@@ -30,7 +30,8 @@ import { execFile, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { Decompress } from "./kark";
+import type { Compress, Decompress } from "./kark";
+export type { Compress } from "./kark";
 import { NativeDecompressError } from "./native-errors";
 
 /** Where the game keeps the library, relative to the game folder. */
@@ -65,8 +66,6 @@ export interface OodleLibrary {
   close(): void;
 }
 
-/** One raw Oodle stream of `raw` (no KARK header). */
-export type Compress = (raw: Uint8Array, compressor: number, level: number) => Uint8Array;
 
 /**
  * The game's Oodle library can't be used. `permanent` when trying again can't help until the library file or the platform changes (not

@@ -25,8 +25,8 @@ const HOST_ADAPTERS = ["anim-decode", "archive-reader", "mesh-decode", "native-d
  * list (`rtti-type-source`, pure data) to the saves endpoint (saves-host-sources.ts), and the facial host's reading of the face skeleton,
  * facial setup, clips and morph targets through the route's decoder (facial-native.ts; types only, the decoding stays in the worker).
  */
-const ALLOWED_IMPORTERS: readonly string[] = ["clothing-host", "facial-native", "idle-host", "native-geometry-export", "native-texture-export", "pose-catalogue-host",
-  "resolver-host", "saves-host-sources"];
+const ALLOWED_IMPORTERS: readonly string[] = ["clothing-host", "facial-native", "idle-host", "native-geometry-export", "native-resource-tools", "native-texture-export",
+  "pose-catalogue-host", "resolver-host", "saves-host-sources"];
 /**
  * Host and page globals (code-scan.ts PAGE_GLOBALS, except that `document` is the red model's own word here, a decoded resource,
  * so only the DOM's members of it count).
@@ -74,6 +74,41 @@ test("nothing outside src/native imports the native reader, and page code never 
       const name = relative(SRC, full).split("\\").join("/").replace(/\.tsx?$/, "");
       for (const dependency of imports(read(full)))
         if (/(?:^|\/)native\/[\w-]+$/.test(dependency) && !ALLOWED_IMPORTERS.includes(name)) offenders.push(`${name} -> ${dependency}`);
+    }
+  };
+  walk(SRC);
+  expect(offenders).toEqual([]);
+});
+
+// PIPE-130: the native writer (src/native/write). Its format modules are pure; `bcn` alone loads native code (XF Studio's texture
+// compressor). Only the Build's tools adapter (native-resource-tools.ts) uses it, and no verifier can reach it.
+const WRITE = join(NATIVE, "write");
+const writeModules = readdirSync(WRITE).filter(file => file.endsWith(".ts")).map(file => file.slice(0, -3)).sort();
+
+test("the native writer's modules are pure except its texture-compressor adapter", () => {
+  expect(writeModules).toEqual(expect.arrayContaining(["bcn", "cr2w-writer", "package-writer", "rdar-writer", "red-encoder", "segments", "xbm-writer"]));
+  for (const name of writeModules) {
+    const text = read(join(WRITE, `${name}.ts`)), code = codeOnly(text);
+    const loadsNative = /import\.meta\.require\s*\(\s*["']bun:ffi/.test(text) || imports(text).includes("bun:ffi");
+    expect(loadsNative, `${name} loads native code`).toBe(name === "bcn");
+    if (name === "bcn") continue;
+    for (const dependency of imports(text)) expect(dependency, `${name} imports ${dependency}`).not.toMatch(HOST_IMPORTS);
+    expect(code.match(HOST_GLOBALS)?.[0] ?? null, `${name} reads host or page globals`).toBeNull();
+    expect(code, `${name} reaches the host`).not.toMatch(/Bun\s*\.\s*(?:spawn|spawnSync|file|write)|new\s+Worker/);
+  }
+});
+
+test("only the Build's tools adapter imports the native writer, and no verifier reaches it", () => {
+  const offenders: string[] = [];
+  const walk = (folder: string) => {
+    for (const entry of readdirSync(folder, { withFileTypes: true })) {
+      const full = join(folder, entry.name);
+      if (entry.isDirectory()) { if (full !== NATIVE) walk(full); continue; }
+      if (!/\.tsx?$/.test(entry.name)) continue;
+      const name = relative(SRC, full).split("\\").join("/").replace(/\.tsx?$/, "");
+      for (const dependency of imports(read(full)))
+        if (/(?:^|\/)native\/write\/[\w-]+$/.test(dependency) && name !== "native-resource-tools") offenders.push(`${name} -> ${dependency}`);
+        else if (/(?:^|\/)native-resource-tools$/.test(dependency)) offenders.push(`${name} -> ${dependency}`);
     }
   };
   walk(SRC);

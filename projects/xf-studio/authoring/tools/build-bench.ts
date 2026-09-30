@@ -35,15 +35,19 @@ const runBuilder = adapter.runBuilder;
 let workDir = "";
 const buildSetup = adapter.buildSetup;
 adapter.buildSetup = () => { const setup = buildSetup(); workDir = setup.work; return setup; };
+let lineTimes: string[] = [];
+let runStarted = 0;
 adapter.runBuilder = async (argv, run) => {
-  const result = await runBuilder(argv, run);
+  lineTimes = [];
+  const onLine = run.onLine;
+  const result = await runBuilder(argv, { ...run, onLine: line => { lineTimes.push(`${((performance.now() - runStarted) / 1000).toFixed(2)} ${line.slice(0, 160)}`); onLine?.(line); } });
   if (keep) { const target = join(scratch, "kept", String(++kept)); rmSync(target, { recursive: true, force: true }); cpSync(workDir, target, { recursive: true }); }
   writeFileSync(join(scratch, `builder-${kept || "last"}.log`), result.stdout + "\n--- stderr ---\n" + result.stderr, "utf8");
   return result;
 };
 mkdirSync(scratch, { recursive: true });
 for (let run = 1; run <= runs; run++) {
-  const started = performance.now(), stages: Record<string, number> = {};
+  const started = runStarted = performance.now(), stages: Record<string, number> = {};
   const outcome = await runProductBuild(adapter, collection, new AbortController().signal, undefined, progress => {
     stages[progress.stage] ??= +((performance.now() - started) / 1000).toFixed(2);
   });

@@ -13,6 +13,8 @@ export const KARK_HEADER_SIZE = 8;
 
 /** Decompress one Oodle stream to exactly `size` bytes, or throw (`NativeDecompressError` when the stream is refused). */
 export type Decompress = (stored: Uint8Array, size: number) => Uint8Array;
+/** One raw Oodle stream of `raw` with `compressor` at `level` (no KARK header); oodle.ts binds the game's. */
+export type Compress = (raw: Uint8Array, compressor: number, level: number) => Uint8Array;
 
 /** A segment whose framing is wrong (a malformed input, not a decompressor failure). */
 export class SegmentError extends NativeMalformedError { override name = "SegmentError"; }

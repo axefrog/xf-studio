@@ -102,7 +102,8 @@ export interface BuildRecord {
   installed: false; gameRenderingVerified: false;
 }
 
-const TEXTURE_GROUPS: readonly (readonly [string, TextureImportSettings])[] = [
+/** Each texture group's WolvenKit import settings (one import per group). */
+export const TEXTURE_GROUP_SETTINGS: readonly (readonly [string, TextureImportSettings])[] = [
   ["dds-colour", { IsGamma: true, TextureGroup: "TEXG_Generic_Color", RawFormat: "TRF_TrueColor", Compression: "TCM_QualityColor",
     GenerateMipMaps: false, IsStreamable: true, PremultiplyAlpha: false }],
   ["dds-scalar", { IsGamma: false, TextureGroup: "TEXG_Generic_Grayscale", RawFormat: "TRF_Grayscale", Compression: "TCM_QualityR",
@@ -289,7 +290,7 @@ export async function buildEyeMakeupResources(options: ResourceBuildOptions): Pr
   options.converting?.();
   // The imports start now and run while the plate and resources are written below (one launch per group: a group's
   // import settings are process-wide environment values).
-  for (const [group, settings] of TEXTURE_GROUPS)
+  for (const [group, settings] of TEXTURE_GROUP_SETTINGS)
     if (groupsUsed.has(group)) start("import-" + group, () => options.tools.importTextures(join(out, "input", group), textureDir, settings));
   const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
   const documents = () => {

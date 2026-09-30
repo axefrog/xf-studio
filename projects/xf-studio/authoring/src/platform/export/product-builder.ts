@@ -14,7 +14,7 @@ import {
 import { dirname, join, parse, resolve, sep } from "node:path";
 import {
   archiveXlText, ExportRefusal, PACKAGE_BUILD_2, PACKAGE_BUILD_STAGES, type PackageBuildStage, type FeatureBuildContext, type FeatureExporterEntry, type FeatureVerification,
-  type GeneratedFile, type PackageBuildResult, type PackageCheckResult, type ProductBuild, type ResourceTools, type VerifierTools,
+  type GeneratedFile, type PackageBuildResult, type PackageCheckResult, type ProductBuild, type ResourceTools, type ResourceWriters, type VerifierTools,
 } from "../api/export";
 import { checkProducts, type ProductOutcome } from "./product-check";
 import { listGeneratedFiles, verifyOverlayArchive, verifyProductArchive } from "./product-verifier";
@@ -165,11 +165,26 @@ function prePackGate(staging: string, recorded: readonly GeneratedFile[]): void 
   }
 }
 
+/** Which writer made a product's files: depot paths (or `archive`) written natively, and those WolvenKit made, with why. */
+type ProductWriters = { native: string[]; wolvenkit: { path: string; reason: string }[] };
+/** The outputs the tools wrote between two of their reports, named by the product's depot paths where a file name is unique. */
+function productWriters(before: ResourceWriters, after: ResourceWriters, files: readonly GeneratedFile[]): ProductWriters {
+  const pathOf = (file: string) => {
+    if (file === "archive") return file;
+    const matches = files.filter(item => item.path === file || item.path.endsWith(`/${file}`));
+    return matches.length === 1 ? matches[0]!.path : file;
+  };
+  return { native: after.native.slice(before.native.length).map(pathOf).sort(),
+    wolvenkit: after.wolvenkit.slice(before.wolvenkit.length).map(item => ({ path: pathOf(item.file), reason: item.reason })) };
+}
+
 /** One product built and verified in its intermediate folder, ready to promote. */
 type Built = { outcome: ProductOutcome; intermediate: string; token: string; archive: string; xl: string; archiveSha256: string;
   xlSha256: string; unpacked: number; verifications: FeatureVerification[];
   /** Files beside the archive and `.xl` (overlay archives, TweakXL files): the product path and where the verified copy is. */
-  extras: { path: string; source: string; sha256: string; bytes: number }[] };
+  extras: { path: string; source: string; sha256: string; bytes: number }[];
+  /** Which writer made each of the product's files, when the tools write natively. */
+  resourceWriters?: ProductWriters };
 /** The extra files a feature's outcome plans, as paths below the product's extras folder. */
 function plannedExtras(outcome: ProductOutcome["features"][number]["outcome"], archive: string): string[] {
   return [...(outcome.extras?.tweaks ?? []).map(name => `r6/tweaks/${archive}/${name}`),
@@ -251,6 +266,8 @@ export async function runProductCommand(options: ProductCommandOptions): Promise
       const files: GeneratedFile[] = [], byFeature = new Map<string, readonly GeneratedFile[]>(), extraFiles: GeneratedFile[] = [];
       const extrasRoot = join(intermediate, "extras");
       mkdirSync(extrasRoot);
+      // What the tools wrote for this product (the native writer says which writer made each file; PIPE-130).
+      const writersBefore = tools.writers?.() ?? null;
       const context = (feature: string): FeatureBuildContext =>
         ({ staging, work: join(intermediate, "features", feature), extras: extrasRoot, tools, prerequisites, signal: options.signal, log, stage });
       stage("compose");
@@ -304,10 +321,11 @@ export async function runProductCommand(options: ProductCommandOptions): Promise
       for (const tweak of extraFiles.filter(f => f.path.startsWith("r6/tweaks/")))
         extras.push({ path: tweak.path, source: join(extrasRoot, ...tweak.path.split("/")), sha256: tweak.sha256, bytes: tweak.bytes });
       extras.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+      const resourceWriters = writersBefore ? productWriters(writersBefore, tools.writers!(), [...files, ...extraFiles]) : undefined;
       writeFileSync(join(intermediate, "build.json"), JSON.stringify({ productId: outcome.product.id, archive: outcome.product.archive,
         archiveSha256, xlSha256, features: outcome.features.map(({ entry }) => ({ feature: entry.exporter.feature, exporter: entry.exporter.id,
           files: byFeature.get(entry.exporter.feature) })), extras: extras.map(({ path, sha256, bytes }) => ({ path, sha256, bytes })),
-        installed: false, gameRenderingVerified: false }) + "\n", "utf8");
+        ...resourceWriters ? { resourceWriters } : {}, installed: false, gameRenderingVerified: false }) + "\n", "utf8");
       cancelled();
       // The product verifier, then each feature's own verifier on its subset (none imports its exporter).
       stage("verify");
@@ -343,7 +361,8 @@ export async function runProductCommand(options: ProductCommandOptions): Promise
       log(`independent verification complete: ${outcome.product.modName}`);
       if (unpacked.archiveSha256 !== archiveSha256 || unpacked.xlSha256 !== xlSha256)
         fail("package_verification_failed", "Independent verification does not match the build.");
-      built.push({ outcome, intermediate, token, archive, xl, archiveSha256, xlSha256, unpacked: unpacked.files.length, verifications, extras });
+      built.push({ outcome, intermediate, token, archive, xl, archiveSha256, xlSha256, unpacked: unpacked.files.length, verifications, extras,
+        ...resourceWriters ? { resourceWriters } : {} });
     }
   } catch (error) {
     if (error instanceof ExportRefusal || (error as { code?: unknown })?.code !== undefined) throw error;
@@ -396,7 +415,8 @@ export async function runProductCommand(options: ProductCommandOptions): Promise
           planSha256: textHash(JSON.stringify(feature.plan)), details: feature.check.details,
           verification: { presetCount: item.verifications[i].presetCount, verifiedFiles: item.verifications[i].verifiedFiles,
             limits: item.verifications[i].limits } })),
-        files, verifiedUnpackedFiles: item.unpacked, installed: false, gameRenderingVerified: false,
+        files, verifiedUnpackedFiles: item.unpacked, ...item.resourceWriters ? { resourceWriters: item.resourceWriters } : {},
+        installed: false, gameRenderingVerified: false,
       };
       writeFileSync(join(staging, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n", "utf8");
       products.push({ ...productCheck, package: final, manifest: join(final, "manifest.json"), archiveSha256: item.archiveSha256,

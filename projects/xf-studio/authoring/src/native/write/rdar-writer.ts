@@ -17,7 +17,7 @@
  */
 import { depotPathHash } from "./package-writer";
 import { KARK_HEADER_SIZE } from "../kark";
-import type { Compress } from "../oodle";
+import type { Compress } from "../kark";
 import { ByteWriter } from "./byte-writer";
 import { karkSegment, LEVEL_NORMAL, OODLE_KRAKEN } from "./segments";
 import { NativeWriteRefusal } from "./red-encoder";
@@ -163,4 +163,15 @@ export function walkOrder(list: (relative: string) => readonly { name: string; f
     for (const entry of entries) if (entry.folder) queue.push(folder + entry.name + "\\");
   }
   return files;
+}
+
+/** Two archives equal byte for byte except each index entry's file time and the index CRC over them. */
+export function archiveEqualExceptTimes(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  const view = new DataView(b.buffer, b.byteOffset, b.byteLength), index = Number(view.getBigUint64(8, true)), files = view.getUint32(index + 16, true);
+  const skip = new Set<number>();
+  for (let i = 8; i < 16; i++) skip.add(index + i);
+  for (let f = 0; f < files; f++) for (let i = 0; i < 8; i++) skip.add(index + 28 + f * 56 + 8 + i);
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i] && !skip.has(i)) return false;
+  return true;
 }

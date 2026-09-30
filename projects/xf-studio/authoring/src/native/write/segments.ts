@@ -4,7 +4,7 @@
  * (resource bodies) at Normal (level 4) [resource: knowledge/archive-format.md §2, every segment of a Build reproduced byte for byte].
  * Pure apart from the injected compressor.
  */
-import type { Compress } from "../oodle";
+import type { Compress } from "../kark";
 import { KARK_HEADER_SIZE, KARK_MAGIC } from "../kark";
 
 export const OODLE_KRAKEN = 8;
