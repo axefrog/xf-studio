@@ -21,6 +21,7 @@ import { NativeWriteRefusal, propertiesToWrite } from "../src/native/write/red-e
 import { karkSegment, LEVEL_OPTIMAL2 } from "../src/native/write/segments";
 import { blockLayout, flipLevels, importPlan, importTexture, readDds } from "../src/native/write/xbm-writer";
 import { createNativeResourceTools, loadNativeWriterLibraries } from "../src/native-resource-tools";
+import { nodeWriterHost } from "../tools/native-writer-host";
 import { encodeDds } from "../src/engines/layered-makeup/flat-mip-chain";
 import { TEXTURE_GROUP_SETTINGS } from "../src/package-resource-builder";
 import type { ResourceTools, TextureImportSettings } from "../src/platform/api";
@@ -237,7 +238,7 @@ describe("the Build's tools write natively and send refusals to WolvenKit", () =
     writeFileSync(join(json, "odd.mi.json"), JSON.stringify(doc({ $type: "NotAClass" })));
     writeFileSync(join(dds, "a_roughness.dds"), encodeDds([new Uint8Array(16), new Uint8Array(4), new Uint8Array(1)], { width: 4, height: 4 }, "r8"));
     const calls: string[] = [];
-    const tools = createNativeResourceTools(fakeWolvenKit(calls), { oodle, bcn });
+    const tools = createNativeResourceTools(fakeWolvenKit(calls), { oodle, bcn }, nodeWriterHost);
     await tools.deserialize([json], out);
     await tools.importTextures(dds, xbm, { ...SCALAR, GenerateMipMaps: true } as TextureImportSettings);
     expect(calls).toEqual(["deserialize odd.mi.json", "import a_roughness.dds"]);
@@ -261,12 +262,12 @@ describe("the Build's tools write natively and send refusals to WolvenKit", () =
     for (const dir of [json, out, staging, packed]) mkdirSync(dir);
     writeFileSync(join(json, "good.mi.json"), JSON.stringify(doc({ $type: "CMaterialInstance" })));
     const calls: string[] = [];
-    const tools = createNativeResourceTools(fakeWolvenKit(calls), { oodle: { unavailable: "no game" }, bcn: { unavailable: "not built" } });
+    const tools = createNativeResourceTools(fakeWolvenKit(calls), { oodle: { unavailable: "no game" }, bcn: { unavailable: "not built" } }, nodeWriterHost);
     await tools.deserialize(json, out);
     await tools.pack(staging, packed);
     expect(calls).toEqual(["deserialize good.mi.json", "pack"]);
     expect(tools.writers!().wolvenkit.every(item => item.reason.includes("no game"))).toBe(true);
-    const libraries = loadNativeWriterLibraries(root, [join(root, "missing.dll")], { oodle: () => { throw Error("no Oodle here"); }, bcn: loadBcnLibrary });
+    const libraries = loadNativeWriterLibraries(root, [join(root, "missing.dll")], { oodle: () => { throw Error("no Oodle here"); }, bcn: loadBcnLibrary, isFile: nodeWriterHost.isFile });
     expect(libraries).toEqual({ oodle: { unavailable: "no Oodle here" }, bcn: { unavailable: "XF Studio's texture compressor is not installed." } });
     for (const dir of folders) rmSync(dir, { recursive: true, force: true });
   });
@@ -277,7 +278,7 @@ describe("the Build's tools write natively and send refusals to WolvenKit", () =
     for (const dir of [staging, packed, target]) mkdirSync(dir);
     try { symlinkSync(target, join(staging, "linked"), "junction"); } catch { return; }
     const calls: string[] = [];
-    const tools = createNativeResourceTools(fakeWolvenKit(calls), { oodle, bcn });
+    const tools = createNativeResourceTools(fakeWolvenKit(calls), { oodle, bcn }, nodeWriterHost);
     await tools.pack(staging, packed);
     expect(calls).toEqual(["pack"]);
     expect(tools.writers!().wolvenkit[0]!.reason).toContain("link");

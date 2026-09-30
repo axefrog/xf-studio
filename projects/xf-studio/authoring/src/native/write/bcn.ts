@@ -5,7 +5,6 @@
  * import makes a hardware Direct3D 11 device when it can, and its BC7 then comes from that encoder). A machine without a usable
  * device gets a refusal, and the caller imports that texture with WolvenKit instead.
  */
-import { existsSync } from "node:fs";
 import { NativeWriteRefusal } from "./red-encoder";
 
 /** The contract version `xfs_bcn_version` must report. */
@@ -26,10 +25,9 @@ export interface BcnLibrary {
 
 type Ffi = typeof import("bun:ffi");
 
-/** Load the library at `path`, or refuse (missing, wrong contract version, not loadable). */
+/** Load the library at `path`, or refuse (not loadable, or the wrong contract version). The caller checks that the file is there. */
 export function loadBcnLibrary(path: string): BcnLibrary {
   if (process.platform !== "win32" || process.arch !== "x64") throw new NativeWriteRefusal("The texture compressor runs on 64-bit Windows only.");
-  if (!existsSync(path)) throw new NativeWriteRefusal("XF Studio's texture compressor is not installed.");
   let ffi: Ffi;
   try { ffi = import.meta.require("bun:ffi") as Ffi; }
   catch (error) { throw new NativeWriteRefusal(`Native libraries cannot be loaded here: ${(error as Error).message}`); }

@@ -28,6 +28,7 @@ import { createWolvenKitVerifierTools } from "../src/verifier-wolvenkit";
 import { closeNativeWriterLibraries, createNativeResourceTools, loadNativeWriterLibraries, type NativeWriterLibraries } from "../src/native-resource-tools";
 import { loadGameOodle } from "../src/native/oodle";
 import { loadBcnLibrary } from "../src/native/write/bcn";
+import { nodeWriterHost } from "./native-writer-host";
 
 const app = resolve(import.meta.dir, "..");
 const project = resolve(app, "..");
@@ -75,7 +76,7 @@ try {
   const nativeLibraries = () => libraries ??= loadNativeWriterLibraries(values["--gamepath"]!, [
     ...process.env.XFS_BCN_LIBRARY ? [process.env.XFS_BCN_LIBRARY] : [],
     join(appRoot, "native", "xfs_bcn.dll"), join(app, "data", "tools", "xfs-bcn", "xfs_bcn.dll")],
-  { oodle: loadGameOodle, bcn: loadBcnLibrary });
+  { oodle: loadGameOodle, bcn: loadBcnLibrary, isFile: nodeWriterHost.isFile });
   const native = !flags.has("--check") && !!values["--gamepath"] && process.env.XFS_NATIVE_WRITER !== "off";
   // In the source tree the code root is the authoring directory; the desktop bundle passes --app-root.
   // Build and dist default to the project's ignored folders.
@@ -95,7 +96,7 @@ try {
     progress: stage => { if (machine) console.log(PACKAGE_PROGRESS_PREFIX + JSON.stringify({ stage })); },
     tools: (wolvenkit, cwd, signal) => {
       const base = createWolvenKitPackageTools(wolvenkit, { cwd, signal });
-      return native ? createNativeResourceTools(base, nativeLibraries(), line => console.log(line)) : base;
+      return native ? createNativeResourceTools(base, nativeLibraries(), nodeWriterHost, line => console.log(line)) : base;
     },
     verifierTools: createWolvenKitVerifierTools,
   });
