@@ -2,7 +2,7 @@
  * Host adapter: the Build's conversions written natively (PIPE-130), with WolvenKit per file wherever the native writer refuses an input.
  * It wraps the WolvenKit tools (package-build-wolvenkit.ts) behind the same `ResourceTools`:
  *
- * - `importTextures`: each DDS to its `.xbm` by the native texture import (native/write/xbm-writer.ts); refused ones in one WolvenKit
+ * - `importTextures`: each DDS to its `.xbm` by the native texture importer, native/write/xbm-writer.ts; refused ones in one WolvenKit
  *   import of their own folder;
  * - `deserialize`: each JSON document to its CR2W file (native/write/cr2w-writer.ts); refused ones in one WolvenKit conversion;
  * - `pack`: the staging tree to one archive (native/write/rdar-writer.ts), or WolvenKit's pack if the packer refuses;
