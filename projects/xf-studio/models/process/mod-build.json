@@ -5,16 +5,17 @@
   "summary": "Building a mod in a bounded child process: stage, pack once, verify, gate and promote exactly once.",
   "status": "target",
   "driver": "driver:package",
-  "work": "Stages every product, packs with WolvenKit, runs the verifiers and promotes the candidate.",
+  "work": "Stages every product, converts its resources and packs it with the native writer where an oracle proves the bytes (WolvenKit for each file it refuses), runs the verifiers with WolvenKit and promotes the candidate.",
   "progress": {
     "type": "object",
     "properties": {
       "stage": {
         "enum": [
-          "staging",
-          "packing",
-          "verifying",
-          "promoting"
+          "prepare",
+          "compose",
+          "convert",
+          "pack",
+          "verify"
         ]
       }
     },
@@ -77,7 +78,7 @@
       "closes": "Recorded outcomes for outside effects."
     },
     {
-      "gap": "No progress is published while a Build runs for minutes.",
+      "gap": "Progress is polled (the page asks for the Build's stage every 400 ms) rather than streamed.",
       "capability": "streamed-results",
       "closes": "Progress streamed from host work to the page."
     }
