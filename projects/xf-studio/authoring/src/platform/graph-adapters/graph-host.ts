@@ -4,16 +4,21 @@
  * rows, 200 at a time). Composition roots construct it with the Studio's graph types and rules.
  */
 import { Aborter, createGraph } from "strata";
-import type { Clock, Graph, InspectorDetail, InspectorPage, Random, RuleDef, TypeDef } from "strata";
+import type { Clock, Graph, GraphStore, InspectorDetail, InspectorPage, NodeRef, Random, RuleDef, TypeDef } from "strata";
 import { LibraryBackups } from "./backups";
 import { SqliteGraphStore } from "./sqlite-store";
-import { STORE_OPERATIONS } from "./browser-graph-store";
-import type { StoreOperation } from "./browser-graph-store";
+import { IRREVERSIBLE_OPERATIONS, STORE_OPERATIONS } from "./browser-graph-store";
+import type { IrreversibleOperation, StoreOperation } from "./browser-graph-store";
 
 export type GraphLibraryOptions = {
   readonly types: readonly TypeDef[]; readonly rules: readonly RuleDef[];
   readonly clock: Clock; readonly random: Random;
 };
+
+/** An irreversible store operation the host is about to run, for the person to confirm. */
+export type IrreversibleRequest = { readonly op: IrreversibleOperation; readonly node: NodeRef };
+/** Asks the person (a host dialog) whether to go ahead; true only on a clear yes. */
+export type ConfirmIrreversible = (request: IrreversibleRequest) => Promise<boolean>;
 
 export class GraphLibrary {
   readonly store: SqliteGraphStore;
@@ -74,6 +79,27 @@ export class GraphLibrary {
     return graph;
   }
 
+  /**
+   * The library's store for a graph the host itself runs (CORE-127): it reads and appends as the store does, and each
+   * compaction or purge runs only after `confirm` answers yes and today's backup is taken (a backup that can't be
+   * taken refuses it). The page's transport never reaches this store's compaction or purge.
+   */
+  confirmedStore(confirm: ConfirmIrreversible): GraphStore {
+    const store = this.store, backups = this.backups;
+    const guarded = async (request: IrreversibleRequest, run: () => Promise<void>): Promise<void> => {
+      if (!(await confirm(request))) throw new Error(request.op === "purge" ? "It wasn't deleted: that needs your confirmation." : "It wasn't compacted: that needs your confirmation.");
+      backups.daily();
+      await run();
+    };
+    return {
+      list: () => store.list(), load: () => store.load(), readStream: (...args) => store.readStream(...args),
+      append: request => store.append(request), changesSince: pos => store.changesSince(pos), counter: () => store.counter(),
+      putSnapshot: snapshot => store.putSnapshot(snapshot), dropSnapshots: node => store.dropSnapshots(node),
+      compact: (node, entries, at) => guarded({ op: "compact", node }, () => store.compact(node, entries, at)),
+      purge: node => guarded({ op: "purge", node }, () => store.purge(node)),
+    };
+  }
+
   async inspect(query: string, offset = 0): Promise<InspectorPage> { return (await this.graph()).inspect(query, offset); }
 
   async node(id: string): Promise<InspectorDetail | undefined> {
@@ -93,7 +119,8 @@ const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
 /**
  * The graph endpoints under `prefix`: `GET inspect?q=&offset=`, `GET node?id=`, `GET backups` (the inspector's
- * read-only feed and the backups list), and `POST store` (the page's store transport: `{ op, args }`).
+ * read-only feed and the backups list), and `POST store` (the page's store transport: `{ op, args }`). The transport
+ * never carries `compact` or `purge` (CORE-127): those run only on the host, through `GraphLibrary.confirmedStore`.
  */
 export function createGraphHandler(library: GraphLibrary, prefix: string): (request: Request) => Promise<Response> {
   const json = (value: unknown, status = 200) => Response.json(value ?? null, { status, headers: { "Cache-Control": "no-store" } });
@@ -112,6 +139,7 @@ export function createGraphHandler(library: GraphLibrary, prefix: string): (requ
         const body = await request.text();
         if (body.length > 16_000_000) return json({ error: "The request is too large." }, 413);
         const { op, args } = JSON.parse(body) as { op: StoreOperation; args: unknown[] };
+        if ((IRREVERSIBLE_OPERATIONS as readonly string[]).includes(op)) return json({ error: "Only XF Studio itself can do that, after you confirm it." }, 403);
         if (!STORE_OPERATIONS.includes(op) || !Array.isArray(args)) return json({ error: "Unknown store operation." }, 400);
         const store = library.store as unknown as Record<StoreOperation, (...values: unknown[]) => Promise<unknown>>;
         return json({ result: await store[op](...args) });
