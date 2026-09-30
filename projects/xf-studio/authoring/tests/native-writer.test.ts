@@ -59,6 +59,45 @@ describe("the writer's rules", () => {
     expect(() => writeCr2wDocument({ Header: { DataType: "CR2W" }, Data: { Version: 194, RootChunk: { $type: "CMaterialInstance" } } }, raw)).toThrow("version");
   });
 
+  test("nothing in the input is ignored or wrapped: unknown wrapper keys, material metadata, out-of-range integers, overflowing fields (NATIVE-73)", () => {
+    const material = (extra: Record<string, unknown>) => doc({ $type: "CMaterialInstance", resourceVersion: 4, ...extra });
+    // Unknown keys inside a reference, its path, a name, a handle and a buffer.
+    expect(() => writeCr2wDocument(material({ baseMaterial: { ...ref("base\\a.mt"), Extra: 1 } }), raw)).toThrow("Extra is not a key");
+    expect(() => writeCr2wDocument(material({ baseMaterial: { DepotPath: { $type: "ResourcePath", $storage: "string", $value: "base\\a.mt", hash: 1 }, Flags: "Default" } }), raw))
+      .toThrow("hash is not a key");
+    expect(() => writeCr2wDocument(material({ audioTag: { ...cname("x"), note: "y" } }), raw)).toThrow("note is not a key");
+    const mesh = (blob: unknown) => doc({ $type: "CMesh", renderResourceBlob: blob });
+    expect(() => writeCr2wDocument(mesh({ HandleId: "1", Data: { $type: "rendRenderMeshBlob" }, Comment: "x" }), raw)).toThrow("Comment is not a key");
+    expect(() => writeCr2wDocument(mesh({ HandleId: "1", Data: { $type: "rendRenderMeshBlob",
+      renderBuffer: { BufferId: "0", Flags: 0, Bytes: "AQID", Type: "x" } } }), raw)).toThrow("Type is not a key");
+    // A wrapper or struct with a stray key is never taken for its default (and so dropped): it is written, and refused there.
+    const layout = { $type: "GpuWrapApiVertexLayoutDesc", elements: { Elements: [], Count: 0 } };
+    expect(propertiesToWrite("GpuWrapApiVertexLayoutDesc", layout).map(p => p.name)).toContain("elements");
+    expect(() => writeCr2wDocument(mesh({ HandleId: "1", Data: { $type: "rendRenderMeshBlob", header: { $type: "rendRenderMeshBlobHeader",
+      vertexLayout: layout } } }), raw)).toThrow("rendRenderMeshBlobHeader.vertexLayout is not a property");
+    // A material's metadata has no proven encoding; null (its default) is fine.
+    expect(() => writeCr2wDocument(material({ metadata: { BufferId: "0", Flags: 0, Bytes: "AQID" } }), raw)).toThrow("metadata is not written");
+    expect(Buffer.from(writeCr2wDocument(material({ metadata: null }), raw).subarray(0, 4)).toString()).toBe("CR2W");
+    // 64-bit integers outside their range are refused, not wrapped.
+    const component = (id: string) => ({ $type: "entMorphTargetSkinnedMeshComponent", name: cname("c"), id });
+    const app = (id: string) => doc({ $type: "appearanceAppearanceResource", appearances: [{ HandleId: "0", Data: { $type: "appearanceAppearanceDefinition",
+      name: cname("a"), components: [component(id)] } }] });
+    expect(() => writeCr2wDocument(app("18446744073709551616"), raw)).toThrow(NativeWriteRefusal);
+    expect(() => writeCr2wDocument(app("-1"), raw)).toThrow(NativeWriteRefusal);
+    expect(writeCr2wDocument(app("18446744073709551615"), raw).length).toBeGreaterThan(0);
+    // Fields too small for their value are refused.
+    const out = new ByteWriter();
+    expect(() => out.u16(0x10000)).toThrow(NativeWriteRefusal);
+    expect(() => out.u32(-1)).toThrow(NativeWriteRefusal);
+    expect(() => out.i16(0x8000)).toThrow(NativeWriteRefusal);
+    expect(() => out.u64(1n << 64n)).toThrow(NativeWriteRefusal);
+    expect(() => out.u8(1.5)).toThrow(NativeWriteRefusal);
+    expect(out.length).toBe(0);
+    // More imports than a u16 index can name.
+    const many = doc({ $type: "CMesh", externalMaterials: Array.from({ length: 0x10000 }, (_, i) => ref(`m_${i}.mi`)) });
+    expect(() => writeCr2wDocument(many, raw)).toThrow("doesn't fit a u16");
+  });
+
   test("names hash as folded FNV-1a 64, strings are length-prefixed UTF-8, flags parse", () => {
     const text = new TextEncoder();
     expect(nameHash(text.encode(""))).toBe(0);

@@ -48,6 +48,8 @@ const isObject = (value: unknown): value is Record<string, Json> => value !== nu
 /** Bitfield text as a set of member names. */
 const bitSet = (text: string) => text === "0" || text === "" ? "" : text.split(",").map(part => part.trim()).sort().join(",");
 
+const hasOnly = (value: Record<string, Json>, keys: readonly string[]) => Object.keys(value).every(key => keys.includes(key));
+
 /** Deep equality of two WolvenKit JSON values of `type` (numbers as float32 or integers, bitfields as sets). */
 function sameJson(a: Json, b: Json, type: string): boolean {
   if (a === b) return true;
@@ -62,19 +64,26 @@ function sameJson(a: Json, b: Json, type: string): boolean {
     return a.every((item, i) => sameJson(item, b[i], inner));
   }
   if (!isObject(a) || !isObject(b)) return false;
-  if ((match = /^static:\d+,(.+)$/.exec(type))) return sameJson(a.Elements, b.Elements, `array:${match[1]}`);
+  // A wrapper with a key it shouldn't have is never the default, so the writer encodes it and refuses it (NATIVE-73).
+  if ((match = /^static:\d+,(.+)$/.exec(type)))
+    return hasOnly(a, ["Elements"]) && hasOnly(b, ["Elements"]) && sameJson(a.Elements, b.Elements, `array:${match[1]}`);
   if (/^ra?Ref:/.test(type)) {
+    if (!hasOnly(a, ["DepotPath", "Flags"]) || !hasOnly(b, ["DepotPath", "Flags"])) return false;
     const empty = (value: Json) => value.DepotPath?.$value === "0" || value.DepotPath?.$value === 0;
     const pathA = empty(a) ? "" : String(a.DepotPath?.$value ?? ""), pathB = empty(b) ? "" : String(b.DepotPath?.$value ?? "");
     return pathA === pathB && (a.Flags ?? "Default") === (b.Flags ?? "Default");
   }
-  if (type === "CName" || type === "NodeRef" || type === "TweakDBID") return String(a.$value) === String(b.$value);
+  if (type === "CName" || type === "NodeRef" || type === "TweakDBID")
+    return hasOnly(a, ["$type", "$storage", "$value"]) && hasOnly(b, ["$type", "$storage", "$value"]) && String(a.$value) === String(b.$value);
   if (/^w?handle:/.test(type) || type === "DataBuffer" || type === "serializationDeferredDataBuffer") return false; // only null is default
   // A class or struct: every property equal (missing ones read as the class default).
   const className = typeof a.$type === "string" ? a.$type : typeof b.$type === "string" ? b.$type : type;
   if (typeof a.$type === "string" && typeof b.$type === "string" && a.$type !== b.$type) return false;
   if (hasDerivedData(a) || hasDerivedData(b)) return false;
   const entry = classEntry(className);
+  // A key the class doesn't have makes it no default, so it is written, and refused there (NATIVE-73).
+  const keys = ["$type", ...entry.props.map(([name]) => name), ...DERIVED[className] ?? []];
+  if (!hasOnly(a, keys) || !hasOnly(b, keys)) return false;
   for (const [name, propType] of entry.props) {
     const fallback = entry.defaults![name];
     if (!sameJson(name in a ? a[name] : fallback, name in b ? b[name] : fallback, propType)) return false;
@@ -118,16 +127,32 @@ function integer(type: string, value: Json): number {
   return value;
 }
 
-function bigint(value: Json): bigint {
-  if (typeof value === "string" && /^-?\d+$/.test(value)) return BigInt(value);
-  if (typeof value === "number" && Number.isSafeInteger(value)) return BigInt(value);
-  throw new NativeWriteRefusal(`${JSON.stringify(value)} is not a 64-bit integer.`);
+const BIG_RANGES: Record<string, [bigint, bigint]> = {
+  Int64: [-(1n << 63n), (1n << 63n) - 1n], Uint64: [0n, (1n << 64n) - 1n], CRUID: [0n, (1n << 64n) - 1n],
+};
+
+/** A 64-bit integer of `type`, refused outside its range rather than wrapped (NATIVE-73). */
+function bigint(type: string, value: Json): bigint {
+  let parsed: bigint | null = null;
+  if (typeof value === "string" && /^-?\d+$/.test(value)) parsed = BigInt(value);
+  else if (typeof value === "number" && Number.isSafeInteger(value)) parsed = BigInt(value);
+  const [min, max] = BIG_RANGES[type]!;
+  if (parsed === null || parsed < min || parsed > max) throw new NativeWriteRefusal(`${JSON.stringify(value)} is not a ${type}.`);
+  return parsed;
+}
+
+/** Refuse keys a JSON wrapper (a handle, reference, name, buffer, fixed array) doesn't have: nothing in the input is ignored (NATIVE-73). */
+export function onlyKeys(value: Json, allowed: readonly string[], owner: string): void {
+  if (!isObject(value)) return;
+  const extra = Object.keys(value).find(key => !allowed.includes(key));
+  if (extra !== undefined) throw new NativeWriteRefusal(`${owner}: ${extra} is not a key the writer knows here.`);
 }
 
 /** The CName text of a JSON name value. */
 export function cnameText(value: Json): string {
   if (!isObject(value) || value.$type !== "CName") throw new NativeWriteRefusal("A CName value is not a CName object.");
   if (value.$storage !== "string" || typeof value.$value !== "string") throw new NativeWriteRefusal("A CName stored as a hash is not written.");
+  onlyKeys(value, ["$type", "$storage", "$value"], "A CName");
   return value.$value;
 }
 
@@ -143,12 +168,20 @@ export function writeValue(ctx: EncodeContext, out: ByteWriter, type: string, va
   if ((match = /^static:(\d+),(.+)$/.exec(type)) || (match = /^\[(\d+)\](.+)$/.exec(type))) {
     const elements = isObject(value) ? value.Elements : null;
     if (!Array.isArray(elements) || elements.length > Number(match[1])) throw new NativeWriteRefusal(`${owner}: ${type} is not a fixed array.`);
+    onlyKeys(value, ["Elements"], owner);
     out.u32(elements.length);
     for (const item of elements) writeValue(ctx, out, match[2]!, item, owner);
     return;
   }
-  if (/^w?handle:/.test(type)) return ctx.handle(out, value, type, owner);
-  if (/^ra?Ref:/.test(type)) return ctx.reference(out, value, type);
+  if (/^w?handle:/.test(type)) {
+    onlyKeys(value, typeof value?.HandleRefId === "string" ? ["HandleRefId"] : ["HandleId", "Data"], owner);
+    return ctx.handle(out, value, type, owner);
+  }
+  if (/^ra?Ref:/.test(type)) {
+    onlyKeys(value, ["DepotPath", "Flags"], owner);
+    onlyKeys(value?.DepotPath, ["$type", "$storage", "$value"], owner);
+    return ctx.reference(out, value, type);
+  }
   switch (type) {
     case "Bool":
       if (value !== 0 && value !== 1 && value !== true && value !== false) throw new NativeWriteRefusal(`${owner}: ${JSON.stringify(value)} is not a Bool.`);
@@ -159,8 +192,8 @@ export function writeValue(ctx: EncodeContext, out: ByteWriter, type: string, va
     case "Uint16": return out.u16(integer(type, value));
     case "Int32": return out.i32(integer(type, value));
     case "Uint32": return out.u32(integer(type, value));
-    case "Int64": return out.i64(bigint(value));
-    case "Uint64": case "CRUID": return out.u64(bigint(value));
+    case "Int64": return out.i64(bigint(type, value));
+    case "Uint64": case "CRUID": return out.u64(bigint(type, value));
     case "Float":
       if (typeof value !== "number") throw new NativeWriteRefusal(`${owner}: ${JSON.stringify(value)} is not a Float.`);
       return out.f32(value);
@@ -171,8 +204,10 @@ export function writeValue(ctx: EncodeContext, out: ByteWriter, type: string, va
     case "String":
       if (typeof value !== "string") throw new NativeWriteRefusal(`${owner}: ${JSON.stringify(value)} is not a String.`);
       return ctx.string(out, value);
-    case "DataBuffer": return ctx.buffer(out, value, false, owner);
-    case "serializationDeferredDataBuffer": return ctx.buffer(out, value, true, owner);
+    case "DataBuffer": case "serializationDeferredDataBuffer":
+      // `raw` is the writer's own form of a buffer it derived (a material buffer's files, an appearance's package).
+      onlyKeys(value, ["BufferId", "Flags", "Bytes", "raw"], owner);
+      return ctx.buffer(out, value, type === "serializationDeferredDataBuffer", owner);
   }
   const kind = kindOf(type);
   if (kind === "enum") {

@@ -129,6 +129,13 @@ class Cr2wWriter implements EncodeContext {
 
   /** Derived JSON properties turned into the ones the file stores. */
   private prepare(className: string, value: Json): Json {
+    // A material's metadata has no proven encoding (NATIVE-73): only its default, null, is written (by leaving it out).
+    if (className === "CMaterialInstance" && value?.metadata !== undefined && value.metadata !== null)
+      throw new NativeWriteRefusal("CMaterialInstance.metadata is not written.");
+    return this.derive(className, value);
+  }
+
+  private derive(className: string, value: Json): Json {
     if (className === "meshMeshMaterialBuffer" && Array.isArray(value.materials) && value.materials.length) {
       if (value.rawData !== null || (Array.isArray(value.rawDataHeaders) && value.rawDataHeaders.length))
         throw new NativeWriteRefusal("A material buffer gives both materials and raw data.");
