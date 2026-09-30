@@ -20,7 +20,7 @@ import { join, win32 } from "node:path";
 import { readFileSync } from "node:fs";
 import type { LocalSettings } from "./local-settings";
 import type { SavesFolderProbe } from "./local-settings-server";
-import { parseMo2Modlist } from "./mo2-instance";
+import { mo2ProviderFolders, parseMo2Modlist } from "./mo2-instance";
 import { readConfiguredMo2Instance, createWindowsDetectionHost } from "./install-detection-host";
 import { engineTypes } from "./native/rtti-type-source";
 import type { EngineTypes } from "./engines/red-object/type-oracle";
@@ -90,9 +90,8 @@ export function gameFileProviders(settings: Pick<LocalSettings, "gameRoot" | "la
     try {
       const instance = readConfiguredMo2Instance(settings.mo2Root);
       const modlist = parseMo2Modlist(readFileSync(join(instance.paths.profiles, settings.mo2ProfileId, "modlist.txt"), "utf8"));
-      out.push(instance.paths.overwrite);
-      for (const entry of [...modlist.entries].sort((a, b) => b.priority - a.priority))
-        if (entry.enabled && entry.kind !== "separator") out.push(join(instance.paths.mods, entry.name));
+      // The same order as every other virtual file (PIPE-06); a row that isn't a single folder name is never joined.
+      out.push(...mo2ProviderFolders(modlist, instance.paths).map(folder => folder.folder));
     } catch { /* An unreadable instance falls back to the game folder alone. */ }
   }
   if (settings.gameRoot) out.push(settings.gameRoot);

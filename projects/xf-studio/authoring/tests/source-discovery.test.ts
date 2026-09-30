@@ -89,7 +89,7 @@ test("MO2 directories come from the instance's ModOrganizer.ini with %BASE_DIR% 
   expect(result.looseFiles[0]?.sourceDerivedFirst?.provider).toBe("mo2-overwrite");
 }));
 
-test("game/manual collision and archive contents remain unresolved", () => fixture(base => {
+test("a game/manual collision takes the resolver's choice, marked ambiguous; archive contents remain unresolved", () => fixture(base => {
   const game = join(base, "game"), manual = join(base, "manual");
   put(join(game, "archive", "pc", "mod", "same.xl"));
   put(join(manual, "archive", "pc", "mod", "same.xl"));
@@ -98,7 +98,9 @@ test("game/manual collision and archive contents remain unresolved", () => fixtu
   const result = discoverSources({ ...defaultLocalSettings(), gameRoot: game, manualModRoot: manual });
   expect(result.looseFiles).toHaveLength(1);
   expect(result.looseFiles[0]?.confidence).toBe("ambiguous");
-  expect(result.looseFiles[0]?.sourceDerivedFirst).toBeNull();
+  // The one virtual-file rule (PIPE-06): the game folder before a manual root, a hypothesis the reason names.
+  expect(result.looseFiles[0]?.sourceDerivedFirst?.provider).toBe("game");
+  expect(result.looseFiles[0]?.reason).toContain("hypothesis");
   expect(result.candidates.filter(x => x.kind === "archive")).toHaveLength(2);
 }));
 

@@ -18,7 +18,7 @@ import { type Ambiguity, type RuleNote, note } from "./resolution-evidence";
 
 export type ArchiveProvider = "game" | "manual" | "mo2-mod" | "mo2-overwrite";
 /** One physical `.archive` (or loose modlist) file as found by source discovery. */
-export interface ArchiveFile {
+export interface ArchiveFile extends VirtualCopy {
   readonly id: string;
   /** Path relative to the game root, forward slashes, case preserved. */
   readonly virtualPath: string;
@@ -62,6 +62,58 @@ const baseName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
 export const alphabetical = (a: string, b: string) => { const x = lower(a), y = lower(b); return x < y ? -1 : x > y ? 1 : 0; };
 const ordinal = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
 
+/** One copy of a virtual file (an archive, an `.xl`, a tweak, a framework's file): who provides it and, in MO2, at what priority. */
+export interface VirtualCopy {
+  readonly id: string;
+  readonly provider: ArchiveProvider;
+  readonly providerName: string;
+  readonly active: boolean;
+  /** MO2 priority (larger wins); null outside MO2. */
+  readonly priority: number | null;
+}
+
+const providerRank = (copy: VirtualCopy) => copy.provider.startsWith("mo2-") ? 0 : copy.provider === "game" ? 1 : 2;
+/**
+ * The one order in which copies of a virtual path shadow each other, visible first (knowledge/mod-loading.md, rule 1;
+ * PIPE-06): active copies before disabled ones; MO2's (overwrite, then the first `modlist.txt` row, as priorities say)
+ * before a physical copy [source: MO2 2.5.2 profile.cpp; over the game folder a hypothesis, since MO2's VFS overlays
+ * it]; the game folder before a manual mod root [hypothesis]; then by id, so the answer never depends on scan order.
+ */
+export function compareCopies(a: VirtualCopy, b: VirtualCopy): number {
+  return Number(b.active) - Number(a.active) || providerRank(a) - providerRank(b) || (b.priority ?? -1) - (a.priority ?? -1) || ordinal(a.id, b.id);
+}
+
+export interface VisibleCopy<T extends VirtualCopy> {
+  /** The copy the game sees, or null when no copy is active. */
+  readonly visible: T | null;
+  /** Every other copy (disabled, or hidden behind the visible one). */
+  readonly shadowed: readonly T[];
+  /** Where the choice rests on a hypothesis. */
+  readonly ambiguities: readonly Ambiguity[];
+}
+
+/** Which copy of one virtual path is visible, by `compareCopies`, with the ambiguities of that choice. */
+export function visibleCopy<T extends VirtualCopy>(copies: readonly T[], subject: string): VisibleCopy<T> {
+  const ordered = copies.slice().sort(compareCopies);
+  const visible = ordered[0]?.active ? ordered[0] : null;
+  const ambiguities: Ambiguity[] = [];
+  if (visible) {
+    const active = ordered.filter(copy => copy.active);
+    const mo2 = active.filter(copy => copy.provider.startsWith("mo2-")), physical = active.filter(copy => !copy.provider.startsWith("mo2-"));
+    if (mo2.length > 1 && mo2[0]!.priority === mo2[1]!.priority)
+      ambiguities.push({ code: "vfs-equal-priority", subject, grade: "hypothesis", chosen: mo2[0]!.providerName,
+        detail: "Two MO2 providers share a priority for one virtual path.", alternatives: mo2.slice(1).map(copy => copy.providerName) });
+    if (mo2.length && physical.length)
+      ambiguities.push({ code: "vfs-mo2-over-game-folder", subject, grade: "hypothesis", chosen: visible.providerName,
+        alternatives: physical.map(copy => copy.providerName),
+        detail: "An MO2 mod and a physical game-folder file provide the same virtual path; MO2's VFS is expected to overlay the game folder." });
+    else if (physical.length > 1)
+      ambiguities.push({ code: "vfs-game-manual-collision", subject, grade: "hypothesis", chosen: visible.providerName,
+        alternatives: physical.slice(1).map(copy => copy.providerName), detail: "The game folder and a manual mod root both provide this path." });
+  }
+  return { visible, shadowed: ordered.filter(copy => copy !== visible), ambiguities };
+}
+
 function classify(virtualPath: string): MountGroup | { reason: string } {
   const path = lower(virtualPath);
   const parts = path.split("/");
@@ -101,26 +153,10 @@ export function buildMountPlan(files: readonly ArchiveFile[], modlistText: strin
   }
   const visible: { file: ArchiveFile; shadowed: ArchiveFile[] }[] = [];
   for (const [key, copies] of byVirtual) {
-    const active = copies.filter(file => file.active);
-    if (!active.length) { for (const file of copies) unmounted.push({ file, reason: "Disabled in the selected MO2 profile." }); continue; }
-    const mo2 = active.filter(file => file.provider.startsWith("mo2-")).sort((a, b) => (b.priority ?? -1) - (a.priority ?? -1));
-    const physical = active.filter(file => !file.provider.startsWith("mo2-"));
-    let chosen: ArchiveFile;
-    if (mo2.length) {
-      if (mo2.length > 1 && mo2[0]!.priority === mo2[1]!.priority)
-        ambiguities.push({ code: "vfs-equal-priority", subject: key, grade: "hypothesis", chosen: mo2[0]!.providerName,
-          detail: "Two MO2 providers share a priority for one virtual archive path.", alternatives: mo2.slice(1).map(f => f.providerName) });
-      chosen = mo2[0]!;
-      if (physical.length) ambiguities.push({ code: "vfs-mo2-over-game-folder", subject: key, grade: "hypothesis",
-        chosen: chosen.providerName, alternatives: physical.map(f => f.providerName),
-        detail: "An MO2 mod and a physical game-folder file provide the same virtual archive; MO2's VFS is expected to overlay the game folder." });
-    } else {
-      if (physical.length > 1) ambiguities.push({ code: "vfs-game-manual-collision", subject: key, grade: "hypothesis",
-        chosen: physical[0]!.providerName, alternatives: physical.slice(1).map(f => f.providerName),
-        detail: "The game folder and a manual mod root both provide this archive path." });
-      chosen = physical[0]!;
-    }
-    visible.push({ file: chosen, shadowed: copies.filter(file => file !== chosen) });
+    const chosen = visibleCopy(copies, key);
+    if (!chosen.visible) { for (const file of copies) unmounted.push({ file, reason: "Disabled in the selected MO2 profile." }); continue; }
+    ambiguities.push(...chosen.ambiguities);
+    visible.push({ file: chosen.visible, shadowed: [...chosen.shadowed] });
   }
 
   const listed = modlistText === null ? null : parseArchiveModlist(modlistText);

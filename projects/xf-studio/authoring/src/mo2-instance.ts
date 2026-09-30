@@ -5,7 +5,8 @@
  * `Profile::refreshModStatus`/`doWriteModlist` (profile.cpp) for `modlist.txt` priority. Evidence and
  * limits are recorded in research/authoring/source-discovery-foundation.md.
  */
-import { isAbsolute, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
+import { compareCopies, type VirtualCopy } from "./archive-precedence";
 
 export type IniSections = ReadonlyMap<string, ReadonlyMap<string, string>>;
 
@@ -186,4 +187,29 @@ export function parseMo2Modlist(text: string): Mo2Modlist {
   });
   return { entries: rows.map((row, index) => ({ ...row, priority: rows.length - index - 1 })),
     overwritePriority: rows.length, notes };
+}
+
+/** A modlist row names one folder in MO2's mods folder: never a path, `.`/`..`, a padded or dot-ended name, or a control character. */
+export const isMo2ModFolderName = (name: string) => name !== "." && name !== ".." && name.trim() === name &&
+  !/[\\/:\x00-\x1f]/.test(name) && !name.endsWith(".") && name.length > 0 && name.length <= 255;
+
+/** A folder that can provide game files, as a copy of every virtual path below it. */
+export interface ProviderFolder extends VirtualCopy {
+  /** The folder the game's paths are joined to (the copy's id). */
+  readonly folder: string;
+}
+
+/**
+ * The folders that can provide a game file on the MO2 route, in the order their copies shadow each other, visible
+ * first (`compareCopies`, knowledge/mod-loading.md rule 1; PIPE-06): MO2's overwrite, the profile's enabled mods by
+ * priority, then the game folder when given. Separators and foreign (`*`) rows carry no files, and a row that isn't a
+ * single folder name is left out, so no path is ever joined outside the mods folder.
+ */
+export function mo2ProviderFolders(modlist: Mo2Modlist, paths: Pick<Mo2InstancePaths, "mods" | "overwrite">, gameRoot?: string | null): ProviderFolder[] {
+  const folder = (provider: ProviderFolder["provider"], providerName: string, path: string, priority: number | null): ProviderFolder =>
+    ({ id: path, folder: path, provider, providerName, active: true, priority });
+  return [folder("mo2-overwrite", "Overwrite", paths.overwrite, modlist.overwritePriority),
+    ...modlist.entries.filter(entry => entry.kind === "mod" && entry.enabled && isMo2ModFolderName(entry.name))
+      .map(entry => folder("mo2-mod", entry.name, join(paths.mods, entry.name), entry.priority)),
+    ...(gameRoot ? [folder("game", "Game folder", gameRoot, null)] : [])].sort(compareCopies);
 }
