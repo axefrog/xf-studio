@@ -285,8 +285,13 @@ export function writeCr2wObject(data: Json, store: StoreBuffer): Uint8Array {
   return writer.file(version, buildVersion);
 }
 
+/** The WolvenKit JSON format the writer reads: WolvenKit 9.0.1's (`WKitJsonVersion`), which its class table follows (PIPE-135). */
+export const WKIT_JSON_VERSION = "0.0.9";
+
 /** Write a WolvenKit JSON resource document (`{Header, Data}`) as a CR2W file. */
 export function writeCr2wDocument(document: Json, store: StoreBuffer): Uint8Array {
   if (document?.Header?.DataType !== "CR2W") throw new NativeWriteRefusal("Not a CR2W document.");
+  if (document.Header.WKitJsonVersion !== WKIT_JSON_VERSION)
+    throw new NativeWriteRefusal(`WolvenKit JSON version ${JSON.stringify(document.Header.WKitJsonVersion ?? null)} is not written (only ${WKIT_JSON_VERSION}).`);
   return writeCr2wObject(document.Data, store);
 }

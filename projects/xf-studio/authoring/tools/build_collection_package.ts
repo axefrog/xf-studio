@@ -17,8 +17,9 @@
 //
 // --diagnostics honours a prepared collection's diagnostic export knobs (plate lifts, surface overrides, head UV, the
 // Glitter route) to build an in-game test candidate; without it such a collection is refused. The hosts never pass it.
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { runProductCommand } from "../src/platform/export/product-builder";
 import { ExportRefusal, PACKAGE_PROGRESS_PREFIX, PrerequisiteStale } from "../src/platform/api";
 import { STUDIO_EXPORTERS } from "../src/compose/exporters";
@@ -29,6 +30,7 @@ import { closeNativeWriterLibraries, createNativeResourceTools, loadNativeWriter
 import { loadGameOodle } from "../src/native/oodle";
 import { loadBcnLibrary } from "../src/native/write/bcn";
 import { nodeWriterHost } from "./native-writer-host";
+import { bcnCandidates } from "../src/packaged-build-tools";
 
 const app = resolve(import.meta.dir, "..");
 const project = resolve(app, "..");
@@ -70,13 +72,14 @@ try {
   const { values, flags } = parseArgs(process.argv.slice(2));
   machine = flags.has("--machine-result");
   // The native writer (PIPE-130): the game's Oodle and XF Studio's texture compressor, when they load; WolvenKit writes what they
-  // can't. `XFS_NATIVE_WRITER=off` (a developer's switch) keeps every conversion on WolvenKit.
+  // can't. `XFS_NATIVE_WRITER=off` (a developer's switch) keeps every conversion on WolvenKit. Which compressor may load, and bound to
+  // which hash, is packaged-build-tools.ts's `bcnCandidates` (NATIVE-75).
   const appRoot = values["--app-root"] ?? app;
   let libraries: NativeWriterLibraries | null = null;
-  const nativeLibraries = () => libraries ??= loadNativeWriterLibraries(values["--gamepath"]!, [
-    ...process.env.XFS_BCN_LIBRARY ? [process.env.XFS_BCN_LIBRARY] : [],
-    join(appRoot, "native", "xfs_bcn.dll"), join(app, "data", "tools", "xfs-bcn", "xfs_bcn.dll")],
-  { oodle: loadGameOodle, bcn: loadBcnLibrary, isFile: nodeWriterHost.isFile });
+  const nativeLibraries = () => libraries ??= loadNativeWriterLibraries(values["--gamepath"]!,
+    bcnCandidates(appRoot, app, process.env, path => { try { return readFileSync(path, "utf8"); } catch { return null; } }),
+    { oodle: loadGameOodle, bcn: loadBcnLibrary, isFile: nodeWriterHost.isFile,
+      sha256: path => createHash("sha256").update(readFileSync(path)).digest("hex") });
   const native = !flags.has("--check") && !!values["--gamepath"] && process.env.XFS_NATIVE_WRITER !== "off";
   // In the source tree the code root is the authoring directory; the desktop bundle passes --app-root.
   // Build and dist default to the project's ignored folders.
@@ -96,7 +99,7 @@ try {
     progress: stage => { if (machine) console.log(PACKAGE_PROGRESS_PREFIX + JSON.stringify({ stage })); },
     tools: (wolvenkit, cwd, signal) => {
       const base = createWolvenKitPackageTools(wolvenkit, { cwd, signal });
-      return native ? createNativeResourceTools(base, nativeLibraries(), nodeWriterHost, line => console.log(line)) : base;
+      return native ? createNativeResourceTools(base, nativeLibraries(), nodeWriterHost, { log: line => console.log(line), signal }) : base;
     },
     verifierTools: createWolvenKitVerifierTools,
   });

@@ -43,15 +43,19 @@ async function runStep(cli: string, args: string[], options: { signal?: AbortSig
  */
 export const DEFAULT_WOLVENKIT_CONCURRENCY = 2;
 
-/** A counting gate: at most `limit` of the tasks run at once, the rest start in the order they were queued. */
+/**
+ * A counting gate: at most `limit` of the tasks run at once, the rest start in the order they were queued. A finishing task hands its
+ * slot straight to the first waiter, so the count never drops in between and a caller arriving before that waiter resumes can't take
+ * the slot too (PIPE-138).
+ */
 export function concurrencyGate(limit: number): <T>(task: () => Promise<T>) => Promise<T> {
   let running = 0;
   const waiting: (() => void)[] = [];
   return async task => {
     if (running >= limit) await new Promise<void>(go => waiting.push(go));
-    running++;
+    else running++;
     try { return await task(); }
-    finally { running--; waiting.shift()?.(); }
+    finally { const next = waiting.shift(); if (next) next(); else running--; }
   };
 }
 

@@ -16,9 +16,9 @@ import type { FeatureExporterEntry } from "../src/platform/api";
 import type { HostPrerequisite, PackageHostAdapter } from "../src/platform/export/product-host";
 import { cachedWolvenKitProbeResult, probeWolvenKitCli, probeWolvenKitCliAsync } from "../src/wolvenkit-cli";
 
-/** The packaged TypeScript builder: one Bun bundle of tools/build_collection_package.ts. No Python. */
-export const BUILD_TOOLS_SCHEMA = "xfs/desktop-build-tools-2";
-export const builderEntry = "app/tools/build.js";
+/** The packaged TypeScript builder: one Bun bundle of tools/build_collection_package.ts. No Python. The builder reads the same names. */
+import { BUILD_TOOLS_SCHEMA, builderEntry } from "../src/packaged-build-tools";
+export { BUILD_TOOLS_SCHEMA, builderEntry };
 const toolNames = [builderEntry];
 const file = (path: string) => { try { return statSync(path).isFile(); } catch { return false; } };
 const directory = (path: string) => { try { return statSync(path).isDirectory(); } catch { return false; } };

@@ -288,4 +288,4 @@ test("the manifest and build record say which writer made each file when the too
   const plain = setup();
   const before = await runProductCommand(plain.options) as PackageBuildResult;
   expect(JSON.parse(readFileSync(before.products[0]!.manifest, "utf8")).resourceWriters).toBeUndefined();
-});
+}, 60_000); // Two Builds: about 5 s on a CI runner.

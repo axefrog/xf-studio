@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { readCr2w } from "../src/native/cr2w-reader";
 import { readResourceJson } from "../src/native/resource-document";
 import { readPackage } from "../src/native/red-package";
@@ -20,10 +20,10 @@ import { archiveEqualExceptTimes, crc64xz, fileTimeOf, packArchive, walkOrder } 
 import { NativeWriteRefusal, propertiesToWrite } from "../src/native/write/red-encoder";
 import { karkSegment, LEVEL_OPTIMAL2 } from "../src/native/write/segments";
 import { blockLayout, flipLevels, importPlan, importTexture, readDds } from "../src/native/write/xbm-writer";
-import { createNativeResourceTools, loadNativeWriterLibraries } from "../src/native-resource-tools";
+import { createNativeResourceTools, loadNativeWriterLibraries, NATIVE_WRITER_ORACLES, oracleRefusal, wolvenKitRefusal } from "../src/native-resource-tools";
 import { nodeWriterHost } from "../tools/native-writer-host";
 import { encodeDds } from "../src/engines/layered-makeup/flat-mip-chain";
-import { TEXTURE_GROUP_SETTINGS } from "../src/package-resource-builder";
+import { EYE_MAKEUP_WRITER_ORACLE, TEXTURE_GROUP_SETTINGS } from "../src/package-resource-builder";
 import type { ResourceTools, TextureImportSettings } from "../src/platform/api";
 import { oracleDescribe } from "./optional-oracles";
 
@@ -221,10 +221,15 @@ describe("the Build's tools write natively and send refusals to WolvenKit", () =
   const folders: string[] = [];
   const temp = () => { const dir = mkdtempSync(join(tmpdir(), "xfs-native-tools-")); folders.push(dir); return dir; };
   const fakeWolvenKit = (calls: string[]): ResourceTools => ({
-    identity: "wolvenkit:test",
+    identity: "wolvenkit:9.0.1:0123456789abcdef",
     async importTextures(input, output) { calls.push(`import ${readdirSync(input).join(",")}`); for (const name of readdirSync(input)) writeFileSync(join(output, name.replace(/\.dds$/, ".xbm")), "wk"); return { exitCode: 0, log: "wk import" }; },
     async serialize() { calls.push("serialize"); return { exitCode: 0, log: "" }; },
-    async deserialize(input, output) { for (const folder of [input].flat()) for (const name of readdirSync(folder)) { calls.push(`deserialize ${name}`); writeFileSync(join(output, name.replace(/\.json$/, "")), "wk"); } return { exitCode: 0, log: "wk deserialize" }; },
+    async deserialize(input, output) {
+      for (const item of [input].flat()) for (const [folder, name] of statSync(item).isFile() ? [[join(item, ".."), basename(item)]] : readdirSync(item).map(name => [item, name])) {
+        calls.push(`deserialize ${name}`); writeFileSync(join(output, name!.replace(/\.json$/, "")), "wk"); void folder;
+      }
+      return { exitCode: 0, log: "wk deserialize" };
+    },
     async pack(_input, output) { calls.push("pack"); writeFileSync(join(output, "archive.archive"), "wk"); return { exitCode: 0, log: "wk pack" }; },
   });
   const oodle = { path: "fake", identity: "fake", sha256: "0", trustedBy: "test", decompress: noDecompress, close() {},
@@ -234,41 +239,111 @@ describe("the Build's tools write natively and send refusals to WolvenKit", () =
   test("each refused input, and only those, goes to WolvenKit; the report says which writer made what", async () => {
     const root = temp(), json = join(root, "json"), out = join(root, "resources"), dds = join(root, "dds"), xbm = join(root, "xbm");
     for (const dir of [json, out, dds, xbm]) mkdirSync(dir);
-    writeFileSync(join(json, "good.mi.json"), JSON.stringify(doc({ $type: "CMaterialInstance", resourceVersion: 4 })));
+    writeFileSync(join(json, "good.inkcharcustomization.json"), JSON.stringify(doc({ $type: "gameuiCharacterCustomizationInfoResource", cookingPlatform: "PLATFORM_PC" })));
     writeFileSync(join(json, "odd.mi.json"), JSON.stringify(doc({ $type: "NotAClass" })));
     writeFileSync(join(dds, "a_roughness.dds"), encodeDds([new Uint8Array(16), new Uint8Array(4), new Uint8Array(1)], { width: 4, height: 4 }, "r8"));
     const calls: string[] = [];
     const tools = createNativeResourceTools(fakeWolvenKit(calls), { oodle, bcn }, nodeWriterHost);
-    await tools.deserialize([json], out);
+    await tools.deserialize([json], out, { oracle: EYE_MAKEUP_WRITER_ORACLE });
     await tools.importTextures(dds, xbm, { ...SCALAR, GenerateMipMaps: true } as TextureImportSettings);
     expect(calls).toEqual(["deserialize odd.mi.json", "import a_roughness.dds"]);
-    expect(readFileSync(join(out, "good.mi")).subarray(0, 4).toString()).toBe("CR2W");
+    expect(readFileSync(join(out, "good.inkcharcustomization")).subarray(0, 4).toString()).toBe("CR2W");
     expect(readFileSync(join(out, "odd.mi"), "utf8")).toBe("wk");
     const staging = join(root, "archive"), packed = join(root, "packed");
     mkdirSync(join(staging, "x"), { recursive: true }); mkdirSync(packed);
-    writeFileSync(join(staging, "x", "good.mi"), readFileSync(join(out, "good.mi")));
+    writeFileSync(join(staging, "x", "good.inkcharcustomization"), readFileSync(join(out, "good.inkcharcustomization")));
     await tools.pack(staging, packed);
     expect(readFileSync(join(packed, "archive.archive")).subarray(0, 4).toString()).toBe("RDAR");
     const report = tools.writers!();
-    expect(report.native).toEqual(["good.mi", "archive"]);
+    expect(report.native).toEqual(["good.inkcharcustomization", "archive"]);
     expect(report.wolvenkit.map(item => item.file)).toEqual(["odd.mi", "a_roughness.xbm"]);
     expect(report.wolvenkit[0]!.reason).toContain("NotAClass");
-    expect(tools.identity).toBe("wolvenkit:test");
+    expect(tools.identity).toBe("wolvenkit:9.0.1:0123456789abcdef");
     for (const dir of folders) rmSync(dir, { recursive: true, force: true });
   });
 
   test("without the game's compressor everything is WolvenKit's, and says why", async () => {
     const root = temp(), json = join(root, "json"), out = join(root, "out"), staging = join(root, "archive"), packed = join(root, "packed");
     for (const dir of [json, out, staging, packed]) mkdirSync(dir);
-    writeFileSync(join(json, "good.mi.json"), JSON.stringify(doc({ $type: "CMaterialInstance" })));
+    writeFileSync(join(json, "good.app.json"), JSON.stringify(doc({ $type: "appearanceAppearanceResource" })));
     const calls: string[] = [];
     const tools = createNativeResourceTools(fakeWolvenKit(calls), { oodle: { unavailable: "no game" }, bcn: { unavailable: "not built" } }, nodeWriterHost);
-    await tools.deserialize(json, out);
+    await tools.deserialize(json, out, { oracle: EYE_MAKEUP_WRITER_ORACLE });
     await tools.pack(staging, packed);
-    expect(calls).toEqual(["deserialize good.mi.json", "pack"]);
+    expect(calls).toEqual(["deserialize good.app.json", "pack"]);
     expect(tools.writers!().wolvenkit.every(item => item.reason.includes("no game"))).toBe(true);
     const libraries = loadNativeWriterLibraries(root, [join(root, "missing.dll")], { oodle: () => { throw Error("no Oodle here"); }, bcn: loadBcnLibrary, isFile: nodeWriterHost.isFile });
     expect(libraries).toEqual({ oodle: { unavailable: "no Oodle here" }, bcn: { unavailable: "XF Studio's texture compressor is not installed." } });
+    for (const dir of folders) rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("only documents an oracle proves are written natively; the rest, and single files, are WolvenKit's with the reason (NATIVE-72)", async () => {
+    const root = temp(), json = join(root, "json"), out = join(root, "out");
+    for (const dir of [json, out]) mkdirSync(dir);
+    const app = { $type: "appearanceAppearanceResource", cookingPlatform: "PLATFORM_PC" };
+    writeFileSync(join(json, "face_rig.app.json"), JSON.stringify(doc(app)));
+    writeFileSync(join(json, "material.mi.json"), JSON.stringify(doc({ $type: "CMaterialInstance", resourceVersion: 4 })));
+    // The expressions exporter names no oracle and converts file by file: WolvenKit converts that file as given, in one launch.
+    const calls: string[] = [], seen: unknown[] = [];
+    const base = fakeWolvenKit(calls);
+    const tools = createNativeResourceTools({ ...base, deserialize: (input, output, options) => { seen.push([input, options]); return base.deserialize(input, output, options); } },
+      { oodle, bcn }, nodeWriterHost);
+    await tools.deserialize(join(json, "face_rig.app.json"), out);
+    expect(calls).toEqual(["deserialize face_rig.app.json"]);
+    expect(seen).toEqual([[join(json, "face_rig.app.json"), undefined]]);
+    expect(tools.writers!()).toEqual({ native: [], wolvenkit: [{ file: "face_rig.app", reason: "No oracle proves the native writer on this exporter's files yet." }] });
+    // With the eye-makeup oracle, a root it doesn't cover (a material written as a file of its own) is WolvenKit's; the .app is native.
+    calls.length = 0;
+    await tools.deserialize(json, out, { oracle: EYE_MAKEUP_WRITER_ORACLE });
+    expect(calls).toEqual(["deserialize material.mi.json"]);
+    expect(readFileSync(join(out, "face_rig.app")).subarray(0, 4).toString()).toBe("CR2W");
+    expect(tools.writers!().wolvenkit.at(-1)).toEqual({ file: "material.mi", reason: "The eye-makeup oracle doesn't cover CMaterialInstance." });
+    // An oracle nobody captured proves nothing.
+    expect(oracleRefusal("CMesh", { oracle: "expressions" })).toBe("The native writer has no oracle named expressions.");
+    expect(oracleRefusal("CMesh", { oracle: EYE_MAKEUP_WRITER_ORACLE })).toBeNull();
+    expect(Object.keys(NATIVE_WRITER_ORACLES)).toEqual([EYE_MAKEUP_WRITER_ORACLE]);
+    // The expressions exporter converts with no oracle.
+    const expressions = readFileSync(resolve(import.meta.dir, "..", "src", "features", "expressions", "export", "index.ts"), "utf8");
+    expect(expressions).toContain("context.tools.deserialize(source, dirname(target))");
+    for (const dir of folders) rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("a WolvenKit other than 9.0.1, or JSON of another version, is never written natively (PIPE-135)", async () => {
+    const root = temp(), json = join(root, "json"), out = join(root, "out"), dds = join(root, "dds"), xbm = join(root, "xbm");
+    const staging = join(root, "archive"), packed = join(root, "packed");
+    for (const dir of [json, out, dds, xbm, staging, packed]) mkdirSync(dir);
+    writeFileSync(join(json, "good.app.json"), JSON.stringify(doc({ $type: "appearanceAppearanceResource" })));
+    writeFileSync(join(dds, "a_roughness.dds"), encodeDds([new Uint8Array(16), new Uint8Array(4), new Uint8Array(1)], { width: 4, height: 4 }, "r8"));
+    const calls: string[] = [];
+    const tools = createNativeResourceTools({ ...fakeWolvenKit(calls), identity: "wolvenkit:8.17.4:0123456789abcdef" }, { oodle, bcn }, nodeWriterHost);
+    await tools.deserialize(json, out, { oracle: EYE_MAKEUP_WRITER_ORACLE });
+    await tools.importTextures(dds, xbm, { ...SCALAR, GenerateMipMaps: true } as TextureImportSettings);
+    await tools.pack(staging, packed);
+    expect(calls).toEqual(["deserialize good.app.json", "import a_roughness.dds", "pack"]);
+    const report = tools.writers!();
+    expect(report.native).toEqual([]);
+    expect(new Set(report.wolvenkit.map(item => item.reason))).toEqual(new Set(["The native writer matches WolvenKit 9.0.1; this Build's WolvenKit is 8.17.4."]));
+    expect(wolvenKitRefusal(undefined)).toContain("of an unknown version");
+    expect(wolvenKitRefusal("wolvenkit:unknown:0123")).toContain("of an unknown version");
+    const older = doc({ $type: "appearanceAppearanceResource" });
+    older.Header.WKitJsonVersion = "0.0.8";
+    expect(() => writeCr2wDocument(older, raw)).toThrow("WolvenKit JSON version \"0.0.8\" is not written");
+    for (const dir of folders) rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("the tools stop between files when the Build is cancelled, and start no WolvenKit (NATIVE-74)", async () => {
+    const root = temp(), json = join(root, "json"), out = join(root, "out"), staging = join(root, "archive"), packed = join(root, "packed");
+    for (const dir of [json, out, staging, packed]) mkdirSync(dir);
+    writeFileSync(join(json, "a.app.json"), JSON.stringify(doc({ $type: "appearanceAppearanceResource" })));
+    writeFileSync(join(json, "b.mi.json"), JSON.stringify(doc({ $type: "NotAClass" })));
+    const calls: string[] = [], controller = new AbortController();
+    let reads = 0;
+    const host = { ...nodeWriterHost, read: (path: string) => { if (++reads === 1) controller.abort(); return nodeWriterHost.read(path); } };
+    const tools = createNativeResourceTools(fakeWolvenKit(calls), { oodle, bcn }, host, { signal: controller.signal });
+    await expect(tools.deserialize(json, out, { oracle: EYE_MAKEUP_WRITER_ORACLE })).rejects.toMatchObject({ code: "package_build_cancelled" });
+    await expect(tools.pack(staging, packed)).rejects.toMatchObject({ code: "package_build_cancelled" });
+    expect(calls).toEqual([]);
+    expect(reads).toBe(1);
     for (const dir of folders) rmSync(dir, { recursive: true, force: true });
   });
 

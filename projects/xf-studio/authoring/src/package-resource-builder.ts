@@ -37,6 +37,11 @@ import {
  */
 export class PlateFootprintChangedError extends Error {}
 
+/**
+ * The native writer's oracle that proves eye makeup's resource documents byte for byte (NATIVE-72): its captured WolvenKit Builds
+ * (tools/native-writer-oracle.ts). native-resource-tools.ts names the root classes it covers.
+ */
+export const EYE_MAKEUP_WRITER_ORACLE = "eye-makeup";
 export const PLATE_STEMS = ["xfs_eye_plate", "xfas_eye_plate"] as const;
 /** The masculine plate's stem (eye-plate-recipe-pma.json `output.stem`). */
 export const MASCULINE_PLATE_STEMS = ["xfs_eye_plate_pma"] as const;
@@ -338,7 +343,9 @@ export async function buildEyeMakeupResources(options: ResourceBuildOptions): Pr
     ...[plan.app, plan.customization, ...male ? [male.app, male.customization] : []].map(path => [fileName(path), appDir] as const)]);
   const converted = join(out, "resources");
   start("deserialize-resources", async () => {
-    const result = await options.tools.deserialize([join(out, "models-json"), join(out, "app-json"), join(out, "cc-json")], converted);
+    // Eye makeup's documents are the ones the native writer's eye-makeup oracle proves byte for byte (NATIVE-72).
+    const result = await options.tools.deserialize([join(out, "models-json"), join(out, "app-json"), join(out, "cc-json")], converted,
+      { oracle: EYE_MAKEUP_WRITER_ORACLE });
     for (const [name, dir] of targets) {
       if (!isFile(join(converted, name))) throw new PackageToolError("package_tool_failed", `WolvenKit did not convert ${name}.`, result.log);
       renameSync(join(converted, name), join(dir, name));
