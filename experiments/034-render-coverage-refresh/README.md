@@ -1,12 +1,14 @@
 # 034: render coverage refresh (30 September 2026)
 
-**Status:** offline measurements for the [render coverage audit](../../research/character-customization/render-coverage.md) refresh and the [render gap plans](../../research/character-customization/render-gap-plans.md). Nothing here has runtime evidence. Evidence grades follow the [knowledge rules](../../knowledge/README.md).
+**Status:** offline measurements for the [render coverage audit](../../research/character-customization/render-coverage.md) refresh and the [render gap plans](../../research/character-customization/render-gap-plans.md) (§1–2), and offline checks of the plans' first implementation (§3–4, same day). Nothing here has runtime evidence. Evidence grades follow the [knowledge rules](../../knowledge/README.md).
 
-Run from `projects/xf-studio/authoring`, under the memory guard (both fit in 2 GB; peak 0.6 GB):
+Run from `projects/xf-studio/authoring`, under the memory guard (each fits in 2–3 GB; peak 0.6 GB):
 
 ```
 <python> ../../../tools/memory_guard.py --limit 2 -- bun ../../../experiments/034-render-coverage-refresh/measure_breath.ts [--json <private file>]
 <python> ../../../tools/memory_guard.py --limit 2 -- bun ../../../experiments/034-render-coverage-refresh/coverage_walk.ts <cached cc-catalogue-*.json>
+<python> ../../../tools/memory_guard.py --limit 2 -- bun ../../../experiments/034-render-coverage-refresh/check_aperture.ts [--fixture <private file>]
+<python> ../../../tools/memory_guard.py --limit 3 -- bun ../../../experiments/034-render-coverage-refresh/check_arms.ts <sav.dat>... [--fixture <private file>]
 ```
 
 `game-files.ts` reads base-game resources straight from the installed archives with XF Studio's own readers, as [experiment 031](../031-photo-mode-facial-setup/README.md) does. Outputs are numbers only; the JSON is game-derived and stays private.
@@ -55,3 +57,40 @@ Sources (base game): the skeleton `h0_000_pwa_c__basehead_skeleton.rig` (SHA-256
 - The visible rows not drawn are the first-person neck (`neck`, group `FPP`; correct), the first-person body tattoo and nipple switchers (correct), and one CCXL hair pack's cap option whose appearance lists no consumer group (`hair_color` slot, no `hairs` group). Whether the game draws such an option through another route is unread [hypothesis]; nothing else in the pack is affected.
 - The masculine beard: 13 part rows and 57 colour rows are conditional. They settle to drawn only where a part is a decal (the stubble); the beard cards (`hair.mt`) are not drawn.
 - Arm cyberware: every holster state except the default is not drawn, for both bodies.
+
+## 3. The lip-aperture reading (PREV-147 step A)
+
+**Question.** Does the Studio's aperture reading (`src/mouth-aperture.ts`), which picks the lip joints from the facial setup's `JointRegions`, the jaw's ancestry and the rest heights instead of joint names, reproduce §1's by-name measurement?
+
+**Method.** [`check_aperture.ts`](check_aperture.ts) solves `ui_closeup_shot` with the male player setup at 30 Hz with XF Studio's own solver and bake (the frames the host serves the page), and reads each frame's aperture with `mouthLipJoints` and `posedParting`. `--fixture` writes the rest, the regions and three frames (0, 2.4 and 14.4 s) for the unit test (`tests/mouth-aperture.test.ts`; game-derived, private, in the ignored `data/private-fixtures/`). Same sources and hashes as §1.
+
+**Results** [offline]:
+
+| | Value |
+|---|---|
+| Joints chosen | upper `l_J_mug_lip_up_0_JNT`, `r_J_mug_lip_up_0_JNT`; lower `l_J_mug_lip_dn_0_JNT`, `r_J_mug_lip_dn_0_JNT`; frame `Head` (its local +x is the rest's up) |
+| Rest parting (the lips' own thickness) | 7.33 mm |
+| Aperture at 0 / 2.4 / 14.4 s | 0 / 2.75 / 2.91 mm |
+| Largest (at 14.53 s) | 3.03 mm |
+| Time per loop at 1 mm or more | 6.7 s |
+| Frames below zero | none |
+
+The region rule picks the same joints §1 named and gives §1's numbers to 0.01 mm. In the mouth region the midline also holds rings of joints above and below the lips (`mouth_rowA_0`, `rowB_0`, `rowA_6`) and the inside joints; the rule separates them by what carries them (the lower lip's joints ride on the jaw, the inside joints hang off the outer ones) and by rest height (the lowest head-carried joint and the highest jaw-carried one on each side).
+
+## 4. The arm cyberware chain (render gap plans §5)
+
+**Question.** Does the Studio's chain (the save's `ArmsCW` item → `holsteredItem` → `appearanceName` → the creator resource's `perspectiveInfo`) name the holster state a save's equipped arm cyberware selects, from the game's own data?
+
+**Method.** [`check_arms.ts`](check_arms.ts) reads each save's loadout with `save-loadout.ts`, follows the item through the installed compiled TweakDB (`tweakdb_ep1.bin`, `clothing-host.ts` `holsteredAppearance`) and the save's body gender's creator resource from the base archives (`arm-cyberware.ts` `armsStateFor`), and lists the arms options the save itself stores in that group. Run on three of the reference machine's own saves (their folder names only are printed); `--fixture` writes the first armed save's chain for `tests/arm-cyberware.test.ts` (save- and game-derived, private). The TweakDB IDs were also checked directly: `Items.StrongArms` → `holstered_strong`, `Items.MantisBlades` → `holstered_mantis`, `Items.w_melee_004__fists_a` → `holstered_default`, each holstered item with `entityName` `holstered_arms`.
+
+**Results** [offline]:
+
+| Save | Equipped `ArmsCW` item | State | Group | Options the save stores in the group |
+|---|---|---|---|---|
+| EndGameSave-13 | 179425979353 | `holstered_strong` | `holstered_strong_tpp` | `holstered_data`, `h_strong_arms_colors_base_tpp`, `h_strong_arms_colors_cyberware01_tpp` |
+| EndGameSave-0 | 175635779345 | `holstered_nanowire` | `holstered_nanowire_tpp` | `holstered_data`, `nails_color_tpp`, `h_monowire_arms_colors_base_tpp` |
+| AutoSave-12 | none | `holstered_default` | `holstered_default_tpp` | `holstered_data`, `nails_color_tpp`, `h_default_arms_colors_tpp` |
+
+- The chain lands on a group the save itself resolved, with the state's two halves for Gorilla Arms (the skin half and the cyberware half), as §5 of the plans expects.
+- The Monowire state is one option, as the plans' §5 table records from the reference save ("one option only").
+- The nails option sits in every state but Gorilla Arms, as the body rendering page records.
