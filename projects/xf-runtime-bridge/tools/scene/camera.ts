@@ -24,6 +24,13 @@ export type CameraModel = CameraPose & {
   fov_axis?: "vertical" | "horizontal" | "neither";
   /** Only when the game's horizontal and vertical scales differ by more than 5 %. */
   pixel_aspect?: number;
+  /**
+   * 0.7 (session 7): "inconsistent" when the game's projection disagrees with its own camera pose (two points on the
+   * camera's optical axis land apart), as photo mode's drone camera showed: the projection then isn't the active camera's
+   * and the model falls back to the field of view.
+   */
+  game_projection?: "consistent" | "inconsistent";
+  projection_note?: string;
 };
 export type Projected = { x: number; y: number; depth: number; in_frame: boolean; behind: boolean };
 
@@ -78,6 +85,8 @@ export function modelFromFov(pose: CameraPose): CameraModel {
  */
 export function calibrate(pose: CameraPose, calibration: Calibration | null | undefined): CameraModel {
   if (!calibration) return modelFromFov(pose);
+  const check = projectionConsistency(calibration, pose.aspect);
+  if (!check.consistent) return { ...modelFromFov(pose), game_projection: "inconsistent", projection_note: check.note };
   const reading = {
     camera: { aspect: pose.aspect },
     screen: { center: calibration.center, target: calibration.center, up: calibration.up, right: calibration.right },
@@ -93,7 +102,31 @@ export function calibrate(pose: CameraPose, calibration: Calibration | null | un
   const near = (a: number, b: number) => Math.abs(a - b) / b < 0.03;
   const axis = near(sy, vertical) ? "vertical" : near(sy, horizontal) ? "horizontal" : "neither";
   // Square pixels: both axes should agree (sx is kept as a check); the vertical one is what the frame's height is measured in.
-  return { ...pose, scale: sy, by: "game", fov_axis: axis, ...(sx > 0 && Math.abs(sx - sy) / sy > 0.05 ? { pixel_aspect: r4(sx / sy) } : {}) };
+  return { ...pose, scale: sy, by: "game", fov_axis: axis, game_projection: "consistent", ...(sx > 0 && Math.abs(sx - sy) / sy > 0.05 ? { pixel_aspect: r4(sx / sy) } : {}) };
+}
+
+/**
+ * Whether the game's projection belongs to the camera pose it reported (0.7, session 7's drone camera): the calibration's
+ * centre (1 m ahead of the camera) and far point (5 m ahead) lie on the optical axis, so the camera's own projection puts
+ * both on the same screen point. Apart by more than 0.02 window heights means ProjectPoint used another camera (the
+ * gameplay camera, or last frame's matrix). Without a far point nothing can be said, and the projection is trusted.
+ */
+export function projectionConsistency(calibration: Calibration, aspect: number): { consistent: boolean; apart?: number; note?: string } {
+  if (!calibration.far) return { consistent: true };
+  const reading = {
+    camera: { aspect },
+    screen: { center: calibration.center, target: calibration.center, up: calibration.up, right: calibration.right },
+  } as unknown as SubjectReading;
+  const space = screenSpace(reading);
+  const c = space.toFrame(calibration.center), f = space.toFrame(calibration.far);
+  const apart = Math.hypot(f.x - c.x, f.y - c.y);
+  if (!Number.isFinite(apart)) return { consistent: false, note: "the game's projection gave no usable numbers" };
+  if (apart <= 0.02) return { consistent: true, apart: r4(apart) };
+  return {
+    consistent: false,
+    apart: r4(apart),
+    note: `the game's projection puts two points straight ahead of the camera ${r4(apart)} window heights apart, so it isn't the active camera's (photo mode's drone camera did this in session 7); positions come from the camera's pose and field of view`,
+  };
 }
 
 /** A world point in frame units. depth is the distance along the view; points behind the camera are never in frame. */

@@ -261,7 +261,7 @@ void Sim060::Register()
                                        }
                                        auto o = subject(npc.at, npc.yaw, request.occlusion);
                                        o["id"] = std::string("sim:") + npc.name;
-                                       o["name"] = npc.name;
+                                       o["record"] = std::string("Character.") + npc.name; // 0.7: the record, not a display name (the world-object rule)
                                        o["class"] = "NPCPuppet";
                                        o["distance"] = distance;
                                        o["dead"] = false;
@@ -491,7 +491,7 @@ void Sim060::Register()
                                return json{{"simulated", true}, {"phase", phase}, {"position", Arr(s.position)}, {"yaw", s.yaw},
                                            {"camera", cameraJson(camera(), phase)}, {"psm", {{"locomotion", s.crouched ? 1 : 0}, {"locomotion_name", s.crouched ? "Crouch" : "Default"}, {"high_level", 2}, {"high_level_name", "SceneTier2"}}},
                                            {"in_combat", false}, {"in_vehicle", false}, {"in_scene", false}, {"in_dialogue", false}, {"busy", busyNow()},
-                                           {"look_at", {{"id", "sim:door"}, {"class", "Door"}, {"name", "Door"}, {"distance", 1.2}, {"interaction_target", true}}},
+                                           {"look_at", {{"id", "sim:door"}, {"class", "Door"}, {"distance", 1.2}}}, {"hud_prompt", {{"active", true}, {"title", "Door"}, {"choices", 1}}}, {"tier", "full"},
                                            {"bridge_effects", s.effects}, {"behaviours", self->m_behaviours.List()["behaviours"]}, {"perspective", "fpp"},
                                            {"weapon_drawn", s.weaponDrawn}, {"menu", s.menu}};
                            }});

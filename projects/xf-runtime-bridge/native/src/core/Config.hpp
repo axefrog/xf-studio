@@ -40,6 +40,15 @@ struct Config
     bool hudPanel = true;
     bool cetLabel = true;
     bool nameplates = true;
+    // 0.7 (session 7, in-game driving): the keys that answer an ask's choices in the ink panel, in order (EInputKey names;
+    // the 2.31 defaults bind F1, F3, F4, F5 and F9 but not F6, F7, F8 or F11; F10 is kept for the overlay's interact key).
+    std::vector<std::string> answerKeys{"IK_F6", "IK_F7", "IK_F8", "IK_F11"};
+
+    // [overlay] (0.7, the ImGui overlay host P0: research/runtime/imgui-overlay-feasibility.md §8): off by default; draw-only
+    // (a diagnostic panel); refuses in HDR. theme: dark (default) or light, chosen by hand, never switched automatically.
+    bool overlayEnabled = false;
+    std::string overlayTheme = "dark";
+    uint32_t overlayScalePercent = 100; // 50-300, on top of the back buffer's height / 1080
 
     // [log]
     Level logLevel = Level::Debug; // baseline is verbose by design; bounded by RED4ext rotation

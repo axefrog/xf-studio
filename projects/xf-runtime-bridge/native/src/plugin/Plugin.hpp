@@ -93,6 +93,11 @@ struct State
     // message lines by the redscript layer through XFBridge_Hud (core/InkUi.hpp). Defaults from [ui] in config.ini.
     inkui::HudPanel hud;
 
+    // 0.7: whether Cyber Engine Tweaks' overlay is open (XFBridge_CetOverlay from the CET layer), and whether the CET layer
+    // has reported it at all (older CET layers never do).
+    std::atomic<bool> cetOverlayOpen{false};
+    std::atomic<bool> cetOverlaySeen{false};
+
     // Reconnect after the kill switch (the CET panel's button, XFBridge_Rearm): requested from script,
     // carried out by the next Running ticks once the old listener has stopped and the kill switch's
     // restore has run (Main.cpp). The outcome is reported through XFBridge_Info (last_rearm).

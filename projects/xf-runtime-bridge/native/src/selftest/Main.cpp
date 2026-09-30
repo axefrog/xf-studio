@@ -2010,7 +2010,23 @@ int wmain(int argc, wchar_t** argv)
                                              "game.save.status");
                                      };
                                      ops.save = [&request] {
+                                         // RB-94 (0.7): the holds again, in the save's own step, as the plugin reads them. The
+                                         // name "hold arrives" simulates another client putting something on V after prepare.
+                                         auto held = sim060 ? sim060->Holds() : json::array();
                                          std::scoped_lock _(sim.mutex);
+                                         if (sim.wardrobeSuspended)
+                                         {
+                                             held.push_back("outfit suspended by the bridge");
+                                         }
+                                         if (request.name == "hold arrives")
+                                         {
+                                             held.push_back("GameplayRestriction.ForceCrouch (simulated: started after prepare)");
+                                         }
+                                         if (!held.empty())
+                                         {
+                                             throw xfb::MethodError("bridge_effects_active", "simulated: something the bridge holds on V started while the save was being prepared (" +
+                                                                                                held.dump() + "); nothing was saved");
+                                         }
                                          if (sim.gameSaveLock || sim.saveLock)
                                          {
                                              throw xfb::MethodError("saving_locked", "simulated: saving is locked");

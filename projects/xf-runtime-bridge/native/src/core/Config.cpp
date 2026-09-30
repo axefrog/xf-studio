@@ -55,6 +55,53 @@ bool ParseU32(const std::string& aValue, uint32_t aMin, uint32_t aMax, uint32_t&
     aOut = value;
     return true;
 }
+// "IK_F6, IK_F7": 1 to 4 EInputKey names (IK_ then letters and digits); anything else keeps the default.
+bool ParseKeyList(const std::string& aValue, std::vector<std::string>& aOut)
+{
+    std::vector<std::string> keys;
+    std::string current;
+    const auto take = [&]() {
+        auto key = Trim(current);
+        current.clear();
+        if (key.empty())
+        {
+            return true;
+        }
+        if (key.size() < 4 || key.size() > 24 || key.rfind("IK_", 0) != 0)
+        {
+            return false;
+        }
+        for (const char c : key)
+        {
+            if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'))
+            {
+                return false;
+            }
+        }
+        keys.push_back(key);
+        return true;
+    };
+    for (const char c : aValue)
+    {
+        if (c == ',')
+        {
+            if (!take())
+            {
+                return false;
+            }
+        }
+        else
+        {
+            current.push_back(c);
+        }
+    }
+    if (!take() || keys.empty() || keys.size() > 4)
+    {
+        return false;
+    }
+    aOut = keys;
+    return true;
+}
 } // namespace
 
 Config ParseConfig(const std::string& aText)
@@ -183,6 +230,27 @@ Config ParseConfig(const std::string& aText)
         {
             ok = ParseBool(value, config.nameplates);
         }
+        else if (key == "ui.answer_keys")
+        {
+            ok = ParseKeyList(value, config.answerKeys);
+        }
+        else if (key == "overlay.enabled")
+        {
+            ok = ParseBool(value, config.overlayEnabled);
+        }
+        else if (key == "overlay.theme")
+        {
+            const auto theme = Lower(value);
+            ok = theme == "dark" || theme == "light";
+            if (ok)
+            {
+                config.overlayTheme = theme;
+            }
+        }
+        else if (key == "overlay.scale_percent")
+        {
+            ok = ParseU32(value, 50, 300, config.overlayScalePercent);
+        }
         else if (key == "log.level")
         {
             ok = ParseLevel(Lower(value), config.logLevel);
@@ -247,6 +315,14 @@ std::string DescribeConfig(const Config& aConfig)
     text += " ui.hud_panel=" + std::string(aConfig.hudPanel ? "true" : "false");
     text += " ui.cet_label=" + std::string(aConfig.cetLabel ? "true" : "false");
     text += " ui.nameplates=" + std::string(aConfig.nameplates ? "true" : "false");
+    std::string keys;
+    for (const auto& key : aConfig.answerKeys)
+    {
+        keys += (keys.empty() ? "" : ",") + key;
+    }
+    text += " ui.answer_keys=" + keys;
+    text += " overlay.enabled=" + std::string(aConfig.overlayEnabled ? "true" : "false") + " overlay.theme=" + aConfig.overlayTheme +
+            " overlay.scale_percent=" + std::to_string(aConfig.overlayScalePercent);
     text += " log.level=" + std::string(LevelName(aConfig.logLevel));
     text += " capture.root=" + (aConfig.captureRoot.empty() ? std::string("<default>") : std::string("<custom>"));
     return text;

@@ -51,16 +51,44 @@ public abstract class XFPlayer {
     if VehicleComponent.IsMountedToVehicle(game, player) {
       return "in_vehicle";
     }
+    // 0.7 (session 7): the gameplay tiers, as the player state machine's high level reports them (gamePSMHighLevel 0-5,
+    // orphans.script:6685; GameplayTier Tier1_FullGameplay .. Tier5_Cinematic, orphans.script:3105; highLevelTransitions.script
+    // SceneTierII..V). Tiers 3 to 5 are the scene holding V (limited gameplay on a spline, first-person cinematic, cinematic):
+    // refused. Tier 2 is staged gameplay (V's apartment, clubs: weapons away, walking pace set by the scene), where the scene
+    // system also counts V as in a scene without holding her: session 7 read in_scene true in the apartment. There the
+    // bridge's reversible moves are allowed, like the player's own walking; a dialogue is still refused in every tier.
     let defs = GetAllBlackboardDefs().PlayerStateMachine;
     let high = XFPlayer.Psm(player, defs.HighLevel);
     if high >= 3 && high <= 5 {
       return "in_scene";
     }
     let scenes = GameInstance.GetSceneSystem(game).GetScriptInterface();
-    if IsDefined(scenes) && (scenes.IsEntityInScene(player.GetEntityID()) || scenes.IsEntityInDialogue(player.GetEntityID())) {
+    if IsDefined(scenes) && scenes.IsEntityInDialogue(player.GetEntityID()) {
       return "in_scene";
     }
     return StrLen(XFPlayer.BusyState(player)) > 0 ? "player_busy" : "";
+  }
+
+  // The gameplay tier by name (0.7): full (Default, SceneTier1), staged (SceneTier2), limited (SceneTier3), fpp_cinematic
+  // (SceneTier4), cinematic (SceneTier5), swimming, or unknown.
+  public static func TierName(high: Int32) -> String {
+    switch high {
+      case 0:
+        return "full";
+      case 1:
+        return "full";
+      case 2:
+        return "staged";
+      case 3:
+        return "limited";
+      case 4:
+        return "fpp_cinematic";
+      case 5:
+        return "cinematic";
+      case 6:
+        return "swimming";
+    }
+    return "unknown";
   }
 
   // The player state machine's own reason V is busy, or "" (only what Busy doesn't already name: combat, vehicles and scenes
@@ -130,22 +158,18 @@ public abstract class XFPlayer {
     out += ",\"high_level\":" + IntToString(XFPlayer.Psm(player, defs.HighLevel)) + ",\"high_level_name\":" + XFJson.Str(EnumValueToString("gamePSMHighLevel", Cast<Int64>(XFPlayer.Psm(player, defs.HighLevel))));
     out += ",\"vehicle\":" + IntToString(XFPlayer.Psm(player, defs.Vehicle)) + ",\"combat\":" + IntToString(XFPlayer.Psm(player, defs.Combat)) + "}";
     out += ",\"in_combat\":" + XFJson.Flag(player.IsInCombat()) + ",\"in_vehicle\":" + XFJson.Flag(VehicleComponent.IsMountedToVehicle(game, player));
+    let high = XFPlayer.Psm(player, defs.HighLevel);
+    out += ",\"tier\":" + XFJson.Str(XFPlayer.TierName(high));
     let scenes = GameInstance.GetSceneSystem(game).GetScriptInterface();
     if IsDefined(scenes) {
-      out += ",\"in_scene\":" + XFJson.Flag(scenes.IsEntityInScene(player.GetEntityID())) + ",\"in_dialogue\":" + XFJson.Flag(scenes.IsEntityInDialogue(player.GetEntityID()));
+      let inScene = scenes.IsEntityInScene(player.GetEntityID());
+      let inDialogue = scenes.IsEntityInDialogue(player.GetEntityID());
+      // staged_scene (0.7): the scene system counts V as in a scene while the tier leaves her free (tier 2, V's apartment).
+      out += ",\"in_scene\":" + XFJson.Flag(inScene) + ",\"in_dialogue\":" + XFJson.Flag(inDialogue) + ",\"staged_scene\":" + XFJson.Flag(inScene && !inDialogue && high <= 2);
     }
     out += ",\"busy\":" + XFJson.Str(XFPlayer.Busy(player)) + ",\"busy_state\":" + XFJson.Str(XFPlayer.BusyState(player)) + ",\"dead\":" + XFJson.Flag(player.IsDead());
     out += ",\"psm_detail\":{\"fall\":" + IntToString(XFPlayer.Psm(player, defs.Fall)) + ",\"landing\":" + IntToString(XFPlayer.Psm(player, defs.Landing)) + ",\"swimming\":" + IntToString(XFPlayer.Psm(player, defs.Swimming)) + ",\"workspot\":" + IntToString(XFPlayer.Psm(player, defs.IsInWorkspot)) + ",\"takedown\":" + IntToString(XFPlayer.Psm(player, defs.Takedown)) + ",\"body_carrying\":" + IntToString(XFPlayer.Psm(player, defs.BodyCarrying)) + "}";
-    let targeting = GameInstance.GetTargetingSystem(game);
-    let looked = targeting.GetLookAtObject(player, true, false);
-    if IsDefined(looked) {
-      // Session 7 (30 Sep 2026): reading GetDisplayName / IsInteractionLookAtTarget on a looked-at door crashed the game
-      // (null read at 0x14 on the game thread), so only the ID, class and distance are read until that is understood.
-      out += ",\"look_at\":{\"id\":" + XFJson.Str(EntityID.ToDebugString(looked.GetEntityID())) + ",\"class\":" + XFJson.Name(looked.GetClassName());
-      out += ",\"distance\":" + XFJson.Num(Vector4.Distance(looked.GetWorldPosition(), player.GetWorldPosition())) + "}";
-    } else {
-      out += ",\"look_at\":null";
-    }
+    out += ",\"look_at\":" + XFScene.LookedAt(player) + ",\"hud_prompt\":" + XFScene.Prompt(game);
     let registry = XFBridgeRegistry.Get();
     if IsDefined(registry) {
       out += ",\"bridge_effects\":" + registry.PlayerEffectsJson();

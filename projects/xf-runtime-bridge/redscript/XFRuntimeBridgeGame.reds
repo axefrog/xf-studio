@@ -492,6 +492,59 @@ public abstract class XFGame {
     return out + "]}";
   }
 
+  // game.saves (0.7, read), step 1: asks the game for its save list and collects the metadata it sends for each save
+  // (OnSaveMetadataReady, the load menu's own callback). Unlike ListSaves it works in any phase with a live session: it
+  // loads nothing.
+  public static func SavesRequest(cid: String) -> String {
+    let handler = XFGame.Handler();
+    let registry = XFBridgeRegistry.Get();
+    if !IsDefined(handler) || !IsDefined(registry) {
+      return XFJson.Fail("unavailable", "the game's save handler isn't available");
+    }
+    registry.ClearSaves();
+    registry.StartMetadata();
+    handler.RegisterToCallback(n"OnSavesForLoadReady", registry, n"OnXFBridgeSavesReady");
+    handler.RegisterToCallback(n"OnSaveMetadataReady", registry, n"OnXFBridgeSaveMetadata");
+    handler.RequestSavesForLoad();
+    return "{\"ok\":true,\"requested\":true}";
+  }
+
+  // game.saves, step 2: the names and whatever metadata has arrived; `done` stops collecting.
+  public static func SavesAnswer(cid: String, done: Bool) -> String {
+    let registry = XFBridgeRegistry.Get();
+    if !IsDefined(registry) {
+      return XFJson.Fail("game_not_ready", "no game session yet");
+    }
+    let names = registry.Saves();
+    let metadata = registry.SaveMetadata();
+    let out = "{\"ok\":true,\"ready\":" + XFJson.Flag(registry.SavesReady()) + ",\"names\":[";
+    let i = 0;
+    while i < ArraySize(names) {
+      if i > 0 {
+        out += ",";
+      }
+      out += XFJson.Str(names[i]);
+      i += 1;
+    }
+    out += "],\"metadata\":[";
+    i = 0;
+    while i < ArraySize(metadata) {
+      if i > 0 {
+        out += ",";
+      }
+      out += metadata[i];
+      i += 1;
+    }
+    if done {
+      registry.StopMetadata();
+      let handler = XFGame.Handler();
+      if IsDefined(handler) {
+        handler.UnregisterFromCallback(n"OnSaveMetadataReady", registry, n"OnXFBridgeSaveMetadata");
+      }
+    }
+    return out + "]}";
+  }
+
   // game.load by name, step 2: looks the exact name up in the list the game just sent (fetched again for
   // this load) and loads that position, in the same game-thread step (RB-58). A name that is missing or
   // listed twice loads nothing.

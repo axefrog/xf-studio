@@ -201,8 +201,23 @@ async function runResume(input: Json, context: CommandContext): Promise<CommandR
 
 // --- capture.sheet -------------------------------------------------------------------------------
 
+/**
+ * 0.7 (session 7): showroom_rotate's sweep answer (or its frames) as sheet cells, labelled by angle, each the frame's
+ * full-resolution capture where it has one, else its viewing copy.
+ */
+export function sweepCells(sweep: Json | undefined): { label: string; path?: string }[] {
+  const frames = (Array.isArray(sweep) ? sweep : (sweep?.frames as Json[] | undefined)) ?? [];
+  return frames
+    .filter((f) => f && f.capture && (typeof f.capture.full === "string" || typeof f.capture.view === "string"))
+    .map((f) => ({ label: typeof f.angle_deg === "number" ? `${Math.round(f.angle_deg * 10) / 10}°` : `step ${f.step ?? "?"}`, path: (f.capture.full ?? f.capture.view) as string }));
+}
+
 async function runCaptureSheet(input: Json, context: CommandContext): Promise<CommandResult> {
-  const cellsIn = input.cells as { label: string; path?: string }[];
+  const fromSweep = input.sweep !== undefined ? sweepCells(input.sweep as Json) : [];
+  if (input.sweep !== undefined && !fromSweep.length) throw planError("bad_input", "The sweep has no captured frames: run showroom_rotate with sweep.capture true, then pass its answer as sweep.");
+  const cellsIn = [...((input.cells as { label: string; path?: string }[] | undefined) ?? []), ...fromSweep];
+  if (!cellsIn.length) throw planError("bad_input", "Give cells, or sweep (showroom_rotate's answer with captured frames).");
+  if (cellsIn.length > 48) throw planError("bad_input", "A sheet holds at most 48 cells.");
   const root = context.captureRoot ?? DEFAULT_CAPTURE_ROOT;
   mkdirSync(root, { recursive: true });
   const cells: SheetCell[] = [];
@@ -344,7 +359,7 @@ export const SCENE_COMMANDS: CommandDef[] = [
     name: "capture.sheet",
     title: "Make a labelled contact sheet",
     description:
-      "Puts named captures side by side in one labelled grid and writes it to disk with a manifest (which file is in which cell): each cell is an earlier capture (path: its .full.png or viewing copy in the capture folder) or, without a path, a screenshot taken now (region, with the XF overlay out of the picture). For comparisons such as finish close-ups or a highlight sweep.",
+      "Puts named captures side by side in one labelled grid and writes it to disk with a manifest (which file is in which cell): each cell is an earlier capture (path: its .full.png or viewing copy in the capture folder) or, without a path, a screenshot taken now (region, with the XF overlay out of the picture). For comparisons such as finish close-ups or a highlight sweep: sweep takes showroom_rotate's answer as it came, one cell per captured step labelled with its angle. Give cells, sweep or both.",
     permission: "read",
     input: obj(
       {
@@ -355,13 +370,48 @@ export const SCENE_COMMANDS: CommandDef[] = [
           minItems: 1,
           maxItems: 48,
         },
+        sweep: {
+          description: "0.7: showroom_rotate's answer from a sweep with capture: true, passed as it came (or only its frames): each captured step becomes a cell labelled with its angle, after any cells given.",
+          ...obj(
+            {
+              frames: {
+                type: "array",
+                description: "The sweep's steps.",
+                items: {
+                  description: "One step.",
+                  ...obj(
+                    {
+                      step: int("The step's number.", 1, 1000),
+                      angle_deg: num("The heads' angle at this step.", -360, 360),
+                      capture: { description: "The step's capture.", ...obj({ full: str("The full-resolution file.", { maxLength: 1024 }), view: str("The viewing copy.", { maxLength: 1024 }) }) },
+                    },
+                  ),
+                },
+                minItems: 1,
+                maxItems: 48,
+              },
+              swept: { type: "array", description: "The heads swept (as showroom_rotate answers).", items: int("A head's index.", 0, 64), maxItems: 64 },
+              from_deg: num("The sweep's first angle.", -360, 360),
+              to_deg: num("The sweep's last angle.", -360, 360),
+              steps: int("The number of steps.", 1, 1000),
+              returned: bool("Whether the heads were turned back."),
+              undo: {
+                description: "showroom_rotate's undo (ignored here).",
+                ...obj({
+                  method: str("The undo's method.", { maxLength: 64 }),
+                  params: { description: "The undo's parameters.", ...obj({ turns: { type: "array", description: "Head yaws.", items: { description: "One head.", ...obj({ index: int("A head's index.", 0, 64), yaw: num("Its yaw.", -720, 720) }) }, maxItems: 64 } }) },
+                }),
+              },
+            },
+            ["frames"],
+          ),
+        },
         title: str("A title across the top.", { maxLength: 120 }),
         columns: int("Cells per row, 1 to 8. Default up to 4.", 1, 8),
         region: oneOf("For cells taken now: the area to keep (as capture_screenshot).", Object.keys(NAMED_REGIONS)),
         max_width: int("The sheet's width at most, 320 to 8000 px. Default 2400.", 320, 8000),
         name: str("Short label for the files (letters, digits, '.', '_', '-').", { pattern: "^[A-Za-z0-9._-]{1,60}$", maxLength: 60 }),
       },
-      ["cells"],
     ),
     local: runCaptureSheet,
   },

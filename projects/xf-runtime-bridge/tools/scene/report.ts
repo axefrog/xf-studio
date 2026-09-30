@@ -285,6 +285,7 @@ export function buildReport(raw: Json, options: ReportOptions, extra: { showroom
     return { ...out, warnings, subjects: [], lights: [] };
   }
   const model = calibrate(pose, raw.calibration as Calibration | undefined);
+  if (model.game_projection === "inconsistent" && model.projection_note) warnings.push(model.projection_note);
   if (include.has("camera")) {
     out.camera = {
       position: pose.position.map(r4), forward: pose.forward.map(r4), fov: pose.fov, aspect: r4(pose.aspect), mode: raw.camera?.mode ?? raw.phase,
@@ -303,7 +304,7 @@ export function buildReport(raw: Json, options: ReportOptions, extra: { showroom
     }
     subjects.push(v);
   }
-  if (Array.isArray(raw.npcs) && kinds.has("npcs")) for (const npc of raw.npcs as Json[]) subjects.push(subjectOf(model, "npc", String(npc.id), npc, bounds, String(npc.name ?? "")));
+  if (Array.isArray(raw.npcs) && kinds.has("npcs")) for (const npc of raw.npcs as Json[]) subjects.push(subjectOf(model, "npc", String(npc.id), npc, bounds, String(npc.record ?? npc.name ?? "")));
   const pieces = (raw.showroom?.pieces as Json[] | undefined) ?? [];
   if (kinds.has("showroom")) for (const piece of pieces) subjects.push(subjectOf(model, "piece", `piece:${piece.index}`, pieceSubject(piece), bounds, String(piece.label ?? "")));
   if (include.has("subjects")) out.subjects = subjects;

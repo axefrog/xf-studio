@@ -279,7 +279,7 @@ std::optional<std::array<double, 3>> CheckPoint(const json& aParams, const char*
 
 MessageRequest ParseMessage(const json& aParams)
 {
-    RequireOnly(aParams, {"text", "seconds", "level", "clear"});
+    RequireOnly(aParams, {"text", "seconds", "level", "clear", "choices"});
     MessageRequest request;
     const auto it = aParams.find("text");
     if (it != aParams.end() && !it->is_null())
@@ -304,6 +304,26 @@ MessageRequest ParseMessage(const json& aParams)
         request.level = *level;
     }
     request.clear = Boolean(aParams, "clear").value_or(false);
+    // 0.7: an ask's answer buttons (the in-game panel's keys and the CET window's buttons).
+    if (const auto it = aParams.find("choices"); it != aParams.end() && !it->is_null())
+    {
+        if (!it->is_array() || it->empty() || it->size() > MessageBoard::kMaxChoices)
+        {
+            Bad("'choices' must be a list of 1 to 4 short labels");
+        }
+        for (const auto& choice : *it)
+        {
+            if (!choice.is_string() || CleanMessageText(choice.get<std::string>(), MessageBoard::kMaxChoiceChars).empty() || choice.get<std::string>().size() > 100)
+            {
+                Bad("each of 'choices' must be a label of 1 to 24 characters");
+            }
+            request.choices.push_back(choice.get<std::string>());
+        }
+        if (request.level != "ask")
+        {
+            Bad("'choices' go with level ask (a question the player answers in the game)");
+        }
+    }
     if (request.text.empty() && !request.clear)
     {
         Bad("give text (the message) or clear: true");

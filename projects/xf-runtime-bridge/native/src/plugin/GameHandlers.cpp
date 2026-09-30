@@ -1035,6 +1035,22 @@ json GameSaveMethod(const MethodContext& aContext)
         return RunGameTask(
             queue, Timeout(),
             [cid, request] {
+                // RB-94 (0.7): the holds are read again in the same game-thread step as the save, so a behaviour started or an
+                // effect put on V by another client after the first check (which runs before prepare) can't reach the save.
+                auto held = CallScript("XFGame", "BridgeHolds", {}, {}, cid).value("holds", json::array());
+                if (!held.is_array())
+                {
+                    held = json::array();
+                }
+                if (Get().behaviours.Active())
+                {
+                    held.push_back("behaviours running (behave_list)");
+                }
+                if (!held.empty())
+                {
+                    throw MethodError("bridge_effects_active", "something the bridge holds on V started while the save was being prepared (" + held.dump() +
+                                                                   "); nothing was saved and the bridge's lock is back on. player_stop lifts it, then save again");
+                }
                 RED4ext::CString label(request.name.c_str());
                 return CallScript("XFGame", "Save", {"String"}, {&label}, cid);
             },

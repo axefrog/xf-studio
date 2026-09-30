@@ -22,6 +22,65 @@ public abstract class XFScene {
     return StrLen(parts) == 0 || StrContains("," + parts + ",", "," + part + ",");
   }
 
+  // The world-object rule (0.7, session 7's crash): on a world object of unknown type (what V looks at, an NPC, anything a
+  // query returns) the bridge calls only the natives every entity answers (GetEntityID, GetClassName, GetWorldPosition,
+  // GetWorldForward, GetWorldYaw), keeps each answer in a local before building text, and reads a record name only after a
+  // cast to the class that declares GetRecordID (gamePuppetBase, VehicleObject). It never calls display-name, interaction or
+  // device natives on such an object: session 7's player_state on V's apartment door ended in the script VM's String +
+  // String operator with a null right operand (exe+0x60a893, the concatenation helper, reached from the operator's native
+  // handler at exe+0x285ccc), after GetDisplayName and IsInteractionLookAtTarget on the door (knowledge/game-crashes.md §2.4).
+  public static func Identity(object: ref<GameObject>, from: Vector4) -> String {
+    let id = EntityID.ToDebugString(object.GetEntityID());
+    let cls = object.GetClassName();
+    let at = object.GetWorldPosition();
+    let distance = Vector4.Distance(at, from);
+    let record = "";
+    let puppet = object as gamePuppetBase;
+    if IsDefined(puppet) {
+      let recordId = puppet.GetRecordID();
+      record = TDBID.ToStringDEBUG(recordId);
+    } else {
+      let vehicle = object as VehicleObject;
+      if IsDefined(vehicle) {
+        let vehicleRecord = vehicle.GetRecordID();
+        record = TDBID.ToStringDEBUG(vehicleRecord);
+      }
+    }
+    let out = "\"id\":" + XFJson.Str(id) + ",\"class\":" + XFJson.Name(cls) + ",\"distance\":" + XFJson.Num(distance);
+    if StrLen(record) > 0 {
+      out += ",\"record\":" + XFJson.Str(record);
+    }
+    return out;
+  }
+
+  // What V looks at (the targeting system's look-at object), by the world-object rule; "null" for nothing.
+  public static func LookedAt(player: ref<PlayerPuppet>) -> String {
+    let targeting = GameInstance.GetTargetingSystem(GetGameInstance());
+    if !IsDefined(targeting) || !IsDefined(player) {
+      return "null";
+    }
+    let looked = targeting.GetLookAtObject(player, true, false);
+    if !IsDefined(looked) {
+      return "null";
+    }
+    let from = player.GetWorldPosition();
+    return "{" + XFScene.Identity(looked, from) + "}";
+  }
+
+  // The HUD's world interaction prompt as the HUD shows it (the UIInteractions blackboard, data only; 0.7: stands in for the
+  // look-at object's interaction query, which the world-object rule leaves out).
+  public static func Prompt(game: GameInstance) -> String {
+    let defs = GetAllBlackboardDefs().UIInteractions;
+    let board = GameInstance.GetBlackboardSystem(game).Get(defs);
+    if !IsDefined(board) {
+      return "null";
+    }
+    let hub = FromVariant<InteractionChoiceHubData>(board.GetVariant(defs.InteractionChoiceHub));
+    let title = GetLocalizedText(hub.title);
+    let count = ArraySize(hub.choices);
+    return "{\"active\":" + XFJson.Flag(hub.active) + ",\"title\":" + XFJson.Str(title) + ",\"choices\":" + IntToString(count) + "}";
+  }
+
   // A static-geometry ray from a point to a target: blocked when something static is hit more than 12 cm before it.
   public static func Ray(from: Vector4, to: Vector4) -> String {
     let result: TraceResult;
@@ -121,8 +180,9 @@ public abstract class XFScene {
           if written > 0 {
             out += ",";
           }
-          out += "{\"id\":" + XFJson.Str(EntityID.ToDebugString(npc.GetEntityID())) + ",\"name\":" + XFJson.Str(npc.GetDisplayName()) + ",\"class\":" + XFJson.Name(npc.GetClassName());
-          out += ",\"distance\":" + XFJson.Num(Vector4.Distance(npc.GetWorldPosition(), player.GetWorldPosition())) + ",\"dead\":" + XFJson.Flag(npc.IsDead()) + "," + XFScene.Subject(npc, camPos, occlusion && hasCamera) + "}";
+          // 0.7: the world-object rule (Identity): the record name instead of GetDisplayName.
+          let dead = npc.IsDead();
+          out += "{" + XFScene.Identity(npc, player.GetWorldPosition()) + ",\"dead\":" + XFJson.Flag(dead) + "," + XFScene.Subject(npc, camPos, occlusion && hasCamera) + "}";
           written += 1;
         }
         i += 1;

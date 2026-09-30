@@ -27,6 +27,18 @@ struct MessageRequest
     int32_t seconds = 8;
     std::string level = "info"; // info, ask, warn, done
     bool clear = false;         // remove every message first (with no text: only that)
+    // 0.7 (session 7, in-game driving): an ask's answer buttons, 1 to kMaxChoices labels; an ask without them gets
+    // DefaultChoices() (Ready, Yes, No). Only asks carry choices.
+    std::vector<std::string> choices;
+};
+
+// The ask the player can answer now: the latest unanswered ask still showing (pinned: newer lines never push it out).
+struct PendingAsk
+{
+    uint64_t id = 0;
+    std::string text;
+    std::vector<std::string> choices;
+    int64_t remainingMs = 0;
 };
 
 // One line of plain text, at most aMaxChars Unicode characters: control characters (newlines, tabs)
@@ -40,6 +52,11 @@ public:
     static constexpr size_t kMaxMessages = 4;
     static constexpr size_t kMaxChars = 200;
     static constexpr int32_t kMaxSeconds = 600;
+    static constexpr size_t kMaxChoices = 4;
+    static constexpr size_t kMaxChoiceChars = 24;
+    static constexpr int32_t kAnsweredSeconds = 6; // how long "Answered: ..." stays in place of an answered ask
+
+    static std::vector<std::string> DefaultChoices();
 
     using Clock = std::chrono::steady_clock;
 
@@ -55,6 +72,13 @@ public:
     size_t Clear();
     size_t Active(Clock::time_point aNow = Clock::now());
 
+    // 0.7: the ask the player can answer now, if any.
+    bool Pending(PendingAsk& aOut, Clock::time_point aNow = Clock::now());
+    // The player's answer to ask aId (0: the pending one) with choice aChoice (0-based). On success the ask is replaced by
+    // "Answered: <choice>" for kAnsweredSeconds and the answer is {ok: true, message_id, choice, label, text}; otherwise
+    // {ok: false, why} (no such ask showing, already answered, choice out of range).
+    nlohmann::json Answer(uint64_t aId, int32_t aChoice, Clock::time_point aNow = Clock::now());
+
 private:
     struct Message
     {
@@ -62,8 +86,10 @@ private:
         std::string text;
         std::string level;
         Clock::time_point expires;
+        std::vector<std::string> choices; // an unanswered ask's; empty once answered
     };
     void DropExpired(Clock::time_point aNow);
+    bool PendingLocked(PendingAsk& aOut, Clock::time_point aNow) const;
 
     std::mutex m_mutex;
     std::deque<Message> m_messages;

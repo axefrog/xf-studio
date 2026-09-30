@@ -235,7 +235,7 @@ std::string CleanField(const std::string& aText)
     return out;
 }
 
-std::string Frame(const HudSettings& aSettings, const BridgeView& aView, const std::vector<MessageLine>& aMessages)
+std::string Frame(const HudSettings& aSettings, const BridgeView& aView, const std::vector<MessageLine>& aMessages, const AskView* aAsk)
 {
     const auto status = Summarize(aView);
     const bool show = aSettings.show && aView.pluginEnabled;
@@ -255,6 +255,15 @@ std::string Frame(const HudSettings& aSettings, const BridgeView& aView, const s
         for (const auto& message : aMessages)
         {
             out += "msg\t" + CleanField(message.level) + "\t" + CleanField(message.text) + "\n";
+        }
+        if (aAsk && aAsk->id != 0 && !aAsk->keyed.empty())
+        {
+            out += "ask\t" + std::to_string(aAsk->id);
+            for (const auto& [key, label] : aAsk->keyed)
+            {
+                out += "\t" + CleanField(key) + "\t" + CleanField(label);
+            }
+            out += "\n";
         }
     }
     return out;
@@ -283,6 +292,15 @@ json ParseFrame(const std::string& aFrame)
         if (key == "msg" && fields.size() >= 3)
         {
             messages.push_back({{"level", fields[1]}, {"text", fields[2]}});
+        }
+        else if (key == "ask" && fields.size() >= 4)
+        {
+            json choices = json::array();
+            for (size_t i = 2; i + 1 < fields.size(); i += 2)
+            {
+                choices.push_back({{"key", fields[i]}, {"label", fields[i + 1]}});
+            }
+            out["ask"] = {{"id", std::stoull(fields[1])}, {"choices", choices}};
         }
         else if (key == "pos" && fields.size() >= 3)
         {

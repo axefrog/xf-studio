@@ -419,6 +419,93 @@ void Live(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut, int64
     });
 }
 
+// XFBridge_Answer(id: Int32, choice: Int32, source: String) -> String   (0.7, session 7's in-game driving: the player answers
+// the ask the ink panel or the CET window shows, by a key or a button). id 0 answers the pending ask. The answer goes into
+// the session's event stream as kind "answer" (session.wait returns it) and the ask is replaced by "Answered: ...". Answers
+// JSON: {ok, message_id, choice, label} or {ok: false, why}. Reads and writes bridge bookkeeping only.
+void Answer(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::CString* aOut, int64_t)
+{
+    int32_t id = 0;
+    int32_t choice = -1;
+    RED4ext::CString source;
+    RED4ext::GetParameter(aFrame, &id);
+    RED4ext::GetParameter(aFrame, &choice);
+    RED4ext::GetParameter(aFrame, &source);
+    aFrame->code++; // skip ParamEnd
+
+    Guarded("XFBridge_Answer", [&] {
+        auto& state = Get();
+        json answer;
+        if (state.bridge && state.bridge->GetDispatcher().IsKilled())
+        {
+            answer = json{{"ok", false}, {"why", "the bridge is stopped"}};
+        }
+        else
+        {
+            answer = state.messages.Answer(id > 0 ? static_cast<uint64_t>(id) : 0, choice);
+        }
+        if (answer.value("ok", false))
+        {
+            auto from = ToStd(source);
+            if (from.empty() || from.size() > 32)
+            {
+                from = "game";
+            }
+            const auto label = answer.value("label", std::string());
+            state.events.Push("answer", "done", "game", "The player answered " + label,
+                              json{{"message_id", answer["message_id"]}, {"choice", answer["choice"]}, {"label", label}, {"question", answer.value("text", std::string())}, {"via", from}});
+        }
+        if (aOut)
+        {
+            *aOut = RED4ext::CString(SerializeJson(answer).c_str());
+        }
+    });
+}
+
+// XFBridge_Comment(text: String) -> Bool   (0.7: the CET window's commentary box, and later the overlay's): a comment from the
+// player into the session's event stream as kind "comment", source "game" (session.wait returns it like an answer).
+void Comment(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut, int64_t)
+{
+    RED4ext::CString text;
+    RED4ext::GetParameter(aFrame, &text);
+    aFrame->code++; // skip ParamEnd
+
+    if (aOut)
+    {
+        *aOut = false;
+    }
+    Guarded("XFBridge_Comment", [&] {
+        const auto body = ToStd(text);
+        if (body.empty())
+        {
+            return;
+        }
+        Get().events.Push("comment", "info", "game", body, json{{"text", body}});
+        if (aOut)
+        {
+            *aOut = true;
+        }
+    });
+}
+
+// XFBridge_CetOverlay(open: Bool) -> Bool   (0.7: the CET layer reports its overlay opening and closing, for ui.state, the
+// capture pre-check that keeps CET's windows out of pictures, and the ImGui host's yield rule).
+void CetOverlay(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut, int64_t)
+{
+    bool open = false;
+    RED4ext::GetParameter(aFrame, &open);
+    aFrame->code++; // skip ParamEnd
+
+    Guarded("XFBridge_CetOverlay", [&] {
+        Get().cetOverlayOpen.store(open);
+        Get().cetOverlaySeen.store(true);
+        if (aOut)
+        {
+            *aOut = true;
+        }
+    });
+}
+
 void RegisterGlobal(RED4ext::CRTTISystem* aRtti, const char* aName, auto aFunction, const char* aReturnType,
                     std::initializer_list<const char*> aStringParams, const char* aParamType = "String")
 {
@@ -427,6 +514,24 @@ void RegisterGlobal(RED4ext::CRTTISystem* aRtti, const char* aName, auto aFuncti
     for (const auto* param : aStringParams)
     {
         func->AddParam(aParamType, param);
+    }
+    if (aReturnType)
+    {
+        func->SetReturnType(aReturnType);
+    }
+    aRtti->RegisterFunction(func);
+    log::Debug("rtti.register", std::string("global=") + aName);
+}
+
+// A global native with typed parameters (type, name), for the ones whose parameters aren't all of one type (0.7).
+void RegisterGlobalTyped(RED4ext::CRTTISystem* aRtti, const char* aName, auto aFunction, const char* aReturnType,
+                         std::initializer_list<std::pair<const char*, const char*>> aParams)
+{
+    auto* func = RED4ext::CGlobalFunction::Create(aName, aName, aFunction);
+    func->flags = {.isNative = true, .isStatic = true};
+    for (const auto& [type, name] : aParams)
+    {
+        func->AddParam(type, name);
     }
     if (aReturnType)
     {
@@ -462,7 +567,10 @@ void PostRegisterTypes()
         RegisterGlobal(rtti, "XFBridge_Hud", &Hud, "String", {});
         RegisterGlobal(rtti, "XFBridge_Note", &Note, "Bool", {"level", "text"});
         RegisterGlobal(rtti, "XFBridge_Live", &Live, "Bool", {});
-        log::Info("rtti.register_types", "phase=post_register natives=15");
+        RegisterGlobalTyped(rtti, "XFBridge_Answer", &Answer, "String", {{"Int32", "id"}, {"Int32", "choice"}, {"String", "source"}});
+        RegisterGlobal(rtti, "XFBridge_Comment", &Comment, "Bool", {"text"});
+        RegisterGlobal(rtti, "XFBridge_CetOverlay", &CetOverlay, "Bool", {"open"}, "Bool");
+        log::Info("rtti.register_types", "phase=post_register natives=18");
     }
     catch (const std::exception& e)
     {

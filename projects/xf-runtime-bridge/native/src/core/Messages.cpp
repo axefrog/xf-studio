@@ -135,16 +135,53 @@ json MessageBoard::Post(const MessageRequest& aRequest, Clock::time_point aNow)
         return json{{"cleared", cleared}, {"active", m_messages.size()}};
     }
     const auto seconds = std::clamp<int32_t>(aRequest.seconds, 1, kMaxSeconds);
+    std::vector<std::string> choices;
+    if (aRequest.level == "ask")
+    {
+        for (const auto& choice : aRequest.choices.empty() ? DefaultChoices() : aRequest.choices)
+        {
+            if (choices.size() < kMaxChoices)
+            {
+                const auto clean = CleanMessageText(choice, kMaxChoiceChars);
+                if (!clean.empty())
+                {
+                    choices.push_back(clean);
+                }
+            }
+        }
+    }
+    // Pinned (0.7): the newest unanswered ask stays; the oldest other line makes room. A new ask takes the pin over.
+    uint64_t pinned = 0;
+    if (choices.empty())
+    {
+        for (auto it = m_messages.rbegin(); it != m_messages.rend(); ++it)
+        {
+            if (!it->choices.empty())
+            {
+                pinned = it->id;
+                break;
+            }
+        }
+    }
     json dropped = json::array();
     while (m_messages.size() >= kMaxMessages)
     {
-        dropped.push_back(m_messages.front().id);
-        m_messages.pop_front();
+        auto victim = m_messages.begin();
+        if (victim->id == pinned && m_messages.size() > 1)
+        {
+            ++victim;
+        }
+        dropped.push_back(victim->id);
+        m_messages.erase(victim);
     }
     const auto id = m_next++;
-    m_messages.push_back({id, text, aRequest.level, aNow + std::chrono::seconds(seconds)});
+    m_messages.push_back({id, text, aRequest.level, aNow + std::chrono::seconds(seconds), choices});
     json out{{"id", id},       {"shown", true},         {"text", text}, {"level", aRequest.level}, {"seconds", seconds},
              {"truncated", truncated}, {"dropped", dropped}, {"active", m_messages.size()}};
+    if (!choices.empty())
+    {
+        out["choices"] = choices;
+    }
     if (aRequest.clear)
     {
         out["cleared"] = cleared;
@@ -164,9 +201,79 @@ std::string MessageBoard::Snapshot(Clock::time_point aNow)
     for (const auto& message : m_messages)
     {
         const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(message.expires - aNow).count();
-        list.push_back({{"id", message.id}, {"text", message.text}, {"level", message.level}, {"remaining_ms", remaining}});
+        json line{{"id", message.id}, {"text", message.text}, {"level", message.level}, {"remaining_ms", remaining}};
+        if (!message.choices.empty())
+        {
+            line["choices"] = message.choices;
+        }
+        list.push_back(line);
     }
-    return json{{"messages", list}}.dump(-1, ' ', false, json::error_handler_t::replace);
+    json out{{"messages", list}};
+    PendingAsk ask;
+    if (PendingLocked(ask, aNow))
+    {
+        out["pending_ask"] = {{"id", ask.id}, {"text", ask.text}, {"choices", ask.choices}};
+    }
+    return out.dump(-1, ' ', false, json::error_handler_t::replace);
+}
+
+std::vector<std::string> MessageBoard::DefaultChoices()
+{
+    return {"Ready", "Yes", "No"};
+}
+
+bool MessageBoard::PendingLocked(PendingAsk& aOut, Clock::time_point aNow) const
+{
+    for (auto it = m_messages.rbegin(); it != m_messages.rend(); ++it)
+    {
+        if (!it->choices.empty() && it->expires > aNow)
+        {
+            aOut.id = it->id;
+            aOut.text = it->text;
+            aOut.choices = it->choices;
+            aOut.remainingMs = std::chrono::duration_cast<std::chrono::milliseconds>(it->expires - aNow).count();
+            return true;
+        }
+    }
+    return false;
+}
+
+bool MessageBoard::Pending(PendingAsk& aOut, Clock::time_point aNow)
+{
+    std::scoped_lock _(m_mutex);
+    DropExpired(aNow);
+    return PendingLocked(aOut, aNow);
+}
+
+json MessageBoard::Answer(uint64_t aId, int32_t aChoice, Clock::time_point aNow)
+{
+    std::scoped_lock _(m_mutex);
+    DropExpired(aNow);
+    PendingAsk pending;
+    const uint64_t id = aId != 0 ? aId : (PendingLocked(pending, aNow) ? pending.id : 0);
+    for (auto& message : m_messages)
+    {
+        if (message.id != id)
+        {
+            continue;
+        }
+        if (message.choices.empty())
+        {
+            return json{{"ok", false}, {"why", "that message has no answer buttons, or was answered already"}, {"message_id", id}};
+        }
+        if (aChoice < 0 || static_cast<size_t>(aChoice) >= message.choices.size())
+        {
+            return json{{"ok", false}, {"why", "no such choice"}, {"message_id", id}};
+        }
+        const auto label = message.choices[static_cast<size_t>(aChoice)];
+        json out{{"ok", true}, {"message_id", id}, {"choice", aChoice}, {"label", label}, {"text", message.text}};
+        message.choices.clear();
+        message.level = "done";
+        message.text = CleanMessageText("Answered: " + label + " (" + message.text + ")", kMaxChars);
+        message.expires = aNow + std::chrono::seconds(kAnsweredSeconds);
+        return out;
+    }
+    return json{{"ok", false}, {"why", id == 0 ? "no question is waiting for an answer" : "that question isn't showing any more"}, {"message_id", id}};
 }
 
 std::vector<std::pair<std::string, std::string>> MessageBoard::Lines(Clock::time_point aNow)

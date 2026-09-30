@@ -234,7 +234,7 @@ describe("0.6 the showroom on the camera ray, the scene report and pre-capture c
     const ids = report.subjects.map((s: Any) => s.id);
     expect(ids).toContain("v");
     expect(ids).toContain("piece:1");
-    const blocked = report.subjects.find((s: Any) => s.label === "Sim NPC B");
+    const blocked = report.subjects.find((s: Any) => s.label === "Character.Sim NPC B");
     expect(blocked.occluded).toBe(true);
     const rig = report.lights.each.filter((l: Any) => l.kind === "rig");
     expect(rig.length).toBeGreaterThan(0);

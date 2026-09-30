@@ -105,7 +105,8 @@ async function projectEyes(context: CommandContext, pose: CameraPose, points: Ve
     const camera = poseOf(read.camera) ?? pose;
     model = calibrate(camera, read.calibration as Calibration | undefined);
     const shown = (read.points as { screen: unknown }[] | undefined) ?? [];
-    if (shown.length === points.length && read.calibration) {
+    // 0.7: the game's projection only when it agrees with its own camera (session 7: photo mode's drone camera didn't).
+    if (shown.length === points.length && read.calibration && model.game_projection !== "inconsistent") {
       const toFrame = frameOf(read.calibration as Calibration, camera.aspect);
       game = shown.map((p) => toFrame(p.screen as never));
     }
@@ -117,7 +118,7 @@ async function projectEyes(context: CommandContext, pose: CameraPose, points: Ve
     const g = game?.[index];
     const at = g ?? { x: m.x, y: m.y };
     return { index, x: Math.round(at.x * 1e4) / 1e4, y: Math.round(at.y * 1e4) / 1e4, in_frame: !m.behind && Math.abs(at.y) <= 0.5 && Math.abs(at.x) <= model.aspect / 2,
-      by: g ? "game" : model.by === "game" ? "model (calibrated by the game)" : "model (field of view read as vertical)" };
+      by: g ? "game" : model.by === "game" ? "model (calibrated by the game)" : model.game_projection === "inconsistent" ? "model (field of view read as vertical; the game's projection disagreed with its camera)" : "model (field of view read as vertical)" };
   });
 }
 

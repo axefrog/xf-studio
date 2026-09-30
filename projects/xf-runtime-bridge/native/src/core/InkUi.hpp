@@ -85,13 +85,22 @@ struct MessageLine
     std::string text;
 };
 
+// 0.7 (session 7, in-game driving): the ask waiting for the player's answer, with the key that answers each choice
+// ([ui] answer_keys: EInputKey names such as IK_F6). The frame's record is "ask<TAB>id<TAB>key<TAB>label..." and the ink
+// panel draws "[F6] Ready  [F7] Yes  [F8] No" under the ask; a press of one of those keys answers it (XFBridge_Answer).
+struct AskView
+{
+    uint64_t id = 0;
+    std::vector<std::pair<std::string, std::string>> keyed; // (key, label) per choice
+};
+
 // XFBridge_Hud()'s answer: one record per line, fields separated by tabs, first line "xfhud<TAB>1". The redscript layer
 // reads it with StrSplit, so no JSON parser is needed in script. Records: show, layer, anchor, pos (x y), scale,
 // nameplates, cet_label, live (the script gate), tone, status, then msg (level text) per message line, oldest first. Text
 // fields never contain tabs or newlines (message text is already one clean line; see CleanField). A disabled bridge
 // answers show 0 (the panel is only drawn while the bridge is on, like the CET label); a killed one shows its state and
 // no messages.
-std::string Frame(const HudSettings& aSettings, const BridgeView& aView, const std::vector<MessageLine>& aMessages);
+std::string Frame(const HudSettings& aSettings, const BridgeView& aView, const std::vector<MessageLine>& aMessages, const AskView* aAsk = nullptr);
 // Parses a frame back into JSON (the self-test and the tests read what the redscript layer would draw).
 json ParseFrame(const std::string& aFrame);
 // Replaces tabs, carriage returns and newlines with spaces.

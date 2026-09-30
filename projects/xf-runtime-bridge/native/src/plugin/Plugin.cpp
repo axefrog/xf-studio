@@ -79,7 +79,18 @@ std::string HudFrame()
             lines.push_back({level, text});
         }
     }
-    return inkui::Frame(state.hud.Current(), view, lines);
+    // 0.7: the pending ask with the key that answers each choice ([ui] answer_keys).
+    inkui::AskView ask;
+    PendingAsk pending;
+    if (!view.killed && state.messages.Pending(pending))
+    {
+        ask.id = pending.id;
+        for (size_t i = 0; i < pending.choices.size() && i < state.config.answerKeys.size(); ++i)
+        {
+            ask.keyed.emplace_back(state.config.answerKeys[i], pending.choices[i]);
+        }
+    }
+    return inkui::Frame(state.hud.Current(), view, lines, &ask);
 }
 
 nlohmann::json InfoJson()

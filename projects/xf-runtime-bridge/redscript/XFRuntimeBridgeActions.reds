@@ -110,6 +110,10 @@ public class XFBridgeRegistry extends ScriptableSystem {
   // game.load by name: the save list the game answered with (OnSavesForLoadReady).
   private let m_saves: array<String>;
   private let m_savesReady: Bool;
+  // game.saves (0.7): the metadata the game sends for each listed save after RequestSavesForLoad (OnSaveMetadataReady), as
+  // JSON text per save; collected only while game.saves asked for it.
+  private let m_saveMetadata: array<String>;
+  private let m_collectMetadata: Bool;
   // wardrobe.equip (0.5.2): the wardrobe before the bridge's first change this session (the kill switch puts it back),
   // and a restore being assembled area by area.
   private let m_wardrobeSnapshot: ref<XFWardrobeSnapshot>;
@@ -618,6 +622,34 @@ public class XFBridgeRegistry extends ScriptableSystem {
   public func ClearSaves() -> Void {
     ArrayClear(this.m_saves);
     this.m_savesReady = false;
+  }
+
+  // game.saves (0.7): the load menu's own metadata callback (loadGameMenu.script:110, 412). Record data only.
+  protected cb func OnXFBridgeSaveMetadata(info: ref<SaveMetadataInfo>) -> Bool {
+    if !this.m_collectMetadata || !IsDefined(info) || ArraySize(this.m_saveMetadata) >= 200 {
+      return true;
+    }
+    let type = EnumValueToString("inkSaveType", Cast<Int64>(EnumInt(info.saveType)));
+    let life = EnumValueToString("inkLifePath", Cast<Int64>(EnumInt(info.lifePath)));
+    let text = "{\"index\":" + IntToString(info.saveIndex) + ",\"name\":" + XFJson.Str(info.internalName) + ",\"valid\":" + XFJson.Flag(info.isValid);
+    text += ",\"type\":" + XFJson.Str(type) + ",\"location\":" + XFJson.Str(info.locationName) + ",\"quest\":" + XFJson.Str(info.trackedQuest);
+    text += ",\"level\":" + XFJson.Num(Cast<Float>(info.level)) + ",\"life_path\":" + XFJson.Str(life) + ",\"timestamp\":" + ToString(info.timestamp);
+    text += ",\"play_time_s\":" + XFJson.Num(Cast<Float>(info.playTime)) + ",\"game_version\":" + XFJson.Str(info.gameVersion) + ",\"modded\":" + XFJson.Flag(info.isModded) + ",\"ep1\":" + XFJson.Flag(info.IsEp1Save()) + "}";
+    ArrayPush(this.m_saveMetadata, text);
+    return true;
+  }
+
+  public func StartMetadata() -> Void {
+    ArrayClear(this.m_saveMetadata);
+    this.m_collectMetadata = true;
+  }
+
+  public func StopMetadata() -> Void {
+    this.m_collectMetadata = false;
+  }
+
+  public func SaveMetadata() -> array<String> {
+    return this.m_saveMetadata;
   }
 
   public func SavesReady() -> Bool {
@@ -1252,6 +1284,8 @@ public abstract class XFBridgeActions {
     out += XFWardrobe.RestoreAfterKill(cid);
     // 0.6: every status effect the bridge applied to V, and any look-at it started.
     out += XFPlayer.RestoreAfterKill(cid);
+    // 0.7: a weather the bridge held goes back to the earlier state, with the game's weather cycle on again.
+    out += XFWeather.RestoreAfterKill(cid);
     if registry.IsSaveLockHeld() {
       out += ",\"save_lock_kept\":true";
     }
