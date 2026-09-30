@@ -53,7 +53,7 @@ flowchart LR
 ## 4. Speech
 
 - **Own voice:** `GameObject.PlayVoiceOver(npc, trigger, …)` queues `SoundPlayVo { voContext }`; the voice's voiceset scene plays a random line for that trigger with audio, subtitle and lip sync [source] `core/entity/gameObject.script:743-770` ([NPC reactions §3](npc-reactions.md#3-how-an-npc-picks-and-plays-a-voice-line)). AMM's Director offers 26 triggers [source] AMM `init.lua:2792-2830`.
-- **Text:** `scnDialogLineData` on `UIGameData.ShowDialogLine`, types `Regular` (bottom subtitle with the speaker's name), `OverHead`, `OverHeadAlwaysVisible`, `Holocall`, `Narrator`, …; hidden by id [source] `orphans.script:7396-7410, 44905-44926` ([NPC reactions §4](npc-reactions.md#4-text-only-barks-and-subtitles)). No audio means no lip sync [hypothesis].
+- **Text:** `scnDialogLineData` on `UIGameData.ShowDialogLine`, types `Regular` (bottom subtitle with the speaker's name), `OverHead`, `OverHeadAlwaysVisible`, `Holocall`, `Narrator`, …; hidden by id [source] `orphans.script:7396-7410, 44905-44926` ([NPC reactions §4](npc-reactions.md#4-text-only-barks-and-subtitles-source)). No audio means no lip sync [hypothesis].
 - **Custom audio:** Audioware's `AudioSystemExt.Play(event, entityID, emitter, lineType, settings)` and emitters [source] Audioware `r6/scripts/Audioware/Ext.reds:11-36`; needs a consenting voice.
 - **Holocalls** are phone machinery plus an ordinary scene over it, started from a quest phase; the answer comes back as a fact [wiki] `modding-guides/quest/custom-video-holocalls.md` (`holocall-phase-3-answer-wait.png`).
 

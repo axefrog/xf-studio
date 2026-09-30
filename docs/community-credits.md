@@ -327,6 +327,10 @@ By Boe6, per its script headers. [Pachinko](https://www.nexusmods.com/cyberpunk2
 
 Published with a support link to cyberdrake on its [Nexus page](https://www.nexusmods.com/cyberpunk2077/mods/32203). Its scripts and plugins showed how the player state machine's own transform request turns V's body, how locomotion parameters make movement follow the camera, how a mod runs its own third-person camera component beside the first-person one, and that a plugin can swap the native handlers behind the state machine's input reads. Together they mapped what a script can and can't do to steer V. Studied only.
 
+### InteractionUI module
+
+By keanuWheeze, per the credit line in the scripts and Nexus description of [Immersive V Dialogue Expanded](https://www.nexusmods.com/cyberpunk2077/mods/24377), whose copy we read. This small Lua module adds a dialogue hub with its own text to the game's dialogue widget at run time and lets the player choose from it with the usual keys, which is how the bridge's planned NPC choices will ask V a question and hear the answer without authoring a scene. Immersive V Dialogue Expanded showed it in use for replies to Johnny. Studied only; no code is copied.
+
 ### Jack Humbert
 
 [Let There Be Flight](https://github.com/jackhumbert/let_there_be_flight), [Mod Settings](https://github.com/jackhumbert/mod_settings) and [Input Loader](https://github.com/jackhumbert/cyberpunk2077-input-loader). Their RED4ext plugins showed how to ship redscript through the plugin itself and declare its natives, and Let There Be Flight's player-attach wrapper is the pattern our bridge's redscript layer follows. Mod Settings' menu-scenario extensions showed that a mod can add its own event to the game's menu scenarios, which is how the bridge asks the idle menu to open the character creator. Input Loader's source showed how mods register new input actions, by merging input files that the game then reads through a configuration redirect, and that it fires none. [Let There Be Flight](https://github.com/jackhumbert/let_there_be_flight) and [Mod Settings](https://github.com/jackhumbert/mod_settings). Mod Settings' menu-scenario extensions showed that a mod can add its own event to the game's menu scenarios, which is how the bridge asks the idle menu to open the character creator, and its pause-menu items showed how a mod adds its own entry to the pause and main menus. Studied only.
@@ -374,10 +378,6 @@ By ArmanIII, per its script headers. [Nexus](https://www.nexusmods.com/cyberpunk
 ### Native Interactions Framework
 
 By keanuWheeze, per its script header. [GitHub](https://github.com/justarandomguyintheinternet/nativeInteractions), [Nexus](https://www.nexusmods.com/cyberpunk2077/mods/21422). Its editor camera, which pulls the first-person camera behind V and widens its limits, and its usable spots built as scene interactions showed which interactions only input can choose. How it starts its scenes through one quest phase and a pair of facts, patches each scene as it loads (choice ids, node refs, option text) and hears a scene end through an event on the player is the route a later XF conversation scene would take. Studied only; its licence asks for credit or permission before code is reused, and none is.
-
-### InteractionUI module
-
-By keanuWheeze, per the credit line in the scripts and Nexus description of [Immersive V Dialogue Expanded](https://www.nexusmods.com/cyberpunk2077/mods/24377), whose copy we read. This small Lua module adds a dialogue hub with its own text to the game's dialogue widget at run time and lets the player choose from it with the usual keys, which is how the bridge's planned NPC choices will ask V a question and hear the answer without authoring a scene. Immersive V Dialogue Expanded showed it in use for replies to Johnny. Studied only; no code is copied.
 
 ### NightlyNow Core
 
@@ -439,6 +439,10 @@ Sun Moon And Stars Tattoo, Serpentine Heart and its Remix, Graceful Tattoo, Broo
 
 [Urmland Street Arcade](https://www.nexusmods.com/cyberpunk2077/mods/23908). Its world resources showed how a small location is added with ArchiveXL: the base game's own arcade, pachinko and vending devices placed in a new streaming block, a devices patch, and a few base-game nodes removed where it stands. Studied only; its author is still being confirmed.
 
+### Vendor and bartender dialogue mods
+
+[Immersive Food Vendors](https://www.nexusmods.com/cyberpunk2077/mods/7322) and [Immersive Bartenders](https://www.nexusmods.com/cyberpunk2077/mods/7203). Their packages showed that conversations with vendors are carried by scenes whose own text is registered through ArchiveXL's subtitle localisation, the route for custom choice text in a scene. Studied only; their authors are still being confirmed.
+
 ### Virtual Atelier, Virtual Atelier Delivery and Virtual Car Dealer
 
 By DJ_Kovrik (djkovrik), whose [GPL-3.0 repository](https://github.com/djkovrik/CP77Mods) publishes their source. [Virtual Atelier](https://www.nexusmods.com/cyberpunk2077/mods/2987) showed how other mods plug stores into one framework through a registration event, how it reuses the base game's vendor screen, and how a new tab joins a computer's menu (a technique its code credits to NexusGuy999). Virtual Atelier Delivery showed how a mod sends phone messages by rewriting pre-authored journal messages from script, spawns its own devices with new interactions, and adds billboards through TweakXL records; Virtual Car Dealer showed a browser page with its own controller and prices set when the tweak database loads. Virtual Atelier Delivery also showed a delivery clock kept in game time that pauses during braindances, while V is Johnny and in the time-skip menu, and map pins that come with a spawned drop-point device. Studied only.
@@ -446,10 +450,6 @@ By DJ_Kovrik (djkovrik), whose [GPL-3.0 repository](https://github.com/djkovrik/
 ### Voiced quest mods
 
 [I Really Want To Stay At Your House - Judy](https://www.nexusmods.com/cyberpunk2077/mods/8753), [Lizzie's Braindances](https://www.nexusmods.com/cyberpunk2077/mods/11077) (by ArmanIII, per its script headers) and [Roller Coaster Enhanced](https://www.nexusmods.com/cyberpunk2077/mods/14617) (authors of the other two not yet checked). Their packages showed how voiced quest mods give their scenes lip sync today: per-language lip-sync maps registered with ArchiveXL that point at the game's existing clips, with no generated animation. Studied only.
-
-### Vendor and bartender dialogue mods
-
-[Immersive Food Vendors](https://www.nexusmods.com/cyberpunk2077/mods/7322) and [Immersive Bartenders](https://www.nexusmods.com/cyberpunk2077/mods/7203). Their packages showed that conversations with vendors are carried by scenes whose own text is registered through ArchiveXL's subtitle localisation, the route for custom choice text in a scene. Studied only; their authors are still being confirmed.
 
 ### Watson Tattoo Shops
 
