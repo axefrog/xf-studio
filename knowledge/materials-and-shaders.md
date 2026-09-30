@@ -31,6 +31,8 @@ Hair is covered only at overview level here. See [hair shading](hair-shading.md)
 | ArchiveXL | `5474e34d` |
 | Cyberpunk Blender add-on | 2.1.0 at `7a4ee793` |
 | dxil-spirv / SPIRV-Cross (optional decompile) | `f2d1b554` / `aa217aeb` |
+| `Cyberpunk2077.exe` / address library (§8) | SHA-256 `a7de82…0991` / linker map `68af45ea` |
+| RED4ext (§8) | `c52c8d80` |
 
 Compiled-program hashes and the reproducible method are in the [shader-system evidence note](../research/materials/shader-system/README.md).
 
@@ -227,7 +229,7 @@ All [source]/[resource] ([mesh-decal contract](../research/materials/mesh-decal-
 
 **Stage labels.** WolvenKit labels the first GUID "pixel". In all 19,647 records it is the **vertex** program; 2,564 records have no pixel program [source].
 
-**Template-to-program link.** Templates connect to programs only by template name plus an opaque material GUID. No template field stores a shader GUID [source]. The name is the template resource's own `CMaterialTemplate.name`, not its depot path: a mod's copy of `mesh_decal.mt` at another path (the legacy XF generator's `mesh_decal__emp_front.mt`, identical to vanilla except `materialPriority`) keeps `name = mesh_decal` [resource] and drew in game [runtime: the reference character wears the legacy build; no capture on file], so tools must identify a template by that name. The Studio's renderer does ([head CC rendering §3](head-cc-rendering.md#3-the-head-decal-family)). `materialPriority` is `EMP_Normal` (0) or `EMP_Front` (1); serializers omit the default [source: WolvenKit RED4 enums].
+**Template-to-program link.** Templates connect to programs only through a lookup key: the hashed template name plus a hash of the permutation (vertex factory and flags, technique index, render stage, pass index); see §8.1. No template field stores a shader GUID [source]. The name is the template resource's own `CMaterialTemplate.name`, not its depot path (three vanilla templates' names differ from their file stems, and the cache keys follow the name): a mod's copy of `mesh_decal.mt` at another path (the legacy XF generator's `mesh_decal__emp_front.mt`, identical to vanilla except `materialPriority`) keeps `name = mesh_decal` [resource] and drew in game [runtime: the reference character wears the legacy build; no capture on file], so tools must identify a template by that name. The Studio's renderer does ([head CC rendering §3](head-cc-rendering.md#3-the-head-decal-family)). `materialPriority` is `EMP_Normal` (0) or `EMP_Front` (1); serializers omit the default [source: WolvenKit RED4 enums].
 
 **Constant registers.**
 
@@ -568,6 +570,32 @@ These become [backlog](../research/backlog/materials-shader-re.md) items.
 14. **Temporal filtering and upscalers.** Which program is the main anti-aliasing? Does the engine apply a negative texture LOD bias under DLSS, FSR3 or XeSS? How do the upscalers treat stable 2–3 pixel glints? Tracked in [Glitter in game](glitter-in-game.md#open-questions).
 15. **Decal normal source.** A mode-1 decal composes with a copy of the G-buffer normal (`t74`). Is it refreshed between decal draws, so that overlapping normal-writing decals compose with each other rather than with the skin ([decal reference §4.5](../research/materials/shader-decal.md#45-normal))?
 16. **Glass and local lights.** The `glass_onesided` transparent program reflects only the sun and the probes; it has no local-light loop [source]. Confirm with a photo-mode light moved across the Gorilla Arms window, and settle what enables `metal_base`'s alpha-test variant and its `post_gbuffer` pass ([metal and glass §8–9](../research/materials/shader-metal-glass.md#8-open-questions)).
+
+## 8. Custom shaders: from template to pipeline state
+
+How the engine turns a material template into GPU work, for the XF Shaders track (our own material shaders). Everything here is offline evidence from the 2.31 executable, CD PROJEKT RED's address library and the cache file; the full trace with addresses, IDs and grades is the [pipeline trace](../research/materials/xf-shaders-pipeline-trace.md), and [`exe_shaders.py`](../research/materials/shader-system/exe_shaders.py) re-proves it. Nothing is confirmed in game yet; the [probe plan](../research/materials/xf-shaders-probe-plan.md) is the test.
+
+### 8.1 How a technique is found [source]
+
+- **One cache, one lookup key.** `shader_final.cache` is opened once at start-up; only its `RDHS` magic is checked on load. A compiled technique is found by a 64-bit key: `fold32(FNV-1a-64(template name)) << 32 | permutation`, where the permutation is FNV-1a-32 over the vertex factory and its Discarded/PreSkinned/Dismembered flags, the technique index, the render-stage name and the pass index. The recipe reproduces all 19,647 records.
+- **The name is the template's `name` CName, not its file.** A copy of `mesh_decal.mt` that keeps `name = mesh_decal` reaches `mesh_decal`'s programs; a copy with a new name finds none.
+- **Programs are per template.** Each of the 19,037 programs belongs to exactly one template name, even when bytes are identical elsewhere. A record names a vertex program and an optional pixel program by GUID; each program names the engine modifier slots it reads (its parameter set).
+- **All programs are `vs_6_0`/`ps_6_0`, signed, with no embedded root signature.**
+
+### 8.2 From technique to pipeline state [source]
+
+1. A draw binds a material for a pass; the render template keeps its own technique map and compiles on a miss (key lookup, then the pixel and vertex programs).
+2. Each program becomes a GpuApi shader, deduplicated by an FNV-1a-32 hash of its bytecode. The bytecode is referenced, not copied.
+3. The command list collects the shaders and the pass's states into a `D3D12_GRAPHICS_PIPELINE_STATE_DESC`. At draw time it hashes the state fields (not the bytecode), seeded by the shaders' IDs, and resolves a PSO from an 8,192-entry cache.
+4. A missing PSO is loaded from an `ID3D12PipelineLibrary` by a name derived from the shader hashes, else created with `ID3D12Device::CreateGraphicsPipelineState`, synchronously or as a `CompilePSOAsync` job.
+5. One global graphics root signature, built at start-up, serves every material draw; bindless textures sit in `t0, space1`.
+
+### 8.3 What this means for custom shaders
+
+- **The cleanest detour is the cache reader's two lookups** (find technique, get program). A copied template with its own name is recognised by its key; the plugin answers with the original's record and its own pixel program under its own GUID, and everything downstream (shader, PSO, pipeline library) separates by itself. Vanilla users of the same template never see it [source for the path; the design is a proposal].
+- **A replacement pixel program must match** the original's input and output signatures, stay within the global root signature's bindings, read material constants from `cb4` at the template's registers, reuse the original's parameter set, and be signed SM 6.0 DXIL.
+- **Shipping shaders natively is not possible additively**: there is one cache file and no mod path. A plugin-read side cache in the same format is the practical form of "a package ships compiled shaders".
+- Every function on the path has an address-library ID, so hooks need no pattern scanning, as with ArchiveXL; object offsets remain version-bound and must be gated.
 
 ## In-game test asks
 
