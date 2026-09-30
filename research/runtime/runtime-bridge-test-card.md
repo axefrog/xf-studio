@@ -568,7 +568,17 @@ Afterwards, record outcomes in the [design page](runtime-bridge-design.md) (unve
 
 ## Build record (bridge 0.7.0, branch build, not staged)
 
-BUILD_RECORD_070
+Built 30 September 2026 on `claude/bridge-070` at `37ed4342b996`, clean tree (manifest `"commit": "37ed4342b996af486f20a2bd644f1b11256af496"`, `"source_tree_clean": true`), by `bun tools/package.ts`, then `bun tools/package.ts --allow-inventory` (the first run's -writes zip renamed; the second rewrote the default and diagnostic zips, whose hashes below are the files it left): version 0.7.0, session 7's findings, the [ranked hooks](bridge-hook-inventory.md), in-game answers and the overlay host P0 on top of 0.6.1 and main's two session-7 hot fixes. On that commit: `xfb_selftest --unit` UNIT OK, self-test 516 of 516, `bun test tools` 293 pass and 4 skipped (the opt-in on-screen capture tests), typecheck, the Lua lint, the theme tables against XF Studio's tokens, and the redscript lint without Codeware, with Codeware `v1.20.4`'s scripts, and with Codeware, the Equipment-EX stub and TweakXL `v1.11.4`'s scripts, each against a copy of the installed 2.31 `final.redscripts` (SHA-256 `2119046f…`). The plugin registers eighteen natives (`XFBridge_Answer`, `XFBridge_Comment`, `XFBridge_CetOverlay` are new) and ships three more script files (`XFRuntimeBridgeCyberware.reds`, `XFRuntimeBridgeWorld.reds`, `XFRuntimeBridgeUi.reds`); the DLL imports only Windows system DLLs and `D3DCOMPILER_47.dll` (Dear ImGui's shader compiler; no `dxgi.dll` or `d3d12.dll`); the -diagnostic and -writes `config.ini` set `[overlay] enabled = true` and carry the CET window's `theme.lua`. A rebuild after merging gives new hashes.
+
+| File | SHA-256 |
+|---|---|
+| `xf-runtime-bridge-0.7.0-writes.zip` (with inventory) | `160ab53fe0b9ddd3c995ee6f1a62b8651bb9e8aff608ca2ac18515c31d71cd19` |
+| `xf-runtime-bridge-0.7.0-writes-no-inventory.zip` | `45c908f96a72c39f02338f5e2cd21e9c51a78184e92a1d61873473e9907318bb` |
+| `xf-runtime-bridge-0.7.0-diagnostic.zip` | `3b8aebd597a7221ba72842414ece68aee2fff195913659b8f921016749484b0c` |
+| `xf-runtime-bridge-0.7.0.zip` (default) | `01e65b072e1efca9c01edc7833688276ca48c03b04e15627311cfeb42d96342b` |
+| (`XFRuntimeBridge.dll` inside each) | `82721bad03856f4e8739a73e15ad8c258ca270b0b2802cc999b44b39934a6bf9` |
+
+**Watch in the session:** `rtti.register_types … natives=18` and `overlay.hook_attached` at load, `overlay.init ok=true` (or `overlay.refused why=`) at the first frame; `answer key` lines (A2); `overlay attached layer=hud size=` (B1); no crash in C1, and the last `script.call` line if there is one; `overlay.reset` (I4) and `overlay.shutdown` (I6). The [session-8 checks](#session-8-checks-bridge-07) cover each.
 
 ## Build record (bridge 0.6.1, branch build, not staged)
 
