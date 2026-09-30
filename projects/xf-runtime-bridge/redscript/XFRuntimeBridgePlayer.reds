@@ -170,7 +170,12 @@ public abstract class XFPlayer {
       out += ",\"in_scene\":" + XFJson.Flag(inScene) + ",\"in_dialogue\":" + XFJson.Flag(inDialogue) + ",\"staged_scene\":" + XFJson.Flag(inScene && !inDialogue && high <= 2);
     }
     out += ",\"busy\":" + XFJson.Str(XFPlayer.Busy(player)) + ",\"busy_state\":" + XFJson.Str(XFPlayer.BusyState(player)) + ",\"dead\":" + XFJson.Flag(player.IsDead());
-    out += ",\"psm_detail\":{\"fall\":" + IntToString(XFPlayer.Psm(player, defs.Fall)) + ",\"landing\":" + IntToString(XFPlayer.Psm(player, defs.Landing)) + ",\"swimming\":" + IntToString(XFPlayer.Psm(player, defs.Swimming)) + ",\"workspot\":" + IntToString(XFPlayer.Psm(player, defs.IsInWorkspot)) + ",\"takedown\":" + IntToString(XFPlayer.Psm(player, defs.Takedown)) + ",\"body_carrying\":" + IntToString(XFPlayer.Psm(player, defs.BodyCarrying)) + "}";
+    out += ",\"psm_detail\":{\"fall\":" + IntToString(XFPlayer.Psm(player, defs.Fall)) + ",\"landing\":" + IntToString(XFPlayer.Psm(player, defs.Landing)) + ",\"swimming\":" + IntToString(XFPlayer.Psm(player, defs.Swimming)) + ",\"workspot\":" + IntToString(XFPlayer.Psm(player, defs.IsInWorkspot)) + ",\"takedown\":" + IntToString(XFPlayer.Psm(player, defs.Takedown)) + ",\"body_carrying\":" + IntToString(XFPlayer.Psm(player, defs.BodyCarrying));
+    // 0.7 (session 7: a teleport mid-jump was refused while a later player_state read all zeros): the locomotion state
+    // (Jump, DodgeAir, SlideFall ...) and whether V stands on the ground now, sampled with the busy state above.
+    let locomotion = XFPlayer.Psm(player, defs.Locomotion);
+    let grounded = GameInstance.GetNavigationSystem(game).IsOnGround(player, 0.35);
+    out += ",\"locomotion\":" + IntToString(locomotion) + ",\"locomotion_name\":" + XFJson.Str(EnumValueToString("gamePSMLocomotionStates", Cast<Int64>(locomotion))) + ",\"on_ground\":" + XFJson.Flag(grounded) + "}";
     out += ",\"look_at\":" + XFScene.LookedAt(player) + ",\"hud_prompt\":" + XFScene.Prompt(game);
     let registry = XFBridgeRegistry.Get();
     if IsDefined(registry) {
@@ -265,6 +270,24 @@ public abstract class XFPlayer {
     let registry = XFBridgeRegistry.Get();
     let touched = IsDefined(registry) ? registry.GlideInputTouched() : "";
     return "{\"ok\":true,\"position\":" + XFScene.Arr(player.GetWorldPosition()) + ",\"yaw\":" + XFJson.Num(player.GetWorldYaw()) + ",\"busy\":" + XFJson.Str(XFPlayer.Busy(player)) + ",\"busy_state\":" + XFJson.Str(XFPlayer.BusyState(player)) + ",\"took_over\":" + XFJson.Str(touched) + "}";
+  }
+
+  // 0.7 (session 7: the maintainer's mouse didn't end a look behaviour): the player's own input watch without a movement hold,
+  // for a look (design §4.2). Off leaves the watch on while a glide's hold is on (the glide owns it then).
+  public static func WatchInput(cid: String, on: Bool) -> String {
+    let player = XFPlayer.Player();
+    let registry = XFBridgeRegistry.Get();
+    if !IsDefined(player) || !IsDefined(registry) {
+      return XFJson.Fail("not_in_gameplay", "V isn't in the world");
+    }
+    if on {
+      registry.StartGlideInputWatch(player);
+    } else {
+      if !registry.HasPlayerEffect(TDBID.Create("GameplayRestriction.NoMovement")) {
+        registry.StopGlideInputWatch(player);
+      }
+    }
+    return "{\"ok\":true,\"watching\":" + XFJson.Flag(on) + "}";
   }
 
   // The player's camera turns towards a world point over duration seconds (the targeting system's own look-at; the

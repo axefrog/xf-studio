@@ -12,7 +12,7 @@
 //   bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge/init.lua   (CET)
 //   bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge/panel.lua  (CET panel; diagnostic and writes packages only)
 // The live-pose carrier is a separate test package (tools/live-pose/build-carrier.ts), never in these.
-//   red4ext/plugins/XFRuntimeBridge/THIRD_PARTY_NOTICES.txt  (nlohmann/json and RED4ext.SDK, MIT)
+//   red4ext/plugins/XFRuntimeBridge/THIRD_PARTY_NOTICES.txt  (nlohmann/json, RED4ext.SDK and Dear ImGui, MIT)
 //   red4ext/plugins/XFRuntimeBridge/manifest.json        (versions and SHA-256 of every other file)
 
 import { createHash } from "node:crypto";
@@ -69,15 +69,23 @@ function listFiles(dir: string): string[] {
 export const WRITES_CLASSES = (options: { allowInventory?: boolean } = {}) =>
   options.allowInventory ? ["photo", "world", "character", "inventory", "save", "showroom", "player"] : ["photo", "world", "character", "save", "showroom", "player"];
 
+/** The [bridge] section's enabled line (after the section's comment lines). */
+const BRIDGE_ENABLED = (on: boolean) => new RegExp(`^\\[bridge\\]\\n(?:;.*\\n)*enabled = ${on}$`, "m");
+
 export function variantConfig(base: string, variant: Variant, options: { allowInventory?: boolean } = {}): string {
   let config = base;
   if (/^allow_writes = true$/m.test(config)) throw new Error("native/config/config.ini must keep allow_writes = false");
   if (/^allow_creator_leave = true$/m.test(config)) throw new Error("native/config/config.ini must keep allow_creator_leave = false");
   if (!/^allow_live_pose = false$/m.test(config)) throw new Error("native/config/config.ini must keep allow_live_pose = false");
-  if (!/^enabled = false$/m.test(config)) throw new Error("native/config/config.ini must keep enabled = false");
+  // 0.7: two sections now have an "enabled" key, so both checks name their section.
+  if (!BRIDGE_ENABLED(false).test(config)) throw new Error("native/config/config.ini must keep enabled = false");
+  if (!/^\[overlay\]\n(?:;.*\n)*enabled = false$/m.test(config)) throw new Error("native/config/config.ini must keep [overlay] enabled = false");
   if (variant !== "default") {
-    config = config.replace(/^enabled = false$/m, "enabled = true");
-    if (!/^enabled = true$/m.test(config)) throw new Error(`${variant} config did not enable the bridge`);
+    config = config.replace(BRIDGE_ENABLED(false), (line) => line.replace(/enabled = false$/, "enabled = true"));
+    if (!BRIDGE_ENABLED(true).test(config)) throw new Error(`${variant} config did not enable the bridge`);
+    // 0.7: the XF overlay host (P0, draw-only) is on in the test packages only; the distribution package keeps it off.
+    config = config.replace(/^(\[overlay\]\n(?:;.*\n)*)enabled = false$/m, "$1enabled = true");
+    if (!/^\[overlay\]\n(?:;.*\n)*enabled = true$/m.test(config)) throw new Error(`${variant} config did not switch the overlay host on`);
   }
   if (variant === "writes") {
     config = config.replace(/^allow_writes = false$/m, "allow_writes = true");
@@ -131,6 +139,8 @@ export type Manifest = {
   /** Steps and consequences for staging by hand (RB-65); empty for the default package, which carries no presets. */
   staging_notes: string[];
   cet_panel: boolean;
+  /** 0.7: whether the XF overlay host is on ([overlay] enabled): the test packages only. */
+  overlay_host: boolean;
   commit: string;
   source_tree_clean: true;
   built_for: Record<string, string>;
@@ -185,6 +195,7 @@ export function stageVariant(options: StageOptions): Manifest {
     photo_mode_presets: variant !== "default" ? "photo_mode.std_preset_6..9 (XF full body, face, eyes, head and shoulders)" : null,
     staging_notes: variant !== "default" ? [...STAGING_NOTES] : [],
     cet_panel: variant !== "default",
+    overlay_host: variant !== "default",
     commit: options.commit, // read from the DLL's build marker; equals HEAD at packaging time
     source_tree_clean: true,
     built_for: {
@@ -193,7 +204,7 @@ export function stageVariant(options: StageOptions): Manifest {
       redscript: "0.5.31",
       cet: "1.37.1",
       tweakxl: "1.11.4 (optional; the data marker and the test profile's camera presets need it)",
-      codeware: "1.20.5 (optional; only photo.enter's research route needs it)",
+      codeware: "1.20.5 (optional; the showroom, the ink panel and its answer keys, the weather and Equipment-EX's route need it)",
     },
     files,
   };

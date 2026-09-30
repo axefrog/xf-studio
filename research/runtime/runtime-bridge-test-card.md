@@ -8,6 +8,7 @@
 |---|---|---|
 | [Before the session](#before-the-session-coordinator) | offline | The coordinator restages the `XF Runtime Bridge` entry from a new build |
 | [Finish showroom checks](#finish-showroom-checks-bridge-050) | 30-35 min | Only with the 0.5.0 -writes build, Codeware and XF Finish Showroom staged, and an XF Eye Artistry build of the same collection and commit; a dim interior at night with 4 m clear in front of V |
+| [Session 8 checks](#session-8-checks-bridge-07) | about 40 min | Only with the 0.7.0 -writes build (`--allow-inventory`), Codeware, XF Finish Showroom and Equipment-EX; V's apartment, then a street with a door, a vending machine, an NPC and a car |
 | [Session 7 checks](#session-7-checks-bridge-06) | about 40 min | Only with the 0.6.1 -writes build (`--allow-inventory`), Codeware, XF Finish Showroom and Equipment-EX; V in her apartment, then in the street; the game window in front |
 | [Ink demo rows](#ink-demo-rows-bridge-053) | folded into session 7 (group F) | The 0.5.3 demos' detailed rows |
 | [Session 6 checks](#session-6-checks-bridge-052) | 30-40 min | Only with the 0.5.2 -writes build with the inventory class (`--allow-inventory`), Codeware and a rebuilt XF Finish Showroom staged, and Character Customization Anywhere **disabled** in the test profile; V in the street, on foot; the game window in front |
@@ -112,6 +113,85 @@ Only with the 0.5.0 -writes build and XF Finish Showroom staged ([pipeline guide
 | K2 | C, M | `showroom_spawn {manifest: "<s2>", presets: ["Gloss A · as before"]}`, then M loads the save (or `game_load {latest: true, discard_unsaved: true}`); after the load, `showroom_state` | Nothing in the world after the load; `showroom_state` has no pieces | A head survives the load: record it (static entities should not persist) |
 
 Evidence: every answer's JSON (spawn plans, spill estimates, sweep frames), the captures (F3–F7 as a fidelity sheet, L1–L3 as a lineup sheet and per-preset strips, L4's burst manifest), the plugin log's `showroom` lines, the Codeware version, and the three archives' SHA-256.
+
+## Session 8 checks (bridge 0.7)
+
+Only with the 0.7.0 -writes build built with `--allow-inventory` ([build record](#build-record-bridge-070-branch-build-not-staged)); Codeware, XF Finish Showroom and Equipment-EX staged as for session 7. Each group proves one of 0.7's new hooks ([inventory](bridge-hook-inventory.md)) or session 7's fixes in the game. About 40 minutes in ten groups; each stands alone. C is the coordinator, M the maintainer; tool names are the MCP names. **New this session:** C asks with `ui_message {level: "ask"}` and waits with `session_wait`; M answers in the game with the keys the XF panel shows (F6 Ready, F7 Yes, F8 No by default) or the buttons in the XF window of the CET overlay, and can send a comment from that window at any time. Behaviours in rows that need M start only after M's Ready (session 7: keep_framed's time ran out before M began). Evidence: every answer's JSON, the named captures, `session_log {tail: 500}` at the end, the plugin log copied **before** any relaunch.
+
+**Restage first** (coordinator, MO2 closed): **replace** the `XF Runtime Bridge` entry's files with `xf-runtime-bridge-0.7.0-writes.zip` (manifest `"version": "0.7.0"`, `"inventory_writes": true`, `cet/.../theme.lua` present). Its `config.ini` has `[overlay] enabled = true` and `theme = dark`, and `[ui] answer_keys`. A save in V's apartment; a street with a door, a vending machine, an NPC and a parked car in reach; a save whose V can take arm cyberware (any V: `add_if_missing` adds it).
+
+**A. Preflight and in-game answers (6 min).** V in her apartment, on foot.
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| A1 | C | `bridge_info`; `ui_state`; `overlay_state` | `plugin_version` 0.7.0; the log has `natives=18` and `overlay.hook_attached present=true resize=true render_shutdown=true`; `bridge_info.overlay.theme` dark, `answer_keys` F6 F7 F8 F11; `ui_state.tier` `staged`, `cet_overlay` false or null | `natives=15`: the old DLL is staged. No `overlay.hook_attached`: record `overlay_state.missing` |
+| A2 | C, M | `ui_message {text: "Press F6 when you can see this", level: "ask", seconds: 120}`; `session_wait {message_id: <its id>, timeout_s: 120}`; M presses F6 in the game | The XF panel shows the question and `[F6] Ready  [F7] Yes  [F8] No` under it; the wait returns `answer.label` Ready, `via` `ink_key`; the panel shows "Answered: Ready" briefly | Keys do nothing: record `ui_state.pending_ask` and the log's `answer key` lines (Codeware's key callback) |
+| A3 | C, M | M opens the CET overlay; `ui_state`; `ui_message {text: "Pick one", level: "ask", choices: ["Key", "Fill", "Rim"], seconds: 120}`; M clicks **Fill** in the XF window; then types "comment check" in the comment box and presses **Send**; `session_wait {kinds: ["answer", "comment"]}` twice; M closes the overlay; `ui_state` | `cet_overlay` true while open, false after; the window is in the XF Studio dark theme (graphite panel, yellow question heading); the waits return `Fill` (`via` `cet_button`) and the comment | The window keeps CET's own colours: record the CET log's `panel` lines |
+| A4 | C, M | `ui_message {level: "ask", text: <a 500-character question>, seconds: 90}`, then five `ui_message` info lines; M reads the CET label and the XF panel | Both wrap the whole question (600 characters shown at most); the question stays on screen while the info lines come and go (pinned) | The question is pushed out: record `ui_state.pending_ask` |
+
+**B. The XF panel on this screen (3 min).** The street (session 7: on 3840×1600 the panel sat off-screen).
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| B1 | C, M | `ui_hud {}`, capture the whole window; `ui_hud {anchor: "bottom_left", x: 60, y: 200, scale: 1.3}`, capture; `ui_hud {anchor: "top_right", x: 2000}`, capture; `ui_hud {reset: true}` | Top right: the whole panel on screen, near the corner; bottom left: fully visible and larger; x 2000 is clamped (the panel stays on screen). The log's `overlay attached layer=hud size=W×H` line gives the layer's own size (record it) | Still off-screen: record the `size=` line and the captures |
+
+**C. World objects are safe to look at (4 min).** Session 7 crashed on a door. The street.
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| C1 | M, C | M looks at a door, then a vending machine, then an NPC, then a parked car; for each C calls `player_state` and `scene_report {include: ["subjects"]}` | No crash. `look_at` has `id`, `class` and `distance` for each; the NPC and the car also a `record`; `hud_prompt` shows the prompt's title (the door's Open, the machine's name). The NPCs in `scene_report` have `record`, not `name` | A crash: copy the plugin log before relaunching; its last `script.call` line names the call. Evidence into the session folder |
+
+**D. Scene tiers (3 min).** V's apartment, then the street.
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| D1 | C | Apartment: `player_state`; `player_teleport {offset: {forward: 1}}` and its undo; `player_look {yaw: 30, relative: true}` and its undo | `tier` `staged`, `busy` ""; `staged_scene` true or false (record it); the teleport and the look go through and back | Refused `in_scene`: record `psm` and `in_dialogue` |
+| D2 | C, M | The street: `player_state`; then M starts a conversation with an NPC and C calls `player_teleport {turn: 10}` | `tier` `full`, `busy` ""; during the conversation the teleport is refused `in_scene` (dialogue) | — |
+
+**E. Arm cyberware (7 min).** The render study's capture C6 without a ripperdoc. The street, V on foot, then photo mode.
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| E1 | C | `cyberware_state` | Every cyberware area with its slots; `arms.holster_state` `holstered_default` (no arm cyberware) or the installed one's; `right_arm_slot.appearance` the same name | `holster_state` empty: record `arms.chain` |
+| E2 | C, M | `cyberware_equip {item: "Items.MantisBlades", add_if_missing: true}`; keep its undo; `cyberware_state`; `photo_open`; `photo_frame {target: "head-and-shoulders"}`; `photo_hud_hide {}`; capture both forearms (`e2-mantis-holstered`); `photo_exit` | `equipped` true; `arms.holster_state` `holstered_mantis`, `creator_group` `holstered_mantis_tpp`; the capture shows the holstered blades' plating on the forearms (M confirms) | Not equipped: record the answer's `note` and `cyberware_state` |
+| E3 | C, M | `player_action {name: "weapon.arms"}`, capture (`e3-mantis-drawn`); its undo (`weapon.holster`) | The blades come out (M confirms); `cyberware_state.arms.weapon_right_slot` names the weapon while drawn; holstered again after | Nothing drawn: record `weapon_right_slot` and M's view |
+| E4 | C, M | E2's undo; then `cyberware_equip {item: "Items.StrongArms", add_if_missing: true}`, photo mode, the same framing and capture (`e4-gorilla`); photo light 1 on (`photo_light_set {light: 1, on: true}`), capture again (`e4-gorilla-light`); photo mode closed; its undo | After E2's undo `holstered_default` and the Mantis Blades gone from the inventory (`removed: true`); Gorilla Arms `holstered_strong`; both captures kept for C6 (the glass under the light is C6's question) | The undo leaves an item: record both answers |
+
+**F. The world (4 min).** The street.
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| F1 | C | `world_state {facts: ["tutorial_ripperdoc_eyes_passed"]}`; `world_probe {around_v: true, ring_m: 4}` | The clock, the rain, `weather.name` (with Codeware) and `weather.states`; the fact's value; nine probes with `navmesh_streamed`, `walkable`, `ground` (and `ceiling_m` under cover) | `weather.readable` false: Codeware isn't loaded |
+| F2 | C, M | `world_weather_set {name: "24h_weather_rain", blend_s: 1}`, capture; its undo, capture; `world_weather_set {name: "24h_weather_fog"}`, `bridge_kill`, M presses Reconnect; `world_state` | Rain within a few seconds, then back to the earlier weather; after the kill the log has `weather_restored` and `weather.set_by_bridge` is false | The weather stays: record `world_state` |
+
+**G. Photo mode's rows and framing (5 min).** A public place with people around; photo mode.
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| G1 | C, M | `photo_open`; `photo_state {options: true}` (read keys 54 and 69's option labels); `photo_scene_set {npcs: {label: <the "off" option's label>}}`, capture; its undo | The surrounding NPCs vanish and come back (M confirms); the answer names `matched_by` | Record key 54's options and the answer |
+| G2 | C, M | M flies the drone camera about 8 m from V; `photo_frame {target: "face"}` | Framed (no `framing_bound`); the answer has `reseated_camera.from_m` about 8 and a note | Record the refusal and `photo_subject` |
+| G3 | C | `showroom_spawn {manifest, presets: [one], distance_m: 1.5}` under the drone camera | `pieces[0].eyes_on_screen` near {0, 0} by `game`, or by the model with the note that the game's projection disagreed with its camera (session 7's case); never −1.2 with `in_frame: false` for a centred head | Record `scene_read {parts: ["camera"]}` |
+| G4 | C | `showroom_rotate {sweep: {steps: 3, capture: true}}`; `capture_sheet {sweep: <its answer>, title: "sweep"}`; `showroom_light {rig: "none"}` (no manifest); `showroom_clear` | One sheet with cells labelled -60, 0 and 60 deg; the rig-off call needs no manifest | — |
+
+**H. Saves and Equipment-EX (3 min).** The street, Equipment-EX's outfit on.
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| H1 | C | `game_saves {limit: 5}` | Five saves newest first with type, location, quest, level and time | `with_metadata` 0: record it (the details callback didn't come outside the Load menu) |
+| H2 | C, M | `wardrobe_state`; `wardrobe_equip {item: "Items.Helmet_01_basic_01"}` (added first with `inventory_equip {…, add_if_missing: true}` if needed); its undo | `script_outfit.version` 1.2.9; the helmet shows on V (M confirms), or the refusal says which: EquipmentEx answered false, the call didn't run, or the item's outfit slot | Record the refusal's text |
+
+**I. The XF overlay host, P0 (6 min).** Anywhere; the overlay is on in this build.
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| I1 | C, M | `overlay_state`; M looks at the top left under the CET label | `phase` drawing, `back_buffer` format and size, `hdr_mode` disabled, `theme` dark; the diagnostic panel in the XF Studio dark theme (graphite, the yellow "XF RUNTIME BRIDGE", a cyan bar sweeping once a second), smooth, in gameplay, menus and photo mode | `refused`: record `refusal` (HDR, format, window). No panel with `drawing`: record `frames` (0 means the present hook never drew) |
+| I2 | C | `capture_screenshot {}` | `overlay.overlay_host_hidden` true and the panel absent from the picture; it returns afterwards | The panel in the picture: record the answer |
+| I3 | M, C | M opens and closes the CET overlay; `overlay_state` in between | The XF panel hides while CET's overlay is open (`cet_open` true) and returns | — |
+| I4 | M, C | M switches windowed ↔ borderless and changes the resolution once; `overlay_state` | The panel returns at the new size; `resizes` counts up; the log has `overlay.reset` | A crash or a black screen: copy the log first |
+| I5 | M, C | If the game offers it: frame generation on, watch the bar; HDR on (then restart) and `overlay_state` | Record ghosting or flicker of the bar with frame generation; in HDR `phase` refused with the HDR reason and nothing drawn | — |
+| I6 | M | At the end of the evening: quit to the desktop | No crash dialog; the log's last lines include `overlay.shutdown` | Copy the crash report |
+
+**J. Friction log (throughout).** Everything met in passing (AGENTS.md), including anything about answering from the game.
 
 ## Session 7 checks (bridge 0.6)
 
@@ -481,6 +561,10 @@ Expected evidence (under MO2, logs sit in `overwrite/`):
 | `r6/logs/redscript_rCURRENT.log` | Both `.reds` files from `red4ext/plugins/XFRuntimeBridge/Scripts`; `Compilation complete` | The plugin's script path under MO2 |
 
 Afterwards, record outcomes in the [design page](runtime-bridge-design.md) (unverified rows become [runtime] with the capture id), in [knowledge/runtime-access.md](../../knowledge/runtime-access.md), and the session 2 answers in [experiment 020](../../experiments/020-session-2/README.md).
+
+## Build record (bridge 0.7.0, branch build, not staged)
+
+BUILD_RECORD_070
 
 ## Build record (bridge 0.6.1, branch build, not staged)
 

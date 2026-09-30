@@ -123,6 +123,11 @@ describe("packages", () => {
     expect(() => variantConfig(base.replace("allow_writes = false", "allow_writes = true"), "default")).toThrow(/allow_writes/);
     expect(() => variantConfig(base.replace("enabled = false", "enabled = true"), "default")).toThrow(/enabled/);
     expect(() => variantConfig(base.replace("allow_live_pose = false", "allow_live_pose = true"), "default")).toThrow(/allow_live_pose/);
+    // 0.7: the overlay host is off in the project's config and in the default package, on in the test packages.
+    expect(() => variantConfig(base.replace(/(\[overlay\]\n(?:;.*\n)*)enabled = false/, "$1enabled = true"), "default")).toThrow(/overlay/);
+    expect(variantConfig(base, "default")).toMatch(/\[overlay\]\n(?:;.*\n)*enabled = false/);
+    expect(variantConfig(base, "diagnostic")).toMatch(/\[overlay\]\n(?:;.*\n)*enabled = true/);
+    expect(variantConfig(base, "writes")).toMatch(/\[bridge\]\n(?:;.*\n)*enabled = true/);
     rmSync(work, { recursive: true, force: true });
   });
 });

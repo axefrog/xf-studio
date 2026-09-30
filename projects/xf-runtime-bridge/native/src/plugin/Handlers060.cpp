@@ -193,6 +193,10 @@ behave::Ops BehaviourOps()
         bool on = aOn;
         ScriptCall("XFPlayer", "Effect", {"String", "Bool"}, {&effect, &on}, cid);
     };
+    ops.watchInput = [cid](bool aOn) {
+        bool on = aOn;
+        ScriptCall("XFPlayer", "WatchInput", {"Bool"}, {&on}, cid);
+    };
     ops.subject = [cid] {
         float up = 0.045f, forward = 0.08f, right = 0.0f;
         return ScriptCall("XFPhoto", "Subject", {"Float", "Float", "Float"}, {&up, &forward, &right}, cid);

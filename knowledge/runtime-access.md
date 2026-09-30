@@ -113,6 +113,15 @@
 | `SaveLocksManager.RequestSaveLockAdd/Remove` | [source] 2.31 | Held from the first write until a save is loaded (the kill switch keeps it); blocking autosaves in practice [unverified] |
 | Autosave triggers: vendor, ripperdoc and perk exits (`MenuUIUtils.RequestAutoSave`), fast travel, legendary loot, drop points, quest checkpoints, the timed autosave setting | [source] 2.31 | Why sessions start with a manual save and end by loading it |
 
+### 5.1 Bridge 0.7 (offline; [hook inventory](../research/runtime/bridge-hook-inventory.md))
+
+- **Reading world objects safely.** Any object the targeting system or a query hands back may be of any type (a door, a vending machine, a car): call only the natives every entity answers, keep each answer in a local, read a record's name only after a cast to the class that declares `GetRecordID`, and read what the HUD shows from its blackboard. Session 7's crash on a door is [game crashes §2.4](game-crashes.md#24-a-string-operator-with-a-null-operand-session-7) [runtime].
+- **Cyberware** reads and writes through the equipment system's own data and requests, as the ripperdoc's screen does; the arms' drawn state is `RequestActiveMeleeware` [source]; in game [unverified].
+- **The weather** needs Codeware: vanilla scripts read only the rain; Codeware's `SetWeather` holds a state and stops the game's weather cycle until `ResetWeather` [source].
+- **The save list's details** come through the Load menu's own callback (`OnSaveMetadataReady`) after `RequestSavesForLoad`; whether it fires outside that menu is [unverified].
+- **Answers from the game.** Codeware's callback system delivers raw keys (`Input/Key`) to a script with no input binding, which is how the ink panel's answer keys work; the CET overlay's windows take clicks only while that overlay is open [source].
+- **Drawing over the game natively** (the overlay host, P0): the engine's `GpuApi::Present` can carry a second chained detour beside CET's; the bridge draws there with its own command list on the engine's direct queue, from the SDK's decoded device data ([ink UI §8](ink-ui.md#8-an-xf-imgui-host-beside-cet)) [source]; in game [unverified].
+
 ## 6. What agents can and cannot do yet
 
 - **Seen working in game:** reads, the photo-mode camera, placement, light values, fade and expression, `cc.apply`, the clock, the freeze and the kill switch's restore, through MCP, the CLI and a session script [runtime]. Sessions 4–6 (28–29 September) added [runtime] ([experiment 029](../experiments/029-session-4/README.md), [experiment 032](../experiments/032-sessions-5-6/README.md)): `photo.open` (only with the game window in front: keys posted to a background window don't reach it), `photo.frame` without drift, lights placed about V, photo mode's own clock and exposure, expressions by label and by table index, `cc.open` and `cc.back` from the street, `cc.apply` by label and through a row's slot, `game.load` and `game.wait` through a load, and spawning, lighting, turning and clearing XF Finish Showroom heads. Every other command works with the game in the background.

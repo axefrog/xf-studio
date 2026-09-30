@@ -708,6 +708,10 @@ void StepLook(Behaviour& aB, const Ops& aOps, double aDt)
             aB.point = {pos[0] + d[0] * 10.0, pos[1] + d[1] * 10.0, pos[2] + d[2] * 10.0};
         }
         aB.firstAngle = AngleDeg(forward, Sub(aB.point, pos));
+        if (aOps.watchInput)
+        {
+            aOps.watchInput(true); // design §4.2: the player's own input ends a look (0.7, session 7)
+        }
         aOps.lookAt(aB.point, aB.duration);
         aB.state = Behaviour::State::Running;
         aB.summary = {{"point", VecJson(aB.point)}, {"angle_deg", Round4(aB.firstAngle)}};
@@ -717,6 +721,15 @@ void StepLook(Behaviour& aB, const Ops& aOps, double aDt)
     const double angle = AngleDeg(forward, Sub(aB.point, pos));
     aB.lastAngle = angle;
     aB.summary["angle_deg"] = Round4(angle);
+    if (aOps.watchInput && aOps.player)
+    {
+        const auto tookOver = aOps.player().value("took_over", std::string());
+        if (!tookOver.empty())
+        {
+            Finish(aB, "user_took_over", "info", {{"input", tookOver}, {"angle_deg", Round4(angle)}});
+            return;
+        }
+    }
     if (angle <= aB.tolerance)
     {
         Finish(aB, "reached", "done", {{"angle_deg", Round4(angle)}, {"forward", VecJson(forward)}});
@@ -1053,6 +1066,10 @@ void Runner::Tick(double aDt, const Ops& aOps, bool aGateOpen)
                     if (b.stopReason != "reached" && aOps.breakLookAt)
                     {
                         aOps.breakLookAt();
+                    }
+                    if (aOps.watchInput)
+                    {
+                        aOps.watchInput(false);
                     }
                 }
                 else if (b.kind == "glide_path")

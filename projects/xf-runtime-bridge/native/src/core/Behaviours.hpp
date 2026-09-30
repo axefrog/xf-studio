@@ -62,6 +62,9 @@ struct Ops
     std::function<std::vector<Vec3>(const Vec3& aFrom, const Vec3& aTo)> path;
     // A movement restriction on V (the status effect GameplayRestriction.NoMovement) on or off.
     std::function<void(bool aOn)> holdMovement;
+    // 0.7 (session 7: a look wasn't broken by the player's mouse): watch the player's own input without holding V; player()
+    // then reports it as took_over. Optional (older hosts leave it empty).
+    std::function<void(bool aOn)> watchInput;
     // photo.subject's reading of V's face in photo mode (keep_framed v).
     std::function<json()> subject;
     // A photo-mode attribute (V's placement for keep_framed v): returns the value the game took.

@@ -138,6 +138,7 @@ struct Sim060::State
     std::vector<std::string> effects;
     // The player's own input (selftest.player {input}), seen by a glide's watch only while its movement hold is on (RB-81).
     std::string input;
+    bool watching = false; // 0.7: a look's input watch
     // A look-at in progress: the camera turns towards the point over the duration.
     bool looking = false;
     double lookFromYaw = 0, lookFromPitch = 0, lookToYaw = 0, lookToPitch = 0, lookT = 0, lookDuration = 1;
@@ -384,7 +385,16 @@ void Sim060::Register()
     m_ops.player = [self, busyNow, holding] {
         std::scoped_lock _(self->m_state->mutex);
         return json{{"position", Arr(self->m_state->position)}, {"yaw", self->m_state->yaw}, {"busy", busyNow()},
-                    {"took_over", holding() ? self->m_state->input : std::string()}};
+                    {"took_over", holding() || self->m_state->watching ? self->m_state->input : std::string()}};
+    };
+    // 0.7: a look's input watch without a hold (as XFPlayer.WatchInput).
+    m_ops.watchInput = [self](bool aOn) {
+        std::scoped_lock _(self->m_state->mutex);
+        self->m_state->watching = aOn;
+        if (aOn)
+        {
+            self->m_state->input.clear();
+        }
     };
     // As XFPlayer.Step: the player's own input or a busy state refuses the step (RB-79, RB-81).
     m_ops.teleportPlayer = [self, busyNow, holding](const Vec3& aPosition, double aYaw) {
