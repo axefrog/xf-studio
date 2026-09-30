@@ -64,7 +64,36 @@ export function npcParams(input: Record<string, unknown>): Record<string, unknow
 
 const bridgeNpc = (method: string) => ({ method, params: npcParams });
 
-export const COMMANDS_080_NPC: CommandDef[] = [
+/** V's state: every npc write (and a pick) is refused while V is out of normal play, fighting, driving or in a scene. */
+const V_STATE = ["not_in_world", "in_combat", "in_vehicle", "in_scene", "not_v"];
+const OURS = ["npc_unknown", "not_ours", "npc_lost"];
+/**
+ * Each npc command's own refusal codes (for the MCP reference; with bridge 0.8a's catalogue080.ts they join its REFUSALS):
+ * what core/Npc.cpp, the redscript layer (XFNpc) and the scenario runner raise, beyond the codes every command can answer.
+ * Their plain words are errors080npc.ts.
+ */
+export const NPC_REFUSALS: Readonly<Record<string, readonly string[]>> = {
+  "npc.list": ["not_in_world", "codeware_missing"],
+  "npc.pick": [...V_STATE, "codeware_missing", "npc_protected", "npc_busy", "npc_not_found", "too_far", "limit"],
+  "npc.status": [],
+  "npc.spawn": [...V_STATE, "cast_unknown", "codeware_missing", "record_missing", "not_ready", "not_streamed", "not_walkable", "spawn_refused", "too_far", "limit"],
+  "npc.move": [...V_STATE, ...OURS, "npc_not_spawned", "npc_releasing", "not_walkable", "too_far", "no_ai"],
+  "npc.follow": [...V_STATE, ...OURS, "npc_not_spawned", "npc_releasing", "too_far", "no_ai"],
+  "npc.turn": [...V_STATE, ...OURS, "npc_not_spawned", "no_ai"],
+  "npc.place": [...V_STATE, ...OURS, "too_far", "no_ai"],
+  "npc.stop": ["npc_unknown", "not_ours"],
+  "npc.say": [...V_STATE, "npc_unknown", "npc_lost", "line_too_long", "trigger_unknown"],
+  "npc.look": [...V_STATE, "npc_unknown", "npc_lost", "npc_not_spawned"],
+  "npc.face": [...V_STATE, "npc_unknown", "npc_lost", "expression_unknown"],
+  "npc.act": [...V_STATE, ...OURS, "npc_moving", "gesture_unknown", "rig_unsupported", "carrier_missing"],
+  "npc.choices": [...V_STATE, "npc_unknown", "npc_lost", "choices_busy", "one_hub_at_a_time", "too_far", "choice_too_long"],
+  "npc.release": ["npc_unknown"],
+  "npc.scenario": ["scenario_invalid"],
+};
+
+const withRefusals = (command: CommandDef) => Object.assign(command, { refusals: NPC_REFUSALS[command.name] ?? [] });
+
+const DEFINITIONS: CommandDef[] = [
   {
     name: "npc.list",
     title: "List the NPCs near V",
@@ -294,5 +323,7 @@ export const COMMANDS_080_NPC: CommandDef[] = [
     },
   },
 ];
+
+export const COMMANDS_080_NPC: CommandDef[] = DEFINITIONS.map(withRefusals);
 
 export type { JsonSchema };

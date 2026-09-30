@@ -40,4 +40,5 @@ export const NPC_MESSAGES: Record<string, string> = {
   choices_busy: "The game shows its own dialogue choices or an interaction prompt right now. Step away from doors, devices and other NPCs' prompts and try again.",
   one_hub_at_a_time: "Dialogue choices are showing already. Wait for the player's pick (npc.choice) or withdraw them first.",
   choice_too_long: "A choice is at most 90 characters. Shorten it.",
+  scenario_invalid: "The scene file isn't valid, so nothing ran. The message names each problem; fix the file and run it again (dry_run checks it without touching the game).",
 };

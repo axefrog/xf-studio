@@ -10,7 +10,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CommandApi } from "../api/command-api.ts";
 import { CATALOGUE, findCommand, PERMISSIONS } from "../api/catalogue.ts";
-import { NPC_CASTS, NPC_EXPRESSIONS, NPC_GESTURES, NPC_TRIGGERS, NPC_WAIT_KINDS, npcParams } from "../api/catalogue080npc.ts";
+import { NPC_CASTS, NPC_EXPRESSIONS, NPC_GESTURES, NPC_REFUSALS, NPC_TRIGGERS, NPC_WAIT_KINDS, npcParams } from "../api/catalogue080npc.ts";
+import { NPC_MESSAGES } from "../api/errors080npc.ts";
+import { plainBridgeError } from "../api/errors.ts";
 import { WAIT_KINDS } from "../api/catalogue070.ts";
 import { checkScenario, loadScenario, runScenario, SCENARIO_DIR, type Scenario } from "../npc/scenario.ts";
 import { HOOK_TIMEOUT_MS, projectDir, sleep, startSelftestHost, tempDir, type Host } from "./helpers.ts";
@@ -69,6 +71,19 @@ describe("0.8 npc offline: the catalogue, the scenario checker, the actor record
     for (const c of npc) expect(c.permission).toBe(["npc.list", "npc.pick", "npc.status"].includes(c.name) ? "read" : "write-npc");
     expect(PERMISSIONS["write-npc"].label).toBe("Direct NPCs");
     for (const kind of NPC_WAIT_KINDS) expect(WAIT_KINDS).toContain(kind);
+  });
+
+  test("every npc command lists its own refusals, each with plain NPC wording", () => {
+    for (const command of CATALOGUE.filter((c) => c.name.startsWith("npc."))) {
+      const refusals = (command as Any).refusals as string[];
+      expect(Array.isArray(refusals), command.name).toBe(true);
+      expect(refusals).toEqual([...(NPC_REFUSALS[command.name] ?? [])]);
+      for (const code of refusals) expect(NPC_MESSAGES[code], `${command.name}: ${code}`).toBeDefined();
+    }
+    expect(Object.keys(NPC_REFUSALS).sort()).toEqual(CATALOGUE.filter((c) => c.name.startsWith("npc.")).map((c) => c.name).sort());
+    // A code the showroom shares reads right for NPCs, and stays the showroom's for the showroom.
+    expect(plainBridgeError("too_far", "x", "npc.spawn").message).toContain("NPCs are directed within 30 m");
+    expect(plainBridgeError("too_far", "x", "showroom.place").message).toContain("nothing was spawned there");
   });
 
   test("the point forms map onto the bridge's parameters", () => {
