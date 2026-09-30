@@ -139,9 +139,10 @@ public abstract class XFPlayer {
     let targeting = GameInstance.GetTargetingSystem(game);
     let looked = targeting.GetLookAtObject(player, true, false);
     if IsDefined(looked) {
-      let interactions = GameInstance.GetInteractionManager(game);
-      out += ",\"look_at\":{\"id\":" + XFJson.Str(EntityID.ToDebugString(looked.GetEntityID())) + ",\"class\":" + XFJson.Name(looked.GetClassName()) + ",\"name\":" + XFJson.Str(looked.GetDisplayName());
-      out += ",\"distance\":" + XFJson.Num(Vector4.Distance(looked.GetWorldPosition(), player.GetWorldPosition())) + ",\"interaction_target\":" + XFJson.Flag(IsDefined(interactions) && interactions.IsInteractionLookAtTarget(player, looked)) + "}";
+      // Session 7 (30 Sep 2026): reading GetDisplayName / IsInteractionLookAtTarget on a looked-at door crashed the game
+      // (null read at 0x14 on the game thread), so only the ID, class and distance are read until that is understood.
+      out += ",\"look_at\":{\"id\":" + XFJson.Str(EntityID.ToDebugString(looked.GetEntityID())) + ",\"class\":" + XFJson.Name(looked.GetClassName());
+      out += ",\"distance\":" + XFJson.Num(Vector4.Distance(looked.GetWorldPosition(), player.GetWorldPosition())) + "}";
     } else {
       out += ",\"look_at\":null";
     }
