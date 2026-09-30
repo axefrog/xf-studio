@@ -10,7 +10,7 @@
     "build:canary": "bun run prepare:static && bunx electrobun@2.0.2 build --env=canary && bun single-installer.ts && bun verify-canary.ts",
     "build:installer": "bun build-installer.ts",
     "run:dev": "bunx electrobun@2.0.2 run --env=dev",
-    "check": "tsc --noEmit",
+    "check": "bun devkit-check.ts && tsc --noEmit",
     "test": "bun test tests"
   },
   "devDependencies": {
