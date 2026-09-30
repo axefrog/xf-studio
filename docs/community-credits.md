@@ -255,7 +255,7 @@ These mods were studied from local installations. Where the private preview disp
 
 ### Appearance Menu Mod
 
-By MaximiliumM and contributors. [GitHub](https://github.com/MaximiliumM/appearancemenumod). Its Lua source showed how a mod sets time and weather, teleports, spawns a fixed camera, poses V and hides the HUD at runtime. Those techniques fill much of the capability matrix for agent-driven in-game tests. Its expression code showed a second facial route beside photo mode: resetting an NPC's reactions and applying a facial-reaction feature that selects one of the game's emotion idles. Its observer on the photo-mode setup is how we learned to catch the photo-mode puppet from Lua. Its cursor override showed how to hide the photo-mode mouse cursor for clean captures, and its controllable lights, saved locations, NPC spawning through Codeware and friendly, immortal actors showed how a test session could light V, stand her in a fixed spot and keep a scene calm. Its decor presets and shareable location packs showed how players already save and exchange placed props and places. Its custom-pose collab files, small Lua tables naming a workspot entity and clips per body, showed the pose route that exists only inside AMM. Its look-at requests with weighted head and chest parts showed how a script can aim a character's eyes, head and chest, one of the channels the pose editor's live posing can use. Its gaze freeze through the global look-at option is one of the two routes the photo-mode snapshot design compares. Its re-teleporting of photo-mode stand-ins after menu changes showed when photo mode rewrites a stand-in's position, its workspot playback on the stand-in showed a pose route beyond the menu, and its makeup and earring switches showed how to hide a decal on V in photo mode. Its player teleport with a chosen facing and its free camera, a spawned camera entity moved by teleports while restriction effects hold V still, are the models for the bridge's planned teleport and free camera. Studied only.
+By MaximiliumM and contributors. [GitHub](https://github.com/MaximiliumM/appearancemenumod). Its Lua source showed how a mod sets time and weather, teleports, spawns a fixed camera, poses V and hides the HUD at runtime. Those techniques fill much of the capability matrix for agent-driven in-game tests. Its expression code showed a second facial route beside photo mode: resetting an NPC's reactions and applying a facial-reaction feature that selects one of the game's emotion idles. Its observer on the photo-mode setup is how we learned to catch the photo-mode puppet from Lua. Its cursor override showed how to hide the photo-mode mouse cursor for clean captures, and its controllable lights, saved locations, NPC spawning through Codeware and friendly, immortal actors showed how a test session could light V, stand her in a fixed spot and keep a scene calm. Its decor presets and shareable location packs showed how players already save and exchange placed props and places. Its custom-pose collab files, small Lua tables naming a workspot entity and clips per body, showed the pose route that exists only inside AMM. Its look-at requests with weighted head and chest parts showed how a script can aim a character's eyes, head and chest, one of the channels the pose editor's live posing can use. Its gaze freeze through the global look-at option is one of the two routes the photo-mode snapshot design compares. Its re-teleporting of photo-mode stand-ins after menu changes showed when photo mode rewrites a stand-in's position, its workspot playback on the stand-in showed a pose route beyond the menu, and its makeup and earring switches showed how to hide a decal on V in photo mode. Its player teleport with a chosen facing and its free camera, a spawned camera entity moved by teleports while restriction effects hold V still, are the models for the bridge's planned teleport and free camera. Its Director, which scripts spawned actors through the game's AI commands (teleport, walk to a point, follow, turn), a voice trigger, a facial reaction, a look-at and a pose per step and cleans them up afterwards, is the model for the bridge's planned NPC direction commands. Studied only.
 
 ### Arkhe
 
@@ -283,7 +283,7 @@ By FreakaZ (+FlowerD), per its script headers. [Nexus](https://www.nexusmods.com
 
 ### Dark Future
 
-By DarkFortuneTeller. [GitHub](https://github.com/DarkFortuneTeller/DarkFuture), [Nexus](https://www.nexusmods.com/cyberpunk2077/mods/16300). Its source showed how a large persistent gameplay system is structured to stay robust: one lifecycle shared by every system, a start-up ordered after the HUD is ready, a check that holds story beats back during cinematics, as Johnny and after the point of no return, a small save footprint, and quest phases driven from script by a single fact that selects which scene to play. Its phone therapist showed how much story a branching text conversation can carry. Studied only; its CC BY-SA 4.0 licence would bind any reuse, and none is.
+By DarkFortuneTeller. [GitHub](https://github.com/DarkFortuneTeller/DarkFuture), [Nexus](https://www.nexusmods.com/cyberpunk2077/mods/16300). Its source showed how a large persistent gameplay system is structured to stay robust: one lifecycle shared by every system, a start-up ordered after the HUD is ready, a check that holds story beats back during cinematics, as Johnny and after the point of no return, a small save footprint, and quest phases driven from script by a single fact that selects which scene to play. Its phone therapist showed how much story a branching text conversation can carry. Its encounter spawns, made so they never reach a save, and its listener on the last dialogue choice informed the NPC direction design. Studied only; its CC BY-SA 4.0 licence would bind any reuse, and none is.
 
 ### dragonzkiller
 
@@ -329,6 +329,10 @@ By Boe6, per its script headers. [Pachinko](https://www.nexusmods.com/cyberpunk2
 ### Immersive Third Person - Best Of Both Worlds
 
 Published with a support link to cyberdrake on its [Nexus page](https://www.nexusmods.com/cyberpunk2077/mods/32203). Its scripts and plugins showed how the player state machine's own transform request turns V's body, how locomotion parameters make movement follow the camera, how a mod runs its own third-person camera component beside the first-person one, and that a plugin can swap the native handlers behind the state machine's input reads. Together they mapped what a script can and can't do to steer V. Studied only.
+
+### InteractionUI module
+
+By keanuWheeze, per the credit line in the scripts and Nexus description of [Immersive V Dialogue Expanded](https://www.nexusmods.com/cyberpunk2077/mods/24377), whose copy we read. This small Lua module adds a dialogue hub with its own text to the game's dialogue widget at run time and lets the player choose from it with the usual keys, which is how the bridge's planned NPC choices will ask V a question and hear the answer without authoring a scene. Immersive V Dialogue Expanded showed it in use for replies to Johnny. Studied only; no code is copied.
 
 ### Jack Humbert
 
@@ -376,7 +380,7 @@ By ArmanIII, per its script headers. [Nexus](https://www.nexusmods.com/cyberpunk
 
 ### Native Interactions Framework
 
-By keanuWheeze, per its script header. [GitHub](https://github.com/justarandomguyintheinternet/nativeInteractions), [Nexus](https://www.nexusmods.com/cyberpunk2077/mods/21422). Its editor camera, which pulls the first-person camera behind V and widens its limits, and its usable spots built as scene interactions showed which interactions only input can choose. Studied only; its licence asks for credit or permission before code is reused, and none is.
+By keanuWheeze, per its script header. [GitHub](https://github.com/justarandomguyintheinternet/nativeInteractions), [Nexus](https://www.nexusmods.com/cyberpunk2077/mods/21422). Its editor camera, which pulls the first-person camera behind V and widens its limits, and its usable spots built as scene interactions showed which interactions only input can choose. How it starts its scenes through one quest phase and a pair of facts, patches each scene as it loads (choice ids, node refs, option text) and hears a scene end through an event on the player is the route a later XF conversation scene would take. Studied only; its licence asks for credit or permission before code is reused, and none is.
 
 ### NightlyNow Core
 
@@ -437,6 +441,10 @@ Sun Moon And Stars Tattoo, Serpentine Heart and its Remix, Graceful Tattoo, Broo
 ### Urmland Street Arcade
 
 [Urmland Street Arcade](https://www.nexusmods.com/cyberpunk2077/mods/23908). Its world resources showed how a small location is added with ArchiveXL: the base game's own arcade, pachinko and vending devices placed in a new streaming block, a devices patch, and a few base-game nodes removed where it stands. Studied only; its author is still being confirmed.
+
+### Vendor and bartender dialogue mods
+
+[Immersive Food Vendors](https://www.nexusmods.com/cyberpunk2077/mods/7322) and [Immersive Bartenders](https://www.nexusmods.com/cyberpunk2077/mods/7203). Their packages showed that conversations with vendors are carried by scenes whose own text is registered through ArchiveXL's subtitle localisation, the route for custom choice text in a scene. Studied only; their authors are still being confirmed.
 
 ### Virtual Atelier, Virtual Atelier Delivery and Virtual Car Dealer
 
