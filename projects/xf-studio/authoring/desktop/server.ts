@@ -9,6 +9,7 @@ import { PartPresetLibrary, partPresetRequest } from "../src/part-preset-store";
 // graph design, G1). Nothing in the page uses it yet; later slices move V, presets and profiles onto it.
 import { createGraphHandler, GraphLibrary } from "../src/platform/graph-adapters/graph-host";
 import { hostClock, hostRandom } from "../src/platform/graph-adapters/host-sources";
+import { LibraryDurability } from "../src/platform/graph-adapters/library-durability";
 import { STUDIO_GRAPH_RULES, STUDIO_GRAPH_TYPES } from "../src/compose/graph";
 import { createLocalSettingsHandler } from "../src/local-settings-server";
 import { FOLDER_FIELDS, type FolderField } from "../src/local-setup-actions";
@@ -129,16 +130,22 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     requestWorkspaceFlush(nonce: string): void; flushTimeoutMs?: number },
   previewExporter?: (cli: string | null) => GameAssetExporter, hostOptions: DesktopHostOptions = {}) {
   mkdirSync(dataRoot, { recursive: true });
-  const library = new LookLibrary(resolve(dataRoot, "library.sqlite"));
-  const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqlite"));
-  const collections = new CollectionLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS);
-  const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS);
-  // Named part presets (an expression today) in their own table of the same library files (part-preset-store.ts).
-  const partPresets = new PartPresetLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS);
-  const verificationPartPresets = new PartPresetLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS);
   const graphOptions = { types: STUDIO_GRAPH_TYPES, rules: STUDIO_GRAPH_RULES, clock: hostClock(), random: hostRandom() };
-  const graphLibrary = new GraphLibrary(resolve(dataRoot, "library.sqlite"), graphOptions);
-  const verificationGraphLibrary = new GraphLibrary(resolve(dataRoot, "verification.sqlite"), graphOptions);
+  // Each library file's durability (library-durability.ts): commits don't wait for the disk, and a flush a few seconds after the last
+  // one makes them durable, so a power cut loses at most those seconds. Open until the app stops (`stop()`, on quit).
+  const libraryLife = new AbortController();
+  const durable = (file: string) => new LibraryDurability(resolve(dataRoot, file), { clock: graphOptions.clock, signal: libraryLife.signal,
+    report: error => hostFailure("library", "flush_failed", "The library couldn't be flushed to disk yet; it will try again.", error, "warn") });
+  const libraryFile = durable("library.sqlite"), verificationFile = durable("verification.sqlite");
+  const library = new LookLibrary(resolve(dataRoot, "library.sqlite"), libraryFile);
+  const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqlite"), verificationFile);
+  const collections = new CollectionLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS, libraryFile);
+  const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS, verificationFile);
+  // Named part presets (an expression today) in their own table of the same library files (part-preset-store.ts).
+  const partPresets = new PartPresetLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS, undefined, libraryFile);
+  const verificationPartPresets = new PartPresetLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS, undefined, verificationFile);
+  const graphLibrary = new GraphLibrary(resolve(dataRoot, "library.sqlite"), { ...graphOptions, writes: libraryFile });
+  const verificationGraphLibrary = new GraphLibrary(resolve(dataRoot, "verification.sqlite"), { ...graphOptions, writes: verificationFile });
   const graphRequests = [["/api/graph", createGraphHandler(graphLibrary, "/api/graph")],
     ["/api/verification/graph", createGraphHandler(verificationGraphLibrary, "/api/verification/graph")]] as const;
   // The library's daily backup, a moment after starting.
@@ -490,6 +497,6 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     characterDetails,
     /** WolvenKit setup (tests and shutdown). */
     wolvenKit,
-    stop() { diagnostics.trace.flush(); shutdown.abort(); previewCore.cancel(); characterDetails.cancel(); wolvenKit.cancel(); server.stop(true); facial.dispose(); collections.close(); verificationCollections.close(); partPresets.close(); verificationPartPresets.close(); clearTimeout(backupTimer); graphLibrary.close(); verificationGraphLibrary.close(); library.close(); verificationLibrary.close(); },
+    stop() { diagnostics.trace.flush(); shutdown.abort(); previewCore.cancel(); characterDetails.cancel(); wolvenKit.cancel(); server.stop(true); facial.dispose(); collections.close(); verificationCollections.close(); partPresets.close(); verificationPartPresets.close(); clearTimeout(backupTimer); graphLibrary.close(); verificationGraphLibrary.close(); library.close(); verificationLibrary.close(); libraryLife.abort(); },
   };
 }

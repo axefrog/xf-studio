@@ -5,6 +5,7 @@ import { COLLECTION_1, COLLECTION_2, isNewerData, type Look, type LookCollection
 import { NEWER_LOOKS_LIBRARY_MESSAGE } from "./collection-workspace";
 import type { PartRegistry } from "./platform/core/document";
 import { hostFailure } from "./diagnostics/host-log";
+import { useWriteAheadLog, type LibraryWrites } from "./platform/graph-adapters/library-durability";
 
 /** A library revision: the collection as looks (`xfs/collection-2` in memory), whatever schema its row was written in. */
 export type StoredCollection = { collection: LookCollection; revision: number; updatedAt: string };
@@ -21,9 +22,11 @@ export type CollectionSummary = { id: string; name: string; revision: number; co
  */
 export class CollectionLibrary {
   private db: Database;
-  constructor(path: string, private parts: PartRegistry) {
+  /** `writes`: the file's durability, told of each commit (library-durability.ts). */
+  constructor(path: string, private parts: PartRegistry, private readonly writes?: LibraryWrites) {
     this.db = new Database(path, { create: true, strict: true });
-    this.db.exec("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
+    this.db.exec("PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;");
+    useWriteAheadLog(this.db);
     const { user_version: version } = this.db.query("PRAGMA user_version").get() as { user_version: number };
     if (version !== 1 && version !== 2) { this.db.close(); throw Error("Open the compatible look library before the collection library."); }
     if (version === 1) this.db.transaction(() => {
@@ -46,6 +49,7 @@ export class CollectionLibrary {
       for (const preset of collection.presets) this.db.query("INSERT INTO collection_preset_versions VALUES (?, ?, ?, ?)")
         .run(collection.id, preset.id, preset.revision, JSON.stringify(preset));
     }).immediate();
+    if (version === 1) writes?.wrote();
   }
   close() { this.db.close(); }
   list(): CollectionSummary[] {
@@ -90,7 +94,7 @@ export class CollectionLibrary {
     }
     // The oldest schema that holds it: rows 0.1.0-alpha.2 reads either way (CORE-123).
     const stored = this.parts.writeMinimal(collection);
-    return this.db.transaction(() => {
+    const saved = this.db.transaction(() => {
       const latest = this.db.query("SELECT MAX(revision) AS revision FROM collection_revisions WHERE collection_id=?")
         .get(collection.id) as { revision: number | null } | null;
       const exists = this.db.query("SELECT id FROM collections WHERE id=?").get(collection.id);
@@ -115,6 +119,8 @@ export class CollectionLibrary {
           ({ ...preset, revision: collection.presets[index].revision })) }), updatedAt);
       return { collection, revision, updatedAt };
     }).immediate();
+    this.writes?.wrote();
+    return saved;
   }
 }
 
