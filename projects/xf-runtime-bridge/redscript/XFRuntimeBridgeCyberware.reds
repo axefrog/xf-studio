@@ -301,7 +301,8 @@ public abstract class XFCyberware {
     if !IsDefined(player) || !IsDefined(registry) {
       return false;
     }
-    if ArraySize(XFCyberware.AddedCopies(player)) > 0 {
+    let copies = XFCyberware.AddedCopies(player);
+    if ArraySize(copies) > 0 {
       return true;
     }
     let snapshot = registry.CyberwareSnapshot();
@@ -354,7 +355,8 @@ public abstract class XFCyberware {
       return "";
     }
     let snapshot = registry.CyberwareSnapshot();
-    let pending = ArraySize(XFCyberware.AddedCopies(player));
+    let copies = XFCyberware.AddedCopies(player);
+    let pending = ArraySize(copies);
     if !IsDefined(snapshot) && pending == 0 {
       return "";
     }

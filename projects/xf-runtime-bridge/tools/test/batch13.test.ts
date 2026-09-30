@@ -184,7 +184,7 @@ describe("0.7 review against the self-test host", () => {
     const weather = await refused(api, "game.save", { name: "with weather", override_lock: true });
     expect(weather.code).toBe("bridge_effects_active");
     expect(weather.message).toContain("weather held by the bridge");
-    expect(weather.message).not.toContain("cyberware");
+    expect(weather.message).not.toContain("cyberware changed by the bridge");
     await ok(api, rain.undo.method, rain.undo.params);
   });
 
