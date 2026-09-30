@@ -7,9 +7,22 @@
       "percent": 100
     },
     "coverage": {
-      "covered": 2878,
-      "total": 2964,
-      "percent": 97.1
+      "covered": 2913,
+      "total": 2984,
+      "percent": 97.62
+    }
+  },
+  "public": {
+    "mutants": {
+      "killed": 4332,
+      "survived": 33,
+      "equivalent": 440,
+      "percent": 99.24
+    },
+    "coverage": {
+      "covered": 2907,
+      "total": 2984,
+      "percent": 97.42
     }
   }
 }

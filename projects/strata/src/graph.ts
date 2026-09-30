@@ -1369,17 +1369,18 @@ export class StrataGraph implements GraphView {
     this.purgedRefs.clear();
     const gone = (id: string) => !this.records.has(id) && !this.inlined.has(id) && !this.layerIndex.has(id);
     const nodesOf = (id: string) => [this.effectiveNodes.get(id), this.entitySeeds.get(id)].filter((node): node is KNode => !!node);
-    // The gone nodes whose kernel nodes nothing else wires in, where the gone nodes that go with them don't count.
-    const going = new Set([...this.entitySeeds.keys(), ...this.effectiveNodes.keys()].filter(gone));
-    for (let changed = true; changed;) {
-      changed = false;
-      const doomed = new Set([...going].flatMap(nodesOf));
-      for (const id of going) if (nodesOf(id).some(node => [...node.demands.keys()].some(consumer => consumer instanceof KNode && !doomed.has(consumer)))) {
-        going.delete(id);
-        changed = true;
-      }
-    }
+    // Decided when the release runs (it may wait for a cycle to end): the gone nodes whose kernel nodes nothing else
+    // wires in, where the gone nodes that go with them don't count.
     kernelInternals.release(this.env, () => {
+      const going = new Set([...this.entitySeeds.keys(), ...this.effectiveNodes.keys()].filter(gone));
+      for (let changed = true; changed;) {
+        changed = false;
+        const doomed = new Set([...going].flatMap(nodesOf));
+        for (const id of going) if (nodesOf(id).some(node => [...node.demands.keys()].some(consumer => consumer instanceof KNode && !doomed.has(consumer)))) {
+          going.delete(id);
+          changed = true;
+        }
+      }
       for (const id of going) {
         for (const node of nodesOf(id)) kernelInternals.removeNow(this.env, node);
         this.effectiveNodes.delete(id); this.entitySeeds.delete(id);
