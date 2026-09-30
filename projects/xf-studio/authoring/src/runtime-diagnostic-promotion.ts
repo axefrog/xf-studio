@@ -5,9 +5,9 @@ import { closeSync, constants, copyFileSync, existsSync, fsyncSync, lstatSync, m
   readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { isWithin as within, overlaps } from "./platform/api/path-containment";
-import { inspectLocalPackageCandidate, installedDuplicates } from "./mod-install-transport";
+import { assertNoLinkedPath, inspectLocalPackageCandidate, installedDuplicates, writeJsonDurably } from "./mod-install-transport";
 import { frameworkModNames } from "./framework-versions";
-import { candidateModName, diagnosticModlist, installedPlaces, legacyModFolder, profileFrameworks, type RuntimeDiagnosticOptions,
+import { candidateModName, diagnosticModlist, enabledMo2Mods, installedPlaces, legacyModFolder, profileFrameworks, type RuntimeDiagnosticOptions,
   type RuntimeDiagnosticPlan } from "./runtime-diagnostic-stage";
 import { EYE_MAKEUP_MOD, eyeMakeupModFolders, isEyeMakeupModFolder } from "./mod-branding";
 
@@ -26,12 +26,7 @@ type Record = { schema: "xfs/runtime-promotion-record-1"; preview: PromotionPrev
 
 function requireValue(ok: unknown, message: string): asserts ok { if (!ok) throw Error(message); }
 const sha = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
-function noLinks(path: string) {
-  let at = resolve(path);
-  while (!existsSync(at)) { const parent = dirname(at); requireValue(parent !== at, "Missing path root."); at = parent; }
-  for (;;) { requireValue(!lstatSync(at).isSymbolicLink(), `Linked path is forbidden: ${at}`);
-    const parent = dirname(at); if (parent === at) break; at = parent; }
-}
+const noLinks = (path: string) => assertNoLinkedPath(path, "Linked path is forbidden");
 function file(path: string) { noLinks(path); requireValue(lstatSync(path).isFile(), `Expected file: ${path}`); }
 function directory(path: string) { noLinks(path); requireValue(lstatSync(path).isDirectory(), `Expected directory: ${path}`); }
 function profileName(name: string) {
@@ -60,14 +55,7 @@ function sameModTree(root: string, entries: Entry[]) {
   requireValue(readdirSync(root).join() === "archive" && readdirSync(join(root, "archive")).join() === "pc" &&
     readdirSync(join(root, "archive", "pc")).join() === "mod", "Promoted mod has additional content.");
 }
-function durableJson(path: string, value: unknown) {
-  requireValue(!existsSync(path), `Record already exists: ${path}`);
-  const temp = `${path}.${randomUUID()}.tmp`;
-  const fd = openSync(temp, "wx");
-  try { writeFileSync(fd, JSON.stringify(value, null, 2) + "\n"); fsyncSync(fd); }
-  finally { closeSync(fd); }
-  renameSync(temp, path);
-}
+const durableJson = (path: string, value: unknown) => writeJsonDurably(path, value, { exclusive: true });
 function recordPaths(stage: string) { return { journal: join(stage, "promotion-journal.json"),
   receipt: join(stage, "promotion-receipt.json") }; }
 function validate(options: PromotionOptions) {
@@ -139,8 +127,7 @@ function validate(options: PromotionOptions) {
     modFiles[i].bytes === candidate.manifest.files[i].bytes, "Staged payload differs from candidate.");
   const game = resolve(options.gameRoot); directory(game);
   file(join(game, "bin", "x64", "Cyberpunk2077.exe"));
-  const sourceLines = readFileSync(sourceModlist, "utf8").split(/\r?\n/);
-  const enabled = sourceLines.filter(line => line.startsWith("+")).map(line => line.slice(1));
+  const enabled = enabledMo2Mods(readFileSync(sourceModlist, "utf8"));
   const enabledMod = enabled.find(name => name.toLowerCase() === modName.toLowerCase() || isEyeMakeupModFolder(name));
   requireValue(!enabledMod, `Source profile already enables ${modName}` +
     (enabledMod?.toLowerCase() === modName.toLowerCase() ? "." : ` under its earlier name "${enabledMod}".`));

@@ -94,8 +94,12 @@ const directory = (path: string) => {
   const stat = lstatSync(path);
   assert(stat.isDirectory() && !stat.isSymbolicLink(), `Expected a real directory: ${path}`);
 };
-/** Reject symlinks/junctions in every existing path component, including roots. */
-function noLinks(path: string) {
+/**
+ * Reject symlinks and junctions in every existing path component, including the roots and a dangling link at the path itself
+ * (`lstat`, never `exists`, which follows a link). The one link walk of the install transport and the runtime diagnostics'
+ * staging and promotion (PIPE-10); `label` words the refusal.
+ */
+export function assertNoLinkedPath(path: string, label = "Linked path is not an install destination"): void {
   let cursor = resolve(path);
   while (true) {
     try { lstatSync(cursor); break; }
@@ -105,12 +109,13 @@ function noLinks(path: string) {
   }
   while (true) {
     const stat = lstatSync(cursor);
-    assert(!stat.isSymbolicLink(), `Linked path is not an install destination: ${cursor}`);
+    assert(!stat.isSymbolicLink(), `${label}: ${cursor}`);
     const parent = dirname(cursor);
     if (parent === cursor) break;
     cursor = parent;
   }
 }
+const noLinks = (path: string) => assertNoLinkedPath(path);
 function parseManifest(root: string): PackageManifest {
   const file = join(root, "manifest.json");
   regular(file);
@@ -151,7 +156,13 @@ function validEntries(files: FileEntry[], namespace: string): boolean {
       /^[a-f0-9]{64}$/.test(entry.sha256) && Number.isSafeInteger(entry.bytes) && entry.bytes > 0);
 }
 const readJson = <T>(path: string): T | null => existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) as T : null;
-function atomicJson(path: string, value: unknown) {
+/**
+ * A journal, receipt or record written durably: to a new temporary file beside it, flushed, then renamed into place, so a crash
+ * leaves the old file or the new one, never half of one. With `exclusive`, an existing file is refused rather than replaced.
+ * The one record writer of the install transport and the runtime diagnostics' promotion (PIPE-10).
+ */
+export function writeJsonDurably(path: string, value: unknown, options: { exclusive?: boolean } = {}): void {
+  assert(!options.exclusive || !existsSync(path), `Record already exists: ${path}`);
   const temp = `${path}.${randomUUID()}.tmp`;
   const fd = openSync(temp, "wx");
   try { writeFileSync(fd, JSON.stringify(value, null, 2) + "\n"); fsyncSync(fd); }
@@ -504,7 +515,7 @@ export function createModInstallTransport(config: InstallTransportConfig) {
     if (journal.pending && journal.next.every(entry => present.get(key(entry)) === entry.sha256)) {
       for (const entry of droppedBy(journal.prior, journal.next)) if (present.has(key(entry))) rmSync(destination(entry));
       if (journal.prior) pruneOwnFolders(journal.prior.namespace);
-      atomicJson(receiptFile, journal.pending);
+      writeJsonDurably(receiptFile, journal.pending);
       rmSync(journalFile);
       return { recovered: true, conflicts: [], direction: "forward" };
     }
@@ -523,7 +534,7 @@ export function createModInstallTransport(config: InstallTransportConfig) {
     if (journal.prior && journal.backup) for (const entry of journal.prior.files)
       if (present.get(key(entry)) !== entry.sha256) restore(journal.backup, entry);
     pruneOwnFolders(basename(journal.next[0]!.path, ".archive"));
-    if (journal.prior) atomicJson(receiptFile, journal.prior);
+    if (journal.prior) writeJsonDurably(receiptFile, journal.prior);
     else if (existsSync(receiptFile)) rmSync(receiptFile);
     rmSync(journalFile);
     return { recovered: true, conflicts: [], direction: "back" };
@@ -558,12 +569,12 @@ export function createModInstallTransport(config: InstallTransportConfig) {
         candidateId: plan.candidateId, namespace: manifest.namespace, files: manifest.files,
         installedAt: new Date().toISOString(), features: manifest.features.map(({ feature, namespace }) => ({ feature, namespace })),
         rollback: prior && backup ? { prior: { ...prior, rollback: null }, backup } : null };
-      atomicJson(journalFile, { schema: "xfs/install-journal-1", targetId, target: target.target,
+      writeJsonDurably(journalFile, { schema: "xfs/install-journal-1", targetId, target: target.target,
         names: manifest.files.map(f => basename(f.path)), next: manifest.files, prior, backup, pending: receipt } satisfies Journal);
       for (let i = 0; i < manifest.files.length; i++) renameSync(staged[i], destination(manifest.files[i]));
       for (const entry of dropped) rmSync(destination(entry));
       for (const entry of manifest.files) assert(hash(destination(entry)) === entry.sha256, "Installed payload changed.");
-      atomicJson(receiptFile, receipt);
+      writeJsonDurably(receiptFile, receipt);
       rmSync(journalFile);
       for (const entry of leftovers) { try { rmSync(destination(entry)); } catch { /* Gone already. */ } }
       if (prior ?? gone) pruneOwnFolders((prior ?? gone)!.namespace);
@@ -590,7 +601,7 @@ export function createModInstallTransport(config: InstallTransportConfig) {
     if (existsSync(receiptFile) || existsSync(journalFile)) return false;
     const adopted: InstallReceipt = { ...receipt, rollback: null };
     if (!validReceipt(adopted)) return false;
-    atomicJson(receiptFile, adopted);
+    writeJsonDurably(receiptFile, adopted);
     return true;
   });
   /** Set a receipt this store no longer answers for aside (kept, renamed), after another store adopted it. */
@@ -605,7 +616,7 @@ export function createModInstallTransport(config: InstallTransportConfig) {
     assert(prior, "No owned installation exists.");
     checkCurrent(prior, prior.files);
     const backup = backUp(prior);
-    atomicJson(journalFile, { schema: "xfs/install-journal-1", targetId, target: target.target,
+    writeJsonDurably(journalFile, { schema: "xfs/install-journal-1", targetId, target: target.target,
       names: prior.files.map(f => basename(f.path)), next: prior.files, prior, backup } satisfies Journal);
     for (const entry of prior.files) rmSync(destination(entry));
     pruneOwnFolders(prior.namespace);
@@ -640,12 +651,12 @@ export function createModInstallTransport(config: InstallTransportConfig) {
       flush(temp);
     }
     try {
-      atomicJson(journalFile, { schema: "xfs/install-journal-1", targetId, target: target.target,
+      writeJsonDurably(journalFile, { schema: "xfs/install-journal-1", targetId, target: target.target,
         names: prior.files.map(f => basename(f.path)), next: prior.files, prior: current, backup } satisfies Journal);
       for (let i = 0; i < prior.files.length; i++) renameSync(staged[i], destination(prior.files[i]));
       for (const entry of droppedBy(current, prior.files)) rmSync(destination(entry));
       pruneOwnFolders(current.namespace);
-      atomicJson(receiptFile, prior);
+      writeJsonDurably(receiptFile, prior);
       rmSync(journalFile);
       return prior;
     } finally { for (const temp of staged) if (existsSync(temp)) rmSync(temp); }

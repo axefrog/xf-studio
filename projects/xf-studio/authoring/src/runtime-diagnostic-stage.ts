@@ -9,8 +9,9 @@ import { isWithin as within, overlaps } from "./platform/api/path-containment";
 import { defaultLocalSettings } from "./local-settings";
 import { checkFrameworkVersions, frameworkModNames, type FrameworkRouteReport } from "./framework-versions";
 import { createWindowsDetectionHost } from "./install-detection-host";
-import { applyMo2Placement, planMo2Placement, type Mo2Placement } from "./mo2-placement";
-import { createModInstallTransport, inspectLocalPackageCandidate, installedDuplicates } from "./mod-install-transport";
+import { applyMo2Placement, disableMo2Mods, mo2ModlistEntry, planMo2Placement, type Mo2Placement } from "./mo2-placement";
+import { isMo2ModFolderName, parseMo2Modlist } from "./mo2-instance";
+import { assertNoLinkedPath, createModInstallTransport, inspectLocalPackageCandidate, installedDuplicates } from "./mod-install-transport";
 import { modNameIssue } from "./platform/api";
 import { EYE_MAKEUP_MOD, eyeMakeupRelatedEntries, isEyeMakeupModFolder } from "./mod-branding";
 
@@ -58,9 +59,11 @@ export function diagnosticPlacement(source: string, frameworkMods: Iterable<stri
  * (or enables) only the mod's row and switches off an enabled predecessor of the same mod. */
 export function diagnosticModlist(source: string, frameworkMods: Iterable<string> = [], modName: string = EYE_MAKEUP_MOD.modName): string {
   const placed = applyMo2Placement(source, diagnosticPlacement(source, frameworkMods, modName), true);
-  const newline = placed.includes("\r\n") ? "\r\n" : "\n";
-  const predecessors = EYE_MAKEUP_MOD.predecessorMods.map(name => `+${name}`);
-  return placed.split(newline).map(line => predecessors.includes(line) ? `-${line.slice(1)}` : line).join(newline);
+  return disableMo2Mods(placed, EYE_MAKEUP_MOD.predecessorMods);
+}
+/** The enabled mods of a profile's list, as MO2 reads it (`+` or no prefix; not separators or foreign rows). */
+export function enabledMo2Mods(text: string): string[] {
+  return parseMo2Modlist(text).entries.filter(entry => entry.enabled && entry.kind === "mod").map(entry => entry.name);
 }
 /** The mod a candidate is (its manifest's mod name, else eye makeup's brand), checked as a folder name (PIPE-90). */
 export function candidateModName(manifest: { modName?: string }): string {
@@ -86,19 +89,7 @@ export function legacyModFolder(modsRoot: string): string | null {
     EYE_MAKEUP_MOD.legacyModFolders.some(name => name.toLowerCase() === entry.toLowerCase())) ?? null;
 }
 const sha = (file: string) => createHash("sha256").update(readFileSync(file)).digest("hex");
-function noLinks(path: string) {
-  let at = resolve(path);
-  while (!existsSync(at)) {
-    const parent = dirname(at);
-    requireValue(parent !== at, "Path root does not exist."); at = parent;
-  }
-  for (;;) {
-    requireValue(!lstatSync(at).isSymbolicLink(), `Linked path is not allowed: ${at}`);
-    const parent = dirname(at);
-    if (parent === at) break;
-    at = parent;
-  }
-}
+const noLinks = (path: string) => assertNoLinkedPath(path, "Linked path is not allowed");
 function regular(path: string) {
   noLinks(path);
   const info = lstatSync(path);
@@ -109,9 +100,7 @@ function profileName(value: string) {
     value !== ".." && value.trim() === value && !value.endsWith("."), "Invalid MO2 profile name.");
 }
 function modName(value: string) {
-  requireValue(value.length > 0 && value.length <= 255 && !/[\\/:\x00-\x1f]/.test(value) &&
-    value !== "." && value !== ".." && value.trim() === value && !value.endsWith("."),
-  "Unsafe enabled MO2 mod name.");
+  requireValue(isMo2ModFolderName(value), "Unsafe enabled MO2 mod name.");
 }
 function checked(options: RuntimeDiagnosticOptions) {
   const { candidateStore, gameRoot, mo2Root, stagingRoot } = options;
@@ -137,8 +126,7 @@ function checked(options: RuntimeDiagnosticOptions) {
 export function planRuntimeDiagnostic(options: RuntimeDiagnosticOptions): RuntimeDiagnosticPlan {
   const paths = checked(options);
   const text = readFileSync(paths.modlist, "utf8");
-  const lines = text.split(/\r?\n/);
-  const names = lines.filter(line => line.startsWith("+")).map(line => line.slice(1));
+  const names = enabledMo2Mods(text);
   for (const name of names) modName(name);
   const mod = candidateModName(paths.candidate.manifest);
   const enabledMod = names.find(name => name.toLowerCase() === mod.toLowerCase() || isEyeMakeupModFolder(name));
@@ -165,7 +153,7 @@ export function planRuntimeDiagnostic(options: RuntimeDiagnosticOptions): Runtim
   const legacy = EYE_MAKEUP_MOD.predecessorMods.some(name => names.includes(name));
   const dedicatedModExists = existsSync(join(paths.mo2, "mods", mod));
   const legacyFolder = legacyModFolder(join(paths.mo2, "mods"));
-  const listed = (name: string) => lines.some(line => /^[+-]/.test(line) && line.slice(1).toLowerCase() === name.toLowerCase());
+  const listed = (name: string) => mo2ModlistEntry(text, name) !== null;
   const cautions = [
     "This checks paired payload hashes and the manifest claim; it does not rerun the independent archive verifier.",
     "The source profile and old runtime logs do not prove which archives will win in a future session.",
