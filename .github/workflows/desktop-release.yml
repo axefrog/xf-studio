@@ -1,4 +1,5 @@
-# XF Studio desktop app (Windows): test, build the unsigned Electrobun app from source, wrap its
+# XF Studio desktop app (Windows): test, build the texture compressor from the pinned DirectXTex source and the unsigned
+# Electrobun app from source (the compressor packaged in its build tools), wrap its
 # setup ZIP into one self-contained setup program with the pinned Inno Setup (single-installer.ts)
 # and run the asset-free allowlist gate (verify-canary.ts) on the update archive, the setup ZIP and
 # the single setup program.
@@ -24,6 +25,9 @@ on:
   pull_request:
     paths:
       - "projects/xf-studio/authoring/desktop/**"
+      - "projects/xf-studio/authoring/native/bcn/**"
+      - "projects/xf-studio/authoring/tools/build-native-bcn.ts"
+      - "projects/xf-studio/authoring/src/native/write/bcn.ts"
       - "tools/private-data.json"
       - "projects/xf-studio/CHANGELOG.md"
       - "projects/xf-studio/THIRD_PARTY_NOTICES.md"
@@ -104,6 +108,16 @@ jobs:
           $env:HUTCH_HOME = Join-Path $env:RUNNER_TEMP "hutch"
           bun run prepare:devkit
 
+      # XF Studio's texture compressor (xfs_bcn.dll, the native resource writer's BC4/BC5/BC7 encoder) from the pinned DirectXTex
+      # source release: the script downloads the release ZIP from GitHub, refuses any bytes but the SHA-256 recorded in
+      # native/bcn/directxtex.json, and builds it with this runner's Visual Studio C++ tools, CMake and Windows SDK fxc (/Brepro,
+      # static runtime). prepare-build-tools.ts (build:canary) packages it and verify-canary.ts loads the packaged copy.
+      - name: Build texture compressor
+        run: |
+          bun tools/build-native-bcn.ts
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-Content data/tools/xfs-bcn/xfs_bcn.json
+
       - name: Typecheck
         run: |
           bun run check
@@ -125,6 +139,15 @@ jobs:
         run: |
           $env:XFS_INNO_SETUP_HOME = Join-Path $env:RUNNER_TEMP "innosetup"
           bun run build:canary
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      # The packaged app (the update archive the setup installs byte for byte) carries the compressor its manifest lists, and it loads.
+      - name: Check the packaged texture compressor
+        working-directory: projects/xf-studio/authoring/desktop
+        env:
+          XFS_REQUIRE_PACKAGED_BCN: "1"
+        run: |
+          bun test tests/packaged-bcn.test.ts
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: Stage checksums and build information

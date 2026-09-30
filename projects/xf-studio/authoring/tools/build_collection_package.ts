@@ -24,7 +24,7 @@ import { runProductCommand } from "../src/platform/export/product-builder";
 import { ExportRefusal, PACKAGE_PROGRESS_PREFIX, PrerequisiteStale } from "../src/platform/api";
 import { STUDIO_EXPORTERS } from "../src/compose/exporters";
 import { EYE_PLATE_MASCULINE_PREREQUISITE, EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
-import { createWolvenKitPackageTools } from "../src/package-build-wolvenkit";
+import { createWolvenKitPackageTools, DEFAULT_WOLVENKIT_CONCURRENCY } from "../src/package-build-wolvenkit";
 import { createWolvenKitVerifierTools } from "../src/verifier-wolvenkit";
 import { closeNativeWriterLibraries, createNativeResourceTools, loadNativeWriterLibraries, type NativeWriterLibraries } from "../src/native-resource-tools";
 import { loadGameOodle } from "../src/native/oodle";
@@ -102,7 +102,10 @@ try {
       const base = createWolvenKitPackageTools(wolvenkit, { cwd, signal });
       return native ? createNativeResourceTools(base, nativeLibraries(), nodeWriterHost, line => console.log(line)) : base;
     },
-    verifierTools: createWolvenKitVerifierTools,
+    // `XFS_VERIFIER_CONCURRENCY=1` (a developer's switch, for measuring) runs the verifier's WolvenKit steps one at a time, in the
+    // order they were queued; it can only lower the Build's limit.
+    verifierTools: (wolvenkit, gamepath) => createWolvenKitVerifierTools(wolvenkit, gamepath,
+      { concurrency: Math.min(DEFAULT_WOLVENKIT_CONCURRENCY, Math.max(1, Number(process.env.XFS_VERIFIER_CONCURRENCY) || DEFAULT_WOLVENKIT_CONCURRENCY)) }),
   });
   console.log(machine ? "XFS_PACKAGE_RESULT=" + JSON.stringify(result) : JSON.stringify(result, null, 2));
   } finally { if (libraries) closeNativeWriterLibraries(libraries); }
