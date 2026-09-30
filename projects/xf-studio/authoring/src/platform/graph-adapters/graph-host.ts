@@ -9,10 +9,13 @@ import { LibraryBackups } from "./backups";
 import { SqliteGraphStore } from "./sqlite-store";
 import { IRREVERSIBLE_OPERATIONS, STORE_OPERATIONS } from "./browser-graph-store";
 import type { IrreversibleOperation, StoreOperation } from "./browser-graph-store";
+import type { LibraryWrites } from "./library-durability";
 
 export type GraphLibraryOptions = {
   readonly types: readonly TypeDef[]; readonly rules: readonly RuleDef[];
   readonly clock: Clock; readonly random: Random;
+  /** The library file's durability, told of each commit (library-durability.ts). */
+  readonly writes?: LibraryWrites;
 };
 
 /** An irreversible store operation the host is about to run, for the person to confirm. */
@@ -30,7 +33,7 @@ export class GraphLibrary {
   constructor(readonly path: string, private readonly options: GraphLibraryOptions) {
     this.backups = new LibraryBackups(path, () => options.clock.now());
     this.store = new SqliteGraphStore(path, { onPurge: node => this.backups.purge(node), beforeMigration: label => this.backups.beforeMigration(label),
-      now: () => options.clock.now() });
+      now: () => options.clock.now(), writes: options.writes });
   }
 
   /**
