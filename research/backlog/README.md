@@ -41,7 +41,9 @@ Goal: procedural finishes computed in the game's own material shader, the way th
 
 **Direction:** our own use first (the eye plate's finishes), to ground the expertise in real use. Once it's proven there, generalise it into a community framework for custom material shaders. Name: **XF Shaders** ("XL" is psiberx's own branding; for them the equivalent would be something like ShadersXL). Release plan: first offer psiberx the full write-up of what's needed (the maintainer contacts them, not an agent). If they don't take it on, release it as XF Shaders.
 
-If route 1 or 2 works, it opens pearl interference colour, holographic and animated finishes, and custom materials well beyond makeup. Starts after the current session's merges; read-only research first, and anything in the game is done under supervision.
+If route 1 or 2 works, it opens pearl interference colour, holographic and animated finishes, and custom materials well beyond makeup. Anything in the game is done under supervision.
+
+**Status (30 September 2026): step (a) done offline, step (b) designed.** The [pipeline trace](../materials/xf-shaders-pipeline-trace.md) follows a template from the shader cache to the D3D12 pipeline state in the 2.31 executable, with an address-library ID for every function (no pattern scanning needed). The cache's lookup key is reproduced for all 19,647 techniques: the template's *name* hash plus a permutation hash, so a renamed copy of a template finds no programs. Route 1's detour is the cache reader's find-technique and get-program calls: remap the renamed copy's key to the original's and serve our pixel program under our own GUID. Route 2 is a no-go natively (one fixed cache file, no mod path) but works as a plugin-read side cache in the same format. Next: build the read-only probe and run its one sitting ([probe plan](../materials/xf-shaders-probe-plan.md)); its last rows are step (c), the red tint.
 
 
 ### Held: a public section for the graph engine (29 September 2026)

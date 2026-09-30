@@ -108,6 +108,14 @@ python research/materials/shader-system/exe_hair.py params     # material parame
 
 Addresses are RVAs of the 2.31 executable; another build moves them, but the method still applies. The same `dis` command reads the skin SSS kernel builder and its constant fills; their RVAs are in the [skin reference §6.3](../shader-skin.md#63-blur-kernel-and-combine). The `dangle` mode applies the same approach to animation code: it goes from an RTTI class name to the class's registration function and instance vtable (through its `GetType` method), then lists the methods the hair dangle solver overrides. The solver's arithmetic is written up in [hair physics §5](../../../knowledge/hair-physics.md#5-solver-arithmetic-231-executable) and its addresses in the [hair physics plan §10](../../animation/hair-physics-plan.md#10-evidence-and-sources). Run from a worktree, set `XF_TOOLS_DIR` to the lab's tools folder, since the default resolves beside the worktree.
 
+`exe_shaders.py` covers the path from a template to a GPU pipeline state ([pipeline trace](../xf-shaders-pipeline-trace.md)). It decodes every region of `shader_final.cache` and re-proves the technique lookup key, computes the key the engine would look up for any template name and permutation, and lists the traced functions with their address-library IDs and a structural check of each:
+
+```powershell
+python research/materials/shader-system/exe_shaders.py cache      # all regions; key reproduced 19,647/19,647
+python research/materials/shader-system/exe_shaders.py key mesh_decal renderstage_post_gbuffer --vf MeshSkinned
+python research/materials/shader-system/exe_shaders.py trace      # RVA, address-library ID, check
+```
+
 ## Programs examined in this pass
 
 | Program | Role | Pixel/compute DXBC SHA-256 |
