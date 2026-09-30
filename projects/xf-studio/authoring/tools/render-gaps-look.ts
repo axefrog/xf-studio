@@ -42,10 +42,12 @@ const boxLuminance = (file: string, box: [number, number, number, number]) => {
   return n ? +(sum / n).toFixed(5) : null;
 };
 
-async function session(scheme: "light" | "dark", width = 1400, height = 900) {
+async function session(scheme: "light" | "dark", width = 960, height = 680, body = false) {
   const page = await launch(`http://127.0.0.1:${port}/?verify=1`, { width, height, scheme });
   const run = (action: object) => page.evaluate(`Promise.resolve(window.xfStudioShell.runtime.dispatch(${JSON.stringify(action)}))`);
   await page.waitFor("document.querySelector('.dock-group') && window.xfStudioPresentation?.viewport.snapshot().head.phase === 'ready'", 300000);
+  // The body off unless the scenario needs it: the host then prepares the head alone, and the page holds far less (a 4 GB guard).
+  if (!body) await run({ kind: "preview.setBody", enabled: false });
   const settle = async (ms = 1500) => {
     await page.wait(ms);
     await page.waitFor("(() => { const e = window.xfStudioSceneEvidence?.(); return e && !e.frames.running; })()", 60000).catch(() => undefined);
@@ -90,7 +92,7 @@ try {
       { kind: "preview.setHair", enabled: false }, { kind: "motion.setIdle", enabled: true }, { kind: "motion.setPaused", paused: true }]) await s.run(action).catch(() => undefined);
     await s.maximize(); await s.settle(3000);
     const rect = await s.canvasRect();
-    await s.run({ kind: "camera.restore", camera: { position: [0, 1.628, -0.34], target: [0, 1.622, -0.068], fov: 8 } });
+    await s.run({ kind: "camera.restore", camera: { position: [0, 1.627, -0.30], target: [0, 1.622, -0.068], fov: 10 } });
     const hasMouth = await s.page.evaluate<boolean>(`!!window.xfStudioSceneEvidence()?.mouth`);
     const frames: Record<string, unknown>[] = [];
     for (const t of [2.4, 14.45, 6.0]) {
@@ -101,7 +103,7 @@ try {
         const file = resolve(out, `${name}.png`);
         await s.page.screenshot(file, rect);
         return { name, mouth: hasMouth ? await s.page.evaluate(`window.xfStudioSceneEvidence().mouth`) : null,
-          luminance: { centre: boxLuminance(file, [0.42, 0.44, 0.58, 0.56]) } };
+          luminance: { mouth: boxLuminance(file, [0.4, 0.46, 0.6, 0.54]) } };
       };
       frames.push({ t, ...(await shoot(`teeth-t${t}`)) });
       if (hasMouth) {
@@ -143,7 +145,7 @@ try {
     await dark.maximize(); await dark.settle(1500);
     const panels: Record<string, boolean> = { "panel-dark-wide": await panelShot(dark, "beard-panel-dark-wide") };
     await dark.page.close();
-    const light = await session("light", 1100, 900);
+    const light = await session("light", 820, 760);
     const b2 = await light.identity();
     await light.run({ kind: "character.useDefault", bodyGender: "male" });
     await light.placed(b2);
@@ -153,7 +155,7 @@ try {
     report.beard = { picked, evidence, panels };
   }
   if (scenarios.has("arms") && save) {
-    const s = await session("dark");
+    const s = await session("dark", 960, 680, true);
     const before = await s.identity();
     await s.page.chooseFiles([resolve(save)]);
     await s.page.send("Runtime.evaluate", { expression: `window.xfStudioShell.runtime.file({ kind: "savedV.import" })`, awaitPromise: true, userGesture: true });

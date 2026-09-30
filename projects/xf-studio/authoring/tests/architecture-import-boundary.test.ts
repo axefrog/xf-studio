@@ -353,7 +353,7 @@ const SCENE_DEVICE_MODULES = new Set<string>([
 const SCENE_SUPPORT_MODULES = new Set<string>([
   "brow-material", "decal-underlay", "face-decal-material", "hair-shading", "head-surface", "skin-material", "metal-base-material", "mouth-occlusion",
   "creator-lighting", "creator-lighting-rig", "shadow-filter", "grading-lut", "studio-environment", "game-blink-messages", "input-bindings",
-  "red-json", "depot-path", "archive-precedence", "resolution-evidence", "deformation-rig", "dangle-spec", "dangle-solver", "base64", "glass-material",
+  "red-json", "depot-path", "archive-precedence", "resolution-evidence", "deformation-rig", "dangle-spec", "dangle-solver", "base64", "glass-material", "linear-falloff",
 ]);
 /** What nothing the scene host reaches may be: a feature, an engine, the composition, the UI, an entry point, or an application service. */
 const SCENE_UNREACHABLE = /^(?:features\/|engines\/|compose\/|studio-ui\/|studio-(?:main|startup|application|presentation)$|platform\/(?:core|export)\/|authoring-|collection-|trusted-|workspace-|[\w-]+-(?:actions|service|host|server)$|node:|bun:)/;
