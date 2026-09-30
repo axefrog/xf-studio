@@ -2,12 +2,12 @@
  * The native resource writer's oracle (PIPE-130): WolvenKit's own conversions of a real Build, kept privately, against which the native
  * writer is compared byte for byte (tests/native-writer.test.ts reads the same folder).
  *
- *   bun tools/native-writer-oracle.ts capture <kept Build work folder> [oracle folder]
- *   bun tools/native-writer-oracle.ts compare [oracle folder]
+ *   bun tools/native-writer-oracle.ts capture <kept Build work folder> <name>
+ *   bun tools/native-writer-oracle.ts compare [name]
  *
  * `capture` takes a Build that WolvenKit wrote (run the Build with XFS_NATIVE_WRITER=off and keep its work folder, e.g.
  * `bun tools/build-bench.ts <collection> <scratch> 1 --keep`) and copies into the oracle folder (default: the ignored
- * `data/native-writer-oracle`): the builder's JSON documents and DDS inputs with each texture group's import settings, WolvenKit's
+ * `data/native-writer-oracle/<name>`): the builder's JSON documents and DDS inputs with each texture group's import settings, WolvenKit's
  * resources (its staging tree) and WolvenKit's archive. The files are game-derived: they stay in ignored private folders.
  * `compare` writes every resource and the archive natively (the game's Oodle from the configured game folder, XF Studio's texture
  * compressor) and reports, per file, whether the bytes are identical; the archive is compared except the file times its index records
@@ -32,8 +32,8 @@ const listFiles = (root: string): string[] => readdirSync(root, { recursive: tru
   .filter(path => statSync(join(root, path)).isFile()).map(path => path.replaceAll("\\", "/")).sort();
 
 if (mode === "capture") {
-  if (!first) throw Error("Usage: bun tools/native-writer-oracle.ts capture <kept Build work folder> [oracle folder]");
-  const kept = resolve(first), out = resolve(second ?? DEFAULT_ORACLE);
+  if (!first || !second || !/^[\w-]+$/.test(second)) throw Error("Usage: bun tools/native-writer-oracle.ts capture <kept Build work folder> <name>");
+  const kept = resolve(first), out = join(DEFAULT_ORACLE, second);
   const product = readdirSync(kept).map(name => join(kept, name)).find(path => existsSync(join(path, "archive")) && existsSync(join(path, "features")));
   if (!product) throw Error("No product folder with an archive and features in the kept Build.");
   const feature = join(product, "features", "eye-makeup");
@@ -56,7 +56,13 @@ if (mode === "capture") {
     settings: Object.fromEntries(TEXTURE_GROUP_SETTINGS) }, null, 2) + "\n");
   console.log(`Captured ${listFiles(join(out, "wolvenkit")).length} WolvenKit resources and its archive into ${out}`);
 } else if (mode === "compare") {
-  const root = resolve(first ?? DEFAULT_ORACLE);
+  const names = first ? [first] : readdirSync(DEFAULT_ORACLE).filter(name => existsSync(join(DEFAULT_ORACLE, name, "oracle.json")));
+  for (const name of names) { console.log(`== ${name}`); compare(join(DEFAULT_ORACLE, name)); }
+} else {
+  throw Error("Usage: bun tools/native-writer-oracle.ts capture <kept Build work folder> <name> | compare [name]");
+}
+
+function compare(root: string) {
   const settings = new LocalSettingsStore().load().settings;
   if (!settings.gameRoot) throw Error("Set the game folder in Settings first.");
   const oodle = loadGameOodle(settings.gameRoot);
@@ -94,6 +100,4 @@ if (mode === "capture") {
   console.log(`${same ? "identical except file times" : "DIFFERENT"}  archive  ${got.length} bytes  ${ms.toFixed(0)} ms`);
   oodle.close(); bcn.close();
   if (failures) { console.error(`${failures} file(s) differ.`); process.exitCode = 1; }
-} else {
-  throw Error("Usage: bun tools/native-writer-oracle.ts capture <kept Build work folder> [oracle folder] | compare [oracle folder]");
 }

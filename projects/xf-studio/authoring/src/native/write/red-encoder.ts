@@ -188,7 +188,8 @@ export function writeValue(ctx: EncodeContext, out: ByteWriter, type: string, va
     names.sort((a, b) => members.get(a)! - members.get(b)!);
     return ctx.bitfield(out, names);
   }
-  if (kind === "class") return ctx.struct(out, type, value, owner);
+  // A struct held by value: any class the writer's table knows (its properties and defaults decide what is written).
+  if (kind === "class" || Object.hasOwn(CLASSES, type)) return ctx.struct(out, type, value, owner);
   throw new NativeWriteRefusal(`${owner}: values of type ${type} are not written.`);
 }
 

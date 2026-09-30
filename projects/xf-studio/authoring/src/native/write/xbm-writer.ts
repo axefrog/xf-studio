@@ -4,8 +4,8 @@
  * §10.1]. Pure apart from the injected compressor and buffer store.
  *
  * - Every level's rows are reversed first (WolvenKit flips on import, and on export; §10.2), then the chain is block-compressed:
- *   `TCM_QualityR` from R8 to BC4 on the CPU, `TCM_QualityColor` from sRGB RGBA8 to sRGB BC7 on the GPU (bcn.ts). Any other
- *   combination is refused (the caller imports that texture with WolvenKit).
+ *   `TCM_QualityR` from R8 to BC4 and `TCM_Normalmap` from RGBA8 to BC5 on the CPU, `TCM_QualityColor` from sRGB RGBA8 to sRGB BC7
+ *   on the GPU (bcn.ts). Any other combination is refused (the caller imports that texture with WolvenKit).
  * - The resource: `CBitmapTexture` (PC, the size, depth 1, the import settings as `setup` with `hasMipchain` and no downgrade) holding a
  *   `rendRenderTextureBlobPC`: header version 2, flags 1, the size, `textureInfo` (alignment 8, one slice, the mip count and data size,
  *   2-D) and per level its pitches and placement (levels back to back, each at least one block); `textureData` in buffer flags 0x20000.
@@ -55,6 +55,8 @@ export function importPlan(settings: TextureImportSettings, format: number): { t
     return { target: DXGI.BC4_UNORM, blockBytes: 8, flags: 0, weight: 1 };
   if (settings.Compression === "TCM_QualityColor" && settings.RawFormat === "TRF_TrueColor" && settings.IsGamma && format === DXGI.R8G8B8A8_UNORM_SRGB)
     return { target: DXGI.BC7_UNORM_SRGB, blockBytes: 16, flags: BCN_GPU, weight: 1 };
+  if (settings.Compression === "TCM_Normalmap" && settings.RawFormat === "TRF_TrueColor" && !settings.IsGamma && format === DXGI.R8G8B8A8_UNORM)
+    return { target: DXGI.BC5_UNORM, blockBytes: 16, flags: 0, weight: 1 };
   return null;
 }
 

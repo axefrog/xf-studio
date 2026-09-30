@@ -142,7 +142,10 @@ describe("CR2W files read back as written", () => {
     expect(importPlan(SCALAR, DXGI.R8_UNORM)).toEqual({ target: DXGI.BC4_UNORM, blockBytes: 8, flags: 0, weight: 1 });
     expect(importPlan(COLOUR, DXGI.R8G8B8A8_UNORM_SRGB)).toEqual({ target: DXGI.BC7_UNORM_SRGB, blockBytes: 16, flags: BCN_GPU, weight: 1 });
     expect(importPlan({ ...SCALAR, GenerateMipMaps: true }, DXGI.R8_UNORM)).toBeNull();
-    expect(importPlan({ ...COLOUR, Compression: "TCM_Normalmap" }, DXGI.R8G8B8A8_UNORM)).toBeNull();
+    const NORMAL = Object.fromEntries(TEXTURE_GROUP_SETTINGS)["dds-normal"]!;
+    expect(importPlan(NORMAL, DXGI.R8G8B8A8_UNORM)).toEqual({ target: DXGI.BC5_UNORM, blockBytes: 16, flags: 0, weight: 1 });
+    expect(importPlan(NORMAL, DXGI.R8G8B8A8_UNORM_SRGB)).toBeNull();
+    expect(importPlan({ ...COLOUR, Compression: "TCM_QualityRG" }, DXGI.R8G8B8A8_UNORM_SRGB)).toBeNull();
     const calls: unknown[][] = [];
     const fake: BcnLibrary = { path: "fake", close() {}, compress: (...args) => { calls.push(args); return new Uint8Array(args[8] as number).fill(7); } };
     const bytes = importTexture(dds, SCALAR, fake, raw);
@@ -283,42 +286,43 @@ describe("the Build's tools write natively and send refusals to WolvenKit", () =
   });
 });
 
-// The oracle: WolvenKit 9.0.1's conversions of a real Build (tools/native-writer-oracle.ts capture), compared byte for byte.
-const ORACLE = resolve(process.env.XFS_NATIVE_WRITER_ORACLE ?? resolve(import.meta.dir, "..", "data", "native-writer-oracle"));
+// The oracles: WolvenKit 9.0.1's conversions of real Builds (tools/native-writer-oracle.ts capture <kept Build> <name>), each compared byte
+// for byte: every resource, and the archive but for the file times its index records.
+const ORACLES = resolve(process.env.XFS_NATIVE_WRITER_ORACLE ?? resolve(import.meta.dir, "..", "data", "native-writer-oracle"));
 const GAME = process.env.XFS_RESOLVER_GAME_ROOT;
 const BCN = process.env.XFS_BCN_LIBRARY ?? resolve(import.meta.dir, "..", "data", "tools", "xfs-bcn", "xfs_bcn.dll");
-const oracleReady = existsSync(join(ORACLE, "oracle.json")) && !!GAME && existsSync(join(GAME ?? "", "bin", "x64", "oo2ext_7_win64.dll")) && existsSync(BCN);
-oracleDescribe(oracleReady, "the native writer's oracle needs a captured WolvenKit Build (bun tools/native-writer-oracle.ts capture), " +
+const oracleNames = existsSync(ORACLES) ? readdirSync(ORACLES).filter(name => existsSync(join(ORACLES, name, "oracle.json"))).sort() : [];
+const oracleReady = oracleNames.length > 0 && !!GAME && existsSync(join(GAME ?? "", "bin", "x64", "oo2ext_7_win64.dll")) && existsSync(BCN);
+oracleDescribe(oracleReady, "the native writer's oracles need a captured WolvenKit Build (bun tools/native-writer-oracle.ts capture), " +
   "XFS_RESOLVER_GAME_ROOT (the game's Oodle) and XF Studio's texture compressor (bun tools/build-native-bcn.ts).")("the native writer against WolvenKit", () => {
   const files = (dir: string): string[] => readdirSync(dir, { recursive: true }).map(String).filter(path => statSync(join(dir, path)).isFile());
   const sha = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
-  test("every resource of the Build is WolvenKit's, byte for byte, and so is the archive but for its file times", () => {
+  for (const name of oracleNames) test(`${name}: every resource is WolvenKit's, byte for byte, and so is the archive but for its file times`, () => {
+    const oracle = join(ORACLES, name);
     const game = loadGameOodle(GAME!), textures = loadBcnLibrary(BCN);
     try {
       const store = (input: Uint8Array) => karkSegment(input, LEVEL_OPTIMAL2, game.compress!);
-      const wolvenkit = new Map(files(join(ORACLE, "wolvenkit")).map(path => [path.split(/[\\/]/).pop()!, join(ORACLE, "wolvenkit", path)]));
+      const wolvenkit = new Map(files(join(oracle, "wolvenkit")).map(path => [path.split(/[\\/]/).pop()!, join(oracle, "wolvenkit", path)]));
       const results: Record<string, boolean> = {};
-      for (const name of readdirSync(join(ORACLE, "json"))) {
-        const file = name.replace(/\.json$/, "");
-        results[file] = sha(writeCr2wDocument(JSON.parse(readFileSync(join(ORACLE, "json", name), "utf8")), store)) === sha(readFileSync(wolvenkit.get(file)!));
+      for (const file of readdirSync(join(oracle, "json"))) {
+        const resource = file.replace(/\.json$/, "");
+        results[resource] = sha(writeCr2wDocument(JSON.parse(readFileSync(join(oracle, "json", file), "utf8")), store)) === sha(readFileSync(wolvenkit.get(resource)!));
       }
       const settings = new Map(TEXTURE_GROUP_SETTINGS);
-      for (const group of readdirSync(join(ORACLE, "dds"))) for (const name of readdirSync(join(ORACLE, "dds", group))) {
-        const file = name.replace(/\.dds$/, ".xbm");
-        results[file] = sha(importTexture(new Uint8Array(readFileSync(join(ORACLE, "dds", group, name))), settings.get(group)!, textures, store)) ===
-          sha(readFileSync(wolvenkit.get(file)!));
-      }
+      for (const group of existsSync(join(oracle, "dds")) ? readdirSync(join(oracle, "dds")) : [])
+        for (const file of readdirSync(join(oracle, "dds", group))) {
+          const resource = file.replace(/\.dds$/, ".xbm");
+          results[resource] = sha(importTexture(new Uint8Array(readFileSync(join(oracle, "dds", group, file))), settings.get(group)!, textures, store)) ===
+            sha(readFileSync(wolvenkit.get(resource)!));
+        }
       expect(Object.keys(results).length).toBe(wolvenkit.size);
-      expect(Object.entries(results).filter(([, same]) => !same).map(([file]) => file)).toEqual([]);
-      const staging = join(ORACLE, "wolvenkit");
+      expect(Object.entries(results).filter(([, same]) => !same).map(([resource]) => resource)).toEqual([]);
+      const staging = join(oracle, "wolvenkit");
       const paths = walkOrder(relative => readdirSync(join(staging, ...relative.split("\\").filter(Boolean)), { withFileTypes: true })
         .map(entry => ({ name: entry.name, folder: entry.isDirectory(), link: entry.isSymbolicLink() })));
       const archive = packArchive(paths.map(path => ({ path, bytes: new Uint8Array(readFileSync(join(staging, ...path.split("\\")))), fileTime: 0n })), game.compress!);
-      expect(archiveEqualExceptTimes(archive, new Uint8Array(readFileSync(join(ORACLE, "wolvenkit.archive"))))).toBe(true);
+      expect(archiveEqualExceptTimes(archive, new Uint8Array(readFileSync(join(oracle, "wolvenkit.archive"))))).toBe(true);
     } finally { game.close(); textures.close(); }
-  }, 120_000);
+  }, 180_000);
 });
-
-void RedObject;
-void writeCr2wObject;
