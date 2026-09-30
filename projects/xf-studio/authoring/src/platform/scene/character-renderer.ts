@@ -10,6 +10,7 @@ import { coreAlbedoReader, coreRoughnessReader, createHeadSkinPlacement, skinSur
 import { priorityRank } from "../../render-templates";
 import type { DetailLimit } from "../../detail-limits";
 import { layeredContextRestored } from "../../layered-material";
+import { MOUTH_OCCLUSION, mouthInteriorUniforms } from "../../mouth-occlusion";
 import { characterDetailsEvidence } from "../../scene-evidence";
 import { keepOutOfBodyOnlyShadows } from "./shadow-casters";
 import { RENDER_ORDER, type CharacterSlot, type CharacterView, type SkinUnderlayPort, type SupersededPart } from "../api/scene";
@@ -122,6 +123,10 @@ export function createCharacterRenderer(input: {
   const profileEncoding: ProfileEncoding = "srgb-decoded";
   // The view's Hair look (0 Crisp … 1 Game-like): one uniform every strand material of this scene reads (hair-shading.ts).
   const hairLook: NonNullable<AdapterContext["hairLook"]> = { value: 0 };
+  // The lips' aperture (metres) every mouth-interior part of this scene reads (mouth-occlusion.ts): the scene measures it on the posed face
+  // each frame (`setMouthParting`); until it can, the stand-in's fixed parting.
+  const mouthInterior = mouthInteriorUniforms();
+  let mouthPinned: { parting: number; floor: number } | null = null;
   // Where the resolved skin is drawn, and the skin colour under decals read on that same head (head-skin-placement.ts).
   const skinPlacement = createHeadSkinPlacement(head, { coreAlbedo: coreAlbedoReader(rig.albedo), coreRoughness: coreRoughnessReader(rig.roughness) });
   let browUnderlay: BrowUnderlayEvidence | undefined;
@@ -137,6 +142,15 @@ export function createCharacterRenderer(input: {
   const EYE_SHELL_RENDER_ORDER = RENDER_ORDER.eyeShell;
   const SHADOW_CASTER_SLOTS = new Set<DetailSlot>(["skin", "body", "clothing"]);
   /**
+   * Hair strands (alpha-to-coverage cards): the hair's, and a face option's (the masculine beard's cards, drawn by their `hair.mt` template
+   * like any hair: render gap plans §6). Lashes are strands too but keep their own order and cast nothing.
+   */
+  const STRAND_SLOTS = new Set<DetailSlot>(["hair", "face"]);
+  const isStrand = (item: LoadedCharacterComponent, mesh: THREE.Mesh) => {
+    const material = mesh.material as THREE.MeshStandardMaterial;
+    return STRAND_SLOTS.has(item.component.slot) && !!material.alphaToCoverage && !!material.alphaMap;
+  };
+  /**
    * What a drawn mesh needs before its programs are built: whether it casts (skin, body and clothing do; hair strands, alpha-to-coverage
    * cards, cast by their coverage, and stay out of the stand-in maps of contact-only lights), its full-skin shadow depth material, and the
    * skinning extension (it wraps the material's compile once). Done once per mesh, when it is prepared or placed, whichever comes first.
@@ -145,8 +159,9 @@ export function createCharacterRenderer(input: {
     if (mesh.userData.xfsPrepared) return;
     mesh.userData.xfsPrepared = true;
     const material = mesh.material as THREE.MeshStandardMaterial;
-    const strand = item.component.slot === "hair" && !!material.alphaToCoverage && !!material.alphaMap;
-    mesh.castShadow = SHADOW_CASTER_SLOTS.has(item.component.slot) || strand;
+    const strand = isStrand(item, mesh);
+    // A glass pane (arm cyberware's window) casts nothing, whatever its slot.
+    mesh.castShadow = (SHADOW_CASTER_SLOTS.has(item.component.slot) || strand) && !material.userData.xfsCastsNoShadow;
     if (strand) keepOutOfBodyOnlyShadows(mesh);
     if (mesh.castShadow && mesh.isSkinnedMesh) mesh.customDepthMaterial = fullSkinDepthMaterial(mesh, { strandAlpha: strand });
     // A component kept from the previous details already carries the skinning extension.
@@ -266,7 +281,7 @@ export function createCharacterRenderer(input: {
   let normalsEnabled = true;
   const skinLimits = (): { slot: DetailSlot; limit: DetailLimit }[] => resolvedSkin?.placement.limit ? [{ slot: "skin", limit: resolvedSkin.placement.limit }] : [];
   function detailContext(slot: DetailSlot): Omit<AdapterContext, "slot"> {
-    return { overMakeup: slot === "lashes", profileEncoding, hairLook,
+    return { overMakeup: slot === "lashes", profileEncoding, hairLook, mouthInterior,
       ...(slot === "face" ? { surface: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null) => skinPlacement.surfaceUnderlay(mesh, skin ?? null) } : {}),
       // The body's decals (tattoos, scars, the underwear cover) blend against the body's own skin, read on its chunks (knowledge/body-rendering.md).
       ...(slot === "body" ? { surface: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null, skins?: readonly ResolvedSkinSurface[]) => {
@@ -460,7 +475,9 @@ export function createCharacterRenderer(input: {
     for (const item of drawnDetails()) {
       const shells = new Set<THREE.Mesh>(item.eyes?.shells.map(entry => entry.mesh) ?? []);
       for (const mesh of item.meshes) {
-        mesh.renderOrder = shells.has(mesh) ? EYE_SHELL_RENDER_ORDER : faceOrder.get(mesh) ?? DETAIL_RENDER_ORDER[item.component.slot];
+        // A face option's strands (the beard's cards) draw with the hair's order, among the opaque parts after the skin.
+        mesh.renderOrder = shells.has(mesh) ? EYE_SHELL_RENDER_ORDER : faceOrder.get(mesh)
+          ?? (isStrand(item, mesh) ? DETAIL_RENDER_ORDER.hair : DETAIL_RENDER_ORDER[item.component.slot]);
         // The skin, body, clothing and hair strands cast the lights' shadows (lighting-setup-stage.ts); eyes, decals and lashes don't.
         prepareMesh(item, mesh);
         // Facial shapes: the same (target, region) names as the head's. The body's shapes (breast size, nail length) are the ones the
@@ -565,6 +582,24 @@ export function createCharacterRenderer(input: {
     /** The Hair look the strands show (0 Crisp … 1 Game-like; preview only, never exported). */
     setHairLook(value: number) { hairLook.value = Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0)); },
     hairLook: () => hairLook.value,
+    /**
+     * The lips' aperture measured on the posed face this frame (metres), or null where it can't be measured: the mouth interior then keeps
+     * the stand-in's fixed parting (mouth-occlusion.ts).
+     */
+    setMouthParting(metres: number | null) {
+      if (mouthPinned) return;
+      mouthInterior.parting.value = metres === null || !Number.isFinite(metres) ? MOUTH_OCCLUSION.unknownParting : Math.max(0, metres);
+    },
+    mouthParting: () => mouthInterior.parting.value,
+    /**
+     * Developer comparisons only (`?verify=1`): hold the interior at a fixed parting and floor (the earlier stand-in's 10 mm and 0.3 for a
+     * before-and-after capture), or null to follow the face again.
+     */
+    pinMouthInterior(pin: { parting: number; floor: number } | null) {
+      mouthPinned = pin;
+      mouthInterior.floor.value = pin ? pin.floor : MOUTH_OCCLUSION.floor;
+      if (pin) mouthInterior.parting.value = pin.parting;
+    },
     eyeAppearance,
     contextRestored,
     /** Listen for the placed V's limits changing after it was placed (PREV-74); returns the unsubscribe. */

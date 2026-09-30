@@ -58,6 +58,7 @@ import { attachSwatchCard, contrastMark, CONTRAST_WORDS, setContrastMark, type S
 import { wolvenKitStepButton } from "../wolvenkit-step";
 import type { ClothingState } from "../../clothing-dressing";
 import type { ClothingArea } from "../../save-loadout";
+import { PARTLY_SHOWN, shownOutcome } from "../../cc-render-coverage";
 
 const NOT_SHOWN = "Not shown in the 3D view yet.";
 const CLOTHES_HELP = "Your V's clothes as your save records them. They are drawn without the game's garment fitting, so layers can clip at the edges.";
@@ -530,7 +531,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
     // The host searches every choice, not only those loaded (UI-72); rows matching by name show while it answers.
     const found = query ? port.authoring.characterSearch(query) : null;
     let stopped: "time" | "disk" | "setup" | null = null;
-    const details = frame.status.assets.characterDetails, drawn = new Set(details?.drawn ?? []);
+    const details = frame.status.assets.characterDetails, shown = { drawn: details?.drawn ?? [], partial: details?.partial ?? [] };
     const uncensoredOn = frame.preview.preview?.uncensored === true;
     let visibleRows = 0;
     for (const controls of panel ? built!.rows : []) {
@@ -568,13 +569,20 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       setExpanded(controls.main, controls.open);
       // Honest coverage: what the 3D view can't draw says so; a conditional option settles from what the shown V draws.
       const isOff = !!value && value.choice === option.off;
-      const conditionalHidden = option.coverage[0] === "conditional" && option.type === "appearance" && !!value && !isOff && details?.phase === "ready" && !drawn.has(option.name);
+      // A conditional option settles from what the shown V draws of it: all of it (drawn), only part of it (a beard whose cards are left
+      // out: marked, never read as drawn), or none of it (not shown).
+      const settles = option.coverage[0] === "conditional" && option.type === "appearance" && !!value && !isOff && details?.phase === "ready";
+      const outcome = settles ? shownOutcome(option.name, shown) : null;
+      const conditionalHidden = outcome === "none", conditionalPartial = outcome === "part";
       const from = option.mod >= 0 ? `From ${creator.mods[option.mod]}` : "From the game";
       const own = value && value.choice !== value.own ? `Your V's own: ${value.ownLabel}.` : "";
-      const describe = [from, own, conditionalHidden ? NOT_SHOWN : "", enhancedList ? CONTRAST_WORDS.mark : ""].filter(Boolean).join(". ").replace(/\.\./g, ".");
+      const describe = [from, own, conditionalHidden ? NOT_SHOWN : conditionalPartial ? PARTLY_SHOWN : "", enhancedList ? CONTRAST_WORDS.mark : ""]
+        .filter(Boolean).join(". ").replace(/\.\./g, ".");
       controls.main.title = `${option.label}: ${value?.label ?? ""} · ${describe}`;
       setAttr(controls.main, "aria-description", describe);
-      controls.notShown.classList.toggle("on", conditionalHidden);
+      // The row's marker says which: not shown, or shown only in part (the row itself dims only when nothing of it is drawn).
+      controls.notShown.classList.toggle("on", conditionalHidden || conditionalPartial);
+      setAttr(controls.notShown, "title", conditionalPartial ? PARTLY_SHOWN : NOT_SHOWN);
       // Off where the option has one; Reset once it differs from the V's own. Both keep their place when unavailable (no layout shift).
       controls.off.hidden = option.off === null;
       setAttr(controls.off, "aria-pressed", String(isOff));

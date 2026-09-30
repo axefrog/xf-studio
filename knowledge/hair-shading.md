@@ -211,7 +211,7 @@ At the adopted calibration the preview's ash brown is 1.25 times the game's leve
 - **The missing light grows with albedo and is cool.** It is largest at the crown and on the lengths away from the key. It lifts the cool `steel_smoke` most and the warm `platinum_blonde` least, and no single term proportional to albedo fits all three colours.
 - **Candidates** [hypothesis]:
   - ray-traced diffuse light reaching the hair through its ambient path, which carries albedo twice (§5); the reference install runs ray-traced lighting at Ultra;
-  - the preview's Rim_Top fold, which under-lights the crown about twofold ([creator lighting §12.4](creator-lighting.md#124-what-remains));
+  - the preview's Rim_Top fold, which under-lit the crown about twofold; since 30 September the preview applies the linear falloff per fragment instead, so the next ladder capture tests how much of the shortfall that was ([creator lighting §12.4](creator-lighting.md#124-what-remains));
   - the TRT lobe's response to the cool rims;
   - the fills' calibrated gain (×0.35, [creator lighting §12.6](creator-lighting.md#126-refit-from-two-captures-28-september)), fitted on luminance over mostly skin regions: the game's hair is cooler than the preview's in every colour, which fits more cyan light on hair than that gain allows.
 

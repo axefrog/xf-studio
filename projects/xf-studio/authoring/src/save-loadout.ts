@@ -11,7 +11,8 @@
  *   The equipment system keeps one `EquipmentSystemPlayerData` per owner; the player's is the one whose `ownerID` is the player's
  *   entity ID (1), else the one with a loadout.
  * - `equipment.equipAreas[]`: `{areaType, equipSlots[{itemID}], activeIndex}`; the item drawn in an area without a wardrobe set is the
- *   active slot's (`GetActiveItem`).
+ *   active slot's (`GetActiveItem`). The arm cyberware area (`ArmsCW`) is read the same way: its active item is the equipped arm
+ *   cyberware, whose holstered item the scripts keep in the right-arm slot (`UpdateArmSlot`; knowledge/body-rendering.md §1.1).
  * - `clothingVisualsInfo[]`: `{areaType, isHidden, visualItem}` per clothing area (`Outfit` has none: `GetVisualSlotIndex`).
  * - `WardrobeSystem_ClothingSets`: a u8 set count, then a u32 that is 8 in a save without sets, the value of
  *   `gameWardrobeClothingSetIndex.INVALID` [hypothesis: it is the active set's index, `Slot1`…`Slot7` = 0…6]. While a set is active, an
@@ -20,9 +21,9 @@
  */
 import { field, valueBudget, type PackageTypes, type PackageValue } from "./engines/red-object/package";
 import { readSavePackage } from "./save-package";
-import { isClothingArea, WARDROBE_SETS, type SavedItem, type SavedLoadout } from "./saved-v";
+import { ARMS_AREA, isClothingArea, WARDROBE_SETS, type SavedItem, type SavedLoadout } from "./saved-v";
 
-export { CLOTHING_AREAS, isClothingArea, parseSavedLoadout, wornAreas, type ClothingArea, type SavedItem, type SavedLoadout, type WornArea } from "./saved-v";
+export { ARMS_AREA, CLOTHING_AREAS, isClothingArea, parseSavedLoadout, wornAreas, type ClothingArea, type SavedItem, type SavedLoadout, type WornArea } from "./saved-v";
 
 /** The equipment enums, for a caller with no type database to ask (a save's own database lists them all). */
 const FALLBACK_ENUMS: ReadonlySet<string> = new Set(["gamedataEquipmentArea", "gameWardrobeClothingSetIndex", "gameEHotkey", "gamedataItemType",
@@ -67,14 +68,17 @@ export function readSavedLoadout(systems: Uint8Array, wardrobeSets: Uint8Array |
   if (!owners) throw Error("The save has no equipment data.");
   const player = found ?? withLoadout ?? first!;
   const equipped: SavedItem[] = [];
+  // The arm cyberware area's active item (the arms' holster state follows it); null when the area is empty or absent.
+  let arms: string | null = null, armsSeen = false;
   const areas = field(field(player.object, "equipment"), "equipAreas");
   for (const area of isList(areas) ? areas : []) {
     const type = text(field(area, "areaType"));
-    if (!isClothingArea(type)) continue;
+    if (!isClothingArea(type) && type !== ARMS_AREA) continue;
     const slots = field(area, "equipSlots"), active = field(area, "activeIndex");
     const index = typeof active === "number" && Number.isInteger(active) ? active : 0;
     const slot = isList(slots) ? slots[index] : undefined;
     const item = itemOf(field(slot, "itemID"));
+    if (type === ARMS_AREA) { if (!armsSeen) { arms = item; armsSeen = true; } continue; }
     if (item && !equipped.some(entry => entry.area === type)) equipped.push({ area: type, item });
   }
   const visuals: SavedLoadout["visuals"][number][] = [];
@@ -89,6 +93,6 @@ export function readSavedLoadout(systems: Uint8Array, wardrobeSets: Uint8Array |
     const index = new DataView(wardrobeSets.buffer, wardrobeSets.byteOffset, wardrobeSets.byteLength).getUint32(1, true);
     wardrobeSet = index < WARDROBE_SETS ? index : null;
   }
-  return { schema: "xfs/saved-loadout-1", equipped, visuals, wardrobeSet,
+  return { schema: "xfs/saved-loadout-1", equipped, visuals, wardrobeSet, arms,
     evidence: { owner: ownerId(player), owners, skipped: [...new Set(player.skipped.map(entry => entry.replace(/\[[0-9]+\]/g, "[]")))].slice(0, 32) } };
 }

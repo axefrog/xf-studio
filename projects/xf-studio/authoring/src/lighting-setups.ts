@@ -49,9 +49,15 @@ export type SetupLight = {
   readonly decay: number;
   readonly distance: number;
   /**
+   * Spot: the radius of the game's linear falloff, applied per fragment (`1 − saturate(d/r)`, linear-falloff.ts) in place of `decay` and
+   * `distance`. Set on the Character creator rig's linear lights; absent on every other light, and on a light stored before XF Studio
+   * drew the falloff per fragment (its intensity then already holds the old head-distance fold, so it keeps drawing as it did).
+   */
+  readonly linearRadius?: number;
+  /**
    * The game's own values for a light that came from the game (the Character creator rig), kept so the light can be sent back to the
    * game in its native units (research/runtime/lighting-mirror-design.md §9): the engine then converts them itself, and a linear-falloff
-   * light, drawn here with its falloff folded into one head-distance intensity, isn't lost. Absent on lights made in the Studio.
+   * light's native falloff isn't lost. Absent on lights made in the Studio.
    */
   readonly game?: GameLightValues;
 };
@@ -209,7 +215,8 @@ export function creatorSetup(sex: BodySex, calibration: CreatorLightingOptions, 
   return {
     lights: specs.map((spec, i) => ({ id: spec.name, name: spec.name.replace(/_/g, " "), type: "spot", position: [...spec.position] as unknown as Vec3,
       target: [...spec.target] as unknown as Vec3, colour: [...spec.colour] as unknown as Vec3, intensity: spec.intensity, shadows: spec.castShadow,
-      angle: spec.angle, penumbra: spec.penumbra, decay: spec.decay, distance: spec.distance, game: gameValues(rows[i]!, spec.intensity) })),
+      angle: spec.angle, penumbra: spec.penumbra, decay: spec.decay, distance: spec.distance, ...(spec.linearRadius !== null ? { linearRadius: spec.linearRadius } : {}),
+      game: gameValues(rows[i]!, spec.intensity) })),
     focus: [...CREATOR_HEAD_SLOT[sex]] as unknown as Vec3, environment: 0, backdrop: "black", display: "game", exposure: calibration.exposure,
   };
 }
@@ -426,13 +433,14 @@ export function parseSetupLight(value: unknown): SetupLight | undefined {
   if (!l || typeof l !== "object" || typeof l.id !== "string" || !LIGHT_ID.test(l.id) || !validSetupName(l.name) || !LIGHT_TYPES.includes(l.type!) ||
     !vector(l.position, LIGHTING_LIMITS.coordinate) || !vector(l.target, LIGHTING_LIMITS.coordinate) || !vector(l.colour, 1) || l.colour.some(c => c < 0) ||
     !finiteIn(l.intensity, 0, LIGHTING_LIMITS.intensity) || typeof l.shadows !== "boolean" || !finiteIn(l.angle, 1e-4, MAX_SPOT_ANGLE) ||
-    !finiteIn(l.penumbra, 0, 1) || !finiteIn(l.decay, 0, 2) || !finiteIn(l.distance, 0, 100)) return;
+    !finiteIn(l.penumbra, 0, 1) || !finiteIn(l.decay, 0, 2) || !finiteIn(l.distance, 0, 100) ||
+    !(l.linearRadius === undefined || finiteIn(l.linearRadius, 1e-3, 1000))) return;
   if (Math.hypot(l.position[0] - l.target[0], l.position[1] - l.target[1], l.position[2] - l.target[2]) < 1e-4) return;
   const game = l.game === undefined ? undefined : parseGameLightValues(l.game);
   if (l.game !== undefined && !game) return;
   return { id: l.id, name: l.name.trim(), type: l.type!, position: [...l.position] as unknown as Vec3, target: [...l.target] as unknown as Vec3,
     colour: [...l.colour] as unknown as Vec3, intensity: l.intensity, shadows: l.shadows, angle: l.angle, penumbra: l.penumbra, decay: l.decay,
-    distance: l.distance, ...(game ? { game } : {}) };
+    distance: l.distance, ...(l.linearRadius !== undefined ? { linearRadius: l.linearRadius } : {}), ...(game ? { game } : {}) };
 }
 /** A stored setup, normalised, or undefined. */
 export function parseLightingSetup(value: unknown): LightingSetup | undefined {

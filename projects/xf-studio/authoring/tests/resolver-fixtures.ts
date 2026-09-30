@@ -54,7 +54,7 @@ export const mesh = (spec: MeshSpec) => cr2w({ $type: "CMesh",
   localMaterialBuffer: { $type: "meshMeshMaterialBuffer", materials: spec.local ?? [] },
   externalMaterials: (spec.external ?? []).map(path => rp(path, "Soft")),
   renderResourceBlob: spec.chunks === null || spec.chunks === undefined ? null : blob(spec.chunks) });
-export const instance = (base: string, values: object[] = []) => ({ $type: "CMaterialInstance", baseMaterial: rp(base), values });
+export const instance = (base: string, values: object[] = [], extra: { enableMask?: number } = {}) => ({ $type: "CMaterialInstance", baseMaterial: rp(base), values, ...extra });
 export const mi = (base: string, values: object[] = []) => cr2w(instance(base, values));
 export const tex = (name: string, path: string) => ({ $type: "rRef:ITexture", [name]: rp(path, path.startsWith("*") ? "Soft" : "Default") });
 export const nameParam = (name: string, value: string) => ({ $type: "CName", [name]: cn(value) });
@@ -81,11 +81,13 @@ export const morphOption = (name: string, targets: string[], extra: Option = {})
 const optionGroups = (groups: Record<string, string[]>) => Object.entries(groups).map(([name, options]) => ({ $type: "gameuiOptionsGroup", name: cn(name), options: options.map(cn) }));
 /** A creator resource: head options and groups, and optionally the body's and the arms'. */
 export const cco = (head: object[], groups: Record<string, string[]>,
-  parts: { body?: { options: object[]; groups: Record<string, string[]> }; arms?: { options: object[]; groups: Record<string, string[]> } } = {}) =>
+  parts: { body?: { options: object[]; groups: Record<string, string[]> }; arms?: { options: object[]; groups: Record<string, string[]> };
+    perspectives?: [name: string, fpp: string, tpp: string][] } = {}) =>
   cr2w({ $type: "gameuiCharacterCustomizationInfoResource", version: 12,
     headCustomizationOptions: head, headGroups: optionGroups(groups),
     bodyCustomizationOptions: parts.body?.options ?? [], bodyGroups: optionGroups(parts.body?.groups ?? {}),
-    armsCustomizationOptions: parts.arms?.options ?? [], armsGroups: optionGroups(parts.arms?.groups ?? {}) });
+    armsCustomizationOptions: parts.arms?.options ?? [], armsGroups: optionGroups(parts.arms?.groups ?? {}),
+    ...(parts.perspectives ? { perspectiveInfo: parts.perspectives.map(([name, fpp, tpp]) => ({ $type: "gameuiPerspectiveInfo", name: cn(name), fpp: cn(fpp), tpp: cn(tpp) })) } : {}) });
 
 /** A synthetic installation: archives (by virtual path) holding path-keyed JSON resources, plus `.xl` documents. */
 export interface FixtureArchive { virtualPath: string; provider?: ArchiveFile["provider"]; providerName?: string; priority?: number | null; active?: boolean; files: Record<string, object> }

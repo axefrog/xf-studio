@@ -385,6 +385,12 @@ export type CharacterDetail = {
    * JSON file beside the record. Optional and additive: a reader that doesn't know it poses the body's helper joints its own way.
    */
   rigs?: RenderRig[];
+  /**
+   * Head options the record draws only in part (render gap plans §6): some of what the game draws for them is left out (a template the
+   * preview can't draw there yet, or an input that couldn't be read), so the Character panel says so rather than showing the row as drawn.
+   * Each names an option some component of the record draws. Optional and additive: a reader without it treats every drawn option as whole.
+   */
+  partial?: string[];
 };
 /** One secondary animated component of the player puppet: its name, the rig and graph it was compiled from, and the program file. */
 export type RenderRig = { component: string; rig: string; graph: string; file: string; sha256: string };
@@ -653,11 +659,15 @@ export function parseCharacterDetail(value: unknown): CharacterDetail {
       typeof rig.file === "string" && /^[a-f0-9]{64}\.json$/.test(rig.file) && rig.file === `${rig.sha256}.json`;
     return ok ? [{ component: rig.component, rig: rig.rig, graph: rig.graph, file: rig.file, sha256: rig.sha256 }] : [];
   }) : [];
+  // Options drawn in part: names of options a kept component draws, each once; anything else is left out.
+  const drawnOptions = new Set(components.map(item => item.option));
+  const partial = Array.isArray(doc.partial) ? [...new Set(doc.partial.filter((name): name is string => typeof name === "string" && drawnOptions.has(name)))]
+    .slice(0, LIMITS.components) : [];
   return { schema: CHARACTER_DETAIL_SCHEMA, detail: "character", identity: text(doc.identity, "identity"), origin: "game-files",
     character: { source: doc.character.source, bodyGender: doc.character.bodyGender },
     provenance: { label: text(doc.provenance?.label, "provenance label"), notes: notes.slice(-LIMITS.notes),
       ...(doc.provenance?.tool === undefined ? {} : { tool: text(doc.provenance.tool, "provenance tool") }) },
-    components, slots, ...(rigs.length ? { rigs } : {}) };
+    components, slots, ...(rigs.length ? { rigs } : {}), ...(partial.length ? { partial } : {}) };
 }
 
 /** Version dispatch: a v1 record is a core head; a later record is a core head or, under the current schema, a character. */

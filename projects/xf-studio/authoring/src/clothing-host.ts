@@ -75,6 +75,18 @@ export function itemRecords(blob: TweakDbBlob, items: readonly string[]): Map<st
   return out;
 }
 
+/**
+ * An arm cyberware item's holstered item's `appearanceName` (the holster state's name; arm-cyberware.ts), from a TweakDB blob: null when
+ * the item or its holstered item isn't defined there.
+ */
+export function holsteredAppearance(blob: TweakDbBlob, item: string): string | null {
+  const holstered = blob.lookup([childId(tweakIdOf(item), ".holsteredItem")]);
+  const id = [...holstered.values()][0];
+  if (id?.type !== "TweakDBID" || !id.value) return null;
+  const name = [...blob.lookup([childId(id.value, ".appearanceName")]).values()][0];
+  return name?.type === "CName" && name.value && name.value !== "None" ? name.value : null;
+}
+
 const NOT_A_PRESET = "Not an appearance-name visual tag preset.";
 /** A preset table: entity path hash → appearance name → tags (the entity's common tags included under `*`). */
 export type PresetTable = Map<string, Map<string, string[]>>;

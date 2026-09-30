@@ -1,46 +1,61 @@
 import * as THREE from "three";
 
 /**
- * Light that reaches the mouth interior, for the preview, which draws no shadows and no ambient occlusion.
+ * Light that reaches the mouth interior, for the preview, whose shadow maps and contact march can't close a lip parting of a few millimetres.
  *
  * In game the teeth sit about 13 mm behind the lip surface (the vanilla female teeth and head meshes at rest [resource: measured on the
  * exported meshes]), and whatever light reaches them comes through the parting of the lips: shadow maps, screen-space ambient occlusion,
  * contact shadows and the subsurface blur across the lips darken the interior [hypothesis: the game's occlusion passes are not decoded].
- * The preview lit them as if they were outside the head, so the idle's slight parting showed bright, forward-looking teeth.
  *
  * The stand-in, per vertex of a part drawn inside the head: its depth `d` behind the face (the frontmost surface of the drawn head straight
- * in front of it, along the face's forward axis), and the share of the outside a point at that depth sees through a lip parting of
- * height `h` (a slit in front of the point: `(h/2) / √((h/2)² + d²)`, the sine of its half-angle), kept above a floor so the effect stays
- * modest. A vertex with no head surface in front of it is not inside the head and keeps all its light. Every light term (direct and
- * ambient, diffuse and specular) is scaled by the factor, since shadows and occlusion both act there.
+ * in front of it, along the face's forward axis), baked once as a vertex attribute; and the share of the outside a point at that depth sees
+ * through a lip parting of height `h` (a slit in front of the point: `(h/2) / √((h/2)² + d²)`, the sine of its half-angle), kept above a
+ * floor. **`h` is the lips' real aperture each frame** (PREV-147 step A): the renderer measures it on the posed face (mouth-aperture.ts)
+ * and writes it to a uniform the interior's program reads, so the closed mouth keeps only the floor, the creator idle's breaths (2.75–2.91
+ * mm) give the front teeth about 0.11, the teeth page's 15 mm about 0.5, and a wide smile opens further. A vertex with no head surface in
+ * front of it is not inside the head and keeps all its light. Every light term (direct and ambient, diffuse and specular) is scaled by
+ * the factor, since shadows and occlusion both act there.
  *
  * Nothing here depends on which part it is; the loader applies it to the teeth slot (the creator's mouth interior).
- * The constants are a Studio choice [hypothesis], to be settled by head CC test ask 15 (the creator's teeth page and a smile).
+ * The floor is a Studio choice [hypothesis], to be settled by capture C1 (the game's teeth-to-lip luminance at the breaths); whether the game
+ * darkens the interior this way at all is unproven until then (research/character-customization/render-gap-plans.md §1).
  */
 export const MOUTH_OCCLUSION = Object.freeze({
-  /** The lip parting the stand-in assumes, in metres (the idle parts the lips a few millimetres; a smile more). */
-  parting: 0.010,
-  /** The least share of light any interior vertex keeps. */
-  floor: 0.3,
+  /**
+   * The parting assumed where the face's lip joints can't be read (no face data for this head, a developer's prepared idle): the earlier
+   * stand-in's fixed 10 mm, so such a head looks as it did before.
+   */
+  unknownParting: 0.010,
+  /** The least share of light any interior vertex keeps (was 0.3 with the fixed parting). */
+  floor: 0.05,
   /** How far in front of a vertex the head surface may be to count (metres). */
   reach: 0.08,
 });
+/**
+ * What the interior's program reads, one pair per scene: the lips' aperture (metres), which the renderer writes each frame, and the floor
+ * (`MOUTH_OCCLUSION.floor`; a developer comparison may set the earlier stand-in's).
+ */
+export type MouthInteriorUniforms = { readonly parting: { value: number }; readonly floor: { value: number } };
+export const mouthInteriorUniforms = (): MouthInteriorUniforms => ({ parting: { value: MOUTH_OCCLUSION.unknownParting }, floor: { value: MOUTH_OCCLUSION.floor } });
 
 /** The share of light a point `depth` metres behind a lip parting of `parting` metres keeps (before the floor). */
-export const partingVisibility = (depth: number, parting: number = MOUTH_OCCLUSION.parting) => {
-  const half = parting / 2;
+export const partingVisibility = (depth: number, parting: number = MOUTH_OCCLUSION.unknownParting) => {
+  const half = Math.max(0, parting) / 2;
   return depth <= 0 ? 1 : half / Math.hypot(half, depth);
 };
+/** The factor the program applies: all of the light outside the head (`depth` 0), else the visibility kept above the floor. */
+export const interiorLight = (depth: number, parting: number, floor: number = MOUTH_OCCLUSION.floor) =>
+  depth <= 0 ? 1 : Math.max(floor, partingVisibility(depth, parting));
 
 /**
- * Occlusion factors for interior vertices (world positions, xyz), from the drawn head's triangles (world positions and indices).
- * `forward` is the face's forward axis in the same space: the preview's V faces −Z. Pure; tests call it with plain arrays.
+ * Each interior vertex's depth behind the face (world positions, xyz), from the drawn head's triangles (world positions and indices): the
+ * frontmost head surface in reach straight in front of it, or 0 where there is none (the vertex is not inside the head). `forward` is the
+ * face's forward axis in the same space: the preview's V faces −Z. Pure; tests call it with plain arrays.
  */
-export function interiorOcclusion(inside: ArrayLike<number>, head: readonly { positions: ArrayLike<number>; index: ArrayLike<number> }[],
-  options: { forward?: 1 | -1; parting?: number; floor?: number; reach?: number } = {}): Float32Array {
-  const forward = options.forward ?? -1, parting = options.parting ?? MOUTH_OCCLUSION.parting;
-  const floor = options.floor ?? MOUTH_OCCLUSION.floor, reach = options.reach ?? MOUTH_OCCLUSION.reach;
-  const count = Math.floor(inside.length / 3), out = new Float32Array(count).fill(1);
+export function interiorDepths(inside: ArrayLike<number>, head: readonly { positions: ArrayLike<number>; index: ArrayLike<number> }[],
+  options: { forward?: 1 | -1; reach?: number } = {}): Float32Array {
+  const forward = options.forward ?? -1, reach = options.reach ?? MOUTH_OCCLUSION.reach;
+  const count = Math.floor(inside.length / 3), out = new Float32Array(count);
   if (!count) return out;
   // Only triangles over the interior's footprint (in the plane across the forward axis) can lie in front of it.
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -82,9 +97,16 @@ export function interiorOcclusion(inside: ArrayLike<number>, head: readonly { po
       const along = ((u * az + v * bz + w * cz) - z) * forward;
       if (along > 0 && along <= reach) depth = Math.max(depth, along);
     }
-    if (depth > 0) out[i] = Math.max(floor, partingVisibility(depth, parting));
+    if (depth > 0) out[i] = depth;
   }
   return out;
+}
+
+/** Occlusion factors at one parting (the program's arithmetic on the CPU): for notes, tests and offline checks. */
+export function interiorOcclusion(inside: ArrayLike<number>, head: readonly { positions: ArrayLike<number>; index: ArrayLike<number> }[],
+  options: { forward?: 1 | -1; parting?: number; floor?: number; reach?: number } = {}): Float32Array {
+  const parting = options.parting ?? MOUTH_OCCLUSION.unknownParting, floor = options.floor ?? MOUTH_OCCLUSION.floor;
+  return interiorDepths(inside, head, options).map(depth => interiorLight(depth, parting, floor));
 }
 
 /** Bind-pose world positions and triangle indices of a mesh (an unindexed mesh reads as consecutive triangles). */
@@ -97,8 +119,16 @@ export function worldTriangles(mesh: THREE.Mesh): { positions: Float32Array; ind
 }
 
 const OCCLUSION_VERTEX = /* glsl */`
-attribute float xfsOcclusion;
+attribute float xfsInteriorDepth;
+uniform float xfsMouthParting;
+uniform float xfsMouthFloor;
 varying float vXfsOcclusion;`;
+// The interior's light, per vertex: `interiorLight` (above) with the scene's measured parting.
+const OCCLUSION_BEGIN = /* glsl */`
+{
+  float xfsHalf = 0.5 * max(xfsMouthParting, 0.0);
+  vXfsOcclusion = xfsInteriorDepth <= 0.0 ? 1.0 : max(xfsMouthFloor, xfsHalf / max(length(vec2(xfsHalf, xfsInteriorDepth)), 1e-6));
+}`;
 const OCCLUSION_FRAGMENT = /* glsl */`
 reflectedLight.directDiffuse *= vXfsOcclusion;
 reflectedLight.directSpecular *= vXfsOcclusion;
@@ -108,30 +138,41 @@ reflectedLight.indirectSpecular *= vXfsOcclusion;
 xfsScatterE *= vXfsOcclusion; // the skin light's scatter input (skin-material.ts): the teeth's irradiance is occluded too
 #endif`;
 
-/** Patch a lit Three program (standard or physical) to scale every light term by the `xfsOcclusion` vertex attribute. */
-export function patchOcclusionShader(shader: { vertexShader: string; fragmentShader: string }) {
+/**
+ * Patch a lit Three program (standard or physical) to scale every light term by the interior's light: the `xfsInteriorDepth` vertex
+ * attribute and the parting and floor uniforms (bound to `uniforms` when given: the scene's shared parting).
+ */
+export function patchOcclusionShader(shader: { vertexShader: string; fragmentShader: string; uniforms?: Record<string, { value: unknown }> },
+  uniforms?: MouthInteriorUniforms) {
   const need = (source: string, find: string) => { if (!source.includes(find)) throw Error(`The occlusion patch expects ${find} in this Three.js build.`); };
   need(shader.vertexShader, "#include <common>"); need(shader.vertexShader, "#include <begin_vertex>");
   need(shader.fragmentShader, "#include <common>"); need(shader.fragmentShader, "#include <aomap_fragment>");
   shader.vertexShader = shader.vertexShader.replace("#include <common>", `#include <common>\n${OCCLUSION_VERTEX}`)
-    .replace("#include <begin_vertex>", "#include <begin_vertex>\nvXfsOcclusion = xfsOcclusion;");
+    .replace("#include <begin_vertex>", `#include <begin_vertex>\n${OCCLUSION_BEGIN}`);
   shader.fragmentShader = shader.fragmentShader.replace("#include <common>", "#include <common>\nvarying float vXfsOcclusion;")
     .replace("#include <aomap_fragment>", `#include <aomap_fragment>\n${OCCLUSION_FRAGMENT}`);
+  if (uniforms && shader.uniforms) { shader.uniforms.xfsMouthParting = uniforms.parting; shader.uniforms.xfsMouthFloor = uniforms.floor; }
   return shader;
 }
 
 /**
- * Give a drawn interior part its occlusion: the factors as the mesh's `xfsOcclusion` attribute, and the material's program patched to
- * apply them (chained after the adapter's own patch, with its own program key). Returns the factors' range for the part's notes.
+ * Give a drawn interior part its occlusion: each vertex's depth behind the drawn head as the mesh's `xfsInteriorDepth` attribute, and the
+ * material's program patched to light it through `uniforms` (the scene's measured aperture and floor; chained after the adapter's own patch, with its
+ * own program key). Returns the depths' range and the factors at the parting now, for the part's notes.
  */
-export function attachInteriorOcclusion(mesh: THREE.Mesh, material: THREE.Material, head: readonly THREE.Mesh[]): { min: number; max: number } {
-  const factors = interiorOcclusion(worldTriangles(mesh).positions, head.map(worldTriangles));
-  mesh.geometry.setAttribute("xfsOcclusion", new THREE.BufferAttribute(factors, 1));
+export function attachInteriorOcclusion(mesh: THREE.Mesh, material: THREE.Material, head: readonly THREE.Mesh[],
+  uniforms: MouthInteriorUniforms = mouthInteriorUniforms()): { depth: { min: number; max: number }; min: number; max: number } {
+  const depths = interiorDepths(worldTriangles(mesh).positions, head.map(worldTriangles));
+  mesh.geometry.setAttribute("xfsInteriorDepth", new THREE.BufferAttribute(depths, 1));
   const previous = material.onBeforeCompile.bind(material), key = material.customProgramCacheKey.bind(material);
-  material.onBeforeCompile = (shader, renderer) => { previous(shader, renderer); patchOcclusionShader(shader); };
-  material.customProgramCacheKey = () => `${key()}|xfs-occlusion-1`;
+  material.onBeforeCompile = (shader, renderer) => { previous(shader, renderer); patchOcclusionShader(shader, uniforms); };
+  material.customProgramCacheKey = () => `${key()}|xfs-occlusion-2`;
   material.needsUpdate = true;
-  let min = 1, max = 0;
-  for (const value of factors) { min = Math.min(min, value); max = Math.max(max, value); }
-  return { min, max };
+  let min = 1, max = 0, near = Infinity, far = 0;
+  for (const depth of depths) {
+    const factor = interiorLight(depth, uniforms.parting.value, uniforms.floor.value);
+    min = Math.min(min, factor); max = Math.max(max, factor);
+    if (depth > 0) { near = Math.min(near, depth); far = Math.max(far, depth); }
+  }
+  return { depth: { min: Number.isFinite(near) ? near : 0, max: far }, min, max };
 }

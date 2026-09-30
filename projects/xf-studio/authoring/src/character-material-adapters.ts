@@ -13,7 +13,8 @@ import type { DecalSurfaceUnderlay } from "./head-skin-placement";
 import { createEyeMaterial, createEyeShellMaterial, eyeParameters, gradientTexture, IRIS_MASK_ENCODING, shellParameters, type EyeHandle } from "./eye-material";
 import type { DetailLimit } from "./detail-limits";
 import { createMetalBaseMaterial, metalBaseParameters } from "./metal-base-material";
-import { attachInteriorOcclusion } from "./mouth-occlusion";
+import { attachInteriorOcclusion, type MouthInteriorUniforms } from "./mouth-occlusion";
+import { createGlassMaterial, glassParameters } from "./glass-material";
 
 /**
  * Renderer material adapters: one per game material template the preview draws (render-templates.ts).
@@ -55,6 +56,11 @@ export type AdapterContext = {
   profileEncoding: ProfileEncoding;
   /** The view's Hair look (0 Crisp … 1 Game-like), one uniform the scene's strands share (hair-shading.ts); Crisp when absent. */
   hairLook?: HairLookUniform;
+  /**
+   * The lips' aperture the scene measures each frame on the posed face (mouth-aperture.ts), one uniform every mouth-interior part of this
+   * scene reads (mouth-occlusion.ts); absent, the interior assumes the stand-in's fixed parting.
+   */
+  mouthInterior?: MouthInteriorUniforms;
 };
 /**
  * The resolved skin as decals see it: its toned base colour (8-bit sRGB, null outside a browser), its head chunks, and for
@@ -406,9 +412,26 @@ const metalBase: MaterialAdapter = {
   },
 };
 
+/**
+ * `glass_onesided.mt`: the transmission pass (glass-material.ts): what is behind the pane is multiplied by its tint. A pane that reflects
+ * (a non-black `GlassSpecularColor`) says that its reflection isn't drawn; the Gorilla Arms' window reflects nothing [resource].
+ */
+const glass: MaterialAdapter = {
+  id: "glass",
+  create(chunk, textures) {
+    const parameters = glassParameters(chunk.scalars, chunk.colours);
+    const notes = parameters.specular.some(value => value > 0) ? ["the pane's reflection isn't drawn, only its tint"] : [];
+    const glassTint = textures("GlassTint", "colour", "repeat"), mask = textures("MaskTexture", "data", "repeat");
+    const material = createGlassMaterial({ ...(glassTint ? { glassTint } : {}), ...(mask ? { mask } : {}) }, parameters);
+    // A pane casts no shadow in the preview's maps (the renderer reads this).
+    material.userData.xfsCastsNoShadow = true;
+    return { material, owned: [], notes };
+  },
+};
+
 export const MATERIAL_ADAPTERS: Readonly<Record<RenderAdapterId, MaterialAdapter>> = Object.freeze({
   skin: skinAdapter, "hair-strand": hairStrand, "hair-cap-decal": hairCapDecal, "double-diffuse-decal": doubleDiffuseDecal,
-  "mesh-decal": faceDecal, eye: eyeball, "eye-shell": eyeShell, layered, "metal-base": metalBase, "decal-placeholder": decalPlaceholder });
+  "mesh-decal": faceDecal, eye: eyeball, "eye-shell": eyeShell, layered, "metal-base": metalBase, glass, "decal-placeholder": decalPlaceholder });
 
 /**
  * The adapter for a chunk's template (by its own name when known), or undefined when the preview does not draw that
@@ -426,8 +449,8 @@ const INTERIOR_SLOTS: ReadonlySet<DetailSlot> = new Set(["teeth"]);
 const interiorAdapters = new Map<MaterialAdapter, MaterialAdapter>();
 /**
  * An adapter whose drawn chunks also take the mouth interior's occlusion (mouth-occlusion.ts): the light that reaches them through the
- * lips, from their depth behind the drawn head. Without the resolved head to measure against, the chunk is drawn fully lit, as before,
- * and says so in its notes.
+ * lips, from their depth behind the drawn head and the lips' parting the scene measures (`mouthInterior`). Without the resolved head to
+ * measure against, the chunk is drawn fully lit, as before, and says so in its notes.
  */
 function withInteriorOcclusion(adapter: MaterialAdapter): MaterialAdapter {
   let wrapped = interiorAdapters.get(adapter);
@@ -437,8 +460,9 @@ function withInteriorOcclusion(adapter: MaterialAdapter): MaterialAdapter {
       if (made.hidden) return made;
       const head = context.skin?.chunks ?? [];
       if (!head.length) return { ...made, notes: [...made.notes, "lit without the mouth's occlusion (no resolved head to measure against)"] };
-      const range = attachInteriorOcclusion(mesh, made.material, head);
-      return { ...made, notes: [...made.notes, `mouth occlusion ${range.min.toFixed(2)}–${range.max.toFixed(2)}`] };
+      const range = attachInteriorOcclusion(mesh, made.material, head, context.mouthInterior);
+      const parting = context.mouthInterior ? "the lips' measured parting" : "a fixed 10 mm parting (no face to measure)";
+      return { ...made, notes: [...made.notes, `mouth occlusion through ${parting}: depth ${(range.depth.min * 1000).toFixed(1)}–${(range.depth.max * 1000).toFixed(1)} mm`] };
     } };
     interiorAdapters.set(adapter, wrapped);
   }

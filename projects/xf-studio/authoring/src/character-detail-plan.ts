@@ -153,6 +153,11 @@ export type PlannedComponent = {
 };
 export type CharacterPlan = { components: PlannedComponent[]; slots: DetailSlotState[];
   /**
+   * Head options drawn only in part (render gap plans §6): the plan draws some of what the game draws for them and leaves the rest out (a
+   * template the preview can't draw there yet), so their creator rows must not read as fully drawn.
+   */
+  partial: string[];
+  /**
    * The game's censored body skin, planned beside the covered one: the host serves it in place of every `covered` component when a cover
    * can't be served (character-detail-service.ts). Empty when the creator resource has no censored twin or it can't be drawn.
    */
@@ -162,6 +167,8 @@ export type TemplateDefaults = ReadonlyMap<string, readonly ResolvedParam[]>;
 /** A template's own `name` and `materialPriority` per template depot path (lower case), read by the host from the `.mt`. */
 export type TemplateIdentities = ReadonlyMap<string, { name: string | null; priority: string | null }>;
 
+/** The scalar key the chunk's instance `enableMask` flag travels under (not a template parameter; `ResolvedChunkMaterial.enableMask`). */
+export const ENABLE_MASK = "enableMask";
 /** Plain words per slot (render-detail.ts, where the record reader uses them too). */
 export { SLOT_WORDS };
 
@@ -230,15 +237,23 @@ const chunkTemplate = (material: ResolvedChunkMaterial, identities: TemplateIden
   return renderTemplate(template, template ? identities.get(template.toLowerCase())?.name : null);
 };
 
-/** Plan one chunk of a slot's component. On the face only decal-family templates draw, with the decal family's inputs. */
-/** One resolved chunk's effective inputs for its template's adapter (also the creator swatches', cc-swatch.ts). */
+/**
+ * Whether a face option's chunk draws, by its template (render gap plans §6): the decal family through the face-decal path, and hair
+ * strands (`hair.mt`: the masculine beard's cards, a mod's moustache) through the hair adapter, as the game draws each template. Other
+ * templates on a face option (none in the vanilla creators) are not drawn there yet.
+ */
+export const faceChunkDraws = (inputs: ReturnType<typeof renderTemplate>) => isDecal(inputs) || inputs?.adapter === "hair-strand";
+/**
+ * Plan one chunk of a slot's component. One resolved chunk's effective inputs for its template's adapter (also the creator swatches',
+ * cc-swatch.ts). On the face only the templates `faceChunkDraws` names draw, a decal with the decal family's inputs.
+ */
 export function planChunk(material: ResolvedChunkMaterial, defaults: TemplateDefaults, rule: PlannedComponent["morphTexture"],
   identities: TemplateIdentities, slot: DetailSlot): PlannedChunk {
   const faceDetail = slot === "face", decals = decalFamilySlot(slot);
   const template = material.template ? refLabel(material.template.ref) : null;
   const identity = template ? identities.get(template.toLowerCase()) : undefined;
   const found = renderTemplate(template, identity?.name);
-  const inputs = found && (!faceDetail || isDecal(found)) ? found : undefined;
+  const inputs = found && (!faceDetail || faceChunkDraws(found)) ? found : undefined;
   const chunk: PlannedChunk = { chunk: material.chunk, name: material.name, template, templateName: identity?.name ?? null,
     materialPriority: identity?.priority ?? null, drawn: !!inputs, placeholder: !!inputs?.placeholder,
     scalars: {}, colours: {}, textures: {}, profiles: {}, skinProfiles: {}, gradients: {}, layered: null };
@@ -268,22 +283,18 @@ export function planChunk(material: ResolvedChunkMaterial, defaults: TemplateDef
   }
   const override = morphTextureOverride(rule, textureInputs);
   if (override) chunk.textures[override[0]] = override[1];
+  // The instance's `enableMask` (a property, not a parameter) travels with the scalars, where the adapter reads it (metal_base's alpha test).
+  if (material.enableMask) chunk.scalars[ENABLE_MASK] = 1;
   return chunk;
 }
 
 function planComponent(slot: DetailSlot, entry: ResolvedAppearance, component: ResolvedComponent,
   defaults: TemplateDefaults, identities: TemplateIdentities = new Map()): PlannedComponent | null {
-  const geometry = component.geometry;
-  if (!geometry || geometry.drawsNothing || !geometry.drawnFrom || geometry.drawnFrom.status !== "archive" || !geometry.visibleChunks?.length ||
-      !geometry.renderChunks) return null;
-  const lods = geometry.chunkLods, scene = geometry.chunkInScene;
+  const geometry = component.geometry, shown = sceneMaterials(component);
+  if (!geometry?.drawnFrom || !geometry.renderChunks || !shown) return null;
   const morphTexture = geometry.morphTexture && geometry.morphTarget
     ? { morph: geometry.morphTarget, texture: geometry.morphTexture.texture, parameter: geometry.morphTexture.parameter } : null;
-  // The highest level of detail, and only chunks the scene draws (a shadow-only chunk is neither drawn nor "skipped"). A chunk past the
-  // end of its appearance's chunk material list has no material of its own (a CCXL stub chunk), so it is not "skipped" either.
-  const materials = component.materials.filter(material => (!lods || ((lods[material.chunk] ?? 1) & 1) === 1) && scene?.[material.chunk] !== false &&
-      material.route !== "none")
-    .map(material => planChunk(material, defaults, morphTexture, identities, slot));
+  const materials = shown.map(material => planChunk(material, defaults, morphTexture, identities, slot));
   const drawn = materials.filter(material => material.drawn);
   // A face or body decal made only of decal templates the preview can't draw yet is still recorded, so the renderer can say so.
   if (decalFamilySlot(slot) ? !drawn.length : !drawn.some(material => !material.placeholder)) return null;
@@ -295,6 +306,30 @@ function planComponent(slot: DetailSlot, entry: ResolvedAppearance, component: R
     ...(slot === "body" ? { morphs: [...new Set(component.appliedMorphs.map(morph => `${morph.target}_${morph.region}`))].slice(0, 16) } : {}),
     ...(readerNotes.length ? { readerNotes: readerNotes.slice(0, 4) } : {}), ...dangleOf(entry, component) };
 }
+/**
+ * The chunk materials of a component the game's scene draws, or null when its geometry draws nothing the preview could export: the highest
+ * level of detail, and only chunks the scene draws (a shadow-only chunk is neither drawn nor "skipped"). A chunk past the end of its
+ * appearance's chunk material list has no material of its own (a CCXL stub chunk), so it is not "skipped" either.
+ */
+function sceneMaterials(component: ResolvedComponent): ResolvedChunkMaterial[] | null {
+  const geometry = component.geometry;
+  if (!geometry || geometry.drawsNothing || !geometry.drawnFrom || geometry.drawnFrom.status !== "archive" || !geometry.visibleChunks?.length ||
+      !geometry.renderChunks) return null;
+  const lods = geometry.chunkLods, scene = geometry.chunkInScene;
+  return component.materials.filter(material => (!lods || ((lods[material.chunk] ?? 1) & 1) === 1) && scene?.[material.chunk] !== false &&
+    material.route !== "none");
+}
+/**
+ * Whether a planned face option leaves part of what the game draws undrawn (render gap plans §6, coverage honesty): a component whose shown
+ * chunks the planner left out (`sceneMaterials` but no plan), a planned component with skipped chunks, or a chunk only recorded (a decal
+ * template the preview can't draw yet).
+ */
+function drawnInPart(entry: ResolvedAppearance, items: readonly PlannedComponent[]): boolean {
+  if (items.some(item => item.skippedChunks > 0 || item.materials.some(material => material.placeholder))) return true;
+  const planned = new Set(items.map(item => item.component));
+  return entry.components.some(component => !planned.has(component.name) && !!sceneMaterials(component)?.length);
+}
+
 /**
  * The dangle component a mesh is skinned to: an animated component of the same appearance with the name its `skinning` binding gives
  * (knowledge/hair-physics.md §2.1). Several components may share that name (a CCXL pack names every part's `hair_dangle`); the one from the
@@ -372,14 +407,14 @@ function oncePerPart(items: readonly { entry: ResolvedAppearance; item: PlannedC
  * `skinDecals` are the decal parts the skin type's appearance brings.
  */
 function planFace(resolved: ResolvedCharacter, cco: CcoResource, defaults: TemplateDefaults, identities: TemplateIdentities,
-  skinDecals: readonly { entry: ResolvedAppearance; component: ResolvedComponent }[]): { components: PlannedComponent[]; state: DetailSlotState } {
+  skinDecals: readonly { entry: ResolvedAppearance; component: ResolvedComponent }[]): { components: PlannedComponent[]; state: DetailSlotState; partial: string[] } {
   const options = new Map(cco.parts.head.options.map((option, index) => [option.name, { option, index }]));
   const toneLinks = new Set(cco.parts.head.options.filter(option => option.uiSlot === "skin_type" && option.link).map(option => option.link));
   const claimed = detailSlotOf(cco);
   const entries = resolved.appearances.filter(entry => entry.part === "head" && !claimed.has(entry.option) &&
     entry.groups.some(group => FACE_GROUPS.includes(group)));
   const planned: { component: PlannedComponent; order: number; label: string }[] = [];
-  const unshown: string[] = [];
+  const unshown: string[] = [], partial = new Set<string>();
   const label = (entry: ResolvedAppearance) => {
     const option = options.get(entry.option)?.option;
     const word = FACE_DETAIL_WORDS[option?.uiSlot ?? ""] ?? "face detail";
@@ -395,7 +430,11 @@ function planFace(resolved: ResolvedCharacter, cco: CcoResource, defaults: Templ
     const items = entry.components.map(component => planComponent("face", entry, component, defaults, identities))
       .filter((item): item is PlannedComponent => !!item);
     const order = options.get(entry.option)?.index ?? Number.MAX_SAFE_INTEGER;
-    if (items.length) { for (const item of items) planned.push({ component: item, order, label: label(entry) }); continue; }
+    if (items.length) {
+      for (const item of items) planned.push({ component: item, order, label: label(entry) });
+      if (drawnInPart(entry, items)) partial.add(entry.option);
+      continue;
+    }
     // A face decal that resolved but can't be drawn (its geometry is missing) is reported. Layered earrings and the face rig are
     // not decals and stay out silently (the teeth have a slot of their own).
     if (entry.components.some(component => component.materials.some(material => isDecal(chunkTemplate(material, identities)))))
@@ -405,14 +444,14 @@ function planFace(resolved: ResolvedCharacter, cco: CcoResource, defaults: Templ
   planned.sort((a, b) => a.order - b.order);
   const labels = [...new Set(planned.map(item => item.label))];
   const components = planned.map(item => item.component);
-  if (!components.length && !unshown.length) return { components, state: { slot: "face", state: "none", label: "None" } };
+  if (!components.length && !unshown.length) return { components, state: { slot: "face", state: "none", label: "None" }, partial: [] };
   const { noun, not, pronoun } = SLOT_WORDS.face;
   // Labels come from mod-supplied names: bounded, so one long name never costs the V its record (PIPE-56).
   const missing = clampedList([...new Set(unshown)], 160);
   if (!components.length) return { components, state: { slot: "face", state: "unavailable", label: clampedList([...new Set(unshown)]),
-    message: `XF Studio can't draw your V's ${noun} (${missing}) yet, so ${pronoun} ${not} shown.` } };
+    message: `XF Studio can't draw your V's ${noun} (${missing}) yet, so ${pronoun} ${not} shown.` }, partial: [] };
   return { components, state: { slot: "face", state: "shown", label: clampedList(labels),
-    ...(unshown.length ? { message: `Some of your V's ${noun} (${missing}) ${not} shown yet.` } : {}) } };
+    ...(unshown.length ? { message: `Some of your V's ${noun} (${missing}) ${not} shown yet.` } : {}) }, partial: [...partial] };
 }
 
 /**
@@ -420,8 +459,9 @@ function planFace(resolved: ResolvedCharacter, cco: CcoResource, defaults: Templ
  * - body part: `TPP_Body` (the third-person half of the `FPP_Body` perspective pair: the body skin, nipples, body tattoos and scars, the
  *   censorship underwear) and `genitals` (the genitals controller's lower group), plus the feet controller's group for the feet state
  *   (`FEET_GROUPS`);
- * - arms part: the default holster state's third-person group, `holstered_default_tpp` (feminine; the masculine creator resource does
- *   not split it: `holstered_default`). The other states belong to equipped arm cyberware, which a creator V never has.
+ * - arms part: the holster state's third-person group (`BodyState.arms`, arm-cyberware.ts: the equipped arm cyberware's state, e.g.
+ *   `holstered_strong_tpp`); without one, the default state's, `holstered_default_tpp` (feminine; the masculine creator resource does not
+ *   split it: `holstered_default`).
  * The breast size (group `breast`) and nail length (`nails`) are morphs, applied to every body component that carries the pair.
  */
 export const BODY_GROUPS: Readonly<Record<"body" | "arms", readonly string[]>> = Object.freeze({
@@ -433,8 +473,11 @@ export const BODY_GROUPS: Readonly<Record<"body" | "arms", readonly string[]>> =
  */
 export type FeetState = "flat" | "lifted";
 export const FEET_GROUPS: Readonly<Record<FeetState, string>> = Object.freeze({ flat: "flat_feet", lifted: "lifted_feet" });
-/** The body's state as worn items would set it; the default is the V with no clothing. */
-export type BodyState = { readonly feet: FeetState };
+/**
+ * The body's state as worn and equipped items set it; the default is the V with no clothing and no arm cyberware. `arms`: the holster
+ * state's third-person group (arm-cyberware.ts `armsStateFor`); absent, the default state's groups (`BODY_GROUPS.arms`).
+ */
+export type BodyState = { readonly feet: FeetState; readonly arms?: string };
 export const DEFAULT_BODY_STATE: BodyState = Object.freeze({ feet: "flat" });
 /**
  * The character creator's puppet (`Character.Player_Puppet_Menu`, `player_wa_tpp.ent`) wears the appearance `character_creation`
@@ -453,13 +496,14 @@ export function creatorPuppetFeet(cco: CcoResource): FeetState | null {
  * The body state a request draws: footwear lifts the feet; bare feet stand as the request's puppet draws them (the creator's, for its
  * idles), else flat, as in the inventory and in gameplay.
  */
-export function bodyStateFor(footwear: FeetState | null | undefined, puppet: "creator" | undefined, cco: CcoResource): BodyState {
-  if (footwear === "lifted") return { feet: "lifted" };
-  return { feet: (puppet === "creator" ? creatorPuppetFeet(cco) : null) ?? "flat" };
+export function bodyStateFor(footwear: FeetState | null | undefined, puppet: "creator" | undefined, cco: CcoResource, arms?: string | null): BodyState {
+  const withArms = arms ? { arms } : {};
+  if (footwear === "lifted") return { feet: "lifted", ...withArms };
+  return { feet: (puppet === "creator" ? creatorPuppetFeet(cco) : null) ?? "flat", ...withArms };
 }
 /** The groups the third-person body reads in one part for a body state. */
 export const bodyGroups = (part: "body" | "arms", state: BodyState = DEFAULT_BODY_STATE): readonly string[] =>
-  part === "body" ? [...BODY_GROUPS.body, FEET_GROUPS[state.feet]] : BODY_GROUPS.arms;
+  part === "body" ? [...BODY_GROUPS.body, FEET_GROUPS[state.feet]] : state.arms ? [state.arms] : BODY_GROUPS.arms;
 /** Plain words for the body's parts, by creator slot, for the label only (selection never uses them); others read "arms" or "body detail". */
 export const BODY_DETAIL_WORDS: Readonly<Record<string, string>> = Object.freeze({
   body_color: "body", flat_feet: "feet", lifted_feet: "feet", underpants: "underwear", body_tattoo: "tattoo", body_scars: "scars",
@@ -689,6 +733,7 @@ export function planCharacterDetails(resolved: ResolvedCharacter, cco: CcoResour
   const slots: DetailSlotState[] = [];
   const skinDecals: { entry: ResolvedAppearance; component: ResolvedComponent }[] = [];
   let censoredBody: PlannedComponent[] = [];
+  const partial: string[] = [];
   for (const slot of DETAIL_SLOTS) {
     if (slot === "face" || slot === "body" || slot === "clothing") {
       if (slot === "body") {
@@ -698,10 +743,12 @@ export function planCharacterDetails(resolved: ResolvedCharacter, cco: CcoResour
         slots.push(planned.state);
         continue;
       }
-      const planned = slot === "face" ? planFace(resolved, cco, defaults, identities, skinDecals)
+      const planned: { components: PlannedComponent[]; state: DetailSlotState; partial?: string[] } = slot === "face"
+        ? planFace(resolved, cco, defaults, identities, skinDecals)
         // With the body hidden, its clothes are too (the Body switch hides both).
         : scope === "hidden" ? { components: [], state: { slot: "clothing", state: "none", label: "Hidden" } as DetailSlotState }
         : planClothing(clothing, defaults, identities);
+      partial.push(...planned.partial ?? []);
       components.push(...planned.components);
       slots.push(planned.state);
       continue;
@@ -736,7 +783,7 @@ export function planCharacterDetails(resolved: ResolvedCharacter, cco: CcoResour
     components.push(...planned);
     slots.push({ slot, state: "shown", label });
   }
-  return { components, slots, censoredBody };
+  return { components, slots, censoredBody, partial };
 }
 
 /** Creator slot names (`uiSlot`) that feed one detail slot. */

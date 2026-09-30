@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { buildCatalogue, CatalogueIndex, type CcCatalogue, readCcoWithPresentation, userFacing } from "../src/cc-catalogue";
 import type { CcoResource } from "../src/cco-model";
-import { catalogueCoverage, refineCoverage, renderCoverage, type CoverageInput } from "../src/cc-render-coverage";
+import { catalogueCoverage, PARTLY_SHOWN, refineCoverage, renderCoverage, shownOutcome, type CoverageInput } from "../src/cc-render-coverage";
 import { CC_PAGE_SIZE, choicePage, panelProjection, readCcPanel, readChoicePage } from "../src/cc-panel";
 import { loadMergedCco } from "../src/character-resolver";
 import { appearance, BASE_CCO, creator, fixtureSource, MOD_CCO, MOD_NAME, PRESENTATION, switcher, TEXTS, vanillaCreator } from "./cc-fixtures";
@@ -118,10 +118,17 @@ describe("creator catalogue from the merged resource", () => {
     expect(status("body", "body_color")).toEqual(["rendered", "body"]);
     // A conditional face option settles from the plan; a rendered one (the teeth, which have a slot of their own) is kept.
     const scars = coverage.get("head/scars")!;
-    expect(refineCoverage(scars, [{ drawn: false }]).status).toBe("not-rendered");
-    expect(refineCoverage(scars, [{ drawn: true }]).status).toBe("rendered");
-    expect(refineCoverage(scars, []).status).toBe("conditional");
-    expect(refineCoverage(coverage.get("head/teeth")!, [{ drawn: false }])).toEqual(coverage.get("head/teeth")!);
+    expect(refineCoverage(scars, "none").status).toBe("not-rendered");
+    expect(refineCoverage(scars, "whole").status).toBe("rendered");
+    // Drawn only in part (a beard whose cards are left out): never claimed as drawn, and says so.
+    expect(refineCoverage(scars, "part")).toEqual({ status: "conditional", detail: "face", note: PARTLY_SHOWN });
+    expect(refineCoverage(scars, null).status).toBe("conditional");
+    expect(refineCoverage(coverage.get("head/teeth")!, "none")).toEqual(coverage.get("head/teeth")!);
+    const shown = { drawn: ["beard_part_01", "scars"], partial: ["beard_part_01"] };
+    expect(shownOutcome("scars", shown)).toBe("whole");
+    expect(shownOutcome("beard_part_01", shown)).toBe("part");
+    expect(shownOutcome("tattoo", shown)).toBe("none");
+    expect(shownOutcome("scars", { drawn: ["scars"] })).toBe("whole");
   });
 
   test("a mod archive replacing the base creator resource names that mod, not vanilla (PIPE-46)", async () => {

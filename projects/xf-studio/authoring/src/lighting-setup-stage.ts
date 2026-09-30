@@ -5,6 +5,7 @@ import { aimShadowAtHead } from "./creator-lighting-rig";
 import { createLinearDisplay } from "./linear-display";
 import type { GradingLut, GradingLutSource } from "./grading-lut";
 import { installShadowFilter } from "./shadow-filter";
+import { installLinearFalloff, LINEAR_FALLOFF_DECAY } from "./linear-falloff";
 import { createSkinScatter } from "./platform/scene/skin-scatter";
 import { createContactShadows, setContactShadows } from "./platform/scene/contact-shadow";
 import { bodyCastersOnly, contactOnly, setBodyCastersOnly } from "./platform/scene/shadow-casters";
@@ -64,7 +65,11 @@ export function createLightListRig() {
     light.intensity = spec.intensity;
     light.position.set(spec.position[0], spec.position[1], spec.position[2]);
     light.target.position.set(spec.target[0], spec.target[1], spec.target[2]);
-    if (isSpot(light)) { light.distance = spec.distance; light.angle = spec.angle; light.penumbra = spec.penumbra; light.decay = spec.decay; }
+    if (isSpot(light)) {
+      // The game's linear falloff, per fragment (linear-falloff.ts): the radius as the distance, a negative decay as the mark.
+      light.distance = spec.linearRadius ?? spec.distance; light.decay = spec.linearRadius ? LINEAR_FALLOFF_DECAY : spec.decay;
+      light.angle = spec.angle; light.penumbra = spec.penumbra;
+    }
     const was = light.castShadow;
     light.castShadow = spec.shadows;
     // The game's character contact shadows (platform/scene/contact-shadow.ts), on a light that shadows at all: the shadow switch turns both off.
@@ -165,6 +170,7 @@ export function createLightingSetupStage(options: {
   // Shadow maps render only for lights that cast; soft PCF with a per-light radius. They are drawn again only when what casts or
   // lights them changed (`shadowState`), not for a camera move: a static V orbited keeps its maps.
   installShadowFilter();
+  installLinearFalloff();
   if (renderer.shadowMap) { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap; renderer.shadowMap.autoUpdate = false; }
   let shadowKey = "";
   let source: LightingSource = { kind: "setup", setup: studioStageSetup(DEFAULT_STUDIO_STAGE) };

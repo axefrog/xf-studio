@@ -309,3 +309,24 @@ test("a stopped preparation doesn't wait for the driver's links, and leaves its 
   } });
   expect(compiled).toBe(2);
 });
+
+test("a face option's hair strands (the beard's cards) draw with the hair's order and cast like hair; its decals keep the face order (render gap plans §6)", () => {
+  const { character } = setup();
+  const strand = (name: string) => {
+    const mesh = skinned(quad(0.01), name);
+    mesh.material = new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, alphaMap: new THREE.Texture(), alphaToCoverage: true });
+    return mesh;
+  };
+  const stubble = skinned(quad(0.005), "stubble"), cards = strand("cards"), hair = strand("hair"), lashes = strand("lashes");
+  const beard = component("face", "beard_color5", [stubble, cards], { decals: [{ mesh: stubble, chunk: { materialPriority: null }, handle: { setNormals() {} } }] as never });
+  character.setCharacterDetails(v("bearded", [skinComponent([skinned(quad(), "skin")]), beard, component("hair", "hair", [hair]), component("lashes", "lashes", [lashes])]));
+  expect(cards.renderOrder).toBe(hair.renderOrder);
+  expect(cards.castShadow).toBe(true);
+  expect((cards.material as THREE.Material).side).toBe(THREE.DoubleSide);
+  // The stubble is a face decal: its own order among the decals, after the skin, and it casts nothing.
+  expect(stubble.renderOrder).toBeGreaterThan(0);
+  expect(stubble.castShadow).toBe(false);
+  // Lashes are strands too, but keep their own order and cast nothing.
+  expect(lashes.castShadow).toBe(false);
+  expect(lashes.renderOrder).toBeGreaterThan(stubble.renderOrder);
+});

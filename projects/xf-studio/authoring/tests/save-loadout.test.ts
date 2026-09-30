@@ -51,7 +51,7 @@ const UNDERWEAR = BigInt(tweakDbId("Items.Underwear_Basic_01_Bottom")), JACKET =
 const HAT = BigInt(tweakDbId("Items.Helmet_01_basic_01"));
 
 /** A save's script systems: an equipment system with two owners (an NPC's and the player's), and a script mod's chunk of an unknown class. */
-function scriptSystems(options: { visuals?: [string, boolean, bigint | null][]; activeIndex?: number } = {}) {
+function scriptSystems(options: { visuals?: [string, boolean, bigint | null][]; activeIndex?: number; arms?: { slots: (bigint | null)[]; active?: number } } = {}) {
   const b = new PackageBuilder();
   const item = (id: bigint) => b.object("gameItemID", [["id", b.tweak(id)], ["rngSeed", { type: "Uint32", bytes: b.u32(7) }]]);
   const slot = (id: bigint | null) => b.object("gameSEquipSlot", id ? [["itemID", item(id)]] : []);
@@ -65,7 +65,8 @@ function scriptSystems(options: { visuals?: [string, boolean, bigint | null][]; 
   b.chunk(b.object("EquipmentSystemPlayerData", [["ownerID", entity(9000324n)]]));
   b.chunk(b.object("EquipmentSystemPlayerData", [["ownerID", entity(1n)], ["equipment", b.object("gameSLoadout", [["equipAreas", b.array("gameSEquipArea", [
     area("Weapon", [123n, null]), area("InnerChest", [TSHIRT]), area("OuterChest", [null, JACKET], options.activeIndex ?? 1), area("Legs", [PANTS]),
-    area("Head", [HAT]), area("UnderwearBottom", [UNDERWEAR]), area("Face", [null])])]])],
+    area("Head", [HAT]), area("UnderwearBottom", [UNDERWEAR]), area("Face", [null]),
+    ...(options.arms ? [area("ArmsCW", options.arms.slots, options.arms.active)] : [])])]])],
     ["clothingVisualsInfo", b.array("gameSSlotVisualInfo", (options.visuals ?? [["Outfit", false, null], ["OuterChest", false, null], ["InnerChest", false, null],
       ["Legs", false, null], ["Head", false, null], ["UnderwearBottom", true, null]]).map(visual))],
     ["hotkeys", b.handles("Hotkey", [])]]));
@@ -95,6 +96,21 @@ describe("save loadout", () => {
     expect(worn.find(entry => entry.area === "Legs")?.item).toBe(String(TSHIRT));
     expect(worn.find(entry => entry.area === "UnderwearBottom")?.item).toBe(String(UNDERWEAR));
     expect(worn.find(entry => entry.area === "Head")).toEqual({ area: "Head", item: String(HAT), hidden: true });
+  });
+
+  test("the arm cyberware area's active item is read beside the clothing areas; none equipped is null, never a clothing area", () => {
+    const gorilla = BigInt(tweakDbId("Items.StrongArms")), mantis = BigInt(tweakDbId("Items.MantisBlades"));
+    const loadout = readSavedLoadout(scriptSystems({ arms: { slots: [mantis, gorilla], active: 1 } }), null);
+    expect(loadout.arms).toBe(String(gorilla));
+    expect(loadout.equipped.some(entry => (entry.area as string) === "ArmsCW")).toBe(false);
+    expect(parseSavedLoadout(JSON.parse(JSON.stringify(loadout)))).toEqual(loadout);
+    // An empty area, and a save without the area at all: no arm cyberware.
+    expect(readSavedLoadout(scriptSystems({ arms: { slots: [null] } }), null).arms).toBeNull();
+    expect(readSavedLoadout(scriptSystems(), null).arms).toBeNull();
+    // A loadout an earlier XF Studio stored has no `arms`: it stays absent (the arms then draw the default state).
+    const { arms: _dropped, ...older } = loadout;
+    expect(parseSavedLoadout(JSON.parse(JSON.stringify(older))).arms).toBeUndefined();
+    expect(() => parseSavedLoadout({ ...loadout, arms: "not an id" })).toThrow();
   });
 
   test("SAVE-11: owners after the player's are counted but never decoded, so only the player's data is kept", () => {

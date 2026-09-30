@@ -190,7 +190,7 @@ describe("creator choices on the piercings", () => {
     // A v3 page's tried choice, or choices on an earlier version, is a page built apart from this host.
     expect(() => parseCharacterRequest({ ...DEFAULT_CHARACTER, schema: "xfs/character-request-3", override: { slot: "piercings", choice: "12", definition: PIERCING.black } })).toThrow();
     expect(() => parseCharacterRequest({ ...chosen, schema: "xfs/character-request-2" })).toThrow();
-    expect(() => parseCharacterRequest({ ...chosen, schema: "xfs/character-request-9" })).toThrow(CharacterRequestVersionError);
+    expect(() => parseCharacterRequest({ ...chosen, schema: "xfs/character-request-10" })).toThrow(CharacterRequestVersionError);
     expect(sameCharacter(REQUEST_A, chosen)).toBe(true);
     expect(sameCharacter(DEFAULT_CHARACTER, chosen)).toBe(false);
   });

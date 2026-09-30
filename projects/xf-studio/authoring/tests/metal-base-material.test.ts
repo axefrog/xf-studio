@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import * as THREE from "three";
 import { materialAdapter } from "../src/character-material-adapters";
-import { createMetalBaseMaterial, metalBaseParameters, metalBaseSurface, patchMetalBaseShader } from "../src/metal-base-material";
+import { createMetalBaseMaterial, metalBaseKeeps, metalBaseParameters, metalBaseSurface, patchMetalBaseShader } from "../src/metal-base-material";
 import { renderTemplate } from "../src/render-templates";
 
 describe("metal_base.remt (research/materials/shader-metal-glass.md §3.3)", () => {
@@ -17,7 +17,7 @@ describe("metal_base.remt (research/materials/shader-metal-glass.md §3.3)", () 
 
   test("parameters: the chunk's scalars, the colour scale from its vector's components, the template's defaults otherwise", () => {
     expect(metalBaseParameters({})).toEqual({ baseColorScale: [1, 1, 1], metalnessScale: 1, metalnessBias: 0, roughnessScale: 1, roughnessBias: 0,
-      normalStrength: 1, layerTile: 1 });
+      normalStrength: 1, layerTile: 1, masked: false, alphaThreshold: 0.38 });
     // The Gorilla Arms end decal's values (shader-metal-glass.md §5).
     const decal = metalBaseParameters({ "BaseColorScale.x": 0.448, "BaseColorScale.y": 0.448, "BaseColorScale.z": 0.448, MetalnessScale: 0.955,
       MetalnessBias: 0.425, RoughnessScale: 0.733, RoughnessBias: 0.439, LayerTile: 2 });
@@ -54,6 +54,24 @@ describe("metal_base.remt (research/materials/shader-metal-glass.md §3.3)", () 
       metalBaseParameters({ "BaseColorScale.x": 0.5, "BaseColorScale.y": 0.25, "BaseColorScale.z": 1 }));
     expect(material.color.toArray()).toEqual([0.5, 0.25, 1]);
     expect(material.side).toBe(THREE.FrontSide);
-    expect(material.customProgramCacheKey()).toBe("xfs-metal-base-1");
+    expect(material.customProgramCacheKey()).toBe("xfs-metal-base-2");
+    expect(material.alphaTest).toBe(0);
+  });
+
+  test("PREV-117: an instance with enableMask alpha-tests the colour map's own alpha against AlphaThreshold; others draw opaque", () => {
+    const masked = metalBaseParameters({ enableMask: 1, AlphaThreshold: 0.5 }), plain = metalBaseParameters({});
+    expect([masked.masked, masked.alphaThreshold]).toEqual([true, 0.5]);
+    expect(metalBaseParameters({ enableMask: 1 }).alphaThreshold).toBe(0.38);
+    expect(metalBaseKeeps(0.49, masked)).toBe(false);
+    expect(metalBaseKeeps(0.5, masked)).toBe(true);
+    expect(metalBaseKeeps(0, plain)).toBe(true);
+    const texture = () => new THREE.DataTexture(new Uint8Array([128, 128, 255, 255]), 1, 1);
+    const material = createMetalBaseMaterial({ baseColor: texture(), metalness: texture(), roughness: texture(), normal: texture() }, masked);
+    expect(material.alphaTest).toBe(0.5);
+    expect(material.customProgramCacheKey()).toBe("xfs-metal-base-2-masked");
+    // The program sets the fragment's alpha from the texture only in the alpha-tested program (Three's alphatest chunk then discards).
+    const shader = patchMetalBaseShader({ fragmentShader: THREE.ShaderLib.standard.fragmentShader });
+    expect(shader.fragmentShader).toContain("#ifdef USE_ALPHATEST\ndiffuseColor.a = xfsBase.a;");
+    expect(shader.fragmentShader.indexOf("diffuseColor.a = xfsBase.a")).toBeLessThan(shader.fragmentShader.indexOf("#include <alphatest_fragment>"));
   });
 });

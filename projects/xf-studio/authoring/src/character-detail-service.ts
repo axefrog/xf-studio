@@ -32,13 +32,14 @@ import { createHash } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { descriptorsFromUiState } from "./cco-model";
+import { type CcoResource, descriptorsFromUiState } from "./cco-model";
 import { type BodyCensorship, type BodyScope, bodyStateFor, planCharacterDetails, previewInput, recordMorphTexture, SLOT_WORDS, type CharacterPlan, type PlanReaders, type PlannedChunk, type PlannedComponent } from "./character-detail-plan";
 import { inputFromCharacterRequest, type CharacterRequest } from "./character-detail-request";
 import { type ComponentOverrides, loadMergedCco, NO_OVERRIDES, overridesKey, resolveCharacter, type CharacterInput, type ResolvedAppearance, type ResolvedCharacter,
   type ResolvedParam } from "./character-resolver";
 import { type ClothingFailure, resolveClothing, type ResolvedClothing } from "./clothing-resolver";
-import { clothingPorts } from "./clothing-host";
+import { clothingPorts, holsteredAppearance, tweakDbOf } from "./clothing-host";
+import { armsStateFor, armsStateNote, type ArmsState } from "./arm-cyberware";
 import { refFromPath, refLabel, type DepotRef } from "./depot-path";
 import { archiveExportSource, type ExportBase, type ExportKind, GameAssetExportError, type GameAssetExporter } from "./game-asset-export";
 import { keepGlbMeshes } from "./glb";
@@ -121,6 +122,19 @@ export class CharacterDetailError extends Error {
 const UNREADABLE = "XF Studio couldn't read your game's character-creator files, so your V's own skin, face details, eyes, brows, lashes, hair, piercings and body aren't shown. The head still works.";
 /** Said with the one next step, "Set up WolvenKit" (the host's state names the need; NATIVE-47). */
 export const TOOL_MISSING = "XF Studio needs WolvenKit to turn your V's own skin, face details, eyes, brows, lashes, hair, piercings and body into the 3D view, and it isn't set up yet. XF Studio can download it for you. The head still works.";
+
+/**
+ * The arms' holster state a request draws (arm-cyberware.ts): its equipped arm cyberware followed through the game's compiled TweakDB (the
+ * Phantom Liberty one when installed); the default state without one. A TweakDB that can't be read leaves the default state, logged.
+ */
+function armsOf(graph: ResourceGraph, request: CharacterRequest, cco: CcoResource, gameRoot: string, log: (line: string) => void): ArmsState {
+  const state = armsStateFor(request.arms, item => {
+    try { const db = tweakDbOf(gameRoot, graph.depot.plan.ep1Installed); return db ? holsteredAppearance(db.blob, item) : undefined; }
+    catch (error) { log(`The game's TweakDB couldn't be read for the arm cyberware: ${(error as Error)?.message ?? error}`); return undefined; }
+  }, cco);
+  if (state.reason && state.reason !== "none-equipped") log(armsStateNote(state));
+  return state;
+}
 
 /** The record's file names are content-addressed: `<sha256>.<ext>`. */
 export const STORE_FILE = /^[a-f0-9]{64}\.(glb|png|json)$/;
@@ -940,7 +954,9 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   const clothing = dressed && !("failed" in dressed) ? dressed : null;
   if (request.clothing && scope === "drawn") time("clothing");
   cancelled();
-  const bodyState = bodyStateFor(clothing?.feet, request.puppet, cco.merged.cco);
+  // The arms' holster state follows the equipped arm cyberware (arm-cyberware.ts); the default state without it.
+  const arms = scope === "drawn" ? armsOf(graph, request, cco.merged.cco, options.route.gameRoot, log) : null;
+  const bodyState = bodyStateFor(clothing?.feet, request.puppet, cco.merged.cco, arms?.group);
   // Only what the preview can draw is resolved: the head, and the body parts its third-person consumers read.
   input = previewInput(input, bodyState, scope === "drawn");
   const { resolved, reused: reusedAppearances } = await resolveThrough(graph, input, cco, cache, clothing?.overrides);
@@ -960,6 +976,8 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   // A slot is many independent parts (face details; a hair and its extra parts; a piercing style's parts): one that can't be read
   // leaves the others shown, and the slot is unavailable only when none of its parts could be served (decided after export).
   const partial = new Map<DetailSlot, "export" | "tool">();
+  // Head options drawn only in part: the plan's, and any whose component or chunk is left out below (the record keeps those still drawn).
+  const partialOptions = new Set(plan.partial);
   const failSlot = (slot: DetailSlot, why: "export" | "tool") => { partial.set(slot, partial.get(slot) === "tool" ? "tool" : why); };
   const unavailable = (slot: DetailSlot, why: "export" | "tool") => {
     const current = slots.get(slot)!;
@@ -983,6 +1001,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
 
   progress("writing");
   const notes: string[] = [];
+  if (arms && arms.reason !== "none-equipped") notes.push(armsStateNote(arms));
   const components: RenderComponent[] = [];
   /** Decoded texels of the distinct textures served so far, against the record's budget (PIPE-43). */
   const served = new Map<string, number>();
@@ -1084,6 +1103,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
    */
   const drops: string[] = [];
   const dropped = (component: PlannedComponent, why: string) => {
+    partialOptions.add(component.option);
     const line = `Part ${component.component} of your V's ${SLOT_WORDS[component.slot].noun} isn't shown: ${why}`;
     drops.push(line);
     note(line);
@@ -1150,6 +1170,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
       const blocking = unread.filter(entry => required.has(entry.param)), optional = unread.filter(entry => !required.has(entry.param));
       if (blocking.length) {
         note(`${component.component} chunk ${material.chunk}: ${words(unread)} could not be read; the chunk is not drawn.`);
+        partialOptions.add(component.option);
         continue;
       }
       if (optional.length) note(`${component.component} chunk ${material.chunk}: ${words(optional)} could not be read; drawn without ${optional.length > 1 ? "them" : "it"}.`);
@@ -1266,6 +1287,8 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
     provenance: { label: `Your ${summary.route === "mo2" ? "Mod Organizer 2 profile" : "game"}'s installed files`,
       notes: recordNotes([...drops, ...whole], notes), ...(toolLabel ? { tool: toolLabel } : {}) },
     components, slots: [...slots.values()], ...(rigs.length ? { rigs } : {}),
+    // Only head options: the Character panel settles its head rows from them (the reader keeps those a component still draws).
+    partial: [...partialOptions].filter(option => components.some(item => item.option === option && item.slot !== "body" && item.slot !== "clothing")),
   };
   // What is written is what the browser's reader makes of it (PIPE-40): one shared rule set, and a part that breaks it is left out
   // with a note here, not discovered by the page.
@@ -1396,7 +1419,8 @@ async function warmOnce(options: WarmOptions, run: CacheRun): Promise<WarmOutcom
     cancelled();
     const scopes = requests.map(bodyScopeOf);
     const worn = clothes.map(entry => entry && !("failed" in entry) ? entry : null);
-    const bodyStates = requests.map((request, index) => bodyStateFor(worn[index]?.feet, request.puppet, cco.merged.cco));
+    const bodyStates = requests.map((request, index) => bodyStateFor(worn[index]?.feet, request.puppet, cco.merged.cco,
+      scopes[index] === "drawn" ? armsOf(graph, request, cco.merged.cco, options.route.gameRoot, log)?.group : null));
     const resolved = await Promise.all(inputs.map((input, index) => input ? resolveThrough(graph, previewInput(input, bodyStates[index],
       scopes[index] === "drawn"), cco, cache, worn[index]?.overrides).then(result => result.resolved) : null));
     cancelled();

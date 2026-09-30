@@ -3,6 +3,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { BLINK_REPEAT_SECONDS, GAME_BLINK_DAMAGED, GAME_BLINK_MISSING, GAME_BLINK_NO_JOINTS, GAME_BLINK_OTHER_HEAD } from "./game-blink-messages";
 import { FACE_MOTION_SCHEMA, FACIAL_BLINK_ENDPOINT, type FaceMotionClip, type FaceMotionRest, type FacialBlinkRecord } from "./platform/api/facial";
 import { bytesFromBase64 } from "./base64";
+import { FACE_REST_KEY } from "./mouth-aperture";
 
 /**
  * The game's own blink on the preview head (knowledge/facial-animation.md). The host solves the player head's facial setup with XF Studio's
@@ -360,6 +361,10 @@ export function faceMotionScene(rest: FaceMotionRest): THREE.Object3D {
   });
   rest.parents.forEach((parent, j) => (parent >= 0 && bones[parent] ? bones[parent]! : root).add(bones[j]!));
   root.updateMatrixWorld(true);
+  // The rest and the setup's regions stay with the scene: the renderer finds the lip joints by them (mouth-aperture-sampler.ts).
+  const regions = Array.isArray(rest.regions) && rest.regions.length === rest.names.length && rest.regions.every(value => Number.isInteger(value) && value >= 0 && value <= 255)
+    ? [...rest.regions] : undefined;
+  root.userData[FACE_REST_KEY] = { names: [...rest.names], parents: [...rest.parents], local, ...(regions ? { regions } : {}) };
   return root;
 }
 

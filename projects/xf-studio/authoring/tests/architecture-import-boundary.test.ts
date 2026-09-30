@@ -336,6 +336,8 @@ const SCENE_DEVICE_MODULES = new Set<string>([
   "detail-limits", "head-load-error", "scene-evidence",
   // The rig's motion (the dangle adapter included) and facial shapes.
   "idle-animation", "idle-catalogue", "game-blink", "preview-motion", "face-morphs", "dangle-motion",
+  // The mouth interior's light: the lips' aperture from the posed face (pure) and the interior's uniforms it writes (PREV-147).
+  "mouth-aperture", "mouth-occlusion",
   // The host's idles as the page reads them: the state record, rests and ancestry (pure), and the endpoint's path.
   "idle-body", "idle-endpoint",
   // A photo-mode pose as a body clip for the idle's rig, and the sampled pose record it reads (types only).
@@ -351,7 +353,7 @@ const SCENE_DEVICE_MODULES = new Set<string>([
 const SCENE_SUPPORT_MODULES = new Set<string>([
   "brow-material", "decal-underlay", "face-decal-material", "hair-shading", "head-surface", "skin-material", "metal-base-material", "mouth-occlusion",
   "creator-lighting", "creator-lighting-rig", "shadow-filter", "grading-lut", "studio-environment", "game-blink-messages", "input-bindings",
-  "red-json", "depot-path", "archive-precedence", "resolution-evidence", "deformation-rig", "dangle-spec", "dangle-solver", "base64",
+  "red-json", "depot-path", "archive-precedence", "resolution-evidence", "deformation-rig", "dangle-spec", "dangle-solver", "base64", "glass-material", "linear-falloff",
 ]);
 /** What nothing the scene host reaches may be: a feature, an engine, the composition, the UI, an entry point, or an application service. */
 const SCENE_UNREACHABLE = /^(?:features\/|engines\/|compose\/|studio-ui\/|studio-(?:main|startup|application|presentation)$|platform\/(?:core|export)\/|authoring-|collection-|trusted-|workspace-|[\w-]+-(?:actions|service|host|server)$|node:|bun:)/;

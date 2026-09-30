@@ -263,10 +263,15 @@ export type SpotLightSpec = {
   readonly target: Vec3;
   /** Linear-light colour. */
   readonly colour: Vec3;
-  /** Candela, including the linear-falloff and cone folds and the calibration gain. */
+  /** Candela, including the cone fold and the calibration gain. */
   readonly intensity: number;
   readonly decay: number;
   readonly distance: number;
+  /**
+   * A linear-falloff light's radius: the renderer attenuates it per fragment by `1 − saturate(d/r)` (linear-falloff.ts); null for an
+   * inverse-square light, which Three's physical falloff (`decay`, `distance`) draws exactly.
+   */
+  readonly linearRadius: number | null;
   /** Three's half-angle in radians and penumbra fraction. */
   readonly angle: number;
   readonly penumbra: number;
@@ -277,21 +282,20 @@ export type SpotLightSpec = {
 
 /**
  * Three parameters for a rig light (knowledge §7, §12). Inverse-square lights are Three's physical falloff
- * (`decay` 2, `distance` = radius), which matches the decoded form exactly. Three has no linear falloff, so
- * a linear light gets `decay` 0, `distance` 0 and its intensity multiplied by `1 − d/r` measured to the
- * head point (within a few percent across the head for these distances). The cone fold does the same for the engine's cone shape,
- * and the calibration gain comes last.
+ * (`decay` 2, `distance` = radius), which matches the decoded form exactly. A linear light carries its radius (`linearRadius`) and
+ * the renderer applies the decoded `1 − saturate(d/r)` per fragment (linear-falloff.ts; render gap plans §2 step A); its `decay` and
+ * `distance` are Three's "no falloff" (0, 0) for a reader that doesn't know the field. The cone fold scales the intensity so the preview
+ * light has the engine cone's strength at the face, and the calibration gain comes last.
  */
 export function spotLightSpec(l: CreatorLight, options: Pick<CreatorLightingOptions, "intensity" | "cone">, head: Vec3, castShadow = false): SpotLightSpec {
   const h = halfAngles(l, options.cone);
   const candela = lumensToCandela(l, options.intensity, options.cone);
   const linear = l.falloff === "linear";
-  const fold = linear ? linearFalloff(length(sub(head, l.position)), l.radius) : 1;
   return Object.freeze({
     name: l.name, position: l.position,
     target: [l.position[0] + l.axis[0], l.position[1] + l.axis[1], l.position[2] + l.axis[2]] as Vec3,
-    colour: lightColourLinear(l.colour), intensity: candela * fold * coneFold(l, options.cone, head) * calibrationGain(l.name),
-    decay: linear ? 0 : 2, distance: linear ? 0 : l.radius,
+    colour: lightColourLinear(l.colour), intensity: candela * coneFold(l, options.cone, head) * calibrationGain(l.name),
+    decay: linear ? 0 : 2, distance: linear ? 0 : l.radius, linearRadius: linear ? l.radius : null,
     angle: h.outer * RAD, penumbra: h.outer > 0 ? saturate(1 - h.inner / h.outer) : 0, falloff: l.falloff, castShadow,
   });
 }

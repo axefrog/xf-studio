@@ -4,7 +4,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { CatalogueIndex } from "../src/cc-catalogue";
 import { choicePage, panelProjection, searchChoices, type CcPanelChoice, type CreatorView } from "../src/cc-panel";
-import { catalogueCoverage } from "../src/cc-render-coverage";
+import { catalogueCoverage, PARTLY_SHOWN } from "../src/cc-render-coverage";
 import { deriveCharacter } from "../src/character-context";
 import { CharacterContextActions, type CreatorPort } from "../src/character-context-actions";
 import { foldedKeys, UIPreferenceActions } from "../src/ui-preferences";
@@ -22,7 +22,7 @@ async function harness(stored?: unknown) {
   const index = new CatalogueIndex(source.catalogue);
   // The fixture has no makeup category: its scars section stands in for it.
   const marked = { ...panel, sections: panel.sections.map(section => ({ ...section, makeup: section.id === "Scars" })) };
-  let failView = false, holdViews = false, updating = false;
+  let failView = false, holdViews = false, updating = false, details: unknown = undefined;
   const held: (() => void)[] = [];
   const prefetches: { option: string; positions: number[]; focus: number | null }[] = [], stops: true[] = [];
   const fetchStates = new Map<number, string>();
@@ -76,13 +76,13 @@ async function harness(stored?: unknown) {
   const root = controller.spec.element as unknown as LightElement;
   lightDocument.body.append(root);
   const frame = () => ({ preferences: preferences.snapshot(), preview: { character: context.snapshot(), preview: undefined, savedV: {}, eyeShapeOptions: undefined },
-    status: { assets: { characterDetails: updating ? { phase: "ready", updating: true, drawn: [], slots: [] } : undefined } }, viewport: { head: { error: null, message: null } } }) as never;
+    status: { assets: { characterDetails: updating ? { phase: "ready", updating: true, drawn: [], slots: [] } : details } }, viewport: { head: { error: null, message: null } } }) as never;
   const paint = () => controller.update(frame());
   context.start(); await settle();
   paint(); await settle(); paint();
   return { context, root, paint, dispatched, preferences, controller, setFailView: (value: boolean) => { failView = value; }, prefetches, stops, fetchStates,
     holdViews: (value: boolean) => { holdViews = value; }, releaseViews: () => { while (held.length) held.shift()!(); },
-    setUpdating: (value: boolean) => { updating = value; } };
+    setUpdating: (value: boolean) => { updating = value; }, setDetails: (value: unknown) => { details = value; } };
 }
 const row = (root: LightElement, label: string) => root.querySelectorAll(".cc-row").find(element => element.querySelector(".cc-row-label")?.textContent === label)!;
 const items = (element: LightElement) => element.querySelectorAll(".cc-choice");
@@ -347,6 +347,32 @@ describe("folding and help in the Character panel", () => {
     expect(h.root.textContent).not.toContain("Hair physics");
     // The quick switch and the Files section explain themselves the same way.
     expect(h.root.querySelectorAll(".help-tip").map(button => button.getAttribute("aria-label"))).toEqual(expect.arrayContaining(["About Show my V's own makeup", "About Files"]));
+  });
+});
+
+describe("a conditional row settles from what the shown V draws of it (render gap plans §6)", () => {
+  test("drawn whole: no marker; drawn only in part: marked with its own words, not dimmed; not drawn: marked and dimmed", async () => {
+    const h = await harness();
+    h.context.dispatch({ kind: "character.setOption", part: "head", option: "scars", choice: "scar_01" });
+    h.paint(); await settle(); h.paint();
+    const scars = row(h.root, "Scars"), marker = () => scars.querySelector(".cc-row-not-shown")!;
+    const show = async (drawn: string[], partial: string[]) => {
+      h.setDetails({ phase: "ready", updating: false, drawn, partial, slots: [] });
+      h.paint(); await settle(); h.paint();
+    };
+    await show(["scars"], []);
+    expect(marker().classList.contains("on")).toBe(false);
+    expect(scars.classList.contains("not-shown")).toBe(false);
+    // A beard whose cards were left out: never read as drawn.
+    await show(["scars"], ["scars"]);
+    expect(marker().classList.contains("on")).toBe(true);
+    expect(marker().getAttribute("title")).toBe(PARTLY_SHOWN);
+    expect(scars.querySelector(".cc-row-main")!.getAttribute("aria-description")).toContain(PARTLY_SHOWN);
+    expect(scars.classList.contains("not-shown")).toBe(false);
+    await show([], []);
+    expect(marker().classList.contains("on")).toBe(true);
+    expect(marker().getAttribute("title")).toBe("Not shown in the 3D view yet.");
+    expect(scars.classList.contains("not-shown")).toBe(true);
   });
 });
 

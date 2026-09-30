@@ -36,6 +36,8 @@ const CORE_VALUES = new Map<string, readonly string[]>([
   ["character-panel-sections", ["allSections", "CHARACTER_CONTRIBUTIONS", "characterPanelTree"]],
   // A creator choice's maker group, the groups' shown order and the pooled "Other mods" heading (cc-panel.ts, pure over the projection).
   ["cc-panel", ["choiceGroup", "compareGroups", "OTHER_MODS_GROUP", "OTHER_MODS_INDEX"]],
+  // How much of a conditional creator option the shown V draws, and the words for one drawn only in part (cc-render-coverage.ts, pure).
+  ["cc-render-coverage", ["PARTLY_SHOWN", "shownOutcome"]],
   // Swatch contrast enhancement's pure math (swatch-contrast.ts): the style guide draws its curve and a before/after specimen.
   ["swatch-contrast", ["CONTRAST", "contrastGain", "enhanceSwatchSet", "separationWeight"]],
   // The easing catalogue's pure data and maths (platform/api/easing.ts): Adjust all › Intensity passes its position through the chosen

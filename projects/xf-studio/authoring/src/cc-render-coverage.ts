@@ -4,7 +4,8 @@
  *
  * - Both body genders follow the same rules: the preview draws a masculine V's head on his own core head and his body through the
  *   same consumer groups and censorship rules (the male V plan, phases 1 and 4). His beard is a face-group option like the makeup:
- *   `conditional` until resolved, then drawn where its parts are face decals (the stubble), not where they are hair cards.
+ *   `conditional` until resolved, then drawn: its stubble is a face decal and its cards are hair strands, both of which a face option draws
+ *   (character-detail-plan.ts `faceChunkDraws`).
  * - **Body and arm** options the third-person body's consumers read (`bodyGroups`, the V with no clothing) are drawn as the body, except those the game's
  *   censorship rule leaves under the underwear cover the preview draws (`bodyOptionDraws`: nipples, genitals), which are drawn only while
  *   the viewer shows V uncensored (`uncensored`, character-detail-plan.ts `bodyRole`); body and arm morphs (breast size, nail length) shape
@@ -14,10 +15,11 @@
  * - An **appearance** option on one of the preview's detail slots (`DETAIL_UI_SLOTS`: skin type, brows, lashes, hair,
  *   eyes, teeth, piercings) that the third-person head consumes is drawn as that detail; any appearance in the hairstyle controller's
  *   group (`HAIR_GROUP`: a multi-part hairstyle's part rows on slots of their own) is drawn as the hair.
- * - Any other head appearance consumed by the head's face groups (`FACE_GROUPS`) is drawn **when its parts are face
- *   decals** (the `mesh_decal` family: makeup, tattoos, scars, face cyberware); other parts are not.
- *   Which case applies is known only after resolving a choice, so the status is `conditional`; `refineCoverage` settles
- *   it from the preview plan's drawn components.
+ * - Any other head appearance consumed by the head's face groups (`FACE_GROUPS`) is drawn **where its parts are templates a face
+ *   option draws**: face decals (the `mesh_decal` family: makeup, tattoos, scars, face cyberware, stubble) and hair strands (the beard's
+ *   cards); other parts are not. Which case applies is known only after resolving a choice, so the status is `conditional`;
+ *   `refineCoverage` settles it from what the shown V draws (`shownOutcome`): whole, only in part (some of its parts left out, so the row
+ *   must not read as drawn), or not at all.
  * - A **colour-only** controller (no `.app`, e.g. the skin tone) shows through its link followers.
  * - An option that **adds nothing** (an Off placeholder whose only choice is `None`) is shown correctly by drawing nothing;
  *   it takes its slot's coverage so its row reads like the others.
@@ -67,7 +69,9 @@ const WORDS: Record<DetailSlot, string> = { skin: "the skin", face: "a face deta
 export const NOT_HEAD = "The 3D view doesn't draw this part of the body, so changing it shows nothing.";
 export const UNDER_COVER = "The game's underwear covers it in the 3D view unless your V is shown uncensored (under Body).";
 const NOT_CONSUMED = "The head the 3D view draws doesn't use this option, so changing it shows nothing.";
-const CONDITIONAL = "Shown when its parts are face decals (makeup, tattoos, scars, face cyberware); other parts aren't drawn yet.";
+const CONDITIONAL = "Shown when the 3D view can draw its parts (face decals such as makeup, tattoos and scars, or hair such as a beard); other parts aren't drawn yet.";
+/** A settled option some of whose parts the 3D view leaves out (render gap plans §6). */
+export const PARTLY_SHOWN = "Not fully shown in the 3D view yet.";
 
 /** Coverage of every option, keyed by option ID. */
 export function renderCoverage(options: readonly CoverageInput[]): Map<string, RenderCoverage> {
@@ -124,15 +128,27 @@ export function renderCoverage(options: readonly CoverageInput[]): Map<string, R
   return result;
 }
 
+/** How much of an option the shown V draws: all of it, only part of it, or none of it. */
+export type ShownOutcome = "whole" | "part" | "none";
 /**
- * Settle a `conditional` coverage from what the preview actually planned for the resolved V: the options with a drawn
- * component are shown, the others that were planned are not.
+ * What the shown V draws of an option, from the record the scene shows (the options its components draw, and of those the ones drawn only
+ * in part: render-detail.ts `partial`).
  */
-export function refineCoverage(coverage: RenderCoverage, planned: readonly { readonly drawn: boolean }[]): RenderCoverage {
-  if (coverage.status !== "conditional" || !planned.length) return coverage;
-  return planned.some(item => item.drawn)
-    ? { status: "rendered", detail: coverage.detail, note: "Drawn as a face detail." }
-    : { status: "not-rendered", detail: null, note: "Its parts aren't face decals, so the 3D view doesn't draw them yet." };
+export function shownOutcome(option: string, shown: { readonly drawn: readonly string[]; readonly partial?: readonly string[] }): ShownOutcome {
+  if (!shown.drawn.includes(option)) return "none";
+  return shown.partial?.includes(option) ? "part" : "whole";
+}
+
+/**
+ * Settle a `conditional` coverage from what the shown V draws of the option (`shownOutcome`; null while nothing is shown): drawn when all
+ * of it is; still `conditional`, with a note that says so, when only part of it is (a beard whose cards were left out never reads as drawn);
+ * not drawn when none of it is.
+ */
+export function refineCoverage(coverage: RenderCoverage, outcome: ShownOutcome | null): RenderCoverage {
+  if (coverage.status !== "conditional" || !outcome) return coverage;
+  if (outcome === "whole") return { status: "rendered", detail: coverage.detail, note: "Drawn as a face detail." };
+  if (outcome === "part") return { status: "conditional", detail: coverage.detail, note: PARTLY_SHOWN };
+  return { status: "not-rendered", detail: null, note: "The 3D view can't draw its parts yet." };
 }
 
 /** The preview's coverage of every option of a catalogue (a projection owned by the preview side; CORE-60). */

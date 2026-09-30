@@ -16,7 +16,9 @@
  * rules with nudity allowed, so neither the censorship underwear nor the censored skin draws; a v6 request is the censored V. `-8` adds
  * `puppet: "creator"`: the V as the character creator's puppet draws its bare feet (the puppet's appearance `character_creation` lists
  * `lifted_feet`; knowledge/body-animation.md §4), because the creator's idles are authored for those feet; a v7 request stands on the feet
- * its footwear gives it (flat when barefoot, as in the inventory and in gameplay).
+ * its footwear gives it (flat when barefoot, as in the inventory and in gameplay). `-9` adds `arms`: the arm cyberware the save equips (the
+ * `ArmsCW` area's item record ID), whose holster state the arms draw (arm-cyberware.ts; knowledge/body-rendering.md §1.1); a v8 request,
+ * like a V without a save, draws the default state.
  */
 import type { AppearanceDescriptor, CcoPart, MorphDescriptor } from "./cco-model";
 import type { BodyGender, CharacterInput } from "./character-resolver";
@@ -27,17 +29,21 @@ import type { SavedV } from "./save-reader";
 import { type CharacterClothing, HAIR_TYPES, type HairType } from "./clothing-dressing";
 import { CLOTHING_AREAS, isClothingArea } from "./save-loadout";
 
-export const CHARACTER_REQUEST_SCHEMA = "xfs/character-request-8" as const;
+export const CHARACTER_REQUEST_SCHEMA = "xfs/character-request-9" as const;
 const EARLIER_REQUEST_SCHEMAS: readonly string[] = ["xfs/character-request-1", "xfs/character-request-2", "xfs/character-request-3", "xfs/character-request-4",
-  "xfs/character-request-5", "xfs/character-request-6", "xfs/character-request-7"];
-/** Earlier versions that carry creator choices and parts (v4–v7). */
-const CHOICE_SCHEMAS: readonly string[] = [CHARACTER_REQUEST_SCHEMA, "xfs/character-request-7", "xfs/character-request-6", "xfs/character-request-5", "xfs/character-request-4"];
-/** Earlier versions that carry clothing (v5–v7). */
-const CLOTHING_SCHEMAS: readonly string[] = [CHARACTER_REQUEST_SCHEMA, "xfs/character-request-7", "xfs/character-request-6", "xfs/character-request-5"];
-/** Earlier versions that carry the body switch (v6, v7). */
-const BODY_SCHEMAS: readonly string[] = [CHARACTER_REQUEST_SCHEMA, "xfs/character-request-7", "xfs/character-request-6"];
-/** Earlier versions that carry the nudity setting (v7). */
-const NUDITY_SCHEMAS: readonly string[] = [CHARACTER_REQUEST_SCHEMA, "xfs/character-request-7"];
+  "xfs/character-request-5", "xfs/character-request-6", "xfs/character-request-7", "xfs/character-request-8"];
+/** Earlier versions that carry creator choices and parts (v4–v8). */
+const CHOICE_SCHEMAS: readonly string[] = [CHARACTER_REQUEST_SCHEMA, "xfs/character-request-8", "xfs/character-request-7", "xfs/character-request-6",
+  "xfs/character-request-5", "xfs/character-request-4"];
+/** Earlier versions that carry clothing (v5–v8). */
+const CLOTHING_SCHEMAS: readonly string[] = [CHARACTER_REQUEST_SCHEMA, "xfs/character-request-8", "xfs/character-request-7", "xfs/character-request-6",
+  "xfs/character-request-5"];
+/** Earlier versions that carry the body switch (v6–v8). */
+const BODY_SCHEMAS: readonly string[] = [CHARACTER_REQUEST_SCHEMA, "xfs/character-request-8", "xfs/character-request-7", "xfs/character-request-6"];
+/** Earlier versions that carry the nudity setting (v7, v8). */
+const NUDITY_SCHEMAS: readonly string[] = [CHARACTER_REQUEST_SCHEMA, "xfs/character-request-8", "xfs/character-request-7"];
+/** Earlier versions that carry the creator puppet (v8). */
+const PUPPET_SCHEMAS: readonly string[] = [CHARACTER_REQUEST_SCHEMA, "xfs/character-request-8"];
 
 /** A request whose version this host doesn't read (the page and the host were built apart). */
 export class CharacterRequestVersionError extends Error {
@@ -48,14 +54,15 @@ export type SavedMorph = { part: CcoPart; group: string; region: string; target:
 /**
  * `body: false`: the V with its body (and so its clothes) turned off; absent, the body is drawn. `nudity: true`: the body as the game draws
  * it with nudity allowed; absent, the game's censored look (never with `body: false`). `puppet: "creator"`: bare feet as the creator's
- * puppet draws them; absent, as the footwear gives them (never with `body: false`).
+ * puppet draws them; absent, as the footwear gives them (never with `body: false`). `arms`: the equipped arm cyberware's item record ID
+ * (decimal), whose holster state the arms draw; absent, the default state (never with `body: false`).
  */
 export type CharacterRequest =
   | { schema: typeof CHARACTER_REQUEST_SCHEMA; source: "default"; bodyGender: BodyGender; choices?: CharacterChoice[]; clothing?: CharacterClothing; body?: false;
-      nudity?: true; puppet?: "creator" }
+      nudity?: true; puppet?: "creator"; arms?: string }
   | { schema: typeof CHARACTER_REQUEST_SCHEMA; source: "save"; bodyGender: BodyGender;
       appearances: SavedAppearance[]; morphs: SavedMorph[]; choices?: CharacterChoice[]; clothing?: CharacterClothing; body?: false; nudity?: true;
-      puppet?: "creator" };
+      puppet?: "creator"; arms?: string };
 
 export const DEFAULT_CHARACTER: CharacterRequest = Object.freeze({ schema: CHARACTER_REQUEST_SCHEMA, source: "default", bodyGender: "female" });
 const MAX_APPEARANCES = CREATOR_LIMITS.appearances, MAX_MORPHS = CREATOR_LIMITS.morphs, MAX_CHOICES = CREATOR_LIMITS.choices;
@@ -81,10 +88,12 @@ export const CHARACTER_WARM_HEADER = "X-XFS-Warm";
  * draws it with nudity allowed.
  */
 export function characterRequestOf(base: { bodyGender: BodyGender; saved: SavedDescriptors | null }, choices: readonly CharacterChoice[] = [],
-  parts: readonly CcoPart[] = ["head", "body", "arms"], clothing: CharacterClothing | null = null, body = true, nudity = false, creatorPuppet = false): CharacterRequest {
+  parts: readonly CcoPart[] = ["head", "body", "arms"], clothing: CharacterClothing | null = null, body = true, nudity = false, creatorPuppet = false,
+  arms: string | null = null): CharacterRequest {
   const with_ = { ...(choices.length ? { choices: choices.map(choice => ({ ...choice, ...(choice.activates ? { activates: [...choice.activates] } : {}) })) } : {}),
     ...(clothing && body ? { clothing: { hairType: clothing.hairType, worn: clothing.worn.map(entry => ({ ...entry })), shown: [...clothing.shown] } } : {}),
-    ...(body ? {} : { body: false as const }), ...(body && nudity ? { nudity: true as const } : {}), ...(body && creatorPuppet ? { puppet: "creator" as const } : {}) };
+    ...(body ? {} : { body: false as const }), ...(body && nudity ? { nudity: true as const } : {}), ...(body && creatorPuppet ? { puppet: "creator" as const } : {}),
+    ...(body && arms ? { arms } : {}) };
   if (!base.saved) return { schema: CHARACTER_REQUEST_SCHEMA, source: "default", bodyGender: base.bodyGender, ...with_ };
   return { schema: CHARACTER_REQUEST_SCHEMA, source: "save", bodyGender: base.bodyGender,
     appearances: base.saved.appearances.filter(item => parts.includes(item.part)).map(item => ({ ...item })),
@@ -132,16 +141,21 @@ export function parseCharacterRequest(value: unknown): CharacterRequest {
   // V); a tried choice (v2, v3) is refused.
   const withChoices = CHOICE_SCHEMAS.includes(String(doc.schema)), withClothing = CLOTHING_SCHEMAS.includes(String(doc.schema));
   const withBody = BODY_SCHEMAS.includes(String(doc.schema));
-  const withNudity = NUDITY_SCHEMAS.includes(String(doc.schema));
-  const optional = current ? ["choices", "clothing", "body", "nudity", "puppet"] : withNudity ? ["choices", "clothing", "body", "nudity"]
+  const withNudity = NUDITY_SCHEMAS.includes(String(doc.schema)), withPuppet = PUPPET_SCHEMAS.includes(String(doc.schema));
+  const optional = current ? ["choices", "clothing", "body", "nudity", "puppet", "arms"] : withPuppet ? ["choices", "clothing", "body", "nudity", "puppet"]
+    : withNudity ? ["choices", "clothing", "body", "nudity"]
     : withBody ? ["choices", "clothing", "body"] : withClothing ? ["choices", "clothing"] : withChoices ? ["choices"] : [];
-  let choices: { choices?: CharacterChoice[]; clothing?: CharacterClothing; body?: false; nudity?: true; puppet?: "creator" } = {};
+  let choices: { choices?: CharacterChoice[]; clothing?: CharacterClothing; body?: false; nudity?: true; puppet?: "creator"; arms?: string } = {};
   if (withBody && doc.body !== undefined) {
     if (doc.body !== false) fail("the body switch is invalid.");
     if (doc.clothing !== undefined) fail("a V without its body wears no clothes.");
     choices.body = false;
   }
-  if (current && doc.puppet !== undefined) {
+  if (current && doc.arms !== undefined) {
+    if (doc.body === false) fail("a V without its body has no arms to draw.");
+    choices.arms = hash(doc.arms);
+  }
+  if (withPuppet && doc.puppet !== undefined) {
     if (doc.puppet !== "creator") fail("the puppet is invalid.");
     if (doc.body === false) fail("a V without its body has no feet to draw.");
     choices.puppet = "creator";
@@ -186,11 +200,12 @@ export function characterRequestFor(v: SavedV | undefined): CharacterRequest {
 }
 
 /**
- * The same V, whatever choices, clothing, body switch, nudity setting and puppet are set on it (a change of any keeps the V's other details on
+ * The same V, whatever choices, clothing, body switch, nudity setting, puppet and arm cyberware are set on it (a change of any keeps the V's other details on
  * screen).
  */
 export function sameCharacter(a: CharacterRequest, b: CharacterRequest): boolean {
-  const { choices: _a, clothing: _c, body: _e, nudity: _g, puppet: _i, ...left } = a, { choices: _b, clothing: _d, body: _f, nudity: _h, puppet: _j, ...right } = b;
+  const { choices: _a, clothing: _c, body: _e, nudity: _g, puppet: _i, arms: _k, ...left } = a,
+    { choices: _b, clothing: _d, body: _f, nudity: _h, puppet: _j, arms: _l, ...right } = b;
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
