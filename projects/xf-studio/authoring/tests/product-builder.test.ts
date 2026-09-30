@@ -218,7 +218,7 @@ test("PIPE-33: a plate without a recorded footprint is read from its mesh; a foo
 }, 60_000);
 
 test("the manifest and build record say which writer made each file when the tools write natively (PIPE-130)", async () => {
-  const { options, calls, packed } = setup();
+  const { dir, options, calls, packed, source, manifest } = setup();
   // The fake tools, reporting every converted file and the pack as native except one texture WolvenKit made.
   const tools = () => {
     const base = fakeTools(calls, packed), native: string[] = [], wolvenkit: { file: string; reason: string }[] = [];
@@ -241,6 +241,8 @@ test("the manifest and build record say which writer made each file when the too
     };
   };
   const result = await runProductCommand({ ...options, tools }) as PackageBuildResult;
+  // The host's result gate accepts a manifest that records its writers.
+  verifyProductBuildResult(result, hostPlan(fixture, source, manifest), join(dir, "dist"));
   const written = JSON.parse(readFileSync(result.products[0]!.manifest, "utf8"));
   const writers = written.resourceWriters as { native: string[]; wolvenkit: { path: string; reason: string }[] };
   expect(writers.native).toContain("archive");
