@@ -71,7 +71,7 @@ export const UNDER_COVER = "The game's underwear covers it in the 3D view unless
 const NOT_CONSUMED = "The head the 3D view draws doesn't use this option, so changing it shows nothing.";
 const CONDITIONAL = "Shown when the 3D view can draw its parts (face decals such as makeup, tattoos and scars, or hair such as a beard); other parts aren't drawn yet.";
 /** A settled option some of whose parts the 3D view leaves out (render gap plans §6). */
-export const PARTLY_SHOWN = "Only part of it is shown in the 3D view yet.";
+export const PARTLY_SHOWN = "Not fully shown in the 3D view yet.";
 
 /** Coverage of every option, keyed by option ID. */
 export function renderCoverage(options: readonly CoverageInput[]): Map<string, RenderCoverage> {
