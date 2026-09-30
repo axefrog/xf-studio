@@ -72,6 +72,31 @@ Changed: `player.state` (`look_at` by the world-object rule, `hud_prompt`, `tier
 - **Photo mode's rows** go with photo mode, like every write-photo change.
 - **The overlay host** never unhooks at run time; `[overlay] enabled = false` (the default) attaches nothing. It refuses in HDR, on an unexpected back-buffer format, queue, device or window, at the first present and after every resize; turns itself off after any exception or failed Dear ImGui check on the render thread; bakes its glyphs once (no upload wait while drawing); and releases everything at the render shutdown (0.7.0 review, RB-97..100, RB-105..108). Captures hide it; it yields while CET's overlay is open.
 
+## Session 8's findings: bridge 0.8, part A
+
+Session 8 (write-up: `experiments/036-session-8` on `main`) proved most of 0.7 in game; what it found is fixed in 0.8's part A (offline, 30 September 2026; [design §3.8](runtime-bridge-design.md#38-bridge-08-part-a-session-8s-findings)), each with a test and a [session-9 row](runtime-bridge-test-card.md#session-9-checks-bridge-08-part-a).
+
+| Finding | Fix | Row |
+|---|---|---|
+| Ink panel cut off top right at 21:9; center unsupported; no plate | Placed inside the visible part of the HUD canvas (cover scaling), nine anchors, default top left 40/360; plate sized from the body; kept on top | B1-B3 |
+| Blank gaps (ink), "?" (CET) for missing glyphs | One mark (U+00A4) on every surface; CET gets a transliterated Latin-1 copy | B4 |
+| Comment box: send with Ctrl+Enter | Ctrl+Enter sends (Send disabled while empty, tooltip) | C2 |
+| Ready/Yes/No on every question | Only the answers given; one Done by default | A3 |
+| World pins drew nowhere | The game's icon kept; AMM's marker data; drawn_by per view; head pins 0.25 m above the eyes | F1 |
+| `eyes_on_screen` wrong under the drone camera | Photo camera's pose and field of view in photo mode; a lateral check elsewhere | G1 |
+| A look not broken by the mouse | Raw mouse/stick (Codeware `Input/Axis`) and camera drift end it | D2 |
+| `game.saves` without details outside the Load menu | Each save's details asked the Load menu's way | H1 |
+| `on_ground` true mid-jump; refusal didn't name the state | The state machine's flag; `player_busy: locomotion:Jump` in plain words | D1 |
+| Arms drawn after photo mode refused changes | Changes holster first (the game had them in the weapon slot) | E1 |
+| `wardrobe_state` Head hidden under Equipment-EX | Areas reconciled with the outfit's parts | H2 |
+| Sweep frames showed the overlay host | Sweeps and bursts hide it like `capture_screenshot` | G2 |
+| `moved_for_space` null when clear | `space_check`: checked, clearance, moved | G3 |
+| Load from the main menu | `game.load` latest and by name through the menu's own paths | I1-I2 |
+| Overlay refused under DLSS frame generation | Streamline's proxies resolved to their native objects | J1-J2 |
+| Blades deployed in photo mode's default pose | A game behaviour ([photo mode §14](../../knowledge/photo-mode.md#14-arm-cyberware-vs-weapon-slot-and-the-cameras-projection)) | E2 |
+| 600-character cap | Checked whole on every surface (unit test) | B5 |
+| The UI review's 14 items | Status wording, colours, themed label, one question, diagnostics setting, window layout, answered line, stopped text, truncation, frame-generation line, F-keys (F9 is quick load, so F11 stays) | A1-A2, B, C |
+
 ## Related
 
 [Runtime bridge design](runtime-bridge-design.md) · [test card](runtime-bridge-test-card.md) · [overlay feasibility](imgui-overlay-feasibility.md) · [next sessions plan](next-sessions-plan.md) · [bridge autonomy](../backlog/bridge-autonomy.md) · [runtime access](../../knowledge/runtime-access.md)

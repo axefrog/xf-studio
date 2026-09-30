@@ -756,6 +756,10 @@ public class XFInkOverlay extends ScriptableSystem {
     }
     let size = this.m_body.GetDesiredSize();
     if size.X < 1.0 || size.Y < 1.0 {
+      // The arranged size where the measured one isn't there (yet).
+      size = this.m_panel.GetChildSize(this.m_body);
+    }
+    if size.X < 1.0 || size.Y < 1.0 {
       return;
     }
     let w = size.X + 56.0;
