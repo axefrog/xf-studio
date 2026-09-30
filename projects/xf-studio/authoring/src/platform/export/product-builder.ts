@@ -16,6 +16,7 @@ import { canonicalPath, containmentKey, isWithin as within, overlaps } from "../
 import {
   archiveXlText, ExportRefusal, PACKAGE_BUILD_2, PACKAGE_BUILD_STAGES, type PackageBuildStage, type FeatureBuildContext, type FeatureExporterEntry, type FeatureVerification,
   type GeneratedFile, type PackageBuildResult, type PackageCheckResult, type ProductBuild, type ResourceTools, type ResourceWriters, type VerifierTools,
+  sideBySide, type UnpackedView,
 } from "../api/export";
 import { checkProducts, type ProductOutcome } from "./product-check";
 import { listGeneratedFiles, verifyOverlayArchive, verifyProductArchive } from "./product-verifier";
@@ -315,34 +316,46 @@ export async function runProductCommand(options: ProductCommandOptions): Promise
           files: byFeature.get(entry.exporter.feature) })), extras: extras.map(({ path, sha256, bytes }) => ({ path, sha256, bytes })),
         ...resourceWriters ? { resourceWriters } : {}, installed: false, gameRenderingVerified: false }) + "\n", "utf8");
       cancelled();
-      // The product verifier, then each feature's own verifier on its subset (none imports its exporter).
+      // The product verifier, then each feature's own verifier on its subset (none imports its exporter). Steps that don't depend on
+      // each other run side by side (the product archive's and each overlay's unbundle; then the features' verifiers, whose own
+      // independent steps overlap too), at most the verifier tools' WolvenKit limit at once. The first failure stops its siblings, and
+      // the Build answers only after every step has passed.
       stage("verify");
       const verifierTools = options.verifierTools(wolvenkit, gamepath);
-      const unpacked = verifyProductArchive({ archive, xl, archiveSha256, files, declaration, features: outcome.features.length,
-        tools: verifierTools, work: join(intermediate, "verify") });
+      const overlayMembers = (archive: string) => extraFiles.filter(f => f.path.startsWith(`overlays/${archive}/`))
+        .map(f => ({ ...f, path: f.path.slice(`overlays/${archive}/`.length) }));
+      const verifyFailed = (error: unknown): never => {
+        if (options.signal?.aborted) return fail("package_build_cancelled", "Package Build was cancelled.");
+        if (error instanceof ExportRefusal) throw error;
+        return fail("package_verification_failed", `Independent verifier failed: ${(error as Error).message}`);
+      };
+      let unpacked!: UnpackedView;
       // Each overlay unbundled and compared with its recorded files; the TweakXL files as they will be promoted.
       const overlayViews: Record<string, { root: string; files: readonly GeneratedFile[] }> = {};
-      for (const overlay of overlays) {
-        const extra = extras.find(item => item.path === `archive/pc/mod/${overlay.archive}.archive`)!;
-        overlayViews[overlay.archive] = verifyOverlayArchive({ archive: extra.source, archiveSha256: extra.sha256, tools: verifierTools,
-          work: join(intermediate, "verify-overlays", overlay.archive), files: extraFiles.filter(f => f.path.startsWith(`overlays/${overlay.archive}/`))
-            .map(f => ({ ...f, path: f.path.slice(`overlays/${overlay.archive}/`.length) })) });
+      try {
+        await sideBySide(options.signal, [
+          async signal => { unpacked = await verifyProductArchive({ archive, xl, archiveSha256, files, declaration, features: outcome.features.length,
+            tools: verifierTools, work: join(intermediate, "verify"), signal }); },
+          ...overlays.map(overlay => async (signal: AbortSignal) => {
+            const extra = extras.find(item => item.path === `archive/pc/mod/${overlay.archive}.archive`)!;
+            overlayViews[overlay.archive] = await verifyOverlayArchive({ archive: extra.source, archiveSha256: extra.sha256, tools: verifierTools,
+              work: join(intermediate, "verify-overlays", overlay.archive), files: overlayMembers(overlay.archive), signal });
+          }),
+        ]);
+      } catch (error) {
+        if (options.signal?.aborted) fail("package_build_cancelled", "Package Build was cancelled.");
+        throw error;
       }
       const extrasView = extras.length ? { root: extrasRoot, tweaks: extraFiles.filter(f => f.path.startsWith("r6/tweaks/")), overlays: overlayViews } : undefined;
-      const verifications: FeatureVerification[] = [];
-      for (const { entry, outcome: feature } of outcome.features) {
-        const ctx = context(entry.exporter.feature);
-        let verification: FeatureVerification;
-        try {
-          verification = entry.verifier.verify({ unpacked, work: ctx.work, staging, verifyDir: join(ctx.work, "verify"), tools: verifierTools,
+      let verifications: FeatureVerification[] = [];
+      try {
+        verifications = await sideBySide(options.signal, outcome.features.map(({ entry, outcome: feature }) => (signal: AbortSignal) => {
+          const ctx = context(entry.exporter.feature);
+          return entry.verifier.verify({ unpacked, work: ctx.work, staging, verifyDir: join(ctx.work, "verify"), tools: verifierTools, signal,
             packaged: JSON.parse(feature.packaged), prerequisites, ...(extrasView ? { extras: extrasView } : {}) });
-        } catch (error) {
-          if (error instanceof ExportRefusal) throw error;
-          return fail("package_verification_failed", `Independent verifier failed: ${(error as Error).message}`);
-        }
-        entry.exporter.accept?.(feature, verification, ctx);
-        verifications.push(verification);
-      }
+        }));
+      } catch (error) { verifyFailed(error); }
+      outcome.features.forEach(({ entry, outcome: feature }, i) => entry.exporter.accept?.(feature, verifications[i]!, context(entry.exporter.feature)));
       writeFileSync(join(intermediate, "verification.json"), JSON.stringify({ archiveSha256: unpacked.archiveSha256,
         xlSha256: unpacked.xlSha256, unpackedFiles: unpacked.files.length,
         features: outcome.features.map(({ entry }, i) => ({ feature: entry.exporter.feature, ...verifications[i].report })) }, null, 2) + "\n", "utf8");

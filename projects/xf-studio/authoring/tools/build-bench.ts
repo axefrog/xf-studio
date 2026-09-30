@@ -52,7 +52,7 @@ for (let run = 1; run <= runs; run++) {
     stages[progress.stage] ??= +((performance.now() - started) / 1000).toFixed(2);
   });
   const seconds = +((performance.now() - started) / 1000).toFixed(2);
-  const answer = outcome.ok ? { ok: true, products: (outcome.result as { products?: { package: string; archiveSha256: string }[] }).products?.map(p => ({ package: p.package, archiveSha256: p.archiveSha256 })) }
+  const answer = outcome.ok ? { ok: true, products: (outcome.result as unknown as { products?: { package: string; archiveSha256: string }[] }).products?.map(p => ({ package: p.package, archiveSha256: p.archiveSha256 })) }
     : outcome;
   console.log(JSON.stringify({ run, seconds, stages, answer }));
 }

@@ -159,8 +159,8 @@ function product(value: unknown) {
     unpacked: { root: unpacked, files: Object.keys(documents).sort().map(path => file(unpacked, path)), archiveSha256: "x", archiveBytes: 1,
       xl: archiveXlText(outcome.xl), xlSha256: "x", features: 1 },
     work: join(dir, "work"), staging: join(dir, "staging"), verifyDir: join(dir, `verify-${Math.random().toString(36).slice(2)}`),
-    tools: { unbundle: () => ({ exitCode: 0, stdout: "", stderr: "" }), exportTextures: () => ({ exitCode: 0, stdout: "", stderr: "" }),
-      serialize: (input, into) => { const source = input as string; mkdirSync(into, { recursive: true }); copyFileSync(source, join(into, `${basename(source)}.json`)); return { exitCode: 0, stdout: "", stderr: "" }; } },
+    tools: { unbundle: async () => ({ exitCode: 0, stdout: "", stderr: "" }), exportTextures: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+      serialize: async (input, into) => { const source = input as string; mkdirSync(into, { recursive: true }); copyFileSync(source, join(into, `${basename(source)}.json`)); return { exitCode: 0, stdout: "", stderr: "" }; } },
     packaged: JSON.parse(outcome.packaged), prerequisites: { [EXPRESSIONS_GAME_PREREQUISITE]: game() },
     extras: { root: extras, tweaks: [file(extras, tweak)], overlays: { [planned.overlay]: { root: overlay, files: [file(overlay, planned.paths.table)] } } } });
   const edit = (rootDir: string, path: string, change: (text: string) => string) => {
@@ -169,7 +169,7 @@ function product(value: unknown) {
   return { dir, planned, input, edit, unpacked, overlay, extras, tweak, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
 }
 
-test("the independent verifier passes a faithful build and catches injected faults", () => {
+test("the independent verifier passes a faithful build and catches injected faults", async () => {
   const value = collection([look(1, "Smirk", expression({ lips_l_corner_up: 0.4, eye_r_brows_raise_in: 0.125 }, "Smirk")), look(5, "Open", expression({ jaw_mid_open: 0.25 }))]);
   const faults: [string, (p: ReturnType<typeof product>) => void, RegExp][] = [
     ["a changed weight", p => p.edit(p.unpacked, p.planned.paths.sets.male, text => {
@@ -190,7 +190,7 @@ test("the independent verifier passes a faithful build and catches injected faul
   ];
   const good = product(value);
   try {
-    const verified = EXPRESSIONS_VERIFIER.verify(good.input());
+    const verified = await EXPRESSIONS_VERIFIER.verify(good.input());
     expect(verified.presetCount).toBe(2);
     expect(verified.report.expressions).toEqual(good.planned.expressions.map(item => ({ id: item.id, clip: item.clip, index: item.index })));
     // The exporter accepts exactly its verifier's report.
@@ -200,18 +200,18 @@ test("the independent verifier passes a faithful build and catches injected faul
     const built = product(value);
     try {
       inject(built);
-      expect(() => EXPRESSIONS_VERIFIER.verify(built.input()), name).toThrow(message);
+      await expect(EXPRESSIONS_VERIFIER.verify(built.input()), name).rejects.toThrow(message);
     } finally { built.cleanup(); }
   }
 });
 
-test("the verifier reads a label with a literal backslash and x41, and control characters, as written (PIPE-121)", () => {
+test("the verifier reads a label with a literal backslash and x41, and control characters, as written (PIPE-121)", async () => {
   // A literal backslash then "x41" (the exporter writes it as \\x41), a backslash, quotes, a tab and a control character.
   const label = String.raw`Back\x41 slash \ ` + "\"q\" \t tab \u0001";
   const value = collection([look(1, "Tricky", expression({ jaw_mid_open: 0.25 }, label))]);
   const built = product(value);
   try {
-    expect(() => EXPRESSIONS_VERIFIER.verify(built.input())).not.toThrow();
+    await EXPRESSIONS_VERIFIER.verify(built.input());
   } finally { built.cleanup(); }
   // The decoder: every escape the exporter writes, and refusals of what YAML wouldn't read.
   expect(yamlQuoted(String.raw`"a\\x41\x41\u00e9\t\""`)).toBe(String.raw`a\x41` + "A\u00e9\t\"");

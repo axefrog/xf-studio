@@ -56,15 +56,15 @@ export function fakeTools(calls: string[], packed: Map<string, string>): Resourc
 /** The verifiers' WolvenKit stand-in: unbundle copies back the tree the fake pack remembered for that archive. */
 export function fakeVerifierTools(packed: Map<string, string>, calls: string[] = []): VerifierTools {
   return {
-    unbundle(archive, output) {
+    async unbundle(archive, output) {
       calls.push("unbundle");
       const tree = packed.get(sha(readFileSync(archive)));
       if (!tree) return { exitCode: 1, stdout: "", stderr: "unknown archive" };
       cpSync(tree, output, { recursive: true });
       return { exitCode: 0, stdout: "ok", stderr: "" };
     },
-    serialize: () => ({ exitCode: 0, stdout: "", stderr: "" }),
-    exportTextures: () => ({ exitCode: 0, stdout: "", stderr: "" }),
+    serialize: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+    exportTextures: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
   };
 }
 
@@ -77,7 +77,7 @@ type EyeReport = { presetRoutes?: unknown; plateInputs?: { mesh: string; morph: 
 export function fakeEyeVerifier(seen: Parameters<FeatureVerifier["verify"]>[0][] = [], overrides: Partial<FeatureVerification> & { report?: EyeReport } = {}): FeatureVerifier {
   return {
     exporterId: EYE_MAKEUP_EXPORTER_ID,
-    verify(input) {
+    async verify(input) {
       seen.push(input);
       if (overrides.report === undefined && "throws" in overrides) throw Error(String((overrides as { throws: unknown }).throws));
       const build = JSON.parse(readFileSync(join(input.work, "build.json"), "utf8"));
@@ -151,5 +151,5 @@ export const LIPS_EXPORTER: FeatureExporter<LipsPlan> = {
   },
 };
 export const LIPS_VERIFIER: FeatureVerifier = { exporterId: "lips/stub",
-  verify: input => ({ presetCount: 0, verifiedFiles: input.unpacked.files.filter(file => file.path.includes("/lips/")).length, limits: [], report: {} }) };
+  verify: async input => ({ presetCount: 0, verifiedFiles: input.unpacked.files.filter(file => file.path.includes("/lips/")).length, limits: [], report: {} }) };
 export const LIPS_ENTRY: FeatureExporterEntry = { exporter: LIPS_EXPORTER as FeatureExporter<unknown>, verifier: LIPS_VERIFIER };

@@ -8,7 +8,6 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { builtVersions, licencePath, noticeIssues, noticesPath, packagedLicence, packagedNotices } from "./notices";
 import { BUILD_TOOLS_SCHEMA, bcnEntry, builderEntry } from "./build";
-import { checkBcnLibrary, loadBcnLibrary } from "../src/native/write/bcn";
 import { contentIssues, describeContentIssues, SCANNED_TEXT } from "./package-content-scan";
 import { payloadMembers, singleInstallerWrapper, WRAPPER_BUDGET, wrapperTexts } from "./single-installer";
 
@@ -98,8 +97,10 @@ const bcnScratch = mkdtempSync(resolve(tmpdir(), "xfs-bcn-check-"));
 try {
   const path = resolve(bcnScratch, "xfs_bcn.dll");
   writeFileSync(path, packagedBcn);
-  const library = loadBcnLibrary(path);
-  try { checkBcnLibrary(library); } finally { library.close(); }
+  // In a process of its own, so the DLL's file is free to delete afterwards.
+  const check = spawnSync(process.execPath, [resolve(root, "bcn-check.ts"), path], { encoding: "utf8", windowsHide: true, timeout: 60_000 });
+  if (check.status !== 0 || !check.stdout.includes("XFS_BCN_OK"))
+    throw Error(`The packaged texture compressor does not load or compress: ${(check.stderr || check.stdout || check.error?.message || "").slice(-2000)}`);
 } finally { rmSync(bcnScratch, { recursive: true, force: true }); }
 const bcnIssues = contentIssues(toolPrefix + bcnEntry, packagedBcn.toString("latin1"));
 if (bcnIssues.length) throw Error(["The packaged texture compressor contains personal paths or addresses:", ...describeContentIssues(bcnIssues)].join("\n"));

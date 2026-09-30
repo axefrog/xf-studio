@@ -22,7 +22,7 @@ import { coverageReference, plateWindow, storedBc4, texelUv, WINDOW_H, WINDOW_W 
 const verifierDir = resolve(import.meta.dir, "../src/features/eye-makeup/verify");
 
 
-test("the verifier imports nothing from the compiler or other Studio modules", () => {
+test("the verifier imports nothing from the compiler or other Studio modules", async () => {
   const files = readdirSync(verifierDir).filter(name => name.endsWith(".ts"));
   expect(files.sort()).toEqual(["dds-reader.ts", "glitter-checks.ts", "index.ts", "plate-geometry.ts", "resource-checks.ts", "resource-inventory.ts", "texture-checks.ts", "uv-window.ts", "verify-build.ts"]);
   for (const name of files) {
@@ -182,9 +182,9 @@ function makeBuild(mutate?: Mutation, input: typeof PLATE = PLATE): Fixture {
 
 type Hooks = {
   tamper?: (unpacked: string) => void;
-  unbundle?: VerifierTools["unbundle"];
-  serialize?: VerifierTools["serialize"];
-  exportTextures?: VerifierTools["exportTextures"];
+  unbundle?: (...args: Parameters<VerifierTools["unbundle"]>) => ToolResult | Promise<ToolResult>;
+  serialize?: (...args: Parameters<VerifierTools["serialize"]>) => ToolResult | Promise<ToolResult>;
+  exportTextures?: (...args: Parameters<VerifierTools["exportTextures"]>) => ToolResult | Promise<ToolResult>;
   options?: Partial<VerifyBuildOptions>;
 };
 const ok = (stdout = "ok"): ToolResult => ({ exitCode: 0, stdout, stderr: "" });
@@ -193,22 +193,22 @@ function fakeTools(fixture: Fixture, hooks: Hooks, calls: string[]): VerifierToo
   const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true })
     .flatMap(entry => entry.isDirectory() ? files(join(dir, entry.name)) : [join(dir, entry.name)]);
   return {
-    unbundle: hooks.unbundle ?? ((archive, output) => {
+    unbundle: async (...args) => (hooks.unbundle ?? ((archive: string, output: string) => {
       calls.push(`unbundle ${archive}`);
       cpSync(join(fixture.build, "archive"), output, { recursive: true });
       hooks.tamper?.(output);
       return ok("Unbundled 10/10 entries.");
-    }),
-    serialize: hooks.serialize ?? ((input, output) => {
+    }))(...args),
+    serialize: async (...args) => (hooks.serialize ?? ((input: string | readonly string[], output: string) => {
       calls.push(`serialize ${input}`);
       for (const file of [input].flat().flatMap(files)) writeFileSync(join(output, basename(file) + ".json"), "\uFEFF" + readFileSync(file, "utf8"));
       return ok();
-    }),
-    exportTextures: hooks.exportTextures ?? ((input, output) => {
+    }))(...args),
+    exportTextures: async (...args) => (hooks.exportTextures ?? ((input: string, output: string) => {
       calls.push(`export ${input}`);
       for (const file of files(input)) writeFileSync(join(output, basename(file).replace(/\.xbm$/, ".dds")), fixture.dds.get(basename(file).replace(/\.xbm$/, ".dds"))!);
       return ok();
-    }),
+    }))(...args),
   };
 }
 
@@ -216,15 +216,15 @@ function run(fixture: Fixture, hooks: Hooks = {}, calls: string[] = []) {
   return verifyBuild({ build: fixture.build, tools: fakeTools(fixture, hooks, calls), ...hooks.options });
 }
 
-function expectFailure(message: RegExp, mutate?: Mutation, after?: (fixture: Fixture) => void, hooks?: Hooks, plate: typeof PLATE = PLATE) {
+async function expectFailure(message: RegExp, mutate?: Mutation, after?: (fixture: Fixture) => void, hooks?: Hooks, plate: typeof PLATE = PLATE) {
   const fixture = makeBuild(mutate, plate);
   try {
     after?.(fixture);
-    expect(() => run(fixture, hooks)).toThrow(message);
+    await expect(run(fixture, hooks)).rejects.toThrow(message);
   } finally { rmSync(fixture.build, { recursive: true, force: true }); }
 }
 
-test("a consistent synthetic build passes with the verify.py report shape plus self-sourced hashes", () => {
+test("a consistent synthetic build passes with the verify.py report shape plus self-sourced hashes", async () => {
   const fixture = makeBuild(), { build } = fixture;
   try {
     // Stale builder conversions must be ignored: the verifier converts the unbundled members itself.
@@ -232,7 +232,7 @@ test("a consistent synthetic build passes with the verify.py report shape plus s
     writeFile(join(build, "export-dds", "xfs_pa1_diffuse.dds"), "not dds");
     writeFile(join(build, "source-json", "xfs_eye_plate.mesh.json"), "not json");
     const calls: string[] = [];
-    const report = run(fixture, {}, calls);
+    const report = await run(fixture, {}, calls);
     expect(Object.keys(report)).toEqual(["build", "presetCount", "selectorCount", "selectorOptionCount", "appDefinitions",
       "compiledComponentTemplates", "meshAppearances", "materialTemplates", "textureCount", "archiveBytes", "archiveSha256",
       "unpackedFilesVerified", "preservedMorphs", "plateGeometry", "plateUvWindow", "resolvedDynamicPaths", "decodedPixelChecks",
@@ -261,40 +261,40 @@ test("a consistent synthetic build passes with the verify.py report shape plus s
     expect(calls).toEqual([`unbundle ${join(work, "archive", "xfs_cns.archive")}`, `serialize ${[join(work, "unpacked"), join(work, "plate")]}`,
       `export ${join(work, "unpacked", ...depot.split("/"), "textures")}`]);
     expect(readFileSync(join(work, "logs", "unbundle.log"), "utf8")).toContain("Unbundled");
-    expect(() => run(fixture)).toThrow("work directory is not empty");
+    await expect(run(fixture)).rejects.toThrow("work directory is not empty");
   } finally { rmSync(build, { recursive: true, force: true }); }
 }, 30_000);
 
-test("texture failures: supplied chain, baked input, decode drift and orientation", () => {
+test("texture failures: supplied chain, baked input, decode drift and orientation", async () => {
   const flipByte = (path: string, offset: number) => { const data = readFileSync(path); data[offset] ^= 0x40; writeFileSync(path, data); };
-  expectFailure(/Supplied roughness mip chain/, undefined, f => flipByte(join(f.build, "input/dds-scalar/xfs_pa1_roughness.dds"), 148 + 256 + 3));
-  expectFailure(/Baked diffuse map differs/, undefined, f => flipByte(join(f.build, "baked/xfs_pa1_diffuse.raw"), 10));
-  expectFailure(/Decoded .*error too large|Decoded base/, undefined, f => {
+  await expectFailure(/Supplied roughness mip chain/, undefined, f => flipByte(join(f.build, "input/dds-scalar/xfs_pa1_roughness.dds"), 148 + 256 + 3));
+  await expectFailure(/Baked diffuse map differs/, undefined, f => flipByte(join(f.build, "baked/xfs_pa1_diffuse.raw"), 10));
+  await expectFailure(/Decoded .*error too large|Decoded base/, undefined, f => {
     // Decoded (exported) roughness far from the source everywhere.
     const data = Uint8Array.from(f.dds.get("xfs_pa1_roughness.dds")!);
     for (let i = 148; i < 148 + W * H; i++) data[i] = 255 - data[i];
     f.dds.set("xfs_pa1_roughness.dds", data);
   });
-  expectFailure(/orientation|error too large/, undefined, f => {
+  await expectFailure(/orientation|error too large/, undefined, f => {
     const data = Buffer.from(f.dds.get("xfs_pa1_diffuse.dds")!), row = W * 4;
     const base = Buffer.from(data.subarray(148, 148 + H * row));
     for (let y = 0; y < H; y++) base.copy(data, 148 + y * row, (H - 1 - y) * row, (H - y) * row);
     f.dds.set("xfs_pa1_diffuse.dds", data);
   });
-  expectFailure(/Unexpected DDS dimensions|size differs|Truncated|trailing/, undefined,
+  await expectFailure(/Unexpected DDS dimensions|size differs|Truncated|trailing/, undefined,
     f => f.dds.set("xfs_pb2_metalness.dds", f.dds.get("xfs_pb2_metalness.dds")!.subarray(0, 200)));
-  expectFailure(/did not export/, undefined, undefined, { exportTextures: () => ok() });
-  expectFailure(/export-textures-0 failed/, undefined, undefined, { exportTextures: () => ({ exitCode: 1, stdout: "", stderr: "" }) });
+  await expectFailure(/did not export/, undefined, undefined, { exportTextures: () => ok() });
+  await expectFailure(/export-textures-0 failed/, undefined, undefined, { exportTextures: () => ({ exitCode: 1, stdout: "", stderr: "" }) });
 }, 30_000);
 
 // Builds and tampers many packaged resources (about 1.3 s locally); slower CI runners need more than the 5 s default.
-test("resource failures: names, links, buffers, component id, morph count and XBM metadata", () => {
-  expectFailure(/XF-branded selector label/, (_b, d) => { d.plan.selectorLabel = "Makeup"; d.cc.headCustomizationOptions[0].Data.localizedName = "Makeup"; });
+test("resource failures: names, links, buffers, component id, morph count and XBM metadata", async () => {
+  await expectFailure(/XF-branded selector label/, (_b, d) => { d.plan.selectorLabel = "Makeup"; d.cc.headCustomizationOptions[0].Data.localizedName = "Makeup"; });
   // Only in `character_customization`, the selector shows in the creator but not in gameplay or photo mode (seen in game).
-  expectFailure(/Head groups must be exactly character_customization and face/, (_b, d) => { d.cc.headGroups.pop(); });
-  expectFailure(/does not list exactly the selector/, (_b, d) => { d.cc.headGroups[1].options = []; });
-  expectFailure(/Morph targets differs/, (_b, d) => { d.morph.targets.pop(); });
-  expectFailure(/Mesh boneNames differs/, (_b, d) => { d.mesh.boneNames = [cname("other")]; });
+  await expectFailure(/Head groups must be exactly character_customization and face/, (_b, d) => { d.cc.headGroups.pop(); });
+  await expectFailure(/does not list exactly the selector/, (_b, d) => { d.cc.headGroups[1].options = []; });
+  await expectFailure(/Morph targets differs/, (_b, d) => { d.morph.targets.pop(); });
+  await expectFailure(/Mesh boneNames differs/, (_b, d) => { d.mesh.boneNames = [cname("other")]; });
   // The makeup component must take ArchiveXL's head-decal prefix so hide_Head hides it with the head, like vanilla makeup.
   const renameComponent = (name: string): Mutation => (_b, d) => {
     const id = componentId(name).toString(), template = d.app.appearances[1].Data;
@@ -303,63 +303,107 @@ test("resource failures: names, links, buffers, component id, morph count and XB
     template.partsOverrides[0].componentsOverrides[0].componentName = cname(name);
     template.compiledData.Data.CruidDict = { "0": id };
   };
-  expectFailure(/Makeup component is not hx_<namespace>_makeup/, renameComponent("xfs_cns_makeup"));
-  expectFailure(/Makeup component is not hx_<namespace>_makeup/, renameComponent("hx_xfs_other_makeup"));
-  expectFailure(/stable derived id/, (_b, d) => { d.app.appearances[1].Data.components[0].id = "12345"; });
-  expectFailure(/exact unsigned integer/, (_b, d) => { d.app.appearances[1].Data.components[0].id = 2 ** 60; });
-  expectFailure(/Off appearance/, (_b, d) => { d.app.appearances[0].Data.components = [{}]; });
-  expectFailure(/skinning is not an enabled root/, (_b, d) => { d.app.appearances[1].Data.compiledData.Data.Chunks[0].Data.enabled = 0; });
-  expectFailure(/Selector default must be Off/, (_b, d) => { d.cc.headCustomizationOptions[0].Data.defaultIndex = 1; });
-  expectFailure(/label differs from the preset name/, (_b, d) => { d.cc.headCustomizationOptions[0].Data.definitions[2].localizedName = "x"; });
-  expectFailure(/unexpected compression/, (_b, d) => { d.xbm[presets[0].textures.roughness].setup.compression = "TCM_None"; });
-  expectFailure(/DiffuseColor/, (_b, d) => { d.mesh.localMaterialBuffer.materials[0].values.find((v: any) => v.DiffuseColor).DiffuseColor.Alpha = 0; });
+  await expectFailure(/Makeup component is not hx_<namespace>_makeup/, renameComponent("xfs_cns_makeup"));
+  await expectFailure(/Makeup component is not hx_<namespace>_makeup/, renameComponent("hx_xfs_other_makeup"));
+  await expectFailure(/stable derived id/, (_b, d) => { d.app.appearances[1].Data.components[0].id = "12345"; });
+  await expectFailure(/exact unsigned integer/, (_b, d) => { d.app.appearances[1].Data.components[0].id = 2 ** 60; });
+  await expectFailure(/Off appearance/, (_b, d) => { d.app.appearances[0].Data.components = [{}]; });
+  await expectFailure(/skinning is not an enabled root/, (_b, d) => { d.app.appearances[1].Data.compiledData.Data.Chunks[0].Data.enabled = 0; });
+  await expectFailure(/Selector default must be Off/, (_b, d) => { d.cc.headCustomizationOptions[0].Data.defaultIndex = 1; });
+  await expectFailure(/label differs from the preset name/, (_b, d) => { d.cc.headCustomizationOptions[0].Data.definitions[2].localizedName = "x"; });
+  await expectFailure(/unexpected compression/, (_b, d) => { d.xbm[presets[0].textures.roughness].setup.compression = "TCM_None"; });
+  await expectFailure(/DiffuseColor/, (_b, d) => { d.mesh.localMaterialBuffer.materials[0].values.find((v: any) => v.DiffuseColor).DiffuseColor.Alpha = 0; });
   // The window's UV transform is re-derived from the packaged plate's own UVs.
-  expectFailure(/UVOffsetY is .*expected/, (_b, d) => { d.mesh.localMaterialBuffer.materials[0].values.find((v: any) => "UVOffsetY" in v).UVOffsetY *= -1; });
-  expectFailure(/UVScaleX is undefined/, (_b, d) => {
+  await expectFailure(/UVOffsetY is .*expected/, (_b, d) => { d.mesh.localMaterialBuffer.materials[0].values.find((v: any) => "UVOffsetY" in v).UVOffsetY *= -1; });
+  await expectFailure(/UVScaleX is undefined/, (_b, d) => {
     const values = d.mesh.localMaterialBuffer.materials[0].values; values.splice(values.findIndex((v: any) => "UVScaleX" in v), 1); });
-  expectFailure(/is 1024x1024, expected 2048x512/, (_b, d) => { Object.assign(d.xbm[presets[1].textures.metalness], { width: 1024, height: 1024 }); });
-  expectFailure(/Only the seed appearance/, (_b, d) => { d.mesh.appearances[1].Data.chunkMaterials = [cname("x")]; });
+  await expectFailure(/is 1024x1024, expected 2048x512/, (_b, d) => { Object.assign(d.xbm[presets[1].textures.metalness], { width: 1024, height: 1024 }); });
+  await expectFailure(/Only the seed appearance/, (_b, d) => { d.mesh.appearances[1].Data.chunkMaterials = [cname("x")]; });
   // The expected morph count comes from the plate recipe, not a constant.
-  expectFailure(new RegExp(`Morph target count is ${PLATE_TARGETS}, not the plate recipe's ${PLATE_TARGETS + 1}`), undefined, undefined,
+  await expectFailure(new RegExp(`Morph target count is ${PLATE_TARGETS}, not the plate recipe's ${PLATE_TARGETS + 1}`), undefined, undefined,
     { options: { morphTargets: PLATE_TARGETS + 1 } });
-  expectFailure(/did not serialize/, undefined, undefined, { serialize: () => ok() });
+  await expectFailure(/did not serialize/, undefined, undefined, { serialize: () => ok() });
 }, 30_000);
 
-test("archive failures: inventory, archive hash, structural declaration and unpacked members", () => {
+test("archive failures: inventory, archive hash, structural declaration and unpacked members", async () => {
   const xl = (f: Fixture, text: string) => writeFileSync(join(f.build, "package/archive/pc/mod/xfs_cns.archive.xl"), text);
-  expectFailure(/differ from the plan/, undefined, f => writeFileSync(join(f.build, "archive", depot, "textures/xfs_extra.xbm"), "x"));
-  expectFailure(/inventory changed after pack/, undefined, f => writeFileSync(join(f.build, "archive", plan.app), "changed"));
-  expectFailure(/Packed archive differs/, undefined, f => writeFileSync(join(f.build, "package/archive/pc/mod/xfs_cns.archive"), "other"));
-  expectFailure(/exactly customizations and resource/, undefined, f => xl(f, "customizations: {}\n"));
-  expectFailure(/not valid YAML/, undefined, f => xl(f, "customizations: [\n"));
+  await expectFailure(/differ from the plan/, undefined, f => writeFileSync(join(f.build, "archive", depot, "textures/xfs_extra.xbm"), "x"));
+  await expectFailure(/inventory changed after pack/, undefined, f => writeFileSync(join(f.build, "archive", plan.app), "changed"));
+  await expectFailure(/Packed archive differs/, undefined, f => writeFileSync(join(f.build, "package/archive/pc/mod/xfs_cns.archive"), "other"));
+  await expectFailure(/exactly customizations and resource/, undefined, f => xl(f, "customizations: {}\n"));
+  await expectFailure(/not valid YAML/, undefined, f => xl(f, "customizations: [\n"));
   // A substring match would accept these; the structural check does not.
-  expectFailure(/exactly customizations and resource/, undefined, f => xl(f, declaration(plan) + "extra: 1\r\n"));
-  expectFailure(/exactly the female list/, undefined, f => xl(f, declaration(plan).replace("  female:", "  male: x\r\n  female:")));
-  expectFailure(/exactly the planned female customization/, undefined, f => xl(f, declaration(plan).replace("female: ", "female: other\\")));
-  expectFailure(/exactly the planned app/, undefined, f => xl(f, declaration(plan) + "      - other\\x.app\r\n"));
-  expectFailure(/differs from its generated payload/, undefined, undefined, { tamper: out => writeFileSync(join(out, plan.mesh), "tampered") });
-  expectFailure(/Unpacked 11 files/, undefined, undefined, { tamper: out => writeFileSync(join(out, depot, "xfs_extra.app"), "x") });
-  expectFailure(/unbundle failed/, undefined, undefined, { unbundle: () => ({ exitCode: 0, stdout: "[ 0: Error ] boom", stderr: "" }) });
-  expectFailure(/unbundle failed/, undefined, undefined, { unbundle: () => ({ exitCode: 1, stdout: "", stderr: "" }) });
+  await expectFailure(/exactly customizations and resource/, undefined, f => xl(f, declaration(plan) + "extra: 1\r\n"));
+  await expectFailure(/exactly the female list/, undefined, f => xl(f, declaration(plan).replace("  female:", "  male: x\r\n  female:")));
+  await expectFailure(/exactly the planned female customization/, undefined, f => xl(f, declaration(plan).replace("female: ", "female: other\\")));
+  await expectFailure(/exactly the planned app/, undefined, f => xl(f, declaration(plan) + "      - other\\x.app\r\n"));
+  await expectFailure(/differs from its generated payload/, undefined, undefined, { tamper: out => writeFileSync(join(out, plan.mesh), "tampered") });
+  await expectFailure(/Unpacked 11 files/, undefined, undefined, { tamper: out => writeFileSync(join(out, depot, "xfs_extra.app"), "x") });
+  await expectFailure(/unbundle failed/, undefined, undefined, { unbundle: () => ({ exitCode: 0, stdout: "[ 0: Error ] boom", stderr: "" }) });
+  await expectFailure(/unbundle failed/, undefined, undefined, { unbundle: () => ({ exitCode: 1, stdout: "", stderr: "" }) });
   // An equivalent declaration in YAML's list form is accepted.
   const fixture = makeBuild();
   try {
     xl(fixture, declaration(plan).replace(`female: ${plan.customization.replaceAll("/", "\\")}`, `female:\r\n    - ${plan.customization.replaceAll("/", "\\")}`));
-    expect(run(fixture).presetCount).toBe(2);
+    expect((await run(fixture)).presetCount).toBe(2);
   } finally { rmSync(fixture.build, { recursive: true, force: true }); }
 }, 30_000);
 
-test("plate provenance: inputs must match the build record and the host, and must not change during verification", () => {
-  expectFailure(/Plate mesh input differs from the build record/, undefined, f => writeFileSync(f.plate.mesh, JSON.stringify(doc({ changed: 1 }))));
-  expectFailure(/Plate morph input is missing/, undefined, f => rmSync(f.plate.morph));
+test("its serialize and texture export run side by side; a failed step stops the other and is the error reported (PIPE-130)", async () => {
+  // Wrap the fake tools: each conversion takes a while and records how many run at once and whether it was stopped.
+  const timed = (tools: VerifierTools, log: { running: number; most: number; stopped: string[] }, fail?: "serialize" | "exportTextures"): VerifierTools => {
+    const wrap = <A extends unknown[]>(name: "serialize" | "exportTextures", call: (...args: A) => Promise<ToolResult>) => async (...args: A) => {
+      const signal = args.at(-1) as AbortSignal;
+      expect(signal).toBeInstanceOf(AbortSignal);
+      log.running++; log.most = Math.max(log.most, log.running);
+      try {
+        await new Promise<void>((done, stop) => {
+          const stopped = () => { clearTimeout(timer); log.stopped.push(name); stop(Error(`${name} stopped`)); };
+          const timer = setTimeout(() => { signal.removeEventListener("abort", stopped); done(); }, name === fail ? 20 : 150);
+          signal.addEventListener("abort", stopped, { once: true });
+        });
+        if (name === fail) throw Error(`WolvenKit ${name} could not run`);
+        return await call(...args);
+      } finally { log.running--; }
+    };
+    return { unbundle: tools.unbundle, serialize: wrap("serialize", tools.serialize), exportTextures: wrap("exportTextures", tools.exportTextures) };
+  };
+  const passing = makeBuild();
+  try {
+    const log = { running: 0, most: 0, stopped: [] as string[] };
+    const report = await verifyBuild({ build: passing.build, tools: timed(fakeTools(passing, {}, []), log) });
+    expect(report.presetCount).toBe(2);
+    expect(log.most).toBe(2);
+  } finally { rmSync(passing.build, { recursive: true, force: true }); }
+  const failing = makeBuild();
+  try {
+    const log = { running: 0, most: 0, stopped: [] as string[] };
+    await expect(verifyBuild({ build: failing.build, tools: timed(fakeTools(failing, {}, []), log, "exportTextures") }))
+      .rejects.toThrow("WolvenKit exportTextures could not run");
+    expect(log.stopped).toEqual(["serialize"]);
+  } finally { rmSync(failing.build, { recursive: true, force: true }); }
+  // The Build's own cancellation reaches every step.
+  const cancelled = makeBuild(), controller = new AbortController();
+  try {
+    const log = { running: 0, most: 0, stopped: [] as string[] };
+    const verifying = verifyBuild({ build: cancelled.build, tools: timed(fakeTools(cancelled, {}, []), log), signal: controller.signal });
+    setTimeout(() => controller.abort(), 40);
+    await expect(verifying).rejects.toThrow(/stopped/);
+    expect(log.stopped.sort()).toEqual(["exportTextures", "serialize"]);
+  } finally { rmSync(cancelled.build, { recursive: true, force: true }); }
+}, 30_000);
+
+test("plate provenance: inputs must match the build record and the host, and must not change during verification", async () => {
+  await expectFailure(/Plate mesh input differs from the build record/, undefined, f => writeFileSync(f.plate.mesh, JSON.stringify(doc({ changed: 1 }))));
+  await expectFailure(/Plate morph input is missing/, undefined, f => rmSync(f.plate.morph));
   const fixture = makeBuild();
   try {
-    expect(() => run(fixture, { options: { plate: { ...fixture.plate, meshSha256: "0".repeat(64) } } }))
-      .toThrow("Plate mesh input differs from the plate the host prepared");
+    await expect(run(fixture, { options: { plate: { ...fixture.plate, meshSha256: "0".repeat(64) } } }))
+      .rejects.toThrow("Plate mesh input differs from the plate the host prepared");
     rmSync(join(fixture.build, "verify"), { recursive: true, force: true });
     // A plate input rewritten after the verifier copied it is caught by the closing comparison.
     let first = true;
-    const serialize: VerifierTools["serialize"] = (input, output) => {
+    const serialize: VerifierTools["serialize"] = async (input, output) => {
       if (first) { first = false; writeFileSync(fixture.plate.morph, "rewritten"); }
       for (const folder of [input].flat()) for (const name of readdirSync(folder, { recursive: true }) as string[]) {
         const file = join(folder, name);
@@ -367,11 +411,11 @@ test("plate provenance: inputs must match the build record and the host, and mus
       }
       return ok();
     };
-    expect(() => run(fixture, { serialize })).toThrow("Plate morph input changed during verification");
+    await expect(run(fixture, { serialize })).rejects.toThrow("Plate morph input changed during verification");
   } finally { rmSync(fixture.build, { recursive: true, force: true }); }
 }, 30_000);
 
-test("the verifier's own inventory refuses noncanonical paths and computes WolvenKit keys", () => {
+test("the verifier's own inventory refuses noncanonical paths and computes WolvenKit keys", async () => {
   expect(canonicalResourcePath("a/b_c.xbm")).toBe(true);
   for (const bad of ["", "/a.xbm", "a\\b.xbm", "A/b.xbm", "a/../b.xbm", "a/b.png", "12.xbm", "a/b.xbm.", "a/.xbm"]) expect(canonicalResourcePath(bad)).toBe(false);
   // FNV-1a 64 of the empty string is the offset basis; one byte follows the published algorithm.
@@ -384,7 +428,7 @@ test("the verifier's own inventory refuses noncanonical paths and computes Wolve
   expect(() => resourceRecords([...files, { path: "m/B.xbm", bytes: 1, sha256: "x" }], p)).toThrow("Noncanonical");
 });
 
-test("the DDS reader rejects malformed files", () => {
+test("the DDS reader rejects malformed files", async () => {
   const dds = encodeFlatDds(maps(0).chain.diffuse, { width: W, height: H }, "diffuse");
   expect(readDdsChain(dds, "diffuse").levels.map(l => l.length / 4)).toEqual([2048 * 512, 1024 * 256, 512 * 128, 256 * 64, 128 * 32, 64 * 16,
     32 * 8, 16 * 4, 8 * 2, 4, 2, 1]);
@@ -397,7 +441,7 @@ test("the DDS reader rejects malformed files", () => {
   expect(() => readDdsChain(badArray, "diffuse")).toThrow("format");
 });
 
-test("the independent reference chain equals the compiler chain on varied inputs, square and non-square", () => {
+test("the independent reference chain equals the compiler chain on varied inputs, square and non-square", async () => {
   for (const [w, h] of [[16, 16], [64, 16], [8, 32], [2048, 512]]) for (let seed = 0; seed < 3; seed++) {
     let s = seed * 7919 + w;
     const next = () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s >>> 24; };
@@ -408,7 +452,7 @@ test("the independent reference chain equals the compiler chain on varied inputs
   }
 });
 
-test("structural JSON equality ignores key order and only the named handle keys", () => {
+test("structural JSON equality ignores key order and only the named handle keys", async () => {
   expect(sameJson({ a: 1, b: [1, { c: 2 }] }, { b: [1, { c: 2 }], a: 1 })).toBe(true);
   expect(sameJson([1, 2], [2, 1])).toBe(false);
   const ignore = new Set(["HandleId"]);
@@ -447,75 +491,75 @@ print(json.dumps(out))`, dir], { stdout: "pipe", stderr: "pipe" });
 });
 
 
-test("plate geometry: the packaged plate must be the input lifted along its normals, every other byte exact", () => {
+test("plate geometry: the packaged plate must be the input lifted along its normals, every other byte exact", async () => {
   const bytesOf = (blob: any) => Buffer.from(blob.renderBuffer.Bytes, "base64");
   const setBytes = (blob: any, data: Buffer) => { blob.renderBuffer.Bytes = data.toString("base64"); };
   // The unlifted cut where the plan says 0.4 mm.
-  expectFailure(/is not lifted 0.4 mm along its normal/, (_b, d) => {
+  await expectFailure(/is not lifted 0.4 mm along its normal/, (_b, d) => {
     const flat = liftedPlate([0]);
     d.mesh.renderResourceBlob.Data = flat.mesh.Data.RootChunk.renderResourceBlob.Data;
     d.morph.blob = flat.morph.Data.RootChunk.blob;
   });
   // A skin weight byte (stream 0, after position and indices) changed in both buffers.
-  expectFailure(/PS_SkinWeights:0 bytes differ from the input/, (_b, d) => {
+  await expectFailure(/PS_SkinWeights:0 bytes differ from the input/, (_b, d) => {
     for (const blob of [d.mesh.renderResourceBlob.Data, d.morph.blob.Data.baseBlob.Data]) {
       const data = bytesOf(blob); data[16] ^= 1; setBytes(blob, data);
     }
   });
-  expectFailure(/mesh and morph base differ/, (_b, d) => {
+  await expectFailure(/mesh and morph base differ/, (_b, d) => {
     const blob = d.morph.blob.Data.baseBlob.Data, data = bytesOf(blob); data[16] ^= 1; setBytes(blob, data);
   });
-  expectFailure(/shading deltas differ/, (_b, d) => {
+  await expectFailure(/shading deltas differ/, (_b, d) => {
     const data = Buffer.from(d.morph.blob.Data.diffsBuffer.Bytes, "base64"); data[5] ^= 1;
     d.morph.blob.Data.diffsBuffer.Bytes = data.toString("base64");
   });
-  expectFailure(/delta is not the lifted input delta/, (_b, d) => {
+  await expectFailure(/delta is not the lifted input delta/, (_b, d) => {
     const data = Buffer.from(d.morph.blob.Data.diffsBuffer.Bytes, "base64");
     data.writeUInt32LE((data.readUInt32LE(0) & 0xc0000000) | ((data.readUInt32LE(0) + 40) & 0x3fffffff), 0);
     d.morph.blob.Data.diffsBuffer.Bytes = data.toString("base64");
   });
-  expectFailure(/Plan plate lifts \[0.2\] differ from the presets' lifts \[0.4\]/, (_b, d) => { d.plan.plate.liftsMm = [0.2]; });
+  await expectFailure(/Plan plate lifts \[0.2\] differ from the presets' lifts \[0.4\]/, (_b, d) => { d.plan.plate.liftsMm = [0.2]; });
 }, 30_000);
 
 // PIPE-28: the render and morph blobs are compared whole with the input; only the re-derived lift fields may differ.
-test("plate blobs: every field the lift does not own must be the input's", () => {
+test("plate blobs: every field the lift does not own must be the input's", async () => {
   const renderBlobs = (d: Parameters<Mutation>[1]) => [d.mesh.renderResourceBlob.Data, d.morph.blob.Data.baseBlob.Data];
   const morphBlob = (d: Parameters<Mutation>[1]) => d.morph.blob.Data;
-  expectFailure(/Packaged plate mesh header\.bonePositions differs from the input/,
+  await expectFailure(/Packaged plate mesh header\.bonePositions differs from the input/,
     (_b, d) => { for (const b of renderBlobs(d)) b.header.bonePositions = [{ X: 1, Y: 0, Z: 0, W: 1 }]; });
-  expectFailure(/Packaged plate mesh header\.renderLODs\[0\] differs from the input/, (_b, d) => { for (const b of renderBlobs(d)) b.header.renderLODs = [5]; });
-  expectFailure(/Packaged plate mesh header\.version differs from the input/, (_b, d) => { for (const b of renderBlobs(d)) b.header.version = 21; });
-  expectFailure(/Packaged plate mesh header\.renderChunkInfos\[0\]\.materialId differs from the input/,
+  await expectFailure(/Packaged plate mesh header\.renderLODs\[0\] differs from the input/, (_b, d) => { for (const b of renderBlobs(d)) b.header.renderLODs = [5]; });
+  await expectFailure(/Packaged plate mesh header\.version differs from the input/, (_b, d) => { for (const b of renderBlobs(d)) b.header.version = 21; });
+  await expectFailure(/Packaged plate mesh header\.renderChunkInfos\[0\]\.materialId differs from the input/,
     (_b, d) => { for (const b of renderBlobs(d)) b.header.renderChunkInfos[0].materialId = [3]; });
   // PIPE-29: the head's position quantization must stay the input's.
-  expectFailure(/Packaged plate mesh header\.quantizationScale\.X differs from the input/,
+  await expectFailure(/Packaged plate mesh header\.quantizationScale\.X differs from the input/,
     (_b, d) => { for (const b of renderBlobs(d)) b.header.quantizationScale.X *= 2; });
-  expectFailure(/Packaged plate mesh buffer holds \d+ bytes, not the \d+ of the lifted layout/, (_b, d) => {
+  await expectFailure(/Packaged plate mesh buffer holds \d+ bytes, not the \d+ of the lifted layout/, (_b, d) => {
     for (const b of renderBlobs(d)) b.renderBuffer.Bytes = Buffer.concat([Buffer.from(b.renderBuffer.Bytes, "base64"), Buffer.alloc(16)]).toString("base64");
   });
-  expectFailure(/Packaged plate morph base header\.renderLODs\[0\] differs from the input/,
+  await expectFailure(/Packaged plate morph base header\.renderLODs\[0\] differs from the input/,
     (_b, d) => { d.morph.blob.Data.baseBlob.Data.header.renderLODs = [5]; });
-  expectFailure(/Packaged plate morph header\.version differs from the input/, (_b, d) => { morphBlob(d).header.version = 1; });
-  expectFailure(/Packaged plate morph header\.numDiffs differs from the input/, (_b, d) => { morphBlob(d).header.numDiffs = 1; });
-  expectFailure(/Packaged plate morph header\.numDiffsMapping differs from the input/, (_b, d) => { morphBlob(d).header.numDiffsMapping += 1; });
-  expectFailure(/Packaged plate morph header\.targetTextureDiffsData differs from the input/, (_b, d) => { morphBlob(d).header.targetTextureDiffsData = []; });
-  expectFailure(/Packaged plate morph textureDiffsBuffer differs from the input/,
+  await expectFailure(/Packaged plate morph header\.version differs from the input/, (_b, d) => { morphBlob(d).header.version = 1; });
+  await expectFailure(/Packaged plate morph header\.numDiffs differs from the input/, (_b, d) => { morphBlob(d).header.numDiffs = 1; });
+  await expectFailure(/Packaged plate morph header\.numDiffsMapping differs from the input/, (_b, d) => { morphBlob(d).header.numDiffsMapping += 1; });
+  await expectFailure(/Packaged plate morph header\.targetTextureDiffsData differs from the input/, (_b, d) => { morphBlob(d).header.targetTextureDiffsData = []; });
+  await expectFailure(/Packaged plate morph textureDiffsBuffer differs from the input/,
     (_b, d) => { morphBlob(d).textureDiffsBuffer = { BufferId: "9", Flags: 0, Bytes: "AAAA" }; });
-  expectFailure(/Packaged plate morph header\.targetStartsInVertexDiffs\[1\] differs from the input/,
+  await expectFailure(/Packaged plate morph header\.targetStartsInVertexDiffs\[1\] differs from the input/,
     (_b, d) => { morphBlob(d).header.targetStartsInVertexDiffs[1] += 1; });
-  expectFailure(/Packaged morph mapping holds \d+ bytes, not the \d+ of the lifted input/, (_b, d) => {
+  await expectFailure(/Packaged morph mapping holds \d+ bytes, not the \d+ of the lifted input/, (_b, d) => {
     const bytes = Buffer.from(morphBlob(d).mappingBuffer.Bytes, "base64");
     morphBlob(d).mappingBuffer.Bytes = Buffer.concat([bytes, Buffer.alloc(64, 7)]).toString("base64");
   });
-  expectFailure(/Packaged plate morph mappingBuffer\.Bytes differs from the input/, (_b, d) => {
+  await expectFailure(/Packaged plate morph mappingBuffer\.Bytes differs from the input/, (_b, d) => {
     const bytes = Buffer.from(morphBlob(d).mappingBuffer.Bytes, "base64"); bytes[bytes.length - 1] ^= 1;
     morphBlob(d).mappingBuffer.Bytes = bytes.toString("base64");
   });
-  expectFailure(/Morph boundingBox differs from the source plate/, (_b, d) => { d.morph.boundingBox = { Min: 9, Max: 9 }; });
-  expectFailure(/Morph baseTexture differs from the source plate/, (_b, d) => { d.morph.baseTexture = ref("base/other.xbm"); });
-  expectFailure(/Morph baseMeshAppearance is not the seed appearance/, (_b, d) => { d.morph.baseMeshAppearance = cname("xfs_eye_plate"); });
-  expectFailure(/Mesh boundingBox differs from the source plate/, (_b, d) => { d.mesh.boundingBox = { Min: 0, Max: 2 }; });
-  expectFailure(/Mesh extraField differs from the source plate/, (_b, d) => { d.mesh.extraField = 1; });
+  await expectFailure(/Morph boundingBox differs from the source plate/, (_b, d) => { d.morph.boundingBox = { Min: 9, Max: 9 }; });
+  await expectFailure(/Morph baseTexture differs from the source plate/, (_b, d) => { d.morph.baseTexture = ref("base/other.xbm"); });
+  await expectFailure(/Morph baseMeshAppearance is not the seed appearance/, (_b, d) => { d.morph.baseMeshAppearance = cname("xfs_eye_plate"); });
+  await expectFailure(/Mesh boundingBox differs from the source plate/, (_b, d) => { d.mesh.boundingBox = { Min: 0, Max: 2 }; });
+  await expectFailure(/Mesh extraField differs from the source plate/, (_b, d) => { d.mesh.extraField = 1; });
 }, 30_000);
 
 // PIPE-29: re-quantized morph targets. The fixture cut's deltas fit its quantization after the lift, so this
@@ -547,7 +591,7 @@ function requantize(blob: any, t: number, scale: number[], offset: number[]) {
   (["X", "Y", "Z"] as const).forEach((axis, a) => { h.targetPositionDiffScale[t][axis] = scale[a]; h.targetPositionDiffOffset[t][axis] = offset[a]; });
 }
 
-test("re-quantized morph targets: the range must be exactly the lifted deltas', and errors stay under an absolute cap", () => {
+test("re-quantized morph targets: the range must be exactly the lifted deltas', and errors stay under an absolute cap", async () => {
   const lifted = liftPlate(TIGHT.mesh, TIGHT.morph, [0.4]), inHeader = TIGHT.morph.Data.RootChunk.blob.Data.header;
   const outHeader = lifted.morph.Data.RootChunk.blob.Data.header;
   const changed = [...Array(inHeader.numTargets).keys()].filter(t =>
@@ -556,28 +600,28 @@ test("re-quantized morph targets: the range must be exactly the lifted deltas', 
   expect(changed).toHaveLength(lifted.report.requantizedTargets);
   const fixture = makeBuild(undefined, TIGHT);
   try {
-    const report = run(fixture);
+    const report = await run(fixture);
     expect(report.plateGeometry).toMatchObject({ requantizedTargets: lifted.report.requantizedTargets, blobsMatchInput: true, meshQuantizationRetained: true });
     expect(report.plateGeometry.maxMorphDeltaErrorMm).toBeGreaterThan(0);
   } finally { rmSync(fixture.build, { recursive: true, force: true }); }
   // A wider range than the lifted deltas need would loosen the half-step tolerance; the deltas still decode within it.
   const t = changed[0]!;
-  expectFailure(/Packaged morph target \d+ is re-quantized to a range other than its lifted deltas/, (_b, d) => {
+  await expectFailure(/Packaged morph target \d+ is re-quantized to a range other than its lifted deltas/, (_b, d) => {
     const blob = d.morph.blob.Data, scale = axisValues(blob.header.targetPositionDiffScale[t]), offset = axisValues(blob.header.targetPositionDiffOffset[t]);
     requantize(blob, t, scale.map(s => s * 2), offset.map((o, a) => o - scale[a] / 2));
   }, undefined, undefined, TIGHT);
   // A target the lift did not need to re-quantize may not be widened either.
-  expectFailure(/Packaged morph target 0 is re-quantized to a range other than its lifted deltas/, (_b, d) => {
+  await expectFailure(/Packaged morph target 0 is re-quantized to a range other than its lifted deltas/, (_b, d) => {
     const blob = d.morph.blob.Data, scale = axisValues(blob.header.targetPositionDiffScale[0]), offset = axisValues(blob.header.targetPositionDiffOffset[0]);
     requantize(blob, 0, scale.map(s => s * 4), offset.map((o, a) => o - scale[a] * 2));
   });
-  expectFailure(/Packaged morph target \d+ quantization differs from the input outside X, Y and Z/, (_b, d) => {
+  await expectFailure(/Packaged morph target \d+ quantization differs from the input outside X, Y and Z/, (_b, d) => {
     d.morph.blob.Data.header.targetPositionDiffScale[t].W = 7;
   }, undefined, undefined, TIGHT);
   // The cap bounds the error whatever the quantization: an input whose own delta step is coarser than the cap is refused.
   const coarse = structuredClone(PLATE), coarseHeader = coarse.morph.Data.RootChunk.blob.Data.header;
   coarseHeader.targetPositionDiffScale[0] = { ...coarseHeader.targetPositionDiffScale[0], X: 0.2, Y: 0.2, Z: 0.2 };
-  expectFailure(/Packaged morph target 0 chunk 0 row \d+ delta error exceeds 0.02 mm/, undefined, undefined, undefined, coarse);
+  await expectFailure(/Packaged morph target 0 chunk 0 row \d+ delta error exceeds 0.02 mm/, undefined, undefined, undefined, coarse);
 }, 30_000);
 
 /** Two lifts and a diagnostic surface: look a1 on the unlifted chunk with skin roughness kept, b2 on the production lift. */
@@ -603,57 +647,57 @@ const twoChunks: Mutation = (_b, d) => {
     values: Object.entries({ DiffuseAlpha: 0, NormalAlpha: 0, RoughnessMetalnessAlpha: 0 }).map(([name, value]) => ({ $type: "Float", [name]: value })) }];
 };
 
-test("diagnostic lifts and surfaces: one chunk per lift, hidden chunks write nothing, overrides are restated", () => {
+test("diagnostic lifts and surfaces: one chunk per lift, hidden chunks write nothing, overrides are restated", async () => {
   const fixture = makeBuild(twoChunks);
   try {
     const collection = { presets: presets.map(p => ({ id: p.id, recipe: p.recipe })),
       diagnostics: { schema: "xfs/export-diagnostics-1", presets: { a1: { plateLiftMm: 0, surface: SURFACE } } } };
-    const report = run(fixture, { options: { packagedCollection: collection } });
+    const report = await run(fixture, { options: { packagedCollection: collection } });
     expect(report.plateGeometry).toMatchObject({ liftsMm: [0, 0.4], chunks: 2 });
     expect(report.materialTemplates).toBe(3);
     expect(report.resolvedDynamicPaths[0].chunkMaterial).toBe(`xfs_pa1${DIAG_ENTRY}`);
     rmSync(join(fixture.build, "verify"), { recursive: true, force: true });
     // The host's packaged collection must carry exactly the same knobs.
-    expect(() => run(fixture, { options: { packagedCollection: { ...collection, diagnostics: undefined } } }))
-      .toThrow("diagnostics for preset Look a1 differ from the packaged collection");
+    await expect(run(fixture, { options: { packagedCollection: { ...collection, diagnostics: undefined } } }))
+      .rejects.toThrow("diagnostics for preset Look a1 differ from the packaged collection");
   } finally { rmSync(fixture.build, { recursive: true, force: true }); }
-  expectFailure(/Hidden chunk material must write nothing/, (b, d) => {
+  await expectFailure(/Hidden chunk material must write nothing/, (b, d) => {
     twoChunks(b, d);
     d.mesh.localMaterialBuffer.materials[2].values[0].DiffuseAlpha = 1;
   });
-  expectFailure(/Appearance xfs_pb2 must name @preset/, (b, d) => {
+  await expectFailure(/Appearance xfs_pb2 must name @preset/, (b, d) => {
     twoChunks(b, d);
     d.mesh.appearances[1].Data.chunkMaterials = [cname("xfs_pb2@preset"), cname("xfs_hidden")];
   });
-  expectFailure(/RoughnessMetalnessAlpha is 1, expected 0/, (b, d) => {
+  await expectFailure(/RoughnessMetalnessAlpha is 1, expected 0/, (b, d) => {
     twoChunks(b, d);
     for (const item of d.mesh.localMaterialBuffer.materials[0].values) if ("RoughnessMetalnessAlpha" in item) item.RoughnessMetalnessAlpha = 1;
   });
-  expectFailure(/does not draw its lift's plate chunk/, (b, d) => { twoChunks(b, d); d.plan.presets[1].plateChunk = 0; });
-  expectFailure(/2 chunks for 1 planned lifts|Plan plate lifts/, (b, d) => { twoChunks(b, d); d.plan.plate.liftsMm = [0.4]; });
+  await expectFailure(/does not draw its lift's plate chunk/, (b, d) => { twoChunks(b, d); d.plan.presets[1].plateChunk = 0; });
+  await expectFailure(/2 chunks for 1 planned lifts|Plan plate lifts/, (b, d) => { twoChunks(b, d); d.plan.plate.liftsMm = [0.4]; });
 }, 30_000);
 
-test("plate-local window: stored row order, record window and texture space are checked, and misplaced content fails the mapping", () => {
+test("plate-local window: stored row order, record window and texture space are checked, and misplaced content fails the mapping", async () => {
   // A builder that rasterised the window upside down: every chain and hash is self-consistent, only the mapping disagrees.
   const mirrored = [mapSet(0, true), mapSet(1, true)], original = maps;
   maps = seed => mirrored[seed];
-  try { expectFailure(/does not match its authored head-UV content at the plate's UVs/); } finally { maps = original; }
+  try { await expectFailure(/does not match its authored head-UV content at the plate's UVs/); } finally { maps = original; }
   // WolvenKit storing rows top to bottom would move every window map; the verifier decodes the stored BC4 level itself.
-  expectFailure(/is not stored with reversed rows/, (_b, d) => {
+  await expectFailure(/is not stored with reversed rows/, (_b, d) => {
     const rough = maps(0).roughness, flipped = new Uint8Array(rough.length);
     for (let y = 0; y < H; y++) flipped.set(rough.subarray((H - 1 - y) * W, (H - y) * W), y * W);
     d.xbm[presets[0].textures.roughness].renderTextureResource = storedBc4(flipped, W, H);
   });
-  expectFailure(/has no stored texture data/, (_b, d) => { delete d.xbm[presets[1].textures.roughness].renderTextureResource; });
+  await expectFailure(/has no stored texture data/, (_b, d) => { delete d.xbm[presets[1].textures.roughness].renderTextureResource; });
   const rewrite = (change: (build: any) => void) => (f: Fixture) => {
     const path = join(f.build, "build.json"), build = JSON.parse(readFileSync(path, "utf8"));
     change(build); writeFileSync(path, JSON.stringify(build));
   };
-  expectFailure(/uses another UV window than the packaged plate's/, undefined, rewrite(b => { b.compiled[0].window.u0 += .001; }));
-  expectFailure(/plate UV window differs from the one the packaged plate's UVs give/, undefined, rewrite(b => { b.plateUv.window.v1 -= .001; }));
-  expectFailure(/has no head-UV coverage reference at least 4096/, undefined, rewrite(b => { b.compiled[1].reference.grid = 1024; }));
-  expectFailure(/was built on head UV, but its route and diagnostics need plate-window/, (_b, d) => { d.plan.presets[0].uvSpace = "head"; });
-  expectFailure(/invalid diagnostic uvSpace/, (_b, d) => { (d.plan.presets[0] as any).diagnostics = { uvSpace: "window" }; });
+  await expectFailure(/uses another UV window than the packaged plate's/, undefined, rewrite(b => { b.compiled[0].window.u0 += .001; }));
+  await expectFailure(/plate UV window differs from the one the packaged plate's UVs give/, undefined, rewrite(b => { b.plateUv.window.v1 -= .001; }));
+  await expectFailure(/has no head-UV coverage reference at least 4096/, undefined, rewrite(b => { b.compiled[1].reference.grid = 1024; }));
+  await expectFailure(/was built on head UV, but its route and diagnostics need plate-window/, (_b, d) => { d.plan.presets[0].uvSpace = "head"; });
+  await expectFailure(/invalid diagnostic uvSpace/, (_b, d) => { (d.plan.presets[0] as any).diagnostics = { uvSpace: "window" }; });
 }, 30_000);
 
 // ---- The merged branch (PIPE-95): eye makeup beside another feature in one product archive ----
@@ -675,23 +719,23 @@ const mergedDeclaration = (p: typeof plan, eyes = true) => ["customizations:", "
  * Run the real eye-makeup verifier on a product archive holding its resources and a second feature's: the unpacked
  * tree is the build's tree plus the other feature's files; `features` says how many features the product holds.
  */
-function runMerged(fixture: Fixture, options: { features?: number; xl?: string; tamper?: (unpacked: string) => void } = {}) {
+async function runMerged(fixture: Fixture, options: { features?: number; xl?: string; tamper?: (unpacked: string) => void } = {}) {
   const unpacked = join(fixture.build, "product-unpacked");
   cpSync(join(fixture.build, "archive"), unpacked, { recursive: true });
   for (const path of [LIPS_APP, LIPS_CC]) writeFile(join(unpacked, path), `lips ${path}`);
   options.tamper?.(unpacked);
   const xl = options.xl ?? mergedDeclaration(plan), calls: string[] = [];
-  const report = verifyEyeMakeupBuild({ work: fixture.build, staging: join(fixture.build, "archive"), workDir: join(fixture.build, "verify-merged"),
+  const report = await verifyEyeMakeupBuild({ work: fixture.build, staging: join(fixture.build, "archive"), workDir: join(fixture.build, "verify-merged"),
     tools: fakeTools(fixture, {}, calls),
     unpacked: { root: unpacked, files: productFiles(unpacked), archiveSha256: sha("product archive"), archiveBytes: 15, xl, xlSha256: sha(xl),
       features: options.features ?? 2 } });
   return { report, calls };
 }
 
-test("merged product: the real verifier checks only its own members and entries beside another feature's (PIPE-95)", () => {
+test("merged product: the real verifier checks only its own members and entries beside another feature's (PIPE-95)", async () => {
   const fixture = makeBuild();
   try {
-    const { report, calls } = runMerged(fixture);
+    const { report, calls } = await runMerged(fixture);
     expect(report).toMatchObject({ presetCount: 2, unpackedFilesVerified: 10, archiveXlSha256: sha(mergedDeclaration(plan)) });
     // Its own members are copied out of the product tree and converted there; the other feature's files never are.
     const members = join(fixture.build, "verify-merged", "members");
@@ -699,24 +743,24 @@ test("merged product: the real verifier checks only its own members and entries 
     expect(productFiles(members).map(file => file.path)).not.toContain(LIPS_APP);
     expect(productFiles(members)).toHaveLength(10);
   } finally { rmSync(fixture.build, { recursive: true, force: true }); }
-  const failing = (message: RegExp, options: Parameters<typeof runMerged>[1]) => {
+  const failing = async (message: RegExp, options: Parameters<typeof runMerged>[1]) => {
     const f = makeBuild();
-    try { expect(() => runMerged(f, options)).toThrow(message); } finally { rmSync(f.build, { recursive: true, force: true }); }
+    try { await expect(runMerged(f, options)).rejects.toThrow(message); } finally { rmSync(f.build, { recursive: true, force: true }); }
   };
   // Its entries must each be declared once in the merged declaration.
-  failing(/register the planned female customization exactly once/, { xl: mergedDeclaration(plan, false) });
-  failing(/register the planned female customization exactly once/, { xl: mergedDeclaration(plan).replace("  female:\r\n",
+  await failing(/register the planned female customization exactly once/, { xl: mergedDeclaration(plan, false) });
+  await failing(/register the planned female customization exactly once/, { xl: mergedDeclaration(plan).replace("  female:\r\n",
     `  female:\r\n    - ${plan.customization.replaceAll("/", "\\")}\r\n`) });
-  failing(/list the planned app exactly once/, { xl: mergedDeclaration(plan).replace(`      - ${plan.app.replaceAll("/", "\\")}\r\n`, "") });
+  await failing(/list the planned app exactly once/, { xl: mergedDeclaration(plan).replace(`      - ${plan.app.replaceAll("/", "\\")}\r\n`, "") });
   // Its members in the product archive must still be byte for byte what it generated, and all present.
-  failing(/differs from its generated payload/, { tamper: out => writeFileSync(join(out, plan.mesh), "tampered") });
-  failing(/member paths differ/, { tamper: out => rmSync(join(out, plan.app)) });
+  await failing(/differs from its generated payload/, { tamper: out => writeFileSync(join(out, plan.mesh), "tampered") });
+  await failing(/member paths differ/, { tamper: out => rmSync(join(out, plan.app)) });
   // The same product claimed to hold eye makeup alone: the declaration and the member count must be exactly its own.
-  failing(/exactly the planned female customization|exactly the female list|exactly customizations/, { features: 1 });
-  failing(/Unpacked 12 files; expected 10/, { features: 1, xl: declaration(plan) });
+  await failing(/exactly the planned female customization|exactly the female list|exactly customizations/, { features: 1 });
+  await failing(/Unpacked 12 files; expected 10/, { features: 1, xl: declaration(plan) });
 }, 60_000);
 
-test("ArchiveXL's component prefix rule, as its hide_Head tag reads the makeup component", () => {
+test("ArchiveXL's component prefix rule, as its hide_Head tag reads the makeup component", async () => {
   // Garment/Prefix.cpp: the text through the first "_" when that "_" sits at index 2-5.
   expect(archiveXlPrefix("hx_xfs_c0123_makeup")).toBe("hx_");
   expect(archiveXlPrefix("hx_000_pwa__basehead_makeup_eyes_01")).toBe("hx_");
