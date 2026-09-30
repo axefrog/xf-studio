@@ -57,3 +57,20 @@ export function loadBcnLibrary(path: string): BcnLibrary {
     close() { if (!closed) { closed = true; library.close(); } },
   };
 }
+
+/**
+ * A load check: compress one 4x4 gradient to BC4 on the CPU (needs no GPU), decode the block and require it to be close to the gradient.
+ * Throws a refusal when the entry point does not work. Used by the library's build script and the desktop packaging gate.
+ */
+export function checkBcnLibrary(library: BcnLibrary): void {
+  const pixels = new Uint8Array(16).map((_, i) => i * 17);
+  const block = library.compress(DXGI.R8_UNORM, pixels, 4, 4, 1, DXGI.BC4_UNORM, 0, 0.5, 8);
+  const [a, b] = [block[0]!, block[1]!];
+  const palette = a > b ? [a, b, ...[1, 2, 3, 4, 5, 6].map(i => ((7 - i) * a + i * b) / 7)]
+    : [a, b, ...[1, 2, 3, 4].map(i => ((5 - i) * a + i * b) / 5), 0, 255];
+  let bits = 0n;
+  for (let i = 7; i >= 2; i--) bits = (bits << 8n) | BigInt(block[i]!);
+  const worst = Math.max(...[...pixels].map((value, i) => Math.abs(palette[Number((bits >> BigInt(3 * i)) & 7n)]! - value)));
+  // Eight levels over a 0–255 ramp of sixteen: about 26 at worst for any good encoder; a broken one is far off.
+  if (worst > 32) throw new NativeWriteRefusal(`The texture compressor made an unexpected BC4 block (${[...block].join(" ")}).`);
+}

@@ -70,12 +70,14 @@ try {
   const { values, flags } = parseArgs(process.argv.slice(2));
   machine = flags.has("--machine-result");
   // The native writer (PIPE-130): the game's Oodle and XF Studio's texture compressor, when they load; WolvenKit writes what they
-  // can't. `XFS_NATIVE_WRITER=off` (a developer's switch) keeps every conversion on WolvenKit.
+  // can't. `XFS_NATIVE_WRITER=off` (a developer's switch) keeps every conversion on WolvenKit. The compressor: a developer's
+  // `XFS_BCN_LIBRARY`, else the desktop app's packaged copy (`<app root>/app/native`, desktop/build.ts `bcnEntry`), else the one
+  // tools/build-native-bcn.ts built into the ignored data/tools/xfs-bcn.
   const appRoot = values["--app-root"] ?? app;
   let libraries: NativeWriterLibraries | null = null;
   const nativeLibraries = () => libraries ??= loadNativeWriterLibraries(values["--gamepath"]!, [
     ...process.env.XFS_BCN_LIBRARY ? [process.env.XFS_BCN_LIBRARY] : [],
-    join(appRoot, "native", "xfs_bcn.dll"), join(app, "data", "tools", "xfs-bcn", "xfs_bcn.dll")],
+    join(appRoot, "app", "native", "xfs_bcn.dll"), join(app, "data", "tools", "xfs-bcn", "xfs_bcn.dll")],
   { oodle: loadGameOodle, bcn: loadBcnLibrary, isFile: nodeWriterHost.isFile });
   const native = !flags.has("--check") && !!values["--gamepath"] && process.env.XFS_NATIVE_WRITER !== "off";
   // In the source tree the code root is the authoring directory; the desktop bundle passes --app-root.

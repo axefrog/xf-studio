@@ -2,7 +2,7 @@
 
 This file lists the third-party software included in the **XF Studio desktop app for Windows** (the setup program published on GitHub Releases and the app it installs), with the licence notices those components require. XF Studio's own code is released under the MIT licence in the repository's [`LICENSE`](../../LICENSE) file; the installed app carries a copy next to this file.
 
-The installer contains no files from Cyberpunk 2077 or from any other mod, and no fonts (the app uses fonts that come with Windows). The app icon is original. The release build checks this list against what it actually packages: `desktop/verify-canary.ts` fails if a shipped program file is not named here, if the versions of Bun, Electrobun or three.js recorded here differ from the ones built in, or if this file or the licence is missing from the installed app.
+The installer contains no files from Cyberpunk 2077 or from any other mod, and no fonts (the app uses fonts that come with Windows). The app icon is original. The release build checks this list against what it actually packages: `desktop/verify-canary.ts` fails if a shipped program file is not named here, if the versions of Bun, Electrobun, three.js, DirectXTex or Inno Setup recorded here differ from the ones built in, or if this file or the licence is missing from the installed app.
 
 ## What is included
 
@@ -15,6 +15,7 @@ The installer contains no files from Cyberpunk 2077 or from any other mod, and n
 | [Zig](https://ziglang.org) standard library | as built into Electrobun 2.0.2 | Electrobun's native programs are built with Zig | MIT (reproduced as a precaution) |
 | Microsoft Edge WebView2 Runtime Evergreen Bootstrapper | the current release from Microsoft at build time (recorded in each release's `build-info.json`) | `Resources/app/webview2/MicrosoftEdgeWebview2Setup.exe` | Microsoft software, redistributed unmodified as described below |
 | [three.js](https://github.com/mrdoob/three.js) | 0.186.0 | `Resources/app/views/studio/build/studio-startup.js`, including the OrbitControls, RoomEnvironment and GLTFLoader add-ons | MIT |
+| [DirectXTex](https://github.com/microsoft/DirectXTex) texture processing library | may2026 | `Resources/app/build-tools/app/native/xfs_bcn.dll`, XF Studio's texture compressor: a small entry point of XF Studio's own (MIT) built with DirectXTex's block-compression encoders and compute shaders, compiled from the pinned DirectXTex source release by the release build (with Microsoft's C/C++ runtime linked in statically, as Visual Studio's redistribution terms allow) | MIT |
 | [Inno Setup](https://jrsoftware.org/isinfo.php) | 6.7.3 | the downloadable setup program (`XFStudio-<version>-win-x64-setup.exe`) is built with Inno Setup: its setup runtime unpacks Electrobun's setup program and payload to a temporary folder and runs it. Nothing from Inno Setup is installed with the app | Inno Setup License (permissive; below) |
 
 The Microsoft Edge WebView2 Runtime that displays the app comes with Windows or from Microsoft and is not shipped by XF Studio. If it is missing, XF Studio asks first and then runs Microsoft's **Evergreen Bootstrapper**, which downloads and installs the runtime from Microsoft. The bootstrapper is packaged exactly as Microsoft publishes it (Copyright Microsoft Corporation), and every build checks that it carries a valid Microsoft Corporation code signature. Microsoft's [WebView2 distribution guidance](https://learn.microsoft.com/microsoft-edge/webview2/concepts/distribution) lets apps "download the bootstrapper and package it with your WebView2 app". The WebView2 Runtime it installs is Microsoft's software under Microsoft's own terms; XF Studio's licence does not cover it.
@@ -143,6 +144,32 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
+```
+
+### DirectXTex (MIT)
+
+```text
+    MIT License
+
+    Copyright (c) Microsoft Corporation.
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE
 ```
 
 ### Microsoft WebView2 SDK loader (BSD-style)
