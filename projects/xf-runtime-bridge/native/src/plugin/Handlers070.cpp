@@ -169,8 +169,12 @@ json WorldProbe(const MethodContext& aContext)
         probes.push_back(Game(
             [cid, point, request] {
                 float x = static_cast<float>(point[0]), y = static_cast<float>(point[1]), z = static_cast<float>(point[2]);
-                float radius = static_cast<float>(request.radius), down = static_cast<float>(request.down);
-                return ScriptCall("XFWorldState", "Probe", {"Float", "Float", "Float", "Float", "Float"}, {&x, &y, &z, &radius, &down}, cid);
+                float radius = static_cast<float>(request.radius), down = static_cast<float>(request.down), clearance = static_cast<float>(request.clearance);
+                bool hasSight = request.sightFrom.has_value();
+                float sx = hasSight ? static_cast<float>((*request.sightFrom)[0]) : 0.0f, sy = hasSight ? static_cast<float>((*request.sightFrom)[1]) : 0.0f,
+                      sz = hasSight ? static_cast<float>((*request.sightFrom)[2]) : 0.0f;
+                return ScriptCall("XFWorldState", "Probe", {"Float", "Float", "Float", "Float", "Float", "Float", "Bool", "Float", "Float", "Float"},
+                                  {&x, &y, &z, &radius, &down, &clearance, &hasSight, &sx, &sy, &sz}, cid);
             },
             "world.probe"));
     }

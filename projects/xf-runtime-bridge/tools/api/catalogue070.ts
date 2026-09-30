@@ -166,6 +166,8 @@ export const COMMANDS_070: CommandDef[] = [
       count: int("Points on the ring, 1 to 15. Default 8.", 1, 15),
       radius_m: num("How far to look for walkable ground from each point, 0.2 to 10 m. Default 2.", 0.2, 10),
       down_m: num("How far below each point the ground ray looks, 0.5 to 100 m. Default 10.", 0.5, 100),
+      clearance_m: num("Also cast eight level rays this long from each point and report which are blocked (free space), 0.05 to 3 m.", 0.05, 3),
+      sight_from: point3("Also check the sight line from this world point to each point (static geometry between)."),
     }),
     bridge: { method: "world.probe", timeoutMs: () => 15000 },
   },

@@ -1476,7 +1476,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "world.pin",
     title: "Place an XF map pin",
     description:
-      "Temporary test feature (bridge 0.5.3). Places a map pin with an XF badge and a label, shown on the world map (with the label in its tooltip), on the minimap and in the world through walls, the way the game shows its own markers. Give exactly one of position [x, y, z] (a world point in metres, as game_status and showroom_state report them), piece (a showroom head's index: the pin stands above its eyes and follows it) or at: \"v\" (above where V stands now). label names it (1-48 characters). variant picks the game's pin type whose map filter and fallback icon it uses: custom (default), apartment, clothes or default. lift_m raises it (metres; default 0 at a position, 0.45 above a head or V). At most 8 pins. world.pin.clear, the kill switch and loading a save remove them.",
+      "Temporary test feature (bridge 0.5.3). Places a map pin with an XF badge and a label, shown on the world map (with the label in its tooltip), on the minimap and in the world through walls, the way the game shows its own markers. Give exactly one of position [x, y, z] (a world point in metres, as game_status and showroom_state report them), piece (a showroom head's index: the pin stands above its eyes; 0.7: placed there, so turning the head leaves it and clearing the heads removes it) or at: \"v\" (above where V stands now). label names it (1-48 characters). variant picks the game's pin type whose map filter and fallback icon it uses: custom (default), apartment, clothes or default. lift_m raises it (metres; default 0 at a position, 0.45 above a head or V). At most 8 pins. world.pin.clear, the kill switch and loading a save remove them.",
     permission: "write-world",
     input: obj(
       {
@@ -1520,6 +1520,7 @@ export const CATALOGUE: readonly CommandDef[] = [
       lateral_m: num("Shift the whole lineup to the right as the camera or V sees it (negative: left), -5 to 5 m. With distance_m equal to photo_frame's distance_m (the camera to V's face), a head at lateral 0.6 stands beside her on the same arc and appears at her scale. Default 0.", -5, 5),
       anchor: oneOf("camera (default in photo mode) or v (default in normal play).", ["camera", "v"]),
       replace: bool("Remove the heads set out earlier first (default true)."),
+      avoid_walls: bool("0.7: check each head's eyes for free space and a clear sight line (world_probe) and move a blocked head back or sideways, saying so in moved_for_space. Default true."),
     }),
     undo: "showroom.clear with what: pieces (or all); loading a save also removes them.",
     local: runShowroomSpawn,

@@ -45,6 +45,38 @@ struct State
 };
 State* gState = nullptr;
 
+// The simulated static wall (as Sim060's occluder): a box beside V's place.
+bool HitsWall(const std::array<double, 3>& aFrom, const std::array<double, 3>& aTo, double& aT)
+{
+    const double lo[3]{100.8, 199.0, 9.0}, hi[3]{103.0, 199.4, 13.0};
+    double t0 = 0.0, t1 = 1.0;
+    for (int i = 0; i < 3; ++i)
+    {
+        const double d = aTo[i] - aFrom[i];
+        if (std::abs(d) < 1e-9)
+        {
+            if (aFrom[i] < lo[i] || aFrom[i] > hi[i])
+            {
+                return false;
+            }
+            continue;
+        }
+        double a = (lo[i] - aFrom[i]) / d, b = (hi[i] - aFrom[i]) / d;
+        if (a > b)
+        {
+            std::swap(a, b);
+        }
+        t0 = std::max(t0, a);
+        t1 = std::min(t1, b);
+        if (t0 > t1)
+        {
+            return false;
+        }
+    }
+    aT = t0;
+    return true;
+}
+
 int32_t SlotCount(const std::string& aArea)
 {
     return aArea == "IntegumentarySystemCW" || aArea == "FrontalCortexCW" ? 3 : 1;
@@ -252,6 +284,31 @@ void RegisterSim070(Dispatcher& aDispatcher, GameThreadQueue&, const Config& aCo
                                   }
                                   o["ground"] = p[2] >= 10.0 && p[2] - 10.0 <= request.down ? json{{"z", 10.0}, {"below_m", p[2] - 10.0}, {"material", "concrete"}} : json(nullptr);
                                   o["ceiling_m"] = nullptr;
+                                  if (request.clearance > 0.0)
+                                  {
+                                      int blocked = 0;
+                                      double nearest = request.clearance;
+                                      json yaws = json::array();
+                                      for (int i = 0; i < 8; ++i)
+                                      {
+                                          const double a = 45.0 * i * 3.14159265358979323846 / 180.0;
+                                          const std::array<double, 3> end{p[0] - std::sin(a) * request.clearance, p[1] + std::cos(a) * request.clearance, p[2]};
+                                          double t = 0.0;
+                                          if (HitsWall(p, end, t))
+                                          {
+                                              ++blocked;
+                                              nearest = std::min(nearest, t * request.clearance);
+                                              yaws.push_back(45 * i);
+                                          }
+                                      }
+                                      o["clearance"] = {{"radius_m", request.clearance}, {"blocked", blocked}, {"nearest_m", nearest}, {"blocked_yaws", yaws}};
+                                  }
+                                  if (request.sightFrom)
+                                  {
+                                      double t = 0.0;
+                                      const bool hit = HitsWall(*request.sightFrom, p, t);
+                                      o["sight"] = {{"checked", true}, {"blocked", hit && t < 0.98}};
+                                  }
                                   probes.push_back(o);
                               }
                               json out{{"simulated", true}, {"probes", probes}};

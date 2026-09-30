@@ -74,6 +74,10 @@ export async function runShowroomSpawn(input: Json, context: CommandContext): Pr
     placements = planLayout(anchor, pieces.length, layout, spacing, distance, lateral, { eyes, height, anchorEye });
     heightFrom = input.height_m !== undefined ? "given" : from === "camera" ? "camera" : "natural";
   }
+  // 0.7 (session 7: a head spawned half inside a wall and a bench): each head's eyes are probed for free space (level rays
+  // CLEARANCE_M long) and a clear sight line from the anchor; a blocked head steps back towards the anchor, then sideways,
+  // until a place is clear, and the answer says where it moved and why.
+  const adjusted = input.avoid_walls === false ? [] : await findFreeSpace(context, placements, from === "camera" ? anchor.origin : [anchor.origin[0], anchor.origin[1], anchor.ground + eyes[2]], anchor.forward);
   const raise = Math.round((height - eyes[2]) * 1000) / 1000;
   const notes: string[] = [];
   if (raise > PEDESTAL_BELOW_M) notes.push(`The heads stand ${raise} m above their natural height; the pedestals reach only ${PEDESTAL_BELOW_M} m down, so they end in the air.`);
@@ -82,6 +86,7 @@ export async function runShowroomSpawn(input: Json, context: CommandContext): Pr
     x: p.position[0], y: p.position[1], z: p.position[2], yaw: p.yaw }));
   const placed = await call(context, "showroom.place", { items, replace: input.replace !== false }, 30000);
   const projected = pose ? await projectEyes(context, pose, placements.map((p) => p.eyes!)) : null;
+  for (const a of adjusted) notes.push(a.note);
   if (projected?.some((p) => !p.in_frame)) notes.push(`Head ${projected.filter((p) => !p.in_frame).map((p) => p.index).join(", ")} is outside the frame (projected eyes); fewer heads, a smaller spacing_m or a larger distance_m brings it in.`);
   return { value: { anchor: from, layout, spacing_m: spacing, distance_m: distance, lateral_m: lateral, height_m: height,
     height_from: heightFrom, raised_m: raise,
@@ -89,8 +94,65 @@ export async function runShowroomSpawn(input: Json, context: CommandContext): Pr
     pieces: items.map((item, i) => ({ index: item.index, label: item.label, appearance: item.appearance, position: [item.x, item.y, item.z], eyes: placements[i]!.eyes, yaw: item.yaw,
       ...(projected ? { eyes_on_screen: projected[i] } : {}) })),
     ...(projected ? { projection: { by: projected[0]?.by, units: "window heights from the window's centre, x right, y down; in frame while |y| <= 0.5 and |x| <= aspect/2" } } : {}),
+    ...(adjusted.length ? { moved_for_space: adjusted.map(({ note: _n, ...rest }) => rest) } : {}),
     ...(notes.length ? { notes } : {}),
     ...placed } };
+}
+
+/** How far each head's eyes need to be from static geometry, and the steps a blocked head tries (0.7). */
+export const CLEARANCE_M = 0.3;
+const STEPS: { back: number; side: number }[] = [
+  { back: 0.3, side: 0 }, { back: 0.6, side: 0 }, { back: 0, side: 0.5 }, { back: 0, side: -0.5 }, { back: 0.3, side: 0.5 }, { back: 0.3, side: -0.5 }, { back: 0, side: 1 }, { back: 0, side: -1 },
+];
+
+type Adjustment = { index: number; from: Vec3; to: Vec3 | null; why: string; note: string };
+
+/**
+ * Probes each placement's eyes (world.probe: level rays and a sight line from the anchor) and moves a blocked one to the
+ * first clear step, in place (position and eyes together). Without world.probe (an older bridge) nothing is checked.
+ */
+export async function findFreeSpace(context: CommandContext, placements: Placement[], anchorEye: Vec3, forward: Vec3): Promise<Adjustment[]> {
+  const out: Adjustment[] = [];
+  const probe = async (point: Vec3) => {
+    const response = await context.api.callBridge("world.probe", { points: [point], clearance_m: CLEARANCE_M, sight_from: anchorEye }, context.cid);
+    if (!response.ok) return null;
+    const r = ((response.result as Json).probes as Json[])[0] ?? {};
+    const blockedSides = Number(r.clearance?.blocked ?? 0);
+    const sight = r.sight?.blocked === true;
+    return { clear: blockedSides === 0 && !sight, why: sight ? "static geometry between the anchor and the head" : blockedSides ? `static geometry within ${CLEARANCE_M} m of the head's eyes (${blockedSides} of 8 directions)` : "" };
+  };
+  const h = Math.hypot(forward[0], forward[1]) || 1;
+  const f: Vec3 = [forward[0] / h, forward[1] / h, 0];
+  const right: Vec3 = [f[1], -f[0], 0];
+  for (const p of placements) {
+    if (!p.eyes) continue;
+    const first = await probe(p.eyes);
+    if (!first) return out; // no world.probe: an older bridge
+    if (first.clear) continue;
+    const from = [...p.position] as Vec3;
+    let moved: Vec3 | null = null;
+    for (const step of STEPS) {
+      const d: Vec3 = [-f[0] * step.back + right[0] * step.side, -f[1] * step.back + right[1] * step.side, 0];
+      const eyes: Vec3 = [p.eyes[0] + d[0], p.eyes[1] + d[1], p.eyes[2]];
+      const check = await probe(eyes);
+      if (check?.clear) {
+        p.position = [p.position[0] + d[0], p.position[1] + d[1], p.position[2]].map((v) => Math.round(v * 1000) / 1000) as Vec3;
+        p.eyes = eyes.map((v) => Math.round(v * 1000) / 1000) as Vec3;
+        moved = p.position;
+        break;
+      }
+    }
+    out.push({
+      index: p.index,
+      from,
+      to: moved,
+      why: first.why,
+      note: moved
+        ? `Head ${p.index} was moved ${Math.round(Math.hypot(moved[0] - from[0], moved[1] - from[1]) * 100) / 100} m for free space (${first.why}).`
+        : `Head ${p.index} has ${first.why} and no clear place was found within 1 m; choose another spot or a smaller distance_m.`,
+    });
+  }
+  return out;
 }
 
 /**

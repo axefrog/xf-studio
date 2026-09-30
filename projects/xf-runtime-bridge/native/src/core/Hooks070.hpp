@@ -74,6 +74,9 @@ struct WorldProbeRequest
     double down = 10.0;                         // how far below each point the ground ray looks, 0.5-100 m
     // around V instead of points: a ring of count points at ring_m from V (plus V's own place)
     bool aroundV = false;
+    double clearance = 0.0;                      // 0.7: level rays this long from each point (0: none), 0.05-3 m
+    std::optional<std::array<double, 3>> sightFrom; // a sight line from here to each point
+
     double ringM = 3.0;
     int32_t count = 8;
 };

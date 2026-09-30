@@ -36,6 +36,26 @@
 #include "core/Log.hpp"
 #include "plugin/Overlay.hpp"
 
+// Dear ImGui's DirectX 12 backend (docking branch) asks DXGI for a factory once, to read tearing support for secondary
+// viewports, which the host never opens. Rather than import dxgi.dll (on the reference install ReShade's proxy) and make a
+// factory of our own, the host answers with the factory the game's own swap chain was made from (GetParent): no new DXGI
+// object is created.
+namespace xfb::plugin::overlay
+{
+IDXGISwapChain3* CurrentSwapChain();
+}
+
+extern "C" HRESULT WINAPI CreateDXGIFactory1(REFIID aRiid, void** aOut)
+{
+    if (!aOut)
+    {
+        return E_POINTER;
+    }
+    *aOut = nullptr;
+    auto* swapChain = xfb::plugin::overlay::CurrentSwapChain();
+    return swapChain ? swapChain->GetParent(aRiid, aOut) : E_FAIL;
+}
+
 namespace xfb::plugin::overlay
 {
 namespace
@@ -588,6 +608,11 @@ void* ShutdownDetour(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4)
     return gShutdown(a1, a2, a3, a4);
 }
 } // namespace
+
+IDXGISwapChain3* CurrentSwapChain()
+{
+    return gR.swapChain.Get();
+}
 
 void Install(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk, OverlayHost& aHost)
 {

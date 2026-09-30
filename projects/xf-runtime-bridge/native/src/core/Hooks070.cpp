@@ -195,7 +195,7 @@ WorldStateRequest ParseWorldState(const json& aParams)
 
 WorldProbeRequest ParseWorldProbe(const json& aParams)
 {
-    p::RequireOnly(aParams, {"points", "around_v", "ring_m", "count", "radius_m", "down_m"});
+    p::RequireOnly(aParams, {"points", "around_v", "ring_m", "count", "radius_m", "down_m", "clearance_m", "sight_from"});
     WorldProbeRequest request;
     if (const auto it = aParams.find("points"); it != aParams.end() && !it->is_null())
     {
@@ -225,6 +225,8 @@ WorldProbeRequest ParseWorldProbe(const json& aParams)
     request.count = static_cast<int32_t>(p::CheckInteger(aParams, "count", 1, 15).value_or(8));
     request.radius = p::CheckNumber(aParams, "radius_m", 0.2, 10.0).value_or(2.0);
     request.down = p::CheckNumber(aParams, "down_m", 0.5, 100.0).value_or(10.0);
+    request.clearance = p::CheckNumber(aParams, "clearance_m", 0.05, 3.0).value_or(0.0);
+    request.sightFrom = p::CheckPoint(aParams, "sight_from", 1e5);
     if (request.points.empty() && !request.aroundV)
     {
         p::CheckFail("give points ([x, y, z] each) or around_v: true (a ring around V)");

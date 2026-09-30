@@ -706,6 +706,10 @@ std::string ParamsCode(const std::function<void()>& aParse)
     {
         return e.code;
     }
+    catch (const std::exception& e)
+    {
+        return std::string("exception: ") + e.what();
+    }
 }
 
 void ParamsTests()
@@ -3097,7 +3101,7 @@ void Bridge070Tests()
         Check("0.7 messages show up to 600 characters", longPost["text"].get<std::string>().size() == 600 && longPost["truncated"] == true);
         Check("0.7 choices go with asks only", ParamsCode([] { p::ParseMessage(json{{"text", "hi"}, {"choices", {"A"}}}); }) == "bad_params");
         Check("0.7 at most four choices", ParamsCode([] { p::ParseMessage(json{{"text", "hi"}, {"level", "ask"}, {"choices", {"A", "B", "C", "D", "E"}}}); }) == "bad_params");
-        Check("0.7 a message may be up to 2000 characters long when sent", ParamsCode([] { p::ParseMessage(json{{"text", std::string(1500, 'b')}}); }).empty());
+        Check("0.7 a message may be up to 2000 characters long when sent", ParamsCode([] { p::ParseMessage(json{{"text", std::string(1500, 'b')}}); }) == "ok");
     }
     {
         const auto config = xfb::ParseConfig("[ui]\nanswer_keys = IK_F7, IK_F8\n[overlay]\nenabled = true\ntheme = light\nscale_percent = 150\n");
@@ -3137,7 +3141,7 @@ void Bridge070Tests()
               h::CyberwareUnequipUndo(json{{"area", "ArmsCW"}, {"slot", 0}, {"previous", "Items.StrongArms"}}, false)["method"] == "cyberware.equip" &&
                   h::CyberwareUnequipUndo(json{{"previous", "Items.StrongArms"}}, true).is_null());
         Check("0.7 world.probe needs points or around_v, not both", ParamsCode([] { h::ParseWorldProbe(json::object()); }) == "bad_params" &&
-                                                                        ParamsCode([] { h::ParseWorldProbe(json{{"points", {{1, 2, 3}}}, {"around_v", true}}); }) == "bad_params");
+                                                                        ParamsCode([] { h::ParseWorldProbe(json::parse(R"({"points":[[1,2,3]],"around_v":true})")); }) == "bad_params");
         const auto ring = h::RingPoints({0, 0, 0}, 0.0, 2.0, 4);
         Check("0.7 a ring starts at V and its first point is straight ahead (+Y at yaw 0)",
               ring.size() == 5 && std::abs(ring[1][1] - 2.0) < 1e-9 && std::abs(ring[1][0]) < 1e-9 && std::abs(ring[2][0] + 2.0) < 1e-9);

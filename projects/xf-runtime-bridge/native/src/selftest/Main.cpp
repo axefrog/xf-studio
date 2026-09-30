@@ -1583,7 +1583,7 @@ int wmain(int argc, wchar_t** argv)
                                      sim.pins.push_back(pin);
                                      sim.gameSaveLock = true;
                                      return json{{"simulated", true}, {"id", pin.id}, {"label", pin.label}, {"variant", pin.variant},
-                                                 {"target", pin.target}, {"bound", pin.piece >= 0 ? "object" : "position"},
+                                                 {"target", pin.target}, {"bound", "position"} /* 0.7: every pin is placed at a point (session 7) */,
                                                  {"position", {pin.x, pin.y, pin.z}}, {"pins", pinsJson()},
                                                  {"undo", {{"method", "world.pin.clear"}, {"params", {{"id", pin.id}}}}},
                                                  {"temporary_test_feature", true}};

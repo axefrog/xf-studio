@@ -107,7 +107,10 @@ public abstract class XFWorldState {
   }
 
   // world.probe (read): one point. radius bounds the navmesh search; down is how far below the point the ground ray looks.
-  public static func Probe(cid: String, x: Float, y: Float, z: Float, radius: Float, down: Float) -> String {
+  // 0.7 (session 7: a showroom head spawned half inside a wall): clearance > 0 casts eight level static rays that long from
+  // the point and reports the directions blocked and the nearest hit; sight (hasSight) casts one ray from (sx, sy, sz) to
+  // the point and reports whether static geometry stands between.
+  public static func Probe(cid: String, x: Float, y: Float, z: Float, radius: Float, down: Float, clearance: Float, hasSight: Bool, sx: Float, sy: Float, sz: Float) -> String {
     let game = GetGameInstance();
     let navigation = GameInstance.GetNavigationSystem(game);
     let queries = GameInstance.GetSpatialQueriesSystem(game);
@@ -141,6 +144,29 @@ public abstract class XFWorldState {
       out += ",\"ceiling_m\":" + XFJson.Num(above.Z - z);
     } else {
       out += ",\"ceiling_m\":null";
+    }
+    if clearance > 0.0 {
+      let blocked = 0;
+      let nearest = clearance;
+      let dirs = "";
+      let i = 0;
+      while i < 8 {
+        let a = Deg2Rad(45.0 * Cast<Float>(i));
+        let end = new Vector4(x - SinF(a) * clearance, y + CosF(a) * clearance, z, 1.0);
+        let hit: TraceResult;
+        if queries.SyncRaycastByCollisionGroup(point, end, n"Static", hit, true, false) && TraceResult.IsValid(hit) {
+          let at = Vector4.Vector3To4(hit.position);
+          let d = Vector4.Distance(at, point);
+          blocked += 1;
+          nearest = MinF(nearest, d);
+          dirs += (StrLen(dirs) > 0 ? "," : "") + IntToString(45 * i);
+        }
+        i += 1;
+      }
+      out += ",\"clearance\":{\"radius_m\":" + XFJson.Num(clearance) + ",\"blocked\":" + IntToString(blocked) + ",\"nearest_m\":" + XFJson.Num(nearest) + ",\"blocked_yaws\":[" + dirs + "]}";
+    }
+    if hasSight {
+      out += ",\"sight\":" + XFScene.Ray(new Vector4(sx, sy, sz, 1.0), point);
     }
     let player = GetPlayer(game);
     if IsDefined(player) {

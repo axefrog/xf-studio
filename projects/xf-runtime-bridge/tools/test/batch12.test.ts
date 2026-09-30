@@ -139,6 +139,12 @@ describe("0.7 against the self-test host", () => {
     const probe = await ok(api, "world.probe", { points: [[100, 202, 10.5], [100, 400, 10]] });
     expect(probe.probes[0]).toMatchObject({ navmesh_streamed: true });
     expect(probe.probes[1].navmesh_streamed).toBe(false);
+    // 0.7 (session 7 finding 12): free space and a sight line at a point beside the simulated wall.
+    const wall = await ok(api, "world.probe", { points: [[101.5, 198.8, 11]], clearance_m: 0.5, sight_from: [101.5, 202, 11] });
+    expect(wall.probes[0].clearance.blocked).toBeGreaterThan(0);
+    expect(wall.probes[0].sight.blocked).toBe(true);
+    const open = await ok(api, "world.probe", { points: [[95, 205, 11]], clearance_m: 0.5 });
+    expect(open.probes[0].clearance.blocked).toBe(0);
     const ring = await ok(api, "world.probe", { around_v: true, count: 4, ring_m: 2 });
     expect(ring.probes).toHaveLength(5);
     expect(await refused(api, "world.weather.set", { name: "24h_weather_blizzard" })).toBe("bad_params");

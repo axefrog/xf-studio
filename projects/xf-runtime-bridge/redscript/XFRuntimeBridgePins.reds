@@ -159,7 +159,10 @@ public abstract class XFInkPins {
       return XFJson.Fail("too_many_pins", "the bridge already shows 8 XF pins; remove one with world.pin.clear");
     }
     let data: MappinData;
-    data.mappinType = t"Mappins.DefaultStaticMappin";
+    // 0.7 (session 7: the position pin didn't show in the world, and neither pin on the minimap): the quest system's
+    // dynamic mappin type, which draws in the world, on the map and on the minimap for a plain position, as Appearance
+    // Menu Mod's markers use it (Modules/util.lua SetMarkerAtPosition); DefaultStaticMappin showed on the world map only.
+    data.mappinType = t"Mappins.QuestDynamicMappinDefinition";
     data.variant = XFInkPins.Variant(variant);
     data.active = true;
     data.visibleThroughWalls = true;
@@ -179,17 +182,14 @@ public abstract class XFInkPins {
       if !IsDefined(entity) {
         return XFJson.Fail("not_spawned_yet", "piece " + IntToString(piece) + " isn't in the world yet; try again in a moment");
       }
-      // The head's eyes stand 1.69 m above its entity's origin (the showroom build's head joint plus 5 cm).
+      // The head's eyes stand 1.69 m above its entity's origin (the showroom build's head joint plus 5 cm). 0.7 (session 7:
+      // the object-bound pin drew well above the head, as the game's default circle): the pin is placed at that point, not
+      // bound to the entity, so its height is exactly the eyes plus lift; turning a head doesn't move it, and clearing the
+      // heads removes it (RB-87).
       let origin = entity.GetWorldPosition();
       entry.piece = piece;
       entry.position = new Vector4(origin.X, origin.Y, origin.Z + 1.69 + lift, 1.0);
-      let owner = entity as GameObject;
-      if IsDefined(owner) {
-        entry.mappin = mappins.RegisterMappinWithObject(data, owner, n"", new Vector3(0.0, 0.0, 1.69 + lift));
-        entry.bound = true;
-      } else {
-        entry.mappin = mappins.RegisterMappin(data, entry.position);
-      }
+      entry.mappin = mappins.RegisterMappin(data, entry.position);
     } else {
       if Equals(target, "v") {
         let at = player.GetWorldPosition();

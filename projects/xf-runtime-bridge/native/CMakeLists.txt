@@ -77,7 +77,7 @@ add_library(xfb_imgui STATIC
   ${imgui_SOURCE_DIR}/backends/imgui_impl_dx12.cpp
 )
 target_include_directories(xfb_imgui PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
-target_compile_definitions(xfb_imgui PUBLIC IMGUI_DISABLE_OBSOLETE_FUNCTIONS IMGUI_DISABLE_DEFAULT_SHELL_FUNCTIONS WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_definitions(xfb_imgui PUBLIC IMGUI_DISABLE_OBSOLETE_FUNCTIONS IMGUI_DISABLE_DEFAULT_SHELL_FUNCTIONS IMGUI_DISABLE_WIN32_FUNCTIONS WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(xfb_imgui PRIVATE /W3 /utf-8)
 
 # -----------------------------------------------------------------------------

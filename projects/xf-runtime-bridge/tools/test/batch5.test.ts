@@ -38,7 +38,8 @@ describe("ui.message and the session runner's echo", () => {
     expect(shown.ok, JSON.stringify(shown)).toBe(true);
     if (shown.ok) expect(shown.result).toMatchObject({ shown: true, text: "Open the creator please", undo: { method: "ui.message", params: { clear: true } } });
     for (let i = 1; i <= 4; i++) await api.run("ui.message", { text: `note ${i}` });
-    expect(await texts(api)).toEqual(["info:note 1", "info:note 2", "info:note 3", "info:note 4"]);
+    // 0.7: the unanswered question stays pinned; the oldest other line made room.
+    expect(await texts(api)).toEqual(["ask:Open the creator please", "info:note 2", "info:note 3", "info:note 4"]);
     const cleared = await api.run("ui.message", { clear: true });
     expect(cleared.ok).toBe(true);
     expect(await texts(api)).toEqual([]);

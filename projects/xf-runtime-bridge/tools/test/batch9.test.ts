@@ -132,7 +132,7 @@ describe("bridge 0.5.3 Demo C: XF map pins (world.pin, world.pin.clear)", () => 
     await bridge(api, "showroom.place", { items: [{ index: 0, template: HEAD, appearance: "xfs_p0170d3e01f014a519c3e000000000005", label: "Gloss A", x: 100, y: 203, z: 10, yaw: 180 }] });
     const onHead = await api.run("world.pin", { piece: 0, label: "Gloss A", variant: "clothes" });
     expect(onHead.ok, JSON.stringify(onHead)).toBe(true);
-    if (onHead.ok) expect(onHead.result).toMatchObject({ target: "piece", bound: "object", variant: "clothes" });
+    if (onHead.ok) expect(onHead.result).toMatchObject({ target: "piece", bound: "position", variant: "clothes" });
     const missing = await api.run("world.pin", { piece: 5, label: "none" });
     expect(!missing.ok && missing.error.code).toBe("no_such_piece");
 
