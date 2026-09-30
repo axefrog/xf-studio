@@ -5,12 +5,14 @@
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { HOST_REAL_PATHS } from "../src/host-real-paths";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { canonicalPath as canonicalWith, containmentKey, isBelow, isBelowReal as belowReal, isWithin, isWithinReal as withinReal, overlaps } from "../src/platform/api/path-containment";
 
 const W = "win32" as const, P = "posix" as const;
-const FS = { exists: existsSync, realpath: realpathSync.native };
+// The host's own reads (PIPE-136: existence by lstat, so a link whose target is gone is seen).
+const FS = HOST_REAL_PATHS;
 const canonicalPath = (path: string) => canonicalWith(path, FS);
 const isBelowReal = (child: string, root: string) => belowReal(child, root, FS);
 const isWithinReal = (child: string, root: string) => withinReal(child, root, FS);
@@ -148,6 +150,25 @@ test("real checks: an outside path that reaches in through a link is refused (PI
     expect(isBelowReal(join(outside, "back", "inner", "file.txt"), join(outside, "back"))).toBe(true);
     // And a path written below the real root is inside the root named through the link.
     expect(isBelowReal(join(root, "inner", "file.txt"), join(outside, "back"))).toBe(true);
+  } finally { cleanup(); }
+});
+
+test("real checks: a link whose target is gone is refused, never read as a folder not created yet (PIPE-136)", () => {
+  const dir = scratch();
+  try {
+    const root = join(dir, "root"), outside = join(dir, "outside");
+    mkdirSync(root); mkdirSync(outside);
+    link(outside, join(root, "door"));
+    rmSync(outside, { recursive: true, force: true });
+    // existsSync follows the link and finds nothing: a check built on it read the dangling link as a folder to create (reproduced).
+    expect(existsSync(join(root, "door"))).toBe(false);
+    expect(withinReal(join(root, "door", "new", "file"), root, { exists: existsSync, realpath: realpathSync.native })).toBe(true);
+    // The host's reads see the link, and its real path fails, so it is refused.
+    expect(isBelowReal(join(root, "door", "new", "file"), root)).toBe(false);
+    expect(isWithinReal(join(root, "door"), root)).toBe(false);
+    expect(() => canonicalPath(join(root, "door", "new"))).toThrow("leads nowhere");
+    expect(isBelowReal(join(root, "new", "file"), root)).toBe(true);
+    rmSync(join(root, "door"), { recursive: false, force: true });
   } finally { cleanup(); }
 });
 

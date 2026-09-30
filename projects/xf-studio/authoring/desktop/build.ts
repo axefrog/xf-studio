@@ -1,11 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { closeSync, existsSync, lstatSync, openSync, readFileSync, readSync, realpathSync, statSync } from "node:fs";
+import { closeSync, lstatSync, openSync, readFileSync, readSync, realpathSync, statSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import { canonicalPath, isWithin, isWithinReal, overlaps } from "../src/platform/api/path-containment";
+import { HOST_REAL_PATHS } from "../src/host-real-paths";
 
 /** The host's file-system reads for the containment checks. */
-const HOST_PATHS = { exists: existsSync, realpath: realpathSync.native };
+const HOST_PATHS = HOST_REAL_PATHS;
 import type { LocalSettings } from "../src/local-settings";
 import { eyePlateHeadOverride, type EyePlateTools } from "../src/eye-plate-service";
 import { eyePlatePrerequisite, masculineEyePlatePrerequisite } from "../src/eye-plate-prerequisite";
@@ -151,10 +152,13 @@ function toolHash(path: string): string {
 function privatePath(root: string, target: string): void {
   const base = resolve(root), path = resolve(target);
   if (!isWithin(path, base) || lstatSync(base).isSymbolicLink() || !isWithinReal(path, base, HOST_PATHS)) throw Error("Private build root uses a linked path.");
+  // Every component is lstat'ed, so a link whose target is gone is refused too (PIPE-136).
   let current = base;
   for (const part of path.slice(base.length).split(sep).filter(Boolean)) {
     current = resolve(current, part);
-    if (existsSync(current) && lstatSync(current).isSymbolicLink()) throw Error("Private build root uses a linked path.");
+    let linked = false;
+    try { linked = lstatSync(current).isSymbolicLink(); } catch { break; } // Not there: nor is anything below it.
+    if (linked) throw Error("Private build root uses a linked path.");
   }
 }
 

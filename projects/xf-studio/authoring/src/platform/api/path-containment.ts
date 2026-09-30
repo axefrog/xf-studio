@@ -11,7 +11,7 @@
  * and spaces other than `.` and `..` (Windows trims those into another name).
  *
  * Real checks (`isWithinReal`, `isBelowReal`) also follow links, through the caller's `RealPaths` (the host passes
- * `existsSync` and `realpathSync.native`): the path must be inside the root as written (or inside the root's
+ * `lstat` for existence and `realpathSync.native`): the path must be inside the root as written (or inside the root's
  * canonical form, so a Windows 8.3 short root matches its long form) and its canonical path inside the root's
  * canonical path. So a junction inside the root that leads out is refused, and so is an outside path that reaches in
  * through a junction (PIPE-31).
@@ -20,7 +20,10 @@
 export type PathFlavour = "win32" | "posix";
 const HOST: PathFlavour = typeof process !== "undefined" && process.platform === "win32" ? "win32" : "posix";
 
-/** The two file-system reads the real checks need: whether a path exists, and its real path (links followed, 8.3 names expanded). */
+/**
+ * The two file-system reads the real checks need: whether an entry exists at a path, without following it (a link whose target is
+ * gone exists: the host passes `lstat`, host-real-paths.ts), and its real path (links followed, 8.3 names expanded).
+ */
 export type RealPaths = { readonly exists: (path: string) => boolean; readonly realpath: (path: string) => string };
 
 type Pieces = { readonly root: string; readonly segments: readonly string[]; readonly separator: string };
@@ -105,7 +108,10 @@ export function canonicalPath(path: string, fs: RealPaths): string {
   let count = p.segments.length;
   while (count > 0 && !fs.exists(joined(p, count))) count--;
   if (!fs.exists(joined(p, count))) return joined(p);
-  const real = fs.realpath(joined(p, count)), rest = p.segments.slice(count);
+  // An entry whose real path can't be read (a link that leads nowhere) is refused, never read as a folder to be created (PIPE-136).
+  let real: string;
+  try { real = fs.realpath(joined(p, count)); } catch { throw Error("That path goes through a link that leads nowhere."); }
+  const rest = p.segments.slice(count);
   if (!rest.length) return real;
   return real.endsWith(p.separator) ? real + rest.join(p.separator) : real + p.separator + rest.join(p.separator);
 }

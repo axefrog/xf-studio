@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { defaultLocalSettings } from "../../src/local-settings";
 import { LocalSettingsStore } from "../../src/local-settings-store";
-import { BUILD_TOOLS_SCHEMA, BUN_RETRY_MS, builderEntry, cachedBunProbe, cachedWolvenKitProbe, desktopBuildIssue, desktopPackageAdapter, PROBE_PENDING, probeBun, useBuilderBun,
+import { BUILD_TOOLS_SCHEMA, BUN_RETRY_MS, builderEntry, cachedBunProbe, privateBuildRootsIssue, cachedWolvenKitProbe, desktopBuildIssue, desktopPackageAdapter, PROBE_PENDING, probeBun, useBuilderBun,
   warmBuildProbes, type WolvenKitProbe } from "../build";
 import { probeWolvenKitCliAsync } from "../../src/wolvenkit-cli";
 import { discardCachedPlate, EyePlateError, packagePlateRecord, type EyePlateManifest } from "../../src/eye-plate-service";
@@ -392,3 +392,15 @@ test("a Bun check that couldn't finish is not an answer: its reason shows while 
   await warmBuildProbes({ wolvenKitCli: null }, wrong, async () => ({ exitCode: 0, stdout: "something else", stderr: "", stopped: null }));
   expect(cachedBunProbe(wrong)).toContain("Reinstall");
 }, 30_000);
+
+test("a private build folder that is a link whose target is gone is refused (PIPE-136)", () => {
+  const data = resolve(root, "dangling-data"), gone = resolve(root, "dangling-target");
+  mkdirSync(data, { recursive: true }); mkdirSync(gone, { recursive: true });
+  expect(privateBuildRootsIssue(data, [])).toBeNull();
+  try { symlinkSync(gone, resolve(data, "package-candidates"), process.platform === "win32" ? "junction" : "dir"); }
+  catch (error) { if (String(error).includes("EPERM")) return; throw error; }
+  rmSync(gone, { recursive: true, force: true });
+  // existsSync follows the link and finds nothing, so the old walk read it as a folder not created yet.
+  expect(existsSync(resolve(data, "package-candidates"))).toBe(false);
+  expect(privateBuildRootsIssue(data, [])).toContain("linked path");
+});
