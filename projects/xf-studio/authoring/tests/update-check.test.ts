@@ -366,3 +366,19 @@ test("the palette's check says it's checking at once, closes that notice before 
     .toEqual(["closed: Checking for updates…", "info: XF Studio couldn't check for updates just now. New versions are always on the releases page."]);
   expect((await run("newer")).slice(1)).toEqual(["closed: Checking for updates…", "info: XF Studio 0.2.0-beta.1 is available. You have 0.1.0-alpha.2."]);
 });
+
+test("a check made just after every check of a run was aborted asks again instead of joining the aborting run (UPD-05)", async () => {
+  const held = heldSource(), service = heldService(held);
+  const reload = new AbortController();
+  const before = service.check(reload.signal);
+  expect(held.pending.length).toBe(1);
+  // The page reloads mid-check (its request aborts), and the new page checks at once, before the old run has wound down.
+  reload.abort();
+  const after = service.check(new AbortController().signal);
+  expect(await before).toMatchObject({ result: "failed", reason: "unavailable" });
+  await flush();
+  expect(held.pending.length).toBe(1);
+  expect(held.pending[0]!.signal.aborted).toBe(false);
+  held.answer();
+  expect(await after).toMatchObject({ result: "newer", latest: { version: "0.1.0-beta.1" } });
+});
