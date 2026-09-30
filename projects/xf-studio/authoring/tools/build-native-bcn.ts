@@ -125,9 +125,11 @@ export async function ensureBcnLibrary(options: { zip?: string; out?: string; fo
     env: { LegacyShaderCompiler: findFxc(), CompileShadersOutput: join(build, "shaders") } });
   const generator = findGenerator();
   log(`Configuring and building xfs_bcn.dll (${generator})…`);
+  // No MSBuild worker or Visual C++ telemetry process outlives the build (they would linger on a shared machine and a CI runner).
+  const quiet = { MSBUILDDISABLENODEREUSE: "1", VSCMD_SKIP_SENDTELEMETRY: "1", DOTNET_CLI_TELEMETRY_OPTOUT: "1" };
   run("cmake", ["-S", sourceDir, "-B", join(build, "cmake"), "-G", generator, "-A", "x64",
-    `-DDIRECTXTEX_DIR=${directxtex.replaceAll("\\", "/")}`, "-DUSE_PREBUILT_SHADERS=ON", `-DCOMPILED_SHADERS=${join(build, "shaders").replaceAll("\\", "/")}`]);
-  run("cmake", ["--build", join(build, "cmake"), "--config", "Release", "--target", "xfs_bcn"]);
+    `-DDIRECTXTEX_DIR=${directxtex.replaceAll("\\", "/")}`, "-DUSE_PREBUILT_SHADERS=ON", `-DCOMPILED_SHADERS=${join(build, "shaders").replaceAll("\\", "/")}`], { env: quiet });
+  run("cmake", ["--build", join(build, "cmake"), "--config", "Release", "--target", "xfs_bcn", "--", "/nodeReuse:false"], { env: quiet });
   // The compiler CMake identified (CMakeFiles/<cmake version>/CMakeCXXCompiler.cmake).
   const files = join(build, "cmake", "CMakeFiles");
   const toolset = readdirSync(files).map(name => join(files, name, "CMakeCXXCompiler.cmake")).filter(path => existsSync(path))

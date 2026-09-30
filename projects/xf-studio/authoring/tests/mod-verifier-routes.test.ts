@@ -192,7 +192,7 @@ test("flat, faceted and Fresnel presets pass the self-sourcing verifier with rou
     expect(report.decodedMipChecks[1].levels.some(level => level.widenedRoughness)).toBe(true);
     expect(report.presetRoutes.map(item => item.route)).toEqual(["flat", "faceted", "fresnel"]);
   } finally { rmSync(fixture.build, { recursive: true, force: true }); }
-});
+}, 30_000);
 
 test("route-specific tampering fails: widened roughness, normal chain, mask chain, base colour, constants and bindings", async () => {
   const flip = (path: string, offset: number) => { const data = readFileSync(path); data[offset] ^= 0x10; writeFileSync(path, data); };

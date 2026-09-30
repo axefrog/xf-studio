@@ -203,7 +203,8 @@ test("the independent verifier passes a faithful build and catches injected faul
       await expect(EXPRESSIONS_VERIFIER.verify(built.input()), name).rejects.toThrow(message);
     } finally { built.cleanup(); }
   }
-});
+  // A faithful build and every fault verified in turn: about 6 s on CI's Windows runner, over bun's 5 s default for an async test.
+}, 60_000);
 
 test("the verifier reads a label with a literal backslash and x41, and control characters, as written (PIPE-121)", async () => {
   // A literal backslash then "x41" (the exporter writes it as \\x41), a backslash, quotes, a tab and a control character.
