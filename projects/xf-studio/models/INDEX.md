@@ -354,6 +354,7 @@ Paths under `projects/xf-studio/authoring/src/`. Modules the ratchets list but n
 | `platform/core/view-graph` | `driver:views`, `type:camera-trail`, `type:history-scope`, `type:view` |
 | `platform/core/view-tools` | `driver:views`, `type:tools` |
 | `platform/export/check-runner` | `driver:package`, `runtime:check-worker`, `source:host-clock`, `source:host-workers` |
+| `platform/export/host-real-paths` | `driver:package` |
 | `platform/export/manifest` | `driver:package`, `type:build` |
 | `platform/export/product-builder` | `driver:package`, `runtime:builder-process`, `sink:dist-store`, `source:host-clock`, `source:host-files` |
 | `platform/export/product-check` | `driver:package` |
