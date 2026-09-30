@@ -10,7 +10,7 @@ import { mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Scheduler, simClock } from "strata/testing";
-import { checkpointLibrary, LIBRARY_FLUSH, LibraryDurability, useWriteAheadLog } from "../src/platform/graph-adapters/library-durability";
+import { checkpointDone, checkpointInWorker, checkpointLibrary, LIBRARY_FLUSH, LibraryDurability, useWriteAheadLog } from "../src/platform/graph-adapters/library-durability";
 import { LookLibrary } from "../src/library-store";
 import { CollectionLibrary } from "../src/collection-store";
 import { PartPresetLibrary } from "../src/part-preset-store";
@@ -168,7 +168,7 @@ test("a library in rollback-journal mode moves to WAL when it opens, its rows in
   } finally { reopened.close(); }
 });
 
-test("a flush checkpoints every committed frame; a reader holding the log makes it report unfinished until it lets go", () => {
+test("a flush checkpoints every committed frame; a reader holding the log makes it report unfinished until it lets go", async () => {
   const path = library(), scheduler = new Scheduler(), life = new AbortController();
   const durability = new LibraryDurability(path, { clock: simClock(scheduler), signal: life.signal });
   const looks = new LookLibrary(path, durability), recipe = initialRecipe();
@@ -179,6 +179,7 @@ test("a flush checkpoints every committed frame; a reader holding the log makes 
     expect(before.checkpointed).toBeLessThan(before.log);
     expect(durability.pending).toBe(true);
     scheduler.advance(LIBRARY_FLUSH.quietMs);
+    await durability.idle();                   // the scheduled flush runs on the checkpoint worker (PIPE-137)
     expect(durability.pending).toBe(false);
     const after = walState(path);
     expect(after.checkpointed).toBe(after.log);
@@ -189,9 +190,11 @@ test("a flush checkpoints every committed frame; a reader holding the log makes 
     looks.save({ name: "Two", recipe });
     expect(checkpointLibrary(path)).toBe(false);
     scheduler.advance(LIBRARY_FLUSH.quietMs);
+    await durability.idle();
     expect(durability.pending).toBe(true);     // tried, not finished: retried later
     reader.exec("COMMIT"); reader.close();
     scheduler.advance(LIBRARY_FLUSH.retryMaxMs);
+    await durability.idle();
     expect(durability.pending).toBe(false);
     const done = walState(path);
     expect(done.checkpointed).toBe(done.log);
@@ -275,3 +278,48 @@ test("a process killed while it saves leaves a valid database holding every save
     try { expect(reopened.list().length).toBeGreaterThanOrEqual(acknowledged.length); } finally { reopened.close(); }
   }
 }, 60_000);
+
+test("the scheduled flush runs off the host's thread; writes made meanwhile stay pending; the end of the lifetime flushes on it (PIPE-137)", async () => {
+  const scheduler = new Scheduler(), life = new AbortController(), onThread: number[] = [], background: (() => void)[] = [];
+  const durability = new LibraryDurability("sim.sqlite", { clock: simClock(scheduler), signal: life.signal,
+    sync: () => { onThread.push(scheduler.now); return true; },
+    syncInBackground: () => new Promise<boolean>(resolve => background.push(() => resolve(true))) });
+  durability.wrote();
+  scheduler.advance(LIBRARY_FLUSH.quietMs);
+  expect(onThread).toEqual([]);                // nothing ran on this thread
+  expect(background).toHaveLength(1);
+  // A write while the checkpoint is out isn't covered by it.
+  scheduler.advance(100); durability.wrote();
+  scheduler.advance(LIBRARY_FLUSH.maxMs);      // its timer fires while the first is still out: no second checkpoint
+  expect(background).toHaveLength(1);
+  background.shift()!(); await durability.idle();
+  expect(durability.pending).toBe(true);
+  scheduler.advance(LIBRARY_FLUSH.quietMs);
+  expect(background).toHaveLength(1);
+  background.shift()!(); await durability.idle();
+  expect(durability.pending).toBe(false);
+  // Quitting with a write pending flushes it at once, on this thread.
+  durability.wrote();
+  life.abort();
+  expect(onThread).toEqual([scheduler.now]);
+  expect(durability.pending).toBe(false);
+});
+
+test("the checkpoint worker makes a real library's commits durable on its own connection; a busy checkpoint is never done", async () => {
+  const path = library(), life = new AbortController();
+  const looks = new LookLibrary(path, { wrote() {} });
+  try {
+    looks.save({ name: "One", recipe: initialRecipe() });
+    const before = walState(path);
+    expect(before.checkpointed).toBeLessThan(before.log);
+    expect(await checkpointInWorker(path)).toBe(true);
+    const after = walState(path);
+    expect(after.checkpointed).toBe(after.log);
+    const missing = await checkpointInWorker(join(path, "..", "missing.sqlite")).then(() => null, (error: Error) => error);
+    expect(missing?.message).toContain("unable to open");
+  } finally { looks.close(); life.abort(); }
+  // SQLite reports -1 frames when another checkpoint held the lock: that is busy, not a file outside WAL.
+  expect(checkpointDone({ busy: 1, log: -1, checkpointed: -1 })).toBe(false);
+  expect(checkpointDone({ busy: 0, log: -1, checkpointed: -1 })).toBe(true);
+  expect(checkpointDone({ busy: 0, log: 4, checkpointed: 3 })).toBe(false);
+});
