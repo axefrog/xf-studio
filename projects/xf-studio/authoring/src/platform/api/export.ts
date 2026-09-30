@@ -483,12 +483,34 @@ export interface FeatureExporter<Plan = unknown> {
 
 /** A WolvenKit run's outcome, for the verifiers. */
 export interface ToolResult { readonly exitCode: number | null; readonly stdout: string; readonly stderr: string }
-/** The WolvenKit operations the verifiers run themselves; each writes only into `output`. */
+/**
+ * The WolvenKit operations the verifiers run themselves; each writes only into `output`. They are asynchronous so a verifier can run
+ * independent steps side by side (`sideBySide`); the adapter limits how many run at once. Aborting `signal` stops that step's process.
+ */
 export interface VerifierTools {
-  unbundle(archive: string, output: string): ToolResult;
+  unbundle(archive: string, output: string, signal?: AbortSignal): Promise<ToolResult>;
   /** Serialize every resource below `input` (one folder, or several in one launch) into `output`, flat. */
-  serialize(input: string | readonly string[], output: string): ToolResult;
-  exportTextures(input: string, output: string): ToolResult;
+  serialize(input: string | readonly string[], output: string, signal?: AbortSignal): Promise<ToolResult>;
+  exportTextures(input: string, output: string, signal?: AbortSignal): Promise<ToolResult>;
+}
+
+/**
+ * Run independent verifier steps at once and wait for all of them. The first to fail aborts the others (each step gets a signal that
+ * follows `signal` and that abort) and is the error thrown, never a sibling's cancellation. Resolves with the steps' results in order.
+ */
+export async function sideBySide<T>(signal: AbortSignal | undefined, steps: readonly ((signal: AbortSignal) => Promise<T>)[]): Promise<T[]> {
+  const controller = new AbortController();
+  const follow = () => controller.abort(signal?.reason);
+  if (signal?.aborted) follow(); else signal?.addEventListener("abort", follow, { once: true });
+  let first: { error: unknown } | null = null;
+  try {
+    const settled = await Promise.allSettled(steps.map(async step => {
+      try { return await step(controller.signal); }
+      catch (error) { if (!first) { first = { error }; controller.abort(error); } throw error; }
+    }));
+    if (first) throw (first as { error: unknown }).error;
+    return settled.map(result => (result as PromiseFulfilledResult<T>).value);
+  } finally { signal?.removeEventListener("abort", follow); }
 }
 /**
  * The product's packed archive as the product verifier unbundled it: every member hash-checked against
@@ -516,6 +538,8 @@ export type FeatureVerifyInput = {
   /** An empty or absent directory for the verifier's own conversions. */
   readonly verifyDir: string;
   readonly tools: VerifierTools;
+  /** The Build's cancellation: a verifier passes it (or a signal that follows it) to every tool step. */
+  readonly signal?: AbortSignal;
   /** The package-only snapshot the host planned (every recipe in the build record must equal it). */
   readonly packaged: unknown;
   readonly prerequisites: Readonly<Record<string, unknown>>;
@@ -535,7 +559,7 @@ export type FeatureVerification = { readonly presetCount: number; readonly verif
  */
 export interface FeatureVerifier {
   readonly exporterId: string;
-  verify(input: FeatureVerifyInput): FeatureVerification;
+  verify(input: FeatureVerifyInput): Promise<FeatureVerification>;
 }
 /** What the host composition registers per exporting feature. */
 export type FeatureExporterEntry = { readonly exporter: FeatureExporter<unknown>; readonly verifier: FeatureVerifier };

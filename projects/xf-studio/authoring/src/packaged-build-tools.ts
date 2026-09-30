@@ -3,9 +3,9 @@
  * (NATIVE-75). The desktop packages the builder bundle below one folder with an integrity manifest (desktop/prepare-build-tools.ts) and
  * runs it with `--app-root <that folder>`. Pure apart from the `readText` port.
  *
- * - **A packaged run** (the app root holds the build-tools manifest) loads only a compressor the manifest lists, bound to the manifest's
- *   SHA-256, and ignores `XFS_BCN_LIBRARY` (a developer's switch, like the `XFS_PACKAGE_*` overrides the desktop ignores). The desktop
- *   doesn't package the compressor yet, so its Builds import textures with WolvenKit.
+ * - **A packaged run** (the app root holds the build-tools manifest) loads only the app's own packaged compressor, which the manifest
+ *   lists, bound to the manifest's SHA-256, and ignores `XFS_BCN_LIBRARY` (a developer's switch, like the `XFS_PACKAGE_*` overrides the
+ *   desktop ignores). A manifest that doesn't list it allows none.
  * - **The source tree** takes a developer's `XFS_BCN_LIBRARY` as given, then the copy tools/build-native-bcn.ts built into the ignored
  *   `data/tools/xfs-bcn`, bound to the SHA-256 its `xfs_bcn.json` records.
  *
@@ -18,7 +18,7 @@ import { dirname, join } from "node:path";
 export const BUILD_TOOLS_SCHEMA = "xfs/desktop-build-tools-2";
 /** The builder bundle, below the build-tools folder. */
 export const builderEntry = "app/tools/build.js";
-/** Where the texture compressor would sit below the build-tools folder, listed in the manifest with its SHA-256. */
+/** The texture compressor, below the build-tools folder, listed in the manifest with its SHA-256 (optional: WolvenKit imports textures without it). */
 export const bcnEntry = "app/native/xfs_bcn.dll";
 
 /**

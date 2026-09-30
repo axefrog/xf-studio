@@ -193,3 +193,27 @@ test("real checks: a Windows 8.3 short-named root matches its long-form paths", 
     expect(isBelowReal(join(dir, "elsewhere"), short)).toBe(false);
   } finally { cleanup(); }
 });
+
+test("real checks: under a short-named folder (a long user name's temporary folder), links are judged as under a long one", () => {
+  const top = scratch();
+  try {
+    const base = join(top, "a long user name");
+    mkdirSync(base);
+    const short = shortName(base);
+    if (!short) return;   // this volume keeps no short names
+    const root = join(short, "root"), outside = join(short, "outside");
+    mkdirSync(join(root, "inner"), { recursive: true }); mkdirSync(outside);
+    writeFileSync(join(root, "inner", "file.txt"), "x");
+    link(root, join(outside, "back"));
+    link(outside, join(root, "door"));
+    // A root given as a link, with the paths below the real root written through the short folder.
+    expect(isBelowReal(join(root, "inner", "file.txt"), join(outside, "back"))).toBe(true);
+    expect(isBelowReal(join(outside, "back", "inner", "file.txt"), join(outside, "back"))).toBe(true);
+    // Still refused: an outside path reaching in through a link, and a link inside the root that leads out.
+    expect(isBelowReal(join(outside, "back", "inner", "file.txt"), root)).toBe(false);
+    expect(isBelowReal(join(root, "door", "x"), root)).toBe(false);
+    // The long form of the shared folder is the same folder.
+    expect(isBelowReal(join(base, "root", "inner", "file.txt"), root)).toBe(true);
+    expect(isBelowReal(join(base, "outside", "back", "inner", "file.txt"), root)).toBe(false);
+  } finally { cleanup(); }
+});

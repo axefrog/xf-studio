@@ -148,7 +148,7 @@ export async function buildShowroom(options: ShowroomBuildOptions): Promise<{ ma
   const verifier = options.verifierTools(options.wolvenkit, options.gamepath);
   const unbundled = join(work, "eye-unbundled");
   mkdirSync(unbundled);
-  const run = verifier.unbundle(eyeArchive, unbundled);
+  const run = await verifier.unbundle(eyeArchive, unbundled, options.signal);
   if (run.exitCode !== 0 || /\bError\s*\]|Unhandled exception/.test(run.stdout + run.stderr))
     fail("package_tool_failed", `WolvenKit couldn't unpack the verified eye-makeup archive: ${(run.stdout + run.stderr).slice(-2000)}`);
   const eyeFiles = listGeneratedFiles(unbundled);
@@ -198,7 +198,7 @@ export async function buildShowroom(options: ShowroomBuildOptions): Promise<{ ma
   const archive = join(packDir, `${paths.archive}.archive`);
   renameSync(join(packDir, "archive.archive"), archive);
   const archiveSha = fileHash(archive);
-  const verification = verifyShowroomArchive({ archive, archiveSha256: archiveSha, files: staged, tools: verifier, work: join(work, "verify"),
+  const verification = await verifyShowroomArchive({ archive, archiveSha256: archiveSha, files: staged, tools: verifier, work: join(work, "verify"),
     expected: { depot, pieces: pieces.map(p => p.appearance), skin, eyes, eyeUnbundled: unbundled, eyeFiles } });
   log("independent showroom verification complete");
 

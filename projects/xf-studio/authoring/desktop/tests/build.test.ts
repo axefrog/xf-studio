@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { defaultLocalSettings } from "../../src/local-settings";
 import { LocalSettingsStore } from "../../src/local-settings-store";
-import { BUILD_TOOLS_SCHEMA, BUN_RETRY_MS, builderEntry, cachedBunProbe, privateBuildRootsIssue, cachedWolvenKitProbe, desktopBuildIssue, desktopPackageAdapter, PROBE_PENDING, probeBun, useBuilderBun,
+import { BUILD_TOOLS_SCHEMA, bcnEntry, BUN_RETRY_MS, builderEntry, cachedBunProbe, privateBuildRootsIssue, cachedWolvenKitProbe, desktopBuildIssue, desktopPackageAdapter, PROBE_PENDING, probeBun, useBuilderBun,
   warmBuildProbes, type WolvenKitProbe } from "../build";
 import { probeWolvenKitCliAsync } from "../../src/wolvenkit-cli";
 import { discardCachedPlate, EyePlateError, packagePlateRecord, type EyePlateManifest } from "../../src/eye-plate-service";
@@ -109,6 +109,28 @@ test("Build readiness requires intact packaged tools, configured inputs and disj
   expect(desktopBuildIssue(h.settings, h.data, h.tools, fixtureWolvenKit)).toContain("integrity");
   // The earlier Python tool bundle is no longer accepted.
   writeFileSync(resolve(h.tools, "manifest.json"), JSON.stringify({ schema: "xfs/desktop-build-tools-1", files: {} }));
+  expect(desktopBuildIssue(h.settings, h.data, h.tools, fixtureWolvenKit)).toContain("incomplete");
+});
+
+test("the packaged texture compressor is optional but, when listed and present, must be the listed bytes", () => {
+  const h = host();
+  const dll = resolve(h.tools, bcnEntry), hash = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
+  mkdirSync(resolve(dll, ".."), { recursive: true });
+  writeFileSync(dll, "MZ compressor fixture");
+  const manifest = (files: Record<string, string>) => writeFileSync(resolve(h.tools, "manifest.json"), JSON.stringify({ schema: BUILD_TOOLS_SCHEMA, files }));
+  const builder = hash(resolve(h.tools, builderEntry));
+  manifest({ [builderEntry]: builder, [bcnEntry]: hash(dll) });
+  expect(desktopBuildIssue(h.settings, h.data, h.tools, fixtureWolvenKit)).toBeNull();
+  // Gone after install: the builder imports textures with WolvenKit instead, so Build stays ready.
+  rmSync(dll);
+  expect(desktopBuildIssue(h.settings, h.data, h.tools, fixtureWolvenKit)).toBeNull();
+  // Present but changed: never loaded, the install needs repairing.
+  writeFileSync(dll, "MZ tampered");
+  expect(desktopBuildIssue(h.settings, h.data, h.tools, fixtureWolvenKit)).toContain("integrity");
+  // The builder itself stays required, and nothing else may be listed.
+  manifest({ [bcnEntry]: hash(dll) });
+  expect(desktopBuildIssue(h.settings, h.data, h.tools, fixtureWolvenKit)).toContain("incomplete");
+  manifest({ [builderEntry]: builder, "app/native/other.dll": "0".repeat(64) });
   expect(desktopBuildIssue(h.settings, h.data, h.tools, fixtureWolvenKit)).toContain("incomplete");
 });
 

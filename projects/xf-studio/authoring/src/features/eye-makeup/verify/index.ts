@@ -16,7 +16,7 @@ type PlateInput = { mesh?: unknown; morph?: unknown; morphTargets?: unknown; rec
 
 export const EYE_MAKEUP_VERIFIER: FeatureVerifier = Object.freeze<FeatureVerifier>({
   exporterId: EYE_MAKEUP_EXPORTER_ID,
-  verify(input) {
+  async verify(input) {
     const plate = input.prerequisites[EYE_PLATE_PREREQUISITE] as PlateInput | undefined;
     ensure(plate && typeof plate.mesh === "string" && typeof plate.morph === "string" && typeof plate.record?.meshSha256 === "string" &&
       typeof plate.record?.morphSha256 === "string", "The verifier needs the plate the build packaged");
@@ -25,7 +25,8 @@ export const EYE_MAKEUP_VERIFIER: FeatureVerifier = Object.freeze<FeatureVerifie
     const his = given === undefined || (given as { unavailable?: unknown } | null)?.unavailable !== undefined ? undefined : given as PlateInput;
     ensure(!his || typeof his.mesh === "string" && typeof his.morph === "string" && typeof his.record?.meshSha256 === "string" &&
       typeof his.record?.morphSha256 === "string", "The verifier needs the masculine plate the build packaged");
-    const report = verifyEyeMakeupBuild({ work: input.work, staging: input.staging, unpacked: input.unpacked, tools: input.tools,
+    const report = await verifyEyeMakeupBuild({ work: input.work, staging: input.staging, unpacked: input.unpacked, tools: input.tools,
+      ...(input.signal ? { signal: input.signal } : {}),
       workDir: input.verifyDir, packagedCollection: input.packaged,
       plate: { mesh: plate.mesh as string, morph: plate.morph as string, meshSha256: plate.record!.meshSha256 as string,
         morphSha256: plate.record!.morphSha256 as string },

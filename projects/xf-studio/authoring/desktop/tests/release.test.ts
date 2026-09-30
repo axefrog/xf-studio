@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import config from "../electrobun.config";
 import desktopPackage from "../package.json";
 import { noticeIssues, requireLicence } from "../notices";
+import directxtexPin from "../../native/bcn/directxtex.json";
 import { INNO_SETUP } from "../inno-setup";
 import { appVersion, changelogPath, changelogSection, checkTag, isPrerelease, parseChecksums, parseReleaseVersion,
   noticesAssetName, releaseNotes, releaseTag, releaseTitle, setupAssetName, stageRelease, verifyStaged } from "../release";
@@ -159,7 +160,7 @@ describe("third-party notices", () => {
   const notices = readFileSync(resolve(import.meta.dir, "../../../THIRD_PARTY_NOTICES.md"), "utf8");
   const facts = { binaries: ["bun.exe", "launcher.exe", "ElectrobunCore.dll", "libNativeWrapper.dll", "libasar.dll",
     "bspatch.exe", "zig-zstd.exe"], bunVersion: "1.4.0", electrobunVersion: "2.0.2", threeVersion: "0.186.0",
-    innoSetupVersion: "6.7.3" };
+    innoSetupVersion: "6.7.3", directxtexVersion: "may2026" };
 
   test("the checked-in notices cover the known shipped programs and versions", () => {
     expect(noticeIssues(notices, facts)).toEqual([]);
@@ -176,6 +177,14 @@ describe("third-party notices", () => {
     expect(noticeIssues(notices.replace("### Electrobun (MIT)", ""), facts)).toEqual(["Missing licence text: Electrobun (MIT)."]);
     expect(noticeIssues(notices, { ...facts, innoSetupVersion: "6.8.0" })).toEqual(["Inno Setup 6.8.0 is not the version listed."]);
     expect(noticeIssues(notices.replace("### Inno Setup License", ""), facts)).toEqual(["Missing licence text: Inno Setup License."]);
+    expect(noticeIssues(notices, { ...facts, directxtexVersion: "jul2026" })).toEqual(["DirectXTex jul2026 is not the version listed."]);
+    expect(noticeIssues(notices.replace("### DirectXTex (MIT)", ""), facts)).toEqual(["Missing licence text: DirectXTex (MIT)."]);
+    expect(noticeIssues(notices.replaceAll("`Resources/app/build-tools/app/native/xfs_bcn.dll`", "the compressor"), facts))
+      .toEqual(["The packaged texture compressor app/native/xfs_bcn.dll is not named."]);
+  });
+
+  test("the notices list the pinned DirectXTex release the texture compressor is built from", () => {
+    expect(noticeIssues(notices, { ...facts, directxtexVersion: directxtexPin.release })).toEqual([]);
   });
 
   test("the notices list the pinned Inno Setup release that builds the setup program", () => {

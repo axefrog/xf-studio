@@ -4,10 +4,12 @@
  * writes (plate cache, build, dist, kept intermediates) stays below the scratch folder given; nothing is installed.
  * Run it under the memory guard: every WolvenKit launch in it is real.
  *
- *   bun tools/build-bench.ts <collection.json> <scratch dir> [runs=1] [--keep]
+ *   bun tools/build-bench.ts <collection.json> <scratch dir> [runs=1] [--keep] [--alternate-verifier]
  *
  * The first run prepares the plates into `<scratch>/plate-cache` when they aren't there (the cold Build). `--keep`
  * copies each Build's work folder to `<scratch>/kept/<run>` before the host removes it (resources, logs, archives).
+ * `--alternate-verifier` alternates the verifier's order run by run: odd runs one WolvenKit step at a time in the order they were
+ * queued (`XFS_VERIFIER_CONCURRENCY=1`, the order before the async verifier), even runs side by side (the default).
  * Prints one JSON line per run: total seconds, seconds at which each stage started, the host's answer.
  */
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -19,7 +21,7 @@ import { STUDIO_EXPORTERS } from "../src/compose/exporters";
 import { EYE_PLATE_MASCULINE_PREREQUISITE, EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
 
 const args = process.argv.slice(2).filter(arg => !arg.startsWith("--"));
-const keep = process.argv.includes("--keep");
+const keep = process.argv.includes("--keep"), alternate = process.argv.includes("--alternate-verifier");
 const [collectionArg, scratchArg, runsArg = "1"] = args;
 if (!collectionArg || !scratchArg) throw Error("Usage: bun tools/build-bench.ts <collection.json> <scratch dir> [runs] [--keep]");
 const scratch = resolve(scratchArg), runs = Number(runsArg);
@@ -47,12 +49,14 @@ adapter.runBuilder = async (argv, run) => {
 };
 mkdirSync(scratch, { recursive: true });
 for (let run = 1; run <= runs; run++) {
+  const verifier = alternate ? (run % 2 ? "one-at-a-time" : "side-by-side") : "default";
+  if (alternate && run % 2) process.env.XFS_VERIFIER_CONCURRENCY = "1"; else delete process.env.XFS_VERIFIER_CONCURRENCY;
   const started = runStarted = performance.now(), stages: Record<string, number> = {};
   const outcome = await runProductBuild(adapter, collection, new AbortController().signal, undefined, progress => {
     stages[progress.stage] ??= +((performance.now() - started) / 1000).toFixed(2);
   });
   const seconds = +((performance.now() - started) / 1000).toFixed(2);
-  const answer = outcome.ok ? { ok: true, products: (outcome.result as { products?: readonly { package: string; archiveSha256: string }[] }).products?.map(p => ({ package: p.package, archiveSha256: p.archiveSha256 })) }
+  const answer = outcome.ok ? { ok: true, products: (outcome.result as unknown as { products?: { package: string; archiveSha256: string }[] }).products?.map(p => ({ package: p.package, archiveSha256: p.archiveSha256 })) }
     : outcome;
-  console.log(JSON.stringify({ run, seconds, stages, answer }));
+  console.log(JSON.stringify({ run, verifier, seconds, verifySeconds: stages.verify === undefined ? null : +(seconds - stages.verify).toFixed(2), stages, answer }));
 }

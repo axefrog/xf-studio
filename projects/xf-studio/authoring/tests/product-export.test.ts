@@ -5,7 +5,7 @@
  * reader for versions 1 and 2.
  */
 import { afterAll, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { runProductCommand } from "../src/platform/export/product-builder";
@@ -20,6 +20,7 @@ import { EYE_MAKEUP_EXPORTER as EYE_EXPORTER } from "../src/features/eye-makeup/
 import { packagePlateRecord, type EyePlateManifest } from "../src/eye-plate-service";
 import { plateReachInput } from "../src/plate-uv-footprint-io";
 import { eyeEntry, fakeEyeVerifier, fakeTools, fakeVerifierTools, FOOTPRINT, LIPS, LIPS_ENTRY, LIPS_EXPORTER, sha, writePlate } from "./fixtures/product-fixture";
+import type { FeatureVerifier } from "../src/platform/api";
 
 const fixture = JSON.parse(readFileSync(resolve(import.meta.dir, "../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
 const root = realpathSync.native(mkdtempSync(join(tmpdir(), "xfs-product-export-")));
@@ -245,3 +246,40 @@ test("a package plan this build can't use refuses Check and Build with its own c
   expect(refusal({ schema: PACKAGE_PLAN_1, products: [{ id: OTHER, features: [LIPS], selectorLabels: {} }] })).toMatchObject({ code: "package_plan_newer" });
   expect(refusal({ schema: PACKAGE_PLAN_1, products: [{ id: "x", features: [] }] })).toMatchObject({ code: "package_plan_damaged" });
 });
+
+test("the features' verifiers run side by side: the first failure stops the other and is what the Build reports; cancelling stops both (PIPE-130)", async () => {
+  const dir = resolve(root, crypto.randomUUID());
+  mkdirSync(join(dir, "game"), { recursive: true });
+  mkdirSync(join(dir, "tools"), { recursive: true });
+  const { plate, manifestFile } = writePlate(dir);
+  writeFileSync(join(dir, "tools", "WolvenKit.CLI.exe"), "fixture");
+  writeFileSync(join(dir, "collection.json"), JSON.stringify(looks()));
+  // Each verifier waits on its signal; the eye verifier fails after `failAfter` ms unless stopped first.
+  const waiting = (id: string, log: string[], failAfter?: number): FeatureVerifier => ({ exporterId: id,
+    verify: input => new Promise((_done, stop) => {
+      log.push(`${id} started`);
+      const stopped = () => { clearTimeout(timer); log.push(`${id} stopped`); stop(Error("stopped")); };
+      const timer = failAfter === undefined ? undefined
+        : setTimeout(() => { input.signal!.removeEventListener("abort", stopped); stop(Error(`${id} found a fault`)); }, failAfter);
+      input.signal!.addEventListener("abort", stopped, { once: true });
+    }) });
+  const run = (log: string[], signal?: AbortSignal, failAfter?: number) => {
+    const packed = new Map<string, string>();
+    return runProductCommand({ exporters: [eyeEntry(waiting(EYE_EXPORTER.id, log, failAfter)), { ...LIPS_ENTRY, verifier: waiting(LIPS_ENTRY.verifier.exporterId, log) }],
+      collection: join(dir, "collection.json"), prerequisites: { [EYE_PLATE_PREREQUISITE]: { directory: plate, manifest: manifestFile } },
+      wolvenkit: join(dir, "tools", "WolvenKit.CLI.exe"), gamepath: join(dir, "game"), appRoot: resolve(import.meta.dir, ".."), signal,
+      buildRoot: join(dir, `build-${log.length}-${failAfter}`), distRoot: join(dir, "dist"), tools: () => fakeTools([], packed), verifierTools: () => fakeVerifierTools(packed) });
+  };
+  const failed: string[] = [];
+  const failure = await run(failed, undefined, 30).then(() => null, error => error);
+  expect(failure).toMatchObject({ code: "package_verification_failed" });
+  expect(String(failure.message)).toContain(`${EYE_EXPORTER.id} found a fault`);
+  expect(failed).toEqual([`${EYE_EXPORTER.id} started`, `${LIPS_ENTRY.verifier.exporterId} started`, `${LIPS_ENTRY.verifier.exporterId} stopped`]);
+  const cancelled: string[] = [], controller = new AbortController();
+  const building = run(cancelled, controller.signal);
+  while (cancelled.length < 2) await Bun.sleep(5);
+  controller.abort();
+  expect(await building.then(() => null, error => error)).toMatchObject({ code: "package_build_cancelled" });
+  expect(cancelled.filter(line => line.endsWith("stopped")).sort()).toEqual([`${EYE_EXPORTER.id} stopped`, `${LIPS_ENTRY.verifier.exporterId} stopped`]);
+  expect(existsSync(join(dir, "dist"))).toBe(false);
+}, 30_000);

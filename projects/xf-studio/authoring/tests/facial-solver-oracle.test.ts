@@ -16,12 +16,13 @@ const available = existsSync(join(fixture, "female", "cases.json")) && existsSyn
 
 oracleDescribe(available, "the facial solver oracle needs its fixture (bun tools/facial-solver-oracle.ts --generate, with Python and the IO Suite) and the local facial intake.")(
   "XF Studio's facial solver against the IO Suite", () => {
-    const rig = JSON.parse(readFileSync(paths.rigJson, "utf8"));
+    // Read inside the tests: Bun still runs a skipped describe's body, where the intake may be missing (CI).
+    const rig = () => JSON.parse(readFileSync(paths.rigJson, "utf8"));
     for (const [name, setupPath] of [["female", paths.setupJson], ["male", paths.maleSetupJson]] as const) {
       test(`${name} setup: every case within 1e-5 rad, 1e-6 m and 1e-6 on the processed tracks`, () => {
         const data = readFixture(join(fixture, name));
         if (!data || !existsSync(setupPath)) return;
-        const reports = compareFixture(compileFacialRig(rig, JSON.parse(readFileSync(setupPath, "utf8"))), data);
+        const reports = compareFixture(compileFacialRig(rig(), JSON.parse(readFileSync(setupPath, "utf8"))), data);
         expect(reports.length).toBeGreaterThan(0);
         for (const group of reports) expect({ group: group.group, failures: group.failures }).toEqual({ group: group.group, failures: [] });
       }, 120_000);

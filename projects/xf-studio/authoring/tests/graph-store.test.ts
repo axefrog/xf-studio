@@ -114,7 +114,7 @@ test("daily backups: one a day, seven daily and four weekly kept, purged nodes r
     expect(existsSync(kept)).toBe(true);
     expect(readdirSync(join(dir, "backups")).some(name => name.includes("pre-restore"))).toBe(true);
   } finally { cleanup(); }
-});
+}, 30_000);   // Several backup and purge rounds on disk: about 5 s on CI's Windows runner, over bun's 5 s default.
 
 /** G1's `events` table, as libraries made before the positions migration have it (CORE-128). */
 const G1_EVENTS = `CREATE TABLE events (pos INTEGER PRIMARY KEY, node TEXT NOT NULL, type TEXT NOT NULL, seq INTEGER NOT NULL,
@@ -188,7 +188,7 @@ test("a purge whose backups are locked stays pending and finishes later; the pur
     expect(raw(library).retryPurges()).toEqual([]);
     expect(library.backups.list().every(item => item.nodes === 0)).toBe(true);
   } finally { library.close(); cleanup(); }
-});
+}, 30_000);   // Several backup and purge rounds on disk: about 5 s on CI's Windows runner, over bun's 5 s default.
 
 test("restore is refused while another connection has the library open", async () => {
   const dir = folder(), path = join(dir, "library.sqlite");

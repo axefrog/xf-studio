@@ -21,7 +21,7 @@ if (!build || !wolvenkit || !gamepath || (morphTargets !== undefined && !/^\d+$/
   process.exit(2);
 }
 try {
-  const report = verifyBuild({ build, tools: createWolvenKitVerifierTools(resolve(wolvenkit), resolve(gamepath)), workDir: option("--work-dir"),
+  const report = await verifyBuild({ build, tools: createWolvenKitVerifierTools(resolve(wolvenkit), resolve(gamepath)), workDir: option("--work-dir"),
     morphTargets: morphTargets === undefined ? undefined : Number(morphTargets) });
   writeFileSync(resolve(option("--report") ?? join(build, "verification.json")), JSON.stringify(report, null, 2) + "\n", "utf8");
   const { resolvedDynamicPaths, decodedPixelChecks, limits, ...brief } = report;

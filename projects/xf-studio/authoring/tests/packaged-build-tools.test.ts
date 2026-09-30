@@ -19,7 +19,7 @@ const hex = "ab".repeat(32);
 test("a packaged run loads only a compressor its manifest lists, bound to its hash, and ignores XFS_BCN_LIBRARY", () => {
   const env = { XFS_BCN_LIBRARY: "/elsewhere/other.dll" };
   const manifest = (listed: Record<string, string>) => files({ "/tools/manifest.json": JSON.stringify({ schema: BUILD_TOOLS_SCHEMA, files: listed }) });
-  // Today's desktop app packages no compressor: none may load, whatever the environment says.
+  // A manifest that doesn't list the compressor (XFS_BCN=skip) allows none, whatever the environment says.
   expect(bcnCandidates("/tools", "/tools/app", env, manifest({ [builderEntry]: "0".repeat(64) }))).toEqual([]);
   expect(slashes(bcnCandidates("/tools", "/tools/app", env, manifest({ [builderEntry]: "0".repeat(64), [bcnEntry]: hex }))))
     .toEqual([{ path: "/tools/app/native/xfs_bcn.dll", sha256: hex }]);

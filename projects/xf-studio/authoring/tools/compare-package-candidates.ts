@@ -46,7 +46,7 @@ export function treeDifferences(label: string, a: readonly FileRecord[], b: read
 }
 
 /** Compare two candidate folders; `unbundle` is WolvenKit's (or a test's stand-in) and writes only below `work`. */
-export function compareCandidates(a: string, b: string, unbundle: VerifierTools["unbundle"], work: string): CandidateComparison {
+export async function compareCandidates(a: string, b: string, unbundle: VerifierTools["unbundle"], work: string): Promise<CandidateComparison> {
   const read = (root: string) => {
     const raw = JSON.parse(readFileSync(join(root, "manifest.json"), "utf8"));
     return { raw, view: readPackageManifest(raw, "eye-makeup") };
@@ -65,14 +65,15 @@ export function compareCandidates(a: string, b: string, unbundle: VerifierTools[
   const payload = (root: string, archive: string, suffix: string) => join(root, "archive", "pc", "mod", `${archive}${suffix}`);
   if (!readFileSync(payload(a, left.view.archive, ".archive.xl")).equals(readFileSync(payload(b, right.view.archive, ".archive.xl"))))
     differences.push("the .archive.xl files differ");
-  const members = (root: string, archive: string, name: string) => {
+  const members = async (root: string, archive: string, name: string) => {
     const output = join(work, name);
     mkdirSync(output, { recursive: true });
-    const run = unbundle(payload(root, archive, ".archive"), output);
+    const run = await unbundle(payload(root, archive, ".archive"), output);
     if (run.exitCode !== 0) throw Error(`WolvenKit could not unbundle ${name}: ${(run.stdout + run.stderr).slice(-2000)}`);
     return treeFiles(output);
   };
-  const x = members(a, left.view.archive, "a"), y = members(b, right.view.archive, "b");
+  // The two unbundles don't depend on each other.
+  const [x, y] = await Promise.all([members(a, left.view.archive, "a"), members(b, right.view.archive, "b")]);
   differences.push(...treeDifferences("archive members", x, y));
   return { identical: !differences.length, differences, members: x.length };
 }
@@ -97,7 +98,7 @@ if (import.meta.main) {
   const scratch = work ? resolve(work) : mkdtempSync(join(base, "candidate-compare-"));
   if (existsSync(scratch) && readdirSync(scratch).length) { console.error(`The work folder must be empty: ${scratch}`); process.exit(2); }
   try {
-    const report = compareCandidates(positional[0], positional[1], createWolvenKitVerifierTools(wolvenkit, gamepath).unbundle, scratch);
+    const report = await compareCandidates(positional[0], positional[1], createWolvenKitVerifierTools(wolvenkit, gamepath).unbundle, scratch);
     for (const [left, right] of trees) {
       if (!statSync(left).isDirectory() || !statSync(right).isDirectory()) throw Error(`Not a folder pair: ${left} ${right}`);
       report.differences.push(...treeDifferences(`tree ${left}`, treeFiles(left, true), treeFiles(right, true)));

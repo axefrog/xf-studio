@@ -45,7 +45,7 @@ import { checkArchiveXl, checkResources, ensure, expectedPlateLifts, verifierBod
 import { contributionsOf, errorStats, expectedChain, facetedReference, halve, maskReference, normalInputOf, uniformReference,
   type ContributionPlanes, type ErrorStats } from "./texture-checks";
 import { checkAccentChain, checkGlitterChains, splitChain, type AccentReport, type GlitterChainReport } from "./glitter-checks";
-import type { GeneratedFile, ToolResult, UnpackedView, VerifierTools } from "../../../platform/api";
+import { sideBySide, type GeneratedFile, type ToolResult, type UnpackedView, type VerifierTools } from "../../../platform/api";
 import { DENSE_INSIDE, expectedUvConstants, expectedWindow, headMaskPlacement, mappingOffset, mappingStats, plateUvSamples, sameWindow, storedBc4Level0,
   type MappingStats, type PlateUvSamples, type ReferenceCrop, type VerifierWindow } from "./uv-window";
 
@@ -72,6 +72,8 @@ export interface VerifyBuildOptions {
   readonly build: string;
   /** The verifier's WolvenKit operations (src/verifier-wolvenkit.ts, or a test fake). */
   readonly tools: VerifierTools;
+  /** The Build's cancellation, followed by every WolvenKit step (a failed step also stops its siblings). */
+  readonly signal?: AbortSignal;
   /** The packaged (filtered) collection the host prepared; every recipe in the build record must equal it. */
   readonly packagedCollection?: unknown;
   /** Empty or absent directory for the verifier's own files; defaults to <build>/verify. */
@@ -528,8 +530,8 @@ function plateInputs(build: Node, options: Pick<VerifyBuildOptions, "plate">) {
   return { files, start };
 }
 
-/** Verify one intermediate build in the standalone layout; throws VerificationError on the first failed check. */
-export function verifyBuild(options: VerifyBuildOptions): VerificationReport {
+/** Verify one intermediate build in the standalone layout; rejects with VerificationError on the first failed check. */
+export async function verifyBuild(options: VerifyBuildOptions): Promise<VerificationReport> {
   const out = resolve(options.build), tools = options.tools;
   ensure(tools && typeof tools.unbundle === "function" && typeof tools.serialize === "function" && typeof tools.exportTextures === "function",
     "The verifier needs its WolvenKit tools");
@@ -549,7 +551,7 @@ export function verifyBuild(options: VerifyBuildOptions): VerificationReport {
   ensure(archiveSha256 === build.archiveSha256, "Packed archive differs from the build record");
   const xlBytes = readFileSync(join(packageDir, plan.namespace + ".archive.xl"));
   // Unbundle the verified archive copy; every member must match the build record byte for byte.
-  runTool(logs, "unbundle", () => tools.unbundle(archiveCopy, unpacked));
+  await runTool(logs, "unbundle", () => tools.unbundle(archiveCopy, unpacked, options.signal));
   const files = listFiles(unpacked);
   ensure(files.length === build.artifacts.length, `Unpacked ${files.length} files; expected ${build.artifacts.length}`);
   return verifyEyeMakeupBuild({ ...options, work: out, staging: join(out, "archive"), workDir: work,
@@ -558,8 +560,8 @@ export function verifyBuild(options: VerifyBuildOptions): VerificationReport {
 }
 
 /** Run one verifier WolvenKit step, keep its log, and require it to have succeeded. */
-function runTool(logs: string, label: string, call: () => ToolResult) {
-  const result = call();
+async function runTool(logs: string, label: string, call: () => Promise<ToolResult>) {
+  const result = await call();
   writeFileSync(join(logs, `${label}.log`), result.stdout + result.stderr, "utf8");
   ensure(result.exitCode === 0 && !/\bError\s*\]|Unhandled exception/.test(result.stdout + result.stderr),
     `WolvenKit ${label} failed: ${(result.stdout + result.stderr).slice(-2000)}`);
@@ -568,10 +570,11 @@ function runTool(logs: string, label: string, call: () => ToolResult) {
 /**
  * Eye makeup's independent checks of its resources in an unpacked product archive: plate provenance, the
  * generated tree, routes re-derived from the recipes, the `.archive.xl` entries, then its own conversions of its
- * hash-checked members (resources, plate geometry, decoded pixels and mips). Throws VerificationError on the
- * first failed check.
+ * hash-checked members (resources, plate geometry, decoded pixels and mips). Rejects with VerificationError on the
+ * first failed check. Its WolvenKit conversions (one serialize, one texture export per texture folder) don't depend on each other, so
+ * they run side by side, as many at once as the tools allow; the first to fail stops the others.
  */
-export function verifyEyeMakeupBuild(options: FeatureVerifyOptions): VerificationReport {
+export async function verifyEyeMakeupBuild(options: FeatureVerifyOptions): Promise<VerificationReport> {
   const out = resolve(options.work), tools = options.tools, view = options.unpacked;
   ensure(tools && typeof tools.serialize === "function" && typeof tools.exportTextures === "function", "The verifier needs its WolvenKit tools");
   ensure(existsSync(join(out, "build.json")), `Build manifest is missing: ${out}`);
@@ -583,7 +586,7 @@ export function verifyEyeMakeupBuild(options: FeatureVerifyOptions): Verificatio
   const dirs = Object.fromEntries(["json", "plate", "dds", "logs"]
     .map(name => [name, join(work, name)])) as Record<"json" | "plate" | "dds" | "logs", string>;
   for (const dir of Object.values(dirs)) mkdirSync(dir, { recursive: true });
-  const runStep = (label: string, call: () => ToolResult) => runTool(dirs.logs, label, call);
+  const runStep = (label: string, call: () => Promise<ToolResult>) => runTool(dirs.logs, label, call);
 
   // Plate provenance at the start: the host's plate files, hashed and copied before anything else.
   const plate = plateInputs(build, options);
@@ -667,22 +670,22 @@ export function verifyEyeMakeupBuild(options: FeatureVerifyOptions): Verificatio
     }
   }
 
-  // The verifier's own conversions of the hash-checked members and plate inputs, in one WolvenKit launch.
-  runStep("serialize-members", () => tools.serialize([memberRoot, dirs.plate, ...male ? [hisDirs.plate] : []], dirs.json));
+  // The verifier's own conversions: the hash-checked members and plate inputs serialized in one WolvenKit launch, and each texture
+  // folder exported, all side by side.
+  const textureDirs = [...new Set(plan.presets.flatMap(p => Object.values(p.textures) as string[]).map(path => path.slice(0, path.lastIndexOf("/"))))];
+  const exportDirs = new Map<string, string>();
+  textureDirs.forEach((dir, i) => { const target = join(dirs.dds, String(i)); mkdirSync(target); exportDirs.set(dir, target); });
+  await sideBySide(options.signal, [
+    signal => runStep("serialize-members", () => tools.serialize([memberRoot, dirs.plate, ...male ? [hisDirs.plate] : []], dirs.json, signal)),
+    ...textureDirs.map((dir, i) => (signal: AbortSignal) =>
+      runStep(`export-textures-${i}`, () => tools.exportTextures(join(memberRoot, ...dir.split("/")), exportDirs.get(dir)!, signal))),
+  ]);
   const converted = (dir: string, name: string) => {
     const path = join(dir, name + ".json");
     ensure(isFile(path), `WolvenKit did not serialize ${name}`);
     return readJson(path);
   };
   const root = (depotPath: string) => converted(dirs.json, fileName(depotPath)).Data.RootChunk;
-  const textureDirs = [...new Set(plan.presets.flatMap(p => Object.values(p.textures) as string[]).map(path => path.slice(0, path.lastIndexOf("/"))))];
-  const exportDirs = new Map<string, string>();
-  textureDirs.forEach((dir, i) => {
-    const target = join(dirs.dds, String(i));
-    mkdirSync(target);
-    runStep(`export-textures-${i}`, () => tools.exportTextures(join(memberRoot, ...dir.split("/")), target));
-    exportDirs.set(dir, target);
-  });
   const exported = (depotPath: string) => {
     const path = join(exportDirs.get(depotPath.slice(0, depotPath.lastIndexOf("/")))!, fileName(depotPath).replace(/\.xbm$/, ".dds"));
     ensure(isFile(path), `WolvenKit did not export ${depotPath}`);

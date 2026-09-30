@@ -30,9 +30,9 @@ const text = (value: unknown) => isRecord(value) ? String(value.$value ?? "") : 
 const handle = (value: unknown): Json | undefined => isRecord(value) && isRecord(value.Data) ? value.Data : undefined;
 
 /** Serialise one resource with WolvenKit into `dir` and read its JSON root document. */
-function serialize(input: FeatureVerifyInput, file: string, dir: string): Json {
+async function serialize(input: FeatureVerifyInput, file: string, dir: string): Promise<Json> {
   mkdirSync(dir, { recursive: true });
-  const run = input.tools.serialize(file, dir);
+  const run = await input.tools.serialize(file, dir, input.signal);
   ensure(run.exitCode === 0, `WolvenKit couldn't read ${file.split(/[\\/]/).at(-1)}`);
   const name = readdirSync(dir).find(item => item.toLowerCase() === `${file.split(/[\\/]/).at(-1)!.toLowerCase()}.json`);
   ensure(name, `WolvenKit wrote no JSON for ${file}`);
@@ -115,7 +115,7 @@ function readGame(value: unknown): Game {
 
 export const EXPRESSIONS_VERIFIER: FeatureVerifier = Object.freeze({
   exporterId: EXPORTER_ID,
-  verify(input: FeatureVerifyInput): FeatureVerification {
+  async verify(input: FeatureVerifyInput): Promise<FeatureVerification> {
     const snapshot = input.packaged as Snapshot;
     ensure(isRecord(snapshot) && Array.isArray(snapshot.expressions) && snapshot.expressions.length, "the package snapshot is empty");
     const game = readGame(input.prerequisites["expressions/game"]);
@@ -129,7 +129,7 @@ export const EXPRESSIONS_VERIFIER: FeatureVerifier = Object.freeze({
     ensure(setPaths.length === 2, "the archive doesn't hold one expression set per gender");
     const verifyDir = input.verifyDir;
     // The patch: each gender's appearance adds exactly one XF component, bound to face_rig, attaching that gender's set.
-    const patch = serialize(input, join(root, ...patchPath.split("/")), join(verifyDir, "patch"));
+    const patch = await serialize(input, join(root, ...patchPath.split("/")), join(verifyDir, "patch"));
     const appearances = (Array.isArray(patch.appearances) ? patch.appearances : []).map(handle).filter((item): item is Json => !!item);
     ensure(appearances.length === 2, "the patch doesn't hold V's two photo-mode face appearances");
     const attached = {} as Record<Gender, string>;
@@ -157,7 +157,7 @@ export const EXPRESSIONS_VERIFIER: FeatureVerifier = Object.freeze({
     // The table: from the overlay; carried rows unchanged and in order, then fillers, then each record's row once; Index is the position.
     const overlays = Object.values(input.extras!.overlays);
     ensure(overlays.length === 1 && overlays[0]!.files.length === 1 && overlays[0]!.files[0]!.path === TABLE, "the table overlay holds other files");
-    const table = serialize(input, join(overlays[0]!.root, ...TABLE.split("/")), join(verifyDir, "table"));
+    const table = await serialize(input, join(overlays[0]!.root, ...TABLE.split("/")), join(verifyDir, "table"));
     const rows = (Array.isArray(table.compiledData) ? table.compiledData : []).map(row => (row as unknown[]).map(String));
     ensure(JSON.stringify(table.compiledData) === JSON.stringify(table.data), "the table's two row copies differ");
     const carried = snapshot.table === "sharing" ? game.base : game.table;
@@ -172,7 +172,7 @@ export const EXPRESSIONS_VERIFIER: FeatureVerifier = Object.freeze({
     let verifiedFiles = 3;
     for (const gender of Object.keys(APPEARANCES) as Gender[]) {
       const rig = game.rigs[gender];
-      const set = serialize(input, join(root, ...attached[gender].split("/")), join(verifyDir, gender));
+      const set = await serialize(input, join(root, ...attached[gender].split("/")), join(verifyDir, gender));
       const chunks = (Array.isArray(set.animationDataChunks) ? set.animationDataChunks as Json[] : [])
         .map(chunk => new Uint8Array(Buffer.from(String((chunk.buffer as Json)?.Bytes ?? ""), "base64")));
       for (const item of Array.isArray(set.animations) ? set.animations : []) {

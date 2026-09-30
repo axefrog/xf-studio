@@ -39,8 +39,8 @@ const same = (a: readonly GeneratedFile[], b: readonly GeneratedFile[]) => {
  * Verify one of a product's overlay archives (ProductExtras): copied into an empty folder, hashed, unbundled, and holding exactly the files
  * its features recorded. Its root goes to the feature verifiers.
  */
-export function verifyOverlayArchive(options: { readonly archive: string; readonly archiveSha256: string; readonly files: readonly GeneratedFile[];
-  readonly tools: VerifierTools; readonly work: string }): { root: string; files: GeneratedFile[] } {
+export async function verifyOverlayArchive(options: { readonly archive: string; readonly archiveSha256: string; readonly files: readonly GeneratedFile[];
+  readonly tools: VerifierTools; readonly work: string; readonly signal?: AbortSignal }): Promise<{ root: string; files: GeneratedFile[] }> {
   const { work, tools } = options;
   ensure(!existsSync(work) || readdirSync(work).length === 0, `work directory is not empty: ${work}`);
   const copies = join(work, "archive"), unpacked = join(work, "unpacked");
@@ -48,7 +48,7 @@ export function verifyOverlayArchive(options: { readonly archive: string; readon
   const archive = join(copies, basename(options.archive));
   copyFileSync(options.archive, archive);
   ensure(sha256(readFileSync(archive)) === options.archiveSha256, `the overlay archive ${basename(archive)} differs from the build record`);
-  const run: ToolResult = tools.unbundle(archive, unpacked);
+  const run: ToolResult = await tools.unbundle(archive, unpacked, options.signal);
   ensure(run.exitCode === 0 && !/\bError\s*\]|Unhandled exception/.test(run.stdout + run.stderr), `WolvenKit unbundle failed: ${(run.stdout + run.stderr).slice(-2000)}`);
   let files: GeneratedFile[];
   try { files = listGeneratedFiles(unpacked); }
@@ -61,9 +61,9 @@ export function verifyOverlayArchive(options: { readonly archive: string; readon
  * Verify one product's packed archive and declaration and unbundle it for the feature verifiers. `work` must be
  * empty or absent; `archiveSha256` is what the build recorded right after packing.
  */
-export function verifyProductArchive(options: { readonly archive: string; readonly xl: string; readonly archiveSha256: string;
+export async function verifyProductArchive(options: { readonly archive: string; readonly xl: string; readonly archiveSha256: string;
   readonly files: readonly GeneratedFile[]; readonly declaration: string; readonly features: number;
-  readonly tools: VerifierTools; readonly work: string }): UnpackedView {
+  readonly tools: VerifierTools; readonly work: string; readonly signal?: AbortSignal }): Promise<UnpackedView> {
   const { work, tools } = options;
   ensure(tools && typeof tools.unbundle === "function", "the verifier needs its WolvenKit tools");
   ensure(!existsSync(work) || readdirSync(work).length === 0, `work directory is not empty: ${work}`);
@@ -76,7 +76,7 @@ export function verifyProductArchive(options: { readonly archive: string; readon
   ensure(archiveSha256 === options.archiveSha256, "the packed archive differs from the build record");
   const xl = readFileSync(options.xl), text = xl.toString("utf8");
   ensure(text === options.declaration, "the ArchiveXL declaration is not exactly the one merged from the features' fragments");
-  const run: ToolResult = tools.unbundle(archive, unpacked);
+  const run: ToolResult = await tools.unbundle(archive, unpacked, options.signal);
   writeFileSync(join(logs, "unbundle.log"), run.stdout + run.stderr, "utf8");
   ensure(run.exitCode === 0 && !/\bError\s*\]|Unhandled exception/.test(run.stdout + run.stderr),
     `WolvenKit unbundle failed: ${(run.stdout + run.stderr).slice(-2000)}`);

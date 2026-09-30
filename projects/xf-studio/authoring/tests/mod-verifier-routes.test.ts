@@ -169,9 +169,9 @@ function run({ build, dds }: ReturnType<typeof makeBuild>, packagedCollection: u
   const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true })
     .flatMap(entry => entry.isDirectory() ? files(join(dir, entry.name)) : [join(dir, entry.name)]);
   const tools: VerifierTools = {
-    unbundle: (_archive, output) => { cpSync(join(build, "archive"), output, { recursive: true }); return ok(); },
-    serialize: (input, output) => { for (const file of [input].flat().flatMap(files)) writeFileSync(join(output, basename(file) + ".json"), readFileSync(file, "utf8")); return ok(); },
-    exportTextures: (input, output) => {
+    unbundle: async (_archive, output) => { cpSync(join(build, "archive"), output, { recursive: true }); return ok(); },
+    serialize: async (input, output) => { for (const file of [input].flat().flatMap(files)) writeFileSync(join(output, basename(file) + ".json"), readFileSync(file, "utf8")); return ok(); },
+    exportTextures: async (input, output) => {
       for (const file of files(input)) writeFileSync(join(output, basename(file).replace(/\.xbm$/, ".dds")), dds.get(basename(file).replace(/\.xbm$/, ".dds"))!);
       return ok();
     },
@@ -180,10 +180,10 @@ function run({ build, dds }: ReturnType<typeof makeBuild>, packagedCollection: u
   return verifyBuild({ build, tools, ...(packagedCollection === null ? {} : { packagedCollection }) });
 }
 
-test("flat, faceted and Fresnel presets pass the self-sourcing verifier with route-aware checks", () => {
+test("flat, faceted and Fresnel presets pass the self-sourcing verifier with route-aware checks", async () => {
   const fixture = makeBuild();
   try {
-    const report = run(fixture);
+    const report = await run(fixture);
     expect(report).toMatchObject({ presetCount: 3, materialTemplates: 3, textureCount: 3 + 4 + 2 });
     expect(report.resolvedDynamicPaths.map(r => r.chunkMaterial.slice(r.chunkMaterial.indexOf("@")))).toEqual(["@preset", "@faceted",
       "@fresnel_11111111222243338444000000000003"]);
@@ -192,9 +192,9 @@ test("flat, faceted and Fresnel presets pass the self-sourcing verifier with rou
     expect(report.decodedMipChecks[1].levels.some(level => level.widenedRoughness)).toBe(true);
     expect(report.presetRoutes.map(item => item.route)).toEqual(["flat", "faceted", "fresnel"]);
   } finally { rmSync(fixture.build, { recursive: true, force: true }); }
-});
+}, 30_000);
 
-test("route-specific tampering fails: widened roughness, normal chain, mask chain, base colour, constants and bindings", () => {
+test("route-specific tampering fails: widened roughness, normal chain, mask chain, base colour, constants and bindings", async () => {
   const flip = (path: string, offset: number) => { const data = readFileSync(path); data[offset] ^= 0x10; writeFileSync(path, data); };
   const cases: [RegExp, Mutation | undefined, ((build: string, plan: Plan) => void) | undefined][] = [
     [/variance-widened/, undefined, (b, p) => flip(join(b, "input/dds-scalar", `${p.presets[1].appearance}_roughness.dds`), 148 + WINDOW_W * WINDOW_H + 5)],
@@ -221,7 +221,7 @@ test("route-specific tampering fails: widened roughness, normal chain, mask chai
   ];
   for (const [message, mutate, tamper] of cases) {
     const fixture = makeBuild(mutate, tamper);
-    try { expect(() => run(fixture)).toThrow(message); } finally { rmSync(fixture.build, { recursive: true, force: true }); }
+    try { await expect(run(fixture)).rejects.toThrow(message); } finally { rmSync(fixture.build, { recursive: true, force: true }); }
   }
 }, 60_000);
 
@@ -231,7 +231,7 @@ const editBuild = (build: string, edit: (record: any) => void) => { // eslint-di
   writeFileSync(join(build, "build.json"), JSON.stringify(record));
 };
 
-test("PIPE-24: the verifier re-derives each route from the recipe and fails on any disagreement", () => {
+test("PIPE-24: the verifier re-derives each route from the recipe and fails on any disagreement", async () => {
   const cases: [RegExp, ((build: string, plan: Plan) => void) | undefined, ((plan: Plan) => void) | undefined, unknown?][] = [
     // A Shimmer preset compiled, packed and declared consistently as flat: every resource check would pass.
     [/Faceted was built for the flat route, but its recipe needs the faceted route/, undefined, plan => {
@@ -254,12 +254,12 @@ test("PIPE-24: the verifier re-derives each route from the recipe and fails on a
   ];
   for (const [message, tamper, replan, source] of cases) {
     const fixture = makeBuild(undefined, tamper, replan);
-    try { expect(() => run(fixture, source === undefined ? packaged : source)).toThrow(message); }
+    try { await expect(run(fixture, source === undefined ? packaged : source)).rejects.toThrow(message); }
     finally { rmSync(fixture.build, { recursive: true, force: true }); }
   }
 }, 60_000);
 
-test("CORE-20: the verifier's restated finish rules agree with the builder's finish table", () => {
+test("CORE-20: the verifier's restated finish rules agree with the builder's finish table", async () => {
   const builder = Object.fromEntries(Object.entries(FINISH_EXPORT).map(([id, rule]) => [id, { route: rule.route, gameOptics: rule.gameOptics }]));
   const { satin, ...restated } = VERIFIER_FINISHES;
   expect(restated).toEqual(builder);
