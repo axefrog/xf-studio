@@ -41,6 +41,8 @@ export function createNativeResourceTools(wolvenkit: ResourceTools, libraries: N
   const oodle = loaded(libraries.oodle), bcn = loaded(libraries.bcn);
   const oodleMissing = missing(libraries.oodle), bcnMissing = missing(libraries.bcn);
   const compress = oodle?.compress ?? null;
+  const noOodle = `The game's Oodle compressor can't be used: ${oodleMissing ?? "the library has no compressor export."}`;
+  const noBcn = `XF Studio's texture compressor can't be used: ${bcnMissing}`;
   const store = (raw: Uint8Array) => karkSegment(raw, LEVEL_OPTIMAL2, compress!);
   const note = (text: string) => log(`native writer: ${text}`);
   const done = (lines: string[], extra?: ToolStep): ToolStep => ({ exitCode: extra?.exitCode ?? 0, log: [...lines, ...(extra ? [extra.log] : [])].join("\n") + "\n" });
@@ -64,8 +66,7 @@ export function createNativeResourceTools(wolvenkit: ResourceTools, libraries: N
       const lines: string[] = [], refused: { path: string; file: string; reason: string }[] = [];
       for (const name of readdirSync(input).filter(name => name.toLowerCase().endsWith(".dds")).sort()) {
         const file = name.replace(/\.dds$/i, ".xbm");
-        const reason = !compress ? `The game's Oodle compressor is unavailable (${oodleMissing ?? "no compressor export"}).`
-          : !bcn ? `XF Studio's texture compressor is unavailable (${bcnMissing}).` : null;
+        const reason = !compress ? noOodle : !bcn ? noBcn : null;
         if (reason) { refused.push({ path: join(input, name), file, reason }); continue; }
         try {
           const started = performance.now();
@@ -83,7 +84,7 @@ export function createNativeResourceTools(wolvenkit: ResourceTools, libraries: N
       const folders = [input].flat();
       for (const folder of folders) for (const name of readdirSync(folder).filter(name => name.endsWith(".json")).sort()) {
         const file = name.slice(0, -".json".length);
-        if (!compress) { refused.push({ path: join(folder, name), file, reason: `The game's Oodle compressor is unavailable (${oodleMissing ?? "no compressor export"}).` }); continue; }
+        if (!compress) { refused.push({ path: join(folder, name), file, reason: noOodle }); continue; }
         try {
           const started = performance.now();
           writeFileSync(join(output, file), writeCr2wDocument(JSON.parse(readFileSync(join(folder, name), "utf8").replace(/^﻿/, "")), store));
@@ -96,7 +97,7 @@ export function createNativeResourceTools(wolvenkit: ResourceTools, libraries: N
     },
 
     async pack(input: string, output: string) {
-      let reason = !compress ? `The game's Oodle compressor is unavailable (${oodleMissing ?? "no compressor export"}).` : null;
+      let reason = !compress ? noOodle : null;
       if (!reason) {
         try {
           const started = performance.now();

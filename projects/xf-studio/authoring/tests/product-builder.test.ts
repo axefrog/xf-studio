@@ -216,3 +216,42 @@ test("PIPE-33: a plate without a recorded footprint is read from its mesh; a foo
   expect(damagedError.message).toContain("recorded UV footprint is damaged");
   expect(existsSync(join(damaged.dir, "build"))).toBe(false); // nothing is written before the inputs are known good
 }, 60_000);
+
+test("the manifest and build record say which writer made each file when the tools write natively (PIPE-130)", async () => {
+  const { options, calls, packed } = setup();
+  // The fake tools, reporting every converted file and the pack as native except one texture WolvenKit made.
+  const tools = () => {
+    const base = fakeTools(calls, packed), native: string[] = [], wolvenkit: { file: string; reason: string }[] = [];
+    return { ...base,
+      async importTextures(input: string, output: string, settings: Parameters<typeof base.importTextures>[2]) {
+        const step = await base.importTextures(input, output, settings);
+        for (const name of readdirSync(input)) {
+          const file = name.replace(/\.dds$/, ".xbm");
+          if (native.length === 0 && wolvenkit.length === 0) wolvenkit.push({ file, reason: "test refusal" }); else native.push(file);
+        }
+        return step;
+      },
+      async deserialize(input: string | readonly string[], output: string) {
+        const step = await base.deserialize(input, output);
+        for (const folder of [input].flat()) for (const name of readdirSync(folder)) native.push(name.replace(/\.json$/, ""));
+        return step;
+      },
+      async pack(input: string, output: string) { const step = await base.pack(input, output); native.push("archive"); return step; },
+      writers: () => ({ native: [...native], wolvenkit: [...wolvenkit] }),
+    };
+  };
+  const result = await runProductCommand({ ...options, tools }) as PackageBuildResult;
+  const written = JSON.parse(readFileSync(result.products[0]!.manifest, "utf8"));
+  const writers = written.resourceWriters as { native: string[]; wolvenkit: { path: string; reason: string }[] };
+  expect(writers.native).toContain("archive");
+  expect(writers.native.filter(path => path !== "archive").every(path => path.includes("/"))).toBe(true);
+  expect(writers.wolvenkit).toHaveLength(1);
+  expect(writers.wolvenkit[0]!.path).toMatch(/\/textures\/.+\.xbm$/);
+  expect(writers.wolvenkit[0]!.reason).toBe("test refusal");
+  // Every packed resource is accounted for once.
+  expect(writers.native.length - 1 + writers.wolvenkit.length).toBe(written.verifiedUnpackedFiles);
+  // Without a report (WolvenKit's tools), the manifest has none.
+  const plain = setup();
+  const before = await runProductCommand(plain.options) as PackageBuildResult;
+  expect(JSON.parse(readFileSync(before.products[0]!.manifest, "utf8")).resourceWriters).toBeUndefined();
+});
