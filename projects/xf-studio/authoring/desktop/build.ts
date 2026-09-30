@@ -16,15 +16,14 @@ import type { FeatureExporterEntry } from "../src/platform/api";
 import type { HostPrerequisite, PackageHostAdapter } from "../src/platform/export/product-host";
 import { cachedWolvenKitProbeResult, probeWolvenKitCli, probeWolvenKitCliAsync } from "../src/wolvenkit-cli";
 
-/** The packaged TypeScript builder: one Bun bundle of tools/build_collection_package.ts. No Python. */
-export const BUILD_TOOLS_SCHEMA = "xfs/desktop-build-tools-2";
-export const builderEntry = "app/tools/build.js";
 /**
- * XF Studio's texture compressor (native/bcn over DirectXTex, PIPE-130), beside the builder, which looks for it at
- * `<app root>/app/native/xfs_bcn.dll`. Optional: without it (or when it won't load) the builder imports textures with WolvenKit
- * and says so in the manifest's `resourceWriters`. When the manifest lists it, it must be the listed bytes.
+ * The packaged tools (src/packaged-build-tools.ts): the TypeScript builder, one Bun bundle of tools/build_collection_package.ts (no
+ * Python), and XF Studio's texture compressor (native/bcn over DirectXTex, PIPE-130). The compressor is optional: without it (or when it
+ * won't load) the builder imports textures with WolvenKit and says so in the manifest's `resourceWriters`. When the manifest lists it, it
+ * must be the listed bytes (checked here before a Build, and again by the builder before it loads it).
  */
-export const bcnEntry = "app/native/xfs_bcn.dll";
+export { BUILD_TOOLS_SCHEMA, bcnEntry, builderEntry } from "../src/packaged-build-tools";
+import { BUILD_TOOLS_SCHEMA, bcnEntry, builderEntry } from "../src/packaged-build-tools";
 const toolNames = [builderEntry];
 const optionalToolNames = [bcnEntry];
 const file = (path: string) => { try { return statSync(path).isFile(); } catch { return false; } };

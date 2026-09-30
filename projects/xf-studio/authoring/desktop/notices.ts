@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import authoringPackage from "../package.json";
 import hutchConfig from "./hutch.config";
 import { INNO_SETUP } from "./inno-setup";
-import { bcnEntry } from "./build";
+import { bcnEntry } from "../src/packaged-build-tools";
 import directxtexPin from "../native/bcn/directxtex.json";
 
 // The notices file and project licence ship inside the installed app (served

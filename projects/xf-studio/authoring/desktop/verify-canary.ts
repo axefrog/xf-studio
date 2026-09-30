@@ -102,8 +102,7 @@ try {
   try { checkBcnLibrary(library); } finally { library.close(); }
 } finally { rmSync(bcnScratch, { recursive: true, force: true }); }
 const bcnIssues = contentIssues(toolPrefix + bcnEntry, packagedBcn.toString("latin1"));
-if (bcnIssues.length) throw Error(["The packaged texture compressor contains personal paths or addresses:", ...describeContentIssues(bcnIssues)].join("
-"));
+if (bcnIssues.length) throw Error(["The packaged texture compressor contains personal paths or addresses:", ...describeContentIssues(bcnIssues)].join("\n"));
 // Exactly one extra resource: Microsoft's WebView2 bootstrapper, unmodified and Microsoft-signed.
 const extraPrefix = `${bundle}/Resources/app/webview2/`;
 sameMembers(members.filter(name => name.startsWith(extraPrefix) && !name.endsWith("/")).map(name => name.slice(extraPrefix.length)),

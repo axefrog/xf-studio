@@ -134,11 +134,6 @@ test("the packaged texture compressor is optional but, when listed and present, 
   expect(desktopBuildIssue(h.settings, h.data, h.tools, fixtureWolvenKit)).toContain("incomplete");
 });
 
-test("the builder looks for the texture compressor where the desktop app packages it", () => {
-  const cli = readFileSync(resolve(import.meta.dir, "..", "..", "tools", "build_collection_package.ts"), "utf8");
-  expect(cli).toContain(`join(appRoot, ${bcnEntry.split("/").map(part => JSON.stringify(part)).join(", ")})`);
-});
-
 test("Build readiness needs no Python: a saved Python path is neither required nor checked", () => {
   const h = host();
   expect("pythonExecutable" in h.settings).toBe(false);

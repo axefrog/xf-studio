@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import config from "../electrobun.config";
 import { COTTONTAIL_CAPABILITIES, hostCapabilities, hostCapabilityUses } from "../runtime-capabilities";
+import { devkitIssue } from "../devkit-check";
 
 test("the Cottontail capability declaration is exactly what the host reaches", () => {
   const declared = [...(config.build.cottontail?.capabilities ?? [])].sort();
@@ -40,4 +41,21 @@ test("the known capability names match the Cottontail this checkout's devkit sel
     join(process.env.HUTCH_HOME || join(homedir(), ".hutch"), cottontail.relativeRoot, "bin", "cottontail-stdlib", "capabilities.json");
   if (!manifest || !existsSync(manifest)) return;
   expect(Object.keys(JSON.parse(readFileSync(manifest, "utf8")).capabilities).sort()).toEqual([...COTTONTAIL_CAPABILITIES].sort());
+});
+
+test("a devkit prepared for another Electrobun release is named as the cause before the typecheck runs", () => {
+  const folder = mkdtempSync(join(tmpdir(), "xfs-devkit-"));
+  try {
+    expect(devkitIssue(folder, "2.0.2")).toContain("missing");
+    mkdirSync(join(folder, ".hutch"));
+    const lock = (version: string) => writeFileSync(join(folder, ".hutch", "dependencies.lock"),
+      JSON.stringify({ objects: [{ type: "electrobun", version }, { type: "toolchain", toolchain: "bun", version: "1.4.0" }] }));
+    lock("2.0.1");
+    expect(devkitIssue(folder, "2.0.2")).toContain("Electrobun 2.0.1, but this checkout builds with 2.0.2");
+    lock("2.0.2");
+    expect(devkitIssue(folder, "2.0.2")).toBeNull();
+  } finally { rmSync(folder, { recursive: true, force: true }); }
+  // The config's Cottontail capability list is typed by 2.0.2's devkit (build.cottontail.capabilities), so it stays a checked key.
+  const devkitType = resolve(import.meta.dir, "..", ".hutch", "devkit", "api", "config", "ElectrobunConfig.ts");
+  if (existsSync(devkitType) && !devkitIssue()) expect(readFileSync(devkitType, "utf8")).toMatch(/cottontail\?: \{[\s\S]*?capabilities\?: string\[\]/);
 });

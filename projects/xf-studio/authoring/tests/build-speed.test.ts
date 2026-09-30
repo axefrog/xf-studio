@@ -71,6 +71,28 @@ test("at most the gate's limit of WolvenKit steps run at once, in the order they
   expect(await task(6)).toBe(6);
 });
 
+test("a finishing task hands its slot to the first waiter: a caller arriving in between waits (deep review 9, PIPE-Low)", async () => {
+  const gate = concurrencyGate(1);
+  let running = 0, most = 0, releaseA!: () => void;
+  const order: string[] = [];
+  const tracked = (name: string) => gate(async () => {
+    order.push(name); running++; most = Math.max(most, running);
+    await new Promise(done => setTimeout(done, 5));
+    running--;
+  });
+  const a = gate(() => { order.push("a"); running++; most = Math.max(most, running);
+    return new Promise<void>(done => { releaseA = () => { running--; done(); }; }); });
+  const b = tracked("b");
+  await Bun.sleep(1);
+  let c: Promise<void> | undefined;
+  // Released, then a new caller one microtask later: before the woken waiter has resumed.
+  releaseA();
+  queueMicrotask(() => { c = tracked("c"); });
+  await a; await b; await Bun.sleep(1); await c;
+  expect(most).toBe(1);
+  expect(order).toEqual(["a", "b", "c"]);
+});
+
 function build(identity: string | undefined, prepare?: (kept: ReturnType<typeof keptPlate>) => void) {
   const kept = keptPlate();
   prepare?.(kept);
