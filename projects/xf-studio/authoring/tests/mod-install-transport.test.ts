@@ -572,3 +572,21 @@ test("an interrupted install with extra files is finished or undone by its journ
     } finally { f.cleanup(); }
   }
 });
+
+test("the install target and private stores are kept apart however a folder is written (PIPE-08)", () => {
+  const f = fixture("direct");
+  try {
+    const open = (candidateStore: string, receiptsRoot: string) => () => createModInstallTransport({ candidateStore, receiptsRoot, settings: f.settings });
+    // The store inside the receipts folder, or the receipts inside the store.
+    expect(open(f.store, join(f.store, "receipts"))).toThrow("distinct");
+    expect(open(join(f.receiptsRoot, "store"), f.receiptsRoot)).toThrow("distinct");
+    if (process.platform === "win32") {
+      // Windows folders ignore case: the same folder with its name in upper case is still the same folder.
+      expect(open(f.store, f.store.toUpperCase())).toThrow("distinct");
+      const gameMods = join(f.game, "ARCHIVE", "PC", "MOD");
+      mkdirSync(gameMods, { recursive: true });
+      expect(open(gameMods, f.receiptsRoot)).toThrow("must be separate");
+      expect(open(f.store, `${join(f.game, "archive", "pc")}/MOD/`)).toThrow("must be separate");
+    }
+  } finally { f.cleanup(); }
+});

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve, sep } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { isBelow } from "./platform/api/path-containment";
 import { crc32, inflateRawSync } from "node:zlib";
 
 /**
@@ -87,7 +88,7 @@ export function extractZip(zip: Buffer, destination: string, limits: ZipLimits):
   mkdirSync(root, { recursive: true });
   return files.map(({ name, data }) => {
     const target = resolve(join(root, ...name.split("/")));
-    if (!target.startsWith(root + sep)) throw new ZipError(`The entry ${name} points outside the destination.`);
+    if (!isBelow(target, root)) throw new ZipError(`The entry ${name} points outside the destination.`);
     mkdirSync(dirname(target), { recursive: true });
     writeFileSync(target, data, { flag: "wx" });
     return { name, bytes: data.length, sha256: createHash("sha256").update(data).digest("hex") };

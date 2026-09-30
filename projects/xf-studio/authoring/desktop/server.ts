@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, realpathSync, statSync } from "node:fs";
-import { resolve, sep } from "node:path";
+import { resolve } from "node:path";
+import { isBelow } from "../src/platform/api/path-containment";
 import { randomBytes } from "node:crypto";
 import { LookLibrary, libraryRequest } from "../src/library-store";
 import { CollectionLibrary, collectionRequest } from "../src/collection-store";
@@ -455,13 +456,13 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       } else {
         try { path = resolve(staticRoot, "." + decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname)); }
         catch { return new Response("Bad path", { status: 400 }); }
-        if (!path.startsWith(staticRoot + sep)) return new Response("Not found", { status: 404 });
+        if (!isBelow(path, staticRoot)) return new Response("Not found", { status: 404 });
       }
       const file = Bun.file(path);
       if (!(await file.exists())) return new Response("Not found", { status: 404 });
       try {
         const resolvedRoot = realpathSync(servedRoot), resolvedFile = realpathSync(path);
-        if (!resolvedFile.startsWith(resolvedRoot + sep) || !statSync(resolvedFile).isFile())
+        if (!isBelow(resolvedFile, resolvedRoot) || !statSync(resolvedFile).isFile())
           return new Response("Not found", { status: 404 });
       } catch { return new Response("Not found", { status: 404 }); }
       if (firstVisit && !renderer.pageServed) { renderer.pageServed = true; report("WebView requested the Studio page."); }

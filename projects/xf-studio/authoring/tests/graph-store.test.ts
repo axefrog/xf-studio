@@ -44,8 +44,14 @@ for (const item of STORE_CASES) test(`host transport: ${item.name}`, async () =>
         clock: simClock(new Scheduler()), random: seededRandom("host") });
       libraries.push(library);
       const handler = createGraphHandler(library, "/api/graph");
-      return new HostGraphStore("http://127.0.0.1/api/graph/store", (url, init) =>
+      const page = new HostGraphStore("http://127.0.0.1/api/graph/store", (url, init) =>
         handler(new Request(url, { ...init, headers: { ...(init.headers as Record<string, string>), Origin: "http://127.0.0.1" } })));
+      // Compaction and purge run only on the host, confirmed (CORE-127); everything else goes through the transport.
+      const host = library.confirmedStore(async () => true);
+      return { list: () => page.list(), load: () => page.load(), readStream: (...args) => page.readStream(...args),
+        append: request => page.append(request), changesSince: pos => page.changesSince(pos), counter: () => page.counter(),
+        putSnapshot: snapshot => page.putSnapshot(snapshot), dropSnapshots: node => page.dropSnapshots(node),
+        compact: (node, entries, at) => host.compact(node, entries, at), purge: node => host.purge(node) };
     });
   } finally { for (const library of libraries) library.close(); cleanup(); }
 });
@@ -274,6 +280,48 @@ test("the inspector feed pages rows through the host endpoint, and refuses other
     expect((await handler(new Request("http://127.0.0.1/api/graph/inspect", { headers: { Origin: "https://example.com" } }))).status).toBe(403);
     expect((await handler(new Request("http://127.0.0.1/api/graph/store", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ op: "purge", args: [made.created.a] }) }))).status).toBe(403);
+  } finally { library.close(); cleanup(); }
+});
+
+test("the page can't compact or purge (CORE-127): the transport refuses both, the page's store never asks, and the host runs them only once confirmed, after a backup", async () => {
+  const dir = folder(), path = join(dir, "library.sqlite");
+  const library = new GraphLibrary(path, { types: STUDIO_GRAPH_TYPES, rules: STUDIO_GRAPH_RULES, clock: simClock(new Scheduler()), random: seededRandom("confirm") });
+  try {
+    const node = { type: POINTER, id: "n1" };
+    const entry = (seq: number, commit: string): Entry => ({ node, seq, pos: 0, commit, actor: "local", actorSeq: seq, at: seq, schema: "1",
+      op: seq === 1 ? { kind: "create", state: { name: "Kept", own: {}, layers: [], trashed: false, retracted: false } } : { kind: "rename", name: `R${seq}` } }) as Entry;
+    await library.store.append({ commit: "c1", expect: [["n1", 0]], entries: [entry(1, "c1")] });
+    await library.store.append({ commit: "c2", expect: [["n1", 1]], entries: [entry(2, "c2")] });
+    const handler = createGraphHandler(library, "/api/graph");
+    const post = (op: string, args: unknown[]) => handler(new Request("http://127.0.0.1/api/graph/store", { method: "POST",
+      headers: { "Content-Type": "application/json", Origin: "http://127.0.0.1" }, body: JSON.stringify({ op, args }) }));
+    // A same-origin page request, well formed in every other way, is refused for both.
+    const purged = await post("purge", [node]);
+    expect(purged.status).toBe(403);
+    expect((await post("compact", [node, [entry(1, "c1")], 5])).status).toBe(403);
+    expect((await library.store.readStream(node)).length).toBe(2);
+    expect((await library.store.list()).map(row => row.ref.id)).toEqual(["n1"]);
+    // The page's store refuses without sending anything.
+    let sent = 0;
+    const page = new HostGraphStore("http://127.0.0.1/api/graph/store", async (url, init) => { sent++; return handler(new Request(url, init)); });
+    await expect(page.purge(node)).rejects.toThrow(/confirm/);
+    await expect(page.compact(node, [entry(1, "c1")], 5)).rejects.toThrow(/confirm/);
+    expect(sent).toBe(0);
+    // The host's store: a no leaves everything as it was, and no backup is taken for it.
+    const asked: string[] = [];
+    const declined = library.confirmedStore(async request => { asked.push(`${request.op}:${request.node.id}`); return false; });
+    await expect(declined.purge(node)).rejects.toThrow(/confirmation/);
+    await expect(declined.compact(node, [entry(1, "c1")], 5)).rejects.toThrow(/confirmation/);
+    expect(asked).toEqual(["purge:n1", "compact:n1"]);
+    expect((await library.store.readStream(node)).length).toBe(2);
+    expect(library.backups.list()).toEqual([]);
+    // A yes: today's backup is taken first, then it runs.
+    const confirmed = library.confirmedStore(async () => true);
+    await confirmed.compact(node, [entry(1, "c1")], 5);
+    expect(library.backups.list().map(item => item.kind)).toEqual(["daily"]);
+    expect((await library.store.readStream(node)).length).toBe(2);   // entry 2 was after the compacted range
+    await confirmed.purge(node);
+    expect(await library.store.list()).toEqual([]);
   } finally { library.close(); cleanup(); }
 });
 

@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync, realpathSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync, realpathSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { runProductCommand, type ProductCommandOptions } from "../src/platform/export/product-builder";
@@ -215,4 +216,35 @@ test("PIPE-33: a plate without a recorded footprint is read from its mesh; a foo
   expect(damagedError.code).toBe("package_plate_mismatch");
   expect(damagedError.message).toContain("recorded UV footprint is damaged");
   expect(existsSync(join(damaged.dir, "build"))).toBe(false); // nothing is written before the inputs are known good
+}, 60_000);
+
+test("the result gate keeps every result inside the local dist folder, through links and 8.3 names (PIPE-08, PIPE-31)", async () => {
+  const { dir, options, source, manifest } = setup();
+  const result = await runProductCommand(options) as PackageBuildResult;
+  const planned = hostPlan(fixture, source, manifest), dist = join(dir, "dist");
+  const [product] = result.products;
+  const moved = (pkg: string) => ({ ...result, products: [{ ...product, package: pkg, manifest: join(pkg, "manifest.json") }] }) as PackageBuildResult;
+  const link = (target: string, path: string) => symlinkSync(target, path, process.platform === "win32" ? "junction" : "dir");
+  verifyProductBuildResult(result, planned, dist);
+  // The dist folder named through a link, or written in another case on Windows, is the same folder.
+  const outside = join(dir, "outside");
+  mkdirSync(outside);
+  link(dist, join(outside, "dist-link"));
+  verifyProductBuildResult(result, planned, join(outside, "dist-link"));
+  if (process.platform === "win32") verifyProductBuildResult(result, planned, dist.toUpperCase());
+  // An outside path that reaches the real package through a link is refused.
+  expect(() => verifyProductBuildResult(moved(join(outside, "dist-link", basename(product.package))), planned, dist)).toThrow("outside the local dist");
+  // A missing result is refused with the same plain error.
+  expect(() => verifyProductBuildResult(moved(join(dist, "missing")), planned, dist)).toThrow("outside the local dist");
+  // A dist root written as its 8.3 short name still holds the result's long-form path.
+  if (process.platform === "win32") {
+    const probe = spawnSync("cmd.exe", ["/d", "/c", `for %I in ("${dist}") do @echo %~sI`], { encoding: "utf8", windowsHide: true, windowsVerbatimArguments: true });
+    const short = probe.status === 0 ? probe.stdout.trim() : "";
+    if (short && short.toLowerCase() !== dist.toLowerCase()) verifyProductBuildResult(result, planned, short);
+  }
+  // A package folder inside dist that is a link leading out is refused.
+  const away = join(outside, "away");
+  renameSync(product.package, away);
+  link(away, product.package);
+  expect(() => verifyProductBuildResult(result, planned, dist)).toThrow(/outside the local dist/);
 }, 60_000);

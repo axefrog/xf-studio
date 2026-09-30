@@ -8,7 +8,7 @@
  * research/authoring/framework-version-check.md.
  */
 import { join } from "node:path";
-import { describeMo2Instance, parseMo2Modlist, parseQSettingsIni } from "./mo2-instance";
+import { describeMo2Instance, mo2ProviderFolders, parseMo2Modlist, parseQSettingsIni } from "./mo2-instance";
 import { EYE_MAKEUP_MOD } from "./mod-branding";
 import { readPeFileVersion } from "./pe-version";
 
@@ -195,11 +195,9 @@ function mo2Providers(port: FrameworkHostPort, input: FrameworkCheckInput, game:
     input.mo2Root, "configured", input.mo2Root);
   const text = port.readText(join(instance.paths.profiles, input.mo2ProfileId, "modlist.txt"), modlistBytes);
   if (text === null) return `We couldn't read the Mod Organizer 2 profile "${input.mo2ProfileId}". Check it still exists.`;
-  const enabled = parseMo2Modlist(text).entries.filter(entry => entry.kind === "mod" && entry.enabled &&
-    !/[\\/:\x00-\x1f]/.test(entry.name) && entry.name !== "." && entry.name !== "..");
-  return [{ kind: "mo2-overwrite", name: "Overwrite", folder: instance.paths.overwrite },
-    ...enabled.map(entry => ({ kind: "mo2-mod" as const, name: entry.name, folder: join(instance.paths.mods, entry.name) })),
-    game];
+  // The same order as every other virtual file (PIPE-06): overwrite, enabled mods by priority, then the game folder.
+  return [...mo2ProviderFolders(parseMo2Modlist(text), instance.paths).map(folder =>
+    ({ kind: folder.provider as "mo2-overwrite" | "mo2-mod", name: folder.providerName, folder: folder.folder })), game];
 }
 
 /** Report both routes; nothing is written, launched or changed. */

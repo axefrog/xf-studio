@@ -1,4 +1,5 @@
 import { resolve, sep } from "node:path";
+import { isBelow } from "./src/platform/api/path-containment";
 import { existsSync, mkdirSync } from "node:fs";
 import { LookLibrary, libraryRequest } from "./src/library-store";
 import { CollectionLibrary, collectionRequest } from "./src/collection-store";
@@ -310,10 +311,10 @@ const server = Bun.serve({
     } catch {
       return new Response("Bad path", { status: 400 });
     }
-    if (!path.startsWith(root + sep))
+    if (!isBelow(path, root))
       return new Response("Not found", { status: 404 });
     let file = Bun.file(path);
-    const assetName = path.startsWith(resolve(root, "assets") + sep) ? path.slice(resolve(root, "assets").length + 1) : null;
+    const assetName = isBelow(path, resolve(root, "assets")) ? path.slice(resolve(root, "assets").length + 1) : null;
     // The retired piercing intakes' payloads may still sit in an old checkout's ignored public/assets; piercings come only from the
     // resolver now, so nothing serves them (UI-50).
     if (assetName !== null && RETIRED_ASSET_DIRS.test(assetName)) return new Response("Not found", { status: 404 });
@@ -329,7 +330,7 @@ const server = Bun.serve({
     // read-only link to another checkout). Files present in the overlay win.
     else if (assetOverlay && assetName !== null) {
       const overlayPath = resolve(assetOverlay, "." + path.slice(resolve(root, "assets").length));
-      if (overlayPath.startsWith(assetOverlay + sep) && await Bun.file(overlayPath).exists())
+      if (isBelow(overlayPath, assetOverlay) && await Bun.file(overlayPath).exists())
         file = Bun.file(overlayPath);
     }
     if (!(await file.exists()))
