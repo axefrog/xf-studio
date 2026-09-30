@@ -114,7 +114,7 @@ export function canonicalPath(path: string, fs: RealPaths): string {
 /**
  * `child` with the ancestor it shares, as written, with `root` replaced by that ancestor's canonical form. Following
  * links in an ancestor both paths are written through can't move one relative to the other, and it expands the 8.3
- * short names they share (a temporary folder under `C:\Users\LONGNA~1`); links in the child's own remaining segments
+ * short names they share (the temporary folder of a long user name, in its 8.3 form); links in the child's own remaining segments
  * are not followed, so a path that reaches in through a link is still refused.
  */
 function throughSharedAncestor(child: string, root: string, fs: RealPaths): string {
