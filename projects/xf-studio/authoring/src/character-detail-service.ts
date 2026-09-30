@@ -960,6 +960,8 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   // A slot is many independent parts (face details; a hair and its extra parts; a piercing style's parts): one that can't be read
   // leaves the others shown, and the slot is unavailable only when none of its parts could be served (decided after export).
   const partial = new Map<DetailSlot, "export" | "tool">();
+  // Head options drawn only in part: the plan's, and any whose component or chunk is left out below (the record keeps those still drawn).
+  const partialOptions = new Set(plan.partial);
   const failSlot = (slot: DetailSlot, why: "export" | "tool") => { partial.set(slot, partial.get(slot) === "tool" ? "tool" : why); };
   const unavailable = (slot: DetailSlot, why: "export" | "tool") => {
     const current = slots.get(slot)!;
@@ -1084,6 +1086,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
    */
   const drops: string[] = [];
   const dropped = (component: PlannedComponent, why: string) => {
+    partialOptions.add(component.option);
     const line = `Part ${component.component} of your V's ${SLOT_WORDS[component.slot].noun} isn't shown: ${why}`;
     drops.push(line);
     note(line);
@@ -1150,6 +1153,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
       const blocking = unread.filter(entry => required.has(entry.param)), optional = unread.filter(entry => !required.has(entry.param));
       if (blocking.length) {
         note(`${component.component} chunk ${material.chunk}: ${words(unread)} could not be read; the chunk is not drawn.`);
+        partialOptions.add(component.option);
         continue;
       }
       if (optional.length) note(`${component.component} chunk ${material.chunk}: ${words(optional)} could not be read; drawn without ${optional.length > 1 ? "them" : "it"}.`);
@@ -1266,6 +1270,8 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
     provenance: { label: `Your ${summary.route === "mo2" ? "Mod Organizer 2 profile" : "game"}'s installed files`,
       notes: recordNotes([...drops, ...whole], notes), ...(toolLabel ? { tool: toolLabel } : {}) },
     components, slots: [...slots.values()], ...(rigs.length ? { rigs } : {}),
+    // Only head options: the Character panel settles its head rows from them (the reader keeps those a component still draws).
+    partial: [...partialOptions].filter(option => components.some(item => item.option === option && item.slot !== "body" && item.slot !== "clothing")),
   };
   // What is written is what the browser's reader makes of it (PIPE-40): one shared rule set, and a part that breaks it is left out
   // with a note here, not discovered by the page.

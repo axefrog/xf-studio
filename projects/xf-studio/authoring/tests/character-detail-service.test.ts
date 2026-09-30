@@ -16,7 +16,7 @@ import { decodePng, decodePngHalved, encodePng, encodePngAsync } from "../src/pn
 import { archiveExportSource, BY_HASH_CONCURRENCY, createGameAssetExporter, GameAssetExportCache, GameAssetExportError, type ExportedGeometry,
   type ExportedMask, type ExportedTexture, type GameAssetExporter } from "../src/game-asset-export";
 import { parseCharacterDetail, UNCOVERED_BODY } from "../src/render-detail";
-import { BODY_REQUEST, detailFixture, eyeRequest, FACE, P, REQUEST_A, REQUEST_B, TONES } from "./character-detail-fixtures";
+import { BEARD, beardRequest, BODY_REQUEST, detailFixture, eyeRequest, FACE, P, REQUEST_A, REQUEST_B, TONES } from "./character-detail-fixtures";
 
 const root = mkdtempSync(join(tmpdir(), "xfs-character-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -566,6 +566,28 @@ describe("face details in the record", () => {
     expect(record.components.filter(c => c.slot === "face").map(c => c.option)).toEqual(["skin_type_03", "makeupCheeks_01", "facial_tattoo_02", "cyberware_01"]);
     expect(record.slots.find(s => s.slot === "face")).toMatchObject({ state: "shown",
       message: "Some of your V's face details couldn't be read from your game files, so not all of them are shown." });
+  });
+
+  test("a beard's cards are served with the hair profile beside its stubble; an option drawn only in part is named in the record", async () => {
+    const { record } = await prepare(beardRequest(BEARD.brown));
+    const [beard] = record.components.filter(c => c.slot === "face");
+    expect(beard!.materials.map(m => [m.chunk, m.template])).toEqual([[0, P.meshDecalMt], [1, P.hairMt]]);
+    expect(beard!.materials[1]!.profiles.HairProfile).toBeDefined();
+    expect(record.partial).toBeUndefined();
+    // The glassy colour's second chunk isn't drawn on the face: the stubble is, and the option is named as drawn in part.
+    const glassy = (await prepare(beardRequest(BEARD.glassy))).record;
+    expect(glassy.components.filter(c => c.slot === "face").map(c => c.chunks)).toEqual([[0]]);
+    expect(glassy.partial).toEqual(["beard_color5"]);
+    expect(parseCharacterDetail(JSON.parse(JSON.stringify(glassy)))).toEqual(glassy);
+    // The face cyberware's emissive chunk is only recorded (a decal template the preview can't draw yet), so it too is drawn in part.
+    expect((await prepare(REQUEST_B)).record.partial).toEqual(["cyberware_01"]);
+  });
+
+  test("the record's reader keeps only drawn options as drawn in part", async () => {
+    const { record } = await prepare(beardRequest(BEARD.glassy));
+    const read = parseCharacterDetail(JSON.parse(JSON.stringify({ ...record, partial: ["beard_color5", "not_drawn", 7, "beard_color5"] })));
+    expect(read.partial).toEqual(["beard_color5"]);
+    expect(parseCharacterDetail(JSON.parse(JSON.stringify({ ...record, partial: "beard_color5" }))).partial).toBeUndefined();
   });
 
   test("templateIdentity reads a template's name and priority; an absent priority is the engine's default", () => {

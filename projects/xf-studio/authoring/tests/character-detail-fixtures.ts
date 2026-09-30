@@ -68,6 +68,8 @@ export const P = {
   lipsApp: "base\\fixture\\makeup_lips_05.app", lipsMorph: "base\\fixture\\hx_lips_morphs.morphtarget", lipsMesh: "base\\fixture\\hx_lips.mesh",
   lipsD: "base\\fixture\\tex\\hx_lips_d05.xbm", lipsRedMi: "base\\fixture\\makeup\\lips_color__red.mi",
   cheeksApp: "base\\fixture\\makeup_cheeks_05.app", frecklesApp: "base\\fixture\\makeup_freckles_01.app",
+  beardApp: "base\\fixture\\beard_05.app", beardMorph: "base\\fixture\\hb_beard_05_morphs.morphtarget", beardMesh: "base\\fixture\\hb_beard_05.mesh",
+  beardD: "base\\fixture\\tex\\hb_beard_05_stubble_d.xbm",
   freckMorph: "base\\fixture\\hx_freckles_morphs.morphtarget", freckMesh: "base\\fixture\\hx_freckles.mesh",
   cheeksD: "base\\fixture\\tex\\hx_cheeks_d05.xbm", frecklesD: "base\\fixture\\tex\\hx_freckles_d01.xbm",
   tattooApp: "base\\fixture\\tattoo_02.app", tattooMorph: "base\\fixture\\hx_tattoo_02_morphs.morphtarget", tattooMesh: "base\\fixture\\hx_tattoo_02.mesh",
@@ -122,6 +124,8 @@ const censored = (action: "Activate" | "Deactivate") => ({ censorFlag: "Censor_N
 export const FACE = { lipsRed: "hx_000_pwa__basehead__makeup_lips_05__06_red", cheeksRed: "hx_000_pwa__morphs_makeup_freckles_01__03_red",
   frecklesBrown: "hx_000_pwa__morphs_makeup_freckles_01__03_light_brown", tattooSenna: "hx_000_pwa__tattoo_02__03_ca_senna",
   cyberSenna: "hx_000_pwa__cyberware_01__03_ca_senna", packLiner: "pack_liner_black" } as const;
+/** Beard part definitions (masculine creator style names). */
+export const BEARD = { brown: "hb_000_pma__beard_05__brown", glassy: "hb_000_pma__beard_05__glassy" } as const;
 /** The eye colour's chunk mask: every chunk but the lashes (chunk 0). */
 export const EYE_MASK = "18446744073709551614";
 /** Skin tone definitions, as the vanilla creator names them. */
@@ -238,6 +242,9 @@ export function detailFixture(options: { skinPatch?: boolean; jewellery?: boolea
       option("makeupLips_05", P.lipsApp, [FACE.lipsRed], "makeupLips_color", 0),
       option("makeupCheeks_05", P.cheeksApp, [FACE.cheeksRed], "makeupCheeks_color", 0),
       option("makeupCheeks_01", P.frecklesApp, [FACE.frecklesBrown], "makeupCheeks_color", 0),
+      // A beard part (the masculine creator's `beard_color` options): a stubble decal and hair cards on one mesh; its "glassy" colour's
+      // second chunk uses a template the preview doesn't draw on the face, so that choice is drawn only in part.
+      option("beard_color5", P.beardApp, [BEARD.brown, BEARD.glassy], "beard_color", 0),
       option("facial_tattoo_02", P.tattooApp, ["hx_000_pwa__tattoo_02__01_ca_pale", FACE.tattooSenna], "facial_tattoo", 0, 1, "skin color"),
       option("cyberware_01", P.cyberApp, ["hx_000_pwa__cyberware_01__01_ca_pale", FACE.cyberSenna], "cyberware", 0, 1, "skin color"),
       slotSwitcher("piercings", "piercings_color", [["Common-Off", ["piercings_00"]], ["01", ["piercings_01"]], ["12", ["piercings_12"]]]),
@@ -253,6 +260,7 @@ export function detailFixture(options: { skinPatch?: boolean; jewellery?: boolea
         localizedName: "FACE FRAME" }),
     ], { TPP: ["skin_type_01", "skin_type_03", "eyebrows_color1", "eyebrows_color2", "eyelash_color", "eyes_color", "facial_tattoo_02", "teeth"],
       face: ["makeupLips_none_00", "makeupLips_05", "makeupCheeks_05", "makeupCheeks_01", "cyberware_01", "piercings_00", "piercings_01", "piercings_12"], hairs: ["hair_color1", "mch_part_01", "mch_part_02"],
+      beards: ["beard_color5"],
       FPP_hairs: ["hair_color_fpp_01"], character_customization: ["skin_type_01", "skin_type_03", "eyebrows_color1", "eyebrows_color2",
         "eyelash_color", "hair_color1", "hair_color_fpp_01", "eyes_color"] }, {
       body: { options: [
@@ -296,6 +304,14 @@ export function detailFixture(options: { skinPatch?: boolean; jewellery?: boolea
       entries: [{ name: "cheeks", local: true, index: 0 }, { name: "cheeks_nose", local: true, index: 0 }, { name: "freckles", local: true, index: 1 }, { name: "freckles_nose", local: true, index: 1 }],
       local: [instance(P.meshDecalMt, [tex("DiffuseTexture", P.cheeksD), colour("DiffuseColor", 186, 20, 40), scalar("DiffuseAlpha", 2)]),
         instance(P.meshDecalMt, [tex("DiffuseTexture", P.frecklesD), colour("DiffuseColor", 97, 63, 48), scalar("DiffuseAlpha", 0.3)])] }),
+    [P.beardApp]: app([BEARD.brown, BEARD.glassy].map(name => ({ name, components: [morphComponent("beard", P.beardMorph, name === BEARD.brown ? "brown" : "glassy")] }))),
+    [P.beardMorph]: morphtarget(P.beardMesh, 2, FACE_TARGETS),
+    [P.beardMesh]: mesh({ appearances: [{ name: "brown", chunkMaterials: ["stubble", "cards"] }, { name: "glassy", chunkMaterials: ["stubble", "glass"] }],
+      entries: [{ name: "stubble", local: true, index: 0 }, { name: "cards", local: true, index: 1 }, { name: "glass", local: true, index: 2 }],
+      local: [instance(P.meshDecalMt, [tex("DiffuseTexture", P.beardD), colour("DiffuseColor", 60, 40, 30), scalar("DiffuseAlpha", 0.8)]),
+        instance(P.hairMt, [tex("Strand_Alpha", P.strandA), tex("Strand_ID", P.strandId), tex("Strand_Gradient", P.strandG), hp("HairProfile", P.hp)]),
+        instance(P.glassMt)] }),
+    [P.beardD]: xbm(true),
     [P.tattooApp]: app(["hx_000_pwa__tattoo_02__01_ca_pale", FACE.tattooSenna].map(name => ({ name, components: [morphComponent("hx_tattoo", P.tattooMorph, name.split("__").pop()!)] }))),
     [P.tattooMorph]: morphtarget(P.tattooMesh, 1, FACE_TARGETS),
     [P.tattooMesh]: mesh({ appearances: [{ name: "01_ca_pale", chunkMaterials: ["ink_pale"] }, { name: "03_ca_senna", chunkMaterials: ["ink_senna"] }],
@@ -570,6 +586,8 @@ export const REQUEST_B = saved([["TPP", "skin_type_03", P.skinApp3, TONES.senna]
 /** A save-shaped request for the two-part hairstyle alone: both parts in `hairs`, as the save lists them. */
 export const MCH_REQUEST = saved([["hairs", "mch_part_01", P.mchApp1, "brown"], ["hairs", "mch_part_02", P.mchApp2, "dark"],
   ["character_customization", "mch_part_01", P.mchApp1, "brown"]]);
+/** A save-shaped request for one beard choice alone (the other slots none). */
+export const beardRequest = (definition: string) => saved([["beards", "beard_color5", P.beardApp, definition]]);
 /** A save-shaped request for one teeth choice alone (the other slots none). */
 export const teethRequest = (definition: string) => saved([["TPP", "teeth", P.teethApp, definition]]);
 /** A save-shaped request for one eye colour alone (the other slots none). */

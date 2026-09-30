@@ -66,8 +66,8 @@ describe("the mouth interior's occlusion (mouth-occlusion.ts)", () => {
       for (const term of ["directDiffuse", "directSpecular", "indirectDiffuse", "indirectSpecular"])
         expect(shader.fragmentShader).toContain(`reflectedLight.${term} *= vXfsOcclusion;`);
       // The program reads the scene's own uniform objects, so a written parting reaches every interior part without a rebuild.
-      expect(shader.uniforms.xfsMouthParting).toBe(uniforms.parting);
-      expect(shader.uniforms.xfsMouthFloor).toBe(uniforms.floor);
+      expect(shader.uniforms!.xfsMouthParting).toBe(uniforms.parting);
+      expect(shader.uniforms!.xfsMouthFloor).toBe(uniforms.floor);
     }
   });
 

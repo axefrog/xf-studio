@@ -130,7 +130,7 @@ export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: Charac
       // Record outcomes, overridden by anything that failed to load in this browser; a shown slot with a part
       // the preview can't draw yet keeps its state and carries the limit codes (the presentation words them).
       // How the details landed in the scene is developer evidence, read in `?verify=1` (studio-startup.ts).
-      return { drawn: [...new Set(record.components.map(component => component.option))],
+      return { drawn: [...new Set(record.components.map(component => component.option))], partial: [...record.partial ?? []],
         garmentTags: [...new Set(record.components.flatMap(component => component.garment?.tags ?? []))].sort(), slots: record.slots.map(slot => {
         const problem = loaded.problems.find(item => item.slot === slot.slot);
         if (problem) return { slot: slot.slot, state: "unavailable" as const, label: slot.label, message: problem.message };

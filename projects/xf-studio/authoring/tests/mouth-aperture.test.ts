@@ -50,8 +50,8 @@ describe("the lips' aperture (mouth-aperture.ts)", () => {
   test("the lip joints come from the regions, the jaw's ancestry and the rest heights, never from names", () => {
     const { rest, regions } = syntheticRest();
     const lips = mouthLipJoints(rest, regions)!;
-    expect(lips.upper.sort()).toEqual(["upper_a", "upper_b"]);
-    expect(lips.lower.sort()).toEqual(["lower_a", "lower_b"]);
+    expect([...lips.upper].sort()).toEqual(["upper_a", "upper_b"]);
+    expect([...lips.lower].sort()).toEqual(["lower_a", "lower_b"]);
     expect(lips.frame).toBe("skull");
     expect(lips.up[1]).toBeCloseTo(1, 9);
     // The rest parting is the lips' own thickness at rest (about 7.3 mm here), not a gap.
@@ -127,8 +127,8 @@ test.skipIf(!existsSync(FIXTURE))("on the game's player face the regions pick th
     frames: Record<string, number[]> };
   const rest: FaceRest = { names: fixture.rest.names, parents: fixture.rest.parents, local: Float32Array.from(fixture.rest.local) };
   const lips = mouthLipJoints(rest, fixture.regions)!;
-  expect(lips.upper.sort()).toEqual(["l_J_mug_lip_up_0_JNT", "r_J_mug_lip_up_0_JNT"]);
-  expect(lips.lower.sort()).toEqual(["l_J_mug_lip_dn_0_JNT", "r_J_mug_lip_dn_0_JNT"]);
+  expect([...lips.upper].sort()).toEqual(["l_J_mug_lip_up_0_JNT", "r_J_mug_lip_up_0_JNT"]);
+  expect([...lips.lower].sort()).toEqual(["l_J_mug_lip_dn_0_JNT", "r_J_mug_lip_dn_0_JNT"]);
   expect(lips.frame).toBe("Head");
   const at = (t: string) => mouthAperture(posedParting({ ...rest, local: Float32Array.from(fixture.frames[t]!) }, lips), lips.rest) * 1000;
   expect(at("0")).toBeCloseTo(0, 2);

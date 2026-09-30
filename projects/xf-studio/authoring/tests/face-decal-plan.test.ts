@@ -7,7 +7,7 @@ import { loadMergedCco, resolveCharacter, type ResolvedParam } from "../src/char
 import { refFromPath, refLabel } from "../src/depot-path";
 import { templateDefaults } from "../src/material-template";
 import { priorityRank, renderTemplate } from "../src/render-templates";
-import { detailFixture, FACE, P, REQUEST_A, REQUEST_B } from "./character-detail-fixtures";
+import { BEARD, beardRequest, detailFixture, FACE, P, REQUEST_A, REQUEST_B } from "./character-detail-fixtures";
 
 // Face details (rank 2 of the head render plan) chosen from the synthetic installation: by the game's structure (groups,
 // the slots other details claim, decal templates by their own name), never by option names.
@@ -100,6 +100,35 @@ describe("face details from the resolver", () => {
     const result = await plan(REQUEST_A, fixture);
     expect(face(result).map(c => c.option)).toEqual(["makeupCheeks_05"]);
     expect(result.slots.find(s => s.slot === "face")).toMatchObject({ slot: "face", state: "shown", label: "cheeks (red)" });
+  });
+
+  test("a beard part plans every drawable chunk by template: the stubble as a face decal, the cards as hair strands (render gap plans §6)", async () => {
+    const result = await plan(beardRequest(BEARD.brown));
+    const [beard, ...others] = face(result);
+    expect(others).toHaveLength(0);
+    expect(beard!.option).toBe("beard_color5");
+    expect(beard!.chunks).toEqual([0, 1]);
+    expect(beard!.skippedChunks).toBe(0);
+    const [stubble, cards] = beard!.materials;
+    expect(renderTemplate(stubble!.template, stubble!.templateName)?.adapter).toBe("mesh-decal");
+    expect(textures(stubble!)).toMatchObject({ DiffuseTexture: P.beardD });
+    // The cards keep the hair adapter's inputs: strand maps and the hair profile.
+    expect(renderTemplate(cards!.template, cards!.templateName)?.adapter).toBe("hair-strand");
+    expect(textures(cards!)).toEqual({ Strand_Alpha: P.strandA, Strand_ID: P.strandId, Strand_Gradient: P.strandG });
+    expect(refLabel(cards!.profiles.HairProfile!.ref as never)).toBe(P.hp);
+    // Everything the game draws for it is drawn, so its row may read as drawn.
+    expect(result.partial).toEqual([]);
+    expect(result.slots.find(s => s.slot === "face")).toMatchObject({ state: "shown", label: "beard (brown)" });
+  });
+
+  test("a face option with a part the preview can't draw there is drawn only in part, and the plan says so", async () => {
+    const result = await plan(beardRequest(BEARD.glassy));
+    const [beard] = face(result);
+    expect(beard!.chunks).toEqual([0]);
+    expect(beard!.skippedChunks).toBe(1);
+    expect(result.partial).toEqual(["beard_color5"]);
+    // Fully drawn options elsewhere stay whole.
+    expect((await plan(REQUEST_A)).partial).toEqual([]);
   });
 
   test("the face consumers are the third-person head's groups; brows, lashes, hair, eyes and skin keep their own slots", async () => {

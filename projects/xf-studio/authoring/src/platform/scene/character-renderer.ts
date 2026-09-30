@@ -142,6 +142,15 @@ export function createCharacterRenderer(input: {
   const EYE_SHELL_RENDER_ORDER = RENDER_ORDER.eyeShell;
   const SHADOW_CASTER_SLOTS = new Set<DetailSlot>(["skin", "body", "clothing"]);
   /**
+   * Hair strands (alpha-to-coverage cards): the hair's, and a face option's (the masculine beard's cards, drawn by their `hair.mt` template
+   * like any hair: render gap plans §6). Lashes are strands too but keep their own order and cast nothing.
+   */
+  const STRAND_SLOTS = new Set<DetailSlot>(["hair", "face"]);
+  const isStrand = (item: LoadedCharacterComponent, mesh: THREE.Mesh) => {
+    const material = mesh.material as THREE.MeshStandardMaterial;
+    return STRAND_SLOTS.has(item.component.slot) && !!material.alphaToCoverage && !!material.alphaMap;
+  };
+  /**
    * What a drawn mesh needs before its programs are built: whether it casts (skin, body and clothing do; hair strands, alpha-to-coverage
    * cards, cast by their coverage, and stay out of the stand-in maps of contact-only lights), its full-skin shadow depth material, and the
    * skinning extension (it wraps the material's compile once). Done once per mesh, when it is prepared or placed, whichever comes first.
@@ -150,7 +159,7 @@ export function createCharacterRenderer(input: {
     if (mesh.userData.xfsPrepared) return;
     mesh.userData.xfsPrepared = true;
     const material = mesh.material as THREE.MeshStandardMaterial;
-    const strand = item.component.slot === "hair" && !!material.alphaToCoverage && !!material.alphaMap;
+    const strand = isStrand(item, mesh);
     mesh.castShadow = SHADOW_CASTER_SLOTS.has(item.component.slot) || strand;
     if (strand) keepOutOfBodyOnlyShadows(mesh);
     if (mesh.castShadow && mesh.isSkinnedMesh) mesh.customDepthMaterial = fullSkinDepthMaterial(mesh, { strandAlpha: strand });
@@ -465,7 +474,9 @@ export function createCharacterRenderer(input: {
     for (const item of drawnDetails()) {
       const shells = new Set<THREE.Mesh>(item.eyes?.shells.map(entry => entry.mesh) ?? []);
       for (const mesh of item.meshes) {
-        mesh.renderOrder = shells.has(mesh) ? EYE_SHELL_RENDER_ORDER : faceOrder.get(mesh) ?? DETAIL_RENDER_ORDER[item.component.slot];
+        // A face option's strands (the beard's cards) draw with the hair's order, among the opaque parts after the skin.
+        mesh.renderOrder = shells.has(mesh) ? EYE_SHELL_RENDER_ORDER : faceOrder.get(mesh)
+          ?? (isStrand(item, mesh) ? DETAIL_RENDER_ORDER.hair : DETAIL_RENDER_ORDER[item.component.slot]);
         // The skin, body, clothing and hair strands cast the lights' shadows (lighting-setup-stage.ts); eyes, decals and lashes don't.
         prepareMesh(item, mesh);
         // Facial shapes: the same (target, region) names as the head's. The body's shapes (breast size, nail length) are the ones the
