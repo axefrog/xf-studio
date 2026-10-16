@@ -3,6 +3,8 @@
  * Rows run root-to-tip downwards; UVs use the same image convention (upload with flipY=false).
  * All four maps come from one sampled fibre population. See research/hair/hair-lab-textures.md.
  */
+import { filterStrandId, type StrandIdSampling } from "./strand-id-filter";
+import { DEFAULT_STRAND_ID_TARGETS } from "./strand-id-targets";
 
 export type AtlasRect = { x: number; y: number; width: number; height: number };
 export type HairCardType = "dense" | "clump" | "wisp" | "single";
@@ -23,6 +25,9 @@ export type HairAtlasRegionDescription = {
   widthProfile?: number[];
   /** Bake for a mesh tangent opposite increasing image U, with UVs unchanged. Consumer must honour this basis. */
   mirrored?: boolean;
+  lengthClass?: "long" | "short";
+  idSampling?: StrandIdSampling;
+  idHistogram?: readonly number[];
 };
 export type HairAtlasDescription = {
   schema: "xfs/hair-atlas-1"; width: number; height: number; seed: number; alphaCutoff: number;
@@ -40,6 +45,7 @@ export type HairAtlasRegion = {
   uv: { u0: number; u1: number; v0: number; v1: number };
   density: number; coverage: AtlasMipCoverage[]; mirrored: boolean;
   direction: { rmsRadians: number; flippedRmsRadians: number; recommendedMirrored: boolean };
+  lengthClass: "long" | "short"; idDistributionError?: number;
 };
 export type HairAtlas = {
   schema: HairAtlasDescription["schema"]; seed: number; alphaCutoff: number;
@@ -130,6 +136,10 @@ export function validateHairAtlas(d: HairAtlasDescription): void {
       || !r.wave || !bounded(r.wave.amplitude, 0, .3) || !bounded(r.wave.cycles, 0, 16)
       || !r.frizz || !bounded(r.frizz.amplitude, 0, .1) || !bounded(r.frizz.cycles, 0, 64)
       || r.mirrored !== undefined && typeof r.mirrored !== "boolean"
+      || r.lengthClass !== undefined && !["long", "short"].includes(r.lengthClass)
+      || r.idSampling !== undefined && (!integer(r.idSampling.size, 1, 16) || !bounded(r.idSampling.background, 0, 1))
+      || r.idHistogram !== undefined && (!r.idSampling || !Array.isArray(r.idHistogram) || r.idHistogram.length !== 16
+        || r.idHistogram.some(v => !bounded(v, 0, 1)) || r.idHistogram.reduce((a, b) => a + b, 0) <= 0)
       || r.widthProfile !== undefined && (!Array.isArray(r.widthProfile) || r.widthProfile.length < 2
         || r.widthProfile.length > 33 || r.widthProfile.some(v => !bounded(v, 0, 1)) || !r.widthProfile.some(v => v > 0))
       || !Array.isArray(r.idQuantiles) || r.idQuantiles.length < 2 || r.idQuantiles.length > 257
@@ -256,12 +266,15 @@ function* rasterSteps(d: HairAtlasDescription, fibres: readonly AtlasFibre[], si
   const orderedRegions = [...d.regions].sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
   for (const r of orderedRegions) {
     signal?.throwIfAborted(); yield { phase: "measure", completed: regions.length, total: orderedRegions.length }; signal?.throwIfAborted();
-    const rect = inside(r), stats = measureAtlasRegion(base, rect, d.alphaCutoff);
+    const rect = inside(r);
+    const idDistributionError = r.idSampling ? filterStrandId(base, r.rect, rect, d.alphaCutoff, r.idSampling, r.idHistogram, signal) : undefined;
+    const stats = measureAtlasRegion(base, rect, d.alphaCutoff);
     const e = errors.get(r.key)!, mirrored = r.mirrored ?? false;
     regions.push({ key: r.key, type: r.type, variant: r.variant, rect, cell: { ...r.rect }, padding: r.padding,
       fibreCount: fibres.filter(f => f.region === r.key).length,
       uv: { u0: rect.x / d.width, u1: (rect.x + rect.width) / d.width, v0: rect.y / d.height, v1: (rect.y + rect.height) / d.height },
-      density: stats.coverage, mirrored,
+      density: stats.coverage, mirrored, lengthClass: r.lengthClass ?? "long",
+      ...(idDistributionError === undefined ? {} : { idDistributionError }),
       direction: { rmsRadians: Math.sqrt(e.selected / (e.weight || 1)), flippedRmsRadians: Math.sqrt(e.flipped / (e.weight || 1)),
         recommendedMirrored: e.flipped < e.selected ? !mirrored : mirrored },
       coverage: [{ level: 0, target: stats.filteredCoverage, raw: stats.filteredCoverage, corrected: stats.filteredCoverage, scale: 1, saturated: false }] });
@@ -433,29 +446,30 @@ export function rasterAtlasFibres(d: HairAtlasDescription, fibres: readonly Atla
   const steps = rasterSteps(d, fibres, signal); let next = steps.next(); while (!next.done) next = steps.next(); return next.value;
 }
 
-/** Artist-style long strips plus short variants. This contains only independently authored parameters. */
+/** Independent fibre parameters plus documented aggregate ID targets; no reference texture pixels. */
 export function defaultHairAtlas(size = 2048): HairAtlasDescription {
   if (!Number.isInteger(size) || size < 256 || size > 4096 || (size & size - 1)) throw Error("Default atlas size must be a power of two from 256 to 4096.");
   const scale = size / 2048, padding = Math.max(1, Math.round(8 * scale));
   const specs: [string, HairCardType, HairAtlasRegionDescription["variant"], number, number, number, number, number, number][] = [
     ["dense-a", "dense", "straight", 0, 0, 448, 1536, 170, .006],
     ["dense-b", "dense", "wave", 448, 0, 368, 1536, 155, .006],
-    ["wisp-a", "wisp", "straight", 816, 0, 128, 1536, 26, .009],
+    ["wisp-a", "wisp", "straight", 816, 0, 128, 1536, 42, .0054],
     ["clump-a", "clump", "wave", 944, 0, 256, 1536, 75, .007],
-    ["wisp-b", "wisp", "wave", 1200, 0, 160, 1536, 24, .01],
-    ["wisp-c", "wisp", "straight", 1360, 0, 144, 1536, 24, .01],
-    ["wisp-d", "wisp", "curl", 1504, 0, 144, 1536, 21, .01],
+    ["wisp-b", "wisp", "wave", 1200, 0, 160, 1536, 40, .00585],
+    ["wisp-c", "wisp", "straight", 1360, 0, 144, 1536, 40, .00565],
+    ["wisp-d", "wisp", "curl", 1504, 0, 144, 1536, 36, .0057],
     ["clump-b", "clump", "wave", 1648, 0, 208, 1536, 39, .009],
-    ["singles", "single", "curl", 1856, 0, 192, 1536, 4, .02],
-    ["short-wisp-a", "wisp", "wave", 0, 1536, 512, 512, 110, .004],
-    ["short-wisp-b", "wisp", "curl", 512, 1536, 448, 512, 145, .004],
+    ["singles", "single", "curl", 1856, 0, 192, 1536, 8, .0092],
+    ["short-wisp-a", "wisp", "wave", 0, 1536, 512, 512, 160, .0028],
+    ["short-wisp-b", "wisp", "curl", 512, 1536, 448, 512, 200, .003],
     ["short-clump", "clump", "wave", 960, 1536, 512, 512, 300, .007],
     ["short-dense", "dense", "wave", 1472, 1536, 448, 512, 155, .006],
-    ["short-single", "single", "straight", 1920, 1536, 128, 512, 24, .014],
+    ["short-single", "single", "straight", 1920, 1536, 128, 512, 36, .0091],
   ];
   return { schema: "xfs/hair-atlas-1", seed: 1701, width: size, height: size, alphaCutoff: 0,
     regions: specs.map(([key, type, variant, x, y, width, height, count, fibreWidth]) => ({ key, type, variant,
       rect: { x: x * scale, y: y * scale, width: width * scale, height: height * scale }, padding, count, width: fibreWidth,
+      lengthClass: y ? "short" : "long", idSampling: { size: Math.max(1, size / 512), background: 104 / 255 }, idHistogram: DEFAULT_STRAND_ID_TARGETS[key],
       clumps: type === "dense" ? 7 : type === "single" ? 1 : 3, clumpStrength: type === "clump" ? .55 : .12,
       length: [.76, 1], rootJitter: .04, rootTaper: .06, tipTaper: y ? type === "dense" ? .35 : .5 : .32,
       wave: { amplitude: variant === "straight" ? .007 : .02, cycles: variant === "curl" ? 2.5 : 1.2 },

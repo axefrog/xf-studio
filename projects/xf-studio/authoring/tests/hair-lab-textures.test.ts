@@ -6,7 +6,7 @@ import { defaultHairAtlas, generateHairAtlas, hairAtlasSteps, sampleAtlasFibres,
 function fixture(overrides: Partial<HairAtlasDescription> = {}): HairAtlasDescription {
   const base = defaultHairAtlas(256);
   return { ...base, regions: [{ ...base.regions[0]!, key: "test", rect: { x: 0, y: 0, width: 256, height: 256 },
-    padding: 8, count: 32, width: .014, length: [.55, 1], rootJitter: .12 }], ...overrides };
+    padding: 8, count: 32, width: .014, length: [.55, 1], rootJitter: .12, idSampling: undefined, idHistogram: undefined }], ...overrides };
 }
 
 test("atlas: identical descriptions produce identical four-map bytes and region metadata", () => {

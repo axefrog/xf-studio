@@ -10,6 +10,10 @@ import { openInstallation } from "../src/resolver-host";
 import { loadMergedCco, resolveCharacter } from "../src/character-resolver";
 import { descriptorsFromUiState } from "../src/cco-model";
 import { refFromPath } from "../src/depot-path";
+import { readCr2w } from "../src/native/cr2w-reader";
+import { DecodeSession } from "../src/native/limits";
+import { TEXTURE_READ_LIMITS } from "../src/native/texture-decode";
+import { textureLayout } from "../src/native/xbm-texture";
 
 const [settingsFile, output = "build/hair-lab-wip"] = process.argv.slice(2);
 if (!settingsFile) throw Error("Usage: hair-atlas-reference.ts PATH_TO_SETTINGS_JSON [PATH_TO_IGNORED_OUTPUT]");
@@ -45,8 +49,12 @@ try {
     const decoded = await decoder.decodeTexture({ archivePath: winner.id, hash: param.resource.ref.hash, maxSide: 2048 });
     if (!decoded.ok) throw Error(decoded.message);
     const { png, ...metadata } = decoded.texture;
+    const resource = opened.reader.pool.read(winner.id, param.resource.ref.hash);
+    if (!resource) throw Error("Reference texture disappeared.");
+    const layout = textureLayout(readCr2w(resource, opened.reader.decompress, new DecodeSession(TEXTURE_READ_LIMITS)));
     writeFileSync(join(out, `atlas-vanilla-${param.name}.png`), png);
-    provenance.push({ name: param.name, path: param.value, archive: winner.name, hash: param.resource.ref.hash, ...metadata });
+    provenance.push({ name: param.name, path: param.value, archive: winner.name, hash: param.resource.ref.hash, ...metadata,
+      compression: layout.compression, mipCount: layout.mips.length, lastMip: layout.mips.at(-1), mipTable: layout.mipTable });
   }
   const evidence = { route: "base-only", option: "01", material: material.name,
     alphaCutoff: Number(material.params.find(p => p.name === "AlphaCutoff")?.value ?? .33),

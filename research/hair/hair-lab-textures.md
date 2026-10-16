@@ -2,6 +2,12 @@
 
 Experimental offline track; no preview wiring, packaging or game evidence. The coordinator's strand-texture brief approves a pure description-to-atlas boundary. This work does not register a graph capability or run generation on the page thread. The later consumer must own worker demand, revision matching and cancellation through the existing Hair Lab process.
 
+The approved continuation adds an isolated strip texture set for consumption: every selectable region gets its own complete mip chain through 1×1, using its content rectangle as the texture domain. It reuses the existing resolved hair material/profile, remaps atlas UVs in the new texture adapter and supplies Flow through a new renderer hook. The existing shared material files remain untouched. A single atlas texel cannot preserve several regions' different coverages; region isolation is the mathematical boundary for arbitrary-distance sampling. No claim is made about the game's actual distance-to-streaming policy; a complete chain covers every possible requested mip.
+
+Export implication: the current preview proposal has four textures per selected region (56 for all 14 strips), rather than four textures for the whole atlas. A future exporter must either keep those separate material/texture sets, use a supported array strategy, or design a separate far representation for a shared atlas. The current content crops have non-power-of-two dimensions; cooking constraints, block padding, texture counts and UV transforms need an export decision and compression validation. This track builds no exporter.
+
+ID sampling reproduces scalar filtering evident in the vanilla resource: a finite-resolution ID bake with a neutral background, followed by a monotone visibility-weighted distribution curve. The curve is declared as aggregate histogram data, never copied texture pixels or added pixel noise. Fibre IDs remain constant in the synthetic sample; edge values are filtered mixtures derived from that sample. Tests cover determinism, constant fields, distribution error, full-chain isolation/coverage, region selection, shader input shape and abort-owned adapter resources.
+
 ## Artist decisions and evidence
 
 Read on 17 October 2026. These sources describe artist workflows, not the Cyberpunk shader's encoding. No source code, presets or texture assets are reused.
@@ -26,6 +32,8 @@ The [pure module](../../projects/xf-studio/authoring/src/features/hair-lab/textu
 
 The intermediate synthetic fibre sample consists of polylines in atlas pixel coordinates with cumulative normalised arc length, a constant ID and width at each vertex. The strip coordinate is monotone; macro curls and backtracking belong in geometry. ID quantiles are stratified and independently shuffled so a low fibre count does not accidentally shift a whole card's roughness. A deterministic painter ordering chooses one foreground fibre for attributes at crossings; coverage is the union of a 4-by-4 subpixel silhouette mask. All three attributes use the same foreground fibre, even at a partly covered crossing. This is a finite supersampling bake, not an analytic fibre intersection or depth renderer. Attribute padding extends into transparent texels within each region, never across another region's gutter. Root and tip widths taper to zero; roots and tips may end at different image rows. The gradient follows the sampled polyline, never atlas height.
 
+Optional [ID sampling](../../projects/xf-studio/authoring/src/features/hair-lab/strand-id-filter.ts) box-bakes the scalar fibre ID over alpha onto a declared neutral background, then bilinearly reconstructs it. The default 2K chart uses a four-pixel footprint, matching the reference ID map's 512² resolution, and neutral byte 104 (the most frequent uncovered reference ID). A monotone empirical CDF maps these filtered values to declared 16-bin visibility-weighted targets. The [default targets](../../projects/xf-studio/authoring/src/features/hair-lab/strand-id-targets.ts) are aggregate measurements of the private reference below, rounded to six decimals and normalised at use; no spatial values are stored. This is calibration against the reference, not a held-out validation claim. Without this step four constant fibre IDs produce only four spikes. A truly constant field cannot be split by the curve; its unattainable histogram error stays explicit. Other maps are untouched.
+
 The [decoded hair shader](../../knowledge/hair-shading.md) reads alpha, ID and gradient as linear red channels. Flow is sRGB (`isGamma=1`). With `FlowStrength=1`, its decoded coefficients are `max(2*linear(R)-1, .01)` along mesh tangent and `max(2*linear(G)-1, .01)` along bitangent; blue is unused. Encode through the inverse sRGB transfer function, then measure the quantised decoded direction.
 
 **Representability limit:** both decoded coefficients are positive. Mixed-sign UV tangents cannot be reproduced exactly at strength 1; reversing an unoriented fibre axis does not solve a mixed-sign pair. The encoder projects onto the supported cone and reports angular error rather than silently claiming exact signed flow. Shallow fine waves keep that error small. A generic signed normal-map encoding is incorrect here.
@@ -34,9 +42,9 @@ The [decoded hair shader](../../knowledge/hair-shading.md) reads alpha, ID and g
 
 Coverage measurements use the shader's cutoff remap followed by its time-resolved dither function. The three-layer k-buffer does not turn card overlap into independent coverage events; this atlas measures a single flat card. Mips stay within aligned padded cells, scalar attributes use alpha weighting, and Flow filters in decoded linear space. Compensation measures four bilinear subtexel positions per texel, applies the shader's cutoff/dither remap **after** filtering and solves an alpha scale against base-level filtered coverage. Quantisation and clipping happen before filtering. Every mip records target, raw filtered coverage, corrected coverage and scale; saturation is explicit when no scale can reach the target. Texel-centre coverage, alpha mean and visible-weighted ID/gradient/specular-shift histograms are separate measurements.
 
-Independent mips stop before cells lose their one-texel gutters or alignment; smaller levels cannot keep unrelated regions separate. The default atlas provides levels 0–3. A consumer must clamp sampling to `maxSafeMip`, repack for a wider distance range or provide a separately designed far representation. These buffers are not a ready-to-export full game mip chain. The bilinear quadrature is an offline estimate of spatially integrated coverage, not TAA/DLSS or anisotropic filtering proof.
+Shared atlas mips stop before cells lose their one-texel gutters or alignment; the default chart provides levels 0–3. For rendering, [prepareHairAtlasStrips](../../projects/xf-studio/authoring/src/features/hair-lab/strand-strips.ts) crops each content domain and builds its own complete chain to 1×1. Odd dimensions use area integration, positive sub-byte alpha footprints survive quantisation, and transparent attributes retain padding. Each level's compensation measures clamped bilinear sampling over that strip alone. The original uncorrected alpha mass drives attribute filtering; repeated alpha compensation never compounds it. `hairAtlasStripSteps` exposes resumable batches. The shared chart is still unsuitable for arbitrary-distance sampling; use the isolated chains. Bilinear quadrature is an offline estimate, not TAA/DLSS or anisotropic filtering proof.
 
-For the later renderer, UVs are image coordinates with root at the smaller V and `flipY=false`. Use the returned **content** UV rectangle, not the cell. Alpha/ID/gradient read red in the game; a Three.js adapter using `alphaMap` must account for that API's green-channel read, for example by expanding scalar bytes to RGB. Upload the supplied mips rather than asking a renderer to average alpha without compensation. Generation remains worker work; none of this module is imported by an ordinary flag-off page.
+For the renderer, UVs are image coordinates with root at the smaller V and `flipY=false`. Use the returned **content** UV rectangle, not the cell. The existing hair shader replaces Three's ordinary green alpha-map read with red, so scalar RedFormat inputs work for this colour pass. The new adapter uploads supplied mips rather than requesting ordinary averaged alpha. Shadow materials are outside this proposal. Generation remains worker work; none of these modules is registered or imported by the ordinary flag-off composition.
 
 `defaultHairAtlas(size)` supplies an editable description; `generateHairAtlas(description, signal)` produces the complete result synchronously in a worker/offline process. `hairAtlasSteps(description, signal)` exposes the same work as a resumable generator; its final return value is the atlas. `sampleAtlasFibres` and `rasterAtlasFibres` expose the shared sample/bake boundary for independent fixtures. Callers may supply several descriptions or workers; there is no singleton or hidden cache. Output map dimensions belong to each mip, and `regions` contains content/cell rectangles, UVs, card type, variation, fibre count, measured density, basis metadata and every mip's coverage record.
 
@@ -48,7 +56,7 @@ Target: 2048 squared, four maps in a few seconds in a worker, with timing separa
 
 ## Results and remaining gates
 
-The kernel, model-derived tests and three offline tools are implemented. The track changes no authored recipes, resource names, export eligibility, package building or promotion, so the Studio-to-mod pipeline remains unchanged. Preview integration, compression and game mips, multi-card k-buffer behaviour and in-game appearance need later validation. No browser, game, mod manager or existing draft was operated.
+The kernel, isolated strip preparation, opt-in preview adapter and offline tools are implemented. The track changes no authored recipes, export eligibility, package building or promotion, so the Studio-to-mod pipeline remains unchanged. Live preview wiring, GPU shader compilation, compression/cooking, multi-card k-buffer behaviour and in-game appearance need later validation. No browser, game, mod manager or existing draft was operated.
 
 ### Reference acquisition
 
@@ -65,47 +73,107 @@ The decoded alpha was inspected, as was the gradient. It has the same dense-to-s
 
 ### Coverage and distributions
 
-The following are offline single-card measurements at AlphaCutoff 0. Distribution errors are total variation on 16 visibility-weighted bins (0 identical, 1 disjoint); means are linear map values. The pure colour-model probe also records the ID-derived specular-shift histogram. Original fibre pixels are not copied or fitted; the default parameters were tuned against aggregate region statistics and inspected silhouettes.
+Single-card measurements at AlphaCutoff 0. Coverage here is texel-centre temporal coverage; mip targets use bilinear quadrature separately. ID errors are total variation on 16 visibility-weighted bins (0 identical, 1 disjoint). Fibre counts describe our synthetic population, not a recovered count of native strands.
 
-| Region | Vanilla coverage | Generated coverage | ID mean error | Gradient mean error | ID / gradient histogram error |
+| Region | Synthetic fibres | Vanilla coverage | Generated coverage | ID histogram error | Gradient mean error |
 |---|---:|---:|---:|---:|---:|
-| Dense A | .568 | .568 | +.003 | −.016 | .082 / .085 |
-| Dense B | .495 | .498 | +.003 | −.000 | .103 / .118 |
-| Clump A | .304 | .308 | +.003 | −.014 | .092 / .085 |
-| Clump B | .242 | .241 | +.019 | −.013 | .179 / .102 |
-| Wisp A | .187 | .185 | −.004 | −.013 | .159 / .141 |
-| Wisp B | .186 | .183 | +.031 | +.008 | .211 / .126 |
-| Wisp C | .185 | .187 | +.008 | +.008 | .310 / .100 |
-| Wisp D | .151 | .153 | −.047 | +.006 | .295 / .161 |
-| Flyaway singles | .058 | .060 | +.054 | +.019 | .785 / .392 |
-| Short wisp A | .111 | .110 | +.017 | +.007 | .144 / .231 |
-| Short wisp B | .140 | .136 | +.017 | +.006 | .119 / .213 |
-| Short clump | .282 | .257 | −.001 | −.007 | .098 / .073 |
-| Short dense | .484 | .493 | −.001 | +.002 | .114 / .122 |
-| Short flyaway set | .089 | .094 | −.005 | +.009 | .180 / .085 |
+| Dense A | 170 | .568 | .568 | .013 | −.016 |
+| Dense B | 155 | .495 | .498 | .027 | −.000 |
+| Clump A | 75 | .304 | .308 | .033 | −.014 |
+| Clump B | 39 | .242 | .241 | .036 | −.013 |
+| Wisp A | 42 | .187 | .187 | .048 | −.016 |
+| Wisp B | 40 | .186 | .188 | .059 | +.006 |
+| Wisp C | 40 | .185 | .188 | .065 | +.004 |
+| Wisp D / curl | 36 | .151 | .155 | .058 | +.004 |
+| Flyaway singles | 8 | .058 | .059 | .046 | +.020 |
+| Short wisp A | 160 | .111 | .113 | .048 | +.008 |
+| Short wisp B / curl | 200 | .140 | .141 | .089 | +.008 |
+| Short clump | 300 | .282 | .257 | .040 | −.007 |
+| Short dense | 155 | .484 | .493 | .018 | +.002 |
+| Short flyaway set | 36 | .089 | .091 | .098 | +.008 |
 
-Coverage is within .026 in every cell; gradient means are within .020. Dense/clump distributions are close, while the four-fibre flyaway region **does not pass a close-distribution claim**. Four constant IDs cannot fill a 16-bin histogram like a lower-resolution filtered map; that explains part of the difference, not all of it. Wisp ID histograms also remain looser than the dense strips. These residuals are recorded rather than remapping gradient away from intrinsic distance or adding unrelated pixel noise to ID. A stricter all-region histogram match remains an R&D gate.
+Long wisp populations increased from 21–26 to 36–42 fibres, long singles from 4 to 8, short wisps from 110/145 to 160/200, and short singles from 24 to 36. Thinner widths preserve the reference's outer-card coverage instead of simply making thicker opaque strips. Long wisps now span .155–.188 against .151–.187; flyaways are .059 against .058. These are norms of the inspected atlas and tutorial density progression, not a universal artist count standard. The short clump remains .026 below its reference and has a different silhouette.
 
-All default safe mips preserve the measured bilinear coverage within .000081 absolute. Tests also cover cutoffs 0 and .33 and dense/sparse populations, with .001 tolerance, plus an independent checkerboard calculation that distinguishes filtering before cutoff from averaging already resolved coverage. This does not validate compressed `.xbm` mips or the game's temporal pipeline.
+All default ID histogram errors are below .099, with means within .0011. Re-running the original four-fibre fixture at its original width .02 gives **.06665**, versus .785 before filtered ID calibration. Reducing both count and width can still leave too few distinct scalar samples; the returned distribution error exposes that limitation. Gradient remains intrinsic distance, never remapped to fit a histogram; the flyaway gradient histogram still differs by about .394 despite a mean within .020. Distribution matching establishes comparable inputs to colour, roughness and specular shift, not identical spatial correlations or unseen-seed accuracy.
 
-### Flat-card colour sanity check
+### Complete strip mip chains
 
-[CPU probe](../../projects/xf-studio/authoring/tools/hair-atlas-peek.ts): both atlas sets use the resolved vanilla brown profile through `src/hair-colour-model.ts`, identical local light `(0.25, 0.18, 0.9513674)`, view/normal `(0,0,1)`, environment irradiance .25, no vertex shadow and the decoded vanilla light defaults. The flat atlas is sampled into a 512² diagnostic view. PNGs use display exposure 4; measurements remain linear before that exposure.
+Every default long strip has 11 levels, every short strip 9, ending at 1×1. All 14 preserve their own density beyond shared-atlas level 3; dense A and singles reach different final alpha bytes, 126 and 15. Largest absolute coverage error over every level is **.002351 at cutoff 0** and **.003539 at cutoff .33**, with no saturated levels. These match the expected uniform-byte quantisation bound (about .002372 and .003540 respectively). Coverage is measured after quantisation, bilinear filtering, cutoff remap and temporal dither resolution, not from average alpha.
 
-Visible-weighted mean lit RGB is generated `(0.019705, 0.017079, 0.014384)` versus vanilla `(0.020459, 0.017785, 0.014947)`, about 3.7–4.0% lower. Sampled view coverage is .28576 versus .28985. This supports comparable aggregate colour response under one declared light, not image equivalence, perceptual approval or game proof. The probe exercises albedo, ID roughness, Flow direction, per-strand highlight shift, local light and environment together.
+Tests include dense and sparse NPOT strips, odd dimensions, independent constant ID fields, stable region selection, both cutoffs and abort between preparation batches. The [real-data probe](../../projects/xf-studio/authoring/tools/hair-atlas-compare.ts) repeats the 2K measurements. The `.33` oracle runs separately with `--cutoff-probe` to fit the 1 GB budget. No distance-to-streaming policy was inferred: complete chains cover the smallest mip any such policy can request. Fractional LODs use trilinear sampling in the visual probe; the per-level bound does not prove arbitrary anisotropic filtering or the game's temporal result.
 
-### Flow basis experiment
+### Offline card colour and lighting check
 
-Default shallow-wave population: arc-length-weighted angular RMS 3.96°, maximum 27.04°, with 49.78% of sampled length outside the positive coefficient cone. Choosing the better of two tangent bases independently for each region lowers RMS to 3.81°. Thus most of the benefit comes from keeping texture deviations small; a single mirrored choice adds little for balanced waves. These errors weight source polyline length, not visible raster area.
+The [comparison tool](../../projects/xf-studio/authoring/tools/hair-atlas-compare.ts) renders six separate, gently cupped/bowed cards: dense, clump, wisp, flyaway, curl and short curl. Generated and vanilla maps share geometry, original atlas UVs, brown_liquorice profile, material and lights. Both sides use the same isolated mip policy; the comparison does not claim to reproduce native cooked mip behaviour. Near cards are 345 pixels long (short card 180); far cards are 64/32. Sampling is trilinear with 2×2 spatial supersampling. Albedo, roughness, Flow direction, ID specular shift, local direct light and environment use the Studio's pure hair colour/lighting maths.
 
-A separate consistently negative diagonal fixture improves from about 17.3° to less than 0.6° when baked for the flipped tangent basis. Reflecting both its image coordinates and decoded direction leaves the original angular error unchanged. Tests check both statements. No geometry or game shader was changed.
+Light directions are normalised `(0.3, .25, 1)` and `(−.3, .25, −1)`, view `(0,0,1)`, environment irradiance .12, exposure 4, no vertex shadow. The back case uses the same exposure; it is intentionally much darker. The six generated/native visible-weighted red-light ratios range from .948–1.023 front-lit and .937–1.008 back-lit. For dense A, front-lit mean linear RGB is generated `(.014135, .011980, .009924)` versus vanilla `(.014670, .012421, .010253)`. The full report retains all RGB channels and coverage per card.
+
+`atlas-07-compare.png` was inspected at 1536×1120: labels and near/far groups are readable, types are distinct, generated wisps have more evenly spaced fine fibres while native wisps show stronger bundled silhouettes; flyaway crossings differ. Similar colour and integrated density do not make these spatial patterns equivalent. The previous flat-atlas probe also remains reproducible: mean RGB generated `(.020026, .017387, .014691)` versus vanilla `(.020459, .017785, .014947)` under its documented single light. These are CPU comparisons without GPU compilation, shadows, overlapping cards/k-buffer, compressed generated maps, TAA history or game evidence.
+
+### Flow basis and scoped shader proposal
+
+Default shallow waves: arc-length-weighted angular RMS **4.06°**, maximum **26.02°**, 49.98% of sampled length outside the positive coefficient cone. Choosing the better tangent basis per region lowers RMS to **3.91°**. A consistently negative diagonal fixture improves from about 17.3° to below .6° with the flipped tangent basis. Reflecting both image and frame leaves relative error unchanged. These are source-polyline measurements, not raster visibility weights.
+
+The shared preview currently uses only `normalize(tbn[1])`. The new [adapter proposal](../../projects/xf-studio/authoring/src/hair-atlas-preview-adapter.ts) calls the existing hair-strand material adapter, then hooks only that new material. Its formula is exactly §4 of [hair shading](../../knowledge/hair-shading.md): sRGB texture sampling first, the asymmetric FlowStrength arithmetic and both `.01` clamps, then normalisation in the tangent frame. A source-token guard fails closed if the shared shader moves. No shared preview file was edited.
+
+`--flow-proposal` renders the same vanilla cards with the current bitangent-only rule and with decoded Flow, saved as `atlas-08-flow-proposal.png`. Coverage is identical. Visible-weighted red changes −.33% to −5.21% front-lit and −.13% to +3.73% back-lit, largest on the flyaway/short curves. Both were visually inspected. This confirms the scoped proposal moves its direction computation toward the decoded game arithmetic; it does **not** establish a whole-hairstyle visual improvement in game. Central integration must verify actual GPU compilation and batch a vanilla hairstyle regression with the next approved runtime session before applying Flow globally.
+
+Patch note for the main adapter: keep this opt-in hook scoped to generated cards for now. A future shared change must request Flow with colour-space decoding, preserve the scalar-map data reads and resolved FlowStrength, and replace only the lighting strand direction. Do not alter coverage or the profile bake along with that change.
+
+## Exact consumption call
+
+Worker-side, behind the Hair Lab experiment's existing demand/cancellation process:
+
+```ts
+const atlas = generateHairAtlas(description, signal);
+const prepared = prepareHairAtlasStrips(atlas, signal);
+// Transfer each alpha/id/gradient/flow ArrayBuffer in prepared.strips[*].levels[*].
+```
+
+On the renderer side, composition joins the pure feature result and the structural scene adapter:
+
+```ts
+// In src/compose/ (the feature renderer itself never imports scene internals).
+import { selectHairAtlasStrip } from "../features/hair-lab/strand-strips";
+import { createHairAtlasPreview } from "../hair-atlas-preview-adapter";
+
+const strip = selectHairAtlasStrip(prepared, {
+  kind: "wisp", lengthClass: "long", mirrored: false,
+}, cardIndex);
+if (!strip) throw Error("Requested card strip is unavailable");
+const preview = createHairAtlasPreview(prepared, renderLifetimeSignal);
+mesh.material = preview.createMaterial(strip.key, resolvedHairChunk, mesh, adapterContext);
+```
+
+Create one `preview` scope per atlas/render lifetime, reuse it across cards, and group cards by strip/material. The returned strip table supplies `key`, `kinds` (dense/clump/wisp/flyaway, plus curl when applicable), `lengthClass`, `mirrored`, fibre count, measured density, original `atlasUV`, levels and coverage diagnostics. Selection is deterministic modulo the matching candidates and returns null instead of silently changing type/length/basis. The default chart bakes the normal basis; descriptions may explicitly bake mirrored variants.
+
+Keep mesh UVs inside `strip.atlasUV`; the alpha texture matrix remaps that content rectangle to isolated 0–1 coordinates for all samplers. Supply indexed card geometry with positions and UVs; the adapter computes missing normals/tangents once. Existing tangents must follow ordinary increasing U: this proposal applies the `mirrored` T sign in its shader hook, so do not also flip that tangent in geometry. A future game exporter would need the equivalent basis in its mesh, because it cannot use this preview hook. Bitangent stays unchanged. All supplied mips are uploaded, clamp-to-edge, flipY false, scalar RedFormat/NoColorSpace and Flow RGBA/SRGBColorSpace. `preview.textures(key)` is also a `ChunkTextures` port for callers that need the raw texture inputs; calling the old adapter with that port alone still omits Flow.
+
+The adapter uses a structural input type and imports no feature, keeping the scene/feature boundary one-way. It reuses the resolved HairProfile and other material scalars, but sets AlphaCutoff on a copied chunk to the generation cutoff: coverage compensation depends on it. Authored chunk data is never mutated. Three materials, profile textures and lazy per-region map caches belong to the supplied AbortSignal. Abort releases them once; geometry remains caller-owned. No UI, feature registration, startup or graph implementation changes are included. The main process must retain request identity, yield between generator batches to service abort messages (or terminate its worker), and discard stale results before creating renderer resources.
+
+Upload provenance: inspected installed Three.js 0.186.0, `src/renderers/webgl/WebGLTextures.js` manual DataTexture mip upload and colour-space/internal-format selection. Mipmap arrays include level 0; Flow expands RGB bytes to RGBA for sRGB upload. No Three.js source was copied.
+
+## Future game texture settings — no exporter
+
+Native-reader inspection of the four reference `.xbm` headers confirms these settings and listed complete mip tables:
+
+| Parameter | Channels read | isGamma | Native compression | Reference size / mip count | Generated storage before cooking |
+|---|---|---:|---|---|---|
+| Strand_Alpha | R coverage | 0 | TCM_QualityR / BC4 UNORM | 1024² / 11 through 1×1 | R8 linear, compensated alpha |
+| Strand_ID | R scalar identity | 0 | TCM_QualityR / BC4 UNORM | 512² / 10 through 1×1 | R8 linear |
+| Strand_Gradient | R intrinsic distance | 0 | TCM_QualityR / BC4 UNORM | 512² / 10 through 1×1 | R8 linear |
+| Flow | R/G direction coefficients; B unused | 1 | TCM_QualityColor / BC7 sRGB | 512² / 10 through 1×1 | RGB8 sRGB (RGBA only for Three upload) |
+
+A complete 2048² texture has 12 levels; a strip has `1 + floor(log2(max(width,height)))`. Keep all levels; do not rebuild alpha mips with ordinary averaging after compensation. Use the colour encoding above, not normal-map compression or a signed tangent map. The current direction encoder assumes material FlowStrength 1; other strengths are decoded faithfully by the adapter but require an appropriate bake if silhouette agreement is required.
+
+The reference header/layout reader is the repository's native `xbm-texture.ts`; its compression mapping and mip tables are observed resource facts, not a guarantee that any cooker preserves hand-authored mip chains. A future exporter must validate that preservation, decode every compressed mip again, repeat coverage/distribution/Flow-error measurements, and check NPOT/block padding and UV remapping. Complete shared-atlas mips cannot preserve unlike neighbouring card densities; choose separate strips (up to 56 texture resources here) or explicitly design a far representation. No package settings, resources or pipeline routes were changed on this track.
 
 ### Time, memory and reproducibility
 
-[Worker benchmark](../../projects/xf-studio/authoring/tools/hair-atlas-bench.ts), Bun 1.4.2, three sequential jobs on one offline worker: approximately .83–1.05 s generation, median .97 s; request through transferable-buffer delivery .83–1.05 s. Map-buffer payload is **33,423,360 bytes (31.875 MiB)** for four maps and levels 0–3. The three output hashes match: `8227a102ec45e3b25f2eb18dd54331e3a5c804c132d4293c4ff4ef2870292cd8`. Peak guarded process memory was .6 GB under the 1 GB limit. The slowest resumable batch was about 56 ms cold, 41 ms on the next job and 28 ms warm: this is a worker kernel, not a page-thread call or a demonstrated 50 ms end-to-end interaction.
+[Worker benchmark](../../projects/xf-studio/authoring/tools/hair-atlas-bench.ts), Bun 1.4.2, three sequential jobs on one offline worker: **1.16–1.65 s generation**, median **1.20 s**, plus **.44–.54 s** strip preparation. Request through transferable delivery is **1.61–2.17 s**. Atlas payload levels 0–3: **33,423,360 bytes**; all isolated strip maps/chains: **30,959,022 bytes**; retaining both: **64,382,382 bytes**. A consumer may discard the shared atlas after strip preparation. All three combined hashes match `c55333b59792fc535ac790841607f9a5c8520a6072bb92f31284daf915d16fa7`. Peak guard usage was **.9 GB under a 1 GB limit**. Maximum resumable batch was 130.5 ms; this is worker work, not an instant page-thread call.
 
-Four base PNGs total about 1.70 MiB at zlib level 3; encoding takes about .14 s separately. The CPU shade/reference reconstruction takes about 2.3 s separately. No GPU upload or browser startup is included. The adapter must publish matching request identity, yield to service abort messages or terminate its own worker, honour mip/basis metadata and preserve the experiment flag boundary.
+The four base PNGs total 2,590,375 bytes, about .16 s encoding separately; the flat colour/reference probe takes about 2.35 s. The near/far front/back CPU comparison takes about 8.5 s including generation, reference reconstruction, full-chain preparation and an original-four-fibre oracle. Its peak is .9 GB. The separate full 2K cutoff-.33 oracle takes 1.67 s and .6 GB. One combined run containing both full comparisons and a second cutoff atlas was guard-killed at 1.1 GB; splitting that oracle into its own process fixed the bounded-memory workflow. No guard limit was raised. GPU upload and browser performance remain unmeasured.
 
-Validation: 111 targeted tests pass across atlas, colour model, cards, model catalogue, lifecycle and architecture boundary suites under the 1 GB guard; targeted TypeScript checking passes. The full authoring suite was not run within this track's 1 GB allocation. Repository link/privacy checks and explicit link/privacy/whitespace scans of the six new text files pass. Peeks and JSON reports live under `authoring/build/hair-lab-wip/` with the `atlas-` prefix; no generated or extracted images are tracked.
+An offline adapter probe constructs all 56 DataTextures from a full 2K result in 10.1 ms. Supplied upload payload is 36,118,859 bytes, including RGBA Flow; scalar maps reference the prepared buffers, while Flow expansion adds 20,639,348 retained bytes. Generation, strip preparation and this adapter probe together peak at .6 GB. This measures CPU texture construction only, not GPU upload or rendering.
 
-Visual inspection of the four final maps confirms the long dense-to-sparse row, short variants, tapered ends and shared attribute paths. Transparent attributes are deliberately extended throughout each cell, explaining the large flat ID/gradient areas away from fibres. The generated short clump is visibly more split and compact than the reference; aggregate coverage/colour similarity does not establish the same silhouette. The two flat shaded views remain visibly different in strand placement, as expected for independent synthesis.
+Validation: **103 focused tests pass across eight files**, 12,837 assertions, under the 1 GB guard (peak .4 GB); targeted TypeScript checking passes. Suites cover atlas, ID filtering, full strips, preview adapter, colour model, cards/domain fixtures, lifecycle and architecture boundaries. The full authoring suite was not run within this track's 1 GB allocation. Repository link/privacy checks and explicit untracked-text link/privacy/whitespace checks pass. All PNGs and reports stay ignored under `authoring/build/hair-lab-wip/`; no generated or extracted images are committed.
