@@ -22,6 +22,8 @@ export function createBrowserViewportDevice(options: {
   queryContext: ViewportAttachmentPort<HTMLElement>["queryContext"];
   /** The feature renderers each loaded head creates (the composition's list, handed down by the composition root). */
   renderers?: readonly FeatureRendererFactory[];
+  optionalRenderers?: import("./platform/api/experiments").ExperimentPort;
+  referenceTextures?: import("./platform/api/scene").SceneHostPort["referenceTextures"];
   sceneFactory?: typeof createSceneHost;
   /** The head's WebGL context was lost or came back (the scene host reports it; the composition root logs it). */
   onContext?: (event: "lost" | "restored") => void;
@@ -91,7 +93,7 @@ export function createBrowserViewportDevice(options: {
     /** Load the head with a body's core (the feminine V's by default); the previous head is released first. */
     async loadHead(body: CoreBody = "female") {
       releaseHead();
-      viewer = await (options.sceneFactory ?? createSceneHost)(options.headHost, { body, renderers: options.renderers, onContext: options.onContext });
+      viewer = await (options.sceneFactory ?? createSceneHost)(options.headHost, { body, renderers: options.renderers, optionalRenderers: options.optionalRenderers, referenceTextures: options.referenceTextures, onContext: options.onContext });
       return viewer;
     },
     /**

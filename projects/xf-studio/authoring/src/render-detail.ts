@@ -294,7 +294,7 @@ export type RenderChunkMaterial = {
 };
 /** WolvenKit names each exported render chunk `submesh_<chunk>_LOD_<lod>` (optionally with a suffix). */
 export function chunkOfMesh(name: string): number | null {
-  const match = /^submesh_(\d+)_LOD_\d+/.exec(name);
+  const match = /^(?:detail_[a-z]+_)?submesh_(\d+)_LOD_\d+/.exec(name);
   return match ? Number(match[1]) : null;
 }
 

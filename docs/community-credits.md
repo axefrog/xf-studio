@@ -368,7 +368,7 @@ By ArmanIII, per its script headers. [Nexus](https://www.nexusmods.com/cyberpunk
 
 ### MELUMINARY
 
-[MELUMINARY Long Length Pak Vol. 3 #011](https://www.nexusmods.com/cyberpunk2077/mods/27125). Supplies the saved character's hair geometry for the optional hair preview, and its maps taught us to check whether an apparently missing texture is genuinely constant. Its physics reuses the base game's long-hair dangle rig and simulation for both parts, which showed that modded hair physics is often a vanilla set transplanted whole. Private local reference only; its creator credits and permissions are still being confirmed.
+[MELUMINARY Long Length Pak Vol. 3 #011](https://www.nexusmods.com/cyberpunk2077/mods/27125). Supplies the saved character's hair geometry for the optional hair preview, and its maps taught us to check whether an apparently missing texture is genuinely constant; [ASH SIDESWEPT GLAM](https://www.nexusmods.com/cyberpunk2077/mods/21898), whose page credits modelling to Hamed Ghaeli, also supplies a private visual benchmark for side parting and swept-fringe flow. Its physics reuses the base game's long-hair dangle rig and simulation for both parts, which showed that modded hair physics is often a vanilla set transplanted whole. Private local reference only; its creator credits and permissions are still being confirmed.
 
 ### MisterChedda
 
@@ -607,3 +607,8 @@ Guillaume-Benjamin-Amand Duchenne (de Boulogne), photographs for *Mécanisme de 
 - The photographers and makeup artists behind the glitter makeup photographs, and the designers and photographers behind the earring photographs, that we used as visual references.
 
 If you recognise your contribution here or anywhere in this project, please let us know so we can credit you properly.
+
+- [Batik Machida](https://beauty.hotpepper.jp/slnH000137560/style/L000156790.html): Their salon photograph informed the Hair Lab regression reference for a diagonal side-swept fringe merging into long layers. The photograph is retained only as a private reference and is not distributed.
+- [Bamboo salon](https://ameblo.jp/momiji1013/entry-12385330289.html): Their rear-view bob photograph informed the shoulder-level tip line and inward-turning ends in the Hair Lab regression set. The photograph is a private visual reference, not a shipped asset.
+- [Jean & Jacqueline](https://jean-jacqueline-friseur.de/blog/simplie-haarverlaengerung-kassel): Their high-ponytail photograph shows scalp lengths gathered into a rear tie and a free tail. It informed the structural regression case; the photograph is retained privately.
+- [Visavis Friseur](https://visavis-friseur.de/damen/sidecut/): Their sidecut reference shows a distinct density boundary with the crown swept toward the long side. It informed the undercut regression case; no photograph is distributed.

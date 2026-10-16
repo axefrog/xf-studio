@@ -19,6 +19,9 @@ export type FeatureRendererContext = {
   skin: SkinUnderlayPort;
   character(): CharacterView;
   subscribeCharacter(listener: () => void): () => void;
+  geometry?: SceneHostPort["geometry"];
+  resolvedSurfaces?: SceneHostPort["resolvedSurfaces"];
+  referenceTextures?: SceneHostPort["referenceTextures"];
   requestFrame(): void;
   onFrame(listener: (dt: number) => void): () => void;
   /** Compile an object's programs ahead (`SceneHostPort.compile`); without it, resolved at once (the first frame compiles them). */
@@ -106,6 +109,9 @@ export function createFeatureRenderers(context: FeatureRendererContext, factorie
       feature: entry.feature,
       renderer: context.renderer,
       anchors: () => ({ head, surface: (id: string) => context.surfaces.get(id) }),
+      geometry: context.geometry,
+      resolvedSurfaces: context.resolvedSurfaces,
+      referenceTextures: context.referenceTextures,
       attach(object: THREE.Object3D, options: { beside?: THREE.Object3D; morphs?: boolean; rig?: boolean } = {}) {
         const parent = (options.beside ?? head).parent;
         if (!parent) throw Error("That anchor is not on the head rig.");
@@ -179,8 +185,7 @@ export function createFeatureRenderers(context: FeatureRendererContext, factorie
     }
   }
   let nextSlot: number = RENDER_ORDER.featurePlates;
-  try {
-    for (const factory of factories) {
+  function add(factory: FeatureRendererFactory) {
       if (entries.some(entry => entry.feature === factory.feature)) throw Error(`The feature ${factory.feature} has two renderers.`);
       const slots = factory.renderSlots ?? 0;
       if (!Number.isInteger(slots) || slots < 0) throw Error(`The ${factory.feature} renderer asks for ${slots} draw-order slots.`);
@@ -196,9 +201,19 @@ export function createFeatureRenderers(context: FeatureRendererContext, factorie
         throw error;
       }
       entries.push(entry);
-    }
+      return entry;
+  }
+  try {
+    for (const factory of factories) add(factory);
   } catch (error) { dispose(); throw error; }
   return {
+    /** Optional contributions have a token; withdrawal restores resolved parts synchronously. */
+    register(factory: FeatureRendererFactory, signal: AbortSignal) {
+      if (signal.aborted) return;
+      const entry = add(factory);
+      signal.addEventListener("abort", () => { const at = entries.indexOf(entry); if (at >= 0) { entries.splice(at, 1); disposeEntry(entry); } }, { once: true });
+      context.supersededChanged(); context.requestFrame();
+    },
     /** A composed feature's renderer, typed by the factory that made it (the composition root reads its own features'; the host never does). */
     get<R extends FeatureRenderer>(factory: FeatureRendererFactory<R>): R | undefined {
       return entries.find(entry => entry.factory === factory)?.renderer as R | undefined;

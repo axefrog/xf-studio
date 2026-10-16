@@ -20,6 +20,8 @@ import { linearTargetSupported } from "../../linear-display";
 import type { LightingSource } from "../../lighting-setups";
 import type { FeatureRenderer, FeatureRendererFactory } from "../api/scene";
 import { createFeatureRenderers, type FeatureRenderers } from "./feature-renderers";
+import { characterGeometry } from "./character-geometry";
+import type { ExperimentPort } from "../api/experiments";
 import { createHeadRig, type MotionLoader } from "./head-rig";
 import { afterTask, createCharacterRenderer } from "./character-renderer";
 import { createCameraSettle } from "./camera-settle";
@@ -42,6 +44,8 @@ export type SceneHostOptions = {
   stage?: StageTheme;
   /** The feature renderers to create once the head is ready (the composition's list, compose/renderers.ts). */
   renderers?: readonly FeatureRendererFactory[];
+  optionalRenderers?: Pick<ExperimentPort, "registrations" | "subscribe">;
+  referenceTextures?: import("../api/scene").SceneHostPort["referenceTextures"];
   /** Whose core head to load: the feminine V's (default) or the masculine V's; a V of the other body needs a new scene host. */
   body?: CoreBody;
   /** The core head record (default: the host's derived preview, core-detail-loader.ts). Probe pages inject a synthetic head. */
@@ -286,6 +290,9 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   // The feature renderers, through their scene ports only (platform/api/scene.ts).
   features = createFeatureRenderers({ renderer, head, surfaces, skin: character.skin,
     character: character.view, subscribeCharacter: character.subscribe,
+    geometry: () => characterGeometry(head, character.resolvedSurfaces("hair"), character.resolvedSurfaces("body")),
+    resolvedSurfaces: character.resolvedSurfaces,
+    referenceTextures: options.referenceTextures,
     requestFrame: invalidate, onFrame, rig: { attach: bones => rigMotion.attach(bones), detach: bones => rigMotion.detach(bones) },
     compile: async object => {
       const prepared = lighting.prepare(object, camera);
@@ -295,6 +302,19 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     supersededChanged: () => { character.refreshVisibility(); invalidate(); },
     ...(options.onRendererError ? { report: options.onRendererError } : {}) }, options.renderers ?? []);
   releases.push(() => features?.dispose());
+  if (options.optionalRenderers) {
+    const registered = new Map<FeatureRendererFactory, AbortController>();
+    const sync = () => {
+      const wanted = options.optionalRenderers!.registrations().map(item => item.renderer);
+      for (const [factory, token] of registered) if (!wanted.includes(factory)) { registered.delete(factory); token.abort(); }
+      for (const factory of wanted) if (!registered.has(factory)) {
+        const token = new AbortController(); features!.register(factory, token.signal); registered.set(factory, token);
+      }
+    };
+    releases.push(options.optionalRenderers.subscribe(sync));
+    releases.push(() => { for (const token of registered.values()) token.abort(); registered.clear(); });
+    sync();
+  }
   // A renderer that replaces resolved parts hides them from the start.
   if (features.superseded().length) character.refreshVisibility();
   resize();

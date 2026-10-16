@@ -69,7 +69,7 @@
   "pure": true,
   "x-contract": [
     "Root ID is population seed plus index; area-weighted scalp attachment is stable for fixed topology and independent of preview budget.",
-    "Roots attach to actual head triangles; cap defines a boundary, never the follicle geometry itself.",
+    "Roots bind to the bald head scalp region. A soft authored density field is seeded once from cap projection (record provenance) or anatomy; later hairstyle changes never change it.",
     "Branch partitions incoming identities, convergence unions only disjoint sets, termination records ended identities, and cycles or missing links fail.",
     "Chart transport preserves root identity, consumed intrinsic length and wave phase; local layers compose only after parent evaluation through the child-to-parent mapping.",
     "Expression operations are constant, ramp, identity variation, smoothstep, multiply, override, masked blend and soft extrema; validate units and all finite bounds.",

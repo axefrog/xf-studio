@@ -78,7 +78,7 @@ export type CharacterDetailState = {
    */
   need?: "wolvenkit";
 };
-export type CharacterDetailSettings = { gameRoot: string | null; launchRoute: LaunchRoute; mo2Root: string | null;
+export type CharacterDetailSettings = { baseOnly?: boolean; gameRoot: string | null; launchRoute: LaunchRoute; mo2Root: string | null;
   mo2ProfileId: string | null; manualModRoot: string | null; wolvenKitCli: string | null };
 export type CharacterDetailHostOptions = {
   /** Host-owned private preview cache; records and files live in `characters/`, exports in `exports/`. */
@@ -188,7 +188,7 @@ export function installationFingerprint(settings: CharacterDetailSettings, regis
  */
 export function characterRoute(settings: CharacterDetailSettings): CharacterRoute | null {
   if (!settings.gameRoot) return null;
-  return { gameRoot: settings.gameRoot, launchRoute: settings.launchRoute, mo2Root: settings.mo2Root, mo2ProfileId: settings.mo2ProfileId,
+  return { ...(settings.baseOnly ? { baseOnly: true } : {}), gameRoot: settings.gameRoot, launchRoute: settings.launchRoute, mo2Root: settings.mo2Root, mo2ProfileId: settings.mo2ProfileId,
     manualModRoot: settings.manualModRoot, wolvenKitCli: settings.wolvenKitCli && existsSync(settings.wolvenKitCli) ? settings.wolvenKitCli : null };
 }
 

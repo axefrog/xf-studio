@@ -142,7 +142,7 @@ test("the presentation never imports the composition root, trusted services or l
 
 test("the one composition root hands the view only the public presentation port", () => {
   const source = readFileSync(join(root, "studio-startup.ts"), "utf8");
-  expect(source).toContain("bootstrap.mount(publicPort => { port = publicPort; mountStudio(publicPort, root, STUDIO_VIEW_COMPOSITION); })");
+  expect(source).toContain("bootstrap.mount(publicPort => { port = publicPort; mountStudio(publicPort, root, viewComposition); })");
   expect((source.match(/mountStudio\(/g) ?? []).length).toBe(1);
   const importers = files(root).filter(file => !file.startsWith(ui) && readFileSync(file, "utf8").includes("studio-ui/app"));
   expect(importers.map(file => relative(root, file))).toEqual(["studio-startup.ts"]);

@@ -2,7 +2,7 @@
   "kind": "runtime",
   "id": "hair-preview",
   "owner": "hair-lab",
-  "summary": "Diagnostic ribbon meshes attached through the feature scene port for one bound scene.",
+  "summary": "Diagnostic strand paths and density scalp tint, attached rigidly to Head for one bound scene.",
   "status": "target",
   "environment": "page",
   "key": [
@@ -13,5 +13,6 @@
   "ready": "driver:hair-lab",
   "query": [],
   "linger": 0,
-  "x-lifetime": "AbortSignal owns attachments, subscriptions and GPU buffers. Existing scene-port detach functions are invoked only inside the renderer adapter."
+  "x-lifetime": "AbortSignal owns attachments, subscriptions and GPU buffers. Existing scene-port detach functions are invoked only inside the renderer adapter.",
+  "x-coverage": "Replacement includes its own head-bound density tint using the existing cap material path and colour profile where possible. Preserve resolved cap topology and UVs. Fit to the head with clearance checked at triangle interiors, not only vertices, so coarse cap triangles cannot cross the finer head surface. Measure high-frequency mask autocorrelation to report periodic coverage defects. M2 adds dense inner cards. Never supersede until matching paths and coverage both exist."
 }

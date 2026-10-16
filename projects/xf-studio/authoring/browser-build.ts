@@ -6,6 +6,7 @@ import { basename, resolve } from "node:path";
 export const browserEntries = [
   "src/studio-main.ts",
   "src/raster-worker.ts",
+  "src/features/hair-lab/render/hair-worker.ts",
   "src/choice-preview-worker.ts",
   "src/render-fidelity-study.ts",
   "tools/glitter-head-study.ts",
@@ -18,6 +19,7 @@ export async function buildBrowser(outdir = resolve(import.meta.dir, "public", "
     entrypoints: browserEntries,
     outdir,
     target: "browser",
+    splitting: true,
     sourcemap: "external",
     // Entries live in src/ and tools/; keep every bundle at /build/<name>.js.
     naming: "[name].[ext]",

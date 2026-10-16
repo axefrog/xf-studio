@@ -1,0 +1,40 @@
+{
+  "kind": "action",
+  "id": "hair-lab-preview",
+  "owner": "hair-lab",
+  "summary": "Inspect generated strands, scalp coverage or both without changing the groom.",
+  "status": "target",
+  "name": "hairLab.preview",
+  "target": "type:hair-lab-session",
+  "input": {
+    "type": "object",
+    "properties": {
+      "display": {
+        "enum": [
+          "combined",
+          "strands",
+          "scalp",
+          "reference",
+          "reference-scalp"
+        ]
+      }
+    },
+    "required": [
+      "display"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The enabled lab has a bound scene.",
+    "refusals": [
+      {
+        "code": "no-scene",
+        "reason": "Open the 3D view first."
+      }
+    ]
+  },
+  "effect": {
+    "session": "Choose the diagnostic display only; retain the generated result and normal-hair restoration contract."
+  },
+  "undo": "none"
+}

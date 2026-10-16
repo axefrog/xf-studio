@@ -1,11 +1,11 @@
 import * as THREE from "three";
-import { extendSkin, fullSkinDepthMaterial } from "../../skin";
+import { copyMaterialShading, extendSkin, fullSkinDepthMaterial } from "../../skin";
 import { EYE_AMBIENT_BOOST, EYE_AXIS_TURN, EYE_FLAT_ROUGHNESS, IRIS_MASK_ENCODING } from "../../eye-material";
 import type { ProfileEncoding } from "../../hair-colour-model";
 import type { AdapterContext, ResolvedSkinSurface } from "../../character-material-adapters";
 import { BODY_SHAPE_KEY, DetailPartPool, loadCharacterDetails, uploadTexture, type CharacterDetailFetch, type LoadedCharacterComponent, type WarmedFiles,
   type LoadedCharacterDetails } from "../../character-detail-loader";
-import type { CharacterDetail, DetailSlot } from "../../render-detail";
+import { chunkOfMesh, type CharacterDetail, type DetailSlot } from "../../render-detail";
 import { coreAlbedoReader, coreRoughnessReader, createHeadSkinPlacement, skinSurfaceUnderlay, type BrowUnderlayEvidence, type HeadSkinPlacement } from "../../head-skin-placement";
 import { priorityRank } from "../../render-templates";
 import type { DetailLimit } from "../../detail-limits";
@@ -558,6 +558,9 @@ export function createCharacterRenderer(input: {
   return {
     skin: skinPort,
     details,
+    resolvedSurfaces: (slot: CharacterSlot) => (characterDetails?.components ?? []).filter(item => item.component.slot === slot).flatMap(item => item.meshes.map(mesh => ({ mesh,
+      template: item.component.materials.find(chunk => chunk.chunk === chunkOfMesh(mesh.name))?.template ?? item.component.materials[0]?.template ?? "",
+      resource: item.component.geometry.depotPath, forkMaterial: () => copyMaterialShading(Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) }))),
     view,
     subscribe(listener: () => void) { characterListeners.add(listener); return () => { characterListeners.delete(listener); }; },
     /** The resolved parts the feature renderers supersede changed: show and hide again (PREV-89). */

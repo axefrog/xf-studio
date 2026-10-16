@@ -36,8 +36,18 @@ export function skinSets(g: THREE.BufferGeometry) {
   return sets;
 }
 /** The skinning a material's compile adds (`extendSkin`), read when its program is built. */
-type SkinExtension = { declarations: string; sum: string; offset: number; sets: number };
+type SkinExtension = { declarations: string; sum: string; offset: number; sets: number;
+  baseCompile?: THREE.Material["onBeforeCompile"]; baseKey?: THREE.Material["customProgramCacheKey"] };
 const extensions = new WeakMap<THREE.Material, SkinExtension>();
+/** Copy template shading for newly generated geometry; never inherit another mesh's skin-attribute layout. */
+export function copyMaterialShading(source: THREE.Material): THREE.Material {
+  const copy = source.clone(), extension = extensions.get(source);
+  copy.onBeforeCompile = extension?.baseCompile ?? source.onBeforeCompile.bind(source);
+  const key = extension?.baseKey ?? source.customProgramCacheKey.bind(source);
+  copy.customProgramCacheKey = () => `${key()}-independent-skin`;
+  delete copy.userData.xfsHeadExtended;
+  return copy;
+}
 function extendedVertexShader(source: string, { declarations, sum, offset }: SkinExtension): string {
   return source
     .replace("#include <common>", `#include <common>\n${declarations}`)
@@ -85,6 +95,8 @@ export function extendSkin(
     extensions.set(material, current);
     const previousCompile = material.onBeforeCompile.bind(material);
     const previousKey = material.customProgramCacheKey.bind(material);
+    current.baseCompile = previousCompile;
+    current.baseKey = previousKey;
     material.onBeforeCompile = (shader, renderer) => {
       previousCompile(shader, renderer);
       shader.vertexShader = extendedVertexShader(shader.vertexShader, current);

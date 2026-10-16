@@ -111,6 +111,7 @@
   },
   "pure": true,
   "x-execution": "Pure bounded numerical batches run inside the generation worker process, with cancellation observed between batches.",
-  "x-contact": "Head and ear surface queries plus fitted shoulder/neck capsules; inspect segment crossings as well as sample endpoints. Report residuals after the final contact pass.",
-  "x-constraints": "Fixed step and order, step-scaled compliance, accumulated multipliers, pinned roots, rest-shape bending and limited sample-bundle separation; no authored guides and no runtime Dyng claims."
+  "x-contact": "Cache a head/ear signed-distance grid per geometry revision in the worker; fitted shoulder/neck capsules; query segment interiors as well as endpoints and report final residuals.",
+  "x-constraints": "Fixed step and order, step-scaled compliance, accumulated multipliers, pinned roots, rest-shape bending and limited sample-bundle separation; no authored guides and no runtime Dyng claims.",
+  "x-frame": "Static solve in bind-pose head space with bind-pose down vector; generated output follows Head rigidly, dynamic motion is M4."
 }

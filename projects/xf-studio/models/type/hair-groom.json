@@ -43,7 +43,7 @@
     },
     "scalp": {
       "kind": "value",
-      "doc": "Surface identity and topology binding; changes in topology require explicit rebinding.",
+      "doc": "Head scalp topology binding independent of selected hairstyle; density and length are authored scalp-space maps.",
       "shape": {
         "type": "object",
         "properties": {
@@ -54,18 +54,53 @@
           "topology": {
             "type": "string",
             "minLength": 1
+          },
+          "densitySeed": {
+            "type": "object",
+            "properties": {
+              "method": {
+                "enum": [
+                  "cap-projected",
+                  "head-estimated"
+                ]
+              },
+              "source": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "method",
+              "source",
+              "revision"
+            ],
+            "additionalProperties": false
+          },
+          "density": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "binding": {
+            "type": "object"
           }
         },
         "required": [
           "resource",
-          "topology"
+          "topology",
+          "densitySeed"
         ],
         "additionalProperties": false
       }
     },
     "graph": {
       "kind": "value",
-      "doc": "Root, volume, branch, convergence and termination intent; no authored curves.",
+      "doc": "Root, field-selected section partitions, clump volumes, disjoint convergence and termination. Section and clump IDs are authored graph labels. Convergence may hold a head-space tie sphere without replacing member roots.",
       "shape": {
         "type": "object",
         "properties": {
@@ -144,6 +179,20 @@
         ],
         "additionalProperties": false
       }
+    },
+    "flow": {
+      "kind": "value",
+      "doc": "Shared growth field: normalised lateral part position, shallow emergence angle, forehead sweep, crown lift and rear-section routing. Style names never choose solver code.",
+      "shape": {
+        "type": "object"
+      }
+    },
+    "cut": {
+      "kind": "value",
+      "doc": "Optional head-space tip plane. Style and settle the intrinsic fibre first, then trim at its first downward crossing; report the retained intrinsic length.",
+      "shape": {
+        "type": "object"
+      }
     }
   },
   "defaults": {
@@ -163,5 +212,6 @@
     }
   },
   "x-document": "Serialized separately as xfs/hair-groom-part-1; never insert into the imported save, character choices or existing makeup draft.",
-  "x-validation": "The operator contract in hair-population validates complete graph and expression shapes before evaluation; schema validation alone is not semantic validation."
+  "x-validation": "The operator contract in hair-population validates complete graph and expression shapes before evaluation; schema validation alone is not semantic validation.",
+  "x-attachment": "Generate in bind-pose head space and attach rigidly to Head; down vector is bind-pose gravity. Hairstyle changes never reseed density."
 }

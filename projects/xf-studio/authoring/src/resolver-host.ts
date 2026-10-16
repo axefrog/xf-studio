@@ -40,6 +40,7 @@ import { NATIVE_JSON_PAYLOADS, type NativeAnswerLedger, NativeFirstFetcher, open
 import { GAME_OODLE_LIBRARY } from "./native/oodle";
 
 export interface InstallationOptions {
+  readonly baseOnly?: boolean;
   readonly gameRoot: string;
   readonly launchRoute: "direct" | "mo2";
   readonly mo2Root?: string | null;
@@ -859,9 +860,13 @@ const UNREADABLE_ISSUES = new Set(["directory_unreadable", "entry_unreadable", "
 
 /** Discover the route's sources, mount archives, read indexes and `.xl` files, and open a resource graph. */
 /** Walk a route's folders for its sources (synchronous; `openInstallation` does it unless given a current discovery). */
-export function discoverRoute(options: Pick<InstallationOptions, "gameRoot" | "launchRoute" | "mo2Root" | "mo2ProfileId" | "manualModRoot" | "folderStamps">): SourceDiscovery {
-  return discoverSources(routeSettings(options), DISCOVERY_LIMITS, { folderStamps: options.folderStamps ?? folderStampMode });
+export function discoverRoute(options: Pick<InstallationOptions, "gameRoot" | "launchRoute" | "mo2Root" | "mo2ProfileId" | "manualModRoot" | "folderStamps" | "baseOnly">): SourceDiscovery {
+  const discovery = discoverSources(routeSettings(options), DISCOVERY_LIMITS, { folderStamps: options.folderStamps ?? folderStampMode });
+  return options.baseOnly ? { ...discovery, candidates: discovery.candidates.filter(isBaseGameSource) } : discovery;
 }
+/** Only the installed game's content/expansion archives; never a mod, XL declaration or loose override. */
+export const isBaseGameSource = (source: Pick<SourceCandidate, "provider" | "kind" | "virtualPath">) =>
+  source.provider === "game" && source.kind === "archive" && /^archive[\\/]pc[\\/](?:content|ep1)[\\/]/i.test(source.virtualPath);
 const routeSettings = (options: Pick<InstallationOptions, "gameRoot" | "launchRoute" | "mo2Root" | "mo2ProfileId" | "manualModRoot">): LocalSettings =>
   ({ ...defaultLocalSettings(), gameRoot: options.gameRoot, launchRoute: options.launchRoute,
     mo2Root: options.mo2Root ?? null, mo2ProfileId: options.mo2ProfileId ?? null, manualModRoot: options.manualModRoot ?? null });
@@ -871,7 +876,7 @@ export function openInstallation(options: InstallationOptions): Installation {
   const folderStamps = options.folderStamps ?? folderStampMode;
   const discovery = options.discovery ?? discoverRoute(options);
   const watch: WatchedPath[] = [...discovery.watched];
-  const candidates = [...discovery.candidates, ...gameBundleFiles(options.gameRoot, watch, folderStamps(options.gameRoot) === "listing")];
+  const candidates = [...discovery.candidates.filter(c => !options.baseOnly || isBaseGameSource(c)), ...(options.baseOnly ? [] : gameBundleFiles(options.gameRoot, watch, folderStamps(options.gameRoot) === "listing"))];
   // The game's own version: an update replaces the executable (and usually its archives).
   const executable = join(options.gameRoot, "bin", "x64", "Cyberpunk2077.exe");
   let executableStat = null;

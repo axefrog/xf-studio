@@ -1,3 +1,4 @@
+import type { ExperimentPort } from "./platform/api/experiments";
 import type { FacialPreviewSnapshot } from "./platform/api/facial";
 import type { PartPresetList, PartPresetOutcome, PartPresetRequest, PartPresetSetList, SetExportState } from "./part-presets";
 import type { AuthoringPresentation } from "./authoring-presentation";
@@ -126,6 +127,7 @@ export type FeatureLookup = {
 
 /** The complete current UI entry point. Construct it only in the trusted composition root. */
 export type StudioPresentationPort<Slot> = {
+  readonly experiments?: ExperimentPort;
   readonly authoring: Pick<StudioApplication,
     "actionKinds" | "requestKinds" | "actionDescriptors" | "requestDescriptors" |
     "gestureDescriptors" | "fileKinds" | "fileDescriptors" | "registry" | "descriptorsFor" | "targetCapability" | "contextCapability" |
@@ -284,6 +286,7 @@ export function createStudioPresentation<Slot>(sources: {
   diagnostics?: DiagnosticsActions;
   /** The modules' services (`compose/module-services.ts`), already facades: the port hands each to its module's view. */
   modules?: readonly ModuleService[];
+  experiments?: ExperimentPort;
 }): StudioPresentationPort<Slot> {
   const a = sources.authoring, l = sources.library, f = sources.files,
     v = sources.viewport, p = sources.preferences, r = sources.previewReadiness,
@@ -396,7 +399,7 @@ export function createStudioPresentation<Slot>(sources: {
   };
   const previewReadiness = Object.freeze({ snapshot: () => r.readiness() });
   const views: StudioPresentationPort<Slot>["views"] = Object.freeze({
-    snapshot: () => a.views(), modules: () => a.modules(), plannedModules: () => a.plannedModules(),
+    snapshot: () => a.views(), modules: () => [...a.modules(), ...(sources.experiments?.registrations().map(item => item.module) ?? [])], plannedModules: () => a.plannedModules(),
     tools: (view: ViewId | undefined, filter: ViewToolFilter) => a.viewTools(view, filter),
     summaries: (view: ViewId | undefined, filter: Pick<ViewToolFilter, "modules">) => a.viewSummaries(view, filter),
     titles: () => a.viewTitles(),
@@ -465,7 +468,8 @@ export function createStudioPresentation<Slot>(sources: {
     : Promise.resolve({ ok: false as const, message: "Web pages can't be opened from here." }) });
   return Object.freeze({ authoring: Object.freeze(authoring), library: Object.freeze(library),
     files: Object.freeze(files), viewport: Object.freeze(viewport), preferences: Object.freeze(preferences),
-    previewReadiness, views, features: () => infos, feature, module: (id: string) => moduleServices.get(id), localSetup: Object.freeze(localSetup),
+    previewReadiness, views, features: () => infos, feature, module: (id: string) => moduleServices.get(id) ?? sources.experiments?.registrations().find(item => item.module.id === id)?.service,
+    experiments: sources.experiments, localSetup: Object.freeze(localSetup),
     facial: Object.freeze({ snapshot: () => a.facialPreview(), retry: () => a.facialRetry(), installed: () => a.facialInstalled() }),
     // A save without a part saves the feature's live part, serialized with its own codec.
     presets: Object.freeze({ list: (feature: string) => a.presetList(feature), sets: (feature: string) => a.presetSets(feature), exports: () => a.presetExports(),
@@ -485,6 +489,7 @@ export function createStudioPresentation<Slot>(sources: {
         ...(sources.modInstall ? [sources.modInstall.subscribe(listener)] : []),
         ...(sources.desktopApp ? [sources.desktopApp.subscribe(listener)] : []),
         ...(sources.updates ? [sources.updates.subscribe(listener)] : []),
+        ...(sources.experiments ? [sources.experiments.subscribe(listener)] : []),
         ...(setup ? [setup.subscribe(listener)] : []), ...(d ? [d.subscribe(listener)] : []),
         ...[...moduleServices.values()].map(service => service.subscribe(listener))];
       return () => { for (const unsubscribe of unsubs) unsubscribe(); };

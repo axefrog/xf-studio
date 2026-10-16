@@ -34,11 +34,15 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
   const research = new Toggle({ label: "Show research tools", help: ["Finishes still waiting for a check in the game (Shimmer, Glitter), rendering and lighting studies, raw exports, compiler plans and developer IDs.",
     "Off unless you're studying how XF Studio works: none of them is needed to make your mod."],
     onChange: on => { appearance.setResearch(on); rt.changed(); } });
-  const reference = button({ label: "Keyboard & mouse…", icon: "keyboard", small: true, variant: "quiet", onClick: () => appearance.openReference() });
+  const experiments = (port.experiments?.snapshot() ?? []).map(info => ({ info, toggle: new Toggle({ label: info.label, help: info.description,
+    reserveNote: true, onChange: on => { void port.experiments!.set(info.id, on).then(() => rt.changed()); } }) }));
+  const experimental = section({ title: "Experimental features", help: "Early tools to try. Your usual tools and saved looks stay available." }, ...experiments.map(item => item.toggle.element));
+  experimental.hidden = !experiments.length;
+  const reference = button({ label: "Keyboard & mouseâ€¦", icon: "keyboard", small: true, variant: "quiet", onClick: () => appearance.openReference() });
 
   const deep = new Toggle({ label: "Diagnostic mode", help: "Records more detail about what XF Studio does, for a day, to help find a problem. It stays on this computer.",
     reserveNote: true, onChange: on => { void setDiagnosticMode(on ? "deep" : "normal"); } });
-  const report = button({ label: "Report a problem…", icon: "warning", small: true, onClick: () => openReportDialog(rt, null) });
+  const report = button({ label: "Report a problemâ€¦", icon: "warning", small: true, onClick: () => openReportDialog(rt, null) });
   async function setDiagnosticMode(mode: "deep" | "normal") {
     const result = await port.diagnostics.dispatch({ kind: "diagnostics.setMode", mode });
     if (result.ok) rt.feedback.record("info", "Diagnostics", result.message); else rt.feedback.toast("warning", "Diagnostics", result.message);
@@ -82,7 +86,7 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
     tools: group("tools", ["XF Studio sets WolvenKit up for you (it asks before downloading). Name your own copy only if you'd rather use it.",
       "The 3D view is built from files XF Studio prepares from your game. Clearing them frees the space; they're prepared again when needed."],
     form.tools, prepared),
-    appearance: group("appearance", "Stored with your workspace on this computer.", theme.element, hints.element, research.element, h("div", { class: "row wrap gap-s" }, reference)),
+    appearance: group("appearance", "Stored with your workspace on this computer.", theme.element, hints.element, research.element, experimental, h("div", { class: "row wrap gap-s" }, reference)),
     updates: group("updates", "New versions are published on GitHub. XF Studio tells you when there's one; you download and install it yourself.",
       checkOnStart.element, h("div", { class: "row wrap gap-s align-center" }, checkNow, updateText, releases)),
     privacy: group("privacy", "Diagnostics stay on this computer. A problem report is prepared for you to review and save; nothing is sent by itself.",
@@ -111,18 +115,18 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
       gameStep.element.parentElement!.hidden = gameStep.element.hidden;
       const files = frame.preview.character?.prepared;
       prepared.hidden = !files;
-      setText(preparedText, !files ? "" : files.clearing ? "Clearing the prepared game files…"
-        : files.bytes === null ? "Prepared game files: checking their size…"
-          : `Prepared game files: ${files.bytes ? size(files.bytes) : "none"}${files.freed ? ` · cleared ${size(files.freed)}` : ""}`);
+      setText(preparedText, !files ? "" : files.clearing ? "Clearing the prepared game filesâ€¦"
+        : files.bytes === null ? "Prepared game files: checking their sizeâ€¦"
+          : `Prepared game files: ${files.bytes ? size(files.bytes) : "none"}${files.freed ? ` Â· cleared ${size(files.freed)}` : ""}`);
       applyCapability(clearPrepared, port.authoring.capability({ kind: "character.clearPreparedFiles" }));
       const setupView = frame.localSetup.view;
       checkOnStart.update(setupView?.fields.checkForUpdates ?? true, { disabled: !setupView || setupView.source === "backup",
-        reason: !setupView ? "Reading your settings…" : setupView.source === "backup" ? "Restore your previous settings first." : undefined });
+        reason: !setupView ? "Reading your settingsâ€¦" : setupView.source === "backup" ? "Restore your previous settings first." : undefined });
       // While checking, the button says so (and waits); after the first render the line and the releases button keep the last
       // result, so the row never reflows. The first render writes them even mid-check, so the releases button never shows without its
       // line. A newer version makes the releases page the main action and Check now the quiet one.
       const state = port.updates.snapshot(), checking = checkingForUpdates(state);
-      setButtonLabel(checkNow, checking ? "Checking…" : "Check now");
+      setButtonLabel(checkNow, checking ? "Checkingâ€¦" : "Check now");
       applyCapability(checkNow, port.updates.capability({ kind: "updates.check" }));
       if (!checking || !updatesShown) {
         updatesShown = true;
@@ -136,6 +140,10 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
       theme.update(appearance.theme());
       hints.update(appearance.hints());
       research.update(appearance.research());
+      for (const { info, toggle } of experiments) {
+        const state = port.experiments!.snapshot().find(item => item.id === info.id)!;
+        toggle.update(state.enabled, { disabled: state.overridden, note: state.message || (state.overridden ? "Set for this verification page." : state.phase === "loading" ? "Opening…" : "") });
+      }
       const mode = port.diagnostics.snapshot().mode;
       const next = mode?.mode === "deep" ? "normal" : "deep", allowed = port.diagnostics.capability({ kind: "diagnostics.setMode", mode: next });
       deep.update(mode?.mode === "deep", { disabled: !allowed.available, reason: allowed.reason,

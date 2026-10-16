@@ -26,9 +26,23 @@
       "shape": {
         "type": "boolean"
       }
+    },
+    "display": {
+      "kind": "value",
+      "doc": "Diagnostic display without changing the authored groom or generation identity.",
+      "shape": {
+        "enum": [
+          "combined",
+          "strands",
+          "scalp",
+          "reference",
+          "reference-scalp"
+        ]
+      }
     }
   },
   "defaults": {
-    "active": false
+    "active": false,
+    "display": "combined"
   }
 }

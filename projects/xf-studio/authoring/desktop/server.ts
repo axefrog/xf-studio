@@ -1,3 +1,4 @@
+import { createReferenceCharacterRoutes } from "../src/reference-character-server";
 import { existsSync, mkdirSync, realpathSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { isBelow } from "../src/platform/api/path-containment";
@@ -241,6 +242,9 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     },
     log: logTo("character"), trace: diagnostics.trace, nativeDecodeWorker: hostOptions.nativeDecodeWorker });
   const characterDetailRequest = createCharacterDetailHandler(characterDetails);
+  const referenceCharacters = createReferenceCharacterRoutes({ cacheRoot: desktopPreviewCache(dataRoot), exporter: previewExporter,
+    settings: () => ({ gameRoot: savedSettings()?.gameRoot ?? null, launchRoute: "direct", mo2Root: null, mo2ProfileId: null,
+      manualModRoot: null, wolvenKitCli: wolvenKit.usable() }), log: logTo("reference-character"), nativeDecodeWorker: hostOptions.nativeDecodeWorker });
   const creatorRequest = createCreatorHandler(characterDetails.creator, { refresh: () => characterDetails.refresh(), prepared: characterDetails });
   const choicePreviewRequest = createChoicePreviewHandler(characterDetails);
   // Photo-mode poses (pose-library-design.md P1), from the same launch route and resolver cache as the creator options.
@@ -343,6 +347,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       if (url.pathname.startsWith(DIAGNOSTICS_PREFIX)) return diagnosticsRequest(routedRequest);
       if (url.pathname === "/api/desktop/preview") return previewCoreRequest(routedRequest);
       if (url.pathname === CHARACTER_DETAIL_ENDPOINT) return characterDetailRequest(routedRequest);
+      if (referenceCharacters.accepts(url.pathname)) return referenceCharacters.handle(routedRequest);
       if (url.pathname === CHOICE_PREVIEW_ENDPOINT || url.pathname.startsWith(`${CHOICE_PREVIEW_ENDPOINT}/`)) return choicePreviewRequest(routedRequest);
       if (url.pathname === CREATOR_ENDPOINT) return creatorRequest(routedRequest);
       if (url.pathname === POSES_ENDPOINT) return poseRequest(routedRequest);
