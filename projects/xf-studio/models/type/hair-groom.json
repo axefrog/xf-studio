@@ -182,7 +182,7 @@
     },
     "flow": {
       "kind": "value",
-      "doc": "Shared growth field: normalised lateral part position, shallow emergence angle, forehead sweep, crown lift and rear-section routing. Style names never choose solver code.",
+      "doc": "Shared growth field: normalised lateral part position, shallow emergence angle, forehead sweep, crown lift and rear-section routing. Optional partCombing is a dimensionless [away-from-part, upward, rearward] vector, mirrored across the part. An explicit foreheadDirection overrides it. Style names never choose solver code.",
       "shape": {
         "type": "object"
       }
@@ -204,7 +204,7 @@
     "fields": {},
     "solver": {
       "samples": 256,
-      "intervals": 24,
+      "intervals": 64,
       "steps": 12,
       "iterations": 8,
       "stepSeconds": 0.016666666666666666,

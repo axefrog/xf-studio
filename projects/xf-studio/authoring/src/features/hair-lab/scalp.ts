@@ -57,21 +57,13 @@ export function scalpRegions(head: HeadSurface) {
   const count = head.positions.length / 3, min: Vec3 = [Infinity, Infinity, Infinity], max: Vec3 = [-Infinity, -Infinity, -Infinity];
   for (let i = 0; i < count; i++) for (let k = 0; k < 3; k++) { min[k] = Math.min(min[k], head.positions[i * 3 + k]); max[k] = Math.max(max[k], head.positions[i * 3 + k]); }
   const centre = min.map((v, k) => (v + max[k]) / 2) as Vec3, size = sub(max, min), front = head.front ?? [0, 0, 1];
-  const links = Array.from({ length: count }, () => [] as number[]);
-  for (let t = 0; t < head.indices.length; t += 3) for (let j = 0; j < 3; j++) { const a = head.indices[t + j], b = head.indices[t + (j + 1) % 3]; links[a].push(b); links[b].push(a); }
-  const seen = new Set<number>(), islands: number[][] = [];
-  for (let v = 0; v < count; v++) {
-    if (seen.has(v) || !links[v].length) continue;
-    const ids = [v]; seen.add(v);
-    for (let j = 0; j < ids.length; j++) for (const next of links[ids[j]]) if (!seen.has(next)) { seen.add(next); ids.push(next); }
-    islands.push(ids);
-  }
-  const crown = new Set(islands.filter(ids => ids.some(i => head.positions[i * 3 + 1] > min[1] + size[1] * .86)).flat());
   const region = (p: Vec3) => {
     const height = (p[1] - min[1]) / size[1], facing = dot(sub(p, centre), front) / size[2], side = Math.abs(p[0] - centre[0]) / (size[0] * .5);
-    return height < .35 ? "neck" : side > .88 && height < .77 ? "ears" : facing > .06 && height < .78 ? "forehead" : facing > 0 && height < .68 ? "face" : "scalp";
+    const forehead = .72 + .06 * smooth(.18, .38, facing);
+    return height < .35 ? "neck" : side > .88 && height < .69 ? "ears" : facing > .06 && height < forehead ? "forehead" : facing > 0 && height < .68 ? "face" : "scalp";
   };
-  const eligible = (i: number) => (islands.length === 1 || crown.has(i)) && region(vertex(head.positions, i)) === "scalp";
+  // A UV-island boundary is not a hairline: the vanilla cap continues across the temple seam.
+  const eligible = (i: number) => region(vertex(head.positions, i)) === "scalp";
   return { eligible, region };
 }
 export function constrainDensity(head: HeadSurface, density: number[]) {

@@ -94,6 +94,8 @@
     "additionalProperties": false
   },
   "pure": true,
-  "x-budget": "At most 8 ms generation for prepared surfaces; cap coarse samples so dispatch-to-frame stays within 50 ms.",
-  "x-shape": "Shared field-driven shallow tangent emergence, part position, forehead sweep, supported layer thickness, tip curvature and soft rear-section routing. Convergence ties steer members along head support to a head-bound hold, then release a gravity-driven tail. Regression grooms change maps and topology only; no style switch in the engine."
+  "x-budget": "Prototype gate: about 100 ms warm generation in the worker for prepared surfaces. Original dispatch-to-frame goal remains 50 ms and is not yet met.",
+  "x-continuity": "Trace supported growth independently of wave amplitude and layer thickness. Apply waves and layer offsets to that stable trace, project contact, then resample intrinsic distance. Tiny scalar edits must not change which route a fibre takes around the body. UV-seam vertices of the cap share their adaptive lift.",
+  "x-sampling": "The interval budget is a maximum. Allocate path samples by curve deviation, maximum edge length and segment contact, retaining roots, intrinsic distances and convergence holds. Tight ear bends need local samples; uniform long edges may not cut through the ear. Tessellation is derived data and never changes fibre identity.",
+  "x-shape": "Shared field-driven shallow tangent emergence, part position, forehead sweep, supported layer thickness, tip curvature and soft rear-section routing. The dimensionless partCombing vector is [away-from-part, upward, rearward], mirrored by the part field; default [2.4, 0.3, 0.35] combs front roots mostly sideways along the hairline. An explicit foreheadDirection vector can override that symmetric field. Convergence ties steer members along head support to a head-bound hold, then release a gravity-driven tail. Regression grooms change maps and topology only; no style switch in the engine."
 }

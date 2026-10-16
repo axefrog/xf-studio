@@ -71,6 +71,9 @@ export function characterGeometry(head: THREE.SkinnedMesh, hair: readonly Resolv
         radii: [Math.min(.23, Math.max(.08, rx)) + .003, .025, Math.min(.20, Math.max(.05, rz)) + .003] });
     }
   }
-  return { resource: `core-head:${head.name || "head"}:${topology}`, topology, revision: `${topology}:${shape}:${capsules.map(c => [...c.a, ...c.b, c.radius, ...(c.radii ?? [])].join(",")).join(";")}`, positions,
+  let bodyHash = 2166136261;
+  for (const value of bodySurface.positions) bodyHash = Math.imul(bodyHash ^ Math.round(value * 1e6), 16777619);
+  for (const value of bodySurface.indices) bodyHash = Math.imul(bodyHash ^ value, 16777619);
+  return { resource: `core-head:${head.name || "head"}:${topology}`, topology, revision: `${topology}:${shape}:body-${bodyHash >>> 0}:${capsules.map(c => [...c.a, ...c.b, c.radius, ...(c.radii ?? [])].join(",")).join(";")}`, positions,
     indices: Array.from(indices.array), uv, down: [0, -1, 0], front: [0, 0, -1], capsules, ...(cap ? { cap } : {}), ...(bodySurface.indices.length ? { body: bodySurface } : {}) };
 }

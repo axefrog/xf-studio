@@ -195,6 +195,9 @@ const skinAdapter: MaterialAdapter = {
 };
 
 /** `hair.mt`: strands and lashes. Profile lookup, overlay, coverage and hair light (hair-shading.ts). */
+/** Attribute preparation for caller-owned geometry using resolved template shading. */
+export function prepareTemplateGeometry(geometry: THREE.BufferGeometry) { attachHairVertexRed(geometry); }
+
 const hairStrand: MaterialAdapter = {
   id: "hair-strand",
   create(chunk, textures, mesh, context) {

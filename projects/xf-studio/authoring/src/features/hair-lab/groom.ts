@@ -26,10 +26,10 @@ export function defaultGroom(surface: HeadSurface): Groom {
       source: surface.cap?.points.length ? surface.cap.source : surface.resource, revision: surface.revision },
       density: surface.cap?.points.length ? seedDensity(surface) : seedAnatomicalDensity(surface), binding: samplingBinding(surface) },
     graph: sectionGraph(),
-    flow: { part: 0, emergenceRadians: Math.PI / 9, foreheadSweep: 1, crownLiftMetres: .0035, rearPreference: 1 },
+    flow: { part: 0, emergenceRadians: Math.PI / 9, foreheadSweep: 1, crownLiftMetres: .0035, rearPreference: 1, partCombing: [2.4, .3, .35] },
     fields: { length: constant(.55, "m"), waves: constant(.012, "m"), spread: constant(.018, "m"), stiffness: constant(.4, "ratio"),
       density: constant(1, "ratio") },
-    solver: { samples: 256, intervals: 48, steps: 12, iterations: 8, stepSeconds: 1 / 60, clearanceMetres: .0005 } };
+    solver: { samples: 256, intervals: 64, steps: 12, iterations: 8, stepSeconds: 1 / 60, clearanceMetres: .0005 } };
 }
 export function surfaceBounds(head: HeadSurface) {
   const min: Vec3 = [Infinity, Infinity, Infinity], max: Vec3 = [-Infinity, -Infinity, -Infinity];

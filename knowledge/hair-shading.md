@@ -8,6 +8,8 @@ This page covers hair cards, and lashes that use hair materials. How hair moves 
 
 ## 1. Inputs
 
+For generated preview geometry, copy template shading independently of the source mesh's skinning extension. The Hair Lab cap probe found that copying an eight-influence compile wrapper onto geometry with only four skin attributes hid otherwise valid geometry. The [material-copy adapter](../projects/xf-studio/authoring/src/skin.ts) retains the base template hook, while the scene surface API prepares template attributes on the caller's geometry. This is an offline Studio finding; it does not change the decoded game shader model below.
+
 | Input | Meaning | Grade |
 |---|---|---|
 | `Strand_ID` (reg 0) | Greyscale per-strand identity; its **red** channel indexes the profile's ID gradient. Templates and the inspected textures are `isGamma=0`, so the value is linear. | [source] [resource] |

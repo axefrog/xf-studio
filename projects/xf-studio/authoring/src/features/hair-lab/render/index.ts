@@ -1,6 +1,5 @@
 import { encodeScalarBytes, scalarBytes } from "../../../platform/api/scalar-image";
 import * as THREE from "three";
-import { attachHairVertexRed } from "../../../hair-shading";
 import { Aborter } from "../../../platform/api/graph";
 import type { AbortSignalLike } from "../../../platform/api/graph";
 import { featureId } from "../../../platform/api/feature";
@@ -86,7 +85,7 @@ export function hairRenderer(lab: ReturnType<typeof createHairLab>, lifetime: Ab
         geometry.setAttribute("position", new THREE.Float32BufferAttribute(surface.positions, 3));
         geometry.setAttribute("uv", new THREE.Float32BufferAttribute(surface.uv, 2)); geometry.setIndex(surface.indices);
         if (surface.colours) geometry.setAttribute("color", new THREE.Float32BufferAttribute(surface.colours, surface.colours.length / (surface.positions.length / 3)));
-        geometry.computeVertexNormals(); attachHairVertexRed(geometry);
+        geometry.computeVertexNormals(); source?.prepareGeometry?.(geometry);
         const prior = material.onBeforeCompile, key = material.customProgramCacheKey.bind(material);
         material.vertexColors = false;
         material.alphaMap = reference!.textures[isCap ? "MaskTexture" : "Strand_Alpha"] ?? material.alphaMap;
@@ -151,7 +150,7 @@ export function hairRenderer(lab: ReturnType<typeof createHairLab>, lifetime: Ab
       void host.compile(group).then(() => {
         if (life.signal.aborted || ticket !== upload || !lab.session(scene)?.active) { for (const g of geometries) g.dispose(); for (const m of materials) m.dispose(); mask.dispose(); return; }
         clear(); const detach = host.attach(group); drawn = { group, detach, geometries, materials, textures: [mask] };
-        resultKey = key; evidence = { stage: result.stage, paths: result.paths.paths.length, scalp: result.groom.scalp.densitySeed,
+        resultKey = key; evidence = { stage: result.stage, continuation: result.continuation ?? false, paths: result.paths.paths.length, scalp: result.groom.scalp.densitySeed,
           capSource: session.surface.coverageSurface!.resource, capShader, capMaterial: { type: tint.type, visible: tint.visible, opacity: tint.opacity, colorWrite: tint.colorWrite, depthTest: tint.depthTest }, tintCoverage: result.tintCheck, residuals: result.residuals, milliseconds: result.milliseconds };
         displayGroup(group);
         host.supersede([{ slot: "hair" }]); host.requestFrame();

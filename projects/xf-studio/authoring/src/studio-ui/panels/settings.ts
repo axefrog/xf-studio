@@ -38,11 +38,11 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
     reserveNote: true, onChange: on => { void port.experiments!.set(info.id, on).then(() => rt.changed()); } }) }));
   const experimental = section({ title: "Experimental features", help: "Early tools to try. Your usual tools and saved looks stay available." }, ...experiments.map(item => item.toggle.element));
   experimental.hidden = !experiments.length;
-  const reference = button({ label: "Keyboard & mouseâ€¦", icon: "keyboard", small: true, variant: "quiet", onClick: () => appearance.openReference() });
+  const reference = button({ label: "Keyboard & mouse…", icon: "keyboard", small: true, variant: "quiet", onClick: () => appearance.openReference() });
 
   const deep = new Toggle({ label: "Diagnostic mode", help: "Records more detail about what XF Studio does, for a day, to help find a problem. It stays on this computer.",
     reserveNote: true, onChange: on => { void setDiagnosticMode(on ? "deep" : "normal"); } });
-  const report = button({ label: "Report a problemâ€¦", icon: "warning", small: true, onClick: () => openReportDialog(rt, null) });
+  const report = button({ label: "Report a problem…", icon: "warning", small: true, onClick: () => openReportDialog(rt, null) });
   async function setDiagnosticMode(mode: "deep" | "normal") {
     const result = await port.diagnostics.dispatch({ kind: "diagnostics.setMode", mode });
     if (result.ok) rt.feedback.record("info", "Diagnostics", result.message); else rt.feedback.toast("warning", "Diagnostics", result.message);
@@ -115,18 +115,18 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
       gameStep.element.parentElement!.hidden = gameStep.element.hidden;
       const files = frame.preview.character?.prepared;
       prepared.hidden = !files;
-      setText(preparedText, !files ? "" : files.clearing ? "Clearing the prepared game filesâ€¦"
-        : files.bytes === null ? "Prepared game files: checking their sizeâ€¦"
-          : `Prepared game files: ${files.bytes ? size(files.bytes) : "none"}${files.freed ? ` Â· cleared ${size(files.freed)}` : ""}`);
+      setText(preparedText, !files ? "" : files.clearing ? "Clearing the prepared game files…"
+        : files.bytes === null ? "Prepared game files: checking their size…"
+          : `Prepared game files: ${files.bytes ? size(files.bytes) : "none"}${files.freed ? ` · cleared ${size(files.freed)}` : ""}`);
       applyCapability(clearPrepared, port.authoring.capability({ kind: "character.clearPreparedFiles" }));
       const setupView = frame.localSetup.view;
       checkOnStart.update(setupView?.fields.checkForUpdates ?? true, { disabled: !setupView || setupView.source === "backup",
-        reason: !setupView ? "Reading your settingsâ€¦" : setupView.source === "backup" ? "Restore your previous settings first." : undefined });
+        reason: !setupView ? "Reading your settings…" : setupView.source === "backup" ? "Restore your previous settings first." : undefined });
       // While checking, the button says so (and waits); after the first render the line and the releases button keep the last
       // result, so the row never reflows. The first render writes them even mid-check, so the releases button never shows without its
       // line. A newer version makes the releases page the main action and Check now the quiet one.
       const state = port.updates.snapshot(), checking = checkingForUpdates(state);
-      setButtonLabel(checkNow, checking ? "Checkingâ€¦" : "Check now");
+      setButtonLabel(checkNow, checking ? "Checking…" : "Check now");
       applyCapability(checkNow, port.updates.capability({ kind: "updates.check" }));
       if (!checking || !updatesShown) {
         updatesShown = true;

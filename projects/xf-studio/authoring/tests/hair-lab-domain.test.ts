@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { constant, evaluateField, transportSample, validateField } from "../src/features/hair-lab/fields";
 import { defaultGroom, evaluateMembership, sampleRoots, validateGroom } from "../src/features/hair-lab/groom";
-import { buildDistanceGrid, capsuleContact, contactAt, segmentContact } from "../src/features/hair-lab/contact";
-import { coarsePaths, cutPaths, drapePaths, pathResiduals } from "../src/features/hair-lab/solve";
+import { buildCharacterContact, buildDistanceGrid, capsuleContact, contactAt, segmentContact } from "../src/features/hair-lab/contact";
+import { coarsePaths, continuePaths, cutPaths, drapePaths, drapeStep, pathResiduals, retargetContinuation } from "../src/features/hair-lab/solve";
 import type { HeadSurface, MaterialSample } from "../src/features/hair-lab/types";
 
 // Synthetic, closed, outward-oriented head; no game resources in fixtures.
@@ -22,6 +22,12 @@ export function sphereSurface(): HeadSurface {
     down: [0, -1, 0], capsules: [] };
 }
 const point: MaterialSample = { id: "1:2", index: 2, uv: [.2, .8], cross: [.3, .7], distance: .15, entrance: .1, phase: .9 };
+function pointAlong(path: import("../src/features/hair-lab/types").HairPath, ratio: number) {
+  const steps = path.segmentMetres ?? Array(path.points.length - 1).fill(path.intrinsicMetres / (path.points.length - 1));
+  const wanted = ratio * path.intrinsicMetres; let at = 0, distance = 0;
+  while (at < steps.length - 1 && distance + steps[at] < wanted) distance += steps[at++];
+  const f = (wanted - distance) / steps[at]; return path.points[at].map((v, k) => v * (1 - f) + path.points[at + 1][k] * f);
+}
 
 describe("Hair Lab model: transport before composition", () => {
   test("non-identity chart changes inherited coordinates, preserving identity, distance and phase", () => {
@@ -118,7 +124,7 @@ describe("Hair Lab model: static contact solve", () => {
         next.fields[field] = constant(initial.value + edit * .0005, "m");
         const paths = coarsePaths(next, roots, head.down, head.front, { grid, surface: head });
         let maximum = 0;
-        for (let p = 0; p < paths.paths.length; p++) for (let j = 0; j < paths.paths[p].points.length; j++) maximum = Math.max(maximum, Math.hypot(...paths.paths[p].points[j].map((v, k) => v - previous.paths[p].points[j][k])));
+        for (let p = 0; p < paths.paths.length; p++) for (let j = 0; j <= 64; j++) { const a = pointAlong(paths.paths[p], j / 64), b = pointAlong(previous.paths[p], j / 64); maximum = Math.max(maximum, Math.hypot(...a.map((v, k) => v - b[k]))); }
         expect(maximum).toBeLessThan(.015);
         expect(paths.paths.map(p => p.root)).toEqual(previous.paths.map(p => p.root));
         previous = paths;
@@ -130,6 +136,8 @@ describe("Hair Lab model: static contact solve", () => {
     expect(contactAt(grid, [.2, 0, 0]).distance).toBeGreaterThan(0);
     expect(segmentContact(grid, [-.2, 0, 0], [.2, 0, 0]).distance).toBeLessThan(-.07);
     expect(segmentContact(grid, [grid.max[0] + .00001, 0, 0], [grid.max[0] + .002, -.02, 0]).distance).toBeGreaterThan(.03);
+    const openBoundary = { ...grid, values: new Float32Array(grid.values.length).fill(-.03) };
+    expect(contactAt(openBoundary, [grid.max[0] + .00001, 0, 0]).distance).toBeGreaterThan(.03);
   });
   test("determinism, root pinning, length and penetration residuals", () => {
     const groom = defaultGroom(head);
@@ -174,6 +182,16 @@ describe("Hair Lab model: static contact solve", () => {
     const broken = structuredClone(solved); broken.paths[0].points[10] = [0, -.3, 0];
     expect(pathResiduals(broken, paths, grid, .0005, [capsule]).penetrationMetres).toBeGreaterThan(.05);
   });
+  test("front growth follows the authored symmetric combing away from the part", () => {
+    const groom = defaultGroom(head); groom.solver.intervals = 48;
+    const roots = sampleRoots(groom, head, 128).filter(root => root.normal[2] > .4 && root.normal[1] > .1 && Math.abs(root.position[0]) > .01);
+    expect(roots.length).toBeGreaterThan(2);
+    const paths = coarsePaths(groom, roots, head.down, head.front, { grid, surface: head });
+    for (const path of paths.paths) {
+      const dx = path.points[1][0] - path.points[0][0];
+      expect(dx * Math.sign(path.root.position[0])).toBeGreaterThan(0);
+    }
+  });
   test("the body distance field catches a torso crossing outside the head grid", () => {
     const body = sphereSurface();
     body.positions = body.positions.map((value, i) => i % 3 === 0 ? value * 1.7 : i % 3 === 1 ? value * 1.8 - .30 : value);
@@ -181,5 +199,95 @@ describe("Hair Lab model: static contact solve", () => {
     expect(contactAt(grid, [0, -.30, 0]).distance).toBeGreaterThan(0);
     expect(contactAt(combined, [0, -.30, 0]).distance).toBeLessThan(-.08);
     expect(segmentContact(combined, [-.25, -.30, 0], [.25, -.30, 0]).distance).toBeLessThan(-.08);
+  });
+  test("small wave and layer edits do not reroute the coarse trace around a body", () => {
+    const body = sphereSurface();
+    body.positions = body.positions.map((v, i) => i % 3 === 0 ? v * 1.7 : i % 3 === 1 ? v * 1.8 - .30 : v);
+    const surface = { ...head, body }, combined = { ...grid, others: [buildDistanceGrid(body, 32)] };
+    const groom = defaultGroom(surface), roots = sampleRoots(groom, surface, 64);
+    const baseline = coarsePaths(groom, roots, head.down, head.front, { grid: combined, surface });
+    for (const field of ["waves", "spread"] as const) {
+      const changed = structuredClone(groom); changed.fields[field] = constant((groom.fields[field] as any).value + .00025, "m");
+      const paths = coarsePaths(changed, roots, head.down, head.front, { grid: combined, surface });
+      let maximum = 0;
+      for (let p = 0; p < paths.paths.length; p++) for (let j = 0; j <= 64; j++) { const a = pointAlong(paths.paths[p], j / 64), b = pointAlong(baseline.paths[p], j / 64); maximum = Math.max(maximum, Math.hypot(...a.map((v, k) => v - b[k]))); }
+      expect(maximum).toBeLessThan(.005);
+    }
+  });
+  test("an open neck boundary is closed for contact without changing scalp topology", () => {
+    const open = sphereSurface(), original = [...open.indices];
+    open.indices = open.indices.filter((_, i) => {
+      const t = Math.floor(i / 3) * 3;
+      return original.slice(t, t + 3).every(v => open.positions[v * 3 + 1] >= -.06);
+    });
+    const before = [...open.indices], closed = buildDistanceGrid(open, 48);
+    expect(contactAt(closed, [.025, -.075, .025]).distance).toBeGreaterThan(.01);
+    expect(contactAt(closed, [.025, 0, .025]).distance).toBeLessThan(0);
+    expect(open.indices).toEqual(before);
+  });
+  test("an acute capped boundary has a positive exterior distance on both sides of its nearest edge", () => {
+    const dome = sphereSurface(), original = [...dome.indices];
+    dome.indices = dome.indices.filter((_, i) => original.slice(Math.floor(i / 3) * 3, Math.floor(i / 3) * 3 + 3).every(v => dome.positions[v * 3 + 1] >= .06));
+    const field = buildDistanceGrid(dome, 48);
+    expect(contactAt(field, [.025, .045, .086]).distance).toBeGreaterThan(.008);
+    expect(contactAt(field, [.025, .0449, .086]).distance).toBeGreaterThan(.008);
+  });
+  test("head and body resolutions describe one solid through the neck overlap", () => {
+    const body = sphereSurface(); body.positions = body.positions.map((v, i) => i % 3 === 0 ? v * 1.7 : i % 3 === 1 ? v * 1.8 - .30 : v);
+    const field = buildCharacterContact({ ...head, body }, 64);
+    let p: [number, number, number] = [.04, -.1, 0];
+    expect(contactAt(field, p).distance).toBeLessThan(0);
+    for (let i = 0; i < 12; i++) { const hit = contactAt(field, p); if (hit.distance >= .001) break; p = p.map((v, k) => v + hit.normal[k] * (.001 - hit.distance)) as typeof p; }
+    expect(contactAt(field, p).distance).toBeGreaterThan(.0009);
+    expect((p[0] / .09) ** 2 + (p[1] / .12) ** 2 + (p[2] / .1) ** 2).toBeGreaterThan(.95);
+    expect((p[0] / (.09 * 1.7)) ** 2 + ((p[1] + .3) / (.12 * 1.8)) ** 2 + (p[2] / .1) ** 2).toBeGreaterThan(.95);
+  });
+  test("contact-aware samples retain tight bends around an ear within the path budget", () => {
+    const ear = sphereSurface();
+    ear.positions = ear.positions.map((v, i) => i % 3 === 0 ? v * .18 + .087 : i % 3 === 1 ? v * .30 : v * .20 + .018);
+    const combined = { ...grid, others: [buildDistanceGrid(ear, 32)] }, surface = { ...head }, groom = defaultGroom(surface);
+    groom.solver.intervals = 64;
+    const paths = coarsePaths(groom, sampleRoots(groom, head, 64), head.down, head.front, { grid: combined, surface });
+    for (const path of paths.paths) {
+      expect(path.points.length).toBeLessThanOrEqual(65);
+      expect(path.segmentMetres!.reduce((sum, v) => sum + v, 0)).toBeCloseTo(path.intrinsicMetres, 10);
+      for (let j = 1; j < path.points.length; j++) expect(segmentContact(combined, path.points[j - 1], path.points[j]).distance).toBeGreaterThan(.0004);
+    }
+  });
+  test("continuation retains the solved route for scalar edits and rejects incompatible attachments", () => {
+    const groom = defaultGroom(head), roots = sampleRoots(groom, head, 24);
+    const coarse = coarsePaths(groom, roots, head.down, head.front, { grid, surface: head }), solved = drapePaths(groom, coarse, grid, []);
+    const edited = structuredClone(groom); edited.fields.waves = constant(.01225, "m");
+    const target = coarsePaths(edited, roots, head.down, head.front, { grid, surface: head });
+    const a = continuePaths({ groom, paths: solved }, edited, target, grid), b = continuePaths({ groom, paths: solved }, edited, target, grid);
+    expect(a).not.toBeNull(); expect(a).toEqual(b);
+    for (let p = 0; p < a!.paths.length; p++) for (let j = 0; j <= 64; j++) {
+      const x = pointAlong(a!.paths[p], j / 64), y = pointAlong(solved.paths[p], j / 64);
+      expect(Math.hypot(...x.map((v, k) => v - y[k]))).toBeLessThan(.005);
+    }
+    const moved = structuredClone(target); moved.paths[0].root.triangle++;
+    expect(continuePaths({ groom, paths: solved }, edited, moved, grid)).toBeNull();
+    const changedGraph = structuredClone(edited); changedGraph.graph.nodes.end = { kind: "root", next: "end" };
+    expect(continuePaths({ groom, paths: solved }, changedGraph, target, grid)).toBeNull();
+  });
+  test("a warm cut retains its termination and tip plane instead of selecting another crossing", () => {
+    const groom = defaultGroom(head); groom.cut = { normal: [0, 1, 0], offsetMetres: -.15 };
+    const roots = sampleRoots(groom, head, 16), cold = coarsePaths(groom, roots, head.down, head.front, { grid, surface: head });
+    const previous = { groom, paths: cutPaths(groom, drapePaths(groom, cold, grid, [])) };
+    expect(previous.paths.paths.every(p => !!p.termination)).toBe(true);
+    const edited = structuredClone(groom); edited.fields.waves = constant(.01225, "m");
+    const target = retargetContinuation(previous, edited, roots)!, rest = continuePaths(previous, edited, target, grid)!;
+    const result = structuredClone(rest); for (let i = 0; i < 2; i++) drapeStep(edited, result, rest, grid, [], head.down);
+    const cut = cutPaths(edited, result);
+    for (let i = 0; i < cut.paths.length; i++) {
+      expect(cut.paths[i].points.at(-1)![1]).toBeCloseTo(-.15, 10);
+      expect(cut.paths[i].intrinsicMetres).toBe(previous.paths.paths[i].intrinsicMetres);
+    }
+  });
+  test("refining a requested fibre leaves accepted neighbours unchanged", () => {
+    const groom = defaultGroom(head), rest = coarsePaths(groom, sampleRoots(groom, head, 4), head.down, head.front, { grid, surface: head }), result = structuredClone(rest);
+    const neighbours = structuredClone(result.paths.slice(1));
+    drapeStep(groom, result, rest, grid, [], head.down, [result.paths[0].root.index]);
+    expect(result.paths.slice(1)).toEqual(neighbours);
   });
 });

@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { copyMaterialShading, extendSkin, fullSkinDepthMaterial } from "../../skin";
 import { EYE_AMBIENT_BOOST, EYE_AXIS_TURN, EYE_FLAT_ROUGHNESS, IRIS_MASK_ENCODING } from "../../eye-material";
 import type { ProfileEncoding } from "../../hair-colour-model";
-import type { AdapterContext, ResolvedSkinSurface } from "../../character-material-adapters";
+import { prepareTemplateGeometry, type AdapterContext, type ResolvedSkinSurface } from "../../character-material-adapters";
 import { BODY_SHAPE_KEY, DetailPartPool, loadCharacterDetails, uploadTexture, type CharacterDetailFetch, type LoadedCharacterComponent, type WarmedFiles,
   type LoadedCharacterDetails } from "../../character-detail-loader";
 import { chunkOfMesh, type CharacterDetail, type DetailSlot } from "../../render-detail";
@@ -560,7 +560,7 @@ export function createCharacterRenderer(input: {
     details,
     resolvedSurfaces: (slot: CharacterSlot) => (characterDetails?.components ?? []).filter(item => item.component.slot === slot).flatMap(item => item.meshes.map(mesh => ({ mesh,
       template: item.component.materials.find(chunk => chunk.chunk === chunkOfMesh(mesh.name))?.template ?? item.component.materials[0]?.template ?? "",
-      resource: item.component.geometry.depotPath, forkMaterial: () => copyMaterialShading(Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) }))),
+      resource: item.component.geometry.depotPath, forkMaterial: () => copyMaterialShading(Array.isArray(mesh.material) ? mesh.material[0] : mesh.material), prepareGeometry: prepareTemplateGeometry }))),
     view,
     subscribe(listener: () => void) { characterListeners.add(listener); return () => { characterListeners.delete(listener); }; },
     /** The resolved parts the feature renderers supersede changed: show and hide again (PREV-89). */

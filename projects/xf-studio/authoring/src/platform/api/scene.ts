@@ -118,7 +118,9 @@ export type CharacterGeometry = {
 /** Borrowed, read-only resolved surfaces for renderer adapters. Materials/textures stay owned by the character renderer. */
 export type ResolvedSurface = { readonly mesh: THREE.SkinnedMesh; readonly template: string; readonly resource: string;
   /** Caller-owned template shading, without the source geometry's skinning extension. */
-  forkMaterial?(): THREE.Material };
+  forkMaterial?(): THREE.Material;
+  /** Add attributes required by this template to caller-owned generated geometry. */
+  prepareGeometry?(geometry: THREE.BufferGeometry): void };
 export type ReferenceTextures = { readonly pixels?: Readonly<Record<string, { width: number; height: number; values: string | Uint8Array }>>; readonly textures: Readonly<Record<string, THREE.Texture>>; readonly resources: Readonly<Record<string, string>>;
   readonly surfaces?: readonly { resource: string; template: string; positions: number[]; indices: number[]; uv: number[]; colours?: number[] }[] };
 

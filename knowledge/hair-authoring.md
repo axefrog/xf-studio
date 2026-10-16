@@ -1,6 +1,6 @@
 # Procedural hair authoring
 
-Maturity: **Draft**. This page separates source-supported artist practices from the proposed Hair Lab computation. No generated groom has been built or observed in game. Related engine facts live in [hair shading](hair-shading.md) and [hair physics](hair-physics.md); implementation intent and budgets live in [Hair Lab design](../research/hair/hair-lab-design.md).
+Maturity: **Draft**. This page separates source-supported artist practices from offline Hair Lab measurements. Diagnostic generated paths run on V in the Studio; generated cards and in-game groom rendering are not yet proven. Related engine facts live in [hair shading](hair-shading.md) and [hair physics](hair-physics.md); implementation and budgets live in [Hair Lab design](../research/hair/hair-lab-design.md).
 
 ## Coverage and layers
 
@@ -14,9 +14,19 @@ Maturity: **Draft**. This page separates source-supported artist practices from 
 
 **[source]** [Macklin, Müller and Chentanez's XPBD paper](https://matthias-research.github.io/pages/publications/XPBD.pdf) describes compliant positional constraints with accumulated multipliers and time-step-scaled compliance. It provides a numerical foundation, not a complete hair model, scalp detector or contact solution.
 
-**[hypothesis]** A stable logical root population can be evaluated at a smaller sample budget without changing membership. Branches must partition identities; convergence must reject overlapping inputs; termination must account for ended fibres. Child-to-parent chart transport must retain intrinsic root distance and phase. Hair Lab proposes pure validators and model-derived tests for these properties; they are not yet implementation evidence.
+**[offline tests]** The implemented logical root population preserves sampled identities across preview budgets. Graph validation checks partitions, overlapping convergence and termination accounting. Child-to-parent field transport preserves intrinsic distance and phase. These are model-derived software tests, not game rendering evidence.
 
 **[hypothesis]** A coarse field sweep can provide immediate editing feedback while a worker refines compliant attachment, length, bending and contact constraints. Its usefulness depends on measured full interaction latency and on results from front, side and rear, rather than solver timing alone.
+
+## Scalp and contact findings
+
+**[resource, offline preview]** The inspected vanilla caps for female choices 01, 24 and 28 use the same 746-vertex surface with different masks. Projecting the mask through cap UVs seeds a head-topology density map. Geometry alone misses hairline softness and fine strokes. Crown-connected UV islands alone are also insufficient: their temple seam produced a rectangular coverage notch. The scalp chart remains head-bound when the selected hairstyle changes. Exact resources and inspected images are recorded in the [design study](../research/hair/hair-lab-design.md#scalp-and-contact).
+
+**[offline test]** A signed distance derived from the nearest triangle's normal can misclassify a point beyond an acute closed edge. An asset-free capped-dome regression reproduces that failure. The current collision candidate uses oriented scanline occupancy and a Euclidean distance transform, closing narrow voxel gaps. Fine head and coarser body grids sample the same union solid so the neck join has no internal collision lid. This is a grid approximation, not an exact geometric or engine collider.
+
+**[source]** [Felzenszwalb and Huttenlocher (2012)](https://cs.brown.edu/people/pfelzens/papers/dt-final.pdf), Sections 2.1–2.2, derive a separable squared Euclidean distance transform from lower envelopes of parabolas. An independent implementation and exhaustive anisotropic-grid oracle support the collision prototype. Source code from the authors' download is not used.
+
+**[offline tests]** Scalar styling edits now take previous matching solved paths as explicit continuation input. This preserves a route around a shoulder or ear instead of selecting a fresh route on every edit. Cold reset determinism is tested separately. A cut retains its terminated intrinsic length and tip-plane constraint during warm edits; very short terminal samples are merged before solving.
 
 ## Open questions
 

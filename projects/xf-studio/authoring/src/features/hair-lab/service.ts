@@ -9,9 +9,10 @@ import type { Groom, HeadSurface, Paths, Residuals } from "./types";
 export type HairDisplay = "combined" | "strands" | "scalp" | "reference" | "reference-scalp";
 export type HairAction = { kind: "hairLab.preview"; target: string; display: HairDisplay } | { kind: "hairLab.activate"; target: string; active: boolean } | { kind: "hairLab.set"; target: string; field: "length" | "waves" | "spread"; value: number }
   | { kind: "hairLab.undo" | "hairLab.redo" | "hairLab.retry"; target: string };
-export type Generation = { groom: Groom; paths: Paths; residuals: Residuals | null; stage: "coarse" | "refined"; milliseconds: Record<string, number>; coverageGeometry?: { positions: number[]; indices: number[]; uv: number[] } | null; coverage?: { width: number; height: number; values: string }; tintCheck?: ReturnType<typeof import("./scalp").densityCoverage> };
-export type GenerationDevice = { generate(target: string, surface: HeadSurface, groom: Groom | null, signal: AbortSignalLike, publish: (result: Generation) => void): Promise<void> };
-type Session = { display: HairDisplay; id: string; active: boolean; surface: HeadSurface; document: NodeRef | null; revision: number; phase: "off" | "shaping" | "settling" | "ready" | "failed"; message: string; result: Generation | null };
+export type Continuation = { groom: Groom; paths: Paths };
+export type Generation = { groom: Groom; paths: Paths; uncutPaths?: Paths; continuation?: boolean; residuals: Residuals | null; stage: "coarse" | "refined"; milliseconds: Record<string, number>; coverageGeometry?: { positions: number[]; indices: number[]; uv: number[] } | null; coverage?: { width: number; height: number; values: string }; tintCheck?: ReturnType<typeof import("./scalp").densityCoverage> };
+export type GenerationDevice = { generate(target: string, surface: HeadSurface, groom: Groom | null, signal: AbortSignalLike, publish: (result: Generation) => void, previous?: Continuation | null): Promise<void> };
+type Session = { display: HairDisplay; id: string; active: boolean; surface: HeadSurface; document: NodeRef | null; revision: number; phase: "off" | "shaping" | "settling" | "ready" | "failed"; message: string; result: Generation | null; settled: Continuation | null; continuation: Continuation | null };
 export type HairLabSnapshot = { sessions: readonly Session[] };
 export type HairLabFacade = ModuleService & { snapshot(): HairLabSnapshot; dispatch(action: HairAction): Promise<{ ok: boolean; message?: string }> };
 
@@ -35,18 +36,29 @@ export function createHairLab(context: ExperimentContext, device: GenerationDevi
         change(id, { phase: "shaping", message: "Shaping hair…", result: null });
         const job = run.spawn("Generate requested groom", async (signal, progress): Promise<Json> => {
           try {
+            let rejected: string | null = null;
             await device.generate(id, row.surface, readGroom(row), signal, result => {
               const latest = sessions.value()![id];
               if (signal.aborted || !latest?.active || latest.revision !== revision) return;
+              if (rejected) return;
+              if (result.stage === "refined") {
+                const r = result.residuals;
+                if (!r || !result.paths.paths.length || ![r.rootMetres, r.lengthRatio, r.penetrationMetres, r.minimumClearanceMetres].every(Number.isFinite) || r.rootMetres > 1e-6 || r.lengthRatio > .02 || r.penetrationMetres > .00005 || r.colliders?.some(c => !Number.isFinite(c.minimumClearanceMetres) || c.penetrationMetres > .00005)) {
+                  rejected = "The refined result failed its attachment, intrinsic-length or contact gate.";
+                  change(id, { phase: "failed", result: null, settled: null, message: "Couldn't settle this groom. Try again, or turn Hair Lab off to use your usual hairstyle." });
+                  progress({ stage: "rejected", revision }); return;
+                }
+              }
               let document = latest.document;
               if (!document) {
                 const created = graph.commit([{ op: "create", type: "experiment-document", as: "groom", fields: { module: "hair-lab", document: result.groom as unknown as Json } }], { scope: `hair:${id}`, label: "Create groom" });
                 if (!created.ok) throw Error(created.message);
                 document = created.created.groom;
               }
-              change(id, { document, result, phase: result.stage === "coarse" ? "settling" : "ready", message: result.stage === "coarse" ? "Settling hair…" : "Ready" });
+              change(id, { document, result, ...(result.stage === "refined" ? { settled: { groom: result.groom, paths: result.groom.cut ? result.paths : result.uncutPaths ?? result.paths } } : {}), phase: result.stage === "coarse" ? "settling" : "ready", message: result.stage === "coarse" ? "Settling hair…" : "Ready" });
               progress({ stage: result.stage, revision });
-            });
+            }, row.continuation);
+            if (rejected) return { error: rejected };
             return { scene: id, revision };
           } catch (error) {
             const latest = sessions.value()![id];
@@ -75,9 +87,9 @@ export function createHairLab(context: ExperimentContext, device: GenerationDevi
         change(row.id, { display: action.display }); return { ok: true };
       }
       if (action.kind === "hairLab.activate") {
-        change(row.id, { active: action.active, revision: row.revision + 1, phase: "off", result: null, message: "" }); demand(); return { ok: true };
+        change(row.id, { active: action.active, revision: row.revision + 1, phase: "off", result: null, settled: null, continuation: null, message: "" }); demand(); return { ok: true };
       }
-      if (action.kind === "hairLab.retry") { change(row.id, { revision: row.revision + 1 }); demand(); return { ok: true }; }
+      if (action.kind === "hairLab.retry") { change(row.id, { revision: row.revision + 1, continuation: null, settled: null }); demand(); return { ok: true }; }
       if (!row.document) return { ok: false, message: "Turn Hair Lab on to create a groom first." };
       const scope = `hair:${row.document.id}`;
       if (action.kind === "hairLab.set") {
@@ -93,14 +105,14 @@ export function createHairLab(context: ExperimentContext, device: GenerationDevi
         const result = action.kind === "hairLab.undo" ? graph.undo(scope) : graph.redo(scope);
         if (!result.ok) return { ok: false, message: result.message };
       }
-      change(row.id, { revision: row.revision + 1 }); demand(); return { ok: true };
+      change(row.id, { revision: row.revision + 1, continuation: row.settled }); demand(); return { ok: true };
     },
     subscribe(listener) { const token = new Aborter(life.signal); observe(token.signal, listener); return () => token.abort(); },
   };
   return {
     facade,
     withdraw() {
-      for (const row of Object.values(sessions.value()!)) if (row.active) change(row.id, { active: false, revision: row.revision + 1, phase: "off", result: null, message: "" });
+      for (const row of Object.values(sessions.value()!)) if (row.active) change(row.id, { active: false, revision: row.revision + 1, phase: "off", result: null, settled: null, continuation: null, message: "" });
       demand();
     },
     bind(id: string, surface: HeadSurface, signal: AbortSignalLike) {
@@ -108,7 +120,7 @@ export function createHairLab(context: ExperimentContext, device: GenerationDevi
       const previousGroom = previous ? readGroom(previous) : null;
       const document = (previousGroom?.scalp.resource === surface.resource && previousGroom?.scalp.topology === surface.topology ? previous?.document : null) ?? graph.list().find(ref => ref.type === "experiment-document" && graph.resolve(ref, ["module"]) === "hair-lab" &&
         (graph.resolve(ref, ["document"]) as unknown as Groom)?.scalp.resource === surface.resource && (graph.resolve(ref, ["document"]) as unknown as Groom)?.scalp.topology === surface.topology) ?? null;
-      env.observe(sessions, { ...sessions.value(), [id]: { display: previous?.display ?? "combined", id, surface, document, active: previous?.active ?? false, revision: (previous?.revision ?? 0) + 1, phase: "off", message: "", result: null } });
+      env.observe(sessions, { ...sessions.value(), [id]: { display: previous?.display ?? "combined", id, surface, document, active: previous?.active ?? false, revision: (previous?.revision ?? 0) + 1, phase: "off", message: "", result: null, settled: null, continuation: null } });
       demand();
       signal.addEventListener("abort", () => { const next = { ...sessions.value() }; delete next[id]; env.observe(sessions, next); demand(); });
     },

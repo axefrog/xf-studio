@@ -23,11 +23,11 @@ export type Groom = {
   scalp: { resource: string; topology: string; densitySeed: { method: "cap-projected" | "head-estimated"; source: string; revision: string }; density?: number[]; binding?: { triangles: number[]; cumulativeAreas: number[] } };
   graph: { root: string; nodes: Record<string, VolumeNode> }; fields: Record<string, Field>;
   cut?: { normal: Vec3; offsetMetres: number };
-  flow?: { part: number; emergenceRadians: number; foreheadSweep: number; crownLiftMetres: number; rearPreference: number; foreheadDirection?: Vec3 };
+  flow?: { part: number; emergenceRadians: number; foreheadSweep: number; crownLiftMetres: number; rearPreference: number; foreheadDirection?: Vec3; partCombing?: Vec3 };
   solver: { samples: number; intervals: number; steps: number; iterations: number; stepSeconds: number; clearanceMetres: number };
 };
 export type Root = MaterialSample & { position: Vec3; normal: Vec3; triangle: number; barycentric: Vec3; density: number };
-export type HairPath = { root: Root; points: Vec3[]; intrinsicMetres: number; segmentMetres?: number[]; holds?: { index: number; position: Vec3 }[] };
+export type HairPath = { root: Root; points: Vec3[]; intrinsicMetres: number; segmentMetres?: number[]; holds?: { index: number; position: Vec3 }[]; termination?: { normal: Vec3; offsetMetres: number } };
 export type Paths = { paths: HairPath[] };
 export type Residuals = { rootMetres: number; lengthRatio: number; penetrationMetres: number; minimumClearanceMetres: number; visibleExtentMetres: number; colliders?: { name: string; minimumClearanceMetres: number; penetrationMetres: number }[] };
 export const add = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];

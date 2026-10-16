@@ -1,4 +1,4 @@
-import { defaultGroom, seedAnatomicalDensity, surfaceBounds } from "../../src/features/hair-lab/groom";
+import { defaultGroom, surfaceBounds } from "../../src/features/hair-lab/groom";
 import { constant } from "../../src/features/hair-lab/fields";
 import type { Field, HeadSurface } from "../../src/features/hair-lab/types";
 export function regressionGrooms(head: HeadSurface) {

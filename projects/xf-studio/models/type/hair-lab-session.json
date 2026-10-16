@@ -27,6 +27,11 @@
         "type": "boolean"
       }
     },
+    "settled": {
+      "kind": "value",
+      "doc": "Latest matching uncut solved paths and their groom as explicit continuation input. Reset, withdrawal and geometry changes clear it. It is transient process state, separate from the authored document.",
+      "shape": { "anyOf": [{ "type": "object" }, { "type": "null" }] }
+    },
     "display": {
       "kind": "value",
       "doc": "Diagnostic display without changing the authored groom or generation identity.",
@@ -43,6 +48,7 @@
   },
   "defaults": {
     "active": false,
+    "settled": null,
     "display": "combined"
   }
 }
