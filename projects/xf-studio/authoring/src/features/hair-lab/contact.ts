@@ -213,6 +213,16 @@ export function contactAt(grid: DistanceGrid, p: Vec3): Contact {
   for (const other of grid.others ?? []) { const contact = contactAt(other, p); if (contact.distance < result.distance) result = contact; }
   return result;
 }
+/** Same signed distance as contactAt, without the six gradient samples needed only for correction. */
+export function contactDistance(grid: DistanceGrid, p: Vec3): number {
+  let distance = Infinity;
+  if (queryActive(grid, p)) {
+    const outside: Vec3 = [p[0] - clamp(p[0], grid.min[0], grid.max[0]), p[1] - clamp(p[1], grid.min[1], grid.max[1]), p[2] - clamp(p[2], grid.min[2], grid.max[2])];
+    const length = magnitude(outside); distance = length > 0 ? .03 + length : sample(grid, p);
+  }
+  for (const other of grid.others ?? []) distance = Math.min(distance, contactDistance(other, p));
+  return distance;
+}
 function ownSegmentContact(grid: DistanceGrid, a: Vec3, b: Vec3): Contact & { t: number } {
   // Disjoint segment/grid bounds need no interior samples; only a potential collision needs a normal.
   for (let k = 0; k < 3; k++) {
@@ -222,15 +232,16 @@ function ownSegmentContact(grid: DistanceGrid, a: Vec3, b: Vec3): Contact & { t:
     if (Math.max(a[k], b[k]) < grid.min[k]) return { distance: .03 + grid.min[k] - Math.max(a[k], b[k]), normal: [0, 0, 0], t: 0 };
   }
   const count = Math.max(1, Math.min(256, Math.ceil(magnitude(sub(b, a)) / (Math.min(...grid.cell) * .5))));
-  let bestDistance = Infinity, bestT = 0, bestPoint = a;
+  let bestDistance = Infinity, bestT = 0;
+  const delta = sub(b, a), p: Vec3 = [0, 0, 0];
   for (let i = 0; i <= count; i++) {
-    const t = i / count, p = add(a, mul(sub(b, a), t));
+    const t = i / count; for (let k = 0; k < 3; k++) p[k] = a[k] + delta[k] * t;
     if (!queryActive(grid, p) || p.some((value, k) => value < grid.min[k] || value > grid.max[k])) continue;
     const distance = sample(grid, p);
-    if (distance < bestDistance) { bestDistance = distance; bestT = t; bestPoint = p; }
+    if (distance < bestDistance) { bestDistance = distance; bestT = t; }
   }
   if (!Number.isFinite(bestDistance)) return { ...ownContactAt(grid, a), t: 0 };
-  return { distance: bestDistance, normal: bestDistance < .002 ? contactAt(grid, bestPoint).normal : [0, 0, 0], t: bestT };
+  return { distance: bestDistance, normal: bestDistance < .002 ? contactAt(grid, add(a, mul(delta, bestT))).normal : [0, 0, 0], t: bestT };
 }
 export function segmentContact(grid: DistanceGrid, a: Vec3, b: Vec3): Contact & { t: number } {
   let result = ownSegmentContact(grid, a, b);

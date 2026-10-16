@@ -150,5 +150,6 @@
   "cleanup": "Release staged buffers, contact acceleration structures and worker resources when their owning request ends; restore resolved hair if no matching replacement remains.",
   "deadline": 500,
   "lane": "page worker, person edits before background work",
-  "x-results": "Progress and complete results enter through worker source observations; host buffers stay in runtimes and graph entries hold references only."
+  "x-results": "Progress and complete results enter through worker source observations; host buffers stay in runtimes and graph entries hold references only.",
+  "x-atlas-comparison": "Proposed M2.5 integration: a verification-only source option selects vanilla (default) or the generated atlas. The existing requested worker process generates and prepares strips once per description, yields between resumable batches, and transfers their typed buffers to its adapter runtime. Graph results contain only a matching atlas identity/description. Composition supplies an abort-owned material factory to the feature renderer; it groups cards by deterministic strip selection and retains V's resolved profile/scalars. Stale requests never create resources. Cold atlas preparation is measured separately; warm styling reuses the prepared atlas and keeps the one-second refined-frame target. No user-facing toggle or export route is added."
 }

@@ -1,7 +1,7 @@
 /** Artist decisions as pure data: layered coverage, atlas density and stable transported ribbon frames. */
 import { add, clamp, cross, dot, lerp, magnitude, mul, normalise, randomAt, smooth, sub, type Vec3 } from "./types";
 import { memberPoint, type Volumes } from "./volumes";
-import { contactAt, segmentContact, type DistanceGrid } from "./contact";
+import { contactAt, contactDistance, segmentContact, type DistanceGrid } from "./contact";
 export type AtlasRegion = { u0: number; u1: number; v0: number; v1: number; density: number; rootAtV1?: boolean };
 export type CardMesh = { positions: number[]; uv: number[]; indices: number[]; rootTip: number[]; ids: number[]; occlusion: number[];
   cards: { id: string; volume: string; layer: "inner" | "middle" | "outer" | "flyaway"; root: string; start: number; count: number; columns: number }[] };
@@ -65,13 +65,16 @@ export function generateCards(volumes: Volumes, regions: readonly AtlasRegion[] 
       projected = normalise(projected); if (dot(projected, widthFrame) < 0) projected = mul(projected, -1); widthFrame = projected;
       const normal = normalise(cross(widthFrame, tangent)), angle = (variation - .5) * layer.twist + Math.sin(t * 2 + path.root.uv[0] * 9) * .1;
       const widthDirection = add(mul(widthFrame, Math.cos(angle)), mul(normal, Math.sin(angle)));
-      const headSupport = grid ? 1 - smooth(.015, .04, contactAt(grid, points[j]).distance) : 0;
+      const headSupport = grid ? 1 - smooth(.015, .04, contactDistance(grid, points[j])) : 0;
       const crownLayer = member.layerThicknessMetres * ({ inner: .1, middle: .45, outer: .85, flyaway: 1 }[layer.name]) * headSupport * smooth(-.05, .35, path.root.normal[1]);
       const offset = (layer.offset + crownLayer) * smooth(0, .03, member.startMetres + t * (member.endMetres - member.startMetres)), centre = add(points[j], mul(normal, offset));
-      const width = layer.width * (.8 + variation * .4) * (1 - .65 * smooth(.65, 1, t));
+      const rootWidth = .12 + .88 * smooth(0, .025, member.startMetres + t * (member.endMetres - member.startMetres));
+      const tipWidth = 1 - (member.cut ? .45 : .98) * smooth(member.cut ? .96 : .82, 1, t);
+      const width = layer.width * (.8 + variation * .4) * rootWidth * tipWidth, cardNormal = normalise(cross(widthDirection, tangent));
       for (let side = 0; side < columns; side++) {
-        let vertex = add(centre, mul(widthDirection, width * (side / (columns - 1) - .5)));
-        if (grid) for (let pass = 0; pass < 4; pass++) { const hit = contactAt(grid, vertex); if (hit.distance >= .0015) break; vertex = add(vertex, mul(hit.normal, .0015 - hit.distance)); }
+        const across = side / (columns - 1) - .5;
+        let vertex = add(add(centre, mul(widthDirection, width * across)), mul(cardNormal, width * .18 * (1 - 4 * across * across)));
+        if (grid) for (let pass = 0; pass < 4; pass++) { const distance = contactDistance(grid, vertex); if (distance >= .0015) break; const hit = contactAt(grid, vertex); vertex = add(vertex, mul(hit.normal, .0015 - distance)); }
         out.positions.push(...vertex); out.uv.push(region.u0 + side / (columns - 1) * (region.u1 - region.u0), region.v0 + rootTip * (region.v1 - region.v0));
         out.rootTip.push(rootTip); out.ids.push(variation);
       }

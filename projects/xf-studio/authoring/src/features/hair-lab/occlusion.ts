@@ -1,5 +1,5 @@
 import { clamp, dot, magnitude, sub, type Vec3 } from "./types";
-import { contactAt, type DistanceGrid } from "./contact";
+import { contactDistance, type DistanceGrid } from "./contact";
 import type { Volumes, VolumeFrame, volumeMesh } from "./volumes";
 import type { CardMesh } from "./cards";
 
@@ -22,7 +22,7 @@ export function groomOcclusion(source: Volumes, grid?: DistanceGrid): (point: Ve
       if (squared < 1) depth[clump] = Math.max(depth[clump], 1 - Math.sqrt(squared));
     }
     let buried = 0; for (const value of depth) buried += value;
-    const skin = grid ? clamp((.007 - contactAt(grid, point).distance) / .007) * .25 : 0;
+    const skin = grid ? clamp((.007 - contactDistance(grid, point)) / .007) * .25 : 0;
     return clamp(1 - Math.exp(-1.2 * buried - skin));
   };
 }

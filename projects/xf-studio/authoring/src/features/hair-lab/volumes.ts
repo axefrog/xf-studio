@@ -4,7 +4,7 @@ import { contactAt, type DistanceGrid } from "./contact";
 import { evaluateField } from "./fields";
 
 export type VolumeFrame = { centre: Vec3; tangent: Vec3; width: Vec3; normal: Vec3; radii: readonly [number, number]; covariance: readonly [number, number, number] };
-export type VolumeMember = { root: Root; coordinates: Vec3[]; startMetres: number; endMetres: number; intrinsicMetres: number; layerThicknessMetres: number; clumpRatio: number };
+export type VolumeMember = { root: Root; coordinates: Vec3[]; startMetres: number; endMetres: number; intrinsicMetres: number; layerThicknessMetres: number; clumpRatio: number; cut?: boolean };
 export type DerivedVolume = { id: string; section: string; next: string; frames: VolumeFrame[]; members: VolumeMember[] };
 export type Volumes = { logicalPopulation: number; sampledPopulation: number; volumes: DerivedVolume[] };
 export function memberPoint(volume: DerivedVolume, member: VolumeMember, ring: number): Vec3 {
@@ -45,7 +45,7 @@ export function deriveVolumes(groom: Groom, source: Paths, rings = 41): Volumes 
       xx /= paths.length; yy /= paths.length; xy /= paths.length;
       return { centre, tangent, width, normal, covariance: [xx, xy, yy], radii: [Math.max(.0015, Math.sqrt(xx) * 2), Math.max(.0015, Math.sqrt(yy) * 2)] };
     });
-    const members = paths.map((path, index) => ({ root: path.root, intrinsicMetres: path.intrinsicMetres, startMetres: samples[index].start, endMetres: samples[index].end, layerThicknessMetres: evaluateField(groom.fields.spread, path.root), clumpRatio: groom.fields.clump ? evaluateField(groom.fields.clump, path.root) : 0,
+    const members = paths.map((path, index) => ({ root: path.root, cut: !!path.termination, intrinsicMetres: path.intrinsicMetres, startMetres: samples[index].start, endMetres: samples[index].end, layerThicknessMetres: evaluateField(groom.fields.spread, path.root), clumpRatio: groom.fields.clump ? evaluateField(groom.fields.clump, path.root) : 0,
       coordinates: frames.map((frame, j) => { const delta = sub(positions[j][index], frame.centre); return [dot(delta, frame.width), dot(delta, frame.normal), dot(delta, frame.tangent)] as Vec3; }) }));
     output.volumes.push({ id, section: node.section ?? id, next: node.next, frames, members });
   }
