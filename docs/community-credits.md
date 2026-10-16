@@ -291,7 +291,7 @@ By DarkFortuneTeller. [GitHub](https://github.com/DarkFortuneTeller/DarkFuture),
 
 ### eagul
 
-[PRC — Fully Modular Jewellery Framework](https://www.nexusmods.com/cyberpunk2077/mods/8590), [New Piercings Collection Vol. 1](https://www.nexusmods.com/cyberpunk2077/mods/8611) and [PRC Vanilla Piercing Mirrors](https://www.nexusmods.com/cyberpunk2077/mods/10236); the framework also credits Auska for morph-target import and manavortex for modding help. PRC showed a working route to morph-compatible modular jewellery and informs our future jewellery design; working out why it works in game (file replacement alone) is what let the preview draw it, and any similar framework, through its generic resolver. [Multicolored Hair](https://www.nexusmods.com/cyberpunk2077/mods/21613), its compatibility patch and its modder's resources showed how multicoloured hair works in game: a hairstyle cut into up to three parts, each with its own creator colour row under one new switcher, which set how XF hair colours should reach split hairstyles. Private local reference only; the PRC pages require the author's permission for reuse or modification, and Multicolored Hair's reuse terms have not been checked.
+[PRC — Fully Modular Jewellery Framework](https://www.nexusmods.com/cyberpunk2077/mods/8590), [New Piercings Collection Vol. 1](https://www.nexusmods.com/cyberpunk2077/mods/8611) and [PRC Vanilla Piercing Mirrors](https://www.nexusmods.com/cyberpunk2077/mods/10236) taught us morph-compatible modular jewellery and the file-replacement route that lets the preview draw such frameworks through its generic resolver; the framework also credits Auska for morph-target import and manavortex for modding help. [Multicolored Hair](https://www.nexusmods.com/cyberpunk2077/mods/21613), its compatibility patch and modder's resources showed how a hairstyle split into up to three parts gets separate creator colour rows under one switcher; the [beginner hair-modelling tutorial](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators-theory/3d-modelling/hair-modeling-beginner-tutorial), edited by mana vortex, taught us dense base coverage, progressively lighter outer cards, root reattachment and controlled tilt variation for Hair Lab. Private local reference and workflow study only; the PRC pages require the author's permission for reuse or modification, and Multicolored Hair's reuse terms have not been checked.
 
 ### Even More Brows for Cyberpunk
 
@@ -573,6 +573,18 @@ Géry Casiez, Nicolas Roussel and Daniel Vogel, "1€ Filter: a simple speed-bas
 ### Fishman, Kiss, Zuker, Fialkov and Whyne (2022)
 
 Zachary Fishman, Alex Kiss, Ronald M. Zuker, Jeffrey A. Fialkov and Cari M. Whyne, [Measuring 3D facial displacement of increasing smile expressions](https://doi.org/10.1016/j.bjps.2022.08.024) (*Journal of Plastic, Reconstructive & Aesthetic Surgery*, 2022), measured on the Binghamton University 3D Facial Expression database. Their cheek and mouth-corner displacements at four smile intensities are the real-face yardstick for how far V's cheeks can and should move.
+
+### Macklin, Müller and Chentanez
+
+Miles Macklin, Matthias Müller and Nuttapong Chentanez, [XPBD: Position-Based Simulation of Compliant Constrained Dynamics](https://matthias-research.github.io/pages/publications/XPBD.pdf). Their compliant-constraint formulation informs the proposed Hair Lab styling solver, including accumulated multipliers and time-step scaling. Studied as a numerical method; no implementation was copied.
+
+### Hair Tool — Bartosz Styperek
+
+[Hair Tool documentation](https://joseconseco.github.io/HairTool_3_Documentation/). Its separation of scalp input, deformation stages and profile/UV assignment helped frame Hair Lab's generation stages. Studied as an artist workflow; no add-on code or assets are reused.
+
+### GS CurveTools
+
+[Curve attributes documentation](https://gs-curvetools.readthedocs.io/en/latest/attributes.html). Its separate controls for orientation, twist, taper and curvature subdivision informed the proposed procedural card decisions. Studied as an artist workflow; no plug-in code or assets are reused.
 
 ## Reference imagery
 

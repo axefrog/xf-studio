@@ -1,0 +1,34 @@
+{
+  "kind": "type",
+  "id": "hair-lab-session",
+  "owner": "hair-lab",
+  "summary": "One lab activation binding a groom and character scene without changing the character.",
+  "status": "target",
+  "class": "session",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "groom": {
+      "kind": "ref",
+      "to": "type:hair-groom",
+      "clone": "share",
+      "doc": "The groom being edited."
+    },
+    "scene": {
+      "kind": "ref",
+      "to": "type:scene",
+      "clone": "share",
+      "doc": "The character scene receiving the replacement."
+    },
+    "active": {
+      "kind": "value",
+      "doc": "Whether this session asks to replace resolved hair.",
+      "shape": {
+        "type": "boolean"
+      }
+    }
+  },
+  "defaults": {
+    "active": false
+  }
+}

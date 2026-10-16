@@ -1,0 +1,20 @@
+{
+  "kind": "panel",
+  "id": "hair-lab",
+  "owner": "hair-lab",
+  "summary": "A diagnostic Hair Lab panel composed from existing headings, toggles, value controls and in-place progress.",
+  "status": "target",
+  "binding": "The explicitly selected hair-lab session and its independent groom document.",
+  "reads": [
+    "type:hair-lab-session",
+    "type:hair-groom",
+    "operator:experiment-enabled",
+    "process:hair-generate"
+  ],
+  "actions": [
+    "action:hair-lab-activate",
+    "action:hair-lab-set"
+  ],
+  "x-controls": "Hair Lab toggle, Length, Waves and Volume, with Ready or in-place shaping/settling feedback; no gestures in M1, no new component-library controls.",
+  "x-refusal": "Generation failure restores normal hair and offers Try again through the existing request; no path prompts or technical error labels."
+}

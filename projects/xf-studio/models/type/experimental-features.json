@@ -1,0 +1,33 @@
+{
+  "kind": "type",
+  "id": "experimental-features",
+  "owner": "platform",
+  "summary": "Persisted opt-in experiment flags associated with the same library preferences.",
+  "status": "target",
+  "class": "authored",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "preferences": {
+      "kind": "ref",
+      "to": "type:preferences",
+      "clone": "share",
+      "doc": "The preferences node whose library owns these experiment settings."
+    },
+    "flags": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "shape": {
+        "type": "boolean"
+      },
+      "doc": "Registered experiment ID to explicit preference; absence means off."
+    }
+  },
+  "defaults": {
+    "flags": {}
+  },
+  "x-persistence": "Store alongside the existing user settings, outside character and draft documents; session URL overrides never enter this stream.",
+  "x-registration": "Generic experiment catalogue entries hold label and lazy import functions; a disabled experiment imports no feature module, view or renderer."
+}

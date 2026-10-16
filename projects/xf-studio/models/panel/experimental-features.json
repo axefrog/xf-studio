@@ -1,0 +1,17 @@
+{
+  "kind": "panel",
+  "id": "experimental-features",
+  "owner": "platform",
+  "summary": "The Experimental features preferences section lists registered experiments as existing toggle controls.",
+  "status": "target",
+  "binding": "The current settings view experimental-features node, independently scoped in verification.",
+  "reads": [
+    "type:experimental-features",
+    "operator:experiment-enabled",
+    "process:experiment-load"
+  ],
+  "actions": [
+    "action:experiment-set"
+  ],
+  "x-visibility": "This generic settings section can be present while every experiment is disabled; no feature-specific panel, command or module appears before opt-in."
+}

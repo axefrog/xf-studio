@@ -1,0 +1,53 @@
+{
+  "kind": "action",
+  "id": "hair-lab-set",
+  "owner": "hair-lab",
+  "summary": "Change Length, Waves or Volume in the independent groom document.",
+  "status": "target",
+  "name": "hairLab.set",
+  "target": "type:hair-groom",
+  "input": {
+    "type": "object",
+    "properties": {
+      "volume": {
+        "type": "string",
+        "minLength": 1
+      },
+      "property": {
+        "enum": [
+          "length",
+          "waves",
+          "spread"
+        ]
+      },
+      "value": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      }
+    },
+    "required": [
+      "volume",
+      "property",
+      "value"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The experiment is enabled, the target volume exists and the value is inside its property range.",
+    "refusals": [
+      {
+        "code": "volume-missing",
+        "reason": "Choose a section before changing its hair."
+      },
+      {
+        "code": "value-out-of-range",
+        "reason": "Choose a value within the shown range."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Append a field override in declared units; one form-edit transaction makes one groom history step and requests a new preview."
+  },
+  "undo": "look"
+}

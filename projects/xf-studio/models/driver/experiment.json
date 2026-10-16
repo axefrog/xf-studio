@@ -1,0 +1,37 @@
+{
+  "kind": "driver",
+  "id": "experiment",
+  "owner": "platform",
+  "summary": "Own lazy optional-module loading and contribution registration for one enabled experiment and window.",
+  "status": "target",
+  "environment": "page",
+  "serves": [
+    "request:load-experiment"
+  ],
+  "demands": [
+    "type:experimental-features",
+    "operator:experiment-enabled"
+  ],
+  "creates": [
+    "the experiment contribution registration model"
+  ],
+  "starts": [
+    "process:experiment-load"
+  ],
+  "runtimes": [
+    "runtime:experiment-contributions"
+  ],
+  "raises": [],
+  "faults": [
+    {
+      "code": "experiment-load-failed",
+      "when": "A registered optional module failed to load; preserve the ordinary Studio and offer Try again.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "fail"
+    }
+  ],
+  "lifetime": "While the effective experiment preference and root-window demand remain true; disabling immediately aborts registration and all feature work.",
+  "x-catalogue": "Platform experiment metadata includes ID, label and a lazy loader; Hair Lab code is not statically imported by registry, views, renderers or exporter composition.",
+  "x-disable": "Ignore late dynamic-import completion after abort; withdraw registered nodes and UI contributions. JavaScript modules already imported may remain cached until page reload."
+}

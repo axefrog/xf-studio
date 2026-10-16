@@ -1,0 +1,98 @@
+{
+  "kind": "operator",
+  "id": "hair-coarse",
+  "owner": "hair-lab",
+  "summary": "Evaluate an immediate low-density rest-shape sweep from the volume fields without claiming physical drape.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {
+      "groom": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "scene": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "character": {
+        "type": "string",
+        "minLength": 1
+      },
+      "revision": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "surface": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "required": [
+      "groom",
+      "scene",
+      "character",
+      "revision",
+      "surface"
+    ],
+    "additionalProperties": false
+  },
+  "inputs": [
+    "operator:hair-population",
+    "type:hair-groom"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "identity": {
+        "type": "object",
+        "properties": {
+          "groom": {
+            "$ref": "shapes.schema.json#/$defs/nodeRef"
+          },
+          "scene": {
+            "$ref": "shapes.schema.json#/$defs/nodeRef"
+          },
+          "character": {
+            "type": "string",
+            "minLength": 1
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "surface": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "groom",
+          "scene",
+          "character",
+          "revision",
+          "surface"
+        ],
+        "additionalProperties": false
+      },
+      "paths": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      },
+      "rootCount": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "quality": {
+        "const": "coarse"
+      }
+    },
+    "required": [
+      "identity",
+      "paths",
+      "rootCount",
+      "quality"
+    ],
+    "additionalProperties": false
+  },
+  "pure": true,
+  "x-budget": "At most 8 ms generation for prepared surfaces; cap coarse samples so dispatch-to-frame stays within 50 ms."
+}

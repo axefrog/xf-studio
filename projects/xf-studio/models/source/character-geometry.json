@@ -1,0 +1,80 @@
+{
+  "kind": "source",
+  "id": "character-geometry",
+  "owner": "platform",
+  "summary": "Read-only character attachment and contact geometry observations keyed by character and topology revision.",
+  "status": "target",
+  "environment": "page",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "scene": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "character": {
+        "type": "string",
+        "minLength": 1
+      },
+      "surface": {
+        "type": "string",
+        "minLength": 1
+      },
+      "head": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      },
+      "cap": {
+        "anyOf": [
+          {
+            "$ref": "shapes.schema.json#/$defs/blob"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "ears": {
+        "anyOf": [
+          {
+            "$ref": "shapes.schema.json#/$defs/blob"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "body": {
+        "anyOf": [
+          {
+            "$ref": "shapes.schema.json#/$defs/blob"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "frame": {
+        "type": "array",
+        "items": {
+          "type": "number"
+        },
+        "minItems": 16,
+        "maxItems": 16
+      }
+    },
+    "required": [
+      "scene",
+      "character",
+      "surface",
+      "head",
+      "cap",
+      "ears",
+      "body",
+      "frame"
+    ],
+    "additionalProperties": false
+  },
+  "adapter": "planned",
+  "simulated": "planned",
+  "rate": "On demanded character geometry or topology revision changes, never a continuous full-mesh read.",
+  "x-boundary": "Scene adapter extracts plain head-space arrays or buffer references; no Three objects cross into domain state. Demand only while a consumer needs contact or attachment geometry."
+}

@@ -1,0 +1,116 @@
+{
+  "kind": "operator",
+  "id": "hair-drape",
+  "owner": "hair-lab",
+  "summary": "Deterministically refine derived volume samples with compliant length, bending, root and contact constraints.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {
+      "groom": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "scene": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "character": {
+        "type": "string",
+        "minLength": 1
+      },
+      "revision": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "surface": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "required": [
+      "groom",
+      "scene",
+      "character",
+      "revision",
+      "surface"
+    ],
+    "additionalProperties": false
+  },
+  "inputs": [
+    "operator:hair-population",
+    "type:hair-groom",
+    "source:character-geometry"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "identity": {
+        "type": "object",
+        "properties": {
+          "groom": {
+            "$ref": "shapes.schema.json#/$defs/nodeRef"
+          },
+          "scene": {
+            "$ref": "shapes.schema.json#/$defs/nodeRef"
+          },
+          "character": {
+            "type": "string",
+            "minLength": 1
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "surface": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "groom",
+          "scene",
+          "character",
+          "revision",
+          "surface"
+        ],
+        "additionalProperties": false
+      },
+      "paths": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      },
+      "residuals": {
+        "type": "object",
+        "properties": {
+          "rootMetres": {
+            "type": "number",
+            "minimum": 0
+          },
+          "lengthRatio": {
+            "type": "number",
+            "minimum": 0
+          },
+          "penetrationMetres": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "rootMetres",
+          "lengthRatio",
+          "penetrationMetres"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "required": [
+      "identity",
+      "paths",
+      "residuals"
+    ],
+    "additionalProperties": false
+  },
+  "pure": true,
+  "x-execution": "Pure bounded numerical batches run inside the generation worker process, with cancellation observed between batches.",
+  "x-contact": "Head and ear surface queries plus fitted shoulder/neck capsules; inspect segment crossings as well as sample endpoints. Report residuals after the final contact pass.",
+  "x-constraints": "Fixed step and order, step-scaled compliance, accumulated multipliers, pinned roots, rest-shape bending and limited sample-bundle separation; no authored guides and no runtime Dyng claims."
+}

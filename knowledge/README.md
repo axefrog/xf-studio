@@ -33,6 +33,8 @@ Draft and Solid pages are published as the [Knowledge section](https://axefrog.g
 
 ## Topics
 
+Hair Lab's current source-supported artist practices and proposed solver/identity semantics are consolidated in [procedural hair authoring](hair-authoring.md) (Draft; no generated-hair runtime proof).
+
 Each page's maturity is **Seed** (only pointers to existing research), **Draft** (consolidated but with significant gaps) or **Solid** (consolidated, cited and cross-checked).
 
 | Topic | Page | Maturity | Existing research to consolidate |

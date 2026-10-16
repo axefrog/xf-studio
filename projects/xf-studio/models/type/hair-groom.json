@@ -1,0 +1,167 @@
+{
+  "kind": "type",
+  "id": "hair-groom",
+  "owner": "hair-lab",
+  "summary": "A separate authored groom document containing a stable root population, volume graph and lazy field expressions.",
+  "status": "target",
+  "class": "authored",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "name": {
+      "kind": "value",
+      "doc": "The groom name.",
+      "shape": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120
+      }
+    },
+    "population": {
+      "kind": "value",
+      "doc": "Stable logical follicle population, independent of derived sample density.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "seed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 120000
+          }
+        },
+        "required": [
+          "seed",
+          "count"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "scalp": {
+      "kind": "value",
+      "doc": "Surface identity and topology binding; changes in topology require explicit rebinding.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "resource": {
+            "type": "string",
+            "minLength": 1
+          },
+          "topology": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "resource",
+          "topology"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "graph": {
+      "kind": "value",
+      "doc": "Root, volume, branch, convergence and termination intent; no authored curves.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "root": {
+            "type": "string",
+            "minLength": 1
+          },
+          "nodes": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "root",
+          "nodes"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "fields": {
+      "kind": "value",
+      "doc": "Named expressions with declared units and charts; evaluated only at requested material samples.",
+      "shape": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object"
+        }
+      }
+    },
+    "solver": {
+      "kind": "value",
+      "doc": "Deterministic evaluation budgets and compliant constraints.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "samples": {
+            "type": "integer",
+            "minimum": 16,
+            "maximum": 1024
+          },
+          "intervals": {
+            "type": "integer",
+            "minimum": 8,
+            "maximum": 64
+          },
+          "steps": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 32
+          },
+          "iterations": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16
+          },
+          "stepSeconds": {
+            "type": "number",
+            "minimum": 0.001,
+            "maximum": 0.05
+          },
+          "clearanceMetres": {
+            "type": "number",
+            "minimum": 0.0001,
+            "maximum": 0.01
+          }
+        },
+        "required": [
+          "samples",
+          "intervals",
+          "steps",
+          "iterations",
+          "stepSeconds",
+          "clearanceMetres"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "defaults": {
+    "name": "Loose waves",
+    "population": {
+      "seed": 1,
+      "count": 60000
+    },
+    "fields": {},
+    "solver": {
+      "samples": 256,
+      "intervals": 24,
+      "steps": 12,
+      "iterations": 8,
+      "stepSeconds": 0.016666666666666666,
+      "clearanceMetres": 0.0005
+    }
+  },
+  "x-document": "Serialized separately as xfs/hair-groom-part-1; never insert into the imported save, character choices or existing makeup draft.",
+  "x-validation": "The operator contract in hair-population validates complete graph and expression shapes before evaluation; schema validation alone is not semantic validation."
+}

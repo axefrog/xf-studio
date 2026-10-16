@@ -1,0 +1,17 @@
+{
+  "kind": "runtime",
+  "id": "hair-preview",
+  "owner": "hair-lab",
+  "summary": "Diagnostic ribbon meshes attached through the feature scene port for one bound scene.",
+  "status": "target",
+  "environment": "page",
+  "key": [
+    "type:hair-lab-session",
+    "type:scene"
+  ],
+  "factory": "planned",
+  "ready": "driver:hair-lab",
+  "query": [],
+  "linger": 0,
+  "x-lifetime": "AbortSignal owns attachments, subscriptions and GPU buffers. Existing scene-port detach functions are invoked only inside the renderer adapter."
+}

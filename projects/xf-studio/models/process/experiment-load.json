@@ -1,0 +1,64 @@
+{
+  "kind": "process",
+  "id": "experiment-load",
+  "owner": "platform",
+  "summary": "Load the explicitly enabled optional module before registering its contributions.",
+  "status": "target",
+  "driver": "driver:experiment",
+  "work": "Call the registered lazy loader and publish its plain contribution description only if its request is still enabled.",
+  "progress": {
+    "type": "object",
+    "properties": {
+      "experiment": {
+        "type": "string",
+        "minLength": 1
+      },
+      "stage": {
+        "const": "loading"
+      }
+    },
+    "required": [
+      "experiment",
+      "stage"
+    ],
+    "additionalProperties": false
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "experiment": {
+        "type": "string",
+        "minLength": 1
+      },
+      "registered": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "experiment",
+      "registered"
+    ],
+    "additionalProperties": false
+  },
+  "failure": {
+    "type": "object",
+    "properties": {
+      "code": {
+        "const": "experiment-load-failed"
+      },
+      "message": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "required": [
+      "code",
+      "message"
+    ],
+    "additionalProperties": false
+  },
+  "cancel": "AbortSignal withdraws registration authority; dynamic import itself may complete but cannot register after abort.",
+  "cleanup": "Abort all contributed lifetimes and remove UI and renderer registrations; keep authored feature documents untouched.",
+  "deadline": 1000,
+  "lane": "page, explicit preference change"
+}
