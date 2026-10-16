@@ -4,7 +4,7 @@ Last reviewed **29 September 2026** (finishes, runtime bridge, showroom and wait
 
 ## Summary
 
-**Hair Lab experiment:** the approved prototype target is an optional generated long, loosely wavy groom on V. Its [approved M1 design and diagnostic implementation](../research/hair/hair-lab-design.md) run in an isolated verification workspace. Five data-only styles, head/body contact, native cap coverage and warm continuation are under final quality checks; generated envelopes and cards are next. This experiment is outside the 1.0 requirements and changes no existing character or draft data.
+**Hair Lab experiment:** the approved prototype target is an optional generated long, loosely wavy groom on V. Its [approved M1 design and diagnostic implementation](../research/hair/hair-lab-design.md) run in an isolated verification workspace. Five data-only styles, head/body contact, native cap coverage and warm continuation are under final quality checks; generated envelopes and cards are next. A [standalone procedural strand-atlas kernel](../research/hair/hair-lab-textures.md) produces coherent alpha, ID, intrinsic gradient and Flow maps offline, with coverage-preserving safe mips and measured basis limitations; it is not wired into the preview or export. This experiment is outside the 1.0 requirements and changes no existing character or draft data.
 
 XF Studio's eye-makeup editor builds a verified **XF Eye Artistry** mod from the player's own game. **`v0.1.0-alpha.2`**, the first published alpha, was released on 28 September 2026 as an unsigned Windows pre-release with checksums and a build-provenance attestation ([release](https://github.com/axefrog/xf-studio/releases/tag/v0.1.0-alpha.2)); `v0.1.0-alpha.1` stays an unpublished draft.
 

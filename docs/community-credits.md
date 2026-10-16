@@ -580,11 +580,27 @@ Miles Macklin, Matthias Müller and Nuttapong Chentanez, [XPBD: Position-Based S
 
 ### Hair Tool — Bartosz Styperek
 
-[Hair Tool documentation](https://joseconseco.github.io/HairTool_3_Documentation/). Its separation of scalp input, deformation stages and profile/UV assignment helped frame Hair Lab's generation stages. Studied as an artist workflow; no add-on code or assets are reused.
+[Hair Tool documentation](https://joseconseco.github.io/HairTool_3_Documentation/). Its separation of scalp input, deformation stages and profile/UV assignment helped frame Hair Lab's generation stages; its baking workflow taught us to derive opacity, random strand ID, root position and flow from one groom, with thinning and end trimming as explicit decisions. Studied as an artist workflow; no add-on code or assets are reused.
 
 ### GS CurveTools
 
 [Curve attributes documentation](https://gs-curvetools.readthedocs.io/en/latest/attributes.html). Its separate controls for orientation, twist, taper and curvature subdivision informed the proposed procedural card decisions. Studied as an artist workflow; no plug-in code or assets are reused.
+
+### Polytricity
+
+[Hair Strand Designer](https://polytricity.artstation.com/store/j7PY/hair-strand-designer-v1-7-0-full-perpetual-license-free-demo-and-sample-set) taught us the artist controls for strand count, spacing, width, length, taper and fine waviness, and the value of seeded regeneration across related map outputs. Workflow study only; no application code, presets or textures are reused.
+
+### Eyosido Software
+
+[HairTG-Cards 2](https://eyosido.com/hairtg-cards) informed the procedural atlas's shared and per-region parameters, rows of designs, density progressions and separation of texturing from card geometry. Workflow study only; no product code, presets or assets are reused.
+
+### SideFX
+
+[Houdini's Bake Texture documentation](https://www.sidefx.com/docs/houdini/nodes/out/baketexture.html) explained producing multiple texture planes from the same source geometry in a receiving UV chart. This informed the Hair Lab atlas's shared fibre sample; no implementation is copied.
+
+### Epic Games
+
+[Unreal Engine's groom cards documentation](https://dev.epicgames.com/documentation/en-us/unreal-engine/setting-up-cards-and-meshes-for-grooms-in-unreal-engine) taught us how coverage, tangent, root coordinates and strand seeds are kept explicit in card texture layouts. Its layout was studied as a workflow reference; the Hair Lab atlas uses Cyberpunk's own shader encoding and includes no Unreal assets or code.
 
 ### Pedro F. Felzenszwalb and Daniel P. Huttenlocher
 
