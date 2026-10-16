@@ -1,4 +1,5 @@
 import type { ExperimentPort } from "./platform/api/experiments";
+import { routeDocumentHistory } from "./platform/core/document-history-routing";
 import type { FacialPreviewSnapshot } from "./platform/api/facial";
 import type { PartPresetList, PartPresetOutcome, PartPresetRequest, PartPresetSetList, SetExportState } from "./part-presets";
 import type { AuthoringPresentation } from "./authoring-presentation";
@@ -293,6 +294,7 @@ export function createStudioPresentation<Slot>(sources: {
     e = sources.editor;
   const s: StatusSource = sources.status ?? { snapshot: () => emptyPresentationStatus(),
     subscribe: () => () => {} };
+  const historyRoute = routeDocumentHistory({ state: () => a.history(), timeline: () => a.historyTimeline() }, sources.experiments);
   const authoring: StudioPresentationPort<Slot>["authoring"] = {
     snapshot: () => a.snapshot(), actionKinds: () => a.actionKinds(),
     requestKinds: () => a.requestKinds(), actionDescriptors: () => a.actionDescriptors(),
@@ -307,20 +309,20 @@ export function createStudioPresentation<Slot>(sources: {
     contextOptionsFor: context => a.contextOptionsFor(context),
     contextQuery: hit => a.contextQuery(hit),
     boundActionCapability: (context, action) => a.boundActionCapability(context, action),
-    dispatchContext: (context, action) => a.dispatchContext(context, action),
-    capability: action => a.capability(action), actionsFor: target => a.actionsFor(target),
-    dispatch: action => a.dispatch(action),
+    dispatchContext: (context, action) => historyRoute.baseChange(() => a.dispatchContext(context, action)),
+    capability: action => { const result = historyRoute.capability(action) ?? a.capability(action), note = historyRoute.hint(action); return note ? { ...result, note } : result; }, actionsFor: target => a.actionsFor(target),
+    dispatch: action => historyRoute.execute(action) ?? historyRoute.baseChange(() => a.dispatch(action)),
     controlBegin: (id, layerId) => a.controlBegin(id, layerId),
-    controlEdit: (id, action) => a.controlEdit(id, action),
-    controlCommit: id => a.controlCommit(id), controlCancel: id => a.controlCancel(id),
+    controlEdit: (id, action) => historyRoute.baseChange(() => a.controlEdit(id, action)),
+    controlCommit: id => historyRoute.baseChange(() => a.controlCommit(id)), controlCancel: id => historyRoute.baseChange(() => a.controlCancel(id)),
     requestCapability: request => a.requestCapability(request), execute: request => a.execute(request),
     canBeginGesture: (source, layerId) => a.canBeginGesture(source, layerId),
     gestureCapability: (source, target) => a.gestureCapability(source, target),
     beginGesture: (source, layerId) => a.beginGesture(source, layerId),
-    applyGesture: (source, proposal) => a.applyGesture(source, proposal),
-    endGesture: (source, cancel) => a.endGesture(source, cancel),
-    previewState: () => a.previewState(), history: () => a.history(),
-    historyTimeline: () => a.historyTimeline(), consequences: subject => a.consequences(subject), finishCatalogue: () => a.finishCatalogue(),
+    applyGesture: (source, proposal) => historyRoute.baseChange(() => a.applyGesture(source, proposal)),
+    endGesture: (source, cancel) => historyRoute.baseChange(() => a.endGesture(source, cancel)),
+    previewState: () => a.previewState(), history: () => historyRoute.state(),
+    historyTimeline: () => historyRoute.timeline(), consequences: subject => a.consequences(subject), finishCatalogue: () => a.finishCatalogue(),
     layerExport: layerId => a.layerExport(layerId),
     layerSurfaceEdge: layerId => a.layerSurfaceEdge(layerId),
     glitterModelCatalogue: () => a.glitterModelCatalogue(),

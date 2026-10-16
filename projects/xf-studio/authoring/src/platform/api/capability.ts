@@ -14,6 +14,8 @@ export type ValidationIssueCode = "required" | "name.blank" | "name.too-long" | 
 export type ValidationIssue = { code: ValidationIssueCode; field?: string; message: string };
 
 export type Capability = { available: boolean; code?: ReasonCode; reason?: string;
+  /** A current contextual hint that does not refuse the action. */
+  note?: string;
   /** Structured validation detail when the refusal concerns one input value or mode. */
   issue?: ValidationIssue };
 

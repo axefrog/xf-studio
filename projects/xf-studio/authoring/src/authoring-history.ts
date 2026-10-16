@@ -4,42 +4,9 @@ import { UNKNOWN_HISTORY_LABEL, type HistoryLabel } from "./history-labels";
 import type { Recipe } from "./engines/layered-makeup/recipe";
 
 /** The history family's actions (registered by the composition as the `history` system family). */
-export type HistoryAction = { kind: "history.undo" | "history.redo" } | { kind: "history.jumpTo"; entryId: string };
+export type { HistoryCommand as HistoryAction, HistoryState, HistoryStep, HistorySnapshot } from "./platform/api/history";
+import type { HistoryState, HistoryStep, HistorySnapshot } from "./platform/api/history";
 
-export type HistoryState = {
-  /** The change the next Undo reverts. */
-  undo?: HistoryLabel;
-  /** The change the next Redo re-applies. */
-  redo?: HistoryLabel;
-  depth: number;
-  redoDepth: number;
-};
-
-/** One change in a history timeline. */
-export type HistoryStep = HistoryLabel & {
-  /** Opaque, session-unique and stable while the step stays in the history (also across Undo/Redo). */
-  id: string;
-  /** When the change was made (epoch ms); absent for steps restored from a saved workspace. */
-  at?: number;
-  /** `done` steps are part of the current look; `undone` ones can be redone (session-only). */
-  state: "done" | "undone";
-};
-/**
- * Read-only history of the current look, oldest first: every kept done step, then the
- * redo-able ones in the order Redo would re-apply them. It never contains recipes, so the
- * planned look-wide history (feature-module-platform §3) can publish the same shape.
- */
-export type HistorySnapshot = {
-  /** Jump target for the oldest kept state, before `steps[0]`. */
-  startId: string;
-  steps: HistoryStep[];
-  /** Index in `steps` of the step the current look follows; -1 at the oldest kept state. */
-  current: number;
-  /** Number of undone steps after `current` (all of them redo-able). */
-  redoCount: number;
-  /** Older steps than the first kept one were dropped (history limit or saved-workspace budget). */
-  trimmed: boolean;
-};
 /** The oldest kept state of every history; not a step of its own. */
 export const HISTORY_START_ID = "start";
 

@@ -64,5 +64,6 @@
       "capability": "undo-groups",
       "closes": "Undo over named sets of nodes and fields as an engine capability."
     }
-  ]
+  ],
+  "x-document-routing": "Registered document participants route the existing global history commands. Unloading a contribution removes its command target while retaining session metadata; absence falls back to ordinary authoring. A jump stays inside the selected document and refreshes every bound view of it."
 }

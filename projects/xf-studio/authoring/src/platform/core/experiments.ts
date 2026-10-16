@@ -3,6 +3,7 @@ import type { ExperimentContext } from "../api/graph";
 import { Aborter, createEnvironment, createGraph, defineType, erector, standardOperators } from "strata";
 import type { AbortSignalLike, GraphModel, GraphStore, Json, KNode, Sources } from "strata";
 import type { ExperimentInfo, ExperimentPort, ExperimentRegistration, ExperimentState } from "../api/experiments";
+import { documentHistory } from "./document-history";
 
 export const EXPERIMENT_TYPES = [
   defineType({ type: "experimental-features", owner: "platform", schema: "1", fields: { flags: { kind: "map", of: { kind: "value" } } }, defaults: () => ({ flags: {} }) }),
@@ -32,7 +33,8 @@ export async function createExperiments<T extends ExperimentRegistration>(option
   const updates = env.seed<number>({ initial: 0, signal: life.signal });
   const registrations = new Map<string, { life: Aborter; contribution?: T }>(); // Adapter runtimes, keyed by experiment request.
   const effective = (id: string) => options.overrides[id] ?? flags.value()?.[id] ?? false;
-  const context: ExperimentContext = { graph, env, sources, signal: life.signal };
+  const history = documentHistory(env, life.signal);
+  const context: ExperimentContext = { graph, env, sources, signal: life.signal, history };
   graph.subscribe(preferenceRef, () => env.observe(flags, graph.resolve(preferenceRef, ["flags"]) as Record<string, boolean>), { signal: life.signal });
   const publish = (id: string, phase: ExperimentState["phase"], message = "") => env.observe(states, { ...states.value(), [id]: { phase, message } });
   const model: GraphModel = { nodes: [{ id: "load", kind: "driver", op: "load-experiments" }] };
@@ -70,6 +72,7 @@ export async function createExperiments<T extends ExperimentRegistration>(option
   (erected.live("load") as import("strata").Driver).start(life.signal, { reason: "experimental feature preference", goal: "registered while enabled" });
   return {
     context,
+    history,
     snapshot: () => definitions.map(info => ({ id: info.id, label: info.label, description: info.description, enabled: effective(info.id), overridden: info.id in options.overrides,
       phase: states.value()?.[info.id]?.phase ?? "off", message: states.value()?.[info.id]?.message ?? "" })),
     registrations: () => [...registrations.values()].flatMap(r => r.contribution ? [r.contribution] : []),

@@ -143,9 +143,11 @@ export function hairRenderer(lab: ReturnType<typeof createHairLab>, lifetime: Ab
       if (drawn?.character === identity && drawn.coverage === result.coverage?.values && drawn.topology === topology && drawn.buffers.cards && result.cards && drawn.buffers.volumes && result.volumeGeometry) {
         const updateBuffer = (g: THREE.BufferGeometry, positions: number[], uv?: number[]) => { const p = g.getAttribute("position") as THREE.BufferAttribute; p.array.set(positions); p.needsUpdate = true; if (uv) { const a = g.getAttribute("uv") as THREE.BufferAttribute; a.array.set(uv); a.needsUpdate = true; } g.computeVertexNormals(); };
         const strands = strandGeometry(result.paths); updateBuffer(drawn.buffers.paths, Array.from(strands.getAttribute("position").array)); strands.dispose();
-        updateBuffer(drawn.buffers.volumes, result.volumeGeometry.positions); updateBuffer(drawn.buffers.cards, result.cards.positions, cardAtlasUV(result.cards, atlas, rootAtV1));
+        updateBuffer(drawn.buffers.volumes, result.volumeGeometry.positions); const volumeColour = drawn.buffers.volumes.getAttribute("color") as THREE.BufferAttribute; volumeColour.array.set(result.volumeGeometry.colours); volumeColour.needsUpdate = true;
+        updateBuffer(drawn.buffers.cards, result.cards.positions, cardAtlasUV(result.cards, atlas, rootAtV1));
+        const red = drawn.buffers.cards.getAttribute("xfsVertexRed") as THREE.BufferAttribute; red.array.set(result.cards.occlusion); red.needsUpdate = true;
         upload++; resultKey = key;
-        evidence = { ...(evidence as Record<string, unknown>), stage: result.stage, continuation: result.continuation ?? false, residuals: result.residuals, cardContact: result.cardContact, milliseconds: result.milliseconds, reusedBuffers: true };
+        evidence = { ...(evidence as Record<string, unknown>), stage: result.stage, continuation: result.continuation ?? false, residuals: result.residuals, cardContact: result.cardContact, occlusion: result.occlusion, milliseconds: result.milliseconds, reusedBuffers: true };
         host.requestFrame(); return;
       }
       const geometry = strandGeometry(result.paths), material = new THREE.MeshStandardMaterial({ color: 0x8b583f, roughness: .6, side: THREE.DoubleSide });
@@ -172,20 +174,20 @@ export function hairRenderer(lab: ReturnType<typeof createHairLab>, lifetime: Ab
       if (result.cards && atlas.length) {
         const source = host.resolvedSurfaces?.("hair").find(item => /(?:^|\\)hair\.mt$/i.test(item.template)), m = source?.forkMaterial?.();
         if (!(m instanceof THREE.MeshStandardMaterial)) { m?.dispose(); throw Error("The current hair material isn't available."); }
-        const data = result.cards, g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(data.positions, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(cardAtlasUV(data, atlas, rootAtV1), 2)); g.setIndex(data.indices); g.computeVertexNormals(); source?.prepareGeometry?.(g);
+        const data = result.cards, g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(data.positions, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(cardAtlasUV(data, atlas, rootAtV1), 2)); g.setAttribute("color", new THREE.Float32BufferAttribute(data.occlusion.flatMap(red => [red, 1, 1]), 3)); g.setIndex(data.indices); g.computeVertexNormals(); source?.prepareGeometry?.(g);
         const prior = m.onBeforeCompile, key = m.customProgramCacheKey.bind(m); m.vertexColors = false; m.alphaMap = reference.textures.Strand_Alpha; m.side = THREE.DoubleSide;
-        m.onBeforeCompile = (shader, renderer) => { prior.call(m, shader, renderer); for (const [uniform, input] of Object.entries({ xfsStrandId: "Strand_ID", xfsStrandGradient: "Strand_Gradient" })) if (shader.uniforms[uniform] && reference!.textures[input]) shader.uniforms[uniform].value = reference!.textures[input]; hairShader = { uniforms: Object.keys(shader.uniforms).filter(k => k.startsWith("xfs")), profile: !!shader.uniforms.xfsProfile }; };
+        m.onBeforeCompile = (shader, renderer) => { prior.call(m, shader, renderer); for (const [uniform, input] of Object.entries({ xfsStrandId: "Strand_ID", xfsStrandGradient: "Strand_Gradient" })) if (shader.uniforms[uniform] && reference!.textures[input]) shader.uniforms[uniform].value = reference!.textures[input]; if (shader.uniforms.xfsShadow) shader.uniforms.xfsShadow.value.z = result.occlusion?.shadowStrength ?? 0; hairShader = { uniforms: Object.keys(shader.uniforms).filter(k => k.startsWith("xfs")), profile: !!shader.uniforms.xfsProfile, shadow: shader.uniforms.xfsShadow?.value.toArray() }; };
         m.customProgramCacheKey = () => `${key()}-xfs-volume-cards`; cardGroup.add(headSkin(g, host, m)); geometries.push(g); materials.push(m); buffers.cards = g;
       }
       group.add(volumeGroup, cardGroup);
-      for (const g of Object.values(buffers)) for (const attribute of ["position", "normal", "uv"]) if (g.hasAttribute(attribute)) (g.getAttribute(attribute) as THREE.BufferAttribute).setUsage(THREE.DynamicDrawUsage);
+      for (const g of Object.values(buffers)) for (const attribute of ["position", "normal", "uv", "color", "xfsVertexRed"]) if (g.hasAttribute(attribute)) (g.getAttribute(attribute) as THREE.BufferAttribute).setUsage(THREE.DynamicDrawUsage);
       displayGroup(group);
       const ticket = ++upload; resultKey = key;
       void host.compile(group).then(() => {
         if (life.signal.aborted || ticket !== upload || !lab.session(scene)?.active) { for (const g of geometries) g.dispose(); for (const m of materials) m.dispose(); mask.dispose(); return; }
         clear(); const detach = host.attach(group); drawn = { group, detach, geometries, materials, textures: [mask], character: identity, coverage: result.coverage?.values, topology, buffers };
         resultKey = key; evidence = { stage: result.stage, continuation: result.continuation ?? false, paths: result.paths.paths.length, scalp: result.groom.scalp.densitySeed,
-          volumes: result.volumes?.volumes.map(v => ({ id: v.id, section: v.section, next: v.next, sampledMembers: v.members.length })), population: result.volumes && { logical: result.volumes.logicalPopulation, sampled: result.volumes.sampledPopulation }, cards: result.cards?.cards.length, cardVertices: result.cards?.positions.length! / 3, cardContact: result.cardContact, atlas: { resources: reference?.resources, regions: atlas.length, rootAtV1 }, hairShader,
+          volumes: result.volumes?.volumes.map(v => ({ id: v.id, section: v.section, next: v.next, sampledMembers: v.members.length })), population: result.volumes && { logical: result.volumes.logicalPopulation, sampled: result.volumes.sampledPopulation }, cards: result.cards?.cards.length, cardVertices: result.cards?.positions.length! / 3, cardContact: result.cardContact, occlusion: result.occlusion, atlas: { resources: reference?.resources, regions: atlas.length, rootAtV1 }, hairShader,
           capSource: session.surface.coverageSurface!.resource, capShader, capMaterial: { type: tint.type, visible: tint.visible, opacity: tint.opacity, colorWrite: tint.colorWrite, depthTest: tint.depthTest }, tintCoverage: result.tintCheck, residuals: result.residuals, milliseconds: result.milliseconds };
         displayGroup(group);
         host.supersede([{ slot: "hair" }]); host.requestFrame();

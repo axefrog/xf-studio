@@ -34,6 +34,7 @@ test("scene jobs pre-empt, reject late results, preserve independent documents a
   expect(jobs[2].previous).toEqual({ groom: complete.groom, paths: complete.paths });
   jobs[0].publish(generation()); expect(lab.session("a")!.result).toBeNull();
   expect((platform.context.graph.resolve(original, ["document"]) as any).fields.length.value).toBe(.60);
+  expect(lab.facade.snapshot().sessions[0].groom?.fields.length).toMatchObject({ op: "constant", value: .60, unit: "m" });
   await lab.facade.dispatch({ kind: "hairLab.undo", target: "a" });
   expect((platform.context.graph.resolve(original, ["document"]) as any).fields.length.value).toBe(.55);
   await lab.facade.dispatch({ kind: "hairLab.redo", target: "a" });
@@ -50,6 +51,12 @@ test("scene jobs pre-empt, reject late results, preserve independent documents a
   await lab.facade.dispatch({ kind: "hairLab.retry", target: "a" }); await settle();
   jobs.at(-1)!.publish({ ...complete, residuals: { ...complete.residuals!, curvature: { maximumPerMetre: 700, maximumTurnRadians: 1.7, maximumJumpPerMetre: 600 } } }); await settle();
   expect(lab.session("a")!.phase).toBe("failed"); expect(lab.session("a")!.result).toBeNull();
+  const c = new Aborter(life.signal); lab.bind("c", head, c.signal);
+  const beforeRevision = lab.session("c")!.revision, participant = lab.histories().find(h => h.id === `hair:${original.id}`)!;
+  expect(platform.history!.snapshot(participant.id).steps[0].label).toBe("Hair length");
+  expect(participant.dispatch({ kind: "history.jumpTo", entryId: platform.history!.snapshot(participant.id).startId })).toBe(true);
+  expect((platform.context.graph.resolve(original, ["document"]) as any).fields.length.value).toBe(.55);
+  expect(lab.session("c")!.revision).toBeGreaterThan(beforeRevision);
   lab.withdraw(); await settle();
   expect(lab.facade.snapshot().sessions.every(s => !s.active && s.result === null)).toBe(true);
   expect(jobs.every(j => j.aborted())).toBe(true);

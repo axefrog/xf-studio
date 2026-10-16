@@ -14,6 +14,10 @@
       "does": "Generate layered ribbons from volumes and shade with the native atlas and character colour profile."
     },
     {
+      "model": "operator:hair-occlusion",
+      "does": "Bake groom-depth occlusion in the worker for diagnostics and card red self-shadow."
+    },
+    {
       "model": "action:experiment-set",
       "does": "Persist opt-in; conditionally load experiment registrations."
     },

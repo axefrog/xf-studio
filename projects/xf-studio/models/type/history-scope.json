@@ -124,5 +124,6 @@
       "capability": "undo-groups",
       "closes": "Selective recording of a session stream: keep the last N steps."
     }
-  ]
+  ],
+  "x-experiment-documents": "Experimental documents contribute independent history targets to the global Undo/History controls. Session metadata stores labels, stable step IDs and cursor; authored data and compensation remain in the owning graph. The last edited document is selected. Editing an ordinary preset returns focus to its own history; histories are never copied into one another."
 }

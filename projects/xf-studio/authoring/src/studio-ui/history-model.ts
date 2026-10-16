@@ -49,10 +49,11 @@ export function historySummary(timeline: HistorySnapshot) {
  * Tooltip and palette title for Undo or Redo, naming what it would change:
  * "Redo: Move point (Ctrl+Shift+Z)", or why it is unavailable with the shortcut still shown.
  */
-export function historyCommandTitle(command: "undo" | "redo", capability: StudioCapability, label: string | undefined, shortcut: string) {
+export function historyCommandTitle(command: "undo" | "redo", capability: StudioCapability, label: string | undefined, shortcut: string, documentLabel?: string) {
   const name = command === "undo" ? "Undo" : "Redo";
-  if (!capability.available) return `${name} (${shortcut}) — ${capability.reason ?? "Unavailable."}\n${HISTORY_SCOPE}`;
-  return `${name}${label ? `: ${label}` : ""} (${shortcut})\n${HISTORY_SCOPE}`;
+  const scope = documentLabel ? `Changes to ${documentLabel}.` : HISTORY_SCOPE;
+  if (!capability.available) return `${name} (${shortcut}) — ${capability.reason ?? "Unavailable."}\n${scope}`;
+  return `${name}${label ? `: ${label}` : ""} (${shortcut})\n${scope}`;
 }
 /** Palette/menu wording without the shortcut, which those surfaces show separately. */
 export function historyCommandLabel(command: "undo" | "redo", capability: StudioCapability, label: string | undefined) {

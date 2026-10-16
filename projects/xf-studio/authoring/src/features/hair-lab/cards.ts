@@ -3,7 +3,7 @@ import { add, clamp, cross, dot, lerp, magnitude, mul, normalise, randomAt, smoo
 import { memberPoint, type Volumes } from "./volumes";
 import { contactAt, segmentContact, type DistanceGrid } from "./contact";
 export type AtlasRegion = { u0: number; u1: number; v0: number; v1: number; density: number; rootAtV1?: boolean };
-export type CardMesh = { positions: number[]; uv: number[]; indices: number[]; rootTip: number[]; ids: number[];
+export type CardMesh = { positions: number[]; uv: number[]; indices: number[]; rootTip: number[]; ids: number[]; occlusion: number[];
   cards: { id: string; volume: string; layer: "inner" | "middle" | "outer" | "flyaway"; root: string; start: number; count: number; columns: number }[] };
 export function atlasRegions(alpha: Uint8Array, width: number, height: number, gradient?: { width: number; height: number; values: Uint8Array }): AtlasRegion[] {
   const regions: AtlasRegion[] = [];
@@ -41,7 +41,7 @@ const LAYERS = [
 ] as const;
 export function generateCards(volumes: Volumes, regions: readonly AtlasRegion[] = [{ u0: 0, u1: 1, v0: 0, v1: 1, density: 1 }], grid?: DistanceGrid, edgePasses = 8): CardMesh {
   if (!regions.length) throw Error("The strand atlas has no usable regions.");
-  const out: CardMesh = { positions: [], uv: [], indices: [], rootTip: [], ids: [], cards: [] };
+  const out: CardMesh = { positions: [], uv: [], indices: [], rootTip: [], ids: [], occlusion: [], cards: [] };
   for (const volume of volumes.volumes) for (const member of volume.members) {
     const originals = volume.frames.map((_, ring) => memberPoint(volume, member, ring));
     const gathered = (weight: number) => volume.frames.map((frame, ring) => lerp(originals[ring], frame.centre, weight * clamp(member.clumpRatio) * smooth(.08, .45, ring / (volume.frames.length - 1))));
@@ -90,6 +90,7 @@ export function generateCards(volumes: Volumes, regions: readonly AtlasRegion[] 
     });
     if (!changed.size) break; dirty = changed;
   }
+  out.occlusion = Array(out.positions.length / 3).fill(0);
   return out;
 }
 /** Atlas choice is derived from native pixels; it never changes canonical card geometry. */

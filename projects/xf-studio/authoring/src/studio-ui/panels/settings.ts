@@ -19,7 +19,7 @@ type Theme = "system" | "light" | "dark";
 /**
  * Settings (UI-109): everything a person configures, in one panel with plain groups: Game (game folder, mod manager and profile, the eye
  * plate head), Saves (where the Save Explorer reads saves), Tools (WolvenKit), Appearance (theme, input hints, research tools), Updates
- * (the check at start, and checking now) and Privacy & diagnostics. Composed from the library's controls and the one setup form (`game-setup.ts`); each choice is saved as it is
+ * (the check at start, and checking now), optional Experimental features and Privacy & diagnostics. Composed from the library's controls and the one setup form (`game-setup.ts`); each choice is saved as it is
  * made, through its own typed port (local settings, UI preferences, diagnostics). Opened from the header's Settings button, the command
  * palette ("Settings", "Game folder and mod manager", "Where are my saves?"), Help and every "Open Settings" next step (`rt.settings.open`).
  */
@@ -86,13 +86,13 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
     tools: group("tools", ["XF Studio sets WolvenKit up for you (it asks before downloading). Name your own copy only if you'd rather use it.",
       "The 3D view is built from files XF Studio prepares from your game. Clearing them frees the space; they're prepared again when needed."],
     form.tools, prepared),
-    appearance: group("appearance", "Stored with your workspace on this computer.", theme.element, hints.element, research.element, experimental, h("div", { class: "row wrap gap-s" }, reference)),
+    appearance: group("appearance", "Stored with your workspace on this computer.", theme.element, hints.element, research.element, h("div", { class: "row wrap gap-s" }, reference)),
     updates: group("updates", "New versions are published on GitHub. XF Studio tells you when there's one; you download and install it yourself.",
       checkOnStart.element, h("div", { class: "row wrap gap-s align-center" }, checkNow, updateText, releases)),
     privacy: group("privacy", "Diagnostics stay on this computer. A problem report is prepared for you to review and save; nothing is sent by itself.",
       deep.element, h("div", { class: "row wrap gap-s" }, report)),
   };
-  const element = h("div", { class: "panel-content settings-panel" }, ...Object.values(sections));
+  const element = h("div", { class: "panel-content settings-panel" }, ...Object.entries(sections).flatMap(([id, content]) => id === "updates" ? [content, experimental] : [content]));
 
   let shown = false, updatesShown = false;
   return {

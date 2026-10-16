@@ -38,5 +38,6 @@
     "action:wolvenkit-recheck",
     "action:wolvenkit-refresh",
     "action:updates-check"
-  ]
+  ],
+  "x-experiments": "Optional experimental preferences form a separate section after Updates and before Privacy & diagnostics. Keyboard & mouse stays with the input hints in Appearance. Verification overrides disable the matching toggle with an explanation; ordinary workspaces expose an enabled toggle, off by default."
 }

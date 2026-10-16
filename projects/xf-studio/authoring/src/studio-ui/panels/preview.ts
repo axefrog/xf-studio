@@ -436,7 +436,7 @@ export function motionPanel(rt: StudioRuntime): PanelController {
       blinkNote.hidden = !blinkNote.textContent;
       setHelp(blinkTip, blinkHelp(motion));
       const physicsAllowed = port.authoring.capability({ kind: "motion.setPhysics", enabled: !motion?.physics });
-      physics.update(motion?.physics ?? false, { disabled: !physicsAllowed.available, reason: physicsAllowed.reason, note: physicsNoteLine(motion), reasonOnLine: !saidOnce });
+      physics.update(motion?.physics ?? false, { disabled: !physicsAllowed.available, reason: physicsAllowed.reason, note: physicsAllowed.note ?? physicsNoteLine(motion), reasonOnLine: !saidOnce });
     },
   };
 }

@@ -12,7 +12,7 @@
       "kind": "ref",
       "to": "type:hair-groom",
       "clone": "share",
-      "doc": "The groom being edited."
+      "doc": "The groom being edited. The read-only presentation snapshot projects this authored value independently of pending or rejected geometry, so controls never revert while a worker runs."
     },
     "scene": {
       "kind": "ref",

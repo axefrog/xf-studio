@@ -5,15 +5,16 @@ import type { ExperimentContext } from "../../platform/api/graph";
 import { constant } from "./fields";
 import { validateGroom } from "./groom";
 import type { Groom, HeadSurface, Paths, Residuals } from "./types";
+import type { HistoryCommand, HistoryParticipant } from "../../platform/api/history";
 
 export type HairDisplay = "combined" | "strands" | "scalp" | "reference" | "reference-scalp" | "volumes" | "cards";
 export type HairAction = { kind: "hairLab.preview"; target: string; display: HairDisplay } | { kind: "hairLab.activate"; target: string; active: boolean } | { kind: "hairLab.set"; target: string; field: "length" | "waves" | "spread"; value: number }
   | { kind: "hairLab.undo" | "hairLab.redo" | "hairLab.retry"; target: string };
 export type Continuation = { groom: Groom; paths: Paths };
-export type Generation = { groom: Groom; paths: Paths; uncutPaths?: Paths; continuation?: boolean; residuals: Residuals | null; stage: "coarse" | "refined"; milliseconds: Record<string, number>; volumes?: import("./volumes").Volumes; volumeGeometry?: ReturnType<typeof import("./volumes").volumeMesh>; cards?: import("./cards").CardMesh; cardContact?: { minimumClearanceMetres: number; penetrationMetres: number }; coverageGeometry?: { positions: number[]; indices: number[]; uv: number[] } | null; coverage?: { width: number; height: number; values: string }; tintCheck?: ReturnType<typeof import("./scalp").densityCoverage> };
+export type Generation = { groom: Groom; paths: Paths; uncutPaths?: Paths; continuation?: boolean; residuals: Residuals | null; stage: "coarse" | "refined"; milliseconds: Record<string, number>; volumes?: import("./volumes").Volumes; volumeGeometry?: ReturnType<typeof import("./volumes").volumeMesh>; cards?: import("./cards").CardMesh; occlusion?: ReturnType<typeof import("./occlusion").bakeOcclusion>["statistics"]; cardContact?: { minimumClearanceMetres: number; penetrationMetres: number }; coverageGeometry?: { positions: number[]; indices: number[]; uv: number[] } | null; coverage?: { width: number; height: number; values: string }; tintCheck?: ReturnType<typeof import("./scalp").densityCoverage> };
 export type GenerationDevice = { generate(target: string, surface: HeadSurface, groom: Groom | null, signal: AbortSignalLike, publish: (result: Generation) => void, previous?: Continuation | null): Promise<void> };
 type Session = { display: HairDisplay; id: string; active: boolean; surface: HeadSurface; document: NodeRef | null; revision: number; phase: "off" | "shaping" | "settling" | "ready" | "failed"; message: string; result: Generation | null; settled: Continuation | null; continuation: Continuation | null };
-export type HairLabSnapshot = { sessions: readonly Session[] };
+export type HairLabSnapshot = { sessions: readonly (Session & { groom: Groom | null })[] };
 export type HairLabFacade = ModuleService & { snapshot(): HairLabSnapshot; dispatch(action: HairAction): Promise<{ ok: boolean; message?: string }> };
 
 /** Authored content lives in its own event stream. Session observations and results remain session streams. */
@@ -77,8 +78,24 @@ export function createHairLab(context: ExperimentContext, device: GenerationDevi
     const driver = env.driver({ name: "Observe Hair Lab", start(run) { run.effect({ inputs: [sessions], run: () => listener() }); } }, undefined, signal);
     driver.start(signal);
   }
+  const refreshDocument = (groomRef: NodeRef) => {
+    for (const row of Object.values(sessions.value()!)) if (row.document?.id === groomRef.id) change(row.id, { revision: row.revision + 1, continuation: row.settled });
+    demand();
+  };
+  function moveHistory(groomRef: NodeRef, action: HistoryCommand): boolean {
+    const scope = `hair:${groomRef.id}`, timeline = context.history?.snapshot(scope);
+    const desired = action.kind === "history.undo" ? (timeline?.current ?? 0) - 1 : action.kind === "history.redo" ? (timeline?.current ?? -1) + 1 : action.entryId === timeline?.startId ? -1 : timeline?.steps.findIndex(step => step.id === action.entryId);
+    if (desired === undefined || timeline && (desired < -1 || desired >= timeline.steps.length) || action.kind === "history.jumpTo" && desired === -1 && action.entryId !== timeline?.startId) return false;
+    let current = timeline?.current ?? (action.kind === "history.undo" ? 0 : -1), changed = false;
+    while (current !== desired) {
+      const result = current > desired ? graph.undo(scope) : graph.redo(scope);
+      if (!result.ok) { if (changed) refreshDocument(groomRef); return false; }
+      current += current > desired ? -1 : 1; context.history?.move(scope, current); changed = true;
+    }
+    if (changed) refreshDocument(groomRef); return true;
+  }
   const facade: HairLabFacade = {
-    module: "hair-lab", snapshot: () => ({ sessions: Object.values(sessions.value()!) }),
+    module: "hair-lab", snapshot: () => ({ sessions: Object.values(sessions.value()!).map(row => Object.freeze({ ...row, groom: readGroom(row) })) }),
     capability: () => ({ available: true }),
     async dispatch(action: HairAction) {
       const row = sessions.value()![action.target]; if (!row) return { ok: false, message: "Open a 3D view first." };
@@ -99,18 +116,24 @@ export function createHairLab(context: ExperimentContext, device: GenerationDevi
         if (!Number.isFinite(action.value) || action.value < lo || action.value > hi) return { ok: false, message: "Choose a value within the slider's range." };
         const edited = { ...groom, fields: { ...groom.fields, [action.field]: constant(action.value, "m") } };
         const issues = validateGroom(edited); if (issues.length) return { ok: false, message: "That change couldn't be used. Undo it and try another value." };
-        const result = graph.commit([{ op: "set", node: row.document, path: ["document"], value: edited as unknown as Json }], { scope, label: `Hair ${action.field}`, action: action.kind });
+        const label = `Hair ${{ length: "length", waves: "waves", spread: "volume" }[action.field]}`;
+        const result = graph.commit([{ op: "set", node: row.document, path: ["document"], value: edited as unknown as Json }], { scope, label, action: action.kind });
         if (!result.ok) return { ok: false, message: result.message };
+        context.history?.record(scope, "Hair Lab", { id: result.commit, label, actionKind: action.kind });
       } else {
-        const result = action.kind === "hairLab.undo" ? graph.undo(scope) : graph.redo(scope);
-        if (!result.ok) return { ok: false, message: result.message };
+        return moveHistory(row.document, { kind: action.kind === "hairLab.undo" ? "history.undo" : "history.redo" }) ? { ok: true } : { ok: false, message: "There is no hair change to undo or redo." };
       }
-      change(row.id, { revision: row.revision + 1, continuation: row.settled }); demand(); return { ok: true };
+      refreshDocument(row.document); return { ok: true };
     },
     subscribe(listener) { const token = new Aborter(life.signal); observe(token.signal, listener); return () => token.abort(); },
   };
   return {
     facade,
+    histories(): HistoryParticipant[] {
+      const documents = new Map(Object.values(sessions.value()!).flatMap(row => row.document ? [[row.document.id, row.document] as const] : []));
+      return [...documents.values()].map(groomRef => ({ id: `hair:${groomRef.id}`, dispatch: action => moveHistory(groomRef, action) }));
+    },
+    actionHints(): Readonly<Record<string, string>> { return Object.values(sessions.value()!).some(row => row.active) ? { "motion.setPhysics": "Turn Hair Lab off for hair physics." } : {}; },
     withdraw() {
       for (const row of Object.values(sessions.value()!)) if (row.active) change(row.id, { active: false, revision: row.revision + 1, phase: "off", result: null, settled: null, continuation: null, message: "" });
       demand();

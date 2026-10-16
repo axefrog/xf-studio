@@ -8,5 +8,6 @@ export function create(context: ExperimentContext) {
   const lab = createHairLab(context, workerGeneration(context.signal));
   return { module: { id: "hair-lab", label: "Hair Lab", icon: "character", group: "character", stage: "dev", shownByDefault: true,
     description: "Try a generated hairstyle on V." } as const, service: lab.facade, renderer: hairRenderer(lab, context.signal),
+    histories: () => lab.histories(), actionHints: () => lab.actionHints(),
     visibility(shown: boolean) { if (!shown) lab.withdraw(); }, contribution: HAIR_VIEW, binding: HAIR_VIEW_BINDING };
 }
