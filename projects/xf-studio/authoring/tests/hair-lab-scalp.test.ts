@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { constrainDensity, densityCoverage, densityMask, projectCapDensity, coveragePattern, fitCapSurface } from "../src/features/hair-lab/scalp";
+import { constrainDensity, densityCoverage, densityMask, projectCapDensity, coveragePattern, fitCapSurface, scalpRegions } from "../src/features/hair-lab/scalp";
 import { surfaceProjector } from "../src/features/hair-lab/contact";
 import { dot, sub } from "../src/features/hair-lab/types";
 import { sphereSurface } from "./hair-lab-domain.test";
@@ -39,4 +39,10 @@ test("coverage diagnostics distinguish a repeated hole lattice from smooth densi
   expect(coveragePattern({ width, height: width, values }).periodic).toBe(false);
   for (let y = 0; y < width; y++) for (let x = 0; x < width; x++) if (x % 8 < 3 && y % 8 < 3) values[y * width + x] = 0;
   expect(coveragePattern({ width, height: width, values }).periodic).toBe(true);
+});
+test("the temple guard follows a sideburn arc while protecting the central forehead and ears", () => {
+  const { region } = scalpRegions(sphereSurface());
+  expect(region([.09 * .72, -.12 + .66 * .24, .075 * .2])).toBe("scalp");
+  expect(region([0, -.12 + .66 * .24, .35 * .2])).toBe("forehead");
+  expect(region([.09 * .95, -.12 + .60 * .24, 0])).toBe("ears");
 });

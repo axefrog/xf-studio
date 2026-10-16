@@ -23,8 +23,10 @@ test("scene jobs pre-empt, reject late results, preserve independent documents a
   expect(jobs.map(j => j.target)).toEqual(["a", "b"]);
   const generation = (resource = head): Generation => ({ groom: defaultGroom(resource), paths: { paths: [] }, stage: "coarse", residuals: null, milliseconds: {} });
   jobs[0].publish(generation()); jobs[1].publish(generation({ ...head, resource: "another-head" })); await settle();
-  const complete: Generation = { ...generation(), stage: "refined", paths: coarsePaths(defaultGroom(head), sampleRoots(defaultGroom(head), head, 1), head.down), residuals: { rootMetres: 0, lengthRatio: 0, penetrationMetres: 0, minimumClearanceMetres: .001, visibleExtentMetres: .5 } };
+  const complete: Generation = { ...generation(), stage: "refined", paths: coarsePaths(defaultGroom(head), sampleRoots(defaultGroom(head), head, 1), head.down), residuals: { rootMetres: 0, lengthRatio: 0, penetrationMetres: 0, minimumClearanceMetres: .001, visibleExtentMetres: .5, curvature: { maximumPerMetre: 20, maximumTurnRadians: .2, maximumJumpPerMetre: 10 } } };
   jobs[0].publish(complete); await settle();
+  expect(Object.isFrozen(lab.facade.snapshot().sessions[0])).toBe(true);
+  expect(Object.isFrozen(lab.facade.snapshot().sessions[0].result!.paths.paths[0].points)).toBe(true);
   const original = lab.session("a")!.document!;
   expect(lab.session("b")!.document).not.toEqual(original);
   await lab.facade.dispatch({ kind: "hairLab.set", target: "a", field: "length", value: .60 }); await settle();
@@ -44,6 +46,9 @@ test("scene jobs pre-empt, reject late results, preserve independent documents a
   await lab.facade.dispatch({ kind: "hairLab.retry", target: "a" }); await settle();
   expect(jobs.at(-1)!.previous).toBeNull();
   jobs.at(-1)!.publish({ ...complete, residuals: { ...complete.residuals!, penetrationMetres: .005 } }); await settle();
+  expect(lab.session("a")!.phase).toBe("failed"); expect(lab.session("a")!.result).toBeNull();
+  await lab.facade.dispatch({ kind: "hairLab.retry", target: "a" }); await settle();
+  jobs.at(-1)!.publish({ ...complete, residuals: { ...complete.residuals!, curvature: { maximumPerMetre: 700, maximumTurnRadians: 1.7, maximumJumpPerMetre: 600 } } }); await settle();
   expect(lab.session("a")!.phase).toBe("failed"); expect(lab.session("a")!.result).toBeNull();
   lab.withdraw(); await settle();
   expect(lab.facade.snapshot().sessions.every(s => !s.active && s.result === null)).toBe(true);

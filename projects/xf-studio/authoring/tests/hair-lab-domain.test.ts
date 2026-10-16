@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { constant, evaluateField, transportSample, validateField } from "../src/features/hair-lab/fields";
 import { defaultGroom, evaluateMembership, sampleRoots, validateGroom } from "../src/features/hair-lab/groom";
 import { buildCharacterContact, buildDistanceGrid, capsuleContact, contactAt, segmentContact } from "../src/features/hair-lab/contact";
-import { coarsePaths, continuePaths, cutPaths, drapePaths, drapeStep, pathResiduals, retargetContinuation } from "../src/features/hair-lab/solve";
+import { coarsePaths, continuePaths, cutPaths, drapePaths, drapeStep, pathCurvature, pathResiduals, retargetContinuation } from "../src/features/hair-lab/solve";
 import type { HeadSurface, MaterialSample } from "../src/features/hair-lab/types";
 
 // Synthetic, closed, outward-oriented head; no game resources in fixtures.
@@ -289,5 +289,12 @@ describe("Hair Lab model: static contact solve", () => {
     const neighbours = structuredClone(result.paths.slice(1));
     drapeStep(groom, result, rest, grid, [], head.down, [result.paths[0].root.index]);
     expect(result.paths.slice(1)).toEqual(neighbours);
+  });
+  test("curvature diagnostics distinguish a smooth arc from a sharp millimetre-scale kink", () => {
+    const groom = defaultGroom(head), path = coarsePaths(groom, sampleRoots(groom, head, 1), head.down).paths[0];
+    const arc = { ...path, points: Array.from({ length: 30 }, (_, j) => [.1 * Math.cos(j * .04), .1 * Math.sin(j * .04), 0] as [number, number, number]) };
+    expect(pathCurvature({ paths: [arc] }).maximumPerMetre).toBeLessThan(11);
+    const kink = { ...path, points: [[0, 0, 0], [.002, 0, 0], [.002, -.002, 0]] as [number, number, number][] };
+    expect(pathCurvature({ paths: [kink] }).maximumPerMetre).toBeGreaterThan(700);
   });
 });

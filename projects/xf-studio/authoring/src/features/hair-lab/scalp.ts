@@ -59,8 +59,8 @@ export function scalpRegions(head: HeadSurface) {
   const centre = min.map((v, k) => (v + max[k]) / 2) as Vec3, size = sub(max, min), front = head.front ?? [0, 0, 1];
   const region = (p: Vec3) => {
     const height = (p[1] - min[1]) / size[1], facing = dot(sub(p, centre), front) / size[2], side = Math.abs(p[0] - centre[0]) / (size[0] * .5);
-    const forehead = .72 + .06 * smooth(.18, .38, facing);
-    return height < .35 ? "neck" : side > .88 && height < .69 ? "ears" : facing > .06 && height < forehead ? "forehead" : facing > 0 && height < .68 ? "face" : "scalp";
+    const central = smooth(.12, .25, facing), forehead = .60 + .18 * central, face = .52 + .13 * central;
+    return height < .35 ? "neck" : side > .88 && height < .69 ? "ears" : facing > 0 && height < face ? "face" : facing > 0 && height < forehead ? "forehead" : "scalp";
   };
   // A UV-island boundary is not a hairline: the vanilla cap continues across the temple seam.
   const eligible = (i: number) => region(vertex(head.positions, i)) === "scalp";

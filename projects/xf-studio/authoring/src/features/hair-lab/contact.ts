@@ -144,7 +144,7 @@ export function buildDistanceGrid(head: HeadSurface, resolution = 48, method: "s
     const solid = closeVoxels(inside, resolution), outside = squaredDistances(solid, resolution, cell, 1), interior = squaredDistances(solid, resolution, cell, 0);
     const halfCell = Math.min(...cell) / 2;
     for (let i = 0; i < values.length; i++) values[i] = solid[i] ? halfCell - Math.sqrt(interior[i]) : Math.sqrt(outside[i]) - halfCell;
-    return { min, max, resolution, cell, values };
+    return smoothDistanceGrid({ min, max, resolution, cell, values });
   }
   // Exact triangle distance matters near contact. A coarse field fills the distant interior/exterior;
   // only the 8 mm surface band needs exact nearest queries on the fine lattice.
@@ -164,6 +164,21 @@ export function buildDistanceGrid(head: HeadSurface, resolution = 48, method: "s
     values[x + resolution * (y + resolution * z)] = Math.sqrt(near.distanceSquared) * (inside[x + resolution * (y + resolution * z)] ? -1 : 1);
   }
   return { min, max, resolution, cell, values };
+}
+/** Remove voxel stair-step curvature before tracing; retain a conservative contact margin. */
+export function smoothDistanceGrid(grid: DistanceGrid, passes = 2): DistanceGrid {
+  const n = grid.resolution; let source = grid.values, target = new Float32Array(source.length);
+  for (let pass = 0; pass < passes; pass++) for (let axis = 0; axis < 3; axis++) {
+    const stride = n ** axis;
+    for (let z = 0; z < n; z++) for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      const at = x + n * (y + n * z), position = axis === 0 ? x : axis === 1 ? y : z;
+      target[at] = (source[at - (position ? stride : 0)] + 2 * source[at] + source[at + (position < n - 1 ? stride : 0)]) * .25;
+    }
+    [source, target] = [target, source];
+  }
+  const margin = Math.min(...grid.cell) * .3 * passes;
+  for (let i = 0; i < source.length; i++) source[i] -= margin;
+  return { ...grid, values: source };
 }
 /** Both resolutions sample one solid; an internal head/body join can never act as a contact lid. */
 export function buildCharacterContact(head: HeadSurface, resolution = 96): DistanceGrid {

@@ -35,7 +35,7 @@ export function coarsePaths(groom: Groom, roots: Root[], down: Vec3, front: Vec3
       const n = headContact.normal, local = sub(p, centre), nearHead = headContact.distance < .025 && p[1] > centre[1] - extentY * .32;
       // Support is unilateral. The skull may stop gravity; it cannot pull a falling fibre onto the neck.
       const gathering = !!tieTarget && holdDistance < 0;
-      const onSupport = nearHead && !(gathering && magnitude(sub(tieTarget!, p)) < .035) && (gathering || dot(down, n) < -.03 || travelled < .02);
+      const supportWeight = nearHead && !(gathering && magnitude(sub(tieTarget!, p)) < .035) ? gathering ? 1 : Math.max(smooth(-.08, .12, -dot(down, n)), 1 - smooth(.012, .03, travelled)) : 0;
       const crown = smooth(.25, .85, root.normal[1]), part = Math.exp(-(((local[0] - extentX * flow.part) / (extentX * .75)) ** 2));
       const rootFacing = dot(root.normal, front), frontSection = smooth(-.2, .5, rootFacing);
       let preferred = add(down, [side * (nearHead ? part * crown * (.12 + 1.5 * frontSection) : 0), 0, 0]);
@@ -46,12 +46,12 @@ export function coarsePaths(groom: Groom, roots: Root[], down: Vec3, front: Vec3
         preferred = lerp(preferred, flow.foreheadDirection ?? add([side * comb[0], comb[1], 0], mul(front, -comb[2])), flow.foreheadSweep);
       }
       if (gathering) preferred = add(normalise(sub(tieTarget!, p)), [0, .65 * smooth(.02, .07, tieTarget![1] - p[1]), 0]);
-      if (onSupport) {
+      if (supportWeight > 0) {
         let tangent = sub(preferred, mul(n, dot(preferred, n)));
         if (magnitude(tangent) < .001) tangent = sub([side, 0, 0], mul(n, n[0] * side));
         tangent = normalise(tangent);
-        const emergence = flow.emergenceRadians * (1 - smooth(.006, .025, travelled));
-        preferred = add(mul(tangent, Math.cos(emergence)), mul(n, Math.sin(emergence)));
+        const emergence = flow.emergenceRadians * (1 - smooth(0, .008, travelled));
+        preferred = lerp(normalise(preferred), add(mul(tangent, Math.cos(emergence)), mul(n, Math.sin(emergence))), supportWeight);
         if (strategy === "tangent") preferred = add(preferred, mul(n, .12));
       }
       if (support && !gathering && flow.rearPreference > 0 && !frontLock && travelled > .035) {
@@ -71,12 +71,14 @@ export function coarsePaths(groom: Groom, roots: Root[], down: Vec3, front: Vec3
       const direction = iteration === 0 ? normalise(preferred) : normalise(lerp(previousDirection, normalise(preferred), nearHead ? .9 : .55));
       let next = add(p, mul(direction, microStep));
       if (support) {
-        const rootLift = (gathering ? 0 : flow.crownLiftMetres) * crown * smooth(0, .012, travelled) * (1 - smooth(.05, .10, travelled));
-        const shell = groom.solver.clearanceMetres + .0008 + rootLift;
+        const distance = travelled + microStep;
+        const rootLift = (gathering ? 0 : flow.crownLiftMetres) * crown * smooth(0, .012, distance) * (1 - smooth(.05, .10, distance));
+        const emergenceRise = Math.sin(flow.emergenceRadians) * .004 * (1 - Math.exp(-distance / .004)) * (1 - smooth(.02, .04, distance));
+        const shell = groom.solver.clearanceMetres + .0008 + rootLift + emergenceRise;
         const contact = contactAt(support.grid, next);
-        const pullToSurface = strategy !== "tangent" && onSupport && travelled > .008 && next[1] > centre[1] - extentY * .25;
-        if (contact.distance < shell || pullToSurface && contact.distance < shell + .015)
-          next = add(next, mul(contact.normal, shell - contact.distance));
+        const attraction = strategy !== "tangent" && next[1] > centre[1] - extentY * .25 && contact.distance < shell + .015 ? supportWeight : 0;
+        if (contact.distance < shell || attraction > 0)
+          next = add(next, mul(contact.normal, (shell - contact.distance) * (contact.distance < shell ? 1 : attraction)));
         for (const capsule of support.surface.body ? [] : support.surface.capsules) {
           const collision = capsuleContact(next, capsule);
           if (collision.distance < shell) next = add(next, mul(collision.normal, shell - collision.distance));
@@ -114,6 +116,29 @@ function styledPath(path: import("./types").HairPath, waves: number, spread: num
     if (j === hold?.index) p = [...hold.position];
     points.push(p); cumulative.push(cumulative[j - 1] + magnitude(sub(p, points[j - 1])));
   }
+  // Fair the physical guide before adaptive sampling. Contact is a unilateral constraint on
+  // each update, so this removes tiny reversals rather than merely rounding their rendering.
+  const original = points.map(p => [...p] as Vec3), weights = Array.from({ length: 19 }, (_, j) => Math.exp(-(((j - 9) / 3) ** 2) / 2)), weightSum = weights.reduce((a, b) => a + b, 0);
+  const blurred: Vec3[] = [];
+  for (let j = 0; j < points.length; j++) {
+    const lo = hold && j >= hold.index ? hold.index : 0, hi = hold && j < hold.index ? hold.index : points.length - 1;
+    let p: Vec3 = [0, 0, 0];
+    for (let offset = -9; offset <= 9; offset++) {
+      const at = j + offset, bounded = clamp(at, lo, hi), value = original[bounded], weight = weights[offset + 9] / weightSum;
+      // Linear continuation at an attachment preserves emergence rather than pulling it into a hook.
+      for (let k = 0; k < 3; k++) p[k] += weight * (value[k] + (at < lo ? (at - lo) * (original[lo + 1][k] - original[lo][k]) : at > hi ? (at - hi) * (original[hi][k] - original[hi - 1][k]) : 0));
+    }
+    blurred.push(p);
+  }
+  for (let j = 1; j < points.length - 1; j++) {
+    if (j === hold?.index) continue;
+    const lo = hold && j > hold.index ? hold.index : 0, hi = hold && j < hold.index ? hold.index : points.length - 1;
+    let p = sub(sub(blurred[j], mul(sub(blurred[lo], original[lo]), 1 - smooth(0, .03, cumulative[j] - cumulative[lo]))), mul(sub(blurred[hi], original[hi]), 1 - smooth(0, .03, cumulative[hi] - cumulative[j])));
+    if (grid) for (let k = 0; k < 3; k++) { const hit = contactAt(grid, p); if (hit.distance >= clearance + .0008) break; p = add(p, mul(hit.normal, clearance + .0008 - hit.distance)); }
+    points[j] = p;
+  }
+  cumulative.splice(0, cumulative.length, 0);
+  for (let j = 1; j < points.length; j++) cumulative.push(cumulative[j - 1] + magnitude(sub(points[j], points[j - 1])));
   const length = path.intrinsicMetres, holdAt = hold ? cumulative[hold.index] : -1;
   if (hold && holdAt >= length) throw Error("The styled convergence hold exceeds the intrinsic length.");
   if (cumulative.at(-1)! < length) {
@@ -214,7 +239,8 @@ export function continuePaths(previous: { groom: Groom; paths: Paths }, groom: G
       p = add(p, [waveDelta * gate * Math.sin(angle), 0, waveDelta * gate * Math.cos(angle) * .45]);
       const contact = contactAt(grid, p), layer = hold ? 0 : spreadDelta * (path.root.index % 3) / 3 * smooth(.01, .06, distance) * (1 - smooth(.02, .04, contact.distance));
       p = add(p, mul(contact.normal, layer));
-      for (let pass = 0; pass < 3; pass++) { const hit = contactAt(grid, p); if (hit.distance >= groom.solver.clearanceMetres + .0005) break; p = add(p, mul(hit.normal, groom.solver.clearanceMetres + .0005 - hit.distance)); }
+      const clearance = groom.solver.clearanceMetres + (path.termination ? .0001 : .0005);
+      for (let pass = 0; pass < 3; pass++) { const hit = contactAt(grid, p); if (hit.distance >= clearance) break; p = add(p, mul(hit.normal, clearance - hit.distance)); }
       if (path.termination && j === path.points.length - 1) { const height = dot(p, path.termination.normal) - path.termination.offsetMetres; p = sub(p, mul(path.termination.normal, height)); }
       return j === hold?.index ? [...hold.position] as Vec3 : p;
     });
@@ -238,7 +264,9 @@ export function drapeStep(groom: Groom, result: Paths, rest: Paths, grid: Distan
       if (path.termination) { const height = dot(path.points[n], path.termination.normal) - path.termination.offsetMetres; path.points[n] = sub(path.points[n], mul(path.termination.normal, height)); }
     };
     const lambdas = new Float64Array(n), bend = Array.from({ length: n }, () => [0, 0, 0] as Vec3);
-    for (let j = 1; j <= n; j++) if (!holds.has(j)) path.points[j] = add(path.points[j], mul(down, 9.81 * dt2 * .15));
+    // A terminated continuation is an already settled haircut. Scalar edits relax its
+    // constraints around that rest shape; replaying gravity would style it a second time.
+    if (!path.termination) for (let j = 1; j <= n; j++) if (!holds.has(j)) path.points[j] = add(path.points[j], mul(down, 9.81 * dt2 * .15));
     pin();
     for (let iteration = 0; iteration < groom.solver.iterations; iteration++) {
       for (let j = 1; j <= n; j++) {
@@ -256,7 +284,7 @@ export function drapeStep(groom: Groom, result: Paths, rest: Paths, grid: Distan
         lambdas[j - 1] += dl; if (wb) path.points[j] = add(path.points[j], mul(tipGradient, dl));
         if (wa) path.points[j - 1] = sub(path.points[j - 1], mul(direction, dl));
       }
-      projectContact(path.points, grid, capsules, clearance, pinned);
+      projectContact(path.points, grid, capsules, clearance, pinned, path.termination?.normal);
       pin();
       if (iteration >= 1 && pathSettled(path.points, segmentLengths, grid, capsules, groom.solver.clearanceMetres)) break;
     }
@@ -273,7 +301,7 @@ export function drapeStep(groom: Groom, result: Paths, rest: Paths, grid: Distan
       }
       pin();
       for (let j = n; j > 1; j--) if (!holds.has(j - 1)) path.points[j - 1] = add(path.points[j], mul(normalise(sub(path.points[j - 1], path.points[j])), segmentLengths[j - 1]));
-      projectContact(path.points, grid, capsules, clearance, pinned);
+      projectContact(path.points, grid, capsules, clearance, pinned, path.termination?.normal);
       pin();
       if (pathSettled(path.points, segmentLengths, grid, capsules, groom.solver.clearanceMetres)) break;
     }
@@ -300,29 +328,28 @@ function pathSettled(points: Vec3[], steps: number[], grid: DistanceGrid, capsul
 export function unsettledPaths(result: Paths, rest: Paths, grid: DistanceGrid, clearance: number, capsules: Capsule[]): number[] {
   return result.paths.filter((path, i) => !pathSettled(path.points, rest.paths[i].segmentMetres ?? Array(path.points.length - 1).fill(path.intrinsicMetres / (path.points.length - 1)), grid, capsules, clearance, .02)).map(path => path.root.index);
 }
-function projectContact(points: Vec3[], grid: DistanceGrid, capsules: Capsule[], clearance: number, pinned: Set<number>) {
+function projectContact(points: Vec3[], grid: DistanceGrid, capsules: Capsule[], clearance: number, pinned: Set<number>, tipPlane?: Vec3) {
+  const gradient = (j: number, normal: Vec3) => tipPlane && j === points.length - 1 ? sub(normal, mul(tipPlane, dot(normal, tipPlane))) : normal;
+  const point = (j: number, hit: { distance: number; normal: Vec3 }) => {
+    if (pinned.has(j) || hit.distance >= clearance) return;
+    const direction = gradient(j, hit.normal), weight = dot(hit.normal, direction);
+    if (weight > 1e-6) points[j] = add(points[j], mul(direction, (clearance - hit.distance) / weight));
+  };
+  const edge = (j: number, hit: { distance: number; normal: Vec3; t: number }) => {
+    if (hit.distance >= clearance) return;
+    const wa = pinned.has(j - 1) ? 0 : 1, wb = pinned.has(j) ? 0 : 1, a = 1 - hit.t, b = hit.t, ga = gradient(j - 1, hit.normal), gb = gradient(j, hit.normal);
+    const denominator = wa * a * a * dot(hit.normal, ga) + wb * b * b * dot(hit.normal, gb);
+    if (denominator > 1e-6) {
+      const delta = (clearance - hit.distance) / denominator;
+      if (wa) points[j - 1] = add(points[j - 1], mul(ga, delta * a));
+      if (wb) points[j] = add(points[j], mul(gb, delta * b));
+    }
+  };
   for (let j = 1; j < points.length; j++) {
-    const contact = contactAt(grid, points[j]);
-    if (!pinned.has(j) && contact.distance < clearance) points[j] = add(points[j], mul(contact.normal, clearance - contact.distance));
-    for (const capsule of capsules) { const c = capsuleContact(points[j], capsule); if (!pinned.has(j) && c.distance < clearance) points[j] = add(points[j], mul(c.normal, clearance - c.distance)); }
-    const segment = segmentContact(grid, points[j - 1], points[j]);
-    if (segment.distance < clearance) {
-      const wa = pinned.has(j - 1) ? 0 : 1, wb = pinned.has(j) ? 0 : 1, a = 1 - segment.t, b = segment.t, denominator = wa * a * a + wb * b * b;
-      if (denominator > 1e-9) {
-        const delta = mul(segment.normal, (clearance - segment.distance) / denominator);
-        if (wa) points[j - 1] = add(points[j - 1], mul(delta, a));
-        if (wb) points[j] = add(points[j], mul(delta, b));
-      }
-    }
-    for (const capsule of capsules) {
-      const c = segmentCapsuleContact(points[j - 1], points[j], capsule);
-      if (c.distance >= clearance) continue;
-      const wa = pinned.has(j - 1) ? 0 : 1, wb = pinned.has(j) ? 0 : 1, a = 1 - c.t, b = c.t, denominator = wa * a * a + wb * b * b;
-      if (denominator < 1e-9) continue;
-      const correction = mul(c.normal, (clearance - c.distance) / denominator);
-      if (wa) points[j - 1] = add(points[j - 1], mul(correction, a));
-      if (wb) points[j] = add(points[j], mul(correction, b));
-    }
+    point(j, contactAt(grid, points[j]));
+    for (const capsule of capsules) point(j, capsuleContact(points[j], capsule));
+    edge(j, segmentContact(grid, points[j - 1], points[j]));
+    for (const capsule of capsules) edge(j, segmentCapsuleContact(points[j - 1], points[j], capsule));
   }
 }
 export function drapePaths(groom: Groom, coarse: Paths, grid: DistanceGrid, capsules: Capsule[], down: Vec3 = [0, -1, 0]): Paths {
@@ -348,7 +375,24 @@ export function pathResiduals(result: Paths, rest: Paths, grid: DistanceGrid, cl
     for (const path of result.paths) for (let j = 1; j < path.points.length; j++) minimum = Math.min(minimum, segmentContact(own, path.points[j - 1], path.points[j]).distance);
     return { name: index ? `body-${index}` : "head-and-ears", minimumClearanceMetres: minimum, penetrationMetres: Math.max(0, clearance - minimum) };
   });
-  return { rootMetres, lengthRatio, penetrationMetres, minimumClearanceMetres, visibleExtentMetres, colliders };
+  return { rootMetres, lengthRatio, penetrationMetres, minimumClearanceMetres, visibleExtentMetres, colliders, curvature: pathCurvature(result) };
+}
+/** Geometric arclength makes this independent of adaptive sample spacing. Holds are explicit corners. */
+export function pathCurvature(source: Paths) {
+  let maximumPerMetre = 0, maximumTurnRadians = 0, maximumJumpPerMetre = 0;
+  for (const path of source.paths) {
+    let previous: number | undefined;
+    for (let j = 1; j < path.points.length - 1; j++) {
+      if (path.holds?.some(h => Math.abs(j - h.index) <= 1)) { previous = undefined; continue; }
+      const a = sub(path.points[j], path.points[j - 1]), b = sub(path.points[j + 1], path.points[j]), la = magnitude(a), lb = magnitude(b);
+      if (Math.min(la, lb) < 1e-7) continue;
+      const turn = Math.acos(clamp(dot(a, b) / (la * lb), -1, 1)), curvature = turn / ((la + lb) * .5);
+      maximumPerMetre = Math.max(maximumPerMetre, curvature); maximumTurnRadians = Math.max(maximumTurnRadians, turn);
+      if (previous !== undefined) maximumJumpPerMetre = Math.max(maximumJumpPerMetre, Math.abs(curvature - previous));
+      previous = curvature;
+    }
+  }
+  return { maximumPerMetre, maximumTurnRadians, maximumJumpPerMetre };
 }
 
 /** Hairdresser semantics: settle first, then trim to a head-bound cut surface. */
@@ -366,7 +410,7 @@ export function cutPaths(groom: Groom, source: Paths, grid?: DistanceGrid): Path
       if (da > 0 && db <= 0) { const t = da / (da - db); points.push(lerp(a, b, t)); segmentMetres.push(expected * t); trimmed = true; break; }
       points.push([...b]); segmentMetres.push(expected);
     }
-    if (trimmed && points.length > 2 && segmentMetres.at(-1)! < groom.solver.clearanceMetres * 2) {
+    if (trimmed && points.length > 2 && segmentMetres.at(-1)! < .006 && (!grid || segmentContact(grid, points.at(-3)!, points.at(-1)!).distance >= groom.solver.clearanceMetres + .0001)) {
       const tail = segmentMetres.pop()!; segmentMetres[segmentMetres.length - 1] += tail; points.splice(points.length - 2, 1);
     }
     let length = segmentMetres.reduce((a, b) => a + b, 0);
@@ -375,17 +419,16 @@ export function cutPaths(groom: Groom, source: Paths, grid?: DistanceGrid): Path
       const original = points.map(p => [...p] as Vec3), originalSteps = [...segmentMetres], originalLength = length;
       const curl = evaluateField(groom.fields.tipCurl, { ...path.root, distance: length }), angle = path.root.uv[0] * Math.PI * 2 - Math.PI;
       const inward: Vec3 = [-Math.sin(angle), 0, Math.cos(angle)], direction = normalise(sub(inward, mul(normal, dot(inward, normal))));
-      const band = Math.min(.04, length * .25); let distance = 0;
+      const band = Math.min(.04, length * .25), deltas: Vec3[] = [[0, 0, 0]]; let distance = 0;
       for (let j = 1; j < points.length; j++) {
         distance += originalSteps[j - 1]; const gate = smooth(originalLength - band, originalLength, distance), delta = mul(direction, .012 * Math.sin(curl) * gate * gate);
-        let weight = 1;
-        if (grid && contactAt(grid, add(original[j], delta)).distance < groom.solver.clearanceMetres + .0003) {
-          let lo = 0, hi = 1;
-          for (let pass = 0; pass < 8; pass++) { const mid = (lo + hi) / 2; if (contactAt(grid, add(original[j], mul(delta, mid))).distance >= groom.solver.clearanceMetres + .0003) lo = mid; else hi = mid; }
-          weight = lo;
-        }
-        points[j] = add(original[j], mul(delta, weight));
+        deltas.push(delta);
       }
+      const candidate = (weight: number) => original.map((p, j) => add(p, mul(deltas[j], weight)));
+      const clear = (values: Vec3[]) => !grid || values.every((p, j) => !j || segmentContact(grid, values[j - 1], p).distance >= groom.solver.clearanceMetres + .0001);
+      let weight = 1;
+      if (!clear(candidate(weight))) { let lo = 0, hi = 1; for (let pass = 0; pass < 10; pass++) { const mid = (lo + hi) / 2; if (clear(candidate(mid))) lo = mid; else hi = mid; } weight = lo; }
+      points.splice(0, points.length, ...candidate(weight));
       for (let j = 1; j < points.length; j++) segmentMetres[j - 1] = magnitude(sub(points[j], points[j - 1]));
       length = segmentMetres.reduce((a, b) => a + b, 0);
       if (length > path.intrinsicMetres) { points.splice(0, points.length, ...original); segmentMetres.splice(0, segmentMetres.length, ...originalSteps); length = originalLength; }

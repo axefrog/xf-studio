@@ -48,7 +48,8 @@ self.onmessage = async event => {
     const stages = groom.cut && !initial ? 2 : 1;
     for (let stage = 0; stage < stages; stage++) {
       if (stage) { rest = cutPaths(groom, result, contactCache.grid); result = structuredClone(rest); }
-      let active: number[] | undefined;
+      let active: number[] | undefined = stage || initial && groom.cut ? unsettledPaths(result, rest, contactCache.grid, groom.solver.clearanceMetres, contactSurface.capsules) : undefined;
+      if (active && !active.length) continue;
       for (let step = 0; step < groom.solver.steps; step++) {
         drapeStep(groom, result, rest, contactCache.grid, contactSurface.capsules, surface.down, active);
         await yieldTask(); if (requested !== id) return;

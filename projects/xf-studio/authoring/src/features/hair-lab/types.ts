@@ -29,7 +29,7 @@ export type Groom = {
 export type Root = MaterialSample & { position: Vec3; normal: Vec3; triangle: number; barycentric: Vec3; density: number };
 export type HairPath = { root: Root; points: Vec3[]; intrinsicMetres: number; segmentMetres?: number[]; holds?: { index: number; position: Vec3 }[]; termination?: { normal: Vec3; offsetMetres: number } };
 export type Paths = { paths: HairPath[] };
-export type Residuals = { rootMetres: number; lengthRatio: number; penetrationMetres: number; minimumClearanceMetres: number; visibleExtentMetres: number; colliders?: { name: string; minimumClearanceMetres: number; penetrationMetres: number }[] };
+export type Residuals = { rootMetres: number; lengthRatio: number; penetrationMetres: number; minimumClearanceMetres: number; visibleExtentMetres: number; curvature?: { maximumPerMetre: number; maximumTurnRadians: number; maximumJumpPerMetre: number }; colliders?: { name: string; minimumClearanceMetres: number; penetrationMetres: number }[] };
 export const add = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 export const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 export const mul = (a: Vec3, k: number): Vec3 => [a[0] * k, a[1] * k, a[2] * k];

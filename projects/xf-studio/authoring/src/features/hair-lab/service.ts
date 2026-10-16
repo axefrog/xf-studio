@@ -43,8 +43,8 @@ export function createHairLab(context: ExperimentContext, device: GenerationDevi
               if (rejected) return;
               if (result.stage === "refined") {
                 const r = result.residuals;
-                if (!r || !result.paths.paths.length || ![r.rootMetres, r.lengthRatio, r.penetrationMetres, r.minimumClearanceMetres].every(Number.isFinite) || r.rootMetres > 1e-6 || r.lengthRatio > .02 || r.penetrationMetres > .00005 || r.colliders?.some(c => !Number.isFinite(c.minimumClearanceMetres) || c.penetrationMetres > .00005)) {
-                  rejected = "The refined result failed its attachment, intrinsic-length or contact gate.";
+                if (!r || !r.curvature || !result.paths.paths.length || ![r.rootMetres, r.lengthRatio, r.penetrationMetres, r.minimumClearanceMetres, ...Object.values(r.curvature)].every(Number.isFinite) || r.rootMetres > 1e-6 || r.lengthRatio > .02 || r.penetrationMetres > .00005 || r.curvature.maximumPerMetre > 350 || r.curvature.maximumTurnRadians > 1.65 || r.curvature.maximumJumpPerMetre > 250 || r.colliders?.some(c => !Number.isFinite(c.minimumClearanceMetres) || c.penetrationMetres > .00005)) {
+                  rejected = "The refined result failed its attachment, intrinsic-length, contact or smoothness gate.";
                   change(id, { phase: "failed", result: null, settled: null, message: "Couldn't settle this groom. Try again, or turn Hair Lab off to use your usual hairstyle." });
                   progress({ stage: "rejected", revision }); return;
                 }
@@ -78,7 +78,7 @@ export function createHairLab(context: ExperimentContext, device: GenerationDevi
     driver.start(signal);
   }
   const facade: HairLabFacade = {
-    module: "hair-lab", snapshot: () => ({ sessions: structuredClone(Object.values(sessions.value()!)) }),
+    module: "hair-lab", snapshot: () => ({ sessions: Object.values(sessions.value()!) }),
     capability: () => ({ available: true }),
     async dispatch(action: HairAction) {
       const row = sessions.value()![action.target]; if (!row) return { ok: false, message: "Open a 3D view first." };
