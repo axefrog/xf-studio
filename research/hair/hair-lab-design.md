@@ -93,6 +93,8 @@ The rough implementation uses nominal widths of 26, 19, 12 and 3 mm for inner, m
 
 The resolved `hh_long01` alpha atlas was visually inspected directly. It contains an upper bank of long strips and a separate lower bank of short tufts. A full-height strip mapper incorrectly sampled both and produced smeared rectangular tips. The current mapper detects horizontal banks before vertical alpha bounds, selects the long bank for these ribbons, and measures root direction per region from `Strand_Gradient`. The alpha taper ends at the ribbon tip. Split convergence spans retain their fraction of the complete fibre's root-to-tip coordinate. The existing `hair.mt` adapter binds the atlas alpha, ID and gradient with V's current `.hp`; the cap retains the gradient-recolour adapter. Native texture bytes remain ignored local inputs.
 
+The [strand texture study](hair-lab-textures.md) defines a standalone four-map generator, calibrated ID distributions, complete isolated strip mips and an opt-in preview adapter with exact consumption calls. Its selector exposes dense/clump/wisp/flyaway/curl, length class and tangent-basis metadata; it is not yet wired into the card generator, which still references installed vanilla long-hair resources through the generic resolver and existing `hair.mt` adapter. V's `.hp` stays authoritative. Never commit extracted textures. Root-to-tip attributes use intrinsic fibre distance, never world height.
+
 ## Verification and budgets
 
 All budgets are proposals until measured. End-to-end timing starts at action dispatch and ends at the first frame showing the matching result, with geometry preparation, queue time, generation, upload and shader readiness reported separately. A fast solver alone is not a fast interaction.
