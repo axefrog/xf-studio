@@ -5,7 +5,7 @@
 
 ### Approved experiment: Hair Lab
 
-[Hair Lab](hair-lab.md) is an approved, optional prototype exception: generate long loosely wavy hair on V through a strand-budget volume graph, behind an experimental preference. The M1 model is approved and diagnostic implementation is under final quality checks. Derived clump envelopes precede the shaded-card stage. Broader hair features still wait for the current product to be finished and polished. In-Studio quality comes first; export is build-only stretch work.
+[Hair Lab](hair-lab.md) is an approved, optional prototype exception: generate hair on V through a strand-budget volume graph, behind an experimental preference. Its rough M2 slice now renders derived clumps, layered cards and scalp coverage through the existing hair shader. Visual fidelity and coarse latency remain active work before M3 styling. Broader hair features still wait for the current product to be finished and polished. In-Studio quality comes first; export is build-only stretch work.
 
 ### 1.0 connective tissue: profiles, Vs, saves and presets (design revision 4, 29 September 2026)
 

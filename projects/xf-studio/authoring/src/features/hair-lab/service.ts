@@ -6,11 +6,11 @@ import { constant } from "./fields";
 import { validateGroom } from "./groom";
 import type { Groom, HeadSurface, Paths, Residuals } from "./types";
 
-export type HairDisplay = "combined" | "strands" | "scalp" | "reference" | "reference-scalp";
+export type HairDisplay = "combined" | "strands" | "scalp" | "reference" | "reference-scalp" | "volumes" | "cards";
 export type HairAction = { kind: "hairLab.preview"; target: string; display: HairDisplay } | { kind: "hairLab.activate"; target: string; active: boolean } | { kind: "hairLab.set"; target: string; field: "length" | "waves" | "spread"; value: number }
   | { kind: "hairLab.undo" | "hairLab.redo" | "hairLab.retry"; target: string };
 export type Continuation = { groom: Groom; paths: Paths };
-export type Generation = { groom: Groom; paths: Paths; uncutPaths?: Paths; continuation?: boolean; residuals: Residuals | null; stage: "coarse" | "refined"; milliseconds: Record<string, number>; coverageGeometry?: { positions: number[]; indices: number[]; uv: number[] } | null; coverage?: { width: number; height: number; values: string }; tintCheck?: ReturnType<typeof import("./scalp").densityCoverage> };
+export type Generation = { groom: Groom; paths: Paths; uncutPaths?: Paths; continuation?: boolean; residuals: Residuals | null; stage: "coarse" | "refined"; milliseconds: Record<string, number>; volumes?: import("./volumes").Volumes; volumeGeometry?: ReturnType<typeof import("./volumes").volumeMesh>; cards?: import("./cards").CardMesh; cardContact?: { minimumClearanceMetres: number; penetrationMetres: number }; coverageGeometry?: { positions: number[]; indices: number[]; uv: number[] } | null; coverage?: { width: number; height: number; values: string }; tintCheck?: ReturnType<typeof import("./scalp").densityCoverage> };
 export type GenerationDevice = { generate(target: string, surface: HeadSurface, groom: Groom | null, signal: AbortSignalLike, publish: (result: Generation) => void, previous?: Continuation | null): Promise<void> };
 type Session = { display: HairDisplay; id: string; active: boolean; surface: HeadSurface; document: NodeRef | null; revision: number; phase: "off" | "shaping" | "settling" | "ready" | "failed"; message: string; result: Generation | null; settled: Continuation | null; continuation: Continuation | null };
 export type HairLabSnapshot = { sessions: readonly Session[] };
@@ -83,7 +83,7 @@ export function createHairLab(context: ExperimentContext, device: GenerationDevi
     async dispatch(action: HairAction) {
       const row = sessions.value()![action.target]; if (!row) return { ok: false, message: "Open a 3D view first." };
       if (action.kind === "hairLab.preview") {
-        if (!["combined", "strands", "scalp", "reference", "reference-scalp"].includes(action.display)) return { ok: false, message: "Choose a supported preview." };
+        if (!["combined", "strands", "scalp", "reference", "reference-scalp", "volumes", "cards"].includes(action.display)) return { ok: false, message: "Choose a supported preview." };
         change(row.id, { display: action.display }); return { ok: true };
       }
       if (action.kind === "hairLab.activate") {
@@ -120,7 +120,7 @@ export function createHairLab(context: ExperimentContext, device: GenerationDevi
       const previousGroom = previous ? readGroom(previous) : null;
       const document = (previousGroom?.scalp.resource === surface.resource && previousGroom?.scalp.topology === surface.topology ? previous?.document : null) ?? graph.list().find(ref => ref.type === "experiment-document" && graph.resolve(ref, ["module"]) === "hair-lab" &&
         (graph.resolve(ref, ["document"]) as unknown as Groom)?.scalp.resource === surface.resource && (graph.resolve(ref, ["document"]) as unknown as Groom)?.scalp.topology === surface.topology) ?? null;
-      env.observe(sessions, { ...sessions.value(), [id]: { display: previous?.display ?? "combined", id, surface, document, active: previous?.active ?? false, revision: (previous?.revision ?? 0) + 1, phase: "off", message: "", result: null, settled: null, continuation: null } });
+      env.observe(sessions, { ...sessions.value(), [id]: { display: previous?.display ?? "cards", id, surface, document, active: previous?.active ?? false, revision: (previous?.revision ?? 0) + 1, phase: "off", message: "", result: null, settled: null, continuation: null } });
       demand();
       signal.addEventListener("abort", () => { const next = { ...sessions.value() }; delete next[id]; env.observe(sessions, next); demand(); });
     },

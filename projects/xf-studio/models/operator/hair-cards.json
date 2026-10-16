@@ -1,0 +1,51 @@
+{
+  "kind": "operator",
+  "id": "hair-cards",
+  "owner": "hair-lab",
+  "status": "target",
+  "summary": "Generate layered ribbons in derived clump material coordinates, then map native strand-atlas regions.",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "inputs": [
+    "operator:hair-volumes"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "positions": {
+        "type": "array",
+        "items": {
+          "type": "number"
+        }
+      },
+      "uv": {
+        "type": "array",
+        "items": {
+          "type": "number"
+        }
+      },
+      "indices": {
+        "type": "array",
+        "items": {
+          "type": "integer"
+        }
+      }
+    },
+    "required": [
+      "positions",
+      "uv",
+      "indices"
+    ],
+    "additionalProperties": false
+  },
+  "pure": true,
+  "x-layers": "Dense inner ribbons cover the cap; middle and outer layers use progressively thinner atlas strips. Sparse narrow flyaways break the silhouette. Width, offset and deterministic twist are layer data. Each ribbon names its source volume and stable population identity.",
+  "x-atlas": "Detect horizontal banks before vertical strip bounds; never map a card across the gap between long strands and short tufts. Determine root direction from each region of Strand_Gradient. Map the native alpha tip to the fibre tip.",
+  "x-contact": "Worker projects ribbon vertices and checks their edges against the prepared character field. Report remaining geometric contact errors; this is Studio evidence, not game proof.",
+  "x-budget": "Fewer than 100000 vertices for 256 members and four deterministic layers. Generate only while the Hair Lab scene driver has demand; abort/stale revision rules cover all buffers.",
+  "x-tests": "Stable layer allocation and IDs, finite transported frames, UV bounds and root-to-tip orientation, reconstruction from volumes, no source mutation and memory/latency measurements.",
+  "x-clumping": "A dimensionless clump field gathers card material coordinates toward each clump centre away from roots. Volume drives supported inner/middle/outer card offsets at the crown. These derived cards are checked separately from the solved path residuals."
+}

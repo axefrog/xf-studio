@@ -193,7 +193,11 @@ export function retargetContinuation(previous: { groom: Groom; paths: Paths }, g
     };
     const distances = cumulative.filter(d => d < length);
     for (let d = cumulative.at(-1)! + .018; d < length; d += .018) distances.push(d);
-    distances.push(length); const points = distances.map(sample);
+    distances.push(length);
+    // A tiny length increase extends the last span; it must not append a sub-millimetre
+    // edge that can fold back under the next wave edit.
+    if (!source.termination && distances.length > 2 && length - distances.at(-2)! < .002 && !holdDistances.some(h => h.distance === distances.at(-2))) distances.splice(distances.length - 2, 1);
+    const points = distances.map(sample);
     while (distances.length > groom.solver.intervals + 1) {
       let best = Infinity, remove = -1;
       for (let i = 1; i < distances.length - 1; i++) {

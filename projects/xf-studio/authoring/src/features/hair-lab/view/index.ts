@@ -1,4 +1,4 @@
-import { button, note, section, Segmented, SliderWithValue, Toggle } from "../../../studio-ui/components";
+import { button, note, section, ChoiceList, SliderWithValue, Toggle } from "../../../studio-ui/components";
 import { h, setText } from "../../../studio-ui/dom";
 import type { PanelController } from "../../../studio-ui/panels/collection";
 import { moduleView, type ModuleViewContext } from "../../../studio-ui/views/feature-view";
@@ -11,7 +11,7 @@ function hairPanel(ctx: ModuleViewContext<HairLabFacade>): PanelController {
   const dispatch = (kind: "hairLab.undo" | "hairLab.redo" | "hairLab.retry") => { const id = target(); if (id) void ctx.dispatch({ kind, target: id }); };
   const active = new Toggle({ label: "Use Hair Lab", help: "Try this groom in the 3D view. Turn it off to return to your selected hairstyle.", onChange: on => { const id = target(); if (id) void ctx.dispatch({ kind: "hairLab.activate", target: id, active: on }); } });
   const status = h("p", { class: "note muted", role: "status", "aria-live": "polite" });
-  const display = new Segmented<HairDisplay>({ label: "Diagnostic view", options: [{ value: "combined", label: "Together" }, { value: "strands", label: "Paths only" }, { value: "scalp", label: "Scalp only" }, { value: "reference", label: "Game reference" }, { value: "reference-scalp", label: "Game cap" }], onSelect: value => { const id = target(); if (id) void ctx.dispatch({ kind: "hairLab.preview", target: id, display: value }); } });
+  const display = new ChoiceList<HairDisplay>({ label: "Preview", layout: "chips", options: [{ value: "cards", label: "Hair cards" }, { value: "volumes", label: "Clumps" }, { value: "strands", label: "Paths" }, { value: "scalp", label: "Scalp" }, { value: "reference", label: "Game hair" }, { value: "reference-scalp", label: "Game cap" }], onSelect: value => { const id = target(); if (id) void ctx.dispatch({ kind: "hairLab.preview", target: id, display: value }); } });
   const diagnostic = note("Preview: strand paths. Hair cards come next.");
   const ranges = { length: { label: "Length", min: .08, max: .85, step: .01, initial: .55, scale: 100, unit: "cm" }, waves: { label: "Waves", min: 0, max: .035, step: .001, initial: .012, scale: 1000, unit: "mm" }, spread: { label: "Volume", min: 0, max: .065, step: .001, initial: .018, scale: 1000, unit: "mm" } } as const;
   const controls = Object.entries(ranges).map(([field, range]) => {
@@ -26,8 +26,8 @@ function hairPanel(ctx: ModuleViewContext<HairLabFacade>): PanelController {
   return { spec: { id: "hair-lab.groom", title: "Hair Lab", icon: "character", description: "Try a generated groom on V.", element },
     update() {
       const row = facade.snapshot().sessions[0];
-      display.update(row?.display ?? "combined", undefined, { disabled: !row?.active });
-      setText(diagnostic, row?.display === "reference" ? "Reference: base-game hairstyle 01, with V's hair colour." : row?.display === "reference-scalp" ? "Reference: base-game hairstyle 01 cap only, with V's hair colour." : row?.display === "scalp" ? "Preview: scalp coverage only. Hair cards come next." : row?.display === "strands" ? "Preview: strand paths only. Hair cards come next." : "Preview: strand paths and scalp coverage. Hair cards come next.");
+      display.update(row?.display ?? "cards", undefined, { disabled: !row?.active, reason: !row?.active ? "Turn on Hair Lab to choose a preview." : undefined });
+      setText(diagnostic, row?.display === "reference" ? "Reference: base-game hairstyle 01, with V's hair colour." : row?.display === "reference-scalp" ? "Reference: base-game hairstyle 01 cap only, with V's hair colour." : row?.display === "scalp" ? "Preview: scalp coverage only." : row?.display === "strands" || row?.display === "combined" ? "Preview: diagnostic strand paths." : row?.display === "volumes" ? "Preview: derived clumps, coloured by section." : "Preview: experimental hair cards with V's hair colour.");
       active.update(row?.active ?? false, { disabled: !row, reason: !row ? "Open the 3D view to try a groom on V." : undefined });
       setText(status, !row ? "Waiting for V…" : !row.active ? "Your selected hairstyle is showing." : row.message);
       for (const { field, control } of controls) {

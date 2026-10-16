@@ -1,6 +1,6 @@
 # Procedural hair authoring
 
-Maturity: **Draft**. This page separates source-supported artist practices from offline Hair Lab measurements. Diagnostic generated paths run on V in the Studio; generated cards and in-game groom rendering are not yet proven. Related engine facts live in [hair shading](hair-shading.md) and [hair physics](hair-physics.md); implementation and budgets live in [Hair Lab design](../research/hair/hair-lab-design.md).
+Maturity: **Draft**. This page separates source-supported artist practices from offline Hair Lab measurements. Generated cards and diagnostic clump cores now run on V in the Studio; fidelity remains rough and no generated groom has in-game proof. Related engine facts live in [hair shading](hair-shading.md) and [hair physics](hair-physics.md); implementation and budgets live in [Hair Lab design](../research/hair/hair-lab-design.md).
 
 ## Coverage and layers
 
@@ -11,6 +11,10 @@ Maturity: **Draft**. This page separates source-supported artist practices from 
 **[source]** [GS CurveTools' curve attributes](https://gs-curvetools.readthedocs.io/en/latest/attributes.html), documentation labelled v2.0.0 and read 16 October 2026, separate orientation about a curve, twist along it, width/taper and curvature-based subdivision. This supports treating those as independent decisions rather than deriving all geometry from one width parameter; detailed image study remains open.
 
 ## Mechanics and identity
+
+**[resource, offline preview]** The resolved `hh_long01` atlas has separate horizontal banks for long strips and short tufts. Treating each column as a full-height strip mixes the banks and causes rectangular smears toward generated tips. Detect the banks before strip bounds, align alpha taper with card tips, and determine root direction from each region of `Strand_Gradient`. The generated preview uses the existing hair adapter and V's colour profile; this does not establish game export.
+
+**[offline preview]** Clump-centre averaging must respect collision routing. Gathering fibres that pass on opposite sides of a shoulder can put a derived card inside the body; contact projection then stretches it into a large triangular sheet. Limit the gathering displacement against contact before generating ribbon geometry. Card edges require their own check even when every solved path passes.
 
 **[source]** [Macklin, Müller and Chentanez's XPBD paper](https://matthias-research.github.io/pages/publications/XPBD.pdf) describes compliant positional constraints with accumulated multipliers and time-step-scaled compliance. It provides a numerical foundation, not a complete hair model, scalp detector or contact solution.
 

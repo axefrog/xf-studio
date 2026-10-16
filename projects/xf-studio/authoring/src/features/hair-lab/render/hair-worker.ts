@@ -5,6 +5,8 @@ import { buildCharacterContact, type DistanceGrid } from "../contact";
 import { defaultGroom, sampleRoots, seedAnatomicalDensity, surfaceBounds, validateGroom } from "../groom";
 import { coarsePaths, continuePaths, cutPaths, drapeStep, pathResiduals, retargetContinuation, unsettledPaths } from "../solve";
 import type { Groom, HeadSurface } from "../types";
+import { deriveVolumes, volumeMesh } from "../volumes";
+import { generateCards, cardContact } from "../cards";
 let requested = 0;
 let coverageCache: { key: string; value: ReturnType<typeof capCoverage>; encoded: string; check: ReturnType<typeof densityCoverage> & { pattern: ReturnType<typeof coveragePattern> } } | undefined;
 let contactCache: { revision: string; grid: DistanceGrid } | undefined;
@@ -41,7 +43,9 @@ self.onmessage = async event => {
     const capResult = coverageCache.value, coverage = { ...capResult.mask, values: coverageCache.encoded }, coverageGeometry = capResult.geometry, tintCheck = coverageCache.check;
     const coverageFinished = performance.now();
     const coarse = performance.now();
-    self.postMessage({ id, result: { groom, coverage, coverageGeometry, tintCheck, continuation: !!initial, paths: cutPaths(groom, paths, contactCache.grid), stage: "coarse", residuals: null, milliseconds: { coarse: coarse - contactPrepared, paths: coverageStarted - contactPrepared, coverage: coverageFinished - coverageStarted, contact: contactPrepared - started } } });
+    const coarsePathsResult = cutPaths(groom, paths, contactCache.grid);
+    const coarseVolumes = deriveVolumes(groom, coarsePathsResult), coarseVolumeGeometry = volumeMesh(coarseVolumes, contactCache.grid), coarseCards = generateCards(coarseVolumes, undefined, contactCache.grid, initial ? 0 : 2), coarseDisplay = performance.now();
+    self.postMessage({ id, result: { groom, coverage, coverageGeometry, tintCheck, continuation: !!initial, paths: coarsePathsResult, volumes: coarseVolumes, volumeGeometry: coarseVolumeGeometry, cards: coarseCards, stage: "coarse", residuals: null, milliseconds: { coarse: coarse - contactPrepared, paths: coverageStarted - contactPrepared, coverage: coverageFinished - coverageStarted, contact: contactPrepared - started, display: coarseDisplay - coarse } } });
     await yieldTask(); if (requested !== id) return;
     
     const prepared = performance.now(); let rest = paths, result = structuredClone(paths);
@@ -57,7 +61,8 @@ self.onmessage = async event => {
       }
     }
     const trimmed = cutPaths(groom, result, contactCache.grid), trimmedRest = cutPaths(groom, rest, contactCache.grid);
-    const residuals = pathResiduals(trimmed, trimmedRest, contactCache.grid, groom.solver.clearanceMetres, contactSurface.capsules), finished = performance.now();
-    self.postMessage({ id, result: { groom, coverage, coverageGeometry, tintCheck, continuation: !!initial, paths: trimmed, uncutPaths: result, stage: "refined", residuals, milliseconds: { coarse: coarse - contactPrepared, paths: coverageStarted - contactPrepared, coverage: coverageFinished - coverageStarted, contact: contactPrepared - started, queue: prepared - coarse, solve: finished - prepared, total: finished - started } }, done: true });
+    const residuals = pathResiduals(trimmed, trimmedRest, contactCache.grid, groom.solver.clearanceMetres, contactSurface.capsules), solved = performance.now();
+    const volumes = deriveVolumes(groom, trimmed), volumeGeometry = volumeMesh(volumes, contactCache.grid), volumesFinished = performance.now(), cards = generateCards(volumes, undefined, contactCache.grid), cardsFinished = performance.now(), contact = cardContact(cards, contactCache.grid), finished = performance.now();
+    self.postMessage({ id, result: { groom, coverage, coverageGeometry, tintCheck, continuation: !!initial, paths: trimmed, uncutPaths: result, volumes, volumeGeometry, cards, cardContact: contact, stage: "refined", residuals, milliseconds: { coarse: coarse - contactPrepared, paths: coverageStarted - contactPrepared, coverage: coverageFinished - coverageStarted, contact: contactPrepared - started, queue: prepared - coarseDisplay, solve: solved - prepared, volumes: volumesFinished - solved, cards: cardsFinished - volumesFinished, cardContact: finished - cardsFinished, total: finished - started } }, done: true });
   } catch (error) { if (requested === id) self.postMessage({ id, error: error instanceof Error ? error.message : "Hair generation failed." }); }
 };

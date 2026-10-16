@@ -15,7 +15,9 @@
           "strands",
           "scalp",
           "reference",
-          "reference-scalp"
+          "reference-scalp",
+          "volumes",
+          "cards"
         ]
       }
     },

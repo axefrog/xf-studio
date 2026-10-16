@@ -167,7 +167,7 @@ export function buildDistanceGrid(head: HeadSurface, resolution = 48, method: "s
 }
 /** Remove voxel stair-step curvature before tracing; retain a conservative contact margin. */
 export function smoothDistanceGrid(grid: DistanceGrid, passes = 2): DistanceGrid {
-  const n = grid.resolution; let source = grid.values, target = new Float32Array(source.length);
+  const n = grid.resolution; let source: Float32Array = grid.values, target: Float32Array = new Float32Array(source.length);
   for (let pass = 0; pass < passes; pass++) for (let axis = 0; axis < 3; axis++) {
     const stride = n ** axis;
     for (let z = 0; z < n; z++) for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {

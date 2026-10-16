@@ -6,6 +6,14 @@
   "status": "target",
   "steps": [
     {
+      "model": "operator:hair-volumes",
+      "does": "Derive section-coloured clump envelopes and material coordinates."
+    },
+    {
+      "model": "operator:hair-cards",
+      "does": "Generate layered ribbons from volumes and shade with the native atlas and character colour profile."
+    },
+    {
       "model": "action:experiment-set",
       "does": "Persist opt-in; conditionally load experiment registrations."
     },

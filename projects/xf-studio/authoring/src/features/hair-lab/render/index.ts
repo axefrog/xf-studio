@@ -6,6 +6,7 @@ import { featureId } from "../../../platform/api/feature";
 import type { FeatureRendererFactory, SceneHostPort } from "../../../platform/api/scene";
 import type { createHairLab } from "../service";
 import type { Paths } from "../types";
+import { atlasRegions, cardAtlasUV } from "../cards";
 
 /** Generated vertices are in the head mesh's bind space, with exactly one Head influence. */
 export function headSkin(geometry: THREE.BufferGeometry, host: SceneHostPort, material: THREE.Material) {
@@ -41,11 +42,12 @@ function strandGeometry(paths: Paths) {
 export function hairRenderer(lab: ReturnType<typeof createHairLab>, lifetime: AbortSignalLike): FeatureRendererFactory {
   return { feature: featureId("hair-lab"), create(host) {
     const life = new Aborter(lifetime), scene = `head:${host.anchors().head.uuid}`;
-    let boundRevision = "", identity: string | null = null, drawn: { group: THREE.Group; detach(): void; geometries: THREE.BufferGeometry[]; materials: THREE.Material[]; textures: THREE.Texture[] } | null = null;
+    let boundRevision = "", identity: string | null = null, drawn: { group: THREE.Group; detach(): void; geometries: THREE.BufferGeometry[]; materials: THREE.Material[]; textures: THREE.Texture[]; character: string | null; coverage: string | undefined; topology: string; buffers: { paths: THREE.BufferGeometry; volumes?: THREE.BufferGeometry; cards?: THREE.BufferGeometry } } | null = null;
     let resultKey = "", evidence: unknown = null, upload = 0;
     let capShader: unknown = null;
     let coverageSource: import("../types").HeadSurface["coverageSurface"];
     let reference: import("../../../platform/api/scene").ReferenceTextures | null = null, readingReference = false;
+    let atlas: ReturnType<typeof atlasRegions> = [], rootAtV1 = false;
     const assetLife = new AbortController(); life.signal.addEventListener("abort", () => assetLife.abort());
     function requestReference() {
       if (readingReference || reference || !host.referenceTextures) return;
@@ -53,6 +55,9 @@ export function hairRenderer(lab: ReturnType<typeof createHairLab>, lifetime: Ab
       lab.coverageState(scene, "preparing", "Preparing scalp coverage…");
       void host.referenceTextures("hair", assetLife.signal).then(found => {
         if (life.signal.aborted) return; reference = found; readingReference = false;
+        const alpha = found.pixels?.Strand_Alpha, gradient = found.pixels?.Strand_Gradient;
+        if (alpha) atlas = atlasRegions(scalarBytes(alpha.values), alpha.width, alpha.height, gradient ? { ...gradient, values: scalarBytes(gradient.values) } : undefined);
+        if (gradient) { const pixels = scalarBytes(gradient.values), width = gradient.width, height = gradient.height; let first = 0, last = 0; for (let x = 0; x < width; x++) { first += pixels[Math.floor(height * .1) * width + x]; last += pixels[Math.floor(height * .9) * width + x]; } rootAtV1 = last < first; }
         const cap = found.surfaces?.find(s => /mesh_decal_gradientmap_recolor\.mt$/i.test(s.template));
         if (!cap) throw Error("No baseline cap surface.");
         const session = lab.session(scene); if (!session) return;
@@ -103,10 +108,12 @@ export function hairRenderer(lab: ReturnType<typeof createHairLab>, lifetime: Ab
     function displayGroup(group: THREE.Group) {
       const display = lab.session(scene)?.display;
       const referenceView = display === "reference" || display === "reference-scalp";
-      group.children[0].visible = !referenceView && display !== "scalp";
+      group.children[0].visible = display === "strands" || display === "combined";
       group.children[1].visible = !referenceView && display !== "strands";
       group.children[2].visible = display === "reference";
       group.children[3].visible = referenceView;
+      group.children[4].visible = display === "volumes";
+      group.children[5].visible = display === "cards";
     }
     function clear() {
       upload++; host.supersede([]);
@@ -125,12 +132,22 @@ export function hairRenderer(lab: ReturnType<typeof createHairLab>, lifetime: Ab
     function update() {
       if (life.signal.aborted) return;
       const session = lab.session(scene);
-      if (!session?.active || !session.result || session.phase === "failed") { clear(); return; }
+      if (!session?.active || session.phase === "failed") { clear(); return; }
+      if (!session.result) return;
       if (coverageSource && !session.surface.coverageSurface) { lab.bind(scene, { ...session.surface, coverageSurface: coverageSource }, life.signal); return; }
       if (!reference || !session.surface.coverageSurface) { requestReference(); return; }
       const result = session.result, key = `${session.revision}:${result.stage}:${identity}`;
       if (drawn) { displayGroup(drawn.group); host.requestFrame(); }
       if (key === resultKey) return;
+      const topology = JSON.stringify([result.paths.paths.map(p => p.points.length), result.cards?.cards.map(c => [c.id, c.count]), result.volumes?.volumes.map(v => [v.id, v.frames.length])]);
+      if (drawn?.character === identity && drawn.coverage === result.coverage?.values && drawn.topology === topology && drawn.buffers.cards && result.cards && drawn.buffers.volumes && result.volumeGeometry) {
+        const updateBuffer = (g: THREE.BufferGeometry, positions: number[], uv?: number[]) => { const p = g.getAttribute("position") as THREE.BufferAttribute; p.array.set(positions); p.needsUpdate = true; if (uv) { const a = g.getAttribute("uv") as THREE.BufferAttribute; a.array.set(uv); a.needsUpdate = true; } g.computeVertexNormals(); };
+        const strands = strandGeometry(result.paths); updateBuffer(drawn.buffers.paths, Array.from(strands.getAttribute("position").array)); strands.dispose();
+        updateBuffer(drawn.buffers.volumes, result.volumeGeometry.positions); updateBuffer(drawn.buffers.cards, result.cards.positions, cardAtlasUV(result.cards, atlas, rootAtV1));
+        upload++; resultKey = key;
+        evidence = { ...(evidence as Record<string, unknown>), stage: result.stage, continuation: result.continuation ?? false, residuals: result.residuals, cardContact: result.cardContact, milliseconds: result.milliseconds, reusedBuffers: true };
+        host.requestFrame(); return;
+      }
       const geometry = strandGeometry(result.paths), material = new THREE.MeshStandardMaterial({ color: 0x8b583f, roughness: .6, side: THREE.DoubleSide });
       const maskData = result.coverage ? { ...result.coverage, values: scalarBytes(result.coverage.values) } : undefined;
       const rgba = new Uint8Array((maskData?.values.length ?? 1) * 4);
@@ -145,12 +162,30 @@ export function hairRenderer(lab: ReturnType<typeof createHairLab>, lifetime: Ab
       const baselineHair = referenceGroup(false), baselineCap = referenceGroup(true);
       group.add(baselineHair.group, baselineCap.group);
       const geometries = [geometry, cap, ...baselineHair.geometries, ...baselineCap.geometries], materials = [material, tint, ...baselineHair.materials, ...baselineCap.materials];
+      const volumeGroup = new THREE.Group(), cardGroup = new THREE.Group(), buffers: { paths: THREE.BufferGeometry; volumes?: THREE.BufferGeometry; cards?: THREE.BufferGeometry } = { paths: geometry };
+      if (result.volumeGeometry) {
+        const data = result.volumeGeometry, g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(data.positions, 3)); g.setAttribute("color", new THREE.Float32BufferAttribute(data.colours, 3)); g.setIndex(data.indices); g.computeVertexNormals();
+        const m = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+        volumeGroup.add(headSkin(g, host, m)); geometries.push(g); materials.push(m); buffers.volumes = g;
+      }
+      let hairShader: unknown = null;
+      if (result.cards && atlas.length) {
+        const source = host.resolvedSurfaces?.("hair").find(item => /(?:^|\\)hair\.mt$/i.test(item.template)), m = source?.forkMaterial?.();
+        if (!(m instanceof THREE.MeshStandardMaterial)) { m?.dispose(); throw Error("The current hair material isn't available."); }
+        const data = result.cards, g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(data.positions, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(cardAtlasUV(data, atlas, rootAtV1), 2)); g.setIndex(data.indices); g.computeVertexNormals(); source?.prepareGeometry?.(g);
+        const prior = m.onBeforeCompile, key = m.customProgramCacheKey.bind(m); m.vertexColors = false; m.alphaMap = reference.textures.Strand_Alpha; m.side = THREE.DoubleSide;
+        m.onBeforeCompile = (shader, renderer) => { prior.call(m, shader, renderer); for (const [uniform, input] of Object.entries({ xfsStrandId: "Strand_ID", xfsStrandGradient: "Strand_Gradient" })) if (shader.uniforms[uniform] && reference!.textures[input]) shader.uniforms[uniform].value = reference!.textures[input]; hairShader = { uniforms: Object.keys(shader.uniforms).filter(k => k.startsWith("xfs")), profile: !!shader.uniforms.xfsProfile }; };
+        m.customProgramCacheKey = () => `${key()}-xfs-volume-cards`; cardGroup.add(headSkin(g, host, m)); geometries.push(g); materials.push(m); buffers.cards = g;
+      }
+      group.add(volumeGroup, cardGroup);
+      for (const g of Object.values(buffers)) for (const attribute of ["position", "normal", "uv"]) if (g.hasAttribute(attribute)) (g.getAttribute(attribute) as THREE.BufferAttribute).setUsage(THREE.DynamicDrawUsage);
       displayGroup(group);
       const ticket = ++upload; resultKey = key;
       void host.compile(group).then(() => {
         if (life.signal.aborted || ticket !== upload || !lab.session(scene)?.active) { for (const g of geometries) g.dispose(); for (const m of materials) m.dispose(); mask.dispose(); return; }
-        clear(); const detach = host.attach(group); drawn = { group, detach, geometries, materials, textures: [mask] };
+        clear(); const detach = host.attach(group); drawn = { group, detach, geometries, materials, textures: [mask], character: identity, coverage: result.coverage?.values, topology, buffers };
         resultKey = key; evidence = { stage: result.stage, continuation: result.continuation ?? false, paths: result.paths.paths.length, scalp: result.groom.scalp.densitySeed,
+          volumes: result.volumes?.volumes.map(v => ({ id: v.id, section: v.section, next: v.next, sampledMembers: v.members.length })), population: result.volumes && { logical: result.volumes.logicalPopulation, sampled: result.volumes.sampledPopulation }, cards: result.cards?.cards.length, cardVertices: result.cards?.positions.length! / 3, cardContact: result.cardContact, atlas: { resources: reference?.resources, regions: atlas.length, rootAtV1 }, hairShader,
           capSource: session.surface.coverageSurface!.resource, capShader, capMaterial: { type: tint.type, visible: tint.visible, opacity: tint.opacity, colorWrite: tint.colorWrite, depthTest: tint.depthTest }, tintCoverage: result.tintCheck, residuals: result.residuals, milliseconds: result.milliseconds };
         displayGroup(group);
         host.supersede([{ slot: "hair" }]); host.requestFrame();

@@ -297,4 +297,11 @@ describe("Hair Lab model: static contact solve", () => {
     const kink = { ...path, points: [[0, 0, 0], [.002, 0, 0], [.002, -.002, 0]] as [number, number, number][] };
     expect(pathCurvature({ paths: [kink] }).maximumPerMetre).toBeGreaterThan(700);
   });
+  test("small length edits extend a free tip without creating a folding micro-segment", () => {
+    const groom = defaultGroom(head), roots = sampleRoots(groom, head, 8), paths = coarsePaths(groom, roots, head.down, head.front, { grid, surface: head });
+    const edited = structuredClone(groom); edited.fields.length = constant(.55025, "m");
+    const next = retargetContinuation({ groom, paths }, edited, roots)!;
+    expect(next.paths.every(path => path.segmentMetres!.at(-1)! >= .002)).toBe(true);
+    expect(next.paths.every(path => Math.abs(path.segmentMetres!.reduce((a, b) => a + b, 0) - .55025) < 1e-10)).toBe(true);
+  });
 });

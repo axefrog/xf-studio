@@ -5,17 +5,21 @@ import { add, cross, dot, magnitude, mul, normalise, randomAt, smooth, sub, vert
 /** Spatial sections and clumps are ordinary partitions and volumes, never solver style branches. */
 export function sectionGraph(): Groom["graph"] {
   const nodes: Groom["graph"]["nodes"] = { roots: { kind: "root", next: "partition" }, end: { kind: "termination" } };
-  const threshold = (at: number): Field => ({ op: "blend", chart: "scalp", unit: "ratio", a: constant(1, "ratio"), b: constant(0, "ratio"),
-    mask: { op: "smoothstep", chart: "scalp", unit: "ratio", low: at - .00001, high: at + .00001, input: { op: "ramp", chart: "scalp", unit: "ratio", axis: "u", from: 0, to: 1 } } });
+  const threshold = (at: number, axis: "u" | "v" = "u"): Field => ({ op: "blend", chart: "scalp", unit: "ratio", a: constant(1, "ratio"), b: constant(0, "ratio"),
+    mask: { op: "smoothstep", chart: "scalp", unit: "ratio", low: at - .00001, high: at + .00001, input: { op: "ramp", chart: "scalp", unit: "ratio", axis, from: 0, to: 1 } } });
   nodes.partition = { kind: "branch", outlets: ["section-left", "section-right"], selection: threshold(.5) };
   for (let side = 0; side < 2; side++) {
     const section = side ? "right" : "left", split = `split-${section}`;
     nodes[`section-${section}`] = { kind: "volume", length: "length", section, next: split };
-    nodes[split] = { kind: "branch", outlets: [`${split}-0`, `${split}-1`], selection: threshold(side * .5 + .25) };
-    for (let half = 0; half < 2; half++) {
-      nodes[`${split}-${half}`] = { kind: "branch", outlets: [`clump-${side * 4 + half * 2}`, `clump-${side * 4 + half * 2 + 1}`], selection: threshold(side * .5 + half * .25 + .125) };
-      for (let leaf = 0; leaf < 2; leaf++) { const id = `clump-${side * 4 + half * 2 + leaf}`; nodes[id] = { kind: "volume", length: "length", section, clump: id, next: "end" }; }
-    }
+    let leaf = 0;
+    const partition = (id: string, depth: number, u0: number, u1: number, v0: number, v1: number) => {
+      if (depth === 4) { const clump = `clump-${side * 16 + leaf++}`; nodes[id] = { kind: "volume", length: "length", section, clump, next: "end" }; return; }
+      const axis = depth % 2 ? "v" : "u", at = axis === "u" ? (u0 + u1) / 2 : depth === 1 ? .8 : (v0 + v1) / 2;
+      const a = `${id}-0`, b = `${id}-1`; nodes[id] = { kind: "branch", outlets: [a, b], selection: threshold(at, axis) };
+      partition(a, depth + 1, u0, axis === "u" ? at : u1, v0, axis === "v" ? at : v1);
+      partition(b, depth + 1, axis === "u" ? at : u0, u1, axis === "v" ? at : v0, v1);
+    };
+    partition(split, 0, side * .5, (side + 1) * .5, .45, 1);
   }
   return { root: "roots", nodes };
 }
@@ -28,7 +32,7 @@ export function defaultGroom(surface: HeadSurface): Groom {
     graph: sectionGraph(),
     flow: { part: 0, emergenceRadians: Math.PI / 9, foreheadSweep: 1, crownLiftMetres: .0035, rearPreference: 1, partCombing: [2.4, .3, .35] },
     fields: { length: constant(.55, "m"), waves: constant(.012, "m"), spread: constant(.018, "m"), stiffness: constant(.4, "ratio"),
-      density: constant(1, "ratio") },
+      density: constant(1, "ratio"), clump: constant(.45, "ratio") },
     solver: { samples: 256, intervals: 64, steps: 12, iterations: 8, stepSeconds: 1 / 60, clearanceMetres: .0005 } };
 }
 export function surfaceBounds(head: HeadSurface) {
