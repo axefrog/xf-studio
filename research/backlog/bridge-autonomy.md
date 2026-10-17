@@ -38,6 +38,18 @@ Effort is rough agent effort once the bridge's redscript actions layer is in pla
 
 Also built: `capture.burst` (flicker and motion), the `cc-eyes` crop, grain and chromatic aberration in `photo.camera.set`, and session 2 and 3 scripts in this flow. Batch 2 (claude/bridge-batch2, offline) hardened these for the session: the key is sent only to `Cyberpunk2077.exe`, only on an explicit "photo mode allowed", re-checked after the window comes forward, never on an unbound or layout-dependent binding; the cursor hide works only in photo mode ([code-health ledger](../authoring/code-health.md#fixed-in-claudebridge-batch2), RB-34..41). **Next:** rank 7 (scene attributes; also B10), rank 8 (studio spot), B7 (worn items), then ranks 10–13 (B5 is rank 10). Question 1 below still matters for sessions that use F12; `cc.open` doesn't depend on it.
 
+## Queued from session friction
+
+From the first Hair Lab in-game test (17 October), driven entirely over the MCP tools:
+
+| Item | Why | Effort |
+|---|---|---|
+| **Settled-render check** for `cc.apply`, `photo.frame` and `photo.exit` (wait until the new appearance's resources are loaded and the camera has stopped moving), offered as an option on those commands and on `capture.screenshot` | Captures lagged one selection behind: a hairstyle switch showed the previous mesh, and a framed shot showed the old camera. This led to one wrong conclusion before it was noticed | M |
+| **A plain wait or settle primitive** | `session.log`'s follow returns at once when older events exist, so there is no clean way to wait a second or two between steps | S |
+| **Framework log watcher**: find ArchiveXL, TweakXL and RED4ext logs wherever the mod manager redirects them, tail them, and surface errors that name a resource prefix (e.g. `xfs_`) in `session.events` | The decisive error (a colour pack lacking a material template) was only in ArchiveXL's log in the mod manager's overwrite folder | M |
+| **Filter or page `player.appearance`'s value lists** | One option returned 285 labels and 285 values | S |
+| **Pick colour values by their visible name** even when internal names repeat, or report the swatch's colour | `black_carbon` matched several entries and the swatch labels are empty, so the index was the only way | S |
+
 ## Questions for the next session
 
 Batch these into the next bridge session's test card:
