@@ -242,8 +242,9 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     },
     log: logTo("character"), trace: diagnostics.trace, nativeDecodeWorker: hostOptions.nativeDecodeWorker });
   const characterDetailRequest = createCharacterDetailHandler(characterDetails);
+  // The desktop host leaves Hair Lab out (localhost only for now), so baseline references stay off here.
   const referenceCharacters = createReferenceCharacterRoutes({ cacheRoot: desktopPreviewCache(dataRoot), exporter: previewExporter,
-    settings: () => ({ gameRoot: savedSettings()?.gameRoot ?? null, launchRoute: "direct", mo2Root: null, mo2ProfileId: null,
+    enabled: () => false, settings: () => ({ gameRoot: savedSettings()?.gameRoot ?? null, launchRoute: "direct", mo2Root: null, mo2ProfileId: null,
       manualModRoot: null, wolvenKitCli: wolvenKit.usable() }), log: logTo("reference-character"), nativeDecodeWorker: hostOptions.nativeDecodeWorker });
   const creatorRequest = createCreatorHandler(characterDetails.creator, { refresh: () => characterDetails.refresh(), prepared: characterDetails });
   const choicePreviewRequest = createChoicePreviewHandler(characterDetails);
