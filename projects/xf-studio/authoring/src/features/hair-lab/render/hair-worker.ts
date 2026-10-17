@@ -11,6 +11,7 @@ import { bakeOcclusion } from "../occlusion";
 let requested = 0;
 let coverageCache: { key: string; value: ReturnType<typeof capCoverage>; encoded: string; check: ReturnType<typeof densityCoverage> & { pattern: ReturnType<typeof coveragePattern> } } | undefined;
 let contactCache: { revision: string; grid: DistanceGrid } | undefined;
+let seedCache: { revision: string; groom: Groom } | undefined;
 let occlusionCache: { key: string; topology: string; colours: number[]; red: number[]; statistics: ReturnType<typeof bakeOcclusion>["statistics"] } | undefined;
 const yieldTask = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 self.onmessage = async event => {
@@ -18,7 +19,11 @@ self.onmessage = async event => {
   if (message.cancel) { if (requested === message.cancel) requested = 0; return; }
   const { id, surface } = message; requested = id;
   try {
-    const started = performance.now(), groom = message.groom ?? defaultGroom(surface), issues = validateGroom(groom);
+    const started = performance.now();
+    const seedRevision = `${surface.revision}:${surface.cap?.source}:${surface.coverageSurface?.resource}`;
+    if (seedCache?.revision !== seedRevision) seedCache = { revision: seedRevision, groom: defaultGroom(surface) };
+    const source = message.groom ?? seedCache.groom;
+    const groom = { ...source, scalp: { ...source.scalp, density: source.scalp.density ?? seedCache.groom.scalp.density, binding: seedCache.groom.scalp.binding } }, issues = validateGroom(groom);
     if (issues.length) throw Error(issues.join(" "));
     if (contactCache?.revision !== surface.revision) {
       const grid = buildCharacterContact(surface, 96);

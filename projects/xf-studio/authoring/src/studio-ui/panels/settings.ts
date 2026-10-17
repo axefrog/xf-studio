@@ -35,7 +35,9 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
     "Off unless you're studying how XF Studio works: none of them is needed to make your mod."],
     onChange: on => { appearance.setResearch(on); rt.changed(); } });
   const experiments = (port.experiments?.snapshot() ?? []).map(info => ({ info, toggle: new Toggle({ label: info.label, help: info.description,
-    reserveNote: true, onChange: on => { void port.experiments!.set(info.id, on).then(() => rt.changed()); } }) }));
+    reserveNote: true, onChange: on => { void port.experiments!.set(info.id, on).then(result => {
+      if (!result.ok) rt.feedback.toast("warning", info.label, result.message ?? "Couldn't change this experimental setting. Try again."); rt.changed();
+    }).catch(() => { rt.feedback.toast("warning", info.label, "Couldn't change this experimental setting. Try again."); rt.changed(); }); } }) }));
   const experimental = section({ title: "Experimental features", help: "Early tools to try. Your usual tools and saved looks stay available." }, ...experiments.map(item => item.toggle.element));
   experimental.hidden = !experiments.length;
   const reference = button({ label: "Keyboard & mouse…", icon: "keyboard", small: true, variant: "quiet", onClick: () => appearance.openReference() });
@@ -140,6 +142,7 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
       theme.update(appearance.theme());
       hints.update(appearance.hints());
       research.update(appearance.research());
+      experimental.hidden = !experiments.length || !appearance.research();
       for (const { info, toggle } of experiments) {
         const state = port.experiments!.snapshot().find(item => item.id === info.id)!;
         toggle.update(state.enabled, { disabled: state.overridden, note: state.message || (state.overridden ? "Set for this verification page." : state.phase === "loading" ? "Opening…" : "") });

@@ -74,11 +74,12 @@ test("Save as new collection names the copy uniquely, and the draft takes the na
     await lib.service.execute({ kind: "initialize" });
     expect(await lib.service.execute({ kind: "save" })).toMatchObject({ ok: true });
     expect(await lib.service.execute({ kind: "saveCopy" })).toMatchObject({ ok: true });
-    expect(lib.db.list().map(item => item.name)).toEqual(["My collection", "My collection 2"]);
+    // Saves in the same millisecond are ordered by ID; this scenario checks unique names, not that tie-break.
+    expect(lib.db.list().map(item => item.name).sort()).toEqual(["My collection", "My collection 2"]);
     expect(lib.service.summary().draft).toMatchObject({ name: "My collection 2", revision: 1 });
     expect(lib.service.persistence()).toMatchObject({ baseline: "known", dirty: false });
     expect(await lib.service.execute({ kind: "saveCopy" })).toMatchObject({ ok: true });
-    expect(lib.db.list().map(item => item.name)).toEqual(["My collection", "My collection 2", "My collection 3"]);
+    expect(lib.db.list().map(item => item.name).sort()).toEqual(["My collection", "My collection 2", "My collection 3"]);
   } finally { lib.close(); }
 });
 

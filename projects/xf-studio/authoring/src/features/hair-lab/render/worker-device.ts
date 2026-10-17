@@ -2,7 +2,7 @@
 import type { AbortSignalLike } from "../../../platform/api/graph";
 import type { Generation, GenerationDevice } from "../service";
 import type { Groom, HeadSurface } from "../types";
-export function workerGeneration(lifetime: AbortSignalLike): GenerationDevice {
+export function workerGeneration(lifetime: AbortSignalLike, options: { shape?: string } = {}): GenerationDevice {
   const workers = new Map<string, Worker>(), pending = new Map<number, { publish(result: Generation): void; resolve(): void; reject(error: Error): void }>();
   let sequence = 0;
   lifetime.addEventListener("abort", () => { for (const worker of workers.values()) worker.terminate(); workers.clear(); for (const item of pending.values()) item.resolve(); pending.clear(); });
@@ -10,7 +10,7 @@ export function workerGeneration(lifetime: AbortSignalLike): GenerationDevice {
     if (signal.aborted || lifetime.aborted) return Promise.resolve();
     let worker = workers.get(target);
     if (!worker) {
-      worker = new Worker(`/build/hair-worker.js?shape=${new URLSearchParams(location.search).get("verify") === "1" ? new URLSearchParams(location.search).get("hairShape") ?? "face-frame" : "face-frame"}`, { type: "module" }); workers.set(target, worker);
+      worker = new Worker(`/build/hair-worker.js?shape=${encodeURIComponent(options.shape ?? "face-frame")}`, { type: "module" }); workers.set(target, worker);
       worker.onmessage = event => {
         const message = event.data as { id: number; result?: Generation; done?: boolean; error?: string }, job = pending.get(message.id);
         if (!job) return;

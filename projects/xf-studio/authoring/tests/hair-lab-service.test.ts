@@ -3,14 +3,30 @@ import { Aborter, MemoryStore } from "strata";
 import { Scheduler, seededRandom, simClock, settle } from "strata/testing";
 import { createExperiments } from "../src/platform/core/experiments";
 import { createHairLab, type Generation, type GenerationDevice } from "../src/features/hair-lab/service";
-import { defaultGroom } from "../src/features/hair-lab/groom";
+import { defaultGroom, scalpSeedSurface } from "../src/features/hair-lab/groom";
 import { sampleRoots } from "../src/features/hair-lab/groom";
 import { coarsePaths } from "../src/features/hair-lab/solve";
 import { sphereSurface } from "./hair-lab-domain.test";
 
+test("re-derived scalp seeds do not depend on the selected vanilla hairstyle",()=>{
+  const head=sphereSurface(),baseline={resource:"baseline",positions:head.positions,indices:head.indices,uv:head.uv};
+  const a=defaultGroom(scalpSeedSurface({...head,cap:{source:"style-a",points:[0,0,0]}},baseline));
+  const b=defaultGroom(scalpSeedSurface({...head,cap:{source:"style-b",points:[1,1,1]}},baseline));
+  expect(a.scalp).toEqual(b.scalp);expect(a.scalp.densitySeed.source).toBe("baseline");
+});
+
+test("cap-seeded sessions wait for the stable baseline before creating their authored groom",async()=>{
+  const life=new Aborter(),platform=await createExperiments({sources:{clock:simClock(new Scheduler()),random:seededRandom(33)},store:new MemoryStore(),signal:life.signal,definitions:[],overrides:{}});
+  let jobs=0;const lab=createHairLab(platform.context,{generate:async()=>{jobs++;}}),head={...sphereSurface(),coverageRequired:true,cap:{source:"selected-hair",points:[0,0,0]}};
+  lab.bind("head",head,life.signal);await lab.facade.dispatch({kind:"hairLab.activate",target:"head",active:true});await settle();expect(jobs).toBe(0);
+  const {cap:_cap,...withoutCap}=head;lab.bind("head",withoutCap,life.signal);await settle();expect(jobs).toBe(0);
+  lab.coverageState("head","failed","Reference unavailable.");await lab.facade.dispatch({kind:"hairLab.retry",target:"head"});expect(lab.session("head")?.phase).toBe("shaping");
+  lab.bind("head",{...head,coverageSurface:{resource:"baseline-cap",positions:[],indices:[],uv:[]}},life.signal);await settle();expect(jobs).toBe(1);life.abort();
+});
+
 test("scene jobs pre-empt, reject late results, preserve independent documents and support Undo/Redo", async () => {
-  const life = new Aborter(), platform = await createExperiments({ sources: { clock: simClock(new Scheduler()), random: seededRandom(1) },
-    store: new MemoryStore(), signal: life.signal, definitions: [], overrides: {} });
+  const life = new Aborter(), store = new MemoryStore(), platform = await createExperiments({ sources: { clock: simClock(new Scheduler()), random: seededRandom(1) },
+    store, signal: life.signal, definitions: [], overrides: {} });
   const jobs: { target: string; previous?: import("../src/features/hair-lab/service").Continuation | null; aborted(): boolean; publish(result: Generation): void; finish(): void }[] = [];
   const device: GenerationDevice = { generate(target, _surface, _groom, signal, publish, previous) { return new Promise<void>(resolve => {
     jobs.push({ target, previous, aborted: () => signal.aborted, publish, finish: resolve }); signal.addEventListener("abort", () => resolve());
@@ -28,22 +44,27 @@ test("scene jobs pre-empt, reject late results, preserve independent documents a
   expect(Object.isFrozen(lab.facade.snapshot().sessions[0])).toBe(true);
   expect(Object.isFrozen(lab.facade.snapshot().sessions[0].result!.paths.paths[0].points)).toBe(true);
   const original = lab.session("a")!.document!;
+  const saved = platform.context.graph.resolve(original, ["document"]) as any;
+  expect(saved.scalp.density).toBeUndefined(); expect(saved.scalp.binding).toBeUndefined();
   expect(lab.session("b")!.document).not.toEqual(original);
   await lab.facade.dispatch({ kind: "hairLab.set", target: "a", field: "length", value: .60 }); await settle();
   expect(jobs[0].aborted()).toBe(true); expect(jobs[1].aborted()).toBe(false); expect(jobs).toHaveLength(3);
   expect(jobs[2].previous).toEqual({ groom: complete.groom, paths: complete.paths });
   jobs[0].publish(generation()); expect(lab.session("a")!.result).toBeNull();
-  expect((platform.context.graph.resolve(original, ["document"]) as any).fields.length.value).toBe(.60);
+  expect((lab.facade.snapshot().sessions.find(s=>s.id === "a")!.groom!.fields.length as any).value).toBe(.60);
   expect(lab.facade.snapshot().sessions[0].groom?.fields.length).toMatchObject({ op: "constant", value: .60, unit: "m" });
+  await platform.context.graph.flush();
+  expect((await store.readStream(original)).at(-1)).toMatchObject({op:{kind:"set",path:["values","length"],value:{op:"constant",value:.60,unit:"m"}}});
+  expect(saved.fields.length.value).toBe(.55);
   await lab.facade.dispatch({ kind: "hairLab.undo", target: "a" });
-  expect((platform.context.graph.resolve(original, ["document"]) as any).fields.length.value).toBe(.55);
+  expect((lab.facade.snapshot().sessions.find(s=>s.id === "a")!.groom!.fields.length as any).value).toBe(.55);
   await lab.facade.dispatch({ kind: "hairLab.redo", target: "a" });
-  expect((platform.context.graph.resolve(original, ["document"]) as any).fields.length.value).toBe(.60);
+  expect((lab.facade.snapshot().sessions.find(s=>s.id === "a")!.groom!.fields.length as any).value).toBe(.60);
   await lab.facade.dispatch({ kind: "hairLab.preview", target: "a", display: "scalp" });
   expect(lab.session("a")!.display).toBe("scalp");
   await lab.facade.dispatch({ kind: "hairLab.preview", target: "a", display: "reference-scalp" });
   expect(lab.session("a")!.display).toBe("reference-scalp");
-  expect((platform.context.graph.resolve(original, ["document"]) as any).fields.length.value).toBe(.60);
+  expect((lab.facade.snapshot().sessions.find(s=>s.id === "a")!.groom!.fields.length as any).value).toBe(.60);
   await lab.facade.dispatch({ kind: "hairLab.retry", target: "a" }); await settle();
   expect(jobs.at(-1)!.previous).toBeNull();
   jobs.at(-1)!.publish({ ...complete, residuals: { ...complete.residuals!, penetrationMetres: .005 } }); await settle();
@@ -55,7 +76,7 @@ test("scene jobs pre-empt, reject late results, preserve independent documents a
   const beforeRevision = lab.session("c")!.revision, participant = lab.histories().find(h => h.id === `hair:${original.id}`)!;
   expect(platform.history!.snapshot(participant.id).steps[0].label).toBe("Hair length");
   expect(participant.dispatch({ kind: "history.jumpTo", entryId: platform.history!.snapshot(participant.id).startId })).toBe(true);
-  expect((platform.context.graph.resolve(original, ["document"]) as any).fields.length.value).toBe(.55);
+  expect((lab.facade.snapshot().sessions.find(s=>s.id === "a")!.groom!.fields.length as any).value).toBe(.55);
   expect(lab.session("c")!.revision).toBeGreaterThan(beforeRevision);
   lab.withdraw(); await settle();
   expect(lab.facade.snapshot().sessions.every(s => !s.active && s.result === null)).toBe(true);

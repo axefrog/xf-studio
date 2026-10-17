@@ -25,7 +25,16 @@ export function createHairLab(context: ExperimentContext, device: GenerationDevi
   const change = (id: string, update: Partial<Session>) => { const row = sessions.value()![id]; if (row) env.observe(sessions, { ...sessions.value(), [id]: { ...row, ...update } }); };
   const demand = () => env.observe(request, (request.value() ?? 0) + 1);
   const jobs = new Map<string, { revision: number; process: Process }>();
-  const readGroom = (row: Session): Groom | null => row.document ? graph.resolve(row.document, ["document"]) as unknown as Groom : null;
+  const readGroom = (row: Session): Groom | null => {
+    if (!row.document) return null;
+    const base = graph.resolve(row.document, ["document"]) as unknown as Groom;
+    const values = graph.resolve(row.document, ["values"]) as unknown as Groom["fields"] | undefined;
+    return Object.freeze({ ...base, fields: Object.freeze({ ...base.fields, ...values }) });
+  };
+  const authored = (groom: Groom): Groom => {
+    const { density: _density, binding: _binding, ...scalp } = groom.scalp;
+    return { ...groom, scalp };
+  };
   const model: GraphModel = { nodes: [{ id: "maintain", kind: "driver", op: "maintain-hair" }] };
   const modelNode = env.seed<GraphModel>({ initial: model, signal: life.signal });
   const erected = erector(env, modelNode, { ...standardOperators, "maintain-hair": { kind: "driver", create: () => ({ name: "Maintain Hair Lab requests", start(run) {
@@ -33,6 +42,7 @@ export function createHairLab(context: ExperimentContext, device: GenerationDevi
       for (const [id, job] of jobs) { const row = sessions.value()![id]; if (!row?.active || row.revision !== job.revision) { job.process.abort("newer hair request"); jobs.delete(id); } }
       for (const row of Object.values(sessions.value()!)) {
         if (!row.active || jobs.has(row.id)) continue;
+        if (row.surface.coverageRequired && !row.surface.coverageSurface) continue;
         const revision = row.revision, id = row.id;
         change(id, { phase: "shaping", message: "Shaping hair…", result: null });
         const job = run.spawn("Generate requested groom", async (signal, progress): Promise<Json> => {
@@ -52,7 +62,7 @@ export function createHairLab(context: ExperimentContext, device: GenerationDevi
               }
               let document = latest.document;
               if (!document) {
-                const created = graph.commit([{ op: "create", type: "experiment-document", as: "groom", fields: { module: "hair-lab", document: result.groom as unknown as Json } }], { scope: `hair:${id}`, label: "Create groom" });
+                const created = graph.commit([{ op: "create", type: "experiment-document", as: "groom", fields: { module: "hair-lab", document: authored(result.groom) as unknown as Json } }], { scope: `hair:${id}`, label: "Create groom" });
                 if (!created.ok) throw Error(created.message);
                 document = created.created.groom;
               }
@@ -104,9 +114,10 @@ export function createHairLab(context: ExperimentContext, device: GenerationDevi
         change(row.id, { display: action.display }); return { ok: true };
       }
       if (action.kind === "hairLab.activate") {
+        if (!action.active && row.document && context.history?.selected() === `hair:${row.document.id}`) context.history.focus(null);
         change(row.id, { active: action.active, revision: row.revision + 1, phase: "off", result: null, settled: null, continuation: null, message: "" }); demand(); return { ok: true };
       }
-      if (action.kind === "hairLab.retry") { change(row.id, { revision: row.revision + 1, continuation: null, settled: null }); demand(); return { ok: true }; }
+      if (action.kind === "hairLab.retry") { change(row.id, { revision: row.revision + 1, continuation: null, settled: null, phase: "shaping", message: "Preparing hair…" }); demand(); return { ok: true }; }
       if (!row.document) return { ok: false, message: "Turn Hair Lab on to create a groom first." };
       const scope = `hair:${row.document.id}`;
       if (action.kind === "hairLab.set") {
@@ -117,7 +128,7 @@ export function createHairLab(context: ExperimentContext, device: GenerationDevi
         const edited = { ...groom, fields: { ...groom.fields, [action.field]: constant(action.value, "m") } };
         const issues = validateGroom(edited); if (issues.length) return { ok: false, message: "That change couldn't be used. Undo it and try another value." };
         const label = `Hair ${{ length: "length", waves: "waves", spread: "volume" }[action.field]}`;
-        const result = graph.commit([{ op: "set", node: row.document, path: ["document"], value: edited as unknown as Json }], { scope, label, action: action.kind });
+        const result = graph.commit([{ op: "set", node: row.document, path: ["values", action.field], value: edited.fields[action.field] as unknown as Json }], { scope, label, action: action.kind });
         if (!result.ok) return { ok: false, message: result.message };
         context.history?.record(scope, "Hair Lab", { id: result.commit, label, actionKind: action.kind });
       } else {
@@ -135,6 +146,7 @@ export function createHairLab(context: ExperimentContext, device: GenerationDevi
     },
     actionHints(): Readonly<Record<string, string>> { return Object.values(sessions.value()!).some(row => row.active) ? { "motion.setPhysics": "Turn Hair Lab off for hair physics." } : {}; },
     withdraw() {
+      context.history?.focus(null);
       for (const row of Object.values(sessions.value()!)) if (row.active) change(row.id, { active: false, revision: row.revision + 1, phase: "off", result: null, settled: null, continuation: null, message: "" });
       demand();
     },

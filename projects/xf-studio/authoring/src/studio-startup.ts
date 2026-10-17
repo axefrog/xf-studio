@@ -1,5 +1,9 @@
 import { browserReferenceTextures } from "./browser-reference-textures-device";
-import { browserExperiments } from "./compose/experiments";
+import { OFF_EXPERIMENTS } from "./platform/core/experiments";
+import type { ExperimentPort } from "./platform/api/experiments";
+import type { ExperimentRegistration } from "./platform/api/experiments";
+import type { ViewContribution } from "./studio-ui/views/contribution";
+import type { ModuleViewBinding } from "./studio-ui/views/feature-view";
 /**
  * The one trusted composition root for the XF Studio page, shared by localhost (`studio-main.ts`)
  * and the desktop bootstrap. It builds the core, browser devices and bootstrap, then mounts
@@ -58,6 +62,10 @@ import { createBrowserUpdateCheck } from "./browser-update-check-device";
 import { pageFailure, setPageDiagnostics } from "./diagnostics/page-sink";
 
 export type StudioHost = {
+  /** Optional host capability; the desktop omits experimental modules until their assets are supported. */
+  experiments?: (verification: boolean, signal: AbortSignal) => Omit<ExperimentPort, "registrations"> & {
+    registrations(): readonly (ExperimentRegistration & { contribution: ViewContribution; binding: ModuleViewBinding })[];
+  };
   /** Where the workspace draft is stored: browser storage, or the desktop's host-owned file. */
   storage: Pick<Storage, "getItem" | "setItem">;
   /** Serialized workspace budget; the desktop host file allows more than browser storage. */
@@ -121,7 +129,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   void diagnostics.refresh();
   const experimentLife = new AbortController();
   window.addEventListener("pagehide", () => experimentLife.abort(), { once: true });
-  const experiments = await browserExperiments(location.search, fetch, experimentLife.signal);
+  const experiments = host.experiments?.(verification, experimentLife.signal) ?? OFF_EXPERIMENTS;
   const storage = host.storage;
   const restored = loadBrowserWorkspace(storage, verification, STUDIO_COMPOSITION.documents), workspace = restored.state;
   // The V's details the page asked for last are read while everything else starts (research/backlog/performance.md, warm restart).
@@ -191,7 +199,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   // The view graph the core owns (view-graph-design.md §3.3): the head restores and follows its main view.
   const views = core.views;
   const headHost = byId("device-head"), uvHost = byId("device-uv");
-  const viewportDevice = createBrowserViewportDevice({ region, headHost, uvHost, queryContext: hit => core.app.contextQuery(hit), renderers: STUDIO_RENDERERS, optionalRenderers: experiments, referenceTextures: browserReferenceTextures,
+  const viewportDevice = createBrowserViewportDevice({ region, headHost, uvHost, queryContext: hit => core.app.contextQuery(hit), renderers: STUDIO_RENDERERS, optionalRenderers: experiments, referenceTextures: browserReferenceTextures(verification),
     onContext: event => event === "lost" ? diagnostics.contextLost("3D view") : diagnostics.contextRestored("3D view") });
   const session = createBrowserWorkspaceSession({
     workspace, restored, verification, storage, budget: host.storageBudget, model: STUDIO_COMPOSITION.documents,

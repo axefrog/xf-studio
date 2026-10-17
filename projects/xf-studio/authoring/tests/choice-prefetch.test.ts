@@ -12,7 +12,7 @@ import { choiceKey, manifestHolds, manifestOf, readChoiceManifest, writeChoiceMa
 import { ChoicePrefetcher, type PrefetchDeps, requestKey } from "../src/choice-prefetch";
 import { depotHash, refFromPath } from "../src/depot-path";
 import { archiveExportSource, createGameAssetExporter, GameAssetExportError, type GameAssetExporter, type GeometryRepair, PARTIAL_RUNS, type UncookRun, usedThisSession } from "../src/game-asset-export";
-import { clearPrepared, evictPrepared, PREPARED_FS_CONCURRENCY, preparedBudgetFrom, preparedFsStats, preparedSize } from "../src/prepared-files";
+import { clearPrepared, evictPrepared, evictPreparedSet, PREPARED_FS_CONCURRENCY, preparedBudgetFrom, preparedFsStats, preparedSize } from "../src/prepared-files";
 import { ChoicePreviewStore } from "../src/choice-preview-host";
 import { backgroundExtraction, foregroundExtraction, WolvenKitFetcher } from "../src/resolver-host";
 import { ResourceGraph, stoppableGraph } from "../src/resource-graph";
@@ -21,6 +21,12 @@ import { app, cr2w, fixtureInstallation, mesh, meshComponent } from "./resolver-
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 const temporary = () => { const root = mkdtempSync(join(tmpdir(), "xfs-prefetch-")); roots.push(root); return root; };
+test("ordinary and reference resolver routes share one combined disk budget", async()=>{
+  const routes=[temporary(),temporary()].map(root=>({exports:join(root,'exports'),resolver:join(root,'resolver'),store:join(root,'store'),manifests:join(root,'choices')}));
+  for(const root of routes){mkdirSync(join(root.resolver,'json'),{recursive:true});writeFileSync(join(root.resolver,'json','cached.json'),'x'.repeat(1000));}
+  expect((await evictPrepared(routes[0],1500)).removed).toBe(0);expect((await evictPrepared(routes[1],1500)).removed).toBe(0);
+  const result=await evictPreparedSet(routes,1500);expect(result.removed).toBe(1);expect(result.bytes).toBe(1000);
+});
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const settle = async () => { for (let i = 0; i < 20; i++) await sleep(1); };
 

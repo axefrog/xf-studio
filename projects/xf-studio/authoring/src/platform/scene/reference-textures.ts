@@ -4,20 +4,22 @@ import * as THREE from "three";
 import { CHARACTER_DETAIL_ASSETS, chunkOfMesh, parseCharacterDetail } from "../../render-detail";
 import type { CharacterSlot, ReferenceTextures } from "../api/scene";
 
-export async function referenceTextures(slot: CharacterSlot, signal: AbortSignal, characterRequest: unknown, route = { endpoint: "/api/preview-character", assets: CHARACTER_DETAIL_ASSETS }): Promise<ReferenceTextures> {
-  const post = await fetch(route.endpoint, { method: "POST", signal, headers: { "Content-Type": "application/json", "X-XFS-Page": `reference-${slot}` },
+export async function referenceTextures(slot: CharacterSlot, signal: AbortSignal, characterRequest: unknown, route: { endpoint: string; assets: string; headers?: Record<string, string> } = { endpoint: "/api/preview-character", assets: CHARACTER_DETAIL_ASSETS }): Promise<ReferenceTextures> {
+  const post = await fetch(route.endpoint, { method: "POST", signal, headers: { ...route.headers, "Content-Type": "application/json", "X-XFS-Page": `reference-${slot}` },
     body: JSON.stringify(characterRequest) });
   if (!post.ok) throw Error("The baseline material couldn't be prepared.");
   let state = await post.json() as { key: string; phase: string; record: string | null };
-  for (let i = 0; state.phase === "preparing" && i < 160; i++) {
+  while (state.phase === "preparing") {
+    signal.throwIfAborted();
     await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(resolve, 250);
-      signal.addEventListener("abort", () => { clearTimeout(timer); reject(signal.reason); }, { once: true });
+      const abort = () => { clearTimeout(timer); reject(signal.reason); };
+      const timer = setTimeout(() => { signal.removeEventListener("abort", abort); resolve(); }, 250);
+      signal.addEventListener("abort", abort, { once: true });
     });
-    state = await (await fetch(`${route.endpoint}?key=${encodeURIComponent(state.key)}`, { signal })).json();
+    state = await (await fetch(`${route.endpoint}?key=${encodeURIComponent(state.key)}`, { signal, headers: route.headers })).json();
   }
   if (state.phase !== "ready" || !state.record) throw Error("The baseline material isn't ready.");
-  const record = parseCharacterDetail(await (await fetch(`${route.assets}${state.record}`, { signal })).json());
+  const record = parseCharacterDetail(await (await fetch(`${route.assets}${state.record}`, { signal, headers: route.headers })).json());
   const chunks = record.components.filter(item => item.slot === slot).flatMap(item => item.materials);
   const inputs = Object.assign({}, ...chunks.map(chunk => chunk.textures)) as Record<string, { file: string; depotPath: string; isGamma: boolean }>;
   const pixels: Record<string, { width: number; height: number; values: Uint8Array }> = {};
@@ -28,7 +30,7 @@ export async function referenceTextures(slot: CharacterSlot, signal: AbortSignal
     // A reference source reads only named material inputs, no geometry or body textures.
     for (const [name, input] of Object.entries(inputs)) {
       if (signal.aborted) throw signal.reason;
-      const blob = await (await fetch(`${route.assets}${input.file}`, { signal })).blob(), url = URL.createObjectURL(blob);
+      const blob = await (await fetch(`${route.assets}${input.file}`, { signal, headers: route.headers })).blob(), url = URL.createObjectURL(blob);
       try {
         const texture = await new THREE.TextureLoader().loadAsync(url);
         if (signal.aborted) { texture.dispose(); throw signal.reason; }
@@ -44,7 +46,7 @@ export async function referenceTextures(slot: CharacterSlot, signal: AbortSignal
     }
     const surfaces: NonNullable<ReferenceTextures["surfaces"]>[number][] = [];
     for (const component of record.components.filter(item => item.slot === slot)) {
-      const glb = await (await fetch(`${route.assets}${component.geometry.file}`, { signal })).arrayBuffer(), scene = (await new GLTFLoader().parseAsync(glb, "")).scene;
+      const glb = await (await fetch(`${route.assets}${component.geometry.file}`, { signal, headers: route.headers })).arrayBuffer(), scene = (await new GLTFLoader().parseAsync(glb, "")).scene;
       scene.traverse(object => {
         if (!(object instanceof THREE.Mesh)) return;
         const material = component.materials.find(m => m.chunk === chunkOfMesh(object.name));
@@ -56,5 +58,5 @@ export async function referenceTextures(slot: CharacterSlot, signal: AbortSignal
       });
     }
     return { textures, resources, surfaces, pixels };
-  } catch (error) { release(); throw error; }
+  } catch (error) { signal.removeEventListener("abort", release); release(); throw error; }
 }

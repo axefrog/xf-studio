@@ -14,6 +14,8 @@ export type MaterialSample = { id: string; index: number; uv: readonly [number, 
 export type ChartMapping = { matrix: readonly [number, number, number, number]; offset: readonly [number, number] };
 export type Capsule = { a: Vec3; b: Vec3; radius: number; radii?: Vec3 };
 export type HeadSurface = { resource: string; topology: string; revision: string; positions: number[]; indices: number[]; uv: number[];
+  /** A scene adapter may require its baseline source before the first authored groom is seeded. */
+  coverageRequired?: boolean;
   coverageSurface?: { resource: string; positions: number[]; indices: number[]; uv: number[]; mask?: { width: number; height: number; values: string | Uint8Array } };
   down: Vec3; front?: Vec3; capsules: Capsule[]; cap?: { source: string; points: number[]; indices?: number[]; uv?: number[]; mask?: { width: number; height: number; values: string | Uint8Array } }; body?: { positions: number[]; indices: number[] } };
 export type VolumeNode = { kind: "root"; next: string } | { kind: "convergence"; next: string; tie?: { position: Vec3; radiusMetres: number } } | { kind: "volume"; next: string; length: string; section?: string; clump?: string; mapping?: ChartMapping }

@@ -13,9 +13,9 @@ const registration: ExperimentRegistration = {
 const sources = () => ({ clock: simClock(new Scheduler()), random: seededRandom(19) });
 test("Hair Lab model: strict isolated override, unknown and duplicate flags ignored", () => {
   expect(experimentOverrides("?experiment.hair-lab=1", ["hair-lab"])).toEqual({});
-  expect(experimentOverrides("?verify=1&experiment.hair-lab=1&experiment.unknown=1", ["hair-lab"])).toEqual({ "hair-lab": true });
-  expect(experimentOverrides("?verify=1&experiment.hair-lab=true", ["hair-lab"])).toEqual({});
-  expect(experimentOverrides("?verify=1&experiment.hair-lab=1&experiment.hair-lab=0", ["hair-lab"])).toEqual({});
+  expect(experimentOverrides("?verify=1&experiment.hair-lab=1&experiment.unknown=1", ["hair-lab"], true)).toEqual({ "hair-lab": true });
+  expect(experimentOverrides("?verify=1&experiment.hair-lab=true", ["hair-lab"], true)).toEqual({});
+  expect(experimentOverrides("?verify=1&experiment.hair-lab=1&experiment.hair-lab=0", ["hair-lab"], true)).toEqual({});
 });
 test("Hair Lab model: zero flag-off imports, persistence and stale import cancellation", async () => {
   const life = new Aborter(), store = new MemoryStore(); let loads = 0, creates = 0, complete!: (value: { create(): ExperimentRegistration }) => void;

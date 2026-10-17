@@ -8,7 +8,7 @@ import { CharacterDetailError, CHARACTER_DETAIL_STEPS, CharacterPreparationCache
 import { choiceKey, manifestProblemSliced, readChoiceManifest, xlIdentity } from "./choice-manifest";
 import { timeSlicer } from "./event-loop";
 import { ChoicePrefetcher, type PrefetchAnswer, type PrefetchInput, type PrefetchLimits } from "./choice-prefetch";
-import { clearPrepared, evictPrepared, PREPARED_BUDGET_BYTES, preparedSize, type PreparedRoots, type PreparedSize } from "./prepared-files";
+import { clearPrepared, evictPreparedSet, PREPARED_BUDGET_BYTES, preparedSize, type PreparedRoots, type PreparedSize } from "./prepared-files";
 import { backgroundExtraction, backgroundPriority, foregroundExtraction, withArchiveFingerprints, type Installation, type InstallationOptions } from "./resolver-host";
 import { CHARACTER_DETAIL_SCHEMA } from "./render-detail";
 import type { CharacterRequest } from "./character-detail-request";
@@ -108,6 +108,8 @@ export type CharacterDetailHostOptions = {
   prefetchLimits?: PrefetchLimits;
   /** Bytes of exports and extracted JSON kept on disk (prepared-files.ts `PREPARED_BUDGET_BYTES`). */
   preparedBudget?: number;
+  /** Other routes sharing this disk budget; each source is counted once by its export root. */
+  sharedPreparedRoots?: () => readonly PreparedRoots[];
   log?: (message: string) => void;
   /** The rolling diagnostics window: what each preparation resolved and prepared (docs/diagnostics.md). */
   trace?: DiagnosticTrace;
@@ -720,7 +722,7 @@ export class CharacterDetailHost {
   keepWithinBudget(): Promise<void> {
     if (this.evicting || Date.now() - this.evictedAt < EVICT_INTERVAL_MS) return this.evicting ?? Promise.resolve();
     this.evictedAt = Date.now();
-    this.evicting = evictPrepared(this.preparedRoots, this.options.preparedBudget ?? PREPARED_BUDGET_BYTES)
+    this.evicting = evictPreparedSet([this.preparedRoots, ...this.options.sharedPreparedRoots?.() ?? []], this.options.preparedBudget ?? PREPARED_BUDGET_BYTES)
       .then(result => { if (result.removed) this.options.log?.(`Prepared game files: removed ${result.removed} least recently used (${(result.freed / 1024 ** 2).toFixed(0)} MB).`); })
       .catch(error => {
         this.options.log?.(`Prepared game files could not be checked against their budget: ${(error as Error)?.message ?? error}`);

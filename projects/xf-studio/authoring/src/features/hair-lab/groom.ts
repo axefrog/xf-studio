@@ -35,6 +35,10 @@ export function defaultGroom(surface: HeadSurface): Groom {
       density: constant(1, "ratio"), clump: constant(.45, "ratio") },
     solver: { samples: 256, intervals: 64, steps: 12, iterations: 8, stepSeconds: 1 / 60, clearanceMetres: .0005 } };
 }
+/** The resolved seed source is independent of whatever hairstyle the character currently wears. */
+export function scalpSeedSurface(surface: HeadSurface, source: NonNullable<HeadSurface["coverageSurface"]>): HeadSurface {
+  return { ...surface, coverageSurface: source, cap: { source: source.resource, points: source.positions, indices: source.indices, uv: source.uv, mask: source.mask } };
+}
 export function surfaceBounds(head: HeadSurface) {
   const min: Vec3 = [Infinity, Infinity, Infinity], max: Vec3 = [-Infinity, -Infinity, -Infinity];
   for (let i = 0; i < head.positions.length; i += 3) for (let k = 0; k < 3; k++) { min[k] = Math.min(min[k], head.positions[i + k]); max[k] = Math.max(max[k], head.positions[i + k]); }

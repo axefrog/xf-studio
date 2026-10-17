@@ -294,7 +294,7 @@ export function createStudioPresentation<Slot>(sources: {
     e = sources.editor;
   const s: StatusSource = sources.status ?? { snapshot: () => emptyPresentationStatus(),
     subscribe: () => () => {} };
-  const historyRoute = routeDocumentHistory({ state: () => a.history(), timeline: () => a.historyTimeline() }, sources.experiments);
+  const historyRoute = routeDocumentHistory({ state: () => a.history(), timeline: () => a.historyTimeline(), capability: action => a.capability(action) }, sources.experiments);
   const authoring: StudioPresentationPort<Slot>["authoring"] = {
     snapshot: () => a.snapshot(), actionKinds: () => a.actionKinds(),
     requestKinds: () => a.requestKinds(), actionDescriptors: () => a.actionDescriptors(),
@@ -315,7 +315,7 @@ export function createStudioPresentation<Slot>(sources: {
     controlBegin: (id, layerId) => a.controlBegin(id, layerId),
     controlEdit: (id, action) => historyRoute.baseChange(() => a.controlEdit(id, action)),
     controlCommit: id => historyRoute.baseChange(() => a.controlCommit(id)), controlCancel: id => historyRoute.baseChange(() => a.controlCancel(id)),
-    requestCapability: request => a.requestCapability(request), execute: request => a.execute(request),
+    requestCapability: request => a.requestCapability(request), execute: request => historyRoute.baseRequest(() => a.execute(request)),
     canBeginGesture: (source, layerId) => a.canBeginGesture(source, layerId),
     gestureCapability: (source, target) => a.gestureCapability(source, target),
     beginGesture: (source, layerId) => a.beginGesture(source, layerId),

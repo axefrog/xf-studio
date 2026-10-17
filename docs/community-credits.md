@@ -291,7 +291,7 @@ By DarkFortuneTeller. [GitHub](https://github.com/DarkFortuneTeller/DarkFuture),
 
 ### eagul
 
-[PRC — Fully Modular Jewellery Framework](https://www.nexusmods.com/cyberpunk2077/mods/8590), [New Piercings Collection Vol. 1](https://www.nexusmods.com/cyberpunk2077/mods/8611) and [PRC Vanilla Piercing Mirrors](https://www.nexusmods.com/cyberpunk2077/mods/10236) taught us morph-compatible modular jewellery and the file-replacement route that lets the preview draw such frameworks through its generic resolver; the framework also credits Auska for morph-target import and manavortex for modding help. [Multicolored Hair](https://www.nexusmods.com/cyberpunk2077/mods/21613), its compatibility patch and modder's resources showed how a hairstyle split into up to three parts gets separate creator colour rows under one switcher; the [beginner hair-modelling tutorial](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators-theory/3d-modelling/hair-modeling-beginner-tutorial), edited by mana vortex, taught us dense base coverage, progressively lighter outer cards, root reattachment and controlled tilt variation for Hair Lab. Private local reference and workflow study only; the PRC pages require the author's permission for reuse or modification, and Multicolored Hair's reuse terms have not been checked.
+[PRC — Fully Modular Jewellery Framework](https://www.nexusmods.com/cyberpunk2077/mods/8590), [New Piercings Collection Vol. 1](https://www.nexusmods.com/cyberpunk2077/mods/8611) and [PRC Vanilla Piercing Mirrors](https://www.nexusmods.com/cyberpunk2077/mods/10236) taught us morph-compatible modular jewellery and the file-replacement route that lets the preview draw such frameworks through its generic resolver; the framework also credits Auska for morph-target import and manavortex for modding help. [Multicolored Hair](https://www.nexusmods.com/cyberpunk2077/mods/21613), its compatibility patch and modder's resources showed how a hairstyle split into up to three parts gets separate creator colour rows under one switcher. Private local reference only; the PRC pages require the author's permission for reuse or modification, and Multicolored Hair's reuse terms have not been checked.
 
 ### Even More Brows for Cyberpunk
 
@@ -368,7 +368,15 @@ By ArmanIII, per its script headers. [Nexus](https://www.nexusmods.com/cyberpunk
 
 ### MELUMINARY
 
-[MELUMINARY Long Length Pak Vol. 3 #011](https://www.nexusmods.com/cyberpunk2077/mods/27125). Supplies the saved character's hair geometry for the optional hair preview, and its maps taught us to check whether an apparently missing texture is genuinely constant; [ASH SIDESWEPT GLAM](https://www.nexusmods.com/cyberpunk2077/mods/21898), whose page credits modelling to Hamed Ghaeli, also supplies a private visual benchmark for side parting and swept-fringe flow. Its physics reuses the base game's long-hair dangle rig and simulation for both parts, which showed that modded hair physics is often a vanilla set transplanted whole. Private local reference only; its creator credits and permissions are still being confirmed.
+[MELUMINARY Long Length Pak Vol. 3 #011](https://www.nexusmods.com/cyberpunk2077/mods/27125) supplies the reference character's optional hair preview. Its maps taught us to check whether an apparently missing texture is constant, and its reused vanilla dangle rig showed how modded hair can inherit the game's simulation. Private local reference only; no assets are redistributed.
+
+### Hair modeling beginner tutorial — eagul and mana vortex
+
+The [beginner hair-modelling tutorial](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators-theory/3d-modelling/hair-modeling-beginner-tutorial), created by eagul and edited by mana vortex, taught us dense base coverage, progressively lighter outer cards, root reattachment and controlled tilt variation for Hair Lab. Studied as an artist workflow; no tutorial assets are reused.
+
+### ASH SIDESWEPT GLAM — MELUMINARY and Hamed Ghaeli
+
+[ASH SIDESWEPT GLAM](https://www.nexusmods.com/cyberpunk2077/mods/21898) names MELUMINARY as its creator and credits its hair modelling to Hamed Ghaeli. It supplies a private benchmark for side parting and swept-fringe flow. The page prohibits asset reuse; no assets are copied into the project or distributed.
 
 ### MisterChedda
 
@@ -576,7 +584,7 @@ Zachary Fishman, Alex Kiss, Ronald M. Zuker, Jeffrey A. Fialkov and Cari M. Whyn
 
 ### Macklin, Müller and Chentanez
 
-Miles Macklin, Matthias Müller and Nuttapong Chentanez, [XPBD: Position-Based Simulation of Compliant Constrained Dynamics](https://matthias-research.github.io/pages/publications/XPBD.pdf). Their compliant-constraint formulation informs the proposed Hair Lab styling solver, including accumulated multipliers and time-step scaling. Studied as a numerical method; no implementation was copied.
+Miles Macklin, Matthias Müller and Nuttapong Chentanez, [XPBD: Position-Based Simulation of Compliant Constrained Dynamics](https://matthias-research.github.io/pages/publications/XPBD.pdf). Their compliant-constraint formulation informs the implemented Hair Lab styling solver, including accumulated multipliers and time-step scaling. Studied as a numerical method; no implementation was copied.
 
 ### Hair Tool — Bartosz Styperek
 

@@ -80,6 +80,7 @@
           },
           "density": {
             "type": "array",
+            "description": "Resolved seed projection or legacy root-map data. The current persistence adapter omits derived seed samples from new authored documents.",
             "items": {
               "type": "number",
               "minimum": 0,
@@ -87,7 +88,8 @@
             }
           },
           "binding": {
-            "type": "object"
+            "type": "object",
+            "description": "Derived geometry-revision sampling cache, accepted in legacy inputs but rebuilt in the worker and omitted from new authored documents."
           }
         },
         "required": [

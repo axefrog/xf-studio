@@ -16,3 +16,14 @@ test("global history routes independent documents, preserves step identity throu
   expect(book.snapshot("b").steps.map(s => s.id)).toEqual(["three"]); expect(book.snapshot("a").steps.map(s => s.id)).toEqual(["one"]);
   book.focus(null); expect(route.timeline()).toEqual(empty); life.abort();
 });
+test("flag-off work builds no history timeline and a selected document respects base busy state", async()=>{
+  let reads=0,calls=0;
+  const empty={startId:"base",steps:[],current:-1,redoCount:0,trimmed:false};
+  const route=routeDocumentHistory({state:()=>({depth:0,redoDepth:0}),timeline:()=>{reads++;return empty;}});
+  expect(route.baseChange(()=>++calls)).toBe(1);expect(reads).toBe(0);
+  expect(await route.baseRequest(async()=>++calls)).toBe(2);expect(reads).toBe(0);
+  const life=new Aborter(),platform=await createExperiments({sources:{clock:simClock(new Scheduler()),random:seededRandom(2)},store:new MemoryStore(),signal:life.signal,definitions:[],overrides:{}});
+  platform.history!.record("a","Hair Lab",{id:"step",label:"Hair waves",actionKind:"hairLab.set"});
+  const busy=routeDocumentHistory({state:()=>({depth:0,redoDepth:0}),timeline:()=>empty,capability:()=>({available:false,code:"busy",reason:"Finish adjustment."})},{...platform,registrations:()=>[{histories:()=>[{id:"a",dispatch(){calls++;return true;}}]}as any]});
+  expect(busy.capability({kind:"history.undo"})?.code).toBe("busy");expect(busy.execute({kind:"history.undo"})?.ok).toBe(false);expect(calls).toBe(2);life.abort();
+});

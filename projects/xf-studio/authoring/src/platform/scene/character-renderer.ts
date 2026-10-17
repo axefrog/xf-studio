@@ -559,7 +559,7 @@ export function createCharacterRenderer(input: {
     skin: skinPort,
     details,
     resolvedSurfaces: (slot: CharacterSlot) => (characterDetails?.components ?? []).filter(item => item.component.slot === slot).flatMap(item => item.meshes.map(mesh => ({ mesh,
-      template: item.component.materials.find(chunk => chunk.chunk === chunkOfMesh(mesh.name))?.template ?? item.component.materials[0]?.template ?? "",
+      template: item.component.materials.find(chunk => chunk.chunk === chunkOfMesh(mesh.name.replace(new RegExp(`^detail_${item.component.slot}_`), "")))?.template ?? item.component.materials[0]?.template ?? "",
       resource: item.component.geometry.depotPath, forkMaterial: () => copyMaterialShading(Array.isArray(mesh.material) ? mesh.material[0] : mesh.material), prepareGeometry: prepareTemplateGeometry }))),
     view,
     subscribe(listener: () => void) { characterListeners.add(listener); return () => { characterListeners.delete(listener); }; },

@@ -5,8 +5,9 @@ import type { AbortSignalLike } from "../../../platform/api/graph";
 import { featureId } from "../../../platform/api/feature";
 import type { FeatureRendererFactory, SceneHostPort } from "../../../platform/api/scene";
 import type { createHairLab } from "../service";
-import type { Paths } from "../types";
+import type { HeadSurface, Paths } from "../types";
 import { atlasRegions, cardAtlasUV } from "../cards";
+import { scalpSeedSurface } from "../groom";
 
 /** Generated vertices are in the head mesh's bind space, with exactly one Head influence. */
 export function headSkin(geometry: THREE.BufferGeometry, host: SceneHostPort, material: THREE.Material) {
@@ -48,6 +49,7 @@ export function hairRenderer(lab: ReturnType<typeof createHairLab>, lifetime: Ab
     let coverageSource: import("../types").HeadSurface["coverageSurface"];
     let reference: import("../../../platform/api/scene").ReferenceTextures | null = null, readingReference = false;
     let atlas: ReturnType<typeof atlasRegions> = [], rootAtV1 = false;
+    const withCoverage = (surface: HeadSurface): HeadSurface => coverageSource ? scalpSeedSurface({ ...surface, coverageRequired: true }, coverageSource) : { ...surface, coverageRequired: true };
     const assetLife = new AbortController(); life.signal.addEventListener("abort", () => assetLife.abort());
     function requestReference() {
       if (readingReference || reference || !host.referenceTextures) return;
@@ -62,7 +64,7 @@ export function hairRenderer(lab: ReturnType<typeof createHairLab>, lifetime: Ab
         if (!cap) throw Error("No baseline cap surface.");
         const session = lab.session(scene); if (!session) return;
         coverageSource = { ...cap, mask: found.pixels?.MaskTexture ? { ...found.pixels.MaskTexture, values: encodeScalarBytes(scalarBytes(found.pixels.MaskTexture.values)) } : undefined };
-        lab.bind(scene, { ...session.surface, coverageSurface: coverageSource }, life.signal);
+        lab.bind(scene, withCoverage(session.surface), life.signal);
       }).catch(() => { readingReference = false; if (!life.signal.aborted) lab.coverageState(scene, "failed", "Couldn't prepare scalp coverage. Try again to read it from your game files."); });
     }
     function coverageMaterial(mask: THREE.Texture) {
@@ -127,15 +129,15 @@ export function hairRenderer(lab: ReturnType<typeof createHairLab>, lifetime: Ab
       identity = character;
       const surface = host.geometry();
       if (surface.revision === boundRevision) { resultKey = ""; update(); return; }
-      boundRevision = surface.revision; clear(); lab.bind(scene, { ...surface, ...(coverageSource ? { coverageSurface: coverageSource } : {}) }, life.signal);
+      boundRevision = surface.revision; clear(); lab.bind(scene, withCoverage(surface), life.signal);
     };
     function update() {
       if (life.signal.aborted) return;
       const session = lab.session(scene);
       if (!session?.active || session.phase === "failed") { clear(); return; }
-      if (!session.result) return;
-      if (coverageSource && !session.surface.coverageSurface) { lab.bind(scene, { ...session.surface, coverageSurface: coverageSource }, life.signal); return; }
+      if (coverageSource && !session.surface.coverageSurface) { lab.bind(scene, withCoverage(session.surface), life.signal); return; }
       if (!reference || !session.surface.coverageSurface) { requestReference(); return; }
+      if (!session.result) return;
       const result = session.result, key = `${session.revision}:${result.stage}:${identity}`;
       if (drawn) { displayGroup(drawn.group); host.requestFrame(); }
       if (key === resultKey) return;
