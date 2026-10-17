@@ -13,6 +13,20 @@ export type HistoryLabel = {
   layerId?: string;
 };
 
+export type HistoryCommand = { kind: "history.undo" } | { kind: "history.redo" } | { kind: "history.jumpTo"; entryId: string };
+export type HistoryState = { undo?: HistoryLabel; redo?: HistoryLabel; depth: number; redoDepth: number };
+export type HistoryStep = HistoryLabel & { id: string; at?: number; state: "done" | "undone" };
+export type HistorySnapshot = { startId: string; steps: HistoryStep[]; current: number; redoCount: number; trimmed: boolean; documentLabel?: string };
+export type HistoryParticipant = { id: string; dispatch(action: HistoryCommand): boolean };
+/** Session metadata only; document contents and compensation remain in their owning graph. */
+export type DocumentHistory = {
+  selected(): string | null;
+  focus(id: string | null): void;
+  snapshot(id: string): HistorySnapshot;
+  record(id: string, documentLabel: string, entry: HistoryLabel & { id: string }): void;
+  move(id: string, current: number): void;
+};
+
 /** The label of a step whose label was not kept (restored from a saved workspace). */
 export const UNKNOWN_HISTORY_LABEL: HistoryLabel = Object.freeze({ label: "Earlier change", actionKind: "unknown" });
 

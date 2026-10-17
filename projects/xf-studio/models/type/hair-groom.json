@@ -1,0 +1,219 @@
+{
+  "kind": "type",
+  "id": "hair-groom",
+  "owner": "hair-lab",
+  "summary": "A separate authored groom document containing a stable root population, volume graph and lazy field expressions.",
+  "status": "target",
+  "class": "authored",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "name": {
+      "kind": "value",
+      "doc": "The groom name.",
+      "shape": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120
+      }
+    },
+    "population": {
+      "kind": "value",
+      "doc": "Stable logical follicle population, independent of derived sample density.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "seed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 120000
+          }
+        },
+        "required": [
+          "seed",
+          "count"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "scalp": {
+      "kind": "value",
+      "doc": "Head scalp topology binding independent of selected hairstyle; density and length are authored scalp-space maps.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "resource": {
+            "type": "string",
+            "minLength": 1
+          },
+          "topology": {
+            "type": "string",
+            "minLength": 1
+          },
+          "densitySeed": {
+            "type": "object",
+            "properties": {
+              "method": {
+                "enum": [
+                  "cap-projected",
+                  "head-estimated"
+                ]
+              },
+              "source": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "method",
+              "source",
+              "revision"
+            ],
+            "additionalProperties": false
+          },
+          "density": {
+            "type": "array",
+            "description": "Resolved seed projection or legacy root-map data. The current persistence adapter omits derived seed samples from new authored documents.",
+            "items": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "binding": {
+            "type": "object",
+            "description": "Derived geometry-revision sampling cache, accepted in legacy inputs but rebuilt in the worker and omitted from new authored documents."
+          }
+        },
+        "required": [
+          "resource",
+          "topology",
+          "densitySeed"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "graph": {
+      "kind": "value",
+      "doc": "Root, field-selected section partitions, clump volumes, disjoint convergence and termination. Section and clump IDs are authored graph labels. Convergence may hold a head-space tie sphere without replacing member roots.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "root": {
+            "type": "string",
+            "minLength": 1
+          },
+          "nodes": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "root",
+          "nodes"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "fields": {
+      "kind": "value",
+      "doc": "Named expressions with declared units and charts; evaluated only at requested material samples.",
+      "shape": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object"
+        }
+      }
+    },
+    "solver": {
+      "kind": "value",
+      "doc": "Deterministic evaluation budgets and compliant constraints.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "samples": {
+            "type": "integer",
+            "minimum": 16,
+            "maximum": 1024
+          },
+          "intervals": {
+            "type": "integer",
+            "minimum": 8,
+            "maximum": 64
+          },
+          "steps": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 32
+          },
+          "iterations": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16
+          },
+          "stepSeconds": {
+            "type": "number",
+            "minimum": 0.001,
+            "maximum": 0.05
+          },
+          "clearanceMetres": {
+            "type": "number",
+            "minimum": 0.0001,
+            "maximum": 0.01
+          }
+        },
+        "required": [
+          "samples",
+          "intervals",
+          "steps",
+          "iterations",
+          "stepSeconds",
+          "clearanceMetres"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "flow": {
+      "kind": "value",
+      "doc": "Shared growth field: normalised lateral part position, shallow emergence angle, forehead sweep, crown lift and rear-section routing. Optional partCombing is a dimensionless [away-from-part, upward, rearward] vector, mirrored across the part. An explicit foreheadDirection overrides it. Style names never choose solver code.",
+      "shape": {
+        "type": "object"
+      }
+    },
+    "cut": {
+      "kind": "value",
+      "doc": "Optional head-space tip plane. Style and settle the intrinsic fibre first, then trim at its first downward crossing; report the retained intrinsic length.",
+      "shape": {
+        "type": "object"
+      }
+    }
+  },
+  "defaults": {
+    "name": "Loose waves",
+    "population": {
+      "seed": 1,
+      "count": 60000
+    },
+    "fields": {},
+    "solver": {
+      "samples": 256,
+      "intervals": 64,
+      "steps": 12,
+      "iterations": 8,
+      "stepSeconds": 0.016666666666666666,
+      "clearanceMetres": 0.0005
+    }
+  },
+  "x-document": "Serialized separately as xfs/hair-groom-part-1; never insert into the imported save, character choices or existing makeup draft.",
+  "x-validation": "The operator contract in hair-population validates complete graph and expression shapes before evaluation; schema validation alone is not semantic validation.",
+  "x-attachment": "Generate in bind-pose head space and attach rigidly to Head; down vector is bind-pose gravity. Hairstyle changes never reseed density."
+}

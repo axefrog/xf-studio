@@ -54,6 +54,8 @@ export const SHELL_PANELS: PanelFactories<typeof SHELL_VIEW> = {
  * commands) and each part-less module's bound view.
  */
 export type ViewComposition = {
+  /** Optional views are already loaded by the experiment driver; the shell never imports them. */
+  optional?: () => readonly { contribution: import("./contribution").ViewContribution; binding: ModuleViewBinding }[];
   readonly catalogue: ViewCatalogue;
   readonly shell: Readonly<Record<string, PanelFactory>>;
   readonly features: readonly FeatureViewBinding[];

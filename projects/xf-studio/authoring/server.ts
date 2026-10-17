@@ -1,3 +1,4 @@
+import { createReferenceCharacterRoutes } from "./src/reference-character-server";
 import { resolve, sep } from "node:path";
 import { isBelow } from "./src/platform/api/path-containment";
 import { existsSync, mkdirSync } from "node:fs";
@@ -158,6 +159,7 @@ const previewCoreRequest = createPreviewCoreHandler(previewCore);
 // another server's warm caches turns eviction off so it never trims them.
 const preparedBudget = preparedBudgetFrom(process.env.XFS_PREPARED_BUDGET_GB, message => { hostFailure("character", "prepared_budget_setting", message, undefined, "warn"); });
 const characterDetails = new CharacterDetailHost({ cacheRoot: previewCacheRoot, ...(preparedBudget !== undefined ? { preparedBudget } : {}),
+  sharedPreparedRoots: () => [referenceCharacters.preparedRoots],
   resolverCache: resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache")),
   settings: () => {
     const settings = localSettings.load().settings;
@@ -167,6 +169,16 @@ const characterDetails = new CharacterDetailHost({ cacheRoot: previewCacheRoot, 
   ...(process.env.XFS_CHOICE_PREVIEW_CACHE ? { previewRoot: resolve(process.env.XFS_CHOICE_PREVIEW_CACHE) } : {}),
   log: diagnostics.log.logger("character"), trace: diagnostics.trace });
 const characterDetailRequest = createCharacterDetailHandler(characterDetails);
+const referenceCharacters = createReferenceCharacterRoutes({ cacheRoot: previewCacheRoot,
+  preparedBudget, sharedPreparedRoots: () => [characterDetails.preparedRoots],
+  enabled: async request => {
+    if (request.headers.get("X-XFS-Verification") === "1") return true;
+    const graph = await graphLibrary.graph(), preferences = graph.list().find(ref => ref.type === "experimental-features");
+    return !!preferences && graph.resolve(preferences, ["flags", "hair-lab"]) === true;
+  },
+  settings: () => ({ gameRoot: packageToolPaths(localSettings.load().settings).gamepath, launchRoute: "direct", mo2Root: null,
+    mo2ProfileId: null, manualModRoot: null, wolvenKitCli: wolvenKit.usable() }), log: diagnostics.log.logger("reference-character") });
+characterDetails.attachPrepared({ bytes: async () => (await referenceCharacters.preparedFiles()).bytes, clear: () => referenceCharacters.clearPreparedFiles() });
 const creatorRequest = createCreatorHandler(characterDetails.creator, { refresh: () => characterDetails.refresh(), prepared: characterDetails });
 const choicePreviewRequest = createChoicePreviewHandler(characterDetails);
 // Photo-mode poses (pose-library-design.md P1): listed from the same launch route and resolver cache as the creator options.
@@ -280,6 +292,7 @@ const server = Bun.serve({
     if (url.pathname === "/api/verification/desktop-app") return verificationDesktopAppRequest(request);
     if (url.pathname === "/api/preview-core") return previewCoreRequest(request);
     if (url.pathname === CHARACTER_DETAIL_ENDPOINT) return characterDetailRequest(request);
+    if (referenceCharacters.accepts(url.pathname)) return referenceCharacters.handle(request);
     if (url.pathname === CHOICE_PREVIEW_ENDPOINT || url.pathname.startsWith(`${CHOICE_PREVIEW_ENDPOINT}/`)) return choicePreviewRequest(request);
     if (url.pathname === CREATOR_ENDPOINT) return creatorRequest(request);
     if (url.pathname === POSES_ENDPOINT) return poseRequest(request);

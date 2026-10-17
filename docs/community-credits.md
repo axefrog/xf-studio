@@ -217,7 +217,7 @@ By the SQLite project. [sqlite.org](https://sqlite.org/). SQLite stores XF Studi
 
 ### Three.js
 
-By mrdoob and the three.js authors. [GitHub](https://github.com/mrdoob/three.js). Three.js renders the studio's entire browser preview: skinned head, materials, camera controls, ray casting and the glitter studies. One isolated glitter study adapts its physical-lighting shader structure, so that code carries the Three.js MIT notice, which must also accompany any distributed build. Its multiple-views examples (one renderer drawing several cameras into scissored regions of one canvas) framed how the planned view graph shares one GPU context across views.
+By mrdoob and the three.js authors. [GitHub](https://github.com/mrdoob/three.js). Three.js renders the studio's entire browser preview: skinned head, materials, camera controls, ray casting and the glitter studies. One isolated glitter study adapts its physical-lighting shader structure, so that code carries the Three.js MIT notice, which must also accompany any distributed build. Its multiple-views examples (one renderer drawing several cameras into scissored regions of one canvas) framed how the planned view graph shares one GPU context across views; its texture-upload implementation established how Hair Lab can supply complete manual mip chains and gamma-correct Flow inputs.
 
 ### WHATWG DOM Standard
 
@@ -291,7 +291,7 @@ By DarkFortuneTeller. [GitHub](https://github.com/DarkFortuneTeller/DarkFuture),
 
 ### eagul
 
-[PRC — Fully Modular Jewellery Framework](https://www.nexusmods.com/cyberpunk2077/mods/8590), [New Piercings Collection Vol. 1](https://www.nexusmods.com/cyberpunk2077/mods/8611) and [PRC Vanilla Piercing Mirrors](https://www.nexusmods.com/cyberpunk2077/mods/10236); the framework also credits Auska for morph-target import and manavortex for modding help. PRC showed a working route to morph-compatible modular jewellery and informs our future jewellery design; working out why it works in game (file replacement alone) is what let the preview draw it, and any similar framework, through its generic resolver. [Multicolored Hair](https://www.nexusmods.com/cyberpunk2077/mods/21613), its compatibility patch and its modder's resources showed how multicoloured hair works in game: a hairstyle cut into up to three parts, each with its own creator colour row under one new switcher, which set how XF hair colours should reach split hairstyles. Private local reference only; the PRC pages require the author's permission for reuse or modification, and Multicolored Hair's reuse terms have not been checked.
+[PRC — Fully Modular Jewellery Framework](https://www.nexusmods.com/cyberpunk2077/mods/8590), [New Piercings Collection Vol. 1](https://www.nexusmods.com/cyberpunk2077/mods/8611) and [PRC Vanilla Piercing Mirrors](https://www.nexusmods.com/cyberpunk2077/mods/10236) taught us morph-compatible modular jewellery and the file-replacement route that lets the preview draw such frameworks through its generic resolver; the framework also credits Auska for morph-target import and manavortex for modding help. [Multicolored Hair](https://www.nexusmods.com/cyberpunk2077/mods/21613), its compatibility patch and modder's resources showed how a hairstyle split into up to three parts gets separate creator colour rows under one switcher. Private local reference only; the PRC pages require the author's permission for reuse or modification, and Multicolored Hair's reuse terms have not been checked.
 
 ### Even More Brows for Cyberpunk
 
@@ -368,7 +368,15 @@ By ArmanIII, per its script headers. [Nexus](https://www.nexusmods.com/cyberpunk
 
 ### MELUMINARY
 
-[MELUMINARY Long Length Pak Vol. 3 #011](https://www.nexusmods.com/cyberpunk2077/mods/27125). Supplies the saved character's hair geometry for the optional hair preview, and its maps taught us to check whether an apparently missing texture is genuinely constant. Its physics reuses the base game's long-hair dangle rig and simulation for both parts, which showed that modded hair physics is often a vanilla set transplanted whole. Private local reference only; its creator credits and permissions are still being confirmed.
+[MELUMINARY Long Length Pak Vol. 3 #011](https://www.nexusmods.com/cyberpunk2077/mods/27125) supplies the reference character's optional hair preview. Its maps taught us to check whether an apparently missing texture is constant, and its reused vanilla dangle rig showed how modded hair can inherit the game's simulation. Private local reference only; no assets are redistributed.
+
+### Hair modeling beginner tutorial — eagul and mana vortex
+
+The [beginner hair-modelling tutorial](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators-theory/3d-modelling/hair-modeling-beginner-tutorial), created by eagul and edited by mana vortex, taught us dense base coverage, progressively lighter outer cards, root reattachment and controlled tilt variation for Hair Lab. Studied as an artist workflow; no tutorial assets are reused.
+
+### ASH SIDESWEPT GLAM — MELUMINARY and Hamed Ghaeli
+
+[ASH SIDESWEPT GLAM](https://www.nexusmods.com/cyberpunk2077/mods/21898) names MELUMINARY as its creator and credits its hair modelling to Hamed Ghaeli. It supplies a private benchmark for side parting and swept-fringe flow. The page prohibits asset reuse; no assets are copied into the project or distributed.
 
 ### MisterChedda
 
@@ -574,6 +582,38 @@ Géry Casiez, Nicolas Roussel and Daniel Vogel, "1€ Filter: a simple speed-bas
 
 Zachary Fishman, Alex Kiss, Ronald M. Zuker, Jeffrey A. Fialkov and Cari M. Whyne, [Measuring 3D facial displacement of increasing smile expressions](https://doi.org/10.1016/j.bjps.2022.08.024) (*Journal of Plastic, Reconstructive & Aesthetic Surgery*, 2022), measured on the Binghamton University 3D Facial Expression database. Their cheek and mouth-corner displacements at four smile intensities are the real-face yardstick for how far V's cheeks can and should move.
 
+### Macklin, Müller and Chentanez
+
+Miles Macklin, Matthias Müller and Nuttapong Chentanez, [XPBD: Position-Based Simulation of Compliant Constrained Dynamics](https://matthias-research.github.io/pages/publications/XPBD.pdf). Their compliant-constraint formulation informs the implemented Hair Lab styling solver, including accumulated multipliers and time-step scaling. Studied as a numerical method; no implementation was copied.
+
+### Hair Tool — Bartosz Styperek
+
+[Hair Tool documentation](https://joseconseco.github.io/HairTool_3_Documentation/). Its separation of scalp input, deformation stages and profile/UV assignment helped frame Hair Lab's generation stages; its baking workflow taught us to derive opacity, random strand ID, root position and flow from one groom, with thinning and end trimming as explicit decisions. Studied as an artist workflow; no add-on code or assets are reused.
+
+### GS CurveTools
+
+[Curve attributes documentation](https://gs-curvetools.readthedocs.io/en/latest/attributes.html). Its separate controls for orientation, twist, taper and curvature subdivision informed the proposed procedural card decisions. Studied as an artist workflow; no plug-in code or assets are reused.
+
+### Polytricity
+
+[Hair Strand Designer](https://polytricity.artstation.com/store/j7PY/hair-strand-designer-v1-7-0-full-perpetual-license-free-demo-and-sample-set) taught us the artist controls for strand count, spacing, width, length, taper and fine waviness, and the value of seeded regeneration across related map outputs. Workflow study only; no application code, presets or textures are reused.
+
+### Eyosido Software
+
+[HairTG-Cards 2](https://eyosido.com/hairtg-cards) informed the procedural atlas's shared and per-region parameters, rows of designs, density progressions and separation of texturing from card geometry. Workflow study only; no product code, presets or assets are reused.
+
+### SideFX
+
+[Houdini's Bake Texture documentation](https://www.sidefx.com/docs/houdini/nodes/out/baketexture.html) explained producing multiple texture planes from the same source geometry in a receiving UV chart. This informed the Hair Lab atlas's shared fibre sample; no implementation is copied.
+
+### Epic Games
+
+[Unreal Engine's groom cards documentation](https://dev.epicgames.com/documentation/en-us/unreal-engine/setting-up-cards-and-meshes-for-grooms-in-unreal-engine) taught us how coverage, tangent, root coordinates and strand seeds are kept explicit in card texture layouts. Its layout was studied as a workflow reference; the Hair Lab atlas uses Cyberpunk's own shader encoding and includes no Unreal assets or code.
+
+### Pedro F. Felzenszwalb and Daniel P. Huttenlocher
+
+Their paper [Distance Transforms of Sampled Functions](https://cs.brown.edu/people/pfelzens/papers/dt-final.pdf) informed the separable Euclidean distance transform used in the Hair Lab collision-grid research. The transform is independently implemented from the mathematical construction; no reference source code is reused.
+
 ## Reference imagery
 
 ### Jewellery form and fit references
@@ -587,6 +627,13 @@ Product and guide pages from [OPI](https://www.opi.com/collections/shimmer-nail-
 ### Duchenne de Boulogne's photographs
 
 Guillaume-Benjamin-Amand Duchenne (de Boulogne), photographs for *Mécanisme de la physionomie humaine* (about 1856–1862), Figures 7, 32, 45, 51 and 54 in the [Cleveland Museum of Art](https://clevelandart.org/art/2018.9)'s open-access collection (CC0), via Wikimedia Commons. His study of the smile is the origin of the Duchenne marker, and these photographs were real-face test inputs for the face-capture prototype. Used locally; not redistributed.
+
+### Hair style references
+
+- [Batik Machida](https://beauty.hotpepper.jp/slnH000137560/style/L000156790.html): Their salon photograph informed the Hair Lab regression reference for a diagonal side-swept fringe merging into long layers. The photograph is retained only as a private reference and is not distributed.
+- [Bamboo salon](https://ameblo.jp/momiji1013/entry-12385330289.html): Their rear-view bob photograph informed the shoulder-level tip line and inward-turning ends in the Hair Lab regression set. The photograph is a private visual reference, not a shipped asset.
+- [Jean & Jacqueline](https://jean-jacqueline-friseur.de/blog/simplie-haarverlaengerung-kassel): Their high-ponytail photograph shows scalp lengths gathered into a rear tie and a free tail. It informed the structural regression case; the photograph is retained privately.
+- [Visavis Friseur](https://visavis-friseur.de/damen/sidecut/): Their sidecut reference shows a distinct density boundary with the crown swept toward the long side. It informed the undercut regression case; no photograph is distributed.
 
 ## Community members we are still identifying
 

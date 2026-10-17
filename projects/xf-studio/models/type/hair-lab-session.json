@@ -1,0 +1,65 @@
+{
+  "kind": "type",
+  "id": "hair-lab-session",
+  "owner": "hair-lab",
+  "summary": "One lab activation binding a groom and character scene without changing the character.",
+  "status": "target",
+  "class": "session",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "groom": {
+      "kind": "ref",
+      "to": "type:hair-groom",
+      "clone": "share",
+      "doc": "The groom being edited. The read-only presentation snapshot projects this authored value independently of pending or rejected geometry, so controls never revert while a worker runs."
+    },
+    "scene": {
+      "kind": "ref",
+      "to": "type:scene",
+      "clone": "share",
+      "doc": "The character scene receiving the replacement."
+    },
+    "active": {
+      "kind": "value",
+      "doc": "Whether this session asks to replace resolved hair.",
+      "shape": {
+        "type": "boolean"
+      }
+    },
+    "settled": {
+      "kind": "value",
+      "doc": "Latest matching uncut solved paths and their groom as explicit continuation input. Reset, withdrawal and geometry changes clear it. It is transient process state, separate from the authored document.",
+      "shape": {
+        "anyOf": [
+          {
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "display": {
+      "kind": "value",
+      "doc": "Diagnostic display without changing the authored groom or generation identity.",
+      "shape": {
+        "enum": [
+          "combined",
+          "strands",
+          "scalp",
+          "reference",
+          "reference-scalp",
+          "volumes",
+          "cards"
+        ]
+      }
+    }
+  },
+  "defaults": {
+    "active": false,
+    "settled": null,
+    "display": "cards"
+  }
+}

@@ -19,7 +19,7 @@ type Theme = "system" | "light" | "dark";
 /**
  * Settings (UI-109): everything a person configures, in one panel with plain groups: Game (game folder, mod manager and profile, the eye
  * plate head), Saves (where the Save Explorer reads saves), Tools (WolvenKit), Appearance (theme, input hints, research tools), Updates
- * (the check at start, and checking now) and Privacy & diagnostics. Composed from the library's controls and the one setup form (`game-setup.ts`); each choice is saved as it is
+ * (the check at start, and checking now), optional Experimental features and Privacy & diagnostics. Composed from the library's controls and the one setup form (`game-setup.ts`); each choice is saved as it is
  * made, through its own typed port (local settings, UI preferences, diagnostics). Opened from the header's Settings button, the command
  * palette ("Settings", "Game folder and mod manager", "Where are my saves?"), Help and every "Open Settings" next step (`rt.settings.open`).
  */
@@ -34,6 +34,12 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
   const research = new Toggle({ label: "Show research tools", help: ["Finishes still waiting for a check in the game (Shimmer, Glitter), rendering and lighting studies, raw exports, compiler plans and developer IDs.",
     "Off unless you're studying how XF Studio works: none of them is needed to make your mod."],
     onChange: on => { appearance.setResearch(on); rt.changed(); } });
+  const experiments = (port.experiments?.snapshot() ?? []).map(info => ({ info, toggle: new Toggle({ label: info.label, help: info.description,
+    reserveNote: true, onChange: on => { void port.experiments!.set(info.id, on).then(result => {
+      if (!result.ok) rt.feedback.toast("warning", info.label, result.message ?? "Couldn't change this experimental setting. Try again."); rt.changed();
+    }).catch(() => { rt.feedback.toast("warning", info.label, "Couldn't change this experimental setting. Try again."); rt.changed(); }); } }) }));
+  const experimental = section({ title: "Experimental features", help: "Early tools to try. Your usual tools and saved looks stay available." }, ...experiments.map(item => item.toggle.element));
+  experimental.hidden = !experiments.length;
   const reference = button({ label: "Keyboard & mouse…", icon: "keyboard", small: true, variant: "quiet", onClick: () => appearance.openReference() });
 
   const deep = new Toggle({ label: "Diagnostic mode", help: "Records more detail about what XF Studio does, for a day, to help find a problem. It stays on this computer.",
@@ -88,7 +94,7 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
     privacy: group("privacy", "Diagnostics stay on this computer. A problem report is prepared for you to review and save; nothing is sent by itself.",
       deep.element, h("div", { class: "row wrap gap-s" }, report)),
   };
-  const element = h("div", { class: "panel-content settings-panel" }, ...Object.values(sections));
+  const element = h("div", { class: "panel-content settings-panel" }, ...Object.entries(sections).flatMap(([id, content]) => id === "updates" ? [content, experimental] : [content]));
 
   let shown = false, updatesShown = false;
   return {
@@ -136,6 +142,11 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
       theme.update(appearance.theme());
       hints.update(appearance.hints());
       research.update(appearance.research());
+      experimental.hidden = !experiments.length || !appearance.research();
+      for (const { info, toggle } of experiments) {
+        const state = port.experiments!.snapshot().find(item => item.id === info.id)!;
+        toggle.update(state.enabled, { disabled: state.overridden, note: state.message || (state.overridden ? "Set for this verification page." : state.phase === "loading" ? "Opening…" : "") });
+      }
       const mode = port.diagnostics.snapshot().mode;
       const next = mode?.mode === "deep" ? "normal" : "deep", allowed = port.diagnostics.capability({ kind: "diagnostics.setMode", mode: next });
       deep.update(mode?.mode === "deep", { disabled: !allowed.available, reason: allowed.reason,

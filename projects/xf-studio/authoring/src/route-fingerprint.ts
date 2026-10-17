@@ -16,6 +16,8 @@ import { describeMo2Instance } from "./mo2-instance";
  * reused) does.
  */
 export type LaunchRouteSettings = {
+  /** Read-only baseline references exclude installed replacement and framework sources. */
+  baseOnly?: boolean;
   gameRoot: string;
   launchRoute: "direct" | "mo2";
   mo2Root?: string | null;
@@ -25,7 +27,7 @@ export type LaunchRouteSettings = {
 
 /** The route's settings, in a fixed order. */
 export const routeIdentity = (route: LaunchRouteSettings): (string | null)[] =>
-  [resolve(route.gameRoot), route.launchRoute, route.mo2Root ?? null, route.mo2ProfileId ?? null, route.manualModRoot ?? null];
+  [resolve(route.gameRoot), route.launchRoute, route.mo2Root ?? null, route.mo2ProfileId ?? null, route.manualModRoot ?? null, ...(route.baseOnly ? ["base-only"] : [])];
 
 const stamp = (path: string | null) => {
   if (!path) return "-";

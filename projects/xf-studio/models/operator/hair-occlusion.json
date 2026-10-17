@@ -1,0 +1,34 @@
+{
+  "kind": "operator",
+  "id": "hair-occlusion",
+  "owner": "hair-lab",
+  "status": "target",
+  "summary": "Bake deterministic groom-depth occlusion for clump diagnostics and hair-card red self-shadow.",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "inputs": [
+    "operator:hair-volumes",
+    "operator:hair-cards"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "bake": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "bake"
+    ],
+    "additionalProperties": false
+  },
+  "pure": true,
+  "x-method": "A worker-local spatial index covers swept clump covariance ellipsoids. Depth in each clump contributes at most once, combined with proximity to the prepared head/body SDF. This is a groom-depth approximation, not ray-traced hemisphere visibility. The same field darkens diagnostic clump colours and supplies card vertex red, where 1 means buried and darker in hair.mt.",
+  "x-budget": "Build once per generation, query only generated vertices, record bake milliseconds separately. No screen-space effect, main-thread bake, authored geometry or new source reads.",
+  "x-tests": "Exposed points have less occlusion than buried points; overlapping clumps increase burial; values are finite in [0,1], deterministic and independent of view. Source geometry and material profiles are unchanged.",
+  "x-coarse": "Only a matching continuation and unchanged card/volume topology may reuse the previous completed occlusion bake for coarse feedback. Final output always rebakes the new geometry. Cache keys include the complete previous groom and surface revision; withdrawal ends the worker cache.",
+  "x-shadow": "Generated cards enable the existing hair.mt baked self-shadow at strength 0.65 while retaining V’s profile and the template’s ShadowMin/ShadowMax. Red is the generated occlusion field, not a colour multiplier."
+}

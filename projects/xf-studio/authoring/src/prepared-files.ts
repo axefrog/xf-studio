@@ -187,12 +187,17 @@ async function fileEntries(folder: string, suffix: string): Promise<Evictable[]>
  * removed and the size after. Under budget (the usual case) it only counts their size: nothing is listed entry by entry (PREV-125).
  */
 export async function evictPrepared(roots: PreparedRoots, budget = PREPARED_BUDGET_BYTES): Promise<{ removed: number; freed: number; bytes: number }> {
-  await sweepStaleWork(roots.exports);
-  const counted = (await Promise.all([folderBytes(roots.exports, exportsSkip), folderBytes(join(roots.resolver, "json"), name => !name.endsWith(".json")),
-    roots.previews ? folderBytes(roots.previews, name => name.endsWith(".tmp")) : 0]))
+  return evictPreparedSet([roots], budget);
+}
+/** Several resolver routes share one budget and one age-ordered candidate set. */
+export async function evictPreparedSet(sources: readonly PreparedRoots[], budget = PREPARED_BUDGET_BYTES): Promise<{ removed: number; freed: number; bytes: number }> {
+  const roots = [...new Map(sources.map(root => [root.exports, root])).values()];
+  for (const root of roots) await sweepStaleWork(root.exports);
+  const counted = (await Promise.all(roots.flatMap(root => [folderBytes(root.exports, exportsSkip), folderBytes(join(root.resolver, "json"), name => !name.endsWith(".json")),
+    root.previews ? folderBytes(root.previews, name => name.endsWith(".tmp")) : 0])))
     .reduce((sum, bytes) => sum + bytes, 0);
   if (counted <= budget) return { removed: 0, freed: 0, bytes: counted };
-  const entries = [...await exportEntries(roots.exports), ...await jsonEntries(roots.resolver), ...await previewEntries(roots.previews)];
+  const entries = (await Promise.all(roots.flatMap(root => [exportEntries(root.exports), jsonEntries(root.resolver), previewEntries(root.previews)]))).flat();
   let bytes = entries.reduce((sum, entry) => sum + entry.bytes, 0), removed = 0, freed = 0;
   if (bytes <= budget) return { removed, freed, bytes };
   entries.sort((a, b) => a.usedMs - b.usedMs);

@@ -104,6 +104,7 @@ test("exported chunk meshes map back to their render chunk", () => {
   expect(chunkOfMesh("submesh_00_LOD_1")).toBe(0);
   expect(chunkOfMesh("submesh_07_LOD_1")).toBe(7);
   expect(chunkOfMesh("submesh_00_LOD_1_doubled")).toBe(0);
+  expect(chunkOfMesh("detail_hair_submesh_02_LOD_1")).toBeNull();
   expect(chunkOfMesh("Armature")).toBeNull();
 });
 

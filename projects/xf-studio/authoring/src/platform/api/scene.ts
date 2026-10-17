@@ -108,6 +108,22 @@ export interface SkinUnderlayPort {
  */
 export type CharacterView = { readonly identity: string | null; readonly drawn: readonly CharacterSlot[] };
 
+/** Bind-pose geometry observations, extracted only on demand. Arrays are detached and contain no scene objects. */
+export type CharacterGeometry = {
+  resource: string; topology: string; revision: string; positions: number[]; indices: number[]; uv: number[];
+  down: [number, number, number]; front?: [number, number, number]; capsules: { a: [number, number, number]; b: [number, number, number]; radius: number; radii?: [number, number, number] }[];
+  cap?: { source: string; points: number[]; indices?: number[]; uv?: number[]; mask?: { width: number; height: number; values: string | Uint8Array } };
+  body?: { positions: number[]; indices: number[] };
+};
+/** Borrowed, read-only resolved surfaces for renderer adapters. Materials/textures stay owned by the character renderer. */
+export type ResolvedSurface = { readonly mesh: THREE.SkinnedMesh; readonly template: string; readonly resource: string;
+  /** Caller-owned template shading, without the source geometry's skinning extension. */
+  forkMaterial?(): THREE.Material;
+  /** Add attributes required by this template to caller-owned generated geometry. */
+  prepareGeometry?(geometry: THREE.BufferGeometry): void };
+export type ReferenceTextures = { readonly pixels?: Readonly<Record<string, { width: number; height: number; values: string | Uint8Array }>>; readonly textures: Readonly<Record<string, THREE.Texture>>; readonly resources: Readonly<Record<string, string>>;
+  readonly surfaces?: readonly { resource: string; template: string; positions: number[]; indices: number[]; uv: number[]; colours?: number[] }[] };
+
 export interface SceneHostPort {
   /** The feature this port was made for. */
   readonly feature: FeatureId;
@@ -123,6 +139,12 @@ export interface SceneHostPort {
    * feature never changes their material, visibility, geometry or transform.
    */
   anchors(): { head: THREE.SkinnedMesh; surface(id: string): THREE.SkinnedMesh | undefined };
+  /** Generic bind-pose attachment/contact source; no extraction until called. */
+  geometry?(): CharacterGeometry;
+  /** Resolved surfaces, including superseded ones (a source remains available while its replacement draws). */
+  resolvedSurfaces?(slot: CharacterSlot): readonly ResolvedSurface[];
+  /** Read a baseline character's template textures through the same installed-resource resolver, without changing the shown character. */
+  referenceTextures?(slot: CharacterSlot, signal: AbortSignal): Promise<ReferenceTextures>;
   /**
    * Put `object` on the head rig, beside `beside` (default: the head), so it shares the head's skeleton space. With `morphs`, every
    * mesh under it that carries facial targets follows the V's facial shapes by name, as the head's own surfaces do, meshes added under

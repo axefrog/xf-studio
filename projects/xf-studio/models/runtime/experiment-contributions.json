@@ -1,0 +1,16 @@
+{
+  "kind": "runtime",
+  "id": "experiment-contributions",
+  "owner": "platform",
+  "summary": "Adapter-owned loaded module exports and registration handles for a single enabled experiment.",
+  "status": "target",
+  "environment": "page",
+  "key": [
+    "type:window",
+    "registered experiment ID"
+  ],
+  "factory": "planned",
+  "ready": "process:experiment-load",
+  "query": [],
+  "linger": 0
+}

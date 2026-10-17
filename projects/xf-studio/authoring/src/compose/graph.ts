@@ -6,5 +6,7 @@
 import type { RuleDef, TypeDef } from "strata";
 import { pointerType, STRUCTURAL_RULES } from "../platform/graph-types";
 
-export const STUDIO_GRAPH_TYPES: readonly TypeDef[] = [pointerType];
+import { EXPERIMENT_TYPES } from "../platform/core/experiments";
+
+export const STUDIO_GRAPH_TYPES: readonly TypeDef[] = [pointerType, ...EXPERIMENT_TYPES];
 export const STUDIO_GRAPH_RULES: readonly RuleDef[] = STRUCTURAL_RULES;

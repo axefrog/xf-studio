@@ -1,0 +1,21 @@
+{
+  "kind": "panel",
+  "id": "hair-lab",
+  "owner": "hair-lab",
+  "summary": "A diagnostic Hair Lab panel composed from existing headings, toggles, value controls and in-place progress.",
+  "status": "target",
+  "binding": "The explicitly selected hair-lab session and its independent groom document.",
+  "reads": [
+    "type:hair-lab-session",
+    "type:hair-groom",
+    "operator:experiment-enabled",
+    "process:hair-generate"
+  ],
+  "actions": [
+    "action:hair-lab-activate",
+    "action:hair-lab-set",
+    "action:hair-lab-preview"
+  ],
+  "x-controls": "Preview toggle, a single combined progress/description line, Show (Hair cards, Clumps, Paths, Scalp), Compare with (Game hair, Game cap), and Length/Waves/Volume. Global Undo/History owns hair edit navigation. Hair physics and export remain unavailable for generated hair.",
+  "x-refusal": "Generation failure restores normal hair and offers a content-width standalone Try again button through the existing request; no path prompts or technical error labels."
+}

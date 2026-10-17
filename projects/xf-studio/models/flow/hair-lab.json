@@ -1,0 +1,120 @@
+{
+  "kind": "flow",
+  "id": "hair-lab",
+  "owner": "hair-lab",
+  "summary": "Opt in, activate and edit a generated diagnostic groom, then restore the normal hairstyle without changing V.",
+  "status": "target",
+  "steps": [
+    {
+      "model": "operator:hair-volumes",
+      "does": "Derive section-coloured clump envelopes and material coordinates."
+    },
+    {
+      "model": "operator:hair-cards",
+      "does": "Generate layered ribbons from volumes and shade with the native atlas and character colour profile."
+    },
+    {
+      "model": "operator:hair-occlusion",
+      "does": "Bake groom-depth occlusion in the worker for diagnostics and card red self-shadow."
+    },
+    {
+      "model": "action:experiment-set",
+      "does": "Persist opt-in; conditionally load experiment registrations."
+    },
+    {
+      "model": "operator:experiment-enabled",
+      "does": "Resolve preference and isolated verification override."
+    },
+    {
+      "model": "request:load-experiment",
+      "does": "Ask the platform to maintain the explicitly enabled experiment contribution."
+    },
+    {
+      "model": "driver:experiment",
+      "does": "Load and register the optional module with an abortable lifetime."
+    },
+    {
+      "model": "action:hair-lab-activate",
+      "does": "Activate the groom and scene session."
+    },
+    {
+      "model": "request:show-hair-lab",
+      "does": "Ask for the session revision to be visible."
+    },
+    {
+      "model": "driver:hair-lab",
+      "does": "Demand matching geometry and own generation and renderer lifetimes."
+    },
+    {
+      "model": "source:character-geometry",
+      "does": "Supply geometry references for the bound character revision."
+    },
+    {
+      "model": "operator:hair-population",
+      "does": "Validate maps and graph and derive stable attached root samples."
+    },
+    {
+      "model": "operator:hair-coarse",
+      "does": "Supply complete immediate diagnostic geometry."
+    },
+    {
+      "model": "process:hair-generate",
+      "does": "Refine in the worker and publish only the matching complete revision."
+    },
+    {
+      "model": "runtime:hair-preview",
+      "does": "Attach diagnostic geometry and replace only the resolved hair slot."
+    },
+    {
+      "model": "action:hair-lab-set",
+      "does": "Append independent groom edits, supersede old work and retain Undo."
+    },
+    {
+      "model": "action:hair-lab-activate",
+      "does": "On deactivation abort work, withdraw replacement and restore normal hair."
+    }
+  ],
+  "demand": "The person activates Hair Lab in a visible module with a bound character scene; no feature demand or imports while its flag is off.",
+  "faults": [
+    {
+      "code": "invalid-groom",
+      "when": "A graph, field unit, coordinate transform or value is invalid.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "fail"
+    },
+    {
+      "code": "scalp-unavailable",
+      "when": "The character geometry does not provide usable scalp support.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "fail"
+    },
+    {
+      "code": "generation-failed",
+      "when": "Worker or renderer failed; normal hair remains and Try again is offered.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "fail"
+    }
+  ],
+  "budget": {
+    "latency": [
+      "Input feedback in the same cycle; coarse generation at most 8 ms and warm action-to-frame at most 50 ms.",
+      "Warm refined action-to-frame target 500 ms; measure preparation, queue, solve, upload and first draw separately.",
+      "No page task over 50 ms; check cancellation between bounded worker batches."
+    ],
+    "memory": "Incremental CPU buffers at most 128 MiB and diagnostic GPU buffers at most 16 MiB; tests under a 6 GB guard."
+  },
+  "invariants": [
+    "Flag off imports no lab modules and registers no lab menus, panels, renderers or workers.",
+    "Neither lab settings nor groom edits modify character/save data or an existing draft.",
+    "Stable follicle identities and attachments are independent of preview density.",
+    "Branches partition; convergence unions disjoint sets; termination accounts for ended identities.",
+    "Map transport preserves identity, original length coordinates, units and phase.",
+    "Every attached result matches groom, scene, character, revision and geometry identity.",
+    "Deactivation, hiding the module, disabling the flag, abort or failure restores normal resolved hair.",
+    "Generation is deterministic for equal inputs and cancellation cannot publish a stale revision.",
+    "Two sessions in different scenes cannot change each other or share implicit current state."
+  ]
+}

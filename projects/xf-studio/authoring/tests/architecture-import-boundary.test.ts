@@ -265,7 +265,7 @@ function platformViolations(tree: Tree): string[] {
   // interfaces; only they use Bun's SQLite and Node's files, and no other platform module imports them. They and the
   // graph types reach the engine through its entry point alone (profiles and graph design §1.1, boundary rules 1-2).
   const graphAdapter = (name: string) => name.startsWith("platform/graph-adapters/");
-  const graph = (name: string) => graphAdapter(name) || name.startsWith("platform/graph-types/");
+  const graph = (name: string) => graphAdapter(name) || name.startsWith("platform/graph-types/") || name === "platform/api/graph" || name === "platform/core/experiments";
   return pure.flatMap(name => [
     ...resolvedIn(tree, name).filter(path => !path.startsWith("platform/") || path.startsWith("platform/scene/") ||
       !host(name) && host(path) || !graphAdapter(name) && graphAdapter(path))
