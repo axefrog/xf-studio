@@ -6,6 +6,15 @@ Current state: the [approved design and model contracts](../hair/hair-lab-design
 
 The active R&D questions are scalp derivation, head/shoulder contact, stable identity across field transport, and action-to-frame latency. Budgets and evidence grades live in the design. Reuse installed vanilla strand atlases through the existing resolver; never package extracted references. No deployment is authorised.
 
+## Preset hairlines (queued for after M1 of the core rebuild)
+
+The current default hairline is traced from the reference hairstyle's hair cap texture. That cap was painted for one long style, so it has a straight, square-cornered front band and no sideburns. On ponytails, updos and short styles, where the hairline shows, that looks artificial.
+
+- **Decision (October 2026):** the default hairline becomes a natural anatomical template, and "match this game hairstyle's cap" stays available as an optional starting point. The template has rounded temples, a gentle front curve, sideburns to about mid-ear and a natural nape, and is bound to the verified head landmarks (forehead, temples, ear attachments, nape). Its variations are ordinary controls: widow's peak, temple recession, sideburn length.
+- **Dependency:** if the game's own cap texture is kept, hair rooted outside it would grow from untinted skin. Generating the scalp tint from the same density map removes the mismatch by construction; decide that with the export work.
+- **Same pass:** Side shave's density mask is a hard straight split down the head's midline, front and back. Replace it with a proper one-sided shaved region with a soft edge and regrowth density.
+- Everything the change touches gets recertified, with before/after captures.
+
 ## Rigging and physics (banked; research first)
 
 Generated hair is baked at export: the influences that shape it are authoring tools, and behaviour in game comes from generated skinning and bones.
