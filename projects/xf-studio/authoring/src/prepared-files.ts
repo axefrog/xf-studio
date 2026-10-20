@@ -27,6 +27,17 @@ export type PreparedRoots = { exports: string; resolver: string; store: string; 
   previews?: string };
 /** Default budget for exports and extracted JSON together. */
 export const PREPARED_BUDGET_BYTES = 8 * 1024 ** 3;
+/**
+ * Split one prepared-file budget between the user's character and the baseline reference characters, so references can never
+ * evict the user's prepared V. The partitions sum to the chosen total; the references get an eighth of it, at most 256 MB.
+ * An unlimited budget (`off`) stays unlimited for both.
+ */
+export function preparedBudgetPartitions(total = PREPARED_BUDGET_BYTES): { character: number; reference: number } {
+  if (total === Infinity) return { character: Infinity, reference: Infinity };
+  if (!Number.isFinite(total) || total <= 0) throw Error("Invalid prepared-file budget.");
+  const reference = Math.min(256 * 1024 ** 2, total / 8);
+  return { character: total - reference, reference };
+}
 export type PreparedSize = { bytes: number; exports: number; resolver: number; store: number; manifests: number };
 
 /**

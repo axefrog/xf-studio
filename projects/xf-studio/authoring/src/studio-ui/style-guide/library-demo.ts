@@ -2,7 +2,7 @@
 import { badge, blockSection, button, setButtonLabel, setButtonVariant, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
   PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, Splitter, stack, TabStrip,
   Toggle, ColorField, applyCapability, openMenu, openValuePopover, openConfirmPopover, TreeView, favouriteToggle, FolderSetting, BipolarSlider, ScrubSlider, ChoiceList, choiceItem, attachSwatchCard, contrastMark, setContrastMark,
-  sampleBackground, LightList, DirectionDial, SizeBar, previewTile, previewStage, ScrollMemory, VIEW_KEY, stageTag, RecordList, recordTime, modLine, type LightListItem, type TabItem } from "../components";
+  sampleBackground, LightList, DirectionDial, SizeBar, previewTile, previewStage, ScrollMemory, VIEW_KEY, stageTag, RecordList, recordTime, modLine, type LightListItem, type TabItem, type TreeNodeData } from "../components";
 import { CONTRAST, contrastGain, enhanceSwatchSet, separationWeight } from "../../swatch-contrast";
 import { h } from "../dom";
 import { setUpdateLine } from "../update-check";
@@ -26,6 +26,37 @@ function header(width: number) {
   range.addEventListener("input", refit);
   requestAnimationFrame(refit);
   return stack({ gap: "normal" }, group, h("label", { class: "control-label" }, h("span", { text: "Group width" }), readout), range);
+}
+
+/** Recursive counterpart to the unchanged Poses specimen: selection, focus and hover remain independent. */
+function recursiveTree() {
+  const expanded = new Set(["structure", "front"]);
+  const nodes: readonly TreeNodeData[] = [
+    { id: "structure", label: "Structure", count: 112, selectable: false, children: [
+      { id: "front", label: "Front section", count: 64, swatch: "#aa7480", children: [
+        { id: "coverage", label: "Coverage layer", secondary: "40 cards", count: 40, swatch: "#aa7480" },
+        { id: "detail", label: "Detail layer", secondary: "fine strands", count: 24, swatch: "#cba3aa" },
+      ] },
+      { id: "back", label: "Back section", count: 48, swatch: "#6b91ae", children: () => [
+        { id: "back-coverage", label: "Coverage layer", count: 36, swatch: "#6b91ae" },
+        { id: "back-detail", label: "Detail layer", count: 12, swatch: "#a2bbcd" },
+      ] },
+      { id: "unavailable", label: "Imported layer", disabled: true, reason: "Choose a source mesh first." },
+    ] },
+    { id: "accessories", label: "Accessories", children: [{ id: "clip", label: "Clip" }] },
+  ];
+  let selected = "detail";
+  const names: Record<string, string> = { structure: "Structure", front: "Front section", coverage: "Coverage layer", detail: "Detail layer",
+    back: "Back section", "back-coverage": "Coverage layer", "back-detail": "Detail layer", unavailable: "Imported layer", accessories: "Accessories", clip: "Clip" };
+  const status = h("p", { class: "note", style: "min-height:3em", text: "Selected: Detail layer. Hover or focus a row to inspect it." });
+  const tree: TreeView = new TreeView({ label: "Sample structure", maxRows: 8, minRows: 8, remember: false,
+    onActivate: id => { selected = id; paint(); status.textContent = `Selected: ${names[selected]}.`; },
+    onToggle: (id, open) => { if (open) expanded.add(id); else expanded.delete(id); paint(); },
+    onHover: item => { status.textContent = item ? `Hover: ${names[item.id]}. Selected: ${names[selected]}.` : `Selected: ${names[selected]}.`; },
+    onFocus: item => { status.textContent = `Focus: ${names[item.id]}. Selected: ${names[selected]}.`; } });
+  const paint = () => tree.update({ nodes, expanded, selected });
+  paint();
+  return stack({ gap: "normal" }, tree.element, status);
 }
 
 const MOUNTS: Record<string, Mount> = {
@@ -224,7 +255,11 @@ const MOUNTS: Record<string, Mount> = {
     const paint = () => tree.update({ groups: groups(), expanded, current });
     paint();
     const search = new SearchField({ label: "Search sample poses", placeholder: "Search poses (Down moves into the list)", onFilter: () => {}, onArrowDown: () => tree.focus() });
-    return h("div", { style: "max-width:420px" }, stack({ gap: "normal" }, search.element, tree.element)); },
+    return h("div", { class: "row wrap gap-m", style: "align-items:flex-start" },
+      h("section", { "data-tree-example": "legacy", style: "flex:1 1 280px;min-width:0;max-width:480px" },
+        stack({ gap: "normal" }, h("h3", { class: "control-label", text: "Grouped rows · Poses" }), search.element, tree.element)),
+      h("section", { "data-tree-example": "recursive", style: "flex:1 1 280px;min-width:0;max-width:480px" },
+        stack({ gap: "normal" }, h("h3", { class: "control-label", text: "Nested nodes · Structure" }), recursiveTree()))); },
   "lib-size-bar": () => {
     // The Start from pattern: a tree that fits six rows by default; drag the bar (or focus it and press Down) to show more.
     const expanded = new Set(["saved", "natural"]);
