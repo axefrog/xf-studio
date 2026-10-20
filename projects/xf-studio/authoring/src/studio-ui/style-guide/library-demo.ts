@@ -34,8 +34,8 @@ function recursiveTree() {
   const nodes: readonly TreeNodeData[] = [
     { id: "structure", label: "Structure", count: 112, selectable: false, children: [
       { id: "front", label: "Front section", count: 64, swatch: "#aa7480", children: [
-        { id: "coverage", label: "Coverage layer", count: 40, swatch: "#aa7480" },
-        { id: "detail", label: "Detail layer", count: 24, swatch: "#cba3aa" },
+        { id: "coverage", label: "Coverage layer", secondary: "40 cards", count: 40, swatch: "#aa7480" },
+        { id: "detail", label: "Detail layer", secondary: "fine strands", count: 24, swatch: "#cba3aa" },
       ] },
       { id: "back", label: "Back section", count: 48, swatch: "#6b91ae", children: () => [
         { id: "back-coverage", label: "Coverage layer", count: 36, swatch: "#6b91ae" },

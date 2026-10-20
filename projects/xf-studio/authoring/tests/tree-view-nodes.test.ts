@@ -82,6 +82,25 @@ test("label selects a branch; chevron only discloses; nonselectable branches dis
   expect(f.item("group").hasAttribute("aria-selected")).toBe(false);
 });
 
+test("the whole chevron cell discloses, not just its icon; a double click on a selectable branch's label toggles it", async () => {
+  const f = await fixture([{ id: "a", label: "Alpha", children: [{ id: "b", label: "Beta" }] },
+    { id: "group", label: "Group", selectable: false, children: [{ id: "c", label: "Charlie" }] }, { id: "leaf", label: "Leaf" }]);
+  const cell = () => f.item("a").querySelector<HTMLElement>("[data-tree-disclosure]")!;
+  // Inside the cell but outside the 10 px icon: the click's target is the cell itself.
+  expect(cell().querySelector("svg")).not.toBeNull();
+  dispatch(cell(), "click"); expect(f.toggled).toEqual(["a:true"]); expect(f.activated).toEqual([]);
+  dispatch(cell().querySelector<HTMLElement>("svg")!, "click"); expect(f.toggled).toEqual(["a:true", "a:false"]);
+  // A double click on the label: the first click selects, the double click opens; a chevron double click adds no third toggle.
+  const label = () => f.item("a").querySelector<HTMLElement>(".tree-label")!;
+  label().click(); dispatch(label(), "dblclick"); expect(f.activated).toEqual(["a"]); expect(f.toggled.at(-1)).toBe("a:true");
+  dispatch(cell(), "click"); dispatch(cell(), "click"); dispatch(cell(), "dblclick"); expect(f.toggled.length).toBe(5);
+  // Leaves and disclosure-only branches: no double-click toggle (a disclosure-only branch toggles on each click already).
+  dispatch(f.item("leaf").querySelector<HTMLElement>(".tree-label")!, "dblclick");
+  dispatch(f.item("group").querySelector<HTMLElement>(".tree-label")!, "dblclick");
+  expect(f.toggled.length).toBe(5);
+  expect(f.item("leaf").querySelector("[data-tree-disclosure]")).toBeNull();
+});
+
 test("collapse returns descendant focus to its nearest surviving ancestor without changing selection", async () => {
   const f = await fixture([{ id: "a", label: "A", children: [{ id: "b", label: "B", children: [{ id: "c", label: "C" }] }] }], ["a", "b"], "c");
   f.tree.focus(); expect(focused()).toBe("c");
@@ -107,10 +126,18 @@ test("hover deduplicates movements within a row, clears on leave/collapse/abort,
 });
 
 test("metadata and swatch supplement the label; unique IDs are required, including across branches", async () => {
-  const f = await fixture([{ id: "a", label: "Coverage", secondary: "40 cards", count: 3, swatch: "#aabbcc" }]);
+  const f = await fixture([{ id: "a", label: "Coverage", secondary: "40 cards", count: 3, swatch: "#aabbcc", badges: [{ text: "New" }] },
+    { id: "one", label: "Single", count: 1 }, { id: "off", label: "Imported", disabled: true, reason: "Choose a source mesh first." }]);
   const el = f.item("a"), swatch = el.querySelector<HTMLElement>(".tree-swatch")!;
-  expect(el.getAttribute("aria-label")).toBe("Coverage, 40 cards, 3 items");
-  expect(el.title).toBe("Coverage, 40 cards"); expect(swatch.getAttribute("aria-hidden")).toBe("true");
+  // As grouped items: label, secondary text, count, then badges; the count pluralised.
+  expect(el.getAttribute("aria-label")).toBe("Coverage, 40 cards, 3 items, New");
+  expect(f.item("one").getAttribute("aria-label")).toBe("Single, 1 item");
+  // Tooltips as grouped rows: label · secondary where secondary text may be cut, the reason when disabled, else none.
+  expect(el.title).toBe("Coverage · 40 cards"); expect(f.item("one").hasAttribute("title")).toBe(false);
+  expect(f.item("off").title).toBe("Choose a source mesh first.");
+  // A swatch-less sibling reserves the swatch slot, so its label lines up.
+  expect(f.item("one").querySelector(".tree-swatch-slot")?.getAttribute("aria-hidden")).toBe("true");
+  expect(swatch.getAttribute("aria-hidden")).toBe("true");
   expect((swatch as unknown as LightElement).style.values.get("--swatch")).toBe("#aabbcc");
   expect(() => f.tree.update({ nodes: [{ id: "a", label: "A" }, { id: "a", label: "Again" }], expanded: new Set() })).toThrow("unique");
 });

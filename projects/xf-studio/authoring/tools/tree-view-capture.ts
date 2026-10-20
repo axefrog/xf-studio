@@ -63,6 +63,9 @@ try {
           swatch:rect(get('coverage').querySelector('.tree-swatch')), overflow:host.scrollWidth>host.clientWidth,
           emptyFocusStops:rows.filter(el=>el.tabIndex===0).length,
           indents:['structure','front','coverage'].map(id=>parseFloat(getComputedStyle(get(id)).paddingLeft)),
+          siblingLabels:['front','back','unavailable'].map(id=>get(id).querySelector('.tree-label').getBoundingClientRect().left),
+          secondaryVisible:getComputedStyle(get('coverage').querySelector('.tree-secondary')).display!=='none',
+          disclosure:rect(get('back').querySelector('[data-tree-disclosure]')),
         };
       })()`);
       const m = measured as any;
@@ -74,6 +77,9 @@ try {
       assert(m.countFontMatches, "Recursive numeric metadata differs from the grouped count style");
       assert(m.metadataVisible && m.swatch.width === 12 && m.swatch.height === 12 && !m.overflow && m.emptyFocusStops === 1, "Narrow row metadata, swatch or tab stops regressed");
       assert(JSON.stringify(m.indents) === "[8,24,40]", "Depth indentation differs from the guide");
+      assert(new Set(m.siblingLabels).size === 1, "Sibling labels don't line up (swatch slot not reserved)");
+      assert(m.secondaryVisible, "Recursive secondary text hidden at this width");
+      assert(m.disclosure.width >= 24 && m.disclosure.height === 28, "Disclosure cell smaller than 24 px × row height");
       const ax = await page.send<any>("Accessibility.getFullAXTree");
       const tree = ax.nodes.find((n: any) => n.role?.value === "tree" && n.name?.value === "Sample structure");
       const items = ax.nodes.filter((n: any) => !n.ignored && n.role?.value === "treeitem");
@@ -86,6 +92,12 @@ try {
       checks.push({ ...m, accessibleHierarchy: "Structure > group > Front section > group > Coverage layer" });
     }
     await page.screenshot(join(out, `atlas-tree-${before ? "before" : "after"}-${theme}-${width}.png`));
+    if (!before) {
+      // The disclosure cell's own hover fill: the pointer on Back section's chevron cell, outside its 10 px icon.
+      const cell = (checks.at(-1) as any).disclosure as { x: number; y: number; width: number; height: number };
+      await page.mouse("mouseMoved", cell.x + 3, cell.y + cell.height / 2);
+      await page.screenshot(join(out, `atlas-tree-after-${theme}-${width}-chevron-hover.png`));
+    }
   }
   assert(!page.console.some(entry => entry.type === "exception" || entry.type === "error"), "Guide runtime error");
   writeFileSync(join(out, "measurements.json"), JSON.stringify(checks, null, 2));

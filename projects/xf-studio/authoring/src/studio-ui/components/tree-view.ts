@@ -7,7 +7,9 @@ import type { ScrollAnchor } from "../../ui-preferences";
 
 /**
  * Tree view (style guide "Tree view"): legacy groups of rows, or recursive `nodes`, virtualised for thousands of visible rows.
- * Recursive nodes select on label click/Enter/Space; their chevron and Left/Right disclose children. Owners hold selection/expansion.
+ * Recursive nodes select on label click/Enter/Space; their chevron cell (a 24 px × row-high target), a double click on a selectable
+ * branch's label and Left/Right disclose children. Owners hold selection/expansion. When any sibling has a swatch, every sibling
+ * reserves its slot, so labels line up.
  * Child providers are synchronous snapshot projections, called once per expanded node per update, never for collapsed descendants.
  * Hover/focus report item references without selecting. The same row height, states and sizing serve both input forms.
  *
@@ -44,9 +46,9 @@ import type { ScrollAnchor } from "../../ui-preferences";
  *   message at the top of the tree), search-match highlight ranges per label.
  * - **Access:** explicit `aria-level`, `aria-setsize` and `aria-posinset` support virtualisation. Recursive branches own a `role=group`
  *   owning their rendered children; ancestors remain rendered. Selectable items declare `aria-selected` independently of focus.
- *   Legacy secondary text still hides below 320 px; recursive short metadata stays visible. Full recursive text remains in tooltips
- *   and accessible names. Swatches are decorative; labels must identify the item without colour.
- *   Groups carry `aria-expanded`. Each item's name is its label, secondary text and badges as text; a trailing action (a favourite
+ *   Legacy secondary text still hides below 320 px; recursive short metadata stays visible. Recursive nodes take tooltips as grouped rows do (label ·
+ *   secondary text, or the disabled reason); the accessible name always carries the full text. Swatches are decorative; labels must identify the item without colour.
+ *   Groups carry `aria-expanded`. Each item's name is its label, secondary text, count ("1 item", "n items") and badges as text; a trailing action (a favourite
  *   toggle) is outside the name, reached by the pointer or the owner's key binding, never by Tab. The loading status and the empty
  *   message sit beside the tree, never inside it, so the tree holds only its items.
  */
@@ -108,7 +110,9 @@ export const TREE_ROW_HEIGHT = 28;
 export const treeHeightWords = (height: number, isDefault = false) => rowWords(height, TREE_ROW_HEIGHT, isDefault);
 const OVERSCAN = 8;
 type Flat = { ref: TreeItemRef; group?: TreeGroupData; row?: TreeRowData; node?: TreeNodeData; parent?: string;
-  branch: boolean; open: boolean; level: number; setsize: number; posinset: number; ident: string; key: string };
+  branch: boolean; open: boolean; level: number; setsize: number; posinset: number; ident: string; key: string;
+  /** A sibling has a swatch: this item reserves the swatch slot, so sibling labels line up. */
+  swatchSlot?: boolean };
 /** An item's identity: its kind and ID (a group and a row may share an ID). */
 const identOf = (kind: TreeItemRef["kind"], id: string) => `${kind === "group" ? "g" : kind === "node" ? "n" : "r"}:${id}`;
 let treeSequence = 0;
@@ -148,6 +152,7 @@ export class TreeView {
     this.tree.addEventListener("scroll", () => { cancelAnimationFrame(this.frame); this.frame = requestAnimationFrame(() => this.paint()); }, listen);
     this.element.addEventListener("keydown", event => this.key(event), listen);
     this.element.addEventListener("click", event => this.click(event), listen);
+    this.element.addEventListener("dblclick", event => this.doubleClick(event), listen);
     this.element.addEventListener("pointerover", event => this.hover(this.itemOf(event.target)), listen);
     this.element.addEventListener("pointerout", event => this.hover(this.itemOf(event.relatedTarget)), listen);
     // A taller tree shows more rows at once (UI-118): paint whenever its size changes, not only on updates and scrolling.
@@ -192,23 +197,23 @@ export class TreeView {
     const recursive = !!state.nodes, flat: Flat[] = [];
     if (state.nodes) {
       const seen = new Set<string>();
-      const visit = (nodes: readonly TreeNodeData[], level: number, parent?: Flat) => nodes.forEach((node, index) => {
+      const visit = (nodes: readonly TreeNodeData[], level: number, parent?: Flat) => { const swatchSlot = nodes.some(node => node.swatch); nodes.forEach((node, index) => {
         if (seen.has(node.id)) throw Error(`Tree node IDs must be unique: ${node.id}`);
         seen.add(node.id);
         const branch = typeof node.children === "function" || !!node.children?.length, open = branch && state.expanded.has(node.id);
         const item: Flat = { ref: { kind: "node", id: node.id, group: parent?.ref.id ?? node.id, ...(parent ? { parent: parent.ref.id } : {}) },
-          node, parent: parent?.ident, branch, open, level, setsize: nodes.length, posinset: index + 1, ident: identOf("node", node.id), key: "" };
+          node, parent: parent?.ident, branch, open, level, setsize: nodes.length, posinset: index + 1, ident: identOf("node", node.id), key: "", swatchSlot };
         flat.push(item);
         if (open) visit(typeof node.children === "function" ? node.children() : node.children!, level + 1, item);
-      });
+      }); };
       visit(state.nodes, 1);
     } else {
       const shown = state.groups!.filter(group => group.rows.length);
       shown.forEach((group, gi) => {
-        const open = state.expanded.has(group.id), ident = identOf("group", group.id);
+        const open = state.expanded.has(group.id), ident = identOf("group", group.id), swatchSlot = group.rows.some(row => row.swatch);
         flat.push({ ref: { kind: "group", id: group.id, group: group.id }, group, branch: true, open, level: 1, setsize: shown.length, posinset: gi + 1, ident, key: "" });
         if (open) group.rows.forEach((row, ri) => flat.push({ ref: { kind: "row", id: row.id, group: group.id }, group, row, parent: ident, branch: false, open: false, level: 2,
-          setsize: group.rows.length, posinset: ri + 1, ident: identOf("row", row.id), key: "" }));
+          setsize: group.rows.length, posinset: ri + 1, ident: identOf("row", row.id), key: "", swatchSlot }));
       });
     }
     this.recursive = recursive; this.current = state.current; this.selected = recursive ? state.selected ?? state.current : undefined;
@@ -217,7 +222,7 @@ export class TreeView {
       // Children/providers are intentionally excluded: collapsed data is never serialised or traversed.
       const data = item.node ? (({ children, ...row }) => row)(item.node) : item.row ?? { ...item.group, rows: item.group!.rows.length };
       item.key = JSON.stringify([data, item.branch, item.open, item.node ? item.ref.id === this.selected : item.row?.id === state.current,
-        item.level, item.setsize, item.posinset]);
+        item.level, item.setsize, item.posinset, !!item.swatchSlot]);
     }
     if (this.hovered && !flat.some(item => item.ident === this.hovered)) this.hover();
     let refocus = false;
@@ -397,8 +402,9 @@ export class TreeView {
   private build(item: Flat): HTMLElement {
     const badges = (list?: readonly TreeBadge[]) => (list ?? []).map(badge => h("span", { class: `badge ${badge.tone ?? "neutral"}`, text: badge.text }));
     const name = (parts: (string | undefined)[]) => parts.filter(Boolean).join(", ");
+    // A swatch, else (when a sibling has one) an empty slot of the same size, so sibling labels line up.
     const swatch = (colour?: string) => {
-      if (!colour) return null;
+      if (!colour) return item.swatchSlot ? h("span", { class: "tree-swatch-slot", "aria-hidden": "true" }) : null;
       const sample = h("span", { class: "swatch tree-swatch", "aria-hidden": "true" }); sample.style.setProperty("--swatch", colour); return sample;
     };
     if (item.node) {
@@ -409,8 +415,11 @@ export class TreeView {
         id: this.idOf(item.ident), role: "treeitem", "data-id": node.id, "data-kind": "node", "aria-level": String(item.level),
         "aria-setsize": String(item.setsize), "aria-posinset": String(item.posinset), "aria-expanded": item.branch ? String(item.open) : undefined,
         "aria-selected": node.selectable !== false ? String(selected) : undefined, "aria-disabled": node.disabled ? "true" : undefined,
-        "aria-description": node.disabled ? node.reason : undefined, title: node.disabled ? node.reason : name([node.label, node.secondary]),
-        "aria-label": name([node.label, node.secondary, ...(node.badges ?? []).map(b => b.text), node.count === undefined ? undefined : `${node.count} items`]) },
+        // As grouped rows: the tooltip holds the full text only where the secondary text may be cut, or the reason a node is disabled.
+        "aria-description": node.disabled ? node.reason : undefined, title: node.disabled ? node.reason : node.secondary ? `${node.label} · ${node.secondary}` : undefined,
+        // As grouped items: label, secondary text, count, then badges.
+        "aria-label": name([node.label, node.secondary, node.count === undefined ? undefined : `${node.count} item${node.count === 1 ? "" : "s"}`,
+          ...(node.badges ?? []).map(b => b.text)]) },
         disclosure, swatch(node.swatch), this.label(node.label, node.highlight), node.secondary ? h("span", { class: "tree-secondary", text: node.secondary }) : null,
         ...badges(node.badges), node.count === undefined ? null : h("span", { class: "tree-count", text: String(node.count) }));
       element.style.setProperty("--tree-depth", String(item.level - 1));
@@ -458,6 +467,12 @@ export class TreeView {
       } else if (!item.node.disabled) this.options.onActivate(item.ref.id);
     } else if (item.branch) this.options.onToggle(item.ref.id, !item.open);
     else if (!item.row!.disabled) this.options.onActivate(item.ref.id);
+  }
+  /** A double click on a selectable branch's label (the first click selected it) opens or closes it too; the chevron toggles on each click. */
+  private doubleClick(event: MouseEvent) {
+    if (this.lifetime.signal.aborted || !(event.target instanceof Element) || event.target.closest("[data-tree-disclosure], .tree-trailing")) return;
+    const item = this.itemOf(event.target);
+    if (item?.node && item.branch && item.node.selectable !== false) this.options.onToggle(item.ref.id, !item.open);
   }
   private key(event: KeyboardEvent) {
     if (this.lifetime.signal.aborted) return;

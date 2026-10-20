@@ -4,7 +4,7 @@ The library's TreeView accepts arbitrary-depth `nodes` alongside its existing `g
 
 ## Integration
 
-Import `TreeView`, `TreeNodeData` and `TreeItemRef` from `studio-ui/components`. Supply a controlled snapshot; no feature-specific code was added to the component or existing callers.
+Import `TreeView`, `TreeNodeData` and `TreeItemRef` from `studio-ui/components`. Supply a controlled snapshot; no feature-specific code was added to the component, and no existing caller was edited.
 
 ```ts
 const controller = new AbortController();
@@ -37,16 +37,17 @@ Node IDs must be stable and globally unique within one recursive tree. Callbacks
 | --- | --- | --- |
 | Label click, Enter | Select, through `onActivate`; disabled nodes never activate | Whole group toggles; leaf activates immediately |
 | Space | Select; a disclosure-only branch toggles | Whole group toggles; leaf unchanged |
-| Chevron click | Toggle branch without selecting | Whole group toggles |
+| Chevron cell click (24 px × row-high target around the 10 px icon) | Toggle branch without selecting | Whole group toggles |
+| Label double click | Selectable branch: the first click selects, the double click toggles; leaves and disclosure-only branches unchanged | Unchanged |
 | Right | Open branch; otherwise enter its first visible child | Same existing behaviour |
 | Left | Close branch; otherwise focus parent | Same existing behaviour |
 | Up/Down, Home/End | Move focus through visible nodes without selecting | Unchanged |
 | Letter | Next matching visible label, wrapping | Existing single-letter type-ahead retained |
 | Hover/focus | Notify independently of selection; hover clears on leave, collapse, virtual eviction and cancellation | Same additive callbacks available |
 
-Both production call sites were checked: [Poses](../../projects/xf-studio/authoring/src/features/poses/view/panel.ts) retains immediate pose activation, group toggling, favourite actions and its key override; the [expression drawer](../../projects/xf-studio/authoring/src/features/expressions/view/drawer.ts) retains immediate start-from activation, remembered groups, F2/Delete and menus. Neither file was edited.
+Both production call sites were checked: [Poses](../../projects/xf-studio/authoring/src/features/poses/view/panel.ts) retains immediate pose activation, group toggling, favourite actions and its key override; the [expression drawer](../../projects/xf-studio/authoring/src/features/expressions/view/drawer.ts) retains immediate start-from activation, remembered groups, F2/Delete and menus. Neither file was edited, but their rows change in one respect: grouped rows now carry `aria-selected` (true on the current row), so screen readers announce selection on Poses and Start from rows. Their visible rendering is unchanged.
 
-Recursive rows use the existing 28 px height, 16 px depth increment, neutral hover, cyan selection and inset 2 px keyboard focus ring. A 12 px decorative swatch supplements the text. Short recursive metadata remains visible at narrow widths; legacy secondary text retains its existing narrow-width hiding rule. Tooltips and accessible names retain the full recursive text. Explicit counts stay separate from secondary text.
+Recursive rows use the existing 28 px height, 16 px depth increment, neutral hover, cyan selection and inset 2 px keyboard focus ring. A 12 px decorative swatch supplements the text; when any sibling has one, every sibling reserves the slot, so a swatch-less sibling's label lines up. Short recursive metadata remains visible at narrow widths, left-aligned after the label as in grouped rows; legacy secondary text retains its existing narrow-width hiding rule (below 320 px). Tooltips follow the grouped rule: label · secondary text where the secondary text may be cut, or the disabled reason. Accessible names follow the grouped order: label, secondary text, count ("1 item", "n items"), badges. Explicit counts stay separate from secondary text.
 
 The component keeps only viewport rows, overscan, focus and the ancestors needed to describe that hierarchy. `aria-level`, `aria-setsize` and `aria-posinset` describe the complete visible snapshot even when siblings are virtualised. Recursive branches own `role=group` elements that own their rendered direct children; `aria-expanded` appears only on branches and `aria-selected` only on selectable items. This follows the [W3C WAI-ARIA tree view pattern](https://www.w3.org/WAI/ARIA/apg/patterns/treeview/) (consulted 17 October 2026). The visual rows remain positioned in the same spacer as legacy trees. Collapsing a focused descendant returns focus to the nearest surviving ancestor. Browser accessibility-tree checks supplement DOM attribute tests; they do not replace testing with screen readers.
 
@@ -56,10 +57,11 @@ The new [behaviour tests](../../projects/xf-studio/authoring/tests/tree-view-nod
 
 [The capture tool](../../projects/xf-studio/authoring/tools/tree-view-capture.ts) opens only the self-contained guide at an ephemeral loopback `?verify=1` address. It starts no Studio server and reads no settings, drafts or game assets. Run it under the 2 GB memory guard. It measures row heights, indents, metadata visibility, swatch dimensions, overflow, roving focus and actual browser accessibility ownership, and saves light and dark screenshots per panel width (`--widths`, default 300 and 480 px). Pass an optional baseline guide HTML (for example `main`'s `public/style-guide.html`) to capture before views as well. Outputs stay in the ignored `evidence/screenshots/` tree. The helper uses a throwaway headless profile with the GPU disabled, and disables Chrome's sandbox for this local, asset-free page because the sandboxed process crashed inside the Windows memory-guard job; no product or browser defaults change. It has a 120 s deadline and closes only its own browser and server.
 
-| Check (port onto `main`, 21 October 2026) | Result |
+| Check (port onto `main`, 21 October 2026, after the UI review's fix list) | Result |
 | --- | --- |
-| Targeted regression suite | 173 passed, 0 failed across 19 files: TreeView, components, style guide, Poses, Expressions, dock, experiments, browser build and architecture boundary. |
-| Headless Chrome, 390/1280 px × light/dark | Four cases passed with the measurements above (28 px rows; 8/24/40 px indents; 12 px swatches; narrow metadata visible; one tab stop; no overflow; three accessible levels). |
-| Grouped callers, before and after | The style guide's grouped Poses specimen and the expression drawer's Start from tree (isolated `?verify=1` workspace, 390 and 1280 px floating panels, both themes) render the same before and after; the drawer captures are byte-identical. |
+| TreeView behaviour tests | Disclosure by the whole chevron cell (not only its icon), label double click on selectable branches only, pluralised counts in grouped order, grouped tooltip rule, reserved swatch slots. |
+| Browser geometry (headless Chrome, real `studio.css`) | The disclosure cell is at least 24 px wide and 28 px high around a 10 px icon; a real hit test 2 px inside its edge lands on the cell, not the icon, and the click toggles the branch; a swatch-less sibling's label starts where its swatched siblings' labels do. |
+| Headless guide captures, 300/480 px (and 1280 px) × light/dark | All cases pass the tool's checks above plus aligned sibling labels, visible recursive secondary text and the cell's size. At 300 px the grouped specimen's secondary text hides (the under-320 px rule) while recursive secondary text stays. Separate captures show the cell's hover fill. |
+| Grouped callers, before and after | The style guide's grouped Poses specimen and the expression drawer's Start from tree (isolated `?verify=1` workspace, 390 and 1280 px floating panels, both themes) render the same before and after; the drawer captures (re-taken after the fix list) are pixel-identical to `main`'s. |
 
 The earlier review on the Hair Lab branch also ran a mechanical UI detector ([Impeccable](https://github.com/pbakaus/impeccable)), whose generic warnings about existing accent borders don't override the Studio guide's selection and focus rules, and found the nested counts needed the grouped count face, which the specimen's `count` now uses. Screenshot checks do not cover a screen reader session, extremely deep indentation in a very narrow panel, or feature integration.
