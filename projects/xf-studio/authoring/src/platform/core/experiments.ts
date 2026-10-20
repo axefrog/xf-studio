@@ -31,6 +31,8 @@ export async function createExperiments<T extends ExperimentRegistration>(option
   const existing = preferenceRef();
   const flags = env.seed<Record<string, boolean>>({ initial: existing ? graph.resolve(existing, ["flags"]) as Record<string, boolean> : {}, signal: life.signal });
   const states = env.seed<Record<string, { phase: ExperimentState["phase"]; message: string }>>({ initial: {}, signal: life.signal });
+  // Per-experiment save problems, shown instead of the load message until a later save of that experiment succeeds.
+  const saveErrors = env.seed<Record<string, string>>({ initial: {}, signal: life.signal });
   const updates = env.seed<number>({ initial: 0, signal: life.signal });
   const registrations = new Map<string, { life: Aborter; contribution?: T }>(); // Adapter runtimes, keyed by experiment request.
   const effective = (id: string) => options.overrides[id] ?? flags.value()?.[id] ?? false;
@@ -74,12 +76,13 @@ export async function createExperiments<T extends ExperimentRegistration>(option
     context,
     history,
     snapshot: () => definitions.map(info => ({ id: info.id, label: info.label, description: info.description, enabled: effective(info.id), overridden: info.id in options.overrides,
-      phase: states.value()?.[info.id]?.phase ?? "off", message: states.value()?.[info.id]?.message ?? "" })),
+      phase: states.value()?.[info.id]?.phase ?? "off", message: saveErrors.value()?.[info.id] || states.value()?.[info.id]?.message || "" })),
     registrations: () => [...registrations.values()].flatMap(r => r.contribution ? [r.contribution] : []),
     async set(id, enabled) {
       if (!definitions.some(d => d.id === id) || typeof enabled !== "boolean") return { ok: false, message: "That experiment isn't available." };
       if (id in options.overrides) return { ok: false, message: "This verification page fixes that experiment setting. Open a page without the override to change it." };
       const before = flags.value()!;
+      let committed = false;
       try {
         let ref = preferenceRef();
         if (!ref) {
@@ -88,16 +91,23 @@ export async function createExperiments<T extends ExperimentRegistration>(option
         }
         const result = graph.commit([{ op: "set", node: ref, path: ["flags", id], value: enabled }], { scope: "experiment-settings", action: "experiment.set" });
         if (!result.ok) throw Error(result.message);
+        committed = true;
         env.observe(flags, { ...before, [id]: enabled });
-        await graph.flush(); return { ok: true };
+        await graph.flush();
+        env.observe(saveErrors, { ...saveErrors.value(), [id]: "" });
+        return { ok: true };
       } catch {
-        env.observe(flags, before); publish(id, "failed", "Couldn't save this experimental setting. Try again.");
-        return { ok: false, message: "Couldn't save this experimental setting. Try again." };
+        // The store may have written before its acknowledgement failed: keep the graph's accepted truth rather than rolling back behind it.
+        const message = committed ? "This change applies for this session, but Studio couldn't confirm saving it. Try again."
+          : "Couldn't change this experimental setting. Try again.";
+        if (committed) { const ref = preferenceRef(); if (ref) env.observe(flags, graph.resolve(ref, ["flags"]) as Record<string, boolean>); }
+        env.observe(saveErrors, { ...saveErrors.value(), [id]: message });
+        return { ok: false, message };
       }
     },
     subscribe(listener) {
       const subscription = new Aborter(life.signal);
-      const driver = env.driver({ name: "Observe experiments", start(run) { run.effect({ inputs: [flags, states, updates], run: () => listener() }); } }, undefined, subscription.signal);
+      const driver = env.driver({ name: "Observe experiments", start(run) { run.effect({ inputs: [flags, states, updates, saveErrors], run: () => listener() }); } }, undefined, subscription.signal);
       driver.start(subscription.signal); return () => subscription.abort();
     },
   };

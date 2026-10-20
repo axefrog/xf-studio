@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { Aborter, MemoryStore } from "strata";
 import { Scheduler, seededRandom, simClock, settle } from "strata/testing";
 import { createExperiments, startExperiments } from "../src/platform/core/experiments";
@@ -19,4 +19,15 @@ test("read-only startup creates no preference node; repeated sets retain one ide
   const port=await createExperiments({definitions:[definition],overrides:{},sources:sources(),store,signal:life.signal});
   expect(port.context.graph.list()).toEqual([]);await port.set('sample',false);await port.set('sample',false);await settle();
   expect(port.context.graph.list().filter(r=>r.type==='experimental-features')).toHaveLength(1);life.abort();
+});
+test("a lost save acknowledgement never rolls accepted preferences back behind the store",async()=>{
+  const life=new Aborter(),memory=new MemoryStore();
+  const port=await createExperiments({definitions:[definition],overrides:{},sources:sources(),store:memory,signal:life.signal});
+  const flush=port.context.graph.flush.bind(port.context.graph);
+  // Lose the acknowledgement after persistence completed, without simulating an endless retry clock.
+  const acknowledgement=spyOn(port.context.graph,'flush').mockImplementation(async()=>{await flush();throw Error('acknowledgement lost');});
+  expect((await port.set('sample',true)).ok).toBe(false);expect(port.snapshot()[0].enabled).toBe(true);expect(port.snapshot()[0].message).toContain('confirm');
+  const ref=port.context.graph.list().find(r=>r.type==='experimental-features')!;expect(port.context.graph.resolve(ref,['flags','sample'])).toBe(true);
+  acknowledgement.mockRestore();await port.set('sample',true);expect(port.snapshot()[0].enabled).toBe(true);life.abort();
+  const nextLife=new Aborter(),next=await createExperiments({definitions:[definition],overrides:{},sources:sources(),store:memory,signal:nextLife.signal});expect(next.snapshot()[0].enabled).toBe(true);nextLife.abort();
 });
