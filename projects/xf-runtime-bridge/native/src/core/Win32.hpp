@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <string_view>
 
@@ -33,7 +34,10 @@ std::filesystem::path RuntimeDirectory();
 bool WriteFileAtomic(const std::filesystem::path& aPath, std::string_view aContent, std::string& aError);
 
 // 0.8.3: a file's SHA-256 as lowercase hex (BCrypt), read in 1 MB pieces; files over aMaxBytes are refused.
-bool FileSha256(const std::filesystem::path& aPath, std::string& aHex, std::string& aError, uint64_t aMaxBytes = 512ull * 1024 * 1024);
+// aCancelled (0.8.3, the review) is asked before each megabyte; answering true stops the hash ("cancelled"), and it may
+// also throw, which is passed on after the handles are closed.
+bool FileSha256(const std::filesystem::path& aPath, std::string& aHex, std::string& aError, uint64_t aMaxBytes = 512ull * 1024 * 1024,
+                const std::function<bool()>& aCancelled = {});
 
 std::string LastErrorText(uint32_t aError);
 std::string UtcNowIso8601();

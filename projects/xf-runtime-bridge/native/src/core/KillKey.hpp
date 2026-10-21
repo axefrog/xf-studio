@@ -39,14 +39,19 @@ bool Parse(const std::string& aText, Chord& aOut, std::string& aError);
 // F5, F9 and Home), for the load log's warning: such a key also does its game action when it stops the bridge.
 bool GameBinds(int aVk);
 
-// The press detection: Poll answers true once when the chord goes down (its key and every modifier it names), never again
-// until the key has been let go. Extra modifiers held don't stop it.
+// The press detection: Poll answers true once when the chord goes down (its key and every modifier it names) while the watch
+// is armed, never again until the key has been let go. Extra modifiers held don't stop it. 0.8.3 (the review: a focus change
+// made a press): while not armed (the game's window not in front, CET's overlay open, the bridge stopped) the keyboard isn't
+// read, and once armed again a press counts only after the chord has been seen released, so holding the key elsewhere and
+// coming back fires nothing. aStillArmed is asked right before answering true (the plugin checks the window and CET's overlay
+// again); a press it refuses is used up, as if it had fired.
 class Watch
 {
 public:
-    bool Poll(const Chord& aChord, const std::function<bool(int)>& aIsDown);
+    bool Poll(const Chord& aChord, bool aArmed, const std::function<bool(int)>& aIsDown, const std::function<bool()>& aStillArmed = {});
 
 private:
     bool m_wasDown = false;
+    bool m_needRelease = true;
 };
 } // namespace xfb::killkey

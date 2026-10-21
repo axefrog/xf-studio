@@ -1095,14 +1095,18 @@ public class XFInkOverlay extends ScriptableSystem {
       this.m_pinMarks[i].SetVisible(false);
       i += 1;
     }
-    // 0.8.3: a pin whose mark wasn't placed this tick (behind the camera, too far, off the screen) says so in ui.state.
-    let registry = XFPinRegistry.Get();
-    if IsDefined(registry) {
-      for entry in registry.Pins() {
-        if !entry.markPlacedNow {
-          entry.markShown = false;
+    // 0.8.3: a pin whose mark wasn't placed this tick (behind the camera, too far, off the screen) says so in ui.state. Only
+    // while the scripts are live (the review: the registry is a scriptable system of the session, and no game system is asked
+    // once a load has begun); otherwise only this overlay's own widgets were touched above (hidden).
+    if IsDefined(frame) && frame.live {
+      let registry = XFPinRegistry.Get();
+      if IsDefined(registry) {
+        for entry in registry.Pins() {
+          if !entry.markPlacedNow {
+            entry.markShown = false;
+          }
+          entry.markPlacedNow = false;
         }
-        entry.markPlacedNow = false;
       }
     }
   }

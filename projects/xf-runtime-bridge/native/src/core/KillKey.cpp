@@ -169,16 +169,27 @@ bool GameBinds(int aVk)
     return aVk == 0x70 || aVk == 0x72 || aVk == 0x73 || aVk == 0x74 || aVk == 0x78 || aVk == 0x24;
 }
 
-bool Watch::Poll(const Chord& aChord, const std::function<bool(int)>& aIsDown)
+bool Watch::Poll(const Chord& aChord, bool aArmed, const std::function<bool(int)>& aIsDown, const std::function<bool()>& aStillArmed)
 {
-    if (!aChord.enabled || !aIsDown)
+    if (!aChord.enabled || !aArmed || !aIsDown)
     {
-        m_wasDown = false;
+        // Disarmed: nothing is read, and the next armed press needs a release first.
+        m_needRelease = true;
+        m_wasDown = true;
         return false;
     }
     const bool down = aIsDown(aChord.vk) && (!aChord.ctrl || aIsDown(0x11)) && (!aChord.shift || aIsDown(0x10)) && (!aChord.alt || aIsDown(0x12));
+    if (m_needRelease)
+    {
+        if (!down)
+        {
+            m_needRelease = false;
+            m_wasDown = false;
+        }
+        return false;
+    }
     const bool pressed = down && !m_wasDown;
     m_wasDown = down;
-    return pressed;
+    return pressed && (!aStillArmed || aStillArmed());
 }
 } // namespace xfb::killkey

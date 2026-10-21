@@ -7,6 +7,7 @@
 
 #include <chrono>
 #include <cstdio>
+#include <exception>
 #include <vector>
 
 namespace xfb::win32
@@ -108,7 +109,8 @@ std::filesystem::path ModuleDirectory(const void* aAddressInModule)
     return std::filesystem::path(buffer).parent_path();
 }
 
-bool FileSha256(const std::filesystem::path& aPath, std::string& aHex, std::string& aError, uint64_t aMaxBytes)
+bool FileSha256(const std::filesystem::path& aPath, std::string& aHex, std::string& aError, uint64_t aMaxBytes,
+                const std::function<bool()>& aCancelled)
 {
     std::error_code ec;
     const auto size = std::filesystem::file_size(aPath, ec);
@@ -138,8 +140,25 @@ bool FileSha256(const std::filesystem::path& aPath, std::string& aHex, std::stri
         ok = false;
     }
     std::vector<unsigned char> buffer(1024 * 1024);
+    std::exception_ptr thrown;
     while (ok)
     {
+        try
+        {
+            if (aCancelled && aCancelled())
+            {
+                aError = "cancelled";
+                ok = false;
+                break;
+            }
+        }
+        catch (...)
+        {
+            thrown = std::current_exception();
+            aError = "cancelled";
+            ok = false;
+            break;
+        }
         DWORD read = 0;
         if (!ReadFile(handle, buffer.data(), static_cast<DWORD>(buffer.size()), &read, nullptr))
         {
@@ -167,6 +186,10 @@ bool FileSha256(const std::filesystem::path& aPath, std::string& aHex, std::stri
         BCryptDestroyHash(hash);
     }
     BCryptCloseAlgorithmProvider(algorithm, 0);
+    if (thrown)
+    {
+        std::rethrow_exception(thrown);
+    }
     if (!ok)
     {
         if (aError.empty())

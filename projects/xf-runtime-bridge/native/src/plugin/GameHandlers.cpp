@@ -2008,7 +2008,8 @@ void RegisterMethods(Dispatcher& aDispatcher)
                           [](const MethodContext& aContext) {
                               params::RequireOnly(aContext.params, {});
                               const auto game = win32::ProcessImagePath().parent_path().parent_path().parent_path();
-                              return showroom::StagedShowrooms(game / L"archive" / L"pc" / L"mod");
+                              // 0.8.3 (the review): stops as soon as the bridge stops or is killed (both close its queue).
+                              return showroom::StagedShowrooms(game / L"archive" / L"pc" / L"mod", [] { return Get().queue.IsClosed(); });
                           }});
     aDispatcher.Register({"showroom.state", Access::Read, RunOn::GameThread,
                           "The XF Finish Showroom heads and light rigs the bridge spawned, where they are and whether they are in.", &ShowroomState});

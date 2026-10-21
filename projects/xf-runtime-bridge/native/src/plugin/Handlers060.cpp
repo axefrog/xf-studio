@@ -357,12 +357,47 @@ json PlayerLook(const MethodContext& aContext)
     bool stopped = false;
     std::string tookOver;
     const auto started = std::chrono::steady_clock::now();
+    // 0.8.3 (the review: mouse movement broke one short look-at, and the next step started another): a smooth look watches
+    // the player's own input with the same watch a glide and behave.look use (XFPlayer.WatchInput, read by XFPlayer.Where),
+    // checks it before every step and while it waits, and switches it off on every way out.
+    struct InputWatch
+    {
+        std::string cid;
+        bool on = false;
+        ~InputWatch()
+        {
+            if (!on)
+            {
+                return;
+            }
+            try
+            {
+                const auto id = cid;
+                Game([id] {
+                    bool off = false;
+                    return ScriptCall("XFPlayer", "WatchInput", {"Bool"}, {&off}, id);
+                }, "player.look.unwatch");
+            }
+            catch (...)
+            {
+                // the queue closed (the kill switch, which removes the watch itself) or the game didn't answer
+            }
+        }
+    } watch{cid};
+    const auto inputSeen = [&cid]() -> std::string {
+        return Game([cid] { return ScriptCall("XFPlayer", "Where", {}, {}, cid); }, "player.where").value("took_over", std::string());
+    };
     if (request.smooth)
     {
+        Game([cid] {
+            bool on = true;
+            return ScriptCall("XFPlayer", "WatchInput", {"Bool"}, {&on}, cid);
+        }, "player.look.watch");
+        watch.on = true;
         // 0.8.3 (session 10's L2a: a five-second look took 1.5 s; the game's own look-at keeps its own pace): steered along the
         // eased great-circle arc with a short look-at to the next place every kLookArcStepS, as behave.look is (0.8.2), so it
-        // takes duration_s. The view only ever comes closer to the point, so drifting more than 4 degrees wider than the
-        // closest it came means the player's mouse or stick turned it: the look ends there (took_over camera_drift).
+        // takes duration_s. Before every step after the first: player.stop, the player's own input (took_over: the action),
+        // and the camera's drift (more than 4 degrees wider than the closest it came: camera_drift) each end it there.
         const Vec3 from = player::DirectionOf(yaw0, pitch0);
         Vec3 to{target.point[0] - camPos[0], target.point[1] - camPos[1], target.point[2] - camPos[2]};
         const double n = std::max(1e-6, std::hypot(to[0], to[1], to[2]));
@@ -370,34 +405,39 @@ json PlayerLook(const MethodContext& aContext)
         double closest = -1.0;
         for (int step = 1;; ++step)
         {
+            if (step > 1)
+            {
+                std::this_thread::sleep_until(started + std::chrono::milliseconds(static_cast<int>((step - 1) * player::kLookArcStepS * 1000.0)));
+                if (stops.StoppedSince(seen))
+                {
+                    stopped = true; // player.stop broke the look-at; nothing here starts it again
+                    break;
+                }
+                tookOver = inputSeen();
+                if (!tookOver.empty())
+                {
+                    break;
+                }
+                reached = readCamera();
+                const double angle = angleTo(reached, target.point);
+                if (closest < 0.0 || angle < closest)
+                {
+                    closest = angle;
+                }
+                else if (step * player::kLookArcStepS > 0.3 && angle > closest + 4.0)
+                {
+                    tookOver = "camera_drift";
+                    break;
+                }
+            }
             const double next = std::min(1.0, step * player::kLookArcStepS / request.duration);
             const auto d = player::LookArc(from, to, next);
-            lookAt({camPos[0] + d[0] * 10.0, camPos[1] + d[1] * 10.0, camPos[2] + d[2] * 10.0}, player::kLookArcStepS * 1.5, "player.look.step");
+            lookAt({camPos[0] + d[0] * 10.0, camPos[1] + d[1] * 10.0, camPos[2] + d[2] * 10.0}, next >= 1.0 ? 0.25 : player::kLookArcStepS * 1.5,
+                   next >= 1.0 ? "player.look" : "player.look.step");
             if (next >= 1.0)
             {
                 break;
             }
-            std::this_thread::sleep_until(started + std::chrono::milliseconds(static_cast<int>(step * player::kLookArcStepS * 1000.0)));
-            if (stops.StoppedSince(seen))
-            {
-                stopped = true; // player.stop broke the look-at; nothing here starts it again
-                break;
-            }
-            reached = readCamera();
-            const double angle = angleTo(reached, target.point);
-            if (closest < 0.0 || angle < closest)
-            {
-                closest = angle;
-            }
-            else if (step * player::kLookArcStepS > 0.3 && angle > closest + 4.0)
-            {
-                tookOver = "camera_drift";
-                break;
-            }
-        }
-        if (!stopped && tookOver.empty())
-        {
-            lookAt(target.point, 0.25, "player.look");
         }
     }
     else
@@ -413,6 +453,14 @@ json PlayerLook(const MethodContext& aContext)
         if (stops.StoppedSince(seen))
         {
             stopped = true;
+        }
+        if (watch.on)
+        {
+            tookOver = inputSeen();
+            if (!tookOver.empty())
+            {
+                break;
+            }
         }
         reached = readCamera();
         const double dy = std::abs(std::remainder(reached.value("yaw", 0.0) - target.yaw, 360.0));

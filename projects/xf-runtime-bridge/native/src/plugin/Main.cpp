@@ -63,14 +63,13 @@ bool GameWindowInFront()
 void PollKillKey(State& aState)
 {
     const auto& chord = aState.config.killKey;
-    if (!chord.enabled || !aState.bridge || aState.bridge->GetDispatcher().IsKilled())
-    {
-        aState.killKeyWatch.Poll(chord, nullptr);
-        return;
-    }
-    const bool armed = GameWindowInFront() && !aState.cetOverlayOpen.load();
-    const auto down = [armed](int aVk) { return armed && (GetAsyncKeyState(aVk) & 0x8000) != 0; };
-    if (aState.killKeyWatch.Poll(chord, down))
+    // 0.8.3 (the review): armed only while the bridge runs, the game's window is in front and CET's overlay is closed; the watch
+    // needs the key released after it is armed again, and the window and the overlay are checked again right before the kill.
+    const auto armedNow = [&aState] {
+        return aState.bridge && !aState.bridge->GetDispatcher().IsKilled() && GameWindowInFront() && !aState.cetOverlayOpen.load();
+    };
+    const auto down = [](int aVk) { return (GetAsyncKeyState(aVk) & 0x8000) != 0; };
+    if (aState.killKeyWatch.Poll(chord, chord.enabled && armedNow(), down, armedNow))
     {
         log::Warn("bridge.kill_key", "key=" + chord.label + " (the bridge's own kill key)");
         aState.bridge->Kill("kill_key");

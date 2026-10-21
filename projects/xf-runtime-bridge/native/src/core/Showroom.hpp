@@ -106,5 +106,15 @@ json Clear(const std::string& aWhat, const Ops& aOps);
 inline constexpr size_t kMaxStagedArchives = 16;
 inline constexpr uintmax_t kMaxManifestBytes = 2 * 1024 * 1024;
 inline constexpr const char* kManifestSuffix = ".showroom.json";
-json StagedShowrooms(const std::filesystem::path& aModFolder);
+// 0.8.3 (the review): the listing is bounded and can be cancelled. At most kMaxFolderEntries names of the folder are looked
+// at, at most kMaxHashBytes are hashed in all and at most kMaxHashBytesPerArchive per archive (an archive past either is
+// listed with sha256 null and the reason), and the whole listing gives up after kMaxStagedMs. aCancelled is asked between
+// names and between each megabyte hashed (the plugin passes "the bridge is stopping or killed": its queue is closed), and a
+// cancelled listing throws MethodError "interrupted". A sidecar is read only within kMaxManifestBytes and kMaxJsonDepth
+// levels and with the schema's fields of the right types; anything else fails that archive's entry alone (manifest_error).
+inline constexpr size_t kMaxFolderEntries = 20000;
+inline constexpr uintmax_t kMaxHashBytes = 256ull * 1024 * 1024;
+inline constexpr uintmax_t kMaxHashBytesPerArchive = 128ull * 1024 * 1024;
+inline constexpr int64_t kMaxStagedMs = 5000;
+json StagedShowrooms(const std::filesystem::path& aModFolder, const std::function<bool()>& aCancelled = {}, uintmax_t aMaxHashBytes = kMaxHashBytes);
 } // namespace xfb::showroom

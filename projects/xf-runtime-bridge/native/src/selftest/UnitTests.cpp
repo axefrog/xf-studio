@@ -4505,27 +4505,51 @@ void Bridge083Tests()
                   refused.killKey.vk == 0x23 && refused.warnings.size() == 1 && refused.warnings[0].find("End") != std::string::npos && !none.killKey.enabled &&
                   xfb::DescribeConfig(parsed).find("ui.kill_key=Ctrl+End") != std::string::npos,
               refused.warnings.empty() ? std::string() : refused.warnings[0]);
-        // Press detection: once per press, only with every modifier the chord names, never while the window isn't in front
-        // (the plugin passes a reader that answers false then).
+        // Press detection: once per press, only with every modifier the chord names, never while disarmed (the window not in
+        // front, CET's overlay open, the bridge stopped).
         std::map<int, bool> keys;
         const auto reader = [&keys](int aVk) { return keys[aVk]; };
         kk::Watch watch;
         int fired = 0;
         keys[0x23] = true;
-        fired += watch.Poll(ctrlEnd, reader) ? 1 : 0; // End without Ctrl: nothing
+        fired += watch.Poll(ctrlEnd, true, reader) ? 1 : 0; // End without Ctrl: nothing
         keys[0x11] = true;
-        fired += watch.Poll(ctrlEnd, reader) ? 1 : 0; // Ctrl + End: once
-        fired += watch.Poll(ctrlEnd, reader) ? 1 : 0; // still held: not again
+        fired += watch.Poll(ctrlEnd, true, reader) ? 1 : 0; // Ctrl + End: once
+        fired += watch.Poll(ctrlEnd, true, reader) ? 1 : 0; // still held: not again
         keys[0x23] = false;
-        fired += watch.Poll(ctrlEnd, reader) ? 1 : 0;
+        fired += watch.Poll(ctrlEnd, true, reader) ? 1 : 0;
         keys[0x23] = true;
-        fired += watch.Poll(ctrlEnd, reader) ? 1 : 0; // pressed again: once more
+        fired += watch.Poll(ctrlEnd, true, reader) ? 1 : 0; // pressed again: once more
         const int afterSecond = fired;
         kk::Watch idle;
-        const bool notInFront = idle.Poll(chord, [](int) { return false; });
-        const bool switchedOff = idle.Poll(off, reader);
-        Check("0.8.3 kill key: one kill per press, only with its modifiers; nothing while the game isn't in front or the key is off",
+        const bool notInFront = idle.Poll(chord, false, reader);
+        const bool switchedOff = idle.Poll(off, true, reader);
+        Check("0.8.3 kill key: one kill per press, only with its modifiers; nothing while disarmed or the key is off",
               afterSecond == 2 && !notInFront && !switchedOff, std::to_string(afterSecond));
+        // The review: End held in another window (disarmed), then the game comes to the front with End still down: no kill;
+        // let go and press again: one kill. A press the last check refuses (CET opened in between) is used up.
+        std::map<int, bool> held{{0x23, true}};
+        const auto heldReader = [&held](int aVk) { return held[aVk]; };
+        kk::Watch focus;
+        int focusFired = 0;
+        focusFired += focus.Poll(chord, false, heldReader) ? 1 : 0; // held while another window is in front
+        focusFired += focus.Poll(chord, true, heldReader) ? 1 : 0;  // the game in front, End still down
+        focusFired += focus.Poll(chord, true, heldReader) ? 1 : 0;
+        const int whileHeld = focusFired;
+        held[0x23] = false;
+        focusFired += focus.Poll(chord, true, heldReader) ? 1 : 0;
+        held[0x23] = true;
+        focusFired += focus.Poll(chord, true, heldReader) ? 1 : 0; // a real press: one kill
+        const int afterPress = focusFired;
+        kk::Watch lastWatch;
+        held[0x23] = false;
+        lastWatch.Poll(chord, true, heldReader);
+        held[0x23] = true;
+        const bool lastCheck = lastWatch.Poll(chord, true, heldReader, [] { return false; }); // CET opened at that moment
+        const bool stillHeld = lastWatch.Poll(chord, true, heldReader, [] { return true; });
+        Check("0.8.3 (review) kill key: End held elsewhere then the game in front fires nothing; a release and a press fire once; "
+              "a press the last check refuses is used up",
+              whileHeld == 0 && afterPress == 1 && !lastCheck && !stillHeld, std::to_string(whileHeld) + "/" + std::to_string(afterPress));
     }
 
     // The staged showroom: the game's own archive/pc/mod (a temporary folder here), the archive's SHA-256, a self-describing
@@ -4552,6 +4576,44 @@ void Bridge083Tests()
                   list[0]["manifest"]["archive"] == a && list[1]["archive"] == b && list[1]["manifest"].is_null() &&
                   list[1].value("manifest_error", std::string()).find("not this archive") != std::string::npos,
               out.dump());
+        // The review: a sidecar nested past the request limit, and one whose schema is null, each fail their own entry only;
+        // the listing stops when cancelled and hashes no more than its limit.
+        const std::string c = "xfs_showroom_" + std::string(32, 'c'), d = "xfs_showroom_" + std::string(32, 'd');
+        std::ofstream(dir / (c + ".archive"), std::ios::binary) << "c";
+        std::ofstream(dir / (d + ".archive"), std::ios::binary) << "d";
+        std::ofstream(dir / (c + ".showroom.json"), std::ios::binary)
+            << "{\"schema\":\"xfs/showroom-package-1\",\"archive\":\"" << c << "\",\"x\":" << std::string(40, '[') << std::string(40, ']') << "}";
+        std::ofstream(dir / (d + ".showroom.json"), std::ios::binary) << "{\"schema\":null,\"archive\":\"" << d << "\"}";
+        const auto four = xfb::showroom::StagedShowrooms(dir);
+        const auto byName = [](const json& aList, const std::string& aArchive) {
+            for (const auto& entry : aList["archives"])
+            {
+                if (entry["archive"] == aArchive)
+                {
+                    return entry;
+                }
+            }
+            return json::object();
+        };
+        Check("0.8.3 (review) showroom.staged: a sidecar nested too deep and one with a null schema fail their own entries; the others stand",
+              four["archives"].size() == 4 && byName(four, a)["manifest"].is_object() && byName(four, c)["manifest"].is_null() &&
+                  byName(four, c).value("manifest_error", std::string()).find("nests deeper") != std::string::npos && byName(four, d)["manifest"].is_null() &&
+                  byName(four, d).value("manifest_error", std::string()).find("not this archive") != std::string::npos,
+              four.dump().substr(0, 600));
+        std::string cancelledCode;
+        try
+        {
+            xfb::showroom::StagedShowrooms(dir, [] { return true; });
+        }
+        catch (const xfb::MethodError& e)
+        {
+            cancelledCode = e.code;
+        }
+        const auto bounded = xfb::showroom::StagedShowrooms(dir, {}, 4);
+        Check("0.8.3 (review) showroom.staged: a cancelled listing stops (interrupted); past the hashing limit an archive is listed unhashed",
+              cancelledCode == "interrupted" && byName(bounded, a)["sha256"].is_string() && byName(bounded, c)["sha256"].is_string() &&
+                  byName(bounded, b)["sha256"].is_null() && byName(bounded, b).value("sha256_error", std::string()).find("not hashed") != std::string::npos,
+              cancelledCode + " " + bounded.dump().substr(0, 400));
         const auto missing = xfb::showroom::StagedShowrooms(dir / L"none");
         Check("0.8.3 showroom.staged: a missing folder answers found false and no archives", missing["found"] == false && missing["archives"].empty(), missing.dump());
         std::filesystem::remove_all(dir);
