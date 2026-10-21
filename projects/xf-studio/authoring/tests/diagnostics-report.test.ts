@@ -11,7 +11,7 @@ import { personalRoots, RedactionRoots } from "../src/diagnostics/host/host-root
 import { DIAGNOSTIC_FORWARD_SCHEMA, type DiagnosticEntry } from "../src/diagnostics/model";
 import { DiagnosticLog, hostDiagnosticsAt, hostFailure, withDiagnostics } from "../src/diagnostics/host/host-log";
 import { TraceWindow } from "../src/diagnostics/host/trace-window";
-import { createDiagnosticsHandler, modFileEntryName, withRequestDiagnostics } from "../src/diagnostics/host/host-endpoint";
+import { createDiagnosticsHandler, modFileEntryName, withRequestDiagnostics, type DiagnosticsHandlerOptions } from "../src/diagnostics/host/host-endpoint";
 import { hideProfileName, resolutionResources } from "../src/diagnostics/host/host-report";
 import { RESOLUTION_TRACE_OPTIONS, resolutionTrace } from "../src/diagnostics/resolution-trace";
 import { hashingSettled, involvedMods, readOwnInstalls } from "../src/diagnostics/host/mod-identity";
@@ -39,7 +39,7 @@ function unzip(bytes: Uint8Array): Map<string, string> {
 }
 
 /** An endpoint over its own data folder and settings; `post` sends a Studio-origin JSON request. */
-function endpoint(name: string, settings: LocalSettings, extra: { openExternal?: (url: string) => boolean } = {}) {
+function endpoint(name: string, settings: LocalSettings, extra: Partial<Pick<DiagnosticsHandlerOptions, "openExternal" | "resources" | "resolverCache">> = {}) {
   const dataRoot = join(root, name);
   const diagnostics = hostDiagnosticsAt(dataRoot);
   const handler = createDiagnosticsHandler(diagnostics, { app: () => ({ version: "0.1.0", commit: null, channel: null, host: "localhost" }),
@@ -183,6 +183,49 @@ describe("profile names of any shape, encoded folders and identifier keys (DIAG-
     expect(hideProfileName(`MO2\\profiles\\Default\\modlist.txt`, "Default")).toBe(`MO2\\profiles\\<profile>\\modlist.txt`);
     expect(hideProfileName("Defaults are loaded by default.", "Default")).toBe("Defaults are loaded by default.");
     expect(hideProfileName("A modlist of mods", "mod")).toBe("A modlist of mods");
+  });
+});
+
+describe("resource tables come from the archive that wins them now (DIAG-08)", () => {
+  test("through the resolver's one lookup: never a cached file of another archive or an older copy, and a changed winner is said", async () => {
+    const cache = join(root, "stale-resolver-cache"), table = (note: string) => ({ Data: { RootChunk: { appearances: [{ name: note }] } } });
+    // An older answer for the same depot hash in the resolver's cache folder, from an archive that no longer wins.
+    mkdirSync(join(cache, "json"), { recursive: true });
+    writeFileSync(join(cache, "json", "1-oldarchive-oldtool.json"), JSON.stringify({ document: table("STALE-TABLE"), meta: {} }));
+    const asked: string[] = [];
+    const { diagnostics, post } = endpoint("winning-resources", defaultLocalSettings(), { resolverCache: cache, resources: async refs => {
+      asked.push(...refs.map(ref => ref.path ?? ref.hash));
+      return new Map([["1", { archive: "hair.archive", provider: "Hair Mod", reader: "native", document: table("CURRENT-TABLE") }],
+        ["2", { archive: "replacer.archive", provider: "Another Mod", reader: "native", document: table("OTHER-WINNER-TABLE") }]]);
+    } });
+    diagnostics.trace.event("character", "resolved", { resources: [
+      { ref: { hash: "1", path: "base\hair.app" }, status: "archive", archive: "hair.archive", provider: "Hair Mod", group: "mod", alternatives: [] },
+      { ref: { hash: "2", path: "base\hair.mesh" }, status: "archive", archive: "hair.archive", provider: "Hair Mod", group: "mod", alternatives: [] },
+      { ref: { hash: "3", path: "base\hair.xbm" }, status: "archive", archive: "hair.archive", provider: "Hair Mod", group: "mod", alternatives: [] }] },
+      RESOLUTION_TRACE_OPTIONS);
+    const manifest = await (await post("report", { ref: null })).json() as ReportManifest;
+    // Only the kinds whose tables a report shows are asked for.
+    expect(asked).toEqual(["base\hair.app", "base\hair.mesh"]);
+    const excerpts = (await (await post("item", { id: manifest.id, item: "excerpts" })).json() as { text: string }).text;
+    expect(excerpts).toContain("CURRENT-TABLE");
+    expect(excerpts).not.toContain("STALE-TABLE");
+    // The mesh now comes from another archive: said, and its table left out rather than shown as the winner's.
+    expect(excerpts).not.toContain("OTHER-WINNER-TABLE");
+    expect(excerpts).toContain("Your mods changed since this was prepared: it now comes from replacer.archive");
+    const full = (await (await post("item", { id: manifest.id, item: "resources-full" })).json() as { text: string }).text;
+    expect(full).toContain("CURRENT-TABLE");
+    expect(full).not.toContain("OTHER-WINNER-TABLE");
+  });
+
+  test("while the game setup isn't open, the report says so instead of guessing from the cache", async () => {
+    const { diagnostics, post } = endpoint("setup-closed", defaultLocalSettings(), { resources: async () => null });
+    diagnostics.trace.event("character", "resolved", { resources: [
+      { ref: { hash: "1", path: "base\hair.app" }, status: "archive", archive: "hair.archive", provider: "Hair Mod", group: "mod", alternatives: [] }] },
+      RESOLUTION_TRACE_OPTIONS);
+    const manifest = await (await post("report", { ref: null })).json() as ReportManifest;
+    const excerpts = (await (await post("item", { id: manifest.id, item: "excerpts" })).json() as { text: string }).text;
+    expect(excerpts).toContain("isn't open in XF Studio right now");
+    expect(manifest.items.some(item => item.id === "resources-full")).toBe(false);
   });
 });
 

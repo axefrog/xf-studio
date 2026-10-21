@@ -223,6 +223,7 @@ const diagnosticsRequest = createDiagnosticsHandler(diagnostics, {
   roots: () => [{ label: "<data>", path: dataRoot }, { label: "<tools>", path: localToolsRoot() }, { label: "<preview-cache>", path: previewCacheRoot },
     { label: "<studio>", path: import.meta.dir }],
   resolverCache: resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache")),
+  resources: (refs, progress) => characterDetails.reportResources(refs, progress),
   installReceipts: () => [state.installReceipts, ...state.legacyInstallReceipts],
   testHook: process.env.XFS_DIAGNOSTICS_TEST_HOOK === "1",
 });

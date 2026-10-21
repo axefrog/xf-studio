@@ -8,7 +8,7 @@ import { CharacterDetailError, CHARACTER_DETAIL_STEPS, CharacterPreparationCache
 import { choiceKey, manifestProblemSliced, readChoiceManifest, xlIdentity } from "./choice-manifest";
 import { ChoicePrefetcher, requestKey, type PrefetchAnswer, type PrefetchInput, type PrefetchLimits } from "../choice-prefetch";
 import { exportsSource, filesSource, keptSource, PreparedFiles, type PreparedRoots, type PreparedSize } from "../../host/prepared-files";
-import { withArchiveFingerprints, type Installation, type InstallationOptions } from "../../game/host/resolver-host";
+import { reportResources, withArchiveFingerprints, type Installation, type InstallationOptions, type ReportResource } from "../../game/host/resolver-host";
 import { hostJobs, lowPriorityNow } from "../../host/host-jobs";
 import { hostClock, type Clock } from "../../platform/core/clock";
 import { DEFAULT_QUIET_MS, lease, type JobContext, type JobScheduler, type JobSpec, type Want } from "../../platform/core/jobs";
@@ -346,6 +346,16 @@ export class CharacterDetailHost {
 
   /** The launch route (`characterRoute`: WolvenKit optional). */
   private route(): CharacterRoute | null { return characterRoute(this.options.settings()); }
+  /**
+   * A problem report's resources, each as the route serves it now (resolver-host.ts `reportResources`, DIAG-08). Only while the route is
+   * open: null otherwise, since a report never opens the game setup, and never starts WolvenKit.
+   */
+  async reportResources(refs: readonly { hash: string; path?: string }[], progress?: (done: number, total: number) => void):
+    Promise<Map<string, ReportResource | null> | null> {
+    const route = this.route();
+    const installation = route ? installations.peek({ ...route, cacheDir: this.resolverCache, log: this.options.log }) : null;
+    return installation ? reportResources(installation, refs.map(ref => ({ hash: ref.hash, path: ref.path ?? null })), undefined, progress) : null;
+  }
   /** The preparation cache shared on the current installation (a new one once its fingerprint changed). */
   private sharedCache(fingerprint = installationFingerprint(this.options.settings())): CharacterPreparationCache {
     if (this.shared?.fingerprint !== fingerprint) this.shared = { fingerprint, cache: new CharacterPreparationCache() };

@@ -394,6 +394,9 @@ export class WolvenKitFetcher implements ResourceFetchPort {
     return null;
   }
 
+  /** WolvenKit's cached answer for this archive's current bytes and this WolvenKit, or null; never runs WolvenKit (DIAG-08). */
+  cachedAnswer(archive: MountedArchive, ref: DepotRef): FetchedResource | null { return this.cached(this.cachePath(archive, ref.hash)) ?? null; }
+
   /** The cached answer: a resource, null for a lasting `.failed` marker, or undefined when WolvenKit must run. */
   private cached(path: string): FetchedResource | null | undefined {
     // A resource WolvenKit could not convert stays failed until its container or WolvenKit changes; one it wrote nothing for, once
@@ -749,6 +752,22 @@ export class ResolverFetcher implements ResourceFetchPort {
    * resource (PIPE-50). `reader` says which answered: `native` or WolvenKit's identity (`tool`). A null answer's `transient` says whether
    * it may not repeat; it counts in `jsonTransientNulls`, never in the preparations' `transientNulls` (NATIVE-50).
    */
+  /**
+   * One resource as this route serves it from `archive`, for a problem report (DIAG-08): the native reader's answer, else WolvenKit's
+   * cached answer for this archive's current bytes and this WolvenKit. Never starts WolvenKit and counts in no statistics; null when
+   * neither has it. `reader` says which answered.
+   */
+  async reportResource(archive: MountedArchive, ref: DepotRef): Promise<{ readonly document: unknown; readonly reader: string } | null> {
+    const decoder = this.native?.decoder;
+    if (decoder && (decoder.canAnswer?.() ?? true)) {
+      try {
+        const outcome = await decoder.decode({ archivePath: archive.id, hash: ref.hash, needName: !ref.path, priority: "background" });
+        if (outcome.ok) return { document: outcome.document, reader: "native" };
+      } catch { /* The cache may still have it. */ }
+    }
+    const cached = this.wolvenKit.cachedAnswer(archive, ref);
+    return cached ? { document: cached.document, reader: this.tool } : null;
+  }
   async fetchJsonResource(archive: MountedArchive, ref: DepotRef, payloads: readonly string[] = [...NATIVE_JSON_PAYLOADS]):
     Promise<(FetchedResource & { readonly reader: string }) | null> {
     const answer = this.counted(archive, ref, this.native
@@ -826,6 +845,41 @@ export function discoverRoute(options: Pick<InstallationOptions, "gameRoot" | "l
   const discovery = discoverSources(routeSettings(options), DISCOVERY_LIMITS, { folderStamps: options.folderStamps ?? folderStampMode });
   return options.baseOnly ? { ...discovery, candidates: discovery.candidates.filter(isBaseGameSource) } : discovery;
 }
+/** One resource of a problem report as the route serves it now (`reportResources`). */
+export interface ReportResource {
+  /** The archive that wins it now, and who supplied that archive. */
+  readonly archive: string;
+  readonly provider: string;
+  /** `native`, or the WolvenKit identity whose cached answer it is. */
+  readonly reader: string;
+  readonly document: unknown;
+}
+/**
+ * The resolver's one lookup for a problem report (DIAG-08): each resource's winner on the opened route now (copies and links followed,
+ * as the resolution follows them) and that archive's answer from the resolver's readers (`ResolverFetcher.reportResource`): never a
+ * cached file of another archive, an older version of it or another reader. Null for a resource no archive has, or that neither the
+ * native reader nor WolvenKit's cache can answer; WolvenKit never starts. Bounded by `limit`, read one at a time, at background priority.
+ */
+export async function reportResources(installation: Pick<Installation, "graph" | "fetcher">, refs: readonly DepotRef[], limit = 400,
+  progress: (done: number, total: number) => void = () => {}): Promise<Map<string, ReportResource | null>> {
+  const out = new Map<string, ReportResource | null>(), wanted = refs.slice(0, limit);
+  for (const [index, ref] of wanted.entries()) {
+    progress(index, wanted.length);
+    if (out.has(ref.hash)) continue;
+    let found: ReportResource | null = null;
+    try {
+      const { entry, lookup } = installation.graph.locate(ref);
+      const winner = lookup.winner;
+      if (winner) {
+        const answer = await installation.fetcher.reportResource(winner, entry);
+        if (answer) found = { archive: winner.name, provider: winner.providerName, reader: answer.reader, document: answer.document };
+      }
+    } catch { /* Not answerable now. */ }
+    out.set(ref.hash, found);
+  }
+  return out;
+}
+
 /** Only the installed game's content/expansion archives; never a mod, XL declaration or loose override. */
 export const isBaseGameSource = (source: Pick<SourceCandidate, "provider" | "kind" | "virtualPath">) =>
   source.provider === "game" && source.kind === "archive" && /^archive[\\/]pc[\\/](?:content|ep1)[\\/]/i.test(source.virtualPath);

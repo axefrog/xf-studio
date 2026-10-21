@@ -31,13 +31,21 @@ export type HostReportSources = {
   webView2?: string | null;
   /** Folders to name instead of print: the data folder, tools, caches. */
   roots?: () => KnownRoot[];
-  /** The resolver's JSON cache (excerpts come from it, never from archives). */
+  /** The resolver's cache folder (named, never printed). */
   resolverCache?: string | null;
+  /**
+   * The resolver's one lookup for a report's resources (DIAG-08): each as the opened route serves it now, by its winning archive and
+   * that archive's answer (character-detail-host.ts `reportResources`). Null while the route isn't open; a report never opens it.
+   */
+  resources?: (refs: readonly { hash: string; path?: string }[], progress?: (done: number, total: number) => void) =>
+    Promise<ReadonlyMap<string, ReportResourceAnswer | null> | null>;
   /** Time a report spends hashing mod files before using their size and date (`HASH_BUDGET_MS`; tests set it). */
   hashBudgetMs?: number;
   /** Folders of XF Studio's install receipts, so the mods it built and placed are named as its own (PIPE-116). */
   installReceipts?: () => readonly string[];
 };
+/** One resource as the route serves it now (resolver-host.ts `ReportResource`). */
+export type ReportResourceAnswer = { readonly archive: string; readonly provider: string; readonly reader: string; readonly document: unknown };
 /** The rolling window's share of a report file; its newest events are kept. */
 export const TRACE_REPORT_BYTES = 4 * 1024 * 1024;
 const EXCERPT_BYTES = 48 * 1024, EXCERPT_TOTAL = 480 * 1024, EXCERPT_COUNT = 24;
@@ -154,25 +162,37 @@ function winners(resources: Record<string, unknown>[] | null) {
   }).sort((a, b) => String(a.path ?? a.hash).localeCompare(String(b.path ?? b.hash)));
 }
 
-/** Bounded excerpts of the resources the latest resolution used, from the resolver's JSON cache (no archive is read). */
-function excerpts(resources: Record<string, unknown>[] | null, cacheDir: string | null | undefined) {
-  if (!resources || !cacheDir) return null;
-  const folder = join(cacheDir, "json");
-  let names: string[] = [];
-  try { names = readdirSync(folder); } catch { return { note: "The resolver cache has no resources yet." }; }
+/** The resources of the latest resolution a report shows the tables of: apps, entities, meshes, morph targets and materials. */
+const shownResources = (resources: Record<string, unknown>[] | null) => (resources ?? []).flatMap(item => {
+  const ref = item.ref as { hash: string; path?: string };
+  return ref.path && EXCERPT_KINDS.test(ref.path) ? [{ item, ref: { hash: /^\d+$/.test(ref.hash) ? ref.hash : depotHash(ref.path), path: ref.path } }] : [];
+});
+type Shown = ReturnType<typeof shownResources>[number];
+/**
+ * A shown resource's document, only when the archive that wins it now is the one the resolution used (by name and provider), so a report
+ * never labels another archive's or an older copy's table as the winner (DIAG-08); else why not.
+ */
+function answerFor(shown: Shown, answers: ReadonlyMap<string, ReportResourceAnswer | null>): { document: unknown } | { note: string } | null {
+  const answer = answers.get(shown.ref.hash);
+  if (!answer) return null;
+  if (answer.archive !== shown.item.archive || (shown.item.provider != null && answer.provider !== shown.item.provider))
+    return { note: `Your mods changed since this was prepared: it now comes from ${answer.archive} (${answer.provider}), so it isn't shown.` };
+  return { document: answer.document };
+}
+const NOT_OPEN = "Your game setup isn't open in XF Studio right now. Show your V, then prepare the report again.";
+
+/** Bounded excerpts of the resources the latest resolution used, each from the archive that won it (`answerFor`). */
+function excerpts(resources: Record<string, unknown>[] | null, answers: ReadonlyMap<string, ReportResourceAnswer | null> | null) {
+  if (!resources) return null;
+  if (!answers) return { note: NOT_OPEN };
   const out: { path: string; archive: unknown; excerpt: unknown }[] = [];
   let total = 0;
-  for (const item of resources) {
-    const ref = item.ref as { hash: string; path?: string };
-    if (!ref.path || !EXCERPT_KINDS.test(ref.path) || out.length >= EXCERPT_COUNT) continue;
-    const hash = /^\d+$/.test(ref.hash) ? ref.hash : depotHash(ref.path);
-    const files = names.filter(name => name.startsWith(`${hash}-`) && name.endsWith(".json"))
-      .map(name => { try { return { name, time: statSync(join(folder, name)).mtimeMs }; } catch { return { name, time: 0 }; } })
-      .sort((a, b) => b.time - a.time);
-    if (!files.length) continue;
-    let root: unknown;
-    try { root = (JSON.parse(readFileSync(join(folder, files[0]!.name), "utf8")).document as { Data?: { RootChunk?: unknown } })?.Data?.RootChunk; }
-    catch { continue; }
+  for (const shown of shownResources(resources)) {
+    if (out.length >= EXCERPT_COUNT) break;
+    const found = answerFor(shown, answers);
+    if (!found) continue;
+    if ("note" in found) { out.push({ path: shown.ref.path, archive: shown.item.archive ?? null, excerpt: { note: found.note } }); continue; }
+    const root = (found.document as { Data?: { RootChunk?: unknown } } | null)?.Data?.RootChunk;
     if (!root) continue;
     let excerpt = boundJson(root, { depth: 12, items: 64, text: 300, drop: PAYLOAD_KEYS });
     if (JSON.stringify(excerpt).length > EXCERPT_BYTES) excerpt = boundJson(root, { depth: 7, items: 24, text: 160, drop: PAYLOAD_KEYS });
@@ -180,7 +200,7 @@ function excerpts(resources: Record<string, unknown>[] | null, cacheDir: string 
     if (size > EXCERPT_BYTES) excerpt = { note: `Left out: ${Math.round(size / 1024)} KB even when shortened.` };
     if (total + Math.min(size, EXCERPT_BYTES) > EXCERPT_TOTAL) break;
     total += Math.min(size, EXCERPT_BYTES);
-    out.push({ path: ref.path, archive: item.archive ?? null, excerpt });
+    out.push({ path: shown.ref.path, archive: shown.item.archive ?? null, excerpt });
   }
   return out;
 }
@@ -230,27 +250,20 @@ export type PreparedHostReport = {
 };
 
 const FULL_RESOURCES_BYTES = 6 * 1024 * 1024;
-/** Full JSON of the resources the latest resolution used (payload fields left out), for the optional item. */
-function fullResources(resources: Record<string, unknown>[] | null, cacheDir: string | null | undefined) {
-  if (!resources || !cacheDir) return null;
-  const folder = join(cacheDir, "json");
-  let names: string[] = [];
-  try { names = readdirSync(folder); } catch { return null; }
+/** Full JSON of the resources the latest resolution used (payload fields left out), each from the archive that won it, for the optional item. */
+function fullResources(resources: Record<string, unknown>[] | null, answers: ReadonlyMap<string, ReportResourceAnswer | null> | null) {
+  if (!resources || !answers) return null;
   const out: { path: string; archive: unknown; document: unknown }[] = [];
   let total = 0;
-  for (const item of resources) {
-    const ref = item.ref as { hash: string; path?: string };
-    if (!ref.path || !EXCERPT_KINDS.test(ref.path)) continue;
-    const hash = /^\d+$/.test(ref.hash) ? ref.hash : depotHash(ref.path);
-    const file = names.find(name => name.startsWith(`${hash}-`) && name.endsWith(".json"));
-    if (!file) continue;
+  for (const shown of shownResources(resources)) {
+    const found = answerFor(shown, answers);
+    if (!found || "note" in found) continue;
     try {
-      const document = boundJson((JSON.parse(readFileSync(join(folder, file), "utf8")) as { document?: unknown }).document,
-        { depth: 40, items: 4_000, text: 4_000, drop: PAYLOAD_KEYS });
+      const document = boundJson(found.document, { depth: 40, items: 4_000, text: 4_000, drop: PAYLOAD_KEYS });
       const size = JSON.stringify(document).length;
       if (total + size > FULL_RESOURCES_BYTES) break;
       total += size;
-      out.push({ path: ref.path, archive: item.archive ?? null, document });
+      out.push({ path: shown.ref.path, archive: shown.item.archive ?? null, document });
     } catch { /* Skipped. */ }
   }
   return out.length ? out : null;
@@ -317,8 +330,14 @@ export async function buildHostReport(diagnostics: HostDiagnostics, sources: Hos
   try { ownInstalls = readOwnInstalls(sources.installReceipts?.() ?? []); } catch { /* Then no mod is recognised as XF Studio's. */ }
   const mods = await involvedMods(winnerList, settings, undefined, { hashBudgetMs: sources.hashBudgetMs, ownInstalls,
     progress: (done, total) => { if (total) progress(`Fingerprinting the mod files involved (${done} of ${total})…`); } });
+  // Each shown resource from the archive that wins it now, through the resolver's one lookup (DIAG-08).
+  let answers: ReadonlyMap<string, ReportResourceAnswer | null> | null = null;
+  const shown = shownResources(resources);
+  if (shown.length && sources.resources) try {
+    answers = await sources.resources(shown.map(item => item.ref), (done, total) => { if (total) progress(`Reading the resources your V used (${done} of ${total})…`); });
+  } catch { answers = null; }
   progress("Putting the report together…");
-  const full = fullResources(resources, sources.resolverCache);
+  const full = fullResources(resources, answers);
   type Built = { id: string; group: ReportGroup; label: string; detail: string; content: unknown; included?: boolean };
   // Counts agree with their nouns ("1 entry", never "1 entries"; release-readiness-audit.md C-13).
   const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -336,7 +355,7 @@ export async function buildHostReport(diagnostics: HostDiagnostics, sources: Hos
     { id: "resolution", group: "resources", label: "Your V's latest preparation", detail: "The creator options, apps, meshes and materials your V used, and which mod supplied each.",
       content: resolved || prepared ? { resolved: resolved?.data ?? null, prepared: prepared?.data ?? null, at: (resolved ?? prepared)!.t } : null },
     { id: "winners", group: "resources", label: "Load-order winners", detail: "For each resource: the archive that won, the ones it beat and the rule that decided.", content: winnerList },
-    { id: "excerpts", group: "resources", label: "Resource tables", detail: `Short extracts of those apps, meshes and materials (appearance and material tables). No geometry or textures. ${MOD_CONTENT_NOTE}`, content: excerpts(resources, sources.resolverCache) },
+    { id: "excerpts", group: "resources", label: "Resource tables", detail: `Short extracts of those apps, meshes and materials (appearance and material tables). No geometry or textures. ${MOD_CONTENT_NOTE}`, content: excerpts(resources, answers) },
     ...(full ? [{ id: "resources-full", group: "optional" as const, label: `Every detail of ${full.length === 1 ? "this resource" : `these ${full.length} resources`}`, detail: `Everything in the resources above, for a closer look. No geometry or textures. ${MOD_CONTENT_NOTE}`, content: full, included: false }] : []),
   ];
   const contents = new Map<string, string>(), files: PreparedHostReport["files"] = new Map();
