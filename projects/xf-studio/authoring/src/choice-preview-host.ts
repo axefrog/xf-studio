@@ -3,14 +3,14 @@
  * sources, both in the host's private derived cache (never committed, published or packaged).
  *
  * - **Store.** `<root>/images/<key>.webp`, content-addressed by the preview key (choice-preview.ts): stills and turntable strips alike. Only WebP files within
- *   `PREVIEW_IMAGE_MAX_BYTES` are kept. "Clear prepared game files" removes them with the rest, and the prepared files' budget evicts
- *   the least recently used (prepared-files.ts, PREV-157): serving or keeping an image or a source marks it used, which also keeps it
- *   for the rest of the session.
+ *   `PREVIEW_IMAGE_MAX_BYTES` are kept. They are the prepared files' `previews` partition (prepared-files.ts): "Clear prepared game
+ *   files" removes them with the rest, and the budget evicts the least recently used (PREV-157): serving or keeping an image or a source
+ *   marks it used, which also keeps it for the rest of the session.
  * - **Source index.** A prepared choice's source (the parts its record draws for the row's detail), by the choice's manifest name
  *   (choice-manifest.ts `choiceKey`), stamped with that manifest's size and time: a choice prepared again (a mod updated, another archive
  *   wins) has a new manifest, so its old source is never reused. A choice whose slot draws nothing is indexed as `null` (no preview).
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { type ChoicePreviewSource, isPreviewKey, parsePreviewSource } from "./choice-preview";
 import { writeFileAtomic } from "./derived-cache";
@@ -72,23 +72,8 @@ export class ChoicePreviewStore {
     catch { /* Advisory: the source is derived again next time. */ }
   }
 
-  /** Bytes on disk (images and sources). */
-  bytes(): number {
-    let total = 0;
-    for (const dir of [this.images, this.sources]) {
-      let names: string[] = [];
-      try { names = readdirSync(dir); } catch { continue; }
-      for (const name of names) { try { total += statSync(join(dir, name)).size; } catch { /* Gone meanwhile. */ } }
-    }
-    return total;
-  }
-  clear(): { freed: number } {
-    const freed = this.bytes();
-    this.memory.clear();
-    rmSync(this.images, { recursive: true, force: true });
-    rmSync(this.sources, { recursive: true, force: true });
-    return { freed };
-  }
+  /** "Clear prepared game files" removed the files (prepared-files.ts, the `previews` partition): forget the sources read from them. */
+  forget(): void { this.memory.clear(); }
 }
 
 /** A manifest file's stamp (size and modification time), or null when there is none. */

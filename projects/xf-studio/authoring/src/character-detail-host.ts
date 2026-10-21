@@ -6,10 +6,12 @@ import { canonicalJson } from "./eye-plate-recipe";
 import { CharacterDetailError, CHARACTER_DETAIL_STEPS, CharacterPreparationCache, prepareCharacterDetails, SERVED_TEXTURE_MAX, STORE_FILE, TOOL_MISSING, warmCharacters,
   type CharacterRoute, type PrepareCharacterOptions, type WarmOptions } from "./character-detail-service";
 import { choiceKey, manifestProblemSliced, readChoiceManifest, xlIdentity } from "./choice-manifest";
-import { timeSlicer } from "./event-loop";
-import { ChoicePrefetcher, type PrefetchAnswer, type PrefetchInput, type PrefetchLimits } from "./choice-prefetch";
-import { clearPrepared, evictPreparedSet, PREPARED_BUDGET_BYTES, preparedSize, type PreparedRoots, type PreparedSize } from "./prepared-files";
-import { backgroundExtraction, backgroundPriority, foregroundExtraction, withArchiveFingerprints, type Installation, type InstallationOptions } from "./resolver-host";
+import { ChoicePrefetcher, requestKey, type PrefetchAnswer, type PrefetchInput, type PrefetchLimits } from "./choice-prefetch";
+import { exportsSource, filesSource, keptSource, PreparedFiles, type PreparedRoots, type PreparedSize } from "./prepared-files";
+import { withArchiveFingerprints, type Installation, type InstallationOptions } from "./resolver-host";
+import { hostJobs, lowPriorityNow } from "./host-jobs";
+import { hostClock, type Clock } from "./platform/core/clock";
+import { DEFAULT_QUIET_MS, lease, type JobContext, type JobScheduler, type JobSpec, type Want } from "./platform/core/jobs";
 import { CHARACTER_DETAIL_SCHEMA } from "./render-detail";
 import type { CharacterRequest } from "./character-detail-request";
 import type { GameAssetExporter } from "./game-asset-export";
@@ -43,8 +45,13 @@ import { PreparedAnswers } from "./prepared-answers";
  * route's generation in the installation registry), so a changed profile, a newly installed mod, a file
  * changed inside a mod folder or another WolvenKit prepares again instead of reusing an answer for a
  * different mod set. Preparations read the process's shared, long-lived installation (installation-registry.ts),
- * checked against the mod setup before each use. They share one on-disk cache, so they run one at a time: a
- * new one starts only after a cancelled one has stopped.
+ * checked against the mod setup before each use.
+ *
+ * **When work runs** is the host's job scheduler's (platform/core/jobs.ts, host-jobs.ts): a page's V is a `person` job wanted by
+ * `<page>/character` (two pages on the same V share one run), held by a lease each poll renews, so a page that went away stops its V;
+ * a preview source being derived is `shown`; the V resolved after a restart (`host/warm-up`), choices prepared ahead (`prefetch`) and
+ * the prepared files' budget check are `ahead`. They share one on-disk cache, so one runs at a time, a new one only after a stopped
+ * one's run returned; a person's change stops what runs below it unless it is past its threshold.
  *
  * It also keeps one in-memory `CharacterPreparationCache` per installation fingerprint (which includes the registry's generation;
  * PREV-68): the resolved appearances, templates and exports, and the served components. A changed creator choice on the same V then
@@ -106,10 +113,17 @@ export type CharacterDetailHostOptions = {
   warm?: (options: WarmOptions) => ReturnType<typeof warmCharacters>;
   /** Limits of preparing choices ahead (choice-prefetch.ts `PREFETCH_LIMITS`). */
   prefetchLimits?: PrefetchLimits;
-  /** Bytes of exports and extracted JSON kept on disk (prepared-files.ts `PREPARED_BUDGET_BYTES`). */
-  preparedBudget?: number;
-  /** Other routes sharing this disk budget; each source is counted once by its export root. */
-  sharedPreparedRoots?: () => readonly PreparedRoots[];
+  /** The host's job scheduler (host-jobs.ts), shared with the prepared files' owner; default: one of its own. */
+  jobs?: JobScheduler;
+  /** The host process's prepared files' owner (prepared-files.ts), with its one budget; default: one of its own over this host alone. */
+  prepared?: PreparedFiles;
+  /**
+   * This host's files as one named partition with an optional cap (the baseline references, HAIR-03); default: the `character`, `exports`
+   * and `previews` partitions.
+   */
+  partition?: { name: string; cap?: number };
+  /** The clock of the pages' leases (`PAGE_LEASE_MS`); default the host's. */
+  clock?: Clock;
   log?: (message: string) => void;
   /** The rolling diagnostics window: what each preparation resolved and prepared (docs/diagnostics.md). */
   trace?: DiagnosticTrace;
@@ -139,14 +153,6 @@ export type PreviewSourceItem = { position: number; state: "ready" | "none" | "u
  * minutes, and the page's lookups and pictures go on meanwhile.
  */
 export const PREVIEW_DERIVE_WAIT_MS = 3000;
-/**
- * While the page is asking for preview sources (within this long of its last question), a batch prepared ahead doesn't start: deriving a
- * ready choice's source takes a fraction of a second and shows at once, while a batch takes a minute. A batch already running finishes
- * first (work past its threshold is never thrown away), and preparing ahead goes on once the page stops asking.
- */
-const PREVIEW_HOLD_MS = 800;
-/** How often, at most, the prepared files are checked against their budget. */
-const EVICT_INTERVAL_MS = 60_000;
 /** `work`'s answer, or a cancellation as soon as `signal` aborts (`work` itself keeps running; its caller tracks it). */
 function untilStopped<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -203,7 +209,7 @@ export const textureLanes = (): number => freemem() > TWO_LANES_FREE_BYTES ? 2 :
 export const TWO_LANES_FREE_BYTES = 4 * 1024 ** 3;
 
 /** How long the page must have been quiet (no change asked for, no file of its V read) before work prepared ahead goes on. */
-export const QUIET_MS = 400;
+export const QUIET_MS = DEFAULT_QUIET_MS;
 /**
  * How long the page must have been quiet before a V answered from a kept answer is resolved in the background after a restart: the page
  * is still starting (its motion, face data, poses and the creator's options come from the host right after the V).
@@ -216,11 +222,22 @@ export const WARM_UP_QUIET_MS = 2000;
  * request's check, as ever.
  */
 export const KEPT_VOUCH_MS = 5000;
+/**
+ * How long a page's want of its V holds without the page asking about it (a poll, a request): a page that went away (closed, or a tab
+ * the browser stopped) stops its V's preparation. Generous, since a hidden tab may be held to one timer a minute.
+ */
+export const PAGE_LEASE_MS = 90_000;
 
 export class CharacterDetailHost {
-  /** Each open page's latest preparation (`request`'s `page`); they run one at a time, in the order they were asked for (PIPE-103). */
-  private readonly running = new Map<string, { key: string; controller: AbortController; promise: Promise<void> }>();
+  /** The host's scheduler (host-jobs.ts): a person's V, preview sources, work prepared ahead and the prepared files' upkeep, in their lanes. */
+  readonly jobs: JobScheduler;
+  /** The prepared files' owner (prepared-files.ts): this host's partitions within the process's one budget. */
+  readonly prepared: PreparedFiles;
   private readonly states = new Map<string, CharacterDetailState>();
+  /** The run preparing each key now, by key (its want, and the token that owns the key's state; a newer run for the key takes it over). */
+  private readonly runs = new Map<string, { want: Want<void>; token: object }>();
+  /** Each open page's V (`request`'s `page`): the key it wants and the lease that holds it while the page keeps asking. */
+  private readonly pages = new Map<string, { key: string; lease: { readonly signal: AbortSignal; renew(): void }; end: AbortController }>();
   /** What preparations on the current installation share, and the fingerprint it belongs to. */
   private shared: { fingerprint: string; cache: CharacterPreparationCache } | null = null;
   /** Keys whose ready answer was degraded (PIPE-53): served once, prepared again when asked again. */
@@ -229,39 +246,16 @@ export class CharacterDetailHost {
   readonly creator: CreatorCatalogueHost;
   /** Prepares an open Character panel row's choices ahead of a click (choice-prefetch.ts). */
   readonly prefetch: ChoicePrefetcher;
-  private evictedAt = 0;
-  private evicting: Promise<void> | null = null;
-  /**
-   * Prefetch batches still settling, each as a promise that never rejects. A stopped batch answers the prefetcher at once, so a
-   * person's own change isn't held up by reads already in WolvenKit; the batch itself runs to its end in the background (it no longer
-   * forgets cache entries or writes manifests once stopped), and Clear waits for it before removing files (PREV-102). The batch is given
-   * the stop, so it asks for nothing further down its resource chains, and the next batch starts only once it settled (PREV-120).
-   */
-  private readonly warming = new Set<Promise<void>>();
-  /** Resolves once every prefetch batch has settled (`warming`). */
-  private async warmingSettled(): Promise<void> { while (this.warming.size) await Promise.all([...this.warming]); }
-  /** A person's requests being answered now (the installation check before a preparation starts): background work waits for them. */
-  private asking = 0;
-  /** When the page last asked for its V or read one of its files (`noteAsk`): background work waits until the page has been quiet a moment. */
-  private askedAt = 0;
   /** Rendered choice previews and their sources (choice-preview-host.ts). */
   readonly previews: ChoicePreviewStore;
-  /**
-   * The preview source being derived now (a prepared choice's record, planned and written from the caches): one at a time, never beside
-   * a person's change or a batch prepared ahead. `passed`: it reached its last step, so a person's change waits for it instead of stopping
-   * it (the scheduling rule: work past its threshold is never thrown away).
-   */
-  private previewing: { controller: AbortController; promise: Promise<unknown>; passed: boolean } | null = null;
-  /** When the page last asked for a preview source to be derived (`PREVIEW_HOLD_MS`). */
-  private previewAskedAt = 0;
   /** Answers kept across restarts (`keptAnswers`), or null. */
   private readonly answers: PreparedAnswers | null;
-  /**
-   * The V answered from a kept answer, being resolved into the shared cache in the background once the page is quiet, so the person's
-   * first change after a restart only resolves what it changes. A person's own request stops it.
-   */
-  private warmingUp: { controller: AbortController; promise: Promise<void> } | null = null;
+  /** This host's prepared files, as the prepared files' owner counts them. */
+  private readonly files: { size(): Promise<number> };
   constructor(private readonly options: CharacterDetailHostOptions) {
+    // Each job reports its own failures in plain words (the scheduler never leaves one unhandled).
+    this.jobs = options.jobs ?? hostJobs();
+    this.prepared = options.prepared ?? new PreparedFiles({ scheduler: this.jobs, log: options.log });
     this.answers = options.keptAnswers === false ? null : options.keptAnswers ?? (options.prepare ? null
       : new PreparedAnswers(join(options.cacheRoot, "choices", "answers"), { code: hostCodeIdentity, recordSchema: CHARACTER_DETAIL_SCHEMA,
         recordExists: record => this.filePath(record) !== null }));
@@ -269,18 +263,41 @@ export class CharacterDetailHost {
     this.creator = options.creator ?? new CreatorCatalogueHost({ route: () => this.route(), fingerprint: () => installationFingerprint(this.options.settings()),
       resolverCache: options.resolverCache ?? join(options.cacheRoot, "resolver"), log: options.log });
     this.prefetch = new ChoicePrefetcher({
+      jobs: this.jobs,
       requestFor: (base, option, position) => this.requestFor(base, option, position),
-      readiness: () => this.readiness(),
-      warm: (requests, signal) => this.warm(requests, signal),
-      foregroundIdle: () => this.foregroundIdle(),
-      settled: () => this.warmingSettled(),
-      preparedBytes: async () => (await preparedSize(this.preparedRoots)).bytes,
-      afterBatch: () => this.keepWithinBudget(),
+      readiness: context => this.readiness(context),
+      warm: (requests, context) => this.warm(requests, context),
+      preparedBytes: () => this.files.size(),
+      afterBatch: () => this.prepared.keepWithinBudget(),
       needsSetup: () => this.needsSetup(),
-      slicer: () => this.backgroundSlicer(),
       log: options.log,
       failed: error => hostFailure("character", "prefetch_failed", "Some character choices couldn't be prepared ahead; they are read when picked.", error, "warn"),
     }, options.prefetchLimits);
+    this.files = this.registerPrepared();
+  }
+
+  /**
+   * This host's partitions of the prepared files: the character's (resolver JSON, store, manifests), its exports and its choice previews;
+   * or, named (the baseline references), all of them as one partition with its cap.
+   */
+  private registerPrepared(): { size(): Promise<number> } {
+    const roots = this.preparedRoots, previews = roots.previews!;
+    const json = filesSource(join(roots.resolver, "json"), ".json", name => name.endsWith(".failed"));
+    const kept = [keptSource(roots.store), keptSource(roots.manifests), keptSource(join(roots.resolver, "native"))];
+    const exports = exportsSource(roots.exports);
+    const shown = [filesSource(join(previews, "images"), ".webp"), filesSource(join(previews, "sources"), ".json")];
+    const hooks = { stop: () => this.stopAll(), forget: () => this.forget(),
+      // An owner on a scheduler of its own (the reference host) settles its work itself; on the shared one, Clear runs alone anyway.
+      ...this.jobs === this.prepared.scheduler ? {} : { settle: () => this.jobs.idle() } };
+    const named = this.options.partition;
+    if (named) {
+      const own = this.prepared.partition({ name: named.name, ...named.cap !== undefined ? { cap: named.cap } : {}, evictable: [exports, json, ...shown], kept, ...hooks });
+      return { size: own.size };
+    }
+    const parts = [this.prepared.partition({ name: "character", evictable: [json], kept, ...hooks }),
+      this.prepared.partition({ name: "exports", evictable: [exports] }),
+      this.prepared.partition({ name: "previews", evictable: shown })];
+    return { size: async () => (await Promise.all(parts.map(part => part.size()))).reduce((sum, bytes) => sum + bytes, 0) };
   }
 
   private get resolverCache() { return this.options.resolverCache ?? join(this.options.cacheRoot, "resolver"); }
@@ -329,6 +346,11 @@ export class CharacterDetailHost {
 
   /** The launch route (`characterRoute`: WolvenKit optional). */
   private route(): CharacterRoute | null { return characterRoute(this.options.settings()); }
+  /** The preparation cache shared on the current installation (a new one once its fingerprint changed). */
+  private sharedCache(fingerprint = installationFingerprint(this.options.settings())): CharacterPreparationCache {
+    if (this.shared?.fingerprint !== fingerprint) this.shared = { fingerprint, cache: new CharacterPreparationCache() };
+    return this.shared.cache;
+  }
 
   private set(state: Omit<CharacterDetailState, "schema" | "recordSchema">): CharacterDetailState {
     const full = { schema: CHARACTER_DETAIL_STATE_SCHEMA, recordSchema: CHARACTER_DETAIL_SCHEMA, ...state };
@@ -339,9 +361,26 @@ export class CharacterDetailHost {
   }
 
   /**
+   * The page moved on from the V it wanted (to `key`, or to nothing): its want is released, and a preparation nobody wants any more is
+   * stopped and its state forgotten at once, so a quick V1 -> V2 -> V1 restarts V1 instead of reporting the stopped run as preparing.
+   */
+  private leave(page: string, key: string | null): void {
+    const held = this.pages.get(page);
+    if (!held || held.key === key) return;
+    this.pages.delete(page);
+    held.end.abort();
+    this.jobs.release(`${page}/character`);
+    this.forgetStopped(held.key);
+  }
+  private forgetStopped(key: string): void {
+    const run = this.runs.get(key);
+    if (run && run.want.state().phase === "stopped") { this.runs.delete(key); this.states.delete(key); }
+  }
+
+  /**
    * Start (or reuse) the preparation for a request from one open page (`page`: its name, empty for a caller that gives none). That
-   * page's other running request is cancelled, and its state is forgotten at once; another page's is left to finish (PIPE-103). The
-   * new preparation starts once every earlier one (a cancelled one too) has stopped.
+   * page's earlier V is let go (stopped, and its state forgotten, unless another page wants it too); another page's is left to finish
+   * (PIPE-103). Preparations run one at a time, in the order asked (the scheduler's person lane), each once the run before it returned.
    */
   request(request: CharacterRequest, page = ""): CharacterDetailState {
     // A person's change pre-empts preparing ahead at once, even when its answer is ready: the batch stops (its choices are queued again,
@@ -352,78 +391,83 @@ export class CharacterDetailHost {
     const fingerprint = installationFingerprint(settings);
     const key = characterRequestKey(request, fingerprint);
     const known = this.states.get(key);
-    const live = <T extends { controller: AbortController }>(run: T | undefined) => run && !run.controller.signal.aborted ? run : null;
-    const active = live(this.running.get(page));
-    // A degraded answer is served once, then prepared again (PIPE-53). A V another page is having prepared is shared, not restarted.
-    if ((known?.phase === "ready" && !this.degraded.has(key))
-      || (known?.phase === "preparing" && [...this.running.values()].some(run => live(run) && run.key === key))) return known;
-    this.degraded.delete(key);
-    // A different (or a stale, cancelled) preparation: stop it and forget its answer now, so a quick
-    // V1 -> V2 -> V1 restarts V1 instead of reporting the cancelled run as still preparing.
-    if (active) { active.controller.abort(); this.states.delete(active.key); }
-    // The V resolved in the background after a restart steps aside; what it resolved so far stays in the shared cache.
-    const warmingUp = this.warmingUp;
-    warmingUp?.controller.abort();
+    // A degraded answer is served once, then prepared again (PIPE-53).
+    if (known?.phase === "ready" && !this.degraded.has(key)) { this.leave(page, null); return known; }
     const route = this.route();
-    if (!route) return this.set({ key, phase: "failed", message: NEEDS_SETUP, progress: null, record: null });
+    if (!route) { this.leave(page, null); return this.set({ key, phase: "failed", message: NEEDS_SETUP, progress: null, record: null }); }
     // Without WolvenKit nothing can be exported for the 3D view: say so at once, as a need rather than a failure, without resolving the V
     // (NATIVE-48). Setting it up changes the fingerprint, so the page's next request prepares the V.
     if (!route.wolvenKitCli) {
+      this.leave(page, null);
       if (known?.phase !== "failed" || known.need !== "wolvenkit") this.options.log?.("Your V's details wait for WolvenKit to be set up.");
       return this.set({ key, phase: "failed", message: TOOL_MISSING, progress: null, record: null, need: "wolvenkit" });
     }
-    const controller = new AbortController();
-    if (this.shared?.fingerprint !== fingerprint) this.shared = { fingerprint, cache: new CharacterPreparationCache() };
-    const cache = this.shared.cache;
-    const exporter = this.exporterFor(route.wolvenKitCli);
-    // A person's own change comes first: a choice being prepared ahead steps aside (choice-prefetch.ts).
-    this.prefetch.foreground(request);
+    const running = this.runs.get(key);
+    const live = running && (running.want.state().phase === "waiting" || running.want.state().phase === "running");
+    // A V another page is having prepared (or this page asked again) is shared, not restarted.
+    if (!live) this.degraded.delete(key);
+    this.leave(page, key);
+    const end = new AbortController();
+    const held = this.pages.get(page) ?? { key, lease: lease(this.options.clock ?? hostClock(), PAGE_LEASE_MS, end.signal), end };
+    held.lease.renew();
+    this.pages.set(page, held);
+    const token = {};
+    const spec = live ? { key, lane: "person" as const, run: async () => {} } : this.preparation(request, key, route, fingerprint, token);
+    // The run is known by its key before it is wanted: a person's job may start within `want`.
+    const entry = { want: null as unknown as Want<void>, token };
+    if (!live) this.runs.set(key, entry);
+    const want = this.jobs.want(`${page}/character`, spec, held.lease.signal);
+    if (!live) {
+      entry.want = want;
+      void want.settled.then(outcome => {
+        if (this.runs.get(key)?.token !== token) return;
+        this.runs.delete(key);
+        // Stopped, perhaps before it ever started (its page's lease ran out while it waited): the key isn't being prepared any more, so a
+        // page that comes back is told `unknown` and asks again, never `preparing` with nothing running.
+        if (outcome.status === "superseded" && this.states.get(key)?.phase === "preparing") this.states.delete(key);
+      });
+    }
+    // The page's lease ends with the run it holds.
+    void want.settled.then(() => { if (this.pages.get(page) === held) { this.pages.delete(page); held.end.abort(); } });
+    if (!live) this.prefetch.foreground(request);
+    return this.states.get(key) ?? this.set({ key, phase: "preparing", message: PREPARING, progress: { index: 0, total: CHARACTER_DETAIL_STEPS.length, label: CHARACTER_DETAIL_STEPS[0]!.label }, record: null });
+  }
+
+  /** A preparation of `request` as a person's job: its state is set as it goes, and kept when it ends. */
+  private preparation(request: CharacterRequest, key: string, route: CharacterRoute, fingerprint: string, token: object): JobSpec<void> {
+    // Whether this run still owns its key's state (a newer run for the same key takes it over).
+    const owns = () => this.runs.get(key)?.token === token;
     const first = CHARACTER_DETAIL_STEPS[0]!;
     this.set({ key, phase: "preparing", message: PREPARING, progress: { index: 0, total: CHARACTER_DETAIL_STEPS.length, label: first.label }, record: null });
-    // Whether this run still owns its key's state (a newer run for the same key takes it over).
-    const owns = () => ![...this.running.values()].some(run => run.key === key && run.controller !== controller);
     // The whole wait is logged, not only the preparation: queued (behind another page's run or a stopped batch), started, done.
     const asked = Date.now();
-    let started = 0;
-    // The installation the preparation read: its watch list is what a kept answer names (prepared-answers.ts).
-    let opened: Installation | null = null;
-    const open = async (options: InstallationOptions) => (opened = await acquireInstallation(options));
-    const run = () => {
-      if (controller.signal.aborted) throw new CharacterDetailError("character_cancelled", "Superseded before it started.");
-      started = Date.now();
-      return foregroundExtraction(this.resolverCache, () => (this.options.prepare ?? prepareCharacterDetails)({ request, route, storeRoot: this.storeRoot, cache, open,
-        derive: request.choices?.length ? structuralInput : undefined, manifests: this.manifests(route),
-        resolverCache: this.resolverCache, exporter, signal: controller.signal,
-        progress: (_step, index, total, label) => {
-          if (!controller.signal.aborted) this.set({ key, phase: "preparing", message: PREPARING, progress: { index, total, label }, record: null });
-        }, log: this.options.log, trace: this.options.trace, nativeDecodeWorker: this.options.nativeDecodeWorker }));
-    };
-    // Start now, or once the earlier runs (a cancelled one still settling on the shared cache, another page's) and a stopped prefetch
-    // batch have let go (PREV-102, PIPE-103).
-    const waits: Promise<unknown>[] = [...this.running.values()].map(run => run.promise);
-    if (warmingUp) waits.push(warmingUp.promise);
-    if (this.prefetch.preparing) waits.push(this.prefetch.idle());
-    // A preview source being derived is stopped, unless it is already writing (then it finishes: it takes a moment and is kept).
-    if (this.previewing) {
-      if (!this.previewing.passed) this.previewing.controller.abort();
-      waits.push(this.previewing.promise.catch(() => { /* Settled. */ }));
-    }
-    const begun = waits.length ? Promise.all(waits).then(run) : new Promise<Awaited<ReturnType<typeof run>>>(resolve => resolve(run()));
-    const promise = begun
-      .then(result => {
-        this.set({ key, phase: "ready", message: result.note ?? "", progress: null, record: result.recordFile });
+    const spec: JobSpec<void> = { key, lane: "person", run: async context => {
+      const { signal } = context;
+      if (signal.aborted) return;
+      const started = Date.now();
+      // The installation the preparation read: its watch list is what a kept answer names (prepared-answers.ts).
+      let opened: Installation | null = null;
+      const open = async (options: InstallationOptions) => (opened = await acquireInstallation(options));
+      try {
+        const cache = this.sharedCache(fingerprint);
+        const result = await (this.options.prepare ?? prepareCharacterDetails)({ request, route, storeRoot: this.storeRoot, cache, open,
+          derive: request.choices?.length ? structuralInput : undefined, manifests: this.manifests(route),
+          resolverCache: this.resolverCache, exporter: this.exporterFor(route.wolvenKitCli), signal,
+          progress: (_step, index, total, label) => {
+            if (!signal.aborted && owns()) this.set({ key, phase: "preparing", message: PREPARING, progress: { index, total, label }, record: null });
+          }, log: this.options.log, trace: this.options.trace, nativeDecodeWorker: this.options.nativeDecodeWorker });
+        if (owns()) this.set({ key, phase: "ready", message: result.note ?? "", progress: null, record: result.recordFile });
         if (result.degraded) this.degraded.add(key); else this.degraded.delete(key);
         // A complete answer is kept for the next start, named by the installation it was prepared from (prepared-answers.ts).
         const watch = (opened as Installation | null)?.watch;
         if (!result.degraded && watch?.length) void this.answers?.remember(installationRouteKey(route), request, { record: result.recordFile, message: result.note ?? "" }, watch);
         this.prefetch.prepared(request, !result.degraded);
-        void this.keepWithinBudget();
+        void this.prepared.keepWithinBudget();
         const done = Date.now(), seconds = (ms: number) => (ms / 1000).toFixed(1);
         this.options.log?.(`Skin, face details, eyes, brows, lashes, hair, piercings and body prepared in ${seconds(done - started)} s (${request.source} V; ` +
           `waited ${seconds(started - asked)} s before starting, ${seconds(done - asked)} s in all).`);
-      })
-      .catch(error => {
-        const cancelled = error instanceof CharacterDetailError && error.code === "character_cancelled" || controller.signal.aborted;
+      } catch (error) {
+        const cancelled = error instanceof CharacterDetailError && error.code === "character_cancelled" || signal.aborted;
         this.prefetch.prepared(request, false);
         if (cancelled) { if (owns()) this.states.delete(key); return; }
         const message = error instanceof CharacterDetailError ? error.message : FAILED;
@@ -432,10 +476,9 @@ export class CharacterDetailHost {
         const need = error instanceof CharacterDetailError && error.code === "character_tool_missing";
         if (!need) hostFailure("character", error instanceof CharacterDetailError ? error.code : "character_failed", message, error instanceof CharacterDetailError ? { code: error.code, message: error.message, detail: error.detail } : error);
         if (owns()) this.set({ key, phase: "failed", message, progress: null, record: null, ...(need ? { need: "wolvenkit" as const } : {}) });
-      })
-      .finally(() => { if (this.running.get(page)?.controller === controller) this.running.delete(page); });
-    this.running.set(page, { key, controller, promise });
-    return this.states.get(key)!;
+      }
+    } };
+    return spec;
   }
 
   /**
@@ -481,18 +524,18 @@ export class CharacterDetailHost {
     const keyNow = () => characterRequestKey(request, installationFingerprint(this.options.settings()));
     if (this.states.has(keyNow())) return null;
     const started = performance.now();
-    this.asking++;
+    // A person's request is being answered: work below the person lane waits for it.
+    const release = this.jobs.hold();
     let found;
     try { found = await this.answers.find(installationRouteKey(route), request); }
     catch { found = null; }
-    finally { this.asking--; }
+    finally { release(); }
     // Asked, prepared or answered meanwhile (another page, the same page again), or the route changed: the usual path decides.
     const key = keyNow(), now = this.route();
     if (!found || this.states.has(key) || !now || installationRouteKey(now) !== installationRouteKey(route)) return null;
     this.noteAsk();
     this.prefetch.pause();
-    const active = this.running.get(page);
-    if (active && !active.controller.signal.aborted && active.key !== key) { active.controller.abort(); this.states.delete(active.key); }
+    this.leave(page, null);
     const state = this.set({ key, phase: "ready", message: found.message, progress: null, record: found.record });
     this.prefetch.prepared(request, true);
     this.options.log?.(`Your V was shown as prepared before (nothing it was prepared from changed; checked in ${Math.round(performance.now() - started)} ms).`);
@@ -501,27 +544,18 @@ export class CharacterDetailHost {
     return state;
   }
   /**
-   * Resolve a V answered from a kept answer into the shared cache, in the background once the page has been quiet for `WARM_UP_QUIET_MS`
+   * Resolve a V answered from a kept answer into the shared cache, as work done ahead once the page has been quiet for `WARM_UP_QUIET_MS`
    * (it reads the V's files and starts everything else first), so the person's first change after a restart only resolves and exports
-   * what it changes. Nothing is written to the store. A person's request stops it (`request`).
+   * what it changes. Nothing is written to the store. A person's change stops it (the scheduler's rule).
    */
   private warmUp(request: CharacterRequest): void {
-    this.warmingUp?.controller.abort();
-    const controller = new AbortController();
-    const promise = (async () => {
-      for (;;) {
-        await this.foregroundIdle();
-        const quiet = WARM_UP_QUIET_MS - (Date.now() - this.askedAt);
-        if (quiet <= 0 || controller.signal.aborted) break;
-        await new Promise(done => setTimeout(done, quiet));
-      }
-      if (controller.signal.aborted || this.running.size) return;
+    this.jobs.want("host/warm-up", { key: `warm-up:${requestKey(request)}`, lane: "ahead", quietMs: WARM_UP_QUIET_MS, run: async context => {
       const started = Date.now();
-      const [outcome] = await this.warm([request], controller.signal);
-      if (!controller.signal.aborted) this.options.log?.(`Your V was resolved in the background in ${((Date.now() - started) / 1000).toFixed(1)} s${outcome?.ready ? "" : " (not complete)"}, so changes to it start from there.`);
-    })().catch(() => { /* Stopped by a person's change, or failed: the change prepares what it needs. */ })
-      .finally(() => { if (this.warmingUp?.controller === controller) this.warmingUp = null; });
-    this.warmingUp = { controller, promise };
+      try {
+        const [outcome] = await this.warm([request], context);
+        if (!context.signal.aborted) this.options.log?.(`Your V was resolved in the background in ${((Date.now() - started) / 1000).toFixed(1)} s${outcome?.ready ? "" : " (not complete)"}, so changes to it start from there.`);
+      } catch { /* Stopped by a person's change, or failed: the change prepares what it needs. */ }
+    } });
   }
 
   /**
@@ -532,31 +566,21 @@ export class CharacterDetailHost {
   async refresh(): Promise<void> {
     const route = this.route();
     if (!route) return;
-    // A person's request: background work steps aside until it is answered (`backgroundSlicer`).
-    this.asking++;
+    // A person's request: work below the person lane steps aside until it is answered.
+    const release = this.jobs.hold();
     try { await installations.revalidate(route); }
     catch { /* The preparation checks again, and reports what it cannot read. */ }
-    finally { this.asking--; }
-  }
-  /**
-   * The turn background work takes between its units (research/backlog/performance.md, scheduling rule): it lets the event loop answer
-   * what is waiting once its slice is used (event-loop.ts), and waits while a person's own request is being answered or prepared, so the
-   * person's change never shares the host's one thread with checks made ahead of time.
-   */
-  private backgroundSlicer(): () => Promise<void> {
-    const slice = timeSlicer();
-    return async () => {
-      await slice();
-      if (this.running.size || this.asking || Date.now() - this.askedAt < QUIET_MS) await this.foregroundIdle();
-    };
+    finally { release(); }
   }
 
-  /** The state for a request key; `unknown` when this host has not seen it (the page asks again). */
+  /** The state for a request key; `unknown` when this host has not seen it (the page asks again). A page's poll holds its want. */
   state(key: string): CharacterDetailState {
+    for (const held of this.pages.values()) if (held.key === key) held.lease.renew();
     return this.states.get(key) ?? { schema: CHARACTER_DETAIL_STATE_SCHEMA, recordSchema: CHARACTER_DETAIL_SCHEMA, key, phase: "unknown", message: "", progress: null, record: null };
   }
 
-  cancel(): void { for (const run of this.running.values()) run.controller.abort(); this.prefetch.cancel(); }
+  /** Stop every page's preparation and preparing ahead. */
+  cancel(): void { for (const page of [...this.pages.keys()]) this.leave(page, null); this.prefetch.cancel(); }
 
   // ---- Preparing choices ahead (choice-prefetch.ts) ----
 
@@ -576,76 +600,63 @@ export class CharacterDetailHost {
     return { ...base, choices };
   }
   /**
-   * A check of whether requests are ready on the installation as it is now (their manifests hold), a few entries at a time so the host
-   * keeps answering requests while a row's choices are checked (choice-manifest.ts `manifestProblemSliced`).
+   * A check of whether requests are ready on the installation as it is now (their manifests hold), a few entries at a time with the job's
+   * turn between them, so the host keeps answering requests while a row's choices are checked (choice-manifest.ts `manifestProblemSliced`).
    */
-  private async readiness(): Promise<(request: CharacterRequest) => Promise<boolean>> {
+  private async readiness(context: JobContext): Promise<(request: CharacterRequest) => Promise<boolean>> {
     const route = this.route();
     if (!route) return async () => false;
-    const installation = await this.backgroundInstallation({ ...route, cacheDir: this.resolverCache, log: this.options.log });
+    // Opening the installation can take a second after a start: a person's change doesn't wait for it (it goes on as the job's tail, and
+    // the change's own open joins it).
+    const opening = this.backgroundInstallation({ ...route, cacheDir: this.resolverCache, log: this.options.log });
+    context.afterwards(opening);
+    const installation = await untilStopped(opening, context.signal);
     const exporter = this.exporterFor(route.wolvenKitCli), manifests = this.manifests(route);
     const check = { graph: installation.graph, fetcher: installation.fetcher, exporter, gameRoot: route.gameRoot, tool: installation.fetcher.tool,
       xl: xlIdentity(installation) };
-    const slice = this.backgroundSlicer();
     return async request => {
       const manifest = readChoiceManifest(manifests.dir, manifests.key(request));
       if (!manifest) return false;
       const memo = new Map<string, string>();
-      return await manifestProblemSliced(manifest, check, slice, run => withArchiveFingerprints(run, memo)) === null;
+      return await manifestProblemSliced(manifest, check, () => context.turn(), run => withArchiveFingerprints(run, memo)) === null;
     };
   }
   /** Whether preparing waits for setup (no game folder, or no WolvenKit): preparing ahead then stops early (NATIVE-48). */
   private needsSetup(): boolean { return !this.route()?.wolvenKitCli; }
-  /** Prepare requests ahead, in the background, sharing the preparations' cache. */
-  private async warm(requests: readonly CharacterRequest[], signal: AbortSignal) {
+  /**
+   * Prepare requests ahead as part of a job below the person lane, sharing the preparations' cache. A stopped job answers at once; its
+   * reads already in WolvenKit finish for everyone in the background (the job's `afterwards`, PREV-102), asking for nothing further.
+   */
+  private async warm(requests: readonly CharacterRequest[], context: JobContext) {
     const route = this.route();
     if (!route?.wolvenKitCli || !requests.length) return requests.map(() => ({ ready: false }));
-    const settings = this.options.settings();
-    const fingerprint = installationFingerprint(settings);
-    if (this.shared?.fingerprint !== fingerprint) this.shared = { fingerprint, cache: new CharacterPreparationCache() };
-    const cache = this.shared.cache;
-    // Each launch decides its priority as it starts: below normal only while no person's own change is being prepared (PIPE-96).
-    const work = backgroundExtraction(this.resolverCache, () => (this.options.warm ?? warmCharacters)({ requests, route, storeRoot: this.storeRoot, cache,
+    const cache = this.sharedCache();
+    // Each launch decides its priority as it starts: below normal only while no person's job runs (PIPE-96).
+    const work = (this.options.warm ?? warmCharacters)({ requests, route, storeRoot: this.storeRoot, cache,
       open: options => this.backgroundInstallation(options),
-      derive: structuralInput, resolverCache: this.resolverCache, exporter: this.exporterFor(route.wolvenKitCli), signal,
-      lowPriority: backgroundPriority(this.resolverCache), manifests: this.manifests(route), log: this.options.log, nativeDecodeWorker: this.options.nativeDecodeWorker }));
-    const settled: Promise<void> = work.then(() => {}, () => {}).finally(() => { this.warming.delete(settled); });
-    this.warming.add(settled);
-    return untilStopped(work, signal);
+      derive: structuralInput, resolverCache: this.resolverCache, exporter: this.exporterFor(route.wolvenKitCli), signal: context.signal,
+      lowPriority: lowPriorityNow, manifests: this.manifests(route), log: this.options.log, nativeDecodeWorker: this.options.nativeDecodeWorker });
+    context.afterwards(work);
+    return untilStopped(work, context.signal);
   }
   /** The opened installation for background work, without the check a person's request makes (opened when it isn't yet). */
   private async backgroundInstallation(options: InstallationOptions): Promise<Installation> {
     return installations.peek(options) ?? acquireInstallation(options);
   }
-  /**
-   * Resolves once no person's own change is being prepared or answered and the page has been quiet for `QUIET_MS` (it reads a new
-   * record's files right after the answer): the next batch of choices prepared ahead starts only then.
-   */
-  private async foregroundIdle(): Promise<void> {
-    for (;;) {
-      if (this.running.size) await Promise.all([...this.running.values()].map(run => run.promise.catch(() => { /* Settled. */ })));
-      if (this.previewing) await this.previewing.promise.catch(() => { /* Settled. */ });
-      const quiet = QUIET_MS - (Date.now() - this.askedAt);
-      const held = PREVIEW_HOLD_MS - (Date.now() - this.previewAskedAt);
-      if (!this.running.size && !this.asking && !this.previewing && quiet <= 0 && held <= 0) return;
-      await new Promise(done => setTimeout(done, Math.max(5, Math.min(Math.max(quiet, held), QUIET_MS))));
-    }
-  }
-  /** The page asked for its V or read one of its files: a person is waiting on the host. */
-  noteAsk(): void { this.askedAt = Date.now(); }
+  /** The page asked for its V or read one of its files: a person is waiting on the host, so work below the person lane waits a moment. */
+  noteAsk(): void { this.jobs.touch(); }
 
   // ---- Choice previews (choice-previews-design.md §6.2) ----
 
   /**
    * A row's preview sources: each position's indexed source, and for `derive` (a choice prepared ahead and ready), its source derived now
-   * from the prepared record, in the background lane: after a person's change, a batch prepared ahead and the quiet moment after a
-   * person's request, one at a time. Never prepares a choice that isn't ready (that is preparing ahead's work).
+   * from the prepared record, in the `shown` lane: after a person's change and the quiet moment after it, before the next batch prepared
+   * ahead (never stopping a running one), one at a time. Never prepares a choice that isn't ready (that is preparing ahead's work).
    */
   async previewSources(input: PreviewSourcesInput): Promise<PreviewSourceItem[]> {
     const route = this.route();
     if (!route) return input.positions.map(position => ({ position, state: "unprepared" as const }));
     const manifests = this.manifests(route), items: PreviewSourceItem[] = [];
-    if (input.derive !== null) this.previewAskedAt = Date.now();
     for (const position of input.positions) {
       const request = await this.requestFor(input.base, input.option, position);
       if (!request) { items.push({ position, state: "none" }); continue; }
@@ -661,107 +672,73 @@ export class CharacterDetailHost {
     return items;
   }
   /**
-   * Plan and write a ready choice's record from the caches and keep its source (undefined: degraded or failed this time; `busy`: the
-   * background lane wasn't free within `PREVIEW_DERIVE_WAIT_MS`, the page went away while waiting, or a person's change stopped it). Once started, a
-   * derivation finishes and is kept even if the page goes away (its source serves the next question).
+   * Plan and write a ready choice's record from the caches and keep its source (undefined: degraded or failed this time; `busy`: it didn't
+   * start within `PREVIEW_DERIVE_WAIT_MS`, the page went away while it waited, or a person's change stopped it before it was writing).
+   * Once started, a derivation finishes and is kept even if the page goes away (its source serves the next question); once writing, a
+   * person's change waits for it (it commits).
    */
   private async derivePreview(request: CharacterRequest, kind: PreviewKind, route: CharacterRoute, key: string, stamp: string,
     signal?: AbortSignal): Promise<ChoicePreviewSource | null | undefined | "busy"> {
-    // Wait for the background lane: no person's change, no batch prepared ahead, no other derivation, and the page quiet a moment.
-    for (const began = Date.now(); ;) {
-      if (signal?.aborted) return "busy";
-      this.previewAskedAt = Date.now();
-      const busy = this.running.size || this.asking || this.previewing || this.prefetch.preparing || this.warming.size || Date.now() - this.askedAt < QUIET_MS;
-      if (!busy) break;
-      if (Date.now() - began >= PREVIEW_DERIVE_WAIT_MS) return "busy";
-      await new Promise(done => setTimeout(done, 100));
-    }
-    const settings = this.options.settings(), fingerprint = installationFingerprint(settings);
-    if (this.shared?.fingerprint !== fingerprint) this.shared = { fingerprint, cache: new CharacterPreparationCache() };
-    const cache = this.shared.cache, controller = new AbortController();
-    const entry: { controller: AbortController; promise: Promise<unknown>; passed: boolean } = { controller, promise: Promise.resolve(), passed: false };
-    const started = Date.now();
-    const work = backgroundExtraction(this.resolverCache, () => (this.options.prepare ?? prepareCharacterDetails)({ request, route, storeRoot: this.storeRoot, cache,
-      // No manifest is written: the choice's own (from preparing ahead) stays the authority, and this source is kept under its stamp.
-      derive: request.choices?.length ? structuralInput : undefined, resolverCache: this.resolverCache,
-      exporter: this.exporterFor(route.wolvenKitCli), signal: controller.signal, log: this.options.log, nativeDecodeWorker: this.options.nativeDecodeWorker,
-      skipDangles: true, progress: step => { if (step === "writing") entry.passed = true; } }));
-    entry.promise = work;
-    this.previewing = entry;
-    try {
-      const result = await work;
-      // Stopped for a person's change (PREV-162): the lane was taken, not a failed try; the page asks again shortly.
-      if (result.degraded) return controller.signal.aborted ? "busy" : undefined;
+    if (signal?.aborted) return "busy";
+    const requester = `preview-source:${key}`;
+    const want = this.jobs.want(requester, { key: `preview-source:${key}:${stamp}:${kind}`, lane: "shown", run: async context => {
+      const started = Date.now();
+      const result = await (this.options.prepare ?? prepareCharacterDetails)({ request, route, storeRoot: this.storeRoot, cache: this.sharedCache(),
+        // No manifest is written: the choice's own (from preparing ahead) stays the authority, and this source is kept under its stamp.
+        derive: request.choices?.length ? structuralInput : undefined, resolverCache: this.resolverCache,
+        exporter: this.exporterFor(route.wolvenKitCli), signal: context.signal, log: this.options.log, nativeDecodeWorker: this.options.nativeDecodeWorker,
+        skipDangles: true, progress: step => { if (step === "writing") context.commit(); } });
+      if (result.degraded) return undefined;
       const source = previewSourceOf(result.record.components, kind);
       // Kept only if the choice's manifest is still the one it was derived under (preparing ahead may have renewed it meanwhile).
       if (manifestStamp(this.manifests(route).dir, key) === stamp) this.previews.setSource(key, stamp, source);
       this.options.log?.(`Choice preview source derived in ${((Date.now() - started) / 1000).toFixed(2)} s (${source ? `${source.parts.length} part(s)` : "nothing drawn"}).`);
       return source;
-    } catch (error) {
-      if (controller.signal.aborted) return "busy";
-      this.options.log?.(`A choice preview's source couldn't be derived: ${(error as Error)?.message ?? error}`);
+    } });
+    // It waits for its lane at most `PREVIEW_DERIVE_WAIT_MS`, and not once the page went away; once it runs, it is held to its end.
+    const giveUp = () => { if (want.state().phase === "waiting") this.jobs.release(requester); };
+    const timer = setTimeout(giveUp, PREVIEW_DERIVE_WAIT_MS);
+    signal?.addEventListener("abort", giveUp, { once: true });
+    let outcome;
+    try { outcome = await want.settled; }
+    finally { clearTimeout(timer); signal?.removeEventListener("abort", giveUp); }
+    // Stopped for a person's change (PREV-162), or never started: the lane was taken, not a failed try; the page asks again shortly.
+    if (outcome.status === "superseded") return "busy";
+    if (outcome.status === "failed") {
+      this.options.log?.(`A choice preview's source couldn't be derived: ${(outcome.error as Error)?.message ?? outcome.error}`);
       return undefined;
-    } finally {
-      if (this.previewing === entry) this.previewing = null;
     }
+    return outcome.result;
   }
 
   // ---- Prepared game files (prepared-files.ts) ----
 
-  /** Other hosts' prepared game files that "Prepared game files" counts and Clear removes (the facial host's cache, CORE-102). */
-  private readonly otherPrepared: { bytes(): Promise<number>; clear(): Promise<{ freed: number }> }[] = [];
-  /** Count another host's prepared game files with these, and clear them with these. */
-  attachPrepared(source: { bytes(): Promise<number>; clear(): Promise<{ freed: number }> }): void { this.otherPrepared.push(source); }
-  /** The prepared files' size on disk (other hosts' included in `bytes` and `others`). */
-  async preparedFiles(): Promise<PreparedSize & { others: number }> {
-    const [own, ...others] = await Promise.all([preparedSize(this.preparedRoots), ...this.otherPrepared.map(source => source.bytes().catch(() => 0))]);
-    const extra = others.reduce((sum, bytes) => sum + bytes, 0) + this.previews.bytes();
-    return { ...own, bytes: own.bytes + extra, others: extra };
-  }
-  /** Keep exports and extracted JSON within their budget (at most once a minute; never what this session used). */
-  keepWithinBudget(): Promise<void> {
-    if (this.evicting || Date.now() - this.evictedAt < EVICT_INTERVAL_MS) return this.evicting ?? Promise.resolve();
-    this.evictedAt = Date.now();
-    this.evicting = evictPreparedSet([this.preparedRoots, ...this.options.sharedPreparedRoots?.() ?? []], this.options.preparedBudget ?? PREPARED_BUDGET_BYTES)
-      .then(result => { if (result.removed) this.options.log?.(`Prepared game files: removed ${result.removed} least recently used (${(result.freed / 1024 ** 2).toFixed(0)} MB).`); })
-      .catch(error => {
-        this.options.log?.(`Prepared game files could not be checked against their budget: ${(error as Error)?.message ?? error}`);
-        hostFailure("character", "prepared_budget_failed", "The prepared game files couldn't be checked against their space limit.", error, "warn");
-      })
-      .finally(() => { this.evicting = null; });
-    return this.evicting;
-  }
+  /** The prepared files' size on disk: every partition's, this process's other hosts' too. */
+  async preparedFiles(): Promise<PreparedSize> { return this.prepared.size(); }
+  /** Keep the prepared files within their budget (at most once a minute; never what this session used). */
+  keepWithinBudget(): Promise<void> { return this.prepared.keepWithinBudget(); }
   /**
-   * "Clear prepared game files": stop preparing ahead, wait for a running preparation to stop, remove every prepared file, and forget
-   * what was derived from them, so the next preparation reads the game files again. The V on screen stays as it is until it is prepared
-   * again.
+   * "Clear prepared game files": stop preparing ahead and every page's preparation, wait until no other job runs and their work let go,
+   * remove every prepared file, and forget what was derived from them, so the next preparation reads the game files again. The V on screen
+   * stays as it is until it is prepared again.
    */
-  async clearPreparedFiles(): Promise<{ freed: number }> {
-    this.prefetch.cancel();
-    for (const run of this.running.values()) run.controller.abort();
-    await this.settled().catch(() => {});
-    // A stopped prefetch batch lets go of the cache and finishes its reads before anything is removed (PREV-102).
-    await this.prefetch.idle();
-    await this.warmingSettled();
-    await this.evicting;
-    this.previewing?.controller.abort();
-    await this.previewing?.promise.catch(() => {});
-    const result = await clearPrepared(this.preparedRoots);
-    try { result.freed += this.previews.clear().freed; }
-    catch (error) { this.options.log?.(`Some choice previews couldn't be cleared: ${(error as Error)?.message ?? error}`); }
-    for (const source of this.otherPrepared) {
-      try { result.freed += (await source.clear()).freed; }
-      catch (error) { this.options.log?.(`Some prepared game files couldn't be cleared: ${(error as Error)?.message ?? error}`); }
-    }
+  clearPreparedFiles(): Promise<{ freed: number }> { return this.prepared.clear(); }
+  /** Clear begins: stop this host's work that writes into its prepared files. */
+  private stopAll(): void {
+    this.cancel();
+    this.jobs.release("host/warm-up");
+  }
+  /** Clear removed the files: forget what was derived from them. */
+  private forget(): void {
     this.shared = null;
     this.states.clear();
     this.degraded.clear();
+    this.previews.forget();
     // The files are gone, so preparing ahead may fill the budget again this session (PREV-104).
     this.prefetch.resetBudget();
-    return result;
   }
-  /** Resolves once no preparation is running (every page's). */
-  async settled(): Promise<void> { while (this.running.size) await Promise.all([...this.running.values()].map(run => run.promise)); }
+  /** Resolves once no person's job (any page's preparation, Clear) waits or runs. */
+  async settled(): Promise<void> { await this.jobs.idle("person"); }
 
   /** Absolute path of a served record or file, or null. Names are content-addressed, never paths. */
   filePath(name: string): string | null {

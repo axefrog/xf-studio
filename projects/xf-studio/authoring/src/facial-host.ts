@@ -38,6 +38,7 @@ import { denseTracks, vectorIssue } from "./engines/facial-rig/vector";
 import { CONTROL_GROUPS, type FacialVocabulary } from "./engines/facial-rig/vocabulary";
 import type { RigRest } from "./engines/facial-rig/pose";
 import type { AxisPair } from "./engines/facial-rig/symmetry";
+import type { PreparedPartition } from "./prepared-files";
 import { FACE_MOTION_SCHEMA, FACIAL_BLINK_ENDPOINT, FACIAL_ENDPOINT, FACIAL_EXPRESSIONS_ENDPOINT, FACIAL_SOLVE_ENDPOINT, FACIAL_STATE_SCHEMA, type FaceMotionClip,
   type FaceMotionRest, type FacialBlink, type FacialBlinkRecord, type FacialHostState, type FacialSolveAnswer, type FacialSolveRequest,
   type FacialStartPoints } from "./platform/api/facial";
@@ -410,6 +411,8 @@ export class FacialHost {
   }
   dispose() { this.current?.controller.abort(); this.current?.process?.dispose(); this.current = null; }
 
+  /** The facial cache as a partition of the prepared files (prepared-files.ts); this host still counts and clears it itself (CORE-108). */
+  preparedPartition(): PreparedPartition { return { name: "facial", own: { bytes: () => this.preparedBytes(), clear: () => this.clearPrepared() } }; }
   /** The facial cache's size (`facial/`), for "Prepared game files". */
   async preparedBytes(): Promise<number> { return folderSize(this.root); }
   /**

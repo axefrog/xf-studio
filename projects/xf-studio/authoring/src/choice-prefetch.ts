@@ -10,29 +10,32 @@
  *   the rest are queued in the panel's order.
  * - **Batches.** Queued choices are prepared together (`warm`: each level of all their resource chains in one WolvenKit batch, their
  *   parts exported in one launch), at low priority: a small first batch, so the choices in view come back soon, then larger ones.
- * - **A person's own change comes first.** While the host prepares a person's change the queue waits (`foregroundIdle`); a batch in
- *   WolvenKit when it starts is stopped (`pause`: its export launch is ended, reads already in WolvenKit finish and are kept), and its
- *   choices are queued again. A hover or focus hint (`focus`) moves a choice to the front of the queue; a click on it is the person's
- *   own change, shown as being prepared (`foreground`) and ready when it is (`prepared`). Nothing awaits between the loop's check that
- *   no change is being prepared and the start of a batch, so a change that starts meanwhile always finds the batch to stop.
- * - **Settles before a person's change.** `idle` resolves once no batch is being prepared, so a person's own change and Clear start only
- *   after a stopped batch has let go of the shared preparation cache (PREV-102).
- * - **One preparation at a time.** A new batch starts only once a stopped one (this job's or a replaced job's) has settled
- *   (`settled`), so repeated clicks never pile up background preparations; a stopped batch doesn't grow the next one (PREV-120).
+ * - **Scheduled as work prepared ahead.** Each readiness check and each batch is an `ahead` job of the host's scheduler
+ *   (platform/core/jobs.ts; one want at a time, `requester`): it starts only while no person's change waits or runs and the host has
+ *   been quiet a moment, after a stopped batch's reads have let go (`afterwards`, PREV-120), and one at a time with the host's other
+ *   work, so repeated clicks never pile up background preparations; a stopped batch doesn't grow the next one.
+ * - **A person's own change comes first.** A person's change stops a batch in WolvenKit (the scheduler's rule, and `pause`: its export
+ *   launch is ended, reads already in WolvenKit finish and are kept), and its choices are queued again; checks wait at their next turn.
+ *   A hover or focus hint (`focus`) moves a choice to the front of the queue; a click on it is the person's own change, shown as being
+ *   prepared (`foreground`) and ready when it is (`prepared`). A batch takes its choices from the queue only as it starts, so a change
+ *   prepared meanwhile isn't prepared again.
+ * - **Settles before a person's change.** A stopped batch's run returns before the person's change starts (`idle` resolves then), and
+ *   Clear starts only after its reads have let go (PREV-102).
  * - **Bounded.** A job stops after `timeMs` of its own work (time spent waiting for a person's change or for a stopped batch isn't
  *   counted), and prefetching stops for the session once it has added `bytes` of prepared files; either
  *   leaves the remaining choices "not prepared" (the panel says why), and a click still prepares them. "Clear prepared game files"
  *   starts the session's byte budget again (`resetBudget`, PREV-104). A job nobody has asked about for `unpolledMs` (the page closed or
- *   went away) is stopped, its batch in WolvenKit too (PREV-105); asking again starts it afresh.
+ *   went away: its lease ran out) is stopped, its batch in WolvenKit too (PREV-105); asking again starts it afresh.
  * - **Never ends the host.** Background work has nobody to report to: an unexpected failure (a dependency throwing, a damaged manifest)
  *   stops the job, leaves its remaining choices "not prepared", and is reported once through `failed` (PREV-101). A choice whose
  *   readiness can't be checked is queued; one whose request can't be made is not prepared.
- * - **Never holds the host up.** Checking which choices are ready gives the event loop a turn between choices (`slicer`), so a person's
- *   own change, a poll and every other request are answered while a row's choices are checked.
+ * - **Never holds the host up.** Checking which choices are ready gives the event loop a turn between choices (the job's `turn`), so a
+ *   person's own change, a poll and every other request are answered while a row's choices are checked.
  */
 import type { CharacterRequest } from "./character-detail-request";
 import { canonicalJson } from "./eye-plate-recipe";
-import { timeSlicer } from "./event-loop";
+import { hostClock, type Clock } from "./platform/core/clock";
+import { lease, type JobContext, type JobScheduler, type RunOutcome } from "./platform/core/jobs";
 
 export const CHOICE_PREFETCH_SCHEMA = "xfs/choice-prefetch-1" as const;
 /**
@@ -57,19 +60,22 @@ export type PrefetchAnswer = {
 };
 export type PrefetchInput = { base: CharacterRequest; option: string; positions: readonly number[]; focus?: number | null };
 export type PrefetchDeps = {
+  /** The host's scheduler: each readiness check and batch is one of its `ahead` jobs. */
+  jobs: JobScheduler;
+  /** The prefetcher's name with the scheduler (default `prefetch`): one want at a time. */
+  requester?: string;
   /** The V with one choice of the option set, or null when the installed catalogue doesn't offer it. */
   requestFor(base: CharacterRequest, option: string, position: number): Promise<CharacterRequest | null>;
-  /** A check of whether a request is ready now (its manifest holds), on the installation as it is now. */
-  readiness(): Promise<(request: CharacterRequest) => boolean | Promise<boolean>>;
-  /** Prepare several requests ahead (character-detail-service.ts `warmCharacters`); per request, whether it is ready. */
-  warm(requests: readonly CharacterRequest[], signal: AbortSignal): Promise<readonly { ready: boolean }[]>;
-  /** Resolves once no person's own change is being prepared. */
-  foregroundIdle(): Promise<void>;
   /**
-   * Resolves once every stopped batch has settled. `warm` answers a stopped batch at once, so a person's own change isn't held up by
-   * reads already in WolvenKit, while the batch lets go in the background; the next batch waits for that (PREV-120).
+   * A check of whether a request is ready now (its manifest holds), on the installation as it is now; long checks take the job's turn
+   * between their units (choice-manifest.ts `manifestProblemSliced`).
    */
-  settled?(): Promise<void>;
+  readiness(context: JobContext): Promise<(request: CharacterRequest) => boolean | Promise<boolean>>;
+  /**
+   * Prepare several requests ahead (character-detail-service.ts `warmCharacters`); per request, whether it is ready. A stopped batch
+   * answers at once, so a person's own change isn't held up by reads already in WolvenKit, and hands those reads to `afterwards`.
+   */
+  warm(requests: readonly CharacterRequest[], context: JobContext): Promise<readonly { ready: boolean }[]>;
   /** The prepared files' size now (prepared-files.ts). */
   preparedBytes(): Promise<number>;
   /** After a batch: keep the prepared files within their budget. */
@@ -77,14 +83,11 @@ export type PrefetchDeps = {
   /** Nothing can be prepared until something is set up (WolvenKit): the job stops as `setup` before its first batch (NATIVE-48). */
   needsSetup?(): boolean;
   log?(message: string): void;
-  /**
-   * Lets the host's event loop answer what is waiting between units of work (event-loop.ts `timeSlicer`): checking which choices are
-   * ready runs one manifest at a time, so a person's request, a poll or a static file is never held back behind the whole check.
-   */
-  slicer?(): () => Promise<void>;
   /** A batch or the job failed for a reason other than being stopped (the host's diagnostics hook). */
   failed?(error: unknown): void;
   now?(): number;
+  /** The clock of the job's lease (default the host's). */
+  clock?: Clock;
 };
 /**
  * `batch`: choices in a job's first batch (the ones in view come back soonest); each later batch doubles, up to `maxBatch`, since every
@@ -103,7 +106,6 @@ type Job = { key: string; base: CharacterRequest; option: string; items: Map<num
   stopped: PrefetchStop; running: boolean; serial: number;
   /** Batches that ran to the end (a stopped batch doesn't grow the next one, PREV-120). */
   batches: number;
-  polledAt: number;
   /** Time the job spent waiting for a person's change or for a stopped batch to settle: not counted toward `timeMs` (PREV-120). */
   pausedMs: number };
 
@@ -115,24 +117,37 @@ export function withoutOption(request: CharacterRequest, option: string): Charac
   return (choices.length ? { ...rest, choices } : rest) as CharacterRequest;
 }
 const messageOf = (error: unknown) => (error as Error)?.message ?? String(error);
+/** `work`'s answer, or a stop as soon as the job is stopped; `work` itself goes on as the job's tail. */
+function untilStopped<T>(work: Promise<T>, context: JobContext): Promise<T> {
+  context.afterwards(work);
+  if (context.signal.aborted) return Promise.reject(new Error("Stopped."));
+  return new Promise<T>((resolve, reject) => {
+    const stop = () => reject(new Error("Stopped."));
+    context.signal.addEventListener("abort", stop, { once: true });
+    work.then(value => { context.signal.removeEventListener("abort", stop); resolve(value); },
+      error => { context.signal.removeEventListener("abort", stop); reject(error); });
+  });
+}
 
 export class ChoicePrefetcher {
   private job: Job | null = null;
-  /** The batch in WolvenKit now, stopped when a person's own change starts (`pause`). */
-  private batch: AbortController | null = null;
+  /** What the job wants of the scheduler now: a readiness check or a batch (a person's change stops only a batch, `pause`). */
+  private current: "check" | "batch" | null = null;
   /** Prepared-file bytes when this session's first prefetch began, and whether the session's byte budget is spent. */
   private startBytes: number | null = null;
   private spent = false;
   /** The request a person's own change is preparing now (its key), if any. */
   private foregroundKey: string | null = null;
-  /** The batch being prepared now, as a promise that settles with it and never rejects: what `idle` waits for. */
+  /** The batch being prepared now (its run started and hasn't returned), as a promise that never rejects: what `idle` waits for. */
   private inflight: Promise<void> | null = null;
-  /** Checks, while a job runs, that the page still asks about it (PREV-105). */
-  private watchdog: ReturnType<typeof setInterval> | null = null;
+  /** While a job runs: its lease, renewed by each question about it, which stops the job once nobody asks (PREV-105). */
+  private lease: { renew(): void; end: AbortController } | null = null;
+  private serial = 0;
   readonly stats = { batches: 0, warmed: 0, cancelled: 0, failed: 0, unpolled: 0 };
 
   constructor(private readonly deps: PrefetchDeps, private readonly limits: PrefetchLimits = PREFETCH_LIMITS) {}
   private now() { return this.deps.now?.() ?? Date.now(); }
+  private get requester() { return this.deps.requester ?? "prefetch"; }
 
   /** Start or update the job for a row and answer its states for `positions`. Never waits for preparation. */
   update(input: PrefetchInput): PrefetchAnswer {
@@ -141,10 +156,10 @@ export class ChoicePrefetcher {
     if (this.job?.key !== key) {
       this.cancel();
       this.job = { key, base, option: input.option, items: new Map(), controller: new AbortController(), startedAt: this.now(),
-        stopped: this.spent ? "disk" : null, running: false, serial: 0, batches: 0, polledAt: this.now(), pausedMs: 0 };
+        stopped: this.spent ? "disk" : null, running: false, serial: 0, batches: 0, pausedMs: 0 };
     }
     const job = this.job!;
-    job.polledAt = this.now();
+    this.lease?.renew();
     for (const position of input.positions) {
       if (!Number.isInteger(position) || position < 0 || job.items.has(position)) continue;
       job.items.set(position, { position, state: "?", request: null, key: null, order: job.serial++ });
@@ -169,10 +184,11 @@ export class ChoicePrefetcher {
   /** Closing the row: stop the job (a batch in WolvenKit is stopped too). */
   cancel(): void {
     const job = this.job;
-    this.stopWatchdog();
+    this.endLease();
     if (!job) return;
     job.controller.abort();
-    this.batch?.abort();
+    this.deps.jobs.release(this.requester);
+    this.current = null;
     this.job = null;
     this.stats.cancelled++;
   }
@@ -183,8 +199,7 @@ export class ChoicePrefetcher {
    */
   stateOf(base: CharacterRequest, option: string, position: number): ChoiceFetchState {
     const job = this.job;
-    if (!job || job.key !== `${requestKey(withoutOption(base, option))}
-${option}`) return "?";
+    if (!job || job.key !== `${requestKey(withoutOption(base, option))}\n${option}`) return "?";
     return job.items.get(position)?.state ?? "?";
   }
   /** The current job still has choices to check or prepare (other background work gives it a turn). */
@@ -192,9 +207,9 @@ ${option}`) return "?";
     const job = this.job;
     return !!job && !job.stopped && [...job.items.values()].some(item => item.state === "?" || item.state === "q");
   }
-  /** A batch is being prepared (or a stopped one hasn't settled yet). */
+  /** A batch is being prepared (its run started and hasn't returned yet). */
   get preparing(): boolean { return this.inflight !== null; }
-  /** Resolves once no batch is being prepared (a stopped one has settled). Never rejects. */
+  /** Resolves once no batch is being prepared (a stopped one has returned). Never rejects. */
   async idle(): Promise<void> {
     while (this.inflight) await this.inflight;
   }
@@ -205,14 +220,16 @@ ${option}`) return "?";
   }
 
   /**
-   * A person is waiting on the host (their change was asked for, prepared or not): stop the batch being prepared ahead; its choices are
-   * queued again, and the reads it already started finish and are kept. The next batch starts once the host is quiet (`foregroundIdle`).
+   * A person is waiting on the host (their change was asked for, prepared or not): stop the batch being prepared ahead (or about to
+   * start); its choices are queued again, and the reads it already started finish and are kept. The next batch starts once the host is
+   * quiet (the scheduler's rule).
    */
-  pause(): void { this.batch?.abort(); }
-  /** A person's own change starts: stop the batch in WolvenKit (its choices are queued again) and wait until the change is prepared. */
+  pause(): void { this.stopBatch(); }
+  private stopBatch(): void { if (this.current === "batch") this.deps.jobs.release(this.requester); }
+  /** A person's own change starts: stop the batch (its choices are queued again); the change's choice shows as being prepared. */
   foreground(request: CharacterRequest): void {
     this.foregroundKey = requestKey(request);
-    this.batch?.abort();
+    this.stopBatch();
     const item = this.itemFor(this.foregroundKey);
     if (item && item.state !== "r") item.state = "f";
   }
@@ -235,7 +252,7 @@ ${option}`) return "?";
 
   /** Start a job's loop. The loop catches its own failures (PREV-101); this catch is the last resort. */
   private start(job: Job): void {
-    this.startWatchdog(job);
+    this.startLease(job);
     this.run(job).catch(error => this.fail(job, error));
   }
   /** An unexpected failure: stop the job, leave its remaining choices not prepared, report it once. */
@@ -251,23 +268,19 @@ ${option}`) return "?";
     } catch { /* Reporting must not end the host either. */ }
   }
 
-  private startWatchdog(job: Job): void {
+  /** A job nobody has asked about for `unpolledMs` is stopped, its batch in WolvenKit too (PREV-105): the page's lease on it. */
+  private startLease(job: Job): void {
     const limit = this.limits.unpolledMs;
     if (!limit) return;
-    this.stopWatchdog();
-    const timer = setInterval(() => {
-      if (this.job !== job) { if (this.watchdog === timer) this.stopWatchdog(); return; }
-      if (this.unpolled(job)) this.stopUnpolled(job);
-    }, Math.max(10, Math.min(limit / 4, 5_000)));
-    (timer as { unref?: () => void }).unref?.();
-    this.watchdog = timer;
+    this.endLease();
+    const end = new AbortController();
+    const held = lease(this.deps.clock ?? hostClock(), limit, end.signal);
+    held.signal.addEventListener("abort", () => { if (this.lease?.end === end) this.stopUnpolled(job); }, { once: true });
+    this.lease = { renew: held.renew, end };
   }
-  private stopWatchdog(): void {
-    if (this.watchdog) clearInterval(this.watchdog);
-    this.watchdog = null;
-  }
-  private unpolled(job: Job): boolean {
-    return !!this.limits.unpolledMs && this.now() - job.polledAt > this.limits.unpolledMs;
+  private endLease(): void {
+    this.lease?.end.abort();
+    this.lease = null;
   }
   /** Nobody asks about the job any more: stop it (its batch in WolvenKit too). The next question starts afresh. */
   private stopUnpolled(job: Job): void {
@@ -277,86 +290,103 @@ ${option}`) return "?";
     this.cancel();
   }
 
+  /** Wants one unit of the job's work of the scheduler (work prepared ahead) and answers how it ended. */
+  private async unit<T>(kind: "check" | "batch", run: (context: JobContext) => Promise<T>): Promise<RunOutcome<T>> {
+    this.current = kind;
+    const want = this.deps.jobs.want(this.requester, { key: `prefetch:${kind}:${++this.serial}`, lane: "ahead", run });
+    try { return await want.settled; } finally { if (this.current === kind) this.current = null; }
+  }
+
+  /** Which of `items` are ready already (a manifest check each; no game file is read), a turn between choices. */
+  private check(job: Job, items: readonly Item[], live: () => boolean): Promise<RunOutcome<void>> {
+    return this.unit("check", async context => {
+      let ready: (request: CharacterRequest) => boolean | Promise<boolean> = () => false;
+      try { ready = await this.deps.readiness(context); }
+      catch (error) {
+        // Stopped while it opened what it checks against: checked again later, never taken as not prepared.
+        if (context.signal.aborted) return;
+        this.deps.log?.(`Choices prepared earlier couldn't be checked; they are prepared again: ${messageOf(error)}`);
+      }
+      // Stopped (a person's change), the check lets go at once: a lookup under way (the catalogue being built) goes on as the job's tail,
+      // and nothing it answers is written into the choices' states.
+      const stopped = () => context.signal.aborted || !live();
+      if (stopped()) return;
+      for (const item of items) {
+        if (stopped()) return;
+        if (item.state !== "?") continue;
+        let request: CharacterRequest | null;
+        try { request = await untilStopped(this.deps.requestFor(job.base, job.option, item.position), context); }
+        catch (error) {
+          if (stopped()) return;
+          request = null; this.deps.log?.(`A choice couldn't be looked up to prepare it ahead: ${messageOf(error)}`);
+        }
+        if (stopped()) return;
+        // One unreadable manifest queues its choice; it never stops the job.
+        let holds = false;
+        if (request) { try { holds = await untilStopped(Promise.resolve(ready(request)), context); } catch { holds = false; } }
+        if (stopped()) return;
+        if (item.state !== "?") continue;
+        item.request = request;
+        item.key = request ? requestKey(request) : null;
+        item.state = !request ? "n" : item.key === this.foregroundKey ? "f" : holds ? "r" : "q";
+        await context.turn();
+      }
+    });
+  }
+
   private async run(job: Job): Promise<void> {
     job.running = true;
     const live = () => !job.controller.signal.aborted && this.job === job;
-    const slice = this.deps.slicer?.() ?? timeSlicer();
     try {
       while (live()) {
-        // Find out which choices are ready already (a manifest check each; no game file is read).
         const unknown = this.queued(job, "?").slice(0, 64);
-        let ready: (request: CharacterRequest) => boolean | Promise<boolean> = () => false;
         if (unknown.length) {
-          try { ready = await this.deps.readiness(); }
-          catch (error) { this.deps.log?.(`Choices prepared earlier couldn't be checked; they are prepared again: ${messageOf(error)}`); }
+          const checked = await this.check(job, unknown, live);
           if (!live()) return;
-        }
-        for (const item of unknown) {
-          try { item.request = await this.deps.requestFor(job.base, job.option, item.position); }
-          catch (error) { item.request = null; this.deps.log?.(`A choice couldn't be looked up to prepare it ahead: ${messageOf(error)}`); }
-          if (!live()) return;
-          item.key = item.request ? requestKey(item.request) : null;
-          // One unreadable manifest queues its choice; it never stops the job.
-          let holds = false;
-          if (item.request) { try { holds = await ready(item.request); } catch { holds = false; } }
-          if (!live()) return;
-          item.state = !item.request ? "n" : item.key === this.foregroundKey ? "f" : holds ? "r" : "q";
-          await slice();
-          if (!live()) return;
-        }
-        if (this.queued(job, "?").length) continue;
-        if (this.startBytes === null) this.startBytes = await this.deps.preparedBytes();
-        if (!live()) return;
-        if (this.unpolled(job)) { this.stopUnpolled(job); return; }
-        // A stopped batch (this job's, or the job this one replaced) settles before the next starts, so repeated clicks never pile up
-        // several preparations; then a person's own change comes first. Neither wait counts toward the job's time (PREV-120).
-        const waited = this.now();
-        await this.idle();
-        await this.deps.settled?.();
-        if (!live()) return;
-        await this.deps.foregroundIdle();
-        job.pausedMs += this.now() - waited;
-        if (!live()) return;
-        if (this.inflight) continue;
-        if (this.now() - job.startedAt - job.pausedMs > this.limits.timeMs) { job.stopped = "time"; break; }
-        if (this.deps.needsSetup?.()) { job.stopped = "setup"; break; }
-        const size = Math.min(this.limits.maxBatch ?? this.limits.batch, this.limits.batch * 2 ** job.batches);
-        const batch = this.queued(job, "q").slice(0, size);
-        if (!batch.length) break;
-        // Nothing awaits between the foreground check and here: a person's change that starts from now on finds this batch (`foreground`).
-        const controller = new AbortController();
-        const stop = () => controller.abort();
-        job.controller.signal.addEventListener("abort", stop, { once: true });
-        this.batch = controller;
-        let settled!: () => void;
-        const inflight = new Promise<void>(resolve => { settled = resolve; });
-        this.inflight = inflight;
-        for (const item of batch) item.state = "f";
-        this.stats.batches++;
-        const began = this.now();
-        let outcomes: readonly { ready: boolean }[] | null = null;
-        try { outcomes = await this.deps.warm(batch.map(item => item.request!), controller.signal); }
-        catch (error) {
-          if (!controller.signal.aborted) {
-            this.deps.log?.(`Preparing choices ahead failed: ${messageOf(error)}`);
-            try { this.deps.failed?.(error); } catch { /* Reporting must not end the host. */ }
-          }
-        } finally {
-          job.controller.signal.removeEventListener("abort", stop);
-          if (this.batch === controller) this.batch = null;
-          if (this.inflight === inflight) this.inflight = null;
-          settled();
-        }
-        if (!live()) return;
-        // Stopped for a person's own change: queued again, unless that change prepared it meanwhile.
-        if (!outcomes) {
-          // A stopped batch's time was a person's (it is prepared again later) and it doesn't grow the next batch.
-          if (controller.signal.aborted) job.pausedMs += this.now() - began;
-          for (const item of batch) if (item.state === "f" && item.key !== this.foregroundKey) item.state = controller.signal.aborted ? "q" : "x";
+          if (checked.status === "failed") throw checked.error;
           continue;
         }
+        if (this.startBytes === null) this.startBytes = await this.deps.preparedBytes();
+        if (!live()) return;
+        if (this.now() - job.startedAt - job.pausedMs > this.limits.timeMs) { job.stopped = "time"; break; }
+        if (this.deps.needsSetup?.()) { job.stopped = "setup"; break; }
+        if (!this.queued(job, "q").length) break;
+        const size = Math.min(this.limits.maxBatch ?? this.limits.batch, this.limits.batch * 2 ** job.batches);
+        // The scheduler starts the batch once no person's change waits or runs, the host has been quiet a moment and a stopped batch's
+        // reads have let go (PREV-120); the wait isn't the job's own time. The batch is taken from the queue as it starts, so a change
+        // prepared meanwhile isn't prepared again.
+        const asked = this.now();
+        let batch: Item[] = [], began = 0, answered: readonly { ready: boolean }[] | null = null;
+        const ended = await this.unit("batch", async context => {
+          began = this.now();
+          job.pausedMs += began - asked;
+          batch = this.queued(job, "q").slice(0, size);
+          if (!batch.length || !live()) return [];
+          for (const item of batch) item.state = "f";
+          this.stats.batches++;
+          let settled!: () => void;
+          const inflight = this.inflight = new Promise<void>(resolve => { settled = resolve; });
+          try { return answered = await this.deps.warm(batch.map(item => item.request!), context); }
+          finally { if (this.inflight === inflight) this.inflight = null; settled(); }
+        });
+        if (!live()) return;
+        // A batch stopped after its preparation had finished anyway: what it prepared is kept, not prepared again.
+        const outcome: RunOutcome<readonly { ready: boolean }[]> = ended.status === "superseded" && answered ? { status: "done", result: answered } : ended;
+        if (outcome.status !== "done") {
+          if (outcome.status === "failed") {
+            this.deps.log?.(`Preparing choices ahead failed: ${messageOf(outcome.error)}`);
+            try { this.deps.failed?.(outcome.error); } catch { /* Reporting must not end the host. */ }
+          }
+          // Stopped for a person's change: queued again, unless that change prepared it meanwhile. A stopped batch's time was a person's
+          // (it is prepared again later) and it doesn't grow the next batch.
+          if (outcome.status === "superseded" && began) job.pausedMs += this.now() - began;
+          for (const item of batch) if (item.state === "f" && item.key !== this.foregroundKey) item.state = outcome.status === "superseded" ? "q" : "x";
+          continue;
+        }
+        if (!batch.length) continue;
         job.batches++;
-        batch.forEach((item, index) => { if (item.state === "f") item.state = outcomes![index]?.ready ? "r" : "x"; });
+        const outcomes = outcome.result;
+        batch.forEach((item, index) => { if (item.state === "f") item.state = outcomes[index]?.ready ? "r" : "x"; });
         this.stats.warmed += batch.length;
         await this.deps.afterBatch?.();
         if (await this.deps.preparedBytes() - this.startBytes > this.limits.bytes) { this.spent = true; job.stopped = "disk"; break; }
@@ -366,8 +396,8 @@ ${option}`) return "?";
       this.fail(job, error);
     } finally {
       job.running = false;
-      // Nothing left to do: the watchdog has nothing to guard until the job starts again.
-      if (this.job === job && (job.stopped || ![...job.items.values()].some(item => item.state === "?" || item.state === "q"))) this.stopWatchdog();
+      // Nothing left to do: the lease has nothing to guard until the job starts again.
+      if (this.job === job && (job.stopped || ![...job.items.values()].some(item => item.state === "?" || item.state === "q"))) this.endLease();
     }
   }
 }

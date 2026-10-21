@@ -37,7 +37,8 @@ import { PREVIEW_CORE_ASSET_NAMES } from "./src/preview-core-recipe";
 import { CharacterDetailHost, characterRoute, installationFingerprint } from "./src/character-detail-host";
 import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "./src/character-detail-server";
 import { CHOICE_PREVIEW_ENDPOINT, createChoicePreviewHandler } from "./src/choice-preview-server";
-import { preparedBudgetFrom, preparedBudgetPartitions } from "./src/prepared-files";
+import { PreparedFiles, preparedBudgetFrom } from "./src/prepared-files";
+import { hostJobs } from "./src/host-jobs";
 import { CREATOR_ENDPOINT, createCreatorHandler } from "./src/cc-catalogue-server";
 import { createFacialHandler, FACIAL_ENDPOINT, FacialHost, locateFacialSolver } from "./src/facial-host";
 import { createPoseHandler, POSES_ENDPOINT } from "./src/pose-catalogue-server";
@@ -138,11 +139,12 @@ const previewCoreRequest = createPreviewCoreHandler(previewCore);
 // The resolver's JSON cache is shared with `tools/resolve-character.ts`; `XFS_RESOLVER_CACHE` relocates it.
 // Choice previews live in `choice-previews/` beside it; `XFS_CHOICE_PREVIEW_CACHE` relocates them (a verification server keeps its own).
 // `XFS_PREPARED_BUDGET_GB` sets the prepared files' disk budget (prepared-files.ts `preparedBudgetFrom`; `off` never evicts): a verification server borrowing
-// another server's warm caches turns eviction off so it never trims them. The budget is split (`preparedBudgetPartitions`) so the
-// baseline reference characters keep within their own small share and can never evict the user's prepared V.
-const preparedBudget = preparedBudgetFrom(process.env.XFS_PREPARED_BUDGET_GB, message => { hostFailure("character", "prepared_budget_setting", message, undefined, "warn"); });
-const preparedPartitions = preparedBudgetPartitions(preparedBudget);
-const characterDetails = new CharacterDetailHost({ cacheRoot: previewCacheRoot, preparedBudget: preparedPartitions.character,
+// another server's warm caches turns eviction off so it never trims them. One owner keeps every host's prepared files within it, the
+// baseline reference characters within their own small share (they never evict the user's prepared V); one scheduler runs the work.
+const jobs = hostJobs();
+const prepared = new PreparedFiles({ scheduler: jobs, log: diagnostics.log.logger("character"),
+  budget: preparedBudgetFrom(process.env.XFS_PREPARED_BUDGET_GB, message => { hostFailure("character", "prepared_budget_setting", message, undefined, "warn"); }) });
+const characterDetails = new CharacterDetailHost({ cacheRoot: previewCacheRoot, jobs, prepared,
   resolverCache: resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache")),
   settings: () => {
     const settings = localSettings.load().settings;
@@ -152,15 +154,13 @@ const characterDetails = new CharacterDetailHost({ cacheRoot: previewCacheRoot, 
   ...(process.env.XFS_CHOICE_PREVIEW_CACHE ? { previewRoot: resolve(process.env.XFS_CHOICE_PREVIEW_CACHE) } : {}),
   log: diagnostics.log.logger("character"), trace: diagnostics.trace });
 const characterDetailRequest = createCharacterDetailHandler(characterDetails);
-const referenceCharacters = createReferenceCharacterRoutes({ cacheRoot: previewCacheRoot,
-  preparedBudget: preparedPartitions.reference,
+const referenceCharacters = createReferenceCharacterRoutes({ cacheRoot: previewCacheRoot, prepared,
   enabled: async request => {
     if (request.headers.get("X-XFS-Verification") === "1") return true;
     return documents.get<ExperimentFlagsDocument>(EXPERIMENT_FLAGS.kind, EXPERIMENT_FLAGS.id)?.value.flags?.["hair-lab"] === true;
   },
   settings: () => ({ gameRoot: packageToolPaths(localSettings.load().settings).gamepath, launchRoute: "direct", mo2Root: null,
     mo2ProfileId: null, manualModRoot: null, wolvenKitCli: wolvenKit.usable() }), log: diagnostics.log.logger("reference-character") });
-characterDetails.attachPrepared({ bytes: async () => (await referenceCharacters.preparedFiles()).bytes, clear: () => referenceCharacters.clearPreparedFiles() });
 const creatorRequest = createCreatorHandler(characterDetails.creator, { refresh: () => characterDetails.refresh(), prepared: characterDetails });
 const choicePreviewRequest = createChoicePreviewHandler(characterDetails);
 // Photo-mode poses (pose-library-design.md P1): listed from the same launch route and resolver cache as the creator options.
@@ -208,9 +208,9 @@ const facial = new FacialHost({ cacheRoot: previewCacheRoot,
     script: resolve(import.meta.dir, "tools", "facial_solver_server.py"), pythonDefault: "python" }),
   log: diagnostics.log.logger("facial") });
 const facialRequest = createFacialHandler(facial);
-// "Clear prepared game files" clears the face data too, and the size counts it (CORE-102).
-characterDetails.attachPrepared({ bytes: () => facial.preparedBytes(), clear: () => facial.clearPrepared() });
-characterDetails.attachPrepared(idlePrepared(idles, idleResolverCache));
+// "Clear prepared game files" clears the face data and the idles too, and the size counts them (CORE-102).
+prepared.partition(facial.preparedPartition());
+prepared.partition(idlePrepared(idles, idleResolverCache));
 // Diagnostics: the page's failures, diagnostic mode and "Report a problem" (nothing is sent anywhere).
 const commit = (() => {
   try { const run = Bun.spawnSync(["git", "rev-parse", "--short", "HEAD"], { cwd: import.meta.dir, stdout: "pipe", stderr: "ignore" });

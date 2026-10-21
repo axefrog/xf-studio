@@ -6,6 +6,7 @@ import { depotHash, sanitizeDepotPath } from "./depot-path";
 import { hostFailure, hostTrace } from "./diagnostics/host-log";
 import { hostClock } from "./platform/core/clock";
 import type { LowPriority } from "./process-tree";
+import { markUsed as touchUsed, usedThisSession } from "./prepared-files";
 
 /**
  * Generic export of game resources into renderer formats: any `.mesh` or `.morphtarget`
@@ -301,16 +302,11 @@ const GENERATION = /^g-[0-9a-z]+-[0-9a-z]+$/;
 let generations = 0;
 /** Clean runs that exported a mesh without its materials file before the partial export is served from the cache. */
 export const PARTIAL_RUNS = 2;
-/** Paths this process already marked as used (the disk budget evicts the least recently used by their modification time). */
-const touched = new Set<string>();
-/** Mark a cache entry (its `entry.json`, or a cache file) as used now, once per process. */
-export function touchUsed(path: string): void {
-  if (touched.has(path)) return;
-  touched.add(path);
-  try { const now = new Date(); utimesSync(path, now, now); } catch { /* Advisory. */ }
-}
-/** Whether this process used (read or wrote) a cache entry: the disk budget never evicts one (prepared-files.ts). */
-export const usedThisSession = (path: string) => touched.has(path);
+/**
+ * Mark a cache entry (its `entry.json`, or a cache file) as used now, once per process, and whether this process used one: the prepared
+ * files' owner keeps that record (prepared-files.ts `markUsed`), and its budget never evicts what this process used.
+ */
+export { touchUsed, usedThisSession };
 
 /** Persistent per-resource cache in host-owned private storage. */
 export class GameAssetExportCache extends DerivedCache {
@@ -462,8 +458,8 @@ export class GameAssetExportCache extends DerivedCache {
       try { this.remove(folder); } catch { /* Swept by a later write. */ }
       throw error;
     }
-    touched.delete(join(directory, "entry.json"));
-    touchUsed(join(directory, "entry.json"));
+    // Rewritten: its use time is now, even when this process used the entry before.
+    touchUsed(join(directory, "entry.json"), true);
     return Object.fromEntries(Object.keys(files).map(name => [name, join(folder, name)]));
   }
   /** Mark the files an entry named as superseded now: their generation folder's time (or, for an entry from before generations, each file's). */
