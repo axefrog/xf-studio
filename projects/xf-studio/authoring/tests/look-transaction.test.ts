@@ -6,8 +6,9 @@
  */
 import { expect, test } from "bun:test";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
-import { CollectionSession } from "../src/library/collection-session";
-import { collectionDraft } from "../src/app/workspace/collection-workspace";
+import { LookEditor } from "../src/library/look-editor";
+import { LookSessions } from "../src/library/look-sessions";
+import { collectionServiceOver } from "./fixtures/profile-studio";
 import { COLLECTION_2 } from "../src/platform/api";
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
@@ -118,35 +119,38 @@ test("inside a transaction only the named parts change; Undo, other owners and n
   c.app.controlCommit("opacity");
 });
 
-test("each look keeps its own hair part and editor memory through preset switches, and Undo continues after switching back", () => {
+test("each look keeps its own hair part and editor memory through preset switches, and Undo continues after switching back", async () => {
   const model = withHair().documents, c = core();
   const [a, b] = ["00000000-0000-4000-8000-00000000000a", "00000000-0000-4000-8000-00000000000b"];
-  const draft = collectionDraft({ schema: COLLECTION_2, id: "00000000-0000-4000-8000-0000000000cc", name: "Looks", presets: [
+  const f = await collectionServiceOver({ schema: COLLECTION_2, id: "00000000-0000-4000-8000-0000000000cc", name: "Looks", presets: [
     { id: a, name: "A", revision: 1, parts: { "eye-makeup": { schema: "xfs/eye-makeup-part-2", body: initialRecipe() },
       hair: { schema: "xfs/hair-part-1", body: { colour: "#111111", strands: [4, 5] } } } },
-    { id: b, name: "B", revision: 1, parts: { "eye-makeup": { schema: "xfs/eye-makeup-part-2", body: initialRecipe() } } }] }, model);
-  const session = new CollectionSession(model, draft, () => c.document.export(),
-    editor => c.document.restore({ ...editor, fieldSelection: editor.fieldSelection ?? {} }), ids());
-  session.display();
+    { id: b, name: "B", revision: 1, parts: { "eye-makeup": { schema: "xfs/eye-makeup-part-2", body: initialRecipe() } } }] }, { model });
+  // The editor shows the scene's look through its session, as the Studio wires it.
+  const editor = new LookEditor({ model, sessions: new LookSessions(f.owner, f.outbox), document: c.document });
+  editor.show(f.scene.look());
+  f.scene.subscribe(() => editor.show(f.scene.look()));
+  const select = (id: string) => f.svc.dispatch({ kind: "preset.select", id });
+  const stored = (id: string) => { editor.commit(); return f.owner.look({ collection: "00000000-0000-4000-8000-0000000000cc", look: id })!.parts; };
   expect(hair(c)).toEqual({ colour: "#111111", strands: [4, 5] });
   c.app.dispatch({ kind: "hair.selectStrand", index: 1 } as never);
   c.app.dispatch({ kind: "hair.addStrand", length: 6 } as never);
-  session.select(b);
+  select(b);
   expect(hair(c)).toBeUndefined();
   expect(c.document.history.state().depth).toBe(0);
   // Look B gains hair only when it is edited; it had none.
-  expect(session.snapshot().collection.presets[1].parts.hair).toBeUndefined();
+  expect(stored(b).hair).toBeUndefined();
   c.app.dispatch({ kind: "hair.setColour", colour: "#222222" } as never);
-  expect(session.snapshot().collection.presets[1].parts.hair).toEqual({ schema: "xfs/hair-part-1", body: { colour: "#222222", strands: [] } });
-  session.select(a);
+  expect(stored(b).hair).toEqual({ schema: "xfs/hair-part-1", body: { colour: "#222222", strands: [] } });
+  select(a);
   expect(hair(c)).toEqual({ colour: "#111111", strands: [4, 5, 6] });
   expect(c.document.others!.document("hair")!.editor).toEqual({ strand: 2 });
   expect(c.app.dispatch({ kind: "history.undo" })).toMatchObject({ ok: true });
   expect(hair(c)).toEqual({ colour: "#111111", strands: [4, 5] });
   // Undo in look B takes its hair part away again: the look is sparse.
-  session.select(b);
+  select(b);
   c.app.dispatch({ kind: "history.undo" });
-  expect(session.snapshot().collection.presets[1].parts).not.toHaveProperty("hair");
+  expect(stored(b)).not.toHaveProperty("hair");
 });
 
 test("the stored workspace keeps the live hair part and editor memory, with a collection and as a loose look", () => {

@@ -5,7 +5,13 @@ import { AuthoringDocument } from "../src/app/authoring/authoring-document";
 import { AuthoringGestures } from "../src/app/authoring/authoring-gestures";
 import { CollectionApplication } from "../src/library/collection-application";
 import type { CollectionTransport } from "../src/library/collection-service";
-import { collectionDraft } from "../src/app/workspace/collection-workspace";
+import { CollectionOwner } from "../src/library/collection-owner";
+import { LookEditor } from "../src/library/look-editor";
+import { LookSessions } from "../src/library/look-sessions";
+import { DocumentOutbox } from "../src/platform/core/document-outbox";
+import { openTestLibrary } from "./fixtures/library-file";
+import { memoryOutboxStorage } from "./fixtures/platform-doubles";
+import { libraryPort, libraryVersions, storedLook, testScene } from "./fixtures/profile-studio";
 import { PreviewQualityActions } from "../src/legacy/eye-makeup/preview/preview-quality-actions";
 import type { PresetCollection } from "../src/legacy/eye-makeup/export/preset-collection";
 import { StudioApplication } from "../src/app/studio-application";
@@ -41,13 +47,17 @@ export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>
   const quality = new PreviewQualityActions(512, { assess: () => ({ accepted: true }), replace: () => {} });
   const app = new StudioApplication({ document, eyeMakeup, gestures, controls, quality,
     ...createViewServices(workspace.preview, undefined, STUDIO_MODULE_REGISTRATION), ...(options.lease ? { access: options.lease } : {}) }, STUDIO_REGISTRY);
-  const source: PresetCollection = { schema: "xfas/collection-1", id: crypto.randomUUID(),
-    name: "Current", presets: [{ id: crypto.randomUUID(), name: "Look", revision: 1,
-      recipe: recipeFile(structuredClone(document.recipe))! }] };
+  // The collection the scene shows: a working copy of one look in a library in memory (made at once; nothing is awaited).
+  const store = openTestLibrary(), port = libraryPort(store), outbox = new DocumentOutbox(port, memoryOutboxStorage(), { retryMs: 5 });
+  outbox.open();
+  const owner = new CollectionOwner({ documents: port, outbox, versions: libraryVersions(store) });
+  const collectionId = crypto.randomUUID(), lookId = crypto.randomUUID();
+  owner.dispatch({ kind: "collection.create", id: collectionId, name: "Current", looks: [storedLook({ name: "Look", recipe: structuredClone(document.recipe) }, lookId)] });
+  const scene = testScene({ collection: collectionId, look: lookId });
+  const lookEditor = new LookEditor({ model: STUDIO_DOCUMENTS, sessions: new LookSessions(owner, outbox), document });
   let packageInput: PresetCollection | undefined;
   const transport: CollectionTransport = {
     list: async () => [], get: async () => { throw Error("No saved fixture collection."); },
-    save: async () => { throw Error("No SQLite write in this fixture."); },
     package: async (_action, input) => { const value = input as PresetCollection; packageInput = value;
       return eyeCheck(value, { presets: value.presets.map(preset => ({ id: preset.id, revision: preset.revision, appearance: "xfs_fixture" })) }); },
   };
@@ -61,8 +71,9 @@ export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>
     savedVReady: () => false, executeCollection: request => app.execute(request),
     recoverCollection: () => library.recover(),
   });
-  library = new CollectionApplication(STUDIO_DOCUMENTS, collectionDraft(source, STUDIO_DOCUMENTS, 1), workspace.library, document,
-    () => {}, transport, app, files);
+  library = new CollectionApplication({ model: STUDIO_DOCUMENTS, owner, scene, transport, flushLook: () => lookEditor.commit() }, document, app, files);
+  lookEditor.show(scene.look());
+  scene.subscribe(() => lookEditor.show(scene.look()));
   const locations: string[] = [];
   let uvView = { mode: "both" as "both" | "single", side: "low" as "low" | "high",
     u: 0, v: 0, span: 1 };

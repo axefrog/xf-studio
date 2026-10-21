@@ -62,6 +62,6 @@ for (const [name, fixture] of Object.entries(fixtures)) test(`${name}: the scrip
   const before = session(fixture()), withPresets = !!restore(fixture()).state.collections;
   const after = await profiles(fixture(), withPresets);
   expect(after.log.map(entry => entry.step)).toEqual(before.log.map(entry => entry.step));
-  for (const [i, entry] of after.log.entries()) expect({ step: entry.step, ...entry }).toEqual({ step: entry.step, ...before.log[i]! });
+  for (const [i, entry] of after.log.entries()) expect([entry.step, entry]).toEqual([entry.step, before.log[i]!]);
   expect(after.reload).toEqual(before.reload);
 }, 60_000);

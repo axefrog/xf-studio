@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { CollectionService } from "../src/library/collection-service";
-import { collectionDraft } from "../src/app/workspace/collection-workspace";
+import { bootstrapCollections } from "./fixtures/profile-studio";
 import { PreviewActions } from "../src/preview/preview-actions";
 import { CharacterContextActions } from "../src/character/character-context-actions";
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
@@ -132,22 +132,17 @@ test("facade groups form changes and hides live gesture targets", () => {
 });
 
 test("facade exposes collection target capabilities and typed async outcomes", async () => {
-  const { app, document, workspace } = fixture(), presetId = crypto.randomUUID();
-  const collection = { schema: "xfas/collection-1" as const, id: crypto.randomUUID(),
-    name: "Draft", presets: [{ id: presetId, name: "One", revision: 1, recipe: document.export().recipe }] };
-  const service = new CollectionService(STUDIO_DOCUMENTS, collectionDraft(collection, STUDIO_DOCUMENTS), workspace.library,
-    () => document.export(), editor => document.restore({ ...editor,
-      fieldSelection: editor.fieldSelection ?? {} }), {
-      list: async () => [], get: async () => { throw Error("not used"); },
-      save: async () => { throw Error("not used"); }, package: async () => { throw Error("not used"); },
-    });
+  const { app, document } = fixture();
+  const collections = bootstrapCollections(document, { name: "Draft", looks: [{ name: "One", recipe: document.export().recipe }] });
+  const presetId = collections.looks[0]!.id;
+  const service = new CollectionService({ model: STUDIO_DOCUMENTS, ...collections.deps });
   app.attach({ collection: service });
   const copy = app.actionsFor({ kind: "preset", id: presetId }).find(item =>
     item.action.kind === "preset.edit" && item.action.command.kind === "copy")!;
   expect(copy.capability.available).toBe(true);
   expect(copy.undo).toBe("none");
   expect(app.dispatch(copy.action).ok).toBe(true);
-  expect(service.view().draft?.collection.presets).toHaveLength(2);
+  expect(service.view().draft?.presets).toHaveLength(2);
   expect(app.requestCapability({ kind: "package", action: "check" }).available).toBe(true);
   expect(await app.execute({ kind: "refresh" })).toMatchObject({ ok: true, result: { kind: "list" } });
   expect(app.dispatch({ kind: "preset.select", id: "stale" })).toMatchObject({ ok: false });
@@ -259,16 +254,9 @@ test("hit-context commands recheck field, layer and collection identity at invoc
   expect(app.dispatchContext(field.context, { kind: "field.clear", layerId, fieldId }))
     .toMatchObject({ ok: false, code: "missing_target" });
 
-  const presetId = crypto.randomUUID();
-  const collection = { schema: "xfas/collection-1" as const, id: crypto.randomUUID(),
-    name: "Draft", presets: [{ id: presetId, name: "One", revision: 1,
-      recipe: document.export().recipe }] };
-  const service = new CollectionService(STUDIO_DOCUMENTS, collectionDraft(collection, STUDIO_DOCUMENTS), workspace.library,
-    () => document.export(), editor => document.restore({ ...editor,
-      fieldSelection: editor.fieldSelection ?? {} }), {
-      list: async () => [], get: async () => { throw Error("not used"); },
-      save: async () => { throw Error("not used"); }, package: async () => { throw Error("not used"); },
-    });
+  const collections = bootstrapCollections(document, { name: "Draft", looks: [{ name: "One", recipe: document.export().recipe }] });
+  const presetId = collections.looks[0]!.id;
+  const service = new CollectionService({ model: STUDIO_DOCUMENTS, ...collections.deps });
   app.attach({ collection: service });
   const layer = app.contextQuery({ kind: "layer", id: layerId });
   const preset = app.contextQuery({ kind: "preset", id: presetId });

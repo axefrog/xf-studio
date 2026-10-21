@@ -22,7 +22,7 @@ test("replacement presentation can perform current cross-surface workflows witho
   expect(shell.snapshot().authoring.document.recipe.layers).toHaveLength(4);
   expect(shell.authoring.dispatch({ kind: "preset.edit", command: { kind: "copy",
     id: shell.library.view().draft!.selected! } }).ok).toBe(true);
-  expect(shell.library.view().draft?.collection.presets).toHaveLength(2);
+  expect(shell.library.view().draft?.presets).toHaveLength(2);
   expect(shell.authoring.dispatch({ kind: "preset.select", id: initial.library.draft!.selected! }).ok).toBe(true);
 
   expect(shell.viewport.uvCommandCapability("other").available).toBe(false);
@@ -45,7 +45,7 @@ test("replacement presentation can perform current cross-surface workflows witho
   expect((await shell.files.execute({ kind: "package.check" })).ok).toBe(true);
   expect(shell.files.snapshot().package?.kind).toBe("packageCheck");
   expect(shell.snapshot().files.package?.freshness).toBe("current");
-  expect(packageInput()?.id).toBe(shell.library.view().draft?.collection.id);
+  expect(packageInput()?.id).toBe(shell.library.view().draft?.id);
   expect(shell.authoring.dispatch({ kind: "layer.setOpacity", layerId: firstLayer.id,
     opacity: .42 }).ok).toBe(true);
   expect(shell.snapshot().files.package?.freshness).toBe("stale");

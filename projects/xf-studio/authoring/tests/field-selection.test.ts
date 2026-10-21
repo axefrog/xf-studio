@@ -1,11 +1,7 @@
 import { expect, test } from "bun:test";
 import { parseFieldSelection, selectedWarp } from "../src/engines/layered-makeup/field-selection";
-import { parseWorkspace } from "../src/app/workspace/workspace-state";
-import { CollectionSession, type EditorSnapshot } from "../src/library/collection-session";
-import { collectionDraft } from "../src/app/workspace/collection-workspace";
-import { storedWorkspace } from "./fixtures/looks";
-import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
-import { initialRecipe, freshWorkspace } from "./fixtures/eye-region";
+import { initialRecipe } from "./fixtures/eye-region";
+import { profileStudio } from "./fixtures/profile-studio";
 
 test("field selection follows stable layer/field IDs and safely falls back for empty or removed fields", () => {
   const recipe = initialRecipe(), l = recipe.layers[0], f = { ...l.fields[0], id: "second", du: .02 };
@@ -22,18 +18,21 @@ test("field selection follows stable layer/field IDs and safely falls back for e
   expect(selectedWarp(l, unusual)).toBe(f);
 });
 
-test("per-preset warp selection survives switches, collection recovery and complete workspace reload", () => {
+test("per-preset warp selection survives switches, removal and restore, and a restart", async () => {
   const recipe = initialRecipe(), l = recipe.layers[0]; l.fields.push({ ...l.fields[0], id: "second", du: .015 });
-  const preset = { id: crypto.randomUUID(), name: "A", revision: 1, recipe };
-  let editor: EditorSnapshot = { recipe, active: 0, selected: 0, history: [], fieldSelection: { [l.id]: "second" } };
-  const session = new CollectionSession(STUDIO_DOCUMENTS, collectionDraft({ schema: "xfas/collection-1", id: crypto.randomUUID(), name: "Test", presets: [preset] }, STUDIO_DOCUMENTS), () => editor, e => editor = e);
-  session.edit({ kind: "copy", id: preset.id });
-  editor.fieldSelection = { [l.id]: l.fields[0].id };
-  session.select(preset.id); expect(editor.fieldSelection?.[l.id]).toBe("second");
-  session.edit({ kind: "remove", id: preset.id }); session.edit({ kind: "restore" });
-  expect(editor.fieldSelection?.[l.id]).toBe("second");
-  const workspace = freshWorkspace(); workspace.collections = session.snapshot();
-  const reloaded = parseWorkspace(storedWorkspace(workspace), STUDIO_DOCUMENTS);
-  expect(reloaded.fieldSelection[l.id]).toBe("second");
-  expect(selectedWarp(reloaded.recipe.layers[0], reloaded.fieldSelection)?.du).toBe(.015);
+  const studio = await profileStudio({ looks: [{ name: "A", recipe }] });
+  const { app, document } = studio, preset = studio.scene.look()!.look, collection = studio.shown()!;
+  const select = (field: string) => expect(app.dispatch({ kind: "field.select", layerId: l.id, fieldId: field }).ok).toBe(true);
+  select("second");
+  expect(app.dispatch({ kind: "preset.edit", command: { kind: "copy", id: preset } }).ok).toBe(true);
+  select(l.fields[0].id);
+  expect(app.dispatch({ kind: "preset.select", id: preset }).ok).toBe(true);
+  expect(document.fieldSelection[l.id]).toBe("second");
+  expect(app.dispatch({ kind: "preset.edit", command: { kind: "remove", id: preset } }).ok).toBe(true);
+  expect(app.dispatch({ kind: "preset.edit", command: { kind: "restore" } }).ok).toBe(true);
+  expect(document.fieldSelection[l.id]).toBe("second");
+  await studio.settle();
+  const again = await profileStudio({ library: studio.library, show: { collection, look: preset } });
+  expect(again.document.fieldSelection[l.id]).toBe("second");
+  expect(selectedWarp(again.document.recipe.layers[0]!, again.document.fieldSelection)?.du).toBe(.015);
 });

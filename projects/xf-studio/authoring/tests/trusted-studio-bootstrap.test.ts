@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { CollectionTransport } from "../src/library/collection-service";
+import { bootstrapCollections } from "./fixtures/profile-studio";
 import { PreviewQualityActions } from "../src/legacy/eye-makeup/preview/preview-quality-actions";
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { createTrustedStudioBootstrap } from "../src/app/trusted-studio-bootstrap";
@@ -25,17 +25,13 @@ test("a presentation mounts from trusted services without any page controls", as
     queryContext: hit => core.app.contextQuery(hit),
   });
   viewport.setReady("uv");
-  const transport: CollectionTransport = {
-    list: async () => [], get: async () => { throw Error("No saved collection."); },
-    save: async () => { throw Error("No SQLite write."); },
-    package: async () => { throw Error("No package build."); },
-  };
+  const collections = bootstrapCollections(core.document, { looks: [{ name: "Look", recipe: workspace.recipe }] });
   const downloads: string[] = [];
-  const bootstrap = createTrustedStudioBootstrap({ workspace, core,
-    preferences: new UIPreferenceActions(workspace.uiPreferences), viewport, transport,
+  const bootstrap = createTrustedStudioBootstrap({ core,
+    preferences: new UIPreferenceActions(workspace.uiPreferences), viewport, collections: collections.deps,
     previewReadiness: { readiness: () => ({ phase: "ready", size: 1024,
       pending: 0, waiting: false, estimatedBytes: 1024, layers: [] }), subscribe: () => () => {} },
-    onEditorRestored: () => { resets++; }, onRecipeImported: () => { imports++; },
+    onRecipeImported: () => { imports++; },
     savedAppearance: { has: () => false, read: () => undefined,
       load: () => { throw Error("No saved V device."); }, ready: () => false },
     fileDevice: { pick: async () => undefined,

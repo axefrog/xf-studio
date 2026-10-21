@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
-import type { CollectionTransport } from "../src/library/collection-service";
-import { collectionDraft } from "../src/app/workspace/collection-workspace";
+import { bootstrapCollections } from "./fixtures/profile-studio";
 import type { PresetCollection } from "../src/legacy/eye-makeup/export/preset-collection";
 import { emptyPresentationStatus, PresentationStatusSource } from "../src/app/presentation-status";
 import { PreviewQualityActions } from "../src/legacy/eye-makeup/preview/preview-quality-actions";
@@ -8,17 +7,12 @@ import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { createTrustedStudioBootstrap } from "../src/app/trusted-studio-bootstrap";
 import { UIPreferenceActions } from "../src/app/ui-preferences";
 import { ViewportAttachment } from "../src/app/viewport-attachment";
-import { recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { finishCatalogue, freshWorkspace } from "./fixtures/eye-region";
 import { preparePackageCollection } from "./fixtures/eye-exporter";
 
 function mountFixture() {
   const workspace = freshWorkspace();
-  const source: PresetCollection = { schema: "xfas/collection-1", id: crypto.randomUUID(), name: "Fixture",
-    presets: [{ id: crypto.randomUUID(), name: "First", revision: 1, recipe: recipeFile(structuredClone(workspace.recipe))! },
-      { id: crypto.randomUUID(), name: "Second", revision: 1, recipe: recipeFile({ ...structuredClone(workspace.recipe), layers: [] })! }] };
-  workspace.collections = collectionDraft(source, STUDIO_DOCUMENTS, 3);
   workspace.history = Array.from({ length: 40 }, () => structuredClone(workspace.recipe));
   let core!: ReturnType<typeof createTrustedAuthoringCore>;
   core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
@@ -27,15 +21,17 @@ function mountFixture() {
     resize: () => {}, cancelInput: () => {}, inputCapture: () => false, headView: () => undefined,
     uvView: () => workspace.uvView, uvCommand: () => true, hitAt: () => undefined,
     queryContext: hit => core.app.contextQuery(hit) });
-  const transport: CollectionTransport = { list: async () => [], get: async () => { throw Error("none"); },
-    save: async () => { throw Error("No SQLite write."); }, package: async () => { throw Error("No package."); } };
+  // The collection shown: "Fixture", saved as version 3, its first look the workspace's recipe and its second empty.
+  const collections = bootstrapCollections(core.document, { name: "Fixture", saved: 3, looks: [{ name: "First", recipe: structuredClone(workspace.recipe) },
+    { name: "Second", recipe: { ...structuredClone(workspace.recipe), layers: [] } }] });
+  const source = { id: collections.id, presets: collections.looks };
   let status = emptyPresentationStatus(true);
   const statusSource = new PresentationStatusSource(() => status);
-  const bootstrap = createTrustedStudioBootstrap({ workspace, core, viewport, transport,
+  const bootstrap = createTrustedStudioBootstrap({ core, viewport, collections: collections.deps,
     preferences: new UIPreferenceActions(workspace.uiPreferences), status: statusSource,
     previewReadiness: { readiness: () => ({ phase: "ready", size: 1024, pending: 0, waiting: false, estimatedBytes: 1, layers: [] }),
       subscribe: () => () => {} },
-    onEditorRestored: () => {}, onRecipeImported: () => {},
+    onRecipeImported: () => {},
     savedAppearance: { has: () => false, read: () => undefined, load: () => { throw Error("none"); }, ready: () => false },
     fileDevice: { pick: async () => undefined, download: () => {}, bakeMask: async () => new Blob() } });
   const port = bootstrap.mount(value => value);
@@ -57,7 +53,7 @@ test("the editor read view is cached, detached and tracks geometry revisions", (
   expect(port.feature("eye-makeup").view().selected()).toBe(core.document.selected);
 });
 
-test("library summary is a primitive projection with the live layer count and recovery facts", () => {
+test("library summary is a primitive projection with the live layer count and recovery facts", async () => {
   const { port, source } = mountFixture();
   const summary = port.library.summary();
   expect(summary.draft).toMatchObject({ id: source.id, name: "Fixture", revision: 3, selected: source.presets[0].id });
@@ -68,8 +64,9 @@ test("library summary is a primitive projection with the live layer count and re
   expect(port.library.summary().draft!.presets[0].layers).toBe(5);
   expect(port.authoring.dispatch({ kind: "preset.edit", command: { kind: "remove", id: source.presets[1].id } }).ok).toBe(true);
   expect(port.library.summary().draft!.removed).toEqual([{ id: source.presets[1].id, name: "Second", index: 1 }]);
-  const opened = { ...structuredClone(source), id: crypto.randomUUID(), name: "Other" };
-  expect(port.authoring.dispatch({ kind: "collection.open", collection: opened }).ok).toBe(true);
+  const text = JSON.stringify({ schema: "xfs/collection-2", id: crypto.randomUUID(), name: "Other", presets: [
+    { id: crypto.randomUUID(), name: "First", revision: 1, parts: source.presets[0]!.parts }] });
+  expect((await port.library.execute({ kind: "import", text, bytes: text.length })).ok).toBe(true);
   expect(port.library.summary().draft).toMatchObject({ name: "Other", previous: { id: source.id, name: "Fixture", revision: 3 } });
 });
 

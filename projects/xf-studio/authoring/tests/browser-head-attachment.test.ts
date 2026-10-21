@@ -4,6 +4,14 @@ import { createBrowserViewportDevice } from "../src/preview/browser/browser-view
 import type { createSceneHost } from "../src/platform/scene/scene-host";
 import type { createSurfaceEditor } from "../src/legacy/eye-makeup/browser/surface-editor";
 import { freshWorkspace, EYE_REGION } from "./fixtures/eye-region";
+import { CharacterContextActions, initialBodyGender } from "../src/character/character-context-actions";
+
+/** The creator catalogue host never answers here: a context stays loading. */
+const creator = { panel: () => new Promise<never>(() => {}), page: () => new Promise<never>(() => {}), view: () => new Promise<never>(() => {}),
+  preset: () => new Promise<never>(() => {}), wait: async () => {} };
+/** The V a head shows, as its owner hands it over (`stored`: the V's stored form): its body, and its context made on the head's ports. */
+const characterPort = (stored?: unknown): HeadAttachmentPorts["character"] => ({ body: initialBodyGender(stored, undefined), previews: null,
+  context: ports => new CharacterContextActions({ ...ports, creator }, stored ? { stored } : {}), release: context => context.dispose() });
 
 // PREV-20: everything wired to a loaded head is released together when a later step fails, so
 // "Try again" starts clean: no doubled theme bindings, service attachments, subscriptions,
@@ -76,9 +84,7 @@ function harness(plan: { failLoad?: number[]; failPresent?: number[] }) {
     colourScheme: { matches: true, addEventListener: (_type, listener) => schemeListeners.add(listener), removeEventListener: (_type, listener) => schemeListeners.delete(listener) },
     attach: services => Object.assign(attached, services),
     persist: () => { persisted++; }, changed: noop,
-    // The creator catalogue host never answers here: the context stays loading.
-    creator: { panel: () => new Promise(() => {}), page: () => new Promise(() => {}), view: () => new Promise(() => {}), preset: () => new Promise(() => {}),
-      wait: async () => {} },
+    character: characterPort(),
   };
   return { log, host, scenes, viewport, ports, attached, preferenceListeners, schemeListeners, bodies,
     get connected() { return connected; }, surfaces, get persisted() { return persisted; }, get loads() { return loads; } };
@@ -184,21 +190,21 @@ test("every composed layered surface gets its preview connected and presented, t
   expect(h.viewport.scene()).toBeUndefined();
 });
 
-test("the head is the shown V's body's core: a masculine V's is prepared first, and a V that changes body loads the head again with its history", async () => {
+test("the head is the shown V's body's core: a masculine V's is prepared first, and a V that changes body loads the head again", async () => {
   const h = harness({});
   const prepared: string[] = [], reloads: unknown[] = [], notices: string[] = [];
-  h.ports.workspace.preview.character = { origin: "default", bodyGender: "male", choices: [] };
-  Object.assign(h.ports, { prepareCore: async (body: string) => { prepared.push(body); }, reload: (history: unknown) => reloads.push(history),
+  h.ports.character = characterPort({ origin: "default", bodyGender: "male", choices: [] });
+  Object.assign(h.ports, { prepareCore: async (body: string) => { prepared.push(body); }, reload: () => reloads.push("reload"),
     notice: (text: string) => notices.push(text) });
   const head = await attachBrowserHead(h.ports);
   expect(prepared).toEqual(["male"]);
   expect(h.bodies).toEqual(["male"]);
   expect(head.characterContext.shownBody()).toBe("male");
-  // The feminine default V: the head asks to load again (after the change finished), carrying the panel's Undo history.
+  // The feminine default V: the head asks to load again (after the change finished); the V's history is its own (`character:<id>`).
   head.characterContext.dispatch({ kind: "character.useDefault", bodyGender: "female" });
   expect(reloads).toEqual([]);
   await new Promise(done => setTimeout(done, 5));
-  expect(reloads).toEqual([expect.objectContaining({ kind: "xfs/character-history" })]);
+  expect(reloads).toEqual(["reload"]);
   // A head released before its reload ran asks nothing.
   head.characterContext.dispatch({ kind: "character.undo" });
   head.dispose();
@@ -209,8 +215,8 @@ test("the head is the shown V's body's core: a masculine V's is prepared first, 
   // The masculine head can't be prepared: the feminine head shows with a plain notice, and no reload loop follows.
   const failing = harness({});
   const told: string[] = [], again: unknown[] = [];
-  failing.ports.workspace.preview.character = { origin: "default", bodyGender: "male", choices: [] };
-  Object.assign(failing.ports, { prepareCore: async () => { throw Error("A newer game patch."); }, reload: (history: unknown) => again.push(history),
+  failing.ports.character = characterPort({ origin: "default", bodyGender: "male", choices: [] });
+  Object.assign(failing.ports, { prepareCore: async () => { throw Error("A newer game patch."); }, reload: () => again.push("reload"),
     notice: (text: string) => told.push(text) });
   const fallback = await attachBrowserHead(failing.ports);
   expect(failing.bodies).toEqual(["female"]);

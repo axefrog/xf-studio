@@ -9,7 +9,8 @@ import { StudioFileOperations, type StudioPickedFile } from "../../src/app/studi
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
 import type { Recipe } from "../../src/engines/layered-makeup/recipe";
 import { CollectionApplication } from "../../src/library/collection-application";
-import { CollectionService, type CollectionTransport } from "../../src/library/collection-service";
+import { CollectionService, type CollectionServiceDeps, type CollectionTransport } from "../../src/library/collection-service";
+import type { AuthoringDocument } from "../../src/app/authoring/authoring-document";
 import type { DocumentModel } from "../../src/app/workspace/collection-workspace";
 import { type LookRef, lookRef, collectionRef } from "../../src/library/collection-documents";
 import { CollectionOwner, type CollectionVersionsPort } from "../../src/library/collection-owner";
@@ -133,9 +134,9 @@ export type ProfileStudio = Awaited<ReturnType<typeof profileStudio>>;
  * host where a test needs to.
  */
 export async function collectionServiceOver(value: unknown, options: { model?: DocumentModel; recipe?: Recipe; versions?: CollectionVersionsPort;
-  package?: CollectionTransport["package"] } = {}) {
+  package?: CollectionTransport["package"]; library?: TestLibrary } = {}) {
   const model = options.model ?? MODEL;
-  const library = openTestLibrary(), port = libraryPort(library), outbox = new DocumentOutbox(port, memoryOutboxStorage(), { retryMs: 5 });
+  const library = options.library ?? openTestLibrary(), port = libraryPort(library), outbox = new DocumentOutbox(port, memoryOutboxStorage(), { retryMs: 5 });
   outbox.open();
   const owner = new CollectionOwner({ documents: port, outbox, versions: options.versions ?? libraryVersions(library) });
   await owner.load();
@@ -151,4 +152,26 @@ export async function collectionServiceOver(value: unknown, options: { model?: D
   return { svc, owner, scene, library, outbox,
     /** The collection as the library last saved it as a version. */
     saved: () => { const list = library.collections.list(); return list.length ? library.collections.get(list.at(-1)!.id).collection : undefined; } };
+}
+
+/**
+ * The collection wiring for a trusted bootstrap, made at once (nothing awaited): a working copy of `looks` in a library in memory (named
+ * `name`, saved as version `saved` when given), shown on a scene, with a look editor over `document`. `deps` is what the bootstrap takes.
+ */
+export function bootstrapCollections(document: AuthoringDocument, input: { name?: string; looks: readonly StudioLookInput[]; saved?: number;
+  transport?: Partial<CollectionTransport> }) {
+  const library = openTestLibrary(), port = libraryPort(library), outbox = new DocumentOutbox(port, memoryOutboxStorage(), { retryMs: 5 });
+  outbox.open();
+  const owner = new CollectionOwner({ documents: port, outbox, versions: libraryVersions(library) });
+  const id = crypto.randomUUID(), looks = input.looks.map(look => storedLook(look));
+  const made = owner.dispatch({ kind: "collection.create", id, name: input.name ?? "Current", looks, ...(input.saved ? { saved: { revision: input.saved } } : {}) });
+  if (!made.ok) throw Error(made.reason);
+  const scene = testScene(looks[0] ? { collection: id, look: looks[0].id } : undefined);
+  const lookEditor = new LookEditor({ model: MODEL, sessions: new LookSessions(owner, outbox), document });
+  lookEditor.show(scene.look());
+  scene.subscribe(() => lookEditor.show(scene.look()));
+  const transport: CollectionTransport = { list: async () => library.collections.list(), get: async key => library.collections.get(key),
+    package: async () => { throw Error("No package build."); }, ...input.transport };
+  const deps: Omit<CollectionServiceDeps, "readRecipe" | "model"> = { owner, scene, transport, flushLook: () => lookEditor.commit() };
+  return { library, outbox, owner, scene, lookEditor, deps, id, looks };
 }
