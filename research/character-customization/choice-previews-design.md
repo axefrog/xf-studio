@@ -270,7 +270,7 @@ To add to the style guide (`src/studio-ui/style-guide/`), as *proposed* patterns
 
 ## 9. Architecture fit
 
-- **Reactive graph.** A choice preview is a derived-data node: its inputs are the choice's resolved parts and the producer's style version, and its output is an image URL. Theme and tint are not inputs, since the tile applies them. Any view can subscribe: the Character panel, the Selectors panel's look lists, preset cards, the pose tree. Nothing assumes one panel.
+- **Shared derived data.** A choice preview is derived from the choice's resolved parts and the producer's style version, and its output is an image URL, owned by the preview service. Theme and tint are not inputs, since the tile applies them. Any view can read it: the Character panel, the Selectors panel's look lists, preset cards, the pose tree. Nothing assumes one panel.
 - **Layers.**
   - Domain/application: the preview service (keys, queue, priorities, states) and producer selection from data.
   - Renderer/device adapters: the worker device (OffscreenCanvas, three, encode), the host store, and the host preview-source endpoint.

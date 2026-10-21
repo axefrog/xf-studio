@@ -33,7 +33,7 @@ It extends the [feature-module platform](feature-module-platform.md) (§2 docume
 - **No worry about row counts.** A crash report from someone who adds 50 rows would itself be useful.
 - **Save identity is auto-generated**, with sensible values. The game silently ignores a saved reference to something missing.
 
-**The model in one paragraph.** A **selector** is a document-level node in the reactive graph: a **feature type** × a **target**. The target is either a **new XF row** or an **existing vanilla row** that the selector adds choices to. A selector holds:
+**The model in one paragraph.** A **selector** is a document-level record: a **feature type** × a **target**. The target is either a **new XF row** or an **existing vanilla row** that the selector adds choices to. A selector holds:
 
 - its **looks** (the authored choices; a look belongs to exactly one selector);
 - its **settings** (name, "XF" shown, placement);
@@ -75,7 +75,7 @@ A **selector type registry** says, per feature type, which targets it allows, it
 | **Worn look** | Which look (or Off) V wears in this row in the Studio | Workspace |
 | **Visibility** | Whether the selector's content draws in the views | Workspace |
 
-**Why it is a graph node.** The "Reactive graph by default" rule applies. A selector feeds several consumers, all derived rather than written:
+**Why it is a shared record.** A selector has one owner and feeds several consumers, all derived rather than written:
 
 - the scene nodes' content (its worn look, drawn by its feature's renderer);
 - the Character panel's rows;

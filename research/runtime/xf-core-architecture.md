@@ -93,7 +93,7 @@ The **light host** that the snapshots design asks for is `lights.host@1`, provid
 - **Link client:** the command catalogue and command API, framing, captures, the MCP server, the CLI and the session runner (today's `tools/`). The catalogue is composed from the core's commands plus each installed plugin's manifest (§4.2).
 - **The photo-mode key** (`photo.open`) stays in the development harness. The release Studio never sends input to the game.
 - **Install host:** installs and updates XF Core and the chosen plugins with consent (§6.3).
-- **Typed actions and capabilities:** for example `lighting.mirrorToGame` behind a `gameBridge.lights` capability, available only when the link reports the plugin and the capability (reactive-graph rule: the game is one more consumer of a view's lights node).
+- **Typed actions and capabilities:** for example `lighting.mirrorToGame` behind a `gameBridge.lights` capability, available only when the link reports the plugin and the capability (the game is one more consumer of a view's lights).
 
 ### 2.4 Core services the plugins use
 

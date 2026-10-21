@@ -181,16 +181,16 @@ Rotation follows each nail's axis by default (upright letters on every finger); 
 - **Nail shape presets** (square, round, almond, stiletto) are **not** geometry changes: the game's nail shape is the mesh or a morph mod's. They are guide overlays for designs that follow a shape (question Q7).
 - The shared **shape library**: star, heart, butterfly, lightning, flame, drop, sparkle, all authored as editable Bézier compound shapes. It serves eye makeup too.
 
-### 3.5 Presets panel, looks and the reactive graph
+### 3.5 Presets panel and looks
 
-A look (a preset) holds one `xfs/nails-part-1`: its hand mode, its layers per hand and space, its finish settings, and a stored reference to the mesh identity it was authored on (§8, R4). As the selectors design requires, the Nails selector is a document node. Its worn look feeds, all derived and none written:
+A look (a preset) holds one `xfs/nails-part-1`: its hand mode, its layers per hand and space, its finish settings, and a stored reference to the mesh identity it was authored on (§8, R4). As the selectors design requires, the Nails selector is a document-level record. Its worn look feeds, all derived and none written:
 
 - the nail renderer's maps (§5);
 - the Character panel's Nails row, which shows "XF: <look>";
 - the swatch colour;
 - the export plan.
 
-Text layout, glyph outlines, nail frames and per-hand rasters are memoised derived nodes, never stored.
+Text layout, glyph outlines, nail frames and per-hand rasters are memoised derived data, never stored.
 
 ## 4. Material and finishes
 

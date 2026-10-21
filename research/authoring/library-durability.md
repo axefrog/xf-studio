@@ -1,6 +1,6 @@
 # Library durability
 
-How XF Studio's SQLite library files (`library.sqlite`, and `verification.sqlite` for isolated checks) keep their data safe, and what that costs. Implementation: `projects/xf-studio/authoring/src/platform/graph-adapters/library-durability.ts`; tests: `tests/library-durability.test.ts`; timing: `tools/bench-library-save.ts`.
+How XF Studio's SQLite library files (`library.sqlite`, and `verification.sqlite` for isolated checks) keep their data safe, and what that costs. Implementation: `platform/persistence/library-durability.ts` under the authoring `src/`; tests: `tests/library-durability.test.ts`; timing: `tools/bench-library-save.ts`.
 
 ## The guarantee
 
@@ -8,11 +8,11 @@ How XF Studio's SQLite library files (`library.sqlite`, and `verification.sqlite
 - **An app crash or kill loses nothing.** Every save that finished is kept.
 - **A power cut or an operating-system crash loses at most the last few seconds.** A save becomes safe on disk within about 5 seconds of being made: 2 seconds after the last save, or 5 seconds after the first unflushed one while saves keep coming. Quitting the app makes everything safe at once.
 
-That is the bar the maintainer set: losing the last few seconds is acceptable, losing the last half hour is not.
+That is the bar: losing the last few seconds is acceptable, losing the last half hour is not.
 
 ## How
 
-Every connection that writes a library file (the look, collection, part-preset and graph stores) calls `useWriteAheadLog`:
+Every connection that writes a library file (the look, collection, part-preset and document stores) calls `useWriteAheadLog`:
 
 1. `PRAGMA journal_mode=WAL`. WAL mode is stored in the file, so a library made by an earlier build in rollback-journal mode moves to WAL the first time it opens; the change is SQLite's own and atomic. Libraries have been WAL since the first release, so in practice this is a no-op.
 2. `PRAGMA synchronous=NORMAL`, **only once WAL is confirmed**. A file that can't enter WAL (a file system without shared memory, say) keeps SQLite's default, `FULL`, and every commit still waits for the disk.
@@ -48,6 +48,10 @@ Electrobun 2.0.2 gives the app `before-quit` (the flush runs through the desktop
 | C: (`%TEMP%`, where `%LOCALAPPDATA%` lives) | 0.27–0.37 s: 1.2–1.4 ms a save | 13–14 ms: 0.05 ms a save | 7–10 ms |
 
 The disk's flush cost varies a lot between drives; the installed app's 40–100 ms per save came from a drive like D:. The flush runs once, a few seconds after the saves stop, instead of inside every save, and on the checkpoint worker's thread (PIPE-137), so its 170–220 ms (0.7–0.9 s after 200 saves) on a drive like D: no longer holds up the host.
+
+## Backups
+
+The library is the only home of the work, so it is also copied without asking (`platform/persistence/backups.ts`): once each day the Studio runs and before every migration, into a `backups` folder beside the library. Each copy is made with SQLite's `VACUUM INTO`, so it is consistent and compact, and it is renamed into place so a half-made copy is never seen. Seven daily and four weekly copies are kept. A permanent delete reaches every copy; a copy that can't be purged yet (locked) stays on a pending list and is retried, and never fails the delete. Restoring is refused while another connection has the library open, keeps the current file first, and applies any pending purge to the restored copy.
 
 ## Tests
 

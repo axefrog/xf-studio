@@ -117,7 +117,7 @@ By Andrey Sitnik and contributors. [Website](https://easings.net), [GitHub](http
 
 ### cyrb53
 
-By bryc. [cyrb53](https://github.com/bryc/code/blob/master/jshash/experimental/cyrb53.js), a public-domain 53-bit string hash. XF Strata derives stable identities from canonical data with it (conflict IDs, the seeds of its random streams).
+By bryc. [cyrb53](https://github.com/bryc/code/blob/master/jshash/experimental/cyrb53.js), a public-domain 53-bit string hash. XF Studio's chunk store uses it as a fast content address for cached data.
 
 ### Electrobun and Hutch
 
@@ -137,7 +137,7 @@ By Jordan Russell and Martijn Laan. [Website](https://jrsoftware.org/isinfo.php)
 
 ### JSON Schema
 
-The [JSON Schema](https://json-schema.org/) specification (draft 2020-12). XF Strata publishes its graph-model format as a JSON Schema, so scripts, tools and a second engine can check a declared subsystem before it is built.
+The [JSON Schema](https://json-schema.org/) specification (draft 2020-12). The XF Runtime Bridge's command catalogue is written as JSON Schema, so every frontend and tool can check a command's input before sending it.
 
 ### JSON for Modern C++
 
@@ -179,10 +179,6 @@ By Microsoft. The DirectX shader compiler and [DXIL reference](https://github.co
 
 By NVIDIA. [GitHub](https://github.com/NVIDIA-RTX/Streamline). Its DLSS Frame Generation programming guide explains the hudless and UI buffers frame generation uses and that presentation moves to another thread while it is on, which is why an overlay drawn into the game's final image may ghost or flicker and why the planned XF overlay host never hooks presentation below the engine. Studied only.
 
-### PractRand (sfc32)
-
-By Chris Doty-Humphrey. [PractRand](https://pracrand.sourceforge.net/) and its small fast counting generator, sfc32. XF Strata's named, seeded random streams use sfc32, which makes every simulation repeatable from its seed.
-
 ### Pillow
 
 By the Pillow contributors. [GitHub](https://github.com/python-pillow/Pillow). Used in research tooling to encode and measure generated test images; its BCn decoder reads the game's compressed textures so their levels, mips and normal-map conventions can be measured offline.
@@ -221,7 +217,7 @@ By mrdoob and the three.js authors. [GitHub](https://github.com/mrdoob/three.js)
 
 ### WHATWG DOM Standard
 
-The [DOM Standard](https://dom.spec.whatwg.org/#aborting-ongoing-activities) (WHATWG). Its AbortController and AbortSignal define the cancellation XF Strata uses everywhere: its tokens follow their semantics (abort once with a reason, listeners called once, signals that follow a parent), stated in XF Strata's specification for other languages.
+The [DOM Standard](https://dom.spec.whatwg.org/#aborting-ongoing-activities) (WHATWG). Its AbortController and AbortSignal define the cancellation XF Studio uses everywhere: work is cancelled by aborting once with a reason, and a signal follows its parent.
 
 ### WebKit
 
@@ -481,10 +477,6 @@ World Objects Removed, Crunch Plaza Expanded, Japantown North Verticality Expand
 ## Research papers
 
 These papers informed our research. Unless an entry says otherwise, no algorithm from them was implemented.
-
-### Zeller and Hildebrandt (2002)
-
-Andreas Zeller and Ralf Hildebrandt, "Simplifying and Isolating Failure-Inducing Input" (IEEE Transactions on Software Engineering, 2002). Its delta debugging is the idea behind XF Strata's shrinker, which removes ever smaller chunks of a failing simulation's steps while the failure persists.
 
 ### Ottosson (2020)
 

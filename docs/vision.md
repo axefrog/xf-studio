@@ -37,14 +37,14 @@ Taken together, that makes XF Studio the kind of live editor for the game that p
 
 The idea registers hold the detail: [bringing V and the world to life](../research/backlog/alive-ideas.md) and [world and interactive ideas](../research/backlog/world-and-interactive-ideas.md).
 
-## One engine under all of it
+## Quests and behaviours as data
 
-XF Studio is being rebuilt on **XF Strata**, its own reactive stream-graph engine: every subsystem is declared as data (models, behaviours, state machines) and built into live machinery, with deterministic simulation testing. A native version of the same engine is planned for the game side. That turns the directions above into one idea:
+The world-facing directions share one approach: describe the thing as plain data and run it, rather than writing bespoke code for each case.
 
-- **A quest is a declared model:** a state machine whose sources are game events and whose effects act on the game (journal, messages, map pins, spawns, rewards), editable live instead of waiting for the game to reload quest data.
-- **A character's routine is a declared behaviour:** game events in, reactions out, running as a long-lived process.
-- **Tested before it reaches the game:** simulated game sources let every quest, routine or behaviour run many times under odd timings and interruptions first.
-- **Designed live:** the Studio edits a model while the game runs it.
+- **A quest is a declared state machine:** its inputs are game events and its effects act on the game (journal, messages, map pins, spawns, rewards), editable live instead of waiting for the game to reload quest data.
+- **A character's routine is a declared behaviour:** game events in, reactions out, running as a long-lived task in the game.
+- **Tested before it reaches the game:** simulated game events let every quest, routine or behaviour run many times under odd timings and interruptions first.
+- **Designed live:** the Studio edits a definition while the game runs it.
 
 ## Two kinds of mod
 
