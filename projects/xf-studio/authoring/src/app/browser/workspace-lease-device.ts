@@ -149,7 +149,7 @@ export function desktopWorkspaceLease(options: {
   let current: number | null = null, asked: () => void = () => {}, lost: () => void = () => {};
   let first: { resolve(held: boolean): void; reject(error: unknown): void } | null = null;
   let grant: { resolve(generation: number): void; reject(error: unknown): void } | null = null;
-  let ended = false;
+  let ended = false, operation: string | null = null;
   const send = (body: Record<string, unknown>) => options.send(options.endpoint, { method: "POST", credentials: "same-origin",
     headers: { "Content-Type": "application/json" }, body: JSON.stringify({ schema: "xfs/desktop-lease-1", page, ...body }) });
   const post = async (body: Record<string, unknown>) => {
@@ -203,6 +203,7 @@ export function desktopWorkspaceLease(options: {
       if (ended) return Promise.reject(Error("The connection to XF Studio's host ended."));
       return new Promise((resolve, reject) => {
         let granted = false;
+        const id = crypto.randomUUID();
         const request = { resolve: (generation: number) => { granted = true; resolve({ generation }); }, reject };
         grant = request;
         // Withdrawn (abandoned, or failed even when the host may have queued it, its answer lost): the host forgets the request, so
@@ -210,10 +211,11 @@ export function desktopWorkspaceLease(options: {
         signal.addEventListener("abort", () => {
           if (granted) return;
           if (grant === request) grant = null;
-          void post({ action: "cancel" }).catch(() => {});
+          // Names this request only: a later takeover's request, even one that reached the host first, is never removed by it.
+          void post({ action: "cancel", request: id }).catch(() => {});
           reject(signal.reason);
         }, { once: true });
-        post({ action: "takeover" }).catch(error => { if (grant === request) grant = null; reject(error); });
+        post({ action: "takeover", request: id }).catch(error => { if (grant === request) grant = null; reject(error); });
       });
     },
     onReleaseRequested(listener) { asked = listener; },
@@ -221,14 +223,19 @@ export function desktopWorkspaceLease(options: {
     async release() {
       // This page's last writes must have landed; otherwise nothing is released.
       try { await options.settle?.(); } catch (error) { throw error instanceof ReleaseUnsaved ? error : new ReleaseUnsaved(String(error)); }
-      const response = await send({ action: "release", generation: current });
-      // 409: the host no longer has this page as holder (an earlier release did land): released. Any other failure is uncertain.
-      if (!response.ok && response.status !== 409) throw Error("The release wasn't confirmed.");
-      current = null;
+      // Each release is one operation with its own ID: if its answer is lost, `reconcile` settles exactly that operation.
+      operation = crypto.randomUUID();
+      const response = await send({ action: "release", generation: current, operation });
+      if (response.ok) { current = null; return; }
+      const { code } = await response.json().catch(() => ({})) as { code?: string };
+      // Voided by a status check: it never applied, and this page still holds the lease.
+      if (code === "void") throw new ReleaseUnsaved("The release was settled as not applied.");
+      throw Error("The release wasn't confirmed.");
     },
     async reconcile() {
       if (ended) throw Error("The connection to XF Studio's host ended.");
-      const response = await send({ action: "status", generation: current });
+      // The host settles the lost release in the same step: applied, or voided so it can't apply later.
+      const response = await send({ action: "status", generation: current, operation });
       if (!response.ok) throw Error("XF Studio's host couldn't say who holds the workspace.");
       const { held } = await response.json() as { held?: unknown };
       if (typeof held !== "boolean") throw Error("XF Studio's host couldn't say who holds the workspace.");

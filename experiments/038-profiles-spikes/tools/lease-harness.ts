@@ -279,6 +279,55 @@ async function scenarios(host: Host, record: (scenario: string, check: string, o
       await a.kill(); await b.kill();
       await sleep(100);
     }
+    // 4d. The release's answer is lost before the host even processed it: the status check voids that release, the page keeps the
+    // lease, and the release, when it finally arrives, is refused, so the other page is never granted behind this one's back.
+    {
+      const s = "release still in flight when checked";
+      const a = await host.open("S");
+      await a.wait(event => event.event === "ack" && (event.seq as number) >= 4);
+      const b = await host.open("T");
+      a.command("delay-release");
+      await a.wait(event => event.event === "control" && event.command === "delay-release");
+      b.command("takeover");
+      const kept = await a.wait(phase("release-failed"));
+      a.command("open-release");
+      const arrived = await a.wait(event => event.event === "control" && event.command === "open-release");
+      await sleep(300);
+      const acked = a.events.filter(event => event.event === "ack" && kept && event.at > kept.at).length;
+      record(s, "the late release is refused; the page keeps writing as the holder and the other page isn't granted", !!kept && arrived?.arrived === 409 &&
+        !b.events.some(phase("taken-over")) && host.holder() === "S" && acked > 0,
+        `late release answered ${arrived?.arrived}; holder ${host.holder()}; ${acked} save(s) acknowledged since`);
+      a.command("retry");
+      const granted = await b.wait(phase("taken-over"));
+      record(s, "Try again then hands over normally", !!granted, granted ? "granted" : "not granted");
+      await a.kill(); await b.kill();
+      await sleep(100);
+    }
+    // 4e. A takeover whose answer is lost, whose cancellation is delayed past a retry: the cancellation removes only its own request.
+    {
+      const s = "late cancellation after a retried takeover";
+      const a = await host.open("U");
+      await a.wait(event => event.event === "ack" && (event.seq as number) >= 4);
+      const b = await host.open("V");
+      a.command("break-writes");
+      await a.wait(event => event.event === "writes" && event.broken === true);
+      b.command("lose-takeover-answer"); b.command("delay-cancel");
+      await b.wait(event => event.event === "control" && event.command === "delay-cancel");
+      b.command("takeover");
+      await b.wait(event => event.event === "takeover" && event.ok === false);
+      await a.wait(phase("release-failed"));
+      b.command("takeover");
+      await sleep(200);
+      b.command("open-cancel");
+      await b.wait(event => event.event === "control" && event.command === "open-cancel");
+      a.command("fix-writes");
+      await a.wait(event => event.event === "writes" && event.broken === false);
+      a.command("retry");
+      const granted = await b.wait(phase("taken-over"));
+      record(s, "the retried takeover is still queued and is granted", !!granted, granted ? "granted" : "not granted (its request was removed)");
+      await a.kill(); await b.kill();
+      await sleep(100);
+    }
     // 5. A write that stalls in transit across a handover: it passed the fence on arrival, but is refused at the save itself.
     {
       const s = "write stalled across a handover";

@@ -14,11 +14,27 @@ import { freshWorkspace } from "../../../projects/xf-studio/authoring/tests/fixt
 import { latePut, runPage } from "./lease-page";
 
 const [base, cookie, name, hang, editMs] = process.argv.slice(2);
-let loseRelease = false;
+let loseRelease = false, delayRelease = false, loseTakeover = false, delayCancel = false;
+/** Requests held back in transit, released by the harness: the body arrives at the host only when `open` runs. */
+const delayed = new Map<string, { open(): void; answer: Promise<number> }>();
+const raw = (url: string, init: RequestInit) => fetch(base + url, { ...init, headers: { Cookie: cookie, Origin: base, ...(init.headers as Record<string, string> | undefined) } });
+/** Sends `init` with its body held back until `open`; the page's own call fails at once, as if its answer were lost. */
+const holdBack = (key: string, url: string, init: RequestInit) => {
+  let open!: () => void;
+  const gate = new Promise<void>(resolve => { open = resolve; });
+  const text = String(init.body);
+  const body = new ReadableStream<Uint8Array>({ async start(controller) { await gate; controller.enqueue(new TextEncoder().encode(text)); controller.close(); } });
+  delayed.set(key, { open, answer: raw(url, { ...init, body, duplex: "half" } as RequestInit).then(response => response.status, () => 0) });
+  throw Error("The answer was lost.");
+};
 const send = async (url: string, init: RequestInit = {}) => {
-  const response = await fetch(base + url, { ...init, headers: { Cookie: cookie, Origin: base, ...(init.headers as Record<string, string> | undefined) } });
-  // The host acted on the release; only its answer goes missing.
-  if (loseRelease && typeof init.body === "string" && init.body.includes('"action":"release"')) { loseRelease = false; throw Error("The answer was lost."); }
+  const body = typeof init.body === "string" ? init.body : "";
+  if (delayRelease && body.includes('"action":"release"')) { delayRelease = false; holdBack("release", url, init); }
+  if (delayCancel && body.includes('"action":"cancel"')) { delayCancel = false; holdBack("cancel", url, init); }
+  const response = await raw(url, init);
+  // The host acted on the request; only its answer goes missing.
+  if (loseRelease && body.includes('"action":"release"')) { loseRelease = false; throw Error("The answer was lost."); }
+  if (loseTakeover && body.includes('"action":"takeover"')) { loseTakeover = false; throw Error("The answer was lost."); }
   return response;
 };
 const report = (event: Record<string, unknown>) => process.stdout.write(`${JSON.stringify({ window: name, at: performance.timeOrigin + performance.now(), ...event })}\n`);
@@ -35,6 +51,18 @@ const postWorkspace = (marker: string, generation: number | null) => send("/api/
 
 const page = await runPage({
   name, hang: hang === "1", report, editMs: Number(editMs) || 15, loseReleaseAnswer: () => { loseRelease = true; },
+  async control(command) {
+    if (command === "delay-release") delayRelease = true;
+    else if (command === "lose-takeover-answer") loseTakeover = true;
+    else if (command === "delay-cancel") delayCancel = true;
+    else if (command.startsWith("open-")) {
+      const held = delayed.get(command.slice(5));
+      if (!held) return { arrived: null };
+      held.open();
+      return { arrived: await held.answer };
+    } else return undefined;
+    return { armed: command };
+  },
   adapter: desktopWorkspaceLease({ endpoint: "/api/desktop/workspace/lease", send, settle: () => writing.then(() => {}) }),
   documents: fence => browserDocuments("/api/documents", send, () => { const generation = fence(); return generation === null ? null : { workspace: "desktop", generation }; }),
   writeWorkspace(marker, generation) {

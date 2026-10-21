@@ -32,6 +32,8 @@ export type PageIo = {
   slowWrite?(marker: string, generation: number): { finish(): Promise<number> };
   /** Desktop: the next release request reaches the host, but its answer is lost on the way back. */
   loseReleaseAnswer?(): void;
+  /** Host-specific transport controls (the desktop page's held-back and lost requests); answers what to report. */
+  control?(command: string): Promise<Record<string, unknown> | undefined>;
   /** Never answer a release request (a hung holder). */
   hang: boolean;
   editMs?: number;
@@ -97,6 +99,8 @@ export async function runPage(io: PageIo) {
       if (name === "break-docs") { docsBroken = true; io.report({ event: "docs", broken: true }); }
       if (name === "fix-docs") { docsBroken = false; io.report({ event: "docs", broken: false }); }
       if (name === "lose-release-answer") { io.loseReleaseAnswer?.(); io.report({ event: "losing-release-answer" }); }
+      const controlled = await io.control?.(name);
+      if (controlled) io.report({ event: "control", command: name, ...controlled });
       if (name === "retry") io.report({ event: "retry", released: await lease.retryRelease() });
       if (name === "slow-write" && io.slowWrite && lease.generation() !== null) {
         slow = io.slowWrite(`${io.name}#slow`, lease.generation()!);

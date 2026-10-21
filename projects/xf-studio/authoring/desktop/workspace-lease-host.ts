@@ -6,8 +6,9 @@
  * `release` when another page asked for it. The stream's end is the page's end: a holder that ends releases at once, and a hung
  * holder (its stream still open) is waited for. Nothing is ever taken by time.
  *
- * `POST { action: "takeover" }` asks the holder to release and queues the page (`cancel` withdraws it); `POST { action: "release", generation }` releases
- * and grants the oldest waiting page. Workspace writes carry the holder's generation (`check`), so a late write from a released
+ * `POST { action: "takeover", request }` asks the holder to release and queues that request (`cancel` with the same `request` withdraws
+ * it alone); `POST { action: "release", generation, operation }` releases once and grants the oldest waiting request; `status` settles a
+ * release whose answer was lost. Workspace writes carry the holder's generation (`check`), so a late write from a released
  * page is refused. Generations come from the library (`DocumentStore.nextLease`), so document writes are fenced by the same ones.
  */
 import { parseFence, WORKSPACE_FENCE_HEADER } from "../src/platform/api/document-store";
@@ -17,9 +18,18 @@ export const DESKTOP_LEASE_SCHEMA = "xfs/desktop-lease-1";
 export const DESKTOP_WORKSPACE = "desktop";
 
 type Page = { id: string; send(event: object): void; close(): void };
-type Scope = { pages: Map<string, Page>; holder: { page: string; generation: number } | null; waiting: string[] };
+/** A queued takeover: the page, and the request's own ID (a cancellation names it, so it never removes a later request). */
+type Waiting = { page: string; request: string };
+type Scope = { pages: Map<string, Page>; holder: { page: string; generation: number } | null; waiting: Waiting[];
+  /**
+   * Release operations by ID: `done` once applied, `void` once a status check settled it as never applied (it is then refused if it
+   * arrives later). Bounded: the oldest are forgotten.
+   */
+  releases: Map<string, "done" | "void"> };
 
 const PAGE_ID = /^[0-9a-zA-Z-]{8,64}$/;
+const OPERATION_ID = /^[0-9a-zA-Z-]{8,64}$/;
+const REMEMBERED_RELEASES = 64;
 
 export class DesktopWorkspaceLeases {
   private readonly scopes = new Map<boolean, Scope>();
@@ -32,7 +42,7 @@ export class DesktopWorkspaceLeases {
 
   private scope(verification: boolean): Scope {
     let scope = this.scopes.get(verification);
-    if (!scope) this.scopes.set(verification, scope = { pages: new Map(), holder: null, waiting: [] });
+    if (!scope) this.scopes.set(verification, scope = { pages: new Map(), holder: null, waiting: [], releases: new Map() });
     return scope;
   }
   /** The holder's generation, or null when no page holds the scope (tests and diagnostics). */
@@ -49,19 +59,19 @@ export class DesktopWorkspaceLeases {
   private grant(verification: boolean, scope: Scope, page: Page) {
     const generation = this.issue(verification);
     scope.holder = { page: page.id, generation };
-    scope.waiting = scope.waiting.filter(id => id !== page.id);
+    scope.waiting = scope.waiting.filter(item => item.page !== page.id);
     page.send({ event: "granted", generation });
     this.report(`Workspace lease ${generation} granted${verification ? " (verification workspace)" : ""}.`);
   }
   private grantNext(verification: boolean, scope: Scope) {
     while (!scope.holder && scope.waiting.length) {
-      const next = scope.pages.get(scope.waiting.shift()!);
+      const next = scope.pages.get(scope.waiting.shift()!.page);
       if (next) this.grant(verification, scope, next);
     }
   }
   private ended(verification: boolean, scope: Scope, id: string) {
     if (!scope.pages.delete(id)) return;
-    scope.waiting = scope.waiting.filter(item => item !== id);
+    scope.waiting = scope.waiting.filter(item => item.page !== id);
     if (scope.holder?.page === id) {
       this.report(`The page holding workspace lease ${scope.holder.generation} ended; it is released.`);
       scope.holder = null;
@@ -104,33 +114,55 @@ export class DesktopWorkspaceLeases {
     return new Response(body, { headers: { "Content-Type": "application/x-ndjson", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
   }
 
-  /** `POST { schema, page, action: "takeover" | "release", generation? }`. */
+  private settle(scope: Scope, operation: string, outcome: "done" | "void") {
+    scope.releases.set(operation, outcome);
+    while (scope.releases.size > REMEMBERED_RELEASES) scope.releases.delete(scope.releases.keys().next().value!);
+  }
+
+  /**
+   * `POST { schema, page, action, ... }`:
+   * - `takeover` with `request` (its ID) queues the page and asks the holder to release; `cancel` with `request` withdraws that one
+   *   request only.
+   * - `release` with `generation` and `operation` (its ID) releases and grants the oldest waiting request, once; a release whose
+   *   operation was settled as never applied is refused.
+   * - `status` with `generation` and `operation`, after a release whose answer was lost, settles that operation in the same step: done
+   *   (`released`), or never applied, in which case it is voided first, so it can't complete later, and the page still holds the lease.
+   */
   async post(verification: boolean, request: Request): Promise<Response> {
-    let body: { schema?: unknown; page?: unknown; action?: unknown; generation?: unknown };
+    let body: { schema?: unknown; page?: unknown; action?: unknown; generation?: unknown; request?: unknown; operation?: unknown };
     try { body = await request.json() as typeof body; } catch { return Response.json({ error: "Invalid JSON." }, { status: 400 }); }
     if (body?.schema !== DESKTOP_LEASE_SCHEMA || typeof body.page !== "string" || !PAGE_ID.test(body.page))
       return Response.json({ error: "Invalid lease request." }, { status: 400 });
     const scope = this.scope(verification), page = scope.pages.get(body.page);
     if (!page) return Response.json({ error: "That page isn't connected." }, { status: 409 });
-    if (body.action === "takeover") {
+    if (body.action === "takeover" || body.action === "cancel") {
+      if (typeof body.request !== "string" || !OPERATION_ID.test(body.request)) return Response.json({ error: "Invalid lease request." }, { status: 400 });
+      const id = body.request;
+      if (body.action === "cancel") {
+        scope.waiting = scope.waiting.filter(item => !(item.page === page.id && item.request === id));
+        return new Response(null, { status: 204 });
+      }
       if (scope.holder?.page === page.id) return new Response(null, { status: 204 });
-      if (!scope.waiting.includes(page.id)) scope.waiting.push(page.id);
+      if (!scope.waiting.some(item => item.request === id)) scope.waiting.push({ page: page.id, request: id });
       const holder = scope.holder && scope.pages.get(scope.holder.page);
       if (holder) holder.send({ event: "release" }); else this.grantNext(verification, scope);
       return new Response(null, { status: 202 });
     }
-    if (body.action === "status") {
-      // After a release whose answer was lost: does this page (with this generation) still hold the workspace?
-      return Response.json({ held: scope.holder?.page === page.id && scope.holder.generation === body.generation });
-    }
-    if (body.action === "cancel") {
-      scope.waiting = scope.waiting.filter(id => id !== page.id);
-      return new Response(null, { status: 204 });
-    }
-    if (body.action === "release") {
-      if (scope.holder?.page !== page.id || scope.holder.generation !== body.generation)
-        return Response.json({ error: "That page doesn't hold this workspace." }, { status: 409 });
-      this.report(`Workspace lease ${scope.holder.generation} released.`);
+    if (body.action === "status" || body.action === "release") {
+      if (typeof body.operation !== "string" || !OPERATION_ID.test(body.operation)) return Response.json({ error: "Invalid lease request." }, { status: 400 });
+      const operation = body.operation, settled = scope.releases.get(operation);
+      const holds = scope.holder?.page === page.id && scope.holder.generation === body.generation;
+      if (body.action === "status") {
+        // Settled in this one step: applied, or voided now so it can never apply later.
+        if (settled === "done") return Response.json({ held: false });
+        if (settled === undefined) this.settle(scope, operation, "void");
+        return Response.json({ held: holds });
+      }
+      if (settled === "done") return new Response(null, { status: 204 });
+      if (settled === "void") return Response.json({ code: "void", error: "That release was settled as not applied." }, { status: 409 });
+      if (!holds) return Response.json({ error: "That page doesn't hold this workspace." }, { status: 409 });
+      this.settle(scope, operation, "done");
+      this.report(`Workspace lease ${scope.holder!.generation} released.`);
       scope.holder = null;
       this.grantNext(verification, scope);
       return new Response(null, { status: 204 });

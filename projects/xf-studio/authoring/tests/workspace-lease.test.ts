@@ -512,3 +512,51 @@ test("desktop: a takeover whose request failed (its answer lost) is still withdr
   streams[0]!.enqueue(new TextEncoder().encode(`${JSON.stringify({ event: "granted", generation: 2 })}\n`));
   expect((await second).ok).toBe(true);
 });
+
+test("desktop: a release and its status check name one operation; takeovers and their cancellations name their own request", async () => {
+  const { desktopWorkspaceLease } = await import("../src/app/browser/workspace-lease-device");
+  const bodies: Record<string, unknown>[] = [];
+  const streams: ReadableStreamDefaultController<Uint8Array>[] = [];
+  const send = async (_url: string, init?: RequestInit) => {
+    if (init?.method !== "POST") return new Response(new ReadableStream<Uint8Array>({ start: controller => { streams.push(controller); } }));
+    const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+    bodies.push(body);
+    if (body.action === "release") throw Error("The answer was lost.");
+    if (body.action === "status") return Response.json({ held: true });
+    return new Response(null, { status: 204 });
+  };
+  const lease = new WorkspaceLease(desktopWorkspaceLease({ endpoint: "/lease", send }), { clock: simulatedClock().clock });
+  const starting = lease.start();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  streams[0]!.enqueue(new TextEncoder().encode(`${JSON.stringify({ event: "granted", generation: 5 })}\n`));
+  await starting;
+  expect(await lease.release()).toBe(false);
+  const release = bodies.find(body => body.action === "release")!, status = bodies.find(body => body.action === "status")!;
+  expect(typeof release.operation).toBe("string");
+  expect(status.operation).toBe(release.operation);
+  expect(lease.snapshot().phase).toBe("release-failed");
+  // A second release is a new operation.
+  await lease.retryRelease();
+  expect(bodies.filter(body => body.action === "release").map(body => body.operation)).toHaveLength(2);
+  expect(new Set(bodies.filter(body => body.action === "release").map(body => body.operation)).size).toBe(2);
+
+  const takeovers: Record<string, unknown>[] = [];
+  const reader = desktopWorkspaceLease({ endpoint: "/lease", send: async (_url, init) => {
+    if (init?.method !== "POST") return new Response(new ReadableStream<Uint8Array>({ start: controller => {
+      controller.enqueue(new TextEncoder().encode(`${JSON.stringify({ event: "held" })}\n`)); } }));
+    takeovers.push(JSON.parse(String(init.body)));
+    return new Response(null, { status: 202 });
+  } });
+  await reader.acquire(new AbortController().signal);
+  for (let i = 0; i < 2; i++) {
+    const run = new AbortController(), asking = reader.takeOver(run.signal).catch(() => {});
+    await new Promise(resolve => setTimeout(resolve, 0));
+    run.abort(); await asking;
+  }
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const [first, cancelFirst, second, cancelSecond] = takeovers;
+  expect([first!.action, cancelFirst!.action, second!.action, cancelSecond!.action]).toEqual(["takeover", "cancel", "takeover", "cancel"]);
+  expect(cancelFirst!.request).toBe(first!.request);
+  expect(cancelSecond!.request).toBe(second!.request);
+  expect(first!.request).not.toBe(second!.request);
+});

@@ -92,7 +92,7 @@ harness/web-locks-model.ts     The browser's Web Locks (exclusive mode) for the 
 tools/lease-harness.ts         The scenarios on both hosts; tests/lease-harness.test.ts runs them
 ```
 
-Each window edits one document (a save every 15 ms, or every 1 ms where a write must be in flight) and writes its workspace every fourth edit, with a marker. Results (21 October 2026; 31 checks in about 14 s, peak 0.8 GB), all **PASS**:
+Each window edits one document (a save every 15 ms, or every 1 ms where a write must be in flight) and writes its workspace every fourth edit, with a marker. Results (21 October 2026; 34 checks in about 16 s, peak 0.8 GB), all **PASS**:
 
 | Scenario | Checks |
 |---|---|
@@ -102,6 +102,8 @@ Each window edits one document (a save every 15 ms, or every 1 ms where a write 
 | Release that can't save | The holder's last workspace write fails: nothing is released, the holder keeps the workspace and says so, and the other window keeps waiting. Try again, once writes work, stores the last write and hands over. |
 | Document write failed while draining | A document write fails in transit during the drain: nothing is handed over. The document stays unsaved, and Try again writes it again before handing over; the stored document is the holder's last edit. |
 | Release answer lost (desktop) | The host acts on the release but its answer is lost: the page goes `reconciling` (read-only), asks the host who holds the workspace, and settles as read-only; it is never writable after the other page's grant. |
+| Release still in flight when checked (desktop) | The release's answer is lost before the host has even processed it. The status check settles that release operation as never applied (voided) in the same step, so the page keeps the lease; when the release finally arrives it is refused (409), the holder is unchanged and the other page isn't granted. Try again then hands over. |
+| Late cancellation after a retried takeover (desktop) | A takeover's answer is lost and its cancellation is delayed past a retry: the cancellation names its own request and removes only that one, so the retried takeover is still queued and is granted. |
 | Write stalled across a handover (desktop) | A write passes the fence on arrival, its body stalls, the lease moves, and the body then arrives: refused at the save (409), the workspace unchanged. |
 | Host stream ended (desktop) | The page becomes `disconnected` at once, says so plainly, and sends nothing more. |
 | No lease generation (localhost) | The host refuses to issue one: the window never becomes writable and lets the Web Lock go. |

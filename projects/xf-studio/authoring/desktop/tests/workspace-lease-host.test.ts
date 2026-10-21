@@ -26,19 +26,19 @@ test("one page holds the desktop workspace; another takes over only after releas
   expect(leases.refuseWrite(write(1), false)).toBeNull();
   expect(leases.refuseWrite(write(null), false)).toBeNull();
   // Takeover asks the holder; nothing moves until it releases.
-  expect((await post(leases, { page: "page-bbbbbbbb", action: "takeover" })).status).toBe(202);
+  expect((await post(leases, { page: "page-bbbbbbbb", action: "takeover", request: "request-1" })).status).toBe(202);
   await Bun.sleep(5);
   expect(a.events.at(-1)).toEqual({ event: "release" });
   expect(leases.holder(false)).toEqual({ page: "page-aaaaaaaa", generation: 1 });
   // Only the holder, with its own generation, releases.
-  expect((await post(leases, { page: "page-bbbbbbbb", action: "release", generation: 1 })).status).toBe(409);
-  expect((await post(leases, { page: "page-aaaaaaaa", action: "release", generation: 1 })).status).toBe(204);
+  expect((await post(leases, { page: "page-bbbbbbbb", action: "release", generation: 1, operation: "release-1aaaa" })).status).toBe(409);
+  expect((await post(leases, { page: "page-aaaaaaaa", action: "release", generation: 1, operation: "release-1aaaa" })).status).toBe(204);
   await Bun.sleep(5);
   expect(b.events.at(-1)).toEqual({ event: "granted", generation: 2 });
   expect((await leases.refuseWrite(write(1), false)!.json())).toMatchObject({ code: "superseded" });
   expect(leases.refuseWrite(write(2), false)).toBeNull();
   // A holder whose page ends (closed, crashed or killed) releases at once to the page waiting for it.
-  expect((await post(leases, { page: "page-aaaaaaaa", action: "takeover" })).status).toBe(202);
+  expect((await post(leases, { page: "page-aaaaaaaa", action: "takeover", request: "request-1" })).status).toBe(202);
   b.end();
   await Bun.sleep(5);
   expect(a.events.at(-1)).toEqual({ event: "granted", generation: 3 });
@@ -55,9 +55,9 @@ test("a withdrawn takeover leaves the queue, so the holder's next release grants
   let issued = 0;
   const leases = new DesktopWorkspaceLeases(() => ++issued, 60_000);
   const a = await page(leases, "page-aaaaaaaa"), b = await page(leases, "page-bbbbbbbb");
-  expect((await post(leases, { page: "page-bbbbbbbb", action: "takeover" })).status).toBe(202);
-  expect((await post(leases, { page: "page-bbbbbbbb", action: "cancel" })).status).toBe(204);
-  expect((await post(leases, { page: "page-aaaaaaaa", action: "release", generation: 1 })).status).toBe(204);
+  expect((await post(leases, { page: "page-bbbbbbbb", action: "takeover", request: "request-1" })).status).toBe(202);
+  expect((await post(leases, { page: "page-bbbbbbbb", action: "cancel", request: "request-1" })).status).toBe(204);
+  expect((await post(leases, { page: "page-aaaaaaaa", action: "release", generation: 1, operation: "release-1aaaa" })).status).toBe(204);
   await Bun.sleep(5);
   expect(leases.holder(false)).toBeNull();
   expect(b.events.some(event => event.event === "granted")).toBe(false);
@@ -91,8 +91,8 @@ test("a workspace write that stalls in transit is fenced again at the save: a ha
     expect(fence()).toBeNull();
     const answer = desktopWorkspaceRequest(request, store, false, fence);
     // The holder hands over while the write's body is still arriving.
-    await post(leases, { page: "page-bbbbbbbb", action: "takeover" });
-    await post(leases, { page: "page-aaaaaaaa", action: "release", generation: 1 });
+    await post(leases, { page: "page-bbbbbbbb", action: "takeover", request: "request-1" });
+    await post(leases, { page: "page-aaaaaaaa", action: "release", generation: 1, operation: "release-1aaaa" });
     finish();
     expect((await answer).status).toBe(409);
     expect(store.load(false)).toBeNull();
@@ -114,11 +114,46 @@ test("after a lost release answer, the host says whether the page still holds th
   let issued = 0;
   const leases = new DesktopWorkspaceLeases(() => ++issued, 60_000);
   const a = await page(leases, "page-aaaaaaaa"), b = await page(leases, "page-bbbbbbbb");
-  const status = async (id: string, generation: number) => (await (await post(leases, { page: id, action: "status", generation })).json()) as { held: boolean };
-  expect(await status("page-aaaaaaaa", 1)).toEqual({ held: true });
-  await post(leases, { page: "page-bbbbbbbb", action: "takeover" });
-  await post(leases, { page: "page-aaaaaaaa", action: "release", generation: 1 });
-  expect(await status("page-aaaaaaaa", 1)).toEqual({ held: false });
-  expect(await status("page-bbbbbbbb", 2)).toEqual({ held: true });
+  const status = async (id: string, generation: number, operation: string) =>
+    (await (await post(leases, { page: id, action: "status", generation, operation })).json()) as { held: boolean };
+  expect(await status("page-aaaaaaaa", 1, "probe-aaaa")).toEqual({ held: true });
+  await post(leases, { page: "page-bbbbbbbb", action: "takeover", request: "request-1" });
+  await post(leases, { page: "page-aaaaaaaa", action: "release", generation: 1, operation: "release-1aaaa" });
+  // The applied release's own operation is settled as done.
+  expect(await status("page-aaaaaaaa", 1, "release-1aaaa")).toEqual({ held: false });
+  expect(await status("page-bbbbbbbb", 2, "probe-bbbb")).toEqual({ held: true });
+  a.end(); b.end(); leases.close();
+});
+
+test("a status check settles a release still in flight as never applied: it is voided, and refused when it arrives", async () => {
+  let issued = 0;
+  const leases = new DesktopWorkspaceLeases(() => ++issued, 60_000);
+  const a = await page(leases, "page-aaaaaaaa"), b = await page(leases, "page-bbbbbbbb");
+  await post(leases, { page: "page-bbbbbbbb", action: "takeover", request: "request-1" });
+  // The page's release answer was "lost" before the host processed it: the status arrives first and voids that operation.
+  expect(await (await post(leases, { page: "page-aaaaaaaa", action: "status", generation: 1, operation: "release-late" })).json()).toEqual({ held: true });
+  const late = await post(leases, { page: "page-aaaaaaaa", action: "release", generation: 1, operation: "release-late" });
+  expect(late.status).toBe(409);
+  expect(await late.json()).toMatchObject({ code: "void" });
+  expect(leases.holder(false)).toEqual({ page: "page-aaaaaaaa", generation: 1 });
+  expect(b.events.some(event => event.event === "granted")).toBe(false);
+  // A new release (a new operation) still works.
+  expect((await post(leases, { page: "page-aaaaaaaa", action: "release", generation: 1, operation: "release-next" })).status).toBe(204);
+  await Bun.sleep(5);
+  expect(b.events.at(-1)).toEqual({ event: "granted", generation: 2 });
+  a.end(); b.end(); leases.close();
+});
+
+test("a cancellation removes only its own takeover request, never a later one from the same page", async () => {
+  let issued = 0;
+  const leases = new DesktopWorkspaceLeases(() => ++issued, 60_000);
+  const a = await page(leases, "page-aaaaaaaa"), b = await page(leases, "page-bbbbbbbb");
+  await post(leases, { page: "page-bbbbbbbb", action: "takeover", request: "request-old" });
+  await post(leases, { page: "page-bbbbbbbb", action: "takeover", request: "request-new" });
+  // The old request's cancellation arrives after the retry.
+  await post(leases, { page: "page-bbbbbbbb", action: "cancel", request: "request-old" });
+  await post(leases, { page: "page-aaaaaaaa", action: "release", generation: 1, operation: "release-1aaaa" });
+  await Bun.sleep(5);
+  expect(b.events.at(-1)).toEqual({ event: "granted", generation: 2 });
   a.end(); b.end(); leases.close();
 });
