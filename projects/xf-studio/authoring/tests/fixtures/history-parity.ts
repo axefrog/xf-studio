@@ -50,16 +50,25 @@ function lookMoment(c: Core, ids: Ids, counts: { resets: number; recipe: number;
   const { app, document } = c;
   return { recipe: digest(document.recipe), active: document.active, others: document.otherParts()?.parts ?? null,
     history: app.history(), timeline: timeline(app.historyTimeline(), ids),
-    undo: app.capability({ kind: "history.undo" }), redo: app.capability({ kind: "history.redo" }), counts: { ...counts } };
+    undo: app.capability({ kind: "history.undo" }), redo: app.capability({ kind: "history.redo" }),
+    // Since the previous moment: how often the preview was reset and the recipe published (exactly), and whether the history changed.
+    counts: { resets: counts.resets, recipe: counts.recipe, history: counts.history > 0 } };
+}
+function moments(c: Core, counts: { resets: number; recipe: number; history: number }) {
+  const ids = new Ids(), seen: unknown[] = [];
+  const note = (what: string, result?: unknown) => {
+    seen.push({ what, result: result ?? null, at: lookMoment(c, ids, counts) });
+    counts.resets = counts.recipe = counts.history = 0;
+  };
+  return { ids, seen, note };
 }
 
 /** A scripted session over eye makeup and the synthetic hair feature: every kind of step, cancel and move. */
 export function lookSession() {
   const wire = wiring(), counts = { resets: 0, recipe: 0, history: 0 };
-  const c = wire.core(withHair(), () => counts.resets++), { app, document } = c, ids = new Ids(), seen: unknown[] = [];
+  const c = wire.core(withHair(), () => counts.resets++), { app, document } = c, { seen, note } = moments(c, counts);
   document.subscribe(change => { if (change === "recipe") counts.recipe++; if (change === "history") counts.history++; });
   const layerId = () => document.recipe.layers[0].id, u0 = document.recipe.layers[0].points[0].u;
-  const note = (what: string, result?: unknown) => seen.push({ what, result: result ?? null, at: lookMoment(c, ids, counts) });
   const gesture = (moves: number[], cancel = false) => {
     const begun = app.beginGesture("uv", layerId());
     for (const u of moves) app.applyGesture("uv", { kind: "point.replace", index: 0, next: { u } });
@@ -131,8 +140,9 @@ export function lookSession() {
 
 /** CORE-46: a change that records no step hides Redo; one that leaves the content as it was keeps it. */
 export function redoValiditySession() {
-  const wire = wiring(), c = wire.core(withTint() as never, () => {}), { app } = c, ids = new Ids(), counts = { resets: 0, recipe: 0, history: 0 };
-  const seen: unknown[] = [], note = (what: string, result?: unknown) => seen.push({ what, result: result ?? null, at: lookMoment(c, ids, counts) });
+  const counts = { resets: 0, recipe: 0, history: 0 }, c = wiring().core(withTint() as never, () => counts.resets++), { app } = c;
+  const { seen, note } = moments(c, counts);
+  c.document.subscribe(change => { if (change === "recipe") counts.recipe++; if (change === "history") counts.history++; });
   note("tint", app.dispatch({ kind: "tint.set", colour: "#111111" } as never));
   note("undo", app.dispatch({ kind: "history.undo" }));
   note("unrecorded tint", app.dispatch({ kind: "tint.try", colour: "#222222" } as never));

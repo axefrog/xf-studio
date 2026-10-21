@@ -722,7 +722,7 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 1,
+     "history": true,
      "recipe": 2,
      "resets": 0
     },
@@ -769,8 +769,8 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 2,
-     "recipe": 4,
+     "history": true,
+     "recipe": 2,
      "resets": 1
     },
     "history": {
@@ -816,9 +816,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 3,
-     "recipe": 5,
-     "resets": 1
+     "history": true,
+     "recipe": 1,
+     "resets": 0
     },
     "history": {
      "depth": 1,
@@ -865,9 +865,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 4,
-     "recipe": 6,
-     "resets": 2
+     "history": true,
+     "recipe": 1,
+     "resets": 1
     },
     "history": {
      "depth": 0,
@@ -915,9 +915,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 6,
-     "recipe": 8,
-     "resets": 3
+     "history": true,
+     "recipe": 2,
+     "resets": 1
     },
     "history": {
      "depth": 0,
@@ -962,9 +962,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 7,
-     "recipe": 9,
-     "resets": 4
+     "history": true,
+     "recipe": 1,
+     "resets": 1
     },
     "history": {
      "depth": 1,
@@ -1012,9 +1012,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 9,
-     "recipe": 9,
-     "resets": 4
+     "history": true,
+     "recipe": 0,
+     "resets": 0
     },
     "history": {
      "depth": 1,
@@ -1059,9 +1059,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 10,
-     "recipe": 10,
-     "resets": 4
+     "history": true,
+     "recipe": 1,
+     "resets": 0
     },
     "history": {
      "depth": 2,
@@ -1116,9 +1116,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 11,
-     "recipe": 11,
-     "resets": 4
+     "history": true,
+     "recipe": 1,
+     "resets": 0
     },
     "history": {
      "depth": 3,
@@ -1181,9 +1181,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 12,
-     "recipe": 12,
-     "resets": 4
+     "history": true,
+     "recipe": 1,
+     "resets": 0
     },
     "history": {
      "depth": 4,
@@ -1254,9 +1254,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 13,
-     "recipe": 12,
-     "resets": 4
+     "history": true,
+     "recipe": 0,
+     "resets": 0
     },
     "history": {
      "depth": 5,
@@ -1341,9 +1341,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 14,
-     "recipe": 12,
-     "resets": 4
+     "history": true,
+     "recipe": 0,
+     "resets": 0
     },
     "history": {
      "depth": 6,
@@ -1437,9 +1437,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 14,
-     "recipe": 12,
-     "resets": 4
+     "history": false,
+     "recipe": 0,
+     "resets": 0
     },
     "history": {
      "depth": 6,
@@ -1533,9 +1533,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 20,
-     "recipe": 13,
-     "resets": 5
+     "history": true,
+     "recipe": 1,
+     "resets": 1
     },
     "history": {
      "depth": 0,
@@ -1621,9 +1621,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 20,
-     "recipe": 13,
-     "resets": 5
+     "history": false,
+     "recipe": 0,
+     "resets": 0
     },
     "history": {
      "depth": 0,
@@ -1710,9 +1710,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 23,
-     "recipe": 14,
-     "resets": 6
+     "history": true,
+     "recipe": 1,
+     "resets": 1
     },
     "history": {
      "depth": 3,
@@ -1801,9 +1801,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 26,
-     "recipe": 15,
-     "resets": 7
+     "history": true,
+     "recipe": 1,
+     "resets": 1
     },
     "history": {
      "depth": 6,
@@ -1895,9 +1895,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 26,
-     "recipe": 15,
-     "resets": 7
+     "history": false,
+     "recipe": 0,
+     "resets": 0
     },
     "history": {
      "depth": 6,
@@ -1990,9 +1990,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 28,
-     "recipe": 15,
-     "resets": 7
+     "history": true,
+     "recipe": 0,
+     "resets": 0
     },
     "history": {
      "depth": 4,
@@ -2086,9 +2086,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 29,
-     "recipe": 15,
-     "resets": 7
+     "history": true,
+     "recipe": 0,
+     "resets": 0
     },
     "history": {
      "depth": 5,
@@ -2165,9 +2165,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 29,
-     "recipe": 16,
-     "resets": 7
+     "history": false,
+     "recipe": 1,
+     "resets": 0
     },
     "history": {
      "depth": 5,
@@ -2249,9 +2249,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 29,
-     "recipe": 16,
-     "resets": 7
+     "history": false,
+     "recipe": 0,
+     "resets": 0
     },
     "history": {
      "depth": 5,
@@ -2334,9 +2334,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 29,
-     "recipe": 17,
-     "resets": 7
+     "history": false,
+     "recipe": 1,
+     "resets": 0
     },
     "history": {
      "depth": 5,
@@ -2418,9 +2418,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 30,
-     "recipe": 18,
-     "resets": 8
+     "history": true,
+     "recipe": 1,
+     "resets": 1
     },
     "history": {
      "depth": 4,
@@ -2505,9 +2505,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 32,
-     "recipe": 20,
-     "resets": 8
+     "history": true,
+     "recipe": 2,
+     "resets": 0
     },
     "history": {
      "depth": 4,
@@ -2592,9 +2592,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 33,
-     "recipe": 22,
-     "resets": 8
+     "history": true,
+     "recipe": 2,
+     "resets": 0
     },
     "history": {
      "depth": 5,
@@ -2671,9 +2671,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 34,
-     "recipe": 23,
-     "resets": 8
+     "history": true,
+     "recipe": 1,
+     "resets": 0
     },
     "history": {
      "depth": 6,
@@ -2761,9 +2761,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 35,
-     "recipe": 23,
-     "resets": 8
+     "history": true,
+     "recipe": 0,
+     "resets": 0
     },
     "history": {
      "depth": 7,
@@ -2870,9 +2870,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 37,
-     "recipe": 23,
-     "resets": 8
+     "history": true,
+     "recipe": 0,
+     "resets": 0
     },
     "history": {
      "depth": 7,
@@ -2975,9 +2975,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 38,
-     "recipe": 24,
-     "resets": 8
+     "history": true,
+     "recipe": 1,
+     "resets": 0
     },
     "history": {
      "depth": 8,
@@ -3090,9 +3090,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 40,
-     "recipe": 24,
-     "resets": 8
+     "history": true,
+     "recipe": 0,
+     "resets": 0
     },
     "history": {
      "depth": 8,
@@ -3202,9 +3202,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 42,
-     "recipe": 24,
-     "resets": 8
+     "history": true,
+     "recipe": 0,
+     "resets": 0
     },
     "history": {
      "depth": 8,
@@ -3313,9 +3313,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 43,
-     "recipe": 25,
-     "resets": 9
+     "history": true,
+     "recipe": 1,
+     "resets": 1
     },
     "history": {
      "depth": 7,
@@ -3423,9 +3423,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 44,
-     "recipe": 26,
-     "resets": 10
+     "history": true,
+     "recipe": 1,
+     "resets": 1
     },
     "history": {
      "depth": 8,
@@ -3533,9 +3533,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 46,
-     "recipe": 27,
-     "resets": 11
+     "history": true,
+     "recipe": 1,
+     "resets": 1
     },
     "history": {
      "depth": 8,
@@ -3643,9 +3643,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 46,
-     "recipe": 27,
-     "resets": 11
+     "history": false,
+     "recipe": 0,
+     "resets": 0
     },
     "history": {
      "depth": 8,
@@ -3752,9 +3752,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 131,
-     "recipe": 112,
-     "resets": 11
+     "history": true,
+     "recipe": 85,
+     "resets": 0
     },
     "history": {
      "depth": 80,
@@ -4436,9 +4436,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 132,
-     "recipe": 113,
-     "resets": 12
+     "history": true,
+     "recipe": 1,
+     "resets": 1
     },
     "history": {
      "depth": 80,
@@ -5134,9 +5134,9 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 133,
-     "recipe": 114,
-     "resets": 13
+     "history": true,
+     "recipe": 1,
+     "resets": 1
     },
     "history": {
      "depth": 80,
@@ -5823,7 +5823,7 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 0,
+     "history": true,
      "recipe": 0,
      "resets": 0
     },
@@ -5878,7 +5878,7 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 0,
+     "history": true,
      "recipe": 0,
      "resets": 0
     },
@@ -5926,7 +5926,7 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 0,
+     "history": false,
      "recipe": 0,
      "resets": 0
     },
@@ -5971,7 +5971,7 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 0,
+     "history": false,
      "recipe": 0,
      "resets": 0
     },
@@ -6015,7 +6015,7 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 0,
+     "history": true,
      "recipe": 0,
      "resets": 0
     },
@@ -6070,7 +6070,7 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 0,
+     "history": true,
      "recipe": 0,
      "resets": 0
     },
@@ -6123,7 +6123,7 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 0,
+     "history": false,
      "recipe": 0,
      "resets": 0
     },
@@ -6178,7 +6178,7 @@
    "at": {
     "active": 0,
     "counts": {
-     "history": 0,
+     "history": true,
      "recipe": 0,
      "resets": 0
     },
