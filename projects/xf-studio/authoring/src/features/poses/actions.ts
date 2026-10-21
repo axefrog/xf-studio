@@ -82,7 +82,7 @@ export type PoseLibraryState = {
   readonly playable: Capability;
 };
 
-/** The catalogue entries of the module's actions (research/authoring/ui-action-catalogue.md): view state and preferences, no Undo. */
+/** The module's actions (routed through its own service, a recorded boundary exception): view state and preferences, no Undo. */
 export const POSE_LIBRARY_DESCRIPTORS = Object.freeze({
   "pose.select": { scope: "viewport", effect: "view", async: true, undo: "none", payload: { id: "text" } },
   "pose.clear": { scope: "viewport", effect: "view", async: false, undo: "none", payload: { to: "choice" } },

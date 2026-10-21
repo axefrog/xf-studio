@@ -27,3 +27,7 @@ Generated hair is baked at export: the influences that shape it are authoring to
   2. Physics chains per major volume, with chain stiffness from the bundle model, inside a bone budget.
   3. Ties and holds as pinned joints.
 - **Research first.** How vanilla hair and the Chevelle mod carry skinning and physics (bones, components, data), from the files. Then the acceptance case is a photo-mode test: the head tilted forward and back with long hair, and no clipping or lifting.
+
+## Open bugs
+
+- **Scalp density against its seed** (HAIR-02): `hair-worker.ts` rebuilds density from the current seed surface without comparing the stored `scalp.densitySeed`, and `authored()` drops authored density that differs from the seed; compare the seed source, flag a mismatch and keep the authored density.

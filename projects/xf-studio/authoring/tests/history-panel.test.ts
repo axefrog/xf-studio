@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { HISTORY_START_ID, type HistorySnapshot } from "../src/authoring-history";
 import { shortcutLabel } from "../src/input-bindings";
 import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
+import { STUDIO_REGISTRY } from "../src/compose/studio-registry";
 import { HISTORY_SCOPE, historyCommandLabel, historyCommandTitle, historyRows, historySummary, HISTORY_TRIMMED_NOTE, jumpable,
   jumpAnnouncement } from "../src/studio-ui/history-model";
 import { defaultCompact, defaultWide } from "../src/studio-ui/layout-defaults";
@@ -66,8 +67,8 @@ test("history.jumpTo is a catalogued workspace action and the History panel is r
     expect(at.group.panels).toContain("layers");
     expect(at.group.active).toBe("layers");
   }
-  const catalogue = readFileSync(resolve(root, "../../../research/authoring/ui-action-catalogue.md"), "utf8");
-  for (const name of ["history.jumpTo", "historyTimeline()"]) expect(catalogue).toContain(name);
+  // Registered by the history family (the registry is the action catalogue).
+  expect(STUDIO_REGISTRY.route("history.jumpTo")).toMatchObject({ ok: true, qualified: "history/history.jumpTo" });
   // The panel reaches the core only through the port: one typed action, read-only snapshots.
   const panel = readFileSync(resolve(root, "src/studio-ui/panels/history.ts"), "utf8");
   expect(panel).toContain(`kind: "history.jumpTo"`);

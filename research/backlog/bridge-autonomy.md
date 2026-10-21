@@ -36,7 +36,7 @@ Effort is rough agent effort once the bridge's redscript actions layer is in pla
 | 9 | `photo.open` in the tools (`tools/input/photo-key.ts`): the player's binding from `UserSettings.json` or `IK_N`, sent only to the game's own window after the write gate, the phase and `photo_mode_can_open` pass; `sendinput` refuses unless the game window is in front. `photo.enter` now refuses without `route: "quest"` |
 | 4 | `cc.open` (batch 3, claude/bridge-batch3): no pause menu and no wrapped vanilla function. The bridge's own event on the idle menu scenario, raised through the game's menu-event blackboard, switches to the mirror's scenario with a `MorphMenuUserData` carrying the edit tag (`mode` mirror = `HairDresser`, ripperdoc = `Ripperdoc`; the vanilla scenario sets `m_updatingFinalizedState`). Refused outside normal play, in combat, a vehicle or a scene, where photo mode isn't allowed or under a combat, scene, tier or moving-platform save lock; takes the save lock and asks only once the game reports saving locked; behind `allow_creator_leave` with Confirm and Back ([photo mode §3.1](../../knowledge/photo-mode.md#31-how-character-customization-anywhere-opens-it)) |
 
-Also built: `capture.burst` (flicker and motion), the `cc-eyes` crop, grain and chromatic aberration in `photo.camera.set`, and session 2 and 3 scripts in this flow. Batch 2 (claude/bridge-batch2, offline) hardened these for the session: the key is sent only to `Cyberpunk2077.exe`, only on an explicit "photo mode allowed", re-checked after the window comes forward, never on an unbound or layout-dependent binding; the cursor hide works only in photo mode ([code-health ledger](../authoring/code-health.md#fixed-in-claudebridge-batch2), RB-34..41). **Next:** rank 7 (scene attributes; also B10), rank 8 (studio spot), B7 (worn items), then ranks 10–13 (B5 is rank 10). Question 1 below still matters for sessions that use F12; `cc.open` doesn't depend on it.
+Also built: `capture.burst` (flicker and motion), the `cc-eyes` crop, grain and chromatic aberration in `photo.camera.set`, and session 2 and 3 scripts in this flow. Batch 2 (claude/bridge-batch2, offline) hardened these for the session: the key is sent only to `Cyberpunk2077.exe`, only on an explicit "photo mode allowed", re-checked after the window comes forward, never on an unbound or layout-dependent binding; the cursor hide works only in photo mode (RB-34..41). **Next:** rank 7 (scene attributes; also B10), rank 8 (studio spot), B7 (worn items), then ranks 10–13 (B5 is rank 10). Question 1 below still matters for sessions that use F12; `cc.open` doesn't depend on it.
 
 ## Queued from session friction
 
@@ -96,6 +96,12 @@ All three approved on 26 September 2026, each confined to the test profile's -wr
 - **Confirm and Back in the creator** (rank 5): yes, only in sessions that end by loading the safety save, with the save lock held while changes are live. Built as `cc.confirm`/`cc.back` behind `allow_creator_leave`.
 - **The photo-mode key** (rank 9): yes, one allowlisted key (the bound `TogglePhotoMode` key), only to the Cyberpunk window, only after `CanPhotoModeBeEnabled`, never any other input. Built as `photo.open`.
 - **Our own camera presets** (rank 3): yes, in the -diagnostic and -writes packages; the distribution package must not carry them. Built as `xf_photo_mode_presets.yaml`.
+
+## Open bugs
+
+- **Wardrobe restore after the kill switch** (RB-93, plausible): `XFWardrobeRestoreLater` runs 0.5 s later without checking `XFBridge_Live` or the phase, the one path the load/detach gate doesn't cover.
+- **Save refusal race** (RB-94, plausible): the holds are read in one game task before `prepare` and the save, so a `behave.start` or `player.effect` from another client in between is written into the save.
+- **Equipment-EX reflection per call** (RB-95): `XFScriptOutfit.Api()` rescans the class and reads its version on every call (2–3 times per `wardrobe.state`); cache it per session. `EquipInto` relies on an empty `TweakDBID` meaning "omitted".
 
 ## Constraints
 
