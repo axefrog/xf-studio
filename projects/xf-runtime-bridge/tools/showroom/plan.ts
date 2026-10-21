@@ -103,6 +103,14 @@ function buildsIn(distDir: string): { manifest: string; archive: string; builtMs
 export type StagedArchive = { archive: string; sha256?: string | null; bytes?: number; manifest?: unknown; manifest_error?: string };
 export type ResolvedShowroom = { archive: string; showroom: Showroom; by: "shipped_manifest" | "matched_build"; manifest?: string };
 
+/** A shipped manifest's record of its own archive (its file list's archive/pc/mod/<archive>.archive), or null. */
+function shippedRecord(manifest: unknown, archive: string): { sha256: string; bytes: number } | null {
+  const files = (manifest as { files?: unknown }).files;
+  if (!Array.isArray(files)) return null;
+  const record = files.find((f) => f && typeof f === "object" && (f as { path?: unknown }).path === `archive/pc/mod/${archive}.archive`) as { sha256?: unknown; bytes?: unknown } | undefined;
+  return record && typeof record.sha256 === "string" && typeof record.bytes === "number" ? { sha256: record.sha256, bytes: record.bytes } : null;
+}
+
 /** A file's SHA-256 (lowercase hex), or null when it can't be read. */
 export function sha256File(path: string): string | null {
   try {
@@ -125,27 +133,35 @@ export function resolveStaged(staged: readonly StagedArchive[], builds: ReturnTy
   const resolved: ResolvedShowroom[] = [];
   const unresolved: { archive: string; why: string }[] = [];
   for (const entry of staged) {
+    // 0.8.3 (the review): a shipped manifest counts only when it describes these very bytes: its file list's record of the
+    // archive has the staged archive's SHA-256 and size (an archive replaced under an older sidecar keeps its name). Otherwise
+    // this machine's builds are tried as for a build without one.
+    let shippedWhy = "";
     if (entry.manifest && typeof entry.manifest === "object") {
-      try {
-        resolved.push({ archive: entry.archive, showroom: readShowroomValue(entry.manifest, `${entry.archive}.showroom.json (shipped in the staged mod)`), by: "shipped_manifest" });
-      } catch (error) {
-        unresolved.push({ archive: entry.archive, why: `its shipped manifest is unusable: ${(error as Error).message}` });
+      const record = shippedRecord(entry.manifest, entry.archive);
+      if (!entry.sha256) shippedWhy = "the game couldn't hash the staged archive to check the manifest it ships";
+      else if (!record) shippedWhy = "the manifest it ships records no hash for its archive";
+      else if (record.sha256 !== entry.sha256 || (typeof entry.bytes === "number" && record.bytes !== entry.bytes)) shippedWhy = "the manifest it ships describes another build of the archive";
+      else {
+        try {
+          resolved.push({ archive: entry.archive, showroom: readShowroomValue(entry.manifest, `${entry.archive}.showroom.json (shipped in the staged mod)`), by: "shipped_manifest" });
+          continue;
+        } catch (error) {
+          shippedWhy = `the manifest it ships is unusable: ${(error as Error).message}`;
+        }
       }
-      continue;
     }
     const same = builds.filter((b) => b.archive === entry.archive);
     const match = entry.sha256 ? same.find((b) => hash(join(dirname(b.manifest), "archive", "pc", "mod", `${b.archive}.archive`)) === entry.sha256) : undefined;
     if (match) {
       resolved.push({ archive: entry.archive, showroom: readShowroom(match.manifest), by: "matched_build", manifest: match.manifest });
     } else {
-      unresolved.push({
-        archive: entry.archive,
-        why: !same.length
-          ? "the staged mod ships no manifest and no build of it is on this machine"
-          : !entry.sha256
-            ? "the game couldn't read the staged archive to compare it with this machine's builds"
-            : `the staged archive matches none of this machine's ${same.length} build(s) of it byte for byte (built again since it was staged?)`,
-      });
+      const local = !same.length
+        ? "no build of it is on this machine"
+        : !entry.sha256
+          ? "the game couldn't hash the staged archive to compare it with this machine's builds"
+          : `it matches none of this machine's ${same.length} build(s) of it byte for byte (built again since it was staged?)`;
+      unresolved.push({ archive: entry.archive, why: shippedWhy ? `${shippedWhy}, and ${local}` : `the staged mod ships no manifest, and ${local}` });
     }
   }
   return { resolved, unresolved };

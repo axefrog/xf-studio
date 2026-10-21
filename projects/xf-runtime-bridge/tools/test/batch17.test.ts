@@ -173,11 +173,82 @@ describe("0.8.3 L2c: handover, resume and the stops work from any process, typed
     expect(order).toEqual(["handover:true", "handover:false"]);
     api.close();
   });
+
+  // The review: the order held only inside one command API; a resume from another one (another process) could land between
+  // a handover's steps. Both now run whole under the handover lock.
+  function sharedBridge(dir: string, log: string[], slowStepMs: number): BridgeTransport {
+    writeFileSync(join(dir, "session.json"), JSON.stringify({ protocol: 1, pid: process.pid, pipe: "p", control_pipe: "p-control", sid: "s", token: "t" }));
+    return {
+      call: async (method, params) => {
+        if (method === "behave.stop") await sleep(slowStepMs);
+        log.push(`${method}${method === "bridge.handover" ? `:${String(params.on)}` : ""}`);
+        return answer(method === "bridge.handover" ? { was: !params.on, player_released: { released: true, removed: [] } } : method === "game.status" ? { phase: "gameplay" } : {});
+      },
+      close: () => undefined,
+    };
+  }
+
+  test("a resume from a second command API waits for a whole handover from the first", async () => {
+    const dir = tempDir("xfb-083-two-apis-");
+    const log: string[] = [];
+    const transport = sharedBridge(dir, log, 300);
+    const make = () => new CommandApi({ runtimeDir: dir, auditDir: join(dir, "logs"), transport: async () => transport, controlTransport: async () => transport, idleCloseMs: 60_000 });
+    const [first, second] = [make(), make()];
+    const handover = first.run("session.handover", {});
+    await sleep(50); // the handover is in its slow first step
+    const resume = second.run("session_resume", {});
+    expect([codeOf(await handover), codeOf(await resume)]).toEqual(["ok", "ok"]);
+    // The whole handover (its steps and its message), then the resume; without the lock the resume's step came first.
+    expect(log).toEqual(["behave.stop", "game.status", "bridge.handover:true", "ui.message", "bridge.handover:false", "ui.message"]);
+    first.close();
+    second.close();
+  });
+
+  test("across processes: while another process holds the handover lock, a resume here waits, then runs", async () => {
+    const dir = tempDir("xfb-083-two-procs-");
+    const log: string[] = [];
+    const transport = sharedBridge(dir, log, 0);
+    const script = `const { withHandoverLock } = await import(${JSON.stringify(join(projectDir, "tools", "handover-lock.ts"))});
+await withHandoverLock(${JSON.stringify(dir)}, async () => { console.log("held"); await new Promise((r) => setTimeout(r, 800)); });
+console.log("released");`;
+    const child = Bun.spawn(["bun", "-e", script], { stdout: "pipe", stderr: "pipe" });
+    const reader = child.stdout.getReader();
+    const first = await reader.read();
+    expect(new TextDecoder().decode(first.value)).toContain("held");
+    const api = new CommandApi({ runtimeDir: dir, auditDir: join(dir, "logs"), transport: async () => transport, controlTransport: async () => transport, idleCloseMs: 60_000 });
+    const started = performance.now();
+    const resume = await api.run("session.resume", {});
+    const waited = performance.now() - started;
+    expect(codeOf(resume)).toBe("ok");
+    expect(waited).toBeGreaterThan(400); // it waited for the other process's operation
+    expect(log).toContain("bridge.handover:false");
+    await child.exited;
+    api.close();
+  }, 20_000);
+
+  test("a resume cancelled while it waits for a handover sends nothing", async () => {
+    const dir = tempDir("xfb-083-cancel-");
+    const log: string[] = [];
+    const transport = sharedBridge(dir, log, 400);
+    const api = new CommandApi({ runtimeDir: dir, auditDir: join(dir, "logs"), transport: async () => transport, controlTransport: async () => transport, idleCloseMs: 60_000 });
+    const handover = api.run("session.handover", {});
+    const stop = new AbortController();
+    const resume = api.run("session.resume", {}, { signal: stop.signal });
+    await sleep(100);
+    stop.abort();
+    expect(codeOf(await handover)).toBe("ok");
+    expect(codeOf(await resume)).toBe("interrupted");
+    expect(log).not.toContain("bridge.handover:false");
+    api.close();
+  });
 });
 
 // --- G1: the staged showroom, through the game's own folder ------------------------------------------------------------------
 
-function manifestFor(archive: string, names: string[]) {
+const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+
+/** A showroom manifest; archiveBytes (the archive's content) gives it the file record a build writes. */
+function manifestFor(archive: string, names: string[], archiveBytes?: string) {
   const key = archive.slice("xfs_showroom_".length);
   const root = `axefrog/appearance_studio/collections/${key}/showroom/`;
   const light = { name: "Main_Face", position: [0, 0.7, 1.0], axis: [0, -1, 0], lumen: 40, falloff: "linear", radius: 5, outer: 45, inner: 15, softness: 2 };
@@ -189,6 +260,7 @@ function manifestFor(archive: string, names: string[]) {
     headJoint: [0, -0.0403, 1.6397],
     pieces: names.map((name, i) => ({ id: `p${i}`, name, appearance: `xfs_p${String(i).padStart(32, "0")}`, route: "flat" })),
     rigs: Object.fromEntries(["creator", "creator_face", "key"].map((r) => [r, { appearance: `xfs_rig_${r}`, lights: [light] }])),
+    ...(archiveBytes !== undefined ? { files: [{ path: `archive/pc/mod/${archive}.archive`, sha256: sha(archiveBytes), bytes: archiveBytes.length }] } : {}),
   };
 }
 
@@ -206,13 +278,16 @@ describe("0.8.3 G1: the staged showroom found by itself", () => {
     build(b, `${b}-1`, "old bytes", ["Old B"]);
     build(b, `${b}-2`, "staged bytes", ["Gloss B"]);
     build(c, `${c}-1`, "other bytes", ["Glitter C"]);
-    const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+    const e = "xfs_showroom_" + "e".repeat(32);
     const { resolved, unresolved } = resolveStaged(
       [
-        { archive: a, sha256: sha("shipped"), manifest: manifestFor(a, ["Gloss A"]) },
-        { archive: b, sha256: sha("staged bytes") },
+        { archive: a, sha256: sha("shipped"), bytes: 7, manifest: manifestFor(a, ["Gloss A"], "shipped") },
+        // The review: an archive replaced under an older sidecar: its shipped manifest describes other bytes, so this
+        // machine's build with the staged bytes is used instead.
+        { archive: b, sha256: sha("staged bytes"), bytes: 12, manifest: manifestFor(b, ["Stale B"], "old bytes") },
         { archive: c, sha256: sha("staged c bytes") },
         { archive: "xfs_showroom_" + "d".repeat(32), sha256: sha("d") },
+        { archive: e, sha256: sha("new e"), bytes: 5, manifest: manifestFor(e, ["Stale E"], "old e") },
       ],
       showroomBuilds(dist),
     );
@@ -221,7 +296,11 @@ describe("0.8.3 G1: the staged showroom found by itself", () => {
       [b, "matched_build", "Gloss B"],
     ]);
     expect(resolved[1]!.manifest).toContain(`${b}-2`);
-    expect(unresolved.map((u) => u.why)).toEqual([expect.stringContaining("matches none"), expect.stringContaining("no build of it")]);
+    expect(unresolved.map((u) => u.why)).toEqual([
+      expect.stringContaining("matches none"),
+      expect.stringContaining("no build of it"),
+      expect.stringContaining("describes another build"),
+    ]);
   });
 
   test("this checkout's dist and the primary checkout's are both searched (session 10 ran the tools from a worktree)", () => {
@@ -246,7 +325,7 @@ describe("0.8.3 against the self-test host", () => {
   const a = "xfs_showroom_" + "a".repeat(32);
   beforeAll(async () => {
     writeFileSync(join(mod, `${a}.archive`), "abc");
-    writeFileSync(join(mod, `${a}.showroom.json`), JSON.stringify(manifestFor(a, ["Gloss A"])));
+    writeFileSync(join(mod, `${a}.showroom.json`), JSON.stringify(manifestFor(a, ["Gloss A"], "abc")));
     writeFileSync(join(mod, "someone_else.archive"), "x");
     host = await startSelftestHost(["--allow-writes", "--write-classes", "photo,world,character,save,showroom,inventory,player", "--mod-dir", mod], 240);
     api = new CommandApi({ runtimeDir: host.dir, auditDir: join(host.dir, "logs"), captureRoot: join(host.dir, "captures") });
