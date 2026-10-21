@@ -89,25 +89,33 @@ export const localExpressionsGame = (tools: PackageTools, env: Record<string, st
     cacheRoot: resolve(env.XFS_EXPRESSIONS_GAME_CACHE || resolve(app, "data", "expressions-game-cache")),
     resolverCache: resolve(env.XFS_RESOLVER_CACHE || resolve(app, "data", "resolver-cache")) });
 
-/** What localhost's Build needs before anything starts, in plain words, or null. */
+/**
+ * Why localhost's Build can't start, in plain words with the one next step (PIPE-134; the "It just works" policy), or null. The words
+ * name only what the person sees: the Set up WolvenKit… button beside the setup line (Settings › Game and the Mod panel's Game
+ * section), their own WolvenKit in Settings › Tools, and the game folder in Settings › Game; never a script, a server override or a path.
+ */
+export const LOCAL_BUILD_REASONS = Object.freeze({
+  wolvenKitUnset: "Build needs WolvenKit, which isn't set up yet. Choose Set up WolvenKit… in Settings › Game and XF Studio downloads it for you.",
+  wolvenKitMissing: "The WolvenKit chosen in Settings › Tools can't be found. Choose it again, or clear that field so XF Studio sets up its own.",
+  gameUnset: "Build needs your Cyberpunk 2077 folder. Choose it in Settings › Game, then build again.",
+  gameMissing: "XF Studio can't find your Cyberpunk 2077 folder. Choose it again in Settings › Game, then build again.",
+  gameExecutableMissing: "That folder isn't your Cyberpunk 2077 folder (it has no bin\\x64\\Cyberpunk2077.exe). Choose the folder the game is installed in, in Settings › Game.",
+  gameArchivesMissing: "Your Cyberpunk 2077 folder is missing its archive\\pc folder. Repair the game in its launcher, then build again.",
+});
 export function localBuildIssue(tools: PackageTools): string | null {
-  for (const [name, path, kind] of [["WolvenKit", tools.wolvenkit, "file"], ["Game", tools.gamepath, "directory"]] as const) {
-    let valid = false;
-    try { const stat = statSync(path); valid = kind === "file" ? stat.isFile() : stat.isDirectory(); } catch { /* Missing local tool. */ }
-    if (!valid) return name === "WolvenKit"
-      ? "WolvenKit isn't set up yet. Let XF Studio download it (bun tools/setup-wolvenkit.ts), set its path in Settings › Game, or use the XFS_PACKAGE_WOLVENKIT server override."
-      : "Game input is unavailable. Set its path in Settings › Game or use the XFS_PACKAGE_GAMEPATH server override.";
-  }
-  for (const [name, path] of [["game executable", join(tools.gamepath, "bin", "x64", "Cyberpunk2077.exe")],
-    ["game archive directory", join(tools.gamepath, "archive", "pc")]] as const) {
-    try { if (name.endsWith("directory") ? statSync(path).isDirectory() : statSync(path).isFile()) continue; }
-    catch { /* Missing game input. */ }
-    return `The configured ${name} is unavailable. Check the Cyberpunk 2077 folder in Settings › Game.`;
-  }
+  const is = (path: string, kind: "file" | "directory") => {
+    try { const stat = statSync(path); return kind === "file" ? stat.isFile() : stat.isDirectory(); } catch { return false; /* Missing. */ }
+  };
+  if (!tools.wolvenkit) return LOCAL_BUILD_REASONS.wolvenKitUnset;
+  if (!is(tools.wolvenkit, "file")) return LOCAL_BUILD_REASONS.wolvenKitMissing;
+  if (!tools.gamepath) return LOCAL_BUILD_REASONS.gameUnset;
+  if (!is(tools.gamepath, "directory")) return LOCAL_BUILD_REASONS.gameMissing;
+  if (!is(join(tools.gamepath, "bin", "x64", "Cyberpunk2077.exe"), "file")) return LOCAL_BUILD_REASONS.gameExecutableMissing;
+  if (!is(join(tools.gamepath, "archive", "pc"), "directory")) return LOCAL_BUILD_REASONS.gameArchivesMissing;
   if (tools.bun.includes("/") || tools.bun.includes("\\")) { // A bare host PATH command is checked by spawn.
     let valid = false;
     try { valid = statSync(tools.bun).isFile(); } catch { /* Missing executable. */ }
-    if (!valid) return "The configured Bun executable is unavailable. Check Settings › Game.";
+    if (!valid) return "XF Studio's build helper is missing. Restart XF Studio; if it keeps happening, reinstall it.";
   }
   return null;
 }

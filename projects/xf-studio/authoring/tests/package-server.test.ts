@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { createPackageHandler, localEyePlate, localPackageAdapter, localPackageTools, localPlateRouteKey, packageRequestSettings, SETUP_UNREADABLE_MESSAGE,
+import { createPackageHandler, LOCAL_BUILD_REASONS, localBuildIssue, localEyePlate, localPackageAdapter, localPackageTools, localPlateRouteKey, packageRequestSettings, SETUP_UNREADABLE_MESSAGE,
   type PackageTools } from "../src/package-server";
 import type { BuilderRun, HostPrerequisite, PackageHostAdapter } from "../src/platform/export/product-host";
 import type { PackageCheckResult } from "../src/platform/api";
@@ -126,11 +126,34 @@ test("the package server resolves local settings for each request", async () => 
     const first = store.save({ ...defaultLocalSettings(), gameRoot: join(directory, "game-a") }, 0);
     const refused = await handler(request({ action: "build", collection: fixture }));
     expect(refused.status).toBe(503);
-    expect((await refused.json()).error).toContain("WolvenKit isn't set up yet");
+    expect((await refused.json()).error).toBe(LOCAL_BUILD_REASONS.wolvenKitUnset);
     expect(seen.at(-1)).toBe(first.gameRoot!);
     const second = store.save({ ...first, gameRoot: join(directory, "game-b") }, 1);
     await handler(request({ action: "build", collection: fixture }));
     expect(seen.at(-1)).toBe(second.gameRoot!);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("PIPE-134: Build's setup reasons are plain, with one next step, and never name a script, an override or a path", () => {
+  const directory = mkdtempSync(join(tmpdir(), "xfs-package-reasons-"));
+  try {
+    const wolvenkit = join(directory, "WolvenKit.CLI.exe"), game = join(directory, "game");
+    writeFileSync(wolvenkit, "");
+    const tools = (over: Partial<PackageTools>) => ({ ...localPackageTools(defaultLocalSettings(), {}), wolvenkit, gamepath: game, ...over });
+    expect(localBuildIssue(tools({ wolvenkit: "" }))).toBe(LOCAL_BUILD_REASONS.wolvenKitUnset);
+    expect(localBuildIssue(tools({ wolvenkit: join(directory, "gone.exe") }))).toBe(LOCAL_BUILD_REASONS.wolvenKitMissing);
+    expect(localBuildIssue(tools({ gamepath: "" }))).toBe(LOCAL_BUILD_REASONS.gameUnset);
+    expect(localBuildIssue(tools({}))).toBe(LOCAL_BUILD_REASONS.gameMissing);
+    mkdirSync(join(game, "bin", "x64"), { recursive: true });
+    expect(localBuildIssue(tools({}))).toBe(LOCAL_BUILD_REASONS.gameExecutableMissing);
+    writeFileSync(join(game, "bin", "x64", "Cyberpunk2077.exe"), "");
+    expect(localBuildIssue(tools({}))).toBe(LOCAL_BUILD_REASONS.gameArchivesMissing);
+    mkdirSync(join(game, "archive", "pc"), { recursive: true });
+    expect(localBuildIssue(tools({}))).toBeNull();
+    for (const reason of Object.values(LOCAL_BUILD_REASONS)) {
+      expect(reason).not.toMatch(/\bbun\b|tools\/|\.ts\b|XFS_|override|Game input|configured|unavailable/i);
+      expect(reason).toMatch(/Settings › (Game|Tools)|launcher/);
+    }
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
