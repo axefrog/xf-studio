@@ -15,6 +15,10 @@
 | Works in game | XF Eye Artistry's shipped finishes verified in game; install and uninstall clean | In-game sessions ([next sessions plan](../research/runtime/next-sessions-plan.md)); the desktop acceptance |
 | Beta scope | Clear beta labelling, easy problem reports, a way to learn about updates | The release notes and the in-app Report a problem flow; the update notifier |
 
+## Beta blockers
+
+What must be done before the beta ships is the **Beta blockers** lane of the [work queue](../research/backlog/README.md#beta-blockers). This page holds the bar and its evidence, and the queue holds the open work.
+
 ## Known open items (29 September 2026)
 
 The first full [readiness audit](../research/authoring/release-readiness-audit.md) (29 September 2026) inventories every visible feature by export status, lists the consistency, speed and first-run gaps, and ranks the closing work by track.

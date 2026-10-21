@@ -1,7 +1,51 @@
 # Research and work queue
 
-**Current as of 26 September 2026.** This is the single ranked queue for XF Studio (`projects/xf-studio`) and related research. Each row links to the owner document that holds the detailed requirements and open/done state. Tracks marked *parallel* are independent enough to run as separate subagents on their own `claude/` branches and worktrees; the coordinator reviews, merges and updates shared status.
+The single queue for XF Studio (`projects/xf-studio`) and related research. **The work queue below is the anchor:** the coordinator reads it before choosing what to start or delegate, updates it whenever something is added, started or finished, and reports from it at every milestone. The sections after it hold the detail, and each queue line links to its detail or owner document.
 
+## Work queue
+
+**Rules.**
+- **Every item sits in exactly one lane,** with the date it was added.
+- **Beta blockers** must be empty before the first public beta ships ([1.0 readiness](../../docs/release-readiness.md)).
+- **One agent slot always works the polish lane,** in batches, whenever capacity allows.
+- **R&D gets a slot only while the polish lane is moving.**
+- **Items older than two weeks** in the blocker or polish lanes are named in the next milestone report.
+- **New requests** go into a lane the day they arrive: bugs and polish on existing features into polish or blockers; new features into *after 1.0*.
+
+### In flight
+- **Architecture cleanup, wave 3:** move the flat `src/` modules into subsystem folders (branch `claude/source-layout`; reviewed and tested; merges when the Hair Lab branch has synced). *21 Oct*
+- **Architecture cleanup, wave 4:** a whole-codebase review by area, its fixes, the status refresh, and retiring the coordinator's private follow-up notes into this queue. *21 Oct*
+
+### Beta blockers
+- **Profiles, layout tabs and the panel picker,** phases 1–4, about 19 agent-days ([design](../authoring/profiles-views-layouts-design.md); proposed, waiting for review and five decisions). *21 Oct*
+- **Choice thumbnails turn the wrong way when dragged** ([small bugs](#small-bugs-and-friction)). *21 Oct*
+- **Speed budgets** ([performance](performance.md)), including:
+  - the restart to V (2 s budget; PREV-196);
+  - the first V after a code change (about 12 s; 26.7 s for a save V, with clothing through WolvenKit);
+  - first-run preparation;
+  - Build's verifier and first plate cut (PIPE-130). *29 Sep*
+- **Finish verdicts in game:** Glitter and Shimmer reworked offline, waiting for in-game sessions ([finishes](glitter-material.md)). *29 Sep*
+- **Consistency leftovers:** UI-142's build steps, and repeated layer names (CORE-125) ([readiness](../../docs/release-readiness.md)). *29 Sep*
+
+### Polish lane (before 1.0)
+- **Starter eye-makeup shapes** under the contributed-defaults convention ([small bugs](#small-bugs-and-friction)). *21 Oct*
+- **The rest of [Small bugs and friction](#small-bugs-and-friction):** Build Stop, two windows on one draft, collection tie order, the masculine plate warning, Build wording, receipt matching. *21 Oct*
+- **A check that pure engine code never reads the clock, randomness or timers** (`engines/layered-makeup/raster-processor.ts` does today). *21 Oct*
+- **Flaky tests:** the mottle raster budget under full-suite load, and "Recent drafts" ordering of saves in the same millisecond. *21 Oct*
+- **A Show in folder route for the workspace file** (desktop). *21 Oct*
+
+### Next tracks (ranked)
+1. **The rest of the job scheduler (F-2):** the facial, idle, pose, grading LUT, swatch, icon and preview-core hosts move onto the scheduler ([performance](performance.md)). *21 Oct*
+2. **Character detail completeness:** colours first, then every creator detail ([ranked tracks](#ranked-tracks), track 2). *25 Sep*
+3. **The eye-makeup editor and finish adapters** (track 6), and CORE-03's remaining steps (the [code-health ledger](../authoring/code-health.md)). *25 Sep*
+
+### R&D (runs only while the polish lane is moving)
+- **Hair Lab** (its own chat and branch, off `main` until the beta). *16 Oct*
+- **In-game overlay and UI; custom material shaders** (below). *29 Sep*
+- **The runtime bridge:** 0.8.0 staged for session 9, then the NPC and DM toolkit branches ([bridge autonomy](bridge-autonomy.md)). *30 Sep*
+
+### After 1.0 (banked)
+- **User-defined shortcuts**, **the Pattern finish**, **profiles phases 5–6** (several views at once, several profiles and Vs), and **the later features** below. *21 Oct and earlier*
 
 ### Approved experiment: Hair Lab
 
