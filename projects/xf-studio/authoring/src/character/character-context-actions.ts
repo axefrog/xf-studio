@@ -46,7 +46,7 @@ import type { CcoPart } from "./cco-model";
 import type { BodyGender } from "./cc-catalogue";
 import { type CcChoicePage, type CcChoiceSearch, type CcSwatches, type CcPanel, type CcPanelChoice, type CcPanelOption, CC_PAGE_SIZE, type CreatorNext, type CreatorState, type CreatorView } from "./cc-panel";
 import { type CcPreset, parseCcPreset, serializeCcPreset, serializeCcPresetEntry } from "./cc-preset";
-import { carryPreset, type CharacterChange, type CharacterChoice, type CharacterSourceChange, characterChoiceOf, type CharacterContextAction, type MissingChoice,
+import { carryPreset, type CharacterChange, type CharacterChoice, characterChoiceOf, type CharacterContextAction, type MissingChoice,
   type SavedDescriptors, savedDescriptorsOf, summariseMissing } from "./character-context";
 import { characterRequestOf, type CharacterRequest } from "./character-detail-request";
 import { CREATOR_LIMITS, isPresetName } from "./creator-names";
@@ -111,12 +111,11 @@ export type CharacterContextPorts = {
   /** Where the character's Undo history lives (the history service's `character:<id>`); default: a private one. */
   history?: CharacterHistoryHome;
   /**
-   * The character's owner, when it has one (character-service.ts): every change of where the V comes from is sent to it as a command
-   * on the character's one queue, and the context shows it once committed (`reflectSource`); the context never changes its source by
-   * itself. `moved`: an Undo or Redo showed another source (applied at once, as history moves are), so older source commands still
-   * being prepared give way to it. Without an owner (a fixture, today's one V on workspace data), the context changes its source itself.
+   * The character's document, when an owner holds it (character-service.ts): whether it changed in another window while this one changed
+   * it too (a conflict), and resolving that. Every change the context makes, its source included, reaches the document through the
+   * owner's outbox; the context never waits for the library.
    */
-  sources?: { change(change: CharacterSourceChange): void; moved(): void };
+  document?: CharacterDocumentPort;
   /** Show a save's V on the head (its facial shape and body), or none for the default V: used when Undo returns to another V. */
   showSave(save: SavedV | null): void;
   /**
@@ -126,6 +125,13 @@ export type CharacterContextPorts = {
   details?: { failed(): boolean; retry(): void; preload?(request: CharacterRequest, signal: AbortSignal): Promise<void> };
   /** Choice previews (choice-preview-service.ts): pictures of a shape row's choices, drawn off the main thread. */
   previews?: ChoicePreviewPort;
+};
+/** A conflict on the character's document (profiles design §2.2), as the Character panel shows it. */
+export type CharacterConflict = { readonly message: string; readonly keepBoth: boolean };
+export type CharacterDocumentPort = {
+  conflict(): CharacterConflict | null;
+  /** Keep mine (over theirs), Use theirs, or Keep both (mine becomes a copy of the V). */
+  resolve(keep: "mine" | "theirs" | "both"): Capability;
 };
 export type ContextOrigin = { readonly kind: "default" } | { readonly kind: "save" } | { readonly kind: "preset"; readonly name: string | null };
 type State = {
@@ -197,6 +203,10 @@ export type CharacterContextSnapshot = {
   clothing: ClothingSnapshot;
   /** Whether the 3D view shows the V's own makeup (`character.setOwnMakeup`). */
   ownMakeup: boolean;
+  /** The V changed in another window while this window changed it too: the panel offers which to keep (`character.resolveConflict`). */
+  conflict: CharacterConflict | null;
+  /** The V was replaced by another window's version (a change from elsewhere, or Use theirs): its Undo starts here. Until the next change. */
+  elsewhere: string | null;
   /** Bumps on every change of state, panel, view or pages. */
   revision: number;
 };
@@ -397,12 +407,11 @@ export class CharacterContextActions {
     this.cleared = [];
     this.apply(next);
     if (saveKey(previous.save?.value) !== saveKey(next.save?.value)) this.showSave(next.save?.value ?? null);
-    // Another source shown by Undo or Redo: the owner's older source commands give way to it.
-    if (previous.origin !== next.origin || previous.save !== next.save || previous.bodyGender !== next.bodyGender) this.ports.sources?.moved();
     return true;
   }
   /** Record one step of the character's history before `key` changes. */
   private record(key: CharacterHistoryKey, label: string, actionKind: string) {
+    this.elsewhere = null;
     this.scope.checkpoint([key], { label, actionKind }, { distinct: true });
   }
   /** The save the saved-V service shows now (its content key), as this service last saw it: a change it didn't make is a new V. */
@@ -425,7 +434,7 @@ export class CharacterContextActions {
       keepable: this.cleared.length, viewing: !!this.viewing, viewError: this.viewError, notes,
       retry: this.capability({ kind: "character.retry" }).available, firstTime: this.firstTime,
       prepared: { bytes: this.prepared.bytes, clearing: this.prepared.clearing, freed: this.prepared.freed }, clothing: this.clothingSnapshot(),
-      ownMakeup: this.ownMakeup, revision: this.revision });
+      ownMakeup: this.ownMakeup, conflict: this.ports.document?.conflict() ?? null, elsewhere: this.elsewhere, revision: this.revision });
   }
   /**
    * The head's creator options whose parts the 3D view hides: every option of the makeup section's rows while the V's own makeup is hidden
@@ -848,6 +857,12 @@ export class CharacterContextActions {
         if (!this.creator.clearPrepared) return refusal("unavailable", "This version of XF Studio can't clear its prepared game files.");
         if (this.prepared.clearing) return refusal("busy", "The prepared game files are being cleared.");
         return this.prepared.bytes === 0 ? refusal("invalid_value", "There are no prepared game files to clear.") : { available: true };
+      case "character.resolveConflict": {
+        const conflict = this.ports.document?.conflict();
+        if (!conflict) return refusal("invalid_value", "Nothing about this V changed in another window.");
+        if (action.keep === "both" && !conflict.keepBoth) return refusal("unavailable", "This V can't be copied right now.");
+        return action.keep === "mine" || action.keep === "theirs" || action.keep === "both" ? { available: true } : refusal("invalid_value", "Choose which V to keep.");
+      }
       case "character.undo":
         return this.scope.canUndo() ? { available: true } : refusal("invalid_value", "There is no character change to undo.");
       case "character.redo":
@@ -891,6 +906,12 @@ export class CharacterContextActions {
   dispatch(action: CharacterContextAction): Record<string, never> {
     const allowed = this.capability(action);
     if (!allowed.available) throw Error(allowed.reason);
+    if (action.kind === "character.resolveConflict") {
+      const done = this.ports.document!.resolve(action.keep);
+      if (!done.available) throw Error(done.reason);
+      this.publish();
+      return {};
+    }
     if (action.kind !== "character.setOption" && action.kind !== "character.clearPreparedFiles") this.firstTime = false;
     // A change of the person's own: nothing more is loaded ahead for the V it replaces (a load in progress is stopped by the change's own).
     for (const requester of this.requesters.values()) requester.cancelWaitingAhead();
@@ -901,7 +922,6 @@ export class CharacterContextActions {
         if (source.kind === "character.loadSave") {
           const value = source.value as SavedV;
           if (this.sameSave(value)) { this.ports.showSave(value); break; }
-          if (this.ports.sources) { this.ports.sources.change(action.source); break; }
           const save = this.saveOf(value);
           this.knownSave = saveKey(value);
           this.changeV("Load a save", { origin: { kind: "save" }, bodyGender: save.value.isMale ? "male" : "female", save, choices: [], kept: null, notCarried: [] }, action.kind, false);
@@ -937,18 +957,15 @@ export class CharacterContextActions {
       }
       case "character.resetAll": this.step("Reset every change", { ...this.state, choices: [] }, action.kind); break;
       case "character.useDefault":
-        if (this.ports.sources) { this.ports.sources.change({ kind: "default", bodyGender: action.bodyGender }); break; }
         this.changeV("Show the default V", { origin: { kind: "default" }, bodyGender: action.bodyGender, save: null, choices: [], kept: null, notCarried: [] }, action.kind);
         break;
       case "character.loadSave": {
-        if (this.ports.sources) { this.ports.sources.change({ kind: "save", value: action.value }); break; }
         const save = this.saveOf(action.value as SavedV);
         this.knownSave = saveKey(action.value as SavedV);
         this.changeV("Load a save", { origin: { kind: "save" }, bodyGender: save.value.isMale ? "male" : "female", save, choices: [], kept: null, notCarried: [] }, action.kind, false);
         break;
       }
       case "character.loadPreset": {
-        if (this.ports.sources) { this.ports.sources.change({ kind: "preset", value: action.value }); break; }
         const preset = this.preset(action.value) as CcPreset;
         const { choices, kept, notCarried } = presetLoad(preset);
         this.changeV(`Load ${preset.name ? `“${preset.name}”` : "a character preset"}`, { origin: { kind: "preset", name: preset.name },
@@ -1043,31 +1060,30 @@ export class CharacterContextActions {
     if (!save) return;
     let parsed: { value: SavedV; saved: SavedDescriptors };
     try { parsed = this.saveOf(save); } catch (error) { console.error(error); return; }
-    if (this.ports.sources) { this.ports.sources.change({ kind: "save", value: save }); return; }
     this.changeV("Load a save", { origin: { kind: "save" }, bodyGender: save.isMale ? "male" : "female", save: parsed, choices: [], kept: null, notCarried: [] }, "character.loadSave", false);
   }
 
   /**
-   * The owner committed a change of where the V comes from (`ports.sources`): the context shows it, as one step of its history (a save
-   * is applied on its scene too). Called on the character's queue, in order with its other commands and edits.
+   * Another window's version of the V replaced this one's (a change made elsewhere, or Use theirs, profiles design §2.2): the context
+   * shows `stored` (with `save`, its decoded save), and its Undo starts here, since the steps before it were of the version replaced.
    */
-  reflectSource(change: CharacterSourceChange): void {
-    const action = sourceAction(change);
-    if (!action || !this.capability(action).available) return;
-    if (action.kind === "character.useDefault") {
-      this.changeV("Show the default V", { origin: { kind: "default" }, bodyGender: action.bodyGender, save: null, choices: [], kept: null, notCarried: [] }, "character.setSource");
-    } else if (action.kind === "character.loadSave") {
-      const value = action.value as SavedV;
-      if (this.sameSave(value)) return;
-      const save = this.saveOf(value);
-      this.changeV("Load a save", { origin: { kind: "save" }, bodyGender: save.value.isMale ? "male" : "female", save, choices: [], kept: null, notCarried: [] }, "character.setSource");
-    } else {
-      const preset = this.preset(action.value) as CcPreset;
-      const { choices, kept, notCarried } = presetLoad(preset);
-      this.changeV(`Load ${preset.name ? `“${preset.name}”` : "a character preset"}`, { origin: { kind: "preset", name: preset.name },
-        bodyGender: preset.bodyGender, save: null, choices, kept, notCarried }, "character.setSource");
-    }
+  replace(stored: unknown, save?: SavedV): void {
+    const form = storedCharacterOf(stored), parsed = save ? this.saveOf(save) : null;
+    const origin = originOf(form, !!parsed);
+    let kept: CcPreset | null = null;
+    if (form?.kept) { try { kept = parseCcPreset(form.kept); } catch { kept = null; } }
+    const previous = this.state;
+    this.cleared = [];
+    this.clothing = form?.clothing ?? DEFAULT_CLOTHING;
+    this.ownMakeup = form?.ownMakeup !== "hidden";
+    this.scope.clear();
+    this.elsewhere = "Changed in another window. Undo starts here.";
+    this.apply({ origin, bodyGender: initialBodyGender(stored, save), save: origin.kind === "save" ? parsed : null, choices: form?.choices ?? [], kept, notCarried: [] });
+    if (saveKey(previous.save?.value) !== saveKey(this.state.save?.value)) this.showSave(this.state.save?.value ?? null);
   }
+  private elsewhere: string | null = null;
+  /** The owner's document changed in a way the snapshot shows (a conflict came or went). */
+  documentChanged(): void { this.publish(); }
 
   /** A portable preset of the choices set on this V (the host names each choice as this installation offers it). */
   exportPreset(name: string | null): Promise<{ text: string; values: number; leftOut: number; personal: number }> {

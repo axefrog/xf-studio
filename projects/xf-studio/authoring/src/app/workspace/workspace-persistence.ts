@@ -39,6 +39,8 @@ export class WorkspacePersistence {
   private lastPlan?: WorkspacePlan;
   constructor(private options: { storage: WorkspacePersistencePort; key: string; writable: boolean;
     restoreError?: string; restoreWarning?: string; capture(): WorkspaceState; delayMs?: number; budget?: number;
+    /** What else in the same storage counts against the budget now (the outbox's keys, profiles design §2.2). */
+    reserved?: () => number;
     /** The document model the stored form is written with (injected by the composition root). */
     model: DocumentModel;
     /** Whether this page may write its workspace now (the workspace lease, profiles design §2.3); always, without one. */
@@ -82,7 +84,7 @@ export class WorkspacePersistence {
     catch { this.publish({ kind: "unavailable", message: SAVE_MESSAGES.unavailable }); return false; }
     // Write the least-trimmed form that fits the budget (`fitWorkspace`). If the browser still refuses
     // it (other keys share the quota), fit a smaller budget before reporting that autosave stopped.
-    let quota = false, budget = this.options.budget ?? WORKSPACE_STORAGE_BUDGET;
+    let quota = false, budget = Math.max(0, (this.options.budget ?? WORKSPACE_STORAGE_BUDGET) - (this.options.reserved?.() ?? 0));
     for (let attempt = 0; attempt < 12; attempt++) {
       const fitted = fitWorkspace(state, this.options.model, budget, this.lastPlan);
       // Unchanged content is not rewritten, so status or view refreshes cannot cause writes.

@@ -5,8 +5,11 @@ import { join } from "node:path";
 import { INITIAL_LEASE, LEASE_MESSAGES, leaseTransition, WorkspaceLease, type LeaseClock, type WorkspaceLeaseAdapter } from "../src/app/workspace/workspace-lease";
 import { leasedDocuments } from "../src/app/workspace/leased-documents";
 import { WorkspacePersistence } from "../src/app/workspace/workspace-persistence";
-import { savedDocument } from "../src/platform/core/saved-document";
-import { formatFence, parseFence, WORKSPACE_FENCE_HEADER, type DocumentStorePort, type DocumentWrite } from "../src/platform/api/document-store";
+import { documentOwners } from "../src/platform/core/saved-document";
+import { DocumentOutbox } from "../src/platform/core/document-outbox";
+import type { TransactAnswer } from "../src/platform/api/document-commands";
+import { formatFence, parseFence, WORKSPACE_FENCE_HEADER, type DocumentStorePort } from "../src/platform/api/document-store";
+import { memoryOutboxStorage } from "./fixtures/platform-doubles";
 import { browserDocuments } from "../src/app/browser/browser-documents-device";
 import { openLibraryFiles } from "../src/library/host/library-files";
 import { hostClock } from "../src/platform/core/clock";
@@ -111,37 +114,39 @@ test("the holder refuses edits at once, runs its release steps in order while it
   expect(lease.draining()).toBe(false);
 });
 
-test("the document store behind the lease drains writes in flight (and the one chained behind them), then sends nothing", async () => {
+test("the outbox behind the lease drains commands in flight (and the successor behind them), then sends nothing", async () => {
   const sent: string[] = [];
   let open = true;
   const answers: (() => void)[] = [];
-  const store: DocumentStorePort = {
-    list: async () => [],
-    put: <T>(kind: string, id: string, value: T, revision: number) => new Promise<DocumentWrite<T>>(resolve => {
-      sent.push(JSON.stringify(value));
-      answers.push(() => resolve({ ok: true, document: { kind, id, revision: revision + 1, value, updatedAt: 0 } }));
-    }),
-  };
+  const store: DocumentStorePort = { list: async () => [], revisions: async () => ({}), read: async () => ({}),
+    transact: request => new Promise<TransactAnswer>(resolve => {
+      const write = request.writes[0]!;
+      sent.push(JSON.stringify(write.value));
+      answers.push(() => resolve({ ok: true, revisions: { [`${write.kind}/${write.id}`]: write.base + 1 } }));
+    }) };
   const leased = leasedDocuments(store, { draining: () => open });
-  const doc = savedDocument(leased, "sample", "a", 0);
+  const outbox = new DocumentOutbox(leased, memoryOutboxStorage(), { writable: () => open, sendable: () => open });
+  outbox.open();
+  const doc = documentOwners(outbox).open("sample", "a", 0);
   void doc.save(1);
   await Promise.resolve(); await Promise.resolve();
   void doc.save(2);
   void doc.save(3);
   let done = false;
-  const drained = leased.drain().then(() => { done = true; });
+  const drained = outbox.settle().then(() => { done = true; });
   await new Promise(resolve => setTimeout(resolve, 5));
   expect(done).toBe(false);
   answers.shift()!();
   await new Promise(resolve => setTimeout(resolve, 5));
-  // The coalesced save (3) went out after the first settled; the drain waits for it too.
+  // The coalesced save (3) went out after the first was acknowledged; the drain waits for it too.
   expect(sent).toEqual(["1", "3"]);
   expect(done).toBe(false);
   answers.shift()!();
   await drained;
   expect(leased.pending()).toBe(0);
   open = false;
-  await expect(doc.save(4)).rejects.toThrow("now open elsewhere");
+  await expect(doc.save(4)).rejects.toThrow("open elsewhere");
+  expect(await leased.transact({ id: "late", command: "x", writes: [{ kind: "sample", id: "a", base: 2, value: 5 }] })).toEqual({ ok: false, reason: "superseded" });
   expect(sent).toEqual(["1", "3"]);
 });
 
@@ -214,19 +219,21 @@ test("the host fences document writes by lease generation, in the write's own tr
     expect(await issue("browser-a")).toBe(1);
     let generation = 1;
     const page = browserDocuments("/api/documents", send, () => ({ workspace: "browser-a", generation }));
-    expect((await page.put("sample", "x", { v: 1 }, 0)).ok).toBe(true);
-    // Another window takes the workspace: the first one's late write is refused, and nothing changes.
+    const put = (target: typeof page, value: unknown, base: number) =>
+      target.transact({ id: `c-${Math.random()}`, command: "sample.write", writes: [{ kind: "sample", id: "x", base, value }] });
+    expect((await put(page, { v: 1 }, 0)).ok).toBe(true);
+    // Another window takes the workspace: the first one's late command is refused, and nothing changes.
     expect(await issue("browser-a")).toBe(2);
-    expect(await page.put("sample", "x", { v: 2 }, 1)).toEqual({ ok: false, reason: "superseded" });
+    expect(await put(page, { v: 2 }, 1)).toEqual({ ok: false, reason: "superseded" });
     expect(files.main.documents.get("sample", "x")).toMatchObject({ revision: 1, value: { v: 1 } });
-    // Another browser's workspace has its own generations; an unfenced write (tools) still lands.
+    // Another browser's workspace has its own generations; an unfenced command (tools) still lands.
     expect(await issue("browser-b")).toBe(1);
-    expect((await browserDocuments("/api/documents", send).put("sample", "x", { v: 3 }, 1)).ok).toBe(true);
+    expect((await put(browserDocuments("/api/documents", send), { v: 3 }, 1)).ok).toBe(true);
     generation = 2;
-    expect((await page.put("sample", "x", { v: 4 }, 2)).ok).toBe(true);
+    expect((await put(page, { v: 4 }, 2)).ok).toBe(true);
     // A malformed fence is refused; the verification library keeps its own generations.
-    expect((await send("/api/documents?kind=sample&id=x", { method: "PUT", headers: { "Content-Type": "application/json",
-      [WORKSPACE_FENCE_HEADER]: "two browser-a" }, body: JSON.stringify({ revision: 3, value: 0 }) })).status).toBe(400);
+    expect((await send("/api/documents/transact", { method: "POST", headers: { "Content-Type": "application/json",
+      [WORKSPACE_FENCE_HEADER]: "two browser-a" }, body: JSON.stringify({ id: "c-x", command: "sample.write", writes: [{ kind: "sample", id: "x", base: 3, value: 0 }] }) })).status).toBe(400);
     expect(await (await send("/api/verification/workspace-lease", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ workspace: "browser-a" }) })).json()).toEqual({ generation: 1 });
     files.close();
@@ -330,16 +337,26 @@ test("autosave's last write answers whether the draft is stored", () => {
   expect(persistence.flush()).toBe(false);
 });
 
-test("the document drain reports a write that failed or was refused while it waited", async () => {
-  let answer: ((result: DocumentWrite) => void) | null = null;
-  const store: DocumentStorePort = { list: async () => [], put: () => new Promise(resolve => { answer = resolve as never; }) };
-  const leased = leasedDocuments(store, { draining: () => true });
-  void leased.put("sample", "a", 1, 0);
-  const drained = leased.drain();
+test("the outbox's drain reports a command that failed while it waited, and stops sending once the window is superseded", async () => {
+  let answer: ((result: TransactAnswer) => void) | null = null, fail: ((error: Error) => void) | null = null;
+  const store: DocumentStorePort = { list: async () => [], revisions: async () => ({}), read: async () => ({}),
+    transact: () => new Promise((resolve, reject) => { answer = resolve; fail = reject; }) };
+  let retry: (() => void) | null = null;
+  const outbox = new DocumentOutbox(leasedDocuments(store, { draining: () => true }), memoryOutboxStorage(),
+    { schedule: (_ms, run) => { retry = run; return { cancel: () => { retry = null; } }; } });
+  outbox.open();
+  outbox.commit("sample.write", [{ kind: "sample", id: "a", value: 1 }]);
+  const drained = outbox.settle();
+  await new Promise(resolve => setTimeout(resolve, 5));
+  fail!(Error("The host didn't answer."));
+  expect(await drained).toBe(false);
+  // Sent again under its ID; this time the host says another window holds the workspace now: the outbox stops, the entry stays stored.
+  const again = outbox.settle();
+  retry!();
   await new Promise(resolve => setTimeout(resolve, 5));
   answer!({ ok: false, reason: "superseded" });
-  expect(await drained).toBe(false);
-  expect(await leased.drain()).toBe(true);
+  expect(await again).toBe(false);
+  expect(outbox.status()).toMatchObject({ stopped: true, pending: 1 });
 });
 
 test("a failed takeover returns to read-only, withdraws its request, and can be tried again", async () => {
@@ -409,30 +426,30 @@ test("desktop: when the lease stream ends, a pending acquire is refused and a ho
   expect(lease.draining()).toBe(false);
 });
 
-test("a document whose write failed during the drain stays unsaved, and Try again writes it again before handing over", async () => {
-  const { documentOwners } = await import("../src/platform/core/saved-document");
-  const script = scriptedAdapter(false), puts: number[] = [];
+test("a document whose command failed during the drain stays in the outbox, and Try again sends it before handing over", async () => {
+  const script = scriptedAdapter(false), sent: number[] = [];
   let broken = true;
-  const store: DocumentStorePort = { list: async () => [], put: async <T>(kind: string, id: string, value: T, revision: number) => {
-    puts.push(value as number);
+  const store: DocumentStorePort = { list: async () => [], revisions: async () => ({}), read: async () => ({}), transact: async request => {
+    const write = request.writes[0]!;
+    sent.push(write.value as number);
     if (broken) throw Error("The host didn't answer.");
-    return { ok: true as const, document: { kind, id, revision: revision + 1, value, updatedAt: 0 } };
+    return { ok: true, revisions: { [`${write.kind}/${write.id}`]: write.base + 1 } };
   } };
   const lease = new WorkspaceLease(script.adapter, { clock: simulatedClock().clock });
   await lease.start();
-  const leased = leasedDocuments(store, lease), owners = documentOwners(leased);
-  lease.onRelease(() => leased.drain());
-  lease.onRelease(() => owners.settle());
-  void owners.open("sample", "a", 0).save(7).catch(() => {});
+  const outbox = new DocumentOutbox(leasedDocuments(store, lease), memoryOutboxStorage(), { schedule: () => ({ cancel() {} }),
+    writable: () => lease.writable(), sendable: () => lease.draining() });
+  outbox.open();
+  lease.onRelease(() => outbox.settle());
+  void documentOwners(outbox).open("sample", "a", 0).save(7).catch(() => {});
   script.ask();
   await new Promise(resolve => setTimeout(resolve, 10));
   expect(lease.snapshot().phase).toBe("release-failed");
   expect(script.calls).toEqual([]);
-  // The retry's drain sees no new failure, but the document is still unsaved: it is written again, and only then released.
+  // Try again: the outbox sends the same command again (under its own ID), and only then is the workspace released.
   broken = false;
   expect(await lease.retryRelease()).toBe(true);
-  expect(puts.at(-1)).toBe(7);
-  expect(puts.filter(value => value === 7).length).toBeGreaterThanOrEqual(2);
+  expect(sent).toEqual([7, 7]);
   expect(script.calls).toEqual(["release"]);
 });
 

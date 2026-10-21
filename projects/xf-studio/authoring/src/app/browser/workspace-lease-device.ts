@@ -11,8 +11,6 @@
  * The workspace a localhost browser edits is its own (its `localStorage`), so its identity is a random ID kept beside it.
  */
 import { ReleaseUnsaved, WorkspaceLease, type LeaseClock, type WorkspaceLeaseAdapter } from "../workspace/workspace-lease";
-import { leasedDocuments } from "../workspace/leased-documents";
-import type { DocumentStorePort, WorkspaceFence } from "../../platform/api/document-store";
 
 /** The page clock's timers for the lease. */
 export const browserLeaseClock: LeaseClock = {
@@ -247,12 +245,12 @@ export function desktopWorkspaceLease(options: {
 
 /**
  * The localhost page's lease, started: the browser workspace's identity, its Web Lock and channel, and the host's generations
- * (`/api/workspace-lease`, the `?verify` one under `/api/verification`). `documents` puts the page's document store behind it: each
- * write carries the lease's fence, nothing is sent once released, and the release drains writes in flight first. Null where the
- * browser has no Web Locks (the window is then the only writer it can know of).
+ * (`/api/workspace-lease`, the `?verify` one under `/api/verification`). `workspace` is the identity the outbox's keys and every
+ * command's fence carry (`document-outbox-device.ts`). Null where the browser has no Web Locks (the window is then the only writer it
+ * can know of).
  */
 export async function startBrowserWorkspaceLease(options: { verification: boolean; send?: typeof fetch;
-  report?: (error: unknown) => void }): Promise<{ lease: WorkspaceLease; documents: LeaseDocuments } | null> {
+  report?: (error: unknown) => void }): Promise<{ lease: WorkspaceLease; workspace: string } | null> {
   if (typeof navigator === "undefined" || !navigator.locks || typeof BroadcastChannel === "undefined") return null;
   const send = options.send ?? fetch;
   const workspace = await browserWorkspaceIdentity(localStorage, navigator.locks, options.verification);
@@ -270,19 +268,5 @@ export async function startBrowserWorkspaceLease(options: { verification: boolea
   addEventListener("pagehide", () => life.abort(), { once: true });
   const lease = new WorkspaceLease(adapter, { clock: browserLeaseClock, signal: life.signal, report: options.report });
   await lease.start();
-  return { lease, documents: leaseDocuments(lease, workspace) };
-}
-
-/** The document store's side of a lease: the fence its writes carry, and the gate (with its drain as a release step). */
-export type LeaseDocuments = { fence(): WorkspaceFence | null; documents(store: DocumentStorePort): DocumentStorePort };
-export function leaseDocuments(lease: WorkspaceLease, workspace: string): LeaseDocuments {
-  return {
-    fence: () => { const generation = lease.generation(); return generation === null ? null : { workspace, generation }; },
-    documents(store) {
-      const leased = leasedDocuments(store, lease);
-      // Registered before the workspace's own last write, so pending document saves drain first (§2.3 release step 3).
-      lease.onRelease(() => leased.drain());
-      return leased;
-    },
-  };
+  return { lease, workspace };
 }

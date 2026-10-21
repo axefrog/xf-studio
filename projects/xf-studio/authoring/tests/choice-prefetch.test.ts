@@ -213,7 +213,7 @@ describe("preparing a row's choices ahead", () => {
     expect(requestKey(withChoice(1))).toBe(requestKey(structuredClone(withChoice(1))));
   });
 
-  test("more requesters than run at once wait their turn and take it fairly between units; nothing is cancelled", async () => {
+  test("more requesters than run at once wait their turn and take it fairly between units; nothing is cancelled (1b scenario 13)", async () => {
     const { service, warmed } = prefetcher({ limits: { batch: 1, maxBatch: 1 } });
     const requesters = Array.from({ length: 9 }, (_, index) => `c-${index}/panel`);
     const poll = (requester: string) => service.update({ base: DEFAULT_CHARACTER, option: "head/hair", positions: [0, 1, 2], requester });
@@ -226,7 +226,7 @@ describe("preparing a row's choices ahead", () => {
     expect(warmed).toHaveLength(27);
   });
 
-  test("a cancelled and recreated requester keeps its new place: the old job's end never frees it, and at most 8 jobs ever run", async () => {
+  test("a cancelled and recreated requester keeps its new place: the old job's end never frees it, and at most 8 jobs ever run (1b scenario 13)", async () => {
     const { service } = prefetcher({ limits: { batch: 1, maxBatch: 1 },
       warm: async requests => { await sleep(10); return requests.map(() => ({ ready: true })); } });
     const poll = (requester: string) => service.update({ base: DEFAULT_CHARACTER, option: "head/hair", positions: [0, 1, 2, 3], requester });
@@ -246,7 +246,7 @@ describe("preparing a row's choices ahead", () => {
     expect(service.stats.cancelled).toBe(1);
   });
 
-  test("the session's byte budget, spent by one requester's batch, stops every job before its next batch", async () => {
+  test("the session's byte budget, spent by one requester's batch, stops every job before its next batch (1b scenario 14)", async () => {
     let bytes = 0;
     const { service, warmed } = prefetcher({ limits: { batch: 1, maxBatch: 1, bytes: 50 }, bytes: () => bytes,
       warm: async requests => { warmed.push(requests.map(() => 0)); bytes += 100; await sleep(5); return requests.map(() => ({ ready: true })); } });

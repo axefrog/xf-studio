@@ -4,7 +4,8 @@ import type { PartPresetList, PartPresetOutcome, PartPresetRequest, PartPresetSe
 import type { AuthoringPresentation } from "./authoring/authoring-presentation";
 import type { CollectionViewPort } from "../library/collection-application";
 import { emptyPresentationStatus, type PresentationStatus } from "./presentation-status";
-import { PREVIEW_SETUP_DESCRIPTORS, WORKSPACE_LEASE_DESCRIPTORS } from "./studio-action-descriptors";
+import { DOCUMENT_OUTBOX_DESCRIPTORS, PREVIEW_SETUP_DESCRIPTORS, WORKSPACE_LEASE_DESCRIPTORS } from "./studio-action-descriptors";
+import type { DocumentOutbox } from "../platform/core/document-outbox";
 import { leaseSnapshot, type WorkspaceLease, type WorkspaceLeaseAction, type WorkspaceLeaseSnapshot } from "./workspace/workspace-lease";
 import type { Layer, Recipe, WarpField } from "../engines/layered-makeup/recipe";
 import type { PreviewReadiness } from "../legacy/eye-makeup/preview/authoring-preview-coordinator";
@@ -239,6 +240,15 @@ export type StudioPresentationPort<Slot> = {
    * family's dispatch is refused with `unavailable` (reads stay available; diagnostics and this page's own view preferences too).
    */
   readonly workspace: Pick<WorkspaceLease, "capability" | "dispatch" | "descriptors"> & { snapshot(): WorkspaceLeaseSnapshot };
+  /**
+   * The outbox (profiles design §2.2): Try again for changes whose record on this computer couldn't be written (`status.outbox` says
+   * how many). Without an outbox (fixtures, tools) there is nothing to try again.
+   */
+  readonly documents: {
+    capability(action: DocumentsAction): StudioCapability;
+    dispatch(action: DocumentsAction): Promise<{ ok: true } | { ok: false; code: string; message: string }>;
+    descriptors(): typeof DOCUMENT_OUTBOX_DESCRIPTORS;
+  };
   snapshot(): ReadonlyDeep<{
     authoring: ReturnType<StudioApplication["snapshot"]>;
     library: ReturnType<CollectionViewPort["view"]>;
@@ -261,6 +271,13 @@ const NO_PREVIEW_SETUP: PreviewSetupSnapshot = Object.freeze({
   card: { open: false, title: "", body: "", progress: null, step: null, notice: null, primary: null, secondary: null, links: [], canDismiss: true, busy: false, route: null },
   consent: null, head: { phase: "unavailable", code: null, message: "", progress: null, next: null }, setupRequests: 0, showRequests: 0, autostart: true, wolvenKitStep: null,
 }) as PreviewSetupSnapshot;
+export type DocumentsAction = { kind: "documents.protect" };
+/** Try again is offered while a change's record couldn't be written, and refused in a page that doesn't hold its workspace. */
+function documentsCapability(outbox: DocumentOutbox | undefined, action: DocumentsAction): StudioCapability {
+  if (action?.kind !== "documents.protect") return { available: false, code: "invalid_value", reason: "Unknown command." };
+  if (!outbox || !outbox.status().unprotected.length) return { available: false, code: "invalid_value", reason: "Every change is recorded on this computer." };
+  return { available: true };
+}
 /** Without a lease the page is the only one, and holds its workspace. */
 const SOLE_WINDOW: WorkspaceLeaseSnapshot = Object.freeze(leaseSnapshot({ phase: "holder", generation: null }));
 type StatusSource = { snapshot(): PresentationStatus; subscribe(listener: () => void): () => void };
@@ -297,6 +314,8 @@ export function createStudioPresentation<Slot>(sources: {
   experiments?: ExperimentPort;
   /** The page's workspace lease; without it (fixtures, tools) this page is the only one and always holds its workspace. */
   workspace?: WorkspaceLease;
+  /** The page's outbox; without it (fixtures, tools) nothing is recorded there. */
+  outbox?: DocumentOutbox;
 }): StudioPresentationPort<Slot> {
   const a = sources.authoring, l = sources.library, f = sources.files,
     v = sources.viewport, p = sources.preferences, r = sources.previewReadiness,
@@ -505,6 +524,15 @@ export function createStudioPresentation<Slot>(sources: {
     installDetection: Object.freeze(leased(installDetection)), modInstall: Object.freeze(leased(modInstall)), previewSetup: Object.freeze(leased(previewSetup)),
     desktopApp: Object.freeze(leased(desktopApp)), updates: Object.freeze(leased(updates)),
     status: Object.freeze({ snapshot: () => s.snapshot() }), links, about, diagnostics: Object.freeze(diagnostics),
+    documents: Object.freeze({
+      capability: (action: DocumentsAction) => documentsCapability(sources.outbox, action),
+      async dispatch(action: DocumentsAction) {
+        const allowed = documentsCapability(sources.outbox, action);
+        if (!allowed.available) return { ok: false as const, code: allowed.code ?? "unavailable", message: allowed.reason ?? "Not available right now." };
+        return sources.outbox!.protect() ? { ok: true as const }
+          : { ok: false as const, code: "unavailable", message: "Your changes still couldn't be recorded on this computer. Export your collection to keep a copy." };
+      },
+      descriptors: () => structuredClone(DOCUMENT_OUTBOX_DESCRIPTORS) }),
     workspace: Object.freeze({ snapshot: () => lease?.snapshot() ?? SOLE_WINDOW,
       capability: (action: WorkspaceLeaseAction) => lease ? lease.capability(action) : { available: false, code: "unavailable" as const, reason: "This workspace is already editable here." },
       dispatch: (action: WorkspaceLeaseAction) => lease ? lease.dispatch(action) : Promise.resolve({ ok: false as const, code: "unavailable", message: "This workspace is already editable here." }),

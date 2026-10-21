@@ -560,20 +560,31 @@ function workspaceNotice(rt: StudioRuntime) {
   };
   const takeOver = button({ label: "Use it here", small: true, onClick: act("workspace.takeOver") });
   const retry = button({ label: "Try again", small: true, onClick: act("workspace.retryRelease") });
-  const element = h("div", { class: "state-line warning workspace-notice", role: "status", hidden: true }, text, takeOver, retry);
+  // Changes not protected on this computer (t-unprotected): the same line, while this window holds its workspace.
+  const exportCollection = button({ label: "Export collection", icon: "export", small: true, onClick: () => void rt.file({ kind: "collection.export" }) });
+  const protect = button({ label: "Try again", icon: "refresh", small: true, onClick: () => {
+    void rt.port.documents.dispatch({ kind: "documents.protect" }).then(outcome => {
+      if (!outcome.ok) rt.feedback.toast("warning", "Workspace", outcome.message, [], { code: outcome.code });
+    });
+  } });
+  const element = h("div", { class: "state-line warning workspace-notice", role: "status", hidden: true }, text, takeOver, retry, exportCollection, protect);
   return {
     element,
     update(frame: Frame) {
-      const lease = frame.status.lease, shown = !!lease?.message;
-      element.hidden = !shown;
-      setText(text, shown ? lease!.message : "");
-      text.title = shown ? lease!.message : "";
+      const lease = frame.status.lease, leaseShown = !!lease?.message;
+      const unprotected = !leaseShown && !!frame.status.outbox?.unprotected;
+      const message = leaseShown ? lease!.message : unprotected ? UNPROTECTED : "";
+      element.hidden = !message;
+      setText(text, message);
+      text.title = message;
       takeOver.hidden = !lease?.canTakeOver;
       retry.hidden = !lease?.canRetry;
+      exportCollection.hidden = protect.hidden = !unprotected;
     },
   };
 }
 
+const UNPROTECTED = "Your latest changes aren't protected on this computer.";
 /** Panels whose controls only read or open things (Help, Activity): a read-only window keeps them all (t-read-only-window). */
 const READ_SAFE_PANELS = new Set<string>(["help", "activity"]);
 function statusBar(rt: StudioRuntime) {

@@ -4,6 +4,7 @@
  * A write names the revision it read, so a page holding an older copy can't overwrite a newer change unnoticed. Types only: the host
  * implements it (`platform/persistence/document-store.ts`) and the page reaches it over `/api/documents`.
  */
+import type { CurrentDocument, DocumentRef, TransactAnswer, TransactRequest } from "./document-commands";
 
 /** A kind: lowercase letters, digits and `-`/`.`, starting with a letter. */
 export const DOCUMENT_KIND = /^[a-z][a-z0-9.-]{0,63}$/;
@@ -51,21 +52,32 @@ export function parseFence(header: string | null): WorkspaceFence | null | "inva
 /** The `documents` kind the host keeps each workspace's newest lease generation under (ID: the workspace). */
 export const WORKSPACE_LEASE_KIND = "xfs-workspace-lease";
 
+/**
+ * The library's documents as the page reaches them. Reads go straight to the library; every write is an owner command (`transact`),
+ * sent only by the outbox (`platform/core/document-outbox.ts`), the one way a document's local state reaches the library.
+ */
 export interface DocumentStorePort {
   /** Every document of a kind, in the order they were first written; `signal` abandons the read. */
   list<T = unknown>(kind: string, signal?: AbortSignal): Promise<readonly StoredDocument<T>[]>;
-  /** Writes `value` over revision `revision` (0: the document doesn't exist yet). */
-  put<T = unknown>(kind: string, id: string, value: T, revision: number): Promise<DocumentWrite<T>>;
+  /** One command, in one host transaction, idempotent by its ID (profiles design §2.1). Throws when the host can't be reached. */
+  transact(request: TransactRequest): Promise<TransactAnswer>;
+  /** The current revision of each document (0: it doesn't exist), keyed `<kind>/<id>`, in one read (the revision check, §2.2). */
+  revisions(refs: readonly DocumentRef[], signal?: AbortSignal): Promise<Readonly<Record<string, number>>>;
+  /** Each document as it is now (null: it doesn't exist), keyed `<kind>/<id>`, in one read. */
+  read(refs: readonly DocumentRef[], signal?: AbortSignal): Promise<Readonly<Record<string, CurrentDocument>>>;
 }
 
 /**
- * One stored document as the page holds it (`platform/core/saved-document.ts`): its value changes at once and is saved in
- * the background, one write at a time, newest value last.
+ * One stored document as the page holds it (`platform/core/saved-document.ts`, over the outbox): its value changes at once and reaches
+ * the library through the outbox.
  */
 export interface SavedDocument<T> {
   readonly kind: string;
   readonly id: string;
   readonly value: T;
-  /** Sets the value now and saves it. Resolves once it (or a newer value) is stored; rejects when the store couldn't take it. */
+  /**
+   * Sets the value now and records it in the outbox. Resolves once the library holds it (or a newer value); rejects when it can't
+   * (it went stale and is a conflict to resolve, or this page no longer holds its workspace).
+   */
   save(value: T): Promise<void>;
 }

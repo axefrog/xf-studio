@@ -156,6 +156,15 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
     onClick: () => { showMessages = !showMessages; rt.changed(); } });
   detailsToggle.setAttribute("aria-expanded", "false"); detailsToggle.setAttribute("aria-controls", "cc-messages");
   const status = h("div", { class: "cc-status" }, statusText, retry, setupWolvenKit.element, keep, detailsToggle);
+  // Changed in another window (t-conflict): first in "Your V" while a conflict waits, with the three ways out.
+  const resolve = (keep: "mine" | "theirs" | "both") => () => dispatch({ kind: "character.resolveConflict", keep });
+  const keepMine = button({ label: "Keep mine", small: true, title: "Save this window's version over the other window's", onClick: resolve("mine") });
+  const useTheirs = button({ label: "Use theirs", small: true, title: "Show the other window's version here; this window's changes go", onClick: resolve("theirs") });
+  const keepBoth = button({ label: "Keep both", small: true, title: "Keep this window's version as a copy, and show the other window's here", onClick: resolve("both") });
+  const conflictText = h("span", {});
+  const conflict = h("div", { class: "state-line warning doc-conflict", role: "group", "aria-label": "Changed in another window", "aria-live": "polite", hidden: true },
+    h("p", { class: "doc-conflict-text" }, h("strong", {}, "Changed in another window."), " ", conflictText),
+    h("div", { class: "row wrap gap-s" }, keepMine, useTheirs, keepBoth));
   const messages = h("div", { class: "cc-messages", id: "cc-messages", hidden: true });
   let showMessages = false;
   // The library's search field (icon, clear button, Escape clears; the same as Poses): the panel filters on its pause, and each paint
@@ -223,7 +232,7 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
     // The V's source with the panel's history beside it, then two rows of buttons: which V (a save or a default V), then character
     // presets. Reset all sits with the V's own makeup above the rows (the style guide's Creator options), so at 300 px the buttons take
     // three lines, not four (C-26).
-    section("Your V", h("div", { class: "cc-source-line" }, source, h("span", { class: "cc-history" }, undo, redo)),
+    section("Your V", conflict, h("div", { class: "cc-source-line" }, source, h("span", { class: "cc-history" }, undo, redo)),
       h("div", { class: "row wrap gap-s" }, loadSave, useDefault, useDefaultMale),
       h("div", { class: "row wrap gap-s" }, loadPreset, savePreset), status, messages, detailNote, detailsBlock),
     h("section", { class: "section cc-quick" }, ownMakeup.element, h("div", { class: "row wrap gap-s" }, resetAll)),
@@ -766,11 +775,18 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
         messages.dataset.key = messageKey;
         messages.replaceChildren(...lines.map(text => note(text, "warning")));
       }
-      // The one status line: what is on its way, what failed (with Try again), else the first of the Details lines.
+      // A conflict on this V (t-conflict): the notice and its three ways out, while it waits.
+      conflict.hidden = !context?.conflict;
+      setText(conflictText, context?.conflict?.message ?? "");
+      keepBoth.hidden = !context?.conflict?.keepBoth;
+      for (const [control, keep] of [[keepMine, "mine"], [useTheirs, "theirs"], [keepBoth, "both"]] as const)
+        applyCapability(control, port.authoring.capability({ kind: "character.resolveConflict", keep }));
+      // The one status line: what is on its way, what failed (with Try again), else the first of the Details lines, else that the V was
+      // just replaced by another window's version (its Undo starts there).
       const line = !context ? "" : context.phase === "preparing" ? context.message || "Reading your game's character-creator options…"
         : context.phase === "failed" ? context.message
           : details?.updating || context.viewing ? (details?.updating && context.firstTime ? FIRST_TIME : "Updating…")
-            : details?.updateError ?? (detailsNeed || (lines.length ? lines[0]! : ""));
+            : details?.updateError ?? (detailsNeed || (lines.length ? lines[0]! : context.elsewhere ?? ""));
       setText(statusText, line);
       statusText.title = line;
       // The status line keeps its height while there is a V whose state it can report (UI-68); before any V can load there is nothing

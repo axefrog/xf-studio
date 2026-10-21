@@ -9,15 +9,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDocumentsHandler } from "../src/platform/persistence/document-store";
 import { browserDocuments } from "../src/app/browser/browser-documents-device";
-import { savedDocument } from "../src/platform/core/saved-document";
+import { documentOwners } from "../src/platform/core/saved-document";
+import { DocumentOutbox } from "../src/platform/core/document-outbox";
 import type { DocumentStorePort } from "../src/platform/api/document-store";
 import { STUDIO_PARTS } from "../src/compose/studio-registry";
 import { COLLECTION_FIXTURES, readFixture } from "./fixtures/capture-plan-golden";
 import { alphaList } from "./fixtures/alpha-0.1.0/collection-list";
 import { readRecipe } from "../src/legacy/eye-makeup/recipe-schema";
-import { ManualClock, settle, storeDocuments } from "./fixtures/platform-doubles";
+import { ManualClock, memoryOutboxStorage, settle, storeDocuments } from "./fixtures/platform-doubles";
 import { openTestLibrary } from "./fixtures/library-file";
 
+async function until(done: () => boolean, ms = 3000) {
+  const end = Date.now() + ms;
+  while (!done()) { if (Date.now() > end) throw Error("Timed out."); await new Promise(resolve => setTimeout(resolve, 5)); }
+}
 const folders: string[] = [];
 function library(): string { const dir = mkdtempSync(join(tmpdir(), "xfs-documents-")); folders.push(dir); return join(dir, "library.sqlite"); }
 afterEach(() => { for (const dir of folders.splice(0)) try { rmSync(dir, { recursive: true, force: true }); } catch { /* closing */ } });
@@ -77,59 +82,72 @@ test("a library with the documents table still opens in earlier XF Studio stores
   reopened.close();
 });
 
-test("the page's transport: the browser device lists and writes through the host endpoint, and a stale write answers the current document", async () => {
+test("the page's transport: the browser device lists, commits, checks and reads through the host endpoint", async () => {
   const file = openTestLibrary(), store = file.documents, handler = createDocumentsHandler(store, "/api/documents");
   try {
     const page = browserDocuments("/api/documents", (url, init) => handler(new Request(`http://127.0.0.1:4317${url}`,
       { ...init, headers: { ...(init?.headers as Record<string, string>), Origin: "http://127.0.0.1:4317" } })));
     expect(await page.list("sample")).toEqual([]);
-    const written = await page.put("sample", "id with spaces/and slashes", { a: 1 }, 0);
-    expect(written.ok && written.document.revision).toBe(1);
+    const ref = { kind: "sample", id: "id with spaces/and slashes" };
+    expect(await page.transact({ id: "c-1", command: "sample.write", writes: [{ ...ref, base: 0, value: { a: 1 } }] }))
+      .toEqual({ ok: true, revisions: { "sample/id with spaces/and slashes": 1 } });
     expect((await page.list("sample")).map(item => [item.id, item.value])).toEqual([["id with spaces/and slashes", { a: 1 }]]);
-    const stale = await page.put("sample", "id with spaces/and slashes", { a: 2 }, 0);
-    expect(stale.ok).toBe(false);
-    expect(!stale.ok && stale.reason === "stale" && stale.current?.revision).toBe(1);
-    await expect(page.put("Not a kind", "x", 1, 0)).rejects.toThrow("kind");
+    expect(await page.transact({ id: "c-2", command: "sample.write", writes: [{ ...ref, base: 0, value: { a: 2 } }] }))
+      .toEqual({ ok: false, reason: "stale", current: { "sample/id with spaces/and slashes": { revision: 1, value: { a: 1 } } } });
+    expect(await page.revisions([ref, { kind: "sample", id: "none" }])).toEqual({ "sample/id with spaces/and slashes": 1, "sample/none": 0 });
+    expect(await page.read([ref])).toEqual({ "sample/id with spaces/and slashes": { revision: 1, value: { a: 1 } } });
+    await expect(page.transact({ id: "c-3", command: "sample.write", writes: [{ kind: "Not a kind", id: "x", base: 0, value: 1 }] })).rejects.toThrow("kind");
   } finally { file.close(); }
 });
 
-test("the endpoint answers local, same-origin pages only, and refuses what isn't a document write", async () => {
+test("the endpoint answers local, same-origin pages only, and refuses what isn't a command", async () => {
   const file = openTestLibrary(), store = file.documents, handler = createDocumentsHandler(store, "/api/documents");
-  const put = (url: string, body: string, headers: Record<string, string> = { Origin: "http://127.0.0.1", "Content-Type": "application/json" }) =>
-    handler(new Request(url, { method: "PUT", headers, body }));
+  const post = (url: string, body: string, headers: Record<string, string> = { Origin: "http://127.0.0.1", "Content-Type": "application/json" }) =>
+    handler(new Request(url, { method: "POST", headers, body }));
+  const command = (value: unknown, base = 0) => JSON.stringify({ id: `c-${Math.random()}`, command: "a.write", writes: [{ kind: "a", id: "b", base, value }] });
   try {
     expect((await handler(new Request("http://example.com/api/documents?kind=a"))).status).toBe(403);
     expect((await handler(new Request("http://127.0.0.1/api/documents?kind=a", { headers: { Origin: "https://example.com" } }))).status).toBe(403);
     expect((await handler(new Request("http://127.0.0.1/api/documents/extra?kind=a"))).status).toBe(404);
-    expect((await put("http://127.0.0.1/api/documents?kind=a&id=b", JSON.stringify({ revision: 0, value: 1 }), { "Content-Type": "application/json" })).status).toBe(403);
-    expect((await put("http://127.0.0.1/api/documents?kind=a&id=b", JSON.stringify({ revision: 0, value: 1 }), { Origin: "http://127.0.0.1", "Content-Type": "text/plain" })).status).toBe(403);
-    expect((await put("http://127.0.0.1/api/documents?kind=a&id=b", "{not json")).status).toBe(400);
-    expect((await put("http://127.0.0.1/api/documents?kind=a&id=b", JSON.stringify({ revision: 0 }))).status).toBe(400);
-    expect((await put("http://127.0.0.1/api/documents?kind=a&id=b", JSON.stringify({ revision: "x", value: 1 }))).status).toBe(400);
+    expect((await post("http://127.0.0.1/api/documents/transact", command(1), { "Content-Type": "application/json" })).status).toBe(403);
+    expect((await post("http://127.0.0.1/api/documents/transact", command(1), { Origin: "http://127.0.0.1", "Content-Type": "text/plain" })).status).toBe(403);
+    expect((await post("http://127.0.0.1/api/documents/transact", "{not json")).status).toBe(400);
+    expect((await post("http://127.0.0.1/api/documents/transact", JSON.stringify({ id: "x", command: "a.write", writes: [{ kind: "a", id: "b", base: "x", value: 1 }] }))).status).toBe(400);
+    // There is no single-document write: commands are the only writes.
+    expect((await handler(new Request("http://127.0.0.1/api/documents?kind=a&id=b", { method: "PUT", headers: { Origin: "http://127.0.0.1", "Content-Type": "application/json" },
+      body: JSON.stringify({ revision: 0, value: 1 }) }))).status).toBe(405);
     expect((await handler(new Request("http://127.0.0.1/api/documents?kind=a", { method: "DELETE", headers: { Origin: "http://127.0.0.1" } }))).status).toBe(405);
     expect(store.list("a")).toEqual([]);
-    expect((await put("http://127.0.0.1/api/documents?kind=a&id=b", JSON.stringify({ revision: 0, value: { ok: true } }))).status).toBe(200);
-    expect((await put("http://127.0.0.1/api/documents?kind=a&id=b", JSON.stringify({ revision: 0, value: { ok: false } }))).status).toBe(409);
+    expect(await (await post("http://127.0.0.1/api/documents/transact", command({ ok: true }))).json()).toMatchObject({ ok: true });
+    expect(await (await post("http://127.0.0.1/api/documents/transact", command({ ok: false }))).json()).toMatchObject({ ok: false, reason: "stale" });
   } finally { file.close(); }
 });
 
-test("a saved document changes at once, writes one at a time with the newest value, and the newest edit here wins over one made elsewhere", async () => {
+test("a saved document changes at once, reaches the library through the outbox with the newest value, and a stale one waits as a conflict", async () => {
   const documents = storeDocuments();
-  let puts = 0;
-  const counted: DocumentStorePort = { list: documents.list, put: (...args) => { puts++; return documents.put(...args); } };
-  const doc = savedDocument(counted, "sample", "a", { n: 0 });
+  let commands = 0;
+  const counted: DocumentStorePort = { ...documents, transact: request => { commands++; return documents.transact(request); } };
+  const outbox = new DocumentOutbox(counted, memoryOutboxStorage(), { retryMs: 5 });
+  outbox.open();
+  const owners = documentOwners(outbox);
+  const doc = owners.open("sample", "a", { n: 0 });
   const saves = [doc.save({ n: 1 }), doc.save({ n: 2 }), doc.save({ n: 3 })];
   expect(doc.value).toEqual({ n: 3 });
   await Promise.all(saves);
-  expect(puts).toBe(1);   // coalesced: the first write already sent the newest value
+  expect(commands).toBe(1);   // coalesced: one command carried the newest value
   expect(documents.store.get("sample", "a")).toMatchObject({ revision: 1, value: { n: 3 } });
-  // Another window writes meanwhile; this page's next edit is written over it.
-  documents.store.put("sample", "a", { n: 99 }, 1);
-  await doc.save({ n: 4 });
+  // Another window writes meanwhile: this page's next edit becomes a conflict, never written over theirs; Keep mine sends it.
+  documents.store.transact({ id: "other", command: "x", writes: [{ kind: "sample", id: "a", base: 1, value: { n: 99 } }] });
+  const mine = doc.save({ n: 4 });
+  await until(() => outbox.conflicts().length === 1);
+  expect(documents.store.get("sample", "a")).toMatchObject({ revision: 2, value: { n: 99 } });
+  outbox.keepMine(outbox.conflicts()[0]!.id);
+  await mine;
   expect(documents.store.get("sample", "a")).toMatchObject({ revision: 3, value: { n: 4 } });
-  // A store that can't take it rejects that save; the value stays as the person left it, and a later save goes through.
-  const failing = savedDocument<{ n: number }>({ list: documents.list, put: async () => { throw new Error("offline"); } }, "sample", "b", { n: 0 });
-  await expect(failing.save({ n: 1 })).rejects.toThrow("offline");
-  expect(failing.value).toEqual({ n: 1 });
+  // A new document starts at its initial value and is recorded when the owners settle.
+  const fresh = owners.open("sample", "b", { n: 0 });
+  expect(fresh.value).toEqual({ n: 0 });
+  expect(await owners.settle()).toBe(true);
+  expect(documents.store.get("sample", "b")).toMatchObject({ revision: 1, value: { n: 0 } });
   await settle();
 });

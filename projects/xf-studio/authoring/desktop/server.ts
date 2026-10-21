@@ -22,6 +22,7 @@ import { eyePlateReadiness } from "../src/legacy/eye-makeup/plate/host/eye-plate
 import { EYE_PLATE_RECIPE } from "../src/legacy/eye-makeup/plate/eye-plate-recipe";
 import { DesktopUpdateService, type NativeUpdater, type UpdateTrust } from "./update-service";
 import { DesktopWorkspaceStore, desktopWorkspaceRequest, desktopWorkspaceStartFresh } from "./workspace-store";
+import { DesktopOutboxStore, desktopOutboxRequest } from "./outbox-store";
 import { DESKTOP_WORKSPACE, DesktopWorkspaceLeases } from "./workspace-lease-host";
 import { INSTANCE_ROUTE, instanceActivateRequest } from "./single-instance";
 // A composition root: the part registry and document model are built once and injected (CORE-29).
@@ -146,6 +147,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const verificationPosePreferencesRequest = createPosePreferencesHandler(new PosePreferencesStore(verificationSettingsDirectory(dataRoot),
     { seed: () => posePreferences.load().preferences }));
   const workspaceStore = new DesktopWorkspaceStore(dataRoot, STUDIO_DOCUMENTS);
+  // The workspace's outbox keys, beside it (profiles design §2.2): one file per document, fenced by the same lease.
+  const outboxStore = new DesktopOutboxStore(dataRoot);
   let closeAck: ((nonce: string, status: "saved" | "failed") => boolean) | undefined;
   // Renderer progress for the host's blank-window watchdog and close handling.
   const renderer = { pageServed: false, bootstrapped: false, smoke: null as string | null };
@@ -390,6 +393,12 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         return response;
       }
       if (url.pathname === "/api/desktop/workspace/lease") return leases.request(routedRequest, url.searchParams.has("verify"));
+      if (url.pathname === "/api/desktop/workspace/outbox") {
+        const fence = () => leases.refuseWrite(request, url.searchParams.has("verify"));
+        const fenced = fence();
+        if (fenced) return fenced;
+        return desktopOutboxRequest(routedRequest, outboxStore, url.searchParams.has("verify"), fence);
+      }
       if (url.pathname === "/api/desktop/workspace") {
         // A late write from a page that released the workspace (an older lease generation) is refused, never written: checked on arrival
         // and again at the save itself, after the body has come in, with nothing awaited in between.

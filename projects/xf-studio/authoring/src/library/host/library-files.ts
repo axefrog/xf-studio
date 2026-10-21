@@ -68,6 +68,8 @@ export function openLibraryFiles(dataRoot: string, options: LibraryFilesOptions)
     const database = openLibraryDatabase(resolve(dataRoot, file), { clock, signal: life.signal, backups, report });
     const stores = libraryStores(database, parts, () => clock.now());
     importLegacyExperiments(database, stores.documents, options.log);
+    // Command receipts no later command forgot are kept 7 days (profiles design §1.4).
+    stores.documents.purgeReceipts();
     return stores;
   };
   const backups = options.isolated ? null : new LibraryBackups(resolve(dataRoot, "library.sqlite"), () => clock.now());
@@ -82,7 +84,7 @@ export function openLibraryFiles(dataRoot: string, options: LibraryFilesOptions)
       { prefix: `${base}/looks`, nested: true, handle: (request: Request) => libraryRequest(request, stores.looks, `${base}/looks`) },
       { prefix: `${base}/collections`, nested: true, handle: (request: Request) => collectionRequest(request, stores.collections, `${base}/collections`) },
       { prefix: `${base}/part-presets`, nested: true, handle: (request: Request) => partPresetRequest(request, stores.partPresets, `${base}/part-presets`) },
-      { prefix: `${base}/documents`, nested: false, handle: documents },
+      { prefix: `${base}/documents`, nested: true, handle: documents },
       { prefix: `${base}/workspace-lease`, nested: false, handle: createWorkspaceLeaseHandler(stores.documents, `${base}/workspace-lease`) },
     ];
   });

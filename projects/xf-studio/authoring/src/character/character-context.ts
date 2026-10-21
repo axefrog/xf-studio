@@ -490,6 +490,11 @@ export type CharacterContextAction =
   | { kind: "character.retry" }
   /** Remove the game files prepared for the 3D view on this computer; they are read from the game again when needed. */
   | { kind: "character.clearPreparedFiles" }
+  /**
+   * The V changed in another window while this one changed it too (profiles design §2.2): keep this window's version over the other
+   * (`mine`), take the other window's (`theirs`), or keep both (this window's becomes a copy of the V, beside the other).
+   */
+  | { kind: "character.resolveConflict"; keep: "mine" | "theirs" | "both" }
   | { kind: "character.undo" }
   | { kind: "character.redo" }
   /** Which of V's clothes the preview shows (clothing-dressing.ts); a viewing setting with its own Undo. */
@@ -519,6 +524,7 @@ export const CHARACTER_CONTEXT_DESCRIPTORS = {
   "character.keepChanges": desc("viewport", "workspace", {}),
   "character.retry": desc("viewport", "workspace", {}),
   "character.clearPreparedFiles": desc("viewport", "file", {}),
+  "character.resolveConflict": desc("file", "workspace", { keep: input("enum", { values: ["mine", "theirs", "both"] }) }),
   "character.undo": desc("viewport", "workspace", {}),
   "character.redo": desc("viewport", "workspace", {}),
   "character.setClothing": desc("viewport", "workspace", { state: input("enum", { values: CLOTHING_STATES }) }),
@@ -533,6 +539,6 @@ export const CHARACTER_CONTEXT_FAMILY: SystemFamily<CharacterContextAction, Scop
   actions: actionTable<CharacterContextAction, Scope>(CHARACTER_CONTEXT_DESCRIPTORS, {
     "character.setOption": true, "character.setOptions": true, "character.setOwnMakeup": true, "character.reset": true, "character.resetAll": true,
     "character.setSource": true, "character.useDefault": true, "character.loadSave": true, "character.loadPreset": true, "character.keepChanges": true, "character.retry": true, "character.clearPreparedFiles": true,
-    "character.undo": true, "character.redo": true, "character.setClothing": true, "character.setClothingArea": true,
+    "character.resolveConflict": true, "character.undo": true, "character.redo": true, "character.setClothing": true, "character.setClothingArea": true,
     "character.undoClothing": true, "character.redoClothing": true }),
 });

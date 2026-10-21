@@ -66,6 +66,8 @@ import { createBrowserDiagnostics } from "../diagnostics/browser/browser-device"
 import { createBrowserUpdateCheck } from "../setup/browser/browser-update-check-device";
 import { pageFailure, setPageDiagnostics } from "../diagnostics/page-sink";
 import type { WorkspaceLease } from "../app/workspace/workspace-lease";
+import type { StartedOutbox } from "../app/browser/document-outbox-device";
+import { outboxView } from "../app/presentation-status";
 
 export type StudioHost = {
   /** Optional host capability; the desktop omits experimental modules until their assets are supported. */
@@ -105,6 +107,11 @@ export type StudioHost = {
    * read-only, and it restarts once Use it here has taken the workspace over. Without one (tools) this window is the only one.
    */
   lease?: WorkspaceLease;
+  /**
+   * The page's outbox, started (`app/browser/document-outbox-device.ts`, profiles design §2.2): the one way documents reach the library.
+   * Its status is shown (the unprotected-changes warning), and it counts against the workspace's storage budget.
+   */
+  documents?: StartedOutbox;
 };
 
 const byId = <T extends HTMLElement>(id: string) => {
@@ -196,10 +203,13 @@ async function start(host: StudioHost, root: HTMLElement) {
   const lease = host.lease;
   const statusSource = new PresentationStatusSource(() => {
     const eye = scene?.eyeAppearance().optics;
-    return { ...status, ...(lease ? { lease: lease.snapshot() } : {}), glitter: measurements.snapshot(), assets: { ...status.assets,
+    return { ...status, ...(lease ? { lease: lease.snapshot() } : {}), ...(host.documents ? { outbox: outboxView(host.documents.outbox.status()) } : {}),
+      glitter: measurements.snapshot(), assets: { ...status.assets,
       characterDetails: head?.characterDetails.snapshot(),
       eyeOptics: eye ? { requested: eye.requested, active: eye.active, reason: eye.reason, error: eye.error } : undefined } };
   });
+  // The outbox's warning follows its status (a failed outbox write, a send that failed, a conflict).
+  host.documents?.outbox.subscribe(event => { if (event.kind !== "acknowledged") statusSource.changed(); });
 
   let messageId = 0;
   const adapterMessage = (source: AdapterMessage["source"], text: string) => {
@@ -228,6 +238,8 @@ async function start(host: StudioHost, root: HTMLElement) {
     onContext: event => event === "lost" ? diagnostics.contextLost("3D view") : diagnostics.contextRestored("3D view") });
   const session = createBrowserWorkspaceSession({
     workspace, restored, verification, storage, budget: host.storageBudget, model: STUDIO_COMPOSITION.documents,
+    // The outbox's keys share the workspace's storage, so they count against its budget (profiles design §2.2).
+    reserved: host.documents ? () => host.documents!.outbox.storedSize() : undefined,
     capture: {
       editor: () => core.document.export(),
       uvView: () => uvEditor?.snapshot() ?? workspace.uvView,
@@ -344,7 +356,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       ready: () => !!scene,
       unavailableReason: () => { const head = viewportDevice.attachment.snapshot().head; return head.error ?? head.message; },
     },
-    fileDevice, diagnostics, modules: moduleServices, experiments, lease,
+    fileDevice, diagnostics, modules: moduleServices, experiments, lease, outbox: host.documents?.outbox,
   });
   // The only object handed to the presentation.
   const viewComposition = { ...STUDIO_VIEW_COMPOSITION, optional: () => experiments.registrations().map(item => ({ contribution: item.contribution, binding: item.binding })) };

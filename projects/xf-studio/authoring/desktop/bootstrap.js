@@ -11,6 +11,8 @@ import { browserLeaseClock, desktopWorkspaceLease } from "../src/app/browser/wor
 import { WorkspaceLease } from "../src/app/workspace/workspace-lease";
 import { DESKTOP_SAVE_FAILED, desktopWorkspaceWriter } from "../src/app/browser/desktop-workspace-writer";
 import { formatFence, WORKSPACE_FENCE_HEADER } from "../src/platform/api/document-store";
+import { browserPage, startDocumentOutbox } from "../src/app/browser/document-outbox-device";
+import { desktopOutboxStorage } from "../src/app/browser/outbox-storage";
 const capabilities = await fetch("/api/desktop/capabilities").then(response => response.json());
 if (capabilities.schema !== "xfs/desktop-capabilities-1") throw Error("Desktop host capabilities are unavailable.");
 // The loopback port changes on each launch, so WebView localStorage alone does
@@ -99,11 +101,29 @@ async function postWorkspace(text, headers = {}) {
 }
 const writer = desktopWorkspaceWriter(postWorkspace, failed => workspaceAlert(failed ? SAVE_FAILED : ""));
 const saveWorkspace = text => writer.save(text);
+// The outbox (profiles design §2.2): the one way documents reach the library. Its keys are written to this launch's WebView storage at
+// once and kept by the host beside the workspace file, fenced by the same lease as the workspace's writes.
+const outboxEndpoint = `/api/desktop/workspace/outbox${verification ? "?verify=1" : ""}`;
+const outboxResponse = await fetch(outboxEndpoint, { cache: "no-store" }).then(response => response.ok ? response.json() : null).catch(() => null);
+if (outboxResponse?.schema !== "xfs/desktop-outbox-1") throw Error("The desktop outbox is unavailable.");
+const outboxWorkspace = verification ? "desktop-verification" : "desktop";
+const outboxStorage = desktopOutboxStorage(localStorage, outboxWorkspace, outboxResponse.launch, outboxResponse.keys, async (key, text) => {
+  const generation = lease.generation();
+  if (generation === null) throw Error("This window no longer holds the workspace.");
+  const response = await fetch(outboxEndpoint, { method: "POST", credentials: "same-origin",
+    headers: { "Content-Type": "application/json", [WORKSPACE_FENCE_HEADER]: formatFence({ workspace: "desktop", generation }) },
+    body: JSON.stringify({ key, text }) });
+  if (!response.ok) throw Error("The outbox key wasn't stored.");
+});
+const documents = startDocumentOutbox({ prefix: `${verification ? "/api/verification" : "/api"}/documents`, send: fetch, workspace: "desktop",
+  storage: outboxStorage, lease, page: browserPage() });
 window.xfDesktopWorkspaceFlush = async updateNonce => {
   window.dispatchEvent(new Event("xfs-desktop-close-flush"));
   await writer.idle();
   if (writer.failed() && workspaceText !== null) await saveWorkspace(workspaceText);
   if (writer.failed()) throw Error(SAVE_FAILED);
+  // Changes not yet in the library are safe once the host holds the outbox's keys: they are sent at the next start.
+  if (!await outboxStorage.settle()) throw Error(SAVE_FAILED);
   if (updateNonce !== undefined) {
     if (typeof updateNonce !== "string" || !/^[0-9a-f-]{36}$/.test(updateNonce) || workspaceText === null)
       throw Error("The update workspace snapshot is unavailable.");
@@ -318,6 +338,7 @@ void import("/build/studio-startup.js").then(({ startStudio }) => startStudio({
   onFlushRequest: flush => { flushRequest = flush; },
   onPreviewReady: () => { previewReady = true; startup.previewReadyMs ??= Math.round(performance.now()); },
   lease,
+  documents,
 })).catch(() => {
     const root = document.getElementById("studio");
     root.removeAttribute("aria-busy");

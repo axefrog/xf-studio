@@ -17,6 +17,7 @@ import type { StoredCharacter } from "./character-context-actions";
 import { type ClothingSetting, clothingSettingOf, DEFAULT_CLOTHING } from "./clothing-dressing";
 import { CREATOR_LIMITS, isPresetName } from "./creator-names";
 import type { SubjectKindSpec } from "../platform/api/subjects";
+import { sha256Hex } from "../platform/core/sha256";
 
 export const CHARACTER_DOCUMENT = "character";
 export const SAVED_V_DOCUMENT = "saved-v";
@@ -102,10 +103,12 @@ export function characterLabel(value: unknown): string {
     : `Default ${shape} V`;
 }
 
-/** A decoded save's ID: the SHA-256 of its content. Equal saves have equal IDs, so characters made from one save share its document. */
-export async function decodedSaveId(save: SavedV): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(save)));
-  return `sv-${Array.from(new Uint8Array(digest).slice(0, 16), byte => byte.toString(16).padStart(2, "0")).join("")}`;
+/**
+ * A decoded save's ID: the SHA-256 of its content. Equal saves have equal IDs, so characters made from one save share its document.
+ * Synchronous, so the change that needs it is recorded in the same turn (profiles design §2.2).
+ */
+export function decodedSaveId(save: SavedV): string {
+  return `sv-${sha256Hex(JSON.stringify(save)).slice(0, 32)}`;
 }
 
 /** The character as its context starts from it (the workspace's form, character-context-actions.ts). */

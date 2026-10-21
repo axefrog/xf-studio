@@ -1,51 +1,70 @@
 /**
- * Owner commands (profiles design §2.1): related library documents change only through their owner's commands, each one host transaction
- * over every document it writes, checked against the revisions it read. A command has an ID; the same ID sent again is answered from
- * the first answer (its receipt) and never applied twice. Types only.
+ * Owner commands (profiles design §2.1) and the outbox they go through (§2.2). Types only.
  *
- * Phase 1b writes through the existing document store one document at a time (`platform/core/document-commands.ts`); the host's
- * `transact`, receipts and the outbox (phase 1c) take over behind the same port.
+ * - **A command** changes one or more library documents in one host transaction (`DocumentStorePort.transact`): every write names the
+ *   revision it read (`base`), and either every write commits or none does and the answer is `stale` with the current documents.
+ * - **Commands are idempotent by ID.** The transaction also writes a receipt (a `documents` row of kind `xfs-receipt`, ID the command's)
+ *   holding the revisions it produced; the same ID sent again is answered from the receipt and never applied twice. A replay with no
+ *   receipt whose every target already holds exactly the value written is acknowledged at the current revisions (the equal-value rule).
+ *   A later command names receipts its page no longer needs in `forget`; the host purges receipts older than 7 days at start.
+ * - **The outbox is the only way a document's local state reaches the library** (`platform/core/document-outbox.ts`): an owner's
+ *   in-memory view of a document is its acknowledged value with its outbox entries applied on top.
  */
 
-/** One write of a command: `base` is the revision it read (0: the document doesn't exist yet). */
-export type CommandWrite =
-  | { readonly kind: string; readonly id: string; readonly base: number; readonly value: unknown }
-  /** Deleted: the next revision is a tombstone keeping the last value (§1.4), so a restore brings it back. */
-  | { readonly kind: string; readonly id: string; readonly base: number; readonly tombstone: true; readonly value: unknown };
+/** A document's address. */
+export type DocumentRef = { readonly kind: string; readonly id: string };
+/** A document's key in answers and the outbox: `<kind>/<id>`. */
+export const documentKey = (ref: DocumentRef) => `${ref.kind}/${ref.id}`;
 
-export type DocumentCommand = {
-  /** The command's own ID: a replay with the same ID is answered, never applied twice. */
+/** A stored tombstone (§1.4): the next revision of a deleted document, keeping its last value so a restore brings it back. */
+export type Tombstone<T = unknown> = { readonly tombstone: true; readonly at: number; readonly value: T };
+export const isTombstone = (value: unknown): value is Tombstone =>
+  !!value && typeof value === "object" && !Array.isArray(value) && (value as { tombstone?: unknown }).tombstone === true;
+export const tombstoneOf = <T>(value: T, at: number): Tombstone<T> => ({ tombstone: true, at, value });
+
+/** One write of a command as the host takes it: `base` is the revision it read (0: the document doesn't exist yet). */
+export type TransactWrite = {
+  readonly kind: string;
+  readonly id: string;
+  readonly base: number;
+  /** The value stored as the next revision (a `Tombstone` for a delete). */
+  readonly value: unknown;
+};
+export type TransactRequest = {
+  /** The command's own ID: a replay with the same ID is answered from its receipt, never applied twice. */
   readonly id: string;
   /** What the command is (`character.create`, `profile.addSubject`). */
   readonly command: string;
-  readonly writes: readonly CommandWrite[];
-  /** Earlier command IDs whose receipts are no longer needed. */
+  readonly writes: readonly TransactWrite[];
+  /** Earlier command IDs whose receipts this page no longer needs. */
   readonly forget?: readonly string[];
 };
-
-/** A document's revision after a command, keyed `<kind>/<id>`. */
+/** A document as it is now, in a stale answer or a read (null: it doesn't exist). */
+export type CurrentDocument = { readonly revision: number; readonly value: unknown } | null;
+/** Each written document's revision after a command, keyed `<kind>/<id>`. */
 export type CommandRevisions = Readonly<Record<string, number>>;
-export const commandKey = (kind: string, id: string) => `${kind}/${id}`;
 /**
- * A command's answer: committed with every written document's revision; `stale` with the current revisions when a base no longer
- * matched (nothing was written); `superseded` when the page no longer holds its workspace.
+ * A command's answer: committed, with every written document's revision (`replayed` when it was answered from a receipt or by the
+ * equal-value rule); `stale` with the written documents as they are now (nothing was written); `superseded` when the page no longer
+ * holds its workspace (a newer lease generation, §2.3).
  */
-export type CommandAnswer =
-  | { readonly ok: true; readonly revisions: CommandRevisions }
-  | { readonly ok: false; readonly reason: "stale"; readonly current: CommandRevisions }
+export type TransactAnswer =
+  | { readonly ok: true; readonly revisions: CommandRevisions; readonly replayed?: "receipt" | "equal" }
+  | { readonly ok: false; readonly reason: "stale"; readonly current: Readonly<Record<string, CurrentDocument>> }
   | { readonly ok: false; readonly reason: "superseded" };
 
-/** A stored tombstone (§1.4): the next revision of a deleted document. */
-export type Tombstone<T = unknown> = { readonly tombstone: true; readonly at: number; readonly value: T };
-export const isTombstone = (value: unknown): value is Tombstone =>
-  !!value && typeof value === "object" && (value as { tombstone?: unknown }).tombstone === true;
+/** The `documents` kind command receipts are kept under (ID: the command's). */
+export const RECEIPT_KIND = "xfs-receipt";
+/** How long a receipt is kept when no later command forgets it. */
+export const RECEIPT_TTL_MS = 7 * 24 * 3600_000;
+/** Kinds the host keeps for itself: no command may write them. */
+export const isHostKind = (kind: string) => kind.startsWith("xfs-");
+/** Most writes in one command, and most receipts one command forgets. */
+export const COMMAND_LIMITS = { writes: 64, forget: 512 } as const;
+
+/** A command ID: unique per command, so a replay is recognised (`<command>:<time>-<random>`). */
+export const commandId = (command: string, random: () => number = Math.random) =>
+  `${command}:${Date.now().toString(36)}-${Math.floor(random() * 2 ** 48).toString(36)}`;
 
 /** A document as an owner reads it: its value, its revision, and whether it is a tombstone. */
 export type HeldDocument<T = unknown> = { readonly id: string; readonly revision: number; readonly value: T; readonly deleted: boolean };
-
-/** Where owners commit their commands and read their documents. */
-export interface DocumentCommandPort {
-  commit(command: DocumentCommand): Promise<CommandAnswer>;
-  /** Every document of a kind, tombstones included (`deleted`). */
-  list<T = unknown>(kind: string, signal?: AbortSignal): Promise<readonly HeldDocument<T>[]>;
-}

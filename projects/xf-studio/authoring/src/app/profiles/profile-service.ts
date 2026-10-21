@@ -9,12 +9,15 @@
  *   command (`character.create` with membership) takes its write from `membership`.
  * - **Subjects are checked against the registry**: a kind this build doesn't register can't be added, but one already stored (written
  *   by a newer build) is kept as it is whenever the profile is written again.
- * - **One write path:** `DocumentCommandPort` (phase 1b writes through the document store; 1c's outbox takes over behind it).
+ * - **One write path: the outbox** (`platform/core/document-outbox.ts`). A command is recorded there at once and reaches the library in
+ *   the background; a profile as readers see it is the library's value with this window's commands on top, and `revision` (a command's
+ *   `base`) moves with every command recorded here and every change taken from another window.
  */
 import { refusal, type Capability } from "../../platform/api/capability";
-import { type CommandWrite, commandKey, type DocumentCommandPort } from "../../platform/api/document-commands";
+import { commandId, type DocumentRef, isTombstone, tombstoneOf } from "../../platform/api/document-commands";
+import type { DocumentStorePort } from "../../platform/api/document-store";
 import { sameSubject, type SubjectRef, type SubjectRegistryPort } from "../../platform/api/subjects";
-import { commandId } from "../../platform/core/document-commands";
+import type { DocumentOutbox, OutboxEdit } from "../../platform/core/document-outbox";
 
 export const PROFILE_DOCUMENT = "profile";
 export const PROFILE_SCHEMA = "xfs/profile-1";
@@ -64,23 +67,38 @@ export function profileDocumentOf(value: unknown): ProfileDocument | null {
 }
 
 export type ProfileServiceDeps = {
-  readonly documents: DocumentCommandPort;
+  /** The library's documents, read once at `load`. */
+  readonly documents: Pick<DocumentStorePort, "list">;
+  /** Every command goes through the outbox. */
+  readonly outbox: DocumentOutbox;
   readonly subjects: SubjectRegistryPort;
   readonly random?: () => number;
   readonly now?: () => number;
 };
 
+export const profileRef = (id: ProfileId): DocumentRef => ({ kind: PROFILE_DOCUMENT, id });
+
 export class ProfileService {
-  private readonly held = new Map<ProfileId, { revision: number; value: ProfileDocument | null }>();
+  /** Every profile this window knows of, in the order it first knew them. */
+  private readonly ids = new Set<ProfileId>();
   private readonly listeners = new Set<() => void>();
   private views: readonly ProfileView[] | null = null;
 
-  constructor(private readonly deps: ProfileServiceDeps) {}
+  constructor(private readonly deps: ProfileServiceDeps) {
+    // Acknowledgements, conflicts, resolutions and changes from elsewhere all change what a profile reads as.
+    deps.outbox.subscribe(event => {
+      if (event.kind === "status") return;
+      const refs = event.kind === "external" || event.kind === "resolved" ? event.refs : event.entry.writes;
+      if (refs.some(ref => ref.kind === PROFILE_DOCUMENT)) { for (const ref of refs) if (ref.kind === PROFILE_DOCUMENT) this.ids.add(ref.id); this.changed(); }
+    });
+  }
 
-  /** Read every profile from the library (deleted ones are held as tombstones, so a later command knows their revision). */
+  /** Read every profile from the library (deleted ones too: a command over them knows their revision). */
   async load(signal?: AbortSignal): Promise<void> {
-    for (const document of await this.deps.documents.list(PROFILE_DOCUMENT, signal))
-      this.held.set(document.id, { revision: document.revision, value: document.deleted ? null : profileDocumentOf(document.value) });
+    for (const document of await this.deps.documents.list(PROFILE_DOCUMENT, signal)) {
+      this.deps.outbox.hold(profileRef(document.id), { revision: document.revision, value: document.value });
+      this.ids.add(document.id);
+    }
     this.changed();
   }
   subscribe(listener: () => void): () => void { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
@@ -88,8 +106,11 @@ export class ProfileService {
 
   /** Every live profile, in the order they were made (frozen; the same array until something changes). */
   list(): readonly ProfileView[] {
-    this.views ??= Object.freeze([...this.held.values()].flatMap(entry => entry.value ? [Object.freeze({ ...entry.value, revision: entry.revision })] : [])
-      .sort((a, b) => a.createdAt - b.createdAt));
+    this.views ??= Object.freeze([...this.ids].flatMap(id => {
+      const held = this.deps.outbox.document(profileRef(id));
+      const value = held && !isTombstone(held.value) ? profileDocumentOf(held.value) : null;
+      return value ? [Object.freeze({ ...value, revision: held!.version })] : [];
+    }).sort((a, b) => a.createdAt - b.createdAt));
     return this.views;
   }
   profile(id: ProfileId): ProfileView | null { return this.list().find(profile => profile.id === id) ?? null; }
@@ -143,36 +164,26 @@ export class ProfileService {
     }
   }
 
-  /** Apply one command: one write, checked against the revision it read. */
+  /** Apply one command: recorded in the outbox at once (one write), checked against the revision it read. */
   async dispatch(action: ProfileAction): Promise<ProfileAnswer> {
     const allowed = this.capability(action);
     if (!allowed.available) return { ok: false, code: allowed.code, reason: allowed.reason ?? "That can't be done." };
     const id = action.kind === "profile.create" ? newProfileId(this.deps.random) : action.profile;
-    const base = action.kind === "profile.create" ? 0 : action.base;
     const value = this.next(action, id);
-    const write: CommandWrite = value ? { kind: PROFILE_DOCUMENT, id, base, value }
-      : { kind: PROFILE_DOCUMENT, id, base, tombstone: true, value: this.held.get(id)?.value ?? null };
-    const answer = await this.deps.documents.commit({ id: commandId(action.kind, this.deps.random), command: action.kind, writes: [write] });
-    if (!answer.ok) return answer.reason === "superseded" ? { ok: false, code: "unavailable", reason: "This workspace is now open in another window." }
-      : { ok: false, code: "stale", reason: "That profile changed since it was read." };
-    const revision = answer.revisions[commandKey(PROFILE_DOCUMENT, id)]!;
-    this.held.set(id, { revision, value });
+    const stored = value ?? tombstoneOf(this.deps.outbox.document(profileRef(id))?.value ?? null, (this.deps.now ?? Date.now)());
+    try { this.deps.outbox.commit(action.kind, [{ ...profileRef(id), value: stored }]); }
+    catch (error) { return { ok: false, code: "unavailable", reason: (error as Error).message }; }
+    this.ids.add(id);
     this.changed();
-    return { ok: true, profile: id, revision };
+    return { ok: true, profile: id, revision: this.deps.outbox.document(profileRef(id))!.version };
   }
 
-  /**
-   * A membership write for another owner's command (`character.create`), checked like `profile.addSubject`; `committed` takes the
-   * command's revision once it is in the library.
-   */
-  membership(profile: ProfileId, base: number, subject: SubjectRef): { write: CommandWrite; committed(revision: number): void } | Capability {
-    const action: ProfileAction = { kind: "profile.addSubject", profile, base, subject };
+  /** A membership edit for another owner's command (`character.create`, Keep both), checked like `profile.addSubject`. */
+  membership(profile: ProfileId, base: number, subject: SubjectRef): { edit: OutboxEdit } | Capability {
     const allowed = this.subjectCheck(subject);
     const target = this.target(profile, base);
     if (!allowed.available) return allowed;
     if (!("id" in target)) return target;
-    const value = this.next(action, profile)!;
-    return { write: { kind: PROFILE_DOCUMENT, id: profile, base, value },
-      committed: revision => { this.held.set(profile, { revision, value }); this.changed(); } };
+    return { edit: { ...profileRef(profile), value: this.next({ kind: "profile.addSubject", profile, base, subject }, profile)! } };
   }
 }

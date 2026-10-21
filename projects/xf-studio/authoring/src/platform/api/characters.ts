@@ -15,11 +15,11 @@ export type CharacterSummary = {
   readonly label: string;
   readonly body: CharacterBody;
   readonly origin: CharacterOrigin;
-  /** The revision a command names as its `base`. */
+  /** What a command names as its `base`: it moves with every command recorded here and every change taken from elsewhere. */
   readonly revision: number;
-  /** It changed elsewhere since this page read it; nothing is written over that (phase 1c resolves it). */
+  /** It changed in another page while this one changed it too: nothing is written over either; the Character panel offers which to keep. */
   readonly conflict: boolean;
-  /** Changes made here aren't in the library yet because a write failed: they are kept and written again (`settle`). */
+  /** Changes made here aren't in the library yet because the library didn't answer: the outbox keeps them and sends them again. */
   readonly unsaved: boolean;
 };
 export const characterRef = (id: string): SubjectRef => ({ kind: CHARACTER_KIND, id });

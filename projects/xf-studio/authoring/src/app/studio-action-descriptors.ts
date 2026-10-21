@@ -213,6 +213,13 @@ export const DESKTOP_APP_DESCRIPTORS = {
  * The workspace lease (`app/workspace/workspace-lease.ts`, profiles design §2.3): Use it here asks the page holding this workspace
  * to release it, and waits until it has. It changes no content; the page restarts from the released workspace.
  */
+/**
+ * The outbox (profiles design §2.2): Try again writes again the records of changes this page couldn't protect on this computer. It
+ * changes no content.
+ */
+export const DOCUMENT_OUTBOX_DESCRIPTORS = {
+  "documents.protect": request("host", "save"),
+} satisfies Record<"documents.protect", RequestDescriptor>;
 export const WORKSPACE_LEASE_DESCRIPTORS = {
   "workspace.takeOver": request("host", "lease"),
   "workspace.retryRelease": request("host", "lease"),

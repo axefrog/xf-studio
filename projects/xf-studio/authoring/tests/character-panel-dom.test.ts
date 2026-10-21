@@ -6,7 +6,7 @@ import { CatalogueIndex } from "../src/character/cc-catalogue";
 import { choicePage, panelProjection, searchChoices, type CcPanelChoice, type CreatorView } from "../src/character/cc-panel";
 import { catalogueCoverage, PARTLY_SHOWN } from "../src/character/cc-render-coverage";
 import { deriveCharacter } from "../src/character/character-context";
-import { CharacterContextActions, type CreatorPort } from "../src/character/character-context-actions";
+import { CharacterContextActions, type CharacterDocumentPort, type CreatorPort } from "../src/character/character-context-actions";
 import { foldedKeys, UIPreferenceActions } from "../src/app/ui-preferences";
 import { bindViewState, PreferenceViewState } from "../src/studio-ui/view-state";
 import { fixtureSource } from "./cc-fixtures";
@@ -16,7 +16,7 @@ beforeAll(() => installLightDom());
 afterAll(() => uninstallLightDom());
 const settle = (ms = 10) => new Promise(resolve => setTimeout(resolve, ms));
 
-async function harness(stored?: unknown) {
+async function harness(stored?: unknown, document?: CharacterDocumentPort) {
   const source = await fixtureSource(true);
   const { panel, mods } = panelProjection(source.catalogue, catalogueCoverage(source.catalogue), "fixture");
   const index = new CatalogueIndex(source.catalogue);
@@ -52,7 +52,7 @@ async function harness(stored?: unknown) {
     preparedFiles: async () => ({ bytes: 3 * 1024 ** 3 / 2 }),
     clearPrepared: async () => ({ freed: 3 * 1024 ** 3 / 2 }),
   };
-  const context = new CharacterContextActions({ creator: port, showSave: () => {} });
+  const context = new CharacterContextActions({ creator: port, showSave: () => {}, ...(document ? { document } : {}) });
   const dispatched: { kind: string }[] = [];
   // The workspace's preferences, as a reload would restore them (`stored`), behind the remembered view state.
   const preferences = new UIPreferenceActions(stored);
@@ -161,6 +161,29 @@ describe("the Character panel's DOM", () => {
     h.paint(); await settle(); h.paint();
     expect(status.querySelector(".cc-status-text")!.textContent).toContain("couldn't reach its preview host");
     expect(nodes()).toBe(shape);
+  });
+
+  test("a conflict shows first in Your V with Keep mine, Use theirs and Keep both; a version from elsewhere says Undo starts there (t-conflict)", async () => {
+    let conflict: { message: string; keepBoth: boolean } | null = null;
+    const resolved: string[] = [];
+    const h = await harness(undefined, { conflict: () => conflict, resolve: keep => { resolved.push(keep); conflict = null; return { available: true }; } });
+    const notice = h.root.querySelector(".doc-conflict")!;
+    expect(notice.hidden).toBe(true);
+    conflict = { message: "You changed this V here too. Which version should it keep?", keepBoth: true };
+    h.context.documentChanged(); h.paint();
+    expect(notice.hidden).toBe(false);
+    expect(notice.textContent).toContain("Changed in another window. You changed this V here too.");
+    const buttons = notice.querySelectorAll("button");
+    expect(buttons.map(button => [button.textContent, button.hidden])).toEqual([["Keep mine", false], ["Use theirs", false], ["Keep both", false]]);
+    buttons[2]!.click();
+    expect(resolved).toEqual(["both"]);
+    expect(h.dispatched.at(-1) as object).toEqual({ kind: "character.resolveConflict", keep: "both" });
+    // The other window's version replaces this one's: the status line says Undo starts here, in its reserved place.
+    h.context.replace({ origin: "default", bodyGender: "male", choices: [] });
+    h.paint(); await settle(); h.paint();
+    expect(notice.hidden).toBe(true);
+    expect(h.root.querySelector(".cc-status-text")!.textContent).toBe("Changed in another window. Undo starts here.");
+    expect(h.context.snapshot().undo).toBeNull();
   });
 
   test("the V's own makeup is a switch that shows its state and changes at once both ways; Reset all dispatches; detail lines are reserved only where needed", async () => {

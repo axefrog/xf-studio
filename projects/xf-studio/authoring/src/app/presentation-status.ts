@@ -1,4 +1,5 @@
 import type { WorkspaceLeaseSnapshot } from "./workspace/workspace-lease";
+import type { OutboxStatus } from "../platform/core/document-outbox";
 import type { CharacterDetailStatus } from "../character/character-detail-actions";
 import type { WorkspaceSaveStatus } from "./workspace/workspace-persistence";
 import type { EditorSlot } from "./viewport-adapter";
@@ -35,7 +36,22 @@ export type PresentationStatus = {
   message?: AdapterMessage;
   /** Whether this page holds its workspace (profiles design §2.3); absent where nothing else can hold it (fixtures). */
   lease?: WorkspaceLeaseSnapshot;
+  /** The outbox (profiles design §2.2): whether this window's latest changes are protected on this computer. Absent without one. */
+  outbox?: OutboxView;
 };
+
+/** What the presentation shows of the outbox: the unprotected-changes warning, and how many changes wait or are in conflict. */
+export type OutboxView = {
+  /** Documents whose latest change isn't protected on this computer (their outbox write failed); 0 when every change is. */
+  readonly unprotected: number;
+  /** Changes not yet in the library. */
+  readonly pending: number;
+  readonly conflicts: number;
+  /** The library didn't answer the last send; changes are sent again shortly. */
+  readonly failing: boolean;
+};
+export const outboxView = (status: OutboxStatus): OutboxView =>
+  ({ unprotected: status.unprotected.length, pending: status.pending, conflicts: status.conflicts, failing: status.failing });
 
 export function emptyPresentationStatus(verification = false): PresentationStatus {
   return { verification, workspace: { kind: "idle", message: "" },

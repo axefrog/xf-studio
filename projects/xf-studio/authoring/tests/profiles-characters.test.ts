@@ -1,7 +1,8 @@
 /**
- * Profiles phase 1b: the profile model and subject registry, `CharacterService`, the creator catalogue's split into shared data and
- * per-requester state, and `character.setSource` (profiles design §1, §2.1, §7). The multi-subject tests run three characters of two
- * bodies through the services at once and check that nothing of one reaches another.
+ * Profiles phase 1: the profile model and subject registry, `CharacterService` on the outbox, the creator catalogue's split into shared
+ * data and per-requester state, `character.setSource` and conflicts on a V (profiles design §1, §2.1, §2.2, §7). The multi-subject tests
+ * run three characters of two bodies through the services at once and check that nothing of one reaches another; the 1b handover's 17
+ * scenarios each have a test.
  */
 import { describe, expect, spyOn, test } from "bun:test";
 import { fileURLToPath } from "node:url";
@@ -14,23 +15,23 @@ import { deriveCharacter } from "../src/character/character-context";
 import type { CreatorPort } from "../src/character/character-context-actions";
 import { CreatorCatalogue } from "../src/character/creator-catalogue";
 import { CharacterService } from "../src/character/character-service";
-import { CHARACTER_DOCUMENT, CHARACTER_SUBJECT, SAVED_V_DOCUMENT } from "../src/character/character-document";
+import { CHARACTER_DOCUMENT, CHARACTER_SUBJECT, type CharacterDocument, SAVED_V_DOCUMENT } from "../src/character/character-document";
 import { characterScope } from "../src/character/character-history";
 import { ProfileService, PROFILE_DOCUMENT, PROFILE_SCHEMA } from "../src/app/profiles/profile-service";
 import { createStudioSubjects } from "../src/compose/subjects";
 import { SubjectRegistry } from "../src/platform/core/subject-registry";
-import { storeCommands } from "../src/platform/core/document-commands";
+import { DocumentOutbox } from "../src/platform/core/document-outbox";
 import { createHistoryService } from "../src/platform/core/history-service";
 import { createJobScheduler } from "../src/platform/core/jobs";
 import { hostClock } from "../src/platform/core/clock";
 import { ChoicePrefetcher } from "../src/character/choice-prefetch";
 import { ChoicePreviewOwner } from "../src/character/choice-preview-owner";
 import type { ChoicePreviewPort } from "../src/character/choice-preview-service";
-import type { CommandAnswer, DocumentCommandPort } from "../src/platform/api/document-commands";
+import type { DocumentStorePort } from "../src/platform/api/document-store";
 import { characterRef } from "../src/platform/api";
 import type { SavedV } from "../src/saves/save-reader";
 import { fixtureSource } from "./cc-fixtures";
-import { storeDocuments } from "./fixtures/platform-doubles";
+import { memoryOutboxStorage, storeDocuments } from "./fixtures/platform-doubles";
 import { sourceText } from "./fixtures/source-files";
 import { imports, resolveFrom } from "./fixtures/import-scan";
 
@@ -111,12 +112,51 @@ function previewDevice(count: { disposed: number }): ChoicePreviewPort {
     release: () => {}, dispose: () => { count.disposed++; } };
 }
 
-async function world() {
-  const host = await fixtureHost(), store = storeDocuments(), documents = storeCommands(store);
+/**
+ * The library behind a port the tests control: commands named in `hold` wait in flight until `open`, and `down` makes every command fail
+ * in transit (the host doesn't answer). A second window writes through `other`, straight to the library.
+ */
+function library() {
+  const documents = storeDocuments();
+  let held = new Set<string>(), down = false;
+  const waits: (() => void)[] = [];
+  const port: DocumentStorePort = { ...documents,
+    async transact(request) {
+      if (held.has(request.command) || held.has("*")) await new Promise<void>(resolve => waits.push(resolve));
+      if (down) throw Error("The library is unreachable.");
+      return documents.store.transact(request);
+    } };
+  return { documents, store: documents.store, port,
+    hold(...commands: string[]) { held = new Set(commands); },
+    held: () => waits.length > 0,
+    open() { held = new Set(); for (const resume of waits.splice(0)) resume(); },
+    setDown(value: boolean) { down = value; },
+    /** Another window's command, straight to the library. */
+    other(command: string, ref: { kind: string; id: string }, value: (current: unknown) => unknown) {
+      const now = documents.store.get(ref.kind, ref.id);
+      return documents.store.transact({ id: `other:${Math.random()}`, command, writes: [{ ...ref, base: now?.revision ?? 0, value: value(now?.value) }] });
+    },
+    value<T>(kind: string, id: string) { return documents.store.get<T>(kind, id)?.value; } };
+}
+
+async function world(lib = library(), storage = memoryOutboxStorage()) {
+  const host = await fixtureHost(), outbox = new DocumentOutbox(lib.port, storage, { retryMs: 5 });
+  outbox.open();
   const subjects = createStudioSubjects(), history = createHistoryService(), catalogue = new CreatorCatalogue(host.port);
-  const profiles = new ProfileService({ documents, subjects });
-  const characters = new CharacterService({ documents, catalogue, history, profiles });
-  return { host, store, documents, subjects, history, catalogue, profiles, characters };
+  const profiles = new ProfileService({ documents: lib.documents, outbox, subjects });
+  const characters = new CharacterService({ documents: lib.documents, outbox, catalogue, history, profiles });
+  return { host, lib, outbox, subjects, history, catalogue, profiles, characters };
+}
+const blueSave = (w: { host: { source: { cco: Parameters<typeof descriptorsFromUiState>[0] } } }, isMale = false) =>
+  saveFor(descriptorsFromUiState(w.host.source.cco, { eyes_color: "he__02_blue" }), isMale);
+const libraryCharacter = (w: Awaited<ReturnType<typeof world>>, id: string) => w.lib.value<CharacterDocument>(CHARACTER_DOCUMENT, id);
+/** A V made and held by a scene, its catalogue ready, everything in the library. */
+async function shownV(w: Awaited<ReturnType<typeof world>>, input: Parameters<CharacterService["create"]>[0] = {}) {
+  const made = await w.characters.create(input), id = made.ok ? made.character : "";
+  const shown: (SavedV | null)[] = [];
+  const context = w.characters.context(id, { showSave: value => shown.push(value) });
+  context.start(); await settle(); await w.characters.flush();
+  return { id, context, shown };
 }
 
 describe("the subject registry (profiles design §1.1)", () => {
@@ -136,53 +176,39 @@ describe("the subject registry (profiles design §1.1)", () => {
   });
 });
 
-describe("owner commands over the document store (phase 1b's path)", () => {
-  test("a command ID is answered once, an equal value is acknowledged, and a stale base writes nothing more", async () => {
-    const store = storeDocuments(), documents = storeCommands(store);
-    const command = { id: "x:1", command: "x", writes: [{ kind: "thing", id: "a", base: 0, value: { n: 1 } }] };
-    const first = await documents.commit(command), again = await documents.commit(command);
-    expect(first).toEqual({ ok: true, revisions: { "thing/a": 1 } });
-    expect(again).toEqual(first);
-    expect((await store.list("thing"))[0]!.revision).toBe(1);
-    // Another command writing the value already there over an older base is acknowledged at the current revision (A5).
-    expect(await documents.commit({ id: "x:2", command: "x", writes: [{ kind: "thing", id: "a", base: 0, value: { n: 1 } }] }))
-      .toEqual({ ok: true, revisions: { "thing/a": 1 } });
-    expect(await documents.commit({ id: "x:3", command: "x", writes: [{ kind: "thing", id: "a", base: 0, value: { n: 2 } }] }))
-      .toEqual({ ok: false, reason: "stale", current: { "thing/a": 1 } });
-    expect(await documents.commit({ id: "x:4", command: "x", writes: [{ kind: "thing", id: "a", base: 1, tombstone: true, value: { n: 1 } }] })).toMatchObject({ ok: true });
-    expect(await documents.list("thing")).toEqual([{ id: "a", revision: 2, value: { n: 1 }, deleted: true }]);
-  });
-});
-
 describe("profiles (profiles design §1.1, §1.4)", () => {
   test("a profile holds subjects of registered kinds, or none; every command names its profile and the revision it read", async () => {
-    const { profiles, documents, subjects } = await world();
-    const made = await profiles.dispatch({ kind: "profile.create", name: "  Night City  " });
+    const w = await world();
+    const made = await w.profiles.dispatch({ kind: "profile.create", name: "  Night City  " });
     expect(made).toMatchObject({ ok: true, revision: 1 });
     const id = made.ok ? made.profile : "";
-    expect(profiles.profile(id)).toMatchObject({ name: "Night City", subjects: [], collections: [] });
+    expect(w.profiles.profile(id)).toMatchObject({ name: "Night City", subjects: [], collections: [] });
     const ref = characterRef("c-abcd1234");
-    expect(await profiles.dispatch({ kind: "profile.addSubject", profile: id, base: 1, subject: ref })).toMatchObject({ ok: true, revision: 2 });
-    // A stale base, an unregistered kind and a repeat are refused, and nothing is written.
-    expect(await profiles.dispatch({ kind: "profile.rename", profile: id, base: 1, name: "Old" })).toMatchObject({ ok: false, code: "stale" });
-    expect(profiles.capability({ kind: "profile.addSubject", profile: id, base: 2, subject: { kind: "quest", id: "q-1" } })).toMatchObject({ available: false, code: "invalid_value" });
-    expect(profiles.capability({ kind: "profile.addSubject", profile: id, base: 2, subject: ref })).toMatchObject({ available: false });
-    expect(profiles.holding(ref).map(profile => profile.id)).toEqual([id]);
+    expect(await w.profiles.dispatch({ kind: "profile.addSubject", profile: id, base: 1, subject: ref })).toMatchObject({ ok: true, revision: 2 });
+    // A stale base, an unregistered kind and a repeat are refused, and nothing is recorded.
+    expect(await w.profiles.dispatch({ kind: "profile.rename", profile: id, base: 1, name: "Old" })).toMatchObject({ ok: false, code: "stale" });
+    expect(w.profiles.capability({ kind: "profile.addSubject", profile: id, base: 2, subject: { kind: "quest", id: "q-1" } })).toMatchObject({ available: false, code: "invalid_value" });
+    expect(w.profiles.capability({ kind: "profile.addSubject", profile: id, base: 2, subject: ref })).toMatchObject({ available: false });
+    expect(w.profiles.holding(ref).map(profile => profile.id)).toEqual([id]);
+    await w.outbox.settle();
+    expect(w.lib.value(PROFILE_DOCUMENT, id)).toMatchObject({ name: "Night City", subjects: [ref] });
     // A subject of a kind this build doesn't know, written by a newer build, is kept when the profile is written again.
-    const store = storeDocuments(), later = storeCommands(store);
-    await store.put(PROFILE_DOCUMENT, "p-future1", { schema: PROFILE_SCHEMA, id: "p-future1", name: "Future", subjects: [{ kind: "quest", id: "q-9" }],
-      collections: [], createdAt: 1, extra: "kept" }, 0);
-    const reader = new ProfileService({ documents: later, subjects });
-    await reader.load();
-    expect(await reader.dispatch({ kind: "profile.rename", profile: "p-future1", base: 1, name: "Renamed" })).toMatchObject({ ok: true });
-    expect((await store.list(PROFILE_DOCUMENT))[0]!.value).toMatchObject({ name: "Renamed", subjects: [{ kind: "quest", id: "q-9" }], extra: "kept" });
+    const lib = library();
+    lib.other("x", { kind: PROFILE_DOCUMENT, id: "p-future1" }, () => ({ schema: PROFILE_SCHEMA, id: "p-future1", name: "Future", subjects: [{ kind: "quest", id: "q-9" }],
+      collections: [], createdAt: 1, extra: "kept" }));
+    const later = await world(lib);
+    await later.profiles.load();
+    expect(await later.profiles.dispatch({ kind: "profile.rename", profile: "p-future1", base: 1, name: "Renamed" })).toMatchObject({ ok: true });
+    await later.outbox.settle();
+    expect(lib.value(PROFILE_DOCUMENT, "p-future1")).toMatchObject({ name: "Renamed", subjects: [{ kind: "quest", id: "q-9" }], extra: "kept" });
     // Removing a subject is membership only; deleting a profile is a tombstone, and a reader sees no live profile.
-    expect(await profiles.dispatch({ kind: "profile.removeSubject", profile: id, base: 2, subject: ref })).toMatchObject({ ok: true, revision: 3 });
-    expect(await profiles.dispatch({ kind: "profile.delete", profile: id, base: 3 })).toMatchObject({ ok: true, revision: 4 });
-    const again = new ProfileService({ documents, subjects });
-    await again.load();
-    expect(again.list()).toEqual([]);
-    expect((await documents.list(PROFILE_DOCUMENT))[0]).toMatchObject({ deleted: true, value: { name: "Night City" } });
+    expect(await w.profiles.dispatch({ kind: "profile.removeSubject", profile: id, base: 2, subject: ref })).toMatchObject({ ok: true, revision: 3 });
+    expect(await w.profiles.dispatch({ kind: "profile.delete", profile: id, base: 3 })).toMatchObject({ ok: true, revision: 4 });
+    await w.outbox.settle();
+    const again = await world(w.lib);
+    await again.profiles.load();
+    expect(again.profiles.list()).toEqual([]);
+    expect(w.lib.value(PROFILE_DOCUMENT, id)).toMatchObject({ tombstone: true, value: { name: "Night City" } });
   });
 });
 
@@ -195,16 +221,22 @@ describe("three characters of two bodies at once (profiles design §7)", () => {
     const b = await w.characters.create({ source: { kind: "default", bodyGender: "female" }, name: "Second", profile: { id, base: 2 } });
     const c = await w.characters.create({ source: { kind: "default", bodyGender: "male" }, profile: { id, base: 3 } });
     expect([a.ok, b.ok, c.ok]).toEqual([true, true, true]);
-    // A stale profile revision refuses the whole command's membership.
+    // A stale profile revision refuses the whole command, membership and character alike.
     expect(await w.characters.create({ profile: { id, base: 1 } })).toMatchObject({ ok: false, code: "stale" });
     expect(w.profiles.profile(id)!.subjects.map(ref => ref.id)).toEqual(w.characters.list().map(character => character.id));
     expect(w.characters.list().map(character => [character.body, character.label])).toEqual([["female", "Default feminine V"], ["female", "Second"], ["male", "Default masculine V"]]);
-    const reread = new CharacterService({ documents: w.documents, catalogue: w.catalogue, history: w.history });
-    await reread.load();
-    expect(reread.list().map(character => character.id)).toEqual(w.characters.list().map(character => character.id));
+    await w.outbox.settle();
+    // Each was one command over the character and the profile together: the profile's revision moved once per V, and receipts the
+    // window no longer needs were forgotten by the commands after them.
+    expect(w.lib.store.get(PROFILE_DOCUMENT, id)!.revision).toBe(4);
+    expect(w.lib.store.list(CHARACTER_DOCUMENT).map(doc => doc.revision)).toEqual([1, 1, 1]);
+    expect(w.lib.store.list("xfs-receipt").length).toBe(1);
+    const reread = await world(w.lib);
+    await reread.characters.load();
+    expect(reread.characters.list().map(character => character.id)).toEqual(w.characters.list().map(character => character.id));
   });
 
-  test("catalogue requests, search, prefetch, history and cancellation never cross from one character to another", async () => {
+  test("catalogue requests, search, prefetch, history and cancellation never cross from one character to another (scenarios 12, 13, 16)", async () => {
     const w = await world();
     const ids = [];
     for (const body of ["female", "female", "male"] as const) {
@@ -299,9 +331,9 @@ describe("three characters of two bodies at once (profiles design §7)", () => {
     w.host.release();
     await settle();
 
-    // Each character's own changes are written back to its own document.
+    // Each character's own changes reach its own document.
     await w.characters.flush();
-    const docs = Object.fromEntries((await w.documents.list<{ choices: unknown[] }>(CHARACTER_DOCUMENT)).map(doc => [doc.id, doc.value.choices.length]));
+    const docs = Object.fromEntries(w.lib.store.list<{ choices: unknown[] }>(CHARACTER_DOCUMENT).map(doc => [doc.id, doc.value.choices.length]));
     expect(docs).toEqual({ [ids[0]!]: 0, [ids[1]!]: 0, [ids[2]!]: 1 });
     // Closing a panel instance never ended its character's preview device; releasing the character does, once.
     expect(devices.map(device => device.disposed)).toEqual([0, 0, 0]);
@@ -311,16 +343,17 @@ describe("three characters of two bodies at once (profiles design §7)", () => {
 
   test("a save is one decoded document shared by the Vs made from it; setSource replaces savedV and names its base", async () => {
     const w = await world();
-    const save = saveFor(descriptorsFromUiState(w.host.source.cco, { eyes_color: "he__02_blue" }));
+    const save = blueSave(w);
     const a = await w.characters.create({ source: { kind: "save", value: save }, save: { kind: "file", name: "sav.dat" } });
     const b = await w.characters.create({ source: { kind: "save", value: structuredClone(save) } });
     expect([a.ok, b.ok]).toEqual([true, true]);
-    expect(await w.documents.list(SAVED_V_DOCUMENT)).toHaveLength(1);
+    await w.outbox.settle();
+    expect(w.lib.store.list(SAVED_V_DOCUMENT)).toHaveLength(1);
     const idA = a.ok ? a.character : "", idB = b.ok ? b.character : "";
     expect(w.characters.document(idA)!.source as object).toMatchObject({ kind: "save", save: { kind: "file", name: "sav.dat" } });
     expect(w.characters.document(idA)!.source as object).toEqual({ ...w.characters.document(idB)!.source, save: { kind: "file", name: "sav.dat" } });
 
-    // A V a scene shows changes through its context: one Undo step, applied on that scene, then written back.
+    // A V a scene shows changes through its context: one Undo step, applied on that scene, and recorded at once.
     const shown: (SavedV | null)[] = [];
     const context = w.characters.context(idA, { showSave: value => shown.push(value) });
     expect(context.snapshot().origin).toEqual({ kind: "save" });
@@ -329,24 +362,27 @@ describe("three characters of two bodies at once (profiles design §7)", () => {
     expect(shown).toEqual([null]);
     expect(context.snapshot()).toMatchObject({ origin: { kind: "default" }, bodyGender: "male", undo: "Show the default V" });
     expect(w.characters.document(idA)).toMatchObject({ body: "male", source: { kind: "default" } });
-    // A stale base is refused; a V no scene shows is written at once.
+    // A stale base is refused; a V no scene shows is recorded directly.
     expect(await w.characters.setSource({ kind: "character.setSource", character: idB, base: 9, source: { kind: "default", bodyGender: "male" } }))
       .toMatchObject({ ok: false, code: "stale" });
     expect(await w.characters.setSource({ kind: "character.setSource", character: idB, base: 1, source: { kind: "default", bodyGender: "male" } }))
       .toMatchObject({ ok: true, revision: 2 });
-    // The save comes back through the context (the alias path: `savedV.*` shows it on the scene, the context follows).
+    // The save comes back through the context, and Undo takes it away again: every step is mirrored to the document.
     context.dispatch({ kind: "character.setSource", source: { kind: "save", value: save } });
-    // The context sends it as a command on the character's queue and shows it once committed.
-    await w.characters.flush();
     expect(shown.at(-1)).toEqual(save);
+    expect(w.characters.document(idA)!.source.kind).toBe("save");
     context.dispatch({ kind: "character.undo" });
     expect(context.snapshot()).toMatchObject({ origin: { kind: "default" }, bodyGender: "male" });
+    expect(w.characters.document(idA)).toMatchObject({ body: "male", source: { kind: "default" } });
     await w.characters.flush();
-    // Deleting names the profiles that list it, writes a tombstone and closes its history.
+    expect(libraryCharacter(w, idA)).toMatchObject({ body: "male", source: { kind: "default" } });
+    // Deleting names the profiles that list it, records a tombstone and closes its history.
     const deleted = await w.characters.delete(idA, w.characters.character(idA)!.revision);
     expect(deleted).toMatchObject({ ok: true, holding: [] });
     expect(w.characters.character(idA)).toBeNull();
     expect(w.history.scope(characterScope(idA))).toBeUndefined();
+    await w.outbox.settle();
+    expect(w.lib.value(CHARACTER_DOCUMENT, idA)).toMatchObject({ tombstone: true });
   });
 });
 
@@ -372,67 +408,194 @@ describe("the shared creator catalogue (profiles design §7, step 1)", () => {
   });
 });
 
-describe("review fixes (chunk 1b)", () => {
-  test("a source change prepared while a rename or a delete landed is refused, never undoing either (finding 1)", async () => {
+/**
+ * The 17 scenarios of the phase 1b handover note (`experiments/038-profiles-spikes/1b-handover.md`), each a test. 1–11 are the
+ * character write path, now the outbox; 12–17 are the catalogue and requesters (12, 13 and 16 also run in the three-character test above,
+ * 13 and 14 in `choice-prefetch.test.ts`).
+ */
+describe("the 1b handover's scenarios, on the outbox", () => {
+  test("scenario 1: a source change made while a rename is in flight never undoes the rename; both reach the library", async () => {
     const w = await world();
-    const ids: string[] = [];
-    for (let i = 0; i < 2; i++) { const made = await w.characters.create(); ids.push(made.ok ? made.character : ""); }
-    const [one, two] = ids as [string, string];
-    const digest = crypto.subtle.digest.bind(crypto.subtle);
-    let open!: () => void;
-    const gate = new Promise<void>(resolve => { open = resolve; });
-    const spy = spyOn(crypto.subtle, "digest").mockImplementation((async (...args: Parameters<typeof digest>) => { await gate; return digest(...args); }) as never);
+    const made = await w.characters.create(), id = made.ok ? made.character : "";
+    await w.outbox.settle();
+    w.lib.hold("character.rename");
+    expect(await w.characters.rename(id, 1, "Renamed")).toMatchObject({ ok: true, revision: 2 });
+    await until(w.lib.held);
+    expect(await w.characters.setSource({ kind: "character.setSource", character: id, base: 2, source: { kind: "save", value: blueSave(w) } }))
+      .toMatchObject({ ok: true, revision: 3 });
+    w.lib.open();
+    expect(await w.characters.settle(id)).toBe(true);
+    expect(w.characters.document(id)).toMatchObject({ name: "Renamed", source: { kind: "save" } });
+    expect(libraryCharacter(w, id)).toMatchObject({ name: "Renamed", source: { kind: "save" } });
+  });
+
+  test("scenario 2: a source change asked before a delete is refused after it; the delete is never undone", async () => {
+    const w = await world();
+    const made = await w.characters.create(), id = made.ok ? made.character : "";
+    w.lib.hold("character.delete");
+    expect(await w.characters.delete(id, 1)).toMatchObject({ ok: true });
+    expect(await w.characters.setSource({ kind: "character.setSource", character: id, base: 1, source: { kind: "save", value: blueSave(w) } }))
+      .toMatchObject({ ok: false, code: "missing_target" });
+    expect(await w.characters.rename(id, 1, "Back")).toMatchObject({ ok: false, code: "missing_target" });
+    w.lib.open();
+    await w.outbox.settle();
+    expect(w.characters.character(id)).toBeNull();
+    expect(w.lib.store.get(CHARACTER_DOCUMENT, id)).toMatchObject({ revision: 2, value: { tombstone: true } });
+  });
+
+  test("scenario 3: a save's ID never waits on hashing, so a masculine V chosen right after it through the context wins everywhere", async () => {
+    const w = await world();
+    const { id, context } = await shownV(w);
+    // The browser's digest would never answer: a source change no longer waits for it.
+    const spy = spyOn(crypto.subtle, "digest").mockImplementation((() => new Promise(() => {})) as never);
     try {
-      const fresh = () => saveFor(descriptorsFromUiState(w.host.source.cco, { eyes_color: "he__02_blue" }));
-      const renamed = w.characters.setSource({ kind: "character.setSource", character: one, base: 1, source: { kind: "save", value: fresh() } });
-      const deleted = w.characters.setSource({ kind: "character.setSource", character: two, base: 1, source: { kind: "save", value: fresh() } });
-      expect(await w.characters.rename(one, 1, "Renamed")).toMatchObject({ ok: true, revision: 2 });
-      expect(await w.characters.delete(two, 1)).toMatchObject({ ok: true, revision: 2 });
-      open();
-      expect(await renamed).toMatchObject({ ok: false, code: "stale" });
-      expect(await deleted).toMatchObject({ ok: false, code: "missing_target" });
+      expect(await w.characters.setSource({ kind: "character.setSource", character: id, base: 1, source: { kind: "save", value: blueSave(w) } }))
+        .toMatchObject({ ok: true });
+      context.dispatch({ kind: "character.useDefault", bodyGender: "male" });
     } finally { spy.mockRestore(); }
-    expect(w.characters.document(one)).toMatchObject({ name: "Renamed", source: { kind: "default" } });
-    expect(w.characters.character(two)).toBeNull();
-    expect((await w.documents.list(CHARACTER_DOCUMENT)).find(doc => doc.id === two)).toMatchObject({ deleted: true, revision: 2 });
+    await w.characters.flush();
+    expect(w.characters.document(id)).toMatchObject({ body: "male", source: { kind: "default" } });
+    expect(context.snapshot()).toMatchObject({ origin: { kind: "default" }, bodyGender: "male" });
+    expect(libraryCharacter(w, id)).toMatchObject({ body: "male", source: { kind: "default" } });
   });
 
-  test("a failed write keeps its changes unsaved, says so, and a release waits until they are in the library (finding 2)", async () => {
-    const w = await world(), failing = { count: 0 };
-    const documents: DocumentCommandPort = { list: (kind, signal) => w.documents.list(kind, signal),
-      commit: async (command): Promise<CommandAnswer> => {
-        if (command.command === "character.update" && failing.count > 0) { failing.count--; throw Error("The library is unreachable."); }
-        return w.documents.commit(command);
-      } };
-    const characters = new CharacterService({ documents, catalogue: w.catalogue, history: w.history });
-    const made = await characters.create(), id = made.ok ? made.character : "";
-    const context = characters.context(id, { showSave: () => {} });
-    context.start(); await settle();
-    failing.count = 99;
+  test("scenario 4: a source change held in flight never replaces a newer one asked through the context", async () => {
+    const w = await world();
+    const { id, context } = await shownV(w);
+    w.lib.hold("character.setSource");
+    await w.characters.setSource({ kind: "character.setSource", character: id, base: 1, source: { kind: "save", value: blueSave(w) } });
+    await until(w.lib.held);
+    context.dispatch({ kind: "character.useDefault", bodyGender: "male" });
+    w.lib.open();
+    await w.characters.flush();
+    expect(w.characters.document(id)).toMatchObject({ body: "male", source: { kind: "default" } });
+    expect(context.snapshot()).toMatchObject({ origin: { kind: "default" }, bodyGender: "male" });
+    expect(libraryCharacter(w, id)).toMatchObject({ body: "male", source: { kind: "default" } });
+  });
+
+  test("scenario 5: a context opened while a source change is in flight shows it, and never writes the earlier source back", async () => {
+    const w = await world();
+    const made = await w.characters.create(), id = made.ok ? made.character : "";
+    await w.outbox.settle();
+    const save = blueSave(w);
+    w.lib.hold("character.setSource");
+    await w.characters.setSource({ kind: "character.setSource", character: id, base: 1, source: { kind: "save", value: save } });
+    await until(w.lib.held);
+    const context = w.characters.context(id, { showSave: () => {} });
+    context.start();
+    expect(context.snapshot().origin).toEqual({ kind: "save" });
+    w.lib.open();
+    await settle(); await w.characters.flush();
+    expect(context.snapshot().origin).toEqual({ kind: "save" });
+    expect(w.characters.document(id)!.source.kind).toBe("save");
+    expect(libraryCharacter(w, id)!.source.kind).toBe("save");
+    expect(w.outbox.pendingEntries()).toEqual([]);
+  });
+
+  test("scenario 6: an edit made while a command is in flight is its successor, written after it over its revision; flush waits for both", async () => {
+    const w = await world();
+    const { id, context } = await shownV(w);
+    w.lib.hold("character.rename");
+    await w.characters.rename(id, 1, "Named");
+    await until(w.lib.held);
     context.dispatch({ kind: "character.setOption", part: "head", option: "eyes_color", choice: "he__02_blue" });
+    const [first, second] = w.outbox.pendingEntries();
+    expect(second!.writes[0]!.base).toEqual({ after: first!.id });
+    let flushed = false;
+    void w.characters.flush().then(() => { flushed = true; });
     await settle();
-    await characters.flush();
-    expect(characters.character(id)).toMatchObject({ unsaved: true, revision: 1 });
-    expect(await characters.settle(id)).toBe(false);
-    expect((await w.documents.list<{ choices: unknown[] }>(CHARACTER_DOCUMENT))[0]!.value.choices).toHaveLength(0);
-    // The library is back. Released: written again first, then let go.
-    failing.count = 0;
-    expect(await characters.release(id)).toBe(true);
-    expect(characters.character(id)).toMatchObject({ unsaved: false, revision: 2 });
-    expect((await w.documents.list<{ choices: unknown[] }>(CHARACTER_DOCUMENT))[0]!.value.choices).toHaveLength(1);
-    // A write that keeps failing: the release refuses and the context, with its change, stays.
-    const again = characters.context(id, { showSave: () => {} });
-    again.start(); await settle();
-    failing.count = 99;
-    again.dispatch({ kind: "character.reset", part: "head", option: "eyes_color" });
-    expect(await characters.release(id)).toBe(false);
-    expect(characters.context(id, { showSave: () => {} })).toBe(again);
-    expect(characters.character(id)!.unsaved).toBe(true);
-    failing.count = 0;
-    expect(await characters.settle(id)).toBe(true);
+    expect(flushed).toBe(false);
+    w.lib.open();
+    await until(() => flushed);
+    expect(w.characters.character(id)).toMatchObject({ conflict: false, unsaved: false });
+    expect(w.lib.store.get(CHARACTER_DOCUMENT, id)).toMatchObject({ revision: 3, value: { name: "Named", choices: [{ option: "eyes_color", choice: "he__02_blue" }] } });
   });
 
-  test("each requester draws through its own lease of one preview device: ending one never ends another's (finding 3)", async () => {
+  test("scenario 7: a change the library can't take stays in the outbox, says so, and a release waits until it is in the library", async () => {
+    const w = await world();
+    const { id, context } = await shownV(w);
+    w.lib.setDown(true);
+    context.dispatch({ kind: "character.setOption", part: "head", option: "eyes_color", choice: "he__02_blue" });
+    expect(await w.characters.settle(id)).toBe(false);
+    expect(w.characters.character(id)).toMatchObject({ unsaved: true });
+    expect(await w.characters.release(id)).toBe(false);
+    expect(w.characters.context(id, { showSave: () => {} })).toBe(context);
+    expect(libraryCharacter(w, id)!.choices).toHaveLength(0);
+    // The library is back: the outbox sends it again by itself, and the release goes through.
+    w.lib.setDown(false);
+    expect(await w.characters.release(id)).toBe(true);
+    expect(w.characters.character(id)).toMatchObject({ unsaved: false });
+    expect(libraryCharacter(w, id)!.choices).toHaveLength(1);
+  });
+
+  test("scenario 8: an edit made after a source change was asked survives it, in the document, the library and the context", async () => {
+    const w = await world();
+    const { id, context } = await shownV(w);
+    w.lib.hold("character.setSource");
+    await w.characters.setSource({ kind: "character.setSource", character: id, base: 1, source: { kind: "default", bodyGender: "male" } });
+    await until(w.lib.held);
+    await settle();
+    context.dispatch({ kind: "character.setOption", part: "head", option: "eyes_color", choice: "he__02_blue" });
+    w.lib.open();
+    await w.characters.flush(); await settle();
+    const want = { body: "male", source: { kind: "default" }, choices: [{ option: "eyes_color", choice: "he__02_blue" }] };
+    expect(w.characters.document(id)).toMatchObject(want);
+    expect(libraryCharacter(w, id)).toMatchObject(want);
+    expect(context.snapshot()).toMatchObject({ bodyGender: "male", set: 1 });
+  });
+
+  test("scenario 9: the save a V already comes from changes nothing, and the document and the context agree", async () => {
+    const w = await world();
+    const save = blueSave(w);
+    const { id, context } = await shownV(w, { source: { kind: "save", value: save } });
+    context.dispatch({ kind: "character.setOption", part: "head", option: "eyes_color", choice: "he__01_brown" });
+    await w.characters.flush();
+    const before = w.outbox.pendingEntries().length, revision = w.characters.character(id)!.revision;
+    expect(await w.characters.setSource({ kind: "character.setSource", character: id, base: revision, source: { kind: "save", value: structuredClone(save) } }))
+      .toMatchObject({ ok: true, revision });
+    expect(w.outbox.pendingEntries().length).toBe(before);
+    expect(context.snapshot()).toMatchObject({ origin: { kind: "save" }, set: 1 });
+    expect(w.characters.document(id)!.choices).toEqual([{ part: "head", option: "eyes_color", choice: "he__01_brown" }]);
+    await w.characters.flush();
+    expect(libraryCharacter(w, id)!.choices).toEqual(w.characters.document(id)!.choices);
+  });
+
+  test("scenario 10: a source change that can't be made says why, and one another window overtook becomes a conflict shown in the panel", async () => {
+    const w = await world();
+    const { id, context } = await shownV(w);
+    // Refused at once, with the reason; nothing changes.
+    expect(() => context.dispatch({ kind: "character.setSource", source: { kind: "save", value: { not: "a save" } } })).toThrow();
+    expect(await w.characters.setSource({ kind: "character.setSource", character: id, base: 1, source: { kind: "preset", value: { nope: 1 } } }))
+      .toMatchObject({ ok: false, code: "invalid_value" });
+    expect(w.outbox.pendingEntries()).toEqual([]);
+    // Another window renames the V while this one changes its source: the change is never silently dropped or written over theirs.
+    w.lib.other("character.rename", { kind: CHARACTER_DOCUMENT, id }, value => ({ ...value as object, name: "Theirs" }));
+    let notified = 0;
+    context.subscribe(() => { notified++; });
+    context.dispatch({ kind: "character.useDefault", bodyGender: "male" });
+    await until(() => w.characters.character(id)!.conflict);
+    expect(notified).toBeGreaterThan(0);
+    expect(context.snapshot().conflict).toMatchObject({ message: expect.stringContaining("Which version"), keepBoth: true });
+    expect(libraryCharacter(w, id)).toMatchObject({ name: "Theirs", body: "female" });
+    expect(context.snapshot()).toMatchObject({ bodyGender: "male" });
+  });
+
+  test("scenario 11: reselecting the save already shown, while an older source change is in flight, lands last everywhere", async () => {
+    const w = await world();
+    const save = blueSave(w);
+    const { id, context } = await shownV(w, { source: { kind: "save", value: save } });
+    w.lib.hold("character.setSource");
+    await w.characters.setSource({ kind: "character.setSource", character: id, base: 1, source: { kind: "default", bodyGender: "male" } });
+    await until(w.lib.held);
+    context.dispatch({ kind: "character.setSource", source: { kind: "save", value: structuredClone(save) } });
+    w.lib.open();
+    await w.characters.flush();
+    expect(context.snapshot()).toMatchObject({ origin: { kind: "save" }, bodyGender: "female" });
+    expect(w.characters.document(id)!.source.kind).toBe("save");
+    expect(libraryCharacter(w, id)!.source.kind).toBe("save");
+  });
+
+  test("scenario 12: each requester draws through its own lease of one preview device: ending one never ends another's", async () => {
     const calls = { disposed: 0, released: [] as string[], stops: 0, aborted: 0 };
     const device: ChoicePreviewPort = {
       sources: (_request, _option, _kind, _positions, _derive, signal) => new Promise((_resolve, reject) =>
@@ -459,115 +622,7 @@ describe("review fixes (chunk 1b)", () => {
     expect(calls.disposed).toBe(1);
   });
 
-  test("an answer to a question asked before the catalogue was dropped is never kept (finding 5)", async () => {
-    const host = await fixtureHost(), catalogue = new CreatorCatalogue(host.port), signal = new AbortController().signal;
-    host.hold();
-    const late = catalogue.panel("female", signal);
-    catalogue.forget("female");
-    host.release();
-    expect((await late).phase).toBe("ready");
-    expect(catalogue.identity("female")).toBe("");
-    await catalogue.panel("female", signal);
-    expect(host.asked.filter(label => label === "panel:female")).toHaveLength(2);
-    expect(catalogue.identity("female")).toBe("fixture-female");
-    host.hold();
-    const page = catalogue.loadRow("female", "fixture-female", "head/eyes_color", "", 0, signal);
-    catalogue.forget("female");
-    host.release();
-    await page;
-    expect(catalogue.rowOf("female", "fixture-female", "head/eyes_color")).toBeNull();
-  });
-
-  test("a row is assembled from kept pages as from fresh ones, and a searched row goes with its pages (finding 7)", async () => {
-    const host = await fixtureHost(), catalogue = new CreatorCatalogue(host.port), signal = new AbortController().signal;
-    await catalogue.panel("female", signal);
-    await catalogue.loadRow("female", "fixture-female", "head/eyes_color", "", 0, signal);
-    (catalogue as unknown as { rows: Map<string, unknown> }).rows.clear();
-    await catalogue.loadRow("female", "fixture-female", "head/eyes_color", "", 0, signal);
-    expect(catalogue.asked.page).toBe(1);
-    expect(catalogue.rowOf("female", "fixture-female", "head/eyes_color")!.choices.length).toBeGreaterThan(0);
-    await catalogue.loadRow("female", "fixture-female", "head/eyes_color", "blue", 0, signal);
-    expect(catalogue.rowOf("female", "fixture-female", "head/eyes_color", "blue")).not.toBeNull();
-    for (let i = 0; i < 130; i++) await catalogue.search("female", `q${i}`, signal);
-    expect(catalogue.rowOf("female", "fixture-female", "head/eyes_color", "blue")).toBeNull();
-    await catalogue.loadRow("female", "fixture-female", "head/eyes_color", "blue", 0, signal);
-    expect(catalogue.asked.page).toBe(3);
-    expect(catalogue.rowOf("female", "fixture-female", "head/eyes_color", "blue")).not.toBeNull();
-  });
-});
-
-/** The library through a port that holds the commits of `held` commands until `open` (and says when one is held). */
-function holding(documents: DocumentCommandPort, held: string) {
-  const waits: (() => void)[] = [];
-  let open = false;
-  const port: DocumentCommandPort = { list: (kind, signal) => documents.list(kind, signal),
-    commit: async command => { if (command.command === held && !open) await new Promise<void>(resolve => waits.push(resolve)); return documents.commit(command); } };
-  return { port, held: () => waits.length > 0, open() { open = true; for (const resume of waits.splice(0)) resume(); } };
-}
-
-describe("review fixes, second round (chunk 1b)", () => {
-  test("a late answer from before the catalogue was dropped never clears the newer catalogue (finding 5)", async () => {
-    let identity = "first";
-    const pages: (() => void)[] = [];
-    const port: CreatorPort = {
-      panel: async () => ({ phase: "ready" as const, message: "", panel: { identity } as never }),
-      page: (_gender, option, offset) => { const asked = identity; return new Promise(resolve => pages.push(() => resolve({ identity: asked, option, query: "", offset, total: 0, choices: [] } as never))); },
-      view: async () => ({}) as never, preset: async () => ({ text: "", values: 0, leftOut: 0, personal: 0 }), wait: async () => {},
-    };
-    const catalogue = new CreatorCatalogue(port), signal = new AbortController().signal;
-    await catalogue.panel("female", signal);
-    const late = catalogue.loadRow("female", "first", "head/eyes_color", "", 0, signal);
-    identity = "second";
-    catalogue.forget("female");
-    await catalogue.panel("female", signal);
-    expect(catalogue.identity("female")).toBe("second");
-    pages.shift()!();
-    await late;
-    expect(catalogue.identity("female")).toBe("second");
-  });
-
-  test("an edit made while a command commits is written after it, on the same queue, and flush waits for both (queue)", async () => {
-    const w = await world(), gate = holding(w.documents, "character.rename");
-    const characters = new CharacterService({ documents: gate.port, catalogue: w.catalogue, history: w.history });
-    const made = await characters.create(), id = made.ok ? made.character : "";
-    const context = characters.context(id, { showSave: () => {} });
-    context.start(); await settle(); await characters.flush();
-    const renaming = characters.rename(id, 1, "Named");
-    await until(gate.held);
-    context.dispatch({ kind: "character.setOption", part: "head", option: "eyes_color", choice: "he__02_blue" });
-    let flushed = false;
-    void characters.flush().then(() => { flushed = true; });
-    await settle();
-    expect(flushed).toBe(false);
-    gate.open();
-    expect(await renaming).toMatchObject({ ok: true, revision: 2 });
-    await characters.flush();
-    expect(flushed).toBe(true);
-    expect(characters.character(id)).toMatchObject({ conflict: false, unsaved: false, revision: 3 });
-    expect(characters.document(id)).toMatchObject({ name: "Named", choices: [{ option: "eyes_color", choice: "he__02_blue" }] });
-  });
-
-  test("a context opened while a source change commits follows the new source and never writes the earlier one back (source)", async () => {
-    const w = await world(), gate = holding(w.documents, "character.setSource");
-    const characters = new CharacterService({ documents: gate.port, catalogue: w.catalogue, history: w.history });
-    const made = await characters.create(), id = made.ok ? made.character : "";
-    const save = saveFor(descriptorsFromUiState(w.host.source.cco, { eyes_color: "he__02_blue" }));
-    const changing = characters.setSource({ kind: "character.setSource", character: id, base: 1, source: { kind: "save", value: save } });
-    await until(gate.held);
-    const shown: (SavedV | null)[] = [];
-    const context = characters.context(id, { showSave: value => shown.push(value) });
-    context.start();
-    expect(context.snapshot().origin).toEqual({ kind: "default" });
-    gate.open();
-    expect(await changing).toMatchObject({ ok: true, revision: 2 });
-    await settle(); await characters.flush();
-    expect(context.snapshot().origin).toEqual({ kind: "save" });
-    expect(shown.at(-1)).toEqual(save);
-    expect(characters.document(id)!.source.kind).toBe("save");
-    expect((await w.documents.list<{ source: { kind: string } }>(CHARACTER_DOCUMENT))[0]!.value.source.kind).toBe("save");
-  });
-
-  test("an ended lease forwards no work to the device, and a picture finished after it ended is let go, not handed on", async () => {
+  test("scenario 12: an ended lease forwards no work to the device, and a picture finished after it ended is let go, not handed on", async () => {
     const asked: string[] = [], released: string[] = [];
     let finish!: () => void;
     const device: ChoicePreviewPort = {
@@ -588,7 +643,7 @@ describe("review fixes, second round (chunk 1b)", () => {
     expect(asked).toEqual(["render"]);
   });
 
-  test("a lease draws only its own live turn: an obsolete one is refused and a frame drawn after the turn moved is closed (previews)", async () => {
+  test("scenario 12: a lease draws only its own live turn: an obsolete one is refused and a frame drawn after the turn moved is closed", async () => {
     const frames: ((value: { bitmap: { close(): void } }) => void)[] = [];
     let closed = 0;
     const device: ChoicePreviewPort = {
@@ -611,49 +666,138 @@ describe("review fixes, second round (chunk 1b)", () => {
     expect(await own).toBe("drawn");
     expect(closed).toBe(1);
   });
-});
 
-describe("review fixes, third round: one path for source changes (chunk 1b)", () => {
-  test("a save paused while hashing gives way to a masculine source chosen meanwhile through the context", async () => {
-    const w = await world();
-    const made = await w.characters.create(), id = made.ok ? made.character : "";
-    const context = w.characters.context(id, { showSave: () => {} });
-    context.start(); await settle(); await w.characters.flush();
-    const digest = crypto.subtle.digest.bind(crypto.subtle);
-    let open!: () => void;
-    const gate = new Promise<void>(resolve => { open = resolve; });
-    const spy = spyOn(crypto.subtle, "digest").mockImplementation((async (...args: Parameters<typeof digest>) => { await gate; return digest(...args); }) as never);
-    let saving: Promise<unknown>;
-    try {
-      saving = w.characters.setSource({ kind: "character.setSource", character: id, base: 1,
-        source: { kind: "save", value: saveFor(descriptorsFromUiState(w.host.source.cco, { eyes_color: "he__02_blue" })) } });
-      context.dispatch({ kind: "character.useDefault", bodyGender: "male" });
-      await until(() => w.characters.document(id)!.body === "male");
-      open();
-      expect(await saving).toMatchObject({ ok: false, code: "stale" });
-    } finally { spy.mockRestore(); }
-    await w.characters.flush();
-    expect(w.characters.document(id)).toMatchObject({ body: "male", source: { kind: "default" } });
-    expect(context.snapshot()).toMatchObject({ origin: { kind: "default" }, bodyGender: "male" });
-    expect((await w.documents.list<{ body: string }>(CHARACTER_DOCUMENT))[0]!.value.body).toBe("male");
+
+  test("scenario 15: an answer to a question asked before the catalogue was dropped is never kept", async () => {
+    const host = await fixtureHost(), catalogue = new CreatorCatalogue(host.port), signal = new AbortController().signal;
+    host.hold();
+    const late = catalogue.panel("female", signal);
+    catalogue.forget("female");
+    host.release();
+    expect((await late).phase).toBe("ready");
+    expect(catalogue.identity("female")).toBe("");
+    await catalogue.panel("female", signal);
+    expect(host.asked.filter(label => label === "panel:female")).toHaveLength(2);
+    expect(catalogue.identity("female")).toBe("fixture-female");
+    host.hold();
+    const page = catalogue.loadRow("female", "fixture-female", "head/eyes_color", "", 0, signal);
+    catalogue.forget("female");
+    host.release();
+    await page;
+    expect(catalogue.rowOf("female", "fixture-female", "head/eyes_color")).toBeNull();
   });
 
-  test("a source held while committing never replaces a newer one asked through the context: the context shows the newer one", async () => {
-    const w = await world(), gate = holding(w.documents, "character.setSource");
-    const characters = new CharacterService({ documents: gate.port, catalogue: w.catalogue, history: w.history });
-    const made = await characters.create(), id = made.ok ? made.character : "";
-    const context = characters.context(id, { showSave: () => {} });
-    context.start(); await settle(); await characters.flush();
-    const save = saveFor(descriptorsFromUiState(w.host.source.cco, { eyes_color: "he__02_blue" }));
-    const first = characters.setSource({ kind: "character.setSource", character: id, base: 1, source: { kind: "save", value: save } });
-    await until(gate.held);
-    context.dispatch({ kind: "character.useDefault", bodyGender: "male" });
-    gate.open();
-    await first;
-    await characters.flush();
-    expect(characters.document(id)).toMatchObject({ body: "male", source: { kind: "default" } });
-    expect(context.snapshot()).toMatchObject({ origin: { kind: "default" }, bodyGender: "male" });
-    expect((await w.documents.list<{ source: { kind: string } }>(CHARACTER_DOCUMENT))[0]!.value.source.kind).toBe("default");
+  test("scenario 15: a late answer from before the catalogue was dropped never clears the newer catalogue", async () => {
+    let identity = "first";
+    const pages: (() => void)[] = [];
+    const port: CreatorPort = {
+      panel: async () => ({ phase: "ready" as const, message: "", panel: { identity } as never }),
+      page: (_gender, option, offset) => { const asked = identity; return new Promise(resolve => pages.push(() => resolve({ identity: asked, option, query: "", offset, total: 0, choices: [] } as never))); },
+      view: async () => ({}) as never, preset: async () => ({ text: "", values: 0, leftOut: 0, personal: 0 }), wait: async () => {},
+    };
+    const catalogue = new CreatorCatalogue(port), signal = new AbortController().signal;
+    await catalogue.panel("female", signal);
+    const late = catalogue.loadRow("female", "first", "head/eyes_color", "", 0, signal);
+    identity = "second";
+    catalogue.forget("female");
+    await catalogue.panel("female", signal);
+    expect(catalogue.identity("female")).toBe("second");
+    pages.shift()!();
+    await late;
+    expect(catalogue.identity("female")).toBe("second");
+  });
+
+
+  test("scenario 17: a row is assembled from kept pages as from fresh ones, and a searched row goes with its pages", async () => {
+    const host = await fixtureHost(), catalogue = new CreatorCatalogue(host.port), signal = new AbortController().signal;
+    await catalogue.panel("female", signal);
+    await catalogue.loadRow("female", "fixture-female", "head/eyes_color", "", 0, signal);
+    (catalogue as unknown as { rows: Map<string, unknown> }).rows.clear();
+    await catalogue.loadRow("female", "fixture-female", "head/eyes_color", "", 0, signal);
+    expect(catalogue.asked.page).toBe(1);
+    expect(catalogue.rowOf("female", "fixture-female", "head/eyes_color")!.choices.length).toBeGreaterThan(0);
+    await catalogue.loadRow("female", "fixture-female", "head/eyes_color", "blue", 0, signal);
+    expect(catalogue.rowOf("female", "fixture-female", "head/eyes_color", "blue")).not.toBeNull();
+    for (let i = 0; i < 130; i++) await catalogue.search("female", `q${i}`, signal);
+    expect(catalogue.rowOf("female", "fixture-female", "head/eyes_color", "blue")).toBeNull();
+    await catalogue.loadRow("female", "fixture-female", "head/eyes_color", "blue", 0, signal);
+    expect(catalogue.asked.page).toBe(3);
+    expect(catalogue.rowOf("female", "fixture-female", "head/eyes_color", "blue")).not.toBeNull();
+  });
+
+});
+
+describe("conflicts on a V (profiles design §2.2)", () => {
+  /** A V shown here, changed in another window while this window changed it too. */
+  async function conflicted() {
+    const w = await world();
+    const profile = await w.profiles.dispatch({ kind: "profile.create", name: "Crew" });
+    const pid = profile.ok ? profile.profile : "";
+    const shown = await shownV(w, { name: "Mine", profile: { id: pid, base: 1 } });
+    w.lib.other("character.update", { kind: CHARACTER_DOCUMENT, id: shown.id }, value => ({ ...value as object, choices: [{ part: "head", option: "eyes_color", choice: "he__01_brown" }] }));
+    shown.context.dispatch({ kind: "character.setOption", part: "head", option: "eyes_color", choice: "he__02_blue" });
+    await until(() => w.characters.character(shown.id)!.conflict);
+    return { w, pid, ...shown };
+  }
+
+  test("Keep mine writes this window's version over theirs, explicitly", async () => {
+    const { w, id, context } = await conflicted();
+    // Edits while in conflict update mine.
+    context.dispatch({ kind: "character.setOwnMakeup", shown: false });
+    expect(context.capability({ kind: "character.resolveConflict", keep: "mine" })).toEqual({ available: true });
+    context.dispatch({ kind: "character.resolveConflict", keep: "mine" });
+    await w.characters.flush();
+    expect(context.snapshot().conflict).toBeNull();
+    expect(libraryCharacter(w, id)).toMatchObject({ choices: [{ choice: "he__02_blue" }], ownMakeup: "hidden" });
+  });
+
+  test("Use theirs shows the other window's version, its Undo starting there, and sends nothing", async () => {
+    const { w, id, context } = await conflicted();
+    const revision = w.characters.character(id)!.revision;
+    context.dispatch({ kind: "character.resolveConflict", keep: "theirs" });
+    expect(context.snapshot()).toMatchObject({ conflict: null, undo: null, elsewhere: "Changed in another window. Undo starts here." });
+    expect(w.characters.document(id)!.choices).toEqual([{ part: "head", option: "eyes_color", choice: "he__01_brown" }]);
+    expect(w.characters.character(id)!.revision).toBeGreaterThan(revision);
+    await w.characters.flush();
+    expect(w.outbox.pendingEntries()).toEqual([]);
+    expect(w.lib.store.get(CHARACTER_DOCUMENT, id)!.revision).toBe(2);
+    // The next change of this window's own clears the note.
+    context.dispatch({ kind: "character.setOwnMakeup", shown: false });
+    expect(context.snapshot().elsewhere).toBeNull();
+  });
+
+  test("Keep both keeps mine as a copy of the V, in the profiles that list it; the original takes theirs", async () => {
+    const { w, id, pid, context } = await conflicted();
+    context.dispatch({ kind: "character.resolveConflict", keep: "both" });
+    await w.characters.flush(); await w.outbox.settle();
+    const copy = w.characters.list().find(item => item.id !== id)!;
+    expect(copy.label).toBe("Mine (this window)");
+    expect(w.characters.document(copy.id)!.choices).toEqual([{ part: "head", option: "eyes_color", choice: "he__02_blue" }]);
+    expect(w.characters.document(id)!.choices).toEqual([{ part: "head", option: "eyes_color", choice: "he__01_brown" }]);
+    expect(w.lib.value<{ subjects: unknown[] }>(PROFILE_DOCUMENT, pid)!.subjects).toEqual([characterRef(id), characterRef(copy.id)]);
+    expect(libraryCharacter(w, copy.id)).toMatchObject({ name: "Mine (this window)" });
+  });
+
+  test("a stored conflict is shown again after a restart, and a change from elsewhere replaces a clean V's context (A7)", async () => {
+    const storage = memoryOutboxStorage(), lib = library();
+    const first = await world(lib, storage);
+    const shown = await shownV(first);
+    lib.other("character.update", { kind: CHARACTER_DOCUMENT, id: shown.id }, value => ({ ...value as object, name: "Theirs" }));
+    shown.context.dispatch({ kind: "character.useDefault", bodyGender: "male" });
+    await until(() => first.characters.character(shown.id)!.conflict);
+    first.outbox.stop();
+    const host = await fixtureHost(), outbox = new DocumentOutbox(lib.port, storage, { retryMs: 5 });
+    const characters = new CharacterService({ documents: lib.documents, outbox, catalogue: new CreatorCatalogue(host.port), history: createHistoryService() });
+    outbox.open();
+    await characters.load();
+    expect(characters.character(shown.id)).toMatchObject({ conflict: true });
+    const context = characters.context(shown.id, { showSave: () => {} });
+    expect(context.snapshot()).toMatchObject({ bodyGender: "male", conflict: { message: expect.any(String) } });
+    context.dispatch({ kind: "character.resolveConflict", keep: "theirs" });
+    // Another window changes it again: the clean V takes it at the next revision check, and its context shows it.
+    lib.other("character.rename", { kind: CHARACTER_DOCUMENT, id: shown.id }, value => ({ ...value as object, body: "male", source: { kind: "default" } }));
+    expect(await outbox.check()).toEqual([{ kind: CHARACTER_DOCUMENT, id: shown.id }]);
+    expect(context.snapshot()).toMatchObject({ bodyGender: "male", elsewhere: expect.any(String), undo: null });
   });
 });
 

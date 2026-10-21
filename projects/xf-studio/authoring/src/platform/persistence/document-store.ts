@@ -12,11 +12,15 @@
  */
 import { DOCUMENT_ID, DOCUMENT_KIND, parseFence, WORKSPACE_FENCE_HEADER, WORKSPACE_LEASE_KIND, type DocumentWrite, type StoredDocument,
   type WorkspaceFence } from "../api/document-store";
+import { COMMAND_LIMITS, type CommandRevisions, type CurrentDocument, type DocumentRef, documentKey, isHostKind, RECEIPT_KIND, RECEIPT_TTL_MS,
+  type TransactAnswer, type TransactRequest, type TransactWrite } from "../api/document-commands";
 import type { LibraryDatabase } from "./library-database";
 
 export type DocumentStoreOptions = {
   /** Wall time for `updatedAt` (the host clock's `now`). */
   readonly now?: () => number;
+  /** Crash harnesses only: runs inside a command's transaction after its writes, before it commits (a kill there rolls it back). */
+  readonly beforeCommit?: (request: TransactRequest) => void;
 };
 
 type Row = { kind: string; id: string; revision: number; value: string; updated_at: number };
@@ -81,6 +85,105 @@ export class DocumentStore {
       return { ok: true, document: { kind, id, revision: revision + 1, value: JSON.parse(text) as T, updatedAt: now } };
     });
   }
+
+  /**
+   * One owner command (profiles design §2.1), in one immediate transaction: with a `fence`, refused as `superseded` when its workspace
+   * has issued a newer lease generation; the receipts named in `forget` are deleted; a command whose receipt exists is answered from it
+   * and nothing is applied again. Otherwise every write's base must be the document's revision: then every write is stored as the next
+   * revision with the command's receipt, or nothing is, and the answer is `stale` with the documents as they are. A replay whose bases no
+   * longer match, but whose every target already holds exactly the value written, is acknowledged at the current revisions (the
+   * equal-value rule, A5).
+   */
+  transact(request: TransactRequest, fence?: WorkspaceFence | null): TransactAnswer {
+    const checked = checkTransact(request);
+    const texts = checked.writes.map(write => JSON.stringify(write.value));
+    const now = (this.options.now ?? Date.now)();
+    return this.db.write((db): TransactAnswer => {
+      if (fence && fence.generation < this.leaseGeneration(fence.workspace)) return { ok: false, reason: "superseded" };
+      const remove = db.query("DELETE FROM documents WHERE kind = ? AND id = ?");
+      for (const id of checked.forget) remove.run(RECEIPT_KIND, id);
+      const receipt = this.row(RECEIPT_KIND, checked.id);
+      if (receipt) return { ok: true, revisions: (JSON.parse(receipt.value) as { revisions: CommandRevisions }).revisions, replayed: "receipt" };
+      const rows = checked.writes.map(write => this.row(write.kind, write.id));
+      if (checked.writes.some((write, i) => (rows[i]?.revision ?? 0) !== write.base)) {
+        if (rows.every((row, i) => row && row.value === texts[i]))
+          return { ok: true, revisions: Object.fromEntries(checked.writes.map((write, i) => [documentKey(write), rows[i]!.revision])), replayed: "equal" };
+        return { ok: false, reason: "stale", current: Object.fromEntries(checked.writes.map((write, i) =>
+          [documentKey(write), rows[i] ? { revision: rows[i]!.revision, value: JSON.parse(rows[i]!.value) } : null])) };
+      }
+      const revisions: Record<string, number> = {};
+      const update = db.query("UPDATE documents SET revision = ?, value = ?, updated_at = ? WHERE kind = ? AND id = ?");
+      const insert = db.query("INSERT INTO documents VALUES (?, ?, ?, ?, ?, ?)");
+      checked.writes.forEach((write, i) => {
+        const revision = write.base + 1;
+        if (rows[i]) update.run(revision, texts[i]!, now, write.kind, write.id);
+        else insert.run(write.kind, write.id, revision, texts[i]!, now, now);
+        revisions[documentKey(write)] = revision;
+      });
+      insert.run(RECEIPT_KIND, checked.id, 1, JSON.stringify({ command: checked.command, revisions }), now, now);
+      this.options.beforeCommit?.(request);
+      return { ok: true, revisions };
+    });
+  }
+
+  /** The current revision of each document (0: none), keyed `<kind>/<id>`, in one read: the revision check (§2.2). */
+  revisions(refs: readonly DocumentRef[]): Record<string, number> {
+    const checked = checkRefs(refs);
+    return this.db.read(() => Object.fromEntries(checked.map(ref => [documentKey(ref), this.revisionOf(ref.kind, ref.id)])));
+  }
+  /** Each document as it is now (null: none), keyed `<kind>/<id>`, in one read. */
+  read(refs: readonly DocumentRef[]): Record<string, CurrentDocument> {
+    const checked = checkRefs(refs);
+    return this.db.read(() => Object.fromEntries(checked.map(ref => {
+      const row = this.row(ref.kind, ref.id);
+      return [documentKey(ref), row ? { revision: row.revision, value: JSON.parse(row.value) } : null];
+    })));
+  }
+  /** Deletes receipts older than `olderThan` ms, in one transaction (host start, §1.4); answers how many. */
+  purgeReceipts(olderThan = RECEIPT_TTL_MS): number {
+    const cutoff = (this.options.now ?? Date.now)() - olderThan;
+    return this.db.write(db => db.query("DELETE FROM documents WHERE kind = ? AND updated_at < ?").run(RECEIPT_KIND, cutoff).changes);
+  }
+
+  private row(kind: string, id: string): { revision: number; value: string } | null {
+    return this.db.read(db => db.query("SELECT revision, value FROM documents WHERE kind = ? AND id = ?").get(kind, id) as { revision: number; value: string } | null);
+  }
+  private revisionOf(kind: string, id: string): number {
+    return (this.db.read(db => db.query("SELECT revision FROM documents WHERE kind = ? AND id = ?").get(kind, id) as { revision: number } | null))?.revision ?? 0;
+  }
+}
+
+const COMMAND_NAME = /^[a-z][A-Za-z0-9.-]{0,63}$/;
+/** References a page may read: valid kinds and IDs, at most 1,000. */
+function checkRefs(refs: readonly DocumentRef[]): DocumentRef[] {
+  if (!Array.isArray(refs) || refs.length > 1000) throw new DocumentStoreError("That isn't a list of documents.");
+  return refs.map(ref => {
+    if (!ref || typeof ref !== "object" || typeof ref.kind !== "string" || !DOCUMENT_KIND.test(ref.kind)) throw new DocumentStoreError("That isn't a document kind.");
+    if (typeof ref.id !== "string" || !DOCUMENT_ID.test(ref.id)) throw new DocumentStoreError("That isn't a document ID.");
+    return { kind: ref.kind, id: ref.id };
+  });
+}
+/** A command the store takes: an ID, a name, 1–64 writes of distinct page-writable documents, and receipts to forget. */
+function checkTransact(request: TransactRequest): { id: string; command: string; writes: TransactWrite[]; forget: string[] } {
+  const r = request as Partial<TransactRequest> | null;
+  if (!r || typeof r !== "object") throw new DocumentStoreError("That isn't a command.");
+  if (typeof r.id !== "string" || !DOCUMENT_ID.test(r.id)) throw new DocumentStoreError("That isn't a command ID.");
+  if (typeof r.command !== "string" || !COMMAND_NAME.test(r.command)) throw new DocumentStoreError("That isn't a command.");
+  if (!Array.isArray(r.writes) || !r.writes.length || r.writes.length > COMMAND_LIMITS.writes) throw new DocumentStoreError("A command writes 1 to 64 documents.");
+  const forget = r.forget ?? [];
+  if (!Array.isArray(forget) || forget.length > COMMAND_LIMITS.forget || forget.some(id => typeof id !== "string" || !DOCUMENT_ID.test(id)))
+    throw new DocumentStoreError("That isn't a list of receipts.");
+  const seen = new Set<string>();
+  const writes = r.writes.map(write => {
+    const [ref] = checkRefs([write]);
+    if (isHostKind(ref!.kind)) throw new DocumentStoreError("That document is the library's own.");
+    if (seen.has(documentKey(ref!))) throw new DocumentStoreError("A command writes each document once.");
+    seen.add(documentKey(ref!));
+    if (!Number.isSafeInteger(write.base) || write.base < 0) throw new DocumentStoreError("That isn't a document revision.");
+    if (JSON.stringify(write.value) === undefined) throw new DocumentStoreError("A document must be a JSON value.");
+    return { ...ref!, base: write.base, value: write.value };
+  });
+  return { id: r.id, command: r.command, writes, forget: [...forget] };
 }
 
 /** Most bytes of one document write's request body. */
@@ -90,35 +193,41 @@ const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
 /**
  * The page's transport, under `prefix` (`/api/documents`; a verification workspace's own library under
- * `/api/verification/documents`): `GET <prefix>?kind=<kind>` answers `{ documents }`, and `PUT <prefix>?kind=<kind>&id=<id>`
- * with `{ revision, value }` answers `{ document }`, or 409 `{ error, current }` when the revision is stale. Local,
- * same-origin requests only.
+ * `/api/verification/documents`):
+ *
+ * - `GET <prefix>?kind=<kind>` answers `{ documents }`;
+ * - `POST <prefix>/transact` with a `TransactRequest` answers the `TransactAnswer` (a write from a page that no longer holds its workspace
+ *   is 409 `{ code: "superseded" }`);
+ * - `POST <prefix>/revisions` and `POST <prefix>/read` with `{ refs }` answer `{ revisions }` and `{ documents }`.
+ *
+ * Local, same-origin requests only. Commands are the only writes: there is no single-document write route.
  */
 export function createDocumentsHandler(store: DocumentStore, prefix: string): (request: Request) => Promise<Response> {
   const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
   return async request => {
     const url = new URL(request.url), origin = request.headers.get("Origin");
-    if (url.pathname !== prefix) return json({ error: "Not found." }, 404);
+    const route = url.pathname === prefix ? "" : url.pathname.startsWith(`${prefix}/`) ? url.pathname.slice(prefix.length + 1) : null;
+    if (route === null || !["", "transact", "revisions", "read"].includes(route)) return json({ error: "Not found." }, 404);
     if (!LOCAL_HOSTS.has(url.hostname) || (origin && origin !== url.origin)) return json({ error: "Local studio requests only." }, 403);
-    const kind = url.searchParams.get("kind") ?? "";
     try {
-      if (request.method === "GET") return json({ documents: store.list(kind) });
-      if (request.method !== "PUT") return json({ error: "Method not allowed." }, 405);
+      if (route === "") return request.method === "GET" ? json({ documents: store.list(url.searchParams.get("kind") ?? "") }) : json({ error: "Method not allowed." }, 405);
+      if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
       if (origin !== url.origin || request.headers.get("Content-Type")?.split(";")[0] !== "application/json") return json({ error: "Use the local studio." }, 403);
       const declared = Number(request.headers.get("Content-Length") ?? NaN);
       if (Number.isFinite(declared) && declared > DOCUMENT_BODY_BYTES) return json({ error: "That is too large to save." }, 413);
       const text = await request.text();
       if (text.length > DOCUMENT_BODY_BYTES) return json({ error: "That is too large to save." }, 413);
-      let body: { revision?: unknown; value?: unknown };
-      try { body = JSON.parse(text) as typeof body; } catch { return json({ error: "Invalid JSON." }, 400); }
-      if (!body || typeof body !== "object" || !("value" in body)) return json({ error: "Invalid JSON." }, 400);
+      let body: unknown;
+      try { body = JSON.parse(text); } catch { return json({ error: "Invalid JSON." }, 400); }
+      if (!body || typeof body !== "object") return json({ error: "Invalid JSON." }, 400);
+      if (route === "revisions") return json({ revisions: store.revisions((body as { refs: DocumentRef[] }).refs) });
+      if (route === "read") return json({ documents: store.read((body as { refs: DocumentRef[] }).refs) });
       const fence = parseFence(request.headers.get(WORKSPACE_FENCE_HEADER));
       if (fence === "invalid") return json({ error: "That isn't a workspace lease." }, 400);
-      const written = store.put(kind, url.searchParams.get("id") ?? "", body.value, Number(body.revision), fence);
-      if (written.ok) return json({ document: written.document });
-      return written.reason === "superseded"
+      const answer = store.transact(body as TransactRequest, fence);
+      return !answer.ok && answer.reason === "superseded"
         ? json({ code: "superseded", error: "This workspace is now open elsewhere, so this change wasn't saved here." }, 409)
-        : json({ error: "This changed elsewhere since it was read.", current: written.current }, 409);
+        : json(answer);
     } catch (error) {
       if (error instanceof DocumentStoreError) return json({ error: error.message }, 400);
       return json({ error: "Saved documents are unavailable right now." }, 500);

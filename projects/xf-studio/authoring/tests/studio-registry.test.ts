@@ -73,7 +73,7 @@ test("derived kind sets equal the sets StudioApplication used to keep by hand", 
   // Every creator choice for the shown V has one owner, the character context (CORE-58); it needs no scene, so a change before the
   // preview is ready is refused as not ready (CORE-64).
   expect(kinds("characterContext")).toEqual(["character.clearPreparedFiles", "character.keepChanges", "character.loadPreset", "character.loadSave", "character.redo",
-    "character.redoClothing", "character.reset", "character.resetAll", "character.retry", "character.setClothing", "character.setClothingArea", "character.setOption",
+    "character.redoClothing", "character.reset", "character.resetAll", "character.resolveConflict", "character.retry", "character.setClothing", "character.setClothingArea", "character.setOption",
     "character.setOptions", "character.setOwnMakeup", "character.setSource", "character.undo", "character.undoClothing", "character.useDefault"]);
   expect(STUDIO_OWNERS.filter(owner => owner.owner === "system" && owner.thrown === "unavailable").map(owner => owner.id as string))
     .toEqual(["preview", "motion", "quality", "views"]);

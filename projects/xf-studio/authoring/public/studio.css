@@ -1307,6 +1307,11 @@ span.category { border-color: transparent; background: transparent; padding-left
   height: calc(var(--control-h-sm) + 2 * var(--sp-2) + 1px); padding-block: 0; border-bottom: 1px solid var(--line); white-space: nowrap; overflow: hidden; }
 .workspace-notice-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
 .workspace-notice .btn { flex: none; }
+/* Changed in another window (style guide t-conflict): first in the owning section, the warning state line holding a lead-in sentence and
+   the three ways out on one row of small buttons. */
+.doc-conflict { display: grid; gap: var(--sp-3); margin-bottom: var(--sp-3); }
+.doc-conflict[hidden] { display: none; }
+.doc-conflict-text { margin: 0; }
 .studio[data-workspace="read-only"] .dock-body [aria-disabled="true"]:is(button, [role="radio"], [role="option"], [role="switch"], [role="checkbox"]),
 .studio[data-workspace="read-only"] .dock-body :is(input, select, textarea):disabled { opacity: .45; cursor: not-allowed; }
 .status-message { border: 0; background: transparent; padding: 2px 4px; max-width: 55vw; text-align: left; color: var(--text-muted); }
