@@ -1,7 +1,53 @@
 # Research and work queue
 
-**Current as of 26 September 2026.** This is the single ranked queue for XF Studio (`projects/xf-studio`) and related research. Each row links to the owner document that holds the detailed requirements and open/done state. Tracks marked *parallel* are independent enough to run as separate subagents on their own `claude/` branches and worktrees; the coordinator reviews, merges and updates shared status.
+The single queue for XF Studio (`projects/xf-studio`) and related research. **The work queue below is the anchor:** the coordinator reads it before choosing what to start or delegate, updates it whenever something is added, started or finished, and reports from it at every milestone. The sections after it hold the detail, and each queue line links to its detail or owner document.
 
+## Work queue
+
+**Rules.**
+- **Every item sits in exactly one lane,** with the date it was added.
+- **Beta blockers** must be empty before the first public beta ships ([1.0 readiness](../../docs/release-readiness.md)).
+- **One agent slot always works the polish lane,** in batches, whenever capacity allows.
+- **R&D gets a slot only while the polish lane is moving.**
+- **Items older than two weeks** in the blocker or polish lanes are named in the next milestone report.
+- **New requests** go into a lane the day they arrive: bugs and polish on existing features into polish or blockers; new features into *after 1.0*.
+
+### In flight
+- **Architecture cleanup, wave 3:** move the flat `src/` modules into subsystem folders (branch `claude/source-layout`; reviewed and tested; merges when the Hair Lab branch has synced). *21 Oct*
+- **Architecture cleanup, wave 4:** the whole-codebase review by area. Running now on export and native, resolver and installation, and the runtime bridge. The core is reviewed after profiles phase 2. Then its fixes and the status refresh. *21 Oct*
+- **Profiles and layouts:** the design is under Sol review. Phase 1 (the profile and V model, with migration) starts once wave 3 merges, and the tab strip and panel picker components are built alongside by the UI component track. Defaults are adopted for the design's five questions. *21 Oct*
+- **Polish batch 1** (`claude/polish-1`): thumbnail drag direction, repeated layer names, collection tie order, the flaky mottle test, Build wording, the masculine-plate warning. *21 Oct*
+
+### Beta blockers
+- **Profiles, layout tabs and the panel picker,** phases 1–4, about 19 agent-days ([design](../authoring/profiles-views-layouts-design.md); in flight). *21 Oct*
+- **Choice thumbnails turn the wrong way when dragged** ([small bugs](#small-bugs-and-friction)). *21 Oct*
+- **Speed budgets** ([performance](performance.md)), including:
+  - the restart to V (2 s budget; PREV-196);
+  - the first V after a code change (about 12 s; 26.7 s for a save V, with clothing through WolvenKit);
+  - first-run preparation;
+  - Build's verifier and first plate cut (PIPE-130). *29 Sep*
+- **Finish verdicts in game:** Glitter and Shimmer reworked offline, waiting for in-game sessions ([finishes](glitter-material.md)). *29 Sep*
+- **Consistency leftovers:** UI-142's build steps, and repeated layer names (CORE-125) ([readiness](../../docs/release-readiness.md)). *29 Sep*
+
+### Polish lane (before 1.0)
+- **Starter eye-makeup shapes** under the contributed-defaults convention ([small bugs](#small-bugs-and-friction)). *21 Oct*
+- **The rest of [Small bugs and friction](#small-bugs-and-friction):** Build Stop, two windows on one draft, collection tie order, the masculine plate warning, Build wording, receipt matching. *21 Oct*
+- **A check that pure engine code never reads the clock, randomness or timers** (`engines/layered-makeup/raster-processor.ts` does today). *21 Oct*
+- **Flaky tests:** the mottle raster budget under full-suite load, and "Recent drafts" ordering of saves in the same millisecond. *21 Oct*
+- **A Show in folder route for the workspace file** (desktop). *21 Oct*
+
+### Next tracks (ranked)
+1. **The rest of the job scheduler (F-2):** the facial, idle, pose, grading LUT, swatch, icon and preview-core hosts move onto the scheduler ([performance](performance.md)). *21 Oct*
+2. **Character detail completeness:** colours first, then every creator detail ([ranked tracks](#ranked-tracks), track 2). *25 Sep*
+3. **The eye-makeup editor and finish adapters** (track 6), and CORE-03's remaining steps (the [code-health ledger](../authoring/code-health.md)). *25 Sep*
+
+### R&D (runs only while the polish lane is moving)
+- **Hair Lab** (its own chat and branch, off `main` until the beta). *16 Oct*
+- **In-game overlay and UI; custom material shaders** (below). *29 Sep*
+- **The runtime bridge:** 0.8.0 staged for session 9, then the NPC and DM toolkit branches ([bridge autonomy](bridge-autonomy.md)). *30 Sep*
+
+### After 1.0 (banked)
+- **User-defined shortcuts**, **the Pattern finish**, **profiles phases 5–6** (several views at once, several profiles and Vs), and **the later features** below. *21 Oct and earlier*
 
 ### Approved experiment: Hair Lab
 
@@ -44,6 +90,15 @@ The classic glitter model's macro dot array reads less like glitter than like a 
 
 Working name options: Dot Matrix, Pixel, Polka Chrome, Sequin (the maintainer decides). Until then, the classic dots stay available behind the Studio's research tools.
 
+
+### Banked: user-defined shortcuts (21 October 2026; waits until the current product reaches 1.0)
+
+Shortcuts today are one fixed table (`input-bindings.ts`, the single source for dispatch, menus, the palette and the Keyboard & mouse reference), with no way for a person to change them. The plan:
+- a user layer of overrides (rebind, add or unbind a chord per binding), stored with the UI preferences;
+- conflicts shown at the moment of rebinding;
+- every default chord, Ctrl+P included, reassignable.
+
+The desktop app can capture chords a browser tab can't (Ctrl+W, Ctrl+T, Ctrl+N); the browser host lists those as unavailable.
 
 ### Queued R&D: custom material shaders in REDengine (29 September 2026)
 
@@ -225,6 +280,8 @@ Existing brow, lash, hair and piercing *preview context* is not permission to bu
 
 Polish on existing features, not new work. Each is one line; the code-health ledger keeps only Medium and above.
 
+- **Starter eye-makeup shapes** (21 October 2026, polish before 1.0). A new look and a new layer start from a lopsided wing whose control points every design first drags back into place. Following the contributed-defaults convention (AGENTS.md, UX policy), eye makeup contributes several natural starter shapes as read-only choices: a soft lid wash along the upper lash line, a classic wing, a crease or smoky shape, and a lower-lash smudge. The person can save any layer's shape as their own starter, and choose which starter New layer and New look use. The current starter (`starterRecipe()` and the new-layer shape in `src/features/eye-makeup/region.ts`) stays intact for existing drafts. Check each starter on the default and the reference V, in both eye modes.
+- **Choice thumbnails turn the wrong way when dragged** (21 October 2026). Dragging a hairstyle thumbnail left or right turns it opposite to the hand. The drag sets `angle = start + dx·360/(width·1.5)` in `src/studio-ui/components/choice-preview.ts` (`PreviewSpin`, about line 238). Flip the sign so the surface under the pointer follows it, check the frame order in `turntableYaw` agrees, and keep the hover spin's direction consistent with the drag.
 - **Build has no Stop.** A Build runs for many seconds and can't be stopped from the Mod panel; the host already stops a Build whose request is dropped, so the panel only needs a Stop button.
 - **Two windows overwrite each other's draft.** Two Studio tabs or windows on one workspace each autosave over the other's draft; the second should see the first's changes, or at least warn.
 - **Collection order on a tie** (LIB-01): two saves in the same millisecond list in random order (`src/library/host/collection-store.ts` orders by `created_at`, then a random UUID); add a stable insertion tie-break.

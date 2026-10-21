@@ -201,7 +201,7 @@ export type KeyBinding = Readonly<{
 const k = (key: string, mods: Partial<Omit<KeyChord, "key">> = {}): KeyChord => ({ key, ...mods });
 
 export const KEY_BINDINGS: readonly KeyBinding[] = [
-  { id: "shell.palette", scope: "global", chords: [k("k", { ctrl: true }), k("p", { ctrl: true, shift: true })], action: shell("palette"), label: "Command palette — every command, with reasons when unavailable", inText: true },
+  { id: "shell.palette", scope: "global", chords: [k("k", { ctrl: true }), k("p", { ctrl: true }), k("p", { ctrl: true, shift: true })], action: shell("palette"), label: "Command palette — every command, with reasons when unavailable", inText: true },
   { id: "shell.save", scope: "global", chords: [k("s", { ctrl: true })], action: { kind: "request", id: "save" }, label: "Save the collection to the local library", inText: true },
   { id: "shell.undo", scope: "global", chords: [k("z", { ctrl: true })], action: act("history.undo"), label: "Undo the last change (outside text fields)" },
   { id: "shell.redo", scope: "global", chords: [k("z", { ctrl: true, shift: true }), k("y", { ctrl: true })], action: act("history.redo"), label: "Redo the change you just undid" },
