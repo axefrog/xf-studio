@@ -603,15 +603,19 @@ export class CollectionService {
    * the new looks' references in order.
    */
   private create(input: { id: string; name: string; looks: readonly LookInput[]; packagePlan?: unknown; saved?: { revision: number } }): LookRef[] {
-    const owner = this.deps.owner, first = input.looks.slice(0, MAX_LOOKS_AT_CREATE);
+    const owner = this.deps.owner;
+    // The profile's membership edit goes in the same command: the first batch leaves room for it within the write limit.
+    const membership = this.deps.membership?.(input.id), also = membership ? [membership] : [];
+    const first = input.looks.slice(0, MAX_LOOKS_AT_CREATE - also.length);
     const ids = input.looks.map(look => look.id ?? this.newId());
     const made = owner.dispatch({ kind: "collection.create", id: input.id, name: input.name, looks: first.map((look, i) => ({ ...look, id: ids[i] })),
       ...(input.packagePlan !== undefined ? { packagePlan: input.packagePlan } : {}), ...(input.saved ? { saved: input.saved } : {}) },
-    this.deps.membership ? { also: collection => { const edit = this.deps.membership!(collection); return edit ? [edit] : []; } } : {});
+    also.length ? { also: () => also } : {});
     if (!made.ok) throw new CollectionServiceError(made.code ?? "unavailable", made.reason);
-    for (const [i, look] of input.looks.slice(MAX_LOOKS_AT_CREATE).entries()) {
+    // The rest are added after it, in order, from where the first batch ended.
+    for (const [i, look] of input.looks.slice(first.length).entries()) {
       const view = owner.collection(input.id)!;
-      const added = owner.dispatch({ kind: "collection.addLook", collection: input.id, base: view.revision, look: { ...look, id: ids[MAX_LOOKS_AT_CREATE + i] } });
+      const added = owner.dispatch({ kind: "collection.addLook", collection: input.id, base: view.revision, look: { ...look, id: ids[first.length + i] } });
       if (!added.ok) throw new CollectionServiceError(added.code ?? "unavailable", added.reason);
     }
     return ids.map(look => ({ collection: input.id, look }));

@@ -4,6 +4,8 @@
  * showing a scene's look through the look editor, and the collection application over them, as `compose/studio-startup.ts` wires them.
  * A second window (`window`) can share the library, as another workspace would.
  */
+import { ProfileService } from "../../src/app/profiles/profile-service";
+import { createStudioSubjects } from "../../src/compose/subjects";
 import { createTrustedAuthoringCore } from "../../src/app/trusted-authoring-core";
 import { StudioFileOperations, type StudioPickedFile } from "../../src/app/studio-file-operations";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
@@ -71,6 +73,8 @@ export async function profileStudio(options: {
   versions?: (library: CollectionVersionsPort) => CollectionVersionsPort;
   /** Where the editor's new items' IDs come from (default: random UUIDs). */
   newId?: () => string;
+  /** A profile lists the collections made here (the Studio's membership edit, in the same command). */
+  profile?: boolean;
 } = {}) {
   const library = options.library ?? openTestLibrary(), port = libraryPort(library), storage = memoryOutboxStorage();
   const outbox = new DocumentOutbox(port, storage, { retryMs: 5 });
@@ -111,13 +115,23 @@ export async function profileStudio(options: {
     hasSavedV: () => false, savedV: () => undefined, loadSavedV: () => ({}), savedVReady: () => false,
     executeCollection: request => core.app.execute(request), recoverCollection: draft => application!.recover(draft),
   });
-  application = new CollectionApplication({ model: MODEL, owner, scene, transport, flushLook: () => lookEditor.commit() }, core.document, core.app, files);
+  let profiles: ProfileService | undefined, profile: string | undefined;
+  if (options.profile) {
+    profiles = new ProfileService({ documents: port, outbox, subjects: createStudioSubjects() });
+    await profiles.load();
+    const made = await profiles.dispatch({ kind: "profile.create", name: "Test profile" });
+    if (!made.ok) throw Error(made.reason);
+    profile = made.profile;
+  }
+  application = new CollectionApplication({ model: MODEL, owner, scene, transport, flushLook: () => lookEditor.commit(),
+    ...(profiles ? { membership: (collection: string) => profiles!.collectionMembership(profile!, collection) } : {}) }, core.document, core.app, files);
   lookEditor.show(scene.look());
   scene.subscribe(() => lookEditor.show(scene.look()));
   const all = () => [...owner.list().flatMap(view => [collectionRef(view.id), ...[...view.looks, ...view.removed.map(item => item.look)]
     .map(look => lookRef({ collection: view.id, look }))])];
   return {
     library, port, outbox, storage, owner, sessions, scene, history, core, app: core.app, document: core.document, lookEditor, collection: application, files,
+    profiles, profile,
     service: application.service,
     downloads, packageInput: () => packageInput, transport,
     /** Writes the shown look, then waits until the library holds every change. */

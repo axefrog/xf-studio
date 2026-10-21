@@ -250,6 +250,30 @@ describe("opening, importing and copies", () => {
     expect(studio.shown()).toBe(imported);
   });
 
+  test("collections made with the profile's membership stay within the write limit: imports of 63, 64 and 130 looks, and their copies", async () => {
+    const studio = await profileStudio({ profile: true });
+    await studio.collection.initialize();
+    const parts = studio.owner.look(studio.scene.look()!)!.parts;
+    for (const count of [63, 64, 130]) {
+      const names = Array.from({ length: count }, (_, i) => `Look ${i + 1}`);
+      const text = JSON.stringify({ schema: "xfs/collection-2", id: crypto.randomUUID(), name: `Set of ${count}`, presets: names.map(name =>
+        ({ id: crypto.randomUUID(), name, revision: 1, parts })) });
+      expect(await studio.collection.execute({ kind: "import", text, bytes: text.length })).toMatchObject({ ok: true });
+      const imported = studio.shown()!;
+      // Every look, in order, and the profile lists the collection.
+      expect(studio.owner.looksOf(imported).map(look => look.name)).toEqual(names);
+      expect(studio.profiles!.profile(studio.profile!)!.collections).toContain(imported);
+      // Save as new collection makes a copy the same way.
+      expect(await studio.collection.execute({ kind: "saveCopy" })).toMatchObject({ ok: true });
+      const copy = studio.shown()!;
+      expect(copy).not.toBe(imported);
+      expect(studio.owner.looksOf(copy).map(look => look.name)).toEqual(names);
+      expect(studio.profiles!.profile(studio.profile!)!.collections).toContain(copy);
+    }
+    expect(await studio.settle()).toBe(true);
+    expect(studio.outbox.conflicts()).toEqual([]);
+  });
+
   test("opening a version saved before it had a working copy makes one from it; Save as new collection copies under fresh IDs", async () => {
     const studio = await profileStudio();
     await studio.collection.initialize();
