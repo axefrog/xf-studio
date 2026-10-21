@@ -287,6 +287,30 @@ describe("the outbox's rules (A1–A7)", () => {
     expect(outbox.conflicts().length).toBe(1);
   });
 
+  test("A7: a writer's unrecorded edits are recorded just before a check takes newer values, so they meet them as a conflict", async () => {
+    const r = rig(), { outbox } = memoryOutbox(r.port);
+    outbox.commit("look.edit", [{ ...LOOK, value: { n: 1 } }]);
+    await quiet(outbox);
+    // A debounced writer holds an edit the outbox hasn't seen; another window writes the look meanwhile.
+    let waiting: number | null = 2, calls = 0;
+    const unregister = outbox.beforeExternal(() => {
+      calls++;
+      if (waiting !== null) { outbox.commit("look.edit", [{ ...LOOK, value: { n: waiting } }]); waiting = null; }
+    });
+    r.store.transact({ id: "o1", command: "x", writes: [{ ...LOOK, base: 1, value: { other: 1 } }] });
+    expect(await outbox.check()).toEqual([]);
+    expect(calls).toBe(1);
+    expect(outbox.document(LOOK)!.value).toEqual({ n: 2 });
+    await quiet(outbox); await tick(10);
+    expect(outbox.conflicts().map(entry => entry.writes[0]!.value)).toEqual([{ n: 2 }]);
+    // Unregistered, it is not asked again.
+    unregister();
+    r.store.transact({ id: "o2", command: "x", writes: [{ ...COLLECTION, base: 0, value: { other: 1 } }] });
+    outbox.hold(COLLECTION, null);
+    await outbox.check();
+    expect(calls).toBe(1);
+  });
+
   test("settle waits for queued entries, says false when a send fails meanwhile, and the host's return triggers a check", async () => {
     const r = rig(), { outbox } = memoryOutbox(r.port);
     outbox.hold(COLLECTION, null);

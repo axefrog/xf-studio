@@ -91,6 +91,32 @@ describe("the shown look", () => {
   });
 });
 
+describe("another window's change to the shown look", () => {
+  test("edits waiting for the write delay are recorded before the other window's version is taken: they meet it as a conflict", async () => {
+    const a = await profileStudio({ looks: [{ name: "One", recipe: initialRecipe() }] });
+    await a.collection.initialize(); await a.settle();
+    const ref = a.scene.look()!;
+    const b = await profileStudio({ library: a.library, show: ref });
+    // This window's edit waits for the write delay; the other window writes its own and it reaches the library first.
+    dispatch(a, { kind: "layer.setOpacity", layerId: layerId(a), opacity: 0.23 });
+    expect(a.lookEditor.dirty()).toBe(true);
+    dispatch(b, { kind: "layer.setOpacity", layerId: layerId(b), opacity: 0.78 });
+    await b.settle();
+    // This window sees the newer revision: its waiting edit is recorded first, so nothing of it is replaced.
+    expect(await a.outbox.check()).toEqual([]);
+    expect(a.lookEditor.dirty()).toBe(false);
+    expect(a.document.recipe.layers[0]!.opacity).toBe(0.23);
+    await a.outbox.settle();
+    const [conflict] = a.outbox.conflicts();
+    expect(conflict).toBeDefined();
+    const mine = conflict!.writes[0]!.value as { parts: Record<string, { body: { layers: { opacity: number }[] } }> };
+    const theirs = Object.values(conflict!.current!)[0]!.value as typeof mine;
+    expect(mine.parts["eye-makeup"]!.body.layers[0]!.opacity).toBe(0.23);
+    expect(theirs.parts["eye-makeup"]!.body.layers[0]!.opacity).toBe(0.78);
+    expect(a.owner.look(ref)!.conflict).not.toBeNull();
+  });
+});
+
 describe("presets", () => {
   test("add, copy, rename, move, remove and restore are owner commands on the shown collection; the scene follows the preset chosen", async () => {
     const studio = await profileStudio();

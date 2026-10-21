@@ -235,6 +235,7 @@ export class DocumentOutbox {
    */
   private readonly graves = new Map<string, Set<string>>();
   private readonly listeners = new Set<(event: OutboxEvent) => void>();
+  private readonly recorders = new Set<() => void>();
   private wakers: (() => void)[] = [];
   /** Callers waiting to hear what became of an entry, by entry ID (they move with its value: `move`). */
   private readonly waits = new Map<string, Waiter[]>();
@@ -479,6 +480,12 @@ export class DocumentOutbox {
       missing: [...waiting].map(key => this.held.get(key)?.ref ?? refOfKey(key)) };
   }
   subscribe(listener: (event: OutboxEvent) => void): () => void { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+  /**
+   * A writer that holds edits not yet recorded here (a debounced editor) records them when `record` is called: synchronously, just before
+   * another window's newer values are taken, so a document with unrecorded edits gets an entry and meets theirs as a conflict instead of
+   * being replaced. Returns the unregister.
+   */
+  beforeExternal(record: () => void): () => void { this.recorders.add(record); return () => { this.recorders.delete(record); }; }
   private emit(event: OutboxEvent) {
     for (const listener of [...this.listeners]) { try { listener(event); } catch (error) { this.options.report?.(error); } }
     this.wake();
@@ -989,6 +996,8 @@ export class DocumentOutbox {
     const newer = clean.filter(held => (revisions[documentKey(held.ref)] ?? 0) > held.revision);
     if (!newer.length) return [];
     const stored = await this.transport.read(newer.map(held => held.ref), signal);
+    // Edits a writer holds unrecorded become entries first: their documents are then skipped below, and meet theirs as a conflict.
+    for (const record of [...this.recorders]) { try { record(); } catch (error) { this.options.report?.(error); } }
     const applied: DocumentRef[] = [];
     for (const held of newer) {
       const now = stored[documentKey(held.ref)];

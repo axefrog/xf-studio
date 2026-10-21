@@ -312,6 +312,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   // The shown look's edits are written through its session (the outbox); anything that needs them now writes them first.
   let lookShown: (() => void) | undefined;
   const lookEditor = new LookEditor({ model: STUDIO_COMPOSITION.documents, sessions: services.looks, document: core.document,
+    beforeExternal: record => documents.outbox.beforeExternal(record),
     restoring: ref => documents.outbox.recovering(lookRef(ref)), shown: () => lookShown?.(), note: text => adapterMessage("preview", text),
     report: error => diagnostics.failure("library", "look_write_failed", "Your latest look change couldn't be recorded yet; it will be tried again.", error, { level: "warn" }) });
   // The editing context (§3.7) is stored with the session: a change of it is written like any other session change.

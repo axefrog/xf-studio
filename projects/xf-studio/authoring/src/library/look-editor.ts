@@ -75,6 +75,11 @@ export type LookEditorDeps = {
   readonly report?: (error: unknown) => void;
   readonly delayMs?: number;
   readonly schedule?: (run: () => void, ms: number) => () => void;
+  /**
+   * Registers a call made just before another window's newer values are taken (`DocumentOutbox.beforeExternal`): the edits waiting for
+   * the write delay are recorded then, so they meet the other window's version as a conflict and are never replaced by it.
+   */
+  readonly beforeExternal?: (record: () => void) => () => void;
 };
 
 type Shown = { ref: LookRef; session: LookSession; content: LookContent; written: string; unsubscribe: () => void };
@@ -87,12 +92,15 @@ export class LookEditor {
   private applying = false;
   private readonly listeners = new Set<() => void>();
   private readonly unsubscribe: () => void;
+  private readonly unregister: () => void;
 
   constructor(private readonly deps: LookEditorDeps) {
     this.unsubscribe = deps.document.subscribe(change => {
       if (this.applying || !this.shown || change === "restore" || change === "access") return;
       this.request();
     });
+    // The write delay only coalesces: before another window's version is taken, what waits is recorded.
+    this.unregister = deps.beforeExternal?.(() => { if (this.cancel) this.commit(); }) ?? (() => {});
   }
 
   /** The look the document shows (undefined: none). */
@@ -151,7 +159,8 @@ export class LookEditor {
     try { content = lookContent(view, this.deps.model); } catch (error) { this.deps.report?.(error); return; }
     const key = this.stored(content, content.state)?.key ?? "";
     if (key === shown.written) return;
-    // Anything not yet written here gives way: the other window's version is the one kept (Keep both made a copy of mine).
+    // Nothing is waiting here: edits are recorded before another window's version is taken (`beforeExternal`), and a resolution
+    // (Use theirs, or Keep both, which made a copy of mine) is the person's choice.
     this.cancel?.(); this.cancel = null;
     shown.content = content; shown.written = key;
     this.display(content.state);
@@ -207,6 +216,7 @@ export class LookEditor {
     this.commit();
     this.close();
     this.unsubscribe();
+    this.unregister();
     this.listeners.clear();
   }
 }
