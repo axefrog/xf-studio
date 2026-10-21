@@ -25,6 +25,17 @@ The maintainer has reviewed it only cursorily so far.
 5. **Verify** the context-menu and command-registry claims end to end (every menu/palette/shortcut path dispatches the same validated action with the same disabled reason).
 6. **Presentation follow-ups:** arrow-key nudging (now possible with `point.move`/`shape.transform`), a Redo entry in context menus if wanted, UI for the new consequences/limits/per-layer readiness beyond the current chip, hint and Glitter limits, UV units (C-17), stable warp names (C-16), virtualised lists for large collections, screen-reader verification, shorter stage hint in narrow head cells.
 
+7. **Design debt from UI review gates** (UI track):
+   - The Panels menu's module switch looks like the panel entries under it, and the menu will scroll at a 900 px window once piercings arrive (UI-165); its panel descriptions are only native tooltips a keyboard user never sees (UI-166).
+   - Header priorities: at 1424 px the module list truncates mid-word, and at 1100 px the collection name goes before the module list, the reverse of the intended priority (UI-167).
+   - The problem report's "Your mod setup · 0 B" reads as empty; show "Not included" (UI-168).
+   - Library Files buttons stretch to the panel width, the primary comes first, and the current row's Reopen is quieter than other rows' Open (UI-169).
+   - The style guide's folder-setting samples lost their backslashes (UI-170).
+   - Copy: Move up says "already at the front" for layers but "already first" for presets; "(experimental export)" against the badge "Experimental"; "Set up 3D view" against "Set up the 3D view…"; "MiB" in settings text (UI-171).
+   - The 0–100 length readouts have no end labels and change width at 10; the finish grid is a five-row single column between about 330 and 396 px; the texture readiness badge shows twice (UI-172).
+   - Character rows whose coverage depends on the resolved choice (Scars, Beard) get no help tip, and the guide's specimen disagrees with the panel (UI-175); the "N not shown" count leaves out partly drawn options (UI-176).
+   - Building an expression set shows only what Build is doing, not its steps (UI-142).
+
 ## Requirements that remain binding for future UI work
 
 These came from the original brief and still apply to any change to the Studio UI.

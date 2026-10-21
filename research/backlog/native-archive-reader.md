@@ -136,4 +136,6 @@ Why the native route reads fewer resources (519 against 612, 621 against 719): t
 - NATIVE-44 is open: a native answer's host-side copy and re-serialisation sit outside the worker's budgets, and resolver and prefetch reads share one FIFO queue without cancellation (only `background` requests wait).
 - A cold WolvenKit-only resolve of the reference save now needs more than 6 GB (its launches load over a thousand archives), so it can't be repeated under the memory guard; the bench's `--seed-wolvenkit` gives a warm baseline for the equality check.
 - Inside packages, a type name the RTTI dump doesn't know as a class is refused. A game patch that adds component or struct classes needs `tools/native-rtti-subset.ts --dump <dump> --hashes-only` rerun on a newer dump.
+- Item factories (`C2dArray`) are refused for their compiled tail, so a clothed V's first preparation reads 642 factories through WolvenKit (35 s, 10 launches; PIPE-105). Decode the tail natively, verified with `tools/native-cr2w-diff.ts` on the cached factories.
+- The request depth cap of 4,096 leaves about 1.3× headroom under the measured stack limit of about 5,400 levels (NATIVE-70; `src/native/native-decode.ts`).
 - Windows x64 only (the game's DLL). Another platform would need another decoder, and none is planned.

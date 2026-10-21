@@ -213,6 +213,19 @@ Existing brow, lash, hair and piercing *preview context* is not permission to bu
 
 **Photo Mode Tools** remains an independent second project; its successor, XF Photo Mode (complete snapshots, the gaze freeze), is designed as the first XF Core plugin. See its project README.
 
+## Small bugs and friction
+
+Polish on existing features, not new work. Each is one line; the code-health ledger keeps only Medium and above.
+
+- **Build has no Stop.** A Build runs for many seconds and can't be stopped from the Mod panel; the host already stops a Build whose request is dropped, so the panel only needs a Stop button.
+- **Two windows overwrite each other's draft.** Two Studio tabs or windows on one workspace each autosave over the other's draft; the second should see the first's changes, or at least warn.
+- **Collection order on a tie** (LIB-01): two saves in the same millisecond list in random order (`src/collection-store.ts` orders by `created_at`, then a random UUID); add a stable insertion tie-break.
+- **Repeated layer names** (CORE-125): a new layer is named `Layer <count+1>`, so it can repeat a name after a removal (`src/engines/layered-makeup/layer-stack.ts`); skip names in use, as presets already do.
+- **A damaged masculine plate blocks the feminine export** (PIPE-122): it reaches `refuse("invalid_collection")` in `src/features/eye-makeup/export/index.ts`; treat it as unavailable with a warning instead.
+- **Developer wording in localhost Build reasons** (PIPE-134): `src/package-server.ts` names `bun tools/setup-wolvenkit.ts`, `XFS_PACKAGE_*` overrides and "Game input".
+- **Install receipts matched on name and size** (CORE-118): an archive not hashed within the problem report's budget matches a receipt on name and size alone (`src/diagnostics/mod-identity.ts`).
+- **WebView2 runs with `--disable-web-security`** (DESK-09): Electrobun's native wrapper hard-codes the flag and no setting removes it; the CSP, session cookie and navigation rules still hold. Raise it upstream, or bundle CEF at the cost of a much larger installer.
+
 ## Working rules for this queue
 
 This is a durable queue, not a scheduled automation. Bounded parallel subagents are explicitly authorised; code-changing agents work in their own worktree under `D:/Dev/worktrees/<slug>` on a `claude/` branch. Offline verification never substitutes for in-game proof: batch game-only questions into one prepared session for the maintainer to run.

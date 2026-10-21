@@ -63,7 +63,7 @@ export type SaveExplorerState = {
   readonly revision: number;
 };
 
-/** The catalogue entries of the explorer's actions (research/authoring/ui-action-catalogue.md): all read-only, none recorded in Undo. */
+/** The explorer's actions (routed through its own service, a recorded boundary exception): all read-only, none recorded in Undo. */
 export const SAVE_EXPLORER_DESCRIPTORS = Object.freeze({
   "saves.refresh": { scope: "saves", effect: "read", async: true, undo: "none", payload: {} },
   "saves.open": { scope: "save", effect: "read", async: true, undo: "none", payload: { folder: "text" } },

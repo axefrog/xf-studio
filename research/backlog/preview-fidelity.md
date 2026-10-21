@@ -45,6 +45,13 @@ The maintainer observes movement above the eyes in the game idle that appears we
 
 Study the actual game skin/eye shaders, textures and parameter semantics (SSS, roughness, normal maps, eye layers, lip/mouth seam). Diagnose the waxy eyes and bright lip seam independently. Use matched camera/lighting and keep honest labels for unverified parity. Pride in presentation and careful detail are explicit priorities.
 
+Open bugs:
+
+- **Beard colour** (PREV-201): beard cards render lighter and more golden than the stubble under the same hair colour; needs material and colour diagnosis.
+- **Creator lighting on the masculine body** (PREV-166): the refit gains were fitted on feminine captures but apply by light name to the masculine rig too (`src/creator-lighting.ts`); key the calibration by body, or mark the masculine rig as not fitted.
+- **Wrap lighting steps at triangle edges** (PREV-137, fallback paths only): `xfsSurfaceCurvature` takes `fwidth` of the interpolated normal, nearly constant per triangle; only the `direct`/`srgb8` paths still use the wrap.
+- **Idle switch jump** (PREV-141): choosing the eyes-section idle during playback starts its face clip at 0, so the face jumps from the running loop's phase; a runtime two-clip blend would remove it.
+
 ### Generalised resource resolution
 
 Saved choices must resolve through effective game/mod resources, including CCXL additions and overrides; a vanilla-looking saved name is not proof of vanilla pixels. Generalise through provider-neutral MO2/Vortex/manual source adapters ([portable mod-source discovery](jewellery-and-customization.md#portable-mod-source-discovery)).
