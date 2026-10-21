@@ -13,9 +13,8 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 - **New requests** go into a lane the day they arrive: bugs and polish on existing features into polish or blockers; new features into *after 1.0*.
 
 ### In flight
-- **Architecture cleanup, wave 3:** move the flat `src/` modules into subsystem folders (branch `claude/source-layout`; reviewed and tested; merges when the Hair Lab branch has synced). *21 Oct*
-- **Architecture cleanup, wave 4:** the whole-codebase review by area. Running now on export and native, resolver and installation, and the runtime bridge. The core is reviewed after profiles phase 2. Then its fixes and the status refresh. *21 Oct*
-- **Profiles and layouts:** the design is under Sol review. Phase 1 (the profile and V model, with migration) starts once wave 3 merges, and the tab strip and panel picker components are built alongside by the UI component track. Defaults are adopted for the design's five questions. *21 Oct*
+- **Wave-4 review fixes** (7 open High, so feature merges are paused): `claude/fix-export` (NATIVE-80, PIPE-140/141, PREV-202), `claude/fix-install` (INSTALL-05..07, PIPE-139/142, DIAG-06..08), and bridge 0.8.1 on `claude/bridge-080a` (RB-97..106). The core review follows profiles phase 2. *21 Oct*
+- **Profiles and layouts:** the design is being revised after Sol's review (13 findings), with the maintainer's answers and the principle "assume nothing but game invariants"; a Sol re-check follows. Phase 1 (the profile and V model, with migration) starts once wave 3 merges, and the tab strip and panel picker components are built alongside by the UI component track. Defaults are adopted for the design's five questions. *21 Oct*
 - **Polish batch 1** (`claude/polish-1`): thumbnail drag direction, repeated layer names, collection tie order, the flaky mottle test, Build wording, the masculine-plate warning. *21 Oct*
 
 ### Beta blockers
