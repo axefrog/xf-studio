@@ -456,6 +456,13 @@ function decodeSimdClip(records: Records, entry: ClipEntry, chunks: readonly num
   const tracks = records.uint(b, "numTracks"), evaluated = records.uint(b, "numTranslationsToEvalAlignedToSimd"), copied = records.uint(b, "numTranslationsToCopy");
   const q = records.uint(b, "quantizationBits"), scaleConstant = records.uint(b, "isScaleConstant") !== 0, trackConstant = records.uint(b, "isTrackConstant") !== 0;
   if (joints < 0) throw new NativeMalformedError(`${name} has more extra joints than joints.`);
+  // Every count must be a non-negative integer (a signed record can hold a negative one) (NATIVE-80).
+  for (const [what, count] of [["frames", frames], ["tracks", tracks], ["evaluated translations", evaluated], ["copied translations", copied], ["quantisation bits", q]] as const)
+    if (!Number.isSafeInteger(count) || count < 0) throw new NativeMalformedError(`${name} declares ${count} ${what}.`);
+  // Constant scales and tracks produce one key per joint or track whatever the frame count, so they are bounded on their own before the
+  // per-frame bounds below, which a frame count of 0 would otherwise satisfy for any number of joints (NATIVE-80).
+  if (joints * CHANNELS.length + tracks > MAX_SIMD_OUTPUT_KEYS) throw new NativeMalformedError(`${name} declares ${joints} joints and ${tracks} tracks.`);
+  if (frames < 1) throw new NativeMalformedError(`${name} declares ${frames} frames; a SIMD clip has at least one.`);
   if (q > 16) throw new NativeMalformedError(`${name} quantises rotations to ${q} bits.`);
   if (evaluated % 4) throw new NativeMalformedError(`${name} evaluates ${evaluated} translations, not a multiple of four.`);
   const j4 = ceil(joints, 4), values = frames * j4 * 3;
