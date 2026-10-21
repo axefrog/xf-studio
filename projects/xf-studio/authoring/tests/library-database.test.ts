@@ -321,6 +321,34 @@ test("a row-rewriting step that fails rolls back and leaves no copy behind, howe
   expect(() => backups.discardMigrationCopy(path)).toThrow("migration copies");
 });
 
+test("a step that commits its rewrite itself and then fails keeps its copy: only the owner's own rollback lets a copy go", () => {
+  const dir = folder(), path = join(dir, "library.sqlite");
+  const file = openTestLibrary(path);
+  file.looks.save({ name: "Before", recipe: initialRecipe() });
+  file.close();
+  const backups = new LibraryBackups(path, () => Date.UTC(2026, 9, 21));
+  const copies = () => backups.list().filter(item => item.kind === "pre-migration");
+  // It commits the rewrite (ending the owner's transaction), begins one of its own, then throws.
+  const escaping: LibraryMigration = { id: "test-escaping-1", rewritesRows: true, applied: () => false, apply: raw => {
+    raw.query("UPDATE look_revisions SET name = 'After'").run();
+    raw.exec("COMMIT; BEGIN;");
+    throw Error("failed after committing");
+  } };
+  expect(() => LibraryDatabase.open(path, { clock: hostClock(), migrations: [...LIBRARY_MIGRATIONS, escaping], backups })).toThrow("failed after committing");
+  // The rewrite is in the file, so the copy is the only record of the rows before it: kept.
+  expect(dump(path).look_revisions.rows).toEqual([expect.objectContaining({ name: "After" })]);
+  expect(copies()).toHaveLength(1);
+  const copy = new Database(copies()[0].file, { readonly: true });
+  try { expect(copy.query("SELECT name FROM look_revisions").all()).toEqual([{ name: "Before" }]); } finally { copy.close(); }
+  // A step that commits and then returns normally is refused (its work escaped the step's transaction), and keeps its copy too.
+  const committing: LibraryMigration = { id: "test-committing-1", rewritesRows: true, applied: () => false,
+    apply: raw => { raw.query("UPDATE look_revisions SET name = 'Later'").run(); raw.exec("COMMIT; BEGIN;"); } };
+  expect(() => LibraryDatabase.open(path, { clock: hostClock(), migrations: [...LIBRARY_MIGRATIONS, committing], backups }))
+    .toThrow("ended the library's transaction");
+  expect(copies()).toHaveLength(2);
+  expect(ledger(path).map(row => row.id)).not.toContain("test-committing-1");
+});
+
 test("a step another opener ran meanwhile is seen inside the write lock: no copy is taken and it doesn't run again", () => {
   const dir = folder(), path = join(dir, "library.sqlite");
   openTestLibrary(path).close();

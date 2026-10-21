@@ -81,12 +81,20 @@ function connect(path: string, options: LibraryDatabaseOptions): { db: Database;
       // The file's write lock first: another opener migrating at the same time waits here, then finds the step done.
       db.exec("BEGIN IMMEDIATE");
       let copy: string | undefined;
+      // The step runs inside a savepoint of the owner's own, uniquely named: if it is still there afterwards, nothing the step
+      // did escaped this transaction (no commit, no transaction of its own), so rolling back undoes all of it.
+      const step = `xfs_step_${crypto.randomUUID().replaceAll("-", "")}`;
+      /** The step's savepoint was released into the owner's transaction: what follows is the owner's own work. */
+      let ours = false;
       try {
         if (!pending(db, migration)) { db.exec("COMMIT"); continue; }
         // The copy reads the file as committed, which this transaction hasn't changed yet; it runs on a connection of its own
         // (a copy can't be made inside a transaction) while the lock keeps every other writer out.
         if (migration.rewritesRows) copy = options.backups?.beforeMigration(migration.id);
+        db.exec(`SAVEPOINT ${step}`);
         migration.apply(db);
+        try { db.exec(`RELEASE ${step}`); ours = true; }
+        catch { throw Error(`Migration ${migration.id} ended the library's transaction.`); }
         if (userVersion(db) > RELEASED_LIBRARY_VERSION) throw Error(`Migration ${migration.id} raised the library version.`);
         db.exec(`CREATE TABLE IF NOT EXISTS ${LEDGER} (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL)`);
         // The backfill: steps made before the ledger existed are recorded the first time it is written.
@@ -96,11 +104,15 @@ function connect(path: string, options: LibraryDatabaseOptions): { db: Database;
         db.exec("COMMIT");
         migrated = true;
       } catch (error) {
+        // Rolled back verifiably only while the owner's transaction is still the one it began: its savepoint (before the step
+        // released it) or the step's work released into it. Otherwise the step committed something, and the copy is kept.
+        let undone = false;
         if (db.inTransaction) {
+          try { db.exec(`ROLLBACK TO ${step}`); undone = true; } catch { undone = ours; }
           db.exec("ROLLBACK");
-          // Rolled back: the file is what the copy holds, so a retry's copy would only repeat it.
-          if (copy) try { options.backups?.discardMigrationCopy(copy); } catch { /* Kept: a spare copy is harmless. */ }
         }
+        // Undone: the file is what the copy holds, so a retry's copy would only repeat it.
+        if (undone && copy) try { options.backups?.discardMigrationCopy(copy); } catch { /* Kept: a spare copy is harmless. */ }
         throw error;
       }
     }
