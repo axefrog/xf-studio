@@ -189,6 +189,8 @@ flowchart TB
 
 ### 2.2 Outbox, recovery and conflicts
 
+**One sync mechanism (decided 21 October, after the phase 1b reviews).** The outbox is the only way any document's local state reaches the library: looks, characters, profiles and every later kind. A service's in-memory view of a document is its acknowledged value with its outbox entries applied on top. Nothing else may keep a separate queue or reflect committed state into a context by hand. Phase 1b's hand-built character queue showed why: across four review rounds, the context and the document kept drifting apart (`experiments/038-profiles-spikes/1b-handover.md`).
+
 **Every mutation goes through the outbox first.** That covers looks, collections, characters, profiles and defaults, so **every unacknowledged durable mutation is recoverable**. The rules are the ones S1 proved ([A1–A7](../../experiments/038-profiles-spikes/README.md#acknowledgement-and-rebasing-rules-s1-answering-sols-medium-point)):
 
 - **An entry** is `{ id, seq, command, writes: { kind, id, base: number | { after: EntryId }, value | tombstone }[], at, state: "queued" | "conflict", current? }`. It is written synchronously before anything is sent.
@@ -226,6 +228,13 @@ flowchart TB
   - The holder is asked to release. It stops accepting edits at once, drains its outbox (flushes), stops its timers and callbacks, writes the workspace a last time, then releases the lease and confirms.
   - If the holder doesn't answer, the new window waits: "Waiting for the other window to finish saving. Close it to continue." The lease moves only when the holder terminates (localhost: the browser releases its Web Lock `xfs.workspace.<key>`; desktop: the host sees its page end).
   - There is no timed steal.
+- **Built in phase 1a, with these details:**
+  - **The desktop app is single-instance.** A second launch brings the running window forward and quits, so two host processes never share `workspace.json`.
+  - **Release order.** A release first ends any open gesture or control edit, committed as one Undo step. Then it refuses edits, drains, makes the last workspace write, and releases.
+  - **What stays available.** A read-only window still reads the library and keeps diagnostics. Its UI preferences work in memory, but are never written while it is read-only.
+  - **Workspace identity.** On localhost the workspace key is a per-browser ID. Fencing generations and the outbox keys use the same ID.
+  - **Takeover restarts the page,** until scene runtimes (phase 4a) allow switching in place.
+  - **Where the read-only message shows.** It is a full-width notice under the header (style-guide pattern `t-read-only-window`). Editing controls show as unavailable, with the reason.
 - **Fencing at the host, as a backstop.** Every lease carries a generation. Document commands and desktop workspace writes carry it, and the host refuses an older generation. A late write from a released window can't land.
 - **The lease and takeover are the one persistence piece the spikes didn't cover.** They are phase 1's first task, with their own small harness: two windows on each host, the holder killed mid-drain, a hung holder, and a late write after release refused by fencing.
 
