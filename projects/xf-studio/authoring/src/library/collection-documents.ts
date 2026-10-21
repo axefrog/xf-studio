@@ -46,6 +46,8 @@ export type CollectionWorking = {
   readonly packagePlan?: unknown;
   /** The named version (released tables) it was last saved as. */
   readonly saved?: { readonly revision: number };
+  /** The collection it was forked from by the profiles migration (a draft or named version that differed from its working copy). */
+  readonly origin?: string;
   readonly createdAt: number;
 };
 export type LookWorking = {

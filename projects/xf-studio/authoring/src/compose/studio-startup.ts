@@ -67,6 +67,8 @@ import { createBrowserUpdateCheck } from "../setup/browser/browser-update-check-
 import { pageFailure, setPageDiagnostics } from "../diagnostics/page-sink";
 import type { WorkspaceLease } from "../app/workspace/workspace-lease";
 import type { StartedOutbox } from "../app/browser/document-outbox-device";
+import { startProfilesMigration } from "../app/browser/profiles-migration-device";
+import type { WorkspaceState } from "../app/workspace/workspace-state";
 import { outboxView } from "../app/presentation-status";
 
 export type StudioHost = {
@@ -236,6 +238,8 @@ async function start(host: StudioHost, root: HTMLElement) {
   const headHost = byId("device-head"), uvHost = byId("device-uv");
   const viewportDevice = createBrowserViewportDevice({ region, headHost, uvHost, queryContext: hit => core.app.contextQuery(hit), renderers: STUDIO_RENDERERS, optionalRenderers: experiments, referenceTextures: browserReferenceTextures(verification),
     onContext: event => event === "lost" ? diagnostics.contextLost("3D view") : diagnostics.contextRestored("3D view") });
+  // The profiles migration's mark and sessions (profiles design §8), stored with the workspace; the migration fills them in.
+  const profileMarks: Pick<WorkspaceState, "migration" | "profiles"> = { migration: workspace.migration, profiles: workspace.profiles };
   const session = createBrowserWorkspaceSession({
     workspace, restored, verification, storage, budget: host.storageBudget, model: STUDIO_COMPOSITION.documents,
     // The outbox's keys share the workspace's storage, so they count against its budget (profiles design §2.2).
@@ -251,6 +255,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       uiPreferences: () => preferences.snapshot(),
       previewSetup: () => ({ autostart, ...(declined ? { declined: true as const } : {}) }),
       transitions: () => transitions.stored(),
+      profiles: () => profileMarks,
     },
     sources: [core.document, preferences], window, document,
     onStatus: save => { status = { ...status, workspace: save }; statusSource.changed(); },
@@ -415,6 +420,17 @@ async function start(host: StudioHost, root: HTMLElement) {
   void localSetup.dispatch({ kind: "setup.refresh" });
   for (let i = 0; i < core.document.recipe.layers.length; i++) previewDevice.coordinator.render(i);
   session.activate();
+  // The profiles migration (profiles design §8), in the background, by the window holding the workspace. Nothing reads its result
+  // until the Studio moves onto the profile services (phase 1d-ii), so today's paths are unchanged.
+  if (host.documents && restored.writable && (!lease || lease.writable())) {
+    const life = new AbortController();
+    window.addEventListener("pagehide", () => life.abort(), { once: true });
+    lease?.onReleaseStart(() => life.abort());
+    void startProfilesMigration({ endpoint: `${verification ? "/api/verification" : "/api"}/profiles/migrate`, send: fetch,
+      workspace: host.documents.workspace, fence: host.documents.fence, model: STUDIO_COMPOSITION.documents, state: () => session.snapshot(),
+      marks: profileMarks, flush: () => session.flush(), signal: life.signal,
+      report: error => diagnostics.failure("library", "profiles_migration_failed", "Your work couldn't be moved into your profile yet; it will try again.", error, { level: "warn" }) });
+  }
   await port!.library.execute({ kind: "initialize" });
   followPreviewSetup();
 

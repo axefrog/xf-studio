@@ -151,6 +151,9 @@ export class LibraryDatabase {
     return this.connection;
   }
 
+  /** The file's backups (null: none, a scratch, test or verification file). */
+  get backups(): LibraryBackups | null { return this.options.backups; }
+
   /** Runs `query` on the file's connection. */
   read<T>(query: (db: Database) => T): T { return query(this.open()); }
 

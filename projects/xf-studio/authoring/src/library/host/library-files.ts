@@ -17,6 +17,7 @@ import { LibraryBackups } from "../../platform/persistence/backups";
 import { createDocumentsHandler, createWorkspaceLeaseHandler, DocumentStore, keepLibraryClean } from "../../platform/persistence/document-store";
 import { importLegacyExperiments } from "../../platform/persistence/legacy-experiment-import";
 import { LibraryDatabase, type LibraryDatabaseOptions } from "../../platform/persistence/library-database";
+import { createProfilesMigrationHandler } from "../../app/profiles/host/profiles-migrate";
 
 /** The library file `path` with the Studio's migrations (tools and tests; the hosts use `openLibraryFiles`). */
 export function openLibraryDatabase(path: string, options: Partial<Omit<LibraryDatabaseOptions, "migrations">> = {}): LibraryDatabase {
@@ -41,7 +42,7 @@ export function libraryStores(database: LibraryDatabase, parts: PartRegistry, no
 export type LibraryFiles = {
   readonly main: LibraryStores;
   readonly verification: LibraryStores;
-  /** The answer to a library request (`/api/looks`, `/api/collections`, `/api/part-presets`, `/api/documents`, `/api/collection-versions`, `/api/workspace-lease`, each also under `/api/verification`), or null for any other path. */
+  /** The answer to a library request (`/api/looks`, `/api/collections`, `/api/part-presets`, `/api/documents`, `/api/collection-versions`, `/api/workspace-lease`, `/api/profiles/migrate`, each also under `/api/verification`), or null for any other path. */
   handle(request: Request, url?: URL): Promise<Response> | null;
   /** Flushes and closes both files and stops the backups. Idempotent. */
   close(): void;
@@ -89,6 +90,9 @@ export function openLibraryFiles(dataRoot: string, options: LibraryFilesOptions)
       { prefix: `${base}/collection-versions`, nested: false,
         handle: collectionVersionsHandler(stores.collections, stores.documents, stores.database, `${base}/collection-versions`) },
       { prefix: `${base}/workspace-lease`, nested: false, handle: createWorkspaceLeaseHandler(stores.documents, `${base}/workspace-lease`) },
+      // The profiles migration (profiles design §8): one transaction per workspace run, fenced by its lease.
+      { prefix: `${base}/profiles/migrate`, nested: false, handle: createProfilesMigrationHandler(stores, `${base}/profiles/migrate`,
+        { parts, backups: stores.database.backups, now: () => clock.now() }) },
     ];
   });
   return {

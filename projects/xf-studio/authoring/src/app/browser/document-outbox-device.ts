@@ -9,7 +9,7 @@
  * - **Revision checks** (A7): every 10 s while the window is visible, and whenever it gains focus; the outbox checks again by itself once
  *   the host answers after failing (a host restart).
  */
-import type { DocumentStorePort } from "../../platform/api/document-store";
+import type { DocumentStorePort, WorkspaceFence } from "../../platform/api/document-store";
 import { DocumentOutbox, type OutboxStorage } from "../../platform/core/document-outbox";
 import type { WorkspaceLease } from "../workspace/workspace-lease";
 import { leasedDocuments } from "../workspace/leased-documents";
@@ -17,7 +17,9 @@ import { browserDocuments } from "./browser-documents-device";
 
 export const REVISION_CHECK_MS = 10_000;
 
-export type StartedOutbox = { readonly outbox: DocumentOutbox; readonly documents: DocumentStorePort; stop(): void };
+export type StartedOutbox = { readonly outbox: DocumentOutbox; readonly documents: DocumentStorePort;
+  /** The workspace's identity, and the lease every library write from this window carries (null: none now). */
+  readonly workspace: string; fence(): WorkspaceFence | null; stop(): void };
 
 export function startDocumentOutbox(options: {
   /** `/api/documents`, or `/api/verification/documents`. */
@@ -34,8 +36,8 @@ export function startDocumentOutbox(options: {
   page?: { addEventListener(type: string, listener: () => void): void; removeEventListener(type: string, listener: () => void): void; visible(): boolean };
 }): StartedOutbox {
   const lease = options.lease;
-  const transport = browserDocuments(options.prefix, (url, init) => options.send(url, init),
-    () => { const generation = lease?.generation() ?? null; return generation === null ? null : { workspace: options.workspace, generation }; });
+  const fence = (): WorkspaceFence | null => { const generation = lease?.generation() ?? null; return generation === null ? null : { workspace: options.workspace, generation }; };
+  const transport = browserDocuments(options.prefix, (url, init) => options.send(url, init), fence);
   const documents = lease ? leasedDocuments(transport, lease) : transport;
   const outbox = new DocumentOutbox(documents, options.storage, {
     writable: () => lease?.writable() ?? true, sendable: () => lease?.draining() ?? true, report: options.report,
@@ -51,7 +53,7 @@ export function startDocumentOutbox(options: {
     if (options.storage.settle) lease.onRelease(() => options.storage.settle!());
     lease.onReleased(stop);
   }
-  return { outbox, documents, stop };
+  return { outbox, documents, workspace: options.workspace, fence, stop };
 }
 
 /** The browser page's focus and visibility, for `startDocumentOutbox`. */

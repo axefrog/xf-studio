@@ -15,6 +15,7 @@ import { DEFAULT_PREVIEW_TEXTURE_SIZE, parsePreviewTextureSize, type PreviewText
 import {parseGlitterChoices, type GlitterChoices} from "../../engines/layered-makeup/glitter-model";
 import { defaultUIPreferences, parseUIPreferences, type UIPreferences } from "../ui-preferences";
 import { isCreatorName } from "../../character/creator-names";
+import { migrationMarkOf, workspaceProfilesOf, type MigrationMark, type WorkspaceProfiles } from "../profiles/profile-session";
 import { storedCharacterOf, type StoredCharacter } from "../../character/character-context-actions";
 import { DEFAULT_CREATOR_LIGHTING, DEFAULT_LIGHTING_PRESET, LIGHTING_PRESETS, readCreatorLighting, storedCreatorLighting, type CreatorLightingOptions,
   type LightingPreset } from "../../preview/creator-lighting";
@@ -159,6 +160,12 @@ export type WorkspaceState = {
   liveFeatures?: Record<string, LiveFeatureState>;
   /** Present when the selected look is locked (it holds a newer build's data): why, in plain words. Never stored. */
   liveLocked?: string;
+  /**
+   * The profiles migration's mark (profiles design §8 step 1) and the profile sessions it built (§1.1, `app/profiles/profile-session.ts`).
+   * Kept as stored; an older build drops both when it saves, so the next upgrade migrates again (§2.4).
+   */
+  migration?: MigrationMark;
+  profiles?: WorkspaceProfiles;
 };
 /**
  * The stored `xfs/workspace-2` document. Editor memory is per feature: `look` is the editor
@@ -265,6 +272,10 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
   // A damaged graph, or the default one written anyway, falls back to the default graph over `preview`.
   const views = v.views !== undefined ? parseViewGraph(v.views, STUDIO_VIEW_GRAPH_RULES) : undefined;
   if (views && !isDefaultViewGraph(views)) state.views = views;
+  // The profiles migration's mark and sessions (profiles design §8): kept when they read, else left for the migration to make again.
+  const mark = migrationMarkOf(v.migration), profiles = workspaceProfilesOf(v.profiles);
+  if (mark) state.migration = mark;
+  if (profiles) state.profiles = profiles;
   if (v.previewSetup && typeof v.previewSetup === "object" && typeof v.previewSetup.autostart === "boolean")
     state.previewSetup = { autostart: v.previewSetup.autostart, ...(v.previewSetup.declined === true ? { declined: true as const } : {}) };
   if (v.library) {

@@ -79,8 +79,8 @@ export type Receipt = { readonly command: string; readonly revisions: CommandRev
 export const RECEIPT_KIND = "xfs-receipt";
 /** How long a receipt is kept when no later command forgets it. */
 export const RECEIPT_TTL_MS = 7 * 24 * 3600_000;
-/** Kinds the host keeps for itself: no command may write them. */
-export const isHostKind = (kind: string) => kind.startsWith("xfs-");
+/** Kinds the host keeps for itself: no command may write them (its own `xfs-` kinds, and the migration records, profiles design §8). */
+export const isHostKind = (kind: string) => kind.startsWith("xfs-") || kind === "migration";
 /** Most writes in one command, and most receipts one command forgets. */
 export const COMMAND_LIMITS = { writes: 64, forget: 512 } as const;
 
