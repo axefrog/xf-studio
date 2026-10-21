@@ -348,12 +348,17 @@ export class CharacterDetailHost {
   private route(): CharacterRoute | null { return characterRoute(this.options.settings()); }
   /**
    * A problem report's resources, each as the route serves it now (resolver-host.ts `reportResources`, DIAG-08). Only while the route is
-   * open: null otherwise, since a report never opens the game setup, and never starts WolvenKit.
+   * open and still current: it is checked first (every watched stamp), and one found out of date is dropped, so a mod switched off
+   * since is never reported as the winner; null then, and while the route isn't open, since a report never opens the game setup. Never
+   * starts WolvenKit.
    */
-  async reportResources(refs: readonly { hash: string; path?: string }[], progress?: (done: number, total: number) => void):
+  async reportResources(refs: readonly { hash: string; path?: string | null }[], progress?: (done: number, total: number) => void):
     Promise<Map<string, ReportResource | null> | null> {
     const route = this.route();
-    const installation = route ? installations.peek({ ...route, cacheDir: this.resolverCache, log: this.options.log }) : null;
+    if (!route) return null;
+    const options = { ...route, cacheDir: this.resolverCache, log: this.options.log };
+    try { await installations.revalidate(options); } catch { return null; }
+    const installation = installations.peek(options);
     return installation ? reportResources(installation, refs.map(ref => ({ hash: ref.hash, path: ref.path ?? null })), undefined, progress) : null;
   }
   /** The preparation cache shared on the current installation (a new one once its fingerprint changed). */
