@@ -1,5 +1,5 @@
 /**
- * The direct-read scan behind the ratchet in `graph-direct-reads.test.ts` (profiles and graph design §5.1): which src
+ * The direct-read scan behind the ratchet in `graph-direct-reads.test.ts`: which src
  * modules read the wall clock, timers, randomness, the file system, processes and workers, the network (fetched or
  * served), the host environment (its variables, `node:os`), browser storage or the game bridge directly, by kind, and
  * how many times.
@@ -35,8 +35,8 @@ export const DIRECT_READS: Readonly<Record<string, { readonly code?: RegExp; rea
 };
 
 /** Adapter modules: they implement a source, and may read directly. */
-export const ADAPTERS: ReadonlySet<string> = new Set(["platform/graph-adapters/host-sources", "platform/graph-adapters/sqlite-store", "platform/graph-adapters/backups",
-  "platform/graph-adapters/library-durability", "features/hair-lab/render/hair-worker", "features/hair-lab/render/worker-device", "platform/scene/reference-textures"]);
+export const ADAPTERS: ReadonlySet<string> = new Set(["platform/core/clock", "platform/core/random", "platform/persistence/document-store", "platform/persistence/backups",
+  "platform/persistence/library-durability", "platform/persistence/legacy-experiment-import", "features/hair-lab/render/hair-worker", "features/hair-lab/render/worker-device", "platform/scene/reference-textures"]);
 
 /** The direct reads in a module's text, counted by kind (kinds it doesn't read are absent). */
 export function readsIn(text: string): Record<string, number> {

@@ -20,7 +20,7 @@
 import { lstat, readdir, rm, rmdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { usedThisSession } from "./game-asset-export";
-import { hostClock } from "./platform/graph-adapters/host-sources";
+import { hostClock } from "./platform/core/clock";
 
 export type PreparedRoots = { exports: string; resolver: string; store: string; manifests: string;
   /** Choice previews (`images/*.webp`, `sources/*.json`): evicted with the budget; their size is counted and cleared by their store. */

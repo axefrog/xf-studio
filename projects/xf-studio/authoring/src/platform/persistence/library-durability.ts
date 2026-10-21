@@ -20,7 +20,7 @@
  * the host's thread, so quitting still makes everything durable before the process ends.
  */
 import { Database } from "bun:sqlite";
-import type { AbortSignalLike, Clock } from "strata";
+import type { Clock } from "../core/clock";
 
 /** A store tells its library file's durability that it committed a write. */
 export interface LibraryWrites { wrote(): void }
@@ -122,7 +122,7 @@ export type LibraryDurabilityOptions = {
   /** Timers (the host clock; simulated in tests). */
   readonly clock: Clock;
   /** The file's open lifetime: when it aborts, a last flush runs at once, and every later write flushes as it happens. */
-  readonly signal: AbortSignalLike;
+  readonly signal: AbortSignal;
   readonly timing?: FlushTiming;
   /** A flush that failed, the first of a run of failures (it is tried again later). */
   readonly report?: (error: unknown) => void;

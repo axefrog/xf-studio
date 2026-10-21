@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { DerivedCache, fileSha256, writeFileAtomic } from "./derived-cache";
 import { depotHash, sanitizeDepotPath } from "./depot-path";
 import { hostFailure, hostTrace } from "./diagnostics/host-log";
-import { hostClock } from "./platform/graph-adapters/host-sources";
+import { hostClock } from "./platform/core/clock";
 import type { LowPriority } from "./process-tree";
 
 /**

@@ -1,7 +1,5 @@
 import { encodeScalarBytes, scalarBytes } from "../../../platform/api/scalar-image";
 import * as THREE from "three";
-import { Aborter } from "../../../platform/api/graph";
-import type { AbortSignalLike } from "../../../platform/api/graph";
 import { featureId } from "../../../platform/api/feature";
 import type { FeatureRendererFactory, SceneHostPort } from "../../../platform/api/scene";
 import type { createHairLab } from "../service";
@@ -40,9 +38,10 @@ function strandGeometry(paths: Paths) {
   const geometry = new THREE.BufferGeometry(); geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3)); geometry.setIndex(indices); geometry.computeVertexNormals(); return geometry;
 }
 
-export function hairRenderer(lab: ReturnType<typeof createHairLab>, lifetime: AbortSignalLike): FeatureRendererFactory {
+export function hairRenderer(lab: ReturnType<typeof createHairLab>, lifetime: AbortSignal): FeatureRendererFactory {
   return { feature: featureId("hair-lab"), create(host) {
-    const life = new Aborter(lifetime), scene = `head:${host.anchors().head.uuid}`;
+    const life = new AbortController(), scene = `head:${host.anchors().head.uuid}`;
+    if (lifetime.aborted) life.abort(); else lifetime.addEventListener("abort", () => life.abort(), { once: true });
     let boundRevision = "", identity: string | null = null, drawn: { group: THREE.Group; detach(): void; geometries: THREE.BufferGeometry[]; materials: THREE.Material[]; textures: THREE.Texture[]; character: string | null; coverage: string | undefined; topology: string; buffers: { paths: THREE.BufferGeometry; volumes?: THREE.BufferGeometry; cards?: THREE.BufferGeometry } } | null = null;
     let resultKey = "", evidence: unknown = null, upload = 0;
     let capShader: unknown = null;

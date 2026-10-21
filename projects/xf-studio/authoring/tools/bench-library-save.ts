@@ -12,8 +12,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Database } from "bun:sqlite";
 import { LookLibrary } from "../src/library-store";
-import { LibraryDurability } from "../src/platform/graph-adapters/library-durability";
-import { hostClock } from "../src/platform/graph-adapters/host-sources";
+import { LibraryDurability } from "../src/platform/persistence/library-durability";
+import { hostClock } from "../src/platform/core/clock";
 import { starterRecipe } from "../src/features/eye-makeup/region";
 import { recipeFile } from "../src/recipe-schema";
 

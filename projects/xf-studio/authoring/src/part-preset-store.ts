@@ -4,7 +4,7 @@ import { isNewerData, modNameIssue, type PartEnvelope } from "./platform/api";
 import type { PartRegistry } from "./platform/core/document";
 import { LibraryError } from "./library-store";
 import { hostFailure } from "./diagnostics/host-log";
-import { useWriteAheadLog, type LibraryWrites } from "./platform/graph-adapters/library-durability";
+import { useWriteAheadLog, type LibraryWrites } from "./platform/persistence/library-durability";
 
 /**
  * Named part presets in the local library (research/authoring/editor-invariants.md "Part presets"): one feature's part saved on its

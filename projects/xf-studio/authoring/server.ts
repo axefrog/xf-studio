@@ -5,12 +5,13 @@ import { existsSync, mkdirSync } from "node:fs";
 import { LookLibrary, libraryRequest } from "./src/library-store";
 import { CollectionLibrary, collectionRequest } from "./src/collection-store";
 import { PartPresetLibrary, partPresetRequest } from "./src/part-preset-store";
-// The graph (XF Strata): its store and backups in the library files, its host transport and inspector feed (profiles and
-// graph design, G1). Nothing in the page uses it yet; later slices move V, presets and profiles onto it.
-import { createGraphHandler, GraphLibrary } from "./src/platform/graph-adapters/graph-host";
-import { hostClock, hostRandom } from "./src/platform/graph-adapters/host-sources";
-import { LibraryDurability } from "./src/platform/graph-adapters/library-durability";
-import { STUDIO_GRAPH_RULES, STUDIO_GRAPH_TYPES } from "./src/compose/graph";
+// The library files' host side: durability, daily backups and the document store (src/platform/persistence).
+import { hostClock } from "./src/platform/core/clock";
+import { LibraryDurability } from "./src/platform/persistence/library-durability";
+import { LibraryBackups } from "./src/platform/persistence/backups";
+import { createDocumentsHandler, DocumentStore } from "./src/platform/persistence/document-store";
+import { importLegacyExperiments } from "./src/platform/persistence/legacy-experiment-import";
+import { EXPERIMENT_FLAGS, type ExperimentFlagsDocument } from "./src/platform/api/experiments";
 // A composition root: the part registry is built once and injected (CORE-29).
 import { STUDIO_PARTS } from "./src/compose/studio-registry";
 import { EXPRESSIONS_GAME_PREREQUISITE } from "./src/features/expressions/export/game";
@@ -64,11 +65,11 @@ const diagnostics = hostDiagnosticsAt(dataRoot, { echo: consoleEcho });
 setProcessDiagnostics(diagnostics);
 // A background failure nobody caught is logged; it never ends the dev server (PREV-101).
 logUnhandledRejections();
-const graphOptions = { types: STUDIO_GRAPH_TYPES, rules: STUDIO_GRAPH_RULES, clock: hostClock(), random: hostRandom() };
+const clock = hostClock();
 // Each library file's durability (library-durability.ts): commits don't wait for the disk, and a flush a few seconds after the last
 // one makes them durable, so a power cut loses at most those seconds. Open for the process's lifetime (a kill loses nothing: the commits are already with the OS).
 const libraryLife = new AbortController();
-const durable = (file: string) => new LibraryDurability(resolve(dataRoot, file), { clock: graphOptions.clock, signal: libraryLife.signal,
+const durable = (file: string) => new LibraryDurability(resolve(dataRoot, file), { clock, signal: libraryLife.signal,
   report: error => hostFailure("library", "flush_failed", "The library couldn't be flushed to disk yet; it will try again.", error, "warn") });
 const libraryFile = durable("library.sqlite"), verificationFile = durable("verification.sqlite");
 const library = new LookLibrary(resolve(dataRoot, "library.sqlite"), libraryFile);
@@ -78,12 +79,14 @@ const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verific
 // Named part presets (an expression today) in their own table of the same library files (part-preset-store.ts).
 const partPresets = new PartPresetLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS, undefined, libraryFile);
 const verificationPartPresets = new PartPresetLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS, undefined, verificationFile);
-const graphLibrary = new GraphLibrary(resolve(dataRoot, "library.sqlite"), { ...graphOptions, writes: libraryFile });
-const verificationGraphLibrary = new GraphLibrary(resolve(dataRoot, "verification.sqlite"), { ...graphOptions, writes: verificationFile });
-const graphRequests = [["/api/graph", createGraphHandler(graphLibrary, "/api/graph")],
-  ["/api/verification/graph", createGraphHandler(verificationGraphLibrary, "/api/verification/graph")]] as const;
-// The library's daily backup, a moment after starting (never for an isolated server's own library).
-if (!state.isolated) setTimeout(() => graphLibrary.dailyBackup(), 2000);
+// Typed documents (the experimental-features preference, experiments' documents) in their own table of the same files.
+const documents = new DocumentStore(resolve(dataRoot, "library.sqlite"), { writes: libraryFile, now: () => clock.now() });
+const verificationDocuments = new DocumentStore(resolve(dataRoot, "verification.sqlite"), { writes: verificationFile, now: () => clock.now() });
+for (const store of [documents, verificationDocuments]) importLegacyExperiments(store, message => diagnostics.log.info("library", "legacy_import", message));
+const documentRequests = [["/api/documents", createDocumentsHandler(documents, "/api/documents")],
+  ["/api/verification/documents", createDocumentsHandler(verificationDocuments, "/api/verification/documents")]] as const;
+// The library's daily backup, a moment after starting and each day after (never for an isolated server's own library).
+if (!state.isolated) new LibraryBackups(resolve(dataRoot, "library.sqlite"), () => clock.now()).keepDaily(clock, libraryLife.signal);
 const localSettings = new LocalSettingsStore(state.settingsDirectory);
 // A verification workspace (?verify) edits its own copy of the settings, starting from these (UI-98).
 const verificationSettings = new LocalSettingsStore(verificationSettingsDirectory(dataRoot), { seed: () => localSettings.load().settings });
@@ -174,8 +177,7 @@ const referenceCharacters = createReferenceCharacterRoutes({ cacheRoot: previewC
   preparedBudget: preparedPartitions.reference,
   enabled: async request => {
     if (request.headers.get("X-XFS-Verification") === "1") return true;
-    const graph = await graphLibrary.graph(), preferences = graph.list().find(ref => ref.type === "experimental-features");
-    return !!preferences && graph.resolve(preferences, ["flags", "hair-lab"]) === true;
+    return documents.get<ExperimentFlagsDocument>(EXPERIMENT_FLAGS.kind, EXPERIMENT_FLAGS.id)?.value.flags?.["hair-lab"] === true;
   },
   settings: () => ({ gameRoot: packageToolPaths(localSettings.load().settings).gamepath, launchRoute: "direct", mo2Root: null,
     mo2ProfileId: null, manualModRoot: null, wolvenKitCli: wolvenKit.usable() }), log: diagnostics.log.logger("reference-character") });
@@ -307,7 +309,7 @@ const server = Bun.serve({
       if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return collectionRequest(request, store, prefix);
     for (const [prefix, store] of [["/api/part-presets", partPresets], ["/api/verification/part-presets", verificationPartPresets]] as const)
       if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return partPresetRequest(request, store, prefix);
-    for (const [prefix, handle] of graphRequests) if (url.pathname.startsWith(prefix + "/")) return handle(request);
+    for (const [prefix, handle] of documentRequests) if (url.pathname === prefix) return handle(request);
     for (const [prefix, store] of [["/api/looks", library], ["/api/verification/looks", verificationLibrary]] as const)
       if (url.pathname === prefix || url.pathname.startsWith(prefix + "/"))
         return libraryRequest(request, store, prefix);

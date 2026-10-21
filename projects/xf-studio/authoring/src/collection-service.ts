@@ -11,8 +11,7 @@ import type { LibraryState } from "./workspace-state";
 import type { PackageAction } from "./package-action";
 import { packageBuildLine, packageCheckLine } from "./package-filter";
 import { packageBuildStageLine } from "./package-action";
-import { hostClock } from "./platform/graph-adapters/host-sources";
-import type { Clock } from "strata";
+import { hostClock, type Clock } from "./platform/core/clock";
 import { refusal, type Capability, type PackageBuildProgress, type PackageBuildResult, type PackageCheckResult } from "./platform/api";
 import { copyPackagePlan } from "./platform/core/package-plan";
 
@@ -322,7 +321,7 @@ export class CollectionService {
       if (stored.revision === draft.revision && stored.collection.id === draft.id) this.remember(stored.collection, stored.revision);
     } catch { /* Baseline stays unknown; the draft itself is unaffected. */ }
   }
-  /** Timers come from the host's clock source (profiles and graph design §5.1). */
+  /** Timers come from the injected clock (platform/core/clock.ts), so a test can drive them. */
   private readonly clock: Clock = hostClock();
   private setProgress(progress: CollectionProgress) { this.progress = progress; this.notify(); }
   /**
