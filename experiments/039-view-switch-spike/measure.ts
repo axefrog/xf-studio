@@ -25,8 +25,9 @@ const RECORD = `(() => { const original = window.fetch; window.__spikeRequests =
       window.__spikeRequests.push({ at: performance.now(), body: JSON.parse(init.body) }); } catch {}
     return original.apply(this, arguments); }; })();`;
 
-const page = await launch(`http://127.0.0.1:${port}/?verify=1&spike=views`, { width: 1100, height: 750, init: GL_PROBE + RECORD,
-  profile: resolve(profileArg), args: ["--enable-precise-memory-info", "--js-flags=--expose-gc"] });
+const page = await launch(`http://127.0.0.1:${port}/?verify=1&spike=views`, { width: 960, height: 640, init: GL_PROBE + RECORD,
+  profile: resolve(profileArg), args: ["--enable-precise-memory-info", "--js-flags=--expose-gc", "--renderer-process-limit=1", "--disable-extensions",
+    "--disable-background-networking", "--disable-features=BackForwardCache,MediaRouter,OptimizationHints,Translate"] });
 
 /** The headless Chrome's GPU process's dedicated and shared GPU memory (Windows GPU Process Memory counters), in MB. */
 async function gpuMemory() {
@@ -78,20 +79,30 @@ const firstFrame = (act: string, drawer: string) => page.evaluate(`(async () => 
 })()`);
 
 try {
+  console.log("waiting for the feminine default V");
   await page.waitFor(ready("female"), 900_000);
   await page.wait(4000);
   log("start", await memory("feminine default V, one view"));
 
+  // `SPIKE_PART=resident` measures only the resident subjects, with the body hidden on every V (a smaller page, for the memory guard).
+  const residentOnly = process.env.SPIKE_PART === "resident";
+  if (!residentOnly) {
   // ---------- Gate A: two views of one scene ----------
   const v2 = await page.evaluate(`(() => { const g = ${S}.graph; return g.addView("main", { scene: true }); })()`) as string;
   // The second view: whole body framing and the other lighting preset (another light configuration, so other programs).
+  const linkedBefore = await page.evaluate(`window.xfsGl.programs.length`) as number;
   await page.evaluate(`${S}.drawView(${JSON.stringify(v2)})`);
   await page.wait(500);
-  for (const action of [{ kind: "camera.body", view: v2 }, { kind: "preview.setLightingPreset", preset: "studio", view: v2 }])
-    log(`viewSetup ${action.kind}`, await page.evaluate(`${S}.dispatch(${JSON.stringify(action)})`));
+  // The second view frames the whole body (a camera action needs its view drawn), then, while the main view is drawn again, gets the
+  // other lighting preset: its rig's programs are first linked by the first timed switch.
+  log("viewSetup camera.body", await page.evaluate(`${S}.dispatch(${JSON.stringify({ kind: "camera.body", view: v2 })})`));
   await page.wait(1500);
   await page.evaluate(`${S}.drawView("main")`);
+  await page.wait(1000);
+  log("viewSetup preset", await page.evaluate(`${S}.dispatch(${JSON.stringify({ kind: "preview.setLightingPreset", preset: process.env.SPIKE_PRESET ?? "studio", view: v2 })})`));
   await page.wait(1500);
+  log("gateA.warmup", { programsLinkedBySecondView: (await page.evaluate(`window.xfsGl.programs.length`) as number) - linkedBefore,
+    lightsShared: await page.evaluate(`(() => { const g = ${S}.graph; const r = id => g.views.find(v => v.id === id); return r("main")?.lights === r(${JSON.stringify(v2)})?.lights; })()`) });
   const viewSwitches: unknown[] = [];
   for (let i = 0; i < 12; i++) {
     const to = i % 2 === 0 ? v2 : "main";
@@ -100,6 +111,7 @@ try {
   }
   log("gateA.viewSwitches", viewSwitches);
   log("gateA.memory", await memory("two views of one scene"));
+  if (process.env.SPIKE_PART === "views") throw Error("done (views only)");
 
   // ---------- Gate B, today's path: the head reloads for the other body ----------
   /** Dispatch a character action and sample, every animation frame, which body the drawn head has and what the page says meanwhile. */
@@ -133,19 +145,33 @@ try {
   await page.wait(3000);
   // Superseded: masculine asked, then the feminine V again 150 ms later. Does the masculine head still load, and is it ever drawn?
   log("gateB.today.superseded", await bodySwitch({ kind: "character.useDefault", bodyGender: "male" }, ready("female"),
-    `await new Promise(r => setTimeout(r, 150)); ${P}.authoring.dispatch({ kind: "character.useDefault", bodyGender: "female" });`));
+    `await new Promise(r => setTimeout(r, 150)); window.__secondAnswer = ${P}.authoring.dispatch({ kind: "character.useDefault", bodyGender: "female" });`).catch(error => String(error)));
+  log("gateB.today.superseded.secondAnswer", await page.evaluate(`JSON.stringify(window.__secondAnswer ?? null)`));
   await page.wait(3000);
-  const requests = await page.evaluate(`window.__spikeRequests.map(r => r.body)`) as { body?: unknown; source: string }[];
-  const masc = [...requests].reverse().find(r => JSON.stringify(r).includes('"male"'));
-  const fem = [...requests].reverse().find(r => r !== masc && !JSON.stringify(r).includes('"male"'));
+  if (await page.evaluate(`${S}.mainBody()`) === "male") {
+    log("gateB.today.superseded.after", { shownBody: "male", note: "the later request for the feminine V was lost; asking again" });
+    await page.evaluate(`${P}.authoring.dispatch({ kind: "character.useDefault", bodyGender: "female" })`);
+  }
+  }
+  if (residentOnly) {
+    log("bodyHidden", await page.evaluate(`${S}.dispatch({ kind: "preview.setBody", enabled: false })`));
+    await page.waitFor(`${status}?.phase === 'ready' && !${status}.updating`, 120_000);
+    await page.wait(3000);
+  }
+  const requests = (await page.evaluate(`window.__spikeRequests.map(r => r.body)`) as { kind?: string; request?: { bodyGender?: string } }[])
+    .filter(r => r.kind === "view" && r.request).map(r => r.request!);
+  const masc = [...requests].reverse().find(r => r.bodyGender === "male");
+  const fem = [...requests].reverse().find(r => r.bodyGender !== "male");
   log("requests", { count: requests.length, masc: masc ? JSON.stringify(masc).slice(0, 300) : null, fem: fem ? JSON.stringify(fem).slice(0, 300) : null });
-  if (!masc) throw Error("No masculine request was recorded.");
+  const mascRequest = masc ?? { schema: "xfs/character-request-9", source: "default", bodyGender: "male" };
+  if (residentOnly) Object.assign(mascRequest, { body: false });
+  log("residentRequest", mascRequest);
 
   // ---------- Gate B, prototype: resident subjects on one context ----------
   await page.waitFor(ready("female"), 120_000);
   log("gateB.resident.memory.before", await memory("feminine head only, before residents"));
   const t0 = Date.now();
-  log("gateB.resident.open", await page.evaluate(`${S}.open("masc", "male", ${JSON.stringify(masc)})`));
+  log("gateB.resident.open", await page.evaluate(`${S}.open("masc", "male", ${JSON.stringify(mascRequest)})`));
   await page.waitFor(`${S}.status("masc")?.phase === "ready" && !${S}.status("masc").updating && ${S}.status("masc").inflight === 0`, 300_000);
   log("gateB.resident.openReadyMs", Date.now() - t0);
   await page.wait(2000);
@@ -158,12 +184,15 @@ try {
   }
   log("gateB.resident.switches", residentSwitches);
   log("gateB.resident.memory.two", await memory("feminine + masculine resident"));
+  await page.evaluate(`${S}.close("masc")`);
+  await page.wait(1500);
+  log("gateB.resident.memory.closedOne", await memory("masculine resident closed"));
   // A third subject on the same body as the shown one (a save V or another character): here the masculine default V with a hairstyle
   // the first doesn't have, opened while the masculine resident is shown, then superseded 150 ms in. Its loader must stop, and its result
   // must never be drawn.
   log("gateB.resident.cancel", await page.evaluate(`(async () => {
     const probe = window.xfsGl;
-    await ${S}.open("late", "male", ${JSON.stringify(masc)}, {});
+    await ${S}.open("late", "male", ${JSON.stringify(mascRequest)}, {});
     await new Promise(r => setTimeout(r, 150));
     const status0 = ${S}.status("late");
     const cancelledAt = ${S}.cancel("late"), uploads0 = probe.uploads.length;
@@ -182,7 +211,7 @@ try {
   await page.evaluate(`${S}.close("late")`);
   // Superseded while it was being shown: open a resident, show it at once (progress: its status), then show the other one 150 ms later.
   log("gateB.resident.supersededShow", await page.evaluate(`(async () => {
-    await ${S}.open("late2", "male", ${JSON.stringify(masc)});
+    await ${S}.open("late2", "male", ${JSON.stringify(mascRequest)});
     ${S}.show("late2");
     const t0 = performance.now(), statusAtShow = ${S}.status("late2");
     await new Promise(r => setTimeout(r, 150));
@@ -199,7 +228,6 @@ try {
       framesWhileShown: framesAtCancel, framesAfterSuperseded: ${S}.frames("late2").frames - framesAtCancel, shown: ${S}.shown(), openMs: Math.round(cancelledAt - t0) };
   })()`));
   await page.evaluate(`${S}.close("late2")`);
-  await page.evaluate(`${S}.close("masc")`);
   await page.wait(1500);
   log("gateB.resident.memory.closed", await memory("resident closed"));
   log("console", page.console.filter(entry => /error|exception/i.test(entry.type)).slice(0, 20));
