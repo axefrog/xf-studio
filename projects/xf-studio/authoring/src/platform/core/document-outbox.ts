@@ -212,6 +212,11 @@ export class OutboxTooLargeError extends Error {
 /** How long a background copy may wait before the page warns that changes aren't protected (a write that fails warns at once). */
 export const WARN_AFTER_MS = 2000;
 /**
+ * How long an edit recorded with `store: "soon"` waits before its key is stored (a look edited continuously, a drag: one storage write per
+ * interval, not per frame). A renderer crash loses at most this much of such edits; nothing else waits.
+ */
+export const STORE_SOON_MS = 250;
+/**
  * One document's stored record. `retained`: an immutable document's content, kept here while any stored command requires it, so a
  * restart can still put it again when the library's cleanup purged it (the page's other copies may be gone by then).
  */
@@ -235,7 +240,13 @@ export class DocumentOutbox {
    */
   private readonly graves = new Map<string, Set<string>>();
   private readonly listeners = new Set<(event: OutboxEvent) => void>();
-  private readonly recorders = new Set<() => void>();
+  /**
+   * Keys whose latest entries are recorded here but not stored yet (`commit` with `store: "soon"`): stored together within
+   * `STORE_SOON_MS`, or at once by `store()`, `settle`, `flush` or any write of the key. Until then they count as unprotected, and their
+   * entries aren't sent (an entry is stored before it is sent).
+   */
+  private readonly deferred = new Set<string>();
+  private storeTimer: { cancel(): void } | null = null;
   private wakers: (() => void)[] = [];
   /** Callers waiting to hear what became of an entry, by entry ID (they move with its value: `move`). */
   private readonly waits = new Map<string, Waiter[]>();
@@ -269,7 +280,8 @@ export class DocumentOutbox {
   constructor(private readonly transport: OutboxTransport, private readonly storage: OutboxStorage, private readonly options: OutboxOptions = {}) {
     storage.watch?.((key, state) => {
       if (this.stopped) return;
-      if (state === "stored") { this.stored(key); if (this.unprotectedKeys.delete(key)) this.emit({ kind: "status" }); }
+      // A key with a newer value waiting to be stored soon stays unprotected: what landed is older than what this page shows.
+      if (state === "stored") { this.stored(key); if (!this.deferred.has(key) && this.unprotectedKeys.delete(key)) this.emit({ kind: "status" }); }
       else this.unprotect(key, state === "failed");
     });
   }
@@ -367,6 +379,7 @@ export class DocumentOutbox {
   /** Writes one document's key (its entries, oldest first, and every pending marker); false when it couldn't be stored. */
   private persistKey(key: string): boolean {
     if (this.stopped) return false;
+    if (this.deferred.delete(key) && !this.deferred.size) { this.storeTimer?.cancel(); this.storeTimer = null; }
     const dropped = [...this.graves.keys()], retained = this.retained(key);
     const entries = this.entriesFor(key), empty = !entries.length && !dropped.length && retained === undefined;
     const record: StoredKey = { schema: SCHEMA, stamp: ++this.stamp, entries, ...(dropped.length ? { dropped } : {}), ...(retained !== undefined ? { retained } : {}) };
@@ -466,6 +479,8 @@ export class DocumentOutbox {
   conflicts(): readonly OutboxEntry[] { return this.entries.filter(entry => entry.state === "conflict"); }
   /** Every unacknowledged entry (tests and diagnostics). */
   pendingEntries(): readonly OutboxEntry[] { return this.entries; }
+  /** The documents recorded with `store: "soon"` and not stored yet (tests and diagnostics). */
+  storingSoon(): readonly DocumentRef[] { return [...this.deferred].map(key => this.held.get(key)?.ref ?? refOfKey(key)); }
   status(): OutboxStatus {
     const recovering = this.recoveringKeys();
     const waiting = new Set(this.entries.filter(entry => entry.state === "queued" && entry.requires?.some(key => this.missing.has(key))).flatMap(entry => this.keysOf(entry)));
@@ -481,11 +496,15 @@ export class DocumentOutbox {
   }
   subscribe(listener: (event: OutboxEvent) => void): () => void { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
   /**
-   * A writer that holds edits not yet recorded here (a debounced editor) records them when `record` is called: synchronously, just before
-   * another window's newer values are taken, so a document with unrecorded edits gets an entry and meets theirs as a conflict instead of
-   * being replaced. Returns the unregister.
+   * Stores every key recorded with `store: "soon"` now (pagehide, closing, Save version, Check, Build, a takeover's drain), and sends what
+   * waited for it.
    */
-  beforeExternal(record: () => void): () => void { this.recorders.add(record); return () => { this.recorders.delete(record); }; }
+  store(): void {
+    if (!this.deferred.size) return;
+    this.storeTimer?.cancel(); this.storeTimer = null;
+    this.persist([...this.deferred]);
+    this.pump();
+  }
   private emit(event: OutboxEvent) {
     for (const listener of [...this.listeners]) { try { listener(event); } catch (error) { this.options.report?.(error); } }
     this.wake();
@@ -519,7 +538,12 @@ export class DocumentOutbox {
    * `requires`: immutable documents the command references; it is sent once each is in the library. Throws while this page may not write
    * (it doesn't hold its workspace).
    */
-  commit(command: string, edits: readonly OutboxEdit[], options: { requires?: readonly DocumentRef[] } = {}): OutboxEntry {
+  commit(command: string, edits: readonly OutboxEdit[], options: { requires?: readonly DocumentRef[];
+    /**
+     * `soon`: the entry is recorded here at once (every value taken from elsewhere meets it, as any pending entry), and its key is stored
+     * within `STORE_SOON_MS` with the edits that follow (a continuous edit); default `now`. A single-document edit only.
+     */
+    store?: "now" | "soon" } = {}): OutboxEntry {
     if (!this.writable() || !this.opened) throw Error("This workspace is open elsewhere, so this change can't be made here.");
     if (!edits.length) throw Error("A command changes at least one document.");
     if (edits.length > COMMAND_LIMITS.writes || (options.requires?.length ?? 0) > COMMAND_LIMITS.writes) throw new OutboxTooLargeError();
@@ -547,7 +571,8 @@ export class DocumentOutbox {
     }
     this.touch(entry);
     for (const edit of edits) this.local(edit).version++;
-    this.persist([...edits.map(edit => documentKey(edit)), ...requires]);
+    if (options.store === "soon" && edits.length === 1 && !requires.length) this.defer(documentKey(edits[0]!));
+    else this.persist([...edits.map(edit => documentKey(edit)), ...requires]);
     this.emit({ kind: "recorded", entry, refs: edits.map(edit => ({ kind: edit.kind, id: edit.id })) });
     queueMicrotask(() => this.pump());
     return entry;
@@ -573,6 +598,12 @@ export class DocumentOutbox {
     return entry;
   }
   private frozen(entry: OutboxEntry) { return this.frozenIds.has(entry.id); }
+  /** `key` is stored soon, with the edits that follow it (`store: "soon"`); meanwhile it is unprotected. */
+  private defer(key: string) {
+    this.deferred.add(key);
+    this.unprotect(key, false);
+    this.storeTimer ??= (this.options.schedule ?? defaultSchedule)(STORE_SOON_MS, () => { this.storeTimer = null; this.store(); });
+  }
   /**
    * The next entry's place in order: above every entry this page has seen, and never below the clock, so a launch that recovered fewer
    * entries than an earlier one held (a crash with host writes pending) still orders its new commands after every older one that comes
@@ -732,6 +763,8 @@ export class DocumentOutbox {
     for (const [at, entry] of this.entries.entries()) {
       if (entry.state !== "queued" || this.inFlight.has(entry.id)) continue;
       if (entry.writes.some(write => typeof write.base !== "number")) continue;
+      // Stored before sent: an entry whose key waits to be stored waits with it.
+      if (this.deferred.size && entry.writes.some(write => this.deferred.has(documentKey(write)))) continue;
       // Commands on a document go one after another: never past an earlier one still waiting on it (after a crash with host writes
       // pending, two recovered commands on a document can both hold numeric bases).
       const keys = new Set(this.keysOf(entry));
@@ -996,8 +1029,6 @@ export class DocumentOutbox {
     const newer = clean.filter(held => (revisions[documentKey(held.ref)] ?? 0) > held.revision);
     if (!newer.length) return [];
     const stored = await this.transport.read(newer.map(held => held.ref), signal);
-    // Edits a writer holds unrecorded become entries first: their documents are then skipped below, and meet theirs as a conflict.
-    for (const record of [...this.recorders]) { try { record(); } catch (error) { this.options.report?.(error); } }
     const applied: DocumentRef[] = [];
     for (const held of newer) {
       const now = stored[documentKey(held.ref)];
@@ -1021,6 +1052,7 @@ export class DocumentOutbox {
     const failures = this.failures;
     // `signal` ends only this wait: the entries stay and are still sent.
     const aborted = signal ? new Promise<void>(resolve => signal.addEventListener("abort", () => resolve(), { once: true })) : null;
+    this.store();
     this.pump();
     for (;;) {
       if (!this.entries.some(entry => touches(entry) && (entry.state === "queued" || this.inFlight.has(entry.id)))) return true;
@@ -1031,6 +1063,7 @@ export class DocumentOutbox {
   /** Resolves once the outbox is empty of queued entries, or `signal` aborts; then says what is pending, in conflict or failed (§2.3). */
   async flush(signal?: AbortSignal): Promise<OutboxStatus> {
     const aborted = signal ? new Promise<void>(resolve => signal.addEventListener("abort", () => resolve(), { once: true })) : null;
+    this.store();
     this.pump();
     while (!signal?.aborted && !this.stopped && this.entries.some(entry => entry.state === "queued" || this.inFlight.has(entry.id)))
       await Promise.race([this.changed(), ...(aborted ? [aborted] : [])]);
@@ -1041,6 +1074,7 @@ export class DocumentOutbox {
     if (this.stopped) return;
     this.stopped = true;
     this.retryTimer?.cancel(); this.retryTimer = null;
+    this.storeTimer?.cancel(); this.storeTimer = null;
     for (const id of [...this.waits.keys()]) this.finish(id, "stopped");
     this.emit({ kind: "status" });
   }

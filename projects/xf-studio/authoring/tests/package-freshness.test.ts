@@ -46,9 +46,9 @@ test("a package result's freshness costs a key comparison per repaint, not a sna
 test("an edit, a preset change or a rename makes the result stale; a new Check makes it current; reads never write the look", async () => {
   const f = await fixture();
   await f.files.execute({ kind: "package.check" });
-  const look = JSON.stringify(f.owner.look(f.scene.look()!));
   f.edit();
-  // Reading freshness never writes the editor into the look.
+  // The edit is recorded as it is made; reading freshness writes nothing more into the look.
+  const look = JSON.stringify(f.owner.look(f.scene.look()!));
   expect(f.files.snapshot().package?.freshness).toBe("stale");
   expect(JSON.stringify(f.owner.look(f.scene.look()!))).toBe(look);
   await f.files.execute({ kind: "package.check" });

@@ -93,28 +93,60 @@ describe("the shown look", () => {
 });
 
 describe("another window's change to the shown look", () => {
-  test("edits waiting for the write delay are recorded before the other window's version is taken: they meet it as a conflict", async () => {
+  /** Two windows on one library showing the same look; this one (`a`) has edited it, and the other's edit reaches the library first. */
+  async function raced() {
     const a = await profileStudio({ looks: [{ name: "One", recipe: initialRecipe() }] });
     await a.collection.initialize(); await a.settle();
     const ref = a.scene.look()!;
     const b = await profileStudio({ library: a.library, show: ref });
-    // This window's edit waits for the write delay; the other window writes its own and it reaches the library first.
+    // This window's edit is recorded in its outbox as it is made; only storing it waits.
     dispatch(a, { kind: "layer.setOpacity", layerId: layerId(a), opacity: 0.23 });
-    expect(a.lookEditor.dirty()).toBe(true);
+    expect(a.outbox.pendingEntries().map(entry => entry.command)).toEqual(["look.update"]);
     dispatch(b, { kind: "layer.setOpacity", layerId: layerId(b), opacity: 0.78 });
     await b.settle();
-    // This window sees the newer revision: its waiting edit is recorded first, so nothing of it is replaced.
+    return { a, b, ref };
+  }
+  const conflictValues = (studio: ProfileStudio) => {
+    const [conflict] = studio.outbox.conflicts();
+    type Stored = { parts: Record<string, { body: { layers: { opacity: number }[] } }> };
+    const opacity = (value: unknown) => (value as Stored).parts["eye-makeup"]!.body.layers[0]!.opacity;
+    return conflict ? { mine: opacity(conflict.writes[0]!.value), theirs: opacity(Object.values(conflict.current!)[0]!.value) } : null;
+  };
+
+  test("a revision check finds this window's edit pending: it meets the other window's version as a conflict", async () => {
+    const { a, ref } = await raced();
     expect(await a.outbox.check()).toEqual([]);
-    expect(a.lookEditor.dirty()).toBe(false);
     expect(a.document.recipe.layers[0]!.opacity).toBe(0.23);
     await a.outbox.settle();
-    const [conflict] = a.outbox.conflicts();
-    expect(conflict).toBeDefined();
-    const mine = conflict!.writes[0]!.value as { parts: Record<string, { body: { layers: { opacity: number }[] } }> };
-    const theirs = Object.values(conflict!.current!)[0]!.value as typeof mine;
-    expect(mine.parts["eye-makeup"]!.body.layers[0]!.opacity).toBe(0.23);
-    expect(theirs.parts["eye-makeup"]!.body.layers[0]!.opacity).toBe(0.78);
+    expect(conflictValues(a)).toEqual({ mine: 0.23, theirs: 0.78 });
     expect(a.owner.look(ref)!.conflict).not.toBeNull();
+  });
+
+  test("a read of the library (the owners loading again) finds it pending too: nothing of it is replaced (review 2, Sol's first case)", async () => {
+    const { a, ref } = await raced();
+    await a.owner.load();
+    expect(a.document.recipe.layers[0]!.opacity).toBe(0.23);
+    expect(a.owner.look(ref)!.state).toBe("live");
+    await a.outbox.settle();
+    expect(conflictValues(a)).toEqual({ mine: 0.23, theirs: 0.78 });
+  });
+
+  test("an edit made while Keep both reads the library joins this window's copy (review 2, Sol's second case)", async () => {
+    const { a, ref } = await raced();
+    await a.outbox.check(); await a.outbox.settle();
+    const id = a.collection.summary().draft!.conflicts[0]!.id;
+    const resolving = a.collection.execute({ kind: "resolveConflict", conflict: id, keep: "both" });
+    // The resolution waits for the library; meanwhile this window edits the look again.
+    dispatch(a, { kind: "layer.setOpacity", layerId: layerId(a), opacity: 0.41 });
+    expect(await resolving).toMatchObject({ ok: true });
+    await a.settle();
+    const presets = a.collection.summary().draft!.presets, copy = presets.find(preset => preset.id !== ref.look)!;
+    const opacityOf = (look: string) => (a.owner.look({ collection: ref.collection, look })!.parts as
+      { "eye-makeup": { body: { layers: { opacity: number }[] } } })["eye-makeup"].body.layers[0]!.opacity;
+    expect(presets).toHaveLength(2);
+    expect(opacityOf(ref.look)).toBe(0.78);
+    expect(opacityOf(copy.id)).toBe(0.41);
+    expect(a.outbox.conflicts()).toEqual([]);
   });
 });
 

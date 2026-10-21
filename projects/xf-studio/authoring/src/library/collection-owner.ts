@@ -248,8 +248,8 @@ export class CollectionOwner {
     }
     return edits;
   }
-  private record(command: string, edits: OutboxEdit[]): OutboxEntry {
-    const entry = this.deps.outbox.commit(command, edits);
+  private record(command: string, edits: OutboxEdit[], options: { store?: "now" | "soon" } = {}): OutboxEntry {
+    const entry = this.deps.outbox.commit(command, edits, options.store ? { store: options.store } : {});
     for (const edit of edits) this.know(edit);
     return entry;
   }
@@ -328,14 +328,15 @@ export class CollectionOwner {
   }
 
   /** `look.update`: a look's own change (its parts, memory or name), one document, coalescing with the look's other unsent edits. */
-  updateLook(ref: LookRef, change: { readonly name?: string; readonly parts?: Readonly<Record<string, unknown>>; readonly memory?: unknown }): { ok: true; entry: OutboxEntry } | { ok: false; code: Capability["code"]; reason: string } {
+  updateLook(ref: LookRef, change: { readonly name?: string; readonly parts?: Readonly<Record<string, unknown>>; readonly memory?: unknown },
+    options: { store?: "now" | "soon" } = {}): { ok: true; entry: OutboxEntry } | { ok: false; code: Capability["code"]; reason: string } {
     const held = this.look(ref);
     if (!held) return { ok: false, code: "missing_target", reason: "That look doesn't exist any more." };
     if (held.state !== "live") return { ok: false, code: "unavailable", reason: "That look was removed. Restore it to edit it." };
     if (change.name !== undefined && !nameOf(change.name)) return { ok: false, code: "invalid_value", reason: NAME_REASON };
     const next: LookWorking = { ...stripLook(held), ...(change.name !== undefined ? { name: nameOf(change.name)! } : {}),
       ...(change.parts !== undefined ? { parts: change.parts } : {}), ...(change.memory !== undefined ? { memory: change.memory } : {}) };
-    try { return { ok: true, entry: this.record("look.update", [{ ...lookRef(ref), value: next }]) }; }
+    try { return { ok: true, entry: this.record("look.update", [{ ...lookRef(ref), value: next }], options) }; }
     catch (error) { return { ok: false, code: error instanceof OutboxRecoveringError ? "not_ready" : "unavailable", reason: (error as Error).message }; }
   }
 

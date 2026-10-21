@@ -4,7 +4,7 @@
  * per-document keys, their crash repair, the revision checks and the desktop storage added.
  */
 import { describe, expect, test } from "bun:test";
-import { DocumentOutbox, type OutboxEvent } from "../src/platform/core/document-outbox";
+import { DocumentOutbox, type OutboxEvent, STORE_SOON_MS } from "../src/platform/core/document-outbox";
 import { documentKey, isTombstone, type TransactAnswer, type TransactRequest, tombstoneOf } from "../src/platform/api/document-commands";
 import type { DocumentStorePort } from "../src/platform/api/document-store";
 import { desktopOutboxStorage, localOutboxStorage } from "../src/app/browser/outbox-storage";
@@ -287,28 +287,37 @@ describe("the outbox's rules (A1–A7)", () => {
     expect(outbox.conflicts().length).toBe(1);
   });
 
-  test("A7: a writer's unrecorded edits are recorded just before a check takes newer values, so they meet them as a conflict", async () => {
-    const r = rig(), { outbox } = memoryOutbox(r.port);
+  test("an edit stored soon is recorded at once: every way a newer value arrives meets it; it is stored, then sent, within the interval", async () => {
+    const r = rig(), timers: (() => void)[] = [];
+    const { outbox, storage } = memoryOutbox(r.port, undefined, { retryMs: 5, schedule: (ms, run) => { if (ms === STORE_SOON_MS) timers.push(run); else setTimeout(run, ms); return { cancel() {} }; } });
     outbox.commit("look.edit", [{ ...LOOK, value: { n: 1 } }]);
     await quiet(outbox);
-    // A debounced writer holds an edit the outbox hasn't seen; another window writes the look meanwhile.
-    let waiting: number | null = 2, calls = 0;
-    const unregister = outbox.beforeExternal(() => {
-      calls++;
-      if (waiting !== null) { outbox.commit("look.edit", [{ ...LOOK, value: { n: waiting } }]); waiting = null; }
-    });
+    const writes = storage.writes, sent = r.calls.length;
+    // A drag: three edits, recorded at once and coalesced into one entry; nothing stored or sent yet, and the look is unprotected meanwhile.
+    for (const n of [2, 3, 4]) outbox.commit("look.edit", [{ ...LOOK, value: { n } }], { store: "soon" });
+    expect(outbox.pendingEntries()).toHaveLength(1);
+    expect(outbox.document(LOOK)!.value).toEqual({ n: 4 });
+    expect(storage.writes).toBe(writes);
+    expect(outbox.status().unprotected).toEqual([LOOK]);
+    await tick(10);
+    expect(r.calls.length).toBe(sent);
+    // Another window writes the look. A read (`hold`) and a revision check both find the edit pending: neither replaces it.
     r.store.transact({ id: "o1", command: "x", writes: [{ ...LOOK, base: 1, value: { other: 1 } }] });
+    outbox.hold(LOOK, r.store.get(LOOK.kind, LOOK.id));
     expect(await outbox.check()).toEqual([]);
-    expect(calls).toBe(1);
-    expect(outbox.document(LOOK)!.value).toEqual({ n: 2 });
-    await quiet(outbox); await tick(10);
-    expect(outbox.conflicts().map(entry => entry.writes[0]!.value)).toEqual([{ n: 2 }]);
-    // Unregistered, it is not asked again.
-    unregister();
-    r.store.transact({ id: "o2", command: "x", writes: [{ ...COLLECTION, base: 0, value: { other: 1 } }] });
-    outbox.hold(COLLECTION, null);
-    await outbox.check();
-    expect(calls).toBe(1);
+    expect(outbox.document(LOOK)!.value).toEqual({ n: 4 });
+    // The interval ends: the key is stored, then the entry is sent, and meets the other window's version as a conflict.
+    expect(timers).toHaveLength(1);
+    timers[0]!();
+    expect(storage.writes).toBe(writes + 1);
+    expect(outbox.status().unprotected).toEqual([]);
+    await tick(20);
+    expect(outbox.conflicts().map(entry => entry.writes[0]!.value)).toEqual([{ n: 4 }]);
+    // `store` stores at once (pagehide, Save version): no timer waits for it.
+    outbox.commit("look.edit", [{ ...LOOK, value: { n: 5 } }], { store: "soon" });
+    outbox.store();
+    expect(outbox.status().unprotected).toEqual([]);
+    expect(outbox.conflicts()[0]!.writes[0]!.value).toEqual({ n: 5 });
   });
 
   test("settle waits for queued entries, says false when a send fails meanwhile, and the host's return triggers a check", async () => {

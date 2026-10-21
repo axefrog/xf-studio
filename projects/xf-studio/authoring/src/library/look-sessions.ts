@@ -24,7 +24,8 @@ export interface LookSession {
   /** The look as this window holds it (null: gone). */
   look(): LookView | null;
   /** Records the look's next value at once; `settled` says what became of it (acknowledged, dropped by a resolution, or stopped). */
-  update(change: LookChange): LookUpdate;
+  /** `store: "soon"`: recorded at once, stored with the look's next changes (a continuous edit), as `DocumentOutbox.commit` says. */
+  update(change: LookChange, options?: { store?: "now" | "soon" }): LookUpdate;
   /** Keep mine, Use theirs (mine kept as a fork) or Keep both, when the look is in conflict. */
   resolve(keep: "mine" | "theirs" | "both"): Promise<Capability>;
   subscribe(listener: (event: LookSessionEvent) => void): () => void;
@@ -65,9 +66,9 @@ export class LookSessions {
     return {
       ref: it.ref,
       look: () => this.owner.look(it.ref),
-      update: change => {
+      update: (change, options) => {
         if (released) return { ok: false, code: "unavailable", reason: "This look was closed here." };
-        const made = this.owner.updateLook(it.ref, change);
+        const made = this.owner.updateLook(it.ref, change, options);
         return made.ok ? { ok: true, settled: this.outbox.settled(made.entry.id) } : made;
       },
       resolve: keep => {

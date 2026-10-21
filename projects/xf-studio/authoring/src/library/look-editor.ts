@@ -6,9 +6,10 @@
  *
  * - **Reading.** A look working copy holds its parts and memory as stored; they are read through the part registry, and a look holding a
  *   newer build's data is shown locked (kept exactly as it came, never written from here).
- * - **Writing.** Every change of the document (an edit, a selection, an Undo) is written shortly after it settles (`delayMs`), and at once
- *   whenever something needs the look as it is now (`commit`: a copy, a snapshot, Save version, closing the page). Only a change is
- *   written: the look's stored form is compared with what was written last.
+ * - **Writing.** Every change of the document (an edit, a selection, an Undo) is recorded in the outbox as it is made (`look.update`,
+ *   coalescing into the look's unsent entry), so every value taken from elsewhere meets it as a pending change (a conflict, never a
+ *   replacement). Only storing it waits: the outbox stores the look's key within `STORE_SOON_MS` (a drag is one storage write per
+ *   interval), and at once when something needs it (`commit`: a copy, a snapshot, Save version, Check, Build, closing the page).
  * - **History.** The document's Undo history is the look's scope, `look:<collection>/<look>` (§3.7); it is stored with the look's memory.
  * - **Elsewhere.** A change of the look taken from another window (or a resolution that took theirs) replaces what the document shows, and
  *   its Undo starts there. While the look is being restored from the last session, the document can't be edited (the recovery gate).
@@ -23,8 +24,6 @@ import type { LookRef, LookWorking } from "./collection-documents";
 import { sameLook } from "./collection-documents";
 import type { LookSession, LookSessions } from "./look-sessions";
 
-/** How long after the document settles its look is written. */
-export const LOOK_WRITE_DELAY_MS = 250;
 export const RESTORING_LOOK = "This look is still being restored from your last session. It can be changed again in a moment.";
 export const CHANGED_ELSEWHERE = "Changed in another window. Undo starts here.";
 /** The scope the document is in while its scene shows no look (its collection's last preset was removed): nothing in it can be edited. */
@@ -75,35 +74,36 @@ export type LookEditorDeps = {
   /** A plain note for the person (the look changed elsewhere). */
   readonly note?: (text: string) => void;
   readonly report?: (error: unknown) => void;
-  readonly delayMs?: number;
-  readonly schedule?: (run: () => void, ms: number) => () => void;
-  /**
-   * Registers a call made just before another window's newer values are taken (`DocumentOutbox.beforeExternal`): the edits waiting for
-   * the write delay are recorded then, so they meet the other window's version as a conflict and are never replaced by it.
-   */
-  readonly beforeExternal?: (record: () => void) => () => void;
+  /** Stores what the outbox holds to store soon, now (`DocumentOutbox.store`): `commit` calls it. */
+  readonly store?: () => void;
 };
 
 /** The look the scene names; `content` is null while it is removed (the document is empty and refuses edits until it is live again). */
-type Shown = { ref: LookRef; session: LookSession; content: LookContent | null; written: string; unsubscribe: () => void };
+type Shown = { ref: LookRef; session: LookSession; content: LookContent | null; unsubscribe: () => void };
 
 export class LookEditor {
   private shown: Shown | null = null;
   /** The document shows no look (and is empty). */
   private empty = false;
-  private cancel: (() => void) | null = null;
+  /** A change of the document couldn't be recorded (the look is being restored, or this window may not write): the next one tries again. */
+  private unrecorded = false;
   private applying = false;
+  /** A change of the Undo history alone waits for the end of the turn (an edit in the same turn records it). */
+  private historyWaits = false;
   private readonly listeners = new Set<() => void>();
   private readonly unsubscribe: () => void;
-  private readonly unregister: () => void;
 
   constructor(private readonly deps: LookEditorDeps) {
+    // Every change of the look's content or selection is recorded as it is made: nothing of it waits outside the outbox. A change of the
+    // Undo history alone (a step's checkpoint, which an edit follows at once in the same turn, or a label) is recorded at the end of the
+    // turn unless the edit recorded it already, so an edit is recorded once.
     this.unsubscribe = deps.document.subscribe(change => {
       if (this.applying || !this.shown || change === "restore" || change === "access") return;
-      this.request();
+      if (change !== "history") { this.historyWaits = false; this.record(); return; }
+      if (this.historyWaits) return;
+      this.historyWaits = true;
+      queueMicrotask(() => { if (this.historyWaits) { this.historyWaits = false; this.record(); } });
     });
-    // The write delay only coalesces: before another window's version is taken, what waits is recorded.
-    this.unregister = deps.beforeExternal?.(() => { if (this.cancel) this.commit(); }) ?? (() => {});
   }
 
   /** The look the document shows (undefined: none). */
@@ -136,7 +136,7 @@ export class LookEditor {
       try { content = lookContent(view, this.deps.model); }
       catch (error) { void session.release(); this.deps.report?.(error); this.changed(); return false; }
     }
-    const shown: Shown = { ref: { ...ref }, session, content, written: "", unsubscribe: () => {} };
+    const shown: Shown = { ref: { ...ref }, session, content, unsubscribe: () => {} };
     this.shown = shown;
     shown.unsubscribe = session.subscribe(event => {
       if (this.shown !== shown) return;
@@ -157,14 +157,13 @@ export class LookEditor {
   private present(shown: Shown) {
     const view = shown.session.look();
     if (view?.state !== "live") {
-      shown.content = null; shown.written = "";
+      shown.content = null;
       this.display({ recipe: emptyRecipe(), active: 0, selected: 0, fieldSelection: {}, history: emptyLookHistory() }, NO_LOOK_SCOPE);
       return;
     }
     let content: LookContent;
     try { content = lookContent(view, this.deps.model); } catch (error) { this.deps.report?.(error); return; }
     shown.content = content;
-    shown.written = this.stored(content, content.state)?.key ?? "";
     this.display(content.state, lookScope(shown.ref));
   }
   private display(state: DocumentState, scope?: string) {
@@ -179,12 +178,11 @@ export class LookEditor {
     if (!view || view.state !== "live") return;
     let content: LookContent;
     try { content = lookContent(view, this.deps.model); } catch (error) { this.deps.report?.(error); return; }
-    const key = this.stored(content, content.state)?.key ?? "";
-    if (key === shown.written) return;
-    // Nothing is waiting here: edits are recorded before another window's version is taken (`beforeExternal`), and a resolution
-    // (Use theirs, or Keep both, which made a copy of mine) is the person's choice.
-    this.cancel?.(); this.cancel = null;
-    shown.content = content; shown.written = key;
+    // Unchanged from what the document shows (this window's own value): nothing to show.
+    if (shown.content && this.stored(content, content.state)?.key === this.stored(shown.content, this.deps.document.export())?.key) return;
+    // Nothing of this window's waits outside the outbox (every change is recorded as it is made), so another window's version arrives
+    // only over a look with no change pending here; a resolution (Use theirs, or Keep both, which made a copy of mine) is the person's.
+    shown.content = content;
     this.display(content.state);
     this.deps.document.history.clear();
     this.deps.note?.(CHANGED_ELSEWHERE);
@@ -199,34 +197,33 @@ export class LookEditor {
     const written = lookStored(content, editor, this.deps.model);
     return written && { ...written, key: JSON.stringify([written.parts, written.memory]) };
   }
-
-  private request() {
-    this.cancel?.();
-    const schedule = this.deps.schedule ?? ((run, ms) => { const timer = setTimeout(run, ms); return () => clearTimeout(timer); });
-    this.cancel = schedule(() => { this.cancel = null; this.commit(); }, this.deps.delayMs ?? LOOK_WRITE_DELAY_MS);
-  }
-  /**
-   * Write the shown look's changes now (nothing when they are written already). False when they couldn't be recorded (the look is being
-   * restored, was removed, or this window may not write): they stay in the document and are written with the next change.
-   */
-  commit(): boolean {
-    this.cancel?.(); this.cancel = null;
+  /** Records the document's state as the look's next value (`look.update`, stored soon). False when it couldn't be recorded. */
+  private record(): boolean {
     const shown = this.shown;
     if (!shown || !shown.content) return true;
-    const content = shown.content;
-    const editor = this.deps.document.export();
-    let written: ReturnType<LookEditor["stored"]>;
-    try { written = this.stored(content, editor); }
-    catch (error) { this.deps.report?.(error); return false; }
-    if (!written || written.key === shown.written) return true;
-    const update = shown.session.update({ parts: written.parts, memory: written.memory });
-    if (!update.ok) { this.blocked(); return false; }
+    const content = shown.content, editor = this.deps.document.export();
+    let written: ReturnType<typeof lookStored>;
+    try { written = lookStored(content, editor, this.deps.model); }
+    catch (error) { this.deps.report?.(error); this.unrecorded = true; return false; }
+    if (!written) return true;
+    const update = shown.session.update({ parts: written.parts, memory: written.memory }, { store: "soon" });
+    if (!update.ok) { this.unrecorded = true; this.blocked(); return false; }
+    this.unrecorded = false;
     shown.content = { look: written.look, memory: written.lookMemory, state: editor };
-    shown.written = written.key;
     return true;
   }
-  /** Whether the shown look has changes not yet written. */
-  dirty(): boolean { return this.cancel !== null; }
+  /**
+   * Make sure the shown look's latest state is recorded and stored now (a copy, a snapshot, Save version, Check, Build, closing the page).
+   * False when it couldn't be recorded (the look is being restored, or this window may not write): it stays in the document and is
+   * recorded with the next change.
+   */
+  commit(): boolean {
+    const ok = !this.unrecorded || this.record();
+    this.deps.store?.();
+    return ok;
+  }
+  /** Whether a change of the shown look couldn't be recorded yet. */
+  dirty(): boolean { return this.unrecorded; }
 
   private close() {
     const shown = this.shown;
@@ -239,7 +236,6 @@ export class LookEditor {
     this.commit();
     this.close();
     this.unsubscribe();
-    this.unregister();
     this.listeners.clear();
   }
 }

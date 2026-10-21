@@ -96,7 +96,7 @@ export async function profileStudio(options: {
     selectedCollection: () => application?.selectedPresetId() ?? "draft", ...(ref && first ? { scope: lookScope(ref) } : {}),
     ...(options.newId ? { newId: options.newId } : {}) }, STUDIO_COMPOSITION);
   const lookEditor = new LookEditor({ model: MODEL, sessions, document: core.document, restoring: look => outbox.recovering(lookRef(look)),
-    beforeExternal: record => outbox.beforeExternal(record) });
+    store: () => outbox.store() });
   const downloads: { name: string; text: string }[] = [];
   let packageInput: unknown;
   const transport: CollectionTransport = {

@@ -41,7 +41,7 @@
  * A failing run prints its mode, seed and step: `XFS_OUTBOX_SEED=<seed> [XFS_OUTBOX_MODE=local|desktop] [XFS_OUTBOX_TRACE=1]` replays it.
  */
 import { expect, test } from "bun:test";
-import { ATTEMPT_MS, DocumentOutbox, type OutboxEntry, type OutboxOutcome, OutboxRecoveringError } from "../src/platform/core/document-outbox";
+import { ATTEMPT_MS, DocumentOutbox, type OutboxEntry, type OutboxOutcome, OutboxRecoveringError, STORE_SOON_MS } from "../src/platform/core/document-outbox";
 import { type CurrentDocument, documentKey, type DocumentRef, tombstoneOf, type TransactAnswer, type TransactRequest } from "../src/platform/api/document-commands";
 import type { DocumentStorePort } from "../src/platform/api/document-store";
 import { desktopOutboxStorage } from "../src/app/browser/outbox-storage";
@@ -254,7 +254,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
   const failures: string[] = [], trace: string[] = [];
   let stepNow = 0;
   const fail = (message: string) => { if (failures.length < 3) failures.push(`${mode} seed ${seed}, step ${stepNow}: ${message}` +
-    (process.env.XFS_OUTBOX_TRACE ? [""].concat(trace.slice(-50)).join(String.fromCharCode(10)) : "")); };
+    (process.env.XFS_OUTBOX_TRACE ? [""].concat(trace.slice(-Number(process.env.XFS_OUTBOX_TRACE_LINES ?? 50))).join(String.fromCharCode(10)) : "")); };
   const library = (key: string) => { const ref = refOf(key), now = store.get(ref.kind, ref.id); return { revision: now?.revision ?? 0, value: now?.value }; };
   const ticks = async () => { for (let i = 0; i < 16; i++) await Promise.resolve(); };
   /** Every value each document has had in the library, by `<key>@<revision>` (what a late read may still carry). */
@@ -454,7 +454,9 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
   /** A step's work on A, which a kill may interrupt after any number of key writes. */
   const onA = async (work: () => void, between: Spec[] = [], killRate = 0.2) => {
     const before = structuredClone(spec), waiting = spec.intents.flatMap(intent => intent.callers);
-    const kill = !degraded && rng.next() < killRate;
+    // A kill loses what waits to be stored soon (reported unprotected, at most `STORE_SOON_MS` of a continuous edit), as storage that
+    // failed does: no kill is armed while any waits; the protection check covers that state.
+    const kill = !degraded && !a.storingSoon().length && rng.next() < killRate;
     // After any number of key writes: mostly the first few, where a step's writes are torn.
     const writesBefore = syncWrites();
     if (kill) killAfter(rng.next() < 0.6 ? rng.int(3) : rng.int(12));
@@ -570,9 +572,12 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
     const roll = rng.next();
     trace.push(`step ${stepNow} ${roll.toFixed(3)}`);
     if (roll < 0.2) {
-      const ref = rng.pick(DOCS), next = value("A"), item = caller();
-      if (!refusedWhileRecovering([documentKey(ref)], () => a.commit("edit", [{ ...ref, value: next }]), item)) await onA(() => {
-        const entry = a.commit("edit", [{ ...ref, value: next }]);
+      // A continuous edit (a look being edited) is recorded at once and stored soon; the rest are stored at once.
+      const ref = rng.pick(DOCS), next = value("A"), item = caller(), store = rng.next() < (process.env.XFS_SOON_OFF ? 0 : 0.4) ? "soon" as const : "now" as const;
+      if (store === "soon") count("edit stored soon");
+      if (!refusedWhileRecovering([documentKey(ref)], () => a.commit("edit", [{ ...ref, value: next }], { store }), item)) await onA(() => {
+        const entry = a.commit("edit", [{ ...ref, value: next }], { store });
+        trace.push(`edit A ${entry.id} ${ref.id} ${store} base ${JSON.stringify(entry.writes[0]!.base)}`);
         const how = record(spec, entry.id, [[documentKey(ref), next]], [], item);
         if (how === "joined" && !spec.intents.some(intent => intent.id === entry.id)) fail(`A joined the edit to ${entry.id}, the specification to another intent`);
         if (how === "new" && spec.intents.at(-1)!.id !== entry.id) fail(`A joined the edit to ${entry.id}, the specification made a new intent`);
@@ -668,8 +673,13 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
       if (!conflict) continue;
       const how = rng.pick(["mine", "theirs", "both"] as const);
       count(`resolve ${how}`);
+      trace.push(`resolve ${how} ${conflict.id}${lossyIds.has(conflict.id) ? " (lossy)" : ""}`);
       if (!spec.intents.some(intent => intent.id === conflict.id && intent.conflict)) { fail(`A's conflict ${conflict.id} isn't the specification's`); break; }
       const item = caller();
+      // Use theirs and Keep both send the dropped command's successors over its base; on a command recovered after a crash with host writes
+      // pending, that base is what the recovery could prove and may be older than A's own later write, so they may go stale against it.
+      if (how !== "mine" && lossyIds.has(conflict.id))
+        for (const write of conflict.writes) if (typeof write.base === "number") lossyBases.add(`${documentKey(write)}@${write.base}`);
       await onA(() => {
         if (how === "mine") {
           // A conflict on a command recovered after a crash with host writes pending was taken against what that recovery could prove;
@@ -915,3 +925,119 @@ test(`the outbox meets its specification in seeded runs (kills while working and
     "snapshot checked", "read captured earlier", "stale read delivered", "own adopted", "edit refused while recovering", "receipts purged",
     "app crash with host writes pending", "answer to an abandoned attempt", "attempt abandoned", "dependency arrived", "owners reload"]) expect(seen[name] ?? 0, name).toBeGreaterThan(0);
 }, 600_000);
+
+/**
+ * The class the profiles 1d-ii review asked for: an edit lands while it waits to be stored (`store: "soon"`, a look edited continuously)
+ * or while a resolution is under way, and a newer value arrives by each way the outbox takes one: a read (`hold`), a revision check, a
+ * recovered command's answer (with `own`, this workspace's later revision), and a resolution. In every case the edit is a pending change
+ * of the outbox's own the moment it is made, so it is never replaced: it meets the newer value as a conflict (its value "mine"), is
+ * kept by Keep mine, carried into Keep both's copy, and let go only by Use theirs, the person's choice.
+ */
+const EDIT_DOC = { kind: "doc", id: "e" };
+const valueOf = (outbox: DocumentOutbox) => outbox.document(EDIT_DOC)?.value;
+const mineOf = (outbox: DocumentOutbox) => outbox.conflicts().find(entry => entry.writes.some(write => write.id === EDIT_DOC.id))?.writes.find(write => write.id === EDIT_DOC.id)?.value;
+/** Turns of the event loop, for sends and answers to land. */
+const turns = async (n = 30) => { for (let i = 0; i < n; i++) await new Promise(resolve => setTimeout(resolve, 0)); };
+/** The library, A's outbox over it (its store timer run by hand), and the other window's direct write. */
+async function editWorld(port?: (base: DocumentStorePort) => DocumentStorePort) {
+  const documents = storeDocuments(), timers: (() => void)[] = [];
+  const storage = memoryOutboxStorage();
+  const make = () => new DocumentOutbox(port ? port(documents) : documents, storage, { retryMs: 1,
+    schedule: (ms, run) => { if (ms === STORE_SOON_MS) timers.push(run); else setTimeout(run, ms); return { cancel() {} }; } });
+  const a = make();
+  a.hold(EDIT_DOC, null);
+  a.open();
+  a.commit("edit", [{ ...EDIT_DOC, value: { n: 1 } }]);
+  await a.settle();
+  const other = (value: unknown) => { const now = documents.store.get(EDIT_DOC.kind, EDIT_DOC.id); documents.store.transact({ id: `other-${Math.random()}`, command: "x", writes: [{ ...EDIT_DOC, base: now?.revision ?? 0, value }] }); };
+  return { documents, storage, a, other, timers, make, storeNow: () => { for (const run of timers.splice(0)) run(); } };
+}
+
+test("an edit waiting to be stored meets a newer value taken by a read, a check, a recovered command's answer or a resolution, never replaced by it", async () => {
+  // A read (an owner loading again) and a revision check: both find the edit pending.
+  for (const path of ["read", "check"] as const) {
+    const w = await editWorld();
+    w.a.commit("edit", [{ ...EDIT_DOC, value: { n: 2 } }], { store: "soon" });
+    w.other({ theirs: 1 });
+    if (path === "read") w.a.hold(EDIT_DOC, w.documents.store.get(EDIT_DOC.kind, EDIT_DOC.id));
+    else expect(await w.a.check()).toEqual([]);
+    expect(valueOf(w.a)).toEqual({ n: 2 });
+    w.storeNow(); await turns();
+    expect(mineOf(w.a)).toEqual({ n: 2 });
+  }
+
+  // A recovered command's answer: an earlier session's change, restored and kept (its base is what this page read), the edit after it;
+  // the other window's write lands first, so the restored change goes stale and the edit folds into its "mine".
+  {
+    const w = await editWorld();
+    let down = true;
+    const gated = new DocumentOutbox({ ...w.documents, transact: async request => { if (down) throw Error("The host didn't answer."); return w.documents.store.transact(request); } },
+      w.storage, { retryMs: 1 });
+    gated.hold(EDIT_DOC, w.documents.store.get(EDIT_DOC.kind, EDIT_DOC.id));
+    gated.open();
+    gated.commit("edit", [{ ...EDIT_DOC, value: { n: 3 } }]);
+    await turns(5);
+    gated.stop();
+    const b = w.make();
+    b.hold(EDIT_DOC, w.documents.store.get(EDIT_DOC.kind, EDIT_DOC.id));
+    // Still recovering: no send yet (the host answers nothing until it is up), and the person keeps working.
+    down = false;
+    b.open();
+    expect(b.recovering(EDIT_DOC)).toBe(true);
+    b.keepRestored();
+    b.commit("edit", [{ ...EDIT_DOC, value: { n: 4 } }], { store: "soon" });
+    w.other({ theirs: 2 });
+    expect(valueOf(b)).toEqual({ n: 4 });
+    for (const run of w.timers.splice(0)) run();
+    await turns();
+    expect(mineOf(b)).toEqual({ n: 4 });
+    expect(valueOf(b)).toEqual({ n: 4 });
+  }
+
+  // `own`: a command in flight when the edit is made (so the edit follows it) is answered with a later revision this same workspace wrote
+  // (a copy a crash lost): that revision becomes the baseline, and the edit, made over the command's value, is never replaced by it: it
+  // goes over the command's own revision and meets the later one as a conflict.
+  {
+    let gate: Promise<void> | null = null, release!: () => void;
+    const w = await editWorld(base => ({ ...base, transact: async request => {
+      if (!gate) return base.transact(request);
+      await gate; gate = null;
+      const answer = await base.transact(request);
+      if (!answer.ok) return answer;
+      const now = (base as DocumentStorePort & { store: { get(kind: string, id: string): { revision: number } | null } }).store.get(EDIT_DOC.kind, EDIT_DOC.id)!;
+      await base.transact({ id: `own-${now.revision}`, command: "x", writes: [{ ...EDIT_DOC, base: now.revision, value: { own: 1 } }] });
+      return { ...answer, replayed: "receipt", own: { [documentKey(EDIT_DOC)]: { revision: now.revision + 1, value: { own: 1 } } } };
+    } }));
+    gate = new Promise(resolve => { release = resolve; });
+    w.a.commit("edit", [{ ...EDIT_DOC, value: { n: 5 } }]);
+    await turns(3);
+    w.a.commit("edit", [{ ...EDIT_DOC, value: { n: 6 } }], { store: "soon" });
+    expect(w.a.pendingEntries().length).toBe(2);
+    release(); await turns(5);
+    expect(valueOf(w.a)).toEqual({ n: 6 });
+    w.storeNow(); await turns();
+    expect(valueOf(w.a)).toEqual({ n: 6 });
+    expect(mineOf(w.a)).toEqual({ n: 6 });
+  }
+
+  // A resolution: the edit lands while the conflict waits (it joins "mine"); Keep mine writes it, Keep both carries it into the copy, and
+  // only Use theirs lets it go.
+  for (const keep of ["mine", "both", "theirs"] as const) {
+    const w = await editWorld();
+    w.a.commit("edit", [{ ...EDIT_DOC, value: { n: 7 } }], { store: "soon" });
+    w.other({ theirs: 3 });
+    w.storeNow(); await turns();
+    const conflict = w.a.conflicts()[0]!;
+    w.a.commit("edit", [{ ...EDIT_DOC, value: { n: 8 } }], { store: "soon" });
+    expect(mineOf(w.a)).toEqual({ n: 8 });
+    if (keep === "mine") w.a.keepMine(conflict.id);
+    else if (keep === "theirs") w.a.useTheirs(conflict.id);
+    else w.a.keepBoth(conflict.id, mine => mine.map(edit => ({ ...edit, id: `${edit.id}~copy` })));
+    w.storeNow(); await turns();
+    expect(w.a.conflicts()).toEqual([]);
+    const library = (id: string) => w.documents.store.get(EDIT_DOC.kind, id)?.value;
+    if (keep === "mine") expect(library("e")).toEqual({ n: 8 });
+    if (keep === "both") { expect(library("e")).toEqual({ theirs: 3 }); expect(library("e~copy")).toEqual({ n: 8 }); }
+    if (keep === "theirs") expect(library("e")).toEqual({ theirs: 3 });
+  }
+});
