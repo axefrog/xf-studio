@@ -4,19 +4,16 @@
  *
  *     documents(kind, id, revision, value, created_at, updated_at)   primary key (kind, id)
  *
- * **Forward-only, beside the released tables.** The table is created when missing (`CREATE TABLE IF NOT EXISTS`) and
- * `user_version` is left as it is, so every earlier XF Studio opens the same library and never reads this table.
- * Connections follow the library's durability rules (`library-durability.ts`): WAL with `synchronous=NORMAL`, and each
- * commit is reported so a flush follows within seconds. A write names the revision it read; a write over any other
- * revision changes nothing and answers `stale` with the current document.
+ * **Forward-only, beside the released tables.** The table is the library file's `documents-1` step (library-migrations.ts),
+ * created when missing, and `user_version` is left as it is, so every earlier XF Studio opens the same library and never
+ * reads this table. The file's owner (`LibraryDatabase`) holds the connection, runs each write as a transaction and tells
+ * the file's durability of it, so a flush follows within seconds. A write names the revision it read; a write over any
+ * other revision changes nothing and answers `stale` with the current document.
  */
-import { Database } from "bun:sqlite";
 import { DOCUMENT_ID, DOCUMENT_KIND, type DocumentWrite, type StoredDocument } from "../api/document-store";
-import { useWriteAheadLog, type LibraryWrites } from "./library-durability";
+import type { LibraryDatabase } from "./library-database";
 
 export type DocumentStoreOptions = {
-  /** The file's durability, told of each commit. */
-  readonly writes?: LibraryWrites;
   /** Wall time for `updatedAt` (the host clock's `now`). */
   readonly now?: () => number;
 };
@@ -29,24 +26,18 @@ const documentOf = <T>(row: Row): StoredDocument<T> =>
 export class DocumentStoreError extends Error {}
 
 export class DocumentStore {
-  private readonly db: Database;
-  constructor(readonly path: string, private readonly options: DocumentStoreOptions = {}) {
-    this.db = new Database(path, { create: true, strict: true });
-    this.db.exec("PRAGMA busy_timeout=5000;");
-    useWriteAheadLog(this.db);
-    this.db.exec(`CREATE TABLE IF NOT EXISTS documents (kind TEXT NOT NULL, id TEXT NOT NULL, revision INTEGER NOT NULL,
-      value TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY (kind, id));`);
-  }
-  close(): void { this.db.close(); }
+  constructor(private readonly db: LibraryDatabase, private readonly options: DocumentStoreOptions = {}) {}
+  /** The library file. */
+  get path(): string { return this.db.path; }
 
   get<T = unknown>(kind: string, id: string): StoredDocument<T> | null {
-    const row = this.db.query("SELECT kind, id, revision, value, updated_at FROM documents WHERE kind = ? AND id = ?").get(kind, id) as Row | null;
+    const row = this.db.read(db => db.query("SELECT kind, id, revision, value, updated_at FROM documents WHERE kind = ? AND id = ?").get(kind, id) as Row | null);
     return row ? documentOf<T>(row) : null;
   }
 
   list<T = unknown>(kind: string): StoredDocument<T>[] {
     if (!DOCUMENT_KIND.test(kind)) throw new DocumentStoreError("That isn't a document kind.");
-    return (this.db.query("SELECT kind, id, revision, value, updated_at FROM documents WHERE kind = ? ORDER BY rowid").all(kind) as Row[]).map(row => documentOf<T>(row));
+    return this.db.read(db => db.query("SELECT kind, id, revision, value, updated_at FROM documents WHERE kind = ? ORDER BY rowid").all(kind) as Row[]).map(row => documentOf<T>(row));
   }
 
   /** Writes `value` over revision `revision` (0 when the document doesn't exist yet), in one immediate transaction. */
@@ -57,15 +48,14 @@ export class DocumentStore {
     const text = JSON.stringify(value);
     if (text === undefined) throw new DocumentStoreError("A document must be a JSON value.");
     const now = (this.options.now ?? Date.now)();
-    const result = this.db.transaction((): DocumentWrite<T> => {
+    // A stale write changes no row, so the file's durability isn't told of it.
+    return this.db.write((db): DocumentWrite<T> => {
       const current = this.get<T>(kind, id);
       if ((current?.revision ?? 0) !== revision) return { ok: false, reason: "stale", current };
-      if (current) this.db.query("UPDATE documents SET revision = ?, value = ?, updated_at = ? WHERE kind = ? AND id = ?").run(revision + 1, text, now, kind, id);
-      else this.db.query("INSERT INTO documents VALUES (?, ?, 1, ?, ?, ?)").run(kind, id, text, now, now);
+      if (current) db.query("UPDATE documents SET revision = ?, value = ?, updated_at = ? WHERE kind = ? AND id = ?").run(revision + 1, text, now, kind, id);
+      else db.query("INSERT INTO documents VALUES (?, ?, 1, ?, ?, ?)").run(kind, id, text, now, now);
       return { ok: true, document: { kind, id, revision: revision + 1, value: JSON.parse(text) as T, updatedAt: now } };
-    }).immediate();
-    if (result.ok) this.options.writes?.wrote();
-    return result;
+    });
   }
 }
 

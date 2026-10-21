@@ -21,7 +21,7 @@ test("the walk covers the workers and the Build tool, and finds uses the bundle 
   const { files, uses } = hostCapabilityUses();
   expect(files).toBeGreaterThan(100);
   const where = (capability: string) => uses.filter(use => use.capability === capability).map(use => use.file.replaceAll("\\", "/"));
-  expect(where("sqlite").some(file => file.endsWith("src/library-store.ts"))).toBe(true);
+  expect(where("sqlite").some(file => file.endsWith("src/platform/persistence/library-database.ts"))).toBe(true);
   expect(where("ffi").some(file => file.endsWith("src/native/oodle.ts"))).toBe(true);
   expect(where("yaml").length).toBeGreaterThan(0);
 

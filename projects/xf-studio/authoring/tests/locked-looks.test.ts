@@ -12,10 +12,9 @@ import { join } from "node:path";
 import { consequenceOf } from "../src/action-consequences";
 import { CollectionService, EVERY_LOOK_NEWER_MESSAGE, NO_EDITABLE_EYE_MAKEUP_MESSAGE, type CollectionTransport } from "../src/collection-service";
 import { CollectionSession, type EditorSnapshot } from "../src/collection-session";
-import { CollectionLibrary } from "../src/collection-store";
 import { collectionDraft, emptyMemory, NEWER_LOOKS_LIBRARY_MESSAGE } from "../src/collection-workspace";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
-import { LookLibrary } from "../src/library-store";
+import { openTestLibrary } from "./fixtures/library-file";
 import { COLLECTION_2, isNewerData, NEWER_LOOK_MESSAGE, type LookCollection } from "../src/platform/api";
 import { eyeMakeupCollection, NEWER_LOOK_REASON, planCollection } from "../src/preset-collection";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
@@ -141,13 +140,12 @@ test("the mod export leaves a locked look out and says why; the library never ta
     { presetId: ID.c, presetName: "C", reason: NEWER_LOOK_REASON }]);
   // The library store refuses it with the plain message and writes nothing.
   const dir = mkdtempSync(join(tmpdir(), "xfs-locked-library-")), path = join(dir, "library.sqlite");
-  new LookLibrary(path).close();
-  const store = new CollectionLibrary(path, STUDIO_PARTS);
+  const file = openTestLibrary(path), store = file.collections;
   try {
     const before = store.list();
     expect(() => store.save({ collection: JSON.parse(JSON.stringify(STUDIO_PARTS.writeMinimal(collection))) })).toThrow(NEWER_LOOKS_LIBRARY_MESSAGE);
     expect(store.list()).toEqual(before);
-  } finally { try { rmSync(dir, { recursive: true, force: true }); } catch { /* WAL files may still be closing. */ } }
+  } finally { file.close(); try { rmSync(dir, { recursive: true, force: true }); } catch { /* WAL files may still be closing. */ } }
   // The draft's Save is refused up front with the same words; Export collection stays available.
   let editor: EditorSnapshot = { recipe: initialRecipe(), ...emptyMemory() };
   const transport: CollectionTransport = { list: async () => [], get: async () => { throw Error("none"); },

@@ -3,15 +3,9 @@ import { existsSync, mkdirSync, realpathSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { isBelow } from "../src/platform/api/path-containment";
 import { randomBytes } from "node:crypto";
-import { LookLibrary, libraryRequest } from "../src/library-store";
-import { CollectionLibrary, collectionRequest } from "../src/collection-store";
-import { PartPresetLibrary, partPresetRequest } from "../src/part-preset-store";
-// The library files' host side: durability, daily backups and the document store (src/platform/persistence).
+// The library files: one owner per file, its stores, durability, daily backups and routes (src/library-files.ts).
 import { hostClock } from "../src/platform/core/clock";
-import { LibraryDurability } from "../src/platform/persistence/library-durability";
-import { LibraryBackups } from "../src/platform/persistence/backups";
-import { createDocumentsHandler, DocumentStore } from "../src/platform/persistence/document-store";
-import { importLegacyExperiments } from "../src/platform/persistence/legacy-experiment-import";
+import { openLibraryFiles } from "../src/library-files";
 import { createLocalSettingsHandler } from "../src/local-settings-server";
 import { FOLDER_FIELDS, type FolderField } from "../src/local-setup-actions";
 import { createInstallDetectionHandler, hostFrameworkCheck, profileFrameworkMods } from "../src/install-detection-server";
@@ -132,26 +126,6 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   previewExporter?: (cli: string | null) => GameAssetExporter, hostOptions: DesktopHostOptions = {}) {
   mkdirSync(dataRoot, { recursive: true });
   const clock = hostClock();
-  // Each library file's durability (library-durability.ts): commits don't wait for the disk, and a flush a few seconds after the last
-  // one makes them durable, so a power cut loses at most those seconds. Open until the app stops (`stop()`, on quit).
-  const libraryLife = new AbortController();
-  const durable = (file: string) => new LibraryDurability(resolve(dataRoot, file), { clock, signal: libraryLife.signal,
-    report: error => hostFailure("library", "flush_failed", "The library couldn't be flushed to disk yet; it will try again.", error, "warn") });
-  const libraryFile = durable("library.sqlite"), verificationFile = durable("verification.sqlite");
-  const library = new LookLibrary(resolve(dataRoot, "library.sqlite"), libraryFile);
-  const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqlite"), verificationFile);
-  const collections = new CollectionLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS, libraryFile);
-  const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS, verificationFile);
-  // Named part presets (an expression today) in their own table of the same library files (part-preset-store.ts).
-  const partPresets = new PartPresetLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS, undefined, libraryFile);
-  const verificationPartPresets = new PartPresetLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS, undefined, verificationFile);
-  // Typed documents (the experimental-features preference, experiments' documents) in their own table of the same files.
-  const documents = new DocumentStore(resolve(dataRoot, "library.sqlite"), { writes: libraryFile, now: () => clock.now() });
-  const verificationDocuments = new DocumentStore(resolve(dataRoot, "verification.sqlite"), { writes: verificationFile, now: () => clock.now() });
-  const documentRequests = [["/api/documents", createDocumentsHandler(documents, "/api/documents")],
-    ["/api/verification/documents", createDocumentsHandler(verificationDocuments, "/api/verification/documents")]] as const;
-  // The library's daily backup, a moment after starting and each day after, until the app stops.
-  new LibraryBackups(resolve(dataRoot, "library.sqlite"), () => clock.now()).keepDaily(clock, libraryLife.signal);
   // Desktop settings follow the Electrobun identity and channel. Never inherit
   // localhost's per-user default or developer XFS_PACKAGE_* environment paths.
   const settingsStore = new LocalSettingsStore(dataRoot);
@@ -169,7 +143,11 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   // One structured log and rolling detail window in <data>/diagnostics/ (docs/diagnostics.md). Host events go there by area;
   // `onReport` adds a listener (tests), it doesn't replace the log.
   const diagnostics = hostDiagnosticsAt(dataRoot);
-  for (const store of [documents, verificationDocuments]) importLegacyExperiments(store, message => diagnostics.log.info("library", "legacy_import", message));
+  // The library files (library.sqlite and verification.sqlite), each with one owner: migrations, transactions and durability (commits
+  // don't wait for the disk; a flush a few seconds after the last makes them durable, so a power cut loses at most those seconds), and the
+  // main file's daily backup. Open until the app stops (`stop()`, on quit).
+  const libraries = openLibraryFiles(dataRoot, { clock, parts: STUDIO_PARTS, isolated: false,
+    log: message => diagnostics.log.info("library", "legacy_import", message) });
   setProcessDiagnostics(diagnostics);
   // The resolver reads game files natively first, in a worker; the packaged app starts the built one.
   if (hostOptions.nativeDecodeWorker) {
@@ -448,13 +426,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       if (url.pathname === "/api/install-detection") return installDetection(routedRequest);
       if (url.pathname === "/api/saves" || url.pathname.startsWith("/api/saves/")) return savesRequest(routedRequest);
       if (url.pathname === "/api/verification/saves" || url.pathname.startsWith("/api/verification/saves/")) return verificationSavesRequest(routedRequest);
-      for (const [prefix, store] of [["/api/collections", collections], ["/api/verification/collections", verificationCollections]] as const)
-        if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return collectionRequest(routedRequest, store, prefix);
-      for (const [prefix, store] of [["/api/part-presets", partPresets], ["/api/verification/part-presets", verificationPartPresets]] as const)
-        if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return partPresetRequest(routedRequest, store, prefix);
-      for (const [prefix, handle] of documentRequests) if (url.pathname === prefix) return handle(routedRequest);
-      for (const [prefix, store] of [["/api/looks", library], ["/api/verification/looks", verificationLibrary]] as const)
-        if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return libraryRequest(routedRequest, store, prefix);
+      const libraryAnswer = libraries.handle(routedRequest, url);
+      if (libraryAnswer) return libraryAnswer;
       if (request.method !== "GET" && request.method !== "HEAD") return new Response("Method not allowed", { status: 405 });
       if (url.pathname === "/health") return Response.json({ app: "xf-studio-desktop" });
       let path: string;
@@ -505,6 +478,15 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     characterDetails,
     /** WolvenKit setup (tests and shutdown). */
     wolvenKit,
-    stop() { diagnostics.trace.flush(); shutdown.abort(); previewCore.cancel(); characterDetails.cancel(); wolvenKit.cancel(); server.stop(true); facial.dispose(); collections.close(); verificationCollections.close(); partPresets.close(); verificationPartPresets.close(); documents.close(); verificationDocuments.close(); library.close(); verificationLibrary.close(); libraryLife.abort(); },
+    stop() {
+      diagnostics.trace.flush();
+      shutdown.abort();
+      previewCore.cancel();
+      characterDetails.cancel();
+      wolvenKit.cancel();
+      server.stop(true);
+      facial.dispose();
+      libraries.close();
+    },
   };
 }
