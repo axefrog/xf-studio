@@ -11,11 +11,11 @@
 // --diagnostics: honour a prepared collection's diagnostic knobs (the finish and Glitter boards).
 // --skin: the head's tone and type appearance (default 01_ca_pale, the untinted albedo); --eyes: an eye gradient.
 import { resolve } from "node:path";
-import { buildShowroom } from "../src/showroom/build";
+import { buildShowroom } from "../src/showroom/host/build";
 import { EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
 import { STUDIO_EXPORTERS } from "../src/compose/exporters";
-import { createWolvenKitPackageTools } from "../src/package-build-wolvenkit";
-import { createWolvenKitVerifierTools } from "../src/verifier-wolvenkit";
+import { createWolvenKitPackageTools } from "../src/legacy/eye-makeup/export/host/package-build-wolvenkit";
+import { createWolvenKitVerifierTools } from "../src/legacy/eye-makeup/export/host/verifier-wolvenkit";
 
 const app = resolve(import.meta.dir, "..");
 const project = resolve(app, "..");

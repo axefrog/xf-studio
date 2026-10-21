@@ -7,13 +7,13 @@
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { localHostState } from "../src/host-state";
-import { LocalSettingsStore } from "../src/local-settings-store";
-import { localExpressionsGame, localPackageAdapter, localPackageTools } from "../src/package-server";
+import { localHostState } from "../src/setup/host/host-state";
+import { LocalSettingsStore } from "../src/setup/host/local-settings-store";
+import { localExpressionsGame, localPackageAdapter, localPackageTools } from "../src/host/package-server";
 import { runProductBuild } from "../src/platform/export/product-host";
 import { STUDIO_EXPORTERS } from "../src/compose/exporters";
 import { EXPRESSIONS_GAME_PREREQUISITE } from "../src/features/expressions/export/game";
-import { setCollection } from "../src/part-preset-sets";
+import { setCollection } from "../src/library/part-preset-sets";
 
 const [privateRoot, table = "installed"] = process.argv.slice(2);
 if (!privateRoot) throw Error("Usage: bun tools/expression_set_dry_run.ts <private root> [installed|sharing]");

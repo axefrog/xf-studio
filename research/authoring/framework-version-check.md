@@ -1,6 +1,6 @@
 # Framework version check and MO2 placement
 
-The Studio never installs, replaces, disables or duplicates a user's frameworks, and never reshapes their mod list. It reads which framework versions the game would load, tells the user plainly what to update and where to get it, and adds only its own mod when placing into MO2. This page records how the read-only check works, why each minimum was chosen, and the placement rule. Code: [`framework-versions.ts`](../../projects/xf-studio/authoring/src/framework-versions.ts), [`pe-version.ts`](../../projects/xf-studio/authoring/src/pe-version.ts), [`mo2-placement.ts`](../../projects/xf-studio/authoring/src/mo2-placement.ts).
+The Studio never installs, replaces, disables or duplicates a user's frameworks, and never reshapes their mod list. It reads which framework versions the game would load, tells the user plainly what to update and where to get it, and adds only its own mod when placing into MO2. This page records how the read-only check works, why each minimum was chosen, and the placement rule. Code: [`framework-versions.ts`](../../projects/xf-studio/authoring/src/installation/framework-versions.ts), [`pe-version.ts`](../../projects/xf-studio/authoring/src/formats/pe-version.ts), [`mo2-placement.ts`](../../projects/xf-studio/authoring/src/installation/mo2-placement.ts).
 
 ## What the check reads
 

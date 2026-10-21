@@ -1,4 +1,4 @@
-import type { PreviewSetupAction } from "../preview-setup";
+import type { PreviewSetupAction } from "../preview/preview-setup";
 import { applyCapability, button, setButtonLabel } from "./controls";
 import type { Frame, StudioRuntime } from "./runtime";
 

@@ -9,12 +9,12 @@
  * Results land in `window.probe` as plain numbers. Nothing here reads game files.
  */
 import * as THREE from "three";
-import { createFaceDecalMaterial, faceDecalParameters } from "../src/face-decal-material";
-import { createSkinMaterial, skinParameters } from "../src/skin-material";
+import { createFaceDecalMaterial, faceDecalParameters } from "../src/materials/render/face-decal-material";
+import { createSkinMaterial, skinParameters } from "../src/materials/render/skin-material";
 import { passParticipation } from "../src/platform/api/scene";
 import { createSkinScatter } from "../src/platform/scene/skin-scatter";
 import { referenceScatter, scatterSlot, type ScatterQuality } from "../src/platform/scene/skin-scatter-kernel";
-import { createLinearDisplay } from "../src/linear-display";
+import { createLinearDisplay } from "../src/preview/render/linear-display";
 import { readTextureLevel } from "./webgl-harness-page";
 
 export type ScatterProbe = {

@@ -8,8 +8,8 @@ import {createRasterJob} from "../src/engines/layered-makeup/recipe";
 import {installGlitterMixtureStudy} from "./glitter-study-material";
 import {installProceduralGlintStudy} from "./glitter-glint-study";
 import { EYE_MAKEUP_REGION, initialRecipe } from "../src/features/eye-makeup/region";
-import { studioStageSetup } from "../src/lighting-setups";
-import { DEFAULT_STUDIO_STAGE } from "../src/studio-lighting";
+import { studioStageSetup } from "../src/preview/lighting-setups";
+import { DEFAULT_STUDIO_STAGE } from "../src/preview/studio-lighting";
 
 const SIZE=new URLSearchParams(location.search).get("size")==="2048"?2048:1024,
   BASE="#592640",variants=["legacy","sparse","default","default-16sample","dense","maximum","fine160k","fine350k","fine350k-covered","uv-cell-glints","uv-cell-polygons"] as const;

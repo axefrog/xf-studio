@@ -1,5 +1,5 @@
 /**
- * Experiment 034, step 3: does XF Studio's lip-aperture reading (`src/mouth-aperture.ts`, PREV-147 step A) pick the lip joints from the
+ * Experiment 034, step 3: does XF Studio's lip-aperture reading (`src/animation/mouth-aperture.ts`, PREV-147 step A) pick the lip joints from the
  * facial setup's regions alone, and reproduce step 1's by-name measurement of the creator idle's breaths?
  *
  * Solves `ui_closeup_shot` with the male player setup (the preview's since 29 September) at 30 Hz with XF Studio's own solver and bake
@@ -16,7 +16,7 @@ import { decodeAnimClip } from "../../projects/xf-studio/authoring/src/native/an
 import { clipTracksFromKeys } from "../../projects/xf-studio/authoring/src/engines/facial-rig/anim-tracks";
 import { bakedRest, bakeFrames, clipFrame } from "../../projects/xf-studio/authoring/src/engines/facial-rig/bake";
 import { compileFacialRig } from "../../projects/xf-studio/authoring/src/engines/facial-rig/solver";
-import { mouthAperture, mouthLipJoints, posedParting, type FaceRest } from "../../projects/xf-studio/authoring/src/mouth-aperture";
+import { mouthAperture, mouthLipJoints, posedParting, type FaceRest } from "../../projects/xf-studio/authoring/src/animation/mouth-aperture";
 import { openGame, PATHS } from "./game-files";
 
 const args = process.argv.slice(2);

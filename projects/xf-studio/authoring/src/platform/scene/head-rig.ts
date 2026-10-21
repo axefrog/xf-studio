@@ -1,19 +1,19 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { extendSkin } from "../../skin";
-import type { SavedV } from "../../saved-v";
-import { IdleAnimation } from "../../idle-animation";
-import type { PoseClip } from "../../pose-clip";
-import { BUILT_IN_CATALOGUE, DEFAULT_IDLE, type IdleCatalogue, type IdleEntry } from "../../idle-catalogue";
-import { activeEyeShape, GAME_BLINK_MISSING, IDLE_FACE_MISSING, IDLE_FACE_PREPARING, IDLE_MASCULINE, loadGameBlink, type GameBlink } from "../../game-blink";
+import { extendSkin } from "../../materials/render/skin";
+import type { SavedV } from "../../saves/saved-v";
+import { IdleAnimation } from "../../animation/render/idle-animation";
+import type { PoseClip } from "../../animation/render/pose-clip";
+import { BUILT_IN_CATALOGUE, DEFAULT_IDLE, type IdleCatalogue, type IdleEntry } from "../../animation/idle-catalogue";
+import { activeEyeShape, GAME_BLINK_MISSING, IDLE_FACE_MISSING, IDLE_FACE_PREPARING, IDLE_MASCULINE, loadGameBlink, type GameBlink } from "../../animation/render/game-blink";
 import { loadIdleSource, type IdleSource } from "./idle-source";
-import { composePreviewMotion } from "../../preview-motion";
+import { composePreviewMotion } from "../../animation/render/preview-motion";
 import { FaceDriver, type FacePose, type FaceRigJoint } from "./face-driver";
-import { createEyeMaterial, eyeParameters, prepareEyeballGeometry } from "../../eye-material";
-import type { LoadedCoreDetail } from "../../core-detail-loader";
-import type { CoreBody } from "../../render-detail";
-import { morphTargetNames } from "../../head-skin-placement";
-import { faceMorphChoiceIndex, faceMorphChoices, faceMorphWeights, followsFaceMorphChoices, type FaceMorphChoice } from "../../face-morphs";
+import { createEyeMaterial, eyeParameters, prepareEyeballGeometry } from "../../materials/render/eye-material";
+import type { LoadedCoreDetail } from "../../character/render/core-detail-loader";
+import type { CoreBody } from "../../character/render-detail";
+import { morphTargetNames } from "../../character/render/head-skin-placement";
+import { faceMorphChoiceIndex, faceMorphChoices, faceMorphWeights, followsFaceMorphChoices, type FaceMorphChoice } from "../../character/face-morphs";
 
 /**
  * The head rig (feature-module platform §5, the platform's character context in the scene): the core head the preview derived from

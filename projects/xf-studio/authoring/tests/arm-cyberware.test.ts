@@ -3,14 +3,14 @@
 // the default arms. A private, save- and game-derived fixture (experiment 034's check_arms.ts) checks the chain on a real save where present.
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
-import { armsStateFor, armsStateNote, DEFAULT_HOLSTER, holsterGroup } from "../src/arm-cyberware";
-import type { CcoResource } from "../src/cco-model";
-import { bodyGroups, bodyStateFor, ENABLE_MASK, planCharacterDetails, previewInput, type TemplateIdentities } from "../src/character-detail-plan";
-import { CHARACTER_REQUEST_SCHEMA, characterRequestOf, inputFromCharacterRequest, parseCharacterRequest, sameCharacter } from "../src/character-detail-request";
-import { templateIdentity } from "../src/character-detail-service";
-import { loadMergedCco, resolveCharacter, type ResolvedParam } from "../src/character-resolver";
-import { refFromPath } from "../src/depot-path";
-import { templateDefaults } from "../src/material-template";
+import { armsStateFor, armsStateNote, DEFAULT_HOLSTER, holsterGroup } from "../src/character/arm-cyberware";
+import type { CcoResource } from "../src/character/cco-model";
+import { bodyGroups, bodyStateFor, ENABLE_MASK, planCharacterDetails, previewInput, type TemplateIdentities } from "../src/character/character-detail-plan";
+import { CHARACTER_REQUEST_SCHEMA, characterRequestOf, inputFromCharacterRequest, parseCharacterRequest, sameCharacter } from "../src/character/character-detail-request";
+import { templateIdentity } from "../src/character/host/character-detail-service";
+import { loadMergedCco, resolveCharacter, type ResolvedParam } from "../src/character/character-resolver";
+import { refFromPath } from "../src/game/depot-path";
+import { templateDefaults } from "../src/game/material-template";
 import { BODY_REQUEST, detailFixture, P } from "./character-detail-fixtures";
 
 /** A creator resource with just the parts the holster rule reads. */

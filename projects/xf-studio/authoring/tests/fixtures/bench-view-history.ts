@@ -5,8 +5,8 @@
  * Prints medians in milliseconds and sizes in UTF-16 code units.
  */
 import { MAIN_VIEW } from "../../src/platform/api/view-graph";
-import { createStudioViewGraph } from "../../src/preview-view-graph";
-import { DEFAULT_CREATOR_LIGHTING } from "../../src/creator-lighting";
+import { createStudioViewGraph } from "../../src/preview/preview-view-graph";
+import { DEFAULT_CREATOR_LIGHTING } from "../../src/preview/creator-lighting";
 import { createDocumentHistory } from "../../src/platform/core/document-history";
 import { freshWorkspace } from "./eye-region";
 

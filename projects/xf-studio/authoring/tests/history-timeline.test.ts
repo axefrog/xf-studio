@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
 import { HISTORY_START_ID } from "../src/platform/api/history";
-import { collectionDraft, parseCollectionWorkspace, withLiveMemory } from "../src/collection-workspace";
+import { collectionDraft, parseCollectionWorkspace, withLiveMemory } from "../src/app/workspace/collection-workspace";
 import { memoryOf } from "./fixtures/looks";
-import { RECIPE_HISTORY_LIMIT, recipeHistory } from "../src/editor-actions";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { encodeWorkspaceForStorage, PERSISTED_BACKGROUND_HISTORY } from "../src/workspace-budget";
-import { parseWorkspace } from "../src/workspace-state";
+import { RECIPE_HISTORY_LIMIT, recipeHistory } from "../src/legacy/eye-makeup/editor-actions";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { encodeWorkspaceForStorage, PERSISTED_BACKGROUND_HISTORY } from "../src/app/workspace/workspace-budget";
+import { parseWorkspace } from "../src/app/workspace/workspace-state";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 
@@ -198,7 +198,7 @@ test("stored copies mark presets whose Undo history the budget shortened", () =>
 });
 
 test("the presentation port publishes the timeline without the live history", async () => {
-  const { createStudioPresentation } = await import("../src/studio-presentation");
+  const { createStudioPresentation } = await import("../src/app/studio-presentation");
   const core = fixture();
   threeEdits(core);
   const port = createStudioPresentation({ authoring: core.app, library: {} as never, files: {} as never,

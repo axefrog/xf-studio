@@ -5,7 +5,7 @@ import type { EyeMakeupViewContext } from "../src/features/eye-makeup/view/actio
 import type { PanelController } from "../src/studio-ui/panels/collection";
 import type { StudioRuntime } from "../src/studio-ui/runtime";
 import type { FeatureViewFactory } from "../src/studio-ui/views/feature-view";
-import type { EyeMakeupFacade } from "../src/studio-presentation";
+import type { EyeMakeupFacade } from "../src/app/studio-presentation";
 import { importUses, imports, resolveFrom } from "./fixtures/import-scan";
 import { sourceFiles, sourceText } from "./fixtures/source-files";
 

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { createBrowserFileDevice } from "../src/browser-file-device";
-import { createBrowserWorkspaceSession, loadBrowserWorkspace } from "../src/browser-workspace-device";
+import { createBrowserFileDevice } from "../src/app/browser/browser-file-device";
+import { createBrowserWorkspaceSession, loadBrowserWorkspace } from "../src/app/browser/browser-workspace-device";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 

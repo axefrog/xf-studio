@@ -1,16 +1,16 @@
 // The Clothing setting (clothing-dressing.ts), its actions and Undo in the character context, the request's clothing (v5) and the record's
 // clothing slot (v9, planClothing). Asset-free: loadouts and resolved clothing are built here.
 import { describe, expect, test } from "bun:test";
-import { CharacterContextActions, type CreatorPort, storedCharacterOf } from "../src/character-context-actions";
-import { planClothing } from "../src/character-detail-plan";
-import { CHARACTER_REQUEST_SCHEMA, parseCharacterRequest, sameCharacter } from "../src/character-detail-request";
-import { NO_OVERRIDES, type ResolvedComponent } from "../src/character-resolver";
-import { BASIC_UNDERWEAR, clothingSettingOf, DEFAULT_CLOTHING, dressingFor, hairTypeOf } from "../src/clothing-dressing";
-import type { ResolvedClothing, ResolvedGarment } from "../src/clothing-resolver";
-import { DETAIL_SLOTS, parseCharacterDetail } from "../src/render-detail";
-import type { SavedLoadout } from "../src/save-loadout";
-import type { SavedV } from "../src/save-reader";
-import { tweakDbId } from "../src/tweakdb-flats";
+import { CharacterContextActions, type CreatorPort, storedCharacterOf } from "../src/character/character-context-actions";
+import { planClothing } from "../src/character/character-detail-plan";
+import { CHARACTER_REQUEST_SCHEMA, parseCharacterRequest, sameCharacter } from "../src/character/character-detail-request";
+import { NO_OVERRIDES, type ResolvedComponent } from "../src/character/character-resolver";
+import { BASIC_UNDERWEAR, clothingSettingOf, DEFAULT_CLOTHING, dressingFor, hairTypeOf } from "../src/character/clothing-dressing";
+import type { ResolvedClothing, ResolvedGarment } from "../src/character/clothing-resolver";
+import { DETAIL_SLOTS, parseCharacterDetail } from "../src/character/render-detail";
+import type { SavedLoadout } from "../src/saves/save-loadout";
+import type { SavedV } from "../src/saves/save-reader";
+import { tweakDbId } from "../src/game/tweakdb-flats";
 
 const loadout: SavedLoadout = { schema: "xfs/saved-loadout-1", wardrobeSet: null, evidence: { owner: "1", owners: 1, skipped: [] },
   equipped: [{ area: "Head", item: "100" }, { area: "InnerChest", item: "101" }, { area: "Legs", item: "102" }, { area: "UnderwearBottom", item: "103" }],

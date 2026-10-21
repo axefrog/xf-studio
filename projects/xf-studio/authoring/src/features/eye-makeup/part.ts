@@ -15,7 +15,7 @@ import { parseFieldSelection, type FieldSelection } from "../../engines/layered-
 import { parseGlitterChoices, type GlitterChoices } from "../../engines/layered-makeup/glitter-model";
 import { emptyRecipe, joinRecipe, recipeChunks, type Recipe } from "../../engines/layered-makeup/recipe";
 import { EYE_MAKEUP_PART_1, EYE_MAKEUP_PART_2, LAYER_MODELS, parseEyeMakeupPart, readPortableRecipe, recipeFile,
-  RECIPE_SCHEMAS, type RecipeModelRegistry } from "../../recipe-schema";
+  RECIPE_SCHEMAS, type RecipeModelRegistry } from "../../legacy/eye-makeup/recipe-schema";
 import { starterRecipe } from "./region";
 
 export { EYE_MAKEUP_PART_1, EYE_MAKEUP_PART_2, RECIPE_SCHEMAS };

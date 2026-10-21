@@ -35,17 +35,17 @@
  * it takes a moment. Closing the row stops it. The prepared game files' size and "Clear prepared game files" sit with the 3D view's
  * own controls.
  */
-import { shortcutLabel } from "../../input-bindings";
-import type { CcPanel, CcPanelOption, CcPanelRow, CreatorView } from "../../cc-panel";
+import { shortcutLabel } from "../../app/input-bindings";
+import type { CcPanel, CcPanelOption, CcPanelRow, CreatorView } from "../../character/cc-panel";
 import { applyCapability, button, setButtonLabel, note, section, Segmented, SelectField, Toggle } from "../controls";
-import type { ChoiceLayout, ChoiceSize } from "../../ui-preferences";
+import type { ChoiceLayout, ChoiceSize } from "../../app/ui-preferences";
 import { h, isTextInput, setAttr, setText, setUnavailable, uid } from "../dom";
 import { ExpandAll, expander, expanderLabel, isExpanded, setExpanded } from "../expander";
 import { ChoiceList, propertyList, SearchField } from "../components";
 import { helpTip, setHelp } from "../help-tip";
 import type { Command } from "../commands";
 import { allSections, CHARACTER_CONTRIBUTIONS, characterPanelTree, type CharacterPanelGroup, type CharacterPanelSection, type CharacterSectionContribution,
-  type CharacterToggle, type CharacterToggleState } from "../../character-panel-sections";
+  type CharacterToggle, type CharacterToggleState } from "../../character/character-panel-sections";
 import { icon } from "../icons";
 import { viewState } from "../view-state";
 import { VIEW_KEY } from "../scroll-anchor";
@@ -56,9 +56,9 @@ import { characterDetailLine, characterDetailRows } from "./preview";
 import { ChoiceList as CreatorChoiceList, swatchLook } from "./character-choices";
 import { attachSwatchCard, contrastMark, CONTRAST_WORDS, setContrastMark, type SwatchSample } from "../components";
 import { wolvenKitStepButton } from "../wolvenkit-step";
-import type { ClothingState } from "../../clothing-dressing";
-import type { ClothingArea } from "../../save-loadout";
-import { PARTLY_SHOWN, shownOutcome } from "../../cc-render-coverage";
+import type { ClothingState } from "../../character/clothing-dressing";
+import type { ClothingArea } from "../../saves/save-loadout";
+import { PARTLY_SHOWN, shownOutcome } from "../../character/cc-render-coverage";
 
 const NOT_SHOWN = "Not shown in the 3D view yet.";
 const CLOTHES_HELP = "Your V's clothes as your save records them. They are drawn without the game's garment fitting, so layers can clip at the edges.";

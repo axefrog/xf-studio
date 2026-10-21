@@ -12,7 +12,7 @@
  */
 import * as THREE from "three";
 import { corneaNormal, createEyeMaterial, EYE_FLAT_ROUGHNESS, EYE_GLSL_FUNCTIONS, eyeDirectLight, eyeParameters, irisPlaneCoordinate,
-  prepareEyeballGeometry, unpackNormalRG, type Vec3 } from "../src/eye-material";
+  prepareEyeballGeometry, unpackNormalRG, type Vec3 } from "../src/materials/render/eye-material";
 
 export type EyeFrame = { peak: number; highlightPixels: number; irisContrast: number; pupil: [number, number] | null; marker: [number, number] | null;
   /** The frame's summed luminance: with a black albedo, the specular energy the light leaves on the eye. */

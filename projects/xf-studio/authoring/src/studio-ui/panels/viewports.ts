@@ -1,11 +1,11 @@
-import { chordsLabel, KEY_BINDINGS, keyBinding, modifierKey, modifiersOf, pointerBinding, shortcutLabel, type ViewportScope } from "../../input-bindings";
+import { chordsLabel, KEY_BINDINGS, keyBinding, modifierKey, modifiersOf, pointerBinding, shortcutLabel, type ViewportScope } from "../../app/input-bindings";
 import { ViewportInputHints } from "../input-hints";
 import { button, applyCapability, setButtonLabel } from "../controls";
 import { progressBar } from "../components/progress";
 import { h, setAttr, setText, isTextInput, uid } from "../dom";
 import { icon, isIconName, type IconName } from "../icons";
 import type { Frame, StudioRuntime } from "../runtime";
-import type { ViewToolEntry } from "../../studio-application";
+import type { ViewToolEntry } from "../../app/studio-application";
 import type { ViewContext } from "../views/panels";
 import { viewportMenu } from "../target-menus";
 import type { PanelController } from "./collection";

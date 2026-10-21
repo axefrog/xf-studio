@@ -1,12 +1,12 @@
 /**
  * Render-coverage walk (research/character-customization/render-coverage.md): every creator option of a cached catalogue projected through
- * the Studio's own coverage rules (`catalogueCoverage`, src/cc-render-coverage.ts), tallied by part, creator slot and status. Reads a
+ * the Studio's own coverage rules (`catalogueCoverage`, src/character/cc-render-coverage.ts), tallied by part, creator slot and status. Reads a
  * catalogue the host cached (private: it lists the installation's mods); prints counts and the slots that aren't fully drawn.
  *
  *   bun ../../../experiments/034-render-coverage-refresh/coverage_walk.ts <cc-catalogue-*.json>
  */
 import { readFileSync } from "node:fs";
-import { catalogueCoverage } from "../../projects/xf-studio/authoring/src/cc-render-coverage";
+import { catalogueCoverage } from "../../projects/xf-studio/authoring/src/character/cc-render-coverage";
 
 const file = process.argv[2];
 if (!file) throw Error("Usage: coverage_walk.ts <catalogue json>");

@@ -7,16 +7,16 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CollectionLibrary } from "../src/collection-store";
+import { CollectionLibrary } from "../src/library/host/collection-store";
 import { STUDIO_PARTS } from "../src/compose/studio-registry";
-import { LIBRARY_MIGRATIONS } from "../src/library-migrations";
-import { partPresetRequest } from "../src/part-preset-store";
+import { LIBRARY_MIGRATIONS } from "../src/library/host/library-migrations";
+import { partPresetRequest } from "../src/library/host/part-preset-store";
 import { hostClock } from "../src/platform/core/clock";
 import { LibraryDatabase } from "../src/platform/persistence/library-database";
 import { openTestLibrary } from "./fixtures/library-file";
 import { alphaList } from "./fixtures/alpha-0.1.0/collection-list";
 import { COLLECTION_FIXTURES, readFixture } from "./fixtures/capture-plan-golden";
-import { parseRecipeFile } from "../src/recipe-schema";
+import { parseRecipeFile } from "../src/legacy/eye-makeup/recipe-schema";
 
 const expression = (controls: Record<string, number>) => ({ schema: "xfs/expression-part-1", body: { controls, links: {} } });
 
@@ -113,7 +113,7 @@ test("the endpoint lists, saves, renames and deletes for the local studio only",
 });
 
 test("the presets family's service lists on first ask, keeps names sorted and refuses in plain words", async () => {
-  const { PartPresetService } = await import("../src/part-presets");
+  const { PartPresetService } = await import("../src/library/part-presets");
   const rows: { id: string; feature: string; name: string; revision: number; part: { schema: string; body: unknown }; updatedAt: string }[] = [];
   let n = 0;
   const service = new PartPresetService({
@@ -208,7 +208,7 @@ test("a damaged set row never stops a preset's delete or restore: it is skipped 
 });
 
 test("a set exports as a package-only collection named for the mod, members in order, deleted ones left out", async () => {
-  const { setCollection, defaultSetModName } = await import("../src/part-preset-sets");
+  const { setCollection, defaultSetModName } = await import("../src/library/part-preset-sets");
   expect(defaultSetModName("expressions", "Moody: faces?")).toBe("XF Expressions - Moody faces");
   expect(defaultSetModName("expressions", "  ")).toBe("XF Expressions");
   expect(defaultSetModName("expressions", "x".repeat(200)).length).toBeLessThanOrEqual(80);
@@ -224,7 +224,7 @@ test("a set exports as a package-only collection named for the mod, members in o
 });
 
 test("a set's Check and Build go through the package route with its package-only collection; reveal waits for a build", async () => {
-  const { PartPresetService } = await import("../src/part-presets");
+  const { PartPresetService } = await import("../src/library/part-presets");
   const presetId = "00000000-0000-4000-8000-000000000001", setId = "00000000-0000-4000-8000-0000000000aa";
   const preset = { id: presetId, feature: "expressions", name: "Smile", revision: 1, part: expression({ jaw_mid_open: 0.2 }), updatedAt: "now" };
   const sets = [{ id: setId, feature: "expressions", name: "Moody", revision: 1, members: [] as string[], updatedAt: "now" }];
@@ -262,7 +262,7 @@ test("a set's Check and Build go through the package route with its package-only
 });
 
 test("a set's provisional Check runs again by itself, and Build says why while a current Check found nothing to package", async () => {
-  const { PartPresetService } = await import("../src/part-presets");
+  const { PartPresetService } = await import("../src/library/part-presets");
   const presetId = "00000000-0000-4000-8000-000000000001", setId = "00000000-0000-4000-8000-0000000000aa";
   const preset = { id: presetId, feature: "expressions", name: "Smile", revision: 1, part: expression({ jaw_mid_open: 0.2 }), updatedAt: "now" };
   const sets = [{ id: setId, feature: "expressions", name: "Moody", revision: 1, members: [presetId], updatedAt: "now" }];

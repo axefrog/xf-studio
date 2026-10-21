@@ -5,15 +5,15 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { planCharacterDetails } from "../src/character-detail-plan";
-import { CharacterPreparationCache, prepareCharacterDetails } from "../src/character-detail-service";
-import { loadMergedCco, resolveCharacter, type CharacterInput } from "../src/character-resolver";
-import { depotHash, refFromPath } from "../src/depot-path";
+import { planCharacterDetails } from "../src/character/character-detail-plan";
+import { CharacterPreparationCache, prepareCharacterDetails } from "../src/character/host/character-detail-service";
+import { loadMergedCco, resolveCharacter, type CharacterInput } from "../src/character/character-resolver";
+import { depotHash, refFromPath } from "../src/game/depot-path";
 import { archiveExportSource, createGameAssetExporter, GameAssetExportError, type ExportedGeometry, type ExportedMask, type ExportedTexture,
-  type GameAssetExporter, type GeometryRepair, type UncookRun } from "../src/game-asset-export";
-import { bonePositionFromRigMatrix, repairMeshForExport } from "../src/mesh-export-repair";
-import { encodePng } from "../src/png";
-import type { JsonObject } from "../src/red-json";
+  type GameAssetExporter, type GeometryRepair, type UncookRun } from "../src/game/host/game-asset-export";
+import { bonePositionFromRigMatrix, repairMeshForExport } from "../src/game/mesh-export-repair";
+import { encodePng } from "../src/formats/png";
+import type { JsonObject } from "../src/game/red-json";
 import { detailFixture, P, REQUEST_A } from "./character-detail-fixtures";
 import { app, cco, fixtureInstallation, instance, mesh, meshComponent, mi, nameParam, tex, appearanceOption, type FixtureArchive } from "./resolver-fixtures";
 

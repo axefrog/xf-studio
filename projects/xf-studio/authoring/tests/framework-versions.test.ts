@@ -3,11 +3,11 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, wr
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { checkFrameworkVersions, compareVersions, EYE_ARTISTRY_REQUIREMENTS, FRAMEWORKS, frameworkModNames,
-  normaliseVersion } from "../src/framework-versions";
-import { createWindowsDetectionHost } from "../src/install-detection-host";
-import { evaluateLocalReadiness } from "../src/local-settings-readiness";
-import { defaultLocalSettings, parseLocalSettings } from "../src/local-settings";
-import { fixedFileVersion, readPeFileVersion } from "../src/pe-version";
+  normaliseVersion } from "../src/installation/framework-versions";
+import { createWindowsDetectionHost } from "../src/installation/host/install-detection-host";
+import { evaluateLocalReadiness } from "../src/setup/host/local-settings-readiness";
+import { defaultLocalSettings, parseLocalSettings } from "../src/setup/local-settings";
+import { fixedFileVersion, readPeFileVersion } from "../src/formats/pe-version";
 
 /** A minimal PE image: DOS header, one `.rsrc` section and a VS_VERSIONINFO with the given version. */
 function fakePe(version: [number, number, number, number]): Uint8Array {

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { browScreenMetrics } from "../src/brow-study-metrics";
+import { browScreenMetrics } from "../src/studies/brow-study-metrics";
 
 test("brow-only silhouette ignores RGB shading but reports it separately", () => {
   const dark = new Uint8ClampedArray([30, 30, 30, 200, 10, 10, 10, 50, 0, 0, 0, 0]);

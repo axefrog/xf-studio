@@ -22,7 +22,7 @@ export const GUIDANCE: Record<string, { combine?: string; adapt?: string; drives
   "s-status": { combine: "The message slot mirrors the newest Activity entry; the readiness badge is the steady home of the makeup textures' state (the 3D view shows its own badge only while they update or fail); errors also toast so they are not missed, but never repeat a note the 3D view already shows." },
   "s-palette": { adapt: "Width is capped to the window minus 32 px; results scroll; it works identically in compact workspaces where header labels are icons." },
   "s-sheet": { combine: "Opened from View preferences, the Panels menu, the palette or the ? key; never stacked on another dialog.", adapt: "Width is capped to the window; the body scrolls and the definition list wraps.",
-    drives: "bindingReference() from src/input-bindings.ts, the same catalogue as r-keys in this guide; preferences inputHints.set." },
+    drives: "bindingReference() from src/app/input-bindings.ts, the same catalogue as r-keys in this guide; preferences inputHints.set." },
   "d-split": { combine: "Splits hold groups or further splits; a group's minimum size stops a splitter before content collapses.",
     adapt: "Sizes are fractions, so resizing the window scales every column and row proportionally.", drives: "DockTree split nodes (axis, sizes) via setSizes()." },
   "d-float": { drives: "DockTree.floating windows (x, y, w, h, node) via applyDrop({kind:'float'}), setWindowRect(), raiseWindow() and recoverWindows()." },
@@ -113,5 +113,5 @@ export const GUIDANCE: Record<string, { combine?: string; adapt?: string; drives
   "r-actions": { combine: "Use with the capability inventory and action catalogue in research/authoring.", adapt: "Table scrolls horizontally in narrow windows.",
     drives: "StudioPresentationPort." },
   "r-keys": { combine: "Generated from the same catalogue as the ? Keyboard & mouse dialog, viewport hints, menu and palette shortcut labels.", adapt: "Two columns at every size.",
-    drives: "src/input-bindings.ts, resolved by the shell keydown handler, DockView tabs, ItemList rows, viewport panels and both gesture adapters." },
+    drives: "src/app/input-bindings.ts, resolved by the shell keydown handler, DockView tabs, ItemList rows, viewport panels and both gesture adapters." },
 };

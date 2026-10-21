@@ -14,11 +14,11 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { armsStateFor } from "../../projects/xf-studio/authoring/src/arm-cyberware";
-import { readCco } from "../../projects/xf-studio/authoring/src/cco-model";
-import { ccoPath } from "../../projects/xf-studio/authoring/src/character-resolver";
-import { holsteredAppearance, tweakDbOf } from "../../projects/xf-studio/authoring/src/clothing-host";
-import { readSavedV } from "../../projects/xf-studio/authoring/src/save-reader";
+import { armsStateFor } from "../../projects/xf-studio/authoring/src/character/arm-cyberware";
+import { readCco } from "../../projects/xf-studio/authoring/src/character/cco-model";
+import { ccoPath } from "../../projects/xf-studio/authoring/src/character/character-resolver";
+import { holsteredAppearance, tweakDbOf } from "../../projects/xf-studio/authoring/src/character/host/clothing-host";
+import { readSavedV } from "../../projects/xf-studio/authoring/src/saves/save-reader";
 import { openGame } from "./game-files";
 
 const args = process.argv.slice(2);

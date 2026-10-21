@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { BODY_FRAME, BODY_SUBJECT, bodyCameraDistance, CAMERA_DISTANCE_RANGE, frontCameraDistance, HEAD_SUBJECT, orbitDistanceLimits,
-  subjectFitDistance, SURFACE_CLEARANCE, surfaceAnchoredDistance } from "../src/camera-framing";
-import { previewClipPlanes } from "../src/camera-depth";
+  subjectFitDistance, SURFACE_CLEARANCE, surfaceAnchoredDistance } from "../src/preview/camera-framing";
+import { previewClipPlanes } from "../src/preview/camera-depth";
 
 test("surface plane keeps its off-centre projection through lens changes", () => {
   for (const aspect of [320 / 660, 504 / 660, 16 / 9])
@@ -123,7 +123,7 @@ test("the range follows the scene: body off shrinks it, lens and aspect change i
 });
 
 test("the closest orbit stops in front of the head's surface, with the near plane well inside that clearance", async () => {
-  const { previewNearPlane } = await import("../src/camera-depth");
+  const { previewNearPlane } = await import("../src/preview/camera-depth");
   // Unpanned front view: the nose tip lies about .096 in front of the target (head z −.091, target z .005).
   const front = orbitDistanceLimits({ fov: 30, aspect: 1, target: [0, 1.67, .005], subjects: [HEAD_SUBJECT], surfaceDepth: .096 });
   expect(front.min).toBeCloseTo(.096 + SURFACE_CLEARANCE, 12);
@@ -136,7 +136,7 @@ test("the closest orbit stops in front of the head's surface, with the near plan
 });
 
 test("a stored pose at the farthest reach of any view stays valid, and one beyond the range does not", async () => {
-  const { validCameraPose } = await import("../src/preview-view-graph");
+  const { validCameraPose } = await import("../src/preview/preview-view-graph");
   const far = orbitDistanceLimits({ fov: 10, aspect: .3, target: [0, BODY_FRAME.targetHeight, .005], subjects: [HEAD_SUBJECT, BODY_SUBJECT] }).max;
   expect(far).toBeGreaterThan(5);
   expect(validCameraPose({ position: [0, BODY_FRAME.targetHeight, -far], target: [0, BODY_FRAME.targetHeight, 0], fov: 10 })).toBe(true);

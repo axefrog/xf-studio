@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { copyMaterialShading, extendSkin } from "../src/skin";
+import { copyMaterialShading, extendSkin } from "../src/materials/render/skin";
 
 test("generated geometry inherits template uniforms without the source mesh's additional skin attributes", () => {
   const geometry = new THREE.BufferGeometry();

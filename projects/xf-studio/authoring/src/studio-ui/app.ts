@@ -1,11 +1,11 @@
 import { viewCatalogue } from "./views/contribution";
-import { allowsNativeTextMenu } from "../context-menu";
+import { allowsNativeTextMenu } from "./context-menu";
 import { checkForUpdatesNow, startupUpdateCheck } from "./update-check";
 import { comingSoon, liveFeatures, plannedShown } from "./coming-soon";
-import type { StudioAction } from "../studio-application";
-import type { StudioFileAction } from "../studio-file-operations";
-import { effectiveTheme, type ThemePreference } from "../ui-preferences";
-import { shortcutLabel } from "../input-bindings";
+import type { StudioAction } from "../app/studio-application";
+import type { StudioFileAction } from "../app/studio-file-operations";
+import { effectiveTheme, type ThemePreference } from "../app/ui-preferences";
+import { shortcutLabel } from "../app/input-bindings";
 import { openInputReference, openPalette, type Command } from "./commands";
 import { studioShortcut } from "./shortcuts";
 import { applyCapability, badge, button, setButtonLabel } from "./controls";

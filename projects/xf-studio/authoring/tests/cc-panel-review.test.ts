@@ -5,20 +5,20 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildCatalogue, CatalogueIndex, readCcoWithPresentation } from "../src/cc-catalogue";
-import { type CatalogueLabels, LABELS_NEED_WOLVENKIT, LABELS_RETRY } from "../src/cc-catalogue-host";
-import { CreatorCatalogueHost, CreatorFailedError, structuralInput } from "../src/cc-catalogue-service";
-import { createCreatorHandler } from "../src/cc-catalogue-server";
-import { choicePage, panelProjection, rowOption, searchChoices, type CcPanel, type CreatorView } from "../src/cc-panel";
-import { CC_PRESET_SCHEMA, parseCcPreset, serializeCcPreset } from "../src/cc-preset";
-import { catalogueCoverage } from "../src/cc-render-coverage";
-import { carryPreset, type CharacterChoice, type CharacterSource, deriveCharacter, lastChoices, matchChoice } from "../src/character-context";
-import { CharacterContextActions, type CreatorPort, storedCharacterOf } from "../src/character-context-actions";
-import { characterRequestOf, DEFAULT_CHARACTER, parseCharacterRequest, type CharacterRequest } from "../src/character-detail-request";
-import { createCharacterDetailHandler } from "../src/character-detail-server";
-import { followCharacter } from "../src/character-follow";
-import { loadMergedCco } from "../src/character-resolver";
-import { CREATOR_LIMITS, isCreatorName, isOptionId } from "../src/creator-names";
+import { buildCatalogue, CatalogueIndex, readCcoWithPresentation } from "../src/character/cc-catalogue";
+import { type CatalogueLabels, LABELS_NEED_WOLVENKIT, LABELS_RETRY } from "../src/character/host/cc-catalogue-host";
+import { CreatorCatalogueHost, CreatorFailedError, structuralInput } from "../src/character/host/cc-catalogue-service";
+import { createCreatorHandler } from "../src/character/host/cc-catalogue-server";
+import { choicePage, panelProjection, rowOption, searchChoices, type CcPanel, type CreatorView } from "../src/character/cc-panel";
+import { CC_PRESET_SCHEMA, parseCcPreset, serializeCcPreset } from "../src/character/cc-preset";
+import { catalogueCoverage } from "../src/character/cc-render-coverage";
+import { carryPreset, type CharacterChoice, type CharacterSource, deriveCharacter, lastChoices, matchChoice } from "../src/character/character-context";
+import { CharacterContextActions, type CreatorPort, storedCharacterOf } from "../src/character/character-context-actions";
+import { characterRequestOf, DEFAULT_CHARACTER, parseCharacterRequest, type CharacterRequest } from "../src/character/character-detail-request";
+import { createCharacterDetailHandler } from "../src/character/host/character-detail-server";
+import { followCharacter } from "../src/character/character-follow";
+import { loadMergedCco } from "../src/character/character-resolver";
+import { CREATOR_LIMITS, isCreatorName, isOptionId } from "../src/character/creator-names";
 import { appearance, creator, fixtureSource, switcher } from "./cc-fixtures";
 import { fixtureInstallation } from "./resolver-fixtures";
 
@@ -544,7 +544,7 @@ describe("UI-72: the search runs on the host over every choice", () => {
 
 describe("CORE-74: the retired tried style is kept until the context stores choices", () => {
   test("written back as read while nothing is set, written empty once choices are stored", async () => {
-    const { WorkspaceComposer } = await import("../src/workspace-composer");
+    const { WorkspaceComposer } = await import("../src/app/workspace/workspace-composer");
     const { freshWorkspace } = await import("./fixtures/eye-region");
     const initial = freshWorkspace();
     initial.preview.piercingStyle = "01"; initial.preview.piercingDefinition = "gold";
@@ -561,7 +561,7 @@ describe("CORE-74: the retired tried style is kept until the context stores choi
 
 describe("PREV-189: a prepared choice under the pointer loads ahead", () => {
   test("after a moment on a prepared choice its V loads ahead; a sweep, an unprepared choice or a change loads nothing, and a choice that becomes prepared loads then", async () => {
-    const { PRELOAD_DWELL_MS } = await import("../src/character-context-actions");
+    const { PRELOAD_DWELL_MS } = await import("../src/character/character-context-actions");
     const source = await fixtureSource(true);
     const { port: base } = await port(source);
     const states = new Map<number, string>();

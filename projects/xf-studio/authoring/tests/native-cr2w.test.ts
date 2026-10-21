@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
-import { buildMountPlan, DepotIndex } from "../src/archive-precedence";
-import { readArchiveXlConfig } from "../src/archivexl-config";
-import { depotHash, refFromHash } from "../src/depot-path";
+import { buildMountPlan, DepotIndex } from "../src/game/archive-precedence";
+import { readArchiveXlConfig } from "../src/game/archivexl-config";
+import { depotHash, refFromHash } from "../src/game/depot-path";
 import { float32Text, float32Value } from "../src/native/json-numbers";
 import { NativeUnsupportedError } from "../src/native/red-model";
 import { readResourceJson } from "../src/native/resource-document";
-import { cr2wRoot, materialParams } from "../src/red-json";
-import { ResourceGraph } from "../src/resource-graph";
+import { cr2wRoot, materialParams } from "../src/game/red-json";
+import { ResourceGraph } from "../src/game/resource-graph";
 import { fakeDecompress, kark } from "./fixtures/native-archive";
 import { buildPackage, Bytes, Cr2wBuilder, materialValues, prop, v } from "./fixtures/native-cr2w";
 

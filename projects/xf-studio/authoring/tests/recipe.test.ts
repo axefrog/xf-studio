@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import { curve } from "../src/engines/layered-makeup/recipe";
 import { initialRecipe, coverage, raster } from "./fixtures/eye-region";
-import { parseEyeMakeupPart, readRecipe as parseRecipe, recipeFile } from "../src/recipe-schema";
+import { parseEyeMakeupPart, readRecipe as parseRecipe, recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
 import { parseRecipe as parseInMemory } from "../src/engines/layered-makeup/recipe";
 import { mottlePreset } from "../src/engines/layered-makeup/mottle";
 import { NewerDataError } from "../src/platform/api";

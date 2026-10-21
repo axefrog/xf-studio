@@ -12,7 +12,7 @@ Evidence grades as in the knowledge base: **[source]** compiled programs or tool
 
 ## 1. The reference models
 
-The library was read from a **copy** of the maintainer's SQLite database: the localhost server's default data folder, `projects/xf-studio/authoring/data/library.sqlite` with its WAL. That folder is `XFAS_DATA_DIR` when set, else the authoring folder's `data/` ([`host-state.ts`](../../projects/xf-studio/authoring/src/host-state.ts)). The original was never opened. It holds one collection and two looks, and only one Glitter layer:
+The library was read from a **copy** of the maintainer's SQLite database: the localhost server's default data folder, `projects/xf-studio/authoring/data/library.sqlite` with its WAL. That folder is `XFAS_DATA_DIR` when set, else the authoring folder's `data/` ([`host-state.ts`](../../projects/xf-studio/authoring/src/setup/host/host-state.ts)). The original was never opened. It holds one collection and two looks, and only one Glitter layer:
 
 | Look | Layer | Model | Settings |
 |---|---|---|---|
@@ -30,7 +30,7 @@ What the Studio's glint models do ([`render/direct-glint.ts`](../../projects/xf-
 
 ## 2. Glitter flakes 2: the Studio models in the export
 
-[`glitter-studio-flakes.ts`](../../projects/xf-studio/authoring/src/glitter-studio-flakes.ts) turns a glint layer's settings into the diagnostic Glitter route's flake statistics. The route gained optional fields for this ([`export-diagnostics.ts`](../../projects/xf-studio/authoring/src/export-diagnostics.ts), [`glitter-route.ts`](../../projects/xf-studio/authoring/src/glitter-route.ts)). A region without them draws exactly board 1's flakes: same stream, same bytes, which the tests pin.
+[`glitter-studio-flakes.ts`](../../projects/xf-studio/authoring/src/legacy/eye-makeup/export/glitter-studio-flakes.ts) turns a glint layer's settings into the diagnostic Glitter route's flake statistics. The route gained optional fields for this ([`export-diagnostics.ts`](../../projects/xf-studio/authoring/src/legacy/eye-makeup/export/export-diagnostics.ts), [`glitter-route.ts`](../../projects/xf-studio/authoring/src/legacy/eye-makeup/export/glitter-route.ts)). A region without them draws exactly board 1's flakes: same stream, same bytes, which the tests pin.
 
 | What | Glitter flakes 2 | Board 1 | Why |
 |---|---|---|---|

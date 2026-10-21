@@ -9,12 +9,12 @@
  * Step IDs are opaque, so they are compared by first appearance; times are session clocks and are
  * compared only for presence.
  */
-import { CollectionActions } from "../../src/collection-actions";
+import { CollectionActions } from "../../src/library/collection-actions";
 import type { HistorySnapshot } from "../../src/platform/api/history";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
-import { createTrustedAuthoringCore } from "../../src/trusted-authoring-core";
-import { encodeWorkspaceAt } from "../../src/workspace-budget";
-import type { WorkspaceState } from "../../src/workspace-state";
+import { createTrustedAuthoringCore } from "../../src/app/trusted-authoring-core";
+import { encodeWorkspaceAt } from "../../src/app/workspace/workspace-budget";
+import type { WorkspaceState } from "../../src/app/workspace/workspace-state";
 import { digest, restore } from "./workspace-observable";
 
 type Core = ReturnType<typeof createTrustedAuthoringCore>;

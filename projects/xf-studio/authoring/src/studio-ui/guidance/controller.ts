@@ -1,5 +1,5 @@
-import { shortcutLabel } from "../../input-bindings";
-import type { TourRecord } from "../../ui-preferences";
+import { shortcutLabel } from "../../app/input-bindings";
+import type { TourRecord } from "../../app/ui-preferences";
 import type { Command } from "../commands";
 import { isTextInput } from "../dom";
 import type { Frame, StudioRuntime } from "../runtime";

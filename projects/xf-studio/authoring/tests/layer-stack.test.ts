@@ -1,11 +1,11 @@
 import { test, expect } from "bun:test";
 import { MAX_LAYERS } from "../src/engines/layered-makeup/recipe";
-import { RECIPE_HISTORY, recipeHistory } from "../src/editor-actions";
-import { parseWorkspace } from "../src/workspace-state";
+import { RECIPE_HISTORY, recipeHistory } from "../src/legacy/eye-makeup/editor-actions";
+import { parseWorkspace } from "../src/app/workspace/workspace-state";
 import { historyRecipes, storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { coverage, initialRecipe, editLayers, compileFlatPreset, freshWorkspace } from "./fixtures/eye-region";
-import { readRecipe as parseRecipe, parseRecipeFile } from "../src/recipe-schema";
+import { readRecipe as parseRecipe, parseRecipeFile } from "../src/legacy/eye-makeup/recipe-schema";
 
 test("legacy recipes upgrade explicitly; empty and variable stacks persist without corrupting history", () => {
   const legacy = { ...initialRecipe(), schema: "eye-artistry/recipe-1",

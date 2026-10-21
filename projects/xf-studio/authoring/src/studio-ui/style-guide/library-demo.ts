@@ -3,10 +3,10 @@ import { badge, blockSection, button, setButtonLabel, setButtonVariant, codeBloc
   PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, Splitter, stack, TabStrip,
   Toggle, ColorField, applyCapability, openMenu, openValuePopover, openConfirmPopover, TreeView, favouriteToggle, FolderSetting, BipolarSlider, ScrubSlider, ChoiceList, choiceItem, attachSwatchCard, contrastMark, setContrastMark,
   sampleBackground, LightList, DirectionDial, SizeBar, previewTile, previewStage, ScrollMemory, VIEW_KEY, stageTag, RecordList, recordTime, modLine, type LightListItem, type TabItem, type TreeNodeData } from "../components";
-import { CONTRAST, contrastGain, enhanceSwatchSet, separationWeight } from "../../swatch-contrast";
+import { CONTRAST, contrastGain, enhanceSwatchSet, separationWeight } from "../../character/swatch-contrast";
 import { h } from "../dom";
 import { setUpdateLine } from "../update-check";
-import { EYE_MAKEUP_MOD } from "../../mod-branding";
+import { EYE_MAKEUP_MOD } from "../../legacy/eye-makeup/mod-branding";
 
 type Mount = () => HTMLElement;
 const tabs: TabItem[] = [["Colour & finish", "finish"], ["Shape", "shape"], ["Pigment & edge", "edge"], ["Warp", "warp"], ["Character", "character"], ["Camera & light", "lighting"]]

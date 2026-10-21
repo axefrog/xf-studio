@@ -2,16 +2,16 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { CharacterDetailHost, installationFingerprint, characterRequestKey, type CharacterDetailSettings } from "../src/character-detail-host";
-import { codeIdentityOf, hostCodeIdentity, includeHostCode, memoisedRead } from "../src/host-code-identity";
-import { InstallationRegistry, installationRouteKey } from "../src/installation-registry";
-import { DiscoverySnapshots, watchDigest, watchUnchanged } from "../src/installation-snapshot";
-import { KEEP_ANSWERS, PreparedAnswers } from "../src/prepared-answers";
-import { discoverRoute, DISCOVERY_LIMITS, openInstallation, type InstallationOptions } from "../src/resolver-host";
-import { routeIdentity } from "../src/route-fingerprint";
-import { pathStamp, type WatchedPath } from "../src/source-discovery";
-import { CHARACTER_DETAIL_SCHEMA } from "../src/render-detail";
-import { CharacterWarmStart } from "../src/character-warm-start";
+import { CharacterDetailHost, installationFingerprint, characterRequestKey, type CharacterDetailSettings } from "../src/character/host/character-detail-host";
+import { codeIdentityOf, hostCodeIdentity, includeHostCode, memoisedRead } from "../src/host/host-code-identity";
+import { InstallationRegistry, installationRouteKey } from "../src/game/host/installation-registry";
+import { DiscoverySnapshots, watchDigest, watchUnchanged } from "../src/game/host/installation-snapshot";
+import { KEEP_ANSWERS, PreparedAnswers } from "../src/character/host/prepared-answers";
+import { discoverRoute, DISCOVERY_LIMITS, openInstallation, type InstallationOptions } from "../src/game/host/resolver-host";
+import { routeIdentity } from "../src/game/host/route-fingerprint";
+import { pathStamp, type WatchedPath } from "../src/game/host/source-discovery";
+import { CHARACTER_DETAIL_SCHEMA } from "../src/character/render-detail";
+import { CharacterWarmStart } from "../src/character/browser/character-warm-start";
 import { REQUEST_A, REQUEST_B } from "./character-detail-fixtures";
 
 /**

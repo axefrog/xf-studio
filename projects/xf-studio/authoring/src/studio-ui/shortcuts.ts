@@ -1,4 +1,4 @@
-import { keyBinding, type KeyEvent } from "../input-bindings";
+import { keyBinding, type KeyEvent } from "../app/input-bindings";
 
 /**
  * Global Studio keyboard shortcuts as a pure decision, so the shell's key handler and its

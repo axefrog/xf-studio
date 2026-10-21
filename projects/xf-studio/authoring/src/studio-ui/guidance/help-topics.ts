@@ -1,5 +1,5 @@
-import { bindingReference, type ReferenceSection } from "../../input-bindings";
-import { EYE_MAKEUP_MOD } from "../../mod-branding";
+import { bindingReference, type ReferenceSection } from "../../app/input-bindings";
+import { EYE_MAKEUP_MOD } from "../../legacy/eye-makeup/mod-branding";
 import { plainText } from "./content";
 import { FINISH_EXPORT_TOKEN, withFinishText, type FinishSummary } from "./finish-text";
 import { WHATS_NEW_TOUR_ID } from "./tours";

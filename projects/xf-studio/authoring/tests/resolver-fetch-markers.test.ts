@@ -2,9 +2,9 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { refFromPath } from "../src/depot-path";
+import { refFromPath } from "../src/game/depot-path";
 import { COMMAND_LINE_LIMIT, commandLineArgumentLength, MAX_PATTERN_CHARS, NOT_WRITTEN_RUNS, uncookPatterns, withoutArchiveFileName,
-  WolvenKitFetcher } from "../src/resolver-host";
+  WolvenKitFetcher } from "../src/game/host/resolver-host";
 import { cr2w } from "./resolver-fixtures";
 
 /**

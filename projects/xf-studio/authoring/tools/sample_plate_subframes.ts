@@ -2,8 +2,8 @@
 // Writes only ignored game-derived geometry under an explicit output path.
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { IdleAnimation } from "../src/idle-animation";
-import { extendSkin, restoreFirstWeights, skinSets } from "../src/skin";
+import { IdleAnimation } from "../src/animation/render/idle-animation";
+import { extendSkin, restoreFirstWeights, skinSets } from "../src/materials/render/skin";
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, writeSync } from "node:fs";
 import { resolve } from "node:path";
 

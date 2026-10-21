@@ -9,15 +9,15 @@ import { PLATFORM_VIEW_TOOLS } from "../src/platform/core/view-tools";
 import { STUDIO_MODULE_REGISTRATION } from "../src/compose/modules";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { STUDIO_CATALOGUE } from "../src/compose/views";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { activate, allGroups, applyDrop, closePanel, locate, openShares, panelsIn, parkPanels, parseTree, setCollapsed, unparkPanels, type DockNode, type DockTree } from "../src/studio-ui/dock/layout";
 import { defaultCompact, defaultWide } from "../src/studio-ui/layout-defaults";
 import { modulePanelChanges } from "../src/studio-ui/runtime";
 import { defaultDockStateFor, restoreDockPreference, serializeDockState } from "../src/studio-ui/dock/persist";
-import { parseUIPreferences, UIPreferenceActions } from "../src/ui-preferences";
+import { parseUIPreferences, UIPreferenceActions } from "../src/app/ui-preferences";
 import { EYE_MAKEUP_GRANDFATHERED_PANELS } from "../src/features/eye-makeup/view/contribution";
 import { freshWorkspace } from "./fixtures/eye-region";
-import { PreviewActions, type PreviewPort } from "../src/preview-actions";
+import { PreviewActions, type PreviewPort } from "../src/preview/preview-actions";
 
 const ids = (tools: readonly ViewToolContribution[]) => tools.map(tool => tool.id);
 

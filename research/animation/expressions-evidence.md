@@ -9,7 +9,7 @@
 | Installed game | 2.31 (`bin\x64\Cyberpunk2077.exe` dated 16 September 2025, 59,945,608 bytes) | Archives, compiled scripts and TweakDB |
 | Compiled scripts | `r6\cache\final.redscripts` SHA-256 `2119046f…ee86`, decompiled with redscript-cli 0.5.31 `decompile -f` | `PhotoModeFace_Record`, `PhotoModePose_Record`, `AnimFeature_PhotomodeFacial`, `AnimFeature_Paperdoll`, `entityPreviewGameController.script`, `photoModePlayerEntity.script`, `photoModeMenuController.script` |
 | TweakDB sources | REDmod tools shipped with the game (`tools\redmod\tweaks`, dated 12 September 2025): `database\photomode\faces.tweak` `d7b19b92…`, `schema.tweak` `7a49bd72…`, `poses.tweak` `972428eb…`, `posecategories.tweak`, `static_data\photomode.tweak` `59f5c82c…`, `database\items\base_values.tweak` | Record shapes and vanilla lists |
-| Compiled TweakDB | `tweakdb.bin` `918f0acf…`, `tweakdb_ep1.bin` `89c7ee67…`, read with the Studio's `src/tweakdb-flats.ts` | The 15 `PhotoModeFaces.*.displayName` flats exist in both blobs with the REDmod values |
+| Compiled TweakDB | `tweakdb.bin` `918f0acf…`, `tweakdb_ep1.bin` `89c7ee67…`, read with the Studio's `src/game/tweakdb-flats.ts` | The 15 `PhotoModeFaces.*.displayName` flats exist in both blobs with the REDmod values |
 | WolvenKit CLI | 9.0.1 (`unbundle`, `convert serialize`) | Extraction and JSON |
 | Clip exporter | `projects/xf-studio/tools/anim-export` (existing build) | Face clips to GLB with float-track extras |
 | WolvenKit source | Local clone at `11720772` (9.0.2 nightly 2026-09-19) | `ModTools.ImportAnims` float-track and animation-type handling |

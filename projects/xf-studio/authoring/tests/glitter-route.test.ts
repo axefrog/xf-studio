@@ -5,16 +5,16 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 // Test-only use of the builder side (bake, mip and resource code): it writes the supplied chains and resources that
 // the independent verifier must accept, and the tampered copies it must refuse.
-import { parseExportDiagnostics } from "../src/export-diagnostics";
+import { parseExportDiagnostics } from "../src/legacy/eye-makeup/export/export-diagnostics";
 import { FINISH_EXPORT, layerExport } from "../src/engines/layered-makeup/finish-export";
 import { encodeDds } from "../src/engines/layered-makeup/flat-mip-chain";
-import { flakeCatalogue, randomStream, tiltVariance } from "../src/glitter-route";
-import { referenceCrop } from "../src/package-bake";
-import { archiveXlDeclaration, HandleCounter, rewritePlateMesh, rewritePlateMorph } from "../src/package-resources";
-import { liftPlate } from "../src/plate-lift";
-import { planCollection } from "../src/preset-collection";
+import { flakeCatalogue, randomStream, tiltVariance } from "../src/legacy/eye-makeup/export/glitter-route";
+import { referenceCrop } from "../src/legacy/eye-makeup/export/host/package-bake";
+import { archiveXlDeclaration, HandleCounter, rewritePlateMesh, rewritePlateMorph } from "../src/legacy/eye-makeup/export/package-resources";
+import { liftPlate } from "../src/legacy/eye-makeup/export/plate-lift";
+import { planCollection } from "../src/legacy/eye-makeup/export/preset-collection";
 import { normalRgba } from "../src/engines/layered-makeup/route-mip-chains";
-import { derivePlateDocuments } from "../src/eye-plate-cut";
+import { derivePlateDocuments } from "../src/legacy/eye-makeup/plate/eye-plate-cut";
 import { checkGlitterChains, levelDims, restatedTiltVariance } from "../src/features/eye-makeup/verify/glitter-checks";
 import { archiveKey } from "../src/features/eye-makeup/verify/resource-inventory";
 import { componentId, expectedAccentValues, glitterOf } from "../src/features/eye-makeup/verify/resource-checks";

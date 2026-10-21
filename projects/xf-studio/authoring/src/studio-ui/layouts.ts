@@ -1,5 +1,5 @@
 import { activeLayout, autoSwitchTarget, layoutLibraryOf, layoutNameProblem, MAX_LAYOUT_NAME, nextLayoutName,
-  type LayoutAction, type LayoutLibrary, type LayoutModules, type LayoutPreferences, type LayoutSizeClass, type SavedLayout } from "../layout-library";
+  type LayoutAction, type LayoutLibrary, type LayoutModules, type LayoutPreferences, type LayoutSizeClass, type SavedLayout } from "../app/layout-library";
 import type { StudioModule } from "../platform/api";
 import type { Command } from "./commands";
 import type { DockView, PanelSpec } from "./dock/dock-view";

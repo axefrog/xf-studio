@@ -14,11 +14,11 @@ import { duplicatedNamespaces, readPackageManifest } from "../src/platform/expor
 import { verifyProductBuildResult } from "../src/platform/export/product-host";
 import { archiveXlText, ExportRefusal, NEWER_PLAN_MESSAGE, NOTHING_PACKAGED_REASON, PACKAGE_PLAN_1, resultOmissions, type FeatureExporter,
   type PackageBuildResult, type PackageCheckResult } from "../src/platform/api";
-import { describePackageCheck } from "../src/package-filter";
+import { describePackageCheck } from "../src/legacy/eye-makeup/export/package-filter";
 import { EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
 import { EYE_MAKEUP_EXPORTER as EYE_EXPORTER } from "../src/features/eye-makeup/export";
-import { packagePlateRecord, type EyePlateManifest } from "../src/eye-plate-service";
-import { plateReachInput } from "../src/plate-uv-footprint-io";
+import { packagePlateRecord, type EyePlateManifest } from "../src/legacy/eye-makeup/plate/host/eye-plate-service";
+import { plateReachInput } from "../src/legacy/eye-makeup/export/host/plate-uv-footprint-io";
 import { eyeEntry, fakeEyeVerifier, fakeTools, fakeVerifierTools, FOOTPRINT, LIPS, LIPS_ENTRY, LIPS_EXPORTER, sha, writePlate } from "./fixtures/product-fixture";
 import type { FeatureVerifier } from "../src/platform/api";
 

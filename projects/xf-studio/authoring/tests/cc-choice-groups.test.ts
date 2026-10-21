@@ -2,13 +2,13 @@
 // `xfs_` resources, authors as mod managers record them, else the mod's name), the host's maker reader (Vortex's records; MO2 records
 // none; hand-placed game-folder mods together), and the choice list's collapsible, keyboard-navigable groups that keep instant selection.
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
-import { buildCatalogue, type CcCatalogue } from "../src/cc-catalogue";
-import type { CcoResource } from "../src/cco-model";
+import { buildCatalogue, type CcCatalogue } from "../src/character/cc-catalogue";
+import type { CcoResource } from "../src/character/cco-model";
 import { BASE_GAME_GROUP, type CcChoiceGroup, type CcPanelChoice, choiceGroup, compareGroups, isXfResource, OTHER_MODS_INDEX, OWN_GROUP_MIN_CHOICES, panelProjection,
-  pooledGroups, readCcPanel, XF_GROUP } from "../src/cc-panel";
-import { catalogueCoverage } from "../src/cc-render-coverage";
-import { GAME_FOLDER_MODS, makerText, modMakers } from "../src/mod-makers";
-import type { VortexModIdentity } from "../src/vortex-deployment";
+  pooledGroups, readCcPanel, XF_GROUP } from "../src/character/cc-panel";
+import { catalogueCoverage } from "../src/character/cc-render-coverage";
+import { GAME_FOLDER_MODS, makerText, modMakers } from "../src/character/host/mod-makers";
+import type { VortexModIdentity } from "../src/installation/vortex-deployment";
 import { installLightDom, lightDocument, lightEvent, type LightElement, uninstallLightDom } from "./light-dom";
 
 beforeAll(() => installLightDom());

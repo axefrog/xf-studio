@@ -7,7 +7,7 @@ import { chunkBudget, decodeChunk, detectSavePackage, MAX_OPEN_CHUNKS, MAX_READI
   from "../src/engines/red-object/package";
 import { readPersistencyIndex } from "../src/engines/red-object/persistency";
 import { openExplorer, SaveExplorerActions, type SaveExplorerDevice } from "../src/features/save-explorer";
-import { readSavedLoadout } from "../src/save-loadout";
+import { readSavedLoadout } from "../src/saves/save-loadout";
 import { buildSave, packageNodeBody, PackageBuilder, persistencyBody, u32 } from "./fixtures/synthetic-save";
 
 /**

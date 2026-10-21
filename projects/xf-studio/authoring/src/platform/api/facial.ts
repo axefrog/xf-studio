@@ -1,7 +1,7 @@
 /**
  * The facial preview's shared contract (research/animation/expression-editor-design.md §4, §5): what the host answers about the
  * player's face rig, the external solver and the installed photo-mode expressions, and what a solve request and answer hold. Types
- * and constants only; the host (src/facial-host.ts), the browser device and the preview service import it, and a feature view reads
+ * and constants only; the host (src/animation/host/facial-host.ts), the browser device and the preview service import it, and a feature view reads
  * the service's snapshot (`FacialPreviewSnapshot`) through its view context.
  */
 
@@ -95,7 +95,7 @@ export type FacialAxisControl = FacialAxisPair & { readonly key: string; readonl
   /** Its symmetry: the link keys of its two ends, its counterpart axis (by key) and whether it starts linked; absent for a centre axis. */
   readonly link?: { readonly keys: readonly string[]; readonly counterpart: string; readonly byDefault: boolean } };
 
-/** A built-in starting point: an expression XF Studio ships (src/expression-samples.ts), started from with its own links. */
+/** A built-in starting point: an expression XF Studio ships (src/animation/expression-samples.ts), started from with its own links. */
 export type FacialSample = {
   /** `xf-sample:<file>`: the preset id its origin records. */
   readonly id: string;

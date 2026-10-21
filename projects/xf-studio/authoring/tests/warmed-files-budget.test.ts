@@ -4,9 +4,9 @@
  */
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { loadCharacterDetails, parseDetailGeometry, type WarmedFiles } from "../src/character-detail-loader";
-import { GlbWriter } from "../src/glb";
-import { CHARACTER_DETAIL_SCHEMA, type CharacterDetail, type RenderComponent } from "../src/render-detail";
+import { loadCharacterDetails, parseDetailGeometry, type WarmedFiles } from "../src/character/render/character-detail-loader";
+import { GlbWriter } from "../src/formats/glb";
+import { CHARACTER_DETAIL_SCHEMA, type CharacterDetail, type RenderComponent } from "../src/character/render-detail";
 
 /** One skinned quad chunk, as WolvenKit names render chunks. */
 function quadMesh(): Uint8Array {

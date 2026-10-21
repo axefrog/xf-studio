@@ -4,8 +4,8 @@
  * until it is killed, printing one line per committed save ("look <n>" after the commit returned).
  *   bun tests/fixtures/library-writer.ts <library.sqlite>
  */
-import { openLibraryDatabase } from "../../src/library-files";
-import { LookLibrary } from "../../src/library-store";
+import { openLibraryDatabase } from "../../src/library/host/library-files";
+import { LookLibrary } from "../../src/library/host/library-store";
 import { hostClock } from "../../src/platform/core/clock";
 import { initialRecipe } from "./eye-region";
 

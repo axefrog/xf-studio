@@ -1,7 +1,7 @@
 // The shared TweakXL YAML reader (tweakxl-overlay.ts) over a synthetic set of files: load bands, templates with `$instances`, `$base`,
 // a flat override, a conflict, `$dlc`, and a `.tweak` file listed as a gap. The creator icons it answers are tested in cc-presentation.test.ts.
 import { describe, expect, test } from "bun:test";
-import { overlayIcon, readTweakOverlay, tweakBand, tweakOrder } from "../src/tweakxl-overlay";
+import { overlayIcon, readTweakOverlay, tweakBand, tweakOrder } from "../src/game/tweakxl-overlay";
 
 const file = (path: string, text: string, provider = "A mod") => ({ path, provider, text });
 

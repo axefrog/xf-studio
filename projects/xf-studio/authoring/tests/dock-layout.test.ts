@@ -5,7 +5,7 @@ import { compassGuides, edgeGuides, resolveDrop, type DropGeometry } from "../sr
 import { defaultCompact, defaultWide } from "../src/studio-ui/layout-defaults";
 import { PANEL_IDS, STUDIO_CATALOGUE } from "../src/compose/views";
 import { restoreDockPreference, serializeDockState } from "../src/studio-ui/dock/persist";
-import { recoverDockLayout } from "../src/ui-preferences";
+import { recoverDockLayout } from "../src/app/ui-preferences";
 
 const area = { x: 0, y: 0, w: 1600, h: 900 };
 const everyPanelOnce = (tree: DockTree) => {

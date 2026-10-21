@@ -1,4 +1,4 @@
-import { bindingReference } from "../../input-bindings";
+import { bindingReference } from "../../app/input-bindings";
 import { code, esc, pattern, section } from "./kit";
 
 export type PanelInfo = { id: string; title: string; description: string };
@@ -48,7 +48,7 @@ export function reference(panels: readonly PanelInfo[]) {
     pattern({ id: "r-keys", title: "Keyboard map", status: "implemented",
       specimen: keys.map(group => `<section class="reference-section"><h3>${esc(group.title)}</h3>${group.detail ? `<p class="muted small">${esc(group.detail)}</p>` : ""}<dl class="shortcut-list wide">${group.rows.map(row =>
         `<dt><kbd>${esc(row.input)}</kbd></dt><dd>${esc(row.label)}${row.where ? `<span class="reference-where"> · ${esc(row.where)}</span>` : ""}</dd>`).join("")}</dl></section>`).join(""),
-      what: "Every keyboard and mouse binding, grouped by context, generated from the input binding catalogue (src/input-bindings.ts). Menus, sliders, popovers and dialogs also close with Esc. Every pointer-only operation has a keyboard path.",
+      what: "Every keyboard and mouse binding, grouped by context, generated from the input binding catalogue (src/app/input-bindings.ts). Menus, sliders, popovers and dialogs also close with Esc. Every pointer-only operation has a keyboard path.",
       when: "The ? Keyboard & mouse dialog renders the same list; a test fails if any binding lacks a label or any hint names a missing binding." }),
     pattern({ id: "r-terms", title: "Terminology", status: "rule",
       specimen: `<dl class="facts">${terms.map(([t, d]) => `<dt>${t}</dt><dd>${d}</dd>`).join("")}</dl>`,

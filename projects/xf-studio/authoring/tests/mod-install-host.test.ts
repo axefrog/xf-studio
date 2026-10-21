@@ -7,10 +7,10 @@ import { createHash } from "node:crypto";
 import { chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { defaultLocalSettings, type LocalSettings } from "../src/local-settings";
+import { defaultLocalSettings, type LocalSettings } from "../src/setup/local-settings";
 import { createModInstallHandler, installIssue, ModInstallError, ModInstallHost, READ_ONLY_VERIFICATION, windowsProcessImages, windowsRunningApps,
-  type RunningApps } from "../src/mod-install-host";
-import { EYE_MAKEUP_MOD } from "../src/mod-branding";
+  type RunningApps } from "../src/installation/host/mod-install-host";
+import { EYE_MAKEUP_MOD } from "../src/legacy/eye-makeup/mod-branding";
 
 const digest = (body: string | Buffer) => createHash("sha256").update(body).digest("hex");
 const MOD = EYE_MAKEUP_MOD.modName;

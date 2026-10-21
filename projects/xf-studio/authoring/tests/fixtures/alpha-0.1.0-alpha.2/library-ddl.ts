@@ -1,7 +1,7 @@
 /**
  * How 0.1.0-alpha.2, the oldest published release, opens and writes a library file, vendored from the tag `v0.1.0-alpha.2`
- * (`9ae9280`): the constructors of `src/library-store.ts` (`LookLibrary`), `src/collection-store.ts` (`CollectionLibrary`) and
- * `src/part-preset-store.ts` (`PartPresetLibrary`), with their DDL, version checks and pragmas verbatim, and the positional
+ * (`9ae9280`): the constructors of `src/library/host/library-store.ts` (`LookLibrary`), `src/library/host/collection-store.ts` (`CollectionLibrary`) and
+ * `src/library/host/part-preset-store.ts` (`PartPresetLibrary`), with their DDL, version checks and pragmas verbatim, and the positional
  * inserts their saves run. The release opens each store on its own connection; here one connection runs the three opening
  * sequences in the order the release's servers construct them. The collection step's carry-over of a version-1 library's
  * looks is left out (it needs the release's collection parser; the tests here only open version-0 or version-2 files with it).

@@ -1,10 +1,10 @@
 // The save's loadout (save-loadout.ts) and the object package reader it uses (save-package.ts), on synthetic packages built here: the
 // layout WolvenKit's `RedPackageReader` reads for a save's script systems (u32 CRUID count), with self-describing field tables.
 import { describe, expect, test } from "bun:test";
-import { MAX_CHUNKS, MAX_NAMES, readSavePackage, SavePackageError } from "../src/save-package";
-import { parseSavedLoadout, readSavedLoadout, wornAreas } from "../src/save-loadout";
-import { parseSavedV, readSavedV } from "../src/save-reader";
-import { tweakDbId } from "../src/tweakdb-flats";
+import { MAX_CHUNKS, MAX_NAMES, readSavePackage, SavePackageError } from "../src/saves/save-package";
+import { parseSavedLoadout, readSavedLoadout, wornAreas } from "../src/saves/save-loadout";
+import { parseSavedV, readSavedV } from "../src/saves/save-reader";
+import { tweakDbId } from "../src/game/tweakdb-flats";
 
 type Value = { type: string; bytes: Uint8Array };
 class PackageBuilder {

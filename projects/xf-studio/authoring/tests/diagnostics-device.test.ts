@@ -2,7 +2,7 @@
 // failures kept once under one reference, and the report review over the light DOM harness (the summary files previewed from the
 // ticked parts, mod files behind the sharing confirmation, the whole of a long part on request, "Prepare again" after expiry).
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { createBrowserDiagnostics, PAGE_QUEUE } from "../src/diagnostics/browser-device";
+import { createBrowserDiagnostics, PAGE_QUEUE } from "../src/diagnostics/browser/browser-device";
 import { DiagnosticsActions, type DiagnosticsDevice } from "../src/diagnostics/actions";
 import { diagnosticEntry, type DiagnosticEntry } from "../src/diagnostics/model";
 import { PREVIEW_CHARS, type ReportManifest } from "../src/diagnostics/report";

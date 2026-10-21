@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { parseFieldSelection, selectedWarp } from "../src/engines/layered-makeup/field-selection";
-import { parseWorkspace } from "../src/workspace-state";
-import { CollectionSession, type EditorSnapshot } from "../src/collection-session";
-import { collectionDraft } from "../src/collection-workspace";
+import { parseWorkspace } from "../src/app/workspace/workspace-state";
+import { CollectionSession, type EditorSnapshot } from "../src/library/collection-session";
+import { collectionDraft } from "../src/app/workspace/collection-workspace";
 import { storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { initialRecipe, freshWorkspace } from "./fixtures/eye-region";

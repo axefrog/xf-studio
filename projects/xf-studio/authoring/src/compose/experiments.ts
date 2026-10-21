@@ -1,6 +1,6 @@
 import { startExperiments, experimentOverrides, type ExperimentDefinition } from "../platform/core/experiments";
 import { hostRandom } from "../platform/core/random";
-import { browserDocuments } from "../browser-documents-device";
+import { browserDocuments } from "../app/browser/browser-documents-device";
 import type { ExperimentRegistration } from "../platform/api/experiments";
 import type { ViewContribution } from "../studio-ui/views/contribution";
 import type { ModuleViewBinding } from "../studio-ui/views/feature-view";

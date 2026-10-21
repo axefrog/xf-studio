@@ -7,14 +7,14 @@ import { basename, dirname, join, resolve } from "node:path";
 // independent verifier must reproduce from its own restated specification.
 import { encodeDds, flatMipChain } from "../src/engines/layered-makeup/flat-mip-chain";
 import { facetedMipChain, maskMipChain, normalRgba, uniformMipChain } from "../src/engines/layered-makeup/route-mip-chains";
-import { planCollection } from "../src/preset-collection";
+import { planCollection } from "../src/legacy/eye-makeup/export/preset-collection";
 import { FINISH_EXPORT } from "../src/engines/layered-makeup/finish-export";
-import { archiveXlDeclaration, HandleCounter, rewritePlateMesh, rewritePlateMorph } from "../src/package-resources";
+import { archiveXlDeclaration, HandleCounter, rewritePlateMesh, rewritePlateMorph } from "../src/legacy/eye-makeup/export/package-resources";
 import { archiveKey } from "../src/features/eye-makeup/verify/resource-inventory";
 import { componentId, VERIFIER_FINISHES } from "../src/features/eye-makeup/verify/resource-checks";
 import { verifyBuild, type ToolResult, type VerifierTools } from "../src/features/eye-makeup/verify/verify-build";
-import { derivePlateDocuments } from "../src/eye-plate-cut";
-import { liftPlate } from "../src/plate-lift";
+import { derivePlateDocuments } from "../src/legacy/eye-makeup/plate/eye-plate-cut";
+import { liftPlate } from "../src/legacy/eye-makeup/export/plate-lift";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "./eye-plate-fixture";
 import { coverageReference, plateWindow, storedBc4, texelUv, WINDOW_H, WINDOW_W } from "./window-fixture";
 import { preparePackageCollection } from "./fixtures/eye-exporter";

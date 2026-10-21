@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { descriptorsFromUiState } from "../src/cco-model";
-import { ccoPath, expandDynamicPath, loadMergedCco, resolveCharacter, visibleChunks, type CharacterInput } from "../src/character-resolver";
-import { depotHash, refFromPath } from "../src/depot-path";
-import { snakeCase } from "../src/resource-graph";
+import { descriptorsFromUiState } from "../src/character/cco-model";
+import { ccoPath, expandDynamicPath, loadMergedCco, resolveCharacter, visibleChunks, type CharacterInput } from "../src/character/character-resolver";
+import { depotHash, refFromPath } from "../src/game/depot-path";
+import { snakeCase } from "../src/game/resource-graph";
 import { app, appearanceOption, cco, cr2w, ent, fixtureInstallation, instance, mesh, meshComponent, mi, morphComponent,
   morphtarget, nameParam, switcherOption, tex, type FixtureArchive } from "./resolver-fixtures";
 

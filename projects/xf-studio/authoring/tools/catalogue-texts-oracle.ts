@@ -10,10 +10,10 @@
  * XFS_RESOLVER_MO2_PROFILE, XFS_WOLVENKIT_CLI). Run it under the memory guard: its launches load the text archives.
  */
 import { resolve } from "node:path";
-import { refFromPath } from "../src/depot-path";
-import { textPlan } from "../src/game-text";
-import { LocalSettingsStore } from "../src/local-settings-store";
-import { openInstallation, WolvenKitFetcher } from "../src/resolver-host";
+import { refFromPath } from "../src/game/depot-path";
+import { textPlan } from "../src/game/game-text";
+import { LocalSettingsStore } from "../src/setup/host/local-settings-store";
+import { openInstallation, WolvenKitFetcher } from "../src/game/host/resolver-host";
 
 const args = Bun.argv.slice(2);
 const option = (name: string) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] ?? null : null; };

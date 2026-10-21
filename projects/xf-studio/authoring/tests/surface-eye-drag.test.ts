@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { createSurfaceEditor } from "../src/surface-editor";
-import { SurfaceMap, uvHoleBridges } from "../src/surface-map";
+import { createSurfaceEditor } from "../src/legacy/eye-makeup/browser/surface-editor";
+import { SurfaceMap, uvHoleBridges } from "../src/legacy/eye-makeup/browser/surface-map";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { extendSkin, restoreFirstWeights } from "../src/skin";
+import { extendSkin, restoreFirstWeights } from "../src/materials/render/skin";
 import { applyAdapterProposal } from "./gesture-test-adapter";
 import { initialRecipe, EYE_REGION } from "./fixtures/eye-region";
 import { derivedPreviewFile, derivedPreviewTest } from "./private-assets";

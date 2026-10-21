@@ -2,11 +2,11 @@
 // (no registry, file system or process is touched) and the endpoint that starts only a confirmed setup or the installed app.
 import { describe, expect, test } from "bun:test";
 import { join, win32 } from "node:path";
-import { DesktopAppActions, type DesktopAppStatus, type DesktopAppTransport } from "../src/desktop-app";
-import { createDesktopAppHandler, detectDesktopApp, launchCommand, parseRegQuery, UNINSTALL_ROOT, type DesktopAppHostPort } from "../src/desktop-app-host";
-import { DESKTOP_APP_DESCRIPTORS } from "../src/studio-action-descriptors";
+import { DesktopAppActions, type DesktopAppStatus, type DesktopAppTransport } from "../src/setup/desktop-app";
+import { createDesktopAppHandler, detectDesktopApp, launchCommand, parseRegQuery, UNINSTALL_ROOT, type DesktopAppHostPort } from "../src/setup/host/desktop-app-host";
+import { DESKTOP_APP_DESCRIPTORS } from "../src/app/studio-action-descriptors";
 import { desktopAppEntry, installerSummary } from "../src/studio-ui/guidance/desktop-app-sheet";
-import { USER_FACING_JARGON } from "../src/alpha-availability";
+import { USER_FACING_JARGON } from "../src/app/alpha-availability";
 
 const LOCAL = "C:\\Users\\someone\\AppData\\Local";
 const APP = win32.join(LOCAL, "dev.axefrog.xf-studio", "canary", "app");

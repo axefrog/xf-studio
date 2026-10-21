@@ -8,13 +8,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDocumentsHandler } from "../src/platform/persistence/document-store";
-import { browserDocuments } from "../src/browser-documents-device";
+import { browserDocuments } from "../src/app/browser/browser-documents-device";
 import { savedDocument } from "../src/platform/core/saved-document";
 import type { DocumentStorePort } from "../src/platform/api/document-store";
 import { STUDIO_PARTS } from "../src/compose/studio-registry";
 import { COLLECTION_FIXTURES, readFixture } from "./fixtures/capture-plan-golden";
 import { alphaList } from "./fixtures/alpha-0.1.0/collection-list";
-import { readRecipe } from "../src/recipe-schema";
+import { readRecipe } from "../src/legacy/eye-makeup/recipe-schema";
 import { ManualClock, settle, storeDocuments } from "./fixtures/platform-doubles";
 import { openTestLibrary } from "./fixtures/library-file";
 

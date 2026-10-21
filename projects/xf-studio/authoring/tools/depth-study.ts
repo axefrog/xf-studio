@@ -3,8 +3,8 @@ import * as THREE from "three";
 import { createSceneHost as createScene } from "../src/platform/scene/scene-host";
 import { STUDIO_RENDERERS } from "../src/compose/renderers";
 import { EYE_MAKEUP_RENDERER } from "../src/features/eye-makeup/render";
-import { extendSkin } from "../src/skin";
-import { previewClipPlanes, previewNearPlane } from "../src/camera-depth";
+import { extendSkin } from "../src/materials/render/skin";
+import { previewClipPlanes, previewNearPlane } from "../src/preview/camera-depth";
 import { initialRecipe } from "../src/features/eye-makeup/region";
 
 const run = document.getElementById("run") as HTMLButtonElement;

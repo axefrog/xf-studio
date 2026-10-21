@@ -1,5 +1,5 @@
-import type { DesktopAppState } from "../../desktop-app";
-import type { ReadonlyDeep } from "../../read-only";
+import type { DesktopAppState } from "../../setup/desktop-app";
+import type { ReadonlyDeep } from "../../platform/api/read-only";
 import { applyCapability, button, setButtonLabel, note } from "../controls";
 import { iconButton } from "../components/icon-button";
 import { h, setText, uid } from "../dom";

@@ -9,8 +9,8 @@
  * every component), so each distinct resource decision is written once in `resources`, and every place that used it holds its
  * index there. That keeps a heavily modded V's record to a fraction of its inline size (DIAG-04).
  */
-import type { ResolvedCharacter, ResolvedChunkMaterial, ResolvedComponent } from "../character-resolver";
-import type { Provenance } from "../resource-graph";
+import type { ResolvedCharacter, ResolvedChunkMaterial, ResolvedComponent } from "../character/character-resolver";
+import type { Provenance } from "../game/resource-graph";
 
 type Compact = Record<string, unknown>;
 /** The event's size bound and what it keeps when a record is still too large (`TraceWindow.event`). */

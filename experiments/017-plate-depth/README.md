@@ -29,7 +29,7 @@ The offset survives the face shapes. Across all 105 morph targets the eye-makeup
 
 **Root cause:** the plate had no outward offset, unlike every vanilla face decal [resource + runtime symptom]; the close-up-only mechanism is [hypothesis]. Confirming test: *Depth A* against *Depth D* below.
 
-**Fix (implemented, production default).** Build now lifts the packaged plate by **0.4 mm** ([`plate-lift.ts`](../../projects/xf-studio/authoring/src/plate-lift.ts)):
+**Fix (implemented, production default).** Build now lifts the packaged plate by **0.4 mm** ([`plate-lift.ts`](../../projects/xf-studio/authoring/src/legacy/eye-makeup/export/plate-lift.ts)):
 
 - Base positions become p + 0.4 mm × n, with n the head's stored shading normal.
 - Each morph row's position delta gains 0.4 mm × (normalize(n + Δn) − n), so the offset follows every target's own shading normal like the vanilla decals. No morph rows are added.
@@ -82,8 +82,8 @@ Density goes from 0.65 to 0.8. It sits beside Board 2's fine stripe and a Satin 
 
 ## Pipeline changes (for review)
 
-- **Lift** at Build ([`plate-lift.ts`](../../projects/xf-studio/authoring/src/plate-lift.ts)), described above; recorded in `build.json` (`plateLift`), the verifier report (`plateGeometry`), and in Check, `manifest.json` and the build result as `plateLiftsMm`, with each preset's knobs in its identity (`presets[].diagnostics`).
-- **Diagnostic knobs**, never shown or saved by the Studio ([`export-diagnostics.ts`](../../projects/xf-studio/authoring/src/export-diagnostics.ts)). An exported collection file may carry `diagnostics` (`xfs/export-diagnostics-1`) keyed by preset ID:
+- **Lift** at Build ([`plate-lift.ts`](../../projects/xf-studio/authoring/src/legacy/eye-makeup/export/plate-lift.ts)), described above; recorded in `build.json` (`plateLift`), the verifier report (`plateGeometry`), and in Check, `manifest.json` and the build result as `plateLiftsMm`, with each preset's knobs in its identity (`presets[].diagnostics`).
+- **Diagnostic knobs**, never shown or saved by the Studio ([`export-diagnostics.ts`](../../projects/xf-studio/authoring/src/legacy/eye-makeup/export/export-diagnostics.ts)). An exported collection file may carry `diagnostics` (`xfs/export-diagnostics-1`) keyed by preset ID:
   - `plateLiftMm`: 0–1 mm;
   - `surface`: overrides of a flat preset's `RoughnessScale`/`RoughnessBias`/`MetalnessScale`/`MetalnessBias`/`RoughnessMetalnessAlpha`.
 - **How the knobs are built.** The package filter keeps the knobs for the presets it packages; the Studio's own collection parser drops them.

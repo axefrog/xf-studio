@@ -17,8 +17,8 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { launch, MASK_VIEWPORTS, type Session } from "./cdp";
-import { defaultLocalSettings } from "../src/local-settings";
-import { EYE_MAKEUP_MOD } from "../src/mod-branding";
+import { defaultLocalSettings } from "../src/setup/local-settings";
+import { EYE_MAKEUP_MOD } from "../src/legacy/eye-makeup/mod-branding";
 
 const [outArg, portArg = "4393"] = process.argv.slice(2);
 if (!outArg) throw Error("Usage: bun tools/mod-manager-extras-look.ts <out dir> [port]");

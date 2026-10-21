@@ -1,14 +1,14 @@
 import { expect, test } from "bun:test";
 import { eyeCheck } from "./fixtures/package-results";
-import { BUILD_PROGRESS_INTERVAL_MS, CollectionService, CollectionServiceError, type CollectionTransport } from "../src/collection-service";
+import { BUILD_PROGRESS_INTERVAL_MS, CollectionService, CollectionServiceError, type CollectionTransport } from "../src/library/collection-service";
 import type { PackageBuildProgress } from "../src/platform/api";
-import { collectionDraft, emptyMemory } from "../src/collection-workspace";
-import { loadWorkspace, parseWorkspace, serializeWorkspace } from "../src/workspace-state";
-import type { EditorSnapshot } from "../src/collection-session";
-import type { PresetCollection } from "../src/preset-collection";
+import { collectionDraft, emptyMemory } from "../src/app/workspace/collection-workspace";
+import { loadWorkspace, parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
+import type { EditorSnapshot } from "../src/library/collection-session";
+import type { PresetCollection } from "../src/legacy/eye-makeup/export/preset-collection";
 import type { LookCollection } from "../src/platform/api";
 import { historyRecipes, looks, memoryOf, recipeOf } from "./fixtures/looks";
-import { recipeFile } from "../src/recipe-schema";
+import { recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { initialRecipe, freshWorkspace } from "./fixtures/eye-region";
 
@@ -82,7 +82,7 @@ test("a partial Check says so in one status line; the result card names what is 
 });
 
 test("a Build's status line names the mod and never a folder path (UI-151)", async () => {
-  const { packageBuildLine } = await import("../src/package-filter");
+  const { packageBuildLine } = await import("../src/legacy/eye-makeup/export/package-filter");
   const product = { modName: "XF Eye Artistry", package: "C:\Data\package-candidates\c1", manifest: "C:\Data\package-candidates\c1\manifest.json",
     features: [{ presets: [{ id: "a" }, { id: "b" }], warnings: [] }] };
   const line = packageBuildLine({ originalPresetCount: 3, omissions: [], products: [product] } as never);

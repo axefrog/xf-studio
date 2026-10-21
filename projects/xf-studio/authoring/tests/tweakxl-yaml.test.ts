@@ -1,7 +1,7 @@
 // The TweakXL YAML reader (tweakxl-yaml.ts): tags and scalar text survive, the block and flow forms TweakXL files use parse to the same tree,
 // and what it doesn't read is refused with a line number.
 import { describe, expect, test } from "bun:test";
-import { mapGet, parseTweakYaml, scalarText, toPlain, YamlError, type YamlNode } from "../src/tweakxl-yaml";
+import { mapGet, parseTweakYaml, scalarText, toPlain, YamlError, type YamlNode } from "../src/game/tweakxl-yaml";
 
 const tags = (node: YamlNode | undefined) => node?.kind === "seq" ? node.items.map(item => [item.tag, scalarText(item)]) : null;
 

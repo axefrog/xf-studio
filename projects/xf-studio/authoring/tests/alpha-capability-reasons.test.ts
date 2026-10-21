@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { type StudioAction, type StudioTarget } from "../src/studio-application";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
-import { BUILD_NEEDS_SETUP, BUILD_TOOLS_CHECKING_REASON, NO_3D_PREVIEW_IN_ALPHA, USER_FACING_JARGON } from "../src/alpha-availability";
+import { type StudioAction, type StudioTarget } from "../src/app/studio-application";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { ACTION_DESCRIPTORS } from "../src/app/studio-action-descriptors";
+import { BUILD_NEEDS_SETUP, BUILD_TOOLS_CHECKING_REASON, NO_3D_PREVIEW_IN_ALPHA, USER_FACING_JARGON } from "../src/app/alpha-availability";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 

@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { defaultLocalSettings } from "../src/local-settings";
-import { discoverSources } from "../src/source-discovery";
+import { defaultLocalSettings } from "../src/setup/local-settings";
+import { discoverSources } from "../src/game/host/source-discovery";
 
 const fixture = (run: (base: string) => void) => {
   const base = mkdtempSync(join(tmpdir(), "xfs-source-test-"));

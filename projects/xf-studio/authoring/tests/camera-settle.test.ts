@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { createCameraSettle } from "../src/platform/scene/camera-settle";
-import { createRenderScheduler } from "../src/render-scheduler";
+import { createRenderScheduler } from "../src/preview/render/render-scheduler";
 
 /** A manual frame clock: `step()` runs the pending animation frame, like one display refresh. */
 function manualClock() {

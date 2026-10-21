@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { dangleOf } from "../src/character-detail-plan";
-import type { ResolvedComponent } from "../src/character-resolver";
-import { IDLE_MASCULINE, MotionActions, PHYSICS_MASCULINE, PHYSICS_NO_DANGLES, PHYSICS_NO_RIG, PHYSICS_UNSUPPORTED, PHYSICS_WAITING, type MotionPort } from "../src/motion-actions";
+import { dangleOf } from "../src/character/character-detail-plan";
+import type { ResolvedComponent } from "../src/character/character-resolver";
+import { IDLE_MASCULINE, MotionActions, PHYSICS_MASCULINE, PHYSICS_NO_DANGLES, PHYSICS_NO_RIG, PHYSICS_UNSUPPORTED, PHYSICS_WAITING, type MotionPort } from "../src/animation/motion-actions";
 import { freshWorkspace } from "./fixtures/eye-region";
-import { createStudioViewGraph, previewMirror, workspaceViewGraph } from "../src/preview-view-graph";
+import { createStudioViewGraph, previewMirror, workspaceViewGraph } from "../src/preview/preview-view-graph";
 import { MAIN_VIEW } from "../src/platform/api/view-graph";
 
 const provenance = (path: string) => ({ ref: { hash: path, path }, status: "archive" }) as unknown as NonNullable<ResolvedComponent["geometry"]>["mesh"];

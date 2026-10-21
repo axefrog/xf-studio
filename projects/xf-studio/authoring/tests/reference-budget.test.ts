@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { filesSource, PreparedFiles, PREPARED_BUDGET_BYTES, referenceCap } from "../src/prepared-files";
+import { filesSource, PreparedFiles, PREPARED_BUDGET_BYTES, referenceCap } from "../src/host/prepared-files";
 import { hostClock } from "../src/platform/core/clock";
 import { createJobScheduler } from "../src/platform/core/jobs";
 

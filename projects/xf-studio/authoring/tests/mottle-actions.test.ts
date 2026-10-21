@@ -5,12 +5,12 @@
 import { expect, test } from "bun:test";
 import { mottlePreset, mottleSeed, nextMottleSeed } from "../src/engines/layered-makeup/mottle";
 import type { Recipe } from "../src/engines/layered-makeup/recipe";
-import { recipeFile } from "../src/recipe-schema";
-import type { StudioAction } from "../src/studio-application";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
+import { recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
+import type { StudioAction } from "../src/app/studio-application";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { freshWorkspace, initialRecipe } from "./fixtures/eye-region";
-import { historyLabel } from "../src/history-labels";
+import { historyLabel } from "../src/legacy/eye-makeup/history-labels";
 
 function fixture(recipe: Recipe = initialRecipe()) {
   const core = createTrustedAuthoringCore(freshWorkspace(recipe), { resetStack: () => {}, selectedCollection: () => "preset-a" }, STUDIO_COMPOSITION);

@@ -5,19 +5,19 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, 
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { inflateRawSync } from "node:zlib";
-import { personalDataIn } from "../src/private-data";
+import { personalDataIn } from "../src/app/private-data";
 import { redactText, redactValue, textRedactor } from "../src/diagnostics/redact";
-import { personalRoots, RedactionRoots } from "../src/diagnostics/host-roots";
+import { personalRoots, RedactionRoots } from "../src/diagnostics/host/host-roots";
 import { DIAGNOSTIC_FORWARD_SCHEMA, type DiagnosticEntry } from "../src/diagnostics/model";
-import { DiagnosticLog, hostDiagnosticsAt, hostFailure, withDiagnostics } from "../src/diagnostics/host-log";
-import { TraceWindow } from "../src/diagnostics/trace-window";
-import { createDiagnosticsHandler, modFileEntryName, withRequestDiagnostics } from "../src/diagnostics/host-endpoint";
-import { hideProfileName, resolutionResources } from "../src/diagnostics/host-report";
+import { DiagnosticLog, hostDiagnosticsAt, hostFailure, withDiagnostics } from "../src/diagnostics/host/host-log";
+import { TraceWindow } from "../src/diagnostics/host/trace-window";
+import { createDiagnosticsHandler, modFileEntryName, withRequestDiagnostics } from "../src/diagnostics/host/host-endpoint";
+import { hideProfileName, resolutionResources } from "../src/diagnostics/host/host-report";
 import { RESOLUTION_TRACE_OPTIONS, resolutionTrace } from "../src/diagnostics/resolution-trace";
-import { hashingSettled, involvedMods, readOwnInstalls } from "../src/diagnostics/mod-identity";
+import { hashingSettled, involvedMods, readOwnInstalls } from "../src/diagnostics/host/mod-identity";
 import type { ReportManifest } from "../src/diagnostics/report";
-import { defaultLocalSettings, type LocalSettings } from "../src/local-settings";
-import type { ResolvedCharacter } from "../src/character-resolver";
+import { defaultLocalSettings, type LocalSettings } from "../src/setup/local-settings";
+import type { ResolvedCharacter } from "../src/character/character-resolver";
 
 const root = mkdtempSync(resolve(tmpdir(), "xfs-diagnostics-report-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));

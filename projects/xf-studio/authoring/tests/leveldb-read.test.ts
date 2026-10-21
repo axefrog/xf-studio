@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { DecodeBudget, LEVELDB_BLOCK_BYTES, readLevelDb, readLogRecords, readTable, snappyDecompress, type LevelDbFile } from "../src/leveldb-read";
+import { DecodeBudget, LEVELDB_BLOCK_BYTES, readLevelDb, readLogRecords, readTable, snappyDecompress, type LevelDbFile } from "../src/formats/leveldb-read";
 
 // A minimal LevelDB writer for fixtures, following google/leveldb doc/log_format.md and doc/table_format.md.
 const enc = new TextEncoder();

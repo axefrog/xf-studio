@@ -2,11 +2,11 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { localEyePlate, localPackageAdapter, type PackageTools } from "../src/package-server";
+import { localEyePlate, localPackageAdapter, type PackageTools } from "../src/host/package-server";
 import { runProductBuild } from "../src/platform/export/product-host";
 import { STUDIO_EXPORTERS } from "../src/compose/exporters";
 import { EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
-import type { EyePlateTools } from "../src/eye-plate-service";
+import type { EyePlateTools } from "../src/legacy/eye-makeup/plate/host/eye-plate-service";
 
 const noHead: EyePlateTools = {
   async extract() { /* The game's content archives contain no head resource. */ },

@@ -2,9 +2,9 @@ import { afterAll, expect, test } from "bun:test";
 import { readdirSync, readFileSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { depotHash } from "../src/depot-path";
-import { archiveSourceContains, readRdarIndexCount, readRdarIndexHashes, sortedHashesContain } from "../src/rdar-index-fs";
-import { readArchiveIndex } from "../src/resolver-host";
+import { depotHash } from "../src/game/depot-path";
+import { archiveSourceContains, readRdarIndexCount, readRdarIndexHashes, sortedHashesContain } from "../src/game/host/rdar-index-fs";
+import { readArchiveIndex } from "../src/game/host/resolver-host";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });

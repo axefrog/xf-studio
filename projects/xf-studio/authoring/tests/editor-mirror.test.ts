@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { createUVEditor } from "../src/uv-editor";
-import { defaultUVView, fitUVView, reflectUV, selectionVisibility } from "../src/uv-view";
-import { flakeCatalogue, mirrorCatalogue, MM_PER_UV } from "../src/glitter-route";
+import { createUVEditor } from "../src/legacy/eye-makeup/browser/uv-editor";
+import { defaultUVView, fitUVView, reflectUV, selectionVisibility } from "../src/legacy/eye-makeup/uv-view";
+import { flakeCatalogue, mirrorCatalogue, MM_PER_UV } from "../src/legacy/eye-makeup/export/glitter-route";
 import type { Mirror } from "../src/engines/layered-makeup/region";
 import { initialRecipe, EYE_REGION, EYE_MIRROR } from "./fixtures/eye-region";
 import { applyAdapterProposal } from "./gesture-test-adapter";

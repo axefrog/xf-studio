@@ -4,18 +4,18 @@
  * Check, Build and the manifest, never dropped silently.
  */
 import { expect, test } from "bun:test";
-import { CollectionService, type CollectionTransport } from "../src/collection-service";
-import type { EditorSnapshot } from "../src/collection-session";
-import { collectionDraft } from "../src/collection-workspace";
+import { CollectionService, type CollectionTransport } from "../src/library/collection-service";
+import type { EditorSnapshot } from "../src/library/collection-session";
+import { collectionDraft } from "../src/app/workspace/collection-workspace";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
-import { describePackageCheck, originalPresetCount } from "../src/package-filter";
+import { describePackageCheck, originalPresetCount } from "../src/legacy/eye-makeup/export/package-filter";
 import { COLLECTION_2, NOTHING_PACKAGED_REASON } from "../src/platform/api";
 import { emptyRecipe } from "../src/engines/layered-makeup/recipe";
-import { NO_EXPORTER_REASON, parseCollection } from "../src/preset-collection";
-import { EYE_MAKEUP_PART_2 } from "../src/recipe-schema";
+import { NO_EXPORTER_REASON, parseCollection } from "../src/legacy/eye-makeup/export/preset-collection";
+import { EYE_MAKEUP_PART_2 } from "../src/legacy/eye-makeup/recipe-schema";
 import { fixedId } from "./fixtures/workspace-v1-fixtures";
 import { initialRecipe } from "./fixtures/eye-region";
-import { readRecipe as parseRecipe } from "../src/recipe-schema";
+import { readRecipe as parseRecipe } from "../src/legacy/eye-makeup/recipe-schema";
 import { preparePackageCollection } from "./fixtures/eye-exporter";
 import { realCheck } from "./fixtures/package-results";
 

@@ -15,7 +15,7 @@ Facts come from the [save import](../eye-artistry/save-import.md) note, the [CC 
 
 ## 2. The save container [source] [resource]
 
-Sources: WolvenKit at commit `11720772` (`WolvenKit.RED4/Save/IO/CyberpunkSaveReader.cs`, `CyberpunkSaveWriter.cs`, `NodeWriter.cs`, `Save/Helper/Compression.cs`, `Save/CSAV/CyberpunkSaveHeaderStruct.cs`, `Save/Parser/CharacterCustomizationAppearancesParser.cs`), the Modding Docs [save file page](https://github.com/CDPR-Modding-Documentation/Cyberpunk-Modding-Docs/blob/be2f44eed8419342ec13f72ed9cab008e9f7b289/for-mod-creators-theory/files-and-what-they-do/file-formats/save-file-.dat.md) (added by darkcart), the Studio's reader (`src/save-reader.ts`), and a read-only structural probe run on scratch copies of two private 2.31 saves (the reference save and the check save; the probe printed layout only, no personal values; the originals were not opened for writing).
+Sources: WolvenKit at commit `11720772` (`WolvenKit.RED4/Save/IO/CyberpunkSaveReader.cs`, `CyberpunkSaveWriter.cs`, `NodeWriter.cs`, `Save/Helper/Compression.cs`, `Save/CSAV/CyberpunkSaveHeaderStruct.cs`, `Save/Parser/CharacterCustomizationAppearancesParser.cs`), the Modding Docs [save file page](https://github.com/CDPR-Modding-Documentation/Cyberpunk-Modding-Docs/blob/be2f44eed8419342ec13f72ed9cab008e9f7b289/for-mod-creators-theory/files-and-what-they-do/file-formats/save-file-.dat.md) (added by darkcart), the Studio's reader (`src/saves/save-reader.ts`), and a read-only structural probe run on scratch copies of two private 2.31 saves (the reference save and the check save; the probe printed layout only, no personal values; the originals were not opened for writing).
 
 A save is a folder holding `sav.dat`, `metadata.9.json` and `screenshot.png` [wiki: CyberCAT page]. `sav.dat`:
 
@@ -78,7 +78,7 @@ Why minimal rather than WolvenKit's full rebuild: a full rewrite recompresses ev
 
 ## 5. Building the node from the Studio's character context
 
-The Studio already derives everything the node needs except four small pieces. `deriveCharacter` (`src/character-context.ts`) turns the context (the save as base plus the person's choices) into the resolver's descriptors with rule R5 (`descriptorsFromUiState`, `src/cco-model.ts`): `{part, group, option, app, definition}` per active appearance and `{part, group, region, target}` per morph. With a save as the base it **keeps the save's own descriptors for every option no choice reaches** (CORE-58), including options the installation no longer offers.
+The Studio already derives everything the node needs except four small pieces. `deriveCharacter` (`src/character/character-context.ts`) turns the context (the save as base plus the person's choices) into the resolver's descriptors with rule R5 (`descriptorsFromUiState`, `src/character/cco-model.ts`): `{part, group, option, app, definition}` per active appearance and `{part, group, region, target}` per morph. With a save as the base it **keeps the save's own descriptors for every option no choice reaches** (CORE-58), including options the installation no longer offers.
 
 | Node piece | Source |
 |---|---|

@@ -1,7 +1,7 @@
 /**
  * What 0.1.0-alpha.2, the oldest published release, reads in a collection library: the schemas its
  * readers accept, vendored from the tag `v0.1.0-alpha.2` (`9ae9280`): `src/platform/api/document.ts`
- * (`COLLECTION_1`, `COLLECTION_2`), `src/recipe-schema.ts` (`RECIPE_FILE_SCHEMAS`) and each
+ * (`COLLECTION_1`, `COLLECTION_2`), `src/legacy/eye-makeup/recipe-schema.ts` (`RECIPE_FILE_SCHEMAS`) and each
  * registered feature's part codec `accepts` (`src/features/eye-makeup/part.ts`,
  * `src/features/expressions/part.ts`). Its `CollectionLibrary.list()` and `get()` read rows of
  * either collection schema through that part registry, so a row whose schemas are all listed here

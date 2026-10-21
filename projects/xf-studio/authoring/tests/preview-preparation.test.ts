@@ -2,13 +2,13 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PreviewCoreHost, type PreviewCoreState } from "../src/preview-core-host";
-import { createPreviewCoreHandler } from "../src/preview-core-server";
-import { isPreviewState, PreviewPreparationActions, previewView, shouldAutoStart, type PreviewState } from "../src/preview-preparation";
-import type { WolvenKitSetupState } from "../src/wolvenkit-setup";
-import { USER_FACING_JARGON } from "../src/alpha-availability";
-import { EYE_PLATE_RECIPE } from "../src/eye-plate-recipe";
-import { createGameAssetExporter } from "../src/game-asset-export";
+import { PreviewCoreHost, type PreviewCoreState } from "../src/preview/host/preview-core-host";
+import { createPreviewCoreHandler } from "../src/preview/host/preview-core-server";
+import { isPreviewState, PreviewPreparationActions, previewView, shouldAutoStart, type PreviewState } from "../src/preview/preview-preparation";
+import type { WolvenKitSetupState } from "../src/setup/wolvenkit-setup";
+import { USER_FACING_JARGON } from "../src/app/alpha-availability";
+import { EYE_PLATE_RECIPE } from "../src/legacy/eye-makeup/plate/eye-plate-recipe";
+import { createGameAssetExporter } from "../src/game/host/game-asset-export";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
@@ -145,7 +145,7 @@ test("renderer actions poll while preparing and stop once the host is ready", as
 });
 
 test("the preview and the Build plate derive from one audited head recipe", async () => {
-  const { PREVIEW_CORE_RECIPE } = await import("../src/preview-core-recipe");
+  const { PREVIEW_CORE_RECIPE } = await import("../src/preview/preview-core-recipe");
   expect(PREVIEW_CORE_RECIPE.plateRecipeId).toBe(EYE_PLATE_RECIPE.id);
 });
 

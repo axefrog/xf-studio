@@ -53,7 +53,7 @@ The lifted-feet `.app` on the reference profile comes from the UV framework's ar
 
 ### Holster-state records
 
-27 September 2026, read-only, with the Studio's TweakDB reader (`src/tweakdb-flats.ts`) under the memory guard. Inputs: `r6\cache\tweakdb.bin` SHA-256 `918f0acfc3f3174b29b5c10b463dfb106b603118c85d24456204a1e2a2ac13f9` and `tweakdb_ep1.bin` SHA-256 `89c7ee678c1366d4c289edc78beaa60ce3d64bf44b300fc3902adc94f6ac14c5`, which hold the same values [resource]:
+27 September 2026, read-only, with the Studio's TweakDB reader (`src/game/tweakdb-flats.ts`) under the memory guard. Inputs: `r6\cache\tweakdb.bin` SHA-256 `918f0acfc3f3174b29b5c10b463dfb106b603118c85d24456204a1e2a2ac13f9` and `tweakdb_ep1.bin` SHA-256 `89c7ee678c1366d4c289edc78beaa60ce3d64bf44b300fc3902adc94f6ac14c5`, which hold the same values [resource]:
 
 | Weapon record | `cyberwareType` | `holsteredItem` (TweakDBID as a number; the record's name was not recovered) | Holstered item's `appearanceName` |
 |---|---|---|---|

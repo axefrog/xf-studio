@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
-import { AuthoringControlEdits } from "../src/authoring-control-edits";
-import { AuthoringDocument } from "../src/authoring-document";
+import { AuthoringControlEdits } from "../src/app/authoring/authoring-control-edits";
+import { AuthoringDocument } from "../src/app/authoring/authoring-document";
 import { registeredEditing } from "./gesture-test-adapter";
-import { WorkspaceComposer } from "../src/workspace-composer";
-import { planLayerPreview, previewCapacity } from "../src/authoring-preview-policy";
-import { assessPreviewQuality } from "../src/preview-quality";
-import { RecipeActions } from "../src/authoring-eye-makeup";
+import { WorkspaceComposer } from "../src/app/workspace/workspace-composer";
+import { planLayerPreview, previewCapacity } from "../src/legacy/eye-makeup/preview/authoring-preview-policy";
+import { assessPreviewQuality } from "../src/legacy/eye-makeup/preview/preview-quality";
+import { RecipeActions } from "../src/legacy/eye-makeup/authoring-eye-makeup";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { eyeMakeupPort } from "./fixtures/eye-region";
 

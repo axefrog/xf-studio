@@ -1,9 +1,9 @@
-import { shortcutLabel } from "../input-bindings";
-import type { CollectionOutcome, CollectionRequest } from "../collection-service";
-import type { ValueSchema } from "../studio-action-descriptors";
-import type { StudioAction, StudioDispatchResult } from "../studio-application";
-import type { StudioFileAction, StudioFileOutcome } from "../studio-file-operations";
-import type { EyeMakeupFacade, StudioPresentationPort } from "../studio-presentation";
+import { shortcutLabel } from "../app/input-bindings";
+import type { CollectionOutcome, CollectionRequest } from "../library/collection-service";
+import type { ValueSchema } from "../app/studio-action-descriptors";
+import type { StudioAction, StudioDispatchResult } from "../app/studio-application";
+import type { StudioFileAction, StudioFileOutcome } from "../app/studio-file-operations";
+import type { EyeMakeupFacade, StudioPresentationPort } from "../app/studio-presentation";
 import type { DockView } from "./dock/dock-view";
 import type { Feedback, FeedbackAction } from "./feedback";
 import { AnchorRegistry } from "./guidance/anchors";

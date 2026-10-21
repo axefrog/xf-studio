@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import * as THREE from "three";
-import { materialAdapter } from "../src/character-material-adapters";
-import { createMetalBaseMaterial, metalBaseKeeps, metalBaseParameters, metalBaseSurface, patchMetalBaseShader } from "../src/metal-base-material";
-import { renderTemplate } from "../src/render-templates";
+import { materialAdapter } from "../src/materials/render/character-material-adapters";
+import { createMetalBaseMaterial, metalBaseKeeps, metalBaseParameters, metalBaseSurface, patchMetalBaseShader } from "../src/materials/render/metal-base-material";
+import { renderTemplate } from "../src/materials/render-templates";
 
 describe("metal_base.remt (research/materials/shader-metal-glass.md §3.3)", () => {
   test("the template is known by its own name and by its vanilla path; every input is optional", () => {

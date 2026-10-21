@@ -7,10 +7,10 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CollectionService, uniqueCollectionName, type CollectionTransport } from "../src/collection-service";
+import { CollectionService, uniqueCollectionName, type CollectionTransport } from "../src/library/collection-service";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
 import { openTestLibrary } from "./fixtures/library-file";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { freshWorkspace } from "./fixtures/eye-region";
 
 function coreFixture() {

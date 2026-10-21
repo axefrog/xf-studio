@@ -12,8 +12,8 @@
  * origin, facing +Y. Vanilla meshes are referenced by path, never copied.
  */
 import { createHash } from "node:crypto";
-import { CREATOR_HEAD_SLOT, CREATOR_RIG_FEMALE, coneFactor, falloff, type CreatorLight, type Vec3 } from "../creator-lighting";
-import { FINISH_SHOWROOM_MOD } from "../mod-branding";
+import { CREATOR_HEAD_SLOT, CREATOR_RIG_FEMALE, coneFactor, falloff, type CreatorLight, type Vec3 } from "../preview/creator-lighting";
+import { FINISH_SHOWROOM_MOD } from "../legacy/eye-makeup/mod-branding";
 
 type Json = any; // eslint-disable-line @typescript-eslint/no-explicit-any
 

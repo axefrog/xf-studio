@@ -1,6 +1,6 @@
 /**
  * What the Poses module reads, in its own terms (the feature rule: a module's core imports only its folder and `platform/api`). These are
- * structural subsets of the host's records (src/pose-catalogue.ts `PoseCatalogue`, `PoseCatalogueState`; src/pose-sample.ts), which the
+ * structural subsets of the host's records (src/animation/pose-catalogue.ts `PoseCatalogue`, `PoseCatalogueState`; src/animation/pose-sample.ts), which the
  * host answers as JSON and the composition root hands over; a sampled pose passes through this module unread, to the motion service.
  */
 export type PoseBodyGender = "female" | "male";

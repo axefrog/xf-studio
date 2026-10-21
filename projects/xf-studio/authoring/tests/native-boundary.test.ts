@@ -25,8 +25,9 @@ const HOST_ADAPTERS = ["anim-decode", "archive-reader", "mesh-decode", "native-d
  * list (`rtti-type-source`, pure data) to the saves endpoint (saves-host-sources.ts), and the facial host's reading of the face skeleton,
  * facial setup, clips and morph targets through the route's decoder (facial-native.ts; types only, the decoding stays in the worker).
  */
-const ALLOWED_IMPORTERS: readonly string[] = ["clothing-host", "facial-native", "idle-host", "native-geometry-export", "native-resource-tools", "native-texture-export",
-  "pose-catalogue-host", "resolver-host", "saves-host-sources"];
+const ALLOWED_IMPORTERS: readonly string[] = ["character/host/clothing-host", "animation/host/facial-native", "animation/host/idle-host",
+  "game/host/native-geometry-export", "legacy/eye-makeup/export/host/native-resource-tools", "game/host/native-texture-export",
+  "animation/host/pose-catalogue-host", "game/host/resolver-host", "saves/host/saves-host-sources"];
 /**
  * Host and page globals (code-scan.ts PAGE_GLOBALS, except that `document` is the red model's own word here, a decoded resource,
  * so only the DOM's members of it count).
@@ -138,18 +139,20 @@ function reach(module: string): Map<string, string[]> {
   }
   return paths;
 }
-const isWriter = (module: string) => module.startsWith("src/native/write/") || module === "src/native-resource-tools";
+const isWriter = (module: string) => module.startsWith("src/native/write/") || module === "src/legacy/eye-makeup/export/host/native-resource-tools";
 
 test("only the Build's tools adapter and the writer's own tools import the native writer; no verifier reaches it through any path (NATIVE-76)", () => {
   expect(MODULES.size).toBeGreaterThan(300);
   // Direct importers, in src/ and tools/.
-  const DIRECT = ["src/native-resource-tools", "tools/build-native-bcn", "tools/build_collection_package", "tools/native-writer-host", "tools/native-writer-oracle"];
-  const direct = [...MODULES].filter(module => !isWriter(module) || module === "src/native-resource-tools")
+  const DIRECT = ["src/legacy/eye-makeup/export/host/native-resource-tools", "tools/build-native-bcn", "tools/build_collection_package",
+    "tools/native-writer-host", "tools/native-writer-oracle"];
+  const direct = [...MODULES].filter(module => !isWriter(module) || module === "src/legacy/eye-makeup/export/host/native-resource-tools")
     .filter(module => localImports(module).some(dependency => isWriter(dependency) && dependency !== module)).sort();
   expect(direct).toEqual(DIRECT);
   // Every verifier module (the product's, each feature's, the plate's, WolvenKit's adapter for them, the verifier tools), transitively.
   const verifiers = [...MODULES].filter(module => /^src\/features\/[^/]+\/verify\//.test(module) || /^tools\/verify_/.test(module) ||
-    ["src/platform/export/product-verifier", "src/verifier-wolvenkit", "src/eye-plate-verify"].includes(module));
+    ["src/platform/export/product-verifier", "src/legacy/eye-makeup/export/host/verifier-wolvenkit",
+      "src/legacy/eye-makeup/plate/eye-plate-verify"].includes(module));
   expect(verifiers.length).toBeGreaterThan(10);
   const leaks = verifiers.flatMap(module => [...reach(module)].filter(([target]) => isWriter(target)).map(([, path]) => path.join(" -> ")));
   expect(leaks).toEqual([]);

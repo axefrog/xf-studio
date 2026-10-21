@@ -1,6 +1,6 @@
-import type { InstallRoute, PreviewSetupAction, PreviewSetupButton } from "../preview-setup";
-import type { ReadonlyDeep } from "../read-only";
-import type { WolvenKitLink } from "../wolvenkit-setup";
+import type { InstallRoute, PreviewSetupAction, PreviewSetupButton } from "../preview/preview-setup";
+import type { ReadonlyDeep } from "../platform/api/read-only";
+import type { WolvenKitLink } from "../setup/wolvenkit-setup";
 import { progressBar } from "./components/progress";
 import { applyCapability, button, setButtonLabel, Segmented } from "./controls";
 import { h, setText, uid } from "./dom";

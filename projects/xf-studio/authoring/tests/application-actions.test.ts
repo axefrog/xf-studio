@@ -1,20 +1,20 @@
 import { expect, test } from "bun:test";
-import { CollectionActions } from "../src/collection-actions";
-import { collectionDraft, editPresets, emptyMemory, newPresetName, type CollectionWorkspace } from "../src/collection-workspace";
-import { RECIPE_HISTORY, recipeHistory } from "../src/editor-actions";
+import { CollectionActions } from "../src/library/collection-actions";
+import { collectionDraft, editPresets, emptyMemory, newPresetName, type CollectionWorkspace } from "../src/app/workspace/collection-workspace";
+import { RECIPE_HISTORY, recipeHistory } from "../src/legacy/eye-makeup/editor-actions";
 import { recipeActionCapability, type RecipeActionState } from "../src/engines/layered-makeup/recipe-actions";
 import type { Recipe } from "../src/engines/layered-makeup/recipe";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { PreviewActions, type PreviewPort } from "../src/preview-actions";
-import { ViewportAdapter, type ViewportPort } from "../src/viewport-adapter";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { PreviewActions, type PreviewPort } from "../src/preview/preview-actions";
+import { ViewportAdapter, type ViewportPort } from "../src/app/viewport-adapter";
 import { glitterModel, type GlitterChoices } from "../src/engines/layered-makeup/glitter-model";
-import type { EditorSnapshot } from "../src/collection-session";
+import type { EditorSnapshot } from "../src/library/collection-session";
 import { EYE_MAKEUP } from "../src/features/eye-makeup";
 import type { GestureEdit } from "../src/engines/layered-makeup/recipe-actions";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { applyLayerAction, applyRecipeAction, freshWorkspace, initialRecipe } from "./fixtures/eye-region";
 import { layerCapability } from "../src/engines/layered-makeup/layer-stack";
-import { RecipeActions } from "../src/authoring-eye-makeup";
+import { RecipeActions } from "../src/legacy/eye-makeup/authoring-eye-makeup";
 
 test("collection commands keep UI views isolated and notify only after valid transitions", () => {
   const preset = { id: crypto.randomUUID(), name: "First", revision: 1, recipe: initialRecipe() };

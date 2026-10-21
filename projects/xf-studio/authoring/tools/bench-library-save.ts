@@ -10,11 +10,11 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { LookLibrary } from "../src/library-store";
-import { openLibraryDatabase } from "../src/library-files";
+import { LookLibrary } from "../src/library/host/library-store";
+import { openLibraryDatabase } from "../src/library/host/library-files";
 import { hostClock } from "../src/platform/core/clock";
 import { starterRecipe } from "../src/features/eye-makeup/region";
-import { recipeFile } from "../src/recipe-schema";
+import { recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
 
 const root = resolve(process.argv[2] ?? tmpdir()), saves = Number(process.argv[3] ?? 200);
 const recipe = recipeFile(starterRecipe());

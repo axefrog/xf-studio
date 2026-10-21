@@ -17,7 +17,7 @@ test("experimental store failure never blocks synchronous all-off startup", asyn
 
 test("the desktop startup bundle contains no Hair Lab feature or worker import", async () => {
   // A file path from the URL (a pathname with its slash stripped is a relative path everywhere but Windows).
-  const result = await Bun.build({ entrypoints: [fileURLToPath(new URL("../src/studio-startup.ts", import.meta.url))], target: "browser" });
+  const result = await Bun.build({ entrypoints: [fileURLToPath(new URL("../src/compose/studio-startup.ts", import.meta.url))], target: "browser" });
   expect(result.success).toBe(true); const text = await result.outputs[0].text();
   expect(text).not.toContain("hair-lab-experiment"); expect(text).not.toContain("/build/hair-worker.js");
 });

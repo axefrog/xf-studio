@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import { compareVersions, emptyUpdateCheckMemory, newestRelease, parseVersion, UPDATE_RECHECK_MS, UpdateCheckService,
-  type ReleaseList, type UpdateCheckMemory } from "../src/update-check";
-import { gitHubReleases, RELEASES_API, releasesFromGitHub, simulatedReleases } from "../src/update-check-github";
-import { createUpdateCheckHandler, UpdateCheckJsonStore } from "../src/update-check-host";
-import { UpdateCheckActions } from "../src/update-check-actions";
-import { UPDATE_CHECK_DESCRIPTORS } from "../src/studio-action-descriptors";
+  type ReleaseList, type UpdateCheckMemory } from "../src/setup/update-check";
+import { gitHubReleases, RELEASES_API, releasesFromGitHub, simulatedReleases } from "../src/setup/host/update-check-github";
+import { createUpdateCheckHandler, UpdateCheckJsonStore } from "../src/setup/host/update-check-host";
+import { UpdateCheckActions } from "../src/setup/update-check-actions";
+import { UPDATE_CHECK_DESCRIPTORS } from "../src/app/studio-action-descriptors";
 import { checkForUpdatesNow, checkingForUpdates, updateCheckLine } from "../src/studio-ui/update-check";
 
 const v = (text: string) => parseVersion(text)!;

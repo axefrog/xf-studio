@@ -1,4 +1,4 @@
-import { chordsLabel, keyBinding, keyBindingById } from "../input-bindings";
+import { chordsLabel, keyBinding, keyBindingById } from "../app/input-bindings";
 import { h, setAttr, setText } from "./dom";
 import { icon } from "./icons";
 

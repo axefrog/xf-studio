@@ -3,7 +3,7 @@ import {
   applyHairShadow, bakeHairProfile, bakeHairProfileBytes, bakedSample, EYELASH_DEFAULT_MI_OVERRIDES, gbufferDecalAlbedo, hairAlbedo,
   hairCoverage, hairDitherThreshold, hairFragmentColor, hairPixelCoverage, hairResolvedCoverage, hairRoughness, HAIR_DITHER, hairShadowFactor, HAIR_TEMPLATE_DEFAULTS, linearEquivalentDecal,
   linearToSrgb8, overlayHairColor, profileIndex, rescaledStops, resolveHairMaterial, sampleStopsEncoded, srgbToLinear, type Rgb,
-} from "../src/hair-colour-model";
+} from "../src/materials/hair-colour-model";
 
 const close = (a: readonly number[], b: readonly number[], digits = 6) =>
   a.forEach((v, i) => expect(v).toBeCloseTo(b[i]!, digits));
@@ -133,7 +133,7 @@ test("post-G-buffer decals blend sqrt(albedo); the linear-over equivalent reprod
 });
 
 test("hair direct light: white R lobe, albedo-tinted TRT, diffuse proportional to albedo", async () => {
-  const { hairDirectLight, HAIR_LIGHTING_VANILLA, HAIR_LIGHTING_KARIS } = await import("../src/hair-colour-model");
+  const { hairDirectLight, HAIR_LIGHTING_VANILLA, HAIR_LIGHTING_KARIS } = await import("../src/materials/hair-colour-model");
   const T: Rgb = [0, 1, 0], N: Rgb = [0, 0, 1], V: Rgb = [0, 0, 1];
   for (const options of [HAIR_LIGHTING_VANILLA, HAIR_LIGHTING_KARIS]) {
     const lighting = { ...options, specularRandomMin: 0, specularRandomMax: 0 };
@@ -153,7 +153,7 @@ test("hair direct light: white R lobe, albedo-tinted TRT, diffuse proportional t
 });
 
 test("hair direct light: Mask_Intensity gates and diffuse arithmetic follow the 2.31 program", async () => {
-  const { hairDirectLight, hairStrandRandom, HAIR_LIGHTING_VANILLA: V231 } = await import("../src/hair-colour-model");
+  const { hairDirectLight, hairStrandRandom, HAIR_LIGHTING_VANILLA: V231 } = await import("../src/materials/hair-colour-model");
   const T: Rgb = [0, 1, 0], N: Rgb = [0, 0, 1], V: Rgb = [0, 0, 1];
   const L: Rgb = [0, 0, 1];                                 // sinL = 0, N.L = 1
   const base = { ...V231, specularRandomMin: 0, specularRandomMax: 0 };
@@ -211,7 +211,7 @@ test("resolved hair coverage matches the dithered pass rate and is nested across
 });
 
 test("local lights evaluate the same model with the LocalLight intensities (executable defaults)", async () => {
-  const { hairDirectLight, HAIR_LIGHTING_VANILLA: V231 } = await import("../src/hair-colour-model");
+  const { hairDirectLight, HAIR_LIGHTING_VANILLA: V231 } = await import("../src/materials/hair-colour-model");
   expect([V231.localR, V231.localTRT, V231.localScatter]).toEqual([0.35, 0.8, 0.47]);
   expect([V231.envR, V231.envTRT, V231.envMultiScatter, V231.additionalAreaRoughness]).toEqual([0.3, 0.8, 0.47, 0.1]);
   const T: Rgb = [0, 1, 0], N: Rgb = [0, 0, 1], V: Rgb = [0, 0, 1], L: Rgb = [0, 0, 1];
@@ -222,7 +222,7 @@ test("local lights evaluate the same model with the LocalLight intensities (exec
 });
 
 test("hair environment light: a view-aligned virtual light, albedo twice in the diffuse, widened irradiance-lit lobes", async () => {
-  const { hairEnvironmentLight, hairDirectLight, HAIR_LIGHTING_VANILLA: V231 } = await import("../src/hair-colour-model");
+  const { hairEnvironmentLight, hairDirectLight, HAIR_LIGHTING_VANILLA: V231 } = await import("../src/materials/hair-colour-model");
   const base = { ...V231, specularRandomMin: 0, specularRandomMax: 0 };
   const T: Rgb = [0, 1, 0], N: Rgb = [0, 0, 1], V: Rgb = [0, 0, 1];
   // Front-facing (N·L_e = 1): diffuse per unit E = 2·EnvMS·C·w²·albedo, w = wrap(1, 0.35) ≈ 0.74, so about 0.52·C of a Standard surface.

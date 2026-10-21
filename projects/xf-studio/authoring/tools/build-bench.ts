@@ -14,8 +14,8 @@
  */
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { LocalSettingsStore } from "../src/local-settings-store";
-import { localEyePlate, localMasculineEyePlate, localPackageAdapter, localPackageTools } from "../src/package-server";
+import { LocalSettingsStore } from "../src/setup/host/local-settings-store";
+import { localEyePlate, localMasculineEyePlate, localPackageAdapter, localPackageTools } from "../src/host/package-server";
 import { runProductBuild } from "../src/platform/export/product-host";
 import { STUDIO_EXPORTERS } from "../src/compose/exporters";
 import { EYE_PLATE_MASCULINE_PREREQUISITE, EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";

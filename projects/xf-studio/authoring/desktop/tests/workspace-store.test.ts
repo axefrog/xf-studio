@@ -3,8 +3,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { DesktopWorkspaceStore } from "../workspace-store";
-import { fitWorkspace } from "../../src/workspace-budget";
-import { loadWorkspace, parseWorkspace, serializeWorkspace, storesLookLevelHistory } from "../../src/workspace-state";
+import { fitWorkspace } from "../../src/app/workspace/workspace-budget";
+import { loadWorkspace, parseWorkspace, serializeWorkspace, storesLookLevelHistory } from "../../src/app/workspace/workspace-state";
 import { historyRecipes } from "../../tests/fixtures/looks";
 import { largeWorkspaceV1, smallWorkspaceV1 } from "../../tests/fixtures/workspace-v1-fixtures";
 import { STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";

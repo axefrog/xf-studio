@@ -1,4 +1,4 @@
-import { chordsLabel, keyBindingById, shortcutLabel } from "../../../input-bindings";
+import { chordsLabel, keyBindingById, shortcutLabel } from "../../../app/input-bindings";
 import { applyCapability, button, emptyState, note } from "../../../studio-ui/controls";
 import { h, pct, setAttr, setText } from "../../../studio-ui/dom";
 import { icon } from "../../../studio-ui/icons";

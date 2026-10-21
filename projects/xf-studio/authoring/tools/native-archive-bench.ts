@@ -11,10 +11,10 @@ import { createHash } from "node:crypto";
 import { lstatSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, sep } from "node:path";
-import { depotHash } from "../src/depot-path";
+import { depotHash } from "../src/game/depot-path";
 import { NativeArchive } from "../src/native/archive-reader";
 import { loadGameOodle } from "../src/native/oodle";
-import { runWolvenKit } from "../src/wolvenkit-cli";
+import { runWolvenKit } from "../src/host/wolvenkit-cli";
 
 const args = process.argv.slice(2);
 const option = (name: string) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : undefined; };

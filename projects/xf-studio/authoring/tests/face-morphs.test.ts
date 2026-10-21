@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   faceMorphChoiceIndex, faceMorphChoices, faceMorphWeights, followsFaceMorphChoices, morphTargetName, parseMorphTargetName,
-} from "../src/face-morphs";
+} from "../src/character/face-morphs";
 
 // Asset-free inventory of the vanilla 2.31 character-creator resources (names only).
 const inventory = JSON.parse(readFileSync(join(import.meta.dir, "..", "..", "..", "..", "research", "character-customization",

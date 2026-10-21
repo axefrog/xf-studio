@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import type { LocalSetupFields, LocalSetupView } from "../src/local-settings-server";
-import { BUILD_TOOLS_CHECKING } from "../src/local-readiness-codes";
-import { BUILD_TOOLS_RECHECK_MS, buildToolsChecking, LocalSetupActions } from "../src/local-setup-actions";
+import type { LocalSetupFields, LocalSetupView } from "../src/setup/host/local-settings-server";
+import { BUILD_TOOLS_CHECKING } from "../src/setup/local-readiness-codes";
+import { BUILD_TOOLS_RECHECK_MS, buildToolsChecking, LocalSetupActions } from "../src/setup/local-setup-actions";
 
 // The settings port owns field merges and queued refreshes, so views never re-implement them (UI-26).
 function fixture() {

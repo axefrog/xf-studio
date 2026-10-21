@@ -2,12 +2,12 @@
 // (UI-67, UI-68, UI-70, CORE-70, CORE-71): choices update in place and keep keyboard focus, the listbox keys move focus without
 // choosing, same-named choices are marked by identity, the status line never adds or removes nodes, and the quick action dispatches.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { CatalogueIndex } from "../src/cc-catalogue";
-import { choicePage, panelProjection, searchChoices, type CcPanelChoice, type CreatorView } from "../src/cc-panel";
-import { catalogueCoverage, PARTLY_SHOWN } from "../src/cc-render-coverage";
-import { deriveCharacter } from "../src/character-context";
-import { CharacterContextActions, type CreatorPort } from "../src/character-context-actions";
-import { foldedKeys, UIPreferenceActions } from "../src/ui-preferences";
+import { CatalogueIndex } from "../src/character/cc-catalogue";
+import { choicePage, panelProjection, searchChoices, type CcPanelChoice, type CreatorView } from "../src/character/cc-panel";
+import { catalogueCoverage, PARTLY_SHOWN } from "../src/character/cc-render-coverage";
+import { deriveCharacter } from "../src/character/character-context";
+import { CharacterContextActions, type CreatorPort } from "../src/character/character-context-actions";
+import { foldedKeys, UIPreferenceActions } from "../src/app/ui-preferences";
 import { bindViewState, PreferenceViewState } from "../src/studio-ui/view-state";
 import { fixtureSource } from "./cc-fixtures";
 import { installLightDom, lightDocument, lightEvent, type LightElement, uninstallLightDom } from "./light-dom";

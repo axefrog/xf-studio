@@ -3,9 +3,9 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createModInstallTransport, declaredResources, extraFileKind, installedDuplicates } from "../src/mod-install-transport";
-import { defaultLocalSettings } from "../src/local-settings";
-import { EYE_MAKEUP_MOD } from "../src/mod-branding";
+import { createModInstallTransport, declaredResources, extraFileKind, installedDuplicates } from "../src/installation/host/mod-install-transport";
+import { defaultLocalSettings } from "../src/setup/local-settings";
+import { EYE_MAKEUP_MOD } from "../src/legacy/eye-makeup/mod-branding";
 
 const digest = (body: string) => createHash("sha256").update(body).digest("hex");
 function fixture(route: "direct" | "mo2") {

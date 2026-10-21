@@ -1,25 +1,25 @@
 /**
- * Lighting setups (src/lighting-setups.ts; knowledge/creator-lighting.md §9): one flat list of complete definitions, built-ins as
+ * Lighting setups (src/preview/lighting-setups.ts; knowledge/creator-lighting.md §9): one flat list of complete definitions, built-ins as
  * read-only templates that fork on the first edit, the person's own setups (rename, duplicate, delete, reset), the light editor, the
  * View and lighting history, numeric parity between a built-in and its unedited fork, and the migration of workspaces saved before.
  */
 import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
-import { CREATOR_RIG_FEMALE, creatorRigSpecs, DEFAULT_CREATOR_LIGHTING, type BodySex } from "../src/creator-lighting";
-import { createLightListRig } from "../src/lighting-setup-stage";
+import { CREATOR_RIG_FEMALE, creatorRigSpecs, DEFAULT_CREATOR_LIGHTING, type BodySex } from "../src/preview/creator-lighting";
+import { createLightListRig } from "../src/preview/render/lighting-setup-stage";
 import { BUILT_IN_SETUP_IDS, builtInSetup, colourHex, creatorSetup, hexToLinear, legacyStudioStage, lightingSource, lightPlacement,
   LIGHTING_LIMITS, migrateLegacyLighting, parseSetupLibrary, resolveLightingSource, studioStageSetup, type LightingSource,
-  type SetupLibrary } from "../src/lighting-setups";
+  type SetupLibrary } from "../src/preview/lighting-setups";
 import { MAIN_VIEW } from "../src/platform/api/view-graph";
-import { PreviewActions, type LightingStatus, type PreviewPort } from "../src/preview-actions";
-import { createStudioViewGraph, previewLights, storedViewGraph } from "../src/preview-view-graph";
-import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
-import { DEFAULT_KEY_ANGLE, DEFAULT_STUDIO_STAGE, STUDIO_LIGHT_COLOURS, STUDIO_SETUP_IDS, STUDIO_SETUPS } from "../src/studio-lighting";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { createTrustedPreviewServices } from "../src/trusted-preview-services";
-import { WorkspaceComposer } from "../src/workspace-composer";
-import { parseWorkspace, serializeWorkspace, type WorkspaceState } from "../src/workspace-state";
+import { PreviewActions, type LightingStatus, type PreviewPort } from "../src/preview/preview-actions";
+import { createStudioViewGraph, previewLights, storedViewGraph } from "../src/preview/preview-view-graph";
+import { ACTION_DESCRIPTORS } from "../src/app/studio-action-descriptors";
+import { DEFAULT_KEY_ANGLE, DEFAULT_STUDIO_STAGE, STUDIO_LIGHT_COLOURS, STUDIO_SETUP_IDS, STUDIO_SETUPS } from "../src/preview/studio-lighting";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedPreviewServices } from "../src/app/trusted-preview-services";
+import { WorkspaceComposer } from "../src/app/workspace/workspace-composer";
+import { parseWorkspace, serializeWorkspace, type WorkspaceState } from "../src/app/workspace/workspace-state";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";

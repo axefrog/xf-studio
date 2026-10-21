@@ -4,7 +4,7 @@ import { FLAKE_LIMITS, FLAKE_MATERIAL, FLAKE_SUBSAMPLES, FLAKE_SUBSAMPLES_16,
   validStudioIrregularSettings, type IrregularFlakes, type FlakeNormalStudyMode } from "./flake-field";
 import type { Layer } from "./recipe";
 import type { FineGlitterScope } from "./region";
-import type { ReadonlyDeep } from "../../read-only";
+import type { ReadonlyDeep } from "../../platform/api/read-only";
 
 /** Pure preparation for future material scheduling, not yet wired into the
  * production worker. Exact strings avoid digest collisions. Names and IDs own

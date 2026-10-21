@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { extendSkin } from "../../../skin";
+import { extendSkin } from "../../../materials/render/skin";
 import { canonicalFinish, defaultFlakes, isIrregular } from "../finish";
 import {maskAlphaKey,studioIrregularOpticalKey,irregularAlbedoKey,previewOpticalKey} from "../makeup-dependencies";
 import type { Layer } from "../recipe";

@@ -1,5 +1,5 @@
-import { shortcutLabel } from "../../input-bindings";
-import type { ProjectLink } from "../../project-links";
+import { shortcutLabel } from "../../app/input-bindings";
+import type { ProjectLink } from "../../app/project-links";
 import { applyCapability, badge, button, emptyState, section } from "../controls";
 import { h, isUnavailable, setText, uid } from "../dom";
 import type { PanelController } from "../panels/collection";
@@ -8,7 +8,7 @@ import type { Frame, StudioRuntime } from "../runtime";
 import { HELP_LINKS, helpReference, helpTopicsFor, searchTopics, searchTours } from "./help-topics";
 import { renderHelp } from "./render";
 import type { Tour } from "./types";
-import type { TourRecord } from "../../ui-preferences";
+import type { TourRecord } from "../../app/ui-preferences";
 import { openReportDialog } from "../diagnostics/report-dialog";
 import { desktopAppEntry, openDesktopApp, openDesktopAppSheet } from "./desktop-app-sheet";
 import { checkForUpdatesNow, checkingForUpdates, setUpdateLine, updateCheckLine } from "../update-check";

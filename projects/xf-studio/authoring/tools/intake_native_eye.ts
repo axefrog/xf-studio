@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { NATIVE_EYE_SOURCE, parseNativeEyeManifest, validateNativeEyeParts, verifyNativeEyeBytes,
-  type NativeEyeManifest } from "../src/native-eye-intake";
+  type NativeEyeManifest } from "../src/studies/native-eye-intake";
 
 const [glbPath, meshPath, morphPath] = process.argv.slice(2);
 if (!glbPath || !meshPath || !morphPath)

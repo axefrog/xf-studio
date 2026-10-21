@@ -12,9 +12,9 @@ import { runProductBuild, builderError, type BuilderRun, type HostPrerequisite, 
 import { runProductCommand } from "../src/platform/export/product-builder";
 import { ExportRefusal, PACKAGE_PLAN_1, PrerequisiteStale, type FeatureExporterEntry, type PackageBuildResult } from "../src/platform/api";
 import { EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
-import { packagePlateRecord, type EyePlateManifest } from "../src/eye-plate-service";
-import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/plate-uv-footprint-io";
-import { localCheckWorker } from "../src/package-server";
+import { packagePlateRecord, type EyePlateManifest } from "../src/legacy/eye-makeup/plate/host/eye-plate-service";
+import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/legacy/eye-makeup/export/host/plate-uv-footprint-io";
+import { localCheckWorker } from "../src/host/package-server";
 import { eyeEntry, fakeTools, fakeVerifierTools, FOOTPRINT, LIPS, LIPS_ENTRY, writePlate } from "./fixtures/product-fixture";
 
 const fixture = JSON.parse(readFileSync(join(import.meta.dir, "../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));

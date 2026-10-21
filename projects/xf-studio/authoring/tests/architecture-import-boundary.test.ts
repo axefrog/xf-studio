@@ -706,7 +706,7 @@ test("diagnostics' pure half is DOM- and host-free, and only composition roots i
   expect(importers("diagnostics/browser-device")).toEqual(["studio-startup"]);
   const outside = (path: string) => sourceText(fileURLToPath(new URL(`../${path}`, import.meta.url)));
   expect(imports(outside("server.ts"))).toContain("./src/diagnostics/host-endpoint");
-  expect(imports(outside("desktop/server.ts"))).toContain("../src/diagnostics/host-endpoint");
+  expect(imports(outside("desktop/server.ts"))).toContain("../src/diagnostics/host/host-endpoint");
   // The rule fails on the violations it names: a pure module loading the file system or the host log, or reading the window.
   const leak = probed({ "diagnostics/report": `import { readFileSync as __probe } from "node:fs";`, "diagnostics/actions": `import { hostFailure as __probe } from "./host-log";` });
   expect([...reachIn(leak, "diagnostics/report", true)]).toContain("node:fs");

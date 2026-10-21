@@ -1,10 +1,10 @@
 // The Character panel's one hierarchy (character-panel-sections.ts): parts of V, the panel's own taxonomy of sections (not the
 // creator's categories), rows placed by what they control, and the contributions' switches and controls, derived from data.
 import { describe, expect, test } from "bun:test";
-import { type CcPanel, type CcPanelOption, panelProjection } from "../src/cc-panel";
-import { catalogueCoverage } from "../src/cc-render-coverage";
+import { type CcPanel, type CcPanelOption, panelProjection } from "../src/character/cc-panel";
+import { catalogueCoverage } from "../src/character/cc-render-coverage";
 import { allSections, CHARACTER_CONTRIBUTIONS, characterPanelTree, identifierWords, type CharacterPanelGroup,
-  type CharacterSectionContribution } from "../src/character-panel-sections";
+  type CharacterSectionContribution } from "../src/character/character-panel-sections";
 import { fixtureSource } from "./cc-fixtures";
 
 const tree = async (contributions?: readonly CharacterSectionContribution[]) => {

@@ -16,7 +16,7 @@
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { launch } from "./cdp";
-import { localSettingsDirectory } from "../src/local-settings-store";
+import { localSettingsDirectory } from "../src/setup/host/local-settings-store";
 
 const [folderArg, portArg = "4493", runsArg = "3"] = process.argv.slice(2);
 if (!folderArg) throw Error("Usage: bun tools/measure-warm-restart.ts <folder> [port] [runs]");

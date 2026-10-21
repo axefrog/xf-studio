@@ -1,0 +1,372 @@
+// Eye makeup's feature build: compile one filtered collection snapshot into baked maps, full
+// mip chains and converted XBM/mesh/morph/app/customization resources at their depot paths in the
+// product's staging tree, check its own resources against its plan (the pre-pack path gate for its
+// subset), and write build.json into its work folder. The export host packs the product once and
+// writes the merged ArchiveXL declaration (platform/export). Never installs.
+//
+// TypeScript port of experiments/005-preset-collection/build.py, which remains a research
+// oracle. Differences, all deliberate: the bake runs in-process; the builder no longer
+// writes PNG copies of the maps or asks WolvenKit for a PNG export, because only the old
+// Python verifier read them; and it no longer round-trips the resources or exports the
+// textures, because the independent verifier converts the unbundled archive members itself.
+import { createHash } from "node:crypto";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { generatedFiles } from "./archive-inventory-fs";
+import { readKeptJson } from "../../../../host/derived-cache";
+import { expectedPaths, inventoryFromFiles } from "../archive-inventory";
+import type { LayeredMakeupRegion } from "../../../../engines/layered-makeup/region";
+import { bakeCollection, type BakedRecord, type CollectionPlan } from "./package-bake";
+import { encodeDds, flatMipChain } from "../../../../engines/layered-makeup/flat-mip-chain";
+import { facetedMipChain, maskMipChain, normalRgba, uniformMipChain } from "../../../../engines/layered-makeup/route-mip-chains";
+import { liftPlate, type PlateLiftReport } from "../plate-lift";
+import { plateUvFootprint, uvTransformConstants, type PlateUvFootprint, type StoredUvBounds, type UvTransformConstants,
+  type UvWindow } from "../../../../engines/layered-makeup/plate-uv-window";
+import type { TextureChannel } from "../../../../engines/layered-makeup/finish-export";
+import { PackageToolError, type PackageResourceTools, type TextureImportSettings, type ToolStep } from "./package-build-wolvenkit";
+import {
+  appearanceResource, assertBrandedPlan, customizationResource, HandleCounter,
+  resourceJson, rewritePlateMesh, rewritePlateMorph, selectorBodies,
+} from "../package-resources";
+
+/** Accepted plate stems: the host-derived built-in plate, then the historical Experiment 004 override name. */
+/**
+ * The plate's own UVs give another footprint than the one the collection was planned on (a cached plate recorded
+ * under an older rule, or a plate changed during the Build). The CLI reports it as `package_plate_stale`, and the
+ * hosts then discard that cached plate and build once more on a fresh one (PIPE-37).
+ */
+export class PlateFootprintChangedError extends Error {}
+
+/**
+ * The native writer's oracle that proves eye makeup's resource documents byte for byte (NATIVE-72): its captured WolvenKit Builds
+ * (tools/native-writer-oracle.ts). native-resource-tools.ts names the root classes it covers.
+ */
+export const EYE_MAKEUP_WRITER_ORACLE = "eye-makeup";
+export const PLATE_STEMS = ["xfs_eye_plate", "xfas_eye_plate"] as const;
+/** The masculine plate's stem (eye-plate-recipe-pma.json `output.stem`). */
+export const MASCULINE_PLATE_STEMS = ["xfs_eye_plate_pma"] as const;
+
+/**
+ * The masculine plate's recorded UV footprint differs from the plate itself (PIPE-37, as for the feminine plate); the
+ * exporter reports it for the masculine prerequisite.
+ */
+export class MasculinePlateFootprintChangedError extends PlateFootprintChangedError {}
+
+export interface ResourceBuildOptions {
+  /** Filtered, package-only collection value (already validated by the preflight). */
+  readonly collection: unknown;
+  /** This feature's fresh work directory (logs, bakes, conversion inputs, build.json); must not exist. */
+  readonly work: string;
+  /**
+   * The product's staging tree: resources go at their depot paths below it, beside other features' files.
+   * Created when missing; none of this build's paths may exist yet.
+   */
+  readonly staging: string;
+  /** Directory holding exactly one plate mesh/morphtarget pair. */
+  readonly plate: string;
+  /**
+   * The plate's kept WolvenKit JSON (eye-plate-json.ts), read instead of serializing the plate when its record matches the
+   * plate's bytes and this build's WolvenKit (`tools.identity`); otherwise the plate is serialized as before.
+   */
+  readonly plateJson?: string;
+  /** Eye makeup's layered-makeup region: its models, mirror and texture grids. */
+  readonly region: LayeredMakeupRegion;
+  readonly tools: PackageResourceTools;
+  /**
+   * The plate UV footprint the preflight planned on (which presets reach the plate). The plate this build
+   * serializes must give exactly this footprint; absent only for callers that plan on no plate.
+   */
+  readonly plateUv?: PlateUvFootprint;
+  /**
+   * The masculine V's plate (a directory holding its one mesh/morphtarget pair) and the UV footprint the plan was made
+   * on. Given when the plan includes him (`plan.masculine`); his plate must give exactly that footprint and the
+   * feminine plate's texture window, so every texture serves both.
+   */
+  readonly masculine?: { readonly plate: string; readonly plateUv: PlateUvFootprint; readonly plateJson?: string };
+  readonly signal?: AbortSignal;
+  readonly log?: (line: string) => void;
+  /** Told when the looks are composed and their conversion into game resources starts (PIPE-131). */
+  readonly converting?: () => void;
+}
+
+export interface BuildRecord {
+  plan: CollectionPlan; compiled: BakedRecord[]; steps: { name: string; exitCode: number }[];
+  plateStem: string; plateInputs: { path: string; sha256: string }[];
+  /** The decal lift applied to the plate geometry (one render chunk per lift). */
+  plateLift: PlateLiftReport;
+  /**
+   * The plate's stored UV0 bounds, the plate-local texture window derived from them and its material constants,
+   * and the SHA-256 of the plate's whole UV footprint (bounds, window, vertex UVs and triangles).
+   */
+  plateUv: { bounds: StoredUvBounds; window: UvWindow; transform: UvTransformConstants; footprintSha256: string };
+  /** This feature's resources in the staging tree, as the pre-pack gate recorded them. */
+  artifacts: ReturnType<typeof inventoryFromFiles>;
+  /** The masculine plate packaged beside the feminine one, when the plan includes him: its inputs, lift and UVs. */
+  masculine?: { plateStem: string; plateInputs: { path: string; sha256: string }[]; plateLift: PlateLiftReport;
+    plateUv: { bounds: StoredUvBounds; window: UvWindow; transform: UvTransformConstants; footprintSha256: string } };
+  installed: false; gameRenderingVerified: false;
+}
+
+/** Each texture group's WolvenKit import settings (one import per group). */
+export const TEXTURE_GROUP_SETTINGS: readonly (readonly [string, TextureImportSettings])[] = [
+  ["dds-colour", { IsGamma: true, TextureGroup: "TEXG_Generic_Color", RawFormat: "TRF_TrueColor", Compression: "TCM_QualityColor",
+    GenerateMipMaps: false, IsStreamable: true, PremultiplyAlpha: false }],
+  ["dds-scalar", { IsGamma: false, TextureGroup: "TEXG_Generic_Grayscale", RawFormat: "TRF_Grayscale", Compression: "TCM_QualityR",
+    GenerateMipMaps: false, IsStreamable: true, PremultiplyAlpha: false }],
+  ["dds-normal", { IsGamma: false, TextureGroup: "TEXG_Generic_Normal", RawFormat: "TRF_TrueColor", Compression: "TCM_Normalmap",
+    GenerateMipMaps: false, IsStreamable: true, PremultiplyAlpha: false }],
+];
+/** Import group of each texture channel: sRGB colour, linear scalar or tangent normal. */
+export const CHANNEL_GROUP: Record<TextureChannel, "dds-colour" | "dds-scalar" | "dds-normal"> = {
+  diffuse: "dds-colour", gradient: "dds-colour", roughness: "dds-scalar", metalness: "dds-scalar", mask: "dds-scalar", normal: "dds-normal",
+  flakes: "dds-scalar", accent: "dds-scalar",
+};
+/** Split a diagnostic glitter map's concatenated chain into its levels (each channel's bytes per texel). */
+function chainLevels(data: Uint8Array, width: number, height: number, levels: number, bytesPerTexel: number): Uint8Array[] {
+  const out: Uint8Array[] = [];
+  let offset = 0;
+  for (let level = 0; level < levels; level++) {
+    const length = Math.max(1, width >> level) * Math.max(1, height >> level) * bytesPerTexel;
+    out.push(data.subarray(offset, offset + length));
+    offset += length;
+  }
+  if (offset !== data.length) throw Error("A glitter map's chain does not match its recorded levels.");
+  return out;
+}
+const TEXEL_BYTES: Record<TextureChannel, number> = { diffuse: 4, gradient: 4, normal: 2, roughness: 1, metalness: 1, mask: 1, flakes: 1, accent: 1 };
+const FOLDERS = ["logs", "baked", "source-json", "models-json", "app-json", "cc-json", "resources",
+  "input/dds-colour", "input/dds-scalar", "input/dds-normal"];
+
+const sha256 = (data: Uint8Array | string) => createHash("sha256").update(data).digest("hex");
+const isFile = (path: string) => { try { return statSync(path).isFile(); } catch { return false; } };
+const readJson = (path: string) => JSON.parse(readFileSync(path, "utf8").replace(/^﻿/, ""));
+
+/** The one plate stem present as a complete mesh/morphtarget pair in `plate`, or an error. */
+export function plateStem(plate: string, accepted: readonly string[] = PLATE_STEMS): string {
+  const stems = accepted.filter(stem => isFile(join(plate, stem + ".mesh")) && isFile(join(plate, stem + ".morphtarget")));
+  if (stems.length !== 1) throw Error(`Plate directory must contain exactly one mesh/morphtarget pair: ${plate}`);
+  return stems[0];
+}
+
+function checkCancelled(signal?: AbortSignal) {
+  if (signal?.aborted) throw new PackageToolError("package_build_cancelled", "Package Build was cancelled.");
+}
+
+export async function buildEyeMakeupResources(options: ResourceBuildOptions): Promise<BuildRecord> {
+  const out = resolve(options.work), plate = resolve(options.plate), archive = resolve(options.staging);
+  const log = options.log ?? (() => {});
+  if (existsSync(out)) throw Error(`Output already exists: ${out}`);
+  const stem = plateStem(plate);
+  const masculinePlate = options.masculine ? resolve(options.masculine.plate) : null;
+  const masculineStem = masculinePlate ? plateStem(masculinePlate, MASCULINE_PLATE_STEMS) : null;
+  for (const folder of [...FOLDERS, ...(masculinePlate ? ["source-json-pma"] : [])]) mkdirSync(join(out, ...folder.split("/")), { recursive: true });
+  mkdirSync(archive, { recursive: true });
+  const steps: BuildRecord["steps"] = [];
+  const step = async (name: string, run: () => Promise<ToolStep>) => {
+    checkCancelled(options.signal);
+    try {
+      const result = await run();
+      writeFileSync(join(out, "logs", `${name}.log`), result.log, "utf8");
+      steps.push({ name, exitCode: result.exitCode });
+      log(`${name} complete`);
+    } catch (error) {
+      if (error instanceof PackageToolError) writeFileSync(join(out, "logs", `${name}.log`), error.log, "utf8");
+      throw error;
+    }
+  };
+  // Independent WolvenKit steps run side by side (the tools bound how many at once). Each is logged and recorded in the
+  // order it was started, and all have finished before the first failure is thrown, so none outlives the build.
+  const started: { name: string; run: Promise<ToolStep> }[] = [];
+  const start = (name: string, run: () => Promise<ToolStep>) => {
+    checkCancelled(options.signal);
+    const promise = run();
+    promise.catch(() => {}); // Observed in `finish`; never an unhandled rejection while other work runs.
+    started.push({ name, run: promise });
+  };
+  const finish = async () => {
+    const running = started.splice(0), settled = await Promise.allSettled(running.map(item => item.run));
+    let failure: unknown = null;
+    settled.forEach((result, i) => {
+      const name = running[i]!.name;
+      if (result.status === "fulfilled") {
+        writeFileSync(join(out, "logs", `${name}.log`), result.value.log, "utf8");
+        steps.push({ name, exitCode: result.value.exitCode });
+        log(`${name} complete`);
+      } else {
+        if (result.reason instanceof PackageToolError) writeFileSync(join(out, "logs", `${name}.log`), result.reason.log, "utf8");
+        failure ??= result.reason;
+      }
+    });
+    if (failure) throw failure;
+  };
+  // The plate's JSON: its kept copy when it matches (no WolvenKit launch), else WolvenKit's serialize of the plate folder.
+  const plateJson = async (name: string, kept: string | undefined, directory: string, plateStemName: string, into: string) => {
+    checkCancelled(options.signal);
+    const found = kept && options.tools.identity
+      ? readKeptJson(kept, options.tools.identity, [".mesh", ".morphtarget"].map(suffix => join(directory, plateStemName + suffix))) : null;
+    if (!found) return step(name, () => options.tools.serialize(directory, into));
+    for (const [resource, json] of Object.entries(found)) copyFileSync(json, join(into, resource + ".json"));
+    writeFileSync(join(out, "logs", `${name}.log`), `Read the plate's kept WolvenKit JSON (${options.tools.identity}): ${kept}\n`, "utf8");
+    steps.push({ name, exitCode: 0 });
+    log(`${name} complete (kept JSON)`);
+  };
+
+  // 1. The plate's own UVs decide the texture window, so serialize it before compiling (after one yield, so an
+  //    immediate cancel stops before any conversion).
+  await new Promise(done => setImmediate(done));
+  await plateJson("serialize-owned-models", options.plateJson, plate, stem, join(out, "source-json"));
+  const sourceMesh = readJson(join(out, "source-json", stem + ".mesh.json"));
+  const footprint = plateUvFootprint(sourceMesh.Data.RootChunk), { bounds, window } = footprint;
+  const footprintSha256 = sha256(JSON.stringify(footprint));
+  // The collection was filtered against a plate footprint (presets that never reach the plate were omitted); it must be this plate's.
+  if (options.plateUv && sha256(JSON.stringify(options.plateUv)) !== footprintSha256)
+    throw new PlateFootprintChangedError("The eye plate's recorded UV footprint differs from the plate itself.");
+  const plateUv = { bounds, window, transform: uvTransformConstants(window), footprintSha256 };
+  writeFileSync(join(out, "logs", "plate-uv.log"), JSON.stringify(plateUv) + "\n", "utf8");
+  // The masculine plate: its own UVs must give the footprint his plan was made on and her texture window, so the one
+  // texture set (and each window entry's UV transform) serves both plates.
+  let masculineSource: { mesh: any; morph: any; plateUv: NonNullable<BuildRecord["masculine"]>["plateUv"] } | null = null; // eslint-disable-line @typescript-eslint/no-explicit-any
+  if (masculinePlate && masculineStem && options.masculine) {
+    await plateJson("serialize-masculine-models", options.masculine.plateJson, masculinePlate, masculineStem, join(out, "source-json-pma"));
+    const mesh = readJson(join(out, "source-json-pma", masculineStem + ".mesh.json"));
+    const his = plateUvFootprint(mesh.Data.RootChunk), hisSha256 = sha256(JSON.stringify(his));
+    if (sha256(JSON.stringify(options.masculine.plateUv)) !== hisSha256)
+      throw new MasculinePlateFootprintChangedError("The masculine eye plate's recorded UV footprint differs from the plate itself.");
+    if (JSON.stringify(his.window) !== JSON.stringify(window)) throw Error("The masculine eye plate's texture window differs from the feminine plate's.");
+    masculineSource = { mesh, morph: readJson(join(out, "source-json-pma", masculineStem + ".morphtarget.json")),
+      plateUv: { bounds: his.bounds, window: his.window, transform: uvTransformConstants(his.window), footprintSha256: hisSha256 } };
+  }
+
+  // 2. Compile each preset's route maps in-process, yielding between presets so a cancel is seen.
+  const baked = join(out, "baked");
+  const { records } = await bakeCollection(options.collection, baked, { window, region: options.region, masculine: !!masculineSource }, async () => {
+    await new Promise(done => setImmediate(done));
+    checkCancelled(options.signal);
+  });
+  writeFileSync(join(out, "logs", "bake.log"),
+    `Compiled ${records.length} authored presets; ${records.reduce((n, r) => n + r.maps.length, 0)} map inputs. No installation.\n`, "utf8");
+  steps.push({ name: "bake", exitCode: 0 });
+  log("bake complete");
+  // The build record keeps the plan exactly as written to plan.json.
+  const plan: CollectionPlan = readJson(join(baked, "plan.json"));
+  const compiled: BakedRecord[] = readJson(join(baked, "compiled.json"));
+  assertBrandedPlan(plan);
+  // Nothing of this feature may be in the staging tree yet (another feature writing its paths is a conflict).
+  const planned = expectedPaths(plan);
+  for (const path of planned) if (existsSync(join(archive, ...path.split("/")))) throw Error(`Staging tree already holds ${path}.`);
+  const modelDir = join(archive, ...dirname(plan.mesh).split("/"));
+  const appDir = join(archive, ...dirname(plan.app).split("/"));
+  const textureDir = join(archive, ...plan.depot.split("/"), "textures");
+  for (const path of [modelDir, appDir, textureDir]) mkdirSync(path, { recursive: true });
+
+  // 3. Full mip chains for each route, written as the DDS inputs WolvenKit imports without regenerating mips.
+  const groupsUsed = new Set<string>();
+  plan.presets.forEach((preset, i) => {
+    const record = compiled[i];
+    if (record.id !== preset.id || record.route !== preset.route) throw Error(`Compiled record ${i} does not match preset ${preset.id}`);
+    if (record.uvSpace !== preset.uvSpace) throw Error(`Compiled record ${i} is on ${record.uvSpace} UV, planned ${preset.uvSpace}`);
+    const raw = {} as Partial<Record<TextureChannel, Uint8Array>>;
+    for (const map of record.maps) {
+      const data = new Uint8Array(readFileSync(join(baked, map.file)));
+      if (sha256(data) !== map.sha256) throw Error(`Baked ${map.channel} map changed after compiling: ${map.file}`);
+      raw[map.channel] = data;
+    }
+    const chains: Partial<Record<TextureChannel, readonly Uint8Array[]>> = {};
+    if (record.route === "glitter") {
+      // Nested chains are drawn per level by the compiler (glitter-route.ts), not reduced here.
+      for (const map of record.maps)
+        chains[map.channel] = chainLevels(raw[map.channel]!, map.width, map.height, map.levels!, TEXEL_BYTES[map.channel]);
+      chains.normal = chains.normal!.map(normalRgba);
+    } else if (record.route === "fresnel") {
+      chains.mask = maskMipChain(raw.mask!, record.width, record.height);
+      chains.gradient = uniformMipChain(raw.gradient!, record.maps.find(m => m.channel === "gradient")!.width);
+    } else if (record.route === "faceted") {
+      const chain = facetedMipChain(raw.diffuse!, raw.roughness!, raw.metalness!, raw.normal!, record.width, record.height);
+      Object.assign(chains, { diffuse: chain.diffuse, roughness: chain.roughness, metalness: chain.metalness, normal: chain.normal.map(normalRgba) });
+    } else Object.assign(chains, flatMipChain(raw.diffuse!, raw.roughness!, raw.metalness!, record.width, record.height));
+    for (const map of record.maps) {
+      const group = CHANNEL_GROUP[map.channel];
+      const format = group === "dds-colour" ? "rgba8-srgb" : group === "dds-normal" ? "rgba8-unorm" : "r8";
+      writeFileSync(join(out, "input", group, `${preset.appearance}_${map.channel}.dds`),
+        encodeDds(chains[map.channel]!, { width: map.width, height: map.height }, format));
+      groupsUsed.add(group);
+    }
+  });
+  options.converting?.();
+  // The imports start now and run while the plate and resources are written below (one launch per group: a group's
+  // import settings are process-wide environment values).
+  for (const [group, settings] of TEXTURE_GROUP_SETTINGS)
+    if (groupsUsed.has(group)) start("import-" + group, () => options.tools.importTextures(join(out, "input", group), textureDir, settings));
+  const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
+  const documents = () => {
+    // 4. Lift the plate off the skin like the vanilla face decals (positions only; one chunk per planned lift),
+    //    then rewrite its appearances/materials (window entries carry the UV transform) and the morph's base mesh.
+    const handles = new HandleCounter();
+    const lifted = liftPlate(sourceMesh, readJson(join(out, "source-json", stem + ".morphtarget.json")), plan.plate.liftsMm);
+    writeFileSync(join(out, "logs", "plate-lift.log"), JSON.stringify(lifted.report) + "\n", "utf8");
+    const mesh = rewritePlateMesh(lifted.mesh, plan, handles, plateUv.transform);
+    writeFileSync(join(out, "models-json", plan.mesh.slice(plan.mesh.lastIndexOf("/") + 1) + ".json"), resourceJson(mesh), "utf8");
+    const morph = rewritePlateMorph(lifted.morph, plan);
+    writeFileSync(join(out, "models-json", plan.morph.slice(plan.morph.lastIndexOf("/") + 1) + ".json"), resourceJson(morph), "utf8");
+    // His plate gets the same lift, appearances and materials (one texture set), bound to his own mesh. Its handles are
+    // counted apart, so every feminine resource keeps exactly the bytes a feminine-only build writes.
+    const [, male] = selectorBodies(plan);
+    if (!!male !== !!masculineSource) throw Error("The plan and the prepared plates disagree on the masculine V.");
+    let masculineLift: PlateLiftReport | undefined;
+    const maleHandles = new HandleCounter();
+    if (male && masculineSource) {
+      const hisLift = liftPlate(masculineSource.mesh, masculineSource.morph, plan.plate.liftsMm);
+      masculineLift = hisLift.report;
+      writeFileSync(join(out, "logs", "plate-lift-pma.log"), JSON.stringify(hisLift.report) + "\n", "utf8");
+      const hisMesh = rewritePlateMesh(hisLift.mesh, plan, maleHandles, masculineSource.plateUv.transform);
+      writeFileSync(join(out, "models-json", male.mesh.slice(male.mesh.lastIndexOf("/") + 1) + ".json"), resourceJson(hisMesh), "utf8");
+      writeFileSync(join(out, "models-json", male.morph.slice(male.morph.lastIndexOf("/") + 1) + ".json"),
+        resourceJson(rewritePlateMorph(hisLift.morph, plan, male)), "utf8");
+    }
+
+    // 5. The .app template and the character-customization selector (one of each per body).
+    writeFileSync(join(out, "app-json", fileName(plan.app) + ".json"), resourceJson(appearanceResource(plan, handles)), "utf8");
+    writeFileSync(join(out, "cc-json", fileName(plan.customization) + ".json"), resourceJson(customizationResource(plan, handles)), "utf8");
+    if (male) {
+      writeFileSync(join(out, "app-json", fileName(male.app) + ".json"), resourceJson(appearanceResource(plan, maleHandles, male)), "utf8");
+      writeFileSync(join(out, "cc-json", fileName(male.customization) + ".json"), resourceJson(customizationResource(plan, maleHandles, male)), "utf8");
+    }
+    return { lifted, male, masculineLift };
+  };
+  let written: ReturnType<typeof documents>;
+  try { written = documents(); }
+  catch (error) { await finish().catch(() => {}); throw error; }
+  const { lifted, male, masculineLift } = written;
+  // Every resource document converts in one WolvenKit launch (its output is flat), then moves to its depot folder.
+  const targets = new Map<string, string>([
+    ...[plan.mesh, plan.morph, ...male ? [male.mesh, male.morph] : []].map(path => [fileName(path), modelDir] as const),
+    ...[plan.app, plan.customization, ...male ? [male.app, male.customization] : []].map(path => [fileName(path), appDir] as const)]);
+  const converted = join(out, "resources");
+  start("deserialize-resources", async () => {
+    // Eye makeup's documents are the ones the native writer's eye-makeup oracle proves byte for byte (NATIVE-72).
+    const result = await options.tools.deserialize([join(out, "models-json"), join(out, "app-json"), join(out, "cc-json")], converted,
+      { oracle: EYE_MAKEUP_WRITER_ORACLE });
+    for (const [name, dir] of targets) {
+      if (!isFile(join(converted, name))) throw new PackageToolError("package_tool_failed", `WolvenKit did not convert ${name}.`, result.log);
+      renameSync(join(converted, name), join(dir, name));
+    }
+    return result;
+  });
+  await finish();
+
+  // 6. Pre-pack gate for this feature: its files in the staging tree must be exactly its planned canonical
+  //    resource paths (the export host then requires the whole tree to be the union of every feature's files).
+  checkCancelled(options.signal);
+  const artifacts = inventoryFromFiles(generatedFiles(archive).filter(file => planned.has(file.path)), plan);
+  const plateInputs = [".mesh", ".morphtarget"].map(suffix => join(plate, stem + suffix))
+    .map(path => ({ path, sha256: sha256(readFileSync(path)) }));
+  const masculine: BuildRecord["masculine"] = masculinePlate && masculineStem && masculineSource && masculineLift ? {
+    plateStem: masculineStem, plateLift: masculineLift, plateUv: masculineSource.plateUv,
+    plateInputs: [".mesh", ".morphtarget"].map(suffix => join(masculinePlate, masculineStem + suffix)).map(path => ({ path, sha256: sha256(readFileSync(path)) })),
+  } : undefined;
+  const record: BuildRecord = { plan, compiled, steps, plateStem: stem, plateInputs, plateLift: lifted.report, plateUv, artifacts,
+    ...(masculine ? { masculine } : {}), installed: false, gameRenderingVerified: false };
+  writeFileSync(join(out, "build.json"), JSON.stringify(record) + "\n", "utf8");
+  log(`BUILD ${out}`);
+  return record;
+}

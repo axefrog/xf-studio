@@ -28,7 +28,7 @@ import { facetedMipChain } from "../../projects/xf-studio/authoring/src/engines/
 import { mipDimensions } from "../../projects/xf-studio/authoring/src/engines/layered-makeup/flat-mip-chain";
 import { sinRad, turn } from "../../projects/xf-studio/authoring/src/engines/layered-makeup/shimmer-grain";
 import { components } from "../../projects/xf-studio/authoring/src/features/eye-makeup/verify/glitter-checks";
-import { encodePng } from "../../projects/xf-studio/authoring/src/png";
+import { encodePng } from "../../projects/xf-studio/authoring/src/formats/png";
 
 const here = dirname(fileURLToPath(import.meta.url)), root = join(here, "../..");
 const png = process.argv.includes("--png"), out = join(here, "generated");

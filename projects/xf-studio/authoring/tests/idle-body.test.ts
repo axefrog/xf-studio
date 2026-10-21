@@ -6,14 +6,14 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, wr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as THREE from "three";
-import { EYES_SECTION_ID, faceClipFor, idleCatalogue, previewIdles, restJoints, rigAncestry, type GraphIdle, type IdleState } from "../src/idle-body";
+import { EYES_SECTION_ID, faceClipFor, idleCatalogue, previewIdles, restJoints, rigAncestry, type GraphIdle, type IdleState } from "../src/animation/idle-body";
 import { clipTimes, MAX_BAKE_FRAMES, MAX_BAKE_SECONDS } from "../src/engines/facial-rig/bake";
 import { compileFacialRig, ENVELOPE_NAMES, FacialSetupError } from "../src/engines/facial-rig/solver";
-import type { FaceSource } from "../src/facial-host";
+import type { FaceSource } from "../src/animation/host/facial-host";
 import { FACE_MOTION_SCHEMA } from "../src/platform/api/facial";
-import { IDLE_CACHE_KEYS, IDLE_HOST_VERSION, IdleHost, IdleSetupError, pruneIdleCache } from "../src/idle-host";
-import { createIdleHandler } from "../src/idle-server";
-import type { IdleEntry } from "../src/idle-catalogue";
+import { IDLE_CACHE_KEYS, IDLE_HOST_VERSION, IdleHost, IdleSetupError, pruneIdleCache } from "../src/animation/host/idle-host";
+import { createIdleHandler } from "../src/animation/host/idle-server";
+import type { IdleEntry } from "../src/animation/idle-catalogue";
 import { loadIdleSource, restSkeleton } from "../src/platform/scene/idle-source";
 
 const name = (value: string) => ({ $type: "CName", $storage: "string", $value: value });

@@ -15,7 +15,7 @@ Protocol (UTF-8 JSON, one object per line):
   ``{"id": int, "error": text}``. A request with ``"outputs": true`` also gets ``"o"``: base64 float32 [frames * m], the solve's
   processed track buffer (wrinkle outputs included), for the in-app solver's parity harness (tests/facial-solver-oracle.test.ts).
 
-The host (src/facial-host.ts) owns everything else: which rig and setup, the track values, latest-wins scheduling and axes.
+The host (src/animation/host/facial-host.ts) owns everything else: which rig and setup, the track values, latest-wins scheduling and axes.
 
     python projects/xf-studio/authoring/tools/facial_solver_server.py --addon <IO Suite checkout> --rig <rig.json> --setup <setup.json>
 """

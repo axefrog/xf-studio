@@ -25,14 +25,14 @@ const sorted = (names: Iterable<string>) => [...new Set(names)].sort();
  * one light rig and one subject; the design splits it into scene, view and graph runtimes behind the scene port. Phase 3 empties this
  * list except for the browser viewport device, which becomes the graph renderer's device.
  */
-const SCENE_HOST_IMPORTERS = ["browser-character-detail-device", "browser-scene-preview-ports", "browser-viewport-device", "surface-editor"];
+const SCENE_HOST_IMPORTERS = ["character/browser/browser-character-detail-device", "preview/browser/browser-scene-preview-ports", "preview/browser/browser-viewport-device", "legacy/eye-makeup/browser/surface-editor"];
 
 /**
  * Modules that spell a fixed viewport-kind union (`"head" | "uv"`, `"uv" | "surface"`). Phase 1 keyed the attachment, the editor
  * adapter, the gesture sources and the adapter messages by view and host IDs; what is left are the binding scopes (a view kind
  * `view3d` scope and module-registered flat views, P6) and the head panel's key description.
  */
-const FIXED_VIEWPORT_KINDS = ["input-bindings"];
+const FIXED_VIEWPORT_KINDS = ["app/input-bindings"];
 const VIEWPORT_KIND_UNION = /"head"\s*\|\s*"uv"|"uv"\s*\|\s*"surface"|"surface"\s*\|\s*"uv"/;
 
 /**
@@ -94,10 +94,10 @@ const ownerViolations = (sources: Record<string, string>) => Object.entries(sour
 
 test("rule 5: only the view graph service stores camera, light, display and tool state (P1)", () => {
   expect(ownerViolations(Object.fromEntries(modules().map(name => [name, text(name)])))).toEqual([]);
-  expect(ownerViolations({ "preview-actions": `class P { run() { this.state.lightingPreset = "creator"; } }`,
-    "other": `class Q { read() { return this.state.exposure === 1; } }` })).toEqual(["preview-actions"]);
+  expect(ownerViolations({ "preview/preview-actions": `class P { run() { this.state.lightingPreset = "creator"; } }`,
+    "other": `class Q { read() { return this.state.exposure === 1; } }` })).toEqual(["preview/preview-actions"]);
   // The graph service is the owner, and preview actions read it.
-  expect(text("preview-actions")).toMatch(/private readonly graph: ViewGraph/);
+  expect(text("preview/preview-actions")).toMatch(/private readonly graph: ViewGraph/);
 });
 
 /**
@@ -120,14 +120,14 @@ test("rule 3: studio-ui names no module's view tool (P2)", () => {
  */
 const READS_MODULE_VISIBILITY = /\b(?:[pP]references|uiPreferences)\b(?:\(\))?(?:\.snapshot\(\))?\??\.modules\b/;
 const visibilityReaders = (sources: Record<string, string>) => Object.entries(sources)
-  .filter(([name, source]) => !name.startsWith("studio-ui/") && !/^features\/[^/]+\/view\//.test(name) && name !== "ui-preferences")
+  .filter(([name, source]) => !name.startsWith("studio-ui/") && !/^features\/[^/]+\/view\//.test(name) && name !== "app/ui-preferences")
   .filter(([, source]) => READS_MODULE_VISIBILITY.test(codeOnly(source))).map(([name]) => name);
 
 test("rule 6: no application, platform or feature module reads the modules preference (P2)", () => {
   expect(visibilityReaders(Object.fromEntries(modules().map(name => [name, text(name)])))).toEqual([]);
-  expect(visibilityReaders({ "studio-application": `const shown = this.preferences.snapshot().modules;`,
+  expect(visibilityReaders({ "app/studio-application": `const shown = this.preferences.snapshot().modules;`,
     "platform/core/view-tools": `if (workspace.uiPreferences.modules?.["eye-makeup"]) return;`,
-    "studio-ui/app": `const chosen = port.preferences.snapshot().modules ?? {};` })).toEqual(["studio-application", "platform/core/view-tools"]);
+    "studio-ui/app": `const chosen = port.preferences.snapshot().modules ?? {};` })).toEqual(["app/studio-application", "platform/core/view-tools"]);
 });
 
 /** Rule 7 (from P2): the module registry's IDs are pinned (a golden snapshot), beside its completeness check (view-modules.test.ts). */

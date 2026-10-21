@@ -4,7 +4,7 @@
  * `action-limits.ts` and `action-consequences.ts` into the action specs). Captured before the move by
  * `capture-spec-fields-golden.ts`; `tests/spec-fields.test.ts` compares the code with it.
  */
-import type { StudioAction, StudioTarget } from "../../src/studio-application";
+import type { StudioAction, StudioTarget } from "../../src/app/studio-application";
 import { trustedFixture } from "../studio-presentation-fixture";
 
 type Shell = ReturnType<typeof trustedFixture>["shell"];

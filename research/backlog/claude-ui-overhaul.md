@@ -14,7 +14,7 @@ The maintainer has reviewed it only cursorily so far.
 - Audit of the previous UI with dispositions (B-, A-, C- items); isolated `?verify=1` acceptance 24/24; independent code review fixed.
 - Core defects B-1 (draft lost on second open), B-2 (texture rebuild/point reset on layer edits) and B-3 (refusal cleared `busy`) fixed on 25 September: `f552ff6`, `da76361` + `c6b2866`, `6c0e46f`.
 - Audit API gaps and adapter notes closed on 25 September: A-1, A-2 (consequence metadata), A-3, A-5, A-7, A-8, A-9, A-10 (labelled Undo/Redo), A-12, A-13, A-14 (revision part), file-workflow IDs in the registry, B-7, control transaction versus gesture and unowned layer edits. Contracts: [boundary assessment](../authoring/ui-architecture-boundary.md#application-api-additions-25-september).
-- Interim native-menu policy (`src/context-menu.ts`) and target-aware context menus on UV points, head points, background and layer rows ([acceptance](../authoring/ui-overhaul-2026-09-24.md#acceptance--isolated-verify1-disposable-library-throwaway-chrome-profile)).
+- Interim native-menu policy (`src/studio-ui/context-menu.ts`) and target-aware context menus on UV points, head points, background and layer rows ([acceptance](../authoring/ui-overhaul-2026-09-24.md#acceptance--isolated-verify1-disposable-library-throwaway-chrome-profile)).
 
 ### Open
 
