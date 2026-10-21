@@ -893,6 +893,16 @@ export class StudioApplication {
     } catch (error) { return { ok: false, ...failure(undefined, error) }; }
   }
   controlCommit(id: string) { this.services.controls.commit(id); this.notify(); }
+  /**
+   * Ends any open pointer gesture or form-control run, committing it as releasing the pointer or finishing the drag would: one Undo
+   * step each, as usual. The workspace lease's release runs it first, so the page's last write holds the edit whole (profiles §2.3).
+   */
+  settleEdits() {
+    if (this.gesture) this.endGesture(this.gesture.source);
+    const control = this.services.controls.snapshot();
+    if (control) this.controlCommit(control.id);
+    if (this.featureControl) this.featureControlCommit(this.featureControl.id);
+  }
   controlCancel(id: string) { this.services.controls.cancel(id); this.notify(); }
   /**
    * A form control's run of edits on a feature bound by the generic handler (a slider drag), as one Undo step (feature-module platform

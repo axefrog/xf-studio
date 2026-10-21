@@ -15,7 +15,7 @@ import { DockView } from "./dock/dock-view";
 import type { PanelId } from "./dock/layout";
 import { defaultDockStateFor, restoreDockPreference, serializeDockState } from "./dock/persist";
 import type { StudioModule } from "../platform/api";
-import { h, isTextInput, setAttr, setText } from "./dom";
+import { h, isTextInput, setAttr, setText, setUnavailable } from "./dom";
 import { Feedback } from "./feedback";
 import { icon, isIconName } from "./icons";
 import { sizeClassFor } from "./layout-defaults";
@@ -214,9 +214,17 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   guidance = mountGuidance(rt, { openHelp });
   const header = shellHeader(rt, theme, view, openHelp, layouts);
   const status = statusBar(rt);
+  const leaseNotice = workspaceNotice(rt);
   const setupCard = previewSetupCard(rt);
   const main = h("main", { class: "workspace", "aria-label": "Workspace panels" }, dock.element);
-  root.replaceChildren(header.element, main, status.element, setupCard.element, setupCard.consent, ...guidance.elements, feedback.toasts, feedback.live, feedback.assertive);
+  // A read-only window: controls marked unavailable never act, whatever kind of control they are (the reason tip answers instead).
+  const refuseUnavailable = (event: Event) => {
+    if (root.dataset.workspace !== "read-only") return;
+    const target = event.target as Element | null, control = target?.closest?.("[aria-disabled='true']");
+    if (control && main.contains(control)) { event.preventDefault(); event.stopPropagation(); }
+  };
+  for (const type of ["click", "dblclick", "pointerdown"]) main.addEventListener(type, refuseUnavailable, true);
+  root.replaceChildren(header.element, leaseNotice.element, main, status.element, setupCard.element, setupCard.consent, ...guidance.elements, feedback.toasts, feedback.live, feedback.assertive);
   root.classList.add("studio-ready");
   dock.render();
   requestAnimationFrame(() => dock.recover());
@@ -302,7 +310,14 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
       if (inView) feedback.record("error", notice.source, notice.message, notice.ref ?? undefined);
       else feedback.toast("error", notice.source, notice.message, [], { ref: notice.ref });
     }
-    header.update(frame); status.update(frame); setupCard.update(frame); dockSetupCard(frame.previewSetup.card.open); guidance.update(frame);
+    // A read-only window opens no prompt that would write settings or data (t-read-only-window): the setup card and the onboarding
+    // offer wait for a window that holds the workspace.
+    const lease = frame.status.lease, readOnly = !!lease && !lease.writable;
+    root.dataset.workspace = readOnly ? "read-only" : "writable";
+    header.update(frame); status.update(frame); leaseNotice.update(frame);
+    if (readOnly) { setupCard.element.hidden = true; dockSetupCard(false); }
+    else { setupCard.update(frame); dockSetupCard(frame.previewSetup.card.open); }
+    guidance.update(frame);
     // A view's tab is titled from the view graph (its name, numbered when there are several) with what it shows as context.
     for (const view of frame.viewTitles) dock.retitle(view.panel, view.title, view.subject);
     // The preview setup asked for the game folder or WolvenKit on a host without its own setup form: Settings › Game.
@@ -317,6 +332,8 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
       if (heavy.has(panel.spec.id) && !heavyOk) continue;
       panel.update(frame);
     }
+    if (readOnly) for (const panel of panels)
+      if (!READ_SAFE_PANELS.has(panel.spec.id) && dock.isVisible(panel.spec.id)) markReadOnly(panel.spec.element, lease!.refusal);
   };
   // Library and Mod package read file-operation capabilities that re-validate the whole
   // draft (~30 ms with long Undo histories). Never repaint them mid-gesture, and otherwise
@@ -529,29 +546,62 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
   };
 }
 
-function statusBar(rt: StudioRuntime) {
-  // A workspace open in another window (style guide t-read-only-window): the line, and Use it here while it is offered.
-  const lease = h("span", { class: "status-item status-lease", role: "status" });
-  const takeOver = button({ label: "Use it here", small: true, className: "status-lease-action", onClick: () => {
+/**
+ * A workspace open in another window (style guide t-read-only-window): one full-width line under the header in the warning tone, with
+ * Use it here while it is offered. Every state has the same height, so a change of state moves nothing.
+ */
+function workspaceNotice(rt: StudioRuntime) {
+  const text = h("span", { class: "workspace-notice-text" });
+  const takeOver = button({ label: "Use it here", small: true, onClick: () => {
     void rt.port.workspace.dispatch({ kind: "workspace.takeOver" }).then(outcome => {
       if (!outcome.ok) rt.feedback.toast("warning", "Workspace", outcome.message, [], { code: outcome.code });
     });
   } });
+  const element = h("div", { class: "state-line warning workspace-notice", role: "status", hidden: true }, text, takeOver);
+  return {
+    element,
+    update(frame: Frame) {
+      const lease = frame.status.lease, shown = !!lease && !lease.writable;
+      element.hidden = !shown;
+      setText(text, shown ? lease!.message : "");
+      text.title = shown ? lease!.message : "";
+      takeOver.hidden = !lease?.canTakeOver;
+    },
+  };
+}
+
+/** Panels whose controls only read or open things (Help, Activity): a read-only window keeps them all (t-read-only-window). */
+const READ_SAFE_PANELS = new Set<string>(["help", "activity"]);
+/** Controls that only change this window's own view (t-read-only-window): kept in a read-only window. */
+const READ_SAFE = ".expander, .help-tip, [role=tab], a[href], input[type='search'], [data-read-safe], [data-read-safe] *";
+const EDITING_CONTROLS = "button, input, select, textarea, [role=slider], [role=radio], [role=option], [role=switch], [role=checkbox]";
+/**
+ * A read-only window's panels (t-read-only-window): every editing control is unavailable with the lease's refusal as its reason,
+ * through the unavailable-command pattern (`setUnavailable`, reason tips). Form fields that edit by themselves are disabled too, so
+ * nothing changes on screen that the application would refuse.
+ */
+function markReadOnly(element: HTMLElement, reason: string) {
+  for (const control of element.querySelectorAll<HTMLElement>(EDITING_CONTROLS)) {
+    if (control.matches(READ_SAFE)) continue;
+    if (control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement) {
+      if (!control.disabled) control.disabled = true;
+      if (control.title !== reason) control.title = reason;
+    } else setUnavailable(control, true, reason);
+  }
+}
+
+function statusBar(rt: StudioRuntime) {
   const workspace = h("span", { class: "status-item" }), activity = h("button", { class: "status-item status-message", type: "button",
     title: "Open the activity log" }), ready = h("span", { class: "status-item ready-badge" }), gesture = h("span", { class: "status-item muted" });
   activity.addEventListener("click", () => rt.dock.reveal("activity"));
-  const element = h("footer", { class: "status-bar", "aria-label": "Status" }, lease, takeOver, workspace, activity, h("span", { class: "grow" }), gesture, ready);
+  const element = h("footer", { class: "status-bar", "aria-label": "Status" }, workspace, activity, h("span", { class: "grow" }), gesture, ready);
   return {
     element,
     update(frame: Frame) {
       // One save status (UI-89): the header's library chip says whether your work is saved; the draft's own autosave shows here
       // only when it has a problem to tell you about.
-      const held = frame.status.lease, readOnly = !!held && held.phase !== "holder";
-      lease.hidden = !readOnly;
-      lease.dataset.tone = held?.phase === "read-only" || held?.phase === "starting" ? "read-only" : "waiting";
-      setText(lease, readOnly ? held!.message : "");
-      lease.title = readOnly ? held!.message : "";
-      takeOver.hidden = !held?.canTakeOver;
+      // A read-only window writes nothing, so it has no autosave problem to tell; the notice under the header says what it is.
+      const readOnly = !!frame.status.lease && !frame.status.lease.writable;
       const save = frame.status.workspace, problem = !readOnly && save.kind !== "saved" && save.kind !== "idle";
       workspace.dataset.tone = save.kind;
       workspace.hidden = !problem;

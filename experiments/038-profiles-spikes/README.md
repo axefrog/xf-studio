@@ -102,6 +102,8 @@ Each window edits one document (a save every 15 ms, or every 1 ms where a write 
 
 What stands in for what: on desktop everything is real but the WebView (a Bun process per page, on the real server and routes). On localhost the host routes, the `BroadcastChannel` and the page code are real; the Web Locks are a model of the standard's exclusive mode, held by the harness as the browser, and `localStorage` is a value it keeps (a window without the lease never wrote it). The real browser path was also run once in headless Chrome (the UI captures below): a second tab opened read-only, and Use it here took the workspace over and restarted as the holder, in light and dark. The process-tree kill that measures the storage commit window (§2.3) is a separate phase 1 gate and not part of this harness.
 
+A release first ends any open pointer gesture or slider drag, committed as one Undo step, before it refuses edits and drains; the authoring unit tests cover that case (`tests/workspace-lease.test.ts`), since it lives in the application, not the transport.
+
 Reproduce: `bun tools/lease-harness.ts <scratch>`, or `bun test tests/lease-harness.test.ts`, under `tools/memory_guard.py --limit 3`.
 
 ## Acknowledgement and rebasing rules (S1, answering Sol's Medium point)

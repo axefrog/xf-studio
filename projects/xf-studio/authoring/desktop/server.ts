@@ -23,6 +23,7 @@ import { EYE_PLATE_RECIPE } from "../src/legacy/eye-makeup/plate/eye-plate-recip
 import { DesktopUpdateService, type NativeUpdater, type UpdateTrust } from "./update-service";
 import { DesktopWorkspaceStore, desktopWorkspaceRequest, desktopWorkspaceStartFresh } from "./workspace-store";
 import { DESKTOP_WORKSPACE, DesktopWorkspaceLeases } from "./workspace-lease-host";
+import { INSTANCE_ROUTE, instanceActivateRequest } from "./single-instance";
 // A composition root: the part registry and document model are built once and injected (CORE-29).
 import { STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
 import { DesktopWorkActivity } from "./work-activity";
@@ -65,6 +66,11 @@ export const desktopToolsRoot = (dataRoot: string) => resolve(dataRoot, "tools")
 const OPEN_LINKS: readonly WolvenKitLink[] = ["wolvenkit-licence", "wolvenkit-release", "runtime-installer", "runtime-page"];
 
 export type DesktopHostOptions = {
+  /**
+   * This process's single-instance claim (`single-instance.ts`): a second launch asks it, with its token, to bring the window forward.
+   * The one route outside the page session.
+   */
+  instance?: { token: string; focus(): void };
   /** Test seams for WolvenKit setup (fixture release, fetch, .NET detection). */
   wolvenKit?: Partial<Omit<WolvenKitSetupOptions, "root" | "configured">>;
   /** Open an official page in the user's browser (Electrobun `Utils.openExternal`). */
@@ -313,6 +319,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       const url = new URL(request.url);
       const origin = `http://127.0.0.1:${server.port}`;
       if (url.origin !== origin) return new Response("Forbidden", { status: 403 });
+      // A second launch of the app hands over to this one (single-instance.ts); it has no page session, only the instance token.
+      if (url.pathname === INSTANCE_ROUTE) return instanceActivateRequest(request, hostOptions.instance?.token, () => hostOptions.instance?.focus());
       const firstVisit = url.pathname === "/" && url.searchParams.get("session") === token;
       const cookie = request.headers.get("Cookie") ?? "";
       if (!firstVisit && !cookie.split("; ").includes(`xfs_session=${token}`))

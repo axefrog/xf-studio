@@ -67,7 +67,7 @@ test("a read-only window refuses, says so, takes over after the grace with the w
   const lease = new WorkspaceLease(script.adapter, { clock: time.clock, graceMs: 1000 });
   expect(lease.refusal()?.reason).toBe(LEASE_MESSAGES.starting);
   await lease.start();
-  expect(lease.snapshot()).toEqual({ phase: "read-only", writable: false, message: LEASE_MESSAGES.readOnly, canTakeOver: true });
+  expect(lease.snapshot()).toEqual({ phase: "read-only", writable: false, message: LEASE_MESSAGES.readOnly, canTakeOver: true, refusal: LEASE_MESSAGES.refused });
   expect(lease.refusal()).toEqual({ available: false, code: "unavailable", reason: LEASE_MESSAGES.refused });
   expect(lease.capability({ kind: "workspace.takeOver" }).available).toBe(true);
   const taking = lease.dispatch({ kind: "workspace.takeOver" });
@@ -238,4 +238,46 @@ test("fence headers round-trip and refuse malformed values", () => {
   expect(parseFence(formatFence({ workspace: "a b/c", generation: 1 }))).toEqual({ workspace: "a b/c", generation: 1 });
   expect(parseFence(null)).toBeNull();
   for (const bad of ["", "1", "x desktop", "1  desktop", "-1 desktop"]) expect(parseFence(bad)).toBe("invalid");
+});
+
+test("a release first ends an open gesture or slider drag (committed, one Undo step each), then refuses edits and drains", async () => {
+  const { createTrustedAuthoringCore } = await import("../src/app/trusted-authoring-core");
+  const { STUDIO_COMPOSITION } = await import("../src/compose/studio-registry");
+  const script = scriptedAdapter(false), order: string[] = [];
+  const lease = new WorkspaceLease(script.adapter, { clock: simulatedClock().clock });
+  await lease.start();
+  const core = createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  const app = core.app, document = core.document;
+  app.attach({ access: lease });
+  lease.onReleaseStart(() => { order.push(`settle:${lease.writable()}`); app.settleEdits(); });
+  lease.onRelease(() => { order.push(`drain:${lease.writable()}`); });
+  const id = document.recipe.layers[0].id, u = document.recipe.layers[0].points[0].u;
+  // A pointer gesture in progress when another window asks for the workspace.
+  expect(app.beginGesture("uv", id)).toBe(true);
+  expect(app.applyGesture("uv", { kind: "point.replace", index: 0, next: { u: u + .002 } })).toBe(true);
+  script.ask();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(order).toEqual(["settle:true", "drain:false"]);
+  expect(app.snapshot().preview?.gesture ?? null).toBeNull();
+  expect(document.recipe.layers[0].points[0].u).toBeCloseTo(u + .002, 9);
+  expect(document.history.state().depth).toBe(1);
+  // Nothing more is accepted once released, and the device's late moves change nothing.
+  expect(app.applyGesture("uv", { kind: "point.replace", index: 0, next: { u: u + .01 } })).toBe(false);
+  expect(app.beginGesture("uv", id)).toBe(false);
+
+  // A slider drag in progress: committed too.
+  const second = scriptedAdapter(false), next = new WorkspaceLease(second.adapter, { clock: simulatedClock().clock });
+  await next.start();
+  const other = createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  other.app.attach({ access: next });
+  next.onReleaseStart(() => other.app.settleEdits());
+  const layer = other.document.recipe.layers[0].id;
+  expect(other.app.controlBegin("opacity", layer)).toBe(true);
+  other.app.controlEdit("opacity", { kind: "layer.setOpacity", layerId: layer, opacity: .42 });
+  second.ask();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(other.app.snapshot().control).toBeUndefined();
+  expect(other.document.recipe.layers[0].opacity).toBe(.42);
+  expect(other.document.history.state().depth).toBe(1);
+  expect(other.app.controlEdit("opacity", { kind: "layer.setOpacity", layerId: layer, opacity: .9 }).ok).toBe(false);
 });

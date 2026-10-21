@@ -76,6 +76,9 @@ test("the library chip distinguishes unsaved, saved, newer-elsewhere and busy st
   const frame = (library: object, persistence?: object) => ({ library, persistence }) as unknown as Frame;
   const draft = { id: "c", name: "C", revision: 3, presets: [] };
   expect(libraryState(frame({ summaries: [] })).label).toBe("Loading library…");
+  // A read-only window (another one holds the workspace) makes no claim about saving.
+  expect(libraryState({ library: { summaries: [], draft: { ...draft, revision: undefined } }, status: { lease: { phase: "read-only", writable: false,
+    message: "This workspace is open in another window.", canTakeOver: true, refusal: "" } } } as unknown as Frame)).toMatchObject({ label: "Read-only", tone: "neutral" });
   expect(libraryState(frame({ summaries: [], draft: { ...draft, revision: undefined } })).label).toBe("Not saved yet");
   expect(libraryState(frame({ summaries: [{ id: "c", revision: 5 }], draft })).label).toBe("Newer version saved");
   expect(libraryState(frame({ busy: true, progress: { phase: "working", message: "Saving" }, summaries: [], draft })).label).toBe("Working…");

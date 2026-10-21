@@ -58,6 +58,8 @@ export type WorkspaceLeaseSnapshot = {
   readonly message: string;
   /** Whether Use it here is offered (read-only, before a takeover starts). */
   readonly canTakeOver: boolean;
+  /** The reason every refused control shows while this page doesn't hold the workspace; empty while it does. */
+  readonly refusal: string;
 };
 
 export const INITIAL_LEASE: LeaseState = { phase: "starting", generation: null };
@@ -79,7 +81,8 @@ export function leaseSnapshot(state: LeaseState): WorkspaceLeaseSnapshot {
   const message = state.phase === "read-only" ? LEASE_MESSAGES.readOnly : state.phase === "taking-over" ? LEASE_MESSAGES.takingOver
     : state.phase === "waiting" ? LEASE_MESSAGES.waiting : state.phase === "releasing" ? LEASE_MESSAGES.releasing
     : state.phase === "starting" ? LEASE_MESSAGES.starting : "";
-  return { phase: state.phase, writable: state.phase === "holder", message, canTakeOver: state.phase === "read-only" };
+  const refusal = state.phase === "holder" ? "" : state.phase === "starting" ? LEASE_MESSAGES.starting : LEASE_MESSAGES.refused;
+  return { phase: state.phase, writable: state.phase === "holder", message, canTakeOver: state.phase === "read-only", refusal };
 }
 
 /** The mechanics one host supplies. Every call settles; none steals the lease. */
@@ -105,6 +108,7 @@ export class WorkspaceLease {
   private state: LeaseState = INITIAL_LEASE;
   private listeners = new Set<() => void>();
   private steps: (() => Promise<void> | void)[] = [];
+  private settles: (() => void)[] = [];
   private takeoverRun: AbortController | null = null;
   private releasing: Promise<void> | null = null;
   constructor(private readonly adapter: WorkspaceLeaseAdapter, private readonly options: {
@@ -126,13 +130,18 @@ export class WorkspaceLease {
   draining() { return this.state.phase === "holder" || this.state.phase === "releasing"; }
   /** The refusal every dispatch gets while this page doesn't hold the workspace; undefined while it does. */
   refusal(): (Capability & { available: false }) | undefined {
-    return this.state.phase === "holder" ? undefined : refusal("unavailable", this.state.phase === "starting" ? LEASE_MESSAGES.starting : LEASE_MESSAGES.refused);
+    return this.state.phase === "holder" ? undefined : refusal("unavailable", this.snapshot().refusal);
   }
   /**
    * The steps a release runs, in order, once edits are refused: drain pending document saves, stop timers and callbacks, write
    * the workspace a last time. Each is awaited.
    */
   onRelease(step: () => Promise<void> | void) { this.steps.push(step); }
+  /**
+   * What a release does first, before it stops accepting edits: end any open gesture or form-control run under its own transaction
+   * rules (committed as a pointer release or a finished drag would), so the last workspace write holds it whole.
+   */
+  onReleaseStart(settle: () => void) { this.settles.push(settle); }
 
   private apply(event: LeaseEvent) {
     const next = leaseTransition(this.state, event);
@@ -198,6 +207,8 @@ export class WorkspaceLease {
    */
   release(): Promise<void> {
     if (this.releasing) return this.releasing;
+    if (this.state.phase !== "holder") return Promise.resolve();
+    for (const settle of this.settles) { try { settle(); } catch (error) { this.options.report?.(error); } }
     if (!this.apply({ kind: "release-requested" })) return Promise.resolve();
     this.releasing = (async () => {
       for (const step of this.steps) {

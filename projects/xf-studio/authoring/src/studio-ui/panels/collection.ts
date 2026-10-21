@@ -42,6 +42,9 @@ const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ?
 /** Library facts derived only from the draft summary and saved list; nothing is guessed. */
 export function libraryState(frame: Frame) {
   const library = frame.library, draft = library.draft;
+  // A read-only window (another one holds the workspace) saves nothing, so it makes no claim about saving (t-read-only-window).
+  const lease = frame.status?.lease;
+  if (lease && !lease.writable) return { tone: "neutral" as const, label: "Read-only", detail: lease.message };
   if (!draft) return { tone: "neutral" as const, label: "Loading library…", detail: "" };
   const stored = library.summaries.find(item => item.id === draft.id);
   if (library.busy && library.progress?.phase === "working") return { tone: "info" as const, label: "Working…", detail: library.progress.message };

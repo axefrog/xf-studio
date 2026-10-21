@@ -237,6 +237,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   if (lease) {
     // Releasing to another window: after the pending document saves drain (a step the host registered first), the workspace is
     // written a last time and its timers stop (§2.3 release steps 3 to 5).
+    lease.onReleaseStart(() => core.app.settleEdits());
     lease.onRelease(() => session.retire());
     lease.subscribe(() => {
       statusSource.changed();

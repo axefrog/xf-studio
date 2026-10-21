@@ -298,6 +298,8 @@ const initialSetup = setupAction({ kind: "setup.refresh" });
 void initialSetup.then(() => {
   // A fresh install gets the plain-language welcome; damaged settings open Settings, which
   // offers to restore them. Everyone else reaches Settings from the header's Settings button or About.
+  // A read-only page (another one holds the workspace) opens no prompt that would write settings (style guide t-read-only-window).
+  if (!lease.writable()) return;
   if (setupView?.source === "new") welcome.showModal();
   else if (setupView?.source === "backup") openGameSetup();
 }).catch(() => { aboutReadiness.textContent = "Your settings couldn't be loaded. Check still works; restart XF Studio to try again."; });
