@@ -1,7 +1,7 @@
 // The diagnostics cleanup (code-health DIAG-01..04, 06..09, 12): what a saved report may hold, redaction of names the shared
 // patterns can't see the end of, a log that never throws, a V's resolution that survives its size, and the page's forwards.
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { inflateRawSync } from "node:zlib";
@@ -276,6 +276,27 @@ describe("a saved report holds only what was ticked (DIAG-01, DIAG-06, DIAG-08, 
     expect((await refused.json()).code).toBe("sharing_not_confirmed");
     const confirmed = await post("bundle", { id: manifest.id, include: [offer.id], sharingConfirmed: true });
     expect([...unzip(new Uint8Array(await confirmed.arrayBuffer())).keys()]).toContain("optional/mod-files/Private Mod Name/private.archive");
+  });
+
+  test("a mod's file changed after the review is refused, never packaged as reviewed (DIAG-06)", async () => {
+    const file = join(mo2, "mods", "Private Mod Name", "archive", "pc", "mod", "private.archive"), reviewed = statSync(file);
+    const { manifest } = await prepare();
+    const offer = manifest.items.find(item => item.modFiles)!;
+    const save = async () => { const response = await post("bundle", { id: manifest.id, include: [offer.id], sharingConfirmed: true });
+      return { status: response.status, code: response.status === 200 ? null : (await response.json()).code }; };
+    try {
+      // Replaced by a larger file: past the size the review showed (and the limits it was offered under).
+      writeFileSync(file, "x".repeat(6 * 1024 * 1024));
+      expect(await save()).toEqual({ status: 409, code: "file_changed" });
+      // The same size and time, other bytes: the SHA-256 the review showed tells them apart.
+      writeFileSync(file, "PRIVATE BYTES");
+      utimesSync(file, reviewed.atime, reviewed.mtime);
+      expect(await save()).toEqual({ status: 409, code: "file_changed" });
+      // The bytes reviewed are saved.
+      writeFileSync(file, "private bytes");
+      utimesSync(file, reviewed.atime, reviewed.mtime);
+      expect(await save()).toEqual({ status: 200, code: null });
+    } finally { writeFileSync(file, "private bytes"); }
   });
 
   test("configured folders are redacted in page items, page facts, the description, the issue link, the log and the window (DIAG-06)", async () => {

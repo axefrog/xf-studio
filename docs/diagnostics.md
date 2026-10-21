@@ -95,7 +95,7 @@ A mod with a Nexus Mods mod ID and file ID is **re-downloadable**: the identical
 
 > Reports you attach on GitHub are public, and most mods' permissions don't allow re-uploading their files. Only include files of mods you made yourself, or whose permissions allow sharing them.
 
-Until that confirmation is turned on, the files can't be included, and turning it off removes them again. The host checks it too: a save that includes mod files without the confirmation is refused. The files' names in the ZIP (`optional/mod-files/<mod>/<archive>`) are redacted like every other part. For mods that can't be shared, the resource extracts and the decision trace are the fallback, and they are usually enough.
+Until that confirmation is turned on, the files can't be included, and turning it off removes them again. The host checks it too: a save that includes mod files without the confirmation is refused. The files' names in the ZIP (`optional/mod-files/<mod>/<archive>`) are redacted like every other part. Saving reads exactly the files the review showed: each must still have the size and modification time it had when the report was prepared (and its SHA-256, when the review showed one), and is never read past that size; a file changed since is refused with a request to prepare the report again. For mods that can't be shared, the resource extracts and the decision trace are the fallback, and they are usually enough.
 
 ## Privacy
 

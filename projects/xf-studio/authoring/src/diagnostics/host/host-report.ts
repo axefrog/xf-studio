@@ -215,12 +215,18 @@ function modList(settings: LocalSettings | null) {
   return { route: settings.launchRoute, game, manual, mo2 };
 }
 
+/** A mod's file as a report's review showed it. */
+export type ReviewedFile = { name: string; path: string; mod: string; bytes: number; modified: string | null; sha256: string | null };
+
 export type PreparedHostReport = {
   manifest: ReportManifest;
   /** Each JSON item's text as the report file will hold it (redacted). */
   contents: Map<string, string>;
-  /** Each mod-file item's archives (private paths; only read when the person ticks the item and saves). */
-  files: Map<string, { name: string; path: string; mod: string }[]>;
+  /**
+   * Each mod-file item's archives (private paths; only read when the person ticks the item and saves), with the identity the review
+   * showed: size, modification time and, when it was computed in time, SHA-256. Saving reads exactly those bytes or refuses (DIAG-06).
+   */
+  files: Map<string, ReviewedFile[]>;
 };
 
 const FULL_RESOURCES_BYTES = 6 * 1024 * 1024;
@@ -350,7 +356,8 @@ export async function buildHostReport(diagnostics: HostDiagnostics, sources: Hos
     const bytes = archives.reduce((sum, archive) => sum + archive.bytes!, 0);
     if (!archives.length || bytes > MOD_FILE_LIMIT) return;
     const id = `mod-file:${index}`;
-    files.set(id, archives.map(archive => ({ name: archive.name, path: archive.path!, mod: mod.name })));
+    files.set(id, archives.map(archive => ({ name: archive.name, path: archive.path!, mod: mod.name, bytes: archive.bytes!,
+      modified: archive.modified, sha256: archive.sha256 })));
     items.push({ id, group: "optional", label: redact(`Files of “${mod.name}”`), modFiles: true, bytes, included: false,
       detail: `${archives.length === 1 ? "Its archive" : `Its ${archives.length} archives`}. XF Studio couldn't tell where this mod came from. ` +
         "Usually the details above are enough; only include its files if you made this mod or its permissions allow sharing.",
