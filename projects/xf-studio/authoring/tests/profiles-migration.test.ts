@@ -13,7 +13,7 @@ import { PANEL_INSTANCE_ID, profileSessionOf } from "../src/app/profiles/profile
 import { ProfilesMigration } from "../src/app/profiles/profiles-migration";
 import { decodedSaveId } from "../src/character/character-document";
 import { STUDIO_PARTS } from "../src/compose/studio-registry";
-import { PACKAGE_PLAN_1 } from "../src/platform/api/export";
+import { type ModPackagePlan, PACKAGE_PLAN_1 } from "../src/platform/api/export";
 import { serializeWorkspace } from "../src/app/workspace/workspace-state";
 import { formatFence, WORKSPACE_FENCE_HEADER } from "../src/platform/api/document-store";
 import { LibraryBackups } from "../src/platform/persistence/backups";
@@ -484,7 +484,7 @@ describe("second review of chunk 1d-i", () => {
     expect(byName.collection).not.toBe(COLLECTION);
     expect(rows(byName.path, "collection-working").find(doc => doc.id === byName.collection)!.value.name).toBe("Fixture looks, renamed elsewhere (from this browser)");
     const planned = realWorkspace();
-    const plan = { schema: PACKAGE_PLAN_1, products: [{ id: COLLECTION, name: "XF Night Eyes", features: [] }] };
+    const plan: ModPackagePlan = { schema: PACKAGE_PLAN_1, products: [{ id: COLLECTION, name: "XF Night Eyes", features: [] }] };
     planned.collections!.collection.packagePlan = plan;
     const byPlan = await second(planned);
     expect(byPlan.collection).not.toBe(COLLECTION);
