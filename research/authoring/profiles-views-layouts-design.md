@@ -191,6 +191,17 @@ flowchart TB
 
 **One sync mechanism (decided 21 October, after the phase 1b reviews).** The outbox is the only way any document's local state reaches the library: looks, characters, profiles and every later kind. A service's in-memory view of a document is its acknowledged value with its outbox entries applied on top. Nothing else may keep a separate queue or reflect committed state into a context by hand. Phase 1b's hand-built character queue showed why: across four review rounds, the context and the document kept drifting apart (`experiments/038-profiles-spikes/1b-handover.md`).
 
+**Built in phase 1c-i.** The outbox, as built and tested:
+
+- **Visible state.** It is computed: the acknowledged baseline with the remaining entries applied. Waiters move with their values. Each entry has a stamp, and repair keeps the newest copy and rewrites anything it changed.
+- **Multi-document entries.** An entry is kept under every document's key. A receipt is forgotten only once every key that holds the entry has been stored without it. An acknowledgement supersedes earlier stored copies of its documents.
+- **Removal markers.** They persist until every stale copy is gone. On desktop, they persist until the host's own copy (`OutboxStorage.durable()`) confirms it. A record that holds only markers is never treated as empty.
+- **Immutable, content-addressed kinds** (`saved-v`). Each is written once by its own create-only command. Commands that name it wait until it is in the library (`requires`). No resolution ever removes it, and an identical write from another window counts as acknowledged.
+- **Desktop protection.** A key is unprotected while its host write is pending. The warning shows only when a write failed or has waited more than 2 s. WebView copies are filed per launch, and a failed WebView write removes the older copy there.
+- **Known limit, fixed in phase 1c-ii.** An app crash while host writes are still pending can produce a false conflict (never an overwrite) against the window's own earlier write. The fix: receipts record the writing workspace and its lease generation, so a replay can recognise later revisions as its own.
+- **Gate.** The model-based specification test (`tests/document-outbox-model.test.ts`) checks the outbox against an independent reference across seeded random runs with kills, restarts, failures and a second window. It runs in CI.
+
+
 **Every mutation goes through the outbox first.** That covers looks, collections, characters, profiles and defaults, so **every unacknowledged durable mutation is recoverable**. The rules are the ones S1 proved ([A1–A7](../../experiments/038-profiles-spikes/README.md#acknowledgement-and-rebasing-rules-s1-answering-sols-medium-point)):
 
 - **An entry** is `{ id, seq, command, writes: { kind, id, base: number | { after: EntryId }, value | tombstone }[], at, state: "queued" | "conflict", current? }`. It is written synchronously before anything is sent.
