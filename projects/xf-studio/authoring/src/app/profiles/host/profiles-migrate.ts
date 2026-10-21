@@ -7,10 +7,12 @@
  * The steps, as S3 proved them (rules M1–M6, experiment 038):
  * 1. **Collections and looks** (M2, M3). Each draft, the current one first, is compared by content (names and parts in order, read
  *    through the part registry, IDs ignored) against its collection's working copy and every fork of it (`origin`). Equal content is
- *    reused; with no working copy the draft becomes it, under its own IDs; otherwise the whole collection forks, "(from this browser)"
+ *    reused only when that loses nothing the draft keeps (each look's Undo history, and its removed looks, restorable there); with no
+ *    working copy, and its identity never used (a deleted collection's is), the draft becomes it under its own IDs; otherwise the whole
+ *    collection forks, "(from this browser)"
  *    (a recovery draft: "(earlier draft)"), with new collection and look IDs. A named version newer than what the working copy (or,
  *    without one, the draft) was saved as comes back first: as the working copy when there is none, else as a fork "(saved in an older
- *    version)" that joins the profile. Nothing existing is overwritten.
+ *    version)" that joins the profile (as one an earlier run brought back does). Nothing existing is overwritten.
  * 2. **The V** (M4): reused when an existing character has exactly its whole state, decoded save by content hash; else created with its
  *    decoded save, as `character.create` makes it.
  * 3. **The profile** (M5): one already holding this V and collection; else none makes "My profile", one is used, several make "From
@@ -30,7 +32,8 @@ import type { LibraryDatabase } from "../../../platform/persistence/library-data
 import { parseSavedV } from "../../../saves/save-reader";
 import { newProfileId, PROFILE_DOCUMENT, PROFILE_SCHEMA, profileDocumentOf } from "../profile-service";
 import { MIGRATION_TOKEN, PROFILES_MIGRATION } from "../profile-session";
-import { contentKey, LAYOUT_DEFAULT_DOCUMENT, LAYOUT_DEFAULT_SCHEMA, LAYOUT_FRAGMENT_SCHEMA, MIGRATION_DOCUMENT, MIGRATION_RESULT_SCHEMA,
+import { canonicalJson } from "../../../platform/api";
+import { contentKey, lookContent, LAYOUT_DEFAULT_DOCUMENT, LAYOUT_DEFAULT_SCHEMA, LAYOUT_FRAGMENT_SCHEMA, MIGRATION_DOCUMENT, MIGRATION_RESULT_SCHEMA,
   MIGRATION_SNAPSHOT_SCHEMA, type MigrationAnswer, type MigrationDraft, type MigrationLook, migrationRecordId, type MigrationRequest, type MigrationResult,
   type MigrationSnapshot, valueKey } from "../profiles-migration-data";
 
@@ -54,6 +57,7 @@ export type MigrateOptions = {
 export class MigrationRequestError extends Error {}
 
 const COLLECTION_ID = /^[0-9a-f-]{36}$/;
+const DIGEST = /^[0-9a-f]{64}$/;
 const LOOK_ID = /^[^/\u0000-\u001f\u007f]{1,100}$/;
 const LIMITS = { drafts: 8, looks: 2_000, layouts: 64 } as const;
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
@@ -76,7 +80,8 @@ function checkDraft(value: unknown): MigrationDraft {
 }
 /** The request, validated (a malformed one throws `MigrationRequestError`). */
 export function checkMigrationRequest(value: unknown): MigrationRequest {
-  if (!object(value) || typeof value.token !== "string" || !MIGRATION_TOKEN.test(value.token)) refuse("That isn't a migration.");
+  if (!object(value) || typeof value.token !== "string" || !MIGRATION_TOKEN.test(value.token) || typeof value.digest !== "string" || !DIGEST.test(value.digest))
+    refuse("That isn't a migration.");
   const s = (value as { snapshot?: unknown }).snapshot;
   if (!object(s) || s.schema !== MIGRATION_SNAPSHOT_SCHEMA || typeof s.workspace !== "string" || !DOCUMENT_ID.test(s.workspace) ||
     !Array.isArray(s.drafts) || s.drafts.length > LIMITS.drafts || !Array.isArray(s.layouts) || s.layouts.length > LIMITS.layouts || !object(s.character))
@@ -103,7 +108,7 @@ export function checkMigrationRequest(value: unknown): MigrationRequest {
   const current = object(snapshot.current) && typeof snapshot.current.id === "string" && Number.isSafeInteger(snapshot.current.revision)
     ? { id: snapshot.current.id, revision: snapshot.current.revision } : undefined;
   const { id: _id, ...doc } = document!;
-  return { token: (value as { token: string }).token, snapshot: { schema: MIGRATION_SNAPSHOT_SCHEMA, workspace: snapshot.workspace, drafts,
+  return { token: (value as { token: string }).token, digest: (value as { digest: string }).digest, snapshot: { schema: MIGRATION_SNAPSHOT_SCHEMA, workspace: snapshot.workspace, drafts,
     ...(typeof snapshot.selected === "string" ? { selected: snapshot.selected } : {}), ...(current ? { current } : {}),
     character: { document: doc, ...(saved ? { saved } : {}) }, layouts } };
 }
@@ -181,20 +186,45 @@ export function migrateProfiles(database: LibraryDatabase, store: DocumentStore,
       };
 
       // 1. Collections and looks (M2, M3).
+      /**
+       * Whether an identity is taken: by a collection or a look of it, live, removed or deleted. A taken identity is never written over (a
+       * deleted collection isn't brought back over what it held); what would have used it is recovered under fresh IDs instead.
+       */
+      const occupied = (id: string) => !!get(COLLECTION_WORKING, id) ||
+        !!db.query("SELECT 1 FROM documents WHERE kind = ? AND substr(id, 1, ?) = ? LIMIT 1").get(LOOK_WORKING, id.length + 1, `${id}/`);
+      const keptKey = (look: { name: string; parts: Readonly<Record<string, unknown>>; memory?: unknown }) =>
+        `${lookContent(parts, look)}|${canonicalJson(look.memory ?? null)}`;
+      /**
+       * Whether reusing `candidate` for `draft` loses nothing the draft keeps: every look's Undo history is the candidate's, and every look the
+       * draft removed (the newest it keeps) is restorable from the candidate with the same content and history. Otherwise the draft forks.
+       */
+      const preserves = (candidate: Row, draft: MigrationDraft) => {
+        const ids = candidate.value.looks as string[];
+        if (draft.looks.some((look, i) => canonicalJson(lookOf(candidate.id, ids[i]!)?.value.memory ?? null) !== canonicalJson(look.memory ?? null))) return false;
+        const removed = new Set((candidate.value.removed as { look: string }[]).flatMap(item => {
+          const look = lookOf(candidate.id, item.look);
+          return look && !isTombstone(look.value) ? [keptKey(look.value as MigrationLook)] : [];
+        }));
+        return draft.removed.slice(Math.max(0, draft.removed.length - REMOVED_LIMIT)).every(look => removed.has(keptKey(look)));
+      };
       const members: string[] = [], recovered: string[] = [];
       const idMap = { collections: {} as Record<string, string>, looks: {} as Record<string, string> };
       let collection = "";
       snap.drafts.forEach((draft, index) => {
         const main = index === 0;
-        const family = list(COLLECTION_WORKING).filter(doc => doc.id === draft.id || doc.value.origin === draft.id);
-        const byContent = new Map(family.map(doc => [contentOf(doc), doc]));
-        let working = family.find(doc => doc.id === draft.id) ?? null;
+        const familyOf = () => list(COLLECTION_WORKING).filter(doc => doc.id === draft.id || doc.value.origin === draft.id).map(doc => ({ doc, content: contentOf(doc) }));
+        let family = familyOf();
+        let working = family.find(item => item.doc.id === draft.id)?.doc ?? null;
         const opened = main && snap.current?.id === draft.id ? snap.current.revision : draft.revision ?? 0;
         const base = working ? (working.value.saved?.revision as number | undefined) ?? 0 : opened;
         const named = newestNamed(draft.id);
-        if (named && named.revision > base && !byContent.has(contentKey(parts, named.looks))) {
+        if (named && named.revision > base) {
           const plan = named.packagePlan !== undefined ? { packagePlan: named.packagePlan } : {};
-          if (!working) {
+          const content = contentKey(parts, named.looks), held = family.find(item => item.content === content)?.doc;
+          if (held) {
+            // Brought back by an earlier run: a fork of it joins this run's profile too.
+            if (main && held.id !== draft.id) members.push(held.id);
+          } else if (!working && !occupied(draft.id)) {
             create(draft.id, named.name, named.looks, [], { ...plan, saved: { revision: named.revision } }, false);
             made.push("working-from-named");
           } else {
@@ -203,18 +233,18 @@ export function migrateProfiles(database: LibraryDatabase, store: DocumentStore,
             made.push("fork-named");
             if (main) members.push(fork);
           }
-          const doc = list(COLLECTION_WORKING).filter(item => item.id === draft.id || item.value.origin === draft.id);
-          for (const item of doc) byContent.set(contentOf(item), item);
-          working ??= get(COLLECTION_WORKING, draft.id);
+          family = familyOf();
+          working ??= family.find(item => item.doc.id === draft.id)?.doc ?? null;
         }
-        const same = byContent.get(contentKey(parts, draft.looks));
+        const content = contentKey(parts, draft.looks);
+        const same = family.find(item => item.content === content && preserves(item.doc, draft))?.doc;
         let id: string, map: Record<string, string>;
         const plan = draft.packagePlan !== undefined ? { packagePlan: draft.packagePlan } : {};
         if (same) {
           id = same.id;
           map = Object.fromEntries(draft.looks.map((look, i) => [look.id, (same.value.looks as string[])[i]!]));
           made.push(main ? "collection-reused" : "recovered-reused");
-        } else if (!working) {
+        } else if (!working && !occupied(draft.id)) {
           id = draft.id;
           map = create(id, draft.name, draft.looks, draft.removed, { ...plan, ...(opened > 0 && named ? { saved: { revision: opened } } : {}) }, false);
           made.push(main ? "collection-created" : "recovered-created");
@@ -226,6 +256,8 @@ export function migrateProfiles(database: LibraryDatabase, store: DocumentStore,
         if (main) { collection = id; idMap.collections[draft.id] = id; Object.assign(idMap.looks, map); members.unshift(id); }
         else recovered.push(id);
       });
+      const unique = [...new Set(members)];
+      members.splice(0, members.length, ...unique);
       point("m-collections");
 
       // 2. The V (M4): its whole state, the decoded save by its content hash.
@@ -260,7 +292,7 @@ export function migrateProfiles(database: LibraryDatabase, store: DocumentStore,
       }
       const held = profile.value;
       const subjects = held.subjects.some(subject => subject.kind === "character" && subject.id === characterId) ? held.subjects : [...held.subjects, { kind: "character", id: characterId }];
-      const added = members.filter(id => !held.collections.includes(id));
+      const added = [...new Set(members)].filter(id => !held.collections.includes(id));
       // Written over the stored value (unknown fields and subjects of unknown kinds kept), only when membership changes.
       if (subjects !== held.subjects || added.length)
         put(PROFILE_DOCUMENT, profile.row.id, { ...profile.row.value, subjects, collections: [...held.collections, ...added] });
@@ -282,7 +314,7 @@ export function migrateProfiles(database: LibraryDatabase, store: DocumentStore,
       point("m-defaults");
 
       // 5. The record (M1).
-      const result: MigrationResult = { schema: MIGRATION_RESULT_SCHEMA, token: request.token, at, profile: profile.row.id, character: characterId,
+      const result: MigrationResult = { schema: MIGRATION_RESULT_SCHEMA, token: request.token, digest: request.digest, at, profile: profile.row.id, character: characterId,
         collection, members, recovered, defaults, idMap, made, ...(copy ? { backup: basename(copy) } : {}) };
       put(MIGRATION_DOCUMENT, migrationRecordId(request.token), result);
       point("m-record");

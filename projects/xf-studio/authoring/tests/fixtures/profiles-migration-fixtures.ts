@@ -15,6 +15,8 @@ import { defaultViewGraph, lightsNodeState } from "../../src/preview/preview-vie
 import type { SavedV } from "../../src/saves/save-reader";
 import { serializeWorkspace, type WorkspaceState } from "../../src/app/workspace/workspace-state";
 import type { DockLayout } from "../../src/app/ui-preferences";
+import { closePanel, type DockTree, group, parkPanels, split } from "../../src/studio-ui/dock/layout";
+import { serializeDockState } from "../../src/studio-ui/dock/persist";
 import { alpha2Open, alpha2Writes } from "./alpha-0.1.0-alpha.2/library-ddl";
 import { initialRecipe } from "./eye-region";
 import { restore } from "./workspace-observable";
@@ -35,20 +37,24 @@ export function fixtureSave(): SavedV {
       decompressedBytes: 1000 } } as SavedV;
 }
 
-const dockTree = (groups: { id: string; panels: string[]; active: string }[], closed: string[], parked: Record<string, unknown> = {}) => ({
-  root: { kind: "split", id: "s-root", axis: "row", sizes: groups.map(() => 1 / groups.length),
-    children: groups.map(group => ({ kind: "group", ...group })) }, floating: [], closed, parked });
-/** The live arrangement: the editing panels left, the main view and a second view right, the Poses panel parked with its place. */
-export const LIVE_DOCK: DockLayout = { format: "xfs/dock", version: 1, state: {
-  wide: dockTree([{ id: "g-1", panels: ["presets", "layers"], active: "layers" }, { id: "g-2", panels: ["head", "view.v2"], active: "head" }], ["character"],
-    { poses: { group: ["presets", "poses"], index: 1, active: false } }),
-  compact: dockTree([{ id: "g-3", panels: ["head", "presets", "layers", "view.v2"], active: "head" }], ["character"]) } as never };
-const EDITING_DOCK: DockLayout = { format: "xfs/dock", version: 1, state: {
-  wide: dockTree([{ id: "g-1", panels: ["presets", "layers"], active: "presets" }, { id: "g-2", panels: ["head"], active: "head" }], []),
-  compact: dockTree([{ id: "g-3", panels: ["head", "presets", "layers"], active: "head" }], []) } as never };
-const PREVIEW_DOCK: DockLayout = { format: "xfs/dock", version: 1, state: {
-  wide: dockTree([{ id: "g-1", panels: ["head", "view.v2"], active: "view.v2" }], ["presets", "layers"]),
-  compact: dockTree([{ id: "g-2", panels: ["head"], active: "head" }], ["presets", "layers", "view.v2"]) } as never };
+/** A tree built with the real dock engine: groups side by side, then `close`d panels (each remembering its place) and `park`ed ones. */
+function engineTree(groups: { panels: string[]; active: string }[], close: string[] = [], park: string[] = []): DockTree {
+  let tree: DockTree = { root: split("row", groups.map(item => group(item.panels, item.active))), floating: [], closed: [] };
+  for (const panel of close) tree = closePanel(tree, panel);
+  return park.length ? parkPanels(tree, park) : tree;
+}
+const engineDock = (wide: DockTree, compact: DockTree): DockLayout => serializeDockState({ wide, compact });
+/**
+ * The live arrangement, made by the real dock engine: the editing panels left, the main view and a second view right; the Character
+ * panel closed (its last place remembered), the Poses panel parked with its module (its place kept).
+ */
+export const LIVE_DOCK: DockLayout = engineDock(
+  engineTree([{ panels: ["presets", "poses", "layers"], active: "layers" }, { panels: ["head", "character", "view.v2"], active: "head" }], ["character"], ["poses"]),
+  engineTree([{ panels: ["head", "presets", "layers", "character", "view.v2"], active: "head" }], ["character"]));
+const EDITING_DOCK: DockLayout = engineDock(engineTree([{ panels: ["presets", "layers"], active: "presets" }, { panels: ["head"], active: "head" }]),
+  engineTree([{ panels: ["head", "presets", "layers"], active: "head" }]));
+const PREVIEW_DOCK: DockLayout = engineDock(engineTree([{ panels: ["presets", "layers", "head", "view.v2"], active: "view.v2" }], ["presets", "layers"]),
+  engineTree([{ panels: ["presets", "layers", "view.v2", "head"], active: "head" }], ["presets", "layers", "view.v2"]));
 
 /** The person's own lighting setup ("Warm key", from Soft studio), shown. */
 export const OWN_SETUPS: SetupLibrary = { setup: "u1", setups: [{ id: "u1", name: "Warm key", base: "soft",

@@ -224,7 +224,7 @@ Results after the second review's fixes (22 October 2026): S1 on both hosts **PA
 
 ## The migration in production (phase 1, chunk 1d-i)
 
-Product code: the library transaction and its route `/api/profiles/migrate` (`src/app/profiles/host/profiles-migrate.ts`), the workspace side (`src/app/profiles/profiles-migration.ts`, started by `startProfilesMigration` in `src/app/browser/profiles-migration-device.ts`), the snapshot, comparison and session data (`src/app/profiles/profiles-migration-data.ts`, `src/app/profiles/profile-session.ts`). The Studio runs it in the background two seconds after start, in the window holding the workspace; nothing reads its result until chunk 1d-ii moves the Studio onto the profile services.
+Product code: the library transaction and its route `/api/profiles/migrate` (`src/app/profiles/host/profiles-migrate.ts`), the workspace side (`src/app/profiles/profiles-migration.ts`, started by `startProfilesMigration` in `src/app/browser/profiles-migration-device.ts`), the snapshot, comparison and session data (`src/app/profiles/profiles-migration-data.ts`, `src/app/profiles/profile-session.ts`). The Studio's start trigger (two seconds after start, in the window holding the workspace) is off (`PROFILES_MIGRATION_ENABLED`) until chunk 1d-ii's switch-over turns it on with the move onto the profile services: until then the legacy fields stay the Studio's own and keep changing, so documents migrated earlier would go stale. Phase 1 reaches `main` as a whole.
 
 - **The record is the host's own.** `migration` joins the host-only kinds, so no page command can write or forge a record.
 - **The pre-migration copy** (`LibraryBackups.beforeMigration("profiles-1")`) is taken inside the transaction, before the library's first `profiles-1` run changes anything, and discarded if that run rolls back. Later runs (another workspace, a re-upgrade) take none.
@@ -244,6 +244,16 @@ Results (22 October 2026), each under `tools/memory_guard.py --limit 4`:
 | Gates | Identical drafts: 1 profile ("My profile": 1 V, 1 collection), 1 character, 1 decoded save, 2 own defaults, both workspaces' scenes on their own look. Divergent drafts (the second browser renamed the look it shows): the draft forks "(from this browser)", both scenes resolve to their own content through the ID map, whichever host commits first. Downgrade and re-upgrade: the edited working copy unchanged, plus forks "(saved in an older version)" and "(from this browser)" in the one profile, 1 V; a second round trip adds only its record. |
 
 A mutation check: mapping the scene's look without the ID map fails 9 of the CI harness's 23 tests.
+
+**Review of chunk 1d-i** (five findings, each with a regression test in `tests/profiles-migration.test.ts`, "review of chunk 1d-i"; each test fails with its fix removed):
+
+- **A deleted collection was brought back over (High).** Its tombstone hid it from the comparison, so the draft was written under its original IDs over the deleted collection and its newer looks. A collection identity is now taken whenever any row of it exists, live, removed or deleted, and a draft that would need it is recovered under fresh IDs ("(from this browser)"); no existing row changes.
+- **Reuse dropped recovery data (High).** Equal live looks reused a working copy even when the draft held other removed looks or other Undo histories. Reuse now also requires that every look's history is the working copy's and every removed look the draft keeps is restorable there with the same content and history; otherwise the draft forks, so nothing it holds is lost (a draft with fewer removed looks still reuses).
+- **A resend could pair a newer snapshot with an older result (High).** The request carries the snapshot's digest and the result keeps it. A result made from another snapshot (a lost answer, then edits before the resend), or a workspace changed since its capture, is migrated again under a new token before the workspace is marked done.
+- **A named version brought back earlier didn't join a later run's profile (Medium).** It now joins whether this run made it or found it.
+- **Closed panels' last places kept panel IDs (Medium).** `lastPlace` keys, groups and anchors are rewritten like parked places. The fixtures' dock arrangements are now made by the real dock engine (`closePanel`, `parkPanels`, `serializeDockState`).
+
+After the fixes: CI harness 23 of 23 in about 3 s; `tests/profiles-migration.test.ts` 22 of 22; sweep of 2 rounds **PASS** in 29 s (40 kills, each recovered after one restart), peak 1.3 GB.
 
 Reproduce: `bun test tests/profiles-migration.test.ts tests/profiles-migration-harness.test.ts` (authoring), and `bun tools/s3-migration.ts <scratch> [rounds]` here.
 

@@ -69,10 +69,13 @@ export type MigrationSnapshot = {
   readonly character: MigrationCharacter;
   readonly layouts: readonly MigrationLayout[];
 };
-export type MigrationRequest = { readonly token: string; readonly snapshot: MigrationSnapshot };
+/** `digest`: the snapshot's `snapshotDigest`, kept in the result, so the page knows which snapshot a stored result was made from. */
+export type MigrationRequest = { readonly token: string; readonly digest: string; readonly snapshot: MigrationSnapshot };
 export type MigrationResult = {
   readonly schema: typeof MIGRATION_RESULT_SCHEMA;
   readonly token: string;
+  /** The digest of the snapshot this result was made from (`snapshotDigest`). */
+  readonly digest: string;
   readonly at: number;
   readonly profile: string;
   readonly character: string;
@@ -106,6 +109,8 @@ export function lookContent(parts: PartRegistry, look: { readonly name: string; 
 /** A collection's content key: its looks' contents in order. */
 export const contentKey = (parts: PartRegistry, looks: readonly { readonly name: string; readonly parts: Readonly<Record<string, unknown>> }[]) =>
   sha256Hex(`[${looks.map(look => lookContent(parts, look)).join(",")}]`);
+/** A snapshot's digest: equal for equal snapshots, whatever their key order. */
+export const snapshotDigest = (snapshot: MigrationSnapshot) => sha256Hex(canonicalJson(snapshot));
 /** Hash of a canonical JSON value (dock arrangements, character states). */
 export const valueKey = (value: unknown) => sha256Hex(canonicalJson(value));
 
@@ -167,7 +172,10 @@ export function characterOf(state: Pick<WorkspaceState, "preview" | "savedV">): 
 // ---------------------------------------------------------------------------------------------------------------------
 // Docks: panel IDs, view panels, fragments
 
-/** The panel IDs a dock arrangement names, in both size classes (groups, active tabs, closed and parked panels, anchors). */
+/**
+ * The panel IDs a dock arrangement names, in both size classes: groups and their active tabs, floating windows, closed panels, parked
+ * panels and closed panels' last places (keys, groups and anchors).
+ */
 export function dockPanels(dock: DockLayout | undefined | null): string[] {
   const found = new Set<string>();
   rewriteDock(dock, id => { found.add(id); return id; });
@@ -195,8 +203,12 @@ export function rewriteDock(dock: DockLayout | undefined | null, rename: (id: st
     return { ...v, root: node(v.root, 0),
       ...(Array.isArray(v.floating) ? { floating: v.floating.map(window => window && typeof window === "object" ? { ...window, node: node((window as Record<string, unknown>).node, 0) } : window) } : {}),
       ...(Array.isArray(v.closed) ? { closed: v.closed.map(id) } : {}),
-      ...(v.parked && typeof v.parked === "object" && !Array.isArray(v.parked)
-        ? { parked: Object.fromEntries(Object.entries(v.parked).map(([key, item]) => [rename(key), place(item)])) } : {}) };
+      // Parked panels (a hidden module's) and closed panels' last places: keyed by panel, each place naming its group and anchor panels.
+      ...Object.fromEntries((["parked", "lastPlace"] as const).flatMap(key => {
+        const places = v[key];
+        return places && typeof places === "object" && !Array.isArray(places)
+          ? [[key, Object.fromEntries(Object.entries(places).map(([panel, item]) => [rename(panel), place(item)]))]] : [];
+      })) };
   };
   const state = dock.state as Record<string, unknown> | null;
   if (!state || typeof state !== "object" || Array.isArray(state)) return structuredClone(dock);

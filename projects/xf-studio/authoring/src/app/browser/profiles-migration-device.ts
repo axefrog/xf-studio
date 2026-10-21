@@ -25,6 +25,13 @@ export function profilesMigrationTransport(endpoint: string, send: (url: string,
   };
 }
 
+/**
+ * Whether the Studio migrates its workspace at start. Off until the Studio moves onto the profile services (phase 1d-ii's switch-over turns
+ * it on in the same change): until then the legacy fields stay the Studio's own and keep changing, so documents migrated earlier would go
+ * stale. Phase 1 reaches `main` as a whole.
+ */
+export const PROFILES_MIGRATION_ENABLED: boolean = false;
+
 /** How long after the Studio starts the migration begins. */
 export const START_DELAY_MS = 2_000;
 
@@ -47,7 +54,10 @@ export function startProfilesMigration(options: {
   report?: (error: unknown) => void;
   /** How long after the Studio starts it begins (it never competes with the first paint). */
   delayMs?: number;
-}): Promise<ProfilesMigrationOutcome> {
+  /** Tests and the switch-over only: run whatever `PROFILES_MIGRATION_ENABLED` says. */
+  enabled?: boolean;
+}): Promise<ProfilesMigrationOutcome | "disabled"> {
+  if (!(options.enabled ?? PROFILES_MIGRATION_ENABLED)) return Promise.resolve("disabled");
   // A migrated workspace costs nothing at start: its stored mark says so, without capturing the workspace.
   if (migrated(options.marks)) return Promise.resolve("already");
   const migration = new ProfilesMigration({ workspace: options.workspace, model: options.model, state: options.state,

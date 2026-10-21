@@ -5,7 +5,10 @@
  * 1. **Token.** The workspace records `{ id: "profiles-1", token, state: "started" }` in one synchronous write before anything is sent.
  * 2. **The library transaction** (`/api/profiles/migrate`) gets the workspace's snapshot under that token; its record answers a resend,
  *    so a resumed run duplicates nothing. A failed send is retried (the token makes that safe) until the page ends.
- * 3. **Session.** The workspace builds the profile's session from the result and records it with `state: "done"` in one synchronous write.
+ * 3. **Session.** The result is checked against the snapshot it was made from (its digest) and against the workspace now: a result of an
+ *    earlier snapshot (a lost answer, then a resend after edits) or a workspace changed since the capture is migrated again under a new
+ *    token, so nothing edited meanwhile is left out. Then the workspace builds the profile's session from the result and records it with
+ *    `state: "done"` in one synchronous write.
  * 4. **Resume.** A run that ended after the token resends under it (before the commit, the library runs it; after, it answers the
  *    record); one that ended after the answer builds the session again. A `done` workspace does nothing.
  * 5. **Downgrade.** An older build drops `migration` and `profiles` when it saves, so the next run migrates again under a new token.
@@ -16,7 +19,7 @@
 import type { DocumentModel } from "../workspace/collection-workspace";
 import type { WorkspaceState } from "../workspace/workspace-state";
 import { type MigrationMark, PROFILES_MIGRATION, type WorkspaceProfiles } from "./profile-session";
-import { buildProfileSession, type MigrationAnswer, type MigrationRequest, type MigrationSnapshot, migrationSnapshot, workspaceProfiles } from "./profiles-migration-data";
+import { buildProfileSession, type MigrationAnswer, type MigrationRequest, type MigrationSnapshot, migrationSnapshot, snapshotDigest, workspaceProfiles } from "./profiles-migration-data";
 
 /** The workspace-side protocol points (the crash harness's kill points). */
 export const WORKSPACE_POINTS = ["w-token", "w-sent", "w-response", "w-done"] as const;
@@ -50,6 +53,8 @@ const sleep = (ms: number, signal: AbortSignal) => new Promise<void>(resolve => 
   function done() { clearTimeout(timer); signal.removeEventListener("abort", done); resolve(); }
   signal.addEventListener("abort", done, { once: true });
 });
+/** How many runs one page load makes while the workspace keeps changing under it (it tries again at the next load). */
+export const RECONCILE_ROUNDS = 4;
 /** The waits between sends: quick at first, then every 30 s. */
 export const RETRY_MS = [500, 1_000, 2_000, 5_000, 10_000, 30_000] as const;
 
@@ -74,35 +79,48 @@ export class ProfilesMigration {
     // 1. The token, stored before anything is sent; a run that was started resumes under its own (a `done` mark without sessions is an
     // older build's leftover, or sessions this build couldn't read: a new run, which only adds its record when nothing changed).
     let mark = now.migration?.state === "started" ? now.migration : undefined;
-    if (!mark) {
-      mark = { id: PROFILES_MIGRATION, token: (deps.newToken ?? (() => crypto.randomUUID()))(), state: "started" };
-      if (!deps.record({ migration: mark })) return "stopped";
-    }
-    point("w-token");
-    // 2. The library transaction, sent until it answers.
-    let answer: MigrationAnswer | undefined, snapshot: MigrationSnapshot | undefined;
-    for (let attempt = 0; !signal.aborted; attempt++) {
-      try {
-        snapshot = migrationSnapshot(deps.state(), deps.model, deps.workspace);
-        const sent = deps.send({ token: mark.token, snapshot }, signal);
-        point("w-sent");
-        answer = await sent;
-        break;
-      } catch (error) {
-        if (signal.aborted) break;
-        if (attempt === 0) deps.report?.(error);
-        await (deps.wait ?? sleep)(RETRY_MS[Math.min(attempt, RETRY_MS.length - 1)]!, signal);
+    for (let round = 0; ; round++) {
+      if (!mark) {
+        mark = { id: PROFILES_MIGRATION, token: (deps.newToken ?? (() => crypto.randomUUID()))(), state: "started" };
+        if (!deps.record({ migration: mark })) return "stopped";
       }
+      point("w-token");
+      // 2. The library transaction, sent until it answers.
+      let answer: MigrationAnswer | undefined, snapshot: MigrationSnapshot | undefined, digest = "";
+      for (let attempt = 0; !signal.aborted; attempt++) {
+        try {
+          snapshot = migrationSnapshot(deps.state(), deps.model, deps.workspace);
+          digest = snapshotDigest(snapshot);
+          const sent = deps.send({ token: mark.token, digest, snapshot }, signal);
+          point("w-sent");
+          answer = await sent;
+          break;
+        } catch (error) {
+          if (signal.aborted) break;
+          if (attempt === 0) deps.report?.(error);
+          await (deps.wait ?? sleep)(RETRY_MS[Math.min(attempt, RETRY_MS.length - 1)]!, signal);
+        }
+      }
+      if (!answer || !snapshot || signal.aborted) return "stopped";
+      if (!answer.ok) {
+        if (answer.reason === "refused") deps.report?.(Error(answer.message ?? "The library refused the profiles migration."));
+        return "stopped";
+      }
+      point("w-response");
+      // 3. Reconcile: the result must be this snapshot's (a resend under the token is answered from the first commit's record), and the
+      // workspace must not have changed since it was captured. Otherwise what changed is migrated again under a new token (the same
+      // rules: unchanged content is reused, changed content forks), so `done` never stands for less than the workspace holds.
+      const state = deps.state();
+      if (answer.result.digest !== digest || JSON.stringify(migrationSnapshot(state, deps.model, deps.workspace)) !== JSON.stringify(snapshot)) {
+        if (round + 1 >= RECONCILE_ROUNDS) return "stopped";
+        mark = undefined;
+        continue;
+      }
+      // The session, and `done`, in one write.
+      const session = buildProfileSession(state, snapshot, answer.result, deps.random);
+      if (!deps.record({ migration: { ...mark, state: "done" }, profiles: workspaceProfiles(answer.result.profile, session) })) return "stopped";
+      break;
     }
-    if (!answer || !snapshot || signal.aborted) return "stopped";
-    if (!answer.ok) {
-      if (answer.reason === "refused") deps.report?.(Error(answer.message ?? "The library refused the profiles migration."));
-      return "stopped";
-    }
-    point("w-response");
-    // 3. The session, and `done`, in one write (the ID map is the sent snapshot's: a resent snapshot is answered from the first's record).
-    const session = buildProfileSession(deps.state(), snapshot, answer.result, deps.random);
-    if (!deps.record({ migration: { ...mark, state: "done" }, profiles: workspaceProfiles(answer.result.profile, session) })) return "stopped";
     point("w-done");
     return "done";
   }

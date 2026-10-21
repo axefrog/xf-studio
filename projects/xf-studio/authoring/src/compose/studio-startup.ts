@@ -67,7 +67,7 @@ import { createBrowserUpdateCheck } from "../setup/browser/browser-update-check-
 import { pageFailure, setPageDiagnostics } from "../diagnostics/page-sink";
 import type { WorkspaceLease } from "../app/workspace/workspace-lease";
 import type { StartedOutbox } from "../app/browser/document-outbox-device";
-import { startProfilesMigration } from "../app/browser/profiles-migration-device";
+import { PROFILES_MIGRATION_ENABLED, startProfilesMigration } from "../app/browser/profiles-migration-device";
 import type { WorkspaceState } from "../app/workspace/workspace-state";
 import { outboxView } from "../app/presentation-status";
 
@@ -420,9 +420,9 @@ async function start(host: StudioHost, root: HTMLElement) {
   void localSetup.dispatch({ kind: "setup.refresh" });
   for (let i = 0; i < core.document.recipe.layers.length; i++) previewDevice.coordinator.render(i);
   session.activate();
-  // The profiles migration (profiles design §8), in the background, by the window holding the workspace. Nothing reads its result
-  // until the Studio moves onto the profile services (phase 1d-ii), so today's paths are unchanged.
-  if (host.documents && restored.writable && (!lease || lease.writable())) {
+  // The profiles migration (profiles design §8), in the background, by the window holding the workspace. Off until the Studio moves onto
+  // the profile services (phase 1d-ii's switch-over turns `PROFILES_MIGRATION_ENABLED` on), so today's paths are unchanged.
+  if (PROFILES_MIGRATION_ENABLED && host.documents && restored.writable && (!lease || lease.writable())) {
     const life = new AbortController();
     window.addEventListener("pagehide", () => life.abort(), { once: true });
     lease?.onReleaseStart(() => life.abort());

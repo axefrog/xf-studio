@@ -6,23 +6,24 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { profilesMigrationTransport, startProfilesMigration } from "../src/app/browser/profiles-migration-device";
+import { PROFILES_MIGRATION_ENABLED, profilesMigrationTransport, startProfilesMigration } from "../src/app/browser/profiles-migration-device";
 import { checkMigrationRequest, createProfilesMigrationHandler } from "../src/app/profiles/host/profiles-migrate";
-import { buildProfileSession, dockPanels, LAYOUT_DEFAULT_DOCUMENT, migrationSnapshot, type MigrationResult } from "../src/app/profiles/profiles-migration-data";
+import { buildProfileSession, dockPanels, LAYOUT_DEFAULT_DOCUMENT, migrationSnapshot, type MigrationResult, snapshotDigest } from "../src/app/profiles/profiles-migration-data";
 import { PANEL_INSTANCE_ID, profileSessionOf } from "../src/app/profiles/profile-session";
+import { ProfilesMigration } from "../src/app/profiles/profiles-migration";
 import { decodedSaveId } from "../src/character/character-document";
 import { STUDIO_PARTS } from "../src/compose/studio-registry";
 import { serializeWorkspace } from "../src/app/workspace/workspace-state";
 import { formatFence, WORKSPACE_FENCE_HEADER } from "../src/platform/api/document-store";
 import { LibraryBackups } from "../src/platform/persistence/backups";
 import { DocumentStoreError } from "../src/platform/persistence/document-store";
-import { alpha2Library, COLLECTION, documentRows, fixtureSave, LIVE_DOCK, MODEL, OWN_SETUPS, realWorkspace, releasedHash, storedText } from "./fixtures/profiles-migration-fixtures";
+import { alpha2Library, alpha2SaveNamed, COLLECTION, documentRows, fixtureSave, LIVE_DOCK, MODEL, OWN_SETUPS, realWorkspace, releasedHash, storedText } from "./fixtures/profiles-migration-fixtures";
 import { HarnessHost, HarnessWorkspace, migrateUntilDone } from "./fixtures/profiles-migration-harness";
 import { restore } from "./fixtures/workspace-observable";
 import { looseWorkspaceV1 } from "./fixtures/workspace-v1-fixtures";
 
 const scratch = mkdtempSync(join(tmpdir(), "xfs-profiles-migration-"));
-afterAll(() => rmSync(scratch, { recursive: true, force: true }));
+afterAll(() => { try { rmSync(scratch, { recursive: true, force: true }); } catch { /* A file a failed test left open; the system cleans its temp folder. */ } });
 let n = 0;
 function library(backups = false) {
   const dir = join(scratch, `lib-${++n}`);
@@ -112,10 +113,14 @@ describe("everything §8 keeps survives the migration", async () => {
     expect(new Set(tab.panels.map(panel => panel.type))).toEqual(new Set(["presets", "layers", "view", "character", "poses"]));
     expect(tab.panels.filter(panel => panel.type === "view").map(panel => panel.binding)).toEqual([
       { policy: "pinned", target: { view: "main" } }, { policy: "pinned", target: { view: "v2" } }]);
-    const wide = (tab.dock!.state as { wide: { parked: Record<string, { group: string[] }>; closed: string[] } }).wide;
-    const poses = tab.panels.find(panel => panel.type === "poses")!.id, presets = tab.panels.find(panel => panel.type === "presets")!.id;
-    expect(wide.parked[poses]!.group).toEqual([presets, poses]);
-    expect(wide.closed).toEqual([tab.panels.find(panel => panel.type === "character")!.id]);
+    const wide = (tab.dock!.state as { wide: { parked: Record<string, { group: string[] }>; lastPlace: Record<string, { group: string[] }>; closed: string[] } }).wide;
+    const of = (type: string, view?: string) => tab.panels.find(panel => panel.type === type &&
+      (!view || (panel.binding as { target: { view: string } }).target.view === view))!.id;
+    // Made by the real dock engine: the parked Poses panel's place and the closed Character panel's last place name instances only.
+    expect(wide.parked).toEqual({ [of("poses")]: expect.objectContaining({ group: [of("presets"), of("poses"), of("layers")] }) });
+    expect(wide.closed).toEqual([of("character")]);
+    expect(wide.lastPlace).toEqual({ [of("character")]: expect.objectContaining({ group: [of("view", "main"), of("character"), of("view", "v2")] }) });
+    expect(JSON.stringify(tab.dock)).not.toMatch(/"(presets|layers|poses|character|head|view\.v2)"/);
     // The same arrangement, panel for panel.
     expect(dockPanels(LIVE_DOCK).length).toBe(panels.length);
   });
@@ -235,7 +240,8 @@ describe("the route", () => {
     const host = new HarnessHost(path);
     const handle = createProfilesMigrationHandler({ database: host.database, documents: host.documents }, "/api/profiles/migrate", { parts: STUDIO_PARTS });
     const state = realWorkspace();
-    const body = JSON.stringify({ token: "00000000-0000-4000-8000-0000000000f1", snapshot: migrationSnapshot(state, MODEL, "browser-a") });
+    const snapshot = migrationSnapshot(state, MODEL, "browser-a");
+    const body = JSON.stringify({ token: "00000000-0000-4000-8000-0000000000f1", digest: snapshotDigest(snapshot), snapshot });
     const post = (text: string, headers: Record<string, string> = {}) => handle(new Request("http://127.0.0.1/api/profiles/migrate", { method: "POST", body: text,
       headers: { "Content-Type": "application/json", Origin: "http://127.0.0.1", ...headers } }));
     expect((await handle(new Request("http://127.0.0.1/api/profiles/migrate", { method: "POST", body, headers: { "Content-Type": "application/json", Origin: "http://evil.test" } }))).status).toBe(403);
@@ -260,9 +266,9 @@ describe("the route", () => {
   test("the session builds from a result alone, and checkMigrationRequest keeps what it validated", () => {
     const state = realWorkspace();
     const snapshot = migrationSnapshot(state, MODEL, "browser-a");
-    const checked = checkMigrationRequest(JSON.parse(JSON.stringify({ token: "00000000-0000-4000-8000-0000000000f2", snapshot })));
+    const checked = checkMigrationRequest(JSON.parse(JSON.stringify({ token: "00000000-0000-4000-8000-0000000000f2", digest: snapshotDigest(snapshot), snapshot })));
     expect(checked.snapshot.drafts.map(draft => draft.looks.length)).toEqual(snapshot.drafts.map(draft => draft.looks.length));
-    const result = { schema: "xfs/profiles-migration-1", token: checked.token, at: 1, profile: "p-abcd", character: "c-abcd", collection: COLLECTION, members: [COLLECTION],
+    const result = { schema: "xfs/profiles-migration-1", token: checked.token, digest: checked.digest, at: 1, profile: "p-abcd", character: "c-abcd", collection: COLLECTION, members: [COLLECTION],
       recovered: [], defaults: ["d-1", "d-2"], idMap: { collections: {}, looks: {} }, made: [] } as MigrationResult;
     const session = buildProfileSession(state, snapshot, result, () => 0.5);
     expect(session.views.scenes[0]!.look).toBeUndefined();
@@ -271,13 +277,22 @@ describe("the route", () => {
 });
 
 describe("in the Studio", () => {
+  test("off until the switch-over (phase 1d-ii): the Studio's start migrates nothing, captures nothing and sends nothing", async () => {
+    expect(PROFILES_MIGRATION_ENABLED).toBe(false);
+    let touched = 0;
+    const outcome = await startProfilesMigration({ endpoint: "/api/profiles/migrate", workspace: "browser-a", fence: () => null, model: MODEL, marks: {}, delayMs: 0,
+      state: () => { touched++; return realWorkspace(); }, flush: () => { touched++; return true; }, signal: new AbortController().signal,
+      send: async () => { touched++; return new Response("{}"); } });
+    expect([outcome, touched]).toEqual(["disabled", 0]);
+  });
+
   test("a migrated workspace starts nothing (not even a capture); otherwise the run records its mark and sessions through the workspace's write", async () => {
     const { path } = library();
     const host = new HarnessHost(path);
     const state = realWorkspace();
     const marks: Parameters<typeof startProfilesMigration>[0]["marks"] = {};
     let flushes = 0, captures = 0;
-    const options = { endpoint: "/api/profiles/migrate", workspace: "browser-a", fence: () => null, model: MODEL, marks, delayMs: 0,
+    const options = { endpoint: "/api/profiles/migrate", workspace: "browser-a", fence: () => null, model: MODEL, marks, delayMs: 0, enabled: true,
       state: () => { captures++; return { ...state, ...marks }; }, flush: () => { flushes++; return true; }, signal: new AbortController().signal,
       send: async (_url: string, init?: RequestInit) => Response.json((await host.send(JSON.parse(init!.body as string)) as { result: MigrationResult }).result) };
     expect(await startProfilesMigration(options)).toBe("done");
@@ -285,6 +300,142 @@ describe("in the Studio", () => {
     captures = 0;
     expect(await startProfilesMigration(options)).toBe("already");
     expect(captures).toBe(0);
+    host.close();
+  });
+});
+
+describe("review of chunk 1d-i", () => {
+  const dropMarks = (workspace: HarnessWorkspace) => workspace.edit(state => { delete state.migration; delete state.profiles; });
+  const collectionsOf = (path: string) => rows(path, "collection-working");
+  const looksIn = (path: string, collection: string) => rows(path, "look-working").filter(doc => doc.id.startsWith(`${collection}/`)).map(doc => doc.value);
+  const results = (path: string) => rows(path, "migration").map(doc => doc.value as MigrationResult);
+  const recordInto = (workspace: HarnessWorkspace) => (marks: Parameters<ConstructorParameters<typeof ProfilesMigration>[0]["record"]>[0]) => {
+    workspace.edit(state => { state.migration = marks.migration; if (marks.profiles) state.profiles = marks.profiles; else delete state.profiles; });
+    return true;
+  };
+
+  test("a deleted collection is never brought back over: an old draft's re-upgrade recovers it under fresh IDs, every existing row untouched", async () => {
+    const { path } = library();
+    const host = new HarnessHost(path), workspace = new HarnessWorkspace(realWorkspace(), "browser-a");
+    await migrateUntilDone(workspace, host);
+    // One of its looks edited, then the collection deleted (a tombstone over the working copy).
+    const working = host.documents.get<Record<string, unknown>>("collection-working", COLLECTION)!;
+    const lookId = (working.value.looks as string[])[0]!;
+    const look = host.documents.get<Record<string, unknown>>("look-working", `${COLLECTION}/${lookId}`)!;
+    expect(host.documents.transact({ id: "edit", command: "look.update", writes: [{ kind: "look-working", id: `${COLLECTION}/${lookId}`, base: look.revision,
+      value: { ...look.value, name: "Newer content" } }] }).ok).toBe(true);
+    expect(host.documents.transact({ id: "delete", command: "collection.delete", writes: [{ kind: "collection-working", id: COLLECTION, base: working.revision,
+      value: { tombstone: true, at: 1, value: working.value } }] }).ok).toBe(true);
+    const before = documentRows(path).filter(doc => doc.kind === "collection-working" || doc.kind === "look-working");
+    dropMarks(workspace);
+    await migrateUntilDone(workspace, host);
+    const after = documentRows(path);
+    for (const doc of before) expect(after.find(other => other.kind === doc.kind && other.id === doc.id)).toEqual(doc);
+    const result = results(path).find(item => item.collection !== COLLECTION)!;
+    expect(collectionsOf(path).find(doc => doc.id === result.collection)!.value).toMatchObject({ origin: COLLECTION, name: expect.stringContaining("(from this browser)") });
+    expect(looksIn(path, result.collection).filter(item => item.state === "live").map(item => item.name).sort())
+      .toEqual(workspace.state().collections!.collection.presets.map(preset => preset.name).sort());
+    host.close();
+  });
+
+  test("identical live looks but different removed looks: the second draft forks, and both removed looks stay restorable", async () => {
+    const { path } = library();
+    const host = new HarnessHost(path);
+    await migrateUntilDone(new HarnessWorkspace(realWorkspace(), "browser-a"), host);
+    const other = realWorkspace();
+    const [removed] = other.collections!.removed;
+    other.collections!.removed.push({ preset: { ...structuredClone(removed!.preset), id: "00000000-0000-4000-8000-0000000000b1", name: "Removed in the other browser" },
+      index: 0, memory: structuredClone(removed!.memory) });
+    await migrateUntilDone(new HarnessWorkspace(other, "browser-b"), host);
+    const result = results(path).find(item => item.collection !== COLLECTION)!;
+    expect(collectionsOf(path).find(doc => doc.id === result.collection)!.value.origin).toBe(COLLECTION);
+    expect(looksIn(path, result.collection).filter(item => item.state === "removed").map(item => item.name).sort())
+      .toEqual([removed!.preset.name, "Removed in the other browser"].sort());
+    expect(looksIn(path, COLLECTION).filter(item => item.state === "removed").map(item => item.name)).toEqual([removed!.preset.name]);
+    // A draft holding fewer removed looks than the working copy loses nothing: reused.
+    const fewer = realWorkspace();
+    fewer.collections!.removed = [];
+    await migrateUntilDone(new HarnessWorkspace(fewer, "browser-c"), host);
+    expect(results(path).filter(item => item.collection === COLLECTION)).toHaveLength(2);
+    host.close();
+  });
+
+  test("identical live looks but different Undo histories: the second draft forks, and both histories are kept", async () => {
+    const { path } = library();
+    const host = new HarnessHost(path);
+    await migrateUntilDone(new HarnessWorkspace(realWorkspace(), "browser-a"), host);
+    const other = realWorkspace(), first = other.collections!.collection.presets[0]!.id;
+    delete other.collections!.memory[first];
+    await migrateUntilDone(new HarnessWorkspace(other, "browser-b"), host);
+    const result = results(path).find(item => item.collection !== COLLECTION)!;
+    const theirs = JSON.parse(storedText(realWorkspace())).collections.memory[first];
+    const mine = JSON.parse(storedText(new HarnessWorkspace(other, "x").state())).collections.memory[first];
+    expect(mine).not.toEqual(theirs);
+    expect(rows(path, "look-working").find(doc => doc.id === `${COLLECTION}/${first}`)!.value.memory).toEqual(theirs);
+    expect(rows(path, "look-working").find(doc => doc.id === `${result.collection}/${result.idMap.looks[first]}`)!.value.memory).toEqual(mine);
+    host.close();
+  });
+
+  test("a lost answer, then an edit before the resend: the edit is migrated under a new token before the workspace is done", async () => {
+    const { path } = library();
+    const host = new HarnessHost(path), workspace = new HarnessWorkspace(realWorkspace(), "browser-a");
+    let lost = false;
+    const added = "00000000-0000-4000-8000-0000000000c1";
+    const migration = new ProfilesMigration({ workspace: "browser-a", model: MODEL, state: () => workspace.state(), wait: async () => {}, record: recordInto(workspace),
+      send: async request => {
+        const answer = await host.send(request);
+        if (lost) return answer;
+        lost = true;
+        // The answer never arrives; meanwhile a look is added and shown.
+        workspace.edit(state => {
+          const looks = state.collections!.collection.presets;
+          looks.push({ ...structuredClone(looks[0]!), id: added, name: "Added while the answer was lost" });
+          state.collections!.selected = added;
+        });
+        throw Error("The library couldn't be reached.");
+      } });
+    expect(await migration.run(new AbortController().signal)).toBe("done");
+    const scene = Object.values(workspace.state().profiles!.sessions)[0]!.views.scenes[0]!;
+    expect(rows(path, "look-working").find(doc => doc.id === `${scene.look!.collection}/${scene.look!.look}`)!.value.name).toBe("Added while the answer was lost");
+    expect(rows(path, "migration")).toHaveLength(2);
+    host.close();
+  });
+
+  test("an edit made while the answer was on its way is migrated too", async () => {
+    const { path } = library();
+    const host = new HarnessHost(path), workspace = new HarnessWorkspace(realWorkspace(), "browser-a");
+    let edited = false;
+    const migration = new ProfilesMigration({ workspace: "browser-a", model: MODEL, state: () => workspace.state(), record: recordInto(workspace),
+      send: async request => {
+        const answer = await host.send(request);
+        if (!edited) {
+          edited = true;
+          workspace.edit(state => { state.collections!.collection.presets.find(look => look.id === state.collections!.selected)!.name = "Renamed meanwhile"; });
+        }
+        return answer;
+      } });
+    expect(await migration.run(new AbortController().signal)).toBe("done");
+    const scene = Object.values(workspace.state().profiles!.sessions)[0]!.views.scenes[0]!;
+    expect(rows(path, "look-working").find(doc => doc.id === `${scene.look!.collection}/${scene.look!.look}`)!.value.name).toBe("Renamed meanwhile");
+    host.close();
+  });
+
+  test("a named version brought back by an earlier run joins the profile a later run migrates into", async () => {
+    const { path } = library();
+    const host = new HarnessHost(path), a = new HarnessWorkspace(realWorkspace(), "browser-a");
+    await migrateUntilDone(a, host);
+    host.close();
+    alpha2SaveNamed(path, 2, "Renamed in the older build");
+    host.restart();
+    dropMarks(a);
+    await migrateUntilDone(a, host);
+    const fork = collectionsOf(path).find(doc => /older version/.test(doc.value.name))!.id;
+    expect(host.documents.transact({ id: "p-2", command: "profile.create", writes: [{ kind: "profile", id: "p-second1", base: 0,
+      value: { schema: "xfs/profile-1", id: "p-second1", name: "Second", subjects: [], collections: [], createdAt: 1 } }] }).ok).toBe(true);
+    const other = realWorkspace();
+    other.preview.character = { ...other.preview.character!, choices: [] };
+    await migrateUntilDone(new HarnessWorkspace(other, "browser-c"), host);
+    expect(rows(path, "profile").find(doc => doc.value.name === "From this browser")!.value.collections).toEqual([COLLECTION, fork]);
     host.close();
   });
 });

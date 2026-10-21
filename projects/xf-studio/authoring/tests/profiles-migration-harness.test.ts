@@ -16,7 +16,7 @@ import { alpha2Library, alpha2SaveNamed, COLLECTION, documentRows, documentsHash
 import { HarnessHost, HarnessWorkspace, migrateUntilDone, outcome } from "./fixtures/profiles-migration-harness";
 
 const scratch = mkdtempSync(join(tmpdir(), "xfs-s3-"));
-afterAll(() => rmSync(scratch, { recursive: true, force: true }));
+afterAll(() => { try { rmSync(scratch, { recursive: true, force: true }); } catch { /* A file a failed test left open; the system cleans its temp folder. */ } });
 let runs = 0;
 function setup(divergent: boolean) {
   const dir = join(scratch, `run-${++runs}`);
