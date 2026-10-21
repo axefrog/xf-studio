@@ -191,6 +191,18 @@ flowchart TB
 
 **One sync mechanism (decided 21 October, after the phase 1b reviews).** The outbox is the only way any document's local state reaches the library: looks, characters, profiles and every later kind. A service's in-memory view of a document is its acknowledged value with its outbox entries applied on top. Nothing else may keep a separate queue or reflect committed state into a context by hand. Phase 1b's hand-built character queue showed why: across four review rounds, the context and the document kept drifting apart (`experiments/038-profiles-spikes/1b-handover.md`).
 
+**Built in phase 1c-ii.**
+
+- **Ownership.** Collections and looks are owned by `CollectionOwner` (owner commands) and `LookSessions` (keyed by `LookRef`), as `collection-working` and `look-working` documents. The old `CollectionService` folds into them in phase 1d.
+- **Snapshots.** `DocumentStore.read(refs)` is the one-transaction snapshot.
+- **Save version.** It flushes, refuses if anything is in conflict or unsent, and then calls the host route `/api/collection-versions`, which writes the released tables from its own snapshot in the same transaction. The window records `saved` afterwards.
+- **Retention.**
+  - A removed look stays restorable while it is in the last 20 and under 30 days old.
+  - The command that pushes a look out of that list writes its tombstone.
+  - The 30-day expiry is a window command, `collection.expire`, never a host write.
+  - A host background job, one minute after start and then daily, purges tombstones after 30 days and receipts after 7 days. It purges an unreferenced decoded save after a 30-day grace.
+- **Checkpoints.** `wal_autocheckpoint` is 16,384 pages, with `journal_size_limit` at 64 MB, so the background flush does the checkpointing.
+
 **Built in phase 1c-i.** The outbox, as built and tested:
 
 - **Visible state.** It is computed: the acknowledged baseline with the remaining entries applied. Waiters move with their values. Each entry has a stamp, and repair keeps the newest copy and rewrites anything it changed.
@@ -198,7 +210,8 @@ flowchart TB
 - **Removal markers.** They persist until every stale copy is gone. On desktop, they persist until the host's own copy (`OutboxStorage.durable()`) confirms it. A record that holds only markers is never treated as empty.
 - **Immutable, content-addressed kinds** (`saved-v`). Each is written once by its own create-only command. Commands that name it wait until it is in the library (`requires`). No resolution ever removes it, and an identical write from another window counts as acknowledged.
 - **Desktop protection.** A key is unprotected while its host write is pending. The warning shows only when a write failed or has waited more than 2 s. WebView copies are filed per launch, and a failed WebView write removes the older copy there.
-- **Known limit, fixed in phase 1c-ii.** An app crash while host writes are still pending can produce a false conflict (never an overwrite) against the window's own earlier write. The fix: receipts record the writing workspace and its lease generation, so a replay can recognise later revisions as its own.
+- **Workspace-aware receipts (phase 1c-ii).** A receipt records the writing workspace and its lease generation. A replay answered from a receipt also names the documents whose every later revision came from that same workspace (`own`). The outbox takes those as its baseline and rebases successors onto them. Another workspace's write, or a receipt that was forgotten or purged, never counts as own.
+- **Keep both** takes theirs first and then forks (rolling back if the fork fails), and a copy never inherits successors. A look's resolve runs a revision check first.
 - **Gate.** The model-based specification test (`tests/document-outbox-model.test.ts`) checks the outbox against an independent reference across seeded random runs with kills, restarts, failures and a second window. It runs in CI.
 
 
