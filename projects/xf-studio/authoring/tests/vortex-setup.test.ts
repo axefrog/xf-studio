@@ -5,6 +5,7 @@ import { isAbsolute, join } from "node:path";
 import { defaultLocalSettings } from "../src/setup/local-settings";
 import { discoverSources } from "../src/game/host/source-discovery";
 import { compareWithDeployment } from "../src/installation/vortex-deployment";
+import { isLocalDrivePath } from "../src/platform/api/path-containment";
 import { inspectVortexSetup, isLocalFolder, readVortexManifests, readVortexStateFolder } from "../src/installation/host/vortex-host";
 import { readVortexGameState, resolveVortexInstallPath, stateFromPairs } from "../src/installation/vortex-state";
 
@@ -288,10 +289,16 @@ test("a newer backup is read when the database is incomplete, even though the da
 }));
 
 test("a staging folder that isn't on a local drive is never opened (VORTEX-06)", () => withFolderAsync(async base => {
-  expect([String.raw`C:\Vortex\mods`, "d:/mods", "/opt/xfs-mods"].map(isLocalFolder)).toEqual([true, true, true]);
+  expect([String.raw`C:\Vortex\mods`, "d:/mods"].map(path => isLocalFolder(path))).toEqual([true, true]);
   expect([String.raw`\\server\share\mods`, "//server/share/mods", String.raw`\\?\UNC\server\x`, String.raw`\\.\pipe\x`, "mods", ""]
-    .map(isLocalFolder)).toEqual([false, false, false, false, false, false]);
-  const game = join(base, "game"), share = String.raw`\\xfs-test.invalid\share\mods`;
+    .map(path => isLocalFolder(path))).toEqual([false, false, false, false, false, false]);
+  // Separators are normalised before a path is classified: on Windows each of these is a share, a device or not absolute (INSTALL-05).
+  const notLocal = [String.raw`/\server\share\mods`, String.raw`\/server/share`, String.raw`/\?\UNC\server\x`, String.raw`/\.\pipe\x`,
+    String.raw`\??\UNC\server\x`, "/??/C:/mods", String.raw`\mods`, "/mods", "C:mods", "C:/mods\0"];
+  expect(notLocal.map(path => isLocalDrivePath(path, "win32"))).toEqual(notLocal.map(() => false));
+  expect([String.raw`C:\Vortex\mods`, "d:/mods", String.raw`E:/mixed\mods`].map(path => isLocalDrivePath(path, "win32"))).toEqual([true, true, true]);
+  expect(["/opt/xfs-mods", "//server/share", "mods"].map(path => isLocalDrivePath(path, "posix"))).toEqual([true, false, false]);
+  const game = join(base, "game"), share = String.raw`/\xfs-test.invalid\share\mods`;
   mkdirSync(game, { recursive: true });
   const manifest = JSON.parse(readFileSync(join(fixtures, "cyberpunk-hardlink.vortex.deployment.json"), "utf8"));
   writeFileSync(join(game, "vortex.deployment.json"), JSON.stringify({ ...manifest, stagingPath: share }));
