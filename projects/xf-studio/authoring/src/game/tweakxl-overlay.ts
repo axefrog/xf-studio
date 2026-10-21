@@ -120,9 +120,14 @@ function substitute(node: YamlNode, instance: ReadonlyMap<string, YamlNode>, bud
 const substituteText = (text: string, instance: ReadonlyMap<string, YamlNode>, budget: YamlBudget) =>
   (substitute({ kind: "scalar", text, tag: null, style: "plain" }, instance, budget) as { text?: string }).text ?? text;
 
-/** A list's operations, or null when no item carries an operation tag (a plain assignment). */
-function mutationsOf(node: YamlNode, file: string, gaps: string[], where: string): ListMutation[] | null {
+/** A list's operations, or null when no item carries an operation tag (a plain assignment). Spends `budget` for the list first. */
+function mutationsOf(node: YamlNode, file: string, gaps: string[], where: string, budget: YamlBudget): ListMutation[] | null {
   if (node.kind !== "seq" || !node.items.some(item => item.tag && item.tag.length > 1)) return null;
+  // Every item may become a mutation or a gap naming the flat: charged before any is made, since one anchored list of operations can be
+  // reused by many flats (PIPE-139).
+  let chars = 0;
+  for (const item of node.items) chars += (item.kind === "scalar" ? item.text.length : 0) + (item.tag?.length ?? 0) + where.length;
+  budget.spend(chars, node.items.length);
   const out: ListMutation[] = [];
   for (const item of node.items) {
     if (!item.tag || item.tag.length <= 1) continue;
@@ -201,7 +206,7 @@ export function readTweakOverlay(files: readonly TweakFile[], environment: Overl
   };
   const set = (name: string, field: string, node: YamlNode, file: TweakFile, staged: Staged) => {
     const flat = `${name}.${field}`;
-    const mutations = mutationsOf(node, file.path, staged.gaps, flat);
+    const mutations = mutationsOf(node, file.path, staged.gaps, flat, staged.budget);
     if (mutations) { staged.apply.push(() => { record(name, file); listOf(flat).mutations.push(...mutations); }); return; }
     if (node.kind === "seq" && node.tag && node.tag.length > 1) staged.gaps.push(`${file.path}: ${flat} tags the whole list with ${node.tag}; TweakXL reads only item tags, so the list replaces the value.`);
     const value = toPlain(node, staged.budget);

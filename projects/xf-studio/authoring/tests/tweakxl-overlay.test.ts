@@ -73,6 +73,19 @@ describe("the TweakXL overlay", () => {
     expect(overlay.files).toBe(4);
   });
 
+  test("an anchored list of operations reused by many flats spends the file's budget too (PIPE-139)", () => {
+    // 2,000 operations reused by 1,500 flats: 3 million mutations from a file of about 60 KB.
+    const ops = `ops: &ops [${Array(2_000).fill("!append PhotoModePoses.x").join(", ")}]`;
+    const flats = Array.from({ length: 1_500 }, (_, i) => `Items.F${i}.tags: *ops`);
+    const overlay = readTweakOverlay([file("r6/tweaks/a_ok.yaml", "Items.Kept.tags: [!append a]"),
+      file("r6/tweaks/b_ops.yaml", [ops, ...flats].join(String.fromCharCode(10)))]);
+    expect(overlay.gaps.filter(gap => gap.startsWith("r6/tweaks/b_ops.yaml: skipped"))).toHaveLength(1);
+    expect([...overlay.lists.keys()]).toEqual(["Items.Kept.tags"]);
+    // Reused within the budget, the same list applies to each flat.
+    const small = readTweakOverlay([file("r6/tweaks/c.yaml", ["ops: &ops [!append a, !append b]", "Items.A.tags: *ops", "Items.B.tags: *ops"].join(String.fromCharCode(10)))]);
+    expect([small.list("Items.A.tags", []), small.list("Items.B.tags", [])]).toEqual([["a", "b"], ["a", "b"]]);
+  });
+
   test("a record field holding a __proto__ key keeps it as data; nothing else picks it up", () => {
     const overlay = readTweakOverlay([file("r6/tweaks/p.yaml", ["Items.X:", "  $type: Item", "  stats:", "    __proto__:", "      displayName: injected"].join("\n"))]);
     const stats = overlay.field("Items.X", "stats") as Record<string, unknown>;
