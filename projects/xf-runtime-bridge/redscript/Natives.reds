@@ -13,7 +13,7 @@ public static native func XFBridge_Kill(reason: String) -> Bool
 // The CET layer answers game.options.read's render options through these two (core/OptionsExchange.hpp).
 public static native func XFBridge_OptionsWanted() -> String
 public static native func XFBridge_OptionsReport(values: String) -> Bool
-// The CET layer draws ui.message's lines under the status label from this one (core/Messages.hpp).
+// The CET layer draws ui.message's lines under the CET line from this one (core/Messages.hpp).
 public static native func XFBridge_Messages() -> String
 // cc.open's pause-menu redirect asks the plugin what to do (core/Writes.hpp CreatorRedirect): "redirect",
 // "foreign", "expired", "refused", "withdrawn", "none", or "" when it can't say (the pause menu then opens).

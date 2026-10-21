@@ -1,7 +1,7 @@
 #pragma once
 
 // ui.message: short messages from the coordinator (or a session script) shown under the bridge's
-// in-game status label, so the player can follow a session without leaving the game. The plugin keeps
+// in-game CET line, so the player can follow a session without leaving the game. The plugin keeps
 // them here; the CET layer polls XFBridge_Messages() a few times a second and draws them.
 //
 // Bounded by design: at most kMaxMessages at once (a new one pushes out the oldest), each at most

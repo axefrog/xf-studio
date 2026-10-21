@@ -6,6 +6,7 @@
 #include "core/Events.hpp"
 #include "core/Log.hpp"
 #include "core/Params.hpp"
+#include "core/Player.hpp"
 
 namespace xfb::behave
 {
@@ -686,42 +687,10 @@ void StopTurntable(Behaviour& aB, const Ops& aOps)
     }
 }
 
-// 0.8.2: the view direction for a yaw and pitch (the game's yaw: 0 faces +Y, positive turns left), and its eased arc.
-Vec3 DirectionOf(double aYaw, double aPitch)
-{
-    return {-std::sin(aYaw * kDeg) * std::cos(aPitch * kDeg), std::cos(aYaw * kDeg) * std::cos(aPitch * kDeg), std::sin(aPitch * kDeg)};
-}
-
-// The view direction a fraction along the great circle from aFrom to aTo (both unit length): its angle to aTo only ever
-// shrinks along the way. Opposite directions turn through the horizontal, the way a head turns round.
-Vec3 Slerp(const Vec3& aFrom, const Vec3& aTo, double aFraction)
-{
-    const double dot = std::clamp(aFrom[0] * aTo[0] + aFrom[1] * aTo[1] + aFrom[2] * aTo[2], -1.0, 1.0);
-    const double theta = std::acos(dot);
-    if (theta < 1e-6)
-    {
-        return aTo;
-    }
-    Vec3 other = aTo;
-    double sinTheta = std::sin(theta);
-    if (sinTheta < 1e-6)
-    {
-        // Opposite: through the direction at right angles to aFrom in its horizontal plane.
-        const double h = std::hypot(aFrom[0], aFrom[1]);
-        const Vec3 side = h > 1e-6 ? Vec3{-aFrom[1] / h, aFrom[0] / h, 0.0} : Vec3{1.0, 0.0, 0.0};
-        const double half = theta * aFraction;
-        return {aFrom[0] * std::cos(half) + side[0] * std::sin(half), aFrom[1] * std::cos(half) + side[1] * std::sin(half),
-                aFrom[2] * std::cos(half) + side[2] * std::sin(half)};
-    }
-    const double a = std::sin((1.0 - aFraction) * theta) / sinTheta, b = std::sin(aFraction * theta) / sinTheta;
-    return {aFrom[0] * a + other[0] * b, aFrom[1] * a + other[1] * b, aFrom[2] * a + other[2] * b};
-}
-
+// 0.8.2: the eased arc from the view at the start to the point (core/Player.hpp LookArc, shared with player.look since 0.8.3).
 Vec3 LookArcPoint(const Behaviour& aB, const Vec3& aCamera, double aFraction)
 {
-    const double f = std::clamp(aFraction, 0.0, 1.0);
-    const double eased = f * f * (3.0 - 2.0 * f); // smoothstep: eased in and out, as the game's own look-at
-    const auto d = Slerp(aB.from, aB.to, eased);
+    const auto d = player::LookArc(aB.from, aB.to, aFraction);
     return {aCamera[0] + d[0] * 10.0, aCamera[1] + d[1] * 10.0, aCamera[2] + d[2] * 10.0};
 }
 
@@ -751,7 +720,7 @@ void StepLook(Behaviour& aB, const Ops& aOps, double aDt)
                 yaw = p.value("yaw", yaw);
                 pitch = p.value("pitch", pitch);
             }
-            const auto d = DirectionOf(yaw, pitch);
+            const auto d = player::DirectionOf(yaw, pitch);
             aB.point = {pos[0] + d[0] * 10.0, pos[1] + d[1] * 10.0, pos[2] + d[2] * 10.0};
         }
         aB.firstAngle = AngleDeg(forward, Sub(aB.point, pos));

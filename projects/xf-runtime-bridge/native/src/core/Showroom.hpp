@@ -10,6 +10,7 @@
 // Nothing persists: static entities have no persistence, the kill switch clears them, and loading a save removes them.
 
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <string>
 #include <vector>
@@ -95,4 +96,15 @@ json Place(const PlaceRequest& aRequest, const Ops& aOps);
 json TurnPieces(const std::vector<Turn>& aTurns, const Ops& aOps);
 // showroom.clear.
 json Clear(const std::string& aWhat, const Ops& aOps);
+
+// 0.8.3, showroom.staged (read; session 10's G1: discovery looked only for local build manifests, and a worktree has none):
+// the XF Finish Showroom archives the game itself sees in its archive/pc/mod folder (the game process's own view of it,
+// which is MO2's virtual folder when MO2 launched the game, so exactly the staged and enabled mods), each with its size and
+// SHA-256 (so the tools can match it to a build), and the manifest a self-describing build ships beside it
+// (xfs_showroom_<32 hex>.showroom.json, schema xfs/showroom-package-1, at most kMaxManifestBytes), when there is one. At most
+// kMaxStagedArchives archives; no paths outside that folder are named.
+inline constexpr size_t kMaxStagedArchives = 16;
+inline constexpr uintmax_t kMaxManifestBytes = 2 * 1024 * 1024;
+inline constexpr const char* kManifestSuffix = ".showroom.json";
+json StagedShowrooms(const std::filesystem::path& aModFolder);
 } // namespace xfb::showroom

@@ -38,6 +38,13 @@ public class XFPinEntry {
   public let bound: Bool;
   // 0.8: the views that have drawn this pin so far (controller class names), for world.pin's answer and the log.
   public let drawnBy: array<String>;
+  // 0.8.3: the bridge's own mark in the world (XFRuntimeBridgeInk.reds PlacePinMark) as the overlay last placed it: shown
+  // this tick, its top-left corner in the overlay's units and in window pixels (the game's own layout), on screen or not.
+  public let markShown: Bool;
+  public let markPlacedNow: Bool;
+  public let markAt: Vector2;
+  public let markPx: Vector2;
+  public let markOnScreen: Bool;
 }
 
 public class XFPinRegistry extends ScriptableSystem {
@@ -158,7 +165,9 @@ public abstract class XFInkPins {
     }
     return "{\"id\":" + IntToString(entry.id) + ",\"label\":" + XFJson.Str(entry.label) + ",\"variant\":" + XFJson.Str(entry.variant)
       + ",\"target\":" + XFJson.Str(entry.target) + ",\"piece\":" + IntToString(entry.piece) + ",\"bound\":" + XFJson.Str(entry.bound ? "object" : "position")
-      + ",\"position\":[" + XFJson.Num(entry.position.X) + "," + XFJson.Num(entry.position.Y) + "," + XFJson.Num(entry.position.Z) + "],\"drawn_by\":[" + drawn + "]}";
+      + ",\"position\":[" + XFJson.Num(entry.position.X) + "," + XFJson.Num(entry.position.Y) + "," + XFJson.Num(entry.position.Z) + "],\"drawn_by\":[" + drawn + "]"
+      + ",\"xf_mark\":{\"shown\":" + XFJson.Flag(entry.markShown) + ",\"at\":[" + XFJson.Num(entry.markAt.X) + "," + XFJson.Num(entry.markAt.Y)
+      + "],\"px\":[" + XFJson.Num(entry.markPx.X) + "," + XFJson.Num(entry.markPx.Y) + "],\"on_screen\":" + XFJson.Flag(entry.markShown && entry.markOnScreen) + "}}";
   }
 
   // 0.8.2: ui.state's pins, with the views that have drawn each by now.
@@ -339,6 +348,61 @@ public abstract class XFInkPins {
       text.SetVisible(showLabel);
     }
     badge.SetVisible(true);
+  }
+
+  // ---- 0.8.3: the bridge's own mark in the world (XFRuntimeBridgeInk.reds PinMark), in a canvas of a fixed size ----------
+
+  public static func MarkWidth() -> Float {
+    return 360.0;
+  }
+
+  public static func MarkHeight() -> Float {
+    return 96.0;
+  }
+
+  // The diamond with "XF" at the top centre, the label under it; every part placed by a margin from the canvas's top-left.
+  public static func BuildMark(mark: ref<inkCanvas>) -> Void {
+    let w = XFInkPins.MarkWidth();
+    let frame = new inkRectangle();
+    frame.SetName(n"frame");
+    frame.SetAnchor(inkEAnchor.TopLeft);
+    frame.SetSize(new Vector2(34.0, 34.0));
+    frame.SetRenderTransformPivot(new Vector2(0.5, 0.5));
+    frame.SetRotation(45.0);
+    frame.SetMargin(new inkMargin(w * 0.5 - 17.0, 7.0, 0.0, 0.0));
+    XFInkStyle.Bind(frame, n"MainColors.Blue");
+    frame.Reparent(mark);
+    let inner = new inkRectangle();
+    inner.SetName(n"inner");
+    inner.SetAnchor(inkEAnchor.TopLeft);
+    inner.SetSize(new Vector2(27.0, 27.0));
+    inner.SetRenderTransformPivot(new Vector2(0.5, 0.5));
+    inner.SetRotation(45.0);
+    inner.SetMargin(new inkMargin(w * 0.5 - 13.5, 10.5, 0.0, 0.0));
+    inner.SetTintColor(new HDRColor(0.035, 0.035, 0.06, 1.0));
+    inner.Reparent(mark);
+    let tag = XFInkStyle.Text(n"mark", 18, n"Bold", n"MainColors.Blue", true);
+    tag.SetText("XF");
+    tag.SetAnchor(inkEAnchor.TopLeft);
+    tag.SetFitToContent(false);
+    tag.SetSize(new Vector2(w, 24.0));
+    tag.SetMargin(new inkMargin(0.0, 12.0, 0.0, 0.0));
+    tag.SetHorizontalAlignment(textHorizontalAlignment.Center);
+    tag.Reparent(mark);
+    let name = XFInkStyle.Text(n"label", 24, n"Semi-Bold", n"MainColors.Blue", true);
+    name.SetAnchor(inkEAnchor.TopLeft);
+    name.SetFitToContent(false);
+    name.SetSize(new Vector2(w, 34.0));
+    name.SetMargin(new inkMargin(0.0, 54.0, 0.0, 0.0));
+    name.SetHorizontalAlignment(textHorizontalAlignment.Center);
+    name.Reparent(mark);
+  }
+
+  public static func MarkLabel(mark: ref<inkCanvas>, label: String) -> Void {
+    let text = mark.GetWidgetByPathName(n"label") as inkText;
+    if IsDefined(text) {
+      text.SetText(label);
+    }
   }
 
   public static func Unbadge(root: wref<inkCompoundWidget>) -> Bool {

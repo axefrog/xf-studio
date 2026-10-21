@@ -43,7 +43,7 @@ inline constexpr double kMaxScale = 2.5;
 // corner or edge of the VISIBLE screen its anchor names (0.8, session 8: the HUD lays out on a 3840 x 2160 design canvas
 // scaled to cover the screen, so on 21:9 its top and bottom 280 units are off screen; XFRuntimeBridgeInk.reds places the
 // panel inside the part the screen shows). For center the offsets move it from the middle.
-// 0.8 default: top left, below the CET label and the overlay panel (session 8 proved x 40, y 640 on the old canvas-relative
+// 0.8 default: top left, below the CET label and the XF box (session 8 proved x 40, y 640 on the old canvas-relative
 // placement at 3840 x 1600, which is y 360 of the visible screen).
 struct HudSettings
 {
@@ -54,7 +54,7 @@ struct HudSettings
     double scale = 1.0;
     std::string layer = "hud"; // hud (inkHUDLayer, hidden with the game's HUD), notifications, top (research: inkWatermarksLayer)
     bool nameplates = true;    // Demo B
-    bool cetLabel = true;      // the CET layer's status label and message lines ([ui] cet_label)
+    bool cetLabel = true;      // the CET layer's CET line and message lines ([ui] cet_label)
 };
 json ToJson(const HudSettings& aSettings);
 bool AnchorOk(const std::string& aAnchor);
@@ -79,27 +79,32 @@ struct BridgeView
 };
 
 // 0.8.2: the in-game surfaces' rule (the maintainer's decision of 21 October, after session 9): one status surface at a
-// time. The ink panel while it is on screen (the game shows its HUD); otherwise the overlay panel (the XF ImGui panel with
-// the yellow heading: photo mode, menus), which then carries the messages and the question too; the status label (CET's,
-// top left) only when neither can draw. The XF Runtime Bridge window (CET's overlay) stays the interactive place and the
-// home for diagnostics; it isn't a status surface.
+// time. The ink panel while it is on screen (the game shows its HUD); otherwise the XF box (the small XF ImGui box with the
+// yellow "XF Runtime Bridge" heading: photo mode, menus), which then carries the messages and the question too; the CET line
+// (CET's one line with a coloured dot, at the far top left) only when neither can draw. The XF Runtime Bridge window (CET's
+// overlay) stays the interactive place and the home for diagnostics; it isn't a status surface.
+// 0.8.3: the names by appearance (session 10: "CET line" and "XF box" read alike), and None: no XF surface while
+// no game session is live (a loading screen, the press-any-key screen after a load, the start-up screens), session 10's
+// finding that the XF box drew over the press-any-key screen.
 enum class StatusSurface
 {
     InkPanel,
-    OverlayPanel,
-    StatusLabel
+    XfBox,
+    CetLine,
+    None
 };
 struct SurfaceFacts
 {
-    bool inkShowing = false;     // the ink panel reported itself on screen in the last moment (XFBridge_InkDrawn)
-    bool overlayDrawing = false; // the overlay host is drawing (hooked, not refused, not stopped by the kill switch)
+    bool inkShowing = false;   // the ink panel reported itself on screen in the last moment (XFBridge_InkDrawn)
+    bool xfBoxDrawing = false; // the overlay host can draw the XF box (hooked, not refused, not stopped by the kill switch)
+    bool sessionLive = true;   // 0.8.3: a game session is live (the script layer ready: not loading, not waiting for the key)
 };
 StatusSurface ChooseStatusSurface(const SurfaceFacts& aFacts);
-// The frame's and XFBridge_Info's name for it: ink_panel, overlay_panel, status_label.
+// The frame's and XFBridge_Info's name for it: ink_panel, xf_box, cet_line or none.
 const char* SurfaceName(StatusSurface aSurface);
 
 // The status line: tone (ok, write, paused, killed, off, idle) and a plain sentence. 0.8 (the UI review): one wording on
-// every surface, made here. text is the ink panel's and the overlay panel's status line ("XF Studio connected · changes
+// every surface, made here. text is the ink panel's and the XF box's status line ("XF Studio connected · changes
 // allowed"); label is the CET label's first line ("XF Runtime Bridge · " + text); connection and changes are the CET
 // window's two lines, each with its own tone. Colour meaning: amber (write, paused) only while changes are allowed or
 // paused, and the text says so; green (ok) connected or read-only; red (killed) stopped; grey (off, idle) otherwise.
@@ -161,8 +166,8 @@ struct AskView
     bool keysArmed = false; // 0.8.2 (the review): the answer keys answer this question now (the "keys" record)
 };
 
-// 0.8.2 (the review: the overlay panel showed "F6 Done" while no key could answer): the line under a question on the overlay
-// panel and the status label: its answer keys while they answer it (the ink panel holds the question with its keys), else
+// 0.8.2 (the review: the XF box showed "F6 Done" while no key could answer): the line under a question on the overlay
+// panel and the CET line: its answer keys while they answer it (the ink panel holds the question with its keys), else
 // where to answer instead.
 std::string AnswerHint(const std::vector<std::string>& aChoices, const std::vector<std::string>& aAnswerKeys, bool aKeysArmed);
 
@@ -172,10 +177,10 @@ std::string AnswerHint(const std::vector<std::string>& aChoices, const std::vect
 // fields never contain tabs or newlines (message text is already one clean line; see CleanField). A disabled bridge
 // answers show 0 (the panel is only drawn while the bridge is on, like the CET label); a killed one shows its state and
 // no messages.
-// 0.8.2: a surface record ("surface<TAB>ink_panel|overlay_panel|status_label") says which status surface shows now; the CET
-// layer draws its status label only for status_label.
+// 0.8.2: a surface record ("surface<TAB>ink_panel|xf_box|cet_line|none", 0.8.3's names) says which status surface shows now;
+// the CET layer draws its CET line only for cet_line.
 std::string Frame(const HudSettings& aSettings, const BridgeView& aView, const std::vector<MessageLine>& aMessages, const AskView* aAsk = nullptr,
-                  StatusSurface aSurface = StatusSurface::StatusLabel);
+                  StatusSurface aSurface = StatusSurface::CetLine);
 // Parses a frame back into JSON (the self-test and the tests read what the redscript layer would draw).
 json ParseFrame(const std::string& aFrame);
 // Replaces tabs, carriage returns and newlines with spaces.
@@ -187,7 +192,7 @@ std::string CleanField(const std::string& aText);
 // aKeysAsk (0.8.2): the question the answer keys answer now (the ink panel's report), so the frame's "keys" record says
 // whether the pending question's keys work.
 std::string BuildFrame(const HudSettings& aSettings, const BridgeView& aView, MessageBoard& aBoard, const std::vector<std::string>& aAnswerKeys,
-                       uint64_t aInkShownAsk, StatusSurface aSurface = StatusSurface::StatusLabel, uint64_t aKeysAsk = 0);
+                       uint64_t aInkShownAsk, StatusSurface aSurface = StatusSurface::CetLine, uint64_t aKeysAsk = 0);
 // A key's name as the panels show it ("IK_F6" to "F6").
 std::string KeyLabel(const std::string& aKey);
 

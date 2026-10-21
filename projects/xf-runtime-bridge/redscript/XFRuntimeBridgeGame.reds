@@ -332,6 +332,47 @@ public abstract class XFInventory {
     XFBridgeLog.Info(cid, "inventory: removed the item the bridge added, '" + item + "': " + XFJson.Flag(removed));
     return "{\"ok\":true,\"removed\":" + XFJson.Flag(removed) + "}";
   }
+
+  // inventory.list (0.8.3, read only; session 10's L1 and L4 had no way to name a jacket V owns): the clothing in V's own
+  // inventory (the transaction system's item list, as FindItem reads it), one entry per copy: its record (inventory_equip's
+  // item), clothing slot, exact identity (inventory_equip's id), its name in the game's language and whether V wears it now.
+  // slot "" lists every clothing slot. Nothing is changed.
+  public static func List(cid: String, slot: String, limit: Int32) -> String {
+    let player = XFInventory.Player();
+    if !IsDefined(player) || !player.IsAttached() {
+      return XFJson.Fail("unavailable", "V isn't in the world; load a save first");
+    }
+    let wanted = StrLen(slot) > 0 ? XFInventory.AreaByName(slot) : gamedataEquipmentArea.Invalid;
+    let items: array<wref<gameItemData>>;
+    if !GameInstance.GetTransactionSystem(GetGameInstance()).GetItemList(player, items) {
+      return XFJson.Fail("unavailable", "the game didn't list V's inventory");
+    }
+    let out = "";
+    let listed = 0;
+    let total = 0;
+    let i = 0;
+    while i < ArraySize(items) {
+      if IsDefined(items[i]) {
+        let id = items[i].GetID();
+        let tdbid = ItemID.GetTDBID(id);
+        let area = XFInventory.ItemArea(tdbid);
+        if NotEquals(area, gamedataEquipmentArea.Invalid) && (Equals(wanted, gamedataEquipmentArea.Invalid) || Equals(area, wanted)) {
+          total += 1;
+          if listed < limit {
+            let record = TweakDBInterface.GetItemRecord(tdbid);
+            let name = IsDefined(record) ? GetLocalizedTextByKey(record.DisplayName()) : "";
+            let worn = Equals(XFInventory.Hash(XFInventory.Equipped(player, area)), XFInventory.Hash(id));
+            out += (listed > 0 ? "," : "") + "{\"item\":" + XFJson.Str(XFInventory.ItemName(id)) + ",\"slot\":" + XFJson.Str(XFInventory.AreaName(area))
+              + ",\"id\":" + XFJson.Str(XFInventory.Hash(id)) + ",\"name\":" + XFJson.Str(name) + ",\"worn\":" + XFJson.Flag(worn) + "}";
+            listed += 1;
+          }
+        }
+      }
+      i += 1;
+    }
+    XFBridgeLog.Debug(cid, "inventory.list slot=" + slot + " count=" + IntToString(total) + " listed=" + IntToString(listed));
+    return "{\"ok\":true,\"count\":" + IntToString(total) + ",\"listed\":" + IntToString(listed) + ",\"items\":[" + out + "]}";
+  }
 }
 
 public abstract class XFGame {

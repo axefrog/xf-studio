@@ -32,6 +32,9 @@ std::filesystem::path RuntimeDirectory();
 // Writes a file via a temporary sibling and an atomic replace.
 bool WriteFileAtomic(const std::filesystem::path& aPath, std::string_view aContent, std::string& aError);
 
+// 0.8.3: a file's SHA-256 as lowercase hex (BCrypt), read in 1 MB pieces; files over aMaxBytes are refused.
+bool FileSha256(const std::filesystem::path& aPath, std::string& aHex, std::string& aError, uint64_t aMaxBytes = 512ull * 1024 * 1024);
+
 std::string LastErrorText(uint32_t aError);
 std::string UtcNowIso8601();
 uint64_t MonotonicMs();

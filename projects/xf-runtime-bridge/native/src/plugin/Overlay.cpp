@@ -688,7 +688,7 @@ void DrawPanel(double aSeconds)
     {
         gR.panel = gPanel.Front();
     }
-    // 0.8.2: one status surface at a time; while the ink panel is on screen (or the status label is the fallback) this
+    // 0.8.2: one status surface at a time; while the ink panel is on screen (or the CET line is the fallback) this
     // panel doesn't draw.
     if (!gR.panel.show)
     {

@@ -199,7 +199,7 @@ HudSettings ApplyHudParams(const HudSettings& aCurrent, const HudSettings& aDefa
 
 Status Summarize(const BridgeView& aView)
 {
-    // 0.8 (the UI review): one wording for the ink panel, the overlay panel, the CET label and the CET window, no jargon
+    // 0.8 (the UI review): one wording for the ink panel, the XF box, the CET label and the CET window, no jargon
     // ("listening", "writes ON", "client", "an XF tool"). Session 8's maintainer asked what "Waiting for XF Studio · changes
     // allowed" meant: not connected now says so.
     Status out;
@@ -252,11 +252,15 @@ Status Summarize(const BridgeView& aView)
 
 StatusSurface ChooseStatusSurface(const SurfaceFacts& aFacts)
 {
+    if (!aFacts.sessionLive)
+    {
+        return StatusSurface::None;
+    }
     if (aFacts.inkShowing)
     {
         return StatusSurface::InkPanel;
     }
-    return aFacts.overlayDrawing ? StatusSurface::OverlayPanel : StatusSurface::StatusLabel;
+    return aFacts.xfBoxDrawing ? StatusSurface::XfBox : StatusSurface::CetLine;
 }
 
 const char* SurfaceName(StatusSurface aSurface)
@@ -265,12 +269,14 @@ const char* SurfaceName(StatusSurface aSurface)
     {
     case StatusSurface::InkPanel:
         return "ink_panel";
-    case StatusSurface::OverlayPanel:
-        return "overlay_panel";
-    case StatusSurface::StatusLabel:
+    case StatusSurface::XfBox:
+        return "xf_box";
+    case StatusSurface::None:
+        return "none";
+    case StatusSurface::CetLine:
         break;
     }
-    return "status_label";
+    return "cet_line";
 }
 
 json StatusJson(const BridgeView& aView)

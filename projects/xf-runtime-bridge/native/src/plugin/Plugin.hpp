@@ -111,13 +111,16 @@ struct State
     // 0.8.2: whether the ink panel reported itself on screen (its HUD shown), with the same staleness; and the status surface
     // chosen this tick (core/InkUi.hpp ChooseStatusSurface).
     std::atomic<bool> inkVisible{false};
-    std::atomic<int> statusSurface{static_cast<int>(inkui::StatusSurface::StatusLabel)};
+    std::atomic<int> statusSurface{static_cast<int>(inkui::StatusSurface::None)};
     bool InkVisible() const;
     // 0.8.2 (the review): the question the ink panel holds with its answer keys (reported whether or not it is on screen), so
     // its keys answer it; 0 when stale or none.
     std::atomic<uint64_t> inkKeysAsk{0};
     uint64_t InkKeysAsk() const;
     uint64_t InkShownAsk() const;
+
+    // 0.8.3: the bridge's own kill key's press detection (game thread only; Main.cpp PollKillKey).
+    killkey::Watch killKeyWatch;
 
     // 0.7: the XF ImGui overlay host (P0, draw-only; core/overlay/Host.hpp, plugin/Overlay.cpp), configured from [overlay].
     xfb::overlay::OverlayHost overlayHost;

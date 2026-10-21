@@ -32,6 +32,7 @@
 #include "core/Dispatcher.hpp"
 #include "core/GameThreadQueue.hpp"
 #include "core/InkUi.hpp"
+#include "core/KillKey.hpp"
 #include "core/LivePose.hpp"
 #include "core/Log.hpp"
 #include "core/Messages.hpp"
@@ -160,18 +161,21 @@ void QueueTests()
     }
 
     // A task already running at the timeout is waited for within the grace period.
+    // 0.8.3 (two of these checks failed once right after a clean build): the game thread drains from the start and the
+    // timeout is 300 ms, not 50, so a busy machine has to keep that thread from running for 300 ms to make the task miss its
+    // start; the task still runs past the timeout (it sleeps 500 ms), which is what the check is about.
     {
         xfb::GameThreadQueue queue;
         queue.SetPumping(true);
-        std::thread game([&] { DrainOne(queue, 20ms); });
+        std::thread game([&] { DrainOne(queue, 0ms); });
         json result;
         std::string error;
         const auto outcome = queue.Run(
             [] {
-                std::this_thread::sleep_for(120ms);
+                std::this_thread::sleep_for(500ms);
                 return json(42);
             },
-            50ms, result, error, "unit.grace", 1000ms);
+            300ms, result, error, "unit.grace", 3000ms);
         game.join();
         Check("running task that finishes within the grace period returns its result",
               outcome == xfb::QueueResult::Done && result == json(42) && queue.LateCompletions() == 0);
@@ -179,22 +183,24 @@ void QueueTests()
 
     // A task still running after timeout + grace: timeout_after_start, then a logged late completion.
     {
+        // 0.8.3: drained from the start, a 300 ms timeout and grace, the task 1.5 s long: the answer comes after about 600 ms,
+        // long before the task ends (the bound is the task's length, not a tight timing).
         xfb::GameThreadQueue queue;
         queue.SetPumping(true);
-        std::thread game([&] { DrainOne(queue, 10ms); });
+        std::thread game([&] { DrainOne(queue, 0ms); });
         json result;
         std::string error;
         const auto started = std::chrono::steady_clock::now();
         const auto outcome = queue.Run(
             [] {
-                std::this_thread::sleep_for(400ms);
+                std::this_thread::sleep_for(1500ms);
                 return json(7);
             },
-            50ms, result, error, "unit.late", 50ms);
+            300ms, result, error, "unit.late", 300ms);
         const auto waited = MsSince(started);
         game.join();
         Check("running task past the grace period reports timeout_after_start",
-              outcome == xfb::QueueResult::TimeoutAfterStart && waited < 300, std::to_string(waited) + " ms");
+              outcome == xfb::QueueResult::TimeoutAfterStart && waited >= 550 && waited < 1400, std::to_string(waited) + " ms");
         Check("its completion afterwards is counted as late", queue.LateCompletions() == 1);
     }
 
@@ -239,15 +245,16 @@ void QueueTests()
         const auto started = std::chrono::steady_clock::now();
         const auto outcome = queue.Run(
             [] {
-                std::this_thread::sleep_for(300ms);
+                std::this_thread::sleep_for(1500ms);
                 return json(1);
             },
             5000ms, result, error, "unit.close_running");
         const auto waited = MsSince(started);
         game.join();
         closer.join();
+        // 0.8.3: the bound is the task's length (1.5 s), not a tight 250 ms: released by the close, not by the task's end.
         Check("Close releases the waiter of a running task at once",
-              outcome == xfb::QueueResult::TimeoutAfterStart && waited < 250 && queue.LateCompletions() == 1,
+              outcome == xfb::QueueResult::TimeoutAfterStart && waited < 1200 && queue.LateCompletions() == 1,
               std::to_string(waited) + " ms");
     }
 }
@@ -3566,7 +3573,7 @@ void Bridge080Tests()
         Check("0.8 key labels drop IK_", k::KeyLabel("IK_F6") == "F6" && k::KeyLabel("F9") == "F9");
     }
 
-    // Session 8's item 1: every documented anchor, center among them; the default top left below the overlay panel.
+    // Session 8's item 1: every documented anchor, center among them; the default top left below the XF box.
     {
         k::HudPanel panel;
         panel.SetDefaults({});
@@ -4292,25 +4299,28 @@ void Session9Tests()
 
     // The surfaces' rule and the frame's surface record.
     {
-        Check("0.8.2 surfaces: the ink panel while it is on screen, else the overlay panel, else the status label",
-              k::ChooseStatusSurface({true, true}) == k::StatusSurface::InkPanel && k::ChooseStatusSurface({false, true}) == k::StatusSurface::OverlayPanel &&
-                  k::ChooseStatusSurface({false, false}) == k::StatusSurface::StatusLabel && k::ChooseStatusSurface({true, false}) == k::StatusSurface::InkPanel);
+        Check("0.8.2 surfaces: the ink panel while it is on screen, else the XF box, else the CET line",
+              k::ChooseStatusSurface({true, true}) == k::StatusSurface::InkPanel && k::ChooseStatusSurface({false, true}) == k::StatusSurface::XfBox &&
+                  k::ChooseStatusSurface({false, false}) == k::StatusSurface::CetLine && k::ChooseStatusSurface({true, false}) == k::StatusSurface::InkPanel);
+        Check("0.8.3 surfaces: none at all while no session is live (session 10: the XF box drew over the press-any-key screen)",
+              k::ChooseStatusSurface({false, true, false}) == k::StatusSurface::None && k::ChooseStatusSurface({true, true, false}) == k::StatusSurface::None &&
+                  k::ChooseStatusSurface({false, false, false}) == k::StatusSurface::None && std::string(k::SurfaceName(k::StatusSurface::None)) == "none");
         k::BridgeView view;
         view.pluginEnabled = true;
         view.listening = true;
         xfb::MessageBoard board;
-        const auto frame = k::ParseFrame(k::BuildFrame(k::HudSettings{}, view, board, {"IK_F6"}, 0, k::StatusSurface::OverlayPanel));
-        Check("0.8.2 surfaces: the frame names the surface (the CET layer draws its label only for status_label)",
-              frame.value("surface", std::string()) == "overlay_panel" &&
-                  k::ParseFrame(k::BuildFrame(k::HudSettings{}, view, board, {"IK_F6"}, 0))["surface"] == "status_label",
+        const auto frame = k::ParseFrame(k::BuildFrame(k::HudSettings{}, view, board, {"IK_F6"}, 0, k::StatusSurface::XfBox));
+        Check("0.8.2 surfaces: the frame names the surface (the CET layer draws its line only for cet_line)",
+              frame.value("surface", std::string()) == "xf_box" &&
+                  k::ParseFrame(k::BuildFrame(k::HudSettings{}, view, board, {"IK_F6"}, 0))["surface"] == "cet_line",
               frame.dump());
         // Review 5: keys are offered only while they answer the question.
         board.Post({"Which?", 60, "ask", false, {"Yes", "No"}}, t0);
         xfb::PendingAsk pendingAsk;
         board.Pending(pendingAsk);
-        const auto armed = k::ParseFrame(k::BuildFrame(k::HudSettings{}, view, board, {"IK_F6", "IK_F7"}, 0, k::StatusSurface::OverlayPanel, pendingAsk.id));
-        const auto unarmed = k::ParseFrame(k::BuildFrame(k::HudSettings{}, view, board, {"IK_F6", "IK_F7"}, 0, k::StatusSurface::OverlayPanel, 0));
-        Check("0.8.2 (review 5) the frame says whether the keys answer the question, and the overlay panel's line follows it",
+        const auto armed = k::ParseFrame(k::BuildFrame(k::HudSettings{}, view, board, {"IK_F6", "IK_F7"}, 0, k::StatusSurface::XfBox, pendingAsk.id));
+        const auto unarmed = k::ParseFrame(k::BuildFrame(k::HudSettings{}, view, board, {"IK_F6", "IK_F7"}, 0, k::StatusSurface::XfBox, 0));
+        Check("0.8.2 (review 5) the frame says whether the keys answer the question, and the XF box's line follows it",
               armed.value("keys", std::string()) == "1" && unarmed.value("keys", std::string()) == "0" &&
                   k::AnswerHint({"Yes", "No"}, {"IK_F6", "IK_F7"}, true) == "F6 Yes   F7 No" &&
                   k::AnswerHint({"Yes", "No"}, {"IK_F6", "IK_F7"}, false) == "Answer in the XF Runtime Bridge window (CET overlay).",
@@ -4454,6 +4464,157 @@ void Session9Tests()
     }
 }
 
+// 0.8.3: session 10's bridge findings (core pieces): the bridge's own kill key, the staged showroom's discovery through the
+// game's own folder, inventory.list's parameters, the smooth look's arc (player.look shares behave.look's).
+void Bridge083Tests()
+{
+    namespace kk = xfb::killkey;
+    // The kill key: parsing, the default, the warning for a key the game binds, and the press detection.
+    {
+        kk::Chord chord;
+        std::string why;
+        const bool end = kk::Parse("End", chord, why);
+        kk::Chord ctrlEnd;
+        const bool chordOk = kk::Parse(" ctrl + End ", ctrlEnd, why);
+        kk::Chord numpadPlus;
+        const bool plusOk = kk::Parse("Ctrl+Numpad+", numpadPlus, why);
+        kk::Chord gameName;
+        const bool gameNameOk = kk::Parse("IK_Multiply", gameName, why);
+        kk::Chord off;
+        const bool offOk = kk::Parse("off", off, why);
+        kk::Chord bad;
+        std::string badWhy;
+        const bool badOk = kk::Parse("Hyper+End", bad, badWhy);
+        std::string unknownWhy;
+        const bool unknownOk = kk::Parse("Space", bad, unknownWhy);
+        Check("0.8.3 kill key: End, Ctrl + End, Ctrl + Numpad +, the game's own names and off parse; other modifiers and keys are refused plainly",
+              end && chord.vk == 0x23 && !chord.ctrl && chord.label == "End" && chordOk && ctrlEnd.ctrl && ctrlEnd.vk == 0x23 &&
+                  ctrlEnd.label == "Ctrl + End" && plusOk && numpadPlus.ctrl && numpadPlus.vk == 0x6B && gameNameOk && gameName.vk == 0x6A &&
+                  gameName.label == "Numpad *" && offOk && !off.enabled && !badOk && badWhy.find("modifier") != std::string::npos && !unknownOk &&
+                  unknownWhy.find("isn't a key") != std::string::npos,
+              ctrlEnd.label + " / " + badWhy + " / " + unknownWhy);
+        Check("0.8.3 kill key: the default is End, which the game's 2.31 bindings leave free (F9, Home and letters are bound)",
+              std::string(kk::kDefault) == "End" && xfb::Config{}.killKey.vk == 0x23 && xfb::Config{}.killKey.enabled && !kk::GameBinds(0x23) &&
+                  kk::GameBinds(0x78) && kk::GameBinds(0x24) && kk::GameBinds('W') && !kk::GameBinds(0x6A));
+        const auto parsed = xfb::ParseConfig("[ui]\nkill_key = Ctrl + End\n");
+        const auto warned = xfb::ParseConfig("[ui]\nkill_key = W\n");
+        const auto refused = xfb::ParseConfig("[ui]\nkill_key = Space\n");
+        const auto none = xfb::ParseConfig("[ui]\nkill_key = off\n");
+        Check("0.8.3 kill key in config.ini: a chord is read; a game key warns; an unknown key warns and keeps End; off switches it off",
+              parsed.killKey.ctrl && parsed.killKey.vk == 0x23 && parsed.warnings.empty() && warned.killKey.vk == 'W' && warned.warnings.size() == 1 &&
+                  refused.killKey.vk == 0x23 && refused.warnings.size() == 1 && refused.warnings[0].find("End") != std::string::npos && !none.killKey.enabled &&
+                  xfb::DescribeConfig(parsed).find("ui.kill_key=Ctrl+End") != std::string::npos,
+              refused.warnings.empty() ? std::string() : refused.warnings[0]);
+        // Press detection: once per press, only with every modifier the chord names, never while the window isn't in front
+        // (the plugin passes a reader that answers false then).
+        std::map<int, bool> keys;
+        const auto reader = [&keys](int aVk) { return keys[aVk]; };
+        kk::Watch watch;
+        int fired = 0;
+        keys[0x23] = true;
+        fired += watch.Poll(ctrlEnd, reader) ? 1 : 0; // End without Ctrl: nothing
+        keys[0x11] = true;
+        fired += watch.Poll(ctrlEnd, reader) ? 1 : 0; // Ctrl + End: once
+        fired += watch.Poll(ctrlEnd, reader) ? 1 : 0; // still held: not again
+        keys[0x23] = false;
+        fired += watch.Poll(ctrlEnd, reader) ? 1 : 0;
+        keys[0x23] = true;
+        fired += watch.Poll(ctrlEnd, reader) ? 1 : 0; // pressed again: once more
+        const int afterSecond = fired;
+        kk::Watch idle;
+        const bool notInFront = idle.Poll(chord, [](int) { return false; });
+        const bool switchedOff = idle.Poll(off, reader);
+        Check("0.8.3 kill key: one kill per press, only with its modifiers; nothing while the game isn't in front or the key is off",
+              afterSecond == 2 && !notInFront && !switchedOff, std::to_string(afterSecond));
+    }
+
+    // The staged showroom: the game's own archive/pc/mod (a temporary folder here), the archive's SHA-256, a self-describing
+    // build's manifest beside it, a manifest that names another archive refused, other mods' files ignored.
+    {
+        wchar_t temp[MAX_PATH]{};
+        GetTempPathW(MAX_PATH, temp);
+        const auto dir = std::filesystem::path(temp) / (L"xfb-unit-staged-" + std::to_wstring(GetCurrentProcessId()));
+        std::filesystem::remove_all(dir);
+        std::filesystem::create_directories(dir);
+        const std::string a = "xfs_showroom_4426018f6966620881cdcb78569544ab", b = "xfs_showroom_d11f5a7fd3192b9e4f6dd14f343578b8";
+        std::ofstream(dir / (a + ".archive"), std::ios::binary) << "abc";
+        std::ofstream(dir / (b + ".archive"), std::ios::binary) << "xyz";
+        std::ofstream(dir / (a + ".showroom.json"), std::ios::binary) << "\xEF\xBB\xBF{\"schema\":\"xfs/showroom-package-1\",\"archive\":\"" << a << "\",\"pieces\":[]}";
+        std::ofstream(dir / (b + ".showroom.json"), std::ios::binary) << "{\"schema\":\"xfs/showroom-package-1\",\"archive\":\"" << a << "\"}";
+        std::ofstream(dir / L"other_mod.archive", std::ios::binary) << "1";
+        std::ofstream(dir / L"xfs_showroom_NOTHEX.archive", std::ios::binary) << "1";
+        std::ofstream(dir / L"\x00C5sa_\x6771\x4EAC.archive", std::ios::binary) << "1"; // a name the narrow code page may not hold
+        const auto out = xfb::showroom::StagedShowrooms(dir);
+        const auto& list = out["archives"];
+        Check("0.8.3 showroom.staged: the game folder's showroom archives with their SHA-256 and a self-describing build's manifest",
+              out["found"] == true && list.size() == 2 && list[0]["archive"] == a && list[0]["bytes"] == 3 &&
+                  list[0]["sha256"] == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" && list[0]["manifest"].is_object() &&
+                  list[0]["manifest"]["archive"] == a && list[1]["archive"] == b && list[1]["manifest"].is_null() &&
+                  list[1].value("manifest_error", std::string()).find("not this archive") != std::string::npos,
+              out.dump());
+        const auto missing = xfb::showroom::StagedShowrooms(dir / L"none");
+        Check("0.8.3 showroom.staged: a missing folder answers found false and no archives", missing["found"] == false && missing["archives"].empty(), missing.dump());
+        std::filesystem::remove_all(dir);
+    }
+
+    // inventory.list's parameters.
+    {
+        const auto all = xfb::params::ParseInventoryList(json::object());
+        const auto jackets = xfb::params::ParseInventoryList(json{{"slot", "OuterChest"}, {"limit", 5}});
+        std::string badSlot, badLimit;
+        try
+        {
+            xfb::params::ParseInventoryList(json{{"slot", "Weapon"}});
+        }
+        catch (const xfb::MethodError& e)
+        {
+            badSlot = e.what();
+        }
+        try
+        {
+            xfb::params::ParseInventoryList(json{{"limit", 500}});
+        }
+        catch (const xfb::MethodError& e)
+        {
+            badLimit = e.what();
+        }
+        Check("0.8.3 inventory.list: every clothing slot by default (limit 100), one slot by name, other slots and limits refused",
+              all.slot.empty() && all.limit == 100 && jackets.slot == "OuterChest" && jackets.limit == 5 && !badSlot.empty() && !badLimit.empty());
+    }
+
+    // The smooth look's arc (behave.look's since 0.8.2, player.look's since 0.8.3): it starts at the view, ends at the point,
+    // only ever comes closer to it, and a duration_s of 5 takes 50 steps of kLookArcStepS (session 10's L2a took 1.5 s).
+    {
+        namespace pl = xfb::player;
+        const double k = 3.14159265358979323846 / 180.0;
+        const auto from = pl::DirectionOf(0.0, 0.0);
+        const auto to = pl::DirectionOf(90.0, -10.0);
+        double previous = 1e9, worst = -1.0;
+        const double duration = 5.0;
+        int steps = 0;
+        for (int step = 1;; ++step)
+        {
+            const double next = std::min(1.0, step * pl::kLookArcStepS / duration);
+            const auto d = pl::LookArc(from, to, next);
+            const double angle = std::acos(std::clamp(d[0] * to[0] + d[1] * to[1] + d[2] * to[2], -1.0, 1.0)) / k;
+            worst = std::max(worst, angle - previous);
+            previous = angle;
+            steps = step;
+            if (next >= 1.0)
+            {
+                break;
+            }
+        }
+        const auto start = pl::LookArc(from, to, 0.0);
+        const auto half = pl::LookArc(from, to, 0.5);
+        const double halfAngle = std::acos(std::clamp(half[0] * to[0] + half[1] * to[1] + half[2] * to[2], -1.0, 1.0)) / k;
+        const auto back = pl::LookArc(from, pl::DirectionOf(180.0, 0.0), 0.5);
+        Check("0.8.3 the smooth look's arc: from the view to the point, never wider on the way, 50 steps for 5 s, eased half way",
+              std::abs(start[0] - from[0]) < 1e-9 && std::abs(start[1] - from[1]) < 1e-9 && previous < 1e-6 && worst <= 1e-9 && steps == 50 &&
+                  std::abs(halfAngle - 45.25) < 1.0 && std::abs(back[2]) < 1e-9 && std::abs(std::hypot(back[0], back[1]) - 1.0) < 1e-9,
+              "steps=" + std::to_string(steps) + " half=" + std::to_string(halfAngle));
+    }
+}
 
 // 0.8.2: the crash investigation's offline checks (run under AddressSanitizer by the build record's ASan step).
 //
@@ -4617,6 +4778,7 @@ int RunUnitTests()
     Bridge081Tests();
     Bridge082Tests();
     Session9Tests();
+    Bridge083Tests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;
 }

@@ -394,6 +394,15 @@ InventoryUnequipRequest ParseInventoryUnequip(const json& aParams)
     return request;
 }
 
+InventoryListRequest ParseInventoryList(const json& aParams)
+{
+    RequireOnly(aParams, {"slot", "limit"});
+    InventoryListRequest request;
+    request.slot = Slot(aParams);
+    request.limit = static_cast<int32_t>(CheckInteger(aParams, "limit", 1, 200).value_or(100));
+    return request;
+}
+
 CameraPlaceRequest ParseCameraPlace(const json& aParams)
 {
     RequireOnly(aParams, {"position", "look_at"});

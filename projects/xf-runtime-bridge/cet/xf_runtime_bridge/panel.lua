@@ -13,7 +13,8 @@
 --     only take access away: resuming gives back exactly what the bridge's config.ini allows.
 --   * Mark this moment (0.6): a marker in the session's event stream (XFBridge_Note), for the coordinator's session.log; the
 --     coordinator also treats it as "ready".
---   * Stop the bridge (the kill switch), on its own row in the danger colour (0.8, the UI review), while it listens.
+--   * Stop the bridge (the kill switch), on its own row in the danger colour (0.8, the UI review), while it listens, with the
+--     bridge's own kill key beside it (0.8.3, [ui] kill_key: it works in the game without CET).
 --   * A commentary box (0.7; XFBridge_Comment): Send, or Ctrl+Enter (0.8, session 8's request; 0.8.2: read from the box's own
 --     validation, since Ctrl+Enter ends the box's editing before anything after it can see the key).
 -- Buttons only queue an action; init.lua carries it out in onUpdate, never while drawing.
@@ -267,6 +268,12 @@ function panel.body(state, queue, theme, which)
         ImGui.PopStyleColor(1)
         if stop then
           queue("kill")
+        end
+        -- 0.8.3: the bridge's own kill key ([ui] kill_key), which works in the game without CET.
+        local killKey = info and type(info.kill_key) == "table" and info.kill_key or nil
+        if killKey and killKey.enabled and type(killKey.label) == "string" then
+          ImGui.SameLine()
+          ImGui.TextDisabled("or press " .. killKey.label .. " in the game")
         end
       end
     end

@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.25)
 
 project(
   XFRuntimeBridge
-  VERSION 0.8.2
+  VERSION 0.8.3
   LANGUAGES CXX RC
 )
 
@@ -132,6 +132,7 @@ add_library(xfb_core STATIC
   src/core/overlay/Host.cpp
   src/core/overlay/Theme.cpp
   src/core/InkUi.cpp
+  src/core/KillKey.cpp
   src/core/LivePose.cpp
   src/core/Log.cpp
   src/core/Messages.cpp

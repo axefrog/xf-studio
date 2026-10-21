@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "core/KillKey.hpp"
 #include "core/Log.hpp"
 
 namespace xfb
@@ -35,7 +36,7 @@ struct Config
     uint32_t maxRequestsPerSecond = 20;
     uint32_t idleDisconnectSeconds = 120;
 
-    // [ui] (bridge 0.5.3, temporary test features): the ink HUD panel (Demo A) shown at start, the CET layer's status label and
+    // [ui] (bridge 0.5.3, temporary test features): the ink HUD panel (Demo A) shown at start, the CET layer's CET line and
     // message lines, and the showroom's pedestal nameplates (Demo B). ui.hud changes each while the game runs.
     bool hudPanel = true;
     bool cetLabel = true;
@@ -45,13 +46,15 @@ struct Config
     // 0.8 (the UI review asked for F9 in place of F11 if it is free): F9 is the game's quick load in 2.31
     // (r6/config/inputUserMappings.xml, overridableUI quickLoad), so F11 stays.
     std::vector<std::string> answerKeys{"IK_F6", "IK_F7", "IK_F8", "IK_F11"};
+    // 0.8.3: the bridge's own kill key (core/KillKey.hpp; default End, "off" for none), read by the plugin itself without CET.
+    killkey::Chord killKey;
 
     // [overlay] (0.7, the ImGui overlay host P0: research/runtime/imgui-overlay-feasibility.md §8): off by default; draw-only
     // (a diagnostic panel); refuses in HDR. theme: dark (default) or light, chosen by hand, never switched automatically.
     bool overlayEnabled = false;
     std::string overlayTheme = "dark";
     uint32_t overlayScalePercent = 100; // 50-300, on top of the back buffer's height / 1080
-    // 0.8 (the UI review): the overlay panel's diagnostic lines (frames, CPU time, the back buffer, frame-generation modules,
+    // 0.8 (the UI review): the XF box's diagnostic lines (frames, CPU time, the back buffer, frame-generation modules,
     // the script gate, requests and the moving bar) only when asked for; the -diagnostic package turns them on.
     bool overlayDiagnostics = false;
 

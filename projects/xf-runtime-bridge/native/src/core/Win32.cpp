@@ -108,6 +108,83 @@ std::filesystem::path ModuleDirectory(const void* aAddressInModule)
     return std::filesystem::path(buffer).parent_path();
 }
 
+bool FileSha256(const std::filesystem::path& aPath, std::string& aHex, std::string& aError, uint64_t aMaxBytes)
+{
+    std::error_code ec;
+    const auto size = std::filesystem::file_size(aPath, ec);
+    if (ec)
+    {
+        aError = "unreadable";
+        return false;
+    }
+    if (size > aMaxBytes)
+    {
+        aError = "too large";
+        return false;
+    }
+    BCRYPT_ALG_HANDLE algorithm = nullptr;
+    BCRYPT_HASH_HANDLE hash = nullptr;
+    if (BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0) < 0)
+    {
+        aError = "BCryptOpenAlgorithmProvider failed";
+        return false;
+    }
+    bool ok = BCryptCreateHash(algorithm, &hash, nullptr, 0, nullptr, 0, 0) >= 0;
+    const auto handle = CreateFileW(aPath.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+                                    FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+    if (handle == INVALID_HANDLE_VALUE)
+    {
+        aError = "unreadable";
+        ok = false;
+    }
+    std::vector<unsigned char> buffer(1024 * 1024);
+    while (ok)
+    {
+        DWORD read = 0;
+        if (!ReadFile(handle, buffer.data(), static_cast<DWORD>(buffer.size()), &read, nullptr))
+        {
+            aError = "read failed";
+            ok = false;
+            break;
+        }
+        if (read == 0)
+        {
+            break;
+        }
+        ok = BCryptHashData(hash, buffer.data(), read, 0) >= 0;
+    }
+    unsigned char digest[32]{};
+    if (ok)
+    {
+        ok = BCryptFinishHash(hash, digest, sizeof(digest), 0) >= 0;
+    }
+    if (handle != INVALID_HANDLE_VALUE)
+    {
+        CloseHandle(handle);
+    }
+    if (hash)
+    {
+        BCryptDestroyHash(hash);
+    }
+    BCryptCloseAlgorithmProvider(algorithm, 0);
+    if (!ok)
+    {
+        if (aError.empty())
+        {
+            aError = "hash failed";
+        }
+        return false;
+    }
+    static const char* hex = "0123456789abcdef";
+    aHex.clear();
+    for (const auto byte : digest)
+    {
+        aHex.push_back(hex[byte >> 4]);
+        aHex.push_back(hex[byte & 15]);
+    }
+    return true;
+}
+
 std::filesystem::path ProcessImagePath()
 {
     std::wstring buffer(MAX_PATH, L'\0');

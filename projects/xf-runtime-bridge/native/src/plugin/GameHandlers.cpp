@@ -34,6 +34,7 @@
 #include "core/OptionsExchange.hpp"
 #include "core/Params.hpp"
 #include "core/Showroom.hpp"
+#include "core/Win32.hpp"
 #include "core/Writes.hpp"
 #include "plugin/GameHandlers.hpp"
 #include "plugin/LivePoseMemory.hpp"
@@ -947,6 +948,15 @@ json PhotoCameraPlace(const MethodContext& aContext)
     }
     const auto reading = RunGameTask(queue, Timeout(), [cid] { return CallScript("XFPhoto", "CameraReading", {}, {}, cid); }, "photo.camera.read");
     return writes::CameraPlaceResult(request, step, reading);
+}
+
+// inventory.list (0.8.3, read): the clothing V owns, each copy with its exact identity (redscript XFInventory.List).
+json InventoryList(const MethodContext& aContext)
+{
+    const auto request = params::ParseInventoryList(aContext.params);
+    RED4ext::CString slot(request.slot.c_str());
+    int32_t limit = request.limit;
+    return CallScript("XFInventory", "List", {"String", "Int32"}, {&slot, &limit}, aContext.cid);
 }
 
 // wardrobe.state (0.5.2): the active outfit and what each clothing area shows.
@@ -1973,6 +1983,9 @@ void RegisterMethods(Dispatcher& aDispatcher)
                                      &InventoryEquipMethod));
     aDispatcher.Register(WriteMethod("inventory.unequip", Access::WriteInventory, RunOn::BridgeThread,
                                      "Unequips a clothing slot (and removes an item the bridge added, if asked).", &InventoryUnequipMethod));
+    // 0.8.3: what clothing V owns (read; the inventory class isn't needed to list it).
+    aDispatcher.Register({"inventory.list", Access::Read, RunOn::GameThread,
+                          "Lists the clothing V owns, each copy with its exact identity (read only).", &InventoryList});
     // Bridge 0.5.2: the wardrobe (outfits decide what each clothing area shows), in the inventory write class.
     aDispatcher.Register({"wardrobe.state", Access::Read, RunOn::GameThread,
                           "The active wardrobe outfit, what each clothing area shows, and the stored outfits.", &WardrobeState});
@@ -1988,6 +2001,15 @@ void RegisterMethods(Dispatcher& aDispatcher)
     aDispatcher.Register({"showroom.anchor", Access::Read, RunOn::GameThread,
                           "Where V and the camera are and which way they face, and whether Codeware is loaded (for placing the showroom).",
                           &ShowroomAnchor});
+    // 0.8.3: the staged showroom builds as the game itself sees them (core/Showroom.cpp StagedShowrooms); files only, no game
+    // objects, so on the pipe's thread.
+    aDispatcher.Register({"showroom.staged", Access::Read, RunOn::BridgeThread,
+                          "Lists the XF Finish Showroom archives the game sees in its archive/pc/mod folder, with each build's own manifest where it ships one.",
+                          [](const MethodContext& aContext) {
+                              params::RequireOnly(aContext.params, {});
+                              const auto game = win32::ProcessImagePath().parent_path().parent_path().parent_path();
+                              return showroom::StagedShowrooms(game / L"archive" / L"pc" / L"mod");
+                          }});
     aDispatcher.Register({"showroom.state", Access::Read, RunOn::GameThread,
                           "The XF Finish Showroom heads and light rigs the bridge spawned, where they are and whether they are in.", &ShowroomState});
     aDispatcher.Register(WriteMethod("showroom.place", Access::WriteShowroom, RunOn::BridgeThread,

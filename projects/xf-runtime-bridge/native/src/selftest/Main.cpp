@@ -148,6 +148,7 @@ int wmain(int argc, wchar_t** argv)
     bool allowLivePose = false;
     int rearmAfterMs = -1;
     bool codeware = true;
+    std::wstring modDir; // 0.8.3: the folder showroom.staged reads as the game's archive/pc/mod (tests pass their own)
     for (int i = 1; i < argc; ++i)
     {
         const std::wstring arg = argv[i];
@@ -200,6 +201,10 @@ int wmain(int argc, wchar_t** argv)
         else if (arg == L"--no-codeware")
         {
             codeware = false;
+        }
+        else if (arg == L"--mod-dir" && i + 1 < argc)
+        {
+            modDir = argv[++i];
         }
         else if (arg == L"--no-cet")
         {
@@ -1534,7 +1539,7 @@ int wmain(int argc, wchar_t** argv)
                              view.inSession = bridge.InSession();
                              view.scriptReady = simLayer.Ready();
                              // 0.8: the plugin's own frame builder (core BuildFrame), and the status every surface shows.
-                             const auto surface = xfb::inkui::ChooseStatusSurface({inkVisible, false});
+                             const auto surface = xfb::inkui::ChooseStatusSurface({inkVisible, false, simLayer.Ready()});
                              const auto frame = xfb::inkui::BuildFrame(hud.Current(), view, messages, config.answerKeys, inkShown, surface, inkKeys);
                              auto out = xfb::inkui::ParseFrame(frame);
                              out["frame"] = frame;
@@ -2341,6 +2346,34 @@ int wmain(int argc, wchar_t** argv)
         };
         return ops;
     };
+    // 0.8.3: the plugin's own listing (core StagedShowrooms) of the folder --mod-dir names, standing in for archive/pc/mod.
+    dispatcher.Register({"showroom.staged", xfb::Access::Read, xfb::RunOn::BridgeThread, "The staged showroom builds (the --mod-dir folder).",
+                         [modDir](const xfb::MethodContext& aContext) {
+                             p::RequireOnly(aContext.params, {});
+                             return xfb::showroom::StagedShowrooms(modDir.empty() ? std::filesystem::path(L"Z:\xfb-no-mod-dir") : std::filesystem::path(modDir));
+                         }});
+    // 0.8.3: inventory.list (simulated: two jackets, one worn, and a cap).
+    dispatcher.Register({"inventory.list", xfb::Access::Read, xfb::RunOn::GameThread, "V's clothing (simulated).",
+                         [](const xfb::MethodContext& aContext) {
+                             const auto request = p::ParseInventoryList(aContext.params);
+                             const json all = json::array({json{{"item", "Items.Jacket_01_basic_01"}, {"slot", "OuterChest"}, {"id", "1111"}, {"name", "Jacket"}, {"worn", true}},
+                                                           json{{"item", "Items.Jacket_02_basic_01"}, {"slot", "OuterChest"}, {"id", "2222"}, {"name", "Other jacket"}, {"worn", false}},
+                                                           json{{"item", "Items.Cap_01"}, {"slot", "Head"}, {"id", "3333"}, {"name", "Cap"}, {"worn", false}}});
+                             json items = json::array();
+                             int count = 0;
+                             for (const auto& item : all)
+                             {
+                                 if (request.slot.empty() || item["slot"] == request.slot)
+                                 {
+                                     ++count;
+                                     if (static_cast<int>(items.size()) < request.limit)
+                                     {
+                                         items.push_back(item);
+                                     }
+                                 }
+                             }
+                             return json{{"ok", true}, {"simulated", true}, {"count", count}, {"listed", items.size()}, {"items", items}};
+                         }});
     dispatcher.Register({"showroom.anchor", xfb::Access::Read, xfb::RunOn::GameThread, "Where V and the camera are (simulated).",
                          [](const xfb::MethodContext& aContext) {
                              const auto archives = xfb::showroom::ParseAnchorArchives(aContext.params);

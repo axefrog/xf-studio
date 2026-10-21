@@ -388,6 +388,15 @@ struct InventoryUnequipRequest
 };
 InventoryUnequipRequest ParseInventoryUnequip(const json& aParams);
 
+// inventory.list (0.8.3, read; session 10's L1 and L4 needed a jacket V owns): {slot (one of ClothingSlots; none: every
+// clothing slot), limit (1-200, default 100)}. Clothing V owns, from her own inventory, with each copy's exact identity.
+struct InventoryListRequest
+{
+    std::string slot;
+    int32_t limit = 100;
+};
+InventoryListRequest ParseInventoryList(const json& aParams);
+
 // photo.camera.place (0.5.2, research): {position: [x, y, z], look_at: [x, y, z]} in world metres, at least 5 cm apart.
 struct CameraPlaceRequest
 {

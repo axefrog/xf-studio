@@ -14,6 +14,7 @@
 #include <map>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "core/Behaviours.hpp"
@@ -329,27 +330,91 @@ json PlayerLook(const MethodContext& aContext)
             "player.look.yaw");
         writes::WaitTicks(Get().queue, 1, GameTimeout());
     }
-    // Aim at the wanted point from where the camera is after any turn (the camera moves with V's head slightly).
-    GameWrite(
-        [cid, point = target.point, duration = request.duration, seen] {
-            Get().playerStops.Require(seen, "player.look");
-            float x = static_cast<float>(point[0]), y = static_cast<float>(point[1]), z = static_cast<float>(point[2]);
-            float d = static_cast<float>(duration);
-            return ScriptCall("XFPlayer", "LookAt", {"Float", "Float", "Float", "Float"}, {&x, &y, &z, &d}, cid);
-        },
-        "player.look");
-    // Wait for it: the look-at runs natively; read the camera until it stops moving or the time is up.
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(static_cast<int>(request.duration * 1000.0) + 700);
+    const auto lookAt = [&cid, &seen](const Vec3& aPoint, double aDuration, const char* aLabel) {
+        GameWrite(
+            [cid, point = aPoint, duration = aDuration, seen] {
+                Get().playerStops.Require(seen, "player.look");
+                float x = static_cast<float>(point[0]), y = static_cast<float>(point[1]), z = static_cast<float>(point[2]);
+                float d = static_cast<float>(duration);
+                return ScriptCall("XFPlayer", "LookAt", {"Float", "Float", "Float", "Float"}, {&x, &y, &z, &d}, cid);
+            },
+            aLabel);
+    };
+    const auto readCamera = [&cid] { return Game([cid] { return ScriptCall("XFPlayer", "State", {}, {}, cid); }, "player.state").at("camera"); };
+    const auto angleTo = [](const json& aCamera, const Vec3& aPoint) {
+        const auto pos = VecOf(aCamera.at("position"));
+        const auto fwd = player::DirectionOf(aCamera.value("yaw", 0.0), aCamera.value("pitch", 0.0));
+        Vec3 d{aPoint[0] - pos[0], aPoint[1] - pos[1], aPoint[2] - pos[2]};
+        const double n = std::hypot(d[0], d[1], d[2]);
+        if (n < 1e-6)
+        {
+            return 0.0;
+        }
+        const double c = std::clamp((fwd[0] * d[0] + fwd[1] * d[1] + fwd[2] * d[2]) / n, -1.0, 1.0);
+        return std::acos(c) * 180.0 / 3.14159265358979323846;
+    };
     json reached = camera;
     bool stopped = false;
-    while (std::chrono::steady_clock::now() < deadline)
+    std::string tookOver;
+    const auto started = std::chrono::steady_clock::now();
+    if (request.smooth)
+    {
+        // 0.8.3 (session 10's L2a: a five-second look took 1.5 s; the game's own look-at keeps its own pace): steered along the
+        // eased great-circle arc with a short look-at to the next place every kLookArcStepS, as behave.look is (0.8.2), so it
+        // takes duration_s. The view only ever comes closer to the point, so drifting more than 4 degrees wider than the
+        // closest it came means the player's mouse or stick turned it: the look ends there (took_over camera_drift).
+        const Vec3 from = player::DirectionOf(yaw0, pitch0);
+        Vec3 to{target.point[0] - camPos[0], target.point[1] - camPos[1], target.point[2] - camPos[2]};
+        const double n = std::max(1e-6, std::hypot(to[0], to[1], to[2]));
+        to = {to[0] / n, to[1] / n, to[2] / n};
+        double closest = -1.0;
+        for (int step = 1;; ++step)
+        {
+            const double next = std::min(1.0, step * player::kLookArcStepS / request.duration);
+            const auto d = player::LookArc(from, to, next);
+            lookAt({camPos[0] + d[0] * 10.0, camPos[1] + d[1] * 10.0, camPos[2] + d[2] * 10.0}, player::kLookArcStepS * 1.5, "player.look.step");
+            if (next >= 1.0)
+            {
+                break;
+            }
+            std::this_thread::sleep_until(started + std::chrono::milliseconds(static_cast<int>(step * player::kLookArcStepS * 1000.0)));
+            if (stops.StoppedSince(seen))
+            {
+                stopped = true; // player.stop broke the look-at; nothing here starts it again
+                break;
+            }
+            reached = readCamera();
+            const double angle = angleTo(reached, target.point);
+            if (closest < 0.0 || angle < closest)
+            {
+                closest = angle;
+            }
+            else if (step * player::kLookArcStepS > 0.3 && angle > closest + 4.0)
+            {
+                tookOver = "camera_drift";
+                break;
+            }
+        }
+        if (!stopped && tookOver.empty())
+        {
+            lookAt(target.point, 0.25, "player.look");
+        }
+    }
+    else
+    {
+        // Aim at the wanted point from where the camera is after any turn (the camera moves with V's head slightly).
+        lookAt(target.point, request.duration, "player.look");
+    }
+    // Wait for it: the last look-at runs natively; read the camera until it is there or the time is up.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(request.smooth ? 700 : static_cast<int>(request.duration * 1000.0) + 700);
+    while (!stopped && tookOver.empty() && std::chrono::steady_clock::now() < deadline)
     {
         writes::WaitTicks(Get().queue, 3, GameTimeout());
         if (stops.StoppedSince(seen))
         {
-            stopped = true; // player.stop broke the look-at; nothing here starts it again
+            stopped = true;
         }
-        reached = Game([cid] { return ScriptCall("XFPlayer", "State", {}, {}, cid); }, "player.state").at("camera");
+        reached = readCamera();
         const double dy = std::abs(std::remainder(reached.value("yaw", 0.0) - target.yaw, 360.0));
         const double dp = std::abs(reached.value("pitch", 0.0) - target.pitch);
         if (stopped || (dy < 1.0 && dp < 1.0))
@@ -357,10 +422,14 @@ json PlayerLook(const MethodContext& aContext)
             break;
         }
     }
+    const double tookS = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
     const double errYaw = std::remainder(reached.value("yaw", 0.0) - target.yaw, 360.0);
     const double errPitch = reached.value("pitch", 0.0) - target.pitch;
     return json{{"mode", request.smooth ? "smooth" : "instant"}, {"wanted", {{"yaw", target.yaw}, {"pitch", target.pitch}}},
                 {"stopped", stopped},
+                {"took_s", std::round(tookS * 100.0) / 100.0},
+                {"duration_s", request.smooth ? request.duration : 0.0},
+                {"took_over", tookOver.empty() ? json(nullptr) : json(tookOver)},
                 {"reached", {{"yaw", reached.value("yaw", 0.0)}, {"pitch", reached.value("pitch", 0.0)}}},
                 {"error_deg", {{"yaw", std::round(errYaw * 100.0) / 100.0}, {"pitch", std::round(errPitch * 100.0) / 100.0}}},
                 {"within_2_deg", std::abs(errYaw) <= 2.0 && std::abs(errPitch) <= 2.0},

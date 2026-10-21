@@ -50,6 +50,33 @@ void RecordRearm(State& aState, bool aOk, const std::string& aMessage)
     aState.lastRearm = nlohmann::json{{"ok", aOk}, {"message", aMessage}, {"at_tick", aState.runningTicks.load()}};
 }
 
+// 0.8.3: whether the game's own window is the one in front (the kill key reads the keyboard only then).
+bool GameWindowInFront()
+{
+    const auto window = GetForegroundWindow();
+    DWORD pid = 0;
+    return window && GetWindowThreadProcessId(window, &pid) != 0 && pid == GetCurrentProcessId();
+}
+
+// 0.8.3: the bridge's own kill key ([ui] kill_key, core/KillKey.hpp), read on the game thread once a tick while the bridge
+// listens, the game's window is in front and CET's overlay is closed. Only reads the keyboard; sends nothing.
+void PollKillKey(State& aState)
+{
+    const auto& chord = aState.config.killKey;
+    if (!chord.enabled || !aState.bridge || aState.bridge->GetDispatcher().IsKilled())
+    {
+        aState.killKeyWatch.Poll(chord, nullptr);
+        return;
+    }
+    const bool armed = GameWindowInFront() && !aState.cetOverlayOpen.load();
+    const auto down = [armed](int aVk) { return armed && (GetAsyncKeyState(aVk) & 0x8000) != 0; };
+    if (aState.killKeyWatch.Poll(chord, down))
+    {
+        log::Warn("bridge.kill_key", "key=" + chord.label + " (the bridge's own kill key)");
+        aState.bridge->Kill("kill_key");
+    }
+}
+
 // Reconnect after the kill switch (XFBridge_Rearm), on the game thread between queue drains. Waits (a few
 // seconds at most) until the old listener has stopped and the kill switch's restore has run, then gives
 // the bridge a new session (new token, pipe name and session id) and starts it again.
@@ -239,8 +266,10 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
             }
         }
         HandleRearm(state);
-        // 0.8.2: the status surface for this tick (one at a time: core/InkUi.hpp ChooseStatusSurface).
-        const auto surface = inkui::ChooseStatusSurface({state.InkVisible(), state.overlayHost.CanShowPanel()});
+        PollKillKey(state);
+        // 0.8.2: the status surface for this tick (one at a time: core/InkUi.hpp ChooseStatusSurface). 0.8.3: none while no
+        // game session is live (a loading screen, the press-any-key screen after a load).
+        const auto surface = inkui::ChooseStatusSurface({state.InkVisible(), state.overlayHost.CanShowPanel(), scriptsReady});
         state.statusSurface.store(static_cast<int>(surface));
         // 0.7: the overlay host's panel data (the three-slot hand-off to the render thread) and its switches.
         if (state.overlayHost.Enabled())
@@ -260,7 +289,7 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
             panel.tone = status.tone;
             panel.bridgeStatus = status.text;
             panel.diagnostics = state.config.overlayDiagnostics;
-            panel.show = surface == inkui::StatusSurface::OverlayPanel;
+            panel.show = surface == inkui::StatusSurface::XfBox;
             if (panel.show && !killed)
             {
                 // 0.8.2: as the status surface, the coordinator's lines and the question with its keys (the ink panel's).

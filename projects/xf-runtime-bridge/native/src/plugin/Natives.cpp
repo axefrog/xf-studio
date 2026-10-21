@@ -320,7 +320,7 @@ void OptionsReport(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aO
     });
 }
 
-// XFBridge_Messages() -> String   (CET layer: the ui.message lines to draw under the status label,
+// XFBridge_Messages() -> String   (CET layer: the ui.message lines to draw under the CET line,
 // {"messages":[{id, text, level, remaining_ms}]}, or "" when there are none). A killed bridge shows none
 // and forgets them.
 void Messages(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::CString* aOut, int64_t)

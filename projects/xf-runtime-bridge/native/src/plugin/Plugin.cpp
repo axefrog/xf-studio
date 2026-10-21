@@ -131,9 +131,11 @@ nlohmann::json InfoJson()
                      {"diagnostics", state.config.overlayDiagnostics}}},
         // 0.8 (the UI review): the status wording every surface shows, made in one place (core/InkUi.cpp Summarize).
         {"status", inkui::StatusJson(BridgeViewNow())},
-        // 0.8.2: which status surface shows now (ink_panel, overlay_panel or status_label).
+        // 0.8.2: which status surface shows now (0.8.3's names: ink_panel, xf_box, cet_line, or none while loading).
         {"status_surface", inkui::SurfaceName(static_cast<inkui::StatusSurface>(state.statusSurface.load()))},
         {"answer_keys", state.config.answerKeys},
+        // 0.8.3: the bridge's own kill key ([ui] kill_key); the XF Runtime Bridge window names it beside Stop.
+        {"kill_key", {{"enabled", state.config.killKey.enabled}, {"label", state.config.killKey.label}, {"setting", "[ui] kill_key in config.ini"}}},
         {"last_rearm", [&state] {
              std::scoped_lock _(state.rearmMutex);
              return state.lastRearm;

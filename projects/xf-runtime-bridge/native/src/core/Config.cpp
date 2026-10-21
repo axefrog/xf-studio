@@ -234,6 +234,26 @@ Config ParseConfig(const std::string& aText)
         {
             ok = ParseKeyList(value, config.answerKeys);
         }
+        else if (key == "ui.kill_key")
+        {
+            std::string why;
+            killkey::Chord chord;
+            ok = killkey::Parse(value, chord, why);
+            if (ok)
+            {
+                config.killKey = chord;
+                if (chord.enabled && killkey::GameBinds(chord.vk))
+                {
+                    config.warnings.push_back("line " + std::to_string(lineNumber) + ": the kill key " + chord.label +
+                                              " is also one of the game's own keys, so pressing it does that too; End is free");
+                }
+            }
+            else
+            {
+                config.warnings.push_back("line " + std::to_string(lineNumber) + ": kill_key: " + why + "; the default (" + killkey::kDefault + ") stays");
+                ok = true; // the warning says it; no second "bad value" line
+            }
+        }
         else if (key == "overlay.enabled")
         {
             ok = ParseBool(value, config.overlayEnabled);
@@ -325,6 +345,10 @@ std::string DescribeConfig(const Config& aConfig)
         keys += (keys.empty() ? "" : ",") + key;
     }
     text += " ui.answer_keys=" + keys;
+    // 0.8.3: no spaces in the log line's value ("Ctrl+End").
+    std::string killKey = aConfig.killKey.enabled ? aConfig.killKey.label : std::string("off");
+    killKey.erase(std::remove(killKey.begin(), killKey.end(), ' '), killKey.end());
+    text += " ui.kill_key=" + killKey;
     text += " overlay.enabled=" + std::string(aConfig.overlayEnabled ? "true" : "false") + " overlay.theme=" + aConfig.overlayTheme +
             " overlay.scale_percent=" + std::to_string(aConfig.overlayScalePercent) + " overlay.diagnostics=" + (aConfig.overlayDiagnostics ? "true" : "false");
     text += " log.level=" + std::string(LevelName(aConfig.logLevel));

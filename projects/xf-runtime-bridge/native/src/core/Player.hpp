@@ -65,6 +65,16 @@ LookTarget LookTargetFor(const LookRequest& aRequest, const Vec3& aCamera, doubl
 double YawOf(const Vec3& aForward);
 double PitchOf(const Vec3& aForward);
 
+// 0.8.3 (session 10's L2a: a five-second smooth player.look took 1.5 s, the game's own look-at keeps its own pace): the path
+// both smooth looks follow (behave.look since 0.8.2, player.look since 0.8.3). DirectionOf is the view direction for a yaw
+// and pitch (the game's yaw: 0 faces +Y, positive turns left); LookArc the direction a fraction (0-1, eased in and out with
+// a smoothstep, as the game's look-at is) along the great circle from aFrom to aTo (unit vectors), whose angle to aTo only
+// ever shrinks; opposite directions turn through the horizontal, the way a head turns round. The look steers along it with
+// one short look-at to the next place every kLookArcStepS, so it takes its duration whatever pace the game keeps.
+inline constexpr double kLookArcStepS = 0.1;
+Vec3 DirectionOf(double aYaw, double aPitch);
+Vec3 LookArc(const Vec3& aFrom, const Vec3& aTo, double aFraction);
+
 // player.action: name crouch, stand, weapon.draw, weapon.holster, weapon.slot (slot 1-3), menu.open (menu), menu.close.
 struct ActionRequest
 {

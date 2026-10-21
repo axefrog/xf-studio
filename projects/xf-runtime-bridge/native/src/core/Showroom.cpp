@@ -1,9 +1,13 @@
 #include "core/Showroom.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <fstream>
+#include <iterator>
 
 #include "core/Dispatcher.hpp"
+#include "core/Win32.hpp"
 
 namespace xfb::showroom
 {
@@ -326,5 +330,91 @@ json Clear(const std::string& aWhat, const Ops& aOps)
     out["undo"] = nullptr;
     out["undo_note"] = "showroom.spawn and showroom.light place them again";
     return out;
+}
+json StagedShowrooms(const std::filesystem::path& aModFolder)
+{
+    json archives = json::array();
+    std::error_code ec;
+    size_t seen = 0;
+    bool more = false;
+    if (std::filesystem::is_directory(aModFolder, ec))
+    {
+        std::vector<std::filesystem::path> files;
+        for (std::filesystem::directory_iterator it(aModFolder, ec), end; !ec && it != end; it.increment(ec))
+        {
+            // Wide names: other mods' files may have names the narrow code page can't hold.
+            const auto name = it->path().filename().wstring();
+            if (name.size() == 13 + 32 + 8 && name.rfind(L"xfs_showroom_", 0) == 0 && name.substr(45) == L".archive" &&
+                std::all_of(name.begin() + 13, name.begin() + 45, [](wchar_t c) { return (c >= L'0' && c <= L'9') || (c >= L'a' && c <= L'f'); }))
+            {
+                files.push_back(it->path());
+            }
+        }
+        std::sort(files.begin(), files.end());
+        for (const auto& file : files)
+        {
+            if (++seen > kMaxStagedArchives)
+            {
+                more = true;
+                break;
+            }
+            const auto stem = file.stem().string(); // xfs_showroom_<key>
+            json entry{{"archive", stem}, {"file", file.filename().string()}};
+            std::error_code sizeError;
+            entry["bytes"] = static_cast<uint64_t>(std::filesystem::file_size(file, sizeError));
+            std::string hex, why;
+            if (win32::FileSha256(file, hex, why))
+            {
+                entry["sha256"] = hex;
+            }
+            else
+            {
+                entry["sha256"] = nullptr;
+                entry["sha256_error"] = why;
+            }
+            const auto sidecar = aModFolder / (stem + kManifestSuffix);
+            entry["manifest"] = nullptr;
+            std::error_code sidecarError;
+            if (std::filesystem::is_regular_file(sidecar, sidecarError))
+            {
+                entry["manifest_file"] = sidecar.filename().string();
+                const auto bytes = std::filesystem::file_size(sidecar, sidecarError);
+                if (sidecarError || bytes > kMaxManifestBytes)
+                {
+                    entry["manifest_error"] = "too large or unreadable";
+                }
+                else
+                {
+                    std::ifstream in(sidecar, std::ios::binary);
+                    std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+                    if (text.size() >= 3 && static_cast<unsigned char>(text[0]) == 0xEF && static_cast<unsigned char>(text[1]) == 0xBB &&
+                        static_cast<unsigned char>(text[2]) == 0xBF)
+                    {
+                        text.erase(0, 3);
+                    }
+                    auto manifest = json::parse(text, nullptr, false);
+                    if (manifest.is_discarded() || !manifest.is_object())
+                    {
+                        entry["manifest_error"] = "not JSON";
+                    }
+                    else if (manifest.value("schema", std::string()) != "xfs/showroom-package-1" || manifest.value("archive", std::string()) != stem)
+                    {
+                        entry["manifest_error"] = "not this archive's showroom manifest";
+                    }
+                    else
+                    {
+                        entry["manifest"] = std::move(manifest);
+                    }
+                }
+            }
+            archives.push_back(std::move(entry));
+        }
+    }
+    return json{{"folder", "archive/pc/mod"},
+                {"found", std::filesystem::is_directory(aModFolder, ec)},
+                {"archives", std::move(archives)},
+                {"more", more},
+                {"how", "the game's own view of its archive/pc/mod folder (MO2's virtual folder when MO2 launched the game: the staged, "
+                        "enabled mods)"}};
 }
 } // namespace xfb::showroom

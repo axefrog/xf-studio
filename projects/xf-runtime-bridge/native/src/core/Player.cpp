@@ -252,4 +252,33 @@ void TeleportPacer::Take()
     oldest = now;
     m_next = (m_next + 1) % kTeleportsPerSecond;
 }
+Vec3 DirectionOf(double aYaw, double aPitch)
+{
+    return {-std::sin(aYaw * kDeg) * std::cos(aPitch * kDeg), std::cos(aYaw * kDeg) * std::cos(aPitch * kDeg), std::sin(aPitch * kDeg)};
+}
+
+Vec3 LookArc(const Vec3& aFrom, const Vec3& aTo, double aFraction)
+{
+    const double f = std::clamp(aFraction, 0.0, 1.0);
+    const double eased = f * f * (3.0 - 2.0 * f);
+    const double dot = std::clamp(aFrom[0] * aTo[0] + aFrom[1] * aTo[1] + aFrom[2] * aTo[2], -1.0, 1.0);
+    const double theta = std::acos(dot);
+    if (theta < 1e-6)
+    {
+        return aTo;
+    }
+    const double sinTheta = std::sin(theta);
+    if (sinTheta < 1e-6)
+    {
+        // Opposite: through the direction at right angles to aFrom in its horizontal plane.
+        const double h = std::hypot(aFrom[0], aFrom[1]);
+        const Vec3 side = h > 1e-6 ? Vec3{-aFrom[1] / h, aFrom[0] / h, 0.0} : Vec3{1.0, 0.0, 0.0};
+        const double half = theta * eased;
+        return {aFrom[0] * std::cos(half) + side[0] * std::sin(half), aFrom[1] * std::cos(half) + side[1] * std::sin(half),
+                aFrom[2] * std::cos(half) + side[2] * std::sin(half)};
+    }
+    const double a = std::sin((1.0 - eased) * theta) / sinTheta, b = std::sin(eased * theta) / sinTheta;
+    return {aFrom[0] * a + aTo[0] * b, aFrom[1] * a + aTo[1] * b, aFrom[2] * a + aTo[2] * b};
+}
+
 } // namespace xfb::player

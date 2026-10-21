@@ -134,7 +134,7 @@ public:
     bool OffForFrameGeneration() const;
 
     // 0.8.2: whether the panel can be the status surface: drawing (hooked, not refused or failed) and not stopped by the kill
-    // switch. A capture's hide and yielding to CET's overlay don't count: they are moments, and the status label must not
+    // switch. A capture's hide and yielding to CET's overlay don't count: they are moments, and the CET line must not
     // take over during a capture.
     bool CanShowPanel() const { return m_enabled.load() && m_phase.load() == Phase::Drawing && !m_killed.load() && !m_passThrough.load(); }
     // Render thread, every present: draw now? (enabled, drawing, not hidden for a capture, not yielding to CET, not killed)

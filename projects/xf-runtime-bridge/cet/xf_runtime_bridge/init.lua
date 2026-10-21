@@ -1,10 +1,11 @@
 -- XF Runtime Bridge: CET (Cyber Engine Tweaks) layer.
 --
 -- Proves: CET events, per-mod logging, calls into the RED4ext natives (Game.XFBridge_*) and into
--- the redscript layer, a kill-switch hotkey, and the status label (top left) with the coordinator's messages under it
--- (ui.message, bridge 0.4). 0.8.2 (the maintainer's decision after session 9): one status surface at a time; the status
--- label is the fallback, drawn only when neither the ink panel nor the overlay panel can show (the plugin says which: the
--- HUD frame's surface record). The XF Runtime Bridge window (panel.lua) stays the interactive place.
+-- the redscript layer, a kill-switch hotkey, and the CET line (top left) with the coordinator's messages under it
+-- (ui.message, bridge 0.4). 0.8.2 (the maintainer's decision after session 9): one status surface at a time; the CET line
+-- (one line with a coloured dot at the far top left) is the fallback, drawn only when neither the ink panel nor the XF box
+-- (the small box with the yellow heading) can show (the plugin says which: the HUD frame's surface record; none while a
+-- loading screen shows, 0.8.3). The XF Runtime Bridge window (panel.lua) stays the interactive place.
 -- CET has no networking (its sandbox exposes no sockets or HTTP), so the external bridge lives
 -- in the RED4ext plugin; this layer only reports to it and shows its state.
 --
@@ -20,7 +21,7 @@ local PENDING_REFRESH_SECONDS = 0.5
 local OPTIONS_POLL_SECONDS = 0.25
 local MESSAGES_POLL_SECONDS = 0.25
 -- The message lines wrap at this width (pixels), so they stay in the top-left corner, clear of the
--- centre of the screen where every framing and capture region sits. The XF overlay panel sits right of it (x 700).
+-- centre of the screen where every framing and capture region sits. The XF box sits right of it (x 700).
 local MESSAGE_WRAP_PX = 640
 -- 0.8 (the UI review): each level's colour is a theme token (theme.lua, from XF Studio's own tokens); these are the
 -- fallbacks for a package without the theme.
@@ -73,7 +74,7 @@ local state = {
   inkAsk = 0,        -- 0.8: the question the ink panel shows on screen now (the frame's inkask record), or 0
   comment = "",     -- 0.7: the commentary box's text
   cetLabel = true, -- bridge 0.5.3: [ui] cet_label / ui.hud's cet_label (read from XFBridge_Hud's frame)
-  surface = "status_label", -- 0.8.2: the status surface the plugin chose (ink_panel, overlay_panel, status_label)
+  surface = "cet_line", -- 0.8.2: the status surface the plugin chose (0.8.3: ink_panel, xf_box, cet_line, none)
   overlayOpen = false,
   cidCounter = 0,
   lastError = nil,
@@ -207,14 +208,14 @@ end
 -- A killed bridge answers none. Read-only; polled four times a second while the bridge is on.
 local function pollMessages()
   local bridge = state.info and state.info.bridge
-  -- 0.8.2: the status label shows only when the plugin names it the status surface (a plugin without the record, or none
-  -- answering: always), a stopped bridge included: while the HUD shows, its ink panel says how to reconnect.
+  -- 0.8.2: the CET line shows only when the plugin names it the status surface (a plugin without the record, or no answer:
+  -- always), a stopped bridge included: while the HUD shows, its ink panel says how to reconnect.
   local hudOk, frame = false, nil
   if state.pluginPresent and bridge and bridge.enabled then
     hudOk, frame = pcall(function() return Game.XFBridge_Hud() end)
   end
   local surface = hudOk and type(frame) == "string" and string.match(frame, "\nsurface\t([%a_]+)\n") or nil
-  state.surface = surface or "status_label"
+  state.surface = surface or "cet_line"
   if not state.pluginPresent or not bridge or not bridge.enabled or bridge.killed then
     state.messages = {}
     state.pendingAsk = nil
@@ -399,6 +400,8 @@ end)
 -- test builds' panel) or the game restarts. The ID, xf_bridge_kill, has never changed and must not: CET keys a binding by
 -- the mod's name and this ID. CET drops a mod's bindings at a launch where the mod isn't installed (its
 -- Developer.RemoveDeadBindings, on by default), so a launch of another profile without the bridge unbinds it (session 9).
+-- 0.8.3: the bridge's own kill key ([ui] kill_key, End by default) works without CET or a binding; this hotkey is the optional
+-- second route.
 registerHotkey("xf_bridge_kill", "Stop XF Runtime Bridge", function()
   local cid = nextCid()
   local ok, killed = callNative("XFBridge_Kill", "cet-hotkey")
@@ -451,7 +454,7 @@ local function colouredWrapped(colour, text)
   ImGui.PopStyleColor(1)
 end
 
--- The status label (0.8, the UI review): themed like the XF Runtime Bridge window; the status line (a bullet in its tone, the words
+-- The CET line (0.8, the UI review): themed like the XF Runtime Bridge window; the status line (a bullet in its tone, the words
 -- muted); then, while the ink panel shows the question, only how to answer it; otherwise the messages, the question in the
 -- text colour, and how to answer it.
 local function drawLabelBody(which)
@@ -481,7 +484,7 @@ local function drawLabelBody(which)
       colouredWrapped(muted, "Answered: " .. tostring(answered.label) .. ".")
     end
   end
-  -- 0.8 (the UI review): why the XF overlay panel isn't there.
+  -- 0.8 (the UI review): why the XF box isn't there.
   if state.info and type(state.info.overlay) == "table" and state.info.overlay.off_for_frame_generation then
     colouredWrapped(muted, "XF overlay is off while frame generation is on.")
   end
@@ -510,9 +513,9 @@ end
 registerForEvent("onDraw", function()
   local enabled = state.info and state.info.bridge and state.info.bridge.enabled
 
-  -- The status label whenever the bridge is enabled and it is the status surface (0.8.2: the fallback, when neither the
-  -- ink panel nor the overlay panel can show); while CET's overlay is open the XF Runtime Bridge window shows the status.
-  if enabled and state.cetLabel and not state.overlayOpen and state.surface == "status_label" then
+  -- The CET line whenever the bridge is enabled and it is the status surface (0.8.2: the fallback, when neither the
+  -- ink panel nor the XF box can show); while CET's overlay is open the XF Runtime Bridge window shows the status.
+  if enabled and state.cetLabel and not state.overlayOpen and state.surface == "cet_line" then
     local drew, err = pcall(drawLabel)
     if not drew then
       state.lastError = tostring(err)
@@ -547,7 +550,7 @@ registerForEvent("onDraw", function()
 end)
 
 return {
-  version = "0.8.2",
+  version = "0.8.3",
   -- For other CET mods: GetMod("XF_Runtime_Bridge").info()
   info = function() return state.info end,
 }
