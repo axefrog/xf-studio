@@ -16,7 +16,9 @@ import { decodeMaskAtlas, decodeMaskLayers, DEFAULT_MASK_LIMITS, maskLayers, typ
 import { InProcessDecoder, WorkerDecoder } from "../src/native/native-decode";
 import { decodeMaskFromPool } from "../src/native/texture-decode";
 import { decodePng } from "../src/png";
-import { evictPrepared, STALE_WORK_MS, sweepStaleWork } from "../src/prepared-files";
+import { exportsSource, PreparedFiles, STALE_WORK_MS, sweepStaleWork } from "../src/prepared-files";
+import { hostClock } from "../src/platform/core/clock";
+import { createJobScheduler } from "../src/platform/core/jobs";
 import { fakeDecompress, syntheticArchive } from "./fixtures/native-archive";
 import { Cr2wBuilder, prop, v } from "./fixtures/native-cr2w";
 
@@ -264,7 +266,9 @@ test("work folders left over by a crash are swept once they are an hour old; new
   expect(readdirSync(exports)).toEqual([".work-recent"]);
   // The budget check sweeps them too, even under budget.
   mkdirSync(old); utimesSync(old, hourAgo, hourAgo);
-  await evictPrepared({ exports, resolver: tempRoot(), store: tempRoot(), manifests: tempRoot() }, Infinity);
+  const files = new PreparedFiles({ budget: Infinity, scheduler: createJobScheduler({ clock: hostClock(), quietMs: 0 }) });
+  files.partition({ name: "exports", evictable: [exportsSource(exports)] });
+  await files.evict();
   expect(readdirSync(exports)).toEqual([".work-recent"]);
 });
 

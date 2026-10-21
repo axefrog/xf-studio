@@ -5,6 +5,9 @@ import { join } from "node:path";
 import { applyColourMatrix, type ChoicePreviewSource, compositeChannels, isPreviewKey, parsePreviewSource, PREVIEW_STYLES, previewCamera, previewColourMatrix,
   previewKey, previewKeyInput, previewKindOf, previewSourceOf, type PreviewTokens, TURNTABLE, turntableYaw } from "../src/choice-preview";
 import { ChoicePreviewStore, manifestStamp } from "../src/choice-preview-host";
+import { filesSource, PreparedFiles } from "../src/prepared-files";
+import { hostClock } from "../src/platform/core/clock";
+import { createJobScheduler } from "../src/platform/core/jobs";
 import { createBrowserChoicePreviewDevice, OBJECT_URLS } from "../src/browser-choice-preview-device";
 import { createChoicePreviewHandler } from "../src/choice-preview-server";
 import { ChoicePreviewService, type ChoicePreviewPort, type PreviewAsk, PreviewHostError, PREVIEW_NOTICES, PreviewSuperseded } from "../src/choice-preview-service";
@@ -135,7 +138,7 @@ describe("the row's camera", () => {
 
 describe("the host store", () => {
   const webp = new Uint8Array([...new TextEncoder().encode("RIFF"), 8, 0, 0, 0, ...new TextEncoder().encode("WEBPVP8L"), 0, 0, 0, 0]);
-  test("keeps WebP images by key, refuses other bytes and keys, and clears", () => {
+  test("keeps WebP images by key, refuses other bytes and keys, and clears", async () => {
     const root = mkdtempSync(join(tmpdir(), "xfs-previews-"));
     try {
       const store = new ChoicePreviewStore(root);
@@ -144,8 +147,11 @@ describe("the host store", () => {
       expect(store.putImage(hex(2), new Uint8Array(40))).toBe(false);
       expect(store.putImage("../escape", webp)).toBe(false);
       expect(store.imagePath("zz")).toBeNull();
-      expect(store.bytes()).toBe(webp.byteLength);
-      expect(store.clear().freed).toBe(webp.byteLength);
+      // Counted and cleared as the prepared files' previews partition (prepared-files.ts).
+      const files = new PreparedFiles({ scheduler: createJobScheduler({ clock: hostClock(), quietMs: 0 }) });
+      files.partition({ name: "previews", evictable: [filesSource(join(root, "images"), ".webp"), filesSource(join(root, "sources"), ".json")], forget: () => store.forget() });
+      expect((await files.size()).bytes).toBe(webp.byteLength);
+      expect((await files.clear()).freed).toBe(webp.byteLength);
       expect(store.imagePath(hex(1))).toBeNull();
     } finally { rmSync(root, { recursive: true, force: true }); }
   });

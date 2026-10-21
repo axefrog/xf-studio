@@ -10,6 +10,9 @@ import { DEFAULT_CHARACTER, type CharacterRequest } from "../src/character-detai
 import { CHOICE_MANIFEST_SCHEMA, manifestProblemSliced, type ChoiceManifest, type ManifestCheck } from "../src/choice-manifest";
 import { ChoicePrefetcher, type PrefetchDeps } from "../src/choice-prefetch";
 import { timeSlicer } from "../src/event-loop";
+import { hostJobs } from "../src/host-jobs";
+import { hostClock } from "../src/platform/core/clock";
+import { createJobScheduler } from "../src/platform/core/jobs";
 import { withArchiveFingerprints } from "../src/resolver-host";
 import { REQUEST_A } from "./character-detail-fixtures";
 
@@ -31,18 +34,17 @@ async function longestStall(work: () => Promise<unknown>): Promise<number> {
 const services: ChoicePrefetcher[] = [];
 afterEach(() => { for (const service of services.splice(0)) service.cancel(); });
 
-/** A row of `count` choices whose readiness checks each take `ms` of synchronous work, with the host's slicer or none. */
-function row(count: number, ms: number, slicer?: PrefetchDeps["slicer"]) {
+/** A row of `count` choices whose readiness checks each take `ms` of synchronous work, with the host's turn or one that never yields. */
+function row(count: number, ms: number, turns = true) {
   let checked = 0;
   let done!: () => void;
   const finished = new Promise<void>(resolve => { done = resolve; });
   const deps: PrefetchDeps = {
+    jobs: turns ? hostJobs({ quietMs: 0 }) : createJobScheduler({ clock: hostClock(), quietMs: 0, sliceMs: Infinity }),
     requestFor: async (_base, _option, position) => withChoice(position),
     readiness: async () => () => { busy(ms); if (++checked === count) done(); return true; },
     warm: async requests => requests.map(() => ({ ready: true })),
-    foregroundIdle: async () => {},
     preparedBytes: async () => 0,
-    ...(slicer ? { slicer } : {}),
   };
   const service = new ChoicePrefetcher(deps, { batch: 8, maxBatch: 8, timeMs: 60_000, bytes: 1e12 });
   services.push(service);
@@ -58,7 +60,7 @@ describe("the host answers while a row's choices are checked", () => {
   });
 
   test("without the turn between choices the same check held every request back for the whole row (the regression)", async () => {
-    const { start, finished } = row(40, 10, () => async () => {});
+    const { start, finished } = row(40, 10, false);
     const stall = await longestStall(async () => { start(); await finished; });
     expect(stall).toBeGreaterThan(350);
   });
@@ -85,17 +87,17 @@ describe("a person's request pre-empts preparing ahead", () => {
   test("pause stops the batch being prepared; its choices are queued again and prepared once the host is quiet", async () => {
     let stopped = 0, batches = 0;
     let quiet!: () => void;
-    let foreground: Promise<void> = Promise.resolve();
+    const jobs = hostJobs({ quietMs: 0 });
     const deps: PrefetchDeps = {
+      jobs,
       requestFor: async (_base, _option, position) => withChoice(position),
       readiness: async () => () => false,
-      warm: (requests, signal) => new Promise((resolve, reject) => {
+      warm: (requests, { signal }) => new Promise((resolve, reject) => {
         batches++;
         // A stopped batch answers at once (the host's `untilStopped`), its reads finishing behind it.
         signal.addEventListener("abort", () => { stopped++; reject(new DOMException("Stopped.", "AbortError")); }, { once: true });
         if (batches > 1) resolve(requests.map(() => ({ ready: true })));
       }),
-      foregroundIdle: () => foreground,
       preparedBytes: async () => 0,
     };
     const service = new ChoicePrefetcher(deps, { batch: 2, maxBatch: 2, timeMs: 60_000, bytes: 1e12 });
@@ -104,8 +106,8 @@ describe("a person's request pre-empts preparing ahead", () => {
     ask();
     for (let i = 0; i < 20 && batches === 0; i++) await sleep(2);
     expect(service.preparing).toBe(true);
-    // The person asks for a change: the host holds background work until it is quiet again.
-    foreground = new Promise(resolve => { quiet = resolve; });
+    // The person asks for a change: the host holds background work until it is prepared.
+    jobs.want("page/character", { key: "change", lane: "person", run: () => new Promise<void>(resolve => { quiet = resolve; }) });
     service.pause();
     for (let i = 0; i < 20 && service.preparing; i++) await sleep(2);
     expect(stopped).toBe(1);
@@ -128,7 +130,7 @@ describe("the character-detail host puts a person first", () => {
     const host = new CharacterDetailHost({ cacheRoot: join(root, "derive"), settings: () => settings,
       prepare: async () => { prepared++; return { record: {} as never, recordFile: `${"d".repeat(64)}.json`, degraded: false }; } });
     // A person's request is being answered the whole time: the lane never frees.
-    (host as unknown as { asking: number }).asking = 1;
+    const answering = host.jobs.hold();
     const derive = (signal?: AbortSignal) => (host as unknown as { derivePreview(...args: unknown[]): Promise<unknown> })
       .derivePreview(REQUEST_A, "hair", {}, "k".repeat(40), "1:1", signal);
     const gone = new AbortController();
@@ -145,19 +147,20 @@ describe("the character-detail host puts a person first", () => {
     expect(await derive()).toBe("busy");
     expect(performance.now() - began).toBeLessThan(PREVIEW_DERIVE_WAIT_MS + 500);
     expect(prepared).toBe(0);
+    answering();
   }, 10_000);
 
   test("a derivation stopped for a person's change answers busy, not a failed try (PREV-162)", async () => {
     for (const ending of ["rejects", "degraded"] as const) {
+      let started = false;
       const host = new CharacterDetailHost({ cacheRoot: join(root, `stopped-${ending}`), settings: () => settings,
-        prepare: ({ signal }) => new Promise((resolve, reject) => signal!.addEventListener("abort", () => ending === "rejects" ? reject(Error("stopped"))
-          : resolve({ record: {} as never, recordFile: `${"d".repeat(64)}.json`, degraded: true }))) });
-      (host as unknown as { askedAt: number }).askedAt = 0;
+        prepare: ({ signal }) => { started = true; return new Promise((resolve, reject) => signal!.addEventListener("abort", () => ending === "rejects" ? reject(Error("stopped"))
+          : resolve({ record: {} as never, recordFile: `${"d".repeat(64)}.json`, degraded: true }))); } });
       const derived = (host as unknown as { derivePreview(...args: unknown[]): Promise<unknown> }).derivePreview(REQUEST_A, "hair", {}, "k".repeat(40), "1:1");
-      const inner = host as unknown as { previewing: { controller: AbortController } | null };
-      for (let i = 0; i < 100 && !inner.previewing; i++) await sleep(10);
-      // What a person's change does to a derivation that hasn't started writing.
-      inner.previewing!.controller.abort();
+      for (let i = 0; i < 100 && !started; i++) await sleep(10);
+      expect(started).toBe(true);
+      // A person's change, while the derivation hasn't started writing.
+      host.jobs.want("page/character", { key: "change", lane: "person", run: async () => {} });
       expect(await derived).toBe("busy");
     }
   }, 10_000);
@@ -174,9 +177,8 @@ describe("the character-detail host puts a person first", () => {
     expect(host.request(REQUEST_A, "page").phase).toBe("ready");
     expect(paused).toBe(2);
     // Background work waits for the page to be quiet: it reads the new record's files right after the answer.
-    const idle = (host as unknown as { foregroundIdle(): Promise<void> }).foregroundIdle();
     let resumed = false;
-    void idle.then(() => { resumed = true; });
+    host.jobs.want("prefetch", { key: "batch", lane: "ahead", run: async () => { resumed = true; } });
     await sleep(QUIET_MS / 4);
     host.noteAsk();
     await sleep(QUIET_MS / 2);

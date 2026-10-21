@@ -432,6 +432,8 @@ describe("host preparation", () => {
     const a = host.request(REQUEST_A);
     expect(a.phase).toBe("preparing");
     expect(a.key).toBe(characterRequestKey(REQUEST_A, installationFingerprint(settings)));
+    // Started (the scheduler starts it on the next turn of the event loop; replaced before that, it would never start).
+    for (let i = 0; i < 100 && !started.length; i++) await new Promise(resolve => setTimeout(resolve, 2));
     const b = host.request(REQUEST_B);
     release();
     await host.settled();
@@ -500,6 +502,8 @@ describe("host preparation", () => {
         }, 40));
       }) });
     const v1 = host.request(REQUEST_A);
+    // V1 has started (the scheduler starts it on the next turn of the event loop).
+    for (let i = 0; i < 100 && !log.length; i++) await new Promise(resolve => setTimeout(resolve, 2));
     host.request(REQUEST_B);
     const again = host.request(REQUEST_A);
     expect(again).toMatchObject({ key: v1.key, phase: "preparing" });

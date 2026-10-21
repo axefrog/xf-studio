@@ -48,6 +48,8 @@ import { createPosePreferencesHandler, PosePreferencesStore } from "../src/featu
 import { POSE_PREFERENCES_ENDPOINT, VERIFICATION_POSE_PREFERENCES_ENDPOINT } from "../src/pose-endpoint";
 import { PoseCatalogueHost } from "../src/pose-catalogue-host";
 import { IdleHost, idlePrepared } from "../src/idle-host";
+import { hostJobs } from "../src/host-jobs";
+import { PreparedFiles } from "../src/prepared-files";
 import { createIdleHandler, IDLES_ENDPOINT } from "../src/idle-server";
 import { createGradingLutHandler, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT, GradingLutHost, serveGradingLut } from "../src/grading-lut-host";
 import { WolvenKitSetupHost, wolvenKitReadinessIssue, type WolvenKitSetupOptions } from "../src/wolvenkit-setup-host";
@@ -236,7 +238,9 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const previewCoreRequest = createPreviewCoreHandler(previewCore);
   // Brows, lashes and hair: resolved from the launch route Build uses (MO2, manual or game folder) and
   // exported from the winning archives into the same private preview cache.
-  const characterDetails = new CharacterDetailHost({ cacheRoot: desktopPreviewCache(dataRoot), exporter: previewExporter,
+  const jobs = hostJobs();
+  const prepared = new PreparedFiles({ scheduler: jobs, log: logTo("character") });
+  const characterDetails = new CharacterDetailHost({ cacheRoot: desktopPreviewCache(dataRoot), exporter: previewExporter, jobs, prepared,
     settings: () => {
       const settings = savedSettings();
       return { gameRoot: settings?.gameRoot ?? null, launchRoute: settings?.launchRoute ?? "direct", mo2Root: settings?.mo2Root ?? null,
@@ -245,7 +249,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     log: logTo("character"), trace: diagnostics.trace, nativeDecodeWorker: hostOptions.nativeDecodeWorker });
   const characterDetailRequest = createCharacterDetailHandler(characterDetails);
   // The desktop host leaves Hair Lab out (localhost only for now), so baseline references stay off here.
-  const referenceCharacters = createReferenceCharacterRoutes({ cacheRoot: desktopPreviewCache(dataRoot), exporter: previewExporter,
+  const referenceCharacters = createReferenceCharacterRoutes({ cacheRoot: desktopPreviewCache(dataRoot), exporter: previewExporter, prepared,
     enabled: () => false, settings: () => ({ gameRoot: savedSettings()?.gameRoot ?? null, launchRoute: "direct", mo2Root: null, mo2ProfileId: null,
       manualModRoot: null, wolvenKitCli: wolvenKit.usable() }), log: logTo("reference-character"), nativeDecodeWorker: hostOptions.nativeDecodeWorker });
   const creatorRequest = createCreatorHandler(characterDetails.creator, { refresh: () => characterDetails.refresh(), prepared: characterDetails });
@@ -284,9 +288,9 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     solver: () => locateFacialSolver({ toolsRoot: resolve(dataRoot, "tools"), script: resolve(import.meta.dir, "facial_solver_server.py") }),
     log: logTo("facial") });
   const facialRequest = createFacialHandler(facial);
-  // "Clear prepared game files" clears the face data too, and the size counts it (CORE-102).
-  characterDetails.attachPrepared({ bytes: () => facial.preparedBytes(), clear: () => facial.clearPrepared() });
-  characterDetails.attachPrepared(idlePrepared(idles, resolve(desktopPreviewCache(dataRoot), "resolver")));
+  // "Clear prepared game files" clears the face data and the idles too, and the size counts them (CORE-102).
+  prepared.partition(facial.preparedPartition());
+  prepared.partition(idlePrepared(idles, resolve(desktopPreviewCache(dataRoot), "resolver")));
   // Diagnostics: the page's failures, diagnostic mode and "Report a problem" (nothing is sent anywhere).
   const diagnosticsRequest = createDiagnosticsHandler(diagnostics, {
     app: () => ({ version: version.version, commit: version.buildHash === "unavailable" ? null : version.buildHash,

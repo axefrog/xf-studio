@@ -43,6 +43,7 @@ import { POSE_SAMPLE_SCHEMA } from "./pose-catalogue";
 import type { PoseSample } from "./pose-sample";
 import { packageChunks, type JsonObject } from "./red-json";
 import type { Installation, InstallationOptions } from "./resolver-host";
+import { keptSource, type PreparedPartition } from "./prepared-files";
 
 /** Version of what this host derives (the catalogue rule, the sample's shape); part of the disk cache's key with the decoder's. */
 export const IDLE_HOST_VERSION = 1;
@@ -464,17 +465,7 @@ export async function readIdles(installation: Installation, log?: (message: stri
     rig: { path: first.rigPath, joints: restJoints(rigOutcome.rig) }, face, clips };
 }
 
-/** The idles' cache as "Clear prepared game files" counts and clears it (character-detail-host.ts `attachPrepared`). */
-export function idlePrepared(host: IdleHost, resolverCache: string) {
-  const root = join(resolverCache, "idles");
-  const size = (dir: string): number => {
-    let total = 0;
-    try { for (const entry of readdirSync(dir, { withFileTypes: true })) total += entry.isDirectory() ? size(join(dir, entry.name)) : statSync(join(dir, entry.name)).size; }
-    catch { /* Gone meanwhile. */ }
-    return total;
-  };
-  return {
-    bytes: async () => size(root),
-    clear: async () => { const freed = size(root); rmSync(root, { recursive: true, force: true }); host.forget(); return { freed }; },
-  };
+/** The idles' cache as a partition of the prepared files (prepared-files.ts): counted, removed by Clear, then the host forgets it. */
+export function idlePrepared(host: IdleHost, resolverCache: string): PreparedPartition {
+  return { name: "idles", kept: [keptSource(join(resolverCache, "idles"))], forget: () => host.forget() };
 }

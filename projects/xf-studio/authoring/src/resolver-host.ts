@@ -32,12 +32,13 @@ import { readRdarIndexCount, readRdarIndexCountAsync, readRdarIndexHashes } from
 import { type FetchedResource, type ResourceFetchPort, ResourceGraph } from "./resource-graph";
 import { discoverSources, listingStamp, pathStamp, type SourceCandidate, type SourceDiscovery, type WatchedPath } from "./source-discovery";
 import { folderStampMode, type FolderStampMode } from "./volume-info";
-import { raiseBackgroundWolvenKit, runWolvenKit, type WolvenKitRun, WolvenKitRunError, type WolvenKitRunOptions, wolvenKitIdentity, wolvenKitIdentityKey } from "./wolvenkit-cli";
+import { runWolvenKit, type WolvenKitRun, WolvenKitRunError, type WolvenKitRunOptions, wolvenKitIdentity, wolvenKitIdentityKey } from "./wolvenkit-cli";
 import { currentDiagnostics, hostFailure, hostTrace } from "./diagnostics/host-log";
 import type { NativeDecoder } from "./native/native-decode";
 import type { NativeFailureKind } from "./native/native-errors";
 import { NATIVE_JSON_PAYLOADS, type NativeAnswerLedger, NativeFirstFetcher, openNativeDecoderAsync } from "./native/native-fetch-port";
 import { GAME_OODLE_LIBRARY } from "./native/oodle";
+import { inLowerLane, personWorking } from "./host-jobs";
 
 export interface InstallationOptions {
   readonly baseOnly?: boolean;
@@ -304,15 +305,17 @@ export const NOT_WRITTEN_RUNS = 2;
  * details, the grading LUT, the eye plate head source) runs its WolvenKit batches through it one at a
  * time, and a resource one fetcher is extracting is awaited by the others instead of extracted again.
  * Batch folders are unique (`mkdtemp`), so another process on the same cache cannot collide either.
+ *
+ * Which chain a batch takes, and its priority, follow the lane of the job it is fetched for (host-jobs.ts): while a person's job runs,
+ * batches go on the foreground chain, so a person's own change never waits behind a batch prepared ahead that is already in WolvenKit;
+ * a batch fetched only for work below the person lane runs below normal priority while no person's job runs. Both chains are safe
+ * together: batch folders are unique and a resource one chain is extracting is awaited by the other, never extracted twice.
  */
 interface CacheLane {
-  /** Batches, one at a time: below normal priority while only background work (a prefetch) runs. */
+  /** Batches, one at a time: below normal priority while only work below the person lane asked for them. */
   tail: Promise<void>;
-  /** Batches flushed while foreground work runs (`foregroundExtraction`): one at a time, never waiting behind a background batch. */
+  /** Batches flushed while a person's job runs: one at a time, never waiting behind a background batch. */
   foregroundTail: Promise<void>;
-  /** Foreground work (a person's own change being prepared) and background work (a prefetch) running now. */
-  foreground: number;
-  background: number;
   inflight: Map<string, Promise<FetchedResource | null>>;
   /** Cache files whose last answer was a null that may not repeat (`WolvenKitFetcher.transient`), whichever fetcher gave it. */
   transient: Set<string> }
@@ -320,34 +323,8 @@ const lanes = new Map<string, CacheLane>();
 function laneFor(cacheDir: string): CacheLane {
   const key = process.platform === "win32" ? resolve(cacheDir).toLowerCase() : resolve(cacheDir);
   let lane = lanes.get(key);
-  if (!lane) { lane = { tail: Promise.resolve(), foregroundTail: Promise.resolve(), foreground: 0, background: 0, inflight: new Map(), transient: new Set() }; lanes.set(key, lane); }
+  if (!lane) { lane = { tail: Promise.resolve(), foregroundTail: Promise.resolve(), inflight: new Map(), transient: new Set() }; lanes.set(key, lane); }
   return lane;
-}
-/**
- * Run `work` as foreground work on a cache folder: while it runs, extraction batches go on the foreground chain, so a person's own
- * change never waits behind a background batch (a prefetch) already in WolvenKit, and they run at normal priority. Both chains are safe
- * together: batch folders are unique and a resource one chain is extracting is awaited by the other, never extracted twice.
- */
-export async function foregroundExtraction<T>(cacheDir: string, work: () => Promise<T>): Promise<T> {
-  const lane = laneFor(cacheDir);
-  lane.foreground++;
-  // A resource this work needs may be in a background batch already: that batch must not run at background priority now.
-  raiseBackgroundWolvenKit();
-  try { return await work(); } finally { lane.foreground--; }
-}
-/**
- * Whether background work on a cache folder should run below normal priority now: only while no foreground work runs there. Pass it as a
- * launch's `lowPriority` so each launch decides when it starts (PIPE-96).
- */
-export const backgroundPriority = (cacheDir: string): (() => boolean) => {
-  const lane = laneFor(cacheDir);
-  return () => lane.foreground === 0;
-};
-/** Run `work` as background work on a cache folder: its batches run below normal priority, unless foreground work runs too. */
-export async function backgroundExtraction<T>(cacheDir: string, work: () => Promise<T>): Promise<T> {
-  const lane = laneFor(cacheDir);
-  lane.background++;
-  try { return await work(); } finally { lane.background--; }
 }
 
 /** A depot path WolvenKit can select by pattern: plain path text, no ArchiveXL markers. */
@@ -398,6 +375,8 @@ export function uncookPatterns(cli: string, archives: readonly string[], output:
 export class WolvenKitFetcher implements ResourceFetchPort {
   private readonly pending = new Map<string, Queue>();
   private timer: ReturnType<typeof setTimeout> | null = null;
+  /** Whether everything queued for the next batch was asked for below the person lane (null: nothing queued yet). */
+  private lowerOnly: boolean | null = null;
   private readonly lane: CacheLane;
   /** The WolvenKit identity (`wolvenKitIdentityKey`) whose output this fetcher caches, and its short form in file names. */
   readonly tool: string;
@@ -466,13 +445,17 @@ export class WolvenKitFetcher implements ResourceFetchPort {
       return Promise.resolve(null);
     }
     const promise = new Promise<FetchedResource | null>(resolve => {
+      // The batch is background work only while everything in it was asked for below the person lane.
+      this.lowerOnly = inLowerLane() && this.lowerOnly !== false;
       const queue = this.pending.get(archive.id) ?? { archive, items: new Map<string, Pending>() };
       queue.items.set(ref.hash, { archive, ref, extension, resolve });
       this.pending.set(archive.id, queue);
       if (!this.timer) this.timer = setTimeout(() => {
         this.timer = null;
-        if (this.lane.foreground > 0) this.lane.foregroundTail = this.lane.foregroundTail.then(() => this.flush(false));
-        else { const background = this.lane.background > 0; this.lane.tail = this.lane.tail.then(() => this.flush(background)); }
+        const background = this.lowerOnly;
+        this.lowerOnly = null;
+        if (personWorking()) this.lane.foregroundTail = this.lane.foregroundTail.then(() => this.flush(false));
+        else this.lane.tail = this.lane.tail.then(() => this.flush(background === true));
       }, 30);
     });
     this.lane.inflight.set(path, promise);
@@ -485,11 +468,10 @@ export class WolvenKitFetcher implements ResourceFetchPort {
     return runWolvenKit(this.cli!, args, { timeoutMs: RESOLVER_STEP_TIMEOUT_MS, keep: 16_000, ...options });
   }
   /**
-   * A background batch's priority, decided as each launch starts rather than when the batch was queued: once foreground work runs on
-   * this lane (a person's own change, which may wait on a resource in this batch or be queued behind it), it runs at normal priority
-   * (PIPE-96).
+   * A background batch's priority, decided as each launch starts rather than when the batch was queued: once a person's job runs (their
+   * own change, which may wait on a resource in this batch or be queued behind it), it runs at normal priority (PIPE-96).
    */
-  private low(background: boolean): boolean { return background && this.lane.foreground === 0; }
+  private low(background: boolean): boolean { return background && !personWorking(); }
   /** Whether this resource is in the cache now, answered from it without WolvenKit (a file, or a lasting marker); nothing is parsed. */
   isCached(archive: MountedArchive, hash: string): boolean {
     const path = this.cachePath(archive, hash);
