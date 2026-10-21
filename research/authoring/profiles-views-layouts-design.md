@@ -189,6 +189,8 @@ flowchart TB
 
 ### 2.2 Outbox, recovery and conflicts
 
+**One sync mechanism (decided 21 October, after the phase 1b reviews).** The outbox is the only way any document's local state reaches the library: looks, characters, profiles and every later kind. A service's in-memory view of a document is its acknowledged value with its outbox entries applied on top. Nothing else may keep a separate queue or reflect committed state into a context by hand. Phase 1b's hand-built character queue showed why: across four review rounds, the context and the document kept drifting apart (`experiments/038-profiles-spikes/1b-handover.md`).
+
 **Every mutation goes through the outbox first.** That covers looks, collections, characters, profiles and defaults, so **every unacknowledged durable mutation is recoverable**. The rules are the ones S1 proved ([A1–A7](../../experiments/038-profiles-spikes/README.md#acknowledgement-and-rebasing-rules-s1-answering-sols-medium-point)):
 
 - **An entry** is `{ id, seq, command, writes: { kind, id, base: number | { after: EntryId }, value | tombstone }[], at, state: "queued" | "conflict", current? }`. It is written synchronously before anything is sent.
