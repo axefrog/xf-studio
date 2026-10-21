@@ -158,7 +158,13 @@ struct AskView
     uint64_t answeredId = 0;
     std::string answeredLabel;
     uint64_t inkShown = 0;
+    bool keysArmed = false; // 0.8.2 (the review): the answer keys answer this question now (the "keys" record)
 };
+
+// 0.8.2 (the review: the overlay panel showed "F6 Done" while no key could answer): the line under a question on the overlay
+// panel and the status label: its answer keys while they answer it (the ink panel holds the question with its keys), else
+// where to answer instead.
+std::string AnswerHint(const std::vector<std::string>& aChoices, const std::vector<std::string>& aAnswerKeys, bool aKeysArmed);
 
 // XFBridge_Hud()'s answer: one record per line, fields separated by tabs, first line "xfhud<TAB>1". The redscript layer
 // reads it with StrSplit, so no JSON parser is needed in script. Records: show, layer, anchor, pos (x y), scale,
@@ -178,8 +184,10 @@ std::string CleanField(const std::string& aText);
 // 0.8: the frame the plugin answers (and the self-test's selftest.hud), made in one place: the board's lines, its pending
 // ask with the answer keys, its answered ask and the question the ink panel last reported drawing; the ink panel's copy of
 // every text.
+// aKeysAsk (0.8.2): the question the answer keys answer now (the ink panel's report), so the frame's "keys" record says
+// whether the pending question's keys work.
 std::string BuildFrame(const HudSettings& aSettings, const BridgeView& aView, MessageBoard& aBoard, const std::vector<std::string>& aAnswerKeys,
-                       uint64_t aInkShownAsk, StatusSurface aSurface = StatusSurface::StatusLabel);
+                       uint64_t aInkShownAsk, StatusSurface aSurface = StatusSurface::StatusLabel, uint64_t aKeysAsk = 0);
 // A key's name as the panels show it ("IK_F6" to "F6").
 std::string KeyLabel(const std::string& aKey);
 

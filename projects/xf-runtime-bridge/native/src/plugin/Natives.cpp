@@ -526,6 +526,7 @@ void InkDrawn(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut, i
         // 0.8.2: shown is the panel on screen (whatever it shows); id the question it draws (0: none).
         state.inkShownAsk.store(shown && id > 0 ? static_cast<uint64_t>(id) : 0);
         state.inkVisible.store(shown);
+        state.inkKeysAsk.store(id > 0 ? static_cast<uint64_t>(id) : 0); // 0.8.2: the question its keys answer, shown or not
         state.inkShownAtMs.store(now);
         if (aOut)
         {

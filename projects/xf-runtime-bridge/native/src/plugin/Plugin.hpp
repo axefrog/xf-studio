@@ -113,6 +113,10 @@ struct State
     std::atomic<bool> inkVisible{false};
     std::atomic<int> statusSurface{static_cast<int>(inkui::StatusSurface::StatusLabel)};
     bool InkVisible() const;
+    // 0.8.2 (the review): the question the ink panel holds with its answer keys (reported whether or not it is on screen), so
+    // its keys answer it; 0 when stale or none.
+    std::atomic<uint64_t> inkKeysAsk{0};
+    uint64_t InkKeysAsk() const;
     uint64_t InkShownAsk() const;
 
     // 0.7: the XF ImGui overlay host (P0, draw-only; core/overlay/Host.hpp, plugin/Overlay.cpp), configured from [overlay].

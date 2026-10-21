@@ -35,7 +35,8 @@ enum class QueueResult
     TimeoutAfterStart, // started, but not finished within timeout + grace; it may still finish
     QueueFull,         // too many requests already waiting
     NotPumping,        // the game thread is not draining (not Running, or the queue is closed)
-    Failed             // the task threw
+    Failed,            // the task threw
+    Deferred           // 0.8.2: closed before it could start, so its cleanup went on the cleanup lane (Run's aOnClosed)
 };
 
 class GameThreadQueue
@@ -50,8 +51,11 @@ public:
     // Bridge thread: queue a task and wait up to aTimeout for its result. If the task has
     // already started when aTimeout expires, wait up to aRunningGrace more before giving up.
     // aLabel names the task in the late-completion log line.
+    // 0.8.2 (the review): aOnClosed, when given, is posted to the cleanup lane whenever the closed queue keeps the task from
+    // starting (refused at the door, or cancelled by Close() while queued), decided under the queue's lock, so a kill can
+    // never slip between a check and the enqueue: such a task either runs, has started, or its cleanup is posted (Deferred).
     QueueResult Run(Task aTask, std::chrono::milliseconds aTimeout, nlohmann::json& aResult, std::string& aError,
-                    const std::string& aLabel = "-", std::chrono::milliseconds aRunningGrace = kDefaultRunningGrace);
+                    const std::string& aLabel = "-", std::chrono::milliseconds aRunningGrace = kDefaultRunningGrace, Task aOnClosed = {});
 
     // Game thread: run at most aMaxTasks queued tasks. Returns how many ran.
     size_t Drain(size_t aMaxTasks);
@@ -84,6 +88,8 @@ public:
     // them with DrainCleanup, before the kill switch's restore, whenever the game's scripts can be called.
     static constexpr size_t kCleanupCapacity = 32;
     bool PostCleanup(Task aTask, const std::string& aLabel);
+    // As PostCleanup, with m_mutex already held.
+    bool PostCleanupLocked(Task aTask, const std::string& aLabel);
     size_t DrainCleanup(size_t aMaxTasks);
     size_t PendingCleanups() const;
 

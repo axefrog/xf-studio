@@ -234,9 +234,10 @@ struct Behaviour
     double lastAngle = -1.0;
     double minAngle = -1.0; // 0.8: the closest the camera came to the look's point so far (the drift check)
     // 0.8.2 (session 9's D2: 4 s ran in 1.2 s; the game's look-at turns at its own pace whatever its duration): the look is
-    // steered along its arc, its view's yaw and pitch eased from where it started to the point over duration_s, one short
-    // look-at to the arc's next place every kLookStepS.
-    double yaw0 = 0.0, pitch0 = 0.0, yaw1 = 0.0, pitch1 = 0.0;
+    // steered along its arc, the shortest one on the sphere (the review: easing yaw and pitch apart can move the view away
+    // from the point for a while, which the drift check reads as the player's mouse), from where it started to the point over
+    // duration_s, one short look-at to the arc's next place every kLookStepS.
+    Vec3 from{}, to{};
     double lastIssue = -1.0;
     bool finalIssued = false;
     // glide_path
@@ -691,13 +692,36 @@ Vec3 DirectionOf(double aYaw, double aPitch)
     return {-std::sin(aYaw * kDeg) * std::cos(aPitch * kDeg), std::cos(aYaw * kDeg) * std::cos(aPitch * kDeg), std::sin(aPitch * kDeg)};
 }
 
+// The view direction a fraction along the great circle from aFrom to aTo (both unit length): its angle to aTo only ever
+// shrinks along the way. Opposite directions turn through the horizontal, the way a head turns round.
+Vec3 Slerp(const Vec3& aFrom, const Vec3& aTo, double aFraction)
+{
+    const double dot = std::clamp(aFrom[0] * aTo[0] + aFrom[1] * aTo[1] + aFrom[2] * aTo[2], -1.0, 1.0);
+    const double theta = std::acos(dot);
+    if (theta < 1e-6)
+    {
+        return aTo;
+    }
+    Vec3 other = aTo;
+    double sinTheta = std::sin(theta);
+    if (sinTheta < 1e-6)
+    {
+        // Opposite: through the direction at right angles to aFrom in its horizontal plane.
+        const double h = std::hypot(aFrom[0], aFrom[1]);
+        const Vec3 side = h > 1e-6 ? Vec3{-aFrom[1] / h, aFrom[0] / h, 0.0} : Vec3{1.0, 0.0, 0.0};
+        const double half = theta * aFraction;
+        return {aFrom[0] * std::cos(half) + side[0] * std::sin(half), aFrom[1] * std::cos(half) + side[1] * std::sin(half),
+                aFrom[2] * std::cos(half) + side[2] * std::sin(half)};
+    }
+    const double a = std::sin((1.0 - aFraction) * theta) / sinTheta, b = std::sin(aFraction * theta) / sinTheta;
+    return {aFrom[0] * a + other[0] * b, aFrom[1] * a + other[1] * b, aFrom[2] * a + other[2] * b};
+}
+
 Vec3 LookArcPoint(const Behaviour& aB, const Vec3& aCamera, double aFraction)
 {
     const double f = std::clamp(aFraction, 0.0, 1.0);
     const double eased = f * f * (3.0 - 2.0 * f); // smoothstep: eased in and out, as the game's own look-at
-    const double yaw = aB.yaw0 + std::remainder(aB.yaw1 - aB.yaw0, 360.0) * eased;
-    const double pitch = aB.pitch0 + (aB.pitch1 - aB.pitch0) * eased;
-    const auto d = DirectionOf(yaw, pitch);
+    const auto d = Slerp(aB.from, aB.to, eased);
     return {aCamera[0] + d[0] * 10.0, aCamera[1] + d[1] * 10.0, aCamera[2] + d[2] * 10.0};
 }
 
@@ -736,11 +760,8 @@ void StepLook(Behaviour& aB, const Ops& aOps, double aDt)
             aOps.watchInput(true); // design §4.2: the player's own input ends a look (0.7, session 7)
         }
         // 0.8.2: the arc from the view now to the point; its first step goes now.
-        aB.yaw0 = std::atan2(-forward[0], forward[1]) / kDeg;
-        aB.pitch0 = std::asin(std::clamp(forward[2], -1.0, 1.0)) / kDeg;
-        const auto toPoint = Normalise(Sub(aB.point, pos));
-        aB.yaw1 = std::atan2(-toPoint[0], toPoint[1]) / kDeg;
-        aB.pitch1 = std::asin(std::clamp(toPoint[2], -1.0, 1.0)) / kDeg;
+        aB.from = forward;
+        aB.to = Normalise(Sub(aB.point, pos));
         aOps.lookAt(LookArcPoint(aB, pos, kLookStepS / std::max(aB.duration, kLookStepS)), kLookStepS * 1.5);
         aB.lastIssue = 0.0;
         aB.state = Behaviour::State::Running;

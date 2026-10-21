@@ -838,7 +838,13 @@ public class XFInkOverlay extends ScriptableSystem {
   // status surface and the overlay panel and the status label stay off. The HUD layer is hidden outside normal play (menus,
   // photo mode, the appearance screen), so there it counts as not shown; the world is only asked while the scripts are live.
   private func ReportDrawn(frame: ref<XFHudFrame>) -> Void {
-    let id = frame.askId > 0 ? frame.askId : frame.answeredId;
+    // 0.8.2 (the review): id is the question this panel holds with its answer keys (DrawnAsk, which the keys answer, on screen
+    // or not), else the answered one it shows; the plugin tells the other surfaces whether the keys work.
+    let keysAsk = 0;
+    if this.m_mounted && IsDefined(this.m_drawn) {
+      keysAsk = this.m_drawn.askId;
+    }
+    let id = keysAsk > 0 ? keysAsk : frame.answeredId;
     let shown = frame.show && this.m_mounted && frame.live;
     if shown && Equals(this.m_layer, "hud") {
       shown = Equals(XFBridgeActions.Phase(), "gameplay");

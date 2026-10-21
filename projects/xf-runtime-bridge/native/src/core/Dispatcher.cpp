@@ -270,26 +270,21 @@ namespace
 json RunTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout, const std::function<json()>& aTask,
              const std::string& aLabel, bool aGated, const Dispatcher* aWriteGate, bool aDeferWhenClosed)
 {
-    // 0.8.2 (the re-check's sixth finding): the kill switch closes the queue, which used to refuse a write's own put-back
-    // step too (photo.pose.set killed during its settle left the category changed). A put-back step (RestoreScope) that
-    // finds it closed goes on the cleanup lane, which the game thread runs before the kill switch's restore; it still checks
-    // the game gate there, so it never calls into a session that has gone.
-    if (aDeferWhenClosed && aQueue.IsClosed())
+    // 0.8.2 (the re-check's sixth finding, and the review's): the kill switch closes the queue, which used to refuse a write's
+    // own put-back step too (photo.pose.set killed during its settle left the category changed). A put-back step (RestoreScope)
+    // passes its cleanup to Run, which posts it to the cleanup lane whenever the closed queue keeps it from starting, decided
+    // under the queue's lock (so a kill between a check and the enqueue can't lose it); the game thread runs the lane before the
+    // kill switch's restore, and the step still checks the game gate there, so it never calls into a session that has gone.
+    GameThreadQueue::Task onClosed;
+    if (aDeferWhenClosed)
     {
-        const bool posted = aQueue.PostCleanup(
-            [aTask, aGated, aLabel]() -> json {
-                if (aGated)
-                {
-                    RequireGameGate(aLabel);
-                }
-                return aTask();
-            },
-            aLabel);
-        if (!posted)
-        {
-            throw MethodError("killed", "the bridge was stopped and its cleanup lane is full, so this step can't put things back: " + aLabel);
-        }
-        return json{{"deferred_to_cleanup", true}};
+        onClosed = [aTask, aGated, aLabel]() -> json {
+            if (aGated)
+            {
+                RequireGameGate(aLabel);
+            }
+            return aTask();
+        };
     }
     json envelope;
     std::string error;
@@ -314,9 +309,11 @@ json RunTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout, const 
                 return json{{"ok", false}, {"code", e.code}, {"message", e.what()}};
             }
         },
-        aTimeout, envelope, error, aLabel);
+        aTimeout, envelope, error, aLabel, GameThreadQueue::kDefaultRunningGrace, std::move(onClosed));
     switch (result)
     {
+    case QueueResult::Deferred:
+        return json{{"deferred_to_cleanup", true}};
     case QueueResult::Done:
         if (envelope.value("ok", false))
         {

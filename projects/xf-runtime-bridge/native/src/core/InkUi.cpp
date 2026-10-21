@@ -580,6 +580,10 @@ std::string Frame(const HudSettings& aSettings, const BridgeView& aView, const s
         {
             out += "answered\t" + std::to_string(aAsk->answeredId) + "\t" + CleanField(ForInk(aAsk->answeredLabel)) + "\n";
         }
+        if (aAsk && aAsk->id != 0 && !aAsk->keyed.empty())
+        {
+            out += std::string("keys\t") + (aAsk->keysArmed ? "1" : "0") + "\n";
+        }
         if (aAsk && aAsk->inkShown != 0)
         {
             out += "inkask\t" + std::to_string(aAsk->inkShown) + "\n";
@@ -588,8 +592,18 @@ std::string Frame(const HudSettings& aSettings, const BridgeView& aView, const s
     return out;
 }
 
+std::string AnswerHint(const std::vector<std::string>& aChoices, const std::vector<std::string>& aAnswerKeys, bool aKeysArmed)
+{
+    std::string hint;
+    for (size_t i = 0; aKeysArmed && i < aChoices.size() && i < aAnswerKeys.size(); ++i)
+    {
+        hint += (hint.empty() ? "" : "   ") + KeyLabel(aAnswerKeys[i]) + " " + aChoices[i];
+    }
+    return hint.empty() ? "Answer in the XF Runtime Bridge window (CET overlay)." : hint;
+}
+
 std::string BuildFrame(const HudSettings& aSettings, const BridgeView& aView, MessageBoard& aBoard, const std::vector<std::string>& aAnswerKeys,
-                       uint64_t aInkShownAsk, StatusSurface aSurface)
+                       uint64_t aInkShownAsk, StatusSurface aSurface, uint64_t aKeysAsk)
 {
     std::vector<MessageLine> lines;
     AskView ask;
@@ -608,6 +622,7 @@ std::string BuildFrame(const HudSettings& aSettings, const BridgeView& aView, Me
                 ask.keyed.emplace_back(aAnswerKeys[i], pending.choices[i]);
             }
             ask.inkShown = aInkShownAsk == pending.id ? aInkShownAsk : 0;
+            ask.keysArmed = aKeysAsk == pending.id;
         }
         else
         {

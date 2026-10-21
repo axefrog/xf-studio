@@ -139,6 +139,7 @@ local function drawQuestion(state, queue, theme, which)
   wrapped(tostring(ask and ask.text or answered.text))
   if ask then
     local keys = state.info and state.info.answer_keys or {}
+    if state.keysArmed == false then keys = {} end -- 0.8.2: no key answers it now; the buttons do
     local fill = panel.colour(theme, which, "XfAccent", AMBER)
     local edge = panel.colour(theme, which, "XfAccentEdge", fill)
     local ink = panel.colour(theme, which, "XfAccentInk", { 0.09, 0.09, 0.05, 1.0 })

@@ -537,30 +537,39 @@ json LightSet(const params::LightRequest& aRequest, const LightOps& aOps)
                 {
                     placeUndo["on"] = false;
                 }
-                aOps.settle();
-                // 0.8.2 (the re-check's fourth finding): switching the light on here is the requested placement (it lands at
-                // the camera), so it passes the write gate like any change. Only when the gate refuses it, and the light was
-                // on before, is it switched on again inside a RestoreScope, and moved back to where it stood when that's
-                // known: the light's earlier state, never the placement. A light that was off stays off.
+                // 0.8.2 (the re-check's fourth finding, and the review's): switching the light on here is the requested placement
+                // (it lands at the camera), so it passes the write gate like any change. The settle between the two switches is
+                // inside the same guard: whatever stops the placement after the switch-off (a pause, a handover, the kill
+                // switch, a settle that fails because the kill switch closed the queue), a light that was on is switched on
+                // again inside a RestoreScope and moved back to where it stood when that's known: its earlier state, never the
+                // placement. After the kill switch those steps go on the cleanup lane. A light that was off stays off.
                 try
                 {
+                    aOps.settle();
                     aOps.set(params::key::kLightState, 1.0f);
                 }
-                catch (const MethodError& e)
+                catch (const std::exception&)
                 {
-                    if (!wasOff && (e.code == "writes_paused" || e.code == "handed_over" || e.code == "killed"))
+                    if (!wasOff)
                     {
                         RestoreScope restoring;
-                        aOps.set(params::key::kLightState, 1.0f);
-                        if (was["position"].is_object() && aOps.place)
+                        try
                         {
-                            const auto& p = was["position"];
-                            params::LightPlacement back;
-                            back.kind = params::LightPlacement::Kind::World;
-                            back.world = {p.value("x", 0.0f), p.value("y", 0.0f), p.value("z", 0.0f)};
-                            aOps.place(aRequest.light, back);
-                            moved = false;
-                            placement["restored"] = true;
+                            aOps.set(params::key::kLightState, 1.0f);
+                            if (was["position"].is_object() && aOps.place)
+                            {
+                                const auto& p = was["position"];
+                                params::LightPlacement back;
+                                back.kind = params::LightPlacement::Kind::World;
+                                back.world = {p.value("x", 0.0f), p.value("y", 0.0f), p.value("z", 0.0f)};
+                                aOps.place(aRequest.light, back);
+                                moved = false;
+                                placement["restored"] = true;
+                            }
+                        }
+                        catch (const std::exception&)
+                        {
+                            // The original failure is the answer; the message below says the light may have moved.
                         }
                     }
                     throw;

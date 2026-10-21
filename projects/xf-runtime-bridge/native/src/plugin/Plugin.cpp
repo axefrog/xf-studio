@@ -68,6 +68,12 @@ bool State::InkVisible() const
     return now - inkShownAtMs.load() <= kInkShownMs && inkVisible.load();
 }
 
+uint64_t State::InkKeysAsk() const
+{
+    const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    return now - inkShownAtMs.load() <= kInkShownMs ? inkKeysAsk.load() : 0;
+}
+
 inkui::BridgeView BridgeViewNow()
 {
     auto& state = Get();
@@ -92,7 +98,7 @@ std::string HudFrame()
     // 0.8: made in one place (core BuildFrame), shared with the self-test's selftest.hud.
     auto& state = Get();
     return inkui::BuildFrame(state.hud.Current(), BridgeViewNow(), state.messages, state.config.answerKeys, state.InkShownAsk(),
-                             static_cast<inkui::StatusSurface>(state.statusSurface.load()));
+                             static_cast<inkui::StatusSurface>(state.statusSurface.load()), state.InkKeysAsk());
 }
 
 nlohmann::json InfoJson()

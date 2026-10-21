@@ -1512,12 +1512,14 @@ int wmain(int argc, wchar_t** argv)
     // 0.8: what the ink panel last reported drawing (XFBridge_InkDrawn in the plugin): selftest.ink_drawn {id, shown}.
     static uint64_t inkShown = 0;
     static bool inkVisible = false; // 0.8.2: the ink panel's own report of being on screen
+    static uint64_t inkKeys = 0;    // 0.8.2: the question its keys answer, shown or not
     dispatcher.Register({"selftest.ink_drawn", xfb::Access::Read, xfb::RunOn::BridgeThread, "The ink panel reports the question it draws (self-test only).",
                          [](const xfb::MethodContext& aContext) {
                              const auto& p = aContext.params;
                              const auto id = p.is_object() ? p.value("id", 0ll) : 0ll;
                              inkShown = p.is_object() && p.value("shown", false) && id > 0 ? static_cast<uint64_t>(id) : 0;
                              inkVisible = p.is_object() && p.value("shown", false);
+                             inkKeys = id > 0 ? static_cast<uint64_t>(id) : 0;
                              return json{{"ok", true}, {"ink_shown", inkShown}};
                          }});
     dispatcher.Register({"selftest.hud", xfb::Access::Read, xfb::RunOn::BridgeThread, "The frame the ink HUD panel would draw (self-test only).",
@@ -1533,7 +1535,7 @@ int wmain(int argc, wchar_t** argv)
                              view.scriptReady = simLayer.Ready();
                              // 0.8: the plugin's own frame builder (core BuildFrame), and the status every surface shows.
                              const auto surface = xfb::inkui::ChooseStatusSurface({inkVisible, false});
-                             const auto frame = xfb::inkui::BuildFrame(hud.Current(), view, messages, config.answerKeys, inkShown, surface);
+                             const auto frame = xfb::inkui::BuildFrame(hud.Current(), view, messages, config.answerKeys, inkShown, surface, inkKeys);
                              auto out = xfb::inkui::ParseFrame(frame);
                              out["frame"] = frame;
                              out["status_all"] = xfb::inkui::StatusJson(view);

@@ -11,8 +11,22 @@ GameThreadQueue::GameThreadQueue(size_t aCapacity)
 
 QueueResult GameThreadQueue::Run(Task aTask, std::chrono::milliseconds aTimeout, nlohmann::json& aResult,
                                  std::string& aError, const std::string& aLabel,
-                                 std::chrono::milliseconds aRunningGrace)
+                                 std::chrono::milliseconds aRunningGrace, Task aOnClosed)
 {
+    const auto defer = [&]() -> QueueResult {
+        // Under m_mutex: the closure is settled here, before or after any Close().
+        if (!PostCleanupLocked(std::move(aOnClosed), aLabel))
+        {
+            aError = "closed, and the cleanup lane is full";
+            return QueueResult::NotPumping;
+        }
+        return QueueResult::Deferred;
+    };
+    if (aOnClosed && m_closed.load())
+    {
+        std::scoped_lock _(m_mutex);
+        return defer();
+    }
     if (m_closed.load() || !m_pumping.load())
     {
         return QueueResult::NotPumping;
@@ -27,7 +41,7 @@ QueueResult GameThreadQueue::Run(Task aTask, std::chrono::milliseconds aTimeout,
         // task is either refused here or swapped out (and released) by Close().
         if (m_closed.load())
         {
-            return QueueResult::NotPumping;
+            return aOnClosed ? defer() : QueueResult::NotPumping;
         }
         if (m_items.size() >= m_capacity)
         {
@@ -62,6 +76,12 @@ QueueResult GameThreadQueue::Run(Task aTask, std::chrono::milliseconds aTimeout,
         if (item->state.compare_exchange_strong(expected, Cancelled) || expected == Cancelled)
         {
             aError = "closed";
+            if (aOnClosed)
+            {
+                // Close() cancelled it before the game thread took it: it never runs, so its cleanup goes on the lane.
+                std::scoped_lock _(m_mutex);
+                return defer();
+            }
             return QueueResult::NotPumping;
         }
         item->abandoned = true;
@@ -210,6 +230,11 @@ void GameThreadQueue::Close()
 bool GameThreadQueue::PostCleanup(Task aTask, const std::string& aLabel)
 {
     std::scoped_lock _(m_mutex);
+    return PostCleanupLocked(std::move(aTask), aLabel);
+}
+
+bool GameThreadQueue::PostCleanupLocked(Task aTask, const std::string& aLabel)
+{
     if (m_cleanup.size() >= kCleanupCapacity)
     {
         log::Warn("game.cleanup_dropped", "task=" + aLabel + " reason=full");

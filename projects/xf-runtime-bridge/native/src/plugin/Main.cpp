@@ -273,12 +273,9 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
                 if (state.messages.Pending(ask))
                 {
                     panel.pendingAsk = ask.text;
-                    std::string hint;
-                    for (size_t i = 0; i < ask.choices.size() && i < state.config.answerKeys.size(); ++i)
-                    {
-                        hint += (hint.empty() ? "" : "   ") + inkui::KeyLabel(state.config.answerKeys[i]) + " " + ask.choices[i];
-                    }
-                    panel.askHint = hint.empty() ? "Answer in the XF Runtime Bridge window (CET overlay)." : hint;
+                    // 0.8.2 (the review): the keys only while they answer this question (the ink panel holds it with its keys:
+                    // not when it is switched off, nor without Codeware); else where to answer.
+                    panel.askHint = inkui::AnswerHint(ask.choices, state.config.answerKeys, state.InkKeysAsk() == ask.id);
                 }
                 else if (state.messages.Answered(answered))
                 {

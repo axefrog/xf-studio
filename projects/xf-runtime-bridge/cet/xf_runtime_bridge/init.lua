@@ -226,6 +226,9 @@ local function pollMessages()
   -- without XFBridge_Hud (older builds) keeps the label.
   state.cetLabel = not (hudOk and type(frame) == "string" and string.find(frame, "\ncet_label\t0\n", 1, true) ~= nil)
   -- 0.8 (the UI review): while the ink panel shows the question on screen, this label keeps to the status and the keys.
+  -- 0.8.2 (the review): whether the answer keys answer the pending question now (a plugin without the record: as before).
+  local keys = hudOk and type(frame) == "string" and string.match(frame, "\nkeys\t(%d)\n") or nil
+  state.keysArmed = keys ~= "0"
   local inkAsk = hudOk and type(frame) == "string" and string.match(frame, "\ninkask\t(%d+)\n") or nil
   state.inkAsk = tonumber(inkAsk) or 0
   local ok, text = pcall(function() return Game.XFBridge_Messages() end)
@@ -425,6 +428,7 @@ end
 -- panel has the question, even while the game hides the HUD.
 local function answerHint(ask)
   local keys = state.info and state.info.answer_keys or {}
+  if state.keysArmed == false then keys = {} end -- 0.8.2: no key answers it now (the ink panel is off, or no Codeware)
   local parts = {}
   for i, label in ipairs(ask.choices or {}) do
     if keys[i] then

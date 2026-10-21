@@ -4075,14 +4075,17 @@ void Bridge082Tests()
     {
         std::map<int32_t, std::array<double, 3>> at;
         xfb::Dispatcher* d = nullptr;
+        std::atomic<int> placed{0};
         xfb::writes::LightOps Ops(std::function<void()> aSettle)
         {
             auto ops = FakePhoto::Ops();
             const auto base = ops.set;
-            ops.set = [this, base](int32_t aKey, float aValue) { return d->RunWrite(1000ms, [&] { return base(aKey, aValue); }, "unit.light.set"); };
+            // By value: a step put on the cleanup lane runs after this call has returned.
+            ops.set = [this, base](int32_t aKey, float aValue) { return d->RunWrite(1000ms, [base, aKey, aValue] { return base(aKey, aValue); }, "unit.light.set"); };
             ops.settle = aSettle;
             ops.place = [this](int32_t aLight, const p::LightPlacement& aPlace) {
-                return d->RunWrite(1000ms, [&] {
+                return d->RunWrite(1000ms, [this, aLight, aPlace] {
+                    ++placed;
                     calls.push_back("place " + std::to_string(aLight));
                     const auto before = at[aLight];
                     at[aLight] = {aPlace.world[0], aPlace.world[1], aPlace.world[2]};
@@ -4141,6 +4144,71 @@ void Bridge082Tests()
         });
         Check("0.8.2 (re-check 4): a light that was on comes back on and to where it stood (its earlier state, not the placement)",
               code == "writes_paused" && fake.values[p::key::kLightState] == 1.0f && fake.at[1] == std::array<double, 3>{9.0, 9.0, 9.0}, code);
+    }
+
+    {
+        // 0.8.2 (the review): the kill switch during the settle between the switch-off and the switch-on. The real settle
+        // fails then (WaitTicks sees the closed queue); the light, which was on, comes back on and to where it stood, through
+        // the cleanup lane. 0.8.2's first fix kept the settle outside the guard and left the light dark; a settle that only
+        // paused (as the tests above) didn't show it.
+        Rig rig;
+        LightFake fake;
+        fake.d = rig.dispatcher.get();
+        fake.values[p::key::kLightSelect] = 0;
+        fake.values[p::key::kLightState] = 1; // on
+        fake.at[1] = {9.0, 9.0, 9.0};
+        bool killed = false;
+        const auto code = ParamsCode([&] {
+            w::LightSet(p::ParseLight(json{{"light", 1}, {"place", "camera"}}), fake.Ops([&] {
+                if (!killed)
+                {
+                    killed = true;
+                    fake.at[1] = {1.0, 2.0, 3.0};
+                    rig.Kill();
+                    throw xfb::MethodError("timeout", "photo mode didn't load the selected light's values in time");
+                }
+            }));
+        });
+        const bool restored = waitFor([&] { return fake.placed.load() >= 1; });
+        Check("0.8.2 (review 3): killed during the settle, a light that was on comes back on and in place through the cleanup lane",
+              code == "timeout" && restored && fake.values[p::key::kLightState] == 1.0f && fake.at[1] == std::array<double, 3>{9.0, 9.0, 9.0}, code);
+    }
+
+    // Review 2: a put-back step cancelled by the kill switch while queued goes on the cleanup lane (decided under the lock).
+    {
+        xfb::Config config;
+        xfb::Session session;
+        std::string error;
+        wchar_t temp[MAX_PATH]{};
+        GetTempPathW(MAX_PATH, temp);
+        xfb::CreateSession(session, error, std::filesystem::path(temp) / L"xfb-unit-082-defer");
+        xfb::GameThreadQueue queue;
+        queue.SetPumping(true); // pumping, but nothing drains: the step waits in the queue
+        xfb::Dispatcher dispatcher(config, session, queue);
+        xfb::SetGameGate({});
+        std::atomic<int> ran{0};
+        json answer;
+        std::thread restorer([&] {
+            xfb::RestoreScope restoring;
+            answer = dispatcher.RunWrite(5000ms, [&] { ++ran; return json::object(); }, "unit.restore.queued");
+        });
+        std::this_thread::sleep_for(50ms);
+        dispatcher.Kill("unit");
+        queue.Close();
+        restorer.join();
+        const auto pending = queue.PendingCleanups();
+        queue.DrainCleanup(4);
+        Check("0.8.2 (review 2): a put-back step the kill switch cancelled while it waited is posted to the cleanup lane, and runs there",
+              answer.value("deferred_to_cleanup", false) && pending == 1 && ran == 1, answer.dump());
+        xfb::GameThreadQueue closed;
+        closed.Close();
+        json result;
+        std::string closedError;
+        const auto refused = closed.Run([] { return json::object(); }, 100ms, result, closedError, "unit.forward");
+        const auto deferred = closed.Run([] { return json::object(); }, 100ms, result, closedError, "unit.restore", xfb::GameThreadQueue::kDefaultRunningGrace,
+                                         [] { return json::object(); });
+        Check("0.8.2 (review 2): a closed queue refuses a forward step and defers a put-back one",
+              refused == xfb::QueueResult::NotPumping && deferred == xfb::QueueResult::Deferred && closed.PendingCleanups() == 1);
     }
 
     // Re-check finding 2: player.stop between a look's steps ends it there.
@@ -4236,6 +4304,17 @@ void Session9Tests()
               frame.value("surface", std::string()) == "overlay_panel" &&
                   k::ParseFrame(k::BuildFrame(k::HudSettings{}, view, board, {"IK_F6"}, 0))["surface"] == "status_label",
               frame.dump());
+        // Review 5: keys are offered only while they answer the question.
+        board.Post({"Which?", 60, "ask", false, {"Yes", "No"}}, t0);
+        xfb::PendingAsk pendingAsk;
+        board.Pending(pendingAsk);
+        const auto armed = k::ParseFrame(k::BuildFrame(k::HudSettings{}, view, board, {"IK_F6", "IK_F7"}, 0, k::StatusSurface::OverlayPanel, pendingAsk.id));
+        const auto unarmed = k::ParseFrame(k::BuildFrame(k::HudSettings{}, view, board, {"IK_F6", "IK_F7"}, 0, k::StatusSurface::OverlayPanel, 0));
+        Check("0.8.2 (review 5) the frame says whether the keys answer the question, and the overlay panel's line follows it",
+              armed.value("keys", std::string()) == "1" && unarmed.value("keys", std::string()) == "0" &&
+                  k::AnswerHint({"Yes", "No"}, {"IK_F6", "IK_F7"}, true) == "F6 Yes   F7 No" &&
+                  k::AnswerHint({"Yes", "No"}, {"IK_F6", "IK_F7"}, false) == "Answer in the XF Runtime Bridge window (CET overlay).",
+              armed.dump());
         // Connection status follows the session (session 9): a request a moment ago counts as connected.
         view.hasClient = false;
         view.inSession = true;
@@ -4261,13 +4340,20 @@ void Session9Tests()
         const bool none = xfb::SessionRunnerActive(session);
         write(json{{"pid", GetCurrentProcessId()}, {"script", "unit"}}.dump());
         const bool mine = xfb::SessionRunnerActive(session);
+        FILETIME created{}, exited{}, kernel{}, user{};
+        GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user);
+        const auto started = std::to_string((static_cast<uint64_t>(created.dwHighDateTime) << 32) | created.dwLowDateTime);
+        write(json{{"pid", GetCurrentProcessId()}, {"process_started", started}}.dump());
+        const bool same = xfb::SessionRunnerActive(session);
+        write(json{{"pid", GetCurrentProcessId()}, {"process_started", "1"}}.dump());
+        const bool reused = xfb::SessionRunnerActive(session);
         write(json{{"pid", 4294967290ull}}.dump());
         const bool gone = xfb::SessionRunnerActive(session);
         write("not json");
         const bool bad = xfb::SessionRunnerActive(session);
         std::filesystem::remove_all(session.runtimeDir);
-        Check("0.8.2 status: the session lock counts while its process runs; a missing, stale or unreadable lock doesn't",
-              !none && mine && !gone && !bad);
+        Check("0.8.2 status: the session lock counts while its process runs (the same process: review 8); a missing, stale, reused-PID or unreadable lock doesn't",
+              !none && mine && same && !reused && !gone && !bad);
     }
 
     // game.load's press-any-key screen: the puppet before the player.
@@ -4330,6 +4416,41 @@ void Session9Tests()
         Check("0.8.2 (D2) behave.look of 90 degrees over 4 s: half way at 2 s, done after about 4 s, steered in short steps",
               !runner.Active() && t >= 3.6 && t <= 4.6 && std::abs(halfway - 45.0) < 8.0 && lookAts >= 30,
               "t=" + std::to_string(t) + " halfway=" + std::to_string(halfway) + " lookAts=" + std::to_string(lookAts));
+    }
+    {
+        // The review's case: from yaw 0, pitch 80 to yaw 180, pitch 0 over 4 s. Easing yaw and pitch apart moved the view away
+        // from the point (100 to about 107 degrees) and the drift check stopped the look as the player's own input; on the
+        // great circle the angle to the point only shrinks.
+        b::Runner runner;
+        xfb::EventLog events;
+        runner.SetEvents(&events);
+        b::Ops fake;
+        const double k = 3.14159265358979 / 180.0;
+        b::Vec3 forward{0.0, std::cos(80.0 * k), std::sin(80.0 * k)};
+        const b::Vec3 camera{0.0, 0.0, 1.7};
+        fake.camera = [&] { return json{{"position", camera}, {"forward", forward}, {"right", {1, 0, 0}}, {"up", {0, 0, 1}}, {"fov", 60.0}}; };
+        fake.lookAt = [&](const b::Vec3& aPoint, double) {
+            const b::Vec3 d{aPoint[0] - camera[0], aPoint[1] - camera[1], aPoint[2] - camera[2]};
+            const double n = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+            forward = {d[0] / n, d[1] / n, d[2] / n}; // a camera that follows each step at once, yaw and pitch
+        };
+        fake.player = [] { return json{{"busy", ""}, {"phase", "gameplay"}}; };
+        runner.Start(b::StartParams("look", json{{"yaw", 180}, {"pitch", 0}, {"duration_s", 4}}), [](xfb::Access) {});
+        double t = 0.0;
+        double worst = 0.0, previous = 1e9;
+        const b::Vec3 target{0.0, -1.0, 0.0};
+        while (runner.Active() && t < 10.0)
+        {
+            runner.Tick(0.05, fake, true);
+            t += 0.05;
+            const double angle = std::acos(std::clamp(forward[0] * target[0] + forward[1] * target[1] + forward[2] * target[2], -1.0, 1.0)) / k;
+            worst = std::max(worst, angle - previous);
+            previous = angle;
+        }
+        const auto stop = events.Read(0, 100, {"behaviour"})["events"].back();
+        Check("0.8.2 (review 4) behave.look from yaw 0, pitch 80 to yaw 180, pitch 0: the angle to the point never grows, and the look ends reached",
+              stop["data"].value("reason", std::string()) == "reached" && worst <= 1e-6 && t >= 3.6,
+              stop.dump() + " worst=" + std::to_string(worst) + " t=" + std::to_string(t));
     }
 }
 

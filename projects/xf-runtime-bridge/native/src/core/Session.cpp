@@ -84,7 +84,15 @@ bool SessionRunnerActive(const Session& aSession)
             return false;
         }
         DWORD code = 0;
-        const bool alive = GetExitCodeProcess(process, &code) && code == STILL_ACTIVE;
+        bool alive = GetExitCodeProcess(process, &code) && code == STILL_ACTIVE;
+        // 0.8.2 (the review): the same process, not a later one given the same PID: its creation time (a decimal FILETIME)
+        // must match the lock's process_started when the lock has one, as tools/session-lock.ts judges it.
+        if (alive && lock.contains("process_started") && lock["process_started"].is_string())
+        {
+            FILETIME created{}, exited{}, kernel{}, user{};
+            alive = GetProcessTimes(process, &created, &exited, &kernel, &user) &&
+                    std::to_string((static_cast<uint64_t>(created.dwHighDateTime) << 32) | created.dwLowDateTime) == lock["process_started"].get<std::string>();
+        }
         CloseHandle(process);
         return alive;
     }
