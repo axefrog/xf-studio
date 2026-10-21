@@ -5,22 +5,18 @@ The open code and design findings of Medium severity and above, from merge revie
 - **High:** a correctness bug, a broken or bypassed boundary, a security or data-loss risk, or a design that would force rework of later features.
 - **Medium:** maintainability debt that will slow the next features.
 
-**More than 3 open High findings pause feature merges** until the count is back to 3 or fewer; cleanup and critical-path fixes may still merge. Open High findings today: 7 (feature merges paused until fixed). Each merge gets one independent Sol review ([AGENTS.md](../../AGENTS.md)); its fixed findings are not recorded here.
+**More than 3 open High findings pause feature merges** until the count is back to 3 or fewer; cleanup and critical-path fixes may still merge. Open High findings today: 6 (feature merges paused until 3 or fewer). Each merge gets one independent Sol review ([AGENTS.md](../../AGENTS.md)); its fixed findings are not recorded here.
 
 ## Open findings
 
 | ID | Severity | Area | Finding | Where |
 |---|---|---|---|---|
 | CORE-03 | High | Core (design) | Presets, Undo and routing were built for eye-makeup recipes. Steps 1–7 of the [feature-module platform](feature-module-platform.md) moved most of it onto the registry and per-feature parts; steps 8–9 remain (eye makeup's preview device, raster client and editors, its exporter and verifier) and the shell couplings in the [boundary assessment](ui-architecture-boundary.md#open-work). | `src/compose/studio-registry.ts`, the [design's file table](feature-module-platform.md#file-moves) |
-| NATIVE-80 | High | Untrusted input | A tiny malicious `.anims` declaring zero frames and millions of joints bypasses the SIMD output budget (every multiplied budget becomes zero) and allocates per joint and track until memory runs out. | `src/native/anim-set.ts:462` |
 | INSTALL-05 | High | Security | The Vortex local-folder check accepts mixed-separator UNC paths (`/\host\share`) from a deployment manifest; normalised, they open an SMB path and can expose Windows authentication. | `src/installation/host/vortex-host.ts:47` |
 | PIPE-139 | High | Untrusted input | TweakXL YAML aliases expand without a budget in `toPlain()`; a small file of doubling aliases allocates exponentially during catalogue loading. | `src/game/tweakxl-yaml.ts:458` |
 | RB-119 | High | Bridge safety | Save preparation runs before relock cleanup is armed; if `SavePrepare` releases the lock and its reply times out, the lock stays off and later autosaves can persist experimental changes. | `projects/xf-runtime-bridge/native/src/core/Writes.cpp:1199` |
 | RB-120 | High | Bridge privacy | Capture bursts reuse the first frame's foreground state and screen rectangle; an Alt+Tab during the screen fallback saves another application's window. Explicit screen capture skips the foreground guard. | `projects/xf-runtime-bridge/tools/capture/capture.ts:280` |
 | RB-121 | High | Bridge safety | `bridge.kill`, stop and handover share the ordinary serial queue, so a `game.wait` can hold them for up to ten minutes while behaviours keep running. | `projects/xf-runtime-bridge/tools/api/command-api.ts:179` |
-| PIPE-140 | Med | Build | Early cancellation is lost: the abort listener is installed after the asynchronous readiness checks, so closing the page during tool probing leaves preparation and Build running. | `src/platform/export/product-host.ts:307` |
-| PIPE-141 | Med | Verify | The texture orientation check needs a strictly better match than the flipped texture, so symmetric coverage (a uniform Matte plate) fails a valid Build. | `src/features/eye-makeup/verify/verify-build.ts:471` |
-| PREV-202 | Med | Preparation | A failed or timed-out retry of a morph skin export throws `WolvenKitRunError` instead of `GameAssetExportError`, aborting character preparation instead of keeping the first GLB. | `src/game/host/game-asset-export-wolvenkit.ts:154` |
 | INSTALL-06 | Med | Mod install | Direct installs share one receipt identity (the destination folder only), so a second collection with another archive namespace fails the namespace check. | `src/installation/host/mod-install-transport.ts:303` |
 | INSTALL-07 | Med | Mod install | Duplicate detection treats historical receipts from every installation as live conflicts; a mod removed through MO2 can block its reinstall indefinitely. | `src/installation/host/mod-install-transport.ts:323` |
 | PIPE-142 | Med | Resolver | Game-folder ArchiveXL bundle discovery lists only immediate children, silently missing `.xl` declarations in `Bundle/` subfolders. | `src/game/host/resolver-host.ts:147` |

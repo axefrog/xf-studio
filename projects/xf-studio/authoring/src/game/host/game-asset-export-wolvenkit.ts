@@ -45,6 +45,15 @@ export function uncookByHashArguments(archivePath: string, depotPath: string, ou
   return ["uncook", archivePath, "-o", outDir, "--hash", depotHash(depotPath), "-u", "--uext", "png", "-v", "Minimal"];
 }
 
+/**
+ * The one translation of a WolvenKit run failure into the exporter's own error, shared by every adapter here (PREV-202): its code (a
+ * timeout counts as the tool failing) and output. Anything else (the disk, a bug) passes through unchanged.
+ */
+export function toExportError(error: unknown): unknown {
+  if (!(error instanceof WolvenKitRunError)) return error;
+  return new GameAssetExportError(error.code === "tool_timeout" ? "tool_failed" : error.code, error.message, error.output);
+}
+
 export function createWolvenKitUncook(cli: string | null, timeoutMs = DEFAULT_TIMEOUT_MS): UncookRun {
   return async ({ source, sources, depotPaths, outDir, withMaterials, signal, byHash, lowPriority }) => {
     const archives = (sources?.length ? sources : [source]).map(item => item.archivePath);
@@ -53,18 +62,9 @@ export function createWolvenKitUncook(cli: string | null, timeoutMs = DEFAULT_TI
       : uncookSelections(cli ?? "", archives, depotPaths, outDir, gameRoot).map(selection => uncookArguments(archives, selection, outDir, gameRoot));
     // WolvenKit logs per-file material warnings on success; the exporter checks the exported files instead.
     try { for (const args of launches) await runWolvenKit(cli, args, { signal, timeoutMs, keep: 64_000, lowPriority }); }
-    catch (error) {
-      if (!(error instanceof WolvenKitRunError)) throw error;
-      const code = error.code === "tool_timeout" ? "tool_failed" : error.code;
-      throw new GameAssetExportError(code, error.message, error.output);
-    }
+    catch (error) { throw toExportError(error); }
   };
 }
-
-const toExportError = (error: unknown) => {
-  if (!(error instanceof WolvenKitRunError)) return error;
-  return new GameAssetExportError(error.code === "tool_timeout" ? "tool_failed" : error.code, error.message, error.output);
-};
 
 /**
  * The repair route for a mesh WolvenKit read but could not write as a GLB (game-asset-export.ts `GeometryRepair`): serialize the raw
@@ -143,7 +143,7 @@ export function createWolvenKitMeshRepair(cli: string | null, timeoutMs = DEFAUL
 /**
  * The skin route for a morph target WolvenKit exported without its skin (game-asset-export.ts `MorphTargetSkin`): the raw copy is
  * exported by file with the game folder, from which WolvenKit reads the base mesh's rig. Exporting the file itself (not uncooking its
- * path) means the bytes are the source's own; no other copy can stand in (PIPE-106).
+ * path) means the bytes are the source's own; no other copy can stand in (PIPE-106). `run` is the process runner (tests pass a fake).
  */
 export function createWolvenKitMorphSkin(cli: string | null, timeoutMs = DEFAULT_TIMEOUT_MS, run: typeof runWolvenKit = runWolvenKit): MorphTargetSkin {
   return async ({ source, depotPath, raw, workDir, signal, lowPriority }) => {
@@ -151,7 +151,9 @@ export function createWolvenKitMorphSkin(cli: string | null, timeoutMs = DEFAULT
     mkdirSync(input, { recursive: true }); mkdirSync(out, { recursive: true });
     const file = join(input, name);
     copyFileSync(raw, file);
-    await run(cli, ["export", file, "-o", out, "-gp", source.gameRoot, "-v", "Minimal"], { signal, timeoutMs, keep: 64_000, lowPriority });
+    // A failed or timed-out export is the exporter's `tool_failed`, so the caller keeps the first GLB (PREV-202).
+    try { await run(cli, ["export", file, "-o", out, "-gp", source.gameRoot, "-v", "Minimal"], { signal, timeoutMs, keep: 64_000, lowPriority }); }
+    catch (error) { throw toExportError(error); }
     const glb = join(out, `${name}.glb`);
     return existsSync(glb) ? glb : null;
   };

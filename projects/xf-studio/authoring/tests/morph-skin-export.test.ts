@@ -5,9 +5,10 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { archiveExportSource, createGameAssetExporter, glbSkinState, type MorphTargetSkin, type UncookRun } from "../src/game/host/game-asset-export";
+import { archiveExportSource, createGameAssetExporter, GameAssetExportError, glbSkinState, type MorphTargetSkin, type UncookRun } from "../src/game/host/game-asset-export";
 import { createWolvenKitMorphSkin } from "../src/game/host/game-asset-export-wolvenkit";
 import { GlbWriter } from "../src/formats/glb";
+import { WolvenKitRunError } from "../src/host/wolvenkit-cli";
 
 const root = mkdtempSync(join(tmpdir(), "xfs-morph-skin-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -98,4 +99,26 @@ test("the WolvenKit skin route exports the raw file itself, by name, with the ga
   expect(commands[0]).toContain("-gp");
   expect(commands[0]![commands[0]!.indexOf("-gp") + 1]).toBe("GAME");
   expect(glbSkinState(glbFile!)?.skins).toBe(1);
+});
+
+test("a failed or timed-out WolvenKit skin export keeps the first GLB; cancellation still stops the export (PREV-202)", async () => {
+  for (const code of ["tool_failed", "tool_timeout"] as const) {
+    const dir = temporary(), source = archiveExportSource(join(dir, "Nails.archive"), dir);
+    const failing = (async () => { throw new WolvenKitRunError(code, `WolvenKit ${code}`, "log"); }) as Parameters<typeof createWolvenKitMorphSkin>[2];
+    const adapter = createWolvenKitMorphSkin("WolvenKit.CLI.exe", 1_000, failing);
+    const raw = join(dir, "raw.morphtarget");
+    writeFileSync(raw, "the mod's nails");
+    // The adapter answers in the exporter's own terms.
+    const thrown = await adapter({ source, depotPath: NAILS, raw, workDir: join(dir, "work") }).catch(error => error);
+    expect(thrown).toBeInstanceOf(GameAssetExportError);
+    expect(thrown).toMatchObject({ code: "tool_failed", output: "log" });
+    // So character preparation goes on with the first, unskinned GLB.
+    const exporter = createGameAssetExporter(join(dir, "exports"), unskinned([]), { tool, skinMorphTarget: adapter });
+    const [answer] = await exporter.exportAll!([{ source, geometry: [NAILS], textures: [], masks: [] }]);
+    expect(glbSkinState(answer!.geometry.get(NAILS)!.glb!)).toEqual({ meshes: 1, skins: 0, vertices: [3] });
+  }
+  const dir = temporary(), source = archiveExportSource(join(dir, "Nails.archive"), dir);
+  const cancelled = (async () => { throw new WolvenKitRunError("cancelled", "Cancelled."); }) as Parameters<typeof createWolvenKitMorphSkin>[2];
+  const exporter = createGameAssetExporter(join(dir, "exports"), unskinned([]), { tool, skinMorphTarget: createWolvenKitMorphSkin("WolvenKit.CLI.exe", 1_000, cancelled) });
+  await expect(exporter.exportAll!([{ source, geometry: [NAILS], textures: [], masks: [] }])).rejects.toMatchObject({ code: "cancelled" });
 });
