@@ -25,7 +25,9 @@ const sorted = (names: Iterable<string>) => [...new Set(names)].sort();
  * one light rig and one subject; the design splits it into scene, view and graph runtimes behind the scene port. Phase 3 empties this
  * list except for the browser viewport device, which becomes the graph renderer's device.
  */
-const SCENE_HOST_IMPORTERS = ["character/browser/browser-character-detail-device", "preview/browser/browser-scene-preview-ports", "preview/browser/browser-viewport-device", "legacy/eye-makeup/browser/surface-editor"];
+const SCENE_HOST_IMPORTERS = ["character/browser/browser-character-detail-device", "preview/browser/browser-scene-preview-ports", "preview/browser/browser-viewport-device", "legacy/eye-makeup/browser/surface-editor",
+  // Spike S2 only (experiments/039-view-switch-spike): a second, resident scene host on the shown head's renderer. Not for main.
+  "preview/browser/spike-views"];
 
 /**
  * Modules that spell a fixed viewport-kind union (`"head" | "uv"`, `"uv" | "surface"`). Phase 1 keyed the attachment, the editor

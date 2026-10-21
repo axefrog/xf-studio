@@ -60,6 +60,11 @@ export type SceneHostOptions = {
   onContext?: (event: "lost" | "restored") => void;
   /** Told when a feature renderer's method throws (default: the console); the host and the other features draw on (PREV-94). */
   onRendererError?: (feature: string, method: string, error: unknown) => void;
+  /**
+   * Spike S2 only (experiments/039-view-switch-spike): draw with another scene host's renderer (one WebGL context, several resident
+   * scenes) instead of opening a context of its own. The host never disposes a renderer it was given. Default behaviour is unchanged.
+   */
+  sharedRenderer?: THREE.WebGLRenderer;
 };
 /** A stored orbit, in neutral head space (workspace-state.ts `CameraState` has the same shape). */
 export type SceneCameraState = { position: number[]; target: number[]; fov: number };
@@ -91,22 +96,28 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     return { canvas, direct, context: canvas.getContext("webgl2", {
       alpha: false, antialias: direct, depth: direct, stencil: false, preserveDrawingBuffer: true }) };
   };
-  let opened = open(false);
-  if (opened.context && !linearTargetSupported(opened.context)) {
+  let opened = options.sharedRenderer ? { canvas: options.sharedRenderer.domElement, direct: false, context: options.sharedRenderer.getContext() as WebGL2RenderingContext }
+    : open(false);
+  if (!options.sharedRenderer && opened.context && !linearTargetSupported(opened.context)) {
     opened.context.getExtension("WEBGL_lose_context")?.loseContext();
     opened = open(true);
   }
   const { canvas, context } = opened;
   if (!context) throw new HeadLoadError("webgl_unavailable", "WebGL 2 is unavailable");
   let renderer: THREE.WebGLRenderer;
-  try { renderer = new THREE.WebGLRenderer({ canvas, context, antialias: opened.direct, depth: opened.direct, preserveDrawingBuffer: true }); }
+  if (options.sharedRenderer) renderer = options.sharedRenderer;
+  else try { renderer = new THREE.WebGLRenderer({ canvas, context, antialias: opened.direct, depth: opened.direct, preserveDrawingBuffer: true }); }
   catch (error) { throw new HeadLoadError("webgl_unavailable", "WebGL 2 could not start", { cause: error }); }
   renderer.setPixelRatio(viewportPixelRatio(devicePixelRatio));
   renderer.setClearColor(0x14181c, 1);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.2;
-  host.prepend(renderer.domElement);
-  releases.push(() => { renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); });
+  if (!options.sharedRenderer) {
+    host.prepend(renderer.domElement);
+    releases.push(() => { renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); });
+  }
+  /** Spike S2: whether this host draws into its (possibly shared) canvas; a resident scene that isn't shown draws nothing. */
+  let drawing = true;
   const scene = new THREE.Scene(),
     camera = new THREE.PerspectiveCamera(30, 1, 0.005, 10);
   const backdrop = createViewportBackdrop(scene, options.stage ?? "dark");
@@ -243,8 +254,9 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   // the controls (every orbit and damping step), canvas input, frame listeners and resizes all request one.
   const scheduler = createRenderScheduler({
     clock: { request: callback => requestAnimationFrame(callback), cancel: handle => cancelAnimationFrame(handle), now: () => performance.now() },
-    animating: () => rigMotion.animating() || settle.settling,
+    animating: () => drawing && (rigMotion.animating() || settle.settling),
     frame(dt) {
+      if (!drawing) return;
       rigMotion.advance(dt);
       character.setMouthParting(mouth.sample());
       if (controls.enabled) controls.update();
@@ -320,6 +332,8 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     for (const listener of faceChanged) listener();
   }) ?? (() => {}));
   const api = {
+    /** Spike S2: draw this scene into the canvas (true) or keep it resident without drawing (false). */
+    setDrawing: (on: boolean) => { drawing = on; controls.enabled = on; if (on) { resize(); invalidate(); } },
     /** Whose core head this scene shows. */
     body: core.body,
     scene,

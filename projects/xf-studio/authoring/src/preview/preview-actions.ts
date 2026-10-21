@@ -152,7 +152,7 @@ export class PreviewActions {
    * @param graph the workspace's view graph (the composition root's); the device must already show its `shown` view's state
    * @param shown the view this device draws
    */
-  constructor(initial: PreviewState, private port: PreviewPort, graph?: ViewGraph, private readonly shown: ViewId = MAIN_VIEW) {
+  constructor(initial: PreviewState, private port: PreviewPort, graph?: ViewGraph, private shown: ViewId = MAIN_VIEW) {
     this.graph = graph ?? createStudioViewGraph(initial);
     // The device shows the stored state; a tool the presentation already withdrew goes off at once (UI-102).
     this.applied = previewFields(this.graph, shown);
@@ -197,6 +197,18 @@ export class PreviewActions {
     if (next.wire !== was.wire) port.setWire(next.wire);
     if (camera && next.camera && changed(next.camera, was.camera)) port.restoreCamera(next.camera);
   }
+  /**
+   * Spike S2 (experiments/039-view-switch-spike): draw another view of the same scene. The device applies only the fields that differ
+   * between the two views (camera included), as it does for any graph change. Nothing calls it by default.
+   */
+  drawView(view: ViewId): void {
+    if (view === this.shown || !this.graph.has(view)) return;
+    this.shown = view;
+    this.apply(true);
+    this.notify();
+  }
+  /** The view this device draws now. */
+  drawnView(): ViewId { return this.shown; }
   /** The view graph this device follows. */
   views(): ViewGraph { return this.graph; }
   /** The view an action acts on: the one it names, else the focused one (the shown one when that is gone). */

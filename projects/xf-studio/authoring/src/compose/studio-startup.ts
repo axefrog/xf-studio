@@ -32,6 +32,7 @@ import { CharacterWarmStart } from "../character/browser/character-warm-start";
 import type { ContextHistory } from "../character/character-context-actions";
 import { rasterRegion } from "../engines/layered-makeup/region";
 import { createBrowserViewportDevice } from "../preview/browser/browser-viewport-device";
+import { createSpikeViews } from "../preview/browser/spike-views";
 import { createBrowserWorkspaceSession, loadBrowserWorkspace } from "../app/browser/browser-workspace-device";
 import { collectionTransport } from "../library/browser/collection-transport";
 import { GlitterMeasurements } from "../legacy/eye-makeup/glitter-measurements";
@@ -307,6 +308,11 @@ async function start(host: StudioHost, root: HTMLElement) {
   const viewComposition = { ...STUDIO_VIEW_COMPOSITION, optional: () => experiments.registrations().map(item => ({ contribution: item.contribution, binding: item.binding })) };
   bootstrap.mount(publicPort => { port = publicPort; mountStudio(publicPort, root, viewComposition); });
   host.onMounted?.({ openGameSetup: () => void previewSetup.dispatch({ kind: "previewSetup.openSetup" }) });
+  // Spike S2 (experiments/039-view-switch-spike): only in a `?verify=1&spike=views` workspace.
+  if (verification && new URLSearchParams(location.search).get("spike") === "views") Object.assign(window, { xfStudioSpike: createSpikeViews({
+    headHost, main: () => scene, preview: () => previewActions, graph: views, renderers: STUDIO_RENDERERS,
+    referenceTextures: browserReferenceTextures(verification), prepareCore: body => host.previewPreparation.ensureBody(body),
+    head: () => { const { view: _view, ...head } = viewportDevice.attachment.snapshot().head as { view?: unknown }; return head; } }) });
   if (verification) Object.assign(window, { xfStudioPresentation: port,
     // Developer evidence about the loaded head (read-only): what loaded, how the V's details landed, frame timing.
     xfStudioSceneEvidence: () => scene ? structuredClone({ core: scene.evidence, characterDetails: scene.characterDetailsEvidence(),
