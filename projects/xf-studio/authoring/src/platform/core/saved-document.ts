@@ -3,7 +3,12 @@ import type { DocumentStorePort, SavedDocument, StoredDocument } from "../api/do
 /** The saves waiting for one write: the newest value, and everyone whose value that write covers. */
 type Batch<T> = { value: T; waiters: { resolve(): void; reject(error: unknown): void }[] };
 /** A holder as its owner sees it: it can also take a newer stored revision while it has nothing unsaved. */
-type HeldDocument<T> = SavedDocument<T> & { refresh(stored: StoredDocument<T>): void };
+type HeldDocument<T> = SavedDocument<T> & { refresh(stored: StoredDocument<T>): void;
+  /**
+   * Resolves true once the store holds this page's value: a value whose write failed is written again now (it stays unsaved, never
+   * dropped), and a write in flight is waited for. False when the store still couldn't take it.
+   */
+  settle(): Promise<boolean> };
 
 /**
  * One stored document as this page holds it (`SavedDocument`): its value changes at once (the person's edit shows
@@ -48,6 +53,7 @@ export function savedDocument<T>(store: DocumentStorePort, kind: string, id: str
       if (dirty || writing || waiting || newer.revision <= revision) return;
       current = newer.value; revision = newer.revision;
     },
+    settle() { return dirty ? this.save(current).then(() => true, () => false) : Promise.resolve(true); },
     save(value) {
       current = value;
       dirty = true;
@@ -80,6 +86,8 @@ export function documentOwners(store: DocumentStorePort) {
       else if (stored) owner.refresh(stored);
       return owner as SavedDocument<T>;
     },
+    /** True once the store holds every document this page holds: unsaved values are written again first (`HeldDocument.settle`). */
+    async settle(): Promise<boolean> { return (await Promise.all([...owners.values()].map(owner => owner.settle()))).every(Boolean); },
     /** The holders of every document of `kind` the page holds, in the order it first held them. */
     held<T>(kind: string): SavedDocument<T>[] { return [...owners.values()].filter(owner => owner.kind === kind) as SavedDocument<T>[]; },
   };

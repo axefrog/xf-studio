@@ -119,6 +119,10 @@ export class DesktopWorkspaceLeases {
       if (holder) holder.send({ event: "release" }); else this.grantNext(verification, scope);
       return new Response(null, { status: 202 });
     }
+    if (body.action === "status") {
+      // After a release whose answer was lost: does this page (with this generation) still hold the workspace?
+      return Response.json({ held: scope.holder?.page === page.id && scope.holder.generation === body.generation });
+    }
     if (body.action === "cancel") {
       scope.waiting = scope.waiting.filter(id => id !== page.id);
       return new Response(null, { status: 204 });

@@ -23,26 +23,56 @@ type Published = { pid: number; port: number; token: string };
 /** A lock held for the rest of this process's life; `acquire` answers whether this process owns it. */
 export type ProcessLock = { acquire(name: string): boolean };
 
-/** The Windows named mutex, owned by the calling thread (the host's main thread) until the process ends. */
-export function windowsMutex(): ProcessLock {
+/** The kernel32 calls the mutex needs (`windowsMutex`); tests pass their own. */
+export type MutexApi = {
+  /** `CreateMutexW(NULL, FALSE, name)`: a handle, or 0 when it failed. */
+  create(name: string): unknown;
+  /** `WaitForSingleObject(handle, 0)`. */
+  wait(handle: unknown): number;
+  close(handle: unknown): void;
+};
+/** The lock couldn't be checked (kernel32 unavailable, the mutex not created, or the wait failed): this launch must not start. */
+export class InstanceLockError extends Error {}
+
+const WAIT_OBJECT_0 = 0, WAIT_ABANDONED = 0x80, WAIT_TIMEOUT = 0x102;
+
+function kernel32(): MutexApi {
   // Loaded only when used, so other platforms and tests that inject a lock never touch kernel32.
   const { dlopen, FFIType, ptr } = require("bun:ffi") as typeof import("bun:ffi");
-  const kernel32 = dlopen("kernel32.dll", {
+  const library = dlopen("kernel32.dll", {
     CreateMutexW: { args: [FFIType.ptr, FFIType.i32, FFIType.ptr], returns: FFIType.ptr },
     WaitForSingleObject: { args: [FFIType.ptr, FFIType.u32], returns: FFIType.u32 },
+    CloseHandle: { args: [FFIType.ptr], returns: FFIType.i32 },
   });
+  return {
+    create: name => { const wide = Buffer.from(`${name}\0`, "utf16le"); return library.symbols.CreateMutexW(null, 0, ptr(wide)); },
+    wait: handle => library.symbols.WaitForSingleObject(handle as never, 0),
+    close: handle => { library.symbols.CloseHandle(handle as never); },
+  };
+}
+
+/**
+ * The Windows named mutex, owned by the calling thread (the host's main thread) until the process ends. `acquire` answers true when
+ * this process owns it now (free, or abandoned by an owner that ended), false when another process owns it (`WAIT_TIMEOUT`), and throws
+ * `InstanceLockError` when it couldn't tell: kernel32 couldn't be loaded, the mutex couldn't be created, or the wait failed.
+ */
+export function windowsMutex(api?: MutexApi): ProcessLock {
   const held: unknown[] = [];
   return {
     acquire(name) {
-      const wide = Buffer.from(`${name}\0`, "utf16le");
-      const handle = kernel32.symbols.CreateMutexW(null, 0, ptr(wide));
-      if (!handle) throw Error("XF Studio couldn't create its single-instance lock.");
-      // WAIT_OBJECT_0 (0): owned now. WAIT_ABANDONED (0x80): its owner ended without letting go; owned now. WAIT_TIMEOUT: another owns it.
-      const result = kernel32.symbols.WaitForSingleObject(handle, 0);
-      const owned = result === 0 || result === 0x80;
-      // The handle stays open for the process's life (closing it would let the mutex go away while owned).
-      held.push(handle);
-      return owned;
+      let calls: MutexApi;
+      try { calls = api ?? kernel32(); } catch (error) { throw new InstanceLockError(`kernel32 couldn't be loaded: ${error}`); }
+      const handle = calls.create(name);
+      if (!handle) throw new InstanceLockError("The single-instance mutex couldn't be created.");
+      const result = calls.wait(handle);
+      if (result === WAIT_OBJECT_0 || result === WAIT_ABANDONED) {
+        // Kept open for the process's life: closing it would let the mutex go while owned.
+        held.push(handle);
+        return true;
+      }
+      calls.close(handle);
+      if (result === WAIT_TIMEOUT) return false;
+      throw new InstanceLockError(`Waiting on the single-instance mutex failed (${result >>> 0}).`);
     },
   };
 }

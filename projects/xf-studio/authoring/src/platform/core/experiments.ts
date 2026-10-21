@@ -96,6 +96,7 @@ export async function createExperiments<T extends ExperimentRegistration>(option
   return {
     context,
     history,
+    settle: () => owners.settle(),
     snapshot: () => definitions.map(info => ({ id: info.id, label: info.label, description: info.description, enabled: effective(info.id), overridden: info.id in options.overrides,
       phase: phases[info.id]?.phase ?? "off", message: saveErrors[info.id] || phases[info.id]?.message || "" })),
     registrations: registered,
@@ -147,6 +148,7 @@ export function startExperiments<T extends ExperimentRegistration>(options: Expe
     get history() { return runtime()?.history; },
     snapshot: (): readonly ExperimentState[] => runtime()?.snapshot() ?? (reading.state().phase === "failed" ? failed : initial),
     registrations: () => runtime()?.registrations() ?? [],
+    settle: async () => await runtime()?.settle?.() ?? true,
     async set(id: string, enabled: boolean) { return await ready && runtime() ? runtime()!.set(id, enabled) : { ok: false, message: "Couldn't read experimental settings. Reload Studio to try again." }; },
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
   };

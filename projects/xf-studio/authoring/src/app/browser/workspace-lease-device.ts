@@ -10,7 +10,7 @@
  *
  * The workspace a localhost browser edits is its own (its `localStorage`), so its identity is a random ID kept beside it.
  */
-import { WorkspaceLease, type LeaseClock, type WorkspaceLeaseAdapter } from "../workspace/workspace-lease";
+import { ReleaseUnsaved, WorkspaceLease, type LeaseClock, type WorkspaceLeaseAdapter } from "../workspace/workspace-lease";
 import { leasedDocuments } from "../workspace/leased-documents";
 import type { DocumentStorePort, WorkspaceFence } from "../../platform/api/document-store";
 
@@ -150,9 +150,10 @@ export function desktopWorkspaceLease(options: {
   let first: { resolve(held: boolean): void; reject(error: unknown): void } | null = null;
   let grant: { resolve(generation: number): void; reject(error: unknown): void } | null = null;
   let ended = false;
+  const send = (body: Record<string, unknown>) => options.send(options.endpoint, { method: "POST", credentials: "same-origin",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ schema: "xfs/desktop-lease-1", page, ...body }) });
   const post = async (body: Record<string, unknown>) => {
-    const response = await options.send(options.endpoint, { method: "POST", credentials: "same-origin",
-      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ schema: "xfs/desktop-lease-1", page, ...body }) });
+    const response = await send(body);
     if (!response.ok) throw Error("The workspace lease request was refused.");
   };
   const handle = (event: DesktopLeaseEvent) => {
@@ -201,23 +202,38 @@ export function desktopWorkspaceLease(options: {
     takeOver(signal) {
       if (ended) return Promise.reject(Error("The connection to XF Studio's host ended."));
       return new Promise((resolve, reject) => {
-        grant = { resolve: generation => resolve({ generation }), reject };
-        // Withdrawn: the host forgets the request, so a later holder isn't asked on its behalf.
+        let granted = false;
+        const request = { resolve: (generation: number) => { granted = true; resolve({ generation }); }, reject };
+        grant = request;
+        // Withdrawn (abandoned, or failed even when the host may have queued it, its answer lost): the host forgets the request, so
+        // a later holder isn't asked on this page's behalf and a later takeover starts clean. Sent whatever became of `grant`.
         signal.addEventListener("abort", () => {
-          if (!grant) return;
-          grant = null;
+          if (granted) return;
+          if (grant === request) grant = null;
           void post({ action: "cancel" }).catch(() => {});
           reject(signal.reason);
         }, { once: true });
-        post({ action: "takeover" }).catch(error => { grant = null; reject(error); });
+        post({ action: "takeover" }).catch(error => { if (grant === request) grant = null; reject(error); });
       });
     },
     onReleaseRequested(listener) { asked = listener; },
     onLost(listener) { lost = listener; },
     async release() {
-      await options.settle?.();
-      await post({ action: "release", generation: current });
+      // This page's last writes must have landed; otherwise nothing is released.
+      try { await options.settle?.(); } catch (error) { throw error instanceof ReleaseUnsaved ? error : new ReleaseUnsaved(String(error)); }
+      const response = await send({ action: "release", generation: current });
+      // 409: the host no longer has this page as holder (an earlier release did land): released. Any other failure is uncertain.
+      if (!response.ok && response.status !== 409) throw Error("The release wasn't confirmed.");
       current = null;
+    },
+    async reconcile() {
+      if (ended) throw Error("The connection to XF Studio's host ended.");
+      const response = await send({ action: "status", generation: current });
+      if (!response.ok) throw Error("XF Studio's host couldn't say who holds the workspace.");
+      const { held } = await response.json() as { held?: unknown };
+      if (typeof held !== "boolean") throw Error("XF Studio's host couldn't say who holds the workspace.");
+      if (!held) current = null;
+      return held ? "held" : "released";
     },
   };
 }

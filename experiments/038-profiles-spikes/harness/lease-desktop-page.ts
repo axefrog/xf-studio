@@ -14,8 +14,13 @@ import { freshWorkspace } from "../../../projects/xf-studio/authoring/tests/fixt
 import { latePut, runPage } from "./lease-page";
 
 const [base, cookie, name, hang, editMs] = process.argv.slice(2);
-const send = (url: string, init: RequestInit = {}) => fetch(base + url, { ...init,
-  headers: { Cookie: cookie, Origin: base, ...(init.headers as Record<string, string> | undefined) } });
+let loseRelease = false;
+const send = async (url: string, init: RequestInit = {}) => {
+  const response = await fetch(base + url, { ...init, headers: { Cookie: cookie, Origin: base, ...(init.headers as Record<string, string> | undefined) } });
+  // The host acted on the release; only its answer goes missing.
+  if (loseRelease && typeof init.body === "string" && init.body.includes('"action":"release"')) { loseRelease = false; throw Error("The answer was lost."); }
+  return response;
+};
 const report = (event: Record<string, unknown>) => process.stdout.write(`${JSON.stringify({ window: name, at: performance.timeOrigin + performance.now(), ...event })}\n`);
 /** The workspace text with `marker` as its first layer's name. */
 const workspace = (marker: string) => {
@@ -29,7 +34,7 @@ const postWorkspace = (marker: string, generation: number | null) => send("/api/
   body: JSON.stringify({ workspace: workspace(marker) }) }).then(response => response.status);
 
 const page = await runPage({
-  name, hang: hang === "1", report, editMs: Number(editMs) || 15,
+  name, hang: hang === "1", report, editMs: Number(editMs) || 15, loseReleaseAnswer: () => { loseRelease = true; },
   adapter: desktopWorkspaceLease({ endpoint: "/api/desktop/workspace/lease", send, settle: () => writing.then(() => {}) }),
   documents: fence => browserDocuments("/api/documents", send, () => { const generation = fence(); return generation === null ? null : { workspace: "desktop", generation }; }),
   writeWorkspace(marker, generation) {

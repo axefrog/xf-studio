@@ -238,7 +238,47 @@ async function scenarios(host: Host, record: (scenario: string, check: string, o
     await a.kill(); await b.kill();
     await sleep(100);
   }
+  // 4b. A document write fails while the release drains: nothing is handed over; Try again writes it again before it hands over.
+  {
+    const s = "document write failed while draining";
+    const a = await host.open("O");
+    await a.wait(event => event.event === "ack" && (event.seq as number) >= 4);
+    const b = await host.open("P");
+    a.command("break-docs");
+    await a.wait(event => event.event === "docs" && event.broken === true);
+    await sleep(60);
+    b.command("takeover");
+    const failed = await a.wait(phase("release-failed"));
+    a.command("fix-docs");
+    await a.wait(event => event.event === "docs" && event.broken === false);
+    a.command("retry");
+    const granted = await b.wait(phase("taken-over"));
+    const doc = await host.doc(), last = a.events.filter(event => event.event === "last-write").at(-1);
+    record(s, "the failed document is written again before the handover", !!failed && !!granted && doc?.value.by === "O" && doc.value.seq === last?.seq,
+      `stored ${JSON.stringify(doc?.value)}, last edit ${last?.seq}`);
+    await a.kill(); await b.kill();
+    await sleep(100);
+  }
   if (host.name === "desktop") {
+    // 4c. The release reaches the host but its answer is lost: the page is never writable again until it knows; the host says released.
+    {
+      const s = "release answer lost";
+      const a = await host.open("Q");
+      await a.wait(event => event.event === "ack" && (event.seq as number) >= 4);
+      const b = await host.open("R");
+      a.command("lose-release-answer");
+      await a.wait(event => event.event === "losing-release-answer");
+      b.command("takeover");
+      const granted = await b.wait(phase("taken-over"));
+      const settled = await a.wait(phase("read-only"));
+      const phases = a.events.filter(event => event.event === "phase" && (settled ? event.at <= settled.at : true)).map(event => event.phase as string);
+      const afterRelease = phases.slice(phases.indexOf("releasing"));
+      record(s, "the page reconciles with the host and stays read-only; it is never writable after the grant", !!granted && !!settled &&
+        afterRelease.includes("reconciling") && !afterRelease.includes("release-failed") && !afterRelease.slice(1).includes("holder"),
+        `phases after asking: ${afterRelease.join(" → ")}`);
+      await a.kill(); await b.kill();
+      await sleep(100);
+    }
     // 5. A write that stalls in transit across a handover: it passed the fence on arrival, but is refused at the save itself.
     {
       const s = "write stalled across a handover";

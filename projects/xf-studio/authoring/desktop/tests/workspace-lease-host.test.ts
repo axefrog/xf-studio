@@ -105,7 +105,20 @@ test("the desktop bootstrap takes the lease before it reads the workspace, and a
   expect(source.indexOf("await lease.start()")).toBeGreaterThan(0);
   expect(source.indexOf("await lease.start()")).toBeLessThan(source.indexOf("await fetch(workspaceEndpoint"));
   expect(source).not.toMatch(/status === 409\) return/);
-  expect(source).toMatch(/if \(lastSaveFailed\) throw Error\(SAVE_FAILED\)/);
+  expect(source).toContain("settle: () => writer.settle()");
   const main = await Bun.file(new URL("../../src/compose/studio-main.ts", import.meta.url)).text();
   expect(main.indexOf("await startBrowserWorkspaceLease")).toBeLessThan(main.indexOf("void startStudio("));
+});
+
+test("after a lost release answer, the host says whether the page still holds the workspace", async () => {
+  let issued = 0;
+  const leases = new DesktopWorkspaceLeases(() => ++issued, 60_000);
+  const a = await page(leases, "page-aaaaaaaa"), b = await page(leases, "page-bbbbbbbb");
+  const status = async (id: string, generation: number) => (await (await post(leases, { page: id, action: "status", generation })).json()) as { held: boolean };
+  expect(await status("page-aaaaaaaa", 1)).toEqual({ held: true });
+  await post(leases, { page: "page-bbbbbbbb", action: "takeover" });
+  await post(leases, { page: "page-aaaaaaaa", action: "release", generation: 1 });
+  expect(await status("page-aaaaaaaa", 1)).toEqual({ held: false });
+  expect(await status("page-bbbbbbbb", 2)).toEqual({ held: true });
+  a.end(); b.end(); leases.close();
 });

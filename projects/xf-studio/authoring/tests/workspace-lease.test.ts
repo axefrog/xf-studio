@@ -311,7 +311,8 @@ test("a release step that can't save stops the release: the page keeps the lease
 
 test("a release whose adapter can't confirm (the desktop's last host write didn't land) keeps the lease too", async () => {
   const script = scriptedAdapter(false);
-  const adapter = { ...script.adapter, release: async () => { throw Error("The last workspace write didn't land."); } };
+  const { ReleaseUnsaved } = await import("../src/app/workspace/workspace-lease");
+  const adapter = { ...script.adapter, release: async () => { throw new ReleaseUnsaved("The last workspace write didn't land."); } };
   const lease = new WorkspaceLease(adapter, { clock: simulatedClock().clock });
   await lease.start();
   expect(await lease.release()).toBe(false);
@@ -406,4 +407,108 @@ test("desktop: when the lease stream ends, a pending acquire is refused and a ho
   await new Promise(resolve => setTimeout(resolve, 5));
   expect(lease.snapshot().phase).toBe("disconnected");
   expect(lease.draining()).toBe(false);
+});
+
+test("a document whose write failed during the drain stays unsaved, and Try again writes it again before handing over", async () => {
+  const { documentOwners } = await import("../src/platform/core/saved-document");
+  const script = scriptedAdapter(false), puts: number[] = [];
+  let broken = true;
+  const store: DocumentStorePort = { list: async () => [], put: async <T>(kind: string, id: string, value: T, revision: number) => {
+    puts.push(value as number);
+    if (broken) throw Error("The host didn't answer.");
+    return { ok: true as const, document: { kind, id, revision: revision + 1, value, updatedAt: 0 } };
+  } };
+  const lease = new WorkspaceLease(script.adapter, { clock: simulatedClock().clock });
+  await lease.start();
+  const leased = leasedDocuments(store, lease), owners = documentOwners(leased);
+  lease.onRelease(() => leased.drain());
+  lease.onRelease(() => owners.settle());
+  void owners.open("sample", "a", 0).save(7).catch(() => {});
+  script.ask();
+  await new Promise(resolve => setTimeout(resolve, 10));
+  expect(lease.snapshot().phase).toBe("release-failed");
+  expect(script.calls).toEqual([]);
+  // The retry's drain sees no new failure, but the document is still unsaved: it is written again, and only then released.
+  broken = false;
+  expect(await lease.retryRelease()).toBe(true);
+  expect(puts.at(-1)).toBe(7);
+  expect(puts.filter(value => value === 7).length).toBeGreaterThanOrEqual(2);
+  expect(script.calls).toEqual(["release"]);
+});
+
+test("a release whose answer was lost is reconciled before this page may write: still held, released, or unknown", async () => {
+  const { ReleaseUnsaved } = await import("../src/app/workspace/workspace-lease");
+  const make = (release: () => Promise<void>, reconcile?: () => Promise<"held" | "released">) =>
+    new WorkspaceLease({ ...scriptedAdapter(false).adapter, release, ...(reconcile ? { reconcile } : {}) }, { clock: simulatedClock().clock });
+  // Unsaved: nothing was released, so the page keeps the lease without asking.
+  const unsaved = make(async () => { throw new ReleaseUnsaved("not stored"); });
+  await unsaved.start();
+  expect(await unsaved.release()).toBe(false);
+  expect(unsaved.snapshot().phase).toBe("release-failed");
+  // Lost answer, and the host says the release landed: read-only, never writable in between.
+  let answer!: (outcome: "held" | "released") => void;
+  const seen: boolean[] = [];
+  const lost = make(async () => { throw Error("The answer was lost."); }, () => new Promise(resolve => { answer = resolve; }));
+  await lost.start();
+  lost.subscribe(() => seen.push(lost.writable()));
+  const releasing = lost.release();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(lost.snapshot()).toMatchObject({ phase: "reconciling", writable: false, message: LEASE_MESSAGES.reconciling });
+  expect(lost.generation()).toBeNull();
+  answer("released");
+  expect(await releasing).toBe(true);
+  expect(lost.snapshot().phase).toBe("read-only");
+  expect(seen).toEqual([false, false, false]);
+  // The host says this page still holds it: writable again, with Try again.
+  const held = make(async () => { throw Error("The answer was lost."); }, async () => "held");
+  await held.start();
+  expect(await held.release()).toBe(false);
+  expect(held.snapshot()).toMatchObject({ phase: "release-failed", writable: true });
+  // It can't be told: never writable (disconnected).
+  const unknown = make(async () => { throw Error("The answer was lost."); }, async () => { throw Error("No host."); });
+  await unknown.start();
+  await unknown.release();
+  expect(unknown.snapshot()).toMatchObject({ phase: "disconnected", writable: false });
+});
+
+test("desktop: Try again sends the latest workspace draft again when its write failed, and waits for it", async () => {
+  const { desktopWorkspaceWriter } = await import("../src/app/browser/desktop-workspace-writer");
+  const { ReleaseUnsaved } = await import("../src/app/workspace/workspace-lease");
+  const sent: string[] = [];
+  let broken = true;
+  const writer = desktopWorkspaceWriter(async text => { sent.push(text); if (broken) throw Error("refused"); });
+  await writer.save("draft 1");
+  await writer.save("draft 2");
+  expect(writer.failed()).toBe(true);
+  await expect(writer.settle()).rejects.toBeInstanceOf(ReleaseUnsaved);
+  expect(sent.at(-1)).toBe("draft 2");
+  broken = false;
+  await writer.settle();
+  expect(sent).toEqual(["draft 1", "draft 2", "draft 2", "draft 2"]);
+  expect(writer.failed()).toBe(false);
+});
+
+test("desktop: a takeover whose request failed (its answer lost) is still withdrawn, so the next one starts clean", async () => {
+  const { desktopWorkspaceLease } = await import("../src/app/browser/workspace-lease-device");
+  const posts: string[] = [];
+  const streams: ReadableStreamDefaultController<Uint8Array>[] = [];
+  const send = async (_url: string, init?: RequestInit) => {
+    if (init?.method !== "POST") return new Response(new ReadableStream<Uint8Array>({ start: controller => { streams.push(controller); } }));
+    const { action } = JSON.parse(String(init.body)) as { action: string };
+    posts.push(action);
+    if (action === "takeover" && posts.filter(item => item === "takeover").length === 1) throw Error("The answer was lost.");
+    return new Response(null, { status: action === "takeover" ? 202 : 204 });
+  };
+  const lease = new WorkspaceLease(desktopWorkspaceLease({ endpoint: "/lease", send }), { clock: simulatedClock().clock });
+  const starting = lease.start();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  streams[0]!.enqueue(new TextEncoder().encode(`${JSON.stringify({ event: "held" })}\n`));
+  await starting;
+  expect((await lease.takeOver()).ok).toBe(false);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(posts).toEqual(["takeover", "cancel"]);
+  const second = lease.takeOver();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  streams[0]!.enqueue(new TextEncoder().encode(`${JSON.stringify({ event: "granted", generation: 2 })}\n`));
+  expect((await second).ok).toBe(true);
 });

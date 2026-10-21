@@ -70,3 +70,27 @@ test.skipIf(process.platform !== "win32")("the Windows named mutex is held for t
     await third.exited;
   } finally { if (first.exitCode === null) first.kill(9); }
 }, 30_000);
+
+test("the mutex tells owned, taken and failed apart, closes every handle it doesn't keep, and startup fails closed with a plain error", async () => {
+  const { windowsMutex, InstanceLockError } = await import("../single-instance");
+  const closed: unknown[] = [];
+  const api = (wait: number, handle: unknown = 7) => ({ create: () => handle, wait: () => wait, close: (h: unknown) => { closed.push(h); } });
+  expect(windowsMutex(api(0)).acquire("x")).toBe(true);
+  expect(windowsMutex(api(0x80)).acquire("x")).toBe(true);
+  expect(closed).toEqual([]);
+  expect(windowsMutex(api(0x102)).acquire("x")).toBe(false);
+  expect(closed).toEqual([7]);
+  // WAIT_FAILED is not "another instance is running": it is an error, and its handle is closed too.
+  expect(() => windowsMutex(api(0xffffffff)).acquire("x")).toThrow(InstanceLockError);
+  expect(closed).toEqual([7, 7]);
+  expect(() => windowsMutex(api(0, 0)).acquire("x")).toThrow(InstanceLockError);
+  const root = mkdtempSync(join(tmpdir(), "xfs-instance-"));
+  try {
+    await expect(claimSingleInstance(root, ports(1, windowsMutex(api(0xffffffff))))).rejects.toBeInstanceOf(InstanceLockError);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+  const main = await Bun.file(new URL("../main.ts", import.meta.url)).text();
+  const claim = main.indexOf("await claimSingleInstance("), guard = main.lastIndexOf("try {", claim), handled = main.indexOf("} catch (error) {", claim);
+  expect(guard).toBeGreaterThan(0);
+  expect(handled).toBeGreaterThan(claim);
+  expect(main.slice(handled, handled + 200)).toContain("XF Studio couldn't check whether it's already running");
+});

@@ -25,10 +25,19 @@ log.write(`Starting XF Studio ${version.version} (${version.channel}, build ${ve
 // One XF Studio per user data folder (profiles design §2.3): a second launch brings the running window forward and quits, so two host
 // processes never share the workspace file.
 mkdirSync(Utils.paths.userData, { recursive: true });
-const instance = await claimSingleInstance(Utils.paths.userData, { pid: process.pid, lock: windowsMutex(),
-  sleep: ms => new Promise(done => setTimeout(done, ms)),
-  activate: async (port, token) => (await fetch(`http://127.0.0.1:${port}${INSTANCE_ROUTE}`, { method: "POST",
-    headers: { [INSTANCE_HEADER]: token }, signal: AbortSignal.timeout(3000) })).status === 204 });
+// Fail closed: a launch that can't check the lock never starts, and says so (the details go to the diagnostics log).
+let instance: Awaited<ReturnType<typeof claimSingleInstance>>;
+try {
+  instance = await claimSingleInstance(Utils.paths.userData, { pid: process.pid, lock: windowsMutex(),
+    sleep: ms => new Promise(done => setTimeout(done, ms)),
+    activate: async (port, token) => (await fetch(`http://127.0.0.1:${port}${INSTANCE_ROUTE}`, { method: "POST",
+      headers: { [INSTANCE_HEADER]: token }, signal: AbortSignal.timeout(3000) })).status === 204 });
+} catch (error) {
+  await fatal("XF Studio couldn't check whether it's already running, so it didn't start.",
+    `This keeps two copies from saving over each other. Restart your computer and open XF Studio again. If this keeps happening, ` +
+    `report a problem on XF Studio's GitHub page and include the diagnostics log: ${log.path}.`, error);
+  throw error;
+}
 if (!instance.first) {
   log.write(instance.activated ? "XF Studio is already running; its window was brought forward."
     : "XF Studio is already running (it didn't answer yet, so its window wasn't brought forward); this launch ends.");

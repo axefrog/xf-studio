@@ -238,7 +238,9 @@ async function start(host: StudioHost, root: HTMLElement) {
     // Releasing to another window: after the pending document saves drain (a step the host registered first), the workspace is
     // written a last time and its timers stop (§2.3 release steps 3 to 5).
     lease.onReleaseStart(() => core.app.settleEdits());
-    // The last write is a step that must succeed; autosave retires only once the lease is released and confirmed.
+    // Every experiment document stored (an unsaved one written again), then the last workspace write: both must succeed, and
+    // autosave retires only once the lease is released and confirmed.
+    lease.onRelease(async () => await (experiments as ExperimentPort).settle?.() ?? true);
     lease.onRelease(() => session.flush());
     lease.onReleased(() => session.retire());
     lease.subscribe(() => {

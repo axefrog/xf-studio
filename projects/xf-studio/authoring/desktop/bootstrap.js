@@ -9,6 +9,7 @@ import { createBrowserWolvenKitSetup } from "../src/setup/wolvenkit-setup";
 import { EYE_MAKEUP_MOD } from "../src/legacy/eye-makeup/mod-branding";
 import { browserLeaseClock, desktopWorkspaceLease } from "../src/app/browser/workspace-lease-device";
 import { WorkspaceLease } from "../src/app/workspace/workspace-lease";
+import { DESKTOP_SAVE_FAILED, desktopWorkspaceWriter } from "../src/app/browser/desktop-workspace-writer";
 import { formatFence, WORKSPACE_FENCE_HEADER } from "../src/platform/api/document-store";
 const capabilities = await fetch("/api/desktop/capabilities").then(response => response.json());
 if (capabilities.schema !== "xfs/desktop-capabilities-1") throw Error("Desktop host capabilities are unavailable.");
@@ -35,11 +36,12 @@ window.xfDesktopWorkspaceFlush = async () => {};
 // One writer per workspace (profiles design §2.3): the host grants this page the workspace's lease, or it opens read-only. The lease
 // comes first, so the workspace is read only after this page knows whether it holds it (a holder that just released has written its
 // last copy by then). Its writes carry the lease's generation, so one sent after this page released the workspace is refused.
-// `inFlight` and `lastSaveFailed` (below) are read only when a release settles, long after they exist.
+// `writer` (below) is read only when a release settles, long after it exists.
 const lease = new WorkspaceLease(desktopWorkspaceLease({ endpoint: `/api/desktop/workspace/lease${verification ? "?verify=1" : ""}`,
   send: (url, init) => fetch(url, init),
-  // A release waits for the last host write and is refused when it didn't land, so the page keeps the lease and says so.
-  settle: async () => { while (inFlight) await inFlight; if (lastSaveFailed) throw Error(SAVE_FAILED); } }), { clock: browserLeaseClock });
+  // A release waits for the last host write, sends the latest draft again if that write failed (Try again does too), and is refused
+  // while it still doesn't land, so the page keeps the lease and says so.
+  settle: () => writer.settle() }), { clock: browserLeaseClock });
 await lease.start();
 const workspaceResponse = await fetch(workspaceEndpoint, { cache: "no-store" });
 if (!workspaceResponse.ok) {
@@ -83,8 +85,7 @@ try { localCopy = localStorage.getItem(workspaceKey); } catch { /* Storage unava
 let workspaceText = workspaceDocument.workspace ?? localCopy;
 // Autosave: at most one host write in flight; the newest draft wins. The host file is the
 // source of truth on desktop, so browser storage failures never block it.
-let pendingText = null, inFlight = null, lastSaveFailed = false;
-const SAVE_FAILED = "Your latest changes could not be saved. Keep this window open and export your collection from the Library panel.";
+const SAVE_FAILED = DESKTOP_SAVE_FAILED;
 async function postWorkspace(text, headers = {}) {
   const generation = lease.generation();
   // A read-only page (or one that released the workspace) writes nothing.
@@ -96,23 +97,13 @@ async function postWorkspace(text, headers = {}) {
   // Refused (another page holds the workspace now) is a failed save like any other: it is never counted as stored.
   if (!response.ok) throw Error(SAVE_FAILED);
 }
-function saveWorkspace(text) {
-  pendingText = text;
-  if (!inFlight) inFlight = (async () => {
-    while (pendingText !== null) {
-      const next = pendingText; pendingText = null;
-      try { await postWorkspace(next); lastSaveFailed = false; workspaceAlert(""); }
-      catch (error) { lastSaveFailed = true; workspaceAlert(error.message); }
-    }
-    inFlight = null;
-  })();
-  return inFlight;
-}
+const writer = desktopWorkspaceWriter(postWorkspace, failed => workspaceAlert(failed ? SAVE_FAILED : ""));
+const saveWorkspace = text => writer.save(text);
 window.xfDesktopWorkspaceFlush = async updateNonce => {
   window.dispatchEvent(new Event("xfs-desktop-close-flush"));
-  if (inFlight) await inFlight;
-  if (lastSaveFailed && workspaceText !== null) await saveWorkspace(workspaceText);
-  if (lastSaveFailed) throw Error(SAVE_FAILED);
+  await writer.idle();
+  if (writer.failed() && workspaceText !== null) await saveWorkspace(workspaceText);
+  if (writer.failed()) throw Error(SAVE_FAILED);
   if (updateNonce !== undefined) {
     if (typeof updateNonce !== "string" || !/^[0-9a-f-]{36}$/.test(updateNonce) || workspaceText === null)
       throw Error("The update workspace snapshot is unavailable.");

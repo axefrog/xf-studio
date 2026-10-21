@@ -12,6 +12,6 @@ test("the workspace lease harness passes on both hosts", async () => {
   try {
     const checks = await runLeaseHarness(scratch);
     expect(checks.filter(check => !check.ok)).toEqual([]);
-    expect(checks.length).toBeGreaterThanOrEqual(28);
+    expect(checks.length).toBeGreaterThanOrEqual(31);
   } finally { rmSync(scratch, { recursive: true, force: true }); }
 }, 60_000);

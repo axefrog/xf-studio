@@ -92,7 +92,7 @@ harness/web-locks-model.ts     The browser's Web Locks (exclusive mode) for the 
 tools/lease-harness.ts         The scenarios on both hosts; tests/lease-harness.test.ts runs them
 ```
 
-Each window edits one document (a save every 15 ms, or every 1 ms where a write must be in flight) and writes its workspace every fourth edit, with a marker. Results (21 October 2026; 28 checks in about 13 s, peak 0.8 GB), all **PASS**:
+Each window edits one document (a save every 15 ms, or every 1 ms where a write must be in flight) and writes its workspace every fourth edit, with a marker. Results (21 October 2026; 31 checks in about 14 s, peak 0.8 GB), all **PASS**:
 
 | Scenario | Checks |
 |---|---|
@@ -100,6 +100,8 @@ Each window edits one document (a save every 15 ms, or every 1 ms where a write 
 | Holder killed while draining | Killed with a save in flight; the waiting window is granted when the holder's window ends (desktop 17 ms, through the end of its stream). Every acknowledged save survives, and nothing from the killed holder lands after the grant. |
 | Hung holder | The holder never answers. After the 0.5 s grace the waiting window says "Waiting for the other window to finish saving. Close it to continue.", and 3.5 s later the host (or the browser) still has the hung window as holder: nothing is taken by time. Once the hung window ends, the waiting window is granted. |
 | Release that can't save | The holder's last workspace write fails: nothing is released, the holder keeps the workspace and says so, and the other window keeps waiting. Try again, once writes work, stores the last write and hands over. |
+| Document write failed while draining | A document write fails in transit during the drain: nothing is handed over. The document stays unsaved, and Try again writes it again before handing over; the stored document is the holder's last edit. |
+| Release answer lost (desktop) | The host acts on the release but its answer is lost: the page goes `reconciling` (read-only), asks the host who holds the workspace, and settles as read-only; it is never writable after the other page's grant. |
 | Write stalled across a handover (desktop) | A write passes the fence on arrival, its body stalls, the lease moves, and the body then arrives: refused at the save (409), the workspace unchanged. |
 | Host stream ended (desktop) | The page becomes `disconnected` at once, says so plainly, and sends nothing more. |
 | No lease generation (localhost) | The host refuses to issue one: the window never becomes writable and lets the Web Lock go. |

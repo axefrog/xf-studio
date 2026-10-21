@@ -28,6 +28,7 @@ export const LEASE_MESSAGES = {
   starting: "Opening the workspace…",
   releaseFailed: "Your latest changes couldn't be saved, so this window kept the workspace. Try again, or export your collection to keep them.",
   disconnected: "This window lost its connection to XF Studio, so it can't save here. Reload the window to continue.",
+  reconciling: "Checking whether the other window has the workspace now…",
   /** The refusal every dispatch gets while this page doesn't hold the workspace. */
   refused: "This workspace is open in another window. Choose Use it here to edit in this window.",
 } as const;
@@ -41,9 +42,12 @@ export const LEASE_MESSAGES = {
  * - `taking-over`: Use it here was chosen; the holder has been asked to release.
  * - `waiting`: the holder hasn't released within the grace period; this page waits for it to finish or close.
  * - `taken-over`: this page now holds the lease after a takeover; the page restarts from the released workspace.
+ * - `reconciling`: a release was sent but its answer was lost; this page may not write until the host (or the browser) says who
+ *   holds the lease now.
  * - `disconnected`: this page can't hold the lease safely (its host stream ended, or the host issued no generation); it writes nothing.
  */
-export type LeasePhase = "starting" | "holder" | "releasing" | "release-failed" | "read-only" | "taking-over" | "waiting" | "taken-over" | "disconnected";
+export type LeasePhase = "starting" | "holder" | "releasing" | "release-failed" | "reconciling" | "read-only" | "taking-over" | "waiting"
+  | "taken-over" | "disconnected";
 export type LeaseState = { readonly phase: LeasePhase; readonly generation: number | null };
 export type LeaseEvent =
   | { kind: "acquired"; generation: number }
@@ -54,8 +58,16 @@ export type LeaseEvent =
   | { kind: "takeover-failed" }
   | { kind: "release-requested" }
   | { kind: "release-failed" }
+  | { kind: "release-uncertain" }
+  | { kind: "still-held" }
   | { kind: "released" }
   | { kind: "lost" };
+
+/**
+ * A release that stopped before anything was released: this page's own last writes didn't land, so it still holds the lease. Any other
+ * failure of `WorkspaceLeaseAdapter.release` leaves the outcome uncertain (the release may have been granted elsewhere).
+ */
+export class ReleaseUnsaved extends Error {}
 
 /** The read-only view of the lease for the presentation. */
 export type WorkspaceLeaseSnapshot = {
@@ -87,7 +99,10 @@ export function leaseTransition(state: LeaseState, event: LeaseEvent): LeaseStat
     case "takeover-failed": return asking(state.phase) ? { phase: "read-only", generation: null } : state;
     case "release-requested": return writing(state.phase) ? { phase: "releasing", generation: state.generation } : state;
     case "release-failed": return state.phase === "releasing" ? { phase: "release-failed", generation: state.generation } : state;
-    case "released": return state.phase === "releasing" ? { phase: "read-only", generation: null } : state;
+    // The answer was lost: the lease may already be another page's. Nothing is written until that is settled.
+    case "release-uncertain": return state.phase === "releasing" ? { phase: "reconciling", generation: state.generation } : state;
+    case "still-held": return state.phase === "reconciling" ? { phase: "release-failed", generation: state.generation } : state;
+    case "released": return state.phase === "releasing" || state.phase === "reconciling" ? { phase: "read-only", generation: null } : state;
     case "lost": return state.phase === "disconnected" || state.phase === "taken-over" ? state : { phase: "disconnected", generation: null };
   }
 }
@@ -95,9 +110,9 @@ export function leaseTransition(state: LeaseState, event: LeaseEvent): LeaseStat
 export function leaseSnapshot(state: LeaseState): WorkspaceLeaseSnapshot {
   const messages: Partial<Record<LeasePhase, string>> = { "read-only": LEASE_MESSAGES.readOnly, "taking-over": LEASE_MESSAGES.takingOver,
     waiting: LEASE_MESSAGES.waiting, releasing: LEASE_MESSAGES.releasing, starting: LEASE_MESSAGES.starting,
-    "release-failed": LEASE_MESSAGES.releaseFailed, disconnected: LEASE_MESSAGES.disconnected };
+    "release-failed": LEASE_MESSAGES.releaseFailed, disconnected: LEASE_MESSAGES.disconnected, reconciling: LEASE_MESSAGES.reconciling };
   const refusal = writing(state.phase) ? "" : state.phase === "starting" ? LEASE_MESSAGES.starting
-    : state.phase === "disconnected" ? LEASE_MESSAGES.disconnected : LEASE_MESSAGES.refused;
+    : state.phase === "disconnected" ? LEASE_MESSAGES.disconnected : state.phase === "reconciling" ? LEASE_MESSAGES.reconciling : LEASE_MESSAGES.refused;
   return { phase: state.phase, writable: writing(state.phase), message: messages[state.phase] ?? "", canTakeOver: state.phase === "read-only",
     canRetry: state.phase === "release-failed", refusal };
 }
@@ -115,8 +130,13 @@ export interface WorkspaceLeaseAdapter {
   onReleaseRequested(listener: () => void): void;
   /** `listener` runs when this page can no longer hold the lease safely (the desktop host's stream ended). */
   onLost?(listener: () => void): void;
-  /** Gives the lease up and confirms it to the page that asked; rejects (keeping the lease) when its own last writes didn't land. */
+  /**
+   * Gives the lease up and confirms it to the page that asked. Rejects with `ReleaseUnsaved` (nothing released) when this page's own
+   * last writes didn't land; any other rejection means the outcome is unknown (the answer was lost), and `reconcile` is asked.
+   */
   release(): Promise<void>;
+  /** Who holds the lease now, after a release whose answer was lost: still this page, or released. Rejects when it can't tell. */
+  reconcile?(): Promise<"held" | "released">;
 }
 
 /** The clock source's timers (the page passes its own; tests a simulated one). */
@@ -151,6 +171,7 @@ export class WorkspaceLease {
   generation(): number | null { return this.draining() ? this.state.generation : null; }
   /** Whether this page may still write what it already had in flight (holding the lease, or draining as it releases). */
   draining() { return writing(this.state.phase) || this.state.phase === "releasing"; }
+  // `reconciling` is neither: a page whose release answer was lost writes nothing until it knows it still holds the lease.
   /** The refusal every dispatch gets while this page may not write; undefined while it may. */
   refusal(): (Capability & { available: false }) | undefined {
     return this.writable() ? undefined : refusal("unavailable", this.snapshot().refusal);
@@ -258,7 +279,18 @@ export class WorkspaceLease {
         if (ok === false) { this.apply({ kind: "release-failed" }); return false; }
       }
       try { await this.adapter.release(); }
-      catch (error) { this.options.report?.(error); this.apply({ kind: "release-failed" }); return false; }
+      catch (error) {
+        this.options.report?.(error);
+        if (error instanceof ReleaseUnsaved) { this.apply({ kind: "release-failed" }); return false; }
+        // The release may have happened: ask who holds the lease before this page may write again.
+        this.apply({ kind: "release-uncertain" });
+        let outcome: "held" | "released";
+        try {
+          if (!this.adapter.reconcile) throw Error("Who holds the workspace can't be checked.");
+          outcome = await this.adapter.reconcile();
+        } catch (failure) { this.options.report?.(failure); this.apply({ kind: "lost" }); return false; }
+        if (outcome === "held") { this.apply({ kind: "still-held" }); return false; }
+      }
       this.apply({ kind: "released" });
       for (const done of this.releasedHooks) { try { done(); } catch (error) { this.options.report?.(error); } }
       return true;
