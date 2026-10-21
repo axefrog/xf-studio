@@ -14,10 +14,12 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 
 ### In flight
 - **Architecture cleanup, wave 3:** move the flat `src/` modules into subsystem folders (branch `claude/source-layout`; reviewed and tested; merges when the Hair Lab branch has synced). *21 Oct*
-- **Architecture cleanup, wave 4:** a whole-codebase review by area, its fixes, the status refresh, and retiring the coordinator's private follow-up notes into this queue. *21 Oct*
+- **Architecture cleanup, wave 4:** the whole-codebase review by area. Running now on export and native, resolver and installation, and the runtime bridge. The core is reviewed after profiles phase 2. Then its fixes and the status refresh. *21 Oct*
+- **Profiles and layouts:** the design is under Sol review. Phase 1 (the profile and V model, with migration) starts once wave 3 merges, and the tab strip and panel picker components are built alongside by the UI component track. Defaults are adopted for the design's five questions. *21 Oct*
+- **Polish batch 1** (`claude/polish-1`): thumbnail drag direction, repeated layer names, collection tie order, the flaky mottle test, Build wording, the masculine-plate warning. *21 Oct*
 
 ### Beta blockers
-- **Profiles, layout tabs and the panel picker,** phases 1–4, about 19 agent-days ([design](../authoring/profiles-views-layouts-design.md); proposed, waiting for review and five decisions). *21 Oct*
+- **Profiles, layout tabs and the panel picker,** phases 1–4, about 19 agent-days ([design](../authoring/profiles-views-layouts-design.md); in flight). *21 Oct*
 - **Choice thumbnails turn the wrong way when dragged** ([small bugs](#small-bugs-and-friction)). *21 Oct*
 - **Speed budgets** ([performance](performance.md)), including:
   - the restart to V (2 s budget; PREV-196);
