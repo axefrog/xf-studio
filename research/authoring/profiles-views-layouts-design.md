@@ -598,17 +598,12 @@ The whole proposal is pre-beta. The spikes have run, and the estimate below is t
 - Generic subjects, and nothing current.
 - The whole proposal is pre-beta, spikes first (run: §9.1).
 
-**Proposed defaults** (from coordination; confirm or change):
+**Also decided (21 October, confirmed with the go-ahead for phase 1):**
 
-- one writer per workspace, with release-only takeover (§2.3);
-- library strictly backward-safe, with a documented workspace reset on downgrade (§2.4).
-
-**Open:**
-
-| # | Question | Proposed default |
-|---|---|---|
-| Q1 | Once looks autosave to the library, does the explicit Save remain? | Yes, as **Save version** (Ctrl+S): a named point older builds read |
-| Q2 | Orphaned subjects: keep until deleted, or clean up after a time? | Keep until an explicit delete. Deleted items purge after 30 days. |
+- One writer per workspace, with release-only takeover (§2.3).
+- The library is strictly backward-safe; the workspace is reset on downgrade, and this is documented (§2.4).
+- Explicit Save stays as **Save version** (Ctrl+S): a named point that older builds can read.
+- Orphaned subjects are kept until explicitly deleted. Deleted items purge after 30 days.
 
 ## Review changes
 
