@@ -1,6 +1,7 @@
 import type { DocumentModel } from "./collection-workspace";
 import { fitWorkspace, WORKSPACE_STORAGE_BUDGET, type WorkspacePlan } from "./workspace-budget";
 import type { WorkspaceState } from "./workspace-state";
+import { WORKSPACE_JOURNAL_LIMIT } from "./platform/api/workspace-file";
 
 /**
  * Autosave state for the presentation.
@@ -18,7 +19,7 @@ export type WorkspaceSaveStatus = {
  * Where the draft goes: the host's workspace file (browser-workspace-device.ts `openHostWorkspace`), whose write may finish
  * later and rejects when it fails, or any synchronous store (tests).
  */
-export type WorkspacePersistencePort = { setItem(key: string, value: string): unknown };
+export type WorkspacePersistencePort = { setItem(key: string, value: string, compact?: () => string): unknown };
 
 export const SAVE_MESSAGES = {
   saved: "Workspace saved",
@@ -74,7 +75,9 @@ export class WorkspacePersistence {
       : this.options.restoreWarning ? { kind: "repaired", message: `Draft autosaved. ${this.options.restoreWarning}` }
       : { kind: "saved", message: SAVE_MESSAGES.saved };
     let result: unknown;
-    try { result = this.options.storage.setItem(this.options.key, fitted.encoded); }
+    // A draft too large for the page's journal (host-workspace-device.ts) can be journalled in a smaller form, made only if asked.
+    const compact = fitted.size > WORKSPACE_JOURNAL_LIMIT ? () => fitWorkspace(state, this.options.model, WORKSPACE_JOURNAL_LIMIT).encoded : undefined;
+    try { result = this.options.storage.setItem(this.options.key, fitted.encoded, compact); }
     catch { this.publish({ kind: "unavailable", message: SAVE_MESSAGES.unavailable }); return; }
     this.written = fitted.encoded; this.lastSize = fitted.size; this.lastPlan = fitted.plan;
     if (!(result instanceof Promise)) { this.publish(done); return; }

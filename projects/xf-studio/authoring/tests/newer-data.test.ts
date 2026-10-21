@@ -136,7 +136,7 @@ test("the host's workspace file saves a workspace with a locked look and keeps i
   const value = stored(); value.collections.memory[value.collections.selected][EYE].partSchema = NEWER_PART;
   const text = JSON.stringify(value);
   writeFileSync(file, text);
-  expect(store.load(false).text).toBe(text);
+  expect((await store.load(false)).text).toBe(text);
   // The renderer opens it with that look locked and writes it back: the store takes it and keeps the look exactly.
   const loaded = loadWorkspace(storage(value), false, STUDIO_DOCUMENTS);
   await store.save(false, JSON.stringify(serializeWorkspace(loaded.state, STUDIO_DOCUMENTS)));
@@ -147,7 +147,7 @@ test("the host's workspace file saves a workspace with a locked look and keeps i
   loose.look = { parts: { [EYE]: { schema: NEWER_PART, body: {} } }, memory: {} };
   writeFileSync(file, JSON.stringify(loose));
   const fresh = JSON.stringify(serializeWorkspace(restore(smallWorkspaceV1()).state, STUDIO_DOCUMENTS));
-  expect(() => store.load(false)).toThrow();
+  await expect(store.load(false)).rejects.toThrow();
   await expect(store.save(false, fresh)).rejects.toThrow();
   const origin = "http://127.0.0.1:4317", headers = { Origin: origin, "Content-Type": "application/json" };
   expect((await workspaceRequest(new Request(`${origin}/api/workspace`), store)).status).toBe(409);

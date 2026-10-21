@@ -24,7 +24,7 @@ import { DesktopUpdateService, type NativeUpdater, type UpdateTrust } from "./up
 // The workspace draft's file, as on localhost (src/workspace-host.ts).
 import { openWorkspaceFile } from "../src/workspace-host";
 import { workspaceRequest } from "../src/platform/persistence/workspace-file";
-import { WORKSPACE_ENDPOINT, WORKSPACE_START_FRESH_ENDPOINT } from "../src/platform/api/workspace-file";
+import { WORKSPACE_ADOPT_ENDPOINT, WORKSPACE_ENDPOINT, WORKSPACE_START_FRESH_ENDPOINT } from "../src/platform/api/workspace-file";
 // A composition root: the part registry and document model are built once and injected (CORE-29).
 import { STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
 import { DesktopWorkActivity } from "./work-activity";
@@ -370,6 +370,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
           { headers: { "Cache-Control": "no-store" } }); }
         catch { return new Response("Update operation is unavailable", { status: 409 }); }
       }
+      if (url.pathname === WORKSPACE_ADOPT_ENDPOINT) return workspaceRequest(routedRequest, workspaceFile, url);
       if (url.pathname === WORKSPACE_START_FRESH_ENDPOINT) {
         const response = await workspaceRequest(routedRequest, workspaceFile, url);
         if (response.ok) report("The user started fresh; an unreadable workspace was set aside.");

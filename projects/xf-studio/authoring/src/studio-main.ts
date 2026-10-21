@@ -14,10 +14,12 @@ import { workspaceKeys } from "./workspace-state";
 import { showWorkspaceUnreadable } from "./studio-ui/workspace-unreadable";
 
 const verification = new URLSearchParams(location.search).has("verify");
-let legacy: Storage | null = null;
-try { legacy = localStorage; } catch { /* Browser storage blocked: the host file still keeps the workspace. */ }
-// The draft is loaded (and an earlier build's browser draft handed to the host, once) before the Studio builds its services.
-const opening = await openHostWorkspace({ fetch: (input, init) => fetch(input, init), verification, key: workspaceKeys(verification).workspace, legacy }).catch(() => null);
+let browser: Storage | null = null, session: Storage | null = null;
+try { browser = localStorage; session = sessionStorage; } catch { /* Browser storage blocked: the host file still keeps the workspace. */ }
+// The draft is loaded (with any journalled draft the host lacks, and an earlier build's browser draft, handed over) before the
+// Studio builds its services.
+const opening = await openHostWorkspace({ fetch: (input, init) => fetch(input, init), verification, key: workspaceKeys(verification).workspace,
+  browser, session, locks: navigator.locks ?? null }).catch(() => null);
 if (!opening) {
   const root = document.getElementById("studio")!;
   root.removeAttribute("aria-busy");

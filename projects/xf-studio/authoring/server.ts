@@ -8,7 +8,7 @@ import { openLibraryFiles } from "./src/library-files";
 // The workspace draft's file, as on the desktop (src/workspace-host.ts).
 import { openWorkspaceFile } from "./src/workspace-host";
 import { workspaceRequest } from "./src/platform/persistence/workspace-file";
-import { WORKSPACE_ENDPOINT, WORKSPACE_START_FRESH_ENDPOINT } from "./src/platform/api/workspace-file";
+import { WORKSPACE_ADOPT_ENDPOINT, WORKSPACE_ENDPOINT, WORKSPACE_START_FRESH_ENDPOINT } from "./src/platform/api/workspace-file";
 import { EXPERIMENT_FLAGS, type ExperimentFlagsDocument } from "./src/platform/api/experiments";
 // A composition root: the part registry is built once and injected (CORE-29).
 import { STUDIO_DOCUMENTS, STUDIO_PARTS } from "./src/compose/studio-registry";
@@ -290,7 +290,8 @@ const server = Bun.serve({
     if (url.pathname === GRADING_LUT_ENDPOINT) return gradingLutRequest(request);
     if (url.pathname === FACIAL_ENDPOINT || url.pathname.startsWith(`${FACIAL_ENDPOINT}/`)) return facialRequest(request);
     if (url.pathname === "/api/wolvenkit") return wolvenKitRequest(request);
-    if (url.pathname === WORKSPACE_ENDPOINT || url.pathname === WORKSPACE_START_FRESH_ENDPOINT) return workspaceRequest(request, workspaceFile, url);
+    if (url.pathname === WORKSPACE_ENDPOINT || url.pathname === WORKSPACE_START_FRESH_ENDPOINT || url.pathname === WORKSPACE_ADOPT_ENDPOINT)
+      return workspaceRequest(request, workspaceFile, url);
     const libraryAnswer = libraries.handle(request, url);
     if (libraryAnswer) return libraryAnswer;
     if (request.method !== "GET" && request.method !== "HEAD")

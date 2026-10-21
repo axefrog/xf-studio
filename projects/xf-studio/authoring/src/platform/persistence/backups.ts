@@ -67,13 +67,16 @@ export class LibraryBackups {
   }
 
   /**
-   * A copy taken before migration `id` changes existing rows (library-database.ts), through the migrating connection, before its
-   * transaction starts. Named `<stem>.pre-migration.<day>.<id>.sqlite` and kept until removed deliberately. Throws when the copy
-   * fails, so the migration doesn't run.
+   * A copy taken before migration `id` changes existing rows (library-database.ts), while the migrating connection holds the
+   * file's write lock and before it changes anything, through a read-only connection of its own. Named
+   * `<stem>.pre-migration.<day>.<id>.<time>-<random>.sqlite`, never reused or replaced, and kept until removed deliberately.
+   * Throws when the copy fails, so the migration doesn't run.
    */
-  beforeMigration(id: string, through: Database): string {
+  beforeMigration(id: string): string {
     if (!/^[a-z0-9-]+$/.test(id)) throw Error("A migration ID names its backup, so it is lowercase letters, digits and dashes.");
-    return this.copy(this.name("pre-migration", isoDay(this.now()), `.${id}`), through);
+    const target = this.name("pre-migration", isoDay(this.now()), `.${id}.${this.now()}-${crypto.randomUUID().slice(0, 8)}`);
+    if (existsSync(target)) throw Error("A migration backup of that name already exists.");
+    return this.copy(target);
   }
 
   /**

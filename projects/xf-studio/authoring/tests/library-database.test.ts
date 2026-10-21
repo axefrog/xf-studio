@@ -281,12 +281,36 @@ test("a step that rewrites rows runs only after a copy of the file; if the copy 
   const database = LibraryDatabase.open(path, { clock: hostClock(), migrations: [...LIBRARY_MIGRATIONS, rename], backups });
   try { expect(libraryStores(database, STUDIO_PARTS).looks.get(look.id).name).toBe("After"); } finally { database.close(); }
   const copies = backups.list().filter(item => item.kind === "pre-migration");
-  expect(copies.map(item => item.file.split(/[\\/]/).at(-1))).toEqual(["library.pre-migration.2026-10-21.test-rename-1.sqlite"]);
-  const copy = new Database(copies[0].file, { readonly: true });
-  try { expect(copy.query("SELECT name FROM look_revisions").all()).toEqual([{ name: "Before" }]); } finally { copy.close(); }
+  expect(copies).toHaveLength(1);
+  expect(copies[0].file.split(/[\\/]/).at(-1)).toMatch(/^library\.pre-migration\.2026-10-21\.test-rename-1\.\d+-[0-9a-f]{8}\.sqlite$/);
+  const names = (file: string) => { const db = new Database(file, { readonly: true }); try { return db.query("SELECT name FROM look_revisions").all(); } finally { db.close(); } };
+  expect(names(copies[0].file)).toEqual([{ name: "Before" }]);
   // Pre-migration copies are never pruned with the daily ones.
   backups.prune();
   expect(backups.list().some(item => item.kind === "pre-migration")).toBe(true);
+  // The same step again (its ledger row removed) the same day: a second copy beside the first, which is never replaced.
+  const raw = new Database(path);
+  raw.query(`DELETE FROM ${LEDGER} WHERE id = 'test-rename-1'`).run();
+  raw.query("UPDATE look_revisions SET name = 'Between'").run();
+  raw.close();
+  LibraryDatabase.open(path, { clock: hostClock(), migrations: [...LIBRARY_MIGRATIONS, rename], backups }).close();
+  const again = backups.list().filter(item => item.kind === "pre-migration");
+  expect(again).toHaveLength(2);
+  expect(names(copies[0].file)).toEqual([{ name: "Before" }]);
+  expect(names(again.find(item => item.file !== copies[0].file)!.file)).toEqual([{ name: "Between" }]);
+});
+
+test("a step another opener ran meanwhile is seen inside the write lock: no copy is taken and it doesn't run again", () => {
+  const dir = folder(), path = join(dir, "library.sqlite");
+  openTestLibrary(path).close();
+  const backups = new LibraryBackups(path, () => Date.UTC(2026, 9, 21));
+  let checks = 0, runs = 0;
+  // Pending at the first look; by the time this opener holds the lock, another one has made it.
+  const raced: LibraryMigration = { id: "test-raced-1", rewritesRows: true, applied: () => ++checks > 1, apply: () => { runs++; } };
+  LibraryDatabase.open(path, { clock: hostClock(), migrations: [...LIBRARY_MIGRATIONS, raced], backups }).close();
+  expect(runs).toBe(0);
+  expect(backups.list()).toEqual([]);
+  expect(ledger(path).map(row => row.id)).not.toContain("test-raced-1");
 });
 
 test("writes nest as savepoints of one transaction and report once; a refused or no-op write reports nothing", () => {

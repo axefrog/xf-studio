@@ -14,7 +14,8 @@
  * ledger row, so a crash leaves it either done or not started. The first migration that writes the ledger also records the
  * migrations it finds already applied (the backfill). Ledger IDs this build doesn't know (a newer build's) are allowed. A
  * migration that rewrites existing rows (`rewritesRows`) runs only after a consistent copy of the file was taken
- * (`LibraryBackups.beforeMigration`); if the copy fails, opening stops and nothing changes.
+ * (`LibraryBackups.beforeMigration`), inside the file's write lock and after checking again that the step is still pending, so
+ * two openers never both migrate or overwrite each other's copy; if the copy fails, opening stops and nothing changes.
  */
 import { Database } from "bun:sqlite";
 import type { Clock } from "../core/clock";
@@ -77,10 +78,13 @@ function connect(path: string, options: LibraryDatabaseOptions): { db: Database;
     let migrated = false;
     for (const migration of options.migrations) {
       if (!pending(db, migration)) continue;
-      if (migration.rewritesRows) options.backups?.beforeMigration(migration.id, db);
-      db.transaction(() => {
-        // Another process may have run it while this one waited for the lock.
-        if (!pending(db, migration)) return;
+      // The file's write lock first: another opener migrating at the same time waits here, then finds the step done.
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        if (!pending(db, migration)) { db.exec("COMMIT"); continue; }
+        // The copy reads the file as committed, which this transaction hasn't changed yet; it runs on a connection of its own
+        // (a copy can't be made inside a transaction) while the lock keeps every other writer out.
+        if (migration.rewritesRows) options.backups?.beforeMigration(migration.id);
         migration.apply(db);
         if (userVersion(db) > RELEASED_LIBRARY_VERSION) throw Error(`Migration ${migration.id} raised the library version.`);
         db.exec(`CREATE TABLE IF NOT EXISTS ${LEDGER} (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL)`);
@@ -88,8 +92,12 @@ function connect(path: string, options: LibraryDatabaseOptions): { db: Database;
         for (const other of options.migrations)
           if (other !== migration && other.applied(db)) db.query(`INSERT OR IGNORE INTO ${LEDGER} VALUES (?, 'before-ledger')`).run(other.id);
         db.query(`INSERT OR IGNORE INTO ${LEDGER} VALUES (?, ?)`).run(migration.id, new Date(options.clock.now()).toISOString());
+        db.exec("COMMIT");
         migrated = true;
-      }).immediate();
+      } catch (error) {
+        if (db.inTransaction) db.exec("ROLLBACK");
+        throw error;
+      }
     }
     return { db, migrated };
   } catch (error) { db.close(); throw error; }

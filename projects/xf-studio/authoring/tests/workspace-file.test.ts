@@ -20,7 +20,7 @@ test("the first version-2 save keeps the version-1 workspace beside it, once, by
     await store.save(verification, v1);   // No file yet: nothing to keep.
     expect(existsSync(backup)).toBe(false);
     writeFileSync(file, v1);        // A workspace written by 0.1.0-alpha.1.
-    const restored = parseWorkspace(JSON.parse(store.load(verification).text!), STUDIO_DOCUMENTS);
+    const restored = parseWorkspace(JSON.parse((await store.load(verification)).text!), STUDIO_DOCUMENTS);
     restored.preview.eyeShape = 7;
     await store.save(verification, JSON.stringify(serializeWorkspace(restored, STUDIO_DOCUMENTS)));
     expect(readFileSync(backup, "utf8")).toBe(v1);
@@ -29,7 +29,7 @@ test("the first version-2 save keeps the version-1 workspace beside it, once, by
     restored.preview.eyeShape = 8;
     await store.save(verification, JSON.stringify(serializeWorkspace(restored, STUDIO_DOCUMENTS)));
     expect(readFileSync(backup, "utf8")).toBe(v1);
-    expect(parseWorkspace(JSON.parse(store.load(verification).text!), STUDIO_DOCUMENTS).preview.eyeShape).toBe(8);
+    expect(parseWorkspace(JSON.parse((await store.load(verification)).text!), STUDIO_DOCUMENTS).preview.eyeShape).toBe(8);
   }
 });
 
@@ -39,7 +39,7 @@ test("a workspace from a newer build is never replaced; an older page's version-
   expect(JSON.parse(readFileSync(file, "utf8")).schema).toBe("xfs/workspace-2");
   const newer = JSON.stringify({ schema: "xfs/workspace-3", look: {} });
   writeFileSync(file, newer);
-  expect(() => store.load(false)).toThrow();
+  await expect(store.load(false)).rejects.toThrow();
   await expect(store.save(false, JSON.stringify(smallWorkspaceV1()))).rejects.toThrow();
   expect(readFileSync(file, "utf8")).toBe(newer);
   expect(existsSync(resolve(dir, store.backupName(false)))).toBe(false);
@@ -51,7 +51,7 @@ test("the .bak is refreshed whenever an older build wrote a newer version-1 file
   const first = smallWorkspaceV1(), second = { ...smallWorkspaceV1(), library: { selected: "", name: "Written by the alpha again" } };
   await store.save(false, JSON.stringify(first));
   writeFileSync(file, JSON.stringify(first));
-  const upgrade = async () => await store.save(false, JSON.stringify(serializeWorkspace(parseWorkspace(JSON.parse(store.load(false).text!),
+  const upgrade = async () => await store.save(false, JSON.stringify(serializeWorkspace(parseWorkspace(JSON.parse((await store.load(false)).text!),
     STUDIO_DOCUMENTS), STUDIO_DOCUMENTS)));
   await upgrade();
   expect(readFileSync(backup, "utf8")).toBe(JSON.stringify(first));

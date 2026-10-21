@@ -165,7 +165,7 @@ describe("a damaged or newer workspace never bricks the app", () => {
       expect(keptAs).toMatch(/^workspace\.broken-.+\.json$/);
       expect(readFileSync(resolve(data, keptAs), "utf8")).toContain("a newer XF Studio");
       const reload = await fetch(base + "/api/workspace", { headers });
-      expect(await reload.json()).toEqual({ schema: "xfs/host-workspace-1", workspace: null, adoptBrowserDraft: false });
+      expect(await reload.json()).toEqual({ schema: "xfs/host-workspace-1", workspace: null, revision: null });
       expect(app.renderer().bootstrapped).toBe(true);
     } finally { app.stop(); }
   });

@@ -25,5 +25,7 @@ export function showWorkspaceUnreadable(root: HTMLElement, options: { file: stri
   // As before: what happened, the kept file, then the one action.
   box.insertBefore(status, fresh.parentElement);
   root.removeAttribute("aria-busy");
-  root.replaceChildren(h("div", { class: "boot-failed", role: "alert", style: "max-width:560px;margin:15vh auto;padding:0 var(--sp-5)" }, box));
+  box.style.cssText = "width:100%;max-width:560px";
+  // Centred in the whole page (the Studio root is a header, content and status grid).
+  root.replaceChildren(h("div", { class: "boot-failed", role: "alert", style: "grid-row:1/-1;display:grid;place-items:center;padding:var(--sp-5)" }, box));
 }

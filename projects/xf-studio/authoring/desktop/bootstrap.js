@@ -29,9 +29,10 @@ const workspaceAlert = message => {
 // Installed before anything can fail, so the host's close handshake always gets an answer.
 window.xfDesktopWorkspaceError = workspaceAlert;
 window.xfDesktopWorkspaceFlush = async () => {};
-let browserStorage = null;
-try { browserStorage = localStorage; } catch { /* Storage unavailable: the host file keeps the workspace. */ }
-const opening = await openHostWorkspace({ fetch: (input, init) => fetch(input, init), verification, key: workspaceKey, legacy: browserStorage });
+let browserStorage = null, sessionStore = null;
+try { browserStorage = localStorage; sessionStore = sessionStorage; } catch { /* Storage unavailable: the host file keeps the workspace. */ }
+const opening = await openHostWorkspace({ fetch: (input, init) => fetch(input, init), verification, key: workspaceKey,
+  browser: browserStorage, session: sessionStore, locks: navigator.locks ?? null });
 if (!opening.ok) {
   // A damaged workspace, or one written by a newer XF Studio, must never brick the app.
   showWorkspaceUnreadable(document.getElementById("studio"), { file: opening.file,
