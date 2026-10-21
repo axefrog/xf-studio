@@ -737,7 +737,12 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
       // A restart reads back what is stored: a key whose write failed is written again first (Try again), since a restart while changes
       // are reported unprotected may come back older, as the warning says (the protection check covers that state).
       memory.fail = false;
-      a.protect();
+      // Or the page stops (a release, a lease lost, a command superseded) with edits still waiting to be stored soon and nothing else
+      // unprotected: stopping stores them first, so the restart brings them back without a Try again.
+      const soon = new Set(a.storingSoon().map(documentKey));
+      const stopsWaiting = mode === "local" && soon.size > 0 && a.status().unprotected.every(ref => soon.has(documentKey(ref))) && more.next() < 0.6;
+      if (stopsWaiting) count("stopped with edits waiting to be stored");
+      else a.protect();
       const app = mode === "desktop" && rng.next() < 0.5;
       if (app && more.next() < 0.4) {
         // The app crashes with host copies still on their way: each key's pending host writes land only in part (a prefix), so the new

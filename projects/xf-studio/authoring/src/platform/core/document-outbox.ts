@@ -1069,12 +1069,18 @@ export class DocumentOutbox {
       await Promise.race([this.changed(), ...(aborted ? [aborted] : [])]);
     return this.status();
   }
-  /** Stops for good: nothing is written or sent again (the page released or lost its workspace). Stored entries stay for the next holder. */
+  /**
+   * Stops for good: what waits to be stored soon is stored first, then nothing is written or sent again (the page released or lost its
+   * workspace, or the library said a newer holder superseded it). Stored entries stay for the next holder.
+   */
   stop(): void {
     if (this.stopped) return;
+    // Persist first, then stop: what waits to be stored soon (`store: "soon"`) is written now, so the next holder recovers it (on every
+    // path that stops: a release, a lease lost, a command superseded). Nothing more is sent.
+    this.storeTimer?.cancel(); this.storeTimer = null;
+    if (this.deferred.size) this.persist([...this.deferred]);
     this.stopped = true;
     this.retryTimer?.cancel(); this.retryTimer = null;
-    this.storeTimer?.cancel(); this.storeTimer = null;
     for (const id of [...this.waits.keys()]) this.finish(id, "stopped");
     this.emit({ kind: "status" });
   }

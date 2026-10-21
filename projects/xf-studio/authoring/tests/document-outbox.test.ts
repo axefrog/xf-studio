@@ -320,6 +320,37 @@ describe("the outbox's rules (A1–A7)", () => {
     expect(outbox.conflicts()[0]!.writes[0]!.value).toEqual({ n: 5 });
   });
 
+  test("a superseded answer stops the outbox only after what waits to be stored soon is stored: the next holder recovers the successor", async () => {
+    const r = rig(), storage = memoryOutboxStorage();
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const port: DocumentStorePort = { ...r.port, transact: async request => { await gate; return { ok: false, reason: "superseded" }; } };
+    const first = new DocumentOutbox(port, storage, { retryMs: 5, schedule: (ms, run) => { if (ms !== STORE_SOON_MS) setTimeout(run, ms); return { cancel() {} }; } });
+    first.hold(LOOK, null);
+    first.open();
+    // An older command in flight, and a successor recorded behind it, waiting to be stored.
+    first.commit("look.edit", [{ ...LOOK, value: { n: 1 } }]);
+    await tick();
+    first.commit("look.edit", [{ ...LOOK, value: { n: 2 } }], { store: "soon" });
+    expect(first.storingSoon()).toEqual([LOOK]);
+    // The library answers that another holder superseded this page: it stops, having stored the successor first, and sends nothing more.
+    release();
+    await tick(10);
+    expect(first.status().stopped).toBe(true);
+    expect(first.storingSoon()).toEqual([]);
+    const sent = r.calls.length;
+    first.store(); await tick(10);
+    expect(r.calls.length).toBe(sent);
+    // A restart well after: the stored keys bring back the successor's value.
+    await tick(30);
+    const second = new DocumentOutbox(r.port, storage, { retryMs: 5 });
+    second.hold(LOOK, null);
+    second.open();
+    expect(second.pendingEntries().map(entry => entry.writes[0]!.value)).toEqual([{ n: 1 }, { n: 2 }]);
+    await quiet(second);
+    expect(value(r.store)!.value).toEqual({ n: 2 });
+  });
+
   test("settle waits for queued entries, says false when a send fails meanwhile, and the host's return triggers a check", async () => {
     const r = rig(), { outbox } = memoryOutbox(r.port);
     outbox.hold(COLLECTION, null);
