@@ -37,7 +37,9 @@ export function startDocumentOutbox(options: {
 }): StartedOutbox {
   const lease = options.lease;
   const fence = (): WorkspaceFence | null => { const generation = lease?.generation() ?? null; return generation === null ? null : { workspace: options.workspace, generation }; };
-  const transport = browserDocuments(options.prefix, (url, init) => options.send(url, init), fence);
+  // `fetch` is called on its own, never as a method of `options` (the browser refuses that: "Illegal invocation").
+  const send = options.send;
+  const transport = browserDocuments(options.prefix, (url, init) => send(url, init), fence);
   const documents = lease ? leasedDocuments(transport, lease) : transport;
   const outbox = new DocumentOutbox(documents, options.storage, {
     writable: () => lease?.writable() ?? true, sendable: () => lease?.draining() ?? true, report: options.report,
