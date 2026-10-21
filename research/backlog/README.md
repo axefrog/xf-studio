@@ -234,6 +234,7 @@ Existing brow, lash, hair and piercing *preview context* is not permission to bu
 
 Polish on existing features, not new work. Each is one line; the code-health ledger keeps only Medium and above.
 
+- **The starter eye-makeup shape is odd** (21 October 2026, polish before 1.0). A new look and a new layer start from a lopsided wing whose control points every design first drags back into place. Replace the starter outline (`starterRecipe()` and the new-layer shape in `src/features/eye-makeup/region.ts`) with a natural, symmetric lid shape that follows the upper lash line and fades toward the brow. Check it on the default and the reference V, in both eye modes. Keep the old shape intact for existing drafts, as the file's comment requires.
 - **Build has no Stop.** A Build runs for many seconds and can't be stopped from the Mod panel; the host already stops a Build whose request is dropped, so the panel only needs a Stop button.
 - **Two windows overwrite each other's draft.** Two Studio tabs or windows on one workspace each autosave over the other's draft; the second should see the first's changes, or at least warn.
 - **Collection order on a tie** (LIB-01): two saves in the same millisecond list in random order (`src/collection-store.ts` orders by `created_at`, then a random UUID); add a stable insertion tie-break.
