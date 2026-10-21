@@ -3,8 +3,10 @@
  * each is loaded, the search typed into it, the row it prepares ahead and the choice under its pointer, and its choice previews. The
  * data itself is the shared catalogue's (creator-catalogue.ts); a requester holds only its own wants, loading and failure states.
  *
- * - **Cancellation is the requester's.** Each question carries the context's catalogue session, or the requester's own controller;
- *   letting go stops only this requester's interest, never another's (the catalogue stops a host question once nobody holds it).
+ * - **Cancellation is the requester's.** Each question carries the requester's own lifetime with the context's catalogue session, or a
+ *   controller of its own; letting go stops only this requester's interest, never another's (the catalogue stops a host question once
+ *   nobody holds it). A disposed requester asks nothing more, publishes nothing late and lets go of its row prepared ahead.
+ * - **Previews** draw through the requester's own lease of the character's one preview device (choice-preview-owner.ts).
  * - **A catalogue follow** (another body, a catalogue that changed, Try again) resets every requester of the character (`reset`).
  * - Its character is reached only through `RequesterHost`, so several requesters of one character see one V and one panel.
  */
@@ -56,7 +58,8 @@ export type RequesterHost = {
   aheadRequest(change: CharacterChoice): CharacterRequest | null;
   /** Load a prepared change's parts ahead without showing it (PREV-189). */
   preload?(request: CharacterRequest, signal: AbortSignal): Promise<void>;
-  previews?: ChoicePreviewPort;
+  /** A lease of the character's one choice-preview device, for this requester alone (ended when the requester's previews end). */
+  previews?(): ChoicePreviewPort;
   /** The view of the V is on its way (previews wait). */
   viewing(): boolean;
   /** The prepared files grew: read their size again. */
@@ -80,8 +83,18 @@ export class CreatorRequester {
   private fetch: Fetch | null = null;
   private ahead: Ahead | null = null;
   private previewService: ChoicePreviewService | null = null;
+  /** The requester's lifetime: aborted on `dispose`, so its questions are let go however long the character's session lasts. */
+  private readonly life = new AbortController();
 
   constructor(readonly id: string, private readonly catalogue: CreatorCatalogue, private readonly port: CreatorPort, private readonly host: RequesterHost) {}
+  private get disposed() { return this.life.signal.aborted || this.host.disposed(); }
+  /** Tell the character's readers, unless this requester is gone. */
+  private publish() { if (!this.disposed) this.host.publish(); }
+  /** The catalogue session's signal joined with this requester's lifetime (null before the first follow). */
+  private signal(): AbortSignal | null {
+    const session = this.host.session();
+    return session ? AbortSignal.any([session.signal, this.life.signal]) : null;
+  }
 
   /** A catalogue follow started: nothing loaded, searched or asked about for the previous one stands. */
   reset(): void {
@@ -112,20 +125,20 @@ export class CreatorRequester {
     return this.page(key, option, wanted) ?? { choices: [], total: this.host.option(option)?.count ?? 0, loading: true, error: null };
   }
   private async loadPage(option: string, query: string) {
-    const key = pageKey(option, query), current = this.page(key, option, query), session = this.host.session();
-    if (current?.loading || this.host.phase() !== "ready" || !session) return;
+    const key = pageKey(option, query), current = this.page(key, option, query), signal = this.signal();
+    if (current?.loading || this.host.phase() !== "ready" || !signal || this.disposed) return;
     const generation = this.host.generation(), gender = this.host.gender(), identity = this.identity();
     const offset = current?.choices.length ?? 0, total = current?.total ?? this.host.option(option)?.count ?? 0;
     this.status.set(key, { loading: true, error: null, total });
     try {
-      const page = await this.catalogue.loadRow(gender, identity, option, query, offset, session.signal);
-      if (generation !== this.host.generation() || this.host.disposed() || this.host.stale(page.identity)) return;
+      const page = await this.catalogue.loadRow(gender, identity, option, query, offset, signal);
+      if (generation !== this.host.generation() || this.disposed || this.host.stale(page.identity)) return;
       this.status.set(key, { loading: false, error: null, total: page.total });
     } catch (error) {
-      if (generation !== this.host.generation() || this.host.disposed()) return;
+      if (generation !== this.host.generation() || this.disposed) return;
       this.status.set(key, { loading: false, error: (error as Error)?.message || "The choices couldn't be read.", total });
     }
-    this.host.publish();
+    this.publish();
   }
 
   /**
@@ -144,23 +157,23 @@ export class CreatorRequester {
     return this.swatchDisplay.get(option, state, choices, grouping);
   }
   private async loadSwatches(option: string) {
-    const port = this.port, session = this.host.session();
-    if (!port.swatches || this.swatchLoading.has(option) || this.host.phase() !== "ready" || !session) return;
-    const generation = this.host.generation(), gender = this.host.gender(), signal = session.signal;
+    const port = this.port, signal = this.signal();
+    if (!port.swatches || this.swatchLoading.has(option) || this.host.phase() !== "ready" || !signal || this.disposed) return;
+    const generation = this.host.generation(), gender = this.host.gender();
     this.swatchLoading.add(option);
     try {
       // A row asked about again while its swatches are pending waits a moment first.
       if (this.swatchRows.get(option)?.pending) await port.wait(SWATCH_POLL_MS, signal);
-      if (generation !== this.host.generation() || this.host.disposed()) return;
+      if (generation !== this.host.generation() || this.disposed) return;
       const answer = await port.swatches(gender, option, signal);
-      if (generation !== this.host.generation() || this.host.disposed() || this.host.stale(answer.identity)) return;
+      if (generation !== this.host.generation() || this.disposed || this.host.stale(answer.identity)) return;
       const sheets = new Map(answer.sheets.map(sheet => [sheet.id, { url: port.sheetUrl?.(gender, sheet.id, sheet.key) ?? "", columns: sheet.columns, rows: sheet.rows }]));
       this.swatchRows.set(option, deepFreeze({ swatches: [...answer.swatches], icons: [...answer.icons], sheets, pending: answer.pending }));
     } catch {
       // Swatches are a nicety: without them the row shows the definitions' own colours.
-      if (generation === this.host.generation() && !this.host.disposed()) this.swatchRows.set(option, { swatches: [], icons: [], sheets: new Map(), pending: false });
+      if (generation === this.host.generation() && !this.disposed) this.swatchRows.set(option, { swatches: [], icons: [], sheets: new Map(), pending: false });
     } finally { this.swatchLoading.delete(option); }
-    if (generation === this.host.generation() && !this.host.disposed()) this.host.publish();
+    if (generation === this.host.generation()) this.publish();
   }
 
   /** The options with a choice matching `query` (the host searches every choice, not only those loaded; UI-72). */
@@ -173,20 +186,20 @@ export class CreatorRequester {
   }
   private startSearch(query: string) {
     this.searching?.controller?.abort();
-    if (!this.port.search || this.host.phase() !== "ready") {
+    if (!this.port.search || this.host.phase() !== "ready" || this.disposed) {
       this.searching = { query, options: null, more: false, loading: false, error: null, controller: null };
       return;
     }
     const controller = new AbortController(), generation = this.host.generation();
     this.searching = { query, options: null, more: false, loading: true, error: null, controller };
     this.port.search(this.host.gender(), query, controller.signal).then(found => {
-      if (controller.signal.aborted || generation !== this.host.generation() || this.host.stale(found.identity)) return;
+      if (controller.signal.aborted || this.disposed || generation !== this.host.generation() || this.host.stale(found.identity)) return;
       this.searching = { query, options: new Set(found.options), more: found.more, loading: false, error: null, controller: null };
-      this.host.publish();
+      this.publish();
     }, error => {
-      if (controller.signal.aborted || generation !== this.host.generation()) return;
+      if (controller.signal.aborted || this.disposed || generation !== this.host.generation()) return;
       this.searching = { query, options: null, more: false, loading: false, error: (error as Error)?.message || "The search couldn't be run.", controller: null };
-      this.host.publish();
+      this.publish();
     });
   }
 
@@ -196,7 +209,7 @@ export class CreatorRequester {
    * can't prepare ahead or the catalogue isn't ready.
    */
   prefetch(option: string, positions: readonly number[], focus: number | null = null): CharacterFetchState | null {
-    if (!this.port.prefetch || !this.host.ready() || !positions.length) return null;
+    if (!this.port.prefetch || !this.host.ready() || !positions.length || this.disposed) return null;
     // Keyed by the V without the row's own choice, so choosing in the row keeps the states it has.
     const request = this.host.detailRequest();
     const key = JSON.stringify([{ ...request, choices: (request.choices ?? []).filter(choice => `${choice.part}/${choice.option}` !== option) }, option]);
@@ -226,7 +239,7 @@ export class CreatorRequester {
     entry.timer = setTimeout(() => { entry.timer = null; this.startAhead(entry); }, PRELOAD_DWELL_MS);
   }
   private startAhead(entry: Ahead) {
-    if (this.ahead !== entry || this.host.disposed() || entry.controller || entry.timer) return;
+    if (this.ahead !== entry || this.disposed || entry.controller || entry.timer) return;
     // Only a choice the host has prepared: a load ahead never starts a preparation of its own.
     if (this.fetch?.option !== entry.option || this.fetch.states.get(entry.position) !== "r") { entry.waiting = true; return; }
     entry.waiting = false;
@@ -255,8 +268,8 @@ export class CreatorRequester {
    */
   previews(option: string, positions: readonly number[], selected: number | null, focus: number | null = null, spin: number | null = null): ChoicePreviewRow | null {
     const kind = this.host.option(option)?.preview;
-    if (!kind || !this.host.previews || !this.host.ready()) return null;
-    this.previewService ??= new ChoicePreviewService(this.host.previews, () => this.host.publish());
+    if (!kind || !this.host.previews || !this.host.ready() || this.disposed) return null;
+    this.previewService ??= new ChoicePreviewService(this.host.previews(), () => this.publish());
     const fetch = this.fetch?.option === option ? this.fetch : null;
     return this.previewService.update({ option, kind, request: this.host.detailRequest(), body: this.host.gender(), catalogue: this.host.panel()?.identity ?? "",
       positions, selected, focus, spin,
@@ -278,7 +291,7 @@ export class CreatorRequester {
     if (fetch.asking) { fetch.again = true; return; }
     const controller = new AbortController();
     fetch.asking = controller;
-    const current = () => this.fetch === fetch && !this.host.disposed();
+    const current = () => this.fetch === fetch && !this.disposed;
     this.port.prefetch!(this.host.detailRequest(), fetch.option, fetch.positions, fetch.focus, controller.signal).then(reply => {
       if (!current()) return;
       let changed = reply.stopped !== fetch.stopped || reply.busy !== fetch.busy;
@@ -292,7 +305,7 @@ export class CreatorRequester {
       if (this.ahead?.waiting && this.ahead.option === fetch.option && fetch.states.get(this.ahead.position) === "r") this.startAhead(this.ahead);
       if (changed) {
         fetch.view = Object.freeze({ option: fetch.option, states: new Map(fetch.states), stopped: fetch.stopped, busy: fetch.busy });
-        this.host.publish();
+        this.publish();
       }
       // The prepared files grew: their size is read again once the row settles.
       if (wasBusy && !reply.busy) this.host.refreshPrepared();
@@ -307,10 +320,16 @@ export class CreatorRequester {
   }
 
   dispose(): void {
+    if (this.life.signal.aborted) return;
+    this.life.abort();
     this.cancelAhead();
     this.fetch?.asking?.abort();
     this.fetch = null;
+    // Ends only this requester's lease of the preview device.
     this.previewService?.dispose();
+    this.previewService = null;
     this.searching?.controller?.abort();
+    this.searching = null;
+    this.catalogue.release(this.id);
   }
 }

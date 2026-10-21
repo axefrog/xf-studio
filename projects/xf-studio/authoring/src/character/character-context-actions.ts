@@ -58,6 +58,7 @@ import { CLOTHING_AREA_LABELS, CLOTHING_STATE_LABELS, CLOTHING_STATES, type Clot
 import { CLOTHING_AREAS, type ClothingArea, wornAreas } from "../saves/save-loadout";
 import type { ChoicePreviewPort, ChoicePreviewRow } from "./choice-preview-service";
 import { CreatorCatalogue } from "./creator-catalogue";
+import { ChoicePreviewOwner } from "./choice-preview-owner";
 import { CreatorRequester, type RequesterHost } from "./creator-requester";
 import { characterHistory, type CharacterHistoryHome, type CharacterHistoryKey, privateHistory } from "./character-history";
 import type { HistoryScope } from "../platform/core/history-service";
@@ -76,10 +77,13 @@ export type CreatorPort = {
   retry?(gender: BodyGender, signal: AbortSignal): Promise<CreatorState>;
   /** The choices an earlier build's tried piercing style stands for on this installation (CORE-74). */
   legacy?(gender: BodyGender, style: string, definition: string): Promise<CharacterChoice[]>;
-  /** Prepare a row's choices ahead (visible ones first; `focus` first of all) and answer their states, one character per position. */
-  prefetch?(request: CharacterRequest, option: string, positions: readonly number[], focus: number | null, signal: AbortSignal): Promise<PrefetchReply>;
-  /** Stop preparing ahead (the row closed). */
-  stopPrefetch?(): Promise<void>;
+  /**
+   * Prepare a row's choices ahead (visible ones first; `focus` first of all) and answer their states, one character per position.
+   * `requester`: who asks (a character's panel instance); each requester's row is its own job on the host.
+   */
+  prefetch?(request: CharacterRequest, option: string, positions: readonly number[], focus: number | null, signal: AbortSignal, requester?: string): Promise<PrefetchReply>;
+  /** Stop preparing ahead (the row closed): `requester`'s row only, or without one every row. */
+  stopPrefetch?(requester?: string): Promise<void>;
   /** A colour row's swatches and icons by position (`pending` while the host is still working them out). */
   swatches?(gender: BodyGender, option: string, signal: AbortSignal): Promise<CcSwatches>;
   /** Where the page fetches an icon sheet. */
@@ -289,6 +293,8 @@ export class CharacterContextActions {
   /** What each panel instance of this character asks of the catalogue (creator-requester.ts); `main` is the Character panel's. */
   private readonly requesters = new Map<string, CreatorRequester>();
   private readonly main: CreatorRequester;
+  /** The one owner of the character's choice-preview device; each requester draws through its own lease. */
+  private readonly previewOwner: ChoicePreviewOwner | null;
   /** The character's Undo history: the history service's `character:<id>` scope (character-history.ts). */
   private readonly home: CharacterHistoryHome;
   private readonly scope: HistoryScope;
@@ -327,6 +333,7 @@ export class CharacterContextActions {
     this.shared = ports.catalogue ?? new CreatorCatalogue(ports.creator!);
     this.requesterName = ports.requester ?? "character";
     this.creator = this.shared.port(this.requesterName);
+    this.previewOwner = ports.previews ? new ChoicePreviewOwner(ports.previews) : null;
     this.main = this.requester("panel");
     // The history carried from the previous head of this V, else the character's own home, else a private one.
     const carried = initial.history?.kind === "xfs/character-history" && isHome(initial.history.history) ? initial.history.history : null;
@@ -365,7 +372,7 @@ export class CharacterContextActions {
       generation: () => this.generation, disposed: () => this.disposed, stale: identity => this.stale(identity), publish: () => this.publish(),
       detailRequest: () => this.detailRequest(), aheadRequest: change => this.aheadRequest(change),
       ...(details?.preload ? { preload: (request: CharacterRequest, signal: AbortSignal) => details.preload!(request, signal) } : {}),
-      ...(this.ports.previews ? { previews: this.ports.previews } : {}),
+      ...(this.previewOwner ? { previews: () => this.previewOwner!.lease() } : {}),
       viewing: () => this.viewing !== null, refreshPrepared: () => this.refreshPrepared(), watchedAt: () => this.watchedAt };
   }
   /** A row's choices loaded so far for the shown V's body and catalogue (shared by every requester). */
@@ -1034,6 +1041,8 @@ export class CharacterContextActions {
   dispose() {
     this.disposed = true;
     for (const requester of this.requesters.values()) requester.dispose();
+    this.previewOwner?.dispose();
+    this.shared.release(this.requesterName);
     this.session?.abort();
     this.viewing?.controller.abort();
     this.unbind();

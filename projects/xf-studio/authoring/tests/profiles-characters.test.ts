@@ -3,7 +3,7 @@
  * per-requester state, and `character.setSource` (profiles design §1, §2.1, §7). The multi-subject tests run three characters of two
  * bodies through the services at once and check that nothing of one reaches another.
  */
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 import { readdirSync } from "node:fs";
 import { descriptorsFromUiState } from "../src/character/cco-model";
@@ -21,6 +21,12 @@ import { createStudioSubjects } from "../src/compose/subjects";
 import { SubjectRegistry } from "../src/platform/core/subject-registry";
 import { storeCommands } from "../src/platform/core/document-commands";
 import { createHistoryService } from "../src/platform/core/history-service";
+import { createJobScheduler } from "../src/platform/core/jobs";
+import { hostClock } from "../src/platform/core/clock";
+import { ChoicePrefetcher } from "../src/character/choice-prefetch";
+import { ChoicePreviewOwner } from "../src/character/choice-preview-owner";
+import type { ChoicePreviewPort } from "../src/character/choice-preview-service";
+import type { CommandAnswer, DocumentCommandPort } from "../src/platform/api/document-commands";
 import { characterRef } from "../src/platform/api";
 import type { SavedV } from "../src/saves/save-reader";
 import { fixtureSource } from "./cc-fixtures";
@@ -29,6 +35,10 @@ import { sourceText } from "./fixtures/source-files";
 import { imports, resolveFrom } from "./fixtures/import-scan";
 
 const settle = () => new Promise(resolve => setTimeout(resolve, 10));
+async function until(done: () => boolean, ms = 3000) {
+  const end = Date.now() + ms;
+  while (!done()) { if (Date.now() > end) throw Error("Timed out."); await new Promise(resolve => setTimeout(resolve, 5)); }
+}
 function saveFor(derived: ReturnType<typeof descriptorsFromUiState>, isMale = false): SavedV {
   const groups = { head: [] as SavedV["groups"]["head"], body: [] as SavedV["groups"]["head"], arms: [] as SavedV["groups"]["head"] };
   const group = (part: "head" | "body" | "arms", name: string) => {
@@ -51,8 +61,20 @@ async function fixtureHost() {
   const index = new CatalogueIndex(source.catalogue), coverage = catalogueCoverage(source.catalogue);
   const projection = { female: panelProjection(source.catalogue, coverage, "fixture-female"), male: panelProjection(source.catalogue, coverage, "fixture-male") };
   const asked: string[] = [], stopped: string[] = [];
-  let stops = 0, holding = false;
+  const stops: string[] = [], warmed: string[] = [];
+  let holding = false;
   const held: (() => void)[] = [];
+  const prefetcher = new ChoicePrefetcher({
+    jobs: createJobScheduler({ clock: hostClock(), quietMs: 0 }),
+    requestFor: async (base, option, position) => ({ ...base, choices: [...base.choices ?? [], { part: "head", option: option.split("/")[1]!, choice: `c${position}` }] }),
+    readiness: async () => () => false,
+    warm: async requests => {
+      warmed.push(...requests.map(request => `${request.bodyGender}:${request.choices!.at(-1)!.choice}`));
+      await new Promise(resolve => setTimeout(resolve, 1));
+      return requests.map(() => ({ ready: true }));
+    },
+    preparedBytes: async () => 0,
+  }, { batch: 2, maxBatch: 2, timeMs: 60_000, bytes: 1e12 });
   const gate = <T>(label: string, signal: AbortSignal | undefined, make: () => T) => new Promise<T>((resolve, reject) => {
     asked.push(label);
     signal?.addEventListener("abort", () => { stopped.push(label); reject(new DOMException("Stopped.", "AbortError")); }, { once: true });
@@ -71,13 +93,22 @@ async function fixtureHost() {
       return { ...view, identity: `fixture-${request.bodyGender}`, values, faceMorphs: [] };
     }),
     preset: async () => ({ text: "", values: 0, leftOut: 0, personal: 0 }),
-    wait: async () => {},
-    prefetch: (request, option, positions, _focus, signal) => gate(`prefetch:${request.bodyGender}:${option}`, signal,
-      () => ({ states: "r".repeat(positions.length), stopped: null, busy: false })),
-    stopPrefetch: async () => { stops++; },
+    wait: (ms, signal) => new Promise(resolve => { const timer = setTimeout(resolve, Math.min(ms, 2)); signal.addEventListener("abort", () => { clearTimeout(timer); resolve(); }); }),
+    // The host's own prefetcher (choice-prefetch.ts) on a real scheduler: each requester's row is its own job there.
+    prefetch: async (request, option, positions, focus, _signal, requester) => {
+      const answer = prefetcher.update({ base: request, option, positions, focus, ...(requester ? { requester } : {}) });
+      return { states: answer.states, stopped: answer.stopped === "failed" ? null : answer.stopped, busy: answer.busy };
+    },
+    stopPrefetch: async requester => { stops.push(requester ?? "(all)"); prefetcher.cancel(requester); },
   };
-  return { port, asked, stopped, source, stops: () => stops,
+  return { port, asked, stopped, source, stops, prefetcher, warmed,
     hold() { holding = true; }, release() { holding = false; for (const answer of held.splice(0)) answer(); } };
+}
+
+/** A choice-preview device that answers nothing and counts its ending. */
+function previewDevice(count: { disposed: number }): ChoicePreviewPort {
+  return { sources: async () => [], subject: async () => "subject", stored: async () => null, render: async (_source, key) => ({ url: `u:${key}` }),
+    release: () => {}, dispose: () => { count.disposed++; } };
 }
 
 async function world() {
@@ -180,7 +211,9 @@ describe("three characters of two bodies at once (profiles design §7)", () => {
       const made = await w.characters.create({ source: { kind: "default", bodyGender: body } });
       ids.push(made.ok ? made.character : "");
     }
-    const [a, b, c] = ids.map(id => w.characters.context(id!, { showSave: () => {} }));
+    // Each character's one preview device, counting when it ends.
+    const devices = ids.map(() => ({ disposed: 0 }));
+    const [a, b, c] = ids.map((id, index) => w.characters.context(id!, { showSave: () => {}, previews: previewDevice(devices[index]!) }));
     expect(w.characters.context(ids[0]!, { showSave: () => {} })).toBe(a!);
     for (const context of [a, b, c]) context!.start();
     await settle();
@@ -207,17 +240,41 @@ describe("three characters of two bodies at once (profiles design §7)", () => {
     expect(a!.search("blue").options).toEqual(b!.search("blue").options);
     expect(w.catalogue.asked.search).toBe(2);
 
-    // Prepared ahead: closing one character's row doesn't stop the host while another's is still open.
-    a!.prefetch("head/eyes_color", [0, 1]);
-    c!.prefetch("head/eyes_color", [0, 1]);
-    await settle();
-    expect(a!.prefetch("head/eyes_color", [0, 1])!.states.get(0)).toBe("r");
+    // Prepared ahead, on the host's real prefetcher: the feminine and masculine Vs' rows are two jobs that never supersede each other,
+    // and closing one stops only its own.
+    const rowsReady = () => [a, c].every(context => [0, 1, 2, 3].every(position => context!.prefetch("head/eyes_color", [0, 1, 2, 3])!.states.get(position) === "r"));
+    await until(rowsReady);
+    expect(w.host.prefetcher.stats.cancelled).toBe(0);
+    expect(w.host.warmed.filter(item => item.startsWith("female:")).sort()).toEqual(["female:c0", "female:c1", "female:c2", "female:c3"]);
+    expect(w.host.warmed.filter(item => item.startsWith("male:")).sort()).toEqual(["male:c0", "male:c1", "male:c2", "male:c3"]);
     a!.stopPrefetch("head/eyes_color");
     await settle();
-    expect(w.host.stops()).toBe(0);
+    expect(w.host.stops).toEqual([`${ids[0]}/panel`]);
+    expect(w.host.prefetcher.stateOf(c!.detailRequest(), "head/eyes_color", 0)).toBe("r");
     c!.stopPrefetch("head/eyes_color");
     await settle();
-    expect(w.host.stops()).toBe(1);
+    expect(w.host.stops).toEqual([`${ids[0]}/panel`, `${ids[2]}/panel`]);
+
+    // A panel instance that closes lets go of its own questions only, publishes nothing late, and its row prepared ahead stops.
+    const extra = b!.requester("extra"), main = b!.requester("panel");
+    extra.prefetch("head/eyes_color", [0]);
+    w.host.hold();
+    extra.choices("head/piercings_00"); main.search("ring");
+    let published = 0;
+    const unsubscribe = b!.subscribe(() => { published++; });
+    b!.releaseRequester("extra");
+    expect(w.host.stopped).toContain("page:female:head/piercings_00:0:");
+    expect(w.host.stopped).not.toContain("search:female:ring");
+    await settle();
+    expect(w.host.stops.at(-1)).toBe(`${ids[1]}/extra`);
+    w.host.release();
+    await settle();
+    expect(main.search("ring").options).not.toBeNull();
+    const before = published;
+    extra.choices("head/eyes_color"); extra.search("blue");
+    await settle();
+    expect(published).toBe(before);
+    unsubscribe();
 
     // History: each character's steps are its own `character:<id>` scope.
     a!.dispatch({ kind: "character.setOption", part: "head", option: "eyes_color", choice: "he__02_blue" });
@@ -246,7 +303,10 @@ describe("three characters of two bodies at once (profiles design §7)", () => {
     await w.characters.flush();
     const docs = Object.fromEntries((await w.documents.list<{ choices: unknown[] }>(CHARACTER_DOCUMENT)).map(doc => [doc.id, doc.value.choices.length]));
     expect(docs).toEqual({ [ids[0]!]: 0, [ids[1]!]: 0, [ids[2]!]: 1 });
-    for (const id of ids) await w.characters.release(id!);
+    // Closing a panel instance never ended its character's preview device; releasing the character does, once.
+    expect(devices.map(device => device.disposed)).toEqual([0, 0, 0]);
+    for (const id of ids) expect(await w.characters.release(id!)).toBe(true);
+    expect(devices.map(device => device.disposed)).toEqual([1, 1, 1]);
   });
 
   test("a save is one decoded document shared by the Vs made from it; setSource replaces savedV and names its base", async () => {
@@ -307,6 +367,127 @@ describe("the shared creator catalogue (profiles design §7, step 1)", () => {
     expect(catalogue.identity("female")).toBe("");
     expect(catalogue.rowOf("female", "fixture-female", "head/eyes_color")).toBeNull();
     expect(catalogue.identity("male")).toBe("fixture-male");
+  });
+});
+
+describe("review fixes (chunk 1b)", () => {
+  test("a source change prepared while a rename or a delete landed is refused, never undoing either (finding 1)", async () => {
+    const w = await world();
+    const ids: string[] = [];
+    for (let i = 0; i < 2; i++) { const made = await w.characters.create(); ids.push(made.ok ? made.character : ""); }
+    const [one, two] = ids as [string, string];
+    const digest = crypto.subtle.digest.bind(crypto.subtle);
+    let open!: () => void;
+    const gate = new Promise<void>(resolve => { open = resolve; });
+    const spy = spyOn(crypto.subtle, "digest").mockImplementation((async (...args: Parameters<typeof digest>) => { await gate; return digest(...args); }) as never);
+    try {
+      const fresh = () => saveFor(descriptorsFromUiState(w.host.source.cco, { eyes_color: "he__02_blue" }));
+      const renamed = w.characters.setSource({ kind: "character.setSource", character: one, base: 1, source: { kind: "save", value: fresh() } });
+      const deleted = w.characters.setSource({ kind: "character.setSource", character: two, base: 1, source: { kind: "save", value: fresh() } });
+      expect(await w.characters.rename(one, 1, "Renamed")).toMatchObject({ ok: true, revision: 2 });
+      expect(await w.characters.delete(two, 1)).toMatchObject({ ok: true, revision: 2 });
+      open();
+      expect(await renamed).toMatchObject({ ok: false, code: "stale" });
+      expect(await deleted).toMatchObject({ ok: false, code: "missing_target" });
+    } finally { spy.mockRestore(); }
+    expect(w.characters.document(one)).toMatchObject({ name: "Renamed", source: { kind: "default" } });
+    expect(w.characters.character(two)).toBeNull();
+    expect((await w.documents.list(CHARACTER_DOCUMENT)).find(doc => doc.id === two)).toMatchObject({ deleted: true, revision: 2 });
+  });
+
+  test("a failed write keeps its changes unsaved, says so, and a release waits until they are in the library (finding 2)", async () => {
+    const w = await world(), failing = { count: 0 };
+    const documents: DocumentCommandPort = { list: (kind, signal) => w.documents.list(kind, signal),
+      commit: async (command): Promise<CommandAnswer> => {
+        if (command.command === "character.update" && failing.count > 0) { failing.count--; throw Error("The library is unreachable."); }
+        return w.documents.commit(command);
+      } };
+    const characters = new CharacterService({ documents, catalogue: w.catalogue, history: w.history });
+    const made = await characters.create(), id = made.ok ? made.character : "";
+    const context = characters.context(id, { showSave: () => {} });
+    context.start(); await settle();
+    failing.count = 1;
+    context.dispatch({ kind: "character.setOption", part: "head", option: "eyes_color", choice: "he__02_blue" });
+    await characters.flush();
+    expect(characters.character(id)).toMatchObject({ unsaved: true, revision: 1 });
+    expect((await w.documents.list<{ choices: unknown[] }>(CHARACTER_DOCUMENT))[0]!.value.choices).toHaveLength(0);
+    // Released: written again first, then let go.
+    expect(await characters.release(id)).toBe(true);
+    expect(characters.character(id)).toMatchObject({ unsaved: false, revision: 2 });
+    expect((await w.documents.list<{ choices: unknown[] }>(CHARACTER_DOCUMENT))[0]!.value.choices).toHaveLength(1);
+    // A write that keeps failing: the release refuses and the context, with its change, stays.
+    const again = characters.context(id, { showSave: () => {} });
+    again.start(); await settle();
+    failing.count = 99;
+    again.dispatch({ kind: "character.reset", part: "head", option: "eyes_color" });
+    expect(await characters.release(id)).toBe(false);
+    expect(characters.context(id, { showSave: () => {} })).toBe(again);
+    expect(characters.character(id)!.unsaved).toBe(true);
+    failing.count = 0;
+    expect(await characters.settle(id)).toBe(true);
+  });
+
+  test("each requester draws through its own lease of one preview device: ending one never ends another's (finding 3)", async () => {
+    const calls = { disposed: 0, released: [] as string[], stops: 0, aborted: 0 };
+    const device: ChoicePreviewPort = {
+      sources: (_request, _option, _kind, _positions, _derive, signal) => new Promise((_resolve, reject) =>
+        signal.addEventListener("abort", () => { calls.aborted++; reject(Error("Stopped.")); })),
+      subject: async () => "subject", stored: async () => null, render: async (_source, key) => ({ url: `u:${key}` }),
+      release: url => { calls.released.push(url); }, dispose: () => { calls.disposed++; },
+      live: { start: async () => {}, frame: async () => ({ bitmap: null as never }), stop: () => { calls.stops++; } },
+    };
+    const owner = new ChoicePreviewOwner(device), first = owner.lease(), second = owner.lease(), source = {} as never;
+    await first.render(source, "k1"); await second.render(source, "k2");
+    const asking = (lease: ChoicePreviewPort) => lease.sources({} as never, "head/hair", "hair" as never, [0], null, new AbortController().signal).then(() => "answered", () => "stopped");
+    const firstAsks = asking(first), secondAsks = asking(second);
+    await second.live!.start(source);
+    first.dispose!();
+    expect(calls).toMatchObject({ disposed: 0, released: ["u:k1"], aborted: 1, stops: 0 });
+    expect(await firstAsks).toBe("stopped");
+    // The live turn is the second's: the first can't stop it.
+    first.live!.stop();
+    expect(calls.stops).toBe(0);
+    second.dispose!();
+    expect(calls).toMatchObject({ disposed: 0, released: ["u:k1", "u:k2"], aborted: 2, stops: 1 });
+    expect(await secondAsks).toBe("stopped");
+    owner.dispose();
+    expect(calls.disposed).toBe(1);
+  });
+
+  test("an answer to a question asked before the catalogue was dropped is never kept (finding 5)", async () => {
+    const host = await fixtureHost(), catalogue = new CreatorCatalogue(host.port), signal = new AbortController().signal;
+    host.hold();
+    const late = catalogue.panel("female", signal);
+    catalogue.forget("female");
+    host.release();
+    expect((await late).phase).toBe("ready");
+    expect(catalogue.identity("female")).toBe("");
+    await catalogue.panel("female", signal);
+    expect(host.asked.filter(label => label === "panel:female")).toHaveLength(2);
+    expect(catalogue.identity("female")).toBe("fixture-female");
+    host.hold();
+    const page = catalogue.loadRow("female", "fixture-female", "head/eyes_color", "", 0, signal);
+    catalogue.forget("female");
+    host.release();
+    await page;
+    expect(catalogue.rowOf("female", "fixture-female", "head/eyes_color")).toBeNull();
+  });
+
+  test("a row is assembled from kept pages as from fresh ones, and a searched row goes with its pages (finding 7)", async () => {
+    const host = await fixtureHost(), catalogue = new CreatorCatalogue(host.port), signal = new AbortController().signal;
+    await catalogue.panel("female", signal);
+    await catalogue.loadRow("female", "fixture-female", "head/eyes_color", "", 0, signal);
+    (catalogue as unknown as { rows: Map<string, unknown> }).rows.clear();
+    await catalogue.loadRow("female", "fixture-female", "head/eyes_color", "", 0, signal);
+    expect(catalogue.asked.page).toBe(1);
+    expect(catalogue.rowOf("female", "fixture-female", "head/eyes_color")!.choices.length).toBeGreaterThan(0);
+    await catalogue.loadRow("female", "fixture-female", "head/eyes_color", "blue", 0, signal);
+    expect(catalogue.rowOf("female", "fixture-female", "head/eyes_color", "blue")).not.toBeNull();
+    for (let i = 0; i < 130; i++) await catalogue.search("female", `q${i}`, signal);
+    expect(catalogue.rowOf("female", "fixture-female", "head/eyes_color", "blue")).toBeNull();
+    await catalogue.loadRow("female", "fixture-female", "head/eyes_color", "blue", 0, signal);
+    expect(catalogue.asked.page).toBe(3);
+    expect(catalogue.rowOf("female", "fixture-female", "head/eyes_color", "blue")).not.toBeNull();
   });
 });
 

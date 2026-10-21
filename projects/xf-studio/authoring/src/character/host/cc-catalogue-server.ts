@@ -35,12 +35,16 @@ const gender = (value: unknown): BodyGender | null => value === "female" || valu
 /** The host side of preparing choices ahead and of the prepared game files (character-detail-host.ts). */
 export type PreparedHost = {
   prefetchRow(input: PrefetchInput): PrefetchAnswer;
-  stopPrefetch(): void;
+  /** Stop one requester's row prepared ahead (without one: every row). */
+  stopPrefetch(requester?: string): void;
   preparedFiles(): Promise<{ bytes: number }>;
   clearPreparedFiles(): Promise<{ freed: number }>;
 };
 /** Most positions one prefetch question names (a page of choices). */
 const MAX_PREFETCH_POSITIONS = 512;
+/** Who asks to prepare a row ahead (a character's panel instance): absent, or a short name without control characters. */
+const requesterOf = (value: unknown): string | undefined | null => value === undefined ? undefined
+  : typeof value === "string" && /^[^\u0000-\u001f\u007f]{1,200}$/.test(value) ? value : null;
 const position = (value: unknown) => Number.isInteger(value) && (value as number) >= 0 && (value as number) < 100_000;
 
 export function createCreatorHandler(host: CreatorCatalogueHost, options: { trustedOrigin?: (request: Request) => boolean; refresh?: () => Promise<void>;
@@ -85,11 +89,16 @@ export function createCreatorHandler(host: CreatorCatalogueHost, options: { trus
         return json({ code: "forbidden", error: "Use the local studio to read the creator options." }, 403);
       const body = JSON.parse(await readBodyText(request, CREATOR_LIMITS.requestBytes)) as
         { kind?: unknown; request?: unknown; name?: unknown; kept?: unknown; bodyGender?: unknown; style?: unknown; definition?: unknown;
-          option?: unknown; positions?: unknown; focus?: unknown };
+          option?: unknown; positions?: unknown; focus?: unknown; requester?: unknown };
       const prepared = options.prepared;
       if (body?.kind === "prefetchStop" || body?.kind === "prepared" || body?.kind === "clearPrepared") {
         if (!prepared) return json({ code: "invalid", error: "Unknown request." }, 400);
-        if (body.kind === "prefetchStop") { prepared.stopPrefetch(); return json({ stopped: true }); }
+        if (body.kind === "prefetchStop") {
+          const requester = requesterOf(body.requester);
+          if (requester === null) return json({ code: "invalid", error: "Unknown request." }, 400);
+          prepared.stopPrefetch(requester);
+          return json({ stopped: true });
+        }
         if (body.kind === "prepared") return json({ bytes: (await prepared.preparedFiles()).bytes });
         try { return json(await prepared.clearPreparedFiles()); }
         catch (error) {
@@ -99,10 +108,11 @@ export function createCreatorHandler(host: CreatorCatalogueHost, options: { trus
       }
       if (body?.kind === "prefetch") {
         if (!prepared || !isOptionId(body.option) || !Array.isArray(body.positions) || body.positions.length > MAX_PREFETCH_POSITIONS ||
-          !body.positions.every(position) || (body.focus !== undefined && body.focus !== null && !position(body.focus)))
+          !body.positions.every(position) || (body.focus !== undefined && body.focus !== null && !position(body.focus)) || requesterOf(body.requester) === null)
           return json({ code: "invalid", error: "Unknown request." }, 400);
+        const requester = requesterOf(body.requester);
         return json(prepared.prefetchRow({ base: parseCharacterRequest(body.request), option: body.option, positions: body.positions as number[],
-          focus: (body.focus as number | null | undefined) ?? null }));
+          focus: (body.focus as number | null | undefined) ?? null, ...(requester ? { requester } : {}) }));
       }
       if (body?.kind === "retry") {
         const which = gender(body.bodyGender);

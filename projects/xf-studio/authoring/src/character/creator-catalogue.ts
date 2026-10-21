@@ -11,17 +11,21 @@
  *   of its own interest only: the host question is stopped when the last requester holding it lets go, and a requester that let go is
  *   answered with an abort at once, whatever the others do.
  * - **A catalogue that changed** (another mod set, PIPE-81): an answer naming another identity than the kept panel's drops everything
- *   kept for that body, so the next question of any requester reaches the host. `retry` (Try again) does the same.
- * - **Prepared ahead** is per requester: the host is told to stop preparing ahead only once no requester still wants it.
+ *   kept for that body, so the next question of any requester reaches the host; `retry` (Try again) does the same. Each body has a
+ *   generation, raised whenever its answers are dropped: an answer to a question asked before that is handed to its asker but never kept.
+ * - **Rows** are assembled from their pages by one path, kept page or fresh. Typed searches are kept only up to a bound, each with its
+ *   searched rows and their pages, dropped together.
+ * - **Prepared ahead** is per requester, down to the host (its own job there, choice-prefetch.ts); `release` lets go of a requester.
  *
  * The page has no job scheduler: the scheduler (platform/core/jobs.ts) is the host's, runs one job at a time and already builds each
- * body's catalogue once for everyone asking. Here deduplication is per key and concurrent, which a page's reads need.
+ * body's catalogue once for everyone asking, and keeps each requester's preparing ahead as its own want. Here deduplication is per key
+ * and concurrent, which a page's reads need.
  */
 import type { BodyGender } from "./cc-catalogue";
 import type { CcChoicePage, CcChoiceSearch, CcPanelChoice, CcSwatches, CreatorState } from "./cc-panel";
 import type { CreatorPort } from "./character-context-actions";
 
-/** Searches (and searched rows) kept: a person types many queries in a session, and each is small but none is final. */
+/** Typed searches kept (each with its searched rows): a person types many queries in a session, each small but none final. */
 const QUERIES_KEPT = 128;
 type Flight = { readonly promise: Promise<unknown>; readonly controller: AbortController; holders: number };
 /** A row's choices loaded so far for one body, identity and query: contiguous from the first, shared by every requester. */
@@ -37,11 +41,13 @@ export class CreatorCatalogue {
   private readonly flights = new Map<string, Flight>();
   /** Each body's ready panel as the host last answered it. */
   private readonly panels = new Map<BodyGender, CreatorState>();
+  /** Raised each time a body's answers are dropped: answers to questions asked before are never kept. */
+  private readonly generations = new Map<BodyGender, number>();
   /** Immutable answers by key (`<what>\n<body>\n<identity>\n…`). */
   private readonly results = new Map<string, unknown>();
   private readonly rows = new Map<string, CatalogueRow>();
-  /** Keys of kept answers to typed searches, oldest first: only the newest `QUERIES_KEPT` stay. */
-  private readonly queries = new Set<string>();
+  /** Kept searches, oldest first: each search's own key, and its searched rows' keys and pages' keys, dropped together. */
+  private readonly searches = new Map<string, Set<string>>();
   /** Requesters preparing a row's choices ahead now. */
   private readonly preparing = new Set<string>();
   /** Host questions asked, by kind (measurement and the multi-subject tests). */
@@ -51,6 +57,7 @@ export class CreatorCatalogue {
 
   /** The identity of the body's kept panel ("" while none is kept). */
   identity(gender: BodyGender): string { return this.panels.get(gender)?.panel?.identity ?? ""; }
+  private generation(gender: BodyGender) { return this.generations.get(gender) ?? 0; }
 
   /** A row's choices loaded so far (from the first, contiguous) for a body and catalogue identity, or null when none are. */
   rowOf(gender: BodyGender, identity: string, option: string, query = ""): CatalogueRow | null {
@@ -95,28 +102,34 @@ export class CreatorCatalogue {
     const kept = this.identity(gender);
     if (identity && kept && identity !== kept) this.forget(gender);
   }
-  /** Drop everything kept for a body (a changed catalogue, Try again). */
+  /** Drop everything kept for a body (a changed catalogue, Try again); answers still on their way are not kept either. */
   forget(gender: BodyGender): void {
+    this.generations.set(gender, this.generation(gender) + 1);
     this.panels.delete(gender);
     const marker = `\n${gender}\n`;
     for (const key of [...this.results.keys()]) if (key.includes(marker)) this.results.delete(key);
     for (const key of [...this.rows.keys()]) if (key.startsWith(`${gender}\n`)) this.rows.delete(key);
-  }
-  /** Keep a search's answer, dropping the oldest searches past the bound. */
-  private keepQuery(key: string, value: unknown, row?: string) {
-    this.results.set(key, value);
-    this.queries.add(key);
-    if (row) this.queries.add(`row\n${row}`);
-    while (this.queries.size > QUERIES_KEPT) {
-      const oldest = this.queries.values().next().value!;
-      this.queries.delete(oldest);
-      if (oldest.startsWith("row\n")) this.rows.delete(oldest.slice(4)); else this.results.delete(oldest);
-    }
+    // Flights already asked are joined only by their own askers: a question asked from now on reaches the host.
+    for (const key of [...this.flights.keys()]) if (key.includes(marker)) this.flights.delete(key);
+    for (const key of [...this.searches.keys()]) if (key.includes(marker)) this.searches.delete(key);
   }
   private rowKey(gender: BodyGender, identity: string, option: string, query: string) { return `${gender}\n${identity}\n${option}\n${query}`; }
-  private keepPanel(gender: BodyGender, state: CreatorState): CreatorState {
+  /** Keep a typed search's answer, or a searched row's page under its search; the oldest searches go past the bound, with their rows. */
+  private keepSearched(search: string, key: string, value: unknown, row?: string) {
+    this.results.set(key, value);
+    const group = this.searches.get(search) ?? new Set<string>();
+    this.searches.delete(search);
+    this.searches.set(search, group.add(key));
+    if (row) group.add(`row\n${row}`);
+    while (this.searches.size > QUERIES_KEPT) {
+      const [oldest, keys] = this.searches.entries().next().value!;
+      this.searches.delete(oldest);
+      for (const item of keys) if (item.startsWith("row\n")) this.rows.delete(item.slice(4)); else this.results.delete(item);
+    }
+  }
+  private keepPanel(gender: BodyGender, state: CreatorState, generation: number): CreatorState {
     // Labels that may read next time, or need WolvenKit, are served but not final (NATIVE-46): the next question asks the host again.
-    if (state.phase !== "ready" || !state.panel || state.next) return state;
+    if (state.phase !== "ready" || !state.panel || state.next || generation !== this.generation(gender)) return state;
     if (this.identity(gender) !== state.panel.identity) this.forget(gender);
     const kept = deepFreeze(state);
     this.panels.set(gender, kept);
@@ -126,36 +139,42 @@ export class CreatorCatalogue {
   panel(gender: BodyGender, signal: AbortSignal): Promise<CreatorState> {
     const kept = this.panels.get(gender);
     if (kept) return Promise.resolve(kept);
-    return this.shared(`panel\n${gender}\n`, signal, inner => { this.asked.panel++; return this.host.panel(gender, inner); })
-      .then(state => this.keepPanel(gender, state));
+    const generation = this.generation(gender);
+    return this.shared(`panel\n${gender}\n${generation}`, signal, inner => { this.asked.panel++; return this.host.panel(gender, inner); })
+      .then(state => this.keepPanel(gender, state, generation));
   }
   retry(gender: BodyGender, signal: AbortSignal): Promise<CreatorState> {
     this.forget(gender);
-    const host = this.host;
-    return (host.retry ? host.retry(gender, signal) : host.panel(gender, signal)).then(state => this.keepPanel(gender, state));
+    const host = this.host, generation = this.generation(gender);
+    return (host.retry ? host.retry(gender, signal) : host.panel(gender, signal)).then(state => this.keepPanel(gender, state, generation));
   }
   page(gender: BodyGender, option: string, offset: number, signal: AbortSignal, query?: string): Promise<CcChoicePage> {
     return this.loadRow(gender, this.identity(gender), option, query ?? "", offset, signal);
   }
   /**
-   * The page of a row at `offset` for the catalogue `identity` a requester's panel came from; it joins that row (`rowOf`) when it is
-   * the next one and came from the same catalogue.
+   * The page of a row at `offset` for the catalogue `identity` a requester's panel came from. Kept or fresh, it joins that row (`rowOf`)
+   * when it is the next one and came from the same catalogue.
    */
   loadRow(gender: BodyGender, identity: string, option: string, query: string, offset: number, signal: AbortSignal): Promise<CcChoicePage> {
-    const key = `page\n${gender}\n${identity}\n${option}\n${offset}\n${query}`;
+    const key = `page\n${gender}\n${identity}\n${option}\n${offset}\n${query}`, rowKey = this.rowKey(gender, identity, option, query);
     const kept = this.results.get(key) as CcChoicePage | undefined;
-    if (kept) return Promise.resolve(kept);
+    if (kept) { this.join(rowKey, offset, kept); return Promise.resolve(kept); }
+    const generation = this.generation(gender);
     return this.shared(key, signal, inner => { this.asked.page++; return this.host.page(gender, option, offset, inner, query || undefined); }).then(page => {
       this.seen(gender, page.identity);
-      if (page.identity && identity && page.identity !== identity) return page;
+      if ((page.identity && identity && page.identity !== identity) || generation !== this.generation(gender)) return page;
       const frozen = deepFreeze(page);
-      const rowKey = this.rowKey(gender, identity, option, query), row = this.rows.get(rowKey);
-      if (identity && query) this.keepQuery(key, frozen, rowKey); else if (identity) this.results.set(key, frozen);
-      // Pages are asked from the first, each at the length loaded so far; a page already joined is not joined again.
-      if ((row?.choices.length ?? 0) === offset)
-        this.rows.set(rowKey, Object.freeze({ choices: Object.freeze([...row?.choices ?? [], ...frozen.choices]), total: frozen.total }));
+      if (identity && query) this.keepSearched(`search\n${gender}\n${identity}\n${query}`, key, frozen, rowKey);
+      else if (identity) this.results.set(key, frozen);
+      this.join(rowKey, offset, frozen);
       return page;
     });
+  }
+  /** Pages are asked from the first, each at the length loaded so far; a page already joined is not joined again. */
+  private join(rowKey: string, offset: number, page: CcChoicePage) {
+    const row = this.rows.get(rowKey);
+    if ((row?.choices.length ?? 0) !== offset) return;
+    this.rows.set(rowKey, Object.freeze({ choices: Object.freeze([...row?.choices ?? [], ...page.choices]), total: page.total }));
   }
   search(gender: BodyGender, query: string, signal: AbortSignal): Promise<CcChoiceSearch> {
     const identity = this.identity(gender), key = `search\n${gender}\n${identity}\n${query}`;
@@ -163,9 +182,10 @@ export class CreatorCatalogue {
     if (kept) return Promise.resolve(kept);
     const host = this.host;
     if (!host.search) return Promise.reject(Error("The creator options can't be searched here."));
+    const generation = this.generation(gender);
     return this.shared(key, signal, inner => { this.asked.search++; return host.search!(gender, query, inner); }).then(found => {
       this.seen(gender, found.identity);
-      if (identity && this.identity(gender) === identity && (!found.identity || found.identity === identity)) this.keepQuery(key, deepFreeze(found));
+      if (identity && generation === this.generation(gender) && (!found.identity || found.identity === identity)) this.keepSearched(key, key, deepFreeze(found));
       return found;
     });
   }
@@ -175,18 +195,25 @@ export class CreatorCatalogue {
     if (kept) return Promise.resolve(kept);
     const host = this.host;
     if (!host.swatches) return Promise.reject(Error("This host has no swatches."));
+    const generation = this.generation(gender);
     return this.shared(key, signal, inner => { this.asked.swatches++; return host.swatches!(gender, option, inner); }).then(answer => {
       this.seen(gender, answer.identity);
       // A table still being worked out is asked again; a settled one is kept.
-      if (!answer.pending && identity && this.identity(gender) === identity && (!answer.identity || answer.identity === identity))
+      if (!answer.pending && identity && generation === this.generation(gender) && (!answer.identity || answer.identity === identity))
         this.results.set(key, deepFreeze(answer));
       return answer;
     });
   }
 
+  /** A requester is gone: the host stops preparing its row ahead. */
+  release(requester: string): void {
+    if (!this.preparing.delete(requester)) return;
+    void this.host.stopPrefetch?.(requester).catch(() => {});
+  }
+
   /**
    * The port one requester uses (a character's panel instance, `<character>/<instance>`): the shared answers above, its own interest
-   * in each, and its own preparing ahead.
+   * in each, and its own row prepared ahead on the host.
    */
   port(requester: string): CreatorPort {
     const host = this.host;
@@ -208,12 +235,11 @@ export class CreatorCatalogue {
     if (host.clearPrepared) port.clearPrepared = () => host.clearPrepared!();
     if (host.prefetch) port.prefetch = (request, option, positions, focus, signal) => {
       this.preparing.add(requester);
-      return host.prefetch!(request, option, positions, focus, signal);
+      return host.prefetch!(request, option, positions, focus, signal, requester);
     };
     if (host.stopPrefetch) port.stopPrefetch = async () => {
       this.preparing.delete(requester);
-      // Another requester still preparing a row ahead keeps the host at it.
-      if (!this.preparing.size) await host.stopPrefetch!();
+      await host.stopPrefetch!(requester);
     };
     return port;
   }

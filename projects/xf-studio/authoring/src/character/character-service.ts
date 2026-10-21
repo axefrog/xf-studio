@@ -9,6 +9,10 @@
  *   (a tombstone, after naming the profiles that list it) and `character.update` (what a context's own actions changed).
  * - **A context's changes are written back** as `character.update`, one write at a time, the newest value last. A write refused as stale
  *   marks the character `conflict` and writes nothing over the newer revision: resolving it is phase 1c's (the outbox and conflicts).
+ *   A write that fails keeps its changes unsaved (`unsaved`, never dropped); `settle` writes them again and says whether the library
+ *   holds them, and a context is released only once it does (the rule of chunk 1a's saved documents, `saved-document.ts`).
+ * - **Commands name their base and commit against it.** A command validates its base, prepares (a save is hashed), validates again and
+ *   commits over that same base, so a change that landed meanwhile (a rename, a delete) is refused, never undone.
  * - **Shared and per character.** Every context shares the page's creator catalogue (creator-catalogue.ts) and is its own requester
  *   (`<id>`, its panel instances `<id>/<instance>`); its Undo history is the history service's `character:<id>` scope.
  * - **Scenes.** A context is bound to the scene ports it was opened with (`showSave` applies a save on that scene's head); several
@@ -58,7 +62,13 @@ type Entry = {
   /** The write in flight, and whether a newer state waits for it. */
   writing: Promise<void> | null;
   again: boolean;
+  /** The context holds changes the library doesn't have yet (set on every change, cleared once a write of them is acknowledged). */
+  dirty: boolean;
+  /** Why the last write-back failed, while its changes are unsaved. */
+  failure: string | null;
 };
+const entryOf = (id: CharacterId, revision: number, doc: CharacterDocument | null): Entry =>
+  ({ id, revision, doc, conflict: false, context: null, unsubscribe: null, writing: null, again: false, dirty: false, failure: null });
 
 const canonical = (value: unknown): string => JSON.stringify(value, (_key, item) => item && typeof item === "object" && !Array.isArray(item)
   ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : item);
@@ -84,7 +94,7 @@ export class CharacterService implements CharactersPort {
     }
     for (const document of characters) {
       const doc = document.deleted ? null : characterDocumentOf(document.value);
-      this.entries.set(document.id, { id: document.id, revision: document.revision, doc, conflict: false, context: null, unsubscribe: null, writing: null, again: false });
+      this.entries.set(document.id, entryOf(document.id, document.revision, doc));
       this.made.set(document.id, this.order++);
     }
     this.changed();
@@ -96,7 +106,7 @@ export class CharacterService implements CharactersPort {
     this.summaries ??= Object.freeze([...this.entries.values()].filter(entry => entry.doc)
       .sort((a, b) => (this.made.get(a.id) ?? 0) - (this.made.get(b.id) ?? 0))
       .map(entry => Object.freeze({ id: entry.id, label: characterLabel(entry.doc), body: entry.doc!.body, origin: entry.doc!.source.kind,
-        revision: entry.revision, conflict: entry.conflict })));
+        revision: entry.revision, conflict: entry.conflict, unsaved: entry.dirty && entry.failure !== null })));
     return this.summaries;
   }
   character(id: CharacterId): CharacterSummary | null { return this.list().find(summary => summary.id === id) ?? null; }
@@ -131,27 +141,49 @@ export class CharacterService implements CharactersPort {
     entry.unsubscribe = context.subscribe(() => this.persist(entry));
     return context;
   }
-  /** No scene shows the character any more: its context goes (its history stays for the session). Resolves once its writes settled. */
-  async release(id: CharacterId): Promise<void> {
+  /**
+   * No scene shows the character any more: its context goes (its history stays for the session), once the library holds its changes.
+   * False (and the context stays) when they couldn't be written: nothing unsaved is dropped.
+   */
+  async release(id: CharacterId): Promise<boolean> {
     const entry = this.entries.get(id);
-    if (!entry?.context) return;
-    await this.flush(id);
+    if (!entry?.context) return true;
+    if (!await this.settle(id)) return false;
+    this.drop(entry);
+    return true;
+  }
+  private drop(entry: Entry) {
     entry.unsubscribe?.();
-    entry.context.dispose();
+    entry.context?.dispose();
     entry.context = null; entry.unsubscribe = null;
   }
   /** Resolves once no write of the character (or of any, without `id`) is in flight or waiting. */
   async flush(id?: CharacterId): Promise<void> {
-    for (const entry of id ? [this.entries.get(id)].filter(Boolean) as Entry[] : [...this.entries.values()])
-      while (entry.writing) await entry.writing;
+    for (const entry of this.held(id)) while (entry.writing) await entry.writing;
   }
+  /**
+   * True once the library holds every change of the character (or of every one, without `id`): changes whose write failed are written
+   * again now. False when one still couldn't be written, or is in conflict.
+   */
+  async settle(id?: CharacterId): Promise<boolean> {
+    await this.flush(id);
+    for (const entry of this.held(id)) if (entry.dirty && entry.context && !entry.conflict) this.persist(entry);
+    await this.flush(id);
+    return this.held(id).every(entry => !entry.dirty);
+  }
+  private held(id?: CharacterId): Entry[] { return id ? [this.entries.get(id)].filter(Boolean) as Entry[] : [...this.entries.values()]; }
 
   /** A context changed: its document is written back, one write at a time, newest last. */
   private persist(entry: Entry) {
+    entry.dirty = true;
     if (entry.writing) { entry.again = true; return; }
     entry.writing = (async () => {
       try {
-        do { entry.again = false; await this.writeBack(entry); } while (entry.again && !entry.conflict);
+        do { entry.again = false; await this.writeBack(entry); } while (entry.again && !entry.conflict && !entry.failure);
+      } catch (error) {
+        // The changes stay unsaved and are written again on the next change or `settle`; the failure is reported.
+        entry.failure = (error as Error)?.message || "The V couldn't be saved.";
+        this.changed();
       } finally { entry.writing = null; }
     })();
   }
@@ -162,15 +194,22 @@ export class CharacterService implements CharactersPort {
     await Promise.resolve();
     const save = context.shownSave(), decoded = save ? await this.saveId(save) : null;
     const next = documentOfForm(entry.id, context.form(), context.shownBody(), decoded, entry.doc);
-    if (canonical(next) === canonical(entry.doc)) return;
+    if (canonical(next) === canonical(entry.doc)) { if (!entry.again) { entry.dirty = false; entry.failure = null; } return; }
     const writes: CommandWrite[] = [];
     if (decoded && save && !this.saves.has(decoded)) writes.push({ kind: SAVED_V_DOCUMENT, id: decoded, base: 0, value: save });
     writes.push({ kind: CHARACTER_DOCUMENT, id: entry.id, base: entry.revision, value: next });
     const answer = await this.deps.documents.commit({ id: commandId("character.update", this.deps.random), command: "character.update", writes });
-    if (!answer.ok) { entry.conflict = true; this.changed(); return; }
+    if (!answer.ok) {
+      if (answer.reason === "stale") entry.conflict = true;
+      else entry.failure = "This workspace is now open in another window, so this V's changes weren't saved here.";
+      this.changed();
+      return;
+    }
     if (decoded && save) this.saves.set(decoded, { revision: answer.revisions[commandKey(SAVED_V_DOCUMENT, decoded)] ?? 1, value: save });
     entry.revision = answer.revisions[commandKey(CHARACTER_DOCUMENT, entry.id)]!;
     entry.doc = next;
+    // Acknowledged: unsaved only if a newer change is waiting for its own write.
+    if (!entry.again) { entry.dirty = false; entry.failure = null; }
     this.changed();
   }
 
@@ -230,7 +269,7 @@ export class CharacterService implements CharactersPort {
       reason: answer.reason === "stale" ? "That profile changed since it was read." : "This workspace is now open in another window." };
     if (made.decoded) this.saves.set(made.decoded.id, { revision: answer.revisions[commandKey(SAVED_V_DOCUMENT, made.decoded.id)] ?? 1, value: made.decoded.value });
     const revision = answer.revisions[commandKey(CHARACTER_DOCUMENT, id)]!;
-    this.entries.set(id, { id, revision, doc, conflict: false, context: null, unsubscribe: null, writing: null, again: false });
+    this.entries.set(id, entryOf(id, revision, doc));
     this.made.set(id, this.order++);
     if (input.profile) membership?.committed(answer.revisions[commandKey("profile", input.profile.id)]!);
     this.changed();
@@ -251,24 +290,31 @@ export class CharacterService implements CharactersPort {
     if (!allowed.available) return failed(allowed);
     const entry = this.entries.get(command.character)!;
     if (entry.context) {
+      // Checked and applied in one turn: nothing lands between the base check and the change.
       entry.context.dispatch({ kind: "character.setSource", source: command.source });
-      await this.flush(entry.id);
-      return entry.conflict ? failed(refusal("stale", "That V changed in another window.")) : { ok: true, character: entry.id, revision: entry.revision };
+      if (!await this.settle(entry.id)) return failed(refusal(entry.conflict ? "stale" : "unavailable",
+        entry.conflict ? "That V changed in another window." : entry.failure ?? "The V couldn't be saved."));
+      return { ok: true, character: entry.id, revision: entry.revision };
     }
     const made = await this.sourced(command.source, { id: entry.id, prior: entry.doc! }, command.save);
     if (!("doc" in made)) return failed(made);
+    // Preparing (hashing a save) took a while: the V must still be as the command read it, and is written over that same base.
+    const still = this.live(command.character, command.base);
+    if (!("id" in still)) return failed(still);
+    if (still.context) return failed(refusal("stale", "That V changed since it was read."));
     const writes: CommandWrite[] = [];
     if (made.decoded && !this.saves.has(made.decoded.id)) writes.push({ kind: SAVED_V_DOCUMENT, id: made.decoded.id, base: 0, value: made.decoded.value });
-    return this.commitCharacter(entry, "character.setSource", made.doc, writes, made.decoded);
+    return this.commitCharacter(still, command.base, "character.setSource", made.doc, writes, made.decoded);
   }
   async rename(character: CharacterId, base: number, name: string): Promise<CharacterAnswer> {
     const entry = this.live(character, base);
     if (!("id" in entry)) return failed(entry);
     const trimmed = name.trim();
     if (!trimmed || trimmed.length > 80) return failed(refusal("invalid_value", "A V's name is 1 to 80 characters."));
-    await this.flush(character);
-    if (entry.revision !== base) return failed(refusal("stale", "That V changed since it was read."));
-    return this.commitCharacter(entry, "character.rename", { ...entry.doc!, name: trimmed }, []);
+    if (!await this.settle(character)) return failed(refusal("unavailable", "This V's other changes couldn't be saved first."));
+    const still = this.live(character, base);
+    if (!("id" in still)) return failed(still);
+    return this.commitCharacter(still, base, "character.rename", { ...still.doc!, name: trimmed }, []);
   }
   /**
    * Delete a character: a tombstone (restorable for 30 days, §1.4). The answer names the profiles that still list it; their references
@@ -278,9 +324,13 @@ export class CharacterService implements CharactersPort {
     const entry = this.live(character, base);
     if (!("id" in entry)) return failed(entry);
     const holding = this.deps.profiles?.holding(characterRef(character)) ?? [];
-    await this.release(character);
+    if (!await this.settle(character)) return failed(refusal("unavailable", "This V's changes couldn't be saved, so it wasn't deleted."));
+    // Its own changes are now in the library: the V must still be at the revision the command read.
+    const still = this.live(character, base);
+    if (!("id" in still)) return failed(still);
+    this.drop(still);
     const answer = await this.deps.documents.commit({ id: commandId("character.delete", this.deps.random), command: "character.delete",
-      writes: [{ kind: CHARACTER_DOCUMENT, id: character, base: entry.revision, tombstone: true, value: entry.doc }] });
+      writes: [{ kind: CHARACTER_DOCUMENT, id: character, base, tombstone: true, value: still.doc }] });
     if (!answer.ok) return failed(refusal(answer.reason === "stale" ? "stale" : "unavailable", "That V changed since it was read."));
     entry.revision = answer.revisions[commandKey(CHARACTER_DOCUMENT, character)]!;
     entry.doc = null;
@@ -288,9 +338,19 @@ export class CharacterService implements CharactersPort {
     this.changed();
     return { ok: true, character, revision: entry.revision, holding };
   }
-  private async commitCharacter(entry: Entry, command: string, doc: CharacterDocument, before: CommandWrite[], decoded?: { id: string; value: SavedV } | null): Promise<CharacterAnswer> {
-    const answer = await this.deps.documents.commit({ id: commandId(command, this.deps.random), command,
-      writes: [...before, { kind: CHARACTER_DOCUMENT, id: entry.id, base: entry.revision, value: doc }] });
+  /** One command over the character's document at the `base` its caller read and checked (never a later revision). */
+  private async commitCharacter(entry: Entry, base: number, command: string, doc: CharacterDocument, before: CommandWrite[], decoded?: { id: string; value: SavedV } | null): Promise<CharacterAnswer> {
+    const commit = this.deps.documents.commit({ id: commandId(command, this.deps.random), command,
+      writes: [...before, { kind: CHARACTER_DOCUMENT, id: entry.id, base, value: doc }] });
+    // The command holds the character's write queue: a context change meanwhile is written after it, over its revision.
+    const gate = commit.then(() => {}, () => {});
+    entry.writing = gate;
+    let answer: Awaited<typeof commit>;
+    try { answer = await commit; }
+    finally {
+      if (entry.writing === gate) entry.writing = null;
+      if (entry.again) { entry.again = false; queueMicrotask(() => this.persist(entry)); }
+    }
     if (!answer.ok) return failed(refusal(answer.reason === "stale" ? "stale" : "unavailable",
       answer.reason === "stale" ? "That V changed since it was read." : "This workspace is now open in another window."));
     if (decoded) this.saves.set(decoded.id, { revision: answer.revisions[commandKey(SAVED_V_DOCUMENT, decoded.id)] ?? 1, value: decoded.value });

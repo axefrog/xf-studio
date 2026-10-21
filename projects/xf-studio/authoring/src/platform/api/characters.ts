@@ -19,6 +19,8 @@ export type CharacterSummary = {
   readonly revision: number;
   /** It changed elsewhere since this page read it; nothing is written over that (phase 1c resolves it). */
   readonly conflict: boolean;
+  /** Changes made here aren't in the library yet because a write failed: they are kept and written again (`settle`). */
+  readonly unsaved: boolean;
 };
 export const characterRef = (id: string): SubjectRef => ({ kind: CHARACTER_KIND, id });
 
