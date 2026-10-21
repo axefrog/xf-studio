@@ -46,7 +46,7 @@ import type { CcoPart } from "./cco-model";
 import type { BodyGender } from "./cc-catalogue";
 import { type CcChoicePage, type CcChoiceSearch, type CcSwatches, type CcPanel, type CcPanelChoice, type CcPanelOption, CC_PAGE_SIZE, type CreatorNext, type CreatorState, type CreatorView } from "./cc-panel";
 import { type CcPreset, parseCcPreset, serializeCcPreset, serializeCcPresetEntry } from "./cc-preset";
-import { carryPreset, type CharacterChange, type CharacterChoice, characterChoiceOf, type CharacterContextAction, type MissingChoice,
+import { carryPreset, type CharacterChange, type CharacterChoice, type CharacterSourceChange, characterChoiceOf, type CharacterContextAction, type MissingChoice,
   type SavedDescriptors, savedDescriptorsOf, summariseMissing } from "./character-context";
 import { characterRequestOf, type CharacterRequest } from "./character-detail-request";
 import { CREATOR_LIMITS, isPresetName } from "./creator-names";
@@ -110,6 +110,13 @@ export type CharacterContextPorts = {
   requester?: string;
   /** Where the character's Undo history lives (the history service's `character:<id>`); default: a private one. */
   history?: CharacterHistoryHome;
+  /**
+   * The character's owner, when it has one (character-service.ts): every change of where the V comes from is sent to it as a command
+   * on the character's one queue, and the context shows it once committed (`reflectSource`); the context never changes its source by
+   * itself. `moved`: an Undo or Redo showed another source (applied at once, as history moves are), so older source commands still
+   * being prepared give way to it. Without an owner (a fixture, today's one V on workspace data), the context changes its source itself.
+   */
+  sources?: { change(change: CharacterSourceChange): void; moved(): void };
   /** Show a save's V on the head (its facial shape and body), or none for the default V: used when Undo returns to another V. */
   showSave(save: SavedV | null): void;
   /**
@@ -390,6 +397,8 @@ export class CharacterContextActions {
     this.cleared = [];
     this.apply(next);
     if (saveKey(previous.save?.value) !== saveKey(next.save?.value)) this.showSave(next.save?.value ?? null);
+    // Another source shown by Undo or Redo: the owner's older source commands give way to it.
+    if (previous.origin !== next.origin || previous.save !== next.save || previous.bodyGender !== next.bodyGender) this.ports.sources?.moved();
     return true;
   }
   /** Record one step of the character's history before `key` changes. */
@@ -892,6 +901,7 @@ export class CharacterContextActions {
         if (source.kind === "character.loadSave") {
           const value = source.value as SavedV;
           if (this.sameSave(value)) { this.ports.showSave(value); break; }
+          if (this.ports.sources) { this.ports.sources.change(action.source); break; }
           const save = this.saveOf(value);
           this.knownSave = saveKey(value);
           this.changeV("Load a save", { origin: { kind: "save" }, bodyGender: save.value.isMale ? "male" : "female", save, choices: [], kept: null, notCarried: [] }, action.kind, false);
@@ -927,15 +937,18 @@ export class CharacterContextActions {
       }
       case "character.resetAll": this.step("Reset every change", { ...this.state, choices: [] }, action.kind); break;
       case "character.useDefault":
+        if (this.ports.sources) { this.ports.sources.change({ kind: "default", bodyGender: action.bodyGender }); break; }
         this.changeV("Show the default V", { origin: { kind: "default" }, bodyGender: action.bodyGender, save: null, choices: [], kept: null, notCarried: [] }, action.kind);
         break;
       case "character.loadSave": {
+        if (this.ports.sources) { this.ports.sources.change({ kind: "save", value: action.value }); break; }
         const save = this.saveOf(action.value as SavedV);
         this.knownSave = saveKey(action.value as SavedV);
         this.changeV("Load a save", { origin: { kind: "save" }, bodyGender: save.value.isMale ? "male" : "female", save, choices: [], kept: null, notCarried: [] }, action.kind, false);
         break;
       }
       case "character.loadPreset": {
+        if (this.ports.sources) { this.ports.sources.change({ kind: "preset", value: action.value }); break; }
         const preset = this.preset(action.value) as CcPreset;
         const { choices, kept, notCarried } = presetLoad(preset);
         this.changeV(`Load ${preset.name ? `“${preset.name}”` : "a character preset"}`, { origin: { kind: "preset", name: preset.name },
@@ -1030,7 +1043,30 @@ export class CharacterContextActions {
     if (!save) return;
     let parsed: { value: SavedV; saved: SavedDescriptors };
     try { parsed = this.saveOf(save); } catch (error) { console.error(error); return; }
+    if (this.ports.sources) { this.ports.sources.change({ kind: "save", value: save }); return; }
     this.changeV("Load a save", { origin: { kind: "save" }, bodyGender: save.isMale ? "male" : "female", save: parsed, choices: [], kept: null, notCarried: [] }, "character.loadSave", false);
+  }
+
+  /**
+   * The owner committed a change of where the V comes from (`ports.sources`): the context shows it, as one step of its history (a save
+   * is applied on its scene too). Called on the character's queue, in order with its other commands and edits.
+   */
+  reflectSource(change: CharacterSourceChange): void {
+    const action = sourceAction(change);
+    if (!action || !this.capability(action).available) return;
+    if (action.kind === "character.useDefault") {
+      this.changeV("Show the default V", { origin: { kind: "default" }, bodyGender: action.bodyGender, save: null, choices: [], kept: null, notCarried: [] }, "character.setSource");
+    } else if (action.kind === "character.loadSave") {
+      const value = action.value as SavedV;
+      if (this.sameSave(value)) return;
+      const save = this.saveOf(value);
+      this.changeV("Load a save", { origin: { kind: "save" }, bodyGender: save.value.isMale ? "male" : "female", save, choices: [], kept: null, notCarried: [] }, "character.setSource");
+    } else {
+      const preset = this.preset(action.value) as CcPreset;
+      const { choices, kept, notCarried } = presetLoad(preset);
+      this.changeV(`Load ${preset.name ? `“${preset.name}”` : "a character preset"}`, { origin: { kind: "preset", name: preset.name },
+        bodyGender: preset.bodyGender, save: null, choices, kept, notCarried }, "character.setSource");
+    }
   }
 
   /** A portable preset of the choices set on this V (the host names each choice as this installation offers it). */

@@ -16,8 +16,11 @@
  * - **Commands name their base.** A base is current from the revision the last command left up to the newest (the character's own
  *   write-backs in between don't make it stale). A command checks it when asked, prepares (a save is hashed), checks again, and on the
  *   queue refuses if another command landed meanwhile (a rename, a delete): never undone.
- * - **A context follows its source.** A source change for a character whose context was opened meanwhile goes through that context
- *   (one Undo step), so its queued write-back never writes the earlier source over the command.
+ * - **One path for where a V comes from.** Every source change is a command on the character's queue, whether it is asked here
+ *   (`setSource`) or by the character's context (its source actions are sent here, `ports.sources`): it takes the character's next
+ *   source generation when asked, is prepared (a save hashed) meanwhile, and on the queue gives way to any newer source change, from
+ *   either route or from an Undo in the context. Once committed, the context shows it (`reflectSource`) at that same place on the
+ *   queue, so it never overwrites a later command or edit; the context never changes its source by itself.
  * - **Shared and per character.** Every context shares the page's creator catalogue (creator-catalogue.ts) and is its own requester
  *   (`<id>`, its panel instances `<id>/<instance>`); its Undo history is the history service's `character:<id>` scope.
  * - **Scenes.** A context is bound to the scene ports it was opened with (`showSave` applies a save on that scene's head); several
@@ -35,7 +38,7 @@ import { parseCcPreset, serializeCcPreset } from "./cc-preset";
 import { CharacterContextActions, type CharacterContextPorts, presetLoad } from "./character-context-actions";
 import { type CharacterSourceChange, savedDescriptorsOf } from "./character-context";
 import { closeCharacterHistory } from "./character-history";
-import { CHARACTER_DOCUMENT, CHARACTER_SCHEMA, type CharacterDocument, characterDocumentOf, type CharacterId, characterLabel, decodedSaveId,
+import { CHARACTER_DOCUMENT, CHARACTER_SCHEMA, type CharacterDocument, type CharacterSource, characterDocumentOf, type CharacterId, characterLabel, decodedSaveId,
   documentOfForm, newCharacterId, SAVED_V_DOCUMENT, type SaveReference, storedOfDocument } from "./character-document";
 import type { CreatorCatalogue } from "./creator-catalogue";
 import type { ProfileId, ProfileService, ProfileView } from "../app/profiles/profile-service";
@@ -71,6 +74,10 @@ type Entry = {
   queued: number;
   /** A write-back of the context's edits is queued and hasn't started (later edits join it). */
   writeQueued: boolean;
+  /** Raised by every source change asked for (either route) and by an Undo or Redo that shows another source: older ones give way. */
+  sourceGen: number;
+  /** Source changes being prepared (off the queue until they are). */
+  preparing: Set<Promise<unknown>>;
   /** The context holds changes the library doesn't have yet (set on every change, cleared once a write of them is acknowledged). */
   dirty: boolean;
   /** Why the last write-back failed, while its changes are unsaved. */
@@ -78,7 +85,7 @@ type Entry = {
 };
 const entryOf = (id: CharacterId, revision: number, doc: CharacterDocument | null): Entry =>
   ({ id, revision, doc, conflict: false, context: null, unsubscribe: null, commandRevision: revision, tail: Promise.resolve(), queued: 0,
-    writeQueued: false, dirty: false, failure: null });
+    writeQueued: false, sourceGen: 0, preparing: new Set(), dirty: false, failure: null });
 
 const canonical = (value: unknown): string => JSON.stringify(value, (_key, item) => item && typeof item === "object" && !Array.isArray(item)
   ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : item);
@@ -145,7 +152,14 @@ export class CharacterService implements CharactersPort {
     if (!("id" in entry)) throw Error(entry.reason);
     if (entry.context) return entry.context;
     const doc = entry.doc!, save = doc.source.kind === "save" ? this.saves.get(doc.source.decoded)?.value : undefined;
-    const context = new CharacterContextActions({ ...ports, catalogue: this.deps.catalogue, requester: id, history: { service: this.deps.history, id } },
+    // Its source actions are commands here; a failed one is reported, a superseded one gave way to a newer change.
+    const sources = {
+      change: (change: CharacterSourceChange) => void this.requestSource(entry, change, {}).then(answer => {
+        if (!answer.ok && answer.code !== "stale") { entry.failure = answer.reason; this.changed(); }
+      }),
+      moved: () => { entry.sourceGen++; },
+    };
+    const context = new CharacterContextActions({ ...ports, catalogue: this.deps.catalogue, requester: id, history: { service: this.deps.history, id }, sources },
       { stored: storedOfDocument(doc), ...(save ? { save } : {}) });
     entry.context = context;
     entry.unsubscribe = context.subscribe(() => this.persist(entry));
@@ -171,19 +185,24 @@ export class CharacterService implements CharactersPort {
     entry.context?.dispose();
     entry.context = null; entry.unsubscribe = null;
   }
-  /** Resolves once the character's queue (or every character's, without `id`) is empty. */
+  /** Resolves once the character's queue (or every character's, without `id`) is empty and no source change is being prepared. */
   async flush(id?: CharacterId): Promise<void> {
-    for (const entry of this.held(id)) while (entry.queued) await entry.tail;
+    for (const entry of this.held(id))
+      while (entry.queued || entry.preparing.size) await Promise.all([entry.tail, ...[...entry.preparing].map(work => work.then(() => {}, () => {}))]);
   }
   /**
    * True once the library holds every change of the character (or of every one, without `id`): changes whose write failed are written
    * again now. False when one still couldn't be written, or is in conflict.
    */
   async settle(id?: CharacterId): Promise<boolean> {
-    await this.flush(id);
+    await this.drain(id);
     for (const entry of this.held(id)) if (entry.dirty && entry.context && !entry.conflict) this.persist(entry);
-    await this.flush(id);
+    await this.drain(id);
     return this.held(id).every(entry => !entry.dirty);
+  }
+  /** Resolves once the character's queue is empty (a source change still being prepared isn't waited for: it is checked on the queue). */
+  private async drain(id?: CharacterId): Promise<void> {
+    for (const entry of this.held(id)) while (entry.queued) await entry.tail;
   }
   private held(id?: CharacterId): Entry[] { return id ? [this.entries.get(id)].filter(Boolean) as Entry[] : [...this.entries.values()]; }
 
@@ -241,29 +260,24 @@ export class CharacterService implements CharactersPort {
   // -------------------------------------------------------------------------------------------------------------
   // Commands
 
-  /** A document's source and choices for `source` (a new V clears the choices made on the previous one), and its decoded save. */
-  private async sourced(source: CharacterSourceChange, base: { id: CharacterId; prior?: CharacterDocument }, save?: SaveReference):
-    Promise<{ doc: CharacterDocument; decoded: { id: string; value: SavedV } | null } | Capability> {
-    const keep = base.prior ? (({ clothing, ownMakeup, name, voice }) => ({ ...(clothing ? { clothing } : {}), ...(ownMakeup ? { ownMakeup } : {}),
-      ...(name ? { name } : {}), ...(voice ? { voice } : {}) }))(base.prior) : {};
-    const doc = (body: BodyGender, rest: Pick<CharacterDocument, "source" | "choices">): CharacterDocument =>
-      ({ ...keep, schema: CHARACTER_SCHEMA, id: base.id, body, ...rest });
-    if (source.kind === "default") {
+  /** What a source change sets on a document (a new V clears the choices made on the previous one), and its decoded save. */
+  private async prepareSource(source: CharacterSourceChange, save?: SaveReference):
+    Promise<{ body: BodyGender; source: CharacterSource; choices: CharacterDocument["choices"]; decoded: { id: string; value: SavedV } | null } | Capability> {
+    if (source?.kind === "default") {
       if (source.bodyGender !== "female" && source.bodyGender !== "male") return refusal("invalid_value", "A V's body is feminine or masculine.");
-      return { doc: doc(source.bodyGender, { source: { kind: "default" }, choices: [] }), decoded: null };
+      return { body: source.bodyGender, source: { kind: "default" }, choices: [], decoded: null };
     }
-    if (source.kind === "save") {
+    if (source?.kind === "save") {
       let value: SavedV;
       try { value = parseSavedV(source.value); savedDescriptorsOf(value); } catch (error) { return refusal("invalid_value", (error as Error).message); }
       const id = await this.saveId(value);
-      return { doc: doc(value.isMale ? "male" : "female", { source: { kind: "save", decoded: id, ...(save ? { save } : {}) }, choices: [] }),
+      return { body: value.isMale ? "male" : "female", source: { kind: "save", decoded: id, ...(save ? { save } : {}) }, choices: [],
         decoded: { id, value: this.saves.get(id)?.value ?? value } };
     }
-    if (source.kind === "preset") {
+    if (source?.kind === "preset") {
       let loaded: ReturnType<typeof presetLoad>, name: string | null;
       try { const preset = parseCcPreset(source.value); loaded = presetLoad(preset); name = preset.name; } catch (error) { return refusal("invalid_value", (error as Error).message); }
-      return { doc: doc(loaded.kept.bodyGender, { source: { kind: "preset", ...(name ? { name } : {}), kept: serializeCcPreset(loaded.kept) },
-        choices: loaded.choices }), decoded: null };
+      return { body: loaded.kept.bodyGender, source: { kind: "preset", ...(name ? { name } : {}), kept: serializeCcPreset(loaded.kept) }, choices: loaded.choices, decoded: null };
     }
     return refusal("invalid_value", "That isn't somewhere a V can come from.");
   }
@@ -274,10 +288,11 @@ export class CharacterService implements CharactersPort {
    */
   async create(input: { source?: CharacterSourceChange; name?: string; save?: SaveReference; profile?: { id: ProfileId; base: number } } = {}): Promise<CharacterAnswer> {
     const id = newCharacterId(this.deps.random);
-    const made = await this.sourced(input.source ?? { kind: "default", bodyGender: "female" }, { id }, input.save);
-    if (!("doc" in made)) return failed(made);
+    const made = await this.prepareSource(input.source ?? { kind: "default", bodyGender: "female" }, input.save);
+    if (!("source" in made)) return failed(made);
     const name = input.name?.trim();
-    const doc: CharacterDocument = name && name.length <= 80 ? { ...made.doc, name } : made.doc;
+    const doc: CharacterDocument = { schema: CHARACTER_SCHEMA, id, ...(name && name.length <= 80 ? { name } : {}), body: made.body, source: made.source,
+      choices: made.choices };
     const writes: CommandWrite[] = [];
     if (made.decoded && !this.saves.has(made.decoded.id)) writes.push({ kind: SAVED_V_DOCUMENT, id: made.decoded.id, base: 0, value: made.decoded.value });
     writes.push({ kind: CHARACTER_DOCUMENT, id, base: 0, value: doc });
@@ -307,47 +322,43 @@ export class CharacterService implements CharactersPort {
     return entry.context ? entry.context.capability({ kind: "character.setSource", source: command.source }) : { available: true };
   }
   /**
-   * Where the V comes from (`character.setSource`, replacing `savedV.*`). A character a scene shows changes through its context (one
-   * Undo step, the save applied on that scene) and is written back; one no scene shows is written at once.
+   * Where the V comes from (`character.setSource`, replacing `savedV.*`): a source command on the character's queue (see the header),
+   * checked against the base the caller read. Refused as `stale` when another command landed since, or a newer source change replaced it.
    */
   async setSource(command: SetSourceCommand): Promise<CharacterAnswer> {
     const allowed = this.capability(command);
     if (!allowed.available) return failed(allowed);
     const entry = this.entries.get(command.character)!;
-    const viaContext = async (): Promise<CharacterAnswer> => {
-      if (!await this.settle(entry.id)) return failed(refusal(entry.conflict ? "stale" : "unavailable",
-        entry.conflict ? "That V changed in another window." : entry.failure ?? "The V couldn't be saved."));
-      return { ok: true, character: entry.id, revision: entry.revision };
-    };
-    if (entry.context) {
-      // Checked and applied in one turn: nothing lands between the base check and the change.
-      entry.context.dispatch({ kind: "character.setSource", source: command.source });
-      return viaContext();
-    }
-    const issued = entry.commandRevision;
-    const made = await this.sourced(command.source, { id: entry.id, prior: entry.doc! }, command.save);
-    if (!("doc" in made)) return failed(made);
-    // Preparing (hashing a save) took a while: the V must still be as the command read it.
-    const still = this.live(command.character, command.base);
-    if (!("id" in still)) return failed(still);
-    const answer = await this.enqueue(entry, async (): Promise<CharacterAnswer | "context"> => {
-      const now = this.stillAsAsked(entry, issued);
-      if (!now.available) return failed(now);
-      // A context opened meanwhile shows the V: the change goes through it, so its write-back carries the new source.
-      if (entry.context) { this.follow(entry, command.source); return "context"; }
+    return this.requestSource(entry, command.source, { issued: entry.commandRevision, ...(command.save ? { save: command.save } : {}) });
+  }
+  /**
+   * The one path of a source change: it takes the next source generation now, is prepared meanwhile, and on the queue gives way to any
+   * newer one; once committed, the context shows it there, in order. `issued`: the command revision a caller's base was checked at.
+   */
+  private async requestSource(entry: Entry, change: CharacterSourceChange, options: { issued?: number; save?: SaveReference }): Promise<CharacterAnswer> {
+    const generation = ++entry.sourceGen;
+    // Prepared off the queue (a save hashed), so edits and other commands don't wait for it; `flush` waits for it too.
+    const prepared = this.prepareSource(change, options.save);
+    entry.preparing.add(prepared);
+    let made: Awaited<typeof prepared>;
+    try { made = await prepared; } finally { entry.preparing.delete(prepared); }
+    return this.enqueue(entry, async () => {
+      if (generation !== entry.sourceGen) return failed(refusal("stale", "A newer change of where this V comes from replaced this one."));
+      if (!("source" in made)) return failed(made);
+      if (!entry.doc) return failed(refusal("missing_target", "That V doesn't exist any more."));
+      if (options.issued !== undefined) { const now = this.stillAsAsked(entry, options.issued); if (!now.available) return failed(now); }
+      // The save the V already comes from: nothing changes (its choices stay).
+      if (made.source.kind === "save" && entry.doc.source.kind === "save" && entry.doc.source.decoded === made.source.decoded)
+        return { ok: true, character: entry.id, revision: entry.revision };
+      const doc: CharacterDocument = { ...entry.doc, body: made.body, source: made.source, choices: made.choices };
       const writes: CommandWrite[] = [];
       if (made.decoded && !this.saves.has(made.decoded.id)) writes.push({ kind: SAVED_V_DOCUMENT, id: made.decoded.id, base: 0, value: made.decoded.value });
-      const done = await this.commitCharacter(entry, "character.setSource", made.doc, writes, made.decoded);
-      // A context opened while the command was being written started from the earlier source: it follows the new one first.
-      if (done.ok && entry.context) this.follow(entry, command.source);
+      const done = await this.commitCharacter(entry, "character.setSource", doc, writes, made.decoded);
+      // The context shows the committed source here, in queue order, unless a newer source change was asked for meanwhile.
+      if (done.ok && entry.context && generation === entry.sourceGen)
+        entry.context.reflectSource(made.decoded ? { kind: "save", value: made.decoded.value } : change);
       return done;
     });
-    return answer === "context" ? viaContext() : answer;
-  }
-  /** The context shows the character's new source (one Undo step), so what it writes back carries it. */
-  private follow(entry: Entry, source: CharacterSourceChange) {
-    const context = entry.context!, action = { kind: "character.setSource" as const, source };
-    if (context.capability(action).available) context.dispatch(action);
   }
   async rename(character: CharacterId, base: number, name: string): Promise<CharacterAnswer> {
     const entry = this.live(character, base);

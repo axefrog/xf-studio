@@ -336,6 +336,8 @@ describe("three characters of two bodies at once (profiles design §7)", () => {
       .toMatchObject({ ok: true, revision: 2 });
     // The save comes back through the context (the alias path: `savedV.*` shows it on the scene, the context follows).
     context.dispatch({ kind: "character.setSource", source: { kind: "save", value: save } });
+    // The context sends it as a command on the character's queue and shows it once committed.
+    await w.characters.flush();
     expect(shown.at(-1)).toEqual(save);
     context.dispatch({ kind: "character.undo" });
     expect(context.snapshot()).toMatchObject({ origin: { kind: "default" }, bodyGender: "male" });
@@ -587,6 +589,50 @@ describe("review fixes, second round (chunk 1b)", () => {
     frames.shift()!({ bitmap: { close: () => { closed++; } } });
     expect(await own).toBe("drawn");
     expect(closed).toBe(1);
+  });
+});
+
+describe("review fixes, third round: one path for source changes (chunk 1b)", () => {
+  test("a save paused while hashing gives way to a masculine source chosen meanwhile through the context", async () => {
+    const w = await world();
+    const made = await w.characters.create(), id = made.ok ? made.character : "";
+    const context = w.characters.context(id, { showSave: () => {} });
+    context.start(); await settle(); await w.characters.flush();
+    const digest = crypto.subtle.digest.bind(crypto.subtle);
+    let open!: () => void;
+    const gate = new Promise<void>(resolve => { open = resolve; });
+    const spy = spyOn(crypto.subtle, "digest").mockImplementation((async (...args: Parameters<typeof digest>) => { await gate; return digest(...args); }) as never);
+    let saving: Promise<unknown>;
+    try {
+      saving = w.characters.setSource({ kind: "character.setSource", character: id, base: 1,
+        source: { kind: "save", value: saveFor(descriptorsFromUiState(w.host.source.cco, { eyes_color: "he__02_blue" })) } });
+      context.dispatch({ kind: "character.useDefault", bodyGender: "male" });
+      await until(() => w.characters.document(id)!.body === "male");
+      open();
+      expect(await saving).toMatchObject({ ok: false, code: "stale" });
+    } finally { spy.mockRestore(); }
+    await w.characters.flush();
+    expect(w.characters.document(id)).toMatchObject({ body: "male", source: { kind: "default" } });
+    expect(context.snapshot()).toMatchObject({ origin: { kind: "default" }, bodyGender: "male" });
+    expect((await w.documents.list<{ body: string }>(CHARACTER_DOCUMENT))[0]!.value.body).toBe("male");
+  });
+
+  test("a source held while committing never replaces a newer one asked through the context: the context shows the newer one", async () => {
+    const w = await world(), gate = holding(w.documents, "character.setSource");
+    const characters = new CharacterService({ documents: gate.port, catalogue: w.catalogue, history: w.history });
+    const made = await characters.create(), id = made.ok ? made.character : "";
+    const context = characters.context(id, { showSave: () => {} });
+    context.start(); await settle(); await characters.flush();
+    const save = saveFor(descriptorsFromUiState(w.host.source.cco, { eyes_color: "he__02_blue" }));
+    const first = characters.setSource({ kind: "character.setSource", character: id, base: 1, source: { kind: "save", value: save } });
+    await until(gate.held);
+    context.dispatch({ kind: "character.useDefault", bodyGender: "male" });
+    gate.open();
+    await first;
+    await characters.flush();
+    expect(characters.document(id)).toMatchObject({ body: "male", source: { kind: "default" } });
+    expect(context.snapshot()).toMatchObject({ origin: { kind: "default" }, bodyGender: "male" });
+    expect((await w.documents.list<{ source: { kind: string } }>(CHARACTER_DOCUMENT))[0]!.value.source.kind).toBe("default");
   });
 });
 

@@ -9,7 +9,8 @@
  *   (`requestFor`).
  * - **Admitted fairly.** At most `PREFETCH_REQUESTERS` jobs run at once; a requester beyond them waits its turn, nothing is cancelled for
  *   it. Between completed units (a check or a batch), a running job whose requesters are waiting yields its place to the longest waiting
- *   one and joins the end of the line, keeping everything it has done.
+ *   one and joins the end of the line, keeping everything it has done. A place belongs to the job itself, not its requester: the end of a
+ *   cancelled job's loop never touches the place of the job that replaced it.
  * - **States** per choice, as one compact string (one character each, `ChoiceFetchState`): not known yet, not prepared, queued, being
  *   prepared, ready, or failed. A choice whose manifest holds (choice-manifest.ts) is ready at once, in this session or a later one;
  *   the rest are queued in the panel's order.
@@ -147,9 +148,9 @@ function untilStopped<T>(work: Promise<T>, context: JobContext): Promise<T> {
 export class ChoicePrefetcher {
   /** Each requester's job, the one asked about least recently first. */
   private jobs = new Map<string, Job>();
-  /** The requesters whose jobs may run now, and those waiting their turn (longest waiting first). */
-  private readonly admitted = new Set<string>();
-  private waiting: string[] = [];
+  /** The jobs that may run now, and those waiting their turn (longest waiting first): each place is held by the job itself. */
+  private readonly admitted = new Set<Job>();
+  private waiting: Job[] = [];
   /** Prepared-file bytes when this session's first prefetch began, and whether the session's byte budget is spent. */
   private startBytes: number | null = null;
   private spent = false;
@@ -158,7 +159,8 @@ export class ChoicePrefetcher {
   /** The batch being prepared now (its run started and hasn't returned), as a promise that never rejects: what `idle` waits for. */
   private inflight: Promise<void> | null = null;
   private serial = 0;
-  readonly stats = { batches: 0, warmed: 0, cancelled: 0, failed: 0, unpolled: 0 };
+  /** `peak`: most jobs running at once (their loops, among the jobs held). */
+  readonly stats = { batches: 0, warmed: 0, cancelled: 0, failed: 0, unpolled: 0, peak: 0 };
 
   constructor(private readonly deps: PrefetchDeps, private readonly limits: PrefetchLimits = PREFETCH_LIMITS) {}
   private now() { return this.deps.now?.() ?? Date.now(); }
@@ -214,15 +216,18 @@ export class ChoicePrefetcher {
     job.current = null;
     this.jobs.delete(requester);
     this.stats.cancelled++;
-    this.vacate(requester);
+    this.vacate(job);
   }
-  /** A requester's job doesn't run any more: its place goes to the longest waiting job with work. */
-  private vacate(requester: string): void {
-    this.admitted.delete(requester);
-    this.waiting = this.waiting.filter(name => name !== requester);
+  /** A job doesn't run any more: its place (its own, never its replacement's) goes to the longest waiting job with work. */
+  private vacate(job: Job): void {
+    this.admitted.delete(job);
+    this.waiting = this.waiting.filter(other => other !== job);
+    this.admitNext();
+  }
+  private admitNext(): void {
     while (this.admitted.size < PREFETCH_REQUESTERS && this.waiting.length) {
-      const next = this.jobs.get(this.waiting.shift()!);
-      if (next && !next.running && !next.stopped && this.hasWork(next)) this.start(next);
+      const next = this.waiting.shift()!;
+      if (this.jobs.get(next.requester) === next && !next.running && !next.stopped && this.hasWork(next)) this.start(next);
     }
   }
   private hasWork(job: Job) { return [...job.items.values()].some(item => item.state === "?" || item.state === "q"); }
@@ -235,7 +240,7 @@ export class ChoicePrefetcher {
       for (const item of job.items.values()) if (item.state === "q" || item.state === "?") item.state = "n";
       if (job.current === "batch") this.deps.jobs.release(this.wantName(job.requester));
     }
-    for (const name of [...this.admitted]) if (!this.jobs.get(name)?.running) this.vacate(name);
+    for (const job of [...this.admitted]) if (!job.running) this.vacate(job);
   }
 
   /**
@@ -297,9 +302,10 @@ export class ChoicePrefetcher {
   /** Start a job's loop once it has a place (otherwise it waits its turn). The loop catches its own failures (PREV-101); this catch is the last resort. */
   private start(job: Job): void {
     if (!job.lease) this.startLease(job);
-    if (!this.admitted.has(job.requester)) {
-      if (this.admitted.size >= PREFETCH_REQUESTERS) { if (!this.waiting.includes(job.requester)) this.waiting.push(job.requester); return; }
-      this.admitted.add(job.requester);
+    if (job.running) return;
+    if (!this.admitted.has(job)) {
+      if (this.admitted.size >= PREFETCH_REQUESTERS) { if (!this.waiting.includes(job)) this.waiting.push(job); return; }
+      this.admitted.add(job);
     }
     this.run(job).catch(error => this.fail(job, error));
   }
@@ -384,6 +390,7 @@ export class ChoicePrefetcher {
 
   private async run(job: Job): Promise<void> {
     job.running = true;
+    this.stats.peak = Math.max(this.stats.peak, [...this.jobs.values()].filter(other => other.running).length);
     const live = () => this.live(job);
     let units = 0, yielded = false;
     try {
@@ -391,8 +398,8 @@ export class ChoicePrefetcher {
         // Between completed units: a waiting requester takes this job's place, and this one waits its turn again with what it has done.
         if (units && this.waiting.length) {
           yielded = true;
-          this.admitted.delete(job.requester);
-          this.waiting.push(job.requester);
+          this.admitted.delete(job);
+          this.waiting.push(job);
           return;
         }
         const unknown = this.queued(job, "?").slice(0, 64);
@@ -456,11 +463,9 @@ export class ChoicePrefetcher {
       this.fail(job, error);
     } finally {
       job.running = false;
-      if (yielded) {
-        // Its place went to the longest waiting job.
-        this.vacate(job.requester);
-        if (!this.admitted.has(job.requester) && !this.waiting.includes(job.requester)) this.waiting.push(job.requester);
-      } else if (this.admitted.has(job.requester) && (job.stopped || !this.hasWork(job) || this.jobs.get(job.requester) !== job)) this.vacate(job.requester);
+      // Its place goes to the longest waiting job (it yielded and waits again, or is done). A cancelled job's place went at its cancel.
+      if (yielded) this.admitNext();
+      else if (this.admitted.has(job) && (job.stopped || !this.hasWork(job) || this.jobs.get(job.requester) !== job)) this.vacate(job);
       // Nothing left to do: the lease has nothing to guard until the job starts again.
       if (this.jobs.get(job.requester) === job && (job.stopped || ![...job.items.values()].some(item => item.state === "?" || item.state === "q"))) this.endLease(job);
     }

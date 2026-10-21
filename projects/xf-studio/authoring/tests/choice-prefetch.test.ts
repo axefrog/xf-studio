@@ -226,6 +226,26 @@ describe("preparing a row's choices ahead", () => {
     expect(warmed).toHaveLength(27);
   });
 
+  test("a cancelled and recreated requester keeps its new place: the old job's end never frees it, and at most 8 jobs ever run", async () => {
+    const { service } = prefetcher({ limits: { batch: 1, maxBatch: 1 },
+      warm: async requests => { await sleep(10); return requests.map(() => ({ ready: true })); } });
+    const poll = (requester: string) => service.update({ base: DEFAULT_CHARACTER, option: "head/hair", positions: [0, 1, 2, 3], requester });
+    const eight = Array.from({ length: 8 }, (_, index) => `c-${index}/panel`);
+    for (const requester of eight) poll(requester);
+    await sleep(15);
+    service.cancel("c-3/panel");
+    poll("c-3/panel");
+    poll("c-8/panel");
+    const all = [...eight, "c-8/panel"], end = Date.now() + 8000;
+    while (!all.every(requester => poll(requester).states === "rrrr")) {
+      if (Date.now() > end) throw Error("Timed out.");
+      expect(service.stats.peak).toBeLessThanOrEqual(8);
+      await sleep(2);
+    }
+    expect(service.stats.peak).toBe(8);
+    expect(service.stats.cancelled).toBe(1);
+  });
+
   test("the session's byte budget, spent by one requester's batch, stops every job before its next batch", async () => {
     let bytes = 0;
     const { service, warmed } = prefetcher({ limits: { batch: 1, maxBatch: 1, bytes: 50 }, bytes: () => bytes,
