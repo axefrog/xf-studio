@@ -6,6 +6,7 @@ import { createPackageHandler, LOCAL_BUILD_REASONS, localBuildIssue, localEyePla
   type PackageTools } from "../src/package-server";
 import type { BuilderRun, HostPrerequisite, PackageHostAdapter } from "../src/platform/export/product-host";
 import type { PackageCheckResult } from "../src/platform/api";
+import { USER_FACING_JARGON } from "../src/alpha-availability";
 import { STUDIO_EXPORTERS } from "../src/compose/exporters";
 import { EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
 import { LocalSettingsStore } from "../src/local-settings-store";
@@ -152,7 +153,8 @@ test("PIPE-134: Build's setup reasons are plain, with one next step, and never n
     expect(localBuildIssue(tools({}))).toBeNull();
     for (const reason of Object.values(LOCAL_BUILD_REASONS)) {
       expect(reason).not.toMatch(/\bbun\b|tools\/|\.ts\b|XFS_|override|Game input|configured|unavailable/i);
-      expect(reason).toMatch(/Settings › (Game|Tools)|launcher/);
+      expect(reason).toMatch(/Settings › (Game|Tools)|launcher|Restart XF Studio/);
+      expect(reason).not.toMatch(USER_FACING_JARGON);
     }
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });

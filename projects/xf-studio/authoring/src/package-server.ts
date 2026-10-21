@@ -101,6 +101,8 @@ export const LOCAL_BUILD_REASONS = Object.freeze({
   gameMissing: "XF Studio can't find your Cyberpunk 2077 folder. Choose it again in Settings › Game, then build again.",
   gameExecutableMissing: "That folder isn't your Cyberpunk 2077 folder (it has no bin\\x64\\Cyberpunk2077.exe). Choose the folder the game is installed in, in Settings › Game.",
   gameArchivesMissing: "Your Cyberpunk 2077 folder is missing its archive\\pc folder. Repair the game in its launcher, then build again.",
+  /** Only a developer's runner override can name a runner that isn't there. */
+  builderMissing: "XF Studio's build helper is missing. Restart XF Studio; if it keeps happening, reinstall XF Studio.",
 });
 export function localBuildIssue(tools: PackageTools): string | null {
   const is = (path: string, kind: "file" | "directory") => {
@@ -115,7 +117,7 @@ export function localBuildIssue(tools: PackageTools): string | null {
   if (tools.bun.includes("/") || tools.bun.includes("\\")) { // A bare host PATH command is checked by spawn.
     let valid = false;
     try { valid = statSync(tools.bun).isFile(); } catch { /* Missing executable. */ }
-    if (!valid) return "XF Studio's build helper is missing. Restart XF Studio; if it keeps happening, reinstall it.";
+    if (!valid) return LOCAL_BUILD_REASONS.builderMissing;
   }
   return null;
 }
