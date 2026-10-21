@@ -160,3 +160,27 @@ test("floats read as the reference JSON prints them: 9 significant digits, ties 
   expect(float32Value(NaN)).toBeNull();
   expect(cr2wRoot(json(materialInstance())).root.$type).toBe("CMaterialInstance");
 });
+
+test("a property or package field named __proto__, constructor or prototype stays an ordinary key, never the object's prototype", () => {
+  // A resource's names come from its own name table: anyone's mod can write these.
+  const names = ["entEntity", "entHardTransformBinding", "__proto__", "handle:entITransformBinding", "bindName", "CName", "root"];
+  const n = (value: string) => names.indexOf(value);
+  const compiled = buildPackage({ names, refs: [], cruids: [0n], rootIndex: 0, objects: [
+    { type: "entEntity", fields: [{ name: "__proto__", type: "handle:entITransformBinding", write: w => { w.i32(1); } }] },
+    { type: "entHardTransformBinding", fields: [{ name: "bindName", type: "CName", write: w => { w.u16(n("root")); } }] },
+  ] });
+  const file = new Cr2wBuilder();
+  const buffer = file.buffer(compiled);
+  file.export("entEntityTemplate", [prop("compiledData", "DataBuffer", v.buffer(buffer)),
+    prop("__proto__", "Color", v.struct([prop("Red", "Uint8", v.u8(7))])), prop("constructor", "Bool", v.bool(true)), prop("prototype", "Bool", v.bool(true))]);
+  const root = json(file.build()).Data.RootChunk;
+  expect(Object.getPrototypeOf(root)).toBe(Object.prototype);
+  expect(Object.hasOwn(root, "__proto__")).toBe(true);
+  expect(Object.getOwnPropertyDescriptor(root, "__proto__")!.value).toMatchObject({ $type: "Color", Red: 7 });
+  expect([root.constructor, root.prototype]).toEqual([1, 1]);
+  expect(root.Red).toBeUndefined();
+  const entity = root.compiledData.Data.Chunks[0];
+  expect(Object.getPrototypeOf(entity)).toBe(Object.prototype);
+  expect(Object.getOwnPropertyDescriptor(entity, "__proto__")!.value).toMatchObject({ Data: { $type: "entHardTransformBinding" } });
+  expect(({} as Record<string, unknown>).Red).toBeUndefined();
+});

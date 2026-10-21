@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { refFromPath } from "../src/game/depot-path";
-import { COMMAND_LINE_LIMIT, commandLineArgumentLength, MAX_PATTERN_CHARS, NOT_WRITTEN_RUNS, reportResources, ResolverFetcher, uncookPatterns, withoutArchiveFileName,
+import { COMMAND_LINE_LIMIT, commandLineArgumentLength, MAX_PATTERN_CHARS, NOT_WRITTEN_RUNS, reportResources, ResolverFetcher, trimBuffers, uncookPatterns, withoutArchiveFileName,
   WolvenKitFetcher } from "../src/game/host/resolver-host";
 import { cr2w } from "./resolver-fixtures";
 
@@ -173,4 +173,11 @@ describe("a problem report's resources (DIAG-08)", () => {
     // The cache is asked only for the winning archive's answer, and only when the native reader had none.
     expect(cachedFor).toEqual([`winner.archive:${refFromPath("mod\cached.mesh").hash}`, `winner.archive:${refFromPath("mod\neither.mi").hash}`]);
   });
+});
+
+test("trimming a cached document keeps a __proto__ key as data, never as the copy's prototype", () => {
+  const trimmed = trimBuffers(JSON.parse('{"a":{"__proto__":{"Bytes":"AAAA","polluted":1}}}')) as { a: Record<string, unknown> };
+  expect(Object.getPrototypeOf(trimmed.a)).toBe(Object.prototype);
+  expect(Object.getOwnPropertyDescriptor(trimmed.a, "__proto__")!.value).toEqual({ Bytes: { $trimmedBase64Length: 4 }, polluted: 1 });
+  expect(trimmed.a.polluted).toBeUndefined();
 });

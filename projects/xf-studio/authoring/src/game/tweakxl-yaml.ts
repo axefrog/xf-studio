@@ -12,6 +12,8 @@
  * Aliases share nodes, so converting a tree (`toPlain`) spends a `YamlBudget` rather than expand them without limit (PIPE-139).
  */
 
+import { setOwn } from "../platform/api/own-property";
+
 export type YamlNode =
   | { readonly kind: "scalar"; readonly text: string; readonly tag: string | null; readonly style: "plain" | "single" | "double" | "block" }
   | { readonly kind: "seq"; readonly items: readonly YamlNode[]; readonly tag: string | null }
@@ -479,7 +481,8 @@ export class YamlBudget {
 
 /**
  * Plain JavaScript values: every scalar as its text (an empty or `null` plain scalar as null), sequences as arrays, mappings as objects
- * (for a key given twice, the later value, which is what a later assignment in TweakXL leaves). Tags are dropped. Bounded by `budget`
+ * (for a key given twice, the later value, which is what a later assignment in TweakXL leaves; every key, `__proto__` included, an
+ * ordinary own key: platform/api/own-property.ts). Tags are dropped. Bounded by `budget`
  * (by default a fresh one): throws `YamlTooLarge` rather than expand aliases without limit.
  */
 export function toPlain(node: YamlNode | null, budget: YamlBudget = new YamlBudget()): unknown {
@@ -488,6 +491,7 @@ export function toPlain(node: YamlNode | null, budget: YamlBudget = new YamlBudg
   budget.spend();
   if (node.kind === "seq") return node.items.map(item => toPlain(item, budget));
   const out: Record<string, unknown> = {};
-  for (const [key, value] of node.entries) { budget.spend(key.length); out[key] = toPlain(value, budget); }
+  // A key such as `__proto__` stays an ordinary key, never the object's prototype.
+  for (const [key, value] of node.entries) { budget.spend(key.length); setOwn(out, key, toPlain(value, budget)); }
   return out;
 }

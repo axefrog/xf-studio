@@ -329,3 +329,10 @@ test("the ZIP writer's CRC and layout", () => {
   expect([...files.get("c.bin")!]).toEqual([1, 2, 3]);
   expect(() => zip([{ name: "../x", data: "" }])).toThrow();
 });
+
+test("a bounded copy keeps a __proto__ key as data, never as the copy's prototype", () => {
+  const copy = boundJson(JSON.parse('{"__proto__":{"polluted":1},"constructor":"c"}')) as Record<string, unknown>;
+  expect(Object.getPrototypeOf(copy)).toBe(Object.prototype);
+  expect(Object.getOwnPropertyDescriptor(copy, "__proto__")!.value).toEqual({ polluted: 1 });
+  expect([copy.polluted, copy.constructor]).toEqual([undefined, "c"]);
+});

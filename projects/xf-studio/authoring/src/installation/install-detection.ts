@@ -3,6 +3,7 @@
  * everything here is parsing and policy, testable with synthetic fixtures. Detection is
  * read-only: it never launches the game or MO2, and never writes to either.
  */
+import { setOwn } from "../platform/api/own-property";
 import { basename, dirname, join, resolve } from "node:path";
 import { describeMo2Instance, parseNxmHandlerIni, type Mo2InstanceDescription } from "./mo2-instance";
 import { EYE_MAKEUP_MOD } from "../legacy/eye-makeup/mod-branding";
@@ -133,7 +134,7 @@ export function parseVdf(text: string): VdfNode {
       if (name === null || name === "}") return node;
       const value = token();
       if (value === null) return node;
-      node[name] = value === "{" ? object() : value;
+      setOwn(node, name, value === "{" ? object() : value);
     }
   };
   return object();

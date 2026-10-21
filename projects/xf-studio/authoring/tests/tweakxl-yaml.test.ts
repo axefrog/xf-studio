@@ -39,6 +39,18 @@ describe("the TweakXL YAML reader", () => {
     expect(() => toPlain(mapGet(doc, "a3")!, new YamlBudget(10, 1000))).toThrow(YamlTooLarge);
   });
 
+  test("a key named __proto__, constructor or prototype stays an ordinary key, never the object's prototype", () => {
+    const plain = toPlain(parseTweakYaml(["Items.X:", "  __proto__:", "    polluted: yes", "  constructor: c", "  prototype: p"].join("\n"))) as
+      Record<string, Record<string, unknown>>;
+    const record = plain["Items.X"]!;
+    expect(Object.keys(record)).toEqual(["__proto__", "constructor", "prototype"]);
+    expect(Object.getPrototypeOf(record)).toBe(Object.prototype);
+    expect(Object.getOwnPropertyDescriptor(record, "__proto__")!.value).toEqual({ polluted: "yes" });
+    expect(record.polluted).toBeUndefined();
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect(JSON.parse(JSON.stringify(plain))).toEqual(JSON.parse('{"Items.X":{"__proto__":{"polluted":"yes"},"constructor":"c","prototype":"p"}}'));
+  });
+
   test("anchors and aliases share the node, tags included; duplicate keys stay in order", () => {
     const doc = parseTweakYaml("a: &list\n  - !append-once m\nb: *list\nk: 1\nk: 2\n");
     expect(mapGet(doc, "b")).toBe(mapGet(doc, "a")!);

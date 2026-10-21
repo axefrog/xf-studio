@@ -73,6 +73,14 @@ describe("the TweakXL overlay", () => {
     expect(overlay.files).toBe(4);
   });
 
+  test("a record field holding a __proto__ key keeps it as data; nothing else picks it up", () => {
+    const overlay = readTweakOverlay([file("r6/tweaks/p.yaml", ["Items.X:", "  $type: Item", "  stats:", "    __proto__:", "      displayName: injected"].join("\n"))]);
+    const stats = overlay.field("Items.X", "stats") as Record<string, unknown>;
+    expect(Object.getPrototypeOf(stats)).toBe(Object.prototype);
+    expect(Object.getOwnPropertyDescriptor(stats, "__proto__")!.value).toEqual({ displayName: "injected" });
+    expect(stats.displayName).toBeUndefined();
+  });
+
   test("scalars keep their text: a label written 01 stays \"01\", not the number 1", () => {
     const overlay = readTweakOverlay([file("r6/tweaks/p.yaml", "PhotoModePoses.a:\n  $base: PhotoModePoses.idle_stand_01\n  displayName: 01\n  animationTime: 0.50\n  locked: false\n")]);
     expect(overlay.field("PhotoModePoses.a", "displayName")).toBe("01");

@@ -17,6 +17,7 @@
  * WolvenKit runs through the shared runner (`wolvenkit-cli.ts`: time limit, exit and log rules, missing
  * .NET), one batch at a time per cache folder, in a unique batch folder.
  */
+import { setOwn } from "../../platform/api/own-property";
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, stat as statAsync, writeFile } from "node:fs/promises";
@@ -244,7 +245,7 @@ export function trimBuffers(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(trimBuffers);
   if (!value || typeof value !== "object") return value;
   const out: Record<string, unknown> = {};
-  for (const [key, item] of Object.entries(value)) out[key] = key === "Bytes" && typeof item === "string" ? { $trimmedBase64Length: item.length } : trimBuffers(item);
+  for (const [key, item] of Object.entries(value)) setOwn(out, key, key === "Bytes" && typeof item === "string" ? { $trimmedBase64Length: item.length } : trimBuffers(item));
   return out;
 }
 
