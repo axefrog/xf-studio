@@ -11,7 +11,7 @@ export function collectionTransport(endpoint: string): CollectionTransport {
       headers: value ? { "Content-Type": "application/json" } : undefined,
       body: value ? JSON.stringify(value) : undefined });
     if (!(response.headers.get("Content-Type") ?? "").includes("application/json"))
-      throw new CollectionServiceError("transport", "Restart the studio server to enable collection storage. Your draft is safe.");
+      throw new CollectionServiceError("transport", "Restart the studio server to enable collection storage. Your work is kept here meanwhile.");
     const data = await response.json();
     if (!response.ok) throw new CollectionServiceError(response.status === 409 ? "conflict" : "storage_failed",
       data.error ?? "Collection request failed.");

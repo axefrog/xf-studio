@@ -125,7 +125,7 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
     onClick: () => { if (rt.dispatch({ kind: "preset.edit", command: { kind: "restore" } })) rt.feedback.announce("Preset restored"); } });
   const importRecipe = button({ label: "Import recipe as preset…", icon: "import", small: true, variant: "quiet",
     onClick: () => void rt.file({ kind: "recipe.import" }) });
-  const failed = emptyState("Library unavailable", "Your library couldn't be read. Your draft still works. Try again, or restart XF Studio.",
+  const failed = emptyState("Library unavailable", "Your library couldn't be read. The look you have open still works. Try again, or restart XF Studio.",
     button({ label: "Retry", icon: "refresh", onClick: () => void rt.request({ kind: "initialize" }) }));
   const empty = emptyState("No presets yet", "A preset is one complete look — one choice in the in-game selector.",
     button({ label: "Add preset", icon: "plus", variant: "primary", onClick: () => rt.dispatch({ kind: "preset.edit", command: { kind: "add" } }) }));
@@ -370,7 +370,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
   // No list of finishes here (release-readiness-audit.md item 7): the finish picker groups them by what can be built, and Check
   // names every layer it leaves out.
   const element = h("div", { class: "panel-content" },
-    section({ title: "Mod package", help: [`Builds your own copy of your XF mods from your current draft, unsaved edits included.`,
+    section({ title: "Mod package", help: [`Builds your own copy of your XF mods from this collection as it is now, your latest edits included.`,
       `Eye makeup becomes ${EYE_MAKEUP_MOD.modName}: each preset is one choice in the character creator's “${EYE_MAKEUP_MOD.selectorLabel}” selector.`,
       "Check names any layer it would leave out, and why. The finish picker groups finishes by what can be built."] },
       // Check, then the primary Build last; the progress takes the rest of the same row (one line, reserved), so it adds no band.
@@ -459,7 +459,7 @@ function renderResult(pkg: PackageResultView, presets: readonly { id: string; na
   const retained = new Set(r.products.flatMap(product => product.features.flatMap(feature => feature.presets.map(look => look.id)))).size;
   const card = h("div", { class: `result-card ${pkg.freshness === "stale" ? "stale" : "ok"}` },
     h("div", { class: "result-head" }, h("strong", { text: isBuild ? "Build result" : "Check result" }),
-      pkg.freshness === "current" ? badge("Current", "success") : badge("Stale — draft changed since", "warning")),
+      pkg.freshness === "current" ? badge("Current", "success") : badge("Stale — changed since", "warning")),
     h("p", { class: "result-summary", text: `${retained} of ${r.originalPresetCount} preset${r.originalPresetCount === 1 ? "" : "s"} can become mod files.${isBuild ? "" : " This check created no files."}` }));
   // One block per mod the collection builds (one by default); each feature in it has its own selector.
   for (const product of r.products) {
@@ -512,7 +512,7 @@ function renderResult(pkg: PackageResultView, presets: readonly { id: string; na
       [`“${name(preset.id)}” in game`, String(preset.appearance ?? "")] as [string, string]))) : []),
     ["Collection fingerprint (SHA-256)", r.collectionSha256],
     ...r.products.flatMap(product => product.features.map(feature => [`${feature.label} fingerprint (SHA-256)`, feature.packagedSha256] as [string, string]))]));
-  if (pkg.freshness === "stale") card.append(note("Your draft changed after this result. Run Check again.", "warning"));
+  if (pkg.freshness === "stale") card.append(note("Your collection changed after this result. Run Check again.", "warning"));
   setAttr(card, "data-freshness", pkg.freshness);
   return card;
 }

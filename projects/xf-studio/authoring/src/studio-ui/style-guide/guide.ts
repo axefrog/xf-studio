@@ -109,6 +109,8 @@ body.guide { overflow: auto; height: auto; }
 .mock-dock.wide-3 { grid-template-columns: 1.25fr 1.6fr 1.25fr; }
 .mock-dock.wide-3.portrait-stage { grid-template-columns: 21fr 37fr 42fr; }
 .mock-dock.wide-2 { grid-template-columns: 1.2fr 1fr; }
+/* A narrow page shows a two-group mock stacked, as the dock stacks its groups in a narrow window. */
+@media (max-width: 640px) { .mock-dock.wide-2 { grid-template-columns: 1fr; } }
 .mock-dock.compact-2 { grid-template-rows: 56fr 44fr; }
 .mock-col, .mock-row { display: grid; gap: 4px; min-height: 0; min-width: 0; }
 .mock-col { grid-auto-rows: minmax(0, 1fr); }

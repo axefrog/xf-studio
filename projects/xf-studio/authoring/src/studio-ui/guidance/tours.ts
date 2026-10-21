@@ -34,7 +34,7 @@ export const TOURS: readonly Tour[] = [
       { anchor: "presets.list", content: { title: "Presets are complete looks",
         body: "A preset is one finished look. Each preset becomes one choice in the game's eye makeup selector, so a collection of presets is the set of looks you'll pick from in the character creator." } },
       { anchor: "header.save", content: { title: "Keep your work in the library",
-        body: "**Save** ([[key:shell.save]]) keeps your collection in the local library, with its earlier versions. Your draft also saves itself between sessions, so closing the app never loses work." } },
+        body: "Your work saves itself to the local library as you go, so closing the app never loses it. **Save** ([[key:shell.save]]) keeps a **version** of your collection there, beside its earlier versions, that you can go back to." } },
       { anchor: "header.package", content: { title: "Make your mod",
         body: "When your looks are ready, open **Mod package**.\n\n- **Check** lists which looks can become mod files, and names anything that would be left out and why. It needs no game files.\n- **Build** makes the mod files. **Add to my mod manager** adds them to your game when you choose to." },
         buttons: [{ label: "Open Mod package", action: { kind: "panel", panel: "package" } }] },

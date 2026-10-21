@@ -70,7 +70,7 @@ test("opening the Studio reads the saved list without replacing the shown collec
   const result = await f.collection.initialize();
   expect(result.ok).toBe(true);
   expect(f.collection.summary().draft).toMatchObject({ name: "Current", presets: [{ name: "Eye" }] });
-  expect(f.collection.view().progress?.message).toContain("your unsaved edits are kept");
+  expect(f.collection.view().progress?.message).toBe("Your collection is back as you left it.");
 });
 
 test("a library with no collection gets a starter collection of one look, shown at once", async () => {

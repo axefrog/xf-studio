@@ -159,7 +159,7 @@ attach("c-context", "Open live menu", button => openMenu([
 ], button, { label: "Demo menu", invoker: button }));
 attach("c-toasts", "Show live toasts", () => {
   feedback.toast("success", "Library", "Saved “Night market set” · version 4.");
-  feedback.toast("error", "Library", "The library has a newer version of this collection. Your draft is kept.", [{ label: "Check the library again", run: () => {} }, { label: "Save as new collection", run: () => {} }]);
+  feedback.toast("warning", "Library", "Your latest changes haven't reached the library yet, so there's nothing coherent to save. They're kept here; try again in a moment.");
 });
 attach("s-palette", "Open live palette", () => openPalette(() => [
   { id: "save", title: "Save version", group: "Library", icon: "save", shortcut: "Ctrl+S", capability: () => ({ available: true }), run: () => feedback.toast("success", "Library", "Saved (demo).") },

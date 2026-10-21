@@ -651,7 +651,7 @@ export class CollectionService {
           const summaries = await this.list();
           this.ensureShown();
           await this.loadBaseline(summaries);
-          message = "Your draft was restored; your unsaved edits are kept.";
+          message = "Your collection is back as you left it.";
           result = { kind: "list", summaries }; break;
         }
         case "open": {
