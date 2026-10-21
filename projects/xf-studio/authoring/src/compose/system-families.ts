@@ -34,7 +34,7 @@ const FILES_ID = familyId("files");
 const PRESETS_ID = familyId("presets");
 
 export const HISTORY_FAMILY: SystemFamily<HistoryAction, ActionScope, typeof HISTORY_ID> = Object.freeze({
-  owner: "system", id: HISTORY_ID, label: "History", thrown: "unavailable",
+  owner: "system", id: HISTORY_ID, label: "History",
   actions: actionTable<HistoryAction, ActionScope>(ACTION_DESCRIPTORS,
     { "history.undo": true, "history.redo": true, "history.jumpTo": true }),
 });
