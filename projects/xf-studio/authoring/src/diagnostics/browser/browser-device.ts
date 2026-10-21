@@ -43,30 +43,43 @@ export function createBrowserDiagnostics(options: BrowserDiagnosticsOptions) {
   const keep = (entries: DiagnosticEntry[]) => {
     ring = [...ring, ...entries].slice(-DIAGNOSTIC_LIMITS.ring);
   };
+  /** A POST is on its way: the next flush waits for it, and `again` asks for one as soon as it ends (DIAG-07). */
+  let flushing = false, again = false;
+  /**
+   * Send the next batch. One at a time: entries forwarded while a batch is on its way stay queued behind it (never overwritten by
+   * what the flush took), and a flush asked for meanwhile runs when it ends (DIAG-07).
+   */
   async function flush() {
     timer = null;
-    if (droppedFromQueue) {
-      queue.unshift(diagnosticEntry({ level: "warn", area: "page", code: "entries_dropped", origin: "page",
-        message: "The window noticed more problems than it could pass on; the oldest were left out.", details: { count: droppedFromQueue } }));
-      droppedFromQueue = 0;
-    }
-    // What couldn't be sent earlier goes first, once the host answers again.
-    const batch = [...ring, ...queue].slice(0, DIAGNOSTIC_LIMITS.batch);
-    const rest = [...ring, ...queue].slice(DIAGNOSTIC_LIMITS.batch);
-    ring = []; queue = [];
-    if (!batch.length) return;
-    const now = Date.now();
-    if (now - windowStart > 60_000) { windowStart = now; sentInWindow = 0; }
-    if (sentInWindow + batch.length > DIAGNOSTIC_LIMITS.perMinute) { keep(batch); queue = rest; schedule(10_000); return; }
-    sentInWindow += batch.length;
+    if (flushing) { again = true; return; }
+    flushing = true;
     try {
-      const response = await send(`${endpoint}/entries`, { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ schema: DIAGNOSTIC_FORWARD_SCHEMA, entries: batch }), keepalive: true });
-      // The host refused this batch (malformed, too large): resending it would only be refused again, so it is dropped.
-      if (!response.ok && response.status >= 500) throw Error(String(response.status));
-    } catch { keep(batch); }
-    queue = rest;
-    if (queue.length) schedule(250);
+      if (droppedFromQueue) {
+        queue.unshift(diagnosticEntry({ level: "warn", area: "page", code: "entries_dropped", origin: "page",
+          message: "The window noticed more problems than it could pass on; the oldest were left out.", details: { count: droppedFromQueue } }));
+        droppedFromQueue = 0;
+      }
+      // What couldn't be sent earlier goes first, once the host answers again. The rest stays queued, and anything forwarded during
+      // the request joins it.
+      const waiting = [...ring, ...queue];
+      const batch = waiting.slice(0, DIAGNOSTIC_LIMITS.batch);
+      ring = []; queue = waiting.slice(DIAGNOSTIC_LIMITS.batch);
+      if (!batch.length) return;
+      const now = Date.now();
+      if (now - windowStart > 60_000) { windowStart = now; sentInWindow = 0; }
+      if (sentInWindow + batch.length > DIAGNOSTIC_LIMITS.perMinute) { keep(batch); schedule(10_000); return; }
+      sentInWindow += batch.length;
+      try {
+        const response = await send(`${endpoint}/entries`, { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ schema: DIAGNOSTIC_FORWARD_SCHEMA, entries: batch }), keepalive: true });
+        // The host refused this batch (malformed, too large): resending it would only be refused again, so it is dropped.
+        if (!response.ok && response.status >= 500) throw Error(String(response.status));
+      } catch { keep(batch); }
+      if (queue.length) schedule(again ? 0 : 250);
+    } finally {
+      flushing = false;
+      if (again) { again = false; if (queue.length) schedule(0); }
+    }
   }
   const schedule = (ms = 250) => { if (!timer) timer = setTimeout(() => void flush(), ms); };
 
