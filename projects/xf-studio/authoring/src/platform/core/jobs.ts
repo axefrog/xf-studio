@@ -102,22 +102,22 @@ export function createJobScheduler(options: JobSchedulerOptions): JobScheduler {
     if (RANK[lane] > 1) at = Math.max(at, lastAt.shown + quietMs);
     return at;
   };
-  const best = (lane: JobLane) => {
+  /** The person job asked first, if any waits. */
+  const firstPerson = () => {
     let found: Job | null = null;
-    for (const job of queue) if (job.lane === lane && (!found || (lane !== "person" && job.order < found.order) || (job.order === found.order && job.seq < found.seq)
-      || (lane === "person" && job.seq < found.seq))) found = job;
+    for (const job of queue) if (job.lane === "person" && (!found || job.seq < found.seq)) found = job;
     return found;
   };
 
   function pump(): void {
     if (running) { notify(); return; }
-    const person = best("person");
+    const person = firstPerson();
     if (person) {
       if (person.exclusive && tails.size) return; // A tail settling pumps again.
       start(person);
       return;
     }
-    if (best("shown") ?? best("ahead")) {
+    if (queue.length) {
       if (tails.size) return;
       let earliest = Infinity;
       for (const lane of ["shown", "ahead"] as const) {
