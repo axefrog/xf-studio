@@ -76,6 +76,11 @@ export interface OutboxStorage {
    * (`pending`: not protected yet), when its latest one landed (`stored`) and when one failed (`failed`, and it is sent again).
    */
   watch?(listener: (key: string, state: "pending" | "stored" | "failed") => void): void;
+  /**
+   * The slower, durable copy's texts as they were read (the desktop host's), where it differs from what `load` merges: a stale entry it
+   * still holds stays marked until that copy's key is written again and the write lands, never judged spent from the merged view.
+   */
+  durable?(): ReadonlyMap<string, string>;
 }
 export type OutboxTransport = { transact(request: TransactRequest): Promise<TransactAnswer>;
   revisions(refs: readonly DocumentRef[], signal?: AbortSignal): Promise<Readonly<Record<string, number>>>;
@@ -206,19 +211,31 @@ export class DocumentOutbox {
   open(): void {
     if (this.opened) return;
     this.opened = true;
-    const records = new Map<string, StoredKey>();
-    for (const [key, text] of this.storage.load()) {
-      try {
-        const record = JSON.parse(text) as StoredKey;
-        if (record?.schema === SCHEMA && Array.isArray(record.entries)) {
-          records.set(key, record);
-          if (record.entries.length) this.sizes.set(key, key.length + text.length);
-        }
-      } catch (error) { this.options.report?.(error); }
-    }
-    const repaired = repair(records);
+    const parse = (texts: ReadonlyMap<string, string>, sizes?: Map<string, number>) => {
+      const parsed = new Map<string, StoredKey>();
+      for (const [key, text] of texts) {
+        try {
+          const record = JSON.parse(text) as StoredKey;
+          if (record?.schema === SCHEMA && Array.isArray(record.entries)) {
+            parsed.set(key, record);
+            if (record.entries.length && sizes) sizes.set(key, key.length + text.length);
+          }
+        } catch (error) { this.options.report?.(error); }
+      }
+      return parsed;
+    };
+    const records = parse(this.storage.load(), this.sizes), durable = parse(this.storage.durable?.() ?? new Map());
+    const repaired = repair(records, [...durable.values()].flatMap(record => record.dropped ?? []));
     this.entries = repaired.entries;
     for (const [id, keys] of repaired.graves) this.graves.set(id, keys);
+    // A stale copy the durable copy still holds (hidden from the merged view by a newer one) keeps its marker until that key is written
+    // again and the write lands.
+    const durableHolders = new Set<string>();
+    for (const [key, record] of durable) for (const entry of record.entries)
+      if (repaired.markers.has(entry?.id) && !this.entries.some(live => live.id === entry.id)) {
+        const holders = this.graves.get(entry.id) ?? new Set<string>();
+        holders.add(key); this.graves.set(entry.id, holders); durableHolders.add(key);
+      }
     this.stamp = Math.max(0, ...[...records.values()].map(record => record.stamp), ...this.entries.map(entry => entry.stamp ?? 0));
     // An entry the repair changed, or whose copies disagree, is written again everywhere with a newer stamp, so no stale copy outlives it.
     const changed = this.entries.filter(entry => repaired.changed.has(entry.id));
@@ -232,7 +249,7 @@ export class DocumentOutbox {
     const keys = new Set([...records.keys(), ...this.entries.flatMap(entry => entry.writes.map(write => documentKey(write)))]);
     // Every write carries the pending markers, so any order is safe; once no stale copy is left, keys holding only spent markers are
     // written again without them (a crash between leaves markers with nothing to mark: harmless).
-    const rewrite = new Set(this.keysOf(...changed));
+    const rewrite = new Set([...this.keysOf(...changed), ...durableHolders]);
     for (const key of keys) {
       const stored = records.get(key);
       const now = this.entriesFor(key);
@@ -517,7 +534,20 @@ export class DocumentOutbox {
   /** A3. */
   private acknowledge(entry: OutboxEntry, revisions: Readonly<Record<string, number>>, replayed?: "receipt" | "equal",
     current?: Readonly<Record<string, CurrentDocument>>): void {
+    const at = this.entries.indexOf(entry);
     this.entries = this.entries.filter(other => other !== entry);
+    // An earlier entry still held on one of its documents is a stored copy of a command already in the library (a crash left it, and it
+    // is being replayed for its receipt): this answer supersedes its write of that document, which must neither show as the value nor
+    // be what the next edit follows. An earlier entry left with no write is done.
+    const superseded = new Set<OutboxEntry>(), done: OutboxEntry[] = [];
+    for (const earlier of this.entries.slice(0, Math.max(0, at))) {
+      if (earlier.state !== "queued") continue;
+      const kept = earlier.writes.filter(write => !entry.writes.some(item => documentKey(item) === documentKey(write)));
+      if (kept.length === earlier.writes.length) continue;
+      if (kept.length) { earlier.writes = kept; superseded.add(earlier); } else done.push(earlier);
+    }
+    this.entries = this.entries.filter(other => !done.includes(other));
+    for (const other of superseded) this.touch(other);
     for (const write of entry.writes) {
       const key = documentKey(write), held = this.local(write), revision = revisions[key];
       if (revision === undefined) continue;
@@ -531,7 +561,9 @@ export class DocumentOutbox {
     // Its receipt is forgotten once every key it was kept under is stored without it.
     const keys = this.keysOf(entry);
     this.forgetting.set(entry.id, new Set(keys));
-    this.persist([...keys, ...this.keysOf(...rebased)]);
+    for (const other of done) this.bury(other);
+    this.persist([...keys, ...this.keysOf(...rebased), ...this.keysOf(...superseded), ...this.keysOf(...done)]);
+    for (const other of done) this.finish(other.id, "acknowledged");
     this.finish(entry.id, "acknowledged");
     this.emit({ kind: "acknowledged", entry, revisions, ...(replayed ? { replayed } : {}) });
   }
@@ -709,8 +741,9 @@ const refOfKey = (key: string): DocumentRef => { const at = key.indexOf("/"); re
  *   document, else onto the dropped entry's stale base);
  * - a successor of an entry no key holds any more goes stale against the library rather than writing over it.
  */
-export function repair(records: ReadonlyMap<string, StoredKey>): { entries: OutboxEntry[]; changed: Set<string>; graves: Map<string, Set<string>> } {
-  const byId = new Map<string, OutboxEntry>(), dropped = new Set<string>(), copies = new Map<string, string[]>(), holders = new Map<string, Set<string>>();
+export function repair(records: ReadonlyMap<string, StoredKey>, alsoDropped: readonly string[] = []):
+  { entries: OutboxEntry[]; changed: Set<string>; graves: Map<string, Set<string>>; markers: Set<string> } {
+  const byId = new Map<string, OutboxEntry>(), dropped = new Set<string>(alsoDropped), copies = new Map<string, string[]>(), holders = new Map<string, Set<string>>();
   for (const [key, record] of records) {
     for (const id of record.dropped ?? []) dropped.add(id);
     for (const entry of record.entries) {
@@ -750,6 +783,6 @@ export function repair(records: ReadonlyMap<string, StoredKey>): { entries: Outb
   // Every removed entry still held somewhere stays marked until each key holding it is written again without it.
   const graves = new Map<string, Set<string>>();
   for (const id of gone.keys()) graves.set(id, new Set(holders.get(id)));
-  return { entries, changed, graves };
+  return { entries, changed, graves, markers: new Set([...dropped, ...replacedBy.keys()]) };
 }
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);

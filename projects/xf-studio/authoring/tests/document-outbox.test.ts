@@ -516,17 +516,16 @@ describe("review findings (chunk 1c-i)", () => {
 /** Second review of chunk 1c-i (Sol's report): each finding as a test. */
 describe("review findings, second round (chunk 1c-i)", () => {
   test("a second crash during recovery never brings back a conflict Use theirs discarded: markers stay until every stale copy is gone", async () => {
-    const r = rig(), storage = memoryOutboxStorage();
-    r.store.transact({ id: "other", command: "x", writes: [{ ...COLLECTION, base: 0, value: { theirs: true } }] });
-    const first = memoryOutbox(r.port, storage).outbox;
-    first.commit("pair", [{ ...COLLECTION, value: { mine: 1 } }, { ...LOOK, value: { mine: 1 } }]);
-    await tick(20);
-    expect(first.conflicts().length).toBe(1);
-    // Use theirs: the window dies after the first key's write (it carries the marker; the second key still holds the conflict).
-    storage.killAfter(1, () => first.stop());
-    first.useTheirs(first.conflicts()[0]!.id);
-    // Recovery: every write it makes may be the last; whatever point it dies at, the next start never shows the conflict again.
-    for (let writes = 0; writes < 4; writes++) {
+    // Each kill point starts from fresh storage: Use theirs torn after its first key's write, then a recovery that dies after `writes`.
+    for (let writes = 0; writes < 5; writes++) {
+      const r = rig(), storage = memoryOutboxStorage();
+      r.store.transact({ id: "other", command: "x", writes: [{ ...COLLECTION, base: 0, value: { theirs: true } }] });
+      const first = memoryOutbox(r.port, storage).outbox;
+      first.commit("pair", [{ ...COLLECTION, value: { mine: 1 } }, { ...LOOK, value: { mine: 1 } }]);
+      await tick(20);
+      expect(first.conflicts().length).toBe(1);
+      storage.killAfter(1, () => first.stop());
+      first.useTheirs(first.conflicts()[0]!.id);
       storage.killAfter(writes, () => second.stop());
       const second: DocumentOutbox = new DocumentOutbox(r.port, storage, { retryMs: 5 });
       second.open();
@@ -535,16 +534,72 @@ describe("review findings, second round (chunk 1c-i)", () => {
       const third = new DocumentOutbox(r.port, storage, { retryMs: 5 });
       third.hold(LOOK, null); third.hold(COLLECTION, r.store.read([COLLECTION])[documentKey(COLLECTION)]!);
       third.open();
-      expect(third.conflicts()).toEqual([]);
+      expect(third.conflicts(), `recovery killed after ${writes} write(s)`).toEqual([]);
       expect(third.document(LOOK)!.value).toBeUndefined();
       expect(third.document(COLLECTION)!.value).toEqual({ theirs: true });
       third.stop();
+      // Once a recovery finishes, no stale copy and no marker is left.
+      const last = new DocumentOutbox(r.port, storage, { retryMs: 5 });
+      last.open();
+      expect([...storage.keys.values()].filter(text => JSON.parse(text).entries.length || JSON.parse(text).dropped?.length)).toEqual([]);
+      last.stop();
     }
-    // Once a recovery finishes, no stale copy and no marker is left.
-    storage.killAfter(Infinity);
-    const last = new DocumentOutbox(r.port, storage, { retryMs: 5 });
-    last.open();
-    expect([...storage.keys.values()].filter(text => JSON.parse(text).entries.length)).toEqual([]);
+  });
+
+  test("desktop: Use theirs, only one host marker lands, the renderer reloads and cleans up, the app restarts: the conflict stays gone", async () => {
+    const COPY_A = COLLECTION, COPY_B = LOOK;
+    const r = rig();
+    r.store.transact({ id: "other", command: "x", writes: [{ ...COPY_A, base: 0, value: { theirs: true } }] });
+    const webview = new Map<string, string>(), host = new Map<string, string>();
+    const browser = { get length() { return webview.size; }, key: (i: number) => [...webview.keys()][i] ?? null, getItem: (key: string) => webview.get(key) ?? null,
+      setItem: (key: string, text: string) => { webview.set(key, text); }, removeItem: (key: string) => { webview.delete(key); } };
+    type Post = { page: number; key: string; text: string | null; resolve(): void; reject(error: Error): void };
+    const posts: Post[] = [];
+    const page = (life: number, launch: string) => desktopOutboxStorage(browser, "desktop", launch, Object.fromEntries(host),
+      (key, text) => new Promise<void>((resolve, reject) => posts.push({ page: life, key, text, resolve, reject })));
+    /** Lands the host writes `which` picks, newest per key last; the rest stay waiting. */
+    const land = async (which: (post: Post) => boolean) => {
+      for (let round = 0; round < 10; round++) {
+        const ready = posts.filter(which);
+        if (!ready.length) break;
+        for (const post of ready) { posts.splice(posts.indexOf(post), 1); if (post.text === null) host.delete(post.key); else host.set(post.key, post.text); post.resolve(); }
+        await tick(2);
+      }
+    };
+    let read = false;
+    const open = (storage: ReturnType<typeof page>) => {
+      const outbox = new DocumentOutbox(r.port, storage, { retryMs: 5 });
+      // The first page read A before the other window wrote it; later ones read the library as it is.
+      outbox.hold(COPY_A, read ? r.store.read([COPY_A])[documentKey(COPY_A)]! : null); outbox.hold(COPY_B, null);
+      read = true;
+      outbox.open();
+      return outbox;
+    };
+    // The conflict, stored on the host under both documents' keys.
+    const first = open(page(1, "launch-1"));
+    first.commit("pair", [{ ...COPY_A, value: { mine: 1 } }, { ...COPY_B, value: { mine: 1 } }]);
+    await tick(20);
+    await land(() => true);
+    expect(first.conflicts().length).toBe(1);
+    // 1. Use theirs. 2. Only A's host write (with the marker) lands.
+    first.useTheirs(first.conflicts()[0]!.id);
+    await tick(2);
+    await land(post => post.key === documentKey(COPY_A));
+    expect(JSON.parse(host.get(documentKey(COPY_B))!).entries.length).toBe(1);
+    // 3. The renderer reloads: its WebView records (newer) hide B's stale host copy. 4. Its cleanup lands for A, never for B.
+    first.stop();
+    for (const post of posts.splice(0)) post.reject(Error("Superseded."));
+    const second = open(page(2, "launch-1"));
+    await tick(5);
+    await land(post => post.page === 2 && post.key === documentKey(COPY_A));
+    expect(second.conflicts()).toEqual([]);
+    // 5. The app restarts as a new launch: the WebView's records of launch 1 aren't read; only the host's copy is.
+    second.stop();
+    for (const post of posts.splice(0)) post.reject(Error("Superseded."));
+    const third = open(page(3, "launch-2"));
+    expect(third.conflicts()).toEqual([]);
+    expect(third.document(COPY_B)!.value).toBeUndefined();
+    expect(third.document(COPY_A)!.value).toEqual({ theirs: true });
   });
 
   test("a desktop WebView write that fails leaves no older copy to be read back over the host's newer one (found by the model test)", async () => {

@@ -70,7 +70,13 @@ type Intent = {
   committed: Record<string, number> | null;
   callers: Caller[];
 };
-type Spec = { docs: Record<string, { revision: number; value: unknown }>; intents: Intent[] };
+/** `versions`: what a command reading each document names as its base, as the design states it: it moves with every change made here and
+ * every change taken from elsewhere, never with an acknowledgement, and starts again at the library's revision when the page opens. */
+type Spec = { docs: Record<string, { revision: number; value: unknown }>; versions: Record<string, number>; intents: Intent[];
+  /** Intents the library acknowledged (a stored copy of one may still be replayed: answered by its receipt, it changes nothing). */
+  acknowledged: string[] };
+const bump = (spec: Spec, key: string) => { spec.versions[key] = (spec.versions[key] ?? 0) + 1; };
+const moved = (spec: Spec, key: string, revision: number) => { spec.versions[key] = Math.max((spec.versions[key] ?? 0) + 1, revision); };
 const keysOf = (intent: Intent) => intent.writes.map(([key]) => key);
 const touching = (spec: Spec, key: string) => spec.intents.filter(intent => keysOf(intent).includes(key));
 function visible(spec: Spec, key: string): unknown {
@@ -80,6 +86,7 @@ function visible(spec: Spec, key: string): unknown {
 /** The next intent after `index` on `key`. */
 const nextOn = (spec: Spec, index: number, key: string) => spec.intents.slice(index + 1).find(intent => keysOf(intent).includes(key));
 function record(spec: Spec, id: string, edits: [string, unknown][], requires: string[], caller: Caller): "joined" | "new" {
+  for (const [key] of edits) bump(spec, key);
   if (edits.length === 1) {
     const last = touching(spec, edits[0]![0]).at(-1);
     if (last && last.writes.length === 1 && !last.put && (!last.sent || last.conflict)) {
@@ -109,12 +116,28 @@ function sendable(spec: Spec, intent: Intent, inLibrary: (key: string) => boolea
 const settle = (callers: Caller[], outcome: OutboxOutcome) => { for (const caller of callers) caller.expected = outcome; };
 function acknowledge(spec: Spec, id: string, revisions: Readonly<Record<string, number>>, current?: Readonly<Record<string, CurrentDocument>>) {
   const at = spec.intents.findIndex(intent => intent.id === id), intent = spec.intents[at]!;
+  // An earlier intent still pending on one of its documents is one the library already holds (it is only being replayed): this answer
+  // supersedes its write of that document; one left with no write is done.
+  for (const earlier of spec.intents.slice(0, at)) {
+    if (earlier.conflict || !earlier.committed || !earlier.writes.some(([key]) => keysOf(intent).includes(key))) continue;
+    earlier.writes = earlier.writes.filter(([key]) => !keysOf(intent).includes(key));
+  }
+  for (const earlier of spec.intents.slice(0, at).filter(item => !item.writes.length)) {
+    spec.intents.splice(spec.intents.indexOf(earlier), 1);
+    spec.acknowledged.push(earlier.id);
+    settle(earlier.callers, "acknowledged");
+  }
+  return answered(spec, id, revisions, current);
+}
+function answered(spec: Spec, id: string, revisions: Readonly<Record<string, number>>, current?: Readonly<Record<string, CurrentDocument>>) {
+  const at = spec.intents.findIndex(intent => intent.id === id), intent = spec.intents[at]!;
   for (const [key, value] of intent.writes) {
     const next = nextOn(spec, at, key);
     if (next && next.bases[key] === null) next.bases[key] = revisions[key]!;
     if (revisions[key]! >= (spec.docs[key]?.revision ?? 0)) spec.docs[key] = { revision: revisions[key]!, value: current?.[key] ? current[key]!.value : value };
   }
   spec.intents.splice(at, 1);
+  spec.acknowledged.push(id);
   settle(intent.callers, "acknowledged");
 }
 function lost(spec: Spec, id: string, revisions: Readonly<Record<string, number>>) {
@@ -150,6 +173,7 @@ function useTheirs(spec: Spec, id: string) {
   for (const [key] of intent.writes) {
     const now = intent.conflict!.theirs[key];
     spec.docs[key] = { revision: now?.revision ?? 0, value: now?.value };
+    moved(spec, key, now?.revision ?? 0);
     const next = nextOn(spec, at, key);
     if (next && next.bases[key] === null) next.bases[key] = intent.bases[key]!;
   }
@@ -160,7 +184,7 @@ function useTheirs(spec: Spec, id: string) {
 /** A restart: every stored intent may have been sent; the owner reads every document from the library; callers start again. */
 function restarted(spec: Spec, library: (key: string) => { revision: number; value: unknown }, nextCaller: () => Caller): Spec {
   const copy: Spec = structuredClone(spec);
-  for (const key of Object.keys(copy.docs)) copy.docs[key] = library(key);
+  for (const key of Object.keys(copy.docs)) { copy.docs[key] = library(key); copy.versions[key] = copy.docs[key]!.revision; }
   for (const intent of copy.intents) { intent.sent = true; intent.callers = [nextCaller()]; }
   return copy;
 }
@@ -202,7 +226,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
     if (how === "lose") { count("answer lost"); sent.reject(Error("The answer was lost.")); } else sent.resolve(answer);
     return answer;
   };
-  let spec: Spec = { docs: Object.fromEntries(keys.map(key => [key, { revision: 0, value: undefined }])), intents: [] };
+  let spec: Spec = { docs: Object.fromEntries(keys.map(key => [key, { revision: 0, value: undefined }])), versions: {}, intents: [], acknowledged: [] };
   let life = 0, adopting = false, a!: DocumentOutbox;
   const deferred: TransactRequest[] = [];
   const checkSend = (request: TransactRequest) => {
@@ -231,8 +255,26 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
   const memory = memoryOutboxStorage();
   const webview = new Map<string, string>();
   const host = new Map<string, string>();
+  /** The renderer dies after this many more WebView writes (desktop kills), like `memory.killAfter`. */
+  const webKill = { left: Infinity, onKill: null as (() => void) | null, killed: false, writes: 0 };
+  const webWrite = (change: () => void) => {
+    if (webKill.killed) return;
+    if (webKill.left-- <= 0) { webKill.killed = true; webKill.onKill?.(); return; }
+    change(); webKill.writes++;
+  };
   const webviewStorage = { get length() { return webview.size; }, key: (i: number) => [...webview.keys()][i] ?? null, getItem: (key: string) => webview.get(key) ?? null,
-    setItem: (key: string, text: string) => { if (memory.fail) throw new DOMException("Full.", "QuotaExceededError"); webview.set(key, text); }, removeItem: (key: string) => { webview.delete(key); } };
+    setItem: (key: string, text: string) => { if (memory.fail) throw new DOMException("Full.", "QuotaExceededError"); webWrite(() => webview.set(key, text)); },
+    removeItem: (key: string) => { webWrite(() => webview.delete(key)); } };
+  /** Kill the page after `writes` more writes to its synchronous storage (memory, or the WebView), or stop arming it (`Infinity`). */
+  const killAfter = (writes: number) => {
+    if (mode === "local") memory.killAfter(writes, () => a.stop());
+    else { webKill.left = writes; webKill.onKill = () => a.stop(); webKill.killed = false; }
+  };
+  const syncWrites = () => mode === "local" ? memory.writes : webKill.writes;
+  /** The app's launch: a real restart is a new one, and the WebView's records of earlier launches aren't read. */
+  let launch = 1;
+  /** Storage failed since it last was whole again: a restart may then come back older (as the warning says), so no kill is armed. */
+  let degraded = false;
   let callerIds = 0;
   const callers: Caller[] = [];
   const caller = (): Caller => { const item: Caller = { id: ++callerIds, expected: null, actual: null }; callers.push(item); return item; };
@@ -246,7 +288,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
       const load = memory.load.bind(memory);
       storage = { ...memory, write: memory.write.bind(memory), load: () => { const entries = [...load()];
         for (let i = entries.length - 1; i > 0; i--) { const j = rng.int(i + 1); [entries[i], entries[j]] = [entries[j]!, entries[i]!]; } return new Map(entries); } };
-    } else storage = desktopOutboxStorage(webviewStorage, "desktop", "launch", Object.fromEntries(host), (key, text) =>
+    } else storage = desktopOutboxStorage(webviewStorage, "desktop", `launch-${launch}`, Object.fromEntries(host), (key, text) =>
       new Promise<void>((resolve, reject) => { hostWrites.push({ life: mine, key, text, resolve, reject }); }));
     a = new DocumentOutbox(transport("A", () => mine), storage, { immutable, newId: () => `a${mine}-${Math.floor(rng.next() * 1e9).toString(36)}`,
       schedule: (_ms, task) => { retries.push(task); return { cancel: () => { const at = retries.indexOf(task); if (at >= 0) retries.splice(at, 1); } }; } });
@@ -257,7 +299,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
       for (const ref of event.refs) {
         const key = documentKey(ref), read = readValues.get(key);
         if (!read || touching(spec, key).length || read.revision <= (spec.docs[key]?.revision ?? 0)) fail(`A took ${key} from a check the specification doesn't allow`);
-        else spec.docs[key] = { revision: read.revision, value: read.value };
+        else { spec.docs[key] = { revision: read.revision, value: read.value }; moved(spec, key, read.revision); }
       }
     });
     a.open();
@@ -271,20 +313,20 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
   const real = () => JSON.stringify({ visible: keys.map(key => [key, a.document(refOf(key))?.value ?? null]),
     intents: a.pendingEntries().map(entry => [entry.id, entry.state]) });
   /** A was killed: it restarts (perhaps dying again while it opens and repairs); its state must be one the specification allows. */
-  const recover = async (allowed: Spec[]) => {
+  const recover = async (allowed: Spec[], labels: string[] = allowed.map(() => "current")) => {
     for (let attempt = 0; ; attempt++) {
       adopting = true;
-      const crash = mode === "local" && attempt < 4 && rng.next() < 0.6;
-      if (crash) memory.killAfter(rng.int(4), () => a.stop());
+      const crash = !degraded && attempt < 4 && rng.next() < 0.6;
+      if (crash) killAfter(rng.int(4));
       openA();
       await ticks();
-      memory.killAfter(Infinity);
+      killAfter(Infinity);
       if (a.status().stopped) { count("killed while opening"); continue; }
       const now = real(), candidates = allowed.map(candidate => restarted(candidate, library, () => ({ id: 0, expected: null, actual: null })));
       const match = candidates.find(candidate => specSignature(candidate, keys) === now);
       adopting = false;
       if (!match) { fail(`after a kill A shows ${now}; the specification allows ${candidates.map(candidate => specSignature(candidate, keys)).join(" or ")}`); return; }
-      count(`recovered ${["after", "between", "before"][candidates.indexOf(match) === 0 ? 0 : candidates.indexOf(match) === candidates.length - 1 ? 2 : 1]}`);
+      count(`recovered ${labels[candidates.indexOf(match)]}`);
       for (const intent of match.intents) intent.callers = [caller()];
       adopt(match);
       for (const request of deferred.splice(0)) checkSend(request);
@@ -294,17 +336,21 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
   /** A step's work on A, which a kill may interrupt after any number of key writes. */
   const onA = async (work: () => void, between: Spec[] = [], killRate = 0.2) => {
     const before = structuredClone(spec), waiting = spec.intents.flatMap(intent => intent.callers);
-    const kill = mode === "local" && !memory.fail && !a.status().unprotected.length && rng.next() < killRate;
+    const kill = !degraded && rng.next() < killRate;
     // After any number of key writes: mostly the first few, where a step's writes are torn.
-    if (kill) memory.killAfter(rng.next() < 0.6 ? rng.int(3) : rng.int(12), () => a.stop());
+    const writesBefore = syncWrites();
+    if (kill) killAfter(rng.next() < 0.6 ? rng.int(3) : rng.int(12));
     try { work(); } catch (error) { if (!a.status().stopped) throw error; }
     await ticks();
-    memory.killAfter(Infinity);
+    killAfter(Infinity);
     if (!a.status().stopped) return;
-    count("killed");
+    count(`killed (${mode})`);
     // Every caller waiting when the step began, or added by it, hears that the page stopped (the kill comes before any other outcome).
     settle([...waiting, ...spec.intents.flatMap(intent => intent.callers)], "stopped");
-    await recover([spec, ...between, before]);
+    // The crash oracle: no key written yet means the step left nothing behind; once one was, the step's decision is stored (every key a
+    // step writes carries it whole: an entry, its conflict, a resolution's markers), and only an acknowledgement's replay may remain.
+    if (syncWrites() === writesBefore) await recover([before], ["before"]);
+    else await recover([spec, ...between], ["after", ...between.map(() => "between")]);
   };
 
   // Window B: edits the same documents and imports the same immutable documents, resolving its conflicts with Keep mine.
@@ -345,6 +391,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
       const blob = rng.pick(BLOBS), item = caller();
       await onA(() => {
         const put = a.put(blob, { blob: blob.id });
+        if (put) bump(spec, documentKey(blob));
         if (put) spec.intents.push({ id: put.id, writes: [[documentKey(blob), { blob: blob.id }]], put: true, requires: [], conflict: null, sent: false, committed: null,
           bases: { [documentKey(blob)]: 0 }, callers: [item] });
         else if (visible(spec, documentKey(blob)) === undefined) fail("A put nothing for a document the specification doesn't hold");
@@ -405,7 +452,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
         const fork = ++forks;
         const copy = a.keepBoth(conflict.id, mine => mine.map(edit => ({ ...edit, id: `${edit.id}~${fork}` })));
         const dropped = useTheirs(spec, conflict.id);
-        for (const [key] of dropped.writes) { keys.push(`${key}~${fork}`); spec.docs[`${key}~${fork}`] = { revision: 0, value: undefined }; }
+        for (const [key] of dropped.writes) { keys.push(`${key}~${fork}`); spec.docs[`${key}~${fork}`] = { revision: 0, value: undefined }; spec.versions[`${key}~${fork}`] = 1; }
         spec.intents.push({ id: copy.id, writes: dropped.writes.map(([key, value]) => [`${key}~${fork}`, value]), put: false, requires: [...dropped.requires], conflict: null,
           sent: false, committed: null, bases: Object.fromEntries(dropped.writes.map(([key]) => [`${key}~${fork}`, 0])), callers: [item] });
         watch(copy, item);
@@ -440,14 +487,28 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
       // Storage refuses writes for a while (a full quota), or works again.
       memory.fail = !memory.fail;
       count(memory.fail ? "storage failing" : "storage back");
-      if (!memory.fail) a.protect();
+      if (memory.fail) degraded = true;
+      else a.protect();
       await ticks();
     } else if (roll < 0.98) {
       // A restart reads back what is stored: a key whose write failed is written again first (Try again), since a restart while changes
       // are reported unprotected may come back older, as the warning says (the protection check covers that state).
       memory.fail = false;
       a.protect();
-      count("restart");
+      const app = mode === "desktop" && rng.next() < 0.5;
+      if (app) {
+        // A real app restart: everything the host was given lands first (a restart with copies still on their way is the protection
+        // check's case, below: only what it says is protected must come back); then a new launch reads the host's copy alone.
+        for (let round = 0; round < 50 && hostWrites.some(write => write.life === life); round++) {
+          const write = hostWrites.find(item => item.life === life)!;
+          hostWrites.splice(hostWrites.indexOf(write), 1);
+          if (write.text === null) host.delete(write.key); else host.set(write.key, write.text);
+          write.resolve(); await ticks();
+        }
+        launch++;
+        count("app restart");
+      } else count("restart");
+      degraded = false;
       settle(spec.intents.flatMap(intent => intent.callers), "stopped");
       a.stop(); await ticks();
       adopting = true;
@@ -462,18 +523,37 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
     if (failures.length) break;
     const shown = real(), expected = specSignature(spec, keys);
     if (shown !== expected) { fail(`A shows ${shown}; the specification ${expected}`); break; }
-    // Protected means recoverable: every document with intents A doesn't report unprotected comes back from the durable storage.
+    // Baselines and versions, directly.
+    for (const key of keys) {
+      const held = a.document(refOf(key));
+      if (!immutable(refOf(key).kind) && (held?.revision ?? 0) !== (spec.docs[key]?.revision ?? 0)) fail(`A's baseline of ${key} is revision ${held?.revision}, the specification's ${spec.docs[key]?.revision}`);
+      if ((held?.version ?? 0) !== (spec.versions[key] ?? 0)) fail(`A's version of ${key} is ${held?.version}, the specification's ${spec.versions[key] ?? 0}`);
+    }
+    // Protected means recoverable, for every document: what A doesn't report unprotected comes back from the durable storage (memory, or
+    // the desktop host's copy, as a new launch reads it) as A shows it, and nothing discarded or acknowledged comes back as a change.
     const unprotected = new Set(a.status().unprotected.map(documentKey));
     const durable = mode === "local" ? new Map(memory.keys) : new Map(host);
     const probe = new DocumentOutbox(documents, { load: () => durable, write: () => {} }, { immutable, writable: () => false, sendable: () => false });
-    for (const key of keys) { const now = library(key); probe.hold(refOf(key), now.revision ? now : null); }
+    for (const key of keys) { const doc = spec.docs[key]; probe.hold(refOf(key), doc?.revision ? doc : null); }
     probe.open();
-    for (const key of keys) if (touching(spec, key).length && !unprotected.has(key)) {
-      count("protected change checked");
+    // A document shares a stored command with an unprotected one: what the unprotected one's key holds may still be older.
+    const unsafe = new Set(unprotected);
+    for (const entry of probe.pendingEntries()) { const touched = entry.writes.map(documentKey); if (touched.some(key => unprotected.has(key))) for (const key of touched) unsafe.add(key); }
+    for (const entry of probe.pendingEntries()) {
+      const intent = spec.intents.find(item => item.id === entry.id);
+      // An acknowledged command may come back (it is replayed, and answered by its receipt). A discarded one, or a conflict already
+      // resolved, may come back only while every document it writes is reported unprotected (the warning's promise).
+      if (intent ? !(entry.state === "conflict" && !intent.conflict) : spec.acknowledged.includes(entry.id)) continue;
+      if (entry.writes.every(write => unprotected.has(documentKey(write)))) continue;
+      fail(`the stored outbox brings back ${entry.id} (${entry.state}), which the specification discarded, though ${entry.writes.filter(write => !unprotected.has(documentKey(write))).map(documentKey)} is reported protected`);
+    }
+    for (const key of keys) if (!unsafe.has(key)) {
+      count("protected document checked");
       if (!same(probe.document(refOf(key))?.value, visible(spec, key))) fail(`${key} is reported protected, but the stored outbox recovers ${JSON.stringify(probe.document(refOf(key))?.value)}, not ${JSON.stringify(visible(spec, key))}` +
         (process.env.XFS_OUTBOX_TRACE ? ` (unprotected ${[...unprotected]}; host writes waiting ${hostWrites.map(write => write.key)}; durable ${JSON.stringify([...durable].map(([k, text]) => [k, JSON.parse(text).entries.map((entry: OutboxEntry) => [entry.id, entry.stamp, entry.writes.map(write => [write.id, write.value])])]))}; A ${JSON.stringify(a.pendingEntries().map(entry => [entry.id, entry.stamp]))})` : ""));
     }
     probe.stop();
+    if (mode === "desktop" && !degraded && !unprotected.size) count("desktop fully protected");
     for (const item of callers) if (item.actual && item.actual !== item.expected) fail(`a caller heard ${item.actual}; the specification says ${item.expected ?? "nothing yet"}`);
     for (const [kind, id] of store.list("doc").map(doc => ["doc", doc.id] as const)) {
       const named = (store.get<{ ref?: string }>(kind, id)?.value as { ref?: string } | undefined)?.ref;
@@ -483,7 +563,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
 
   // ---- The end: everything delivered, every conflict resolved, every host write landed.
   memory.fail = false;
-  for (let round = 0; round < 600 && !failures.length; round++) {
+  for (let round = 0; round < 4000 && !failures.length; round++) {
     for (const task of retries.splice(0)) task();
     await ticks();
     if (hostWrites.length) { const write = hostWrites.shift()!;
@@ -527,18 +607,25 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
 const pinned = process.env.XFS_OUTBOX_SEED;
 const modes = (process.env.XFS_OUTBOX_MODE ? [process.env.XFS_OUTBOX_MODE] : ["local", "desktop"]) as ("local" | "desktop")[];
 const RUNS = Number(process.env.XFS_OUTBOX_RUNS ?? 60);
+/**
+ * Seeds that found defects in deeper sweeps, run every time: a replayed copy of an acknowledged command followed by the next edit (local
+ * 5979845, desktop 1212607), immutable baselines learned by lookup (local 2527161, 4609858), discarded conflicts brought back from the
+ * desktop host's copy (desktop 1719423, 1806532), and long recoveries (desktop 365274, 2519242).
+ */
+const FIXED = { local: [5979845, 2527161, 4609858], desktop: [1212607, 1719423, 1806532, 365274, 2519242] };
 const STEPS = 400;
 test(`the outbox meets its specification in seeded runs (kills while working and while recovering, late checks, failing storage, two windows)`, async () => {
   const all: string[] = [];
   let total = 0;
-  for (const mode of modes) for (const seed of pinned ? [Number(pinned)] : Array.from({ length: mode === "local" ? RUNS : Math.ceil(RUNS / 2) }, (_, i) => 1000 + i * 7919)) {
+  for (const mode of modes) for (const seed of pinned ? [Number(pinned)] : [...Array.from({ length: mode === "local" ? RUNS : Math.ceil(RUNS / 2) }, (_, i) => 1000 + i * 7919),
+    ...FIXED[mode]]) {
     const failures = await run(mode, seed, STEPS);
     total += STEPS;
     if (failures.length) { all.push(failures[0]!); console.log(failures[0]); }
   }
   console.log(JSON.stringify({ steps: total, seen }));
   expect(all).toEqual([]);
-  if (!pinned) for (const name of ["killed", "killed while opening", "recovered after", "recovered before", "restart", "resolve mine", "resolve theirs", "resolve both",
-    "answer stale", "answer receipt", "answer equal", "answer lost", "send failed", "late read", "storage failing", "host write landed", "host write failed",
-    "B imports", "protected change checked"]) expect(seen[name] ?? 0, name).toBeGreaterThan(0);
+  if (!pinned) for (const name of ["killed (local)", "killed (desktop)", "killed while opening", "recovered after", "recovered before", "recovered between", "restart",
+    "app restart", "resolve mine", "resolve theirs", "resolve both", "answer stale", "answer receipt", "answer equal", "answer lost", "send failed", "late read",
+    "storage failing", "host write landed", "host write failed", "host write fenced", "B imports", "protected document checked"]) expect(seen[name] ?? 0, name).toBeGreaterThan(0);
 }, 600_000);

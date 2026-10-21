@@ -34,7 +34,8 @@ export function localOutboxStorage(storage: KeyStorage, workspace: string): Outb
   };
 }
 
-const isEmpty = (text: string) => { try { return !(JSON.parse(text) as { entries?: unknown[] }).entries?.length; } catch { return false; } };
+/** A record with no entries and no markers (a record holding only markers isn't empty: they must reach the host). */
+const isEmpty = (text: string) => { try { const record = JSON.parse(text) as { entries?: unknown[]; dropped?: unknown[] }; return !record.entries?.length && !record.dropped?.length; } catch { return false; } };
 const stampOf = (text: string) => { try { return Number((JSON.parse(text) as { stamp?: unknown }).stamp) || 0; } catch { return -1; } };
 
 /**
@@ -106,6 +107,7 @@ export function desktopOutboxStorage(local: KeyStorage, workspace: string, launc
       }
     },
     watch(next) { listener = next; },
+    durable: () => new Map(Object.entries(host)),
     async settle() {
       for (const [key, writer] of writers) {
         while (writer.running) await writer.running;

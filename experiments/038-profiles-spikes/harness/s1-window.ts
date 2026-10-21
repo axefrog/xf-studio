@@ -12,9 +12,10 @@
  * Prints `rec <key> <seq> <0|1>` after each command is recorded (1: protected), `ack <key> <seq> <revision> <replayed>`,
  * `conflict <key>`, `fork <key> <seq>`, `warning <0|1>` when the unprotected warning changes, and `done` once its edits are all in the
  * library. `XFS_KILL=<point>:<n>` terminates it at after-record, in-flight, ack-received or after-ack on the n-th occurrence;
- * `XFS_FAIL_OUTBOX=<from>:<to>` makes the outbox's storage refuse every write between those edits (a full quota).
+ * `XFS_FAIL_OUTBOX=<from>:<to>` makes the outbox's storage refuse every write between those edits (a full quota); `XFS_S1_DUMP=<file>`
+ * appends each conflict's bases, values' sequence numbers and the library's revisions to that file (diagnosing a false conflict).
  */
-import { readFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 import { DocumentOutbox } from "../../../projects/xf-studio/authoring/src/platform/core/document-outbox";
 import { browserDocuments } from "../../../projects/xf-studio/authoring/src/app/browser/browser-documents-device";
 import { desktopOutboxStorage, localOutboxStorage } from "../../../projects/xf-studio/authoring/src/app/browser/outbox-storage";
@@ -92,6 +93,8 @@ outbox.subscribe(event => {
   } else if (event.kind === "conflict") {
     const entry = event.entry;
     for (const write of entry.writes) out(`conflict ${documentKey(write)}`);
+    if (process.env.XFS_S1_DUMP) appendFileSync(process.env.XFS_S1_DUMP, `${JSON.stringify({ id: entry.id, seq: entry.seq, writes: entry.writes.map(write => [write.id, write.base, (write.value as { seqs?: unknown })?.seqs]), current: Object.fromEntries(Object.entries(entry.current ?? {}).map(([key, now]) => [key, [now?.revision, (now?.value as { seqs?: unknown })?.seqs]])) })}
+`);
     // The script's person picks Keep both a moment later: mine becomes a fork, never written over theirs.
     setTimeout(() => {
       if (!outbox.conflicts().some(item => item.id === entry.id)) return;
