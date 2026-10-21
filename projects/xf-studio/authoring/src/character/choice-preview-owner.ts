@@ -19,15 +19,19 @@ export class ChoicePreviewOwner {
   lease(): ChoicePreviewPort {
     const device = this.device, life = new AbortController(), urls = new Set<string>(), token = {};
     const ended = () => life.signal.aborted || this.disposed;
+    // An ended lease asks the device nothing more.
+    const refuse = () => Promise.reject(new PreviewSuperseded());
     const port: ChoicePreviewPort = {
-      sources: (request, option, kind, positions, derive, signal) =>
-        device.sources(request, option, kind, positions, derive, AbortSignal.any([signal, life.signal])),
-      subject: body => device.subject(body),
-      stored: key => device.stored(key),
+      sources: (request, option, kind, positions, derive, signal) => ended() ? refuse()
+        : device.sources(request, option, kind, positions, derive, AbortSignal.any([signal, life.signal])),
+      subject: body => ended() ? refuse() : device.subject(body),
+      stored: key => ended() ? refuse() : device.stored(key),
       render: async (source, key, frames) => {
+        if (ended()) throw new PreviewSuperseded();
         const drawn = await device.render(source, key, frames);
-        // A picture drawn after its lease ended is let go at once.
-        if (ended()) device.release?.(drawn.url); else urls.add(drawn.url);
+        // A picture drawn after its lease ended is let go at once and never handed on.
+        if (ended()) { device.release?.(drawn.url); throw new PreviewSuperseded(); }
+        urls.add(drawn.url);
         return drawn;
       },
       release: url => { if (urls.delete(url)) device.release?.(url); },

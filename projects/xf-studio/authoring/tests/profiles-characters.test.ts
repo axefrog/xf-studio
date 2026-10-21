@@ -567,6 +567,27 @@ describe("review fixes, second round (chunk 1b)", () => {
     expect((await w.documents.list<{ source: { kind: string } }>(CHARACTER_DOCUMENT))[0]!.value.source.kind).toBe("save");
   });
 
+  test("an ended lease forwards no work to the device, and a picture finished after it ended is let go, not handed on", async () => {
+    const asked: string[] = [], released: string[] = [];
+    let finish!: () => void;
+    const device: ChoicePreviewPort = {
+      sources: async () => { asked.push("sources"); return []; }, subject: async () => { asked.push("subject"); return "subject"; },
+      stored: async () => { asked.push("stored"); return null; },
+      render: (_source, key) => { asked.push("render"); return new Promise(resolve => { finish = () => resolve({ url: `u:${key}` }); }); },
+      release: url => { released.push(url); },
+    };
+    const lease = new ChoicePreviewOwner(device).lease(), source = {} as never;
+    const drawing = lease.render(source, "k1").then(() => "handed on", () => "refused");
+    lease.dispose!();
+    finish();
+    expect(await drawing).toBe("refused");
+    expect(released).toEqual(["u:k1"]);
+    const outcome = (work: Promise<unknown>) => work.then(() => "asked", () => "refused");
+    expect(await Promise.all([outcome(lease.render(source, "k2")), outcome(lease.subject("female")), outcome(lease.stored("k3")),
+      outcome(lease.sources({} as never, "head/hair", "hair" as never, [0], null, new AbortController().signal))])).toEqual(["refused", "refused", "refused", "refused"]);
+    expect(asked).toEqual(["render"]);
+  });
+
   test("a lease draws only its own live turn: an obsolete one is refused and a frame drawn after the turn moved is closed (previews)", async () => {
     const frames: ((value: { bitmap: { close(): void } }) => void)[] = [];
     let closed = 0;
