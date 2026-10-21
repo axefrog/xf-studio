@@ -21,7 +21,7 @@ The binding rules are in the [architecture contract](architecture-contract.md). 
 
 ## Hair Lab experiment boundaries
 
-The optional experiment is switched by an experiment flag in the local settings store. The platform's generic loader (`platform/core/experiments.ts`) reads the flag and registers the feature's contributions only while it is on, and withdraws them when it goes off. The feature reaches the platform only through the platform API; it does not construct platform internals itself.
+The optional experiment is switched by an experiment flag, held in the library's `experiment-flags` document (id `preferences`) in the document store. The platform's generic loader (`platform/core/experiments.ts`) reads the flag and registers the feature's contributions only while it is on, and withdraws them when it goes off. The feature reaches the platform only through the platform API; it does not construct platform internals itself.
 
 Direct worker, clock, task-yield and worker-URL reads stay in `features/hair-lab/render/worker-device.ts` and `hair-worker.ts`, which are device adapters. The composition supplies worker options and the root's verification decision; these adapters no longer read the page's location. The same track owns replacing their dedicated worker transport with a shared worker adapter once that adapter serves numerical geometry jobs. The solver and service add no direct clock, randomness, file, page or network reads. The loader publishes its status as plain state, and a failed load never blocks the shell.
 

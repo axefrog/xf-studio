@@ -32,7 +32,7 @@ Studio code is split into subsystems with one owner each, under `projects/xf-stu
 | Persistence | `platform/persistence/` | The typed, versioned document store in `library.sqlite` (served at `/api/documents`), library durability and automatic backups |
 | History | `platform/core/history-transaction.ts`, `document-history.ts` | Undo and redo for documents |
 | View graph | `platform/core/view-graph.ts` ([design](../research/authoring/view-graph-design.md)) | Views, cameras, lights, overlays and module contributions, shared or linked between views |
-| Experiment flags | the local settings store | Which optional experiments are on |
+| Experiment flags | a per-library document in the document store (kind `experiment-flags`, id `preferences`) | Which optional experiments are on; a verification workspace keeps its own |
 
 New Studio code takes time and randomness from the clock and random services rather than reading globals, and runs cancellable work as a task.
 

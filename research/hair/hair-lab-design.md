@@ -10,7 +10,7 @@ Coordinator review: APPROVED with amendments. The scalp is head-bound with a sep
 
 | Concern | Proposed M1 contract |
 |---|---|
-| Experiment preferences | Platform-owned flags in the local settings store; a generic experiment-ID to boolean map, absent means off. Present Hair Lab under Experimental features in Settings using existing components. No feature imports or registration while disabled. |
+| Experiment preferences | Platform-owned flags in a per-library `experiment-flags` document (id `preferences`) in the document store, so a verification workspace keeps its own; a generic experiment-ID to boolean map, absent means off. Present Hair Lab under Experimental features in Settings using existing components. No feature imports or registration while disabled. |
 | Verification override | `?verify=1&experiment.hair-lab=1` enables it only in the isolated verification workspace; `0` forces off. Overrides are session inputs, never persisted. Unknown experiments are ignored. |
 | Activation | Enabling makes the module available. Its panel's Hair Lab toggle activates replacement for its bound scene and groom. Closing or hiding the module withdraws the replacement. Enabling alone does not hide normal hair. |
 | Ownership | `features/hair-lab/` owns domain, view and render adapters; platform composition owns conditional loading and generic settings. No feature rules in startup or UI. |

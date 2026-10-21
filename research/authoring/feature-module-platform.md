@@ -417,7 +417,7 @@ Add these to `tests/architecture-import-boundary.test.ts`, with a recursive walk
    - every action has a descriptor, label, Undo policy and numeric units, and appears in the catalogue and an activity source;
    - every exporting feature has an exporter and a verifier;
    - every panel has meta;
-   - a golden `registry()` snapshot guards against ID churn.
+   - the action catalogue is generated from the registry, so it cannot drift from it.
 
 **Enforced today** (`tests/architecture-import-boundary.test.ts`, `tests/studio-ui-boundary.test.ts`, `tests/studio-registry.test.ts`):
 
@@ -426,7 +426,7 @@ Add these to `tests/architecture-import-boundary.test.ts`, with a recursive walk
 - Rule 2 for Three and `node:`, rules 4 and 5.
 - The engine rules: engines import only engines, `platform/api` and the pure helpers; only an engine's `render/` imports Three and the scene's shared materials; no other engine module reaches a renderer or Three, even through other modules; and the pure engine reads no page or host global: the window in any use but a property name, `self.`, `document.`, `globalThis`, storage, the navigator, `fetch`, `process.env` or `Bun.env`, scanned in code with comments and literals blanked (CORE-78). studio-ui and the platform import no engine.
 - The view rules: views receive a `FeatureViewContext` over their facade, never the shell's runtime or the port, by type (UI-73); the import scan sees every import form (UI-74).
-- The registry golden of rule 7.
+- The registry completeness checks of rule 7 (`tests/studio-registry.test.ts`).
 
 The engine and feature rules run over a source tree, and a test runs them on the tree with the review's injected violations appended (a pure engine module importing its renderer, the page globals of CORE-78, a feature core importing a browser device, a trusted service, the DOM and Three, and a legacy module reaching the look history), each of which must fail. Since step 8 a feature's `export/` and `verify/` have their own rules (rules 2 and 3): the exporter imports only `platform/api`, engines (not renderers), its own core and exporter, Node and a shrinking legacy list of the `src/` pipeline modules it wraps; the verifier imports only `platform/api`, Node, its own folder and its core's export info, and reaches no exporter, engine or legacy pipeline module even transitively; only `platform/export` in the platform uses Node; the browser bundle reaches no exporter, verifier or export host (rule 6); and every exporting feature has an exporter and a verifier of the same ID in `compose/exporters.ts` (rule 7, `tests/studio-registry.test.ts`). Each is shown to fail on injected violations. See [file moves](#file-moves). Since step 7, rule 2 lets a feature's `render/` (only) import Three, and a renderer imports only `platform/api`, engines, Three and its own feature's core, never `platform/scene` ([step 7 status](#step-7-status)); `platform/api` and `platform/core` never import `platform/scene`, and `platform/scene` imports the platform, Three and a listed set of the scene's device modules (a [recorded exception](ui-architecture-boundary.md#open-work)). Since the step 7 cleanup these two rules are transitive, types included (CORE-86): everything the scene host reaches is a listed device or support module, never a feature, engine, `compose/`, studio-ui or application service, and a renderer reaches, beyond its feature's core, only `platform/api`, engines, Three and the scene's materials. `platform/api` names Three by type only (CORE-88), and the import scan reads template-literal specifiers and refuses any computed `import()` or `require()` (CORE-87).
 
@@ -487,7 +487,6 @@ Built on 26 September in `claude/platform-step1`. Behaviour, action IDs, seriali
 - Only `compose/**` imports features.
 - Every action is owned exactly once, and the owners' union equals the descriptor table in order.
 - The derived kind sets equal the previous hand-kept ones.
-- The golden `tests/golden/studio-registry.json` equals the catalogue captured from the pre-change code.
 
 **Cost.** Measured on the same machine against the pre-change code: no change within noise. Routing costs the same or less; a six-action capability sweep dropped from 0.67 to 0.57 µs. Figures are in the [ledger](code-health.md).
 
@@ -634,7 +633,7 @@ Built on 26 September in `claude/platform-step4`. Every user-visible Undo, Redo 
 
 ### Cleanup after step 4
 
-The review of steps 3 and 4 (ledger findings CORE-38 to CORE-44) was fixed on 26 September in `claude/cleanup-platform2`. The standard stored form of every fixture, the look-history parity golden, the registry golden and library bytes are unchanged; the 0.1.0-alpha.1 reader tests pass.
+The review of steps 3 and 4 (ledger findings CORE-38 to CORE-44) was fixed on 26 September in `claude/cleanup-platform2`. The standard stored form of every fixture, the look-history parity golden and library bytes are unchanged; the 0.1.0-alpha.1 reader tests pass.
 
 **Decisions.**
 
@@ -658,7 +657,7 @@ The review of steps 3 and 4 (ledger findings CORE-38 to CORE-44) was fixed on 26
 
 ### Step 5 status
 
-Built on 26 September in `claude/platform-step5`, with the file moves in `claude/platform-step5-moves` ([below](#file-moves)). Appearance, exported archive members, the look-history parity golden, every stored workspace and library row of the committed fixtures and the step-2/3 goldens are unchanged, and the 0.1.0-alpha.1 reader tests pass. The registry golden changes by exactly the Undo-port rename (below).
+Built on 26 September in `claude/platform-step5`, with the file moves in `claude/platform-step5-moves` ([below](#file-moves)). Appearance, exported archive members, the look-history parity golden, every stored workspace and library row of the committed fixtures and the step-2/3 goldens are unchanged, and the 0.1.0-alpha.1 reader tests pass.
 
 **What exists.**
 
@@ -672,7 +671,7 @@ Built on 26 September in `claude/platform-step5`, with the file moves in `claude
 
 **Decisions.**
 
-- **The Undo-port rename and its golden change.** The history family's actions and the feature Undo policy were still named after the eye-makeup recipe; since step 4 Undo is a look history across parts, so the names say what they do. `tests/golden/studio-registry.json` differs from its step-1 capture by exactly 3 + 3 occurrences of the two kinds and 45 `"undo": "recipe"` values that became `"part"`; order, scopes, payloads, effects and every other policy are unchanged. No stored data names an action kind or policy (labels, times and Redo are session-only; bindings and tours are code), so no workspace, library or layout changes.
+- **The Undo-port rename.** The history family's actions and the feature Undo policy were still named after the eye-makeup recipe; since step 4 Undo is a look history across parts, so the names say what they do. The registry's 3 + 3 action names of the two kinds and 45 `"undo": "recipe"` policies became `"part"`; order, scopes, payloads, effects and every other policy are unchanged. No stored data names an action kind or policy (labels, times and Redo are session-only; bindings and tours are code), so no workspace, library or layout changes.
 - **`port.editor` is removed** rather than kept as an alias: its one consumer is eye makeup's view, which now reads its facade, and two names for one view would be migration debt. `port.authoring` keeps its eye-makeup-specific methods (form controls, `layerExport`, the catalogues) for other callers and tests; eye makeup's view no longer uses `port.authoring` at all (UI-52, [file moves](#file-moves)).
 - **Slots, not trees, in contributions.** A panel names a shell slot (`collection`, `stack`, `stage`, `canvas`, `inspect` or `closed`) and a catalogue order; the shell owns the arrangement (group IDs and ratios per size class). The derived layouts equal the hand-kept pre-step-5 trees exactly, and a customised pre-step-5 layout restores unchanged (`tests/view-contributions.test.ts`). Panel IDs are grandfathered (eye makeup's six and the shell's eleven); new features use `<feature>.<panel>`, so `parseTree` now accepts a dot and the dock's tab-focus lookups use attribute selectors.
 - **The view composition list is in `compose/`.** Until the file moves it sat in `studio-ui/views/` as a recorded boundary exception; the moves met its removal criterion and the exception is gone ([boundary assessment](ui-architecture-boundary.md#open-work)).
@@ -727,7 +726,7 @@ Done on 26 September in `claude/platform-step5-moves`, as two commits so history
 
 ### Step 7 status
 
-Built on 26 September in `claude/platform-step7`, as reviewable commits: the scene port and eye makeup's renderer, then the move and split of `scene.ts`, then the real-GPU tests. Appearance, draw order, frame requests, stored data, the registry golden and every exported byte are unchanged.
+Built on 26 September in `claude/platform-step7`, as reviewable commits: the scene port and eye makeup's renderer, then the move and split of `scene.ts`, then the real-GPU tests. Appearance, draw order, frame requests, stored data and every exported byte are unchanged.
 
 **What exists.**
 
@@ -817,7 +816,7 @@ Built on 26 September in `claude/platform-step7`, as reviewable commits: the sce
 
 ### Cleanup after step 7
 
-Done 26 September in `claude/cleanup-step7`, before module #2: every finding of the step 7 review (PREV-89..98, CORE-86..89, UI-76..77) and CORE-82; see the [code-health ledger](code-health.md#fixed-in-claudecleanup-step7). Makeup screenshot parity and every golden are unchanged.
+Done 26 September in `claude/cleanup-step7`, before module #2: every finding of the step 7 review (PREV-89..98, CORE-86..89, UI-76..77) and CORE-82. Makeup screenshot parity and every golden are unchanged.
 
 - **Supersedes** are the port's `supersede(parts)`, per component (a slot, or named creator options) and changeable at any time; a superseded part draws as if the V had none.
 - **Rig motion:** `attach(…, { rig: true })` joins a feature's own bones to the idle and blink.

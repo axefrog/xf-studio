@@ -179,6 +179,10 @@ By Microsoft. The DirectX shader compiler and [DXIL reference](https://github.co
 
 By NVIDIA. [GitHub](https://github.com/NVIDIA-RTX/Streamline). Its DLSS Frame Generation programming guide explains the hudless and UI buffers frame generation uses and that presentation moves to another thread while it is on, which is why an overlay drawn into the game's final image may ghost or flicker and why the planned XF overlay host never hooks presentation below the engine. Studied only.
 
+### PractRand (sfc32)
+
+By Chris Doty-Humphrey. [PractRand](https://pracrand.sourceforge.net/) and its small fast counting generator, sfc32. XF Studio's seeded random helper uses sfc32, which makes tests and simulations repeatable from a seed.
+
 ### Pillow
 
 By the Pillow contributors. [GitHub](https://github.com/python-pillow/Pillow). Used in research tooling to encode and measure generated test images; its BCn decoder reads the game's compressed textures so their levels, mips and normal-map conventions can be measured offline.

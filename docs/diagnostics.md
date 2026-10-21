@@ -2,7 +2,7 @@
 
 XF Studio traps its own errors, keeps a small private record of what it worked out, and helps a person file a useful bug report without shipping their mods. **Nothing is ever sent automatically.** A report is prepared for review, and the person saves it and attaches it themselves.
 
-Code: [`projects/xf-studio/authoring/src/diagnostics/`](../projects/xf-studio/authoring/src/diagnostics/). Tests: [`tests/diagnostics.test.ts`](../projects/xf-studio/authoring/tests/diagnostics.test.ts), [`tests/diagnostics-report.test.ts`](../projects/xf-studio/authoring/tests/diagnostics-report.test.ts) (what a saved report holds, redaction, the resolution's size) and [`tests/diagnostics-device.test.ts`](../projects/xf-studio/authoring/tests/diagnostics-device.test.ts) (the page's device and the review). The typed actions are in the [action catalogue](../research/authoring/ui-action-catalogue.md#diagnostics-and-problem-reports).
+Code: [`projects/xf-studio/authoring/src/diagnostics/`](../projects/xf-studio/authoring/src/diagnostics/). Tests: [`tests/diagnostics.test.ts`](../projects/xf-studio/authoring/tests/diagnostics.test.ts), [`tests/diagnostics-report.test.ts`](../projects/xf-studio/authoring/tests/diagnostics-report.test.ts) (what a saved report holds, redaction, the resolution's size) and [`tests/diagnostics-device.test.ts`](../projects/xf-studio/authoring/tests/diagnostics-device.test.ts) (the page's device and the review). The typed actions are in the [action catalogue](../research/authoring/ui-action-catalogue.md).
 
 ## Where things live
 
