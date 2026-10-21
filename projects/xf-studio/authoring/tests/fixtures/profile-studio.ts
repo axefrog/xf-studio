@@ -91,7 +91,6 @@ export async function profileStudio(options: {
   const core = createTrustedAuthoringCore({ ...workspace, ...(first ? first.state : {}) }, { history, resetStack: () => {},
     selectedCollection: () => application?.selectedPresetId() ?? "draft", ...(ref && first ? { scope: lookScope(ref) } : {}),
     ...(options.newId ? { newId: options.newId } : {}) }, STUDIO_COMPOSITION);
-  if (ref && first) history.focus(lookScope(ref));
   const lookEditor = new LookEditor({ model: MODEL, sessions, document: core.document, restoring: look => outbox.recovering(lookRef(look)) });
   const downloads: { name: string; text: string }[] = [];
   let packageInput: unknown;

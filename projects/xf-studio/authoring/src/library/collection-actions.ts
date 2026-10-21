@@ -60,7 +60,7 @@ export type CollectionDraftSummary = {
   presets: { id: string; name: string; revision: number; layers: number; locked?: true }[];
   /** Oldest first; `restore` brings back the last entry. */
   removed: { id: string; name: string; index: number }[];
-  /** The collection shown before an open or import (Undo open shows it again). */
+  /** The collection shown before an open or an import: Undo open shows it again. */
   previous?: { id: string; name: string; revision?: number };
   /**
    * Recent drafts, newest first: the library's other working copies never saved as a version (release-readiness-audit.md item 13), each

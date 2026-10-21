@@ -24,8 +24,6 @@ export function studio(state: WorkspaceState) {
   let n = 0;
   const core = createTrustedAuthoringCore(state, { resetStack: () => {}, selectedCollection: () => "draft",
     newId: () => `step4-${++n}` }, STUDIO_COMPOSITION);
-  // Undo reaches the look shown, as the Studio's start makes it the editing context (profiles design §3.7).
-  core.history.focus(core.document.scopeId);
   const actions = state.collections ? new CollectionActions(STUDIO_DOCUMENTS, state.collections, () => core.document.export(),
     editor => core.document.restore({ ...editor, fieldSelection: editor.fieldSelection ?? {} })) : undefined;
   return { core, actions };

@@ -360,8 +360,10 @@ export function createHistoryService(): HistoryService {
   const documents: DocumentHistory = {
     selected: () => recent[0]?.startsWith(DOCUMENT_PREFIX) ? recent[0].slice(DOCUMENT_PREFIX.length) : null,
     focus: id => {
-      if (id !== null) setFocus(DOCUMENT_PREFIX + id);
-      else if (recent[0]?.startsWith(DOCUMENT_PREFIX)) setFocus(null);
+      if (id !== null) { setFocus(DOCUMENT_PREFIX + id); return; }
+      // No document focused: global Undo goes back to the editing context before the documents.
+      const rest = recent.filter(item => !item.startsWith(DOCUMENT_PREFIX));
+      if (rest.length !== recent.length) { recent = rest; notify(true); }
     },
     snapshot,
     record: (id, documentLabel, entry, change) => batch(() => {

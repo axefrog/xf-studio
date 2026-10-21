@@ -254,7 +254,8 @@ describe("the collection owner: several collections and looks at once, each comm
     expect(w.owner.look({ collection: id, look: looks[0]! })).toBeNull();
     expect(w.owner.restorable(id).map(item => item.look)).not.toContain(looks[0]);
     expectOk(w.owner.dispatch({ kind: "collection.restoreLook", collection: id, base: w.owner.collection(id)!.revision, look: looks[5]! }));
-    expect(w.owner.looksOf(id).map(look => look.name).at(-1)).toBe("L5");
+    // Back where it stood when it was removed (each of these was first then).
+    expect(w.owner.looksOf(id).map(look => look.name).at(0)).toBe("L5");
     expect(w.owner.dispatch({ kind: "collection.restoreLook", collection: id, base: w.owner.collection(id)!.revision, look: looks[0]! })).toMatchObject({ ok: false });
     await quiet(w.outbox);
     // 30 days on, a new window's load expires the rest in one command of its own.
@@ -493,8 +494,9 @@ describe("a crash at any point loses nothing acknowledged, with several collecti
             const look = rng.pick(view.removed).look;
             const answer = w.owner.dispatch({ kind: "collection.restoreLook", collection: id, base: view.revision, look });
             if (answer.ok) {
-              const c = expected.collections[id]!;
-              c.removed = c.removed.filter(item => item !== look); c.looks.push(look);
+              // Back where it stood when it was removed.
+              const c = expected.collections[id]!, index = view.removed.find(item => item.look === look)?.index;
+              c.removed = c.removed.filter(item => item !== look); c.looks.splice(Math.min(index ?? c.looks.length, c.looks.length), 0, look);
               set(`${id}/${look}`, { ...expected.looks[`${id}/${look}`]!, state: "live" });
             }
           } else if (roll < 0.62 && view) {

@@ -56,7 +56,7 @@ test("derived kind sets equal the sets StudioApplication used to keep by hand", 
   // Before step 1: `recipeKinds = RECIPE_ACTION_KINDS` plus the two literal layer kinds.
   expect(kinds("eye-makeup")).toEqual([...RECIPE_ACTION_KINDS, "layer.edit", "layer.setEnabled"].sort());
   // Before step 1: `COLLECTION_KIND_TABLE`.
-  expect(kinds("collection")).toEqual(["collection.importRecipe", "collection.open", "collection.rename",
+  expect(kinds("collection")).toEqual(["collection.importRecipe", "collection.rename",
     "collection.undoOpen", "package.assign", "package.merge", "package.rename", "package.split", "preset.edit", "preset.select"]);
   // Before step 1: literal comparisons and `startsWith` prefixes, with saved-V as the final fallback.
   expect(kinds("history")).toEqual(["history.jumpTo", "history.redo", "history.undo"]);

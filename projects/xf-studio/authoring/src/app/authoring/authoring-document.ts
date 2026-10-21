@@ -93,7 +93,10 @@ export class AuthoringDocument {
       // The recipe's and the other parts' revisions: while unchanged, Redo stays valid without comparing content.
       revision: () => `${this.geometryRevision}:${this.otherRevision}`, fingerprint: keys => this.contentKey(keys) };
     this.service = options.history ?? createHistoryService();
-    this.scope = this.openScope(options.scope ?? LOCAL_LOOK_SCOPE, lookHistory(initial.history, initial.historyTrimmed === true, parts));
+    const stack = lookHistory(initial.history, initial.historyTrimmed === true, parts);
+    this.scope = this.openScope(options.scope ?? LOCAL_LOOK_SCOPE, stack);
+    // The look shown is the editing context until something else is edited (profiles design §3.7: Undo in a view undoes its look).
+    this.scope.replace(stack);
     parts.others?.load(initial.liveFeatures);
     this.lockedReason = initial.liveLocked;
   }
