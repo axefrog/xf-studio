@@ -271,6 +271,14 @@ export function builderStage(line: string): PackageBuildStage | null {
     return (PACKAGE_BUILD_STAGES as readonly unknown[]).includes(stage) ? stage as PackageBuildStage : null;
   } catch { return null; }
 }
+const ABORTED = Symbol("aborted");
+/** `work`'s answer, or `ABORTED` as soon as `signal` aborts (the work itself goes on; its later outcome is ignored). */
+function untilAborted<T>(work: Promise<T>, signal: AbortSignal): Promise<T | typeof ABORTED> {
+  if (signal.aborted) return Promise.resolve(ABORTED);
+  let release = () => {};
+  const aborted = new Promise<typeof ABORTED>(done => { release = () => done(ABORTED); signal.addEventListener("abort", release, { once: true }); });
+  return Promise.race([work, aborted]).finally(() => signal.removeEventListener("abort", release));
+}
 async function attempt(adapter: PackageHostAdapter, value: unknown, signal: AbortSignal, timeoutMs: number,
   retried: boolean, onProgress: (progress: PackageBuildProgress) => void): Promise<PackageHostOutcome | typeof RETRY> {
   const started = Date.now();
@@ -290,8 +298,14 @@ async function attempt(adapter: PackageHostAdapter, value: unknown, signal: Abor
   let setup: ReturnType<PackageHostAdapter["buildSetup"]> | undefined;
   try {
     if (deadline.signal.aborted) return stopped();
+    // The readiness probe may be shared with other callers and slow (a WolvenKit launch), so it is not stopped, only no longer waited
+    // for: cancellation and the deadline settle this Build at once and free the service for the next one.
     let issue: string | null;
-    try { issue = await adapter.buildIssue(); }
+    try {
+      const answer = await untilAborted(Promise.resolve().then(() => adapter.buildIssue()), deadline.signal);
+      if (answer === ABORTED) return stopped();
+      issue = answer;
+    }
     catch (error) { adapter.log("build", "package_build_unavailable", "Build readiness could not be checked.", error); issue = "Package Build could not check its setup. Restart XF Studio and try again."; }
     if (deadline.signal.aborted) return stopped();
     if (issue) return failure("package_build_unavailable", issue);
@@ -316,6 +330,8 @@ async function attempt(adapter: PackageHostAdapter, value: unknown, signal: Abor
     if (missing.length) return failure("package_build_unavailable", "This host can't prepare everything these mod files need.");
     report("prepare");
     for (const id of needed) {
+      // A prerequisite that finished without heeding the signal does not start the next one.
+      if (deadline.signal.aborted) return stopped();
       try { prepared[id] = await adapter.prerequisites[id].prepare(deadline.signal); }
       catch (error) {
         if (deadline.signal.aborted) return stopped();

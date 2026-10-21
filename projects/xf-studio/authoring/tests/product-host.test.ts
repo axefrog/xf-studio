@@ -8,10 +8,10 @@ import { afterAll, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { runProductBuild, builderError, type BuilderRun, type HostPrerequisite, type PackageHostAdapter } from "../src/platform/export/product-host";
+import { PackageHostService, runProductBuild, builderError, type BuilderRun, type HostPrerequisite, type PackageHostAdapter } from "../src/platform/export/product-host";
 import { runProductCommand } from "../src/platform/export/product-builder";
 import { ExportRefusal, PACKAGE_PLAN_1, PrerequisiteStale, type FeatureExporterEntry, type PackageBuildResult } from "../src/platform/api";
-import { EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
+import { EYE_PLATE_MASCULINE_PREREQUISITE, EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
 import { packagePlateRecord, type EyePlateManifest } from "../src/legacy/eye-makeup/plate/host/eye-plate-service";
 import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/legacy/eye-makeup/export/host/plate-uv-footprint-io";
 import { localCheckWorker } from "../src/host/package-server";
@@ -140,6 +140,30 @@ test("a Build cancelled while its setup is probed, or before it starts, prepares
   expect(probed).toBe(false);
   expect(prepared).toEqual([]);
   expect(before.runs).toEqual([]);
+}, 60_000);
+
+test("cancelling during a slow readiness probe settles at once and frees the service; a cancel during one prerequisite starts no other (PIPE-140)", async () => {
+  // The probe answers only after a minute; the cancelled Build must not wait for it.
+  let answer = (_issue: string | null) => {};
+  const probe = new Promise<string | null>(done => { answer = done; });
+  const service = new PackageHostService(), cancel = new AbortController(), slow = host();
+  const pending = service.run({ ...slow.adapter, buildIssue: () => probe }, "build", fixture, cancel.signal);
+  await Bun.sleep(20);
+  cancel.abort();
+  const settled = await Promise.race([pending, Bun.sleep(2_000).then(() => "still waiting")]);
+  expect(settled).toMatchObject({ ok: false, code: "package_build_cancelled", status: 499 });
+  expect(service.busy("build")).toBe(false);
+  expect(slow.runs).toEqual([]);
+  answer(null);
+  // Two prerequisites: the page closes while the first is prepared, which finishes without heeding the signal.
+  const started: string[] = [], base = host(), during = new AbortController();
+  const plate = base.adapter.prerequisites[EYE_PLATE_PREREQUISITE];
+  const adapter: PackageHostAdapter = { ...base.adapter, prerequisites: {
+    [EYE_PLATE_PREREQUISITE]: { ...plate, prepare: async signal => { started.push("plate"); during.abort(); return plate.prepare(signal); } },
+    [EYE_PLATE_MASCULINE_PREREQUISITE]: { cached: () => null, discard() {}, prepare: async () => { started.push("masculine"); throw Error("not reached"); } } } };
+  expect(await runProductBuild(adapter, fixture, during.signal)).toMatchObject({ ok: false, code: "package_build_cancelled" });
+  expect(started).toEqual(["plate"]);
+  expect(base.runs).toEqual([]);
 }, 60_000);
 
 test("a builder answer that differs from the host's own plan is refused", async () => {
