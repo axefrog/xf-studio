@@ -427,6 +427,13 @@ async function start(host: StudioHost, root: HTMLElement) {
     },
     fileDevice, diagnostics, modules: moduleServices, experiments, lease, outbox: documents.outbox,
     panelInstance: panel => sessionState.instance(panel),
+    // A focused 3D view's own Undo steps the look its scene shows (Ctrl+Z in the 3D view always undoes the look); header and History-panel
+    // Undo follow the editing context. (The V panel handles its own Ctrl+Z: character.undo.)
+    panelHistoryScope: panel => {
+      const view = panel === "head" ? MAIN_VIEW : panel.startsWith("view.") ? panel.slice("view.".length) : undefined;
+      const look = view !== undefined && views.has(view) ? sessionState.scene(views.node(view, "scene").id).look : undefined;
+      return look ? lookScope(look) : undefined;
+    },
   });
   // The editor shows the scene's look, and follows it when the scene shows another one.
   lookShown = () => { previewDevice.coordinator.resetStack(); drawUV(); };

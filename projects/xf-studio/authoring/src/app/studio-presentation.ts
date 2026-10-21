@@ -248,7 +248,14 @@ export type StudioPresentationPort<Slot> = {
    * The panel instances of the tab shown (profiles design §1.1; phase 1, one instance of each panel): a module panel's own instance ID
    * (`<panel>--<base36>`), which names its session in its module's service.
    */
-  readonly panels: { instance(panel: string): string };
+  readonly panels: {
+    instance(panel: string): string;
+    /**
+     * The history a panel's own Undo steps while focus is in it, when it has one: a 3D view's is the look its scene shows
+     * (`look:<collection>/<look>`). Header and History-panel Undo follow the editing context instead.
+     */
+    historyScope(panel: string): string | undefined;
+  };
   readonly documents: {
     capability(action: DocumentsAction): StudioCapability;
     dispatch(action: DocumentsAction): Promise<{ ok: true } | { ok: false; code: string; message: string }>;
@@ -336,6 +343,8 @@ export function createStudioPresentation<Slot>(sources: {
   outbox?: DocumentOutbox;
   /** A panel's instance in the tab shown (the session's); without it (fixtures, tools) each panel is one instance, `<panel>--local`. */
   panelInstance?: (panel: string) => string;
+  /** A panel's own history scope (see `panels.historyScope`); without it (fixtures, tools) no panel has one. */
+  panelHistoryScope?: (panel: string) => string | undefined;
 }): StudioPresentationPort<Slot> {
   const a = sources.authoring, l = sources.library, f = sources.files,
     v = sources.viewport, p = sources.preferences, r = sources.previewReadiness,
@@ -544,7 +553,8 @@ export function createStudioPresentation<Slot>(sources: {
     installDetection: Object.freeze(leased(installDetection)), modInstall: Object.freeze(leased(modInstall)), previewSetup: Object.freeze(leased(previewSetup)),
     desktopApp: Object.freeze(leased(desktopApp)), updates: Object.freeze(leased(updates)),
     status: Object.freeze({ snapshot: () => s.snapshot() }), links, about, diagnostics: Object.freeze(diagnostics),
-    panels: Object.freeze({ instance: (panel: string) => sources.panelInstance?.(panel) ?? `${panel}--local` }),
+    panels: Object.freeze({ instance: (panel: string) => sources.panelInstance?.(panel) ?? `${panel}--local`,
+      historyScope: (panel: string) => sources.panelHistoryScope?.(panel) }),
     documents: Object.freeze({
       capability: (action: DocumentsAction) => documentsCapability(sources.outbox, action),
       async dispatch(action: DocumentsAction) {

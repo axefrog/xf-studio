@@ -42,8 +42,9 @@ const inView: typeof desc = (...args) => { const d = desc(...args); return { ...
 
 /** Every public top-level action ID is covered at compile time; nested commands have named variants. */
 export const ACTION_DESCRIPTORS = {
-  "history.undo": desc("workspace", "content", "none"),
-  "history.redo": desc("workspace", "content", "none"),
+  // A named `scope` steps that history (a focused panel's own); without one, the focused scope.
+  "history.undo": desc("workspace", "content", "none", { scope: { type: "string", required: false, from: "target" } }),
+  "history.redo": desc("workspace", "content", "none", { scope: { type: "string", required: false, from: "target" } }),
   "history.jumpTo": desc("workspace", "content", "none", { entryId: input("string") }),
   // Eye makeup's actions, in catalogue order (eye-makeup-descriptors.ts).
   ...EYE_MAKEUP_DESCRIPTORS,

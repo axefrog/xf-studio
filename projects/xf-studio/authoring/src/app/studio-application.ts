@@ -498,6 +498,11 @@ export class StudioApplication {
    * Where global Undo and Redo go: the editing context (profiles design §3.7), the scope of the last editing interaction (a look, a V
    * or an experiment's document); none (undefined) before anything was edited. Without a history service (fixtures), the look's.
    */
+  /** The history a command steps: the scope it names (a focused panel's own), else the focused one. */
+  private commandHistory(action: HistoryAction): HistoryScope | undefined {
+    const named = action.kind !== "history.jumpTo" ? action.scope : undefined;
+    return named && this.services.history ? this.services.history.scope(named) : this.focusedHistory();
+  }
   private focusedHistory(): HistoryScope | undefined {
     return this.services.history ? this.services.history.focused() ?? undefined : this.services.document.history;
   }
@@ -745,12 +750,12 @@ export class StudioApplication {
     return {
       // Global Undo, Redo and jumps reach the focused history scope, which decides what is available.
       history: {
-        capability: action => app.focusedHistory()?.capability(action) ?? refusal("unavailable", NOTHING_TO_UNDO),
+        capability: action => app.commandHistory(action)?.capability(withoutScope(action)) ?? refusal("unavailable", NOTHING_TO_UNDO),
         // A document's move (through its experiment) has no result of its own; a look's says whether it moved.
         dispatch: action => {
-          const scope = app.focusedHistory();
+          const scope = app.commandHistory(action);
           if (!scope) return undefined;
-          const moved = scope.command(action);
+          const moved = scope.command(withoutScope(action));
           return isLookScope(scope.id) || !app.services.history ? moved : undefined;
         },
       },
@@ -1147,4 +1152,10 @@ function unknownCommand(): StudioCapability { return { available: false, code: "
 export type NotThenable<T> = T extends PromiseLike<unknown> ? never : T;
 function isThenable(value: unknown): value is PromiseLike<unknown> {
   return (typeof value === "object" || typeof value === "function") && value !== null && typeof (value as { then?: unknown }).then === "function";
+}
+
+/** The command a scope carries out: the scope it named is already chosen. */
+function withoutScope(action: HistoryAction): HistoryAction {
+  if (action.kind === "history.jumpTo" || action.scope === undefined) return action;
+  return { kind: action.kind };
 }

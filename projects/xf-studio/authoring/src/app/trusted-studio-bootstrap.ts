@@ -59,6 +59,8 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   outbox?: import("../platform/core/document-outbox").DocumentOutbox;
   /** A panel's instance in the tab shown (the profile session's). */
   panelInstance?: (panel: string) => string;
+  /** A focused panel's own history scope (the presentation's `panels.historyScope`): a 3D view's is the look its scene shows. */
+  panelHistoryScope?: (panel: string) => string | undefined;
   onRecipeImported(): void;
   savedAppearance: {
     has(): boolean;
@@ -107,7 +109,8 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     previewReadiness: options.previewReadiness, editor: core.presentation, status: options.status,
     localSetup: options.localSetup, installDetection: options.installDetection, modInstall: options.modInstall, previewSetup: options.previewSetup,
     desktopApp: options.desktopApp, updates: options.updates, links: options.links, about: options.about, diagnostics: options.diagnostics, modules: options.modules, experiments: options.experiments,
-    workspace: options.lease, outbox: options.outbox, ...(options.panelInstance ? { panelInstance: options.panelInstance } : {}) });
+    workspace: options.lease, outbox: options.outbox, ...(options.panelInstance ? { panelInstance: options.panelInstance } : {}),
+    ...(options.panelHistoryScope ? { panelHistoryScope: options.panelHistoryScope } : {}) });
   return {
     /** Trusted handles are retained by the composition root; never pass this object to a UI. */
     files, collection,

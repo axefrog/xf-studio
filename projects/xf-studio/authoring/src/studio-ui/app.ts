@@ -384,7 +384,11 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
       // Undo follows focus (view-graph-design.md §3.6): in Camera & light and Preview quality (its Rendering options) it steps the View
       // and lighting history, not the look's.
       if (["lighting", "quality"].some(id => byId.get(id)?.spec.element.contains(document.activeElement))) { rt.dispatch({ kind: shortcut === "redo" ? "view.redo" : "view.undo" }); return; }
-      rt.dispatch({ kind: shortcut === "redo" ? "history.redo" : "history.undo" });
+      // A focused panel's own history comes first: in the 3D view Ctrl+Z undoes the look it shows, even when a creator choice was changed
+      // last (the V panel steps its own with character.undo). Elsewhere Undo follows the editing context, as the header's and History's do.
+      const focusedPanel = [...byId.keys()].find(id => byId.get(id)!.spec.element.contains(document.activeElement));
+      const scope = focusedPanel ? port.panels.historyScope(focusedPanel) : undefined;
+      rt.dispatch({ kind: shortcut === "redo" ? "history.redo" : "history.undo", ...(scope ? { scope } : {}) });
     } else if (shortcut === "regions" || shortcut === "regions-back") cycleRegions(root, shortcut === "regions-back");
     else if (shortcut === "guide") { closeMenus(false); openHelp(); }
     else view.openReference();

@@ -13,7 +13,11 @@ export type HistoryLabel = {
   layerId?: string;
 };
 
-export type HistoryCommand = { kind: "history.undo" } | { kind: "history.redo" } | { kind: "history.jumpTo"; entryId: string };
+/**
+ * Undo, Redo and a jump. Undo and Redo may name the history scope they step (`scope`: `look:<collection>/<look>`, `character:<id>`),
+ * as a focused panel's own Undo does (the 3D view steps the look it shows); without one they step the focused scope, the editing context.
+ */
+export type HistoryCommand = { kind: "history.undo"; scope?: string } | { kind: "history.redo"; scope?: string } | { kind: "history.jumpTo"; entryId: string };
 export type HistoryState = { undo?: HistoryLabel; redo?: HistoryLabel; depth: number; redoDepth: number };
 export type HistoryStep = HistoryLabel & { id: string; at?: number; state: "done" | "undone" };
 export type HistorySnapshot = { startId: string; steps: HistoryStep[]; current: number; redoCount: number; trimmed: boolean; documentLabel?: string };

@@ -61,6 +61,34 @@ describe("the shown look", () => {
     studio.history.focus(null); studio.history.focus(null); studio.history.focus(null);
     expect(studio.app.capability({ kind: "history.undo" })).toMatchObject({ available: false, reason: NOTHING_TO_UNDO });
   });
+
+  test("Undo naming a scope steps that one: in the 3D view Ctrl+Z undoes the look even when a creator choice was changed last", async () => {
+    const studio = await profileStudio({ looks: [{ name: "One", recipe: initialRecipe() }] });
+    await studio.collection.initialize();
+    const look = studio.document.scopeId!;
+    dispatch(studio, { kind: "layer.setOpacity", layerId: layerId(studio), opacity: 0.3 });
+    // A V's creator choice changed after it: its history becomes the editing context.
+    let choice = "a";
+    const character = studio.history.open("character:v1", { read: () => choice, apply: values => { choice = (values as Record<string, unknown>).choice as string; return true; } });
+    character.checkpoint(["choice"], { label: "Body", actionKind: "character.choose" });
+    choice = "b";
+    expect(studio.history.editing()).toBe("character:v1");
+    // The header's Undo follows the editing context: the creator choice.
+    expect(studio.app.capability({ kind: "history.undo" })).toMatchObject({ available: true });
+    // The 3D view's Undo names the look it shows: the look's edit goes, the creator choice stays.
+    expect(studio.app.dispatch({ kind: "history.undo", scope: look }).ok).toBe(true);
+    expect(studio.document.recipe.layers[0]!.opacity).not.toBe(0.3);
+    expect(choice).toBe("b");
+    expect(studio.app.dispatch({ kind: "history.redo", scope: look }).ok).toBe(true);
+    expect(studio.document.recipe.layers[0]!.opacity).toBe(0.3);
+    // A step kept in the look's history makes it the editing context again; the V's history is still there to step.
+    expect(studio.history.editing()).toBe(look);
+    expect(studio.app.dispatch({ kind: "history.undo", scope: "character:v1" }).ok).toBe(true);
+    expect(choice).toBe("a");
+    expect(studio.document.recipe.layers[0]!.opacity).toBe(0.3);
+    // A scope that isn't open has nothing to undo, with its reason.
+    expect(studio.app.capability({ kind: "history.undo", scope: "look:gone/gone" })).toMatchObject({ available: false, reason: NOTHING_TO_UNDO });
+  });
 });
 
 describe("presets", () => {

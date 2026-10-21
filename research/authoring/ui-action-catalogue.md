@@ -10,8 +10,8 @@ Every user-visible action is registered by exactly one owner, a system family or
 
 | Action | Scope | Effect | Undo | Inputs | Variants |
 |---|---|---|---|---|---|
-| `history.undo` | workspace | content | none |  |  |
-| `history.redo` | workspace | content | none |  |  |
+| `history.undo` | workspace | content | none | scope?: string |  |
+| `history.redo` | workspace | content | none | scope?: string |  |
 | `history.jumpTo` | workspace | content | none | entryId: string |  |
 
 ## Eye makeup (`eye-makeup`, feature module)
