@@ -7,6 +7,9 @@ import { createBrowserLocalSetup, desktopFolderPicker } from "../src/setup/brows
 import { createBrowserPreviewPreparation } from "../src/preview/preview-preparation";
 import { createBrowserWolvenKitSetup } from "../src/setup/wolvenkit-setup";
 import { EYE_MAKEUP_MOD } from "../src/legacy/eye-makeup/mod-branding";
+import { browserLeaseClock, desktopWorkspaceLease } from "../src/app/browser/workspace-lease-device";
+import { WorkspaceLease } from "../src/app/workspace/workspace-lease";
+import { formatFence, WORKSPACE_FENCE_HEADER } from "../src/platform/api/document-store";
 const capabilities = await fetch("/api/desktop/capabilities").then(response => response.json());
 if (capabilities.schema !== "xfs/desktop-capabilities-1") throw Error("Desktop host capabilities are unavailable.");
 // The loopback port changes on each launch, so WebView localStorage alone does
@@ -73,10 +76,21 @@ let workspaceText = workspaceDocument.workspace ?? localCopy;
 // source of truth on desktop, so browser storage failures never block it.
 let pendingText = null, inFlight = null, lastSaveFailed = false;
 const SAVE_FAILED = "Your latest changes could not be saved. Keep this window open and export your collection from the Library panel.";
+// One writer per workspace (profiles design §2.3): the host grants this page the workspace's lease, or it opens read-only. Its
+// writes carry the lease's generation, so one sent after this page released the workspace is refused, never written.
+const lease = new WorkspaceLease(desktopWorkspaceLease({ endpoint: `/api/desktop/workspace/lease${verification ? "?verify=1" : ""}`,
+  send: (url, init) => fetch(url, init), settle: async () => { while (inFlight) await inFlight; } }), { clock: browserLeaseClock });
+await lease.start();
 async function postWorkspace(text, headers = {}) {
+  const generation = lease.generation();
+  // A read-only page (or one that released the workspace) writes nothing.
+  if (generation === null && !lease.draining()) return;
   const response = await fetch(workspaceEndpoint, { method: "POST", credentials: "same-origin",
-    headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify({ workspace: text }),
-    keepalive: new TextEncoder().encode(text).length < 60_000 });
+    headers: { "Content-Type": "application/json", ...headers,
+      ...(generation === null ? {} : { [WORKSPACE_FENCE_HEADER]: formatFence({ workspace: "desktop", generation }) }) },
+    body: JSON.stringify({ workspace: text }), keepalive: new TextEncoder().encode(text).length < 60_000 });
+  // Refused because another page holds the workspace now: nothing of this page's is lost that the holder didn't write last.
+  if (response.status === 409) return;
   if (!response.ok) throw Error(SAVE_FAILED);
 }
 function saveWorkspace(text) {
@@ -115,7 +129,7 @@ const workspaceStorage = {
     try { localStorage.setItem(key, value); } catch { /* The host file already has it. */ }
   },
 };
-if (workspaceDocument.workspace === null && workspaceText !== null) saveWorkspace(workspaceText);
+if (workspaceDocument.workspace === null && workspaceText !== null && lease.writable()) saveWorkspace(workspaceText);
 const stylesheet = document.createElement("link");
 stylesheet.rel = "stylesheet";
 stylesheet.href = "/about.css";
@@ -307,6 +321,7 @@ void import("/build/studio-startup.js").then(({ startStudio }) => startStudio({
   onMounted: shell => { startup.editorReadyMs ??= Math.round(performance.now()); studio = shell; if (setupWanted) { setupWanted = false; shell.openGameSetup(); } },
   onFlushRequest: flush => { flushRequest = flush; },
   onPreviewReady: () => { previewReady = true; startup.previewReadyMs ??= Math.round(performance.now()); },
+  lease,
 })).catch(() => {
     const root = document.getElementById("studio");
     root.removeAttribute("aria-busy");

@@ -9,10 +9,15 @@ import { startStudio } from "./studio-startup";
 import { createBrowserDesktopApp } from "../setup/browser/browser-desktop-app-device";
 import { createBrowserWolvenKitSetup } from "../setup/wolvenkit-setup";
 import { browserExperiments } from "./experiments";
+import { startBrowserWorkspaceLease } from "../app/browser/workspace-lease-device";
 
+// One writer per workspace (profiles design §2.3): the lease is settled before the Studio builds anything, so a second tab opens read-only.
+const workspaceLease = await startBrowserWorkspaceLease({ verification: new URLSearchParams(location.search).has("verify") })
+  .catch(() => null);
 void startStudio({
   storage: localStorage,
-  experiments: (verification, signal) => browserExperiments(location.search, fetch, signal, verification),
+  ...(workspaceLease ? { lease: workspaceLease.lease } : {}),
+  experiments: (verification, signal) => browserExperiments(location.search, fetch, signal, verification, workspaceLease?.documents),
   previewPreparation: createBrowserPreviewPreparation("/api/preview-core"),
   wolvenKitSetup: createBrowserWolvenKitSetup("/api/wolvenkit"),
   setupPlace: LOCALHOST_SETUP_PLACE,

@@ -132,7 +132,12 @@ type Services = { document: AuthoringDocument;
   /** The live facial preview (facial-preview.ts): the held expression on the head, and what a feature's drawer shows. */
   facial?: FacialPreview;
   /** The edited layered surface's outer boundary in UV, once the head is loaded (surface-edge.ts). */
-  surfaceOutline?: SurfaceOutline };
+  surfaceOutline?: SurfaceOutline;
+  /**
+   * Whether this page may change its workspace (the workspace lease, profiles design §2.3): while another page holds it,
+   * every action, request, control and gesture is refused with its `unavailable` refusal. Reads stay available.
+   */
+  access?: { refusal(): (StudioCapability & { available: false }) | undefined } };
 
 /** One read-only, target-aware entry point for a replaceable presentation. */
 export class StudioApplication {
@@ -194,8 +199,9 @@ export class StudioApplication {
       if (content !== this.seenContent) { this.seenContent = content; this.collectionRevision++; }
       this.notify();
     }));
-    for (const source of [s.preview, s.motion, s.transitions, s.quality, s.savedV, s.characterDetails, s.characterContext, s.viewActions, s.presets, s.facial])
-      if (source) this.unsubs.push(source.subscribe(() => this.notify()));
+    for (const source of [s.preview, s.motion, s.transitions, s.quality, s.savedV, s.characterDetails, s.characterContext, s.viewActions, s.presets, s.facial,
+      s.access as { subscribe?(listener: () => void): () => void } | undefined])
+      if (source?.subscribe) this.unsubs.push(source.subscribe(() => this.notify()));
   }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   /** Exact command IDs; nested preset/layer command variants retain their typed payloads. */
@@ -600,9 +606,18 @@ export class StudioApplication {
   recordAppliedSavedAppearance(result: Readonly<Pick<SavedAppearanceState, "suggestedEyeShape">>) {
     if (result.suggestedEyeShape !== undefined) this.services.preview?.rememberEyeShape(result.suggestedEyeShape);
   }
+  /** The workspace lease's refusal while another page holds this workspace; undefined while this page may write. */
+  private denied() { return this.services.access?.refusal(); }
+  /** A request that only reads (the library list) stays available in a read-only page; `open` replaces the draft, so it doesn't. */
+  private readOnlyRequest(kind: string) {
+    const route = this.routes.routeAsync(kind);
+    return kind !== "open" && route.ok && (route.descriptor as { effect?: string }).effect === "read";
+  }
   capability(action: StudioAction): StudioCapability {
     const s = this.services, route = this.routes.route(action.kind);
     if (!route.ok) return unknownCommand();
+    const denied = this.denied();
+    if (denied) return denied;
     // With a loaded collection but no selected preset the editor shows an empty recipe no
     // preset owns; content written there would be discarded at the next preset switch.
     if (route.spec.descriptor.effect === "content" && this.unowned())
@@ -853,7 +868,7 @@ export class StudioApplication {
   }
   /** A pointer gesture owns the Undo transaction while it runs; a form control cannot start inside it. */
   controlBegin(id: string, layerId: string) {
-    if (this.gesture || this.look || this.featureControl || this.unowned() || this.services.document.locked) return false;
+    if (this.denied() || this.gesture || this.look || this.featureControl || this.unowned() || this.services.document.locked) return false;
     const begun = this.services.controls.begin(id, layerId); if (begun) this.notify(); return begun;
   }
   /**
@@ -889,7 +904,7 @@ export class StudioApplication {
     const open = this.featureControl;
     if (open?.feature === feature && open.id === id) return true;
     if (open) this.featureControlCommit(open.id);
-    if (this.gesture || this.look || this.services.controls.snapshot() || this.unowned() || this.services.document.locked
+    if (this.denied() || this.gesture || this.look || this.services.controls.snapshot() || this.unowned() || this.services.document.locked
       || !this.featureHandlers.has(feature)) return false;
     this.featureControl = { feature, id, transaction: this.services.document.history.begin([feature], CONTROL_TRANSACTION) };
     this.notify();
@@ -934,9 +949,13 @@ export class StudioApplication {
   featureControlSnapshot() { return this.featureControl ? { feature: this.featureControl.feature, id: this.featureControl.id } : undefined; }
   /** A part preset request's capability, routed by the registry to the `presets` family. */
   presetCapability(request: PartPresetRequest): StudioCapability {
+    const denied = this.readOnlyRequest(request.kind) ? undefined : this.denied();
+    if (denied) return denied;
     return this.ownsAsync("presets", request.kind) ? this.asyncHandlers.presets.capability(request) : unknownCommand();
   }
   async executePreset(request: PartPresetRequest): Promise<PartPresetOutcome> {
+    const denied = this.readOnlyRequest(request.kind) ? undefined : this.denied();
+    if (denied) return { ok: false, code: denied.code!, message: denied.reason! };
     return this.ownsAsync("presets", request.kind) ? this.asyncHandlers.presets.execute(request)
       : { ok: false, code: "invalid_value", message: "Unknown command." };
   }
@@ -958,17 +977,25 @@ export class StudioApplication {
   facialInstalled() { this.services.facial?.installed(); }
   /** A library request's capability, routed by the registry to the `library` family. */
   requestCapability(request: CollectionRequest): StudioCapability {
+    const denied = this.readOnlyRequest(request.kind) ? undefined : this.denied();
+    if (denied) return denied;
     return this.ownsAsync("library", request.kind) ? this.asyncHandlers.library.capability(request) : unknownCommand();
   }
   async execute(request: CollectionRequest) {
+    const denied = this.readOnlyRequest(request.kind) ? undefined : this.denied();
+    if (denied) return { ok: false as const, code: denied.code!, message: denied.reason! };
     return this.ownsAsync("library", request.kind) ? this.asyncHandlers.library.execute(request)
       : { ok: false as const, code: "invalid_value", message: "Unknown command." };
   }
   /** A file workflow's capability, routed by the registry to the `files` family (the workflow's own answer). */
   fileCapability(action: StudioFileAction): { available: boolean; reason?: string; code?: ReasonCode } {
+    const denied = this.denied();
+    if (denied) return denied;
     return this.ownsAsync("files", action.kind) ? this.asyncHandlers.files.capability(action) : unknownCommand();
   }
   executeFile(action: StudioFileAction): Promise<StudioFileOutcome> {
+    const denied = this.denied();
+    if (denied) return Promise.resolve({ ok: false, code: denied.code!, message: denied.reason! });
     return this.ownsAsync("files", action.kind) ? this.asyncHandlers.files.execute(action)
       : Promise.resolve({ ok: false, code: "invalid_value", message: "Unknown command." });
   }
@@ -978,6 +1005,8 @@ export class StudioApplication {
     return !!owner?.loaded && !owner.id;
   }
   canBeginGesture(source: GestureOrigin, layerId: string): StudioCapability {
+    const denied = this.denied();
+    if (denied) return denied;
     if (this.unowned()) return { available: false, code: "missing_target", reason: NO_PRESET };
     if (this.services.document.locked) return refusal("unavailable", this.services.document.locked);
     if (fromView3d(source) && this.previewUnavailable)

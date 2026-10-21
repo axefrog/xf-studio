@@ -27,6 +27,8 @@ export const SAVE_MESSAGES = {
 /** One explicit debounce/flush policy for the isolated workspace key. */
 export class WorkspacePersistence {
   private active = false;
+  /** Retired (the workspace was handed to another page): nothing is written again in this page's lifetime. */
+  private retired = false;
   private timer?: ReturnType<typeof setTimeout>;
   private status: WorkspaceSaveStatus = { kind: "idle", message: "" };
   private listeners = new Set<(status: WorkspaceSaveStatus) => void>();
@@ -38,22 +40,34 @@ export class WorkspacePersistence {
   constructor(private options: { storage: WorkspacePersistencePort; key: string; writable: boolean;
     restoreError?: string; restoreWarning?: string; capture(): WorkspaceState; delayMs?: number; budget?: number;
     /** The document model the stored form is written with (injected by the composition root). */
-    model: DocumentModel }) {}
+    model: DocumentModel;
+    /** Whether this page may write its workspace now (the workspace lease, profiles design §2.3); always, without one. */
+    canWrite?: () => boolean }) {}
   subscribe(listener: (status: WorkspaceSaveStatus) => void) {
     this.listeners.add(listener); return () => this.listeners.delete(listener);
   }
   snapshot() { return { ...this.status }; }
   /** Encoded length (UTF-16 code units) of the last stored workspace, for diagnostics and tests. */
   storedSize() { return this.lastSize; }
-  activate() { this.active = true; }
+  activate() { if (!this.retired) this.active = true; }
+  /**
+   * The last write before this page hands the workspace to another one: the pending draft is written now, the debounce timer is
+   * stopped, and nothing is written again (profiles design §2.3, release steps 4 and 5).
+   */
+  retire() {
+    this.flush();
+    clearTimeout(this.timer); this.timer = undefined;
+    this.active = false; this.retired = true;
+  }
   request() {
-    if (!this.active) return;
+    if (!this.active || this.options.canWrite?.() === false) return;
     clearTimeout(this.timer);
     this.timer = setTimeout(() => this.flush(), this.options.delayMs ?? 180);
   }
   flush() {
     clearTimeout(this.timer); this.timer = undefined;
-    if (!this.active) return;
+    // A read-only page (another one holds the workspace) writes nothing; the lease says so in the page.
+    if (!this.active || this.options.canWrite?.() === false) return;
     if (!this.options.writable) {
       this.publish({ kind: "protected", message: `${this.options.restoreError ?? "Workspace could not be restored"}. Original storage kept; export your recipe before closing.` });
       return;

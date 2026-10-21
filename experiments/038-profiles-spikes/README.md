@@ -62,6 +62,8 @@ experiments/038-profiles-spikes/
   tests/s1-rules.test.ts   The acknowledgement rules, lost acknowledgements, coalescing, conflicts, outbox failure
 ```
 
+The workspace lease harness has its own section below.
+
 - **Kills are real process terminations** (`TerminateProcess` through `process.kill(pid, "SIGKILL")`). Protocol-point kills are the process killing itself at a named point. Timed kills come from the parent. The host's in-transaction kills leave SQLite to roll back from the WAL on the next open.
 - **Presence check.** Every edit's value carries `seqs[<window>]`. The window prints `rec` after each synchronous outbox write and `ack` after each acknowledgement is recorded. At every restart and at the end, each logged sequence number must be in the library, in the document or a fork of it, or in that window's outbox.
 - **Silent overwrite check.** The host appends every committed write to a log with its revision and `seqs`. Across a document's revisions, no window's sequence number may go down. Only an explicit **Keep mine** may lower it, and the script never chooses it. The script's person always picks **Keep both** 10 ms after a conflict.
@@ -77,6 +79,30 @@ bun tools/s1-latency.ts <scratch> <scratch>/fixtures/look-16x80.json [--browser]
 bun tools/s1-kill.ts <scratch>/s1 <scratch>/fixtures/look-16x80.json
 bun tools/s3-kill.ts <scratch>/s3
 ```
+
+## Workspace lease harness (phase 1, chunk 1a)
+
+The one persistence piece the spikes didn't cover: one writer per workspace, takeover only after release, and fencing at the host ([design §2.3](../../research/authoring/profiles-views-layouts-design.md#23-flush-close-and-one-writer-per-workspace)). Unlike the spikes, this is product code: `src/app/workspace/workspace-lease.ts` (the phases and the controller, injected clock), `src/app/workspace/leased-documents.ts` (the document gate and its drain), `src/app/browser/workspace-lease-device.ts` (the Web Locks and `BroadcastChannel` adapter, and the desktop stream adapter), `desktop/workspace-lease-host.ts` (the desktop host's lease and its workspace-write fence) and the generations in the library (`DocumentStore.nextLease`, `documents` rows of kind `xfs-workspace-lease`). The harness drives them:
+
+```
+harness/lease-page.ts          One window: the real lease, document gate and holder, editing while it holds the workspace
+harness/lease-desktop-page.ts  A desktop page as a process, on the real desktop server (killing it ends its lease stream)
+harness/lease-browser-page.ts  A localhost window as a worker, on the real library routes
+harness/web-locks-model.ts     The browser's Web Locks (exclusive mode) for the worker windows, and the windows' proxy
+tools/lease-harness.ts         The scenarios on both hosts; tests/lease-harness.test.ts runs them
+```
+
+Each window edits one document (a save every 15 ms, or every 1 ms where a write must be in flight) and writes its workspace every fourth edit, with a marker. Results (21 October 2026, about 10 s, peak 0.9 GB), all **PASS** on both hosts:
+
+| Scenario | Checks |
+|---|---|
+| Two windows | The second opens read-only; its dispatch is refused with `unavailable` and a save it tries never reaches the host. Use it here: the holder drains, writes its workspace last and releases, then the new window is granted (desktop 10–17 ms, localhost 3 ms after asking). Every save the holder acknowledged, and its last workspace, are stored. A late write from the released window, sent past its own gate over the current revision, is refused as `superseded` (document and desktop workspace). |
+| Holder killed while draining | Killed with a save in flight; the waiting window is granted when the holder's window ends (desktop 17 ms, through the end of its stream). Every acknowledged save survives, and nothing from the killed holder lands after the grant. |
+| Hung holder | The holder never answers. After the 0.5 s grace the waiting window says "Waiting for the other window to finish saving. Close it to continue.", and 3.5 s later the host (or the browser) still has the hung window as holder: nothing is taken by time. Once the hung window ends, the waiting window is granted. |
+
+What stands in for what: on desktop everything is real but the WebView (a Bun process per page, on the real server and routes). On localhost the host routes, the `BroadcastChannel` and the page code are real; the Web Locks are a model of the standard's exclusive mode, held by the harness as the browser, and `localStorage` is a value it keeps (a window without the lease never wrote it). The real browser path was also run once in headless Chrome (the UI captures below): a second tab opened read-only, and Use it here took the workspace over and restarted as the holder, in light and dark. The process-tree kill that measures the storage commit window (§2.3) is a separate phase 1 gate and not part of this harness.
+
+Reproduce: `bun tools/lease-harness.ts <scratch>`, or `bun test tests/lease-harness.test.ts`, under `tools/memory_guard.py --limit 3`.
 
 ## Acknowledgement and rebasing rules (S1, answering Sol's Medium point)
 

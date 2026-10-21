@@ -1,3 +1,4 @@
+import type { WorkspaceLeaseSnapshot } from "./workspace/workspace-lease";
 import type { CharacterDetailStatus } from "../character/character-detail-actions";
 import type { WorkspaceSaveStatus } from "./workspace/workspace-persistence";
 import type { EditorSlot } from "./viewport-adapter";
@@ -32,6 +33,8 @@ export type PresentationStatus = {
   assets: PreviewAssetStatus;
   glitter: GlitterPreviewMeasurement[];
   message?: AdapterMessage;
+  /** Whether this page holds its workspace (profiles design §2.3); absent where nothing else can hold it (fixtures). */
+  lease?: WorkspaceLeaseSnapshot;
 };
 
 export function emptyPresentationStatus(verification = false): PresentationStatus {

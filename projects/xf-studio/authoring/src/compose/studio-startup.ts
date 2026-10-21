@@ -61,6 +61,7 @@ import { DiagnosticsActions } from "../diagnostics/actions";
 import { createBrowserDiagnostics } from "../diagnostics/browser/browser-device";
 import { createBrowserUpdateCheck } from "../setup/browser/browser-update-check-device";
 import { pageFailure, setPageDiagnostics } from "../diagnostics/page-sink";
+import type { WorkspaceLease } from "../app/workspace/workspace-lease";
 
 export type StudioHost = {
   /** Optional host capability; the desktop omits experimental modules until their assets are supported. */
@@ -95,6 +96,11 @@ export type StudioHost = {
   onFlushRequest?: (flush: () => void) => void;
   /** Called once the 3D head is interactive. */
   onPreviewReady?: () => void;
+  /**
+   * The window's workspace lease, already started (profiles design §2.3): while another window holds the workspace this one is
+   * read-only, and it restarts once Use it here has taken the workspace over. Without one (tools) this window is the only one.
+   */
+  lease?: WorkspaceLease;
 };
 
 const byId = <T extends HTMLElement>(id: string) => {
@@ -183,9 +189,10 @@ async function start(host: StudioHost, root: HTMLElement) {
   const liveSurface = STUDIO_LAYERED_SURFACES.get(STUDIO_COMPOSITION.documents.live);
   const measurements = new GlitterMeasurements({
     layers: () => core.document.recipe.layers, size: () => previewDevice.coordinator.size, fineGlitter: region.fineGlitter });
+  const lease = host.lease;
   const statusSource = new PresentationStatusSource(() => {
     const eye = scene?.eyeAppearance().optics;
-    return { ...status, glitter: measurements.snapshot(), assets: { ...status.assets,
+    return { ...status, ...(lease ? { lease: lease.snapshot() } : {}), glitter: measurements.snapshot(), assets: { ...status.assets,
       characterDetails: head?.characterDetails.snapshot(),
       eyeOptics: eye ? { requested: eye.requested, active: eye.active, reason: eye.reason, error: eye.error } : undefined } };
   });
@@ -201,6 +208,8 @@ async function start(host: StudioHost, root: HTMLElement) {
     // A cheap read: Glitter-model and finish changes ask for it, and a snapshot would stash and copy the whole draft (CORE-05).
     selectedCollection: () => bootstrap?.collection.selectedPresetId() ?? "draft",
   }, STUDIO_COMPOSITION);
+  // One writer per workspace: while another window holds it, every action, request, control and gesture is refused here.
+  if (lease) core.app.attach({ access: lease });
   // The view graph the core owns (view-graph-design.md §3.3): the head restores and follows its main view.
   const views = core.views;
   const headHost = byId("device-head"), uvHost = byId("device-uv");
@@ -222,8 +231,19 @@ async function start(host: StudioHost, root: HTMLElement) {
     },
     sources: [core.document, preferences], window, document,
     onStatus: save => { status = { ...status, workspace: save }; statusSource.changed(); },
+    canWrite: lease ? () => lease.draining() : undefined,
   });
   host.onFlushRequest?.(() => session.flush());
+  if (lease) {
+    // Releasing to another window: after the pending document saves drain (a step the host registered first), the workspace is
+    // written a last time and its timers stop (§2.3 release steps 3 to 5).
+    lease.onRelease(() => session.retire());
+    lease.subscribe(() => {
+      statusSource.changed();
+      // Taken over: this page was built from the workspace as it was when it opened, so it restarts from the one just released.
+      if (lease.snapshot().phase === "taken-over") location.reload();
+    });
+  }
   const persist = () => session.request();
   const drawUV = () => viewportDevice.drawUV();
   previewDevice = createBrowserPreviewDevice({
@@ -301,7 +321,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       ready: () => !!scene,
       unavailableReason: () => { const head = viewportDevice.attachment.snapshot().head; return head.error ?? head.message; },
     },
-    fileDevice, diagnostics, modules: moduleServices, experiments,
+    fileDevice, diagnostics, modules: moduleServices, experiments, lease,
   });
   // The only object handed to the presentation.
   const viewComposition = { ...STUDIO_VIEW_COMPOSITION, optional: () => experiments.registrations().map(item => ({ contribution: item.contribution, binding: item.binding })) };

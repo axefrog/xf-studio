@@ -22,6 +22,7 @@ import { eyePlateReadiness } from "../src/legacy/eye-makeup/plate/host/eye-plate
 import { EYE_PLATE_RECIPE } from "../src/legacy/eye-makeup/plate/eye-plate-recipe";
 import { DesktopUpdateService, type NativeUpdater, type UpdateTrust } from "./update-service";
 import { DesktopWorkspaceStore, desktopWorkspaceRequest, desktopWorkspaceStartFresh } from "./workspace-store";
+import { DESKTOP_WORKSPACE, DesktopWorkspaceLeases } from "./workspace-lease-host";
 // A composition root: the part registry and document model are built once and injected (CORE-29).
 import { STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
 import { DesktopWorkActivity } from "./work-activity";
@@ -151,6 +152,10 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const libraries = openLibraryFiles(dataRoot, { clock, parts: STUDIO_PARTS, isolated: false,
     log: message => diagnostics.log.info("library", "legacy_import", message) });
   setProcessDiagnostics(diagnostics);
+  // One writer per workspace (profiles design §2.3): the page holding the lease writes the workspace; its generations come from the
+  // library, so document writes are fenced by the same ones.
+  const leases = new DesktopWorkspaceLeases(verification => (verification ? libraries.verification : libraries.main).documents.nextLease(DESKTOP_WORKSPACE),
+    5000, message => diagnostics.log.info("workspace", "lease", message));
   // The resolver reads game files natively first, in a worker; the packaged app starts the built one.
   if (hostOptions.nativeDecodeWorker) {
     installations.useNativeWorker(hostOptions.nativeDecodeWorker);
@@ -376,7 +381,11 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         if (response.ok) report("The user started fresh; an unreadable workspace was set aside.");
         return response;
       }
+      if (url.pathname === "/api/desktop/workspace/lease") return leases.request(routedRequest, url.searchParams.has("verify"));
       if (url.pathname === "/api/desktop/workspace") {
+        // A late write from a page that released the workspace (an older lease generation) is refused, never written.
+        const fenced = leases.refuseWrite(request, url.searchParams.has("verify"));
+        if (fenced) return fenced;
         const response = await desktopWorkspaceRequest(routedRequest, workspaceStore, url.searchParams.has("verify"));
         // Only a successfully loaded workspace makes the close handshake wait for the page.
         if (request.method === "GET" && !renderer.bootstrapped) {
@@ -483,7 +492,10 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     characterDetails,
     /** WolvenKit setup (tests and shutdown). */
     wolvenKit,
+    /** The workspace leases (tests and the lease harness). */
+    leases,
     stop() {
+      leases.close();
       diagnostics.trace.flush();
       shutdown.abort();
       previewCore.cancel();

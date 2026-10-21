@@ -4,7 +4,8 @@ import type { PartPresetList, PartPresetOutcome, PartPresetRequest, PartPresetSe
 import type { AuthoringPresentation } from "./authoring/authoring-presentation";
 import type { CollectionViewPort } from "../library/collection-application";
 import { emptyPresentationStatus, type PresentationStatus } from "./presentation-status";
-import { PREVIEW_SETUP_DESCRIPTORS } from "./studio-action-descriptors";
+import { PREVIEW_SETUP_DESCRIPTORS, WORKSPACE_LEASE_DESCRIPTORS } from "./studio-action-descriptors";
+import { leaseSnapshot, type WorkspaceLease, type WorkspaceLeaseAction, type WorkspaceLeaseSnapshot } from "./workspace/workspace-lease";
 import type { Layer, Recipe, WarpField } from "../engines/layered-makeup/recipe";
 import type { PreviewReadiness } from "../legacy/eye-makeup/preview/authoring-preview-coordinator";
 import type { ReadonlyDeep } from "../platform/api/read-only";
@@ -233,6 +234,11 @@ export type StudioPresentationPort<Slot> = {
   readonly about: AboutPort;
   /** Problem reports, diagnostic mode and error references. */
   readonly diagnostics: DiagnosticsPort;
+  /**
+   * Whether this page holds its workspace (profiles design §2.3), and Use it here. While another page holds it, every other
+   * family's dispatch is refused with `unavailable` (reads stay available; diagnostics and this page's own view preferences too).
+   */
+  readonly workspace: Pick<WorkspaceLease, "capability" | "dispatch" | "descriptors"> & { snapshot(): WorkspaceLeaseSnapshot };
   snapshot(): ReadonlyDeep<{
     authoring: ReturnType<StudioApplication["snapshot"]>;
     library: ReturnType<CollectionViewPort["view"]>;
@@ -255,6 +261,8 @@ const NO_PREVIEW_SETUP: PreviewSetupSnapshot = Object.freeze({
   card: { open: false, title: "", body: "", progress: null, step: null, notice: null, primary: null, secondary: null, links: [], canDismiss: true, busy: false, route: null },
   consent: null, head: { phase: "unavailable", code: null, message: "", progress: null, next: null }, setupRequests: 0, showRequests: 0, autostart: true, wolvenKitStep: null,
 }) as PreviewSetupSnapshot;
+/** Without a lease the page is the only one, and holds its workspace. */
+const SOLE_WINDOW: WorkspaceLeaseSnapshot = Object.freeze(leaseSnapshot({ phase: "holder", generation: null }));
 type StatusSource = { snapshot(): PresentationStatus; subscribe(listener: () => void): () => void };
 
 /** Method wrappers prevent a presentation consumer from receiving trusted service objects. */
@@ -287,12 +295,24 @@ export function createStudioPresentation<Slot>(sources: {
   /** The modules' services (`compose/module-services.ts`), already facades: the port hands each to its module's view. */
   modules?: readonly ModuleService[];
   experiments?: ExperimentPort;
+  /** The page's workspace lease; without it (fixtures, tools) this page is the only one and always holds its workspace. */
+  workspace?: WorkspaceLease;
 }): StudioPresentationPort<Slot> {
   const a = sources.authoring, l = sources.library, f = sources.files,
     v = sources.viewport, p = sources.preferences, r = sources.previewReadiness,
     e = sources.editor;
   const s: StatusSource = sources.status ?? { snapshot: () => emptyPresentationStatus(),
     subscribe: () => () => {} };
+  // The lease's gate for the families that don't route through the application (which refuses by itself, `Services.access`).
+  const lease = sources.workspace;
+  const denied = () => lease?.refusal();
+  const refusedAsync = async () => { const why = denied()!; return { ok: false as const, code: why.code!, message: why.reason! }; };
+  /** A family's capability and dispatch behind the lease. */
+  const leased = <F extends { capability(action: never): unknown; dispatch(action: never, ...rest: never[]): Promise<unknown> }>(family: F): F => ({
+    ...family,
+    capability: ((action: never) => denied() ?? family.capability(action)) as F["capability"],
+    dispatch: ((action: never, ...rest: never[]) => denied() ? refusedAsync() : family.dispatch(action, ...rest)) as F["dispatch"],
+  });
   // An experiment may explain why an action is unavailable while it is on ("Turn Hair Lab off for hair physics").
   const hint = (action: { kind: string }) => sources.experiments?.registrations().map(item => item.actionHints?.()[action.kind]).find(Boolean);
   const authoring: StudioPresentationPort<Slot>["authoring"] = {
@@ -470,14 +490,25 @@ export function createStudioPresentation<Slot>(sources: {
     : Promise.resolve({ ok: false as const, message: "Web pages can't be opened from here." }) });
   return Object.freeze({ authoring: Object.freeze(authoring), library: Object.freeze(library),
     files: Object.freeze(files), viewport: Object.freeze(viewport), preferences: Object.freeze(preferences),
-    previewReadiness, views, features: () => infos, feature, module: (id: string) => moduleServices.get(id) ?? sources.experiments?.registrations().find(item => item.module.id === id)?.service,
-    experiments: sources.experiments, localSetup: Object.freeze(localSetup),
+    previewReadiness, views, features: () => infos, feature, module: (id: string) => {
+      const service = moduleServices.get(id) ?? sources.experiments?.registrations().find(item => item.module.id === id)?.service;
+      return service && lease ? leased(service) : service;
+    },
+    experiments: sources.experiments && lease ? { ...sources.experiments, subscribe: sources.experiments.subscribe.bind(sources.experiments),
+      snapshot: () => sources.experiments!.snapshot(), registrations: () => sources.experiments!.registrations(),
+      set: (id: string, enabled: boolean) => denied() ? refusedAsync() : sources.experiments!.set(id, enabled) } : sources.experiments,
+    localSetup: Object.freeze(leased(localSetup)),
     facial: Object.freeze({ snapshot: () => a.facialPreview(), retry: () => a.facialRetry(), installed: () => a.facialInstalled() }),
     // A save without a part saves the feature's live part, serialized with its own codec.
     presets: Object.freeze({ list: (feature: string) => a.presetList(feature), sets: (feature: string) => a.presetSets(feature), exports: () => a.presetExports(),
       capability: (request: PartPresetRequest) => a.presetCapability(withPart(request)), execute: (request: PartPresetRequest) => a.executePreset(withPart(request)) }),
-    installDetection: Object.freeze(installDetection), modInstall: Object.freeze(modInstall), previewSetup: Object.freeze(previewSetup), desktopApp, updates,
+    installDetection: Object.freeze(leased(installDetection)), modInstall: Object.freeze(leased(modInstall)), previewSetup: Object.freeze(leased(previewSetup)),
+    desktopApp: Object.freeze(leased(desktopApp)), updates: Object.freeze(leased(updates)),
     status: Object.freeze({ snapshot: () => s.snapshot() }), links, about, diagnostics: Object.freeze(diagnostics),
+    workspace: Object.freeze({ snapshot: () => lease?.snapshot() ?? SOLE_WINDOW,
+      capability: (action: WorkspaceLeaseAction) => lease ? lease.capability(action) : { available: false, code: "unavailable" as const, reason: "This workspace is already editable here." },
+      dispatch: (action: WorkspaceLeaseAction) => lease ? lease.dispatch(action) : Promise.resolve({ ok: false as const, code: "unavailable", message: "This workspace is already editable here." }),
+      descriptors: () => structuredClone(WORKSPACE_LEASE_DESCRIPTORS) }),
     snapshot: () => ({ authoring: a.snapshot(), library: l.view(), files: f.snapshot(),
       viewport: v.snapshot(), preferences: p.snapshot(), previewReadiness: r.readiness(),
       status: s.snapshot(), localSetup: localSetup.snapshot(),
@@ -492,7 +523,7 @@ export function createStudioPresentation<Slot>(sources: {
         ...(sources.desktopApp ? [sources.desktopApp.subscribe(listener)] : []),
         ...(sources.updates ? [sources.updates.subscribe(listener)] : []),
         ...(sources.experiments ? [sources.experiments.subscribe(listener)] : []),
-        ...(setup ? [setup.subscribe(listener)] : []), ...(d ? [d.subscribe(listener)] : []),
+        ...(setup ? [setup.subscribe(listener)] : []), ...(d ? [d.subscribe(listener)] : []), ...(lease ? [lease.subscribe(listener)] : []),
         ...[...moduleServices.values()].map(service => service.subscribe(listener))];
       return () => { for (const unsubscribe of unsubs) unsubscribe(); };
     },

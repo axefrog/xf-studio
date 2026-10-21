@@ -88,7 +88,7 @@ test("the page's transport: the browser device lists and writes through the host
     expect((await page.list("sample")).map(item => [item.id, item.value])).toEqual([["id with spaces/and slashes", { a: 1 }]]);
     const stale = await page.put("sample", "id with spaces/and slashes", { a: 2 }, 0);
     expect(stale.ok).toBe(false);
-    expect(!stale.ok && stale.current?.revision).toBe(1);
+    expect(!stale.ok && stale.reason === "stale" && stale.current?.revision).toBe(1);
     await expect(page.put("Not a kind", "x", 1, 0)).rejects.toThrow("kind");
   } finally { file.close(); }
 });

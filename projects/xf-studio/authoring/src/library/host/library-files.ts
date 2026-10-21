@@ -14,7 +14,7 @@ import { PartPresetLibrary, partPresetRequest } from "./part-preset-store";
 import { hostClock, type Clock } from "../../platform/core/clock";
 import type { PartRegistry } from "../../platform/core/document";
 import { LibraryBackups } from "../../platform/persistence/backups";
-import { createDocumentsHandler, DocumentStore } from "../../platform/persistence/document-store";
+import { createDocumentsHandler, createWorkspaceLeaseHandler, DocumentStore } from "../../platform/persistence/document-store";
 import { importLegacyExperiments } from "../../platform/persistence/legacy-experiment-import";
 import { LibraryDatabase, type LibraryDatabaseOptions } from "../../platform/persistence/library-database";
 
@@ -41,7 +41,7 @@ export function libraryStores(database: LibraryDatabase, parts: PartRegistry, no
 export type LibraryFiles = {
   readonly main: LibraryStores;
   readonly verification: LibraryStores;
-  /** The answer to a library request (`/api/looks`, `/api/collections`, `/api/part-presets`, `/api/documents`, each also under `/api/verification`), or null for any other path. */
+  /** The answer to a library request (`/api/looks`, `/api/collections`, `/api/part-presets`, `/api/documents`, `/api/workspace-lease`, each also under `/api/verification`), or null for any other path. */
   handle(request: Request, url?: URL): Promise<Response> | null;
   /** Flushes and closes both files and stops the backups. Idempotent. */
   close(): void;
@@ -83,6 +83,7 @@ export function openLibraryFiles(dataRoot: string, options: LibraryFilesOptions)
       { prefix: `${base}/collections`, nested: true, handle: (request: Request) => collectionRequest(request, stores.collections, `${base}/collections`) },
       { prefix: `${base}/part-presets`, nested: true, handle: (request: Request) => partPresetRequest(request, stores.partPresets, `${base}/part-presets`) },
       { prefix: `${base}/documents`, nested: false, handle: documents },
+      { prefix: `${base}/workspace-lease`, nested: false, handle: createWorkspaceLeaseHandler(stores.documents, `${base}/workspace-lease`) },
     ];
   });
   return {

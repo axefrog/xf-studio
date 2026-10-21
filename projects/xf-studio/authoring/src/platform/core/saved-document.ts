@@ -25,7 +25,10 @@ export function savedDocument<T>(store: DocumentStorePort, kind: string, id: str
   let dirty = !stored;
   const write = async (value: T): Promise<void> => {
     let result = await store.put(kind, id, value, revision);
+    // A page that no longer holds its workspace writes nothing (profiles design §2.3), and doesn't retry.
+    if (!result.ok && result.reason === "superseded") throw new Error("This workspace is now open elsewhere, so this change wasn't saved here.");
     if (!result.ok) result = await store.put(kind, id, value, result.current?.revision ?? 0);
+    if (!result.ok && result.reason === "superseded") throw new Error("This workspace is now open elsewhere, so this change wasn't saved here.");
     if (!result.ok) throw new Error("The document changed elsewhere while it was being saved.");
     revision = result.document.revision;
   };

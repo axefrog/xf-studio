@@ -1,3 +1,4 @@
+import type { WorkspaceLease } from "../src/app/workspace/workspace-lease";
 import { eyeCheck } from "./fixtures/package-results";
 import { AuthoringControlEdits } from "../src/app/authoring/authoring-control-edits";
 import { AuthoringDocument } from "../src/app/authoring/authoring-document";
@@ -25,7 +26,9 @@ import { eyeMakeupPort } from "./fixtures/eye-region";
  * A trusted presentation over real application services, without a browser. `hitAt` stands in
  * for the viewport pickers (default: the selected layer's first point).
  */
-export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>["hitAt"] } = {}): {
+export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>["hitAt"];
+  /** The window's workspace lease (profiles design §2.3); without it the window is the only one. */
+  lease?: WorkspaceLease } = {}): {
   shell: StudioPresentationPort<string>; packageInput: () => PresetCollection | undefined;
   downloads: string[]; locations: string[] } {
   const workspace = freshWorkspace(), document = new AuthoringDocument(workspace);
@@ -37,7 +40,7 @@ export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>
   const controls = new AuthoringControlEdits(document, editing.controls);
   const quality = new PreviewQualityActions(512, { assess: () => ({ accepted: true }), replace: () => {} });
   const app = new StudioApplication({ document, eyeMakeup, gestures, controls, quality,
-    ...createViewServices(workspace.preview, undefined, STUDIO_MODULE_REGISTRATION) }, STUDIO_REGISTRY);
+    ...createViewServices(workspace.preview, undefined, STUDIO_MODULE_REGISTRATION), ...(options.lease ? { access: options.lease } : {}) }, STUDIO_REGISTRY);
   const source: PresetCollection = { schema: "xfas/collection-1", id: crypto.randomUUID(),
     name: "Current", presets: [{ id: crypto.randomUUID(), name: "Look", revision: 1,
       recipe: recipeFile(structuredClone(document.recipe))! }] };
@@ -82,6 +85,6 @@ export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>
   const previewReadiness = { readiness: () => ({ phase: "ready" as const, size: 1024 as const,
     pending: 0, waiting: false, estimatedBytes: 1024, layers: [] }), subscribe: (_listener: () => void) => () => {} };
   return { shell: createStudioPresentation({ authoring: app, library, files, viewport, preferences,
-    previewReadiness }),
+    previewReadiness, ...(options.lease ? { workspace: options.lease } : {}) }),
     packageInput: () => packageInput, downloads, locations };
 }

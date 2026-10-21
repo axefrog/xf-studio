@@ -10,7 +10,8 @@
  * the file's durability of it, so a flush follows within seconds. A write names the revision it read; a write over any
  * other revision changes nothing and answers `stale` with the current document.
  */
-import { DOCUMENT_ID, DOCUMENT_KIND, type DocumentWrite, type StoredDocument } from "../api/document-store";
+import { DOCUMENT_ID, DOCUMENT_KIND, parseFence, WORKSPACE_FENCE_HEADER, WORKSPACE_LEASE_KIND, type DocumentWrite, type StoredDocument,
+  type WorkspaceFence } from "../api/document-store";
 import type { LibraryDatabase } from "./library-database";
 
 export type DocumentStoreOptions = {
@@ -40,8 +41,30 @@ export class DocumentStore {
     return this.db.read(db => db.query("SELECT kind, id, revision, value, updated_at FROM documents WHERE kind = ? ORDER BY rowid").all(kind) as Row[]).map(row => documentOf<T>(row));
   }
 
-  /** Writes `value` over revision `revision` (0 when the document doesn't exist yet), in one immediate transaction. */
-  put<T = unknown>(kind: string, id: string, value: T, revision: number): DocumentWrite<T> {
+  /** The newest lease generation issued for `workspace` (0 before the first). */
+  leaseGeneration(workspace: string): number {
+    return this.get<{ generation?: number }>(WORKSPACE_LEASE_KIND, workspace)?.value.generation ?? 0;
+  }
+  /**
+   * Issues the next lease generation for `workspace` (profiles design §2.3), in one transaction: from then on a write fenced with an
+   * older one is refused. Kept in the library, so a host restart never issues a generation twice.
+   */
+  nextLease(workspace: string): number {
+    if (!DOCUMENT_ID.test(workspace)) throw new DocumentStoreError("That isn't a workspace.");
+    return this.db.write(() => {
+      const current = this.get<{ generation?: number }>(WORKSPACE_LEASE_KIND, workspace);
+      const generation = (current?.value.generation ?? 0) + 1;
+      const written = this.put(WORKSPACE_LEASE_KIND, workspace, { schema: "xfs/workspace-lease-1", generation }, current?.revision ?? 0);
+      if (!written.ok) throw new DocumentStoreError("The workspace lease changed while it was issued.");
+      return generation;
+    });
+  }
+
+  /**
+   * Writes `value` over revision `revision` (0 when the document doesn't exist yet), in one immediate transaction. With a `fence`,
+   * the write is refused as `superseded` when its workspace has issued a newer lease generation since, checked in the same transaction.
+   */
+  put<T = unknown>(kind: string, id: string, value: T, revision: number, fence?: WorkspaceFence | null): DocumentWrite<T> {
     if (!DOCUMENT_KIND.test(kind)) throw new DocumentStoreError("That isn't a document kind.");
     if (!DOCUMENT_ID.test(id)) throw new DocumentStoreError("That isn't a document ID.");
     if (!Number.isSafeInteger(revision) || revision < 0) throw new DocumentStoreError("That isn't a document revision.");
@@ -50,6 +73,7 @@ export class DocumentStore {
     const now = (this.options.now ?? Date.now)();
     // A stale write changes no row, so the file's durability isn't told of it.
     return this.db.write((db): DocumentWrite<T> => {
+      if (fence && fence.generation < this.leaseGeneration(fence.workspace)) return { ok: false, reason: "superseded" };
       const current = this.get<T>(kind, id);
       if ((current?.revision ?? 0) !== revision) return { ok: false, reason: "stale", current };
       if (current) db.query("UPDATE documents SET revision = ?, value = ?, updated_at = ? WHERE kind = ? AND id = ?").run(revision + 1, text, now, kind, id);
@@ -88,11 +112,36 @@ export function createDocumentsHandler(store: DocumentStore, prefix: string): (r
       let body: { revision?: unknown; value?: unknown };
       try { body = JSON.parse(text) as typeof body; } catch { return json({ error: "Invalid JSON." }, 400); }
       if (!body || typeof body !== "object" || !("value" in body)) return json({ error: "Invalid JSON." }, 400);
-      const written = store.put(kind, url.searchParams.get("id") ?? "", body.value, Number(body.revision));
-      return written.ok ? json({ document: written.document }) : json({ error: "This changed elsewhere since it was read.", current: written.current }, 409);
+      const fence = parseFence(request.headers.get(WORKSPACE_FENCE_HEADER));
+      if (fence === "invalid") return json({ error: "That isn't a workspace lease." }, 400);
+      const written = store.put(kind, url.searchParams.get("id") ?? "", body.value, Number(body.revision), fence);
+      if (written.ok) return json({ document: written.document });
+      return written.reason === "superseded"
+        ? json({ code: "superseded", error: "This workspace is now open elsewhere, so this change wasn't saved here." }, 409)
+        : json({ error: "This changed elsewhere since it was read.", current: written.current }, 409);
     } catch (error) {
       if (error instanceof DocumentStoreError) return json({ error: error.message }, 400);
       return json({ error: "Saved documents are unavailable right now." }, 500);
     }
+  };
+}
+
+/**
+ * The localhost page's lease generations (profiles design §2.3), at `path` (`/api/workspace-lease`, or under `/api/verification`):
+ * `POST { workspace }` answers `{ generation }`, the next one for that workspace. The page asks once it holds the browser's Web Lock
+ * for the workspace; the desktop host issues its own (`desktop/workspace-lease-host.ts`). Local, same-origin requests only.
+ */
+export function createWorkspaceLeaseHandler(store: DocumentStore, path: string): (request: Request) => Promise<Response> {
+  const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
+  return async request => {
+    const url = new URL(request.url), origin = request.headers.get("Origin");
+    if (url.pathname !== path) return json({ error: "Not found." }, 404);
+    if (!LOCAL_HOSTS.has(url.hostname) || origin !== url.origin) return json({ error: "Local studio requests only." }, 403);
+    if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
+    let body: { workspace?: unknown };
+    try { body = await request.json() as typeof body; } catch { return json({ error: "Invalid JSON." }, 400); }
+    if (typeof body?.workspace !== "string" || !DOCUMENT_ID.test(body.workspace)) return json({ error: "That isn't a workspace." }, 400);
+    try { return json({ generation: store.nextLease(body.workspace) }); }
+    catch { return json({ error: "The workspace lease is unavailable right now." }, 500); }
   };
 }

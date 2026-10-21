@@ -530,16 +530,29 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
 }
 
 function statusBar(rt: StudioRuntime) {
+  // A workspace open in another window (style guide t-read-only-window): the line, and Use it here while it is offered.
+  const lease = h("span", { class: "status-item status-lease", role: "status" });
+  const takeOver = button({ label: "Use it here", small: true, className: "status-lease-action", onClick: () => {
+    void rt.port.workspace.dispatch({ kind: "workspace.takeOver" }).then(outcome => {
+      if (!outcome.ok) rt.feedback.toast("warning", "Workspace", outcome.message, [], { code: outcome.code });
+    });
+  } });
   const workspace = h("span", { class: "status-item" }), activity = h("button", { class: "status-item status-message", type: "button",
     title: "Open the activity log" }), ready = h("span", { class: "status-item ready-badge" }), gesture = h("span", { class: "status-item muted" });
   activity.addEventListener("click", () => rt.dock.reveal("activity"));
-  const element = h("footer", { class: "status-bar", "aria-label": "Status" }, workspace, activity, h("span", { class: "grow" }), gesture, ready);
+  const element = h("footer", { class: "status-bar", "aria-label": "Status" }, lease, takeOver, workspace, activity, h("span", { class: "grow" }), gesture, ready);
   return {
     element,
     update(frame: Frame) {
       // One save status (UI-89): the header's library chip says whether your work is saved; the draft's own autosave shows here
       // only when it has a problem to tell you about.
-      const save = frame.status.workspace, problem = save.kind !== "saved" && save.kind !== "idle";
+      const held = frame.status.lease, readOnly = !!held && held.phase !== "holder";
+      lease.hidden = !readOnly;
+      lease.dataset.tone = held?.phase === "read-only" || held?.phase === "starting" ? "read-only" : "waiting";
+      setText(lease, readOnly ? held!.message : "");
+      lease.title = readOnly ? held!.message : "";
+      takeOver.hidden = !held?.canTakeOver;
+      const save = frame.status.workspace, problem = !readOnly && save.kind !== "saved" && save.kind !== "idle";
       workspace.dataset.tone = save.kind;
       workspace.hidden = !problem;
       setText(workspace, problem ? `▲ ${save.message}` : "");

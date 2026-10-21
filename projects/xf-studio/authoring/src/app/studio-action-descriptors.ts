@@ -27,7 +27,7 @@ export type ActionScope = StudioTarget["kind"] | "file" | "host";
 export type { PayloadSchema, UndoPolicy, ValueSchema } from "../platform/api";
 export type ActionDescriptor = PlatformActionDescriptor<ActionScope>;
 export type RequestDescriptor = { scope: readonly ActionScope[]; payload: PayloadSchema;
-  effect: "read" | "save" | "download" | "import" | "package" | "derive" | "install-tool" | "install-mod" | "reveal" | "launch"; async: true;
+  effect: "read" | "save" | "download" | "import" | "package" | "derive" | "install-tool" | "install-mod" | "reveal" | "launch" | "lease"; async: true;
   cancellable: boolean };
 
 const desc = (scope: ActionScope | readonly ActionScope[], effect: ActionDescriptor["effect"], undo: UndoPolicy,
@@ -209,6 +209,14 @@ export const DESKTOP_APP_DESCRIPTORS = {
  * which the host skips when Settings turns it off; `check` is the person's own; `skipVersion` stops the check at start announcing a
  * version. Each reads or keeps only what the host found; none changes a recipe, the library or Undo. The page asks after first paint.
  */
+/**
+ * The workspace lease (`app/workspace/workspace-lease.ts`, profiles design §2.3): Use it here asks the page holding this workspace
+ * to release it, and waits until it has. It changes no content; the page restarts from the released workspace.
+ */
+export const WORKSPACE_LEASE_DESCRIPTORS = {
+  "workspace.takeOver": request("host", "lease"),
+} satisfies Record<"workspace.takeOver", RequestDescriptor>;
+
 export const UPDATE_CHECK_DESCRIPTORS = {
   "updates.startupCheck": request("host", "read", {}, true),
   "updates.check": request("host", "read", {}, true),

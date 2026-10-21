@@ -1300,6 +1300,10 @@ span.category { border-color: transparent; background: transparent; padding-left
 .status-item { overflow: hidden; text-overflow: ellipsis; }
 .status-item[data-tone="saved"] { color: var(--text-muted); }
 .status-item[data-tone="protected"], .status-item[data-tone="unavailable"] { color: var(--danger); font-weight: 600; }
+/* A workspace open in another window (style guide t-read-only-window): the line and its one action, never an error. */
+.status-lease[data-tone="read-only"] { color: var(--warning); font-weight: 600; }
+.status-lease[data-tone="waiting"] { color: var(--signal); }
+.status-bar .status-lease-action { flex: none; height: calc(var(--control-h-sm) - 4px); }
 .status-message { border: 0; background: transparent; padding: 2px 4px; max-width: 55vw; text-align: left; color: var(--text-muted); }
 .status-message:hover { color: var(--text); background: var(--bg-hover); }
 .status-message[data-tone="error"] { color: var(--danger); } .status-message[data-tone="warning"] { color: var(--warning); } .status-message[data-tone="progress"] { color: var(--signal); }

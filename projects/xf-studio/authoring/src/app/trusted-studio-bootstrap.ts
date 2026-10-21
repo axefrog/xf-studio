@@ -52,6 +52,8 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   /** The modules' services (`compose/module-services.ts`), as facades. */
   modules?: readonly ModuleService[];
   experiments?: import("../platform/api/experiments").ExperimentPort;
+  /** The page's workspace lease (profiles design §2.3); without it this page is the only one. */
+  lease?: import("./workspace/workspace-lease").WorkspaceLease;
   onRecipeImported(): void;
   savedAppearance: {
     has(): boolean;
@@ -100,7 +102,8 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     files, viewport: options.viewport, preferences: options.preferences,
     previewReadiness: options.previewReadiness, editor: core.presentation, status: options.status,
     localSetup: options.localSetup, installDetection: options.installDetection, modInstall: options.modInstall, previewSetup: options.previewSetup,
-    desktopApp: options.desktopApp, updates: options.updates, links: options.links, about: options.about, diagnostics: options.diagnostics, modules: options.modules, experiments: options.experiments });
+    desktopApp: options.desktopApp, updates: options.updates, links: options.links, about: options.about, diagnostics: options.diagnostics, modules: options.modules, experiments: options.experiments,
+    workspace: options.lease });
   return {
     /** Trusted handles are retained by the composition root; never pass this object to a UI. */
     files, collection,
