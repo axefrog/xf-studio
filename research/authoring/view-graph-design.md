@@ -1,6 +1,6 @@
 # View graph and Studio modules: design
 
-**Status:** P1 and P2 built on `claude/view-graph-p1`, 27 September 2026 (see [phase status](#65-phase-status)); P3–P5 not started. It answers three directions for the Studio's shell:
+**Status:** P1 and P2 built on `claude/view-graph-p1`, 27 September 2026 (see [phase status](#65-phase-status)); P3–P5 not started. **Superseded in part** by the [profiles, views and layout tabs design](profiles-views-layouts-design.md), which is the one contract for the Modules menu, module visibility and saved layouts (§4.2, §4.3, §4.5), the main view that can't be closed (§3.3, §3.4), legacy mirroring (§3.5, §6.4), focus stored in the graph (§3.8) and Undo routing by focus (§3.6, §6.5). It answers three directions for the Studio's shell:
 
 1. Show at least one or two modules beyond eye makeup, to demonstrate how switching between modules works, or whether it needs to be exclusive at all. Some modules are not V-centric (the game map, game assets, world locations).
 2. Allow more than one 3D view, configured as a graph. Views reference shared or separate nodes: content, camera, lights, render settings, overlays and editing tools. The example to support: two views of V sharing one camera, each with its own light rig.
