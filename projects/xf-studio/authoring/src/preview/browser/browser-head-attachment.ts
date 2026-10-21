@@ -14,6 +14,8 @@ import { createBrowserScenePreviewPorts } from "./browser-scene-preview-ports";
 import { CharacterDetailActions } from "../../character/character-detail-actions";
 import type { CharacterWarmStart } from "../../character/browser/character-warm-start";
 import { CharacterContextActions, initialBodyGender, type ContextHistory, type CreatorPort } from "../../character/character-context-actions";
+import type { CreatorCatalogue } from "../../character/creator-catalogue";
+import type { CharacterHistoryHome } from "../../character/character-history";
 import type { CoreBody } from "../../character/render-detail";
 import { followCharacter } from "../../character/character-follow";
 import type { createBrowserPreviewDevice } from "../../legacy/eye-makeup/browser/browser-preview-device";
@@ -75,8 +77,15 @@ export type HeadAttachmentPorts = {
   persist(): void;
   /** Tells the presentation that device status changed. */
   changed(): void;
-  /** The creator catalogue's host transport (default: the page's own host). */
+  /** The creator catalogue's host transport (default: the page's own host), when no shared `catalogue` is given. */
   creator?: CreatorPort;
+  /** The page's creator catalogue, shared by every character and outliving any one head (creator-catalogue.ts). */
+  catalogue?: CreatorCatalogue;
+  /**
+   * The character this head shows: its requester name with the catalogue and its Undo history's home (the session history service's
+   * `character:<id>` scope). Absent: a private history, carried to the next head through `history`.
+   */
+  character?: { requester: string; history: CharacterHistoryHome };
   /**
    * Make sure a body's core head is prepared before it loads (the masculine V's is prepared on first use); rejects when it can't
    * be, and the feminine head is shown instead. Absent: the core is taken as prepared.
@@ -190,7 +199,9 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     // Its Try again also retries a V whose preparation failed (PREV-86). An earlier build's tried piercing style (the retired preview
     // fields) becomes Piercings choices once the catalogue is ready (CORE-74).
     const saved = savedAppearance, retired = ports.workspace.preview;
-    const characterContext = new CharacterContextActions({ creator: ports.creator ?? createBrowserCreatorDevice(),
+    const characterContext = new CharacterContextActions({
+      ...(ports.catalogue ? { catalogue: ports.catalogue } : { creator: ports.creator ?? createBrowserCreatorDevice() }),
+      ...(ports.character ? { requester: ports.character.requester, history: ports.character.history } : {}),
       showSave: save => { if (save) saved.dispatch({ kind: "savedV.restore", value: save }); else if (saved.hasSavedV()) saved.dispatch({ kind: "savedV.clear" }); },
       details: { failed: () => characterDetails.failed(), retry: () => void characterDetails.retry(),
         preload: (request, signal) => characterDetails.preload(request, signal) },

@@ -457,6 +457,8 @@ export function characterChoiceOf(value: unknown): CharacterChoice | null {
 
 /** One option set to a choice: the choice's key, and for a switcher choice the options it activates (its identity, CORE-70). */
 export type CharacterChange = { part: CcoPart; option: string; choice: string; activates?: readonly string[] };
+/** A V's source as `character.setSource` names it. */
+export type CharacterSourceChange = { kind: "default"; bodyGender: BodyGender } | { kind: "save"; value: unknown } | { kind: "preset"; value: unknown };
 export type CharacterContextAction =
   /** Set one option to a choice (a key from the catalogue, with a switcher choice's activated options); its link family follows. */
   | ({ kind: "character.setOption" } & CharacterChange)
@@ -471,6 +473,11 @@ export type CharacterContextAction =
   | { kind: "character.reset"; part: CcoPart; option: string }
   /** Every change back to the V's own; the V stays. */
   | { kind: "character.resetAll" }
+  /**
+   * Where the V comes from (profiles design §7; absorbs `savedV.*`, which stay as aliases until phase 1 ends): the creator's default V of
+   * a body, a decoded save (applied on the scene showing it), or a decoded `xfs/cc-preset-1` preset. One step, like the actions below.
+   */
+  | { kind: "character.setSource"; source: CharacterSourceChange }
   /** Show the creator's default V (Undo shows the previous V again). */
   | { kind: "character.useDefault"; bodyGender: BodyGender }
   /** Show a decoded save's V; the choices made on the previous V are cleared (one step; `keepChanges` brings them back). */
@@ -505,6 +512,7 @@ export const CHARACTER_CONTEXT_DESCRIPTORS = {
   "character.setOwnMakeup": desc("viewport", "workspace", { shown: input("boolean") }),
   "character.reset": desc("viewport", "workspace", target),
   "character.resetAll": desc("viewport", "workspace", {}),
+  "character.setSource": desc("file", "workspace", { source: input("object") }),
   "character.useDefault": desc("viewport", "workspace", { bodyGender: input("enum", { values: ["female", "male"] }) }),
   "character.loadSave": desc("file", "workspace", { value: input("object") }),
   "character.loadPreset": desc("file", "workspace", { value: input("object") }),
@@ -524,7 +532,7 @@ export const CHARACTER_CONTEXT_FAMILY: SystemFamily<CharacterContextAction, Scop
   owner: "system", id: CHARACTER_ID, label: "Character",
   actions: actionTable<CharacterContextAction, Scope>(CHARACTER_CONTEXT_DESCRIPTORS, {
     "character.setOption": true, "character.setOptions": true, "character.setOwnMakeup": true, "character.reset": true, "character.resetAll": true,
-    "character.useDefault": true, "character.loadSave": true, "character.loadPreset": true, "character.keepChanges": true, "character.retry": true, "character.clearPreparedFiles": true,
+    "character.setSource": true, "character.useDefault": true, "character.loadSave": true, "character.loadPreset": true, "character.keepChanges": true, "character.retry": true, "character.clearPreparedFiles": true,
     "character.undo": true, "character.redo": true, "character.setClothing": true, "character.setClothingArea": true,
     "character.undoClothing": true, "character.redoClothing": true }),
 });

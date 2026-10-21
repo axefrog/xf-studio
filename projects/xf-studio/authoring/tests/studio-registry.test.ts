@@ -74,7 +74,7 @@ test("derived kind sets equal the sets StudioApplication used to keep by hand", 
   // preview is ready is refused as not ready (CORE-64).
   expect(kinds("characterContext")).toEqual(["character.clearPreparedFiles", "character.keepChanges", "character.loadPreset", "character.loadSave", "character.redo",
     "character.redoClothing", "character.reset", "character.resetAll", "character.retry", "character.setClothing", "character.setClothingArea", "character.setOption",
-    "character.setOptions", "character.setOwnMakeup", "character.undo", "character.undoClothing", "character.useDefault"]);
+    "character.setOptions", "character.setOwnMakeup", "character.setSource", "character.undo", "character.undoClothing", "character.useDefault"]);
   expect(STUDIO_OWNERS.filter(owner => owner.owner === "system" && owner.thrown === "unavailable").map(owner => owner.id as string))
     .toEqual(["preview", "motion", "quality", "views"]);
 });

@@ -30,6 +30,10 @@ import { createBrowserPreviewDevice } from "../legacy/eye-makeup/browser/browser
 import { attachBrowserHead, type AttachedHead } from "../preview/browser/browser-head-attachment";
 import { CharacterWarmStart } from "../character/browser/character-warm-start";
 import type { ContextHistory } from "../character/character-context-actions";
+import { CreatorCatalogue } from "../character/creator-catalogue";
+import { createBrowserCreatorDevice } from "../character/browser/browser-cc-catalogue-device";
+import { newCharacterId } from "../character/character-document";
+import { readSavedV } from "../saves/save-reader";
 import { rasterRegion } from "../engines/layered-makeup/region";
 import { createBrowserViewportDevice } from "../preview/browser/browser-viewport-device";
 import { createBrowserWorkspaceSession, loadBrowserWorkspace } from "../app/browser/browser-workspace-device";
@@ -201,9 +205,16 @@ async function start(host: StudioHost, root: HTMLElement) {
   const adapterMessage = (source: AdapterMessage["source"], text: string) => {
     status = { ...status, message: { id: ++messageId, source, text } }; statusSource.changed();
   };
+  // One history service for the session: the look's and the View and lighting history beside the experiments' documents, and the
+  // shown V's (`character:<id>`).
+  const historyService = ("historyService" in experiments && experiments.historyService) || createHistoryService();
+  // One creator catalogue for the page (creator-catalogue.ts): every character, and every head made again for another body, shares it.
+  const creatorCatalogue = new CreatorCatalogue(createBrowserCreatorDevice());
+  // The one V this Studio shows (one drawn view, one character) until the profiles migration gives it a stored character (phase 1d):
+  // its ID names its requester and its history scope for the session.
+  const shownCharacter = newCharacterId();
   const core = createTrustedAuthoringCore(workspace, {
-    // One history service for the session: the look's and the View and lighting history beside the experiments' documents.
-    history: ("historyService" in experiments && experiments.historyService) || createHistoryService(),
+    history: historyService,
     resetStack: previous => previewDevice?.coordinator.syncStack(previous),
     // A cheap read: Glitter-model and finish changes ask for it, and a snapshot would stash and copy the whole draft (CORE-05).
     selectedCollection: () => bootstrap?.collection.selectedPresetId() ?? "draft",
@@ -322,7 +333,14 @@ async function start(host: StudioHost, root: HTMLElement) {
     savedAppearance: {
       has: () => savedAppearance?.hasSavedV() ?? false,
       read: () => savedAppearance?.snapshot().savedV,
-      load: bytes => savedAppearance!.dispatch({ kind: "savedV.load", bytes }),
+      // A save file becomes where the V comes from (`character.setSource`, which `savedV.load` stays an alias of until phase 1 ends);
+      // the shown V's scene applies it.
+      load: bytes => {
+        if (bytes.byteLength > 128 * 1024 * 1024) throw Error("Save is larger than the supported limit.");
+        const result = core.app.dispatch({ kind: "character.setSource", source: { kind: "save", value: readSavedV(bytes) } });
+        if (!result.ok) throw Error(result.message);
+        return savedAppearance!.snapshot();
+      },
       ready: () => !!scene,
       unavailableReason: () => { const head = viewportDevice.attachment.snapshot().head; return head.error ?? head.message; },
     },
@@ -428,6 +446,7 @@ async function start(host: StudioHost, root: HTMLElement) {
         // The shown V's body decides the core head (the masculine V's is prepared on first use); a V that changes body loads it again.
         prepareCore: body => host.previewPreparation.ensureBody(body, (message, progress) => viewportDevice.headPending("preparing", message, progress)),
         reload: history => { headWorkspace = session.snapshot(); headHistory = history; previewSetup.reloadHead(); }, history,
+        catalogue: creatorCatalogue, character: { requester: shownCharacter, history: { service: historyService, id: shownCharacter } },
         notice: text => adapterMessage("preview", text), warmStart,
         // The live feature's layered surface: the preview device fills its layers and the on-head editor edits it. Other composed layered
         // surfaces have no layer source until the core edits more than one live feature.

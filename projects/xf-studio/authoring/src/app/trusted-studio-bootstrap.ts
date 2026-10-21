@@ -82,7 +82,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     characterPreset: {
       unavailable: kind => core.app.characterPresetUnavailable(kind),
       load: value => {
-        const result = core.app.dispatch({ kind: "character.loadPreset", value });
+        const result = core.app.dispatch({ kind: "character.setSource", source: { kind: "preset", value } });
         if (!result.ok) throw Error(result.message);
       },
       save: () => core.app.characterPresetFile(),
