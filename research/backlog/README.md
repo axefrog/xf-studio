@@ -17,7 +17,7 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 - **Profiles phase 1** (the single primary focus; `claude/profiles-p1`). The design is approved, with the four defaults confirmed. Chunks run one at a time:
   1. 1a: lease, takeover and fencing (done: harness 34/34, three Sol rounds);
   2. 1b: profile model and character service (done; its remaining sync races move to the outbox);
-  3. 1c-i: generic outbox, idempotent transactions, characters on the outbox, conflict UI (running); 1c-ii: collection and look working copies, snapshots, tombstones, checkpoint tuning;
+  3. 1c-i: generic outbox, idempotent transactions, characters on the outbox, conflict UI (done: model-based specification test, about 480k random steps; four Sol rounds); 1c-ii: collection and look working copies, snapshots, Save version, tombstones, checkpoint tuning, workspace-aware receipts (running);
   4. 1d: migration;
   5. 1e: IDs, focus, history, data contracts, de-singletoning;
   6. 1f: gate runs.
