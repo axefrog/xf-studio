@@ -127,7 +127,7 @@ The feature, view, exporter, verifier and host-folder rules, CORE-29 (only `comp
 
 ## Moving another branch
 
-`bun tools/source-layout.ts` (from `projects/xf-studio/authoring/`) moves each mapped file that still exists with `git mv`, rewrites every relative import that no longer resolves (from where its file was before the move), and rewrites `src/<old>.ts` paths in tracked Markdown, code, Python, CSS and HTML, except inside Markdown's `<!-- historical-paths -->` regions. An import that already resolves is never touched, so the script is safe to run again.
+`bun tools/source-layout.ts` (from `projects/xf-studio/authoring/`) moves each mapped file that still exists with `git mv`, rewrites every relative import that no longer resolves (from where its file was before the move; imports are found with TypeScript's scanner, so path-like strings, comments and template text are never touched), and rewrites `src/<old>.ts` paths in tracked Markdown, code, Python, CSS and HTML, except inside Markdown's `<!-- historical-paths -->` regions. An import that already resolves is never touched, so the script is safe to run again.
 
 A branch that has its own new modules merges `main` after the move (edits to moved files follow the renames), then runs `bun tools/source-layout.ts --imports-only [files or folders]` to fix its own imports. To move its new flat modules too, it adds them to a copy of the map and passes `--map <file>`. `--check` reports what would change and any import of a mapped module that resolves nowhere.
 
