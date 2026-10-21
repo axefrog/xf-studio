@@ -5,8 +5,7 @@
  * either collection schema, readable by 0.1.0-alpha.1) and its dirty state.
  */
 import { expect, test } from "bun:test";
-import { CollectionService } from "../src/library/collection-service";
-import { CollectionOwner, type CollectionVersionsPort } from "../src/library/collection-owner";
+import type { CollectionVersionsPort } from "../src/library/collection-owner";
 import { collectionDraft, parseCollectionWorkspace, writeCollectionWorkspace, type DocumentModel } from "../src/app/workspace/collection-workspace";
 import { STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
 import { EYE_MAKEUP } from "../src/features/eye-makeup";
@@ -16,10 +15,7 @@ import { recipeFile, readRecipe } from "../src/legacy/eye-makeup/recipe-schema";
 import { initialRecipe } from "./fixtures/eye-region";
 import { HAIR } from "./fixtures/hair-feature";
 import { alphaParseCollection } from "./fixtures/alpha-0.1.0/collection-list";
-import { openTestLibrary } from "./fixtures/library-file";
-import { libraryPort, libraryVersions, testScene } from "./fixtures/profile-studio";
-import { memoryOutboxStorage } from "./fixtures/platform-doubles";
-import { DocumentOutbox } from "../src/platform/core/document-outbox";
+import { collectionServiceOver } from "./fixtures/profile-studio";
 
 const ID = "0ec3546e-3fac-43e7-8c19-a65d20383d41";
 const NEW = "11111111-2222-4333-8444-555555555555";
@@ -27,24 +23,9 @@ const recipe = () => readRecipe(initialRecipe());
 const collection = () => ({ schema: COLLECTION_1, id: ID, name: "Looks",
   presets: [{ id: "f25f8eb1-8a83-4f65-a111-b83086382c18", name: "One", revision: 1, recipe: recipeFile(recipe())! }] });
 
-/**
- * The collection service over a library in memory holding `value` as its working copy (the scene shows its first look). `versions`: Save
- * version as the host answers it (default: the library's). `saved()`: the collection as the library last saved it as a version.
- */
-async function service(value: unknown = collection(), model: DocumentModel = STUDIO_DOCUMENTS, versions?: CollectionVersionsPort) {
-  const library = openTestLibrary(), port = libraryPort(library), outbox = new DocumentOutbox(port, memoryOutboxStorage(), { retryMs: 5 });
-  outbox.open();
-  const owner = new CollectionOwner({ documents: port, outbox, versions: versions ?? libraryVersions(library) });
-  await owner.load();
-  const read = model.parts.readCollection(value, true, "keep");
-  const made = owner.dispatch({ kind: "collection.create", id: read.id, name: read.name, looks: read.presets.map(look => ({ id: look.id, name: look.name,
-    parts: model.parts.minimalLook(look).parts })), ...((value as { packagePlan?: unknown }).packagePlan !== undefined ? { packagePlan: (value as { packagePlan?: unknown }).packagePlan } : {}) });
-  if (!made.ok) throw Error(made.reason);
-  const scene = testScene({ collection: read.id, look: read.presets[0]!.id });
-  const svc = new CollectionService({ model, owner, scene, transport: { list: async () => library.collections.list(), get: async id => library.collections.get(id),
-    package: async () => { throw Error("unused"); } }, readRecipe: () => ({ recipe: recipe(), revision: 0 }) });
-  return { svc, owner, scene, library, saved: () => { const list = library.collections.list(); return list.length ? library.collections.get(list.at(-1)!.id).collection : undefined; } };
-}
+/** The collection service over a library in memory holding `value` as its working copy (the scene shows its first look). */
+const service = (value: unknown = collection(), model: DocumentModel = STUDIO_DOCUMENTS, versions?: CollectionVersionsPort) =>
+  collectionServiceOver(value, { model, recipe: recipe(), ...(versions ? { versions } : {}) });
 
 test("with eye makeup alone there is one mod, named XF Eye Artistry; it can be renamed and named back, never split", async () => {
   const f = await service();

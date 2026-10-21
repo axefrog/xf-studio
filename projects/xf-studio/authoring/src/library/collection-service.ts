@@ -774,14 +774,19 @@ export class CollectionService {
     });
   }
   /**
-   * The scene shows a live look: its own when it has one, else the first look of the first collection with any (the profile's first), else
-   * a new collection with one starter look.
+   * The scene shows a live look: its own when it has one; else the first of its collection (an empty one stays shown, so its removed
+   * presets can be restored); else the first look of the first collection with any; else a new collection with one starter look.
    */
   private ensureShown() {
     const owner = this.deps.owner, ref = this.deps.scene.look();
     if (ref && owner.look(ref)?.state === "live" && owner.collection(ref.collection)?.looks.includes(ref.look)) return;
-    const same = ref ? owner.collection(ref.collection) : null;
-    const candidate = same?.looks[0] ? same : owner.list().find(view => view.looks.length);
+    const same = owner.collection(ref?.collection ?? this.current ?? "");
+    if (same) {
+      this.current = same.id;
+      this.deps.scene.setLook(same.looks[0] ? { collection: same.id, look: same.looks[0] } : undefined);
+      return;
+    }
+    const candidate = owner.list().find(view => view.looks.length);
     if (candidate) { this.deps.scene.setLook({ collection: candidate.id, look: candidate.looks[0]! }); return; }
     const look = starterLook(this.newId(), "Preset 1", this.deps.model);
     const refs = this.create({ id: this.newId(), name: "My collection", looks: [{ id: look.id, name: look.name, ...this.storedLook(look) }] });

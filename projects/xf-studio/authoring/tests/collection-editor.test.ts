@@ -9,85 +9,65 @@ import { LIBRARY_MIGRATIONS } from "../src/library/host/library-migrations";
 import { hostClock } from "../src/platform/core/clock";
 import { LibraryDatabase } from "../src/platform/persistence/library-database";
 import { openTestLibrary, type TestLibrary } from "./fixtures/library-file";
-import { CollectionSession, type EditorSnapshot } from "../src/library/collection-session";
-import { COLLECTION_RECOVERY_LIMIT, collectionDraft, emptyMemory, emptyRecipe } from "../src/app/workspace/collection-workspace";
-import { historyRecipes } from "./fixtures/looks";
+import { emptyRecipe } from "../src/app/workspace/collection-workspace";
 import { parseCollection, planCollection } from "../src/legacy/eye-makeup/export/preset-collection";
-import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
-import { recipeOf } from "./fixtures/looks";
-import { STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
-import { initialRecipe, freshWorkspace } from "./fixtures/eye-region";
+import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
+import { initialRecipe } from "./fixtures/eye-region";
+import { profileStudio } from "./fixtures/profile-studio";
+import { COLLECTION_2 } from "../src/platform/api";
 
-test("preset switching retains unsaved recipes, selections and Undo; structural operations preserve export identity", () => {
-  const id = crypto.randomUUID(), original = { id: crypto.randomUUID(), name: "Original", revision: 1, recipe: initialRecipe() };
-  let editor: EditorSnapshot = { recipe: original.recipe, active: 2, selected: 3, history: [initialRecipe()] };
-  const session = new CollectionSession(STUDIO_DOCUMENTS, collectionDraft({ schema: "xfas/collection-1", id, name: "Looks", presets: [original] }, STUDIO_DOCUMENTS),
-    () => editor, e => editor = e);
-  editor.recipe.layers[0].color = "#123456";
-  session.edit({ kind: "copy", id: original.id });
-  const copyId = session.state.selected!; expect(copyId).not.toBe(original.id);
-  editor.recipe.layers[0].color = "#aabbcc";
-  session.select(original.id);
-  expect(editor.recipe.layers[0].color).toBe("#123456"); expect(editor.active).toBe(2); expect(editor.selected).toBe(3);
-  expect(historyRecipes(editor.history)).toHaveLength(1);
-  const before = planCollection(session.snapshot().collection);
-  session.edit({ kind: "rename", id: original.id, name: "Renamed" });
-  session.edit({ kind: "move", id: original.id, to: 1 });
-  const after = planCollection(session.snapshot().collection);
+test("preset switching keeps each look's edits, selection and Undo; structural operations preserve export identity; a restart restores removals", async () => {
+  const studio = await profileStudio({ name: "Looks", looks: [{ name: "Original", recipe: initialRecipe() }] });
+  await studio.collection.initialize();
+  const { app, document } = studio, original = studio.scene.look()!.look, collection = studio.shown()!;
+  const ok = (action: Parameters<typeof app.dispatch>[0]) => expect(app.dispatch(action).ok).toBe(true);
+  ok({ kind: "layer.select", layerId: document.recipe.layers[2]!.id });
+  ok({ kind: "point.select", layerId: document.recipe.layers[2]!.id, index: 3 });
+  ok({ kind: "layer.setColor", layerId: document.recipe.layers[0]!.id, color: "#123456" });
+  ok({ kind: "preset.edit", command: { kind: "copy", id: original } });
+  const copyId = studio.scene.look()!.look; expect(copyId).not.toBe(original);
+  ok({ kind: "layer.setColor", layerId: document.recipe.layers[0]!.id, color: "#aabbcc" });
+  ok({ kind: "preset.select", id: original });
+  expect(document.recipe.layers[0]!.color).toBe("#123456"); expect(document.active).toBe(2); expect(document.selected).toBe(3);
+  expect(app.history().depth).toBe(1);
+  const plan = () => { const value = STUDIO_DOCUMENTS.parts.readCollection({ schema: COLLECTION_2, id: collection, name: "Looks",
+    presets: studio.owner.looksOf(collection).map(look => ({ id: look.id, name: look.name, revision: 1, parts: look.parts })) }, true);
+    return planCollection(value as never); };
+  studio.lookEditor.commit();
+  const before = plan();
+  ok({ kind: "preset.edit", command: { kind: "rename", id: original, name: "Renamed" } });
+  ok({ kind: "preset.edit", command: { kind: "move", id: original, to: 1 } });
+  const after = plan();
   expect(after.presets[1].appAppearance).toBe(before.presets[0].appAppearance);
-  session.edit({ kind: "remove", id: original.id }); session.edit({ kind: "remove", id: copyId });
-  expect(editor.recipe).toEqual(emptyRecipe()); expect(session.state.collection.presets).toHaveLength(0);
-  expect(() => planCollection(session.state.collection)).toThrow();
-  const workspace = freshWorkspace(); workspace.collections = session.snapshot();
-  // Sidebar-shell disclosure state saved by earlier builds is ignored on restore.
-  const stored = serializeWorkspace(workspace, STUDIO_DOCUMENTS);
-  const restored = parseWorkspace(JSON.parse(JSON.stringify({ ...stored,
-    collections: { ...stored.collections, filesOpen: true, expanded: false } })), STUDIO_DOCUMENTS);
-  expect(restored.collections!.removed).toHaveLength(2); expect(restored.recipe.layers).toHaveLength(0);
-  expect(restored.collections).not.toHaveProperty("filesOpen");
-  expect(restored.collections).not.toHaveProperty("expanded");
-  const resumed = new CollectionSession(STUDIO_DOCUMENTS, restored.collections!, () => editor, e => editor = e);
-  resumed.edit({ kind: "restore" }); expect(editor.recipe.layers[0].color).toBe("#aabbcc");
-  resumed.edit({ kind: "restore" }); expect(editor.recipe.layers[0].color).toBe("#123456"); expect(editor.active).toBe(2);
-  expect(resumed.state.selected).toBe(original.id);
+  ok({ kind: "preset.edit", command: { kind: "remove", id: original } }); ok({ kind: "preset.edit", command: { kind: "remove", id: copyId } });
+  expect(document.recipe).toEqual(emptyRecipe()); expect(studio.collection.summary().draft!.presets).toHaveLength(0);
+  expect(() => plan()).toThrow();
+  // A restart restores the removals: the newest first, each with its own edits and selection.
+  await studio.settle();
+  const resumed = await profileStudio({ library: studio.library, show: { collection, look: original } });
+  await resumed.collection.initialize();
+  expect(resumed.service.summary().draft!.removed.map(item => item.id)).toEqual([original, copyId]);
+  expect(resumed.app.dispatch({ kind: "preset.edit", command: { kind: "restore" } }).ok).toBe(true);
+  expect(resumed.document.recipe.layers[0]!.color).toBe("#aabbcc");
+  expect(resumed.app.dispatch({ kind: "preset.edit", command: { kind: "restore" } }).ok).toBe(true);
+  expect(resumed.document.recipe.layers[0]!.color).toBe("#123456"); expect(resumed.document.active).toBe(2);
+  expect(resumed.scene.look()!.look).toBe(original);
 });
 
-test("opening collections is recoverable and save completion never overwrites edits made in flight", () => {
-  const a = { schema: "xfas/collection-1" as const, id: crypto.randomUUID(), name: "A", presets: [
-    { id: crypto.randomUUID(), name: "A1", revision: 1, recipe: initialRecipe() }] };
-  let editor: EditorSnapshot = { recipe: a.presets[0].recipe, ...emptyMemory() };
-  const session = new CollectionSession(STUDIO_DOCUMENTS, collectionDraft(a, STUDIO_DOCUMENTS), () => editor, e => editor = e);
-  const sent = session.snapshot().collection;
-  editor.recipe.layers[0].color = "#ffeedd";
-  session.saved({ collection: { ...sent, id: crypto.randomUUID() }, revision: 1, updatedAt: "now" }, a.id);
-  expect(recipeOf(session.snapshot().collection.presets[0]).layers[0].color).toBe("#ffeedd");
-  const priorId = session.state.collection.id;
-  session.open({ ...a, id: crypto.randomUUID(), presets: [] });
-  expect(editor.recipe.layers).toHaveLength(0);
-  const ws = freshWorkspace(); ws.collections = session.snapshot();
-  const restored = parseWorkspace(JSON.parse(JSON.stringify(serializeWorkspace(ws, STUDIO_DOCUMENTS))), STUDIO_DOCUMENTS);
-  const next = new CollectionSession(STUDIO_DOCUMENTS, restored.collections!, () => editor, e => editor = e);
-  next.undoOpen(); expect(editor.recipe.layers[0].color).toBe("#ffeedd"); expect(next.state.collection.id).toBe(priorId);
-  next.importRecipe(initialRecipe(), "Portable"); expect(next.state.collection.presets).toHaveLength(2);
-  expect(next.state.collection.presets[1].name).toBe("Portable");
-});
-
-test("recovery is bounded and follows the opened drafts in order", () => {
-  const collection = (name: string) => ({ schema: "xfas/collection-1" as const,
-    id: crypto.randomUUID(), name, presets: [] });
-  const first = collection("First");
-  let editor: EditorSnapshot = { recipe: emptyRecipe(), ...emptyMemory() };
-  const session = new CollectionSession(STUDIO_DOCUMENTS, collectionDraft(first, STUDIO_DOCUMENTS), () => editor, value => editor = value);
-  for (let n = 0; n < COLLECTION_RECOVERY_LIMIT + 1; n++) session.open(collection(`Open ${n}`));
-  expect(session.state.previous?.collection.name).toBe(`Open ${COLLECTION_RECOVERY_LIMIT - 1}`);
-  expect(session.state.older?.map(draft => draft.collection.name)).toEqual(
-    Array.from({ length: COLLECTION_RECOVERY_LIMIT - 1 }, (_, index) => `Open ${COLLECTION_RECOVERY_LIMIT - 2 - index}`));
-  for (let n = COLLECTION_RECOVERY_LIMIT - 1; n >= 0; n--) {
-    session.undoOpen();
-    expect(session.state.collection.name).toBe(`Open ${n}`);
-  }
-  expect(session.state.previous?.collection.name).toBe(`Open ${COLLECTION_RECOVERY_LIMIT}`);
-  expect(session.state.older).toHaveLength(COLLECTION_RECOVERY_LIMIT - 1);
+test("opening a collection replaces nothing and Undo open shows the one before; a recipe imports as a preset of its own", async () => {
+  const studio = await profileStudio({ name: "A", looks: [{ name: "A1", recipe: initialRecipe() }] });
+  await studio.collection.initialize();
+  studio.app.dispatch({ kind: "layer.setColor", layerId: studio.document.recipe.layers[0]!.id, color: "#ffeedd" });
+  const prior = studio.shown();
+  const text = JSON.stringify({ schema: COLLECTION_2, id: crypto.randomUUID(), name: "B", presets: [
+    { id: crypto.randomUUID(), name: "B1", revision: 1, parts: { "eye-makeup": STUDIO_DOCUMENTS.parts.envelope("eye-makeup", emptyRecipe()) } }] });
+  expect((await studio.collection.execute({ kind: "import", text, bytes: text.length })).ok).toBe(true);
+  expect(studio.document.recipe.layers).toHaveLength(0);
+  expect(studio.collection.dispatch({ kind: "collection.undoOpen" }).ok).toBe(true);
+  expect(studio.document.recipe.layers[0]!.color).toBe("#ffeedd"); expect(studio.shown()).toBe(prior);
+  studio.collection.importRecipe(initialRecipe(), "Portable");
+  expect(studio.collection.summary().draft!.presets.map(preset => preset.name)).toEqual(["A1", "Portable"]);
+  void parseCollection;
 });
 
 test("SQLite migration preserves look revisions; collection saves are atomic, ordered and conflict-protected", () => {

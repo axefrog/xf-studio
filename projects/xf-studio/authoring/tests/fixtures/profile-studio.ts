@@ -9,7 +9,8 @@ import { StudioFileOperations, type StudioPickedFile } from "../../src/app/studi
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
 import type { Recipe } from "../../src/engines/layered-makeup/recipe";
 import { CollectionApplication } from "../../src/library/collection-application";
-import type { CollectionTransport } from "../../src/library/collection-service";
+import { CollectionService, type CollectionTransport } from "../../src/library/collection-service";
+import type { DocumentModel } from "../../src/app/workspace/collection-workspace";
 import { type LookRef, lookRef, collectionRef } from "../../src/library/collection-documents";
 import { CollectionOwner, type CollectionVersionsPort } from "../../src/library/collection-owner";
 import { saveCollectionVersion } from "../../src/library/host/collection-store";
@@ -83,7 +84,7 @@ export async function profileStudio(options: {
     ref = { collection: id, look: looks[0]!.id };
   }
   const scene = testScene(ref), history = createHistoryService(), sessions = new LookSessions(owner, outbox);
-  const first = ref ? lookContent(owner.look(ref)!, MODEL) : null;
+  const shownView = ref ? owner.look(ref) : null, first = shownView?.state === "live" ? lookContent(shownView, MODEL) : null;
   const workspace = freshWorkspace();
   let application: CollectionApplication | undefined;
   const core = createTrustedAuthoringCore({ ...workspace, ...(first ? first.state : {}) }, { history, resetStack: () => {},
@@ -125,3 +126,29 @@ export async function profileStudio(options: {
   };
 }
 export type ProfileStudio = Awaited<ReturnType<typeof profileStudio>>;
+
+/**
+ * The collection service alone (no editor) over a library in memory holding `value` (a collection file of either schema) as a working
+ * copy, its scene showing the first look. `recipe`: the editor's live recipe for that look. `transport` and `versions` stand in for the
+ * host where a test needs to.
+ */
+export async function collectionServiceOver(value: unknown, options: { model?: DocumentModel; recipe?: Recipe; versions?: CollectionVersionsPort;
+  package?: CollectionTransport["package"] } = {}) {
+  const model = options.model ?? MODEL;
+  const library = openTestLibrary(), port = libraryPort(library), outbox = new DocumentOutbox(port, memoryOutboxStorage(), { retryMs: 5 });
+  outbox.open();
+  const owner = new CollectionOwner({ documents: port, outbox, versions: options.versions ?? libraryVersions(library) });
+  await owner.load();
+  const read = model.parts.readCollection(value, true, "keep");
+  const plan = (value as { packagePlan?: unknown }).packagePlan;
+  const made = owner.dispatch({ kind: "collection.create", id: read.id, name: read.name, looks: read.presets.map(look => ({ id: look.id, name: look.name,
+    parts: model.parts.minimalLook(look).parts })), ...(plan !== undefined ? { packagePlan: plan } : {}) });
+  if (!made.ok) throw Error(made.reason);
+  const scene = testScene(read.presets[0] ? { collection: read.id, look: read.presets[0].id } : undefined);
+  const recipe = options.recipe;
+  const svc = new CollectionService({ model, owner, scene, transport: { list: async () => library.collections.list(), get: async id => library.collections.get(id),
+    package: options.package ?? (async () => { throw Error("unused"); }) }, ...(recipe ? { readRecipe: () => ({ recipe, revision: 0 }) } : {}) });
+  return { svc, owner, scene, library, outbox,
+    /** The collection as the library last saved it as a version. */
+    saved: () => { const list = library.collections.list(); return list.length ? library.collections.get(list.at(-1)!.id).collection : undefined; } };
+}
