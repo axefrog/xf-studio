@@ -97,6 +97,12 @@ All three approved on 26 September 2026, each confined to the test profile's -wr
 - **The photo-mode key** (rank 9): yes, one allowlisted key (the bound `TogglePhotoMode` key), only to the Cyberpunk window, only after `CanPhotoModeBeEnabled`, never any other input. Built as `photo.open`.
 - **Our own camera presets** (rank 3): yes, in the -diagnostic and -writes packages; the distribution package must not carry them. Built as `xf_photo_mode_presets.yaml`.
 
+## Open bugs
+
+- **Wardrobe restore after the kill switch** (RB-93, plausible): `XFWardrobeRestoreLater` runs 0.5 s later without checking `XFBridge_Live` or the phase, the one path the load/detach gate doesn't cover.
+- **Save refusal race** (RB-94, plausible): the holds are read in one game task before `prepare` and the save, so a `behave.start` or `player.effect` from another client in between is written into the save.
+- **Equipment-EX reflection per call** (RB-95): `XFScriptOutfit.Api()` rescans the class and reads its version on every call (2–3 times per `wardrobe.state`); cache it per session. `EquipInto` relies on an empty `TweakDBID` meaning "omitted".
+
 ## Constraints
 
 - Techniques are learned from other mods' source, not copied; AMM and cjsu's mods state no open licence, and Photo Mode Ex is MIT. Credits are in [community credits](../../docs/community-credits.md).
