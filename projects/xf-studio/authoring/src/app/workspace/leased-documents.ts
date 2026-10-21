@@ -7,8 +7,11 @@
 import type { DocumentStorePort } from "../../platform/api/document-store";
 
 export type LeasedDocuments = DocumentStorePort & {
-  /** Resolves once no write is in flight, including writes queued behind ones that settle while it waits. */
-  drain(): Promise<void>;
+  /**
+   * Resolves once no write is in flight, including writes queued behind ones that settle while it waits: true when every write that
+   * settled from its start succeeded, false when one failed or was refused (the release then keeps the lease).
+   */
+  drain(): Promise<boolean>;
   /** Writes in flight now (tests and the harness). */
   pending(): number;
 };
@@ -17,23 +20,26 @@ export function leasedDocuments(inner: DocumentStorePort, lease: { draining(): b
   /** One turn of the page's task queue: a holder's next write starts after its previous one settles (`saved-document.ts`). */
   nextTurn: () => Promise<void> = () => new Promise(resolve => setTimeout(resolve, 0))): LeasedDocuments {
   const inFlight = new Set<Promise<unknown>>();
+  let failures = 0;
   return {
     list: (kind, signal) => inner.list(kind, signal),
     put(kind, id, value, revision) {
       if (!lease.draining()) return Promise.resolve({ ok: false, reason: "superseded" });
       const write = inner.put(kind, id, value, revision);
       inFlight.add(write);
-      const done = () => { inFlight.delete(write); };
-      write.then(done, done);
+      write.then(result => { inFlight.delete(write); if (!result.ok && result.reason === "superseded") failures++; },
+        () => { inFlight.delete(write); failures++; });
       return write;
     },
     async drain() {
+      const before = failures;
       // A save made just before the release starts its write a microtask later; a coalesced save starts once the write before it settles.
       await nextTurn();
       while (inFlight.size) {
         await Promise.allSettled([...inFlight]);
         await nextTurn();
       }
+      return failures === before;
     },
     pending: () => inFlight.size,
   };

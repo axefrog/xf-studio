@@ -15,7 +15,8 @@ import { DockView } from "./dock/dock-view";
 import type { PanelId } from "./dock/layout";
 import { defaultDockStateFor, restoreDockPreference, serializeDockState } from "./dock/persist";
 import type { StudioModule } from "../platform/api";
-import { h, isTextInput, setAttr, setText, setUnavailable } from "./dom";
+import { h, isTextInput, setAttr, setText } from "./dom";
+import { markReadOnly } from "./read-only-sweep";
 import { Feedback } from "./feedback";
 import { icon, isIconName } from "./icons";
 import { sizeClassFor } from "./layout-defaults";
@@ -552,44 +553,29 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
  */
 function workspaceNotice(rt: StudioRuntime) {
   const text = h("span", { class: "workspace-notice-text" });
-  const takeOver = button({ label: "Use it here", small: true, onClick: () => {
-    void rt.port.workspace.dispatch({ kind: "workspace.takeOver" }).then(outcome => {
+  const act = (kind: "workspace.takeOver" | "workspace.retryRelease") => () => {
+    void rt.port.workspace.dispatch({ kind }).then(outcome => {
       if (!outcome.ok) rt.feedback.toast("warning", "Workspace", outcome.message, [], { code: outcome.code });
     });
-  } });
-  const element = h("div", { class: "state-line warning workspace-notice", role: "status", hidden: true }, text, takeOver);
+  };
+  const takeOver = button({ label: "Use it here", small: true, onClick: act("workspace.takeOver") });
+  const retry = button({ label: "Try again", small: true, onClick: act("workspace.retryRelease") });
+  const element = h("div", { class: "state-line warning workspace-notice", role: "status", hidden: true }, text, takeOver, retry);
   return {
     element,
     update(frame: Frame) {
-      const lease = frame.status.lease, shown = !!lease && !lease.writable;
+      const lease = frame.status.lease, shown = !!lease?.message;
       element.hidden = !shown;
       setText(text, shown ? lease!.message : "");
       text.title = shown ? lease!.message : "";
       takeOver.hidden = !lease?.canTakeOver;
+      retry.hidden = !lease?.canRetry;
     },
   };
 }
 
 /** Panels whose controls only read or open things (Help, Activity): a read-only window keeps them all (t-read-only-window). */
 const READ_SAFE_PANELS = new Set<string>(["help", "activity"]);
-/** Controls that only change this window's own view (t-read-only-window): kept in a read-only window. */
-const READ_SAFE = ".expander, .help-tip, [role=tab], a[href], input[type='search'], [data-read-safe], [data-read-safe] *";
-const EDITING_CONTROLS = "button, input, select, textarea, [role=slider], [role=radio], [role=option], [role=switch], [role=checkbox]";
-/**
- * A read-only window's panels (t-read-only-window): every editing control is unavailable with the lease's refusal as its reason,
- * through the unavailable-command pattern (`setUnavailable`, reason tips). Form fields that edit by themselves are disabled too, so
- * nothing changes on screen that the application would refuse.
- */
-function markReadOnly(element: HTMLElement, reason: string) {
-  for (const control of element.querySelectorAll<HTMLElement>(EDITING_CONTROLS)) {
-    if (control.matches(READ_SAFE)) continue;
-    if (control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement) {
-      if (!control.disabled) control.disabled = true;
-      if (control.title !== reason) control.title = reason;
-    } else setUnavailable(control, true, reason);
-  }
-}
-
 function statusBar(rt: StudioRuntime) {
   const workspace = h("span", { class: "status-item" }), activity = h("button", { class: "status-item status-message", type: "button",
     title: "Open the activity log" }), ready = h("span", { class: "status-item ready-badge" }), gesture = h("span", { class: "status-item muted" });

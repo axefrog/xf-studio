@@ -24,6 +24,10 @@ type Event = { window: string; at: number; event: string; [key: string]: unknown
 type Win = { name: string; events: Event[]; command(name: string): void; kill(): Promise<void>; alive(): boolean;
   wait(match: (event: Event) => boolean, ms?: number): Promise<Event | null> };
 type Host = { name: "desktop" | "localhost"; open(name: string, options?: { hang?: boolean; editMs?: number }): Promise<Win>;
+  /** Desktop: the host ends every page's lease stream (as when it stops). */
+  endStreams?(): void;
+  /** Localhost: the host refuses to issue lease generations while on. */
+  refuseLeases?(on: boolean): void;
   doc(): Promise<{ revision: number; value: LeaseDoc } | null>; workspace(): Promise<string | null>;
   /** The window the host (or the browser) has as holder now, or null. */
   holder(): string | null; close(): Promise<void> };
@@ -69,7 +73,7 @@ async function desktopHost(scratch: string): Promise<Host> {
         }
       })();
       void new Response(proc.stderr).text().then(text => { if (text.trim()) process.stderr.write(`[${name}] ${text.slice(0, 1500)}\n`); });
-      const started = await win.wait(event => event.event === "phase" && ["holder", "read-only"].includes(event.phase as string), 15_000);
+      const started = await win.wait(event => event.event === "phase" && ["holder", "read-only", "disconnected"].includes(event.phase as string), 15_000);
       if (!started) throw Error(`Desktop page ${name} didn't start.`);
       // The host names pages by their own IDs; the harness learns which is which from who holds the lease right after.
       if (started.phase === "holder") pages.set(app.leases.holder(false)?.page ?? "", name);
@@ -85,6 +89,7 @@ async function desktopHost(scratch: string): Promise<Host> {
       return workspace === null ? null : /"([A-Z]#\d+(?:#last)?|[A-Z]#late)"/.exec(workspace)?.[1] ?? "(no marker)";
     },
     holder() { const held = app.leases.holder(false); return held ? pages.get(held.page) ?? `page ${held.page}` : null; },
+    endStreams() { app.leases.close(); },
     async close() { app.stop(); },
   };
 }
@@ -92,7 +97,10 @@ async function desktopHost(scratch: string): Promise<Host> {
 async function localhostHost(scratch: string): Promise<Host> {
   mkdirSync(join(scratch, "localhost"), { recursive: true });
   const files = openLibraryFiles(join(scratch, "localhost"), { clock: hostClock(), parts: STUDIO_PARTS, isolated: true });
-  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: request => files.handle(request) ?? new Response("Not found", { status: 404 }) });
+  let refuse = false;
+  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: request =>
+    refuse && new URL(request.url).pathname === "/api/workspace-lease" ? new Response("Unavailable", { status: 503 })
+      : files.handle(request) ?? new Response("Not found", { status: 404 }) });
   const base = `http://127.0.0.1:${server.port}`, workspace = `browser-${crypto.randomUUID()}`;
   const workers = new Map<string, Worker>();
   const locks = new WebLocksModel((window, message) => workers.get(window)?.postMessage(message));
@@ -115,13 +123,14 @@ async function localhostHost(scratch: string): Promise<Host> {
         else { storage.value = message.value; if (locks.holder(`xfs.workspace.${workspace}`) !== name) late.push(`${name}: ${message.value}`); }
       };
       worker.postMessage({ op: "init", base, name, hang, workspace, editMs });
-      const started = await win.wait(event => event.event === "phase" && ["holder", "read-only"].includes(event.phase as string), 15_000);
+      const started = await win.wait(event => event.event === "phase" && ["holder", "read-only", "disconnected"].includes(event.phase as string), 15_000);
       if (!started) throw Error(`Window ${name} didn't start.`);
       return win;
     },
     async doc() { return files.main.documents.get<LeaseDoc>(LEASE_DOC.kind, LEASE_DOC.id); },
     async workspace() { return storage.value; },
     holder: () => locks.holder(`xfs.workspace.${workspace}`),
+    refuseLeases(on) { refuse = on; },
     async close() {
       for (const worker of workers.values()) worker.terminate();
       server.stop(true); files.close();
@@ -204,6 +213,95 @@ async function scenarios(host: Host, record: (scenario: string, check: string, o
     const granted = await b.wait(phase("taken-over"));
     record(s, "once the hung window ends, the waiting window is granted", !!granted, granted ? "granted" : "not granted");
     await b.kill();
+  }
+  // 4. A release whose last write can't be stored: nothing is released; the holder keeps the workspace and says so; Try again hands over.
+  {
+    const s = "release that can't save";
+    const a = await host.open("G");
+    await a.wait(event => event.event === "ack" && (event.seq as number) >= 4);
+    const b = await host.open("H");
+    a.command("break-writes");
+    await a.wait(event => event.event === "writes" && event.broken === true);
+    b.command("takeover");
+    const failed = await a.wait(phase("release-failed"));
+    await sleep(800);
+    record(s, "the holder keeps the workspace, and the other window keeps waiting", !!failed && !a.events.some(phase("read-only")) &&
+      !b.events.some(phase("taken-over")) && host.holder() !== null && host.holder() !== "H",
+      `G: ${failed?.message ?? "no failure shown"}; holder ${host.holder()}`);
+    a.command("fix-writes");
+    await a.wait(event => event.event === "writes" && event.broken === false);
+    a.command("retry");
+    const released = await a.wait(phase("read-only")), granted = await b.wait(phase("taken-over"));
+    const last = a.events.filter(event => event.event === "last-write").at(-1), ws = await host.workspace();
+    record(s, "Try again stores the last write, releases, and the other window is granted", !!released && !!granted && ws === `G#${last?.seq}#last`,
+      `workspace ${ws}`);
+    await a.kill(); await b.kill();
+    await sleep(100);
+  }
+  if (host.name === "desktop") {
+    // 5. A write that stalls in transit across a handover: it passed the fence on arrival, but is refused at the save itself.
+    {
+      const s = "write stalled across a handover";
+      const a = await host.open("I");
+      await a.wait(event => event.event === "ack" && (event.seq as number) >= 4);
+      a.command("slow-write");
+      await a.wait(event => event.event === "slow-started");
+      await sleep(200);
+      const b = await host.open("J");
+      b.command("takeover");
+      await b.wait(phase("taken-over"));
+      const before = await host.workspace();
+      a.command("finish-slow");
+      const finished = await a.wait(event => event.event === "slow-finished");
+      const after = await host.workspace();
+      record(s, "the stalled write is refused at the save and changes nothing", finished?.status === 409 && after === before && after !== "I#slow",
+        `status ${finished?.status}; workspace ${before} → ${after}`);
+      await a.kill(); await b.kill();
+      await sleep(100);
+    }
+    // 6. The host ends the page's stream: the page stops being writable at once and sends nothing more.
+    {
+      const s = "host stream ended";
+      const a = await host.open("K");
+      await a.wait(event => event.event === "ack" && (event.seq as number) >= 4);
+      host.endStreams!();
+      const lost = await a.wait(phase("disconnected"));
+      await sleep(300);
+      const sentAfter = a.events.filter(event => event.event === "ws" && lost && event.at > lost.at + 50 && event.status !== 0);
+      record(s, "the page becomes read-only with a plain message and writes nothing more", !!lost && lost.message === LEASE_MESSAGES.disconnected &&
+        sentAfter.length === 0, `"${lost?.message}"; ${sentAfter.length} write(s) sent after`);
+      await a.kill();
+    }
+  } else {
+    // 7. The host can't issue a generation: the page never becomes writable (fail closed), and lets the lock go.
+    {
+      const s = "no lease generation";
+      host.refuseLeases!(true);
+      const c = await host.open("L").catch(() => null);
+      const lost = c ? await c.wait(phase("disconnected"), 8000) : null;
+      await sleep(200);
+      record(s, "the window stays unwritable and lets the lock go", !!lost && !c!.events.some(phase("holder")) && host.holder() === null,
+        `phase ${lost?.phase ?? c?.events.find(e => e.event === "phase")?.phase}; holder ${host.holder()}`);
+      host.refuseLeases!(false);
+      await c?.kill();
+    }
+    // 8. A takeover that fails (no generation for it) returns to read-only, withdraws its request, and can be tried again.
+    {
+      const s = "takeover retried";
+      const a = await host.open("M");
+      await a.wait(event => event.event === "ack" && (event.seq as number) >= 4);
+      const b = await host.open("N");
+      host.refuseLeases!(true);
+      b.command("takeover");
+      const failed = await b.wait(event => event.event === "takeover" && event.ok === false, 10_000);
+      const readOnly = b.events.filter(phase("read-only")).length >= 2;
+      host.refuseLeases!(false);
+      b.command("takeover");
+      const granted = await b.wait(phase("taken-over"));
+      record(s, "the failed takeover returns to read-only and a second one succeeds", !!failed && readOnly && !!granted,
+        `first ${failed ? "failed" : "?"}; second ${granted ? "granted" : "not granted"}`);
+      await a.kill(); await b.kill();
+    }
   }
 }
 

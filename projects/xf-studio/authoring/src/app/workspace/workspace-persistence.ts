@@ -51,11 +51,10 @@ export class WorkspacePersistence {
   storedSize() { return this.lastSize; }
   activate() { if (!this.retired) this.active = true; }
   /**
-   * The last write before this page hands the workspace to another one: the pending draft is written now, the debounce timer is
-   * stopped, and nothing is written again (profiles design §2.3, release steps 4 and 5).
+   * After this page handed the workspace to another one (its last write already stored, profiles design §2.3): the debounce timer
+   * stops, and nothing is written again in this page's lifetime.
    */
   retire() {
-    this.flush();
     clearTimeout(this.timer); this.timer = undefined;
     this.active = false; this.retired = true;
   }
@@ -64,28 +63,34 @@ export class WorkspacePersistence {
     clearTimeout(this.timer);
     this.timer = setTimeout(() => this.flush(), this.options.delayMs ?? 180);
   }
-  flush() {
+  /**
+   * Writes the latest draft now. Answers whether it is stored: written (whole or trimmed to fit), unchanged since the last write, or
+   * nothing to write; false when it couldn't be (storage full or unavailable, capture failed, or this page may not write).
+   */
+  flush(): boolean {
     clearTimeout(this.timer); this.timer = undefined;
     // A read-only page (another one holds the workspace) writes nothing; the lease says so in the page.
-    if (!this.active || this.options.canWrite?.() === false) return;
+    if (this.options.canWrite?.() === false) return false;
+    if (!this.active) return true;
+    // A protected workspace (unreadable at restore) is never written by any page, so there is nothing of this one's to lose.
     if (!this.options.writable) {
       this.publish({ kind: "protected", message: `${this.options.restoreError ?? "Workspace could not be restored"}. Original storage kept; export your recipe before closing.` });
-      return;
+      return true;
     }
     let state: WorkspaceState;
     try { state = this.options.capture(); }
-    catch { this.publish({ kind: "unavailable", message: SAVE_MESSAGES.unavailable }); return; }
+    catch { this.publish({ kind: "unavailable", message: SAVE_MESSAGES.unavailable }); return false; }
     // Write the least-trimmed form that fits the budget (`fitWorkspace`). If the browser still refuses
     // it (other keys share the quota), fit a smaller budget before reporting that autosave stopped.
     let quota = false, budget = this.options.budget ?? WORKSPACE_STORAGE_BUDGET;
     for (let attempt = 0; attempt < 12; attempt++) {
       const fitted = fitWorkspace(state, this.options.model, budget, this.lastPlan);
       // Unchanged content is not rewritten, so status or view refreshes cannot cause writes.
-      if (fitted.encoded === this.written) return;
+      if (fitted.encoded === this.written) return true;
       try {
         this.options.storage.setItem(this.options.key, fitted.encoded);
       } catch (error) {
-        if (!isQuotaError(error)) { this.publish({ kind: "unavailable", message: SAVE_MESSAGES.unavailable }); return; }
+        if (!isQuotaError(error)) { this.publish({ kind: "unavailable", message: SAVE_MESSAGES.unavailable }); return false; }
         quota = true;
         if (fitted.minimal) break;
         budget = Math.min(budget, Math.floor(fitted.size * 0.75));
@@ -96,9 +101,10 @@ export class WorkspacePersistence {
         ? { kind: "nearly-full", message: SAVE_MESSAGES.nearlyFull }
         : this.options.restoreWarning ? { kind: "repaired", message: `Draft autosaved. ${this.options.restoreWarning}` }
         : { kind: "saved", message: SAVE_MESSAGES.saved });
-      return;
+      return true;
     }
     if (quota) this.publish({ kind: "full", message: SAVE_MESSAGES.full });
+    return false;
   }
   /** Publish only real changes, so a listener that reacts to status cannot loop. */
   private publish(status: WorkspaceSaveStatus) {

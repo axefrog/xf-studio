@@ -238,7 +238,9 @@ async function start(host: StudioHost, root: HTMLElement) {
     // Releasing to another window: after the pending document saves drain (a step the host registered first), the workspace is
     // written a last time and its timers stop (§2.3 release steps 3 to 5).
     lease.onReleaseStart(() => core.app.settleEdits());
-    lease.onRelease(() => session.retire());
+    // The last write is a step that must succeed; autosave retires only once the lease is released and confirmed.
+    lease.onRelease(() => session.flush());
+    lease.onReleased(() => session.retire());
     lease.subscribe(() => {
       statusSource.changed();
       // Taken over: this page was built from the workspace as it was when it opened, so it restarts from the one just released.

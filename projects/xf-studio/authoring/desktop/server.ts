@@ -391,10 +391,12 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       }
       if (url.pathname === "/api/desktop/workspace/lease") return leases.request(routedRequest, url.searchParams.has("verify"));
       if (url.pathname === "/api/desktop/workspace") {
-        // A late write from a page that released the workspace (an older lease generation) is refused, never written.
-        const fenced = leases.refuseWrite(request, url.searchParams.has("verify"));
+        // A late write from a page that released the workspace (an older lease generation) is refused, never written: checked on arrival
+        // and again at the save itself, after the body has come in, with nothing awaited in between.
+        const fence = () => leases.refuseWrite(request, url.searchParams.has("verify"));
+        const fenced = fence();
         if (fenced) return fenced;
-        const response = await desktopWorkspaceRequest(routedRequest, workspaceStore, url.searchParams.has("verify"));
+        const response = await desktopWorkspaceRequest(routedRequest, workspaceStore, url.searchParams.has("verify"), fence);
         // Only a successfully loaded workspace makes the close handshake wait for the page.
         if (request.method === "GET" && !renderer.bootstrapped) {
           if (response.ok) { renderer.bootstrapped = true; report("Renderer bootstrap loaded the workspace."); }

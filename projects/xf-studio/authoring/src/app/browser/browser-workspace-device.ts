@@ -41,7 +41,7 @@ export function createBrowserWorkspaceSession(options: {
   persistence.subscribe(options.onStatus);
   for (const source of options.sources) source.subscribe(() => persistence.request());
   const request = () => persistence.request(), flush = () => persistence.flush();
-  options.window.addEventListener("pagehide", flush);
+  options.window.addEventListener("pagehide", () => { flush(); });
   options.document.addEventListener("visibilitychange", () => { if (options.document.hidden) flush(); });
   for (const event of ["input", "change", "click"]) options.document.addEventListener(event, request);
   return { request, flush, activate: () => persistence.activate(), retire: () => persistence.retire(),

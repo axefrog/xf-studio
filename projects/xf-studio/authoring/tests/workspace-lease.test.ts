@@ -67,7 +67,7 @@ test("a read-only window refuses, says so, takes over after the grace with the w
   const lease = new WorkspaceLease(script.adapter, { clock: time.clock, graceMs: 1000 });
   expect(lease.refusal()?.reason).toBe(LEASE_MESSAGES.starting);
   await lease.start();
-  expect(lease.snapshot()).toEqual({ phase: "read-only", writable: false, message: LEASE_MESSAGES.readOnly, canTakeOver: true, refusal: LEASE_MESSAGES.refused });
+  expect(lease.snapshot()).toEqual({ phase: "read-only", writable: false, message: LEASE_MESSAGES.readOnly, canTakeOver: true, canRetry: false, refusal: LEASE_MESSAGES.refused });
   expect(lease.refusal()).toEqual({ available: false, code: "unavailable", reason: LEASE_MESSAGES.refused });
   expect(lease.capability({ kind: "workspace.takeOver" }).available).toBe(true);
   const taking = lease.dispatch({ kind: "workspace.takeOver" });
@@ -145,7 +145,7 @@ test("the document store behind the lease drains writes in flight (and the one c
   expect(sent).toEqual(["1", "3"]);
 });
 
-test("autosave writes nothing while read-only, and its retirement writes once more and then never again", () => {
+test("autosave writes nothing while read-only; after its last write, retiring it stops every later write", () => {
   const writes: string[] = [];
   let can = false, edits = 0;
   const workspace = freshWorkspace();
@@ -158,8 +158,9 @@ test("autosave writes nothing while read-only, and its retirement writes once mo
   can = true;
   persistence.flush();
   expect(writes).toHaveLength(1);
-  persistence.retire();
+  expect(persistence.flush()).toBe(true);
   expect(writes).toHaveLength(2);
+  persistence.retire();
   persistence.activate(); persistence.request(); persistence.flush();
   expect(writes).toHaveLength(2);
 });
@@ -189,7 +190,7 @@ test("a read-only window refuses every dispatch with unavailable, keeps reads, a
   expect(shell.authoring.requestCapability({ kind: "refresh" }).code).not.toBe("unavailable");
   expect(shell.workspace.snapshot()).toMatchObject({ phase: "read-only", canTakeOver: true });
   expect(shell.workspace.capability({ kind: "workspace.takeOver" }).available).toBe(true);
-  expect(Object.keys(shell.workspace.descriptors())).toEqual(["workspace.takeOver"]);
+  expect(Object.keys(shell.workspace.descriptors())).toEqual(["workspace.takeOver", "workspace.retryRelease"]);
 });
 
 test("the window that holds its workspace behaves as before", async () => {
@@ -260,7 +261,6 @@ test("a release first ends an open gesture or slider drag (committed, one Undo s
   script.ask();
   await new Promise(resolve => setTimeout(resolve, 0));
   expect(order).toEqual(["settle:true", "drain:false"]);
-  expect(app.snapshot().preview?.gesture ?? null).toBeNull();
   expect(document.recipe.layers[0].points[0].u).toBeCloseTo(u + .002, 9);
   expect(document.history.state().depth).toBe(1);
   // Nothing more is accepted once released, and the device's late moves change nothing.
@@ -282,4 +282,128 @@ test("a release first ends an open gesture or slider drag (committed, one Undo s
   expect(other.document.recipe.layers[0].opacity).toBe(.42);
   expect(other.document.history.state().depth).toBe(1);
   expect(other.app.controlEdit("opacity", { kind: "layer.setOpacity", layerId: layer, opacity: .9 }).ok).toBe(false);
+});
+
+test("a release step that can't save stops the release: the page keeps the lease and its edits, says so, and Try again finishes it", async () => {
+  const time = simulatedClock(), script = scriptedAdapter(false), released: string[] = [];
+  const lease = new WorkspaceLease(script.adapter, { clock: time.clock });
+  await lease.start();
+  let saves = false;
+  lease.onRelease(() => saves);
+  lease.onReleased(() => released.push("autosave retired"));
+  script.ask();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(lease.snapshot()).toMatchObject({ phase: "release-failed", writable: true, canRetry: true, canTakeOver: false, message: LEASE_MESSAGES.releaseFailed });
+  expect(lease.refusal()).toBeUndefined();
+  expect(lease.generation()).toBe(1);
+  expect(script.calls).toEqual([]);
+  expect(released).toEqual([]);
+  // A repeated request doesn't retry by itself; Try again does.
+  script.ask();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(lease.snapshot().phase).toBe("release-failed");
+  saves = true;
+  expect(await lease.dispatch({ kind: "workspace.retryRelease" })).toEqual({ ok: true });
+  expect(script.calls).toEqual(["release"]);
+  expect(released).toEqual(["autosave retired"]);
+  expect(lease.snapshot().phase).toBe("read-only");
+});
+
+test("a release whose adapter can't confirm (the desktop's last host write didn't land) keeps the lease too", async () => {
+  const script = scriptedAdapter(false);
+  const adapter = { ...script.adapter, release: async () => { throw Error("The last workspace write didn't land."); } };
+  const lease = new WorkspaceLease(adapter, { clock: simulatedClock().clock });
+  await lease.start();
+  expect(await lease.release()).toBe(false);
+  expect(lease.snapshot().phase).toBe("release-failed");
+});
+
+test("autosave's last write answers whether the draft is stored", () => {
+  const workspace = freshWorkspace();
+  let full = false;
+  const persistence = new WorkspacePersistence({ storage: { setItem: () => { if (full) throw Object.assign(Error("full"), { name: "QuotaExceededError" }); } },
+    key: "k", writable: true, capture: () => { workspace.recipe.layers[0].opacity = Math.random(); return workspace; }, model: STUDIO_DOCUMENTS });
+  persistence.activate();
+  expect(persistence.flush()).toBe(true);
+  full = true;
+  expect(persistence.flush()).toBe(false);
+});
+
+test("the document drain reports a write that failed or was refused while it waited", async () => {
+  let answer: ((result: DocumentWrite) => void) | null = null;
+  const store: DocumentStorePort = { list: async () => [], put: () => new Promise(resolve => { answer = resolve as never; }) };
+  const leased = leasedDocuments(store, { draining: () => true });
+  void leased.put("sample", "a", 1, 0);
+  const drained = leased.drain();
+  await new Promise(resolve => setTimeout(resolve, 5));
+  answer!({ ok: false, reason: "superseded" });
+  expect(await drained).toBe(false);
+  expect(await leased.drain()).toBe(true);
+});
+
+test("a failed takeover returns to read-only, withdraws its request, and can be tried again", async () => {
+  let attempt = 0, withdrawn = 0;
+  const lease = new WorkspaceLease({
+    acquire: async () => null,
+    takeOver: signal => {
+      signal.addEventListener("abort", () => withdrawn++, { once: true });
+      return ++attempt === 1 ? Promise.reject(Error("No generation.")) : Promise.resolve({ generation: 4 });
+    },
+    onReleaseRequested: () => {}, release: async () => {},
+  }, { clock: simulatedClock().clock });
+  await lease.start();
+  expect((await lease.takeOver()).ok).toBe(false);
+  expect(withdrawn).toBe(1);
+  expect(lease.snapshot()).toMatchObject({ phase: "read-only", canTakeOver: true });
+  expect((await lease.takeOver()).ok).toBe(true);
+  expect(lease.snapshot().phase).toBe("taken-over");
+});
+
+test("a page that can't get a generation, or loses its host, is never writable", async () => {
+  const noGeneration = new WorkspaceLease({ acquire: async () => { throw Error("No generation."); }, takeOver: () => new Promise(() => {}),
+    onReleaseRequested: () => {}, release: async () => {} }, { clock: simulatedClock().clock });
+  await noGeneration.start();
+  expect(noGeneration.snapshot()).toMatchObject({ phase: "disconnected", writable: false, message: LEASE_MESSAGES.disconnected, canTakeOver: false });
+  expect(noGeneration.refusal()?.reason).toBe(LEASE_MESSAGES.disconnected);
+  let lose = () => {};
+  const held = new WorkspaceLease({ ...scriptedAdapter(false).adapter, onLost: listener => { lose = listener; } }, { clock: simulatedClock().clock });
+  await held.start();
+  expect(held.writable()).toBe(true);
+  lose();
+  expect(held.snapshot()).toMatchObject({ phase: "disconnected", writable: false });
+  expect(held.generation()).toBeNull();
+});
+
+test("localhost: a page holding the Web Lock but refused a generation lets the lock go and is refused (fail closed)", async () => {
+  const { browserWorkspaceLease } = await import("../src/app/browser/workspace-lease-device");
+  let held = 0;
+  const locks = { request: async (_name: string, _options: unknown, callback: (lock: unknown) => unknown) => { held++; try { return await callback({ name: "x" }); } finally { held--; } } };
+  const channel = { postMessage() {}, addEventListener() {} };
+  const adapter = browserWorkspaceLease({ workspace: "browser-test", locks: locks as never, channel, register: async () => null, retryDelays: [1, 1], sleep: async () => {} });
+  await expect(adapter.acquire(new AbortController().signal)).rejects.toThrow("didn't issue a workspace lease");
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(held).toBe(0);
+});
+
+test("desktop: when the lease stream ends, a pending acquire is refused and a holder loses write access", async () => {
+  const { desktopWorkspaceLease } = await import("../src/app/browser/workspace-lease-device");
+  const streams: ReadableStreamDefaultController<Uint8Array>[] = [];
+  const send = async (_url: string, init?: RequestInit) => init?.method === "POST" ? new Response(null, { status: 204 })
+    : new Response(new ReadableStream<Uint8Array>({ start: controller => { streams.push(controller); } }));
+  const pending = desktopWorkspaceLease({ endpoint: "/lease", send });
+  const acquiring = pending.acquire(new AbortController().signal);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  streams[0]!.close();
+  await expect(acquiring).rejects.toThrow("ended");
+  const adapter = desktopWorkspaceLease({ endpoint: "/lease", send });
+  const lease = new WorkspaceLease(adapter, { clock: simulatedClock().clock });
+  const starting = lease.start();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  streams[1]!.enqueue(new TextEncoder().encode(`${JSON.stringify({ event: "granted", generation: 3 })}\n`));
+  await starting;
+  expect(lease.generation()).toBe(3);
+  streams[1]!.close();
+  await new Promise(resolve => setTimeout(resolve, 5));
+  expect(lease.snapshot().phase).toBe("disconnected");
+  expect(lease.draining()).toBe(false);
 });

@@ -32,6 +32,15 @@ const workspaceAlert = message => {
 // Installed before anything can fail, so the host's close handshake always gets an answer.
 window.xfDesktopWorkspaceError = workspaceAlert;
 window.xfDesktopWorkspaceFlush = async () => {};
+// One writer per workspace (profiles design §2.3): the host grants this page the workspace's lease, or it opens read-only. The lease
+// comes first, so the workspace is read only after this page knows whether it holds it (a holder that just released has written its
+// last copy by then). Its writes carry the lease's generation, so one sent after this page released the workspace is refused.
+// `inFlight` and `lastSaveFailed` (below) are read only when a release settles, long after they exist.
+const lease = new WorkspaceLease(desktopWorkspaceLease({ endpoint: `/api/desktop/workspace/lease${verification ? "?verify=1" : ""}`,
+  send: (url, init) => fetch(url, init),
+  // A release waits for the last host write and is refused when it didn't land, so the page keeps the lease and says so.
+  settle: async () => { while (inFlight) await inFlight; if (lastSaveFailed) throw Error(SAVE_FAILED); } }), { clock: browserLeaseClock });
+await lease.start();
 const workspaceResponse = await fetch(workspaceEndpoint, { cache: "no-store" });
 if (!workspaceResponse.ok) {
   // A damaged workspace, or one written by a newer XF Studio, must never brick the app.
@@ -76,11 +85,6 @@ let workspaceText = workspaceDocument.workspace ?? localCopy;
 // source of truth on desktop, so browser storage failures never block it.
 let pendingText = null, inFlight = null, lastSaveFailed = false;
 const SAVE_FAILED = "Your latest changes could not be saved. Keep this window open and export your collection from the Library panel.";
-// One writer per workspace (profiles design §2.3): the host grants this page the workspace's lease, or it opens read-only. Its
-// writes carry the lease's generation, so one sent after this page released the workspace is refused, never written.
-const lease = new WorkspaceLease(desktopWorkspaceLease({ endpoint: `/api/desktop/workspace/lease${verification ? "?verify=1" : ""}`,
-  send: (url, init) => fetch(url, init), settle: async () => { while (inFlight) await inFlight; } }), { clock: browserLeaseClock });
-await lease.start();
 async function postWorkspace(text, headers = {}) {
   const generation = lease.generation();
   // A read-only page (or one that released the workspace) writes nothing.
@@ -89,8 +93,7 @@ async function postWorkspace(text, headers = {}) {
     headers: { "Content-Type": "application/json", ...headers,
       ...(generation === null ? {} : { [WORKSPACE_FENCE_HEADER]: formatFence({ workspace: "desktop", generation }) }) },
     body: JSON.stringify({ workspace: text }), keepalive: new TextEncoder().encode(text).length < 60_000 });
-  // Refused because another page holds the workspace now: nothing of this page's is lost that the holder didn't write last.
-  if (response.status === 409) return;
+  // Refused (another page holds the workspace now) is a failed save like any other: it is never counted as stored.
   if (!response.ok) throw Error(SAVE_FAILED);
 }
 function saveWorkspace(text) {

@@ -25,7 +25,7 @@ self.onmessage = async (event: MessageEvent) => {
     page = await runPage({
       name, hang: message.hang, report, editMs: message.editMs,
       adapter: browserWorkspaceLease({ workspace, locks: locks.manager, channel: new BroadcastChannel(`xfs.workspace.${workspace}`), window: name,
-        repeatMs: 400, async register(signal) {
+        repeatMs: 400, retryDelays: [50, 100], async register(signal) {
           const response = await send("/api/workspace-lease", { method: "POST", signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspace }) });
           return (await response.json() as { generation: number }).generation;
         } }),

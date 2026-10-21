@@ -39,6 +39,22 @@ const page = await runPage({
     writing = write.catch(() => {});
     return write;
   },
+  slowWrite(marker, generation) {
+    // The body arrives only on `finish`: the request reaches the host (and passes its first fence check) long before its body does.
+    let open!: () => void;
+    const gate = new Promise<void>(resolve => { open = resolve; });
+    const text = JSON.stringify({ workspace: workspace(marker) });
+    const body = new ReadableStream<Uint8Array>({ async start(controller) {
+      controller.enqueue(new TextEncoder().encode(text.slice(0, 16)));
+      await gate;
+      controller.enqueue(new TextEncoder().encode(text.slice(16)));
+      controller.close();
+    } });
+    const answer = send("/api/desktop/workspace", { method: "POST", body, duplex: "half",
+      headers: { "Content-Type": "application/json", [WORKSPACE_FENCE_HEADER]: formatFence({ workspace: "desktop", generation }) } } as RequestInit)
+      .then(response => response.status, () => 0);
+    return { finish: () => { open(); return answer; } };
+  },
   async late(generation) {
     return { document: await latePut(send, name, { workspace: "desktop", generation }), workspace: await postWorkspace(`${name}#late`, generation) };
   },

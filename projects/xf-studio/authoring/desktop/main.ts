@@ -10,7 +10,7 @@ import { createHostLog } from "./host-log";
 import { detectWebView2, WEBVIEW2_DOWNLOAD_URL } from "./webview2";
 import { ensureWebView2 } from "./webview2-install";
 import { blankWindowNotice, BLANK_WINDOW_TIMEOUT_MS, MISSING_WEBVIEW2_TIMEOUT_MS, mainWindowPlacement } from "./startup-watchdog";
-import { claimSingleInstance, INSTANCE_HEADER, INSTANCE_ROUTE, processAlive } from "./single-instance";
+import { claimSingleInstance, INSTANCE_HEADER, INSTANCE_ROUTE, windowsMutex } from "./single-instance";
 import { mkdirSync } from "node:fs";
 
 // The packaged app has no console: startup facts and failures go to the structured
@@ -25,12 +25,13 @@ log.write(`Starting XF Studio ${version.version} (${version.channel}, build ${ve
 // One XF Studio per user data folder (profiles design §2.3): a second launch brings the running window forward and quits, so two host
 // processes never share the workspace file.
 mkdirSync(Utils.paths.userData, { recursive: true });
-const instance = await claimSingleInstance(Utils.paths.userData, { pid: process.pid, alive: processAlive,
+const instance = await claimSingleInstance(Utils.paths.userData, { pid: process.pid, lock: windowsMutex(),
   sleep: ms => new Promise(done => setTimeout(done, ms)),
   activate: async (port, token) => (await fetch(`http://127.0.0.1:${port}${INSTANCE_ROUTE}`, { method: "POST",
     headers: { [INSTANCE_HEADER]: token }, signal: AbortSignal.timeout(3000) })).status === 204 });
 if (!instance.first) {
-  log.write("XF Studio is already running; its window was brought forward.");
+  log.write(instance.activated ? "XF Studio is already running; its window was brought forward."
+    : "XF Studio is already running (it didn't answer yet, so its window wasn't brought forward); this launch ends.");
   Utils.quit(0);
   await new Promise(() => {});
 }

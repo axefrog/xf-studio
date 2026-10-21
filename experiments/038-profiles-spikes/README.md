@@ -92,13 +92,18 @@ harness/web-locks-model.ts     The browser's Web Locks (exclusive mode) for the 
 tools/lease-harness.ts         The scenarios on both hosts; tests/lease-harness.test.ts runs them
 ```
 
-Each window edits one document (a save every 15 ms, or every 1 ms where a write must be in flight) and writes its workspace every fourth edit, with a marker. Results (21 October 2026, about 10 s, peak 0.9 GB), all **PASS** on both hosts:
+Each window edits one document (a save every 15 ms, or every 1 ms where a write must be in flight) and writes its workspace every fourth edit, with a marker. Results (21 October 2026; 28 checks in about 13 s, peak 0.8 GB), all **PASS**:
 
 | Scenario | Checks |
 |---|---|
 | Two windows | The second opens read-only; its dispatch is refused with `unavailable` and a save it tries never reaches the host. Use it here: the holder drains, writes its workspace last and releases, then the new window is granted (desktop 10–17 ms, localhost 3 ms after asking). Every save the holder acknowledged, and its last workspace, are stored. A late write from the released window, sent past its own gate over the current revision, is refused as `superseded` (document and desktop workspace). |
 | Holder killed while draining | Killed with a save in flight; the waiting window is granted when the holder's window ends (desktop 17 ms, through the end of its stream). Every acknowledged save survives, and nothing from the killed holder lands after the grant. |
 | Hung holder | The holder never answers. After the 0.5 s grace the waiting window says "Waiting for the other window to finish saving. Close it to continue.", and 3.5 s later the host (or the browser) still has the hung window as holder: nothing is taken by time. Once the hung window ends, the waiting window is granted. |
+| Release that can't save | The holder's last workspace write fails: nothing is released, the holder keeps the workspace and says so, and the other window keeps waiting. Try again, once writes work, stores the last write and hands over. |
+| Write stalled across a handover (desktop) | A write passes the fence on arrival, its body stalls, the lease moves, and the body then arrives: refused at the save (409), the workspace unchanged. |
+| Host stream ended (desktop) | The page becomes `disconnected` at once, says so plainly, and sends nothing more. |
+| No lease generation (localhost) | The host refuses to issue one: the window never becomes writable and lets the Web Lock go. |
+| Takeover retried (localhost) | A takeover that gets no generation returns to read-only and withdraws its request; a second takeover succeeds. |
 
 What stands in for what: on desktop everything is real but the WebView (a Bun process per page, on the real server and routes). On localhost the host routes, the `BroadcastChannel` and the page code are real; the Web Locks are a model of the standard's exclusive mode, held by the harness as the browser, and `localStorage` is a value it keeps (a window without the lease never wrote it). The real browser path was also run once in headless Chrome (the UI captures below): a second tab opened read-only, and Use it here took the workspace over and restarted as the holder, in light and dark. The process-tree kill that measures the storage commit window (§2.3) is a separate phase 1 gate and not part of this harness.
 

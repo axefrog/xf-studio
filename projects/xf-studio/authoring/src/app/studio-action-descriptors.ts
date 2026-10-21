@@ -215,7 +215,8 @@ export const DESKTOP_APP_DESCRIPTORS = {
  */
 export const WORKSPACE_LEASE_DESCRIPTORS = {
   "workspace.takeOver": request("host", "lease"),
-} satisfies Record<"workspace.takeOver", RequestDescriptor>;
+  "workspace.retryRelease": request("host", "lease"),
+} satisfies Record<"workspace.takeOver" | "workspace.retryRelease", RequestDescriptor>;
 
 export const UPDATE_CHECK_DESCRIPTORS = {
   "updates.startupCheck": request("host", "read", {}, true),

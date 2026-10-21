@@ -6,7 +6,7 @@
  * `release` when another page asked for it. The stream's end is the page's end: a holder that ends releases at once, and a hung
  * holder (its stream still open) is waited for. Nothing is ever taken by time.
  *
- * `POST { action: "takeover" }` asks the holder to release and queues the page; `POST { action: "release", generation }` releases
+ * `POST { action: "takeover" }` asks the holder to release and queues the page (`cancel` withdraws it); `POST { action: "release", generation }` releases
  * and grants the oldest waiting page. Workspace writes carry the holder's generation (`check`), so a late write from a released
  * page is refused. Generations come from the library (`DocumentStore.nextLease`), so document writes are fenced by the same ones.
  */
@@ -118,6 +118,10 @@ export class DesktopWorkspaceLeases {
       const holder = scope.holder && scope.pages.get(scope.holder.page);
       if (holder) holder.send({ event: "release" }); else this.grantNext(verification, scope);
       return new Response(null, { status: 202 });
+    }
+    if (body.action === "cancel") {
+      scope.waiting = scope.waiting.filter(id => id !== page.id);
+      return new Response(null, { status: 204 });
     }
     if (body.action === "release") {
       if (scope.holder?.page !== page.id || scope.holder.generation !== body.generation)

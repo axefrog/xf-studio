@@ -52,15 +52,19 @@ export function browserWorkspaceLease(options: {
   workspace: string;
   locks: Pick<LockManager, "request">;
   channel: Channel;
-  /** The host's next lease generation for this workspace; null when the host couldn't issue one (writes then go unfenced). */
+  /** The host's next lease generation for this workspace; null (or a throw) when the host couldn't issue one. */
   register(signal: AbortSignal): Promise<number | null>;
   /** The tab's session storage: remembers a takeover across the restart that follows it. */
   session?: Pick<Storage, "getItem" | "setItem" | "removeItem">;
   window?: string;
   repeatMs?: number;
   resumeWaitMs?: number;
+  /** Waits between attempts to get a generation (default: 250 ms, then 500, 1000, 2000). */
+  retryDelays?: readonly number[];
+  sleep?: (ms: number) => Promise<void>;
 }): WorkspaceLeaseAdapter {
   const name = `xfs.workspace.${options.workspace}`, me = options.window ?? crypto.randomUUID();
+  const sleep = options.sleep ?? (ms => new Promise<void>(resolve => setTimeout(resolve, ms)));
   let hold: (() => void) | null = null;
   let asked: () => void = () => {};
   options.channel.addEventListener("message", event => {
@@ -69,19 +73,36 @@ export function browserWorkspaceLease(options: {
   });
   /** Holds the lock until `release`: the callback's promise is the lock's lifetime. */
   const held = () => new Promise<void>(resolve => { hold = resolve; });
-  const generation = async (signal: AbortSignal) => { try { return await options.register(signal); } catch { return null; } };
+  /**
+   * The host's generation, retried a few times. Without one the page must not write (its writes would carry no fence), so the lock
+   * is let go and the caller is refused (fail closed).
+   */
+  const generation = async (signal: AbortSignal): Promise<number> => {
+    for (const wait of [0, ...(options.retryDelays ?? [250, 500, 1000, 2000])]) {
+      if (wait) await sleep(wait);
+      signal.throwIfAborted();
+      try { const issued = await options.register(signal); if (Number.isSafeInteger(issued)) return issued!; } catch { /* Tried again below. */ }
+    }
+    throw Error("XF Studio's server didn't issue a workspace lease.");
+  };
+  /** The lock callback: on a generation, hold the lock and answer; otherwise let the lock go at once and refuse. */
+  const holdWith = (signal: AbortSignal, resolve: (value: { generation: number }) => void, reject: (error: unknown) => void, restarting = false) =>
+    async (lock: Lock | null) => {
+      if (!lock) return;
+      let issued: number;
+      try { issued = await generation(signal); } catch (error) { reject(error); return; }
+      if (restarting) options.session?.setItem(RESUME_KEY, options.workspace);
+      resolve({ generation: issued });
+      return held();
+    };
   return {
     acquire(signal) {
       const resumed = options.session?.getItem(RESUME_KEY) === options.workspace;
       if (resumed) options.session?.removeItem(RESUME_KEY);
       return new Promise((resolve, reject) => {
-        const granted = async (lock: Lock | null) => {
-          if (!lock) { resolve(null); return; }
-          resolve({ generation: await generation(signal) });
-          return held();
-        };
+        const granted = holdWith(signal, resolve, reject);
         const request = resumed ? { signal: AbortSignal.timeout(options.resumeWaitMs ?? RESUME_WAIT_MS) } : { ifAvailable: true };
-        options.locks.request(name, request, granted).catch(error => {
+        options.locks.request(name, request, async lock => { if (!lock) { resolve(null); return; } return granted(lock); }).catch(error => {
           // A restarted page whose old lock didn't go in time opens read-only rather than failing.
           if (resumed) resolve(null); else reject(error);
         });
@@ -91,14 +112,12 @@ export function browserWorkspaceLease(options: {
       const ask = () => options.channel.postMessage({ type: "release", workspace: options.workspace, from: me } satisfies LeaseMessage);
       ask();
       const repeat = setInterval(ask, options.repeatMs ?? REPEAT_MS);
+      // Withdrawn (a failed or abandoned takeover): no more asking; the queued lock request is aborted with the same signal.
+      signal.addEventListener("abort", () => clearInterval(repeat), { once: true });
       return new Promise((resolve, reject) => {
         options.locks.request(name, { signal }, async lock => {
           clearInterval(repeat);
-          if (!lock) return;
-          const issued = await generation(signal);
-          options.session?.setItem(RESUME_KEY, options.workspace);
-          resolve({ generation: issued });
-          return held();
+          return holdWith(signal, resolve, reject, true)(lock);
         }).catch(error => { clearInterval(repeat); reject(error); });
       });
     },
@@ -122,14 +141,15 @@ export function desktopWorkspaceLease(options: {
   send: (url: string, init?: RequestInit) => Promise<Response>;
   /** This page load's ID. */
   page?: string;
-  /** Waits for workspace writes still on their way to the host, so the last one lands before the lease is released. */
+  /** Waits for workspace writes still on their way to the host; rejects when the last one didn't land, so nothing is released. */
   settle?: () => Promise<void>;
 }): WorkspaceLeaseAdapter & { generation(): number | null } {
   const page = options.page ?? crypto.randomUUID();
   const separator = options.endpoint.includes("?") ? "&" : "?";
-  let current: number | null = null, asked: () => void = () => {};
-  let first: ((held: boolean) => void) | null = null;
-  let grant: ((generation: number) => void) | null = null;
+  let current: number | null = null, asked: () => void = () => {}, lost: () => void = () => {};
+  let first: { resolve(held: boolean): void; reject(error: unknown): void } | null = null;
+  let grant: { resolve(generation: number): void; reject(error: unknown): void } | null = null;
+  let ended = false;
   const post = async (body: Record<string, unknown>) => {
     const response = await options.send(options.endpoint, { method: "POST", credentials: "same-origin",
       headers: { "Content-Type": "application/json" }, body: JSON.stringify({ schema: "xfs/desktop-lease-1", page, ...body }) });
@@ -138,24 +158,35 @@ export function desktopWorkspaceLease(options: {
   const handle = (event: DesktopLeaseEvent) => {
     if (event.event === "granted") {
       current = event.generation;
-      if (first) { first(true); first = null; }
-      else if (grant) { grant(event.generation); grant = null; }
-    } else if (event.event === "held") { if (first) { first(false); first = null; } }
+      if (first) { first.resolve(true); first = null; }
+      else if (grant) { grant.resolve(event.generation); grant = null; }
+    } else if (event.event === "held") { if (first) { first.resolve(false); first = null; } }
     else if (event.event === "release") asked();
+  };
+  /** The stream ended (the host stopped, or dropped this page): nothing waits on it any more, and this page may not write. */
+  const end = () => {
+    if (ended) return;
+    ended = true; current = null;
+    const error = Error("The connection to XF Studio's host ended.");
+    first?.reject(error); first = null;
+    grant?.reject(error); grant = null;
+    lost();
   };
   const listen = async (body: ReadableStream<Uint8Array>) => {
     const reader = body.getReader(), decoder = new TextDecoder();
     let buffered = "";
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffered += decoder.decode(value, { stream: true });
-      let line: number;
-      while ((line = buffered.indexOf("\n")) >= 0) {
-        const text = buffered.slice(0, line); buffered = buffered.slice(line + 1);
-        try { if (text) handle(JSON.parse(text) as DesktopLeaseEvent); } catch { /* A malformed line is skipped. */ }
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffered += decoder.decode(value, { stream: true });
+        let line: number;
+        while ((line = buffered.indexOf("\n")) >= 0) {
+          const text = buffered.slice(0, line); buffered = buffered.slice(line + 1);
+          try { if (text) handle(JSON.parse(text) as DesktopLeaseEvent); } catch { /* A malformed line is skipped. */ }
+        }
       }
-    }
+    } finally { end(); }
   };
   return {
     generation: () => current,
@@ -163,23 +194,30 @@ export function desktopWorkspaceLease(options: {
       // The stream lives as long as the page: it is never aborted, so its end is the page's end.
       const response = await options.send(`${options.endpoint}${separator}page=${encodeURIComponent(page)}`, { cache: "no-store", credentials: "same-origin" });
       if (!response.ok || !response.body) throw Error("The workspace lease is unavailable.");
-      const held = new Promise<boolean>(resolve => { first = resolve; });
+      const held = new Promise<boolean>((resolve, reject) => { first = { resolve, reject }; });
       void listen(response.body).catch(() => {});
-      return await held ? { generation: current } : null;
+      return await held ? { generation: current! } : null;
     },
     takeOver(signal) {
+      if (ended) return Promise.reject(Error("The connection to XF Studio's host ended."));
       return new Promise((resolve, reject) => {
-        grant = generation => resolve({ generation });
-        signal.addEventListener("abort", () => { grant = null; reject(signal.reason); }, { once: true });
+        grant = { resolve: generation => resolve({ generation }), reject };
+        // Withdrawn: the host forgets the request, so a later holder isn't asked on its behalf.
+        signal.addEventListener("abort", () => {
+          if (!grant) return;
+          grant = null;
+          void post({ action: "cancel" }).catch(() => {});
+          reject(signal.reason);
+        }, { once: true });
         post({ action: "takeover" }).catch(error => { grant = null; reject(error); });
       });
     },
     onReleaseRequested(listener) { asked = listener; },
+    onLost(listener) { lost = listener; },
     async release() {
       await options.settle?.();
-      const generation = current;
+      await post({ action: "release", generation: current });
       current = null;
-      await post({ action: "release", generation });
     },
   };
 }

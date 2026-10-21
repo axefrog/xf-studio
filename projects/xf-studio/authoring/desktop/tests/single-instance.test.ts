@@ -1,43 +1,37 @@
 import { expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { claimSingleInstance, INSTANCE_HEADER, INSTANCE_LOCK, instanceActivateRequest, type InstancePorts } from "../single-instance";
+import { join, resolve } from "node:path";
+import { claimSingleInstance, INSTANCE_HEADER, INSTANCE_LOCK, instanceActivateRequest, instanceName, type InstancePorts, type ProcessLock } from "../single-instance";
 
-const ports = (pid: number, running: Set<number>, activated: number[] = []): InstancePorts => ({
-  pid, alive: id => running.has(id), sleep: async () => {}, publishWaitMs: 300,
+/** A lock owned by whichever process asked first, as the named mutex is. */
+const sharedLock = () => { const owners = new Map<string, number>(); return (pid: number): ProcessLock => ({ acquire: name => {
+  if (!owners.has(name)) owners.set(name, pid);
+  return owners.get(name) === pid;
+} }); };
+const ports = (pid: number, lock: ProcessLock, activated: number[] = []): InstancePorts => ({
+  pid, lock, sleep: async () => {}, publishWaitMs: 400,
   activate: async (port, token) => { activated.push(port); return token.length === 64; },
 });
 
-test("the first process claims the data folder; a second launch brings it forward and doesn't start", async () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-instance-"));
+test("the lock decides who runs; the published port only brings the first window forward", async () => {
+  const root = mkdtempSync(join(tmpdir(), "xfs-instance-")), lock = sharedLock();
   try {
-    const running = new Set([100, 200]), activated: number[] = [];
-    const first = await claimSingleInstance(root, ports(100, running));
+    const first = await claimSingleInstance(root, ports(100, lock(100)));
     expect(first.first).toBe(true);
     if (!first.first) return;
+    // Before the first publishes (still installing WebView2, say), a second launch waits, then ends without starting.
+    expect(await claimSingleInstance(root, ports(200, lock(200)))).toEqual({ first: false, activated: false });
     first.publish(4555);
     expect(JSON.parse(readFileSync(join(root, INSTANCE_LOCK), "utf8"))).toEqual({ pid: 100, port: 4555, token: first.token });
-    expect((await claimSingleInstance(root, ports(200, running, activated))).first).toBe(false);
+    const activated: number[] = [];
+    expect(await claimSingleInstance(root, ports(200, lock(200), activated))).toEqual({ first: false, activated: true });
     expect(activated).toEqual([4555]);
-    // The owner's lock stays; releasing it removes it, and the next launch is first.
-    first.release();
-    expect(existsSync(join(root, INSTANCE_LOCK))).toBe(false);
-    expect((await claimSingleInstance(root, ports(200, running))).first).toBe(true);
-  } finally { rmSync(root, { recursive: true, force: true }); }
-});
-
-test("a stale lock (its process gone, or an owner that never publishes or answers) is taken over", async () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-instance-"));
-  try {
-    writeFileSync(join(root, INSTANCE_LOCK), JSON.stringify({ pid: 999, port: 1, token: "x".repeat(64) }));
-    expect((await claimSingleInstance(root, ports(300, new Set([300])))).first).toBe(true);
-    // A live process that never publishes a port (a reused process ID): waited for, then taken over.
-    writeFileSync(join(root, INSTANCE_LOCK), JSON.stringify({ pid: 400 }));
-    expect((await claimSingleInstance(root, ports(301, new Set([301, 400])))).first).toBe(true);
-    // A damaged lock file.
+    // A stale or damaged file never lets a second process start while the first holds the lock.
     writeFileSync(join(root, INSTANCE_LOCK), "{");
-    expect((await claimSingleInstance(root, ports(302, new Set([302])))).first).toBe(true);
+    expect((await claimSingleInstance(root, ports(300, lock(300)))).first).toBe(false);
+    first.release();
+    expect(existsSync(join(root, INSTANCE_LOCK))).toBe(true);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -51,3 +45,28 @@ test("only the instance's own token brings its window forward", () => {
   expect(ask("a".repeat(64))).toBe(204);
   expect(focused).toBe(1);
 });
+
+test.skipIf(process.platform !== "win32")("the Windows named mutex is held for the owner's lifetime and freed when it is killed", async () => {
+  const name = `${instanceName(join(tmpdir(), `xfs-mutex-${crypto.randomUUID()}`))}`;
+  const module = resolve(import.meta.dir, "../single-instance.ts").replace(/\\/g, "/");
+  const holder = (hold: boolean) => Bun.spawn([process.execPath, "-e",
+    `const { windowsMutex } = await import(${JSON.stringify(module)}); console.log(windowsMutex().acquire(${JSON.stringify(name)}) ? "owned" : "taken");
+     ${hold ? "await new Promise(() => {});" : ""}`], { stdout: "pipe", stderr: "ignore" });
+  const firstLine = async (child: ReturnType<typeof holder>) => {
+    const reader = child.stdout.getReader(), { value } = await reader.read(); reader.releaseLock();
+    return new TextDecoder().decode(value).trim();
+  };
+  const first = holder(true);
+  try {
+    expect(await firstLine(first)).toBe("owned");
+    const second = holder(false);
+    expect(await firstLine(second)).toBe("taken");
+    await second.exited;
+    first.kill(9);
+    await first.exited;
+    // The owner ended without letting go: Windows abandons the mutex, and the next launch owns it.
+    const third = holder(false);
+    expect(await firstLine(third)).toBe("owned");
+    await third.exited;
+  } finally { if (first.exitCode === null) first.kill(9); }
+}, 30_000);

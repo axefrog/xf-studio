@@ -25,6 +25,11 @@ export type PageIo = {
   /** A write sent late, with `generation`, past the page's own gate: the host's answers (document, workspace; null where none). */
   late(generation: number): Promise<{ document: string; workspace: number | null }>;
   report(event: Record<string, unknown>): void;
+  /**
+   * A workspace write whose body arrives only when `finish` is called (a write that stalls in transit), fenced with `generation`;
+   * `finish` answers the host's status. Desktop only.
+   */
+  slowWrite?(marker: string, generation: number): { finish(): Promise<number> };
   /** Never answer a release request (a hung holder). */
   hang: boolean;
   editMs?: number;
@@ -36,24 +41,30 @@ export async function runPage(io: PageIo) {
     graceMs: 500, report: error => io.report({ event: "error", message: String(error) }) });
   const leased = leasedDocuments(io.documents(() => lease.generation()), lease);
   const doc = savedDocument<LeaseDoc>(leased, LEASE_DOC.kind, LEASE_DOC.id, { by: io.name, seq: 0 });
-  let seq = 0, held: number | null = null, timer: ReturnType<typeof setInterval> | undefined;
+  let seq = 0, held: number | null = null, timer: ReturnType<typeof setInterval> | undefined, broken = false;
+  let slow: { finish(): Promise<number> } | null = null;
+  // `break-writes` makes every workspace write fail (a full disk, an unreachable host) until `fix-writes`.
+  const writeWorkspace = (marker: string, generation: number | null) => broken ? Promise.resolve(503) : io.writeWorkspace(marker, generation);
+  const stored = (status: number) => status >= 200 && status < 300;
   const edit = () => {
     // Every edit passes the lease's gate first, as every dispatch does in the Studio.
     if (lease.refusal()) return;
     const mine = ++seq;
     doc.save({ by: io.name, seq: mine }).then(() => io.report({ event: "ack", seq: mine }), () => {});
-    if (mine % 4 === 0) void io.writeWorkspace(`${io.name}#${mine}`, lease.generation()).then(status => io.report({ event: "ws", seq: mine, status }));
+    if (mine % 4 === 0) void writeWorkspace(`${io.name}#${mine}`, lease.generation()).then(status => io.report({ event: "ws", seq: mine, status }));
   };
   lease.onRelease(async () => {
     io.report({ event: "draining", pending: leased.pending(), seq });
     if (io.hang) for (;;) { /* A hung holder: its window never answers again. */ }
-    await leased.drain();
+    return await leased.drain();
   });
+  // The last workspace write must be stored, or the release stops and this window keeps the workspace (release-failed).
   lease.onRelease(async () => {
-    clearInterval(timer);
-    const status = await io.writeWorkspace(`${io.name}#${seq}#last`, lease.generation());
+    const status = await writeWorkspace(`${io.name}#${seq}#last`, lease.generation());
     io.report({ event: "last-write", seq, status });
+    return stored(status);
   });
+  lease.onReleased(() => clearInterval(timer));
   lease.subscribe(() => {
     const snapshot = lease.snapshot();
     if (lease.generation() !== null) held = lease.generation();
@@ -73,6 +84,14 @@ export async function runPage(io: PageIo) {
         io.report({ event: "probe", code: refusal?.code ?? null, edited: seq !== before, put: sent.ok ? "written" : sent.reason });
       }
       if (name === "late" && held !== null) io.report({ event: "late", generation: held, ...await io.late(held) });
+      if (name === "break-writes") { broken = true; io.report({ event: "writes", broken }); }
+      if (name === "fix-writes") { broken = false; io.report({ event: "writes", broken }); }
+      if (name === "retry") io.report({ event: "retry", released: await lease.retryRelease() });
+      if (name === "slow-write" && io.slowWrite && lease.generation() !== null) {
+        slow = io.slowWrite(`${io.name}#slow`, lease.generation()!);
+        io.report({ event: "slow-started" });
+      }
+      if (name === "finish-slow" && slow) io.report({ event: "slow-finished", status: await slow.finish() });
     },
   };
 }
