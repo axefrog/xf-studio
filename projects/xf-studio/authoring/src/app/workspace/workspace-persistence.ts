@@ -19,9 +19,9 @@ export type WorkspacePersistencePort = { setItem(key: string, value: string): vo
 
 export const SAVE_MESSAGES = {
   saved: "Workspace saved",
-  nearlyFull: "Draft autosaved, but workspace storage is nearly full, so older Undo steps were not kept. Save to library to keep a revision.",
-  full: "Workspace storage is full, so recent changes are not being autosaved. Save to library or export your collection to keep them.",
-  unavailable: "Autosave is unavailable. Save to library or export a recipe to keep your work.",
+  nearlyFull: "Draft autosaved, but workspace storage is nearly full, so older Undo steps were not kept. Save version keeps a version you can return to.",
+  full: "Workspace storage is full, so recent changes are not being autosaved. Save version or export your collection to keep them.",
+  unavailable: "Autosave is unavailable. Save version or export a recipe to keep your work.",
 } as const;
 
 /** One explicit debounce/flush policy for the isolated workspace key. */

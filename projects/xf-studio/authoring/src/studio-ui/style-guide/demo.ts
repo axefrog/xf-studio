@@ -162,8 +162,8 @@ attach("c-toasts", "Show live toasts", () => {
   feedback.toast("error", "Library", "The library has a newer version of this collection. Your draft is kept.", [{ label: "Check the library again", run: () => {} }, { label: "Save as new collection", run: () => {} }]);
 });
 attach("s-palette", "Open live palette", () => openPalette(() => [
-  { id: "save", title: "Save to library", group: "Library", icon: "save", shortcut: "Ctrl+S", capability: () => ({ available: true }), run: () => feedback.toast("success", "Library", "Saved (demo).") },
-  { id: "recover", title: "Recover previous draft", group: "Library", icon: "undo", capability: () => ({ available: false, reason: "No previous draft." }), run: () => {} },
+  { id: "save", title: "Save version", group: "Library", icon: "save", shortcut: "Ctrl+S", capability: () => ({ available: true }), run: () => feedback.toast("success", "Library", "Saved (demo).") },
+  { id: "recover", title: "Show the previous collection", group: "Library", icon: "undo", capability: () => ({ available: false, reason: "No collection was open before this one." }), run: () => {} },
   { id: "float", title: "Float Camera & light", group: "Layout", icon: "float", capability: () => ({ available: true }), run: () => {} },
   { id: "theme", title: "Theme: dark", group: "Appearance", icon: "moon", capability: () => ({ available: true }), run: () => setTheme("dark") },
 ]));

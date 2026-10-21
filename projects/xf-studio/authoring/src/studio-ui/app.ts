@@ -475,7 +475,7 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
   const redo = button({ label: "Redo", icon: "redo", iconOnly: true, variant: "ghost", title: `Redo (${keys.redo})`, onClick: () => rt.dispatch({ kind: "history.redo" }) });
   const historyButton = button({ label: "History", icon: "history", iconOnly: true, variant: "ghost", title: `History: every recent change to this preset\n${HISTORY_SCOPE}`,
     onClick: () => rt.dock.reveal("history") });
-  const save = button({ label: "Save", icon: "save", title: `Save to library (${keys.save})`, onClick: () => void rt.request({ kind: "save" }) });
+  const save = button({ label: "Save", icon: "save", title: `Save version (${keys.save})`, onClick: () => void rt.request({ kind: "save" }) });
   const pkg = button({ label: "Package", icon: "package", variant: "quiet", title: "Open mod package review", onClick: () => rt.dock.reveal("package") });
   const palette = button({ label: "Commands", icon: "command", variant: "ghost", title: `Command palette (${keys.palette})`, onClick: () => {} });
   const helpButton = button({ label: "Help", icon: "help", iconOnly: true, variant: "ghost", title: `Help: tours, answers and shortcuts (${shortcutLabel("shell.help")})`, onClick: openHelp });
@@ -537,7 +537,7 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
       setAttr(undo, "aria-label", historyCommandLabel("undo", undoCap, history.undo?.label));
       setAttr(redo, "aria-label", historyCommandLabel("redo", redoCap, history.redo?.label));
       const saveCap = port.authoring.requestCapability({ kind: "save" });
-      applyCapability(save, saveCap); save.title = saveCap.available ? `Save to library (${keys.save})` : saveCap.reason ?? "";
+      applyCapability(save, saveCap); save.title = saveCap.available ? `Save version (${keys.save})` : saveCap.reason ?? "";
       verify.hidden = !frame.status.verification;
       const layout = layouts.label();
       setButtonLabel(layoutsButton, layout.name);
@@ -812,10 +812,10 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     act("preset.add", "Add preset", "Edit", { kind: "preset.edit", command: { kind: "add" } }, { icon: "plus" }),
     act("preset.restore", "Restore removed preset", "Edit", { kind: "preset.edit", command: { kind: "restore" } }, { icon: "reset" }),
     ...features,
-    request("library.save", "Save to library", "Library", { kind: "save" }, { icon: "save", shortcut: shortcutLabel("shell.save") }),
+    request("library.save", "Save version", "Library", { kind: "save" }, { icon: "save", shortcut: shortcutLabel("shell.save") }),
     request("library.copy", "Save as new collection", "Library", { kind: "saveCopy" }, { icon: "duplicate", keywords: "copy" }),
     // The saved list updates itself (release-readiness-audit.md item 13), so there is no Refresh command.
-    file("library.recover", "Recover previous draft", "Library", { kind: "collection.recover" }, { icon: "undo" }),
+    file("library.recover", "Show the previous collection", "Library", { kind: "collection.recover" }, { icon: "undo" }),
     { id: "collection.import", title: "Import collection…", group: "Files", icon: "import", capability: () => port.files.capability({ kind: "collection.import" }),
       run: () => importCollection(rt, { x: Math.round(window.innerWidth / 2 - 170), y: 120 }) },
     file("collection.export", "Export collection (saves first)", "Files", { kind: "collection.export" }, { icon: "export" }),

@@ -357,6 +357,7 @@ export class CollectionService {
     if (!collection) return refusal("not_ready", LOADING);
     if (request.kind === "open" && !this.summaries.some(item => item.id === request.id))
       return refusal("invalid_value", "Saved collection is no longer in this list. Refresh it first.");
+    if (request.kind === "open" && request.id === collection.id) return refusal("invalid_value", "This collection is already open.");
     if (request.kind === "import" && (!Number.isSafeInteger(request.bytes) || request.bytes < 0 || request.bytes > 16_000_000))
       return refusal("limit", "That collection is larger than 16 MB, the most XF Studio can import.");
     // A look this build can't read is kept exactly as it came; the library's named versions never take it.
@@ -384,7 +385,7 @@ export class CollectionService {
       case "collection.undoOpen":
         if (action.draft !== undefined) return this.recent(view.id).some(other => other.id === action.draft)
           ? { available: true } : refusal("missing_target", "That earlier draft is no longer in the list.");
-        return this.previousLook() ? { available: true } : refusal("invalid_value", "No previous draft.");
+        return this.previousLook() ? { available: true } : refusal("invalid_value", "No collection was open before this one.");
       case "preset.edit": {
         const command = action.command;
         if (command.kind === "restore" && !this.deps.owner.restorable(view.id).length) return refusal("invalid_value", "No removed preset to restore.");

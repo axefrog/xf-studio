@@ -26,7 +26,7 @@ import { PANEL_META } from "../panel-meta";
 
 /** How a recent draft stands against the library, in words (its row's meta line). */
 const DRAFT_STATE: Record<"never" | "same" | "edited" | "unknown", (revision?: number) => string> = {
-  never: () => "Draft · never saved",
+  never: () => "Draft · no version yet",
   same: revision => `Draft · same as saved version ${revision}`,
   edited: revision => `Draft · edited since version ${revision}, not saved`,
   unknown: revision => `Draft · started from version ${revision}`,
@@ -50,11 +50,12 @@ export function libraryState(frame: Frame) {
   if (!draft) return { tone: "neutral" as const, label: "Loading library…", detail: "" };
   const stored = library.summaries.find(item => item.id === draft.id);
   if (library.busy && library.progress?.phase === "working") return { tone: "info" as const, label: "Working…", detail: library.progress.message };
-  // Plain chip labels; version numbers live in the tooltip/detail line.
-  if (draft.revision === undefined) return { tone: "warning" as const, label: "Not saved yet",
-    detail: "Not in your library yet. Save to keep a version you can return to." };
+  // Plain chip labels; version numbers live in the tooltip/detail line. Work is always in the library (it saves itself as you go); the
+  // chip says how it stands against the last version saved (profiles design §2.2: Save version).
+  if (draft.revision === undefined) return { tone: "info" as const, label: "No version yet",
+    detail: "Your work saves itself to your library as you go. Save version keeps a version you can return to." };
   if (stored && stored.revision > draft.revision) return { tone: "warning" as const, label: "Newer version saved",
-    detail: `Version ${stored.revision} was saved elsewhere; your draft is from version ${draft.revision}. Save as a new collection, or reopen it.` };
+    detail: `Version ${stored.revision} was saved elsewhere; this collection was last saved here as version ${draft.revision}. Save version keeps yours as the newest, or Save as new collection keeps both.` };
   const persistence = frame.persistence;
   if (persistence?.baseline === "known" && !persistence.dirty) return { tone: "neutral" as const, label: "Saved",
     detail: `Matches version ${draft.revision} in your library.` };
@@ -62,11 +63,11 @@ export function libraryState(frame: Frame) {
     const presets = persistence.dirtyPresets.length;
     const what = [persistence.structureDirty ? "the collection's name or order" : "",
       presets ? `${presets} ${presets === 1 ? "preset" : "presets"}` : ""].filter(Boolean).join(" and ");
-    return { tone: "info" as const, label: "Unsaved changes",
-      detail: `Changed since version ${draft.revision}: ${what}. Saving makes version ${draft.revision + 1}.` };
+    return { tone: "info" as const, label: "Changed since last version",
+      detail: `Changed since version ${draft.revision}: ${what}. Save version makes version ${draft.revision + 1}.` };
   }
   return { tone: "neutral" as const, label: "Autosaved draft",
-    detail: `Started from version ${draft.revision}. Save to keep a new version.` };
+    detail: `Last saved as version ${draft.revision}. Your work saves itself as you go; Save version keeps a new version.` };
 }
 
 export function presetsPanel(rt: StudioRuntime): PanelController {
@@ -187,7 +188,7 @@ export function importCollection(rt: StudioRuntime, _anchor?: MenuAnchor) {
 
 export function libraryPanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
-  const save = button({ label: "Save to library", icon: "save", variant: "primary", onClick: () => void rt.request({ kind: "save" }) });
+  const save = button({ label: "Save version", icon: "save", variant: "primary", onClick: () => void rt.request({ kind: "save" }) });
   const saveCopy = button({ label: "Save as new collection", icon: "duplicate", title: "Stores a copy with a new identity; you continue editing the copy.",
     onClick: () => void rt.request({ kind: "saveCopy" }) });
   const stateLine = h("p", { class: "state-line" });
@@ -198,13 +199,13 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
   const syncList = () => { if (port.authoring.requestCapability({ kind: "refresh" }).available) void port.library.execute({ kind: "refresh" }); };
   window.addEventListener("focus", syncList);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) syncList(); });
-  // Earlier drafts, newest first, each brought back with its own Recover (item 13): the draft you had open joins the list.
+  // Recent drafts, newest first (item 13): the library's other collections never saved as a version, each shown again with its Recover.
   const drafts = new RecordList({ label: "Recent drafts" });
-  const draftsSection = section({ title: "Recent drafts", help: ["Opening a saved collection keeps the draft you had open here, unsaved edits included; Recover brings it back.",
-    "Each line says how the draft stands against its saved version, so a draft is never mistaken for the saved collection of the same name."] }, drafts.element);
+  const draftsSection = section({ title: "Recent drafts", help: ["Collections in your library that were never saved as a version: an import, or an earlier draft. Recover shows one; the collection you have open stays in your library.",
+    "Each line says it has no version yet, so a draft is never mistaken for a saved collection of the same name."] }, drafts.element);
   let draftsSignature = "";
   const saved = new RecordList({ label: "Saved collections" });
-  const savedEmpty = emptyState("Nothing saved yet", "Save to library keeps the first version of this collection. Drafts still autosave on this computer.");
+  const savedEmpty = emptyState("No versions yet", "Save version keeps the first version of this collection. Your work saves itself to your library as you go.");
   const fileButtons = {
     importCollection: button({ label: "Import collection…", icon: "import", small: true, onClick: event => importCollection(rt, event.currentTarget as Element) }),
     exportCollection: button({ label: "Export collection", icon: "export", small: true, onClick: () => void rt.file({ kind: "collection.export" }) }),
@@ -221,8 +222,8 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
     fileButtons.exportPlan, fileButtons.importRecipe, fileButtons.exportRecipe, fileButtons.exportMask));
   const filesTip = filesSection.querySelector<HTMLElement>(".help-tip")!;
   const element = h("div", { class: "panel-content" },
-    section({ title: "Local library", help: ["Saving keeps a version of this collection in your library on this computer. Edits you make while it saves stay in your draft.",
-      "Your draft also saves itself on this computer as you work."] },
+    section({ title: "Local library", help: ["Save version keeps a version of this collection in your library on this computer that you can go back to. Edits you make while it saves are kept.",
+      "Your work also saves itself to your library as you go."] },
       stateLine, progress, h("div", { class: "row wrap gap-s" }, save, saveCopy)),
     section({ title: "Saved collections", help: "The versions saved in your library on this computer. Open one to work on it." }, savedEmpty, saved.element),
     draftsSection,
@@ -242,7 +243,7 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
       if (draftsKey !== draftsSignature) {
         draftsSignature = draftsKey;
         drafts.update(queue.map(entry => {
-          const recover = button({ label: "Recover", icon: "undo", small: true, title: `Bring back “${entry.name}”; the draft you have open joins this list`,
+          const recover = button({ label: "Recover", icon: "undo", small: true, title: `Show “${entry.name}”; the collection you have open stays in your library`,
             onClick: () => void rt.file({ kind: "collection.recover", draft: entry.id }) });
           applyCapability(recover, port.files.capability({ kind: "collection.recover", draft: entry.id }));
           return { id: entry.id, name: entry.name, meta: [...DRAFT_STATE[entry.saved](entry.revision).split(" · "), plural(entry.presets, "preset")], action: recover };
@@ -253,12 +254,12 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
         savedSignature = signature;
         saved.update(library.summaries.map(item => {
           const current = item.id === draft?.id;
-          // The row open now says so with its badge and background; its button has the same weight as every other row's Open.
-          const open = button({ label: current ? "Reopen" : "Open", small: true,
+          // The row open now says so with its badge and background; its Open is unavailable, with the same weight as every other row's.
+          const open = button({ label: "Open", small: true,
             onClick: () => void rt.request({ kind: "open", id: item.id }, { actions: [undoReplaceAction(rt, "Undo open")] }) });
           applyCapability(open, port.authoring.requestCapability({ kind: "open", id: item.id }));
           return { id: item.id, name: item.name, current, meta: [plural(item.count, "preset"), `version ${item.revision}`, recordTime(item.updatedAt)],
-            ...(current ? { badge: { text: "This draft", tone: "info" as const } } : {}), action: open };
+            ...(current ? { badge: { text: "Open now", tone: "info" as const } } : {}), action: open };
         }));
       }
       savedEmpty.hidden = library.summaries.length > 0;
@@ -359,7 +360,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
     await rt.request({ kind: "package", action }, { quietSuccess: false });
   }
   function confirmBuild(anchor: Element) {
-    openMenu([{ kind: "heading", label: "Build your mod files?", detail: "Uses the current draft, including unsaved edits. Can take a minute or two, and can't be cancelled once started. Nothing is added to your game or mod manager until you choose to." },
+    openMenu([{ kind: "heading", label: "Build your mod files?", detail: "Uses this collection as it is now, your latest edits included. Can take a minute or two, and can't be cancelled once started. Nothing is added to your game or mod manager until you choose to." },
       { kind: "action", label: "Build now", icon: "package", capability: buildCapability(), run: () => void runPackage("build") },
       { kind: "action", label: "Check first", icon: "check", capability: port.files.capability({ kind: "package.check" }), run: () => void runPackage("check") }],
     anchor, { label: "Confirm build", invoker: anchor });

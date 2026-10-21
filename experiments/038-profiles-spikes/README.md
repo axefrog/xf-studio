@@ -224,7 +224,7 @@ Results after the second review's fixes (22 October 2026): S1 on both hosts **PA
 
 ## The migration in production (phase 1, chunk 1d-i)
 
-Product code: the library transaction and its route `/api/profiles/migrate` (`src/app/profiles/host/profiles-migrate.ts`), the workspace side (`src/app/profiles/profiles-migration.ts`, started by `startProfilesMigration` in `src/app/browser/profiles-migration-device.ts`), the snapshot, comparison and session data (`src/app/profiles/profiles-migration-data.ts`, `src/app/profiles/profile-session.ts`). The Studio's start trigger (two seconds after start, in the window holding the workspace) is off (`PROFILES_MIGRATION_ENABLED`) until chunk 1d-ii's switch-over turns it on with the move onto the profile services: until then the legacy fields stay the Studio's own and keep changing, so documents migrated earlier would go stale. Phase 1 reaches `main` as a whole.
+Product code: the library transaction and its route `/api/profiles/migrate` (`src/app/profiles/host/profiles-migrate.ts`), the workspace side (`src/app/profiles/profiles-migration.ts`, started by `startProfilesMigration` in `src/app/browser/profiles-migration-device.ts`), the snapshot, comparison and session data (`src/app/profiles/profiles-migration-data.ts`, `src/app/profiles/profile-session.ts`). The Studio runs it at start (`PROFILES_MIGRATION_ENABLED`, chunk 1d-ii), in the window holding the workspace, before the Studio is built from the profile services. Phase 1 reaches `main` as a whole.
 
 - **The record is the host's own.** `migration` joins the host-only kinds, so no page command can write or forge a record.
 - **The pre-migration copy** (`LibraryBackups.beforeMigration("profiles-1")`) is taken inside the transaction, before the library's first `profiles-1` run changes anything, and discarded if that run rolls back. Later runs (another workspace, a re-upgrade) take none.
@@ -260,6 +260,27 @@ A mutation check: mapping the scene's look without the ID map fails 9 of the CI 
 After the fixes: CI harness 23 of 23 in about 3 s; `tests/profiles-migration.test.ts` 25 of 25; sweep of 2 rounds **PASS** in 29 s (40 kills, each recovered after one restart), peak 1.3 GB.
 
 Reproduce: `bun test tests/profiles-migration.test.ts tests/profiles-migration-harness.test.ts` (authoring), and `bun tools/s3-migration.ts <scratch> [rounds]` here.
+
+## The Studio on the profile services (phase 1, chunk 1d-ii)
+
+The running Studio is built from the profile session and its services; the workspace's pre-profiles fields (the collection draft, recovery drafts, the saved V, the character fields, views and layout) are migration input only and are written back unchanged.
+
+- **Start.** `src/compose/studio-startup.ts` runs the migration first, loads the services (`createProfileServices` in `src/app/profiles/profile-window.ts`) and opens the session (`openProfileSession`): the workspace's `profiles.sessions` when migrated, else a transient one on the first profile. Tab 1's views, scenes and panel instances come from it (`ProfileSessionState`, `src/app/profiles/profile-session-state.ts`); the drawn view's scene names the look shown (`look`) and the V (`subject`).
+- **The shown look.** `LookEditor` (`src/library/look-editor.ts`) binds the editor's document to the scene's `LookRef` through `LookSessions`: it writes the look 250 ms after the document settles, and at once before Save version, Check, Build, closing and a lease takeover. A look in recovery or changed elsewhere is blocked or reloaded with its reason.
+- **Collections.** `CollectionService` (`src/library/collection-service.ts`) is folded onto `CollectionOwner`: preset add, copy, rename, move, remove and restore (back where it stood) are owner commands; Save (Ctrl+S) is **Save version** through `/api/collection-versions`; opening and importing never replace anything, and Undo open shows the collection open before. The recovery-draft queue is gone: recent drafts are the library's collections never saved as a version.
+- **History.** Scopes are `look:<collection>/<look>` and `character:<id>`; the look shown is the editing context and is kept in the session (`focus.editing`). There is no unqualified fallback: with no editing context Undo is unavailable, with its reason.
+- **The V.** The head's character comes from `CharacterService.context(id, …)` for the scene's `subject`.
+- **Save Explorer.** One session per panel instance; every `saves.*` action names its `instance` (`src/features/save-explorer/sessions.ts`).
+- **The old model** (`LegacyDraftSession`, `LegacyDraftActions`) survives only as the test oracle in `tests/fixtures/legacy-draft.ts`, for the goldens and the differential parity test.
+
+Parity evidence (22 October 2026):
+
+| Gate | Result |
+|---|---|
+| Differential parity (`tests/profiles-parity.test.ts`): the same script on the old draft model and on the profile services, over the five workspace-1 fixtures | **PASS**: every step's document, history and preset list match: edits, controls, gestures, Undo, Redo, history jumps, preset add, switch, remove and restore, and a restart, the last through the migration and the library |
+| Studio flows (`tests/profiles-studio.test.ts`, 9 tests) | **PASS**: the shown look edited in place and restored with its Undo history after a restart; per-look history scopes; preset commands; Save version; Check and Build on the snapshot; open, import, Save as new collection, Export collection |
+| Latency (`tests/look-editor-latency.test.ts`, 16 layers and 80 Undo steps, about 120,000 UTF-16 units) | **PASS**: look write p95 1.8 ms (budget 4 ms), edit p95 0.4 ms; package freshness 0.07 ms per repaint |
+| `?verify=1` browser run on an isolated server and data folder | Migrated at start; an edit and an added preset persisted; after a reload the preset list, the shown preset, the edited opacity and its one Undo step returned. The 3D head was not prepared in that folder, so the V's rendering was not exercised there |
 
 ## Acknowledgement and rebasing rules (S1, answering Sol's Medium point)
 
