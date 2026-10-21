@@ -18,7 +18,15 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 - **Polish batch 1** (`claude/polish-1`): thumbnail drag direction, repeated layer names, collection tie order, the flaky mottle test, Build wording, the masculine-plate warning. *21 Oct*
 
 ### Beta blockers
-- **Profiles, layout tabs and the panel picker,** phases 1–4, about 19 agent-days ([design](../authoring/profiles-views-layouts-design.md); in flight). *21 Oct*
+- **Profiles, views and layouts: the whole proposal is pre-beta** (decided 21 Oct; [design](../authoring/profiles-views-layouts-design.md)). Order:
+  1. core model, migration, autosave, conflicts, recovery, history;
+  2. tabs and contributed defaults;
+  3. binding selector, panel instances, panel picker, empty states;
+  4. simultaneous views;
+  5. several Vs and profiles;
+  6. tab duplication, reopen history, orphan handling.
+
+  Spikes S1–S3 come first. About 40–49 agent-days, re-estimated after the spikes. *21 Oct*
 - **Choice thumbnails turn the wrong way when dragged** ([small bugs](#small-bugs-and-friction)). *21 Oct*
 - **Speed budgets** ([performance](performance.md)), including:
   - the restart to V (2 s budget; PREV-196);
