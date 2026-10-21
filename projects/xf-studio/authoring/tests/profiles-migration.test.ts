@@ -13,6 +13,7 @@ import { PANEL_INSTANCE_ID, profileSessionOf } from "../src/app/profiles/profile
 import { ProfilesMigration } from "../src/app/profiles/profiles-migration";
 import { decodedSaveId } from "../src/character/character-document";
 import { STUDIO_PARTS } from "../src/compose/studio-registry";
+import { PACKAGE_PLAN_1 } from "../src/platform/api/export";
 import { serializeWorkspace } from "../src/app/workspace/workspace-state";
 import { formatFence, WORKSPACE_FENCE_HEADER } from "../src/platform/api/document-store";
 import { LibraryBackups } from "../src/platform/persistence/backups";
@@ -437,5 +438,63 @@ describe("review of chunk 1d-i", () => {
     await migrateUntilDone(new HarnessWorkspace(other, "browser-c"), host);
     expect(rows(path, "profile").find(doc => doc.value.name === "From this browser")!.value.collections).toEqual([COLLECTION, fork]);
     host.close();
+  });
+});
+
+describe("second review of chunk 1d-i", () => {
+  const results = (path: string) => rows(path, "migration").map(doc => doc.value as MigrationResult);
+  /** Migrates the fixture, then `other`: answers the collection `other`'s draft went to. */
+  async function second(other: ReturnType<typeof realWorkspace>, between?: (host: HarnessHost) => void): Promise<{ path: string; collection: string }> {
+    const { path } = library();
+    const host = new HarnessHost(path);
+    await migrateUntilDone(new HarnessWorkspace(realWorkspace(), "browser-a"), host);
+    between?.(host);
+    await migrateUntilDone(new HarnessWorkspace(other, "browser-b"), host);
+    host.close();
+    return { path, collection: results(path).at(-1)!.collection };
+  }
+  const removedNames = (path: string, collection: string) =>
+    rows(path, "look-working").filter(doc => doc.id.startsWith(`${collection}/`) && doc.value.state === "removed").map(doc => doc.value.name).sort();
+
+  test("a removed look the working copy holds past 30 days isn't restorable there: the draft keeping it forks", async () => {
+    const { path, collection } = await second(realWorkspace(), host => {
+      const working = host.documents.get<{ removed: { look: string; at: number }[] }>("collection-working", COLLECTION)!;
+      const old = Date.now() - 31 * 24 * 3600_000;
+      expect(host.documents.transact({ id: "age", command: "collection.rename", writes: [{ kind: "collection-working", id: COLLECTION, base: working.revision,
+        value: { ...working.value, removed: working.value.removed.map(item => ({ ...item, at: old })) } }] }).ok).toBe(true);
+    });
+    expect(collection).not.toBe(COLLECTION);
+    const [removed] = realWorkspace().collections!.removed;
+    expect(removedNames(path, collection)).toEqual([removed!.preset.name]);
+  });
+
+  test("two equal removed looks need two restorable ones: one in the working copy isn't enough", async () => {
+    const other = realWorkspace();
+    const [removed] = other.collections!.removed;
+    other.collections!.removed.push({ preset: { ...structuredClone(removed!.preset), id: "00000000-0000-4000-8000-0000000000d1" }, index: 0, memory: structuredClone(removed!.memory) });
+    const { path, collection } = await second(other);
+    expect(collection).not.toBe(COLLECTION);
+    expect(removedNames(path, collection)).toEqual([removed!.preset.name, removed!.preset.name]);
+  });
+
+  test("another name or another package plan forks, keeping it; a migration's own copy still reuses under the name it was given", async () => {
+    const renamed = realWorkspace();
+    renamed.collections!.collection.name = "Fixture looks, renamed elsewhere";
+    const byName = await second(renamed);
+    expect(byName.collection).not.toBe(COLLECTION);
+    expect(rows(byName.path, "collection-working").find(doc => doc.id === byName.collection)!.value.name).toBe("Fixture looks, renamed elsewhere (from this browser)");
+    const planned = realWorkspace();
+    const plan = { schema: PACKAGE_PLAN_1, products: [{ id: COLLECTION, name: "XF Night Eyes", features: [] }] };
+    planned.collections!.collection.packagePlan = plan;
+    const byPlan = await second(planned);
+    expect(byPlan.collection).not.toBe(COLLECTION);
+    const stored = rows(byPlan.path, "collection-working").find(doc => doc.id === byPlan.collection)!.value;
+    expect(stored.packagePlan).toEqual(JSON.parse(storedText(planned)).collections.collection.packagePlan);
+    expect(stored.packagePlan).toBeDefined();
+    // The re-upgrade of a workspace whose draft became "(from this browser)" finds that copy again.
+    const host = new HarnessHost(byPlan.path), workspace = new HarnessWorkspace(planned, "browser-b");
+    await migrateUntilDone(workspace, host);
+    host.close();
+    expect(results(byPlan.path).at(-1)!.collection).toBe(byPlan.collection);
   });
 });

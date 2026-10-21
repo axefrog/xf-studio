@@ -253,7 +253,11 @@ A mutation check: mapping the scene's look without the ID map fails 9 of the CI 
 - **A named version brought back earlier didn't join a later run's profile (Medium).** It now joins whether this run made it or found it.
 - **Closed panels' last places kept panel IDs (Medium).** `lastPlace` keys, groups and anchors are rewritten like parked places. The fixtures' dock arrangements are now made by the real dock engine (`closePanel`, `parkPanels`, `serializeDockState`).
 
-After the fixes: CI harness 23 of 23 in about 3 s; `tests/profiles-migration.test.ts` 22 of 22; sweep of 2 rounds **PASS** in 29 s (40 kills, each recovered after one restart), peak 1.3 GB.
+**Accepted behaviour (the re-check):** when a resend carries an intermediate snapshot B that the person's own later state C supersedes before the run settles, B's content is never migrated on its own: the run reconciles against C, the workspace as it is. That is ordinary editing: only the latest state matters, as with any edit made over another.
+
+**Second review of chunk 1d-i** (three findings in reuse, regression tests in `tests/profiles-migration.test.ts`, "second review of chunk 1d-i"; each fails with its fix removed): a removed look now counts only while it is restorable in the working copy (listed, and within 30 days), so an expired one no longer lets a draft that keeps it reuse the copy (High); removed looks are matched one for one, so two equal ones need two (Medium); and reuse needs the same name (a migration's own copy: the name it gave it) and the same package plan, so a difference is kept in a fork (Medium).
+
+After the fixes: CI harness 23 of 23 in about 3 s; `tests/profiles-migration.test.ts` 25 of 25; sweep of 2 rounds **PASS** in 29 s (40 kills, each recovered after one restart), peak 1.3 GB.
 
 Reproduce: `bun test tests/profiles-migration.test.ts tests/profiles-migration-harness.test.ts` (authoring), and `bun tools/s3-migration.ts <scratch> [rounds]` here.
 

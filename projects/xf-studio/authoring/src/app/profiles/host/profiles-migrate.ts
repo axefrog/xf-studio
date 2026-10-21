@@ -7,10 +7,10 @@
  * The steps, as S3 proved them (rules M1–M6, experiment 038):
  * 1. **Collections and looks** (M2, M3). Each draft, the current one first, is compared by content (names and parts in order, read
  *    through the part registry, IDs ignored) against its collection's working copy and every fork of it (`origin`). Equal content is
- *    reused only when that loses nothing the draft keeps (each look's Undo history, and its removed looks, restorable there); with no
- *    working copy, and its identity never used (a deleted collection's is), the draft becomes it under its own IDs; otherwise the whole
- *    collection forks, "(from this browser)"
- *    (a recovery draft: "(earlier draft)"), with new collection and look IDs. A named version newer than what the working copy (or,
+ *    reused only when that loses nothing the draft keeps (its name and package plan, each look's Undo history, and its removed looks,
+ *    restorable there now, one for one); with no working copy, and its identity never used (a deleted collection's is), the draft
+ *    becomes it under its own IDs; otherwise the whole collection forks, "(from this browser)" (a recovery draft: "(earlier draft)"),
+ *    with new collection and look IDs. A named version newer than what the working copy (or,
  *    without one, the draft) was saved as comes back first: as the working copy when there is none, else as a fork "(saved in an older
  *    version)" that joins the profile (as one an earlier run brought back does). Nothing existing is overwritten.
  * 2. **The V** (M4): reused when an existing character has exactly its whole state, decoded save by content hash; else created with its
@@ -22,7 +22,7 @@
  */
 import { basename } from "node:path";
 import { CHARACTER_DOCUMENT, CHARACTER_SCHEMA, characterDocumentOf, decodedSaveId, newCharacterId, SAVED_V_DOCUMENT } from "../../../character/character-document";
-import { COLLECTION_WORKING, COLLECTION_WORKING_SCHEMA, LOOK_WORKING, LOOK_WORKING_SCHEMA, nameOf, REMOVED_LIMIT, suffixed } from "../../../library/collection-documents";
+import { COLLECTION_WORKING, COLLECTION_WORKING_SCHEMA, LOOK_WORKING, LOOK_WORKING_SCHEMA, nameOf, pruneRemoved, REMOVED_LIMIT, type RemovedLook, suffixed } from "../../../library/collection-documents";
 import { isTombstone } from "../../../platform/api/document-commands";
 import { DOCUMENT_ID, parseFence, WORKSPACE_FENCE_HEADER, type WorkspaceFence } from "../../../platform/api/document-store";
 import type { PartRegistry } from "../../../platform/core/document";
@@ -58,6 +58,8 @@ export class MigrationRequestError extends Error {}
 
 const COLLECTION_ID = /^[0-9a-f-]{36}$/;
 const DIGEST = /^[0-9a-f]{64}$/;
+/** What a migration's copy of a collection is called after: a draft from this browser, an earlier draft, a named version. */
+export const FORK_FROM_BROWSER = "(from this browser)", FORK_EARLIER = "(earlier draft)", FORK_NAMED = "(saved in an older version)";
 const LOOK_ID = /^[^/\u0000-\u001f\u007f]{1,100}$/;
 const LIMITS = { drafts: 8, looks: 2_000, layouts: 64 } as const;
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
@@ -194,18 +196,34 @@ export function migrateProfiles(database: LibraryDatabase, store: DocumentStore,
         !!db.query("SELECT 1 FROM documents WHERE kind = ? AND substr(id, 1, ?) = ? LIMIT 1").get(LOOK_WORKING, id.length + 1, `${id}/`);
       const keptKey = (look: { name: string; parts: Readonly<Record<string, unknown>>; memory?: unknown }) =>
         `${lookContent(parts, look)}|${canonicalJson(look.memory ?? null)}`;
+      /** The names a migration gives a copy of `name`: a fork of a draft, of an earlier draft, of a named version. */
+      const forkNames = (name: string) => [FORK_FROM_BROWSER, FORK_EARLIER, FORK_NAMED].map(suffix => suffixed(name, suffix));
       /**
-       * Whether reusing `candidate` for `draft` loses nothing the draft keeps: every look's Undo history is the candidate's, and every look the
-       * draft removed (the newest it keeps) is restorable from the candidate with the same content and history. Otherwise the draft forks.
+       * Whether reusing `candidate` for `draft` loses nothing the draft keeps, so that otherwise the draft forks:
+       * - the same name (a migration's copy: the name that copy was given) and the same package plan;
+       * - every look's Undo history is the candidate's;
+       * - every look the draft removed (the newest it keeps) is restorable from the candidate now (listed and within 30 days) with the same
+       *   content and history, each by a look of its own (a multiset: two equal removed looks need two).
        */
       const preserves = (candidate: Row, draft: MigrationDraft) => {
+        const name = candidate.value.name as string;
+        if (name !== draft.name && !(candidate.value.origin === draft.id && forkNames(draft.name).includes(name))) return false;
+        if (canonicalJson(candidate.value.packagePlan ?? null) !== canonicalJson(draft.packagePlan ?? null)) return false;
         const ids = candidate.value.looks as string[];
         if (draft.looks.some((look, i) => canonicalJson(lookOf(candidate.id, ids[i]!)?.value.memory ?? null) !== canonicalJson(look.memory ?? null))) return false;
-        const removed = new Set((candidate.value.removed as { look: string }[]).flatMap(item => {
+        const restorable = new Map<string, number>();
+        for (const item of pruneRemoved((candidate.value.removed ?? []) as RemovedLook[], at).kept) {
           const look = lookOf(candidate.id, item.look);
-          return look && !isTombstone(look.value) ? [keptKey(look.value as MigrationLook)] : [];
-        }));
-        return draft.removed.slice(Math.max(0, draft.removed.length - REMOVED_LIMIT)).every(look => removed.has(keptKey(look)));
+          if (!look || isTombstone(look.value) || look.value.state !== "removed") continue;
+          const key = keptKey(look.value as MigrationLook);
+          restorable.set(key, (restorable.get(key) ?? 0) + 1);
+        }
+        return draft.removed.slice(Math.max(0, draft.removed.length - REMOVED_LIMIT)).every(look => {
+          const key = keptKey(look), left = restorable.get(key) ?? 0;
+          if (!left) return false;
+          restorable.set(key, left - 1);
+          return true;
+        });
       };
       const members: string[] = [], recovered: string[] = [];
       const idMap = { collections: {} as Record<string, string>, looks: {} as Record<string, string> };
@@ -229,7 +247,7 @@ export function migrateProfiles(database: LibraryDatabase, store: DocumentStore,
             made.push("working-from-named");
           } else {
             const fork = uuid();
-            create(fork, suffixed(named.name, "(saved in an older version)"), named.looks, [], { ...plan, origin: draft.id }, true);
+            create(fork, suffixed(named.name, FORK_NAMED), named.looks, [], { ...plan, origin: draft.id }, true);
             made.push("fork-named");
             if (main) members.push(fork);
           }
@@ -250,7 +268,7 @@ export function migrateProfiles(database: LibraryDatabase, store: DocumentStore,
           made.push(main ? "collection-created" : "recovered-created");
         } else {
           id = uuid();
-          map = create(id, suffixed(draft.name, main ? "(from this browser)" : "(earlier draft)"), draft.looks, draft.removed, { ...plan, origin: draft.id }, true);
+          map = create(id, suffixed(draft.name, main ? FORK_FROM_BROWSER : FORK_EARLIER), draft.looks, draft.removed, { ...plan, origin: draft.id }, true);
           made.push(main ? "collection-forked" : "recovered-forked");
         }
         if (main) { collection = id; idMap.collections[draft.id] = id; Object.assign(idMap.looks, map); members.unshift(id); }
