@@ -193,7 +193,7 @@ flowchart TB
 
 **Built in phase 1c-ii.**
 
-- **Ownership.** Collections and looks are owned by `CollectionOwner` (owner commands) and `LookSessions` (keyed by `LookRef`), as `collection-working` and `look-working` documents. The old `CollectionService` folds into them in phase 1d.
+- **Ownership.** Collections and looks are owned by `CollectionOwner` (owner commands) and `LookSessions` (keyed by `LookRef`), as `collection-working` and `look-working` documents. The old `CollectionService` folded into them in phase 1d-ii.
 - **Snapshots.** `DocumentStore.read(refs)` is the one-transaction snapshot.
 - **Save version.** It flushes, refuses if anything is in conflict or unsent, and then calls the host route `/api/collection-versions`, which writes the released tables from its own snapshot in the same transaction. The window records `saved` afterwards.
 - **Retention.**
@@ -616,7 +616,18 @@ No schema migration: every record is a `documents` row, and `user_version` stays
   - Panel IDs, parked places and `lastPlace` keys, groups and anchors are all rewritten to instance IDs.
   - A tab's `dock` may be null, meaning the default arrangement.
   - Own defaults are `layout-default` documents holding a graph fragment with slots `v1` and `look1`.
-- **Start trigger.** The migration's start trigger (`PROFILES_MIGRATION_ENABLED`) stays off until the phase 1d-ii switch-over, so migrated documents never go stale.
+- **Start trigger.** `PROFILES_MIGRATION_ENABLED` is on since the phase 1d-ii switch-over: every start migrates (or resumes) before the Studio builds its session.
+
+**Built in phase 1d-ii (the switch-over).** The Studio now runs on the profile services.
+
+- **One collection owner.** The old `CollectionService` folded into `CollectionOwner` and `LookSessions`. The session is the source of the V and the look shown, and the V comes from its `CharacterService` owner.
+- **Edits are recorded as they are made.** A look edit is written to the outbox synchronously, and only the store to the library waits (250 ms). Another window's version met during that delay becomes a conflict, never a silent replacement. Whenever the outbox stops (release, lease loss, a superseded answer), it first stores what was waiting, then sends nothing more.
+- **Conflicts.** A conflict on a look or a collection shows the `ConflictNotice` (`t-conflict`) in the Presets panel, with typed resolution requests. Save version, Check and Build wait until it is resolved.
+- **Collections.** Removing the last preset keeps the collection, across a restart. A new collection created with its profile membership stays within the 64-write limit. Restore puts a look back where it stood.
+- **History.** Each look has its own history scope, and the look shown is the editing context until something else is edited; there is no unqualified look scope and no fallback. Ctrl+Z in a 3D view undoes the look that view shows (§3.7). The V's own scope replaced the history carry between heads.
+- **Save Explorer.** One session per panel instance; `saves.*` actions name their instance, and a released session ends with its panel.
+- **Wording.** The header button reads **Save version**.
+- **Gates.** A differential parity test replays each workspace fixture's scripted session before and after the switch-over, step by step. An edit-latency gate (16 layers, 80 Undo steps) keeps p95 under 4 ms. A start-to-restart test runs on a real-shaped workspace.
 
 ## 9. Phases
 

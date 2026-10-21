@@ -13,13 +13,13 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 - **New requests** go into a lane the day they arrive: bugs and polish on existing features into polish or blockers; new features into *after 1.0*.
 
 ### In flight
-- **Wave-4 review fixes** (7 open High, so feature merges are paused): `claude/fix-export` (NATIVE-80, PIPE-140/141, PREV-202), `claude/fix-install` (INSTALL-05..07, PIPE-139/142, DIAG-06..08), and bridge 0.8.1 (RB-119..128) now owned by XF · Runtime bridge. The core review follows profiles phase 2. *21 Oct*
+- **Open High findings** (4, so feature merges stay paused): CORE-03, and RB-119..121, fixed on the bridge branches (now 0.8.2, owned by XF · Runtime bridge) and closed when those merge. The export and install fixes have landed. The core review follows profiles phase 2. *21 Oct*
 - **Profiles phase 1** (the single primary focus; `claude/profiles-p1`). The design is approved, with the four defaults confirmed. Chunks run one at a time:
   1. 1a: lease, takeover and fencing (done: harness 34/34, three Sol rounds);
   2. 1b: profile model and character service (done; its remaining sync races move to the outbox);
   3. 1c-i: generic outbox, idempotent transactions, characters on the outbox, conflict UI (done: model-based specification test, about 480k random steps; four Sol rounds); 1c-ii: collection and look working copies, snapshots, Save version, tombstones, checkpoint tuning, workspace-aware receipts (done; four Sol rounds, spec test about 485k steps);
-  4. 1d-i: the `profiles-1` migration and its crash harness (done; three Sol rounds); 1d-ii: the running Studio switched onto the new services, with parity gates (running);
-  5. 1e: IDs, focus, history, data contracts, de-singletoning;
+  4. 1d-i: the `profiles-1` migration and its crash harness (done; three Sol rounds); 1d-ii: the running Studio switched onto the new services, with parity gates (done; three Sol rounds, the last Medium fixed after them and checked in phase 1's final review);
+  5. 1e: IDs, focus, history, data contracts, de-singletoning (next);
   6. 1f: gate runs.
 
   It merges once the open High findings are 3 or fewer (bridge 0.8.1). *21 Oct*
