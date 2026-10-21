@@ -1,6 +1,6 @@
 # Profiles, views and layout tabs: design
 
-**Status:** proposed design for review (21 October 2026; revised twice the same day after independent reviews, see [Review changes](#review-changes)). Nothing is built. The whole proposal is pre-beta work, and spikes come first (§9). The [architecture contract](architecture-contract.md) governs throughout, and the backlog's [profiles entry](../backlog/README.md#profiles-and-multiple-vs-after-the-beta) records the product decisions this page builds on.
+**Status:** proposed design for review (21 October 2026; revised three times after two independent reviews and the spikes, see [Review changes](#review-changes)). Nothing is built beyond the spikes: S1 and S3 pass, and S2 failed as designed, so the scene-runtime split (phase 4a) comes before tabs. The whole proposal is pre-beta work (§9). The [architecture contract](architecture-contract.md) governs throughout, and the backlog's [profiles entry](../backlog/README.md#profiles-and-multiple-vs-after-the-beta) records the product decisions this page builds on.
 
 **What this page supersedes in the [view graph design](view-graph-design.md).** This page is the one contract for these topics:
 
@@ -47,7 +47,9 @@ These are the only invariants the model keeps. Each holds because the game or th
 | Released builds keep reading the library | `user_version` ≤ 2, released tables never altered ([library durability](library-durability.md)) | New data only as `documents` rows |
 | localStorage is synchronous and per origin; a Web Lock is released only when its holder releases it or its window ends | Browser storage and Web Locks | The outbox and session write synchronously, and the workspace lease follows §2.3 |
 | One pointer: one gesture at a time | [View graph §3.8](view-graph-design.md#38-input-routing-and-focus) | A second open gesture is refused in every view |
-| One GPU context per window, with frame and raster budgets | [View graph §3.7](view-graph-design.md#37-rendering-and-performance) | A budget: work beyond it waits and says why, and is never refused by the model |
+| One GPU context per window, with frame, raster and residency budgets | [View graph §3.7](view-graph-design.md#37-rendering-and-performance); a resident subject costs about 0.47 GB VRAM head-only and 0.7–1.2 GB whole-body ([S2 §3](../../experiments/039-view-switch-spike/README.md#memory)) | Budgets: work beyond them waits and says why, and is never refused by the model (§4.5) |
+| Scene runtimes on one renderer share its global state | Three's `WebGLRenderer` holds tone mapping, exposure, render target and shadow settings for every draw (S2 §5) | Each runtime's draw sets every renderer-level setting it relies on |
+| A material's shader program links on its first draw, synchronously, unless compiled ahead | WebGL program linking; S2 measured a 94 s cold link on a fresh browser profile | A view or subject is prepared before it is drawn (§4.5) |
 
 ## 1. The entity model
 
@@ -72,7 +74,8 @@ These are the only invariants the model keeps. Each holds because the game or th
 | **Scene** | Display state (motion when the runtime split lands), `subject?`, `look?` (character scenes), `gen` (raised when its subject or look changes) | A subject, a look | `ViewGraph` | Graph node | Per session |
 | **Camera, Lights, Display, Tools** | As in the [view graph](view-graph-design.md#31-node-types) | n/a | `ViewGraph` | Graph nodes | Per session |
 | **Focus** | `views: Record<ViewId, number>` (focus sequence), `panel?`, `editing?: EditingContext` (§3.7) | Views, panels, a history scope | `FocusService` (`platform/core/focus.ts`) | In the session | Per session |
-| **Outbox** | Pending owner commands: `{ id, command, writes: { kind, id, base, value }[], at }`, newest value per document | Documents | `DocumentOwners` (`platform/core/saved-document.ts`) | Workspace `outbox`, written synchronously | Per workspace |
+| **Outbox** | Pending owner commands: `{ id, seq, command, writes: { kind, id, base: number \| { after }, value \| tombstone }[], at, state, current? }`; per document at most one frozen (sent) entry and one open successor (§2.2) | Documents | `DocumentOwners` (`platform/core/saved-document.ts`) | Workspace keys `xfs.outbox.<workspace>.<kind>/<id>`, written synchronously, inside the workspace budget | Per workspace |
+| **Receipt** | `{ command, revisions }` for a committed command ID | The documents it wrote | `DocumentStorePort.transact` | Document `xfs-receipt` | Per library; 7 days |
 | **Studio module** | The manifest, plus `defaults: DefaultLayoutContribution[]` | Panel types, tools, defaults | `compose/modules.ts` | Code | Per build |
 | **Panel type** | `PanelContribution` plus `owner` (§5), `context` (what it shows, §3.1), `stateInDefaults?` | Its module | `compose/views.ts` | Code | Per build |
 | **Default layout** | `id`, `name`, `description`, `owner` (a module, `shared` or `user`), `fragment` | Panel types | Feature defaults: composition. Own defaults: `LayoutDefaults` (`src/app/profiles/`). | Code; own defaults as document `layout-default` | Per build; per library |
@@ -158,43 +161,65 @@ flowchart TB
   | Delete own default | Tombstone, with an Undo notice. Tabs made from it keep working. |
   | Remove look | One collection command (§2.1). The look joins `removed` and its working document becomes `state: "removed"`: not bindable, and scenes showing it say "Removed" with **Restore**. When it leaves `removed` (pushed out by the 21st removal, or after 30 days), the same command that drops it writes the tombstone. |
 
-- **Tombstones and cleanup.** A tombstone is the next revision, `{ tombstone: true, at, value }`. The host purges tombstones older than 30 days at start, in one transaction. It also purges decoded saves no character references, and the look documents of purged collections.
+- **Tombstones and cleanup.** A tombstone is the next revision, `{ tombstone: true, at, value }`. The host purges tombstones older than 30 days at start, in one transaction. It also purges decoded saves no character references, the look documents of purged collections, and receipts older than 7 days.
 - **Retention roots:** profiles, own defaults and collections. A subject that no profile references (an orphan) is kept until deleted, and is listed under **Add a V you've used before**.
 
 ## 2. Persistence
 
-### 2.1 Owner commands and coherent snapshots
+### 2.1 Owner commands, receipts and coherent snapshots
 
 - **Owners write; nothing else does.** Related documents change only through their owner's commands, for example:
   - `collection.addLook`, `copyLook`, `removeLook`, `restoreLook`, `reorder` and `rename`;
   - `character.create` (character plus decoded save plus profile membership);
   - `profile.addSubject`.
-- **Each command is one host transaction.** It is sent as `{ writes: [{ kind, id, base, value | tombstone }] }` to `DocumentStorePort.transact`. All writes commit, or none do and the answer is `stale` with the current revisions. Single-document edits are one-write commands.
-- **Coherent snapshots.** Save version and export first flush the collection's outbox entries. They then read the collection working copy and every live look in **one read transaction** (`DocumentStorePort.snapshot(refs)`). Save version writes the released tables from that snapshot in the same host transaction. Export records the snapshot's revisions in its manifest.
+
+  Single-document edits are one-write commands.
+- **Each command is one host transaction.** `DocumentStorePort.transact({ id, command, writes, forget })` takes `writes` as `{ kind, id, base, value | tombstone }[]`. All writes commit, or none do and the answer is `stale` with the current revisions.
+- **Commands are idempotent by `id`** ([spike rule A4](../../experiments/038-profiles-spikes/README.md#acknowledgement-and-rebasing-rules-s1-answering-sols-medium-point)).
+  - The transaction also writes a **receipt**, a `documents` row of kind `xfs-receipt` holding the resulting revisions.
+  - A command whose receipt exists is answered from it and never applied twice, so a committed command whose answer was lost comes back as the window's own write, not a conflict.
+  - Receipts are deleted when a later command names them in `forget`, and purged after 7 days at host start (§1.4).
+- **Equal-value fallback (A5).** A replay with no receipt whose bases no longer match, but whose every target already holds exactly the replayed value, is acknowledged at the current revisions.
+- **One mechanism.** The migration record (`migration/profiles-1:<token>`, §8) is the same thing: a command ID whose stored result answers a replay.
+- **Coherent snapshots.** Save version and export first flush the collection's outbox entries. They then read the collection working copy and every live look in **one read transaction** (`DocumentStorePort.snapshot(refs)`). Save version writes the released tables from that snapshot in the same host transaction, and export records the snapshot's revisions in its manifest.
+- **The host thread never checkpoints.**
+  - A committed look writes about 320 KB (about 80 WAL pages), so SQLite's default autocheckpoint (1,000 pages) would run on the host thread about every 12 commits, at 67–184 ms on a D:-like drive.
+  - The library owner raises `wal_autocheckpoint` well above that (or sets it to 0), and the worker's flush, which already runs within 5 s, does the checkpointing ([library durability](library-durability.md#how)).
+  - Phase 1 repeats the S1 latency run on the data drive.
 
 ### 2.2 Outbox, recovery and conflicts
 
-- **Every mutation goes through the outbox first.** Before a command is sent, its newest values and base revisions are written synchronously to the workspace outbox. Coalesced later edits replace the entry's values, so queued values are covered too. The entry leaves the outbox only when the library acknowledges a revision holding those values. This covers looks, collections, characters, profiles and defaults alike, so **every unacknowledged durable mutation is recoverable**.
-- **Replay at start** (or after a host restart) sends each entry as its command:
-  - if every base still matches, it commits as written (the write never arrived);
-  - otherwise it goes to `conflict`, with the recovered values as "mine".
+**Every mutation goes through the outbox first.** That covers looks, collections, characters, profiles and defaults, so **every unacknowledged durable mutation is recoverable**. The rules are the ones S1 proved ([A1–A7](../../experiments/038-profiles-spikes/README.md#acknowledgement-and-rebasing-rules-s1-answering-sols-medium-point)):
 
-  It is never merged and never written silently over another writer.
-- **Conflict.**
-  - When the store answers `stale`, the local values are kept and nothing retries. The owning panel shows "Changed in another window", with **Keep mine** (an explicit command over the newer revisions) and **Use theirs**.
-  - For looks the panel also offers **Keep both**: mine becomes a fork, "(this window)".
-  - **Use theirs** for a look keeps mine as a fork too.
-- **The outbox can fail to write** (quota, or a failed host-file write). Then the window shows a persistent warning: "Your latest changes aren't protected on this computer", with **Export collection** and **Retry**. It keeps sending to the library, and lists unprotected changes in the close prompt. Edits are never blocked, and nothing claims to be safe that isn't.
-- **External changes.**
+- **An entry** is `{ id, seq, command, writes: { kind, id, base: number | { after: EntryId }, value | tombstone }[], at, state: "queued" | "conflict", current? }`. It is written synchronously before anything is sent.
+- **A sent entry is frozen (A1).** From its first send, its ID, bases and values never change, and every resend reuses the ID.
+- **One successor per document (A2).**
+  - An edit coalesces into its document's newest entry only while that entry is unsent, or in conflict (where it updates "mine").
+  - Behind a frozen entry, an edit opens one successor based on `{ after: <frozen ID> }`, and later edits coalesce into it. A document holds at most one frozen entry and one open one.
+  - Multi-document commands never coalesce. They queue behind every earlier entry touching any of their documents.
+- **Acknowledgement (A3).** The answer, fresh or from a receipt, removes the entry. Its revisions become the window's baseline, and every `{ after }` successor is rebased onto them, **all in one synchronous outbox write**. The command ID goes into the next command's `forget`.
+- **Stale (A6).** A stale answer makes the entry a `conflict` holding the current revisions, and nothing retries.
+  - Single-document successors fold into its "mine"; multi-document successors stay blocked.
+  - **Use theirs** rebases later entries onto the stale base, so they go stale in turn and are never sent over theirs.
+- **Conflict resolution.** The owning panel shows "Changed in another window", with **Keep mine** (an explicit command over the newer revisions), **Use theirs** and, for looks, **Keep both** (mine becomes a fork, "(this window)"; Use theirs on a look keeps mine as a fork too).
+  - **Each resolution is one outbox write.** S1 caught a two-write Keep both losing "mine" when killed between the writes.
+  - **Stored conflicts are shown again after a restart.**
+- **Replay at start** (or after a host restart) resends each queued entry under its own ID. Receipts and the equal-value fallback turn lost acknowledgements into the window's own writes. A real conflict follows A6. Nothing is merged or written silently over another writer.
+- **Storage and budget.**
+  - Each document's entries live under their own key, `xfs.outbox.<workspace>.<kind>/<id>`, so a commit rewrites only its own document's entries.
+  - The outbox counts against the workspace storage budget (`WORKSPACE_STORAGE_BUDGET`). One look under edit is up to 160K UTF-16 units, at most two entries per document, and two more for every dirty look while the host is unreachable.
+- **The outbox can fail to write** (quota, or a failed host-file write). Then the window shows a persistent warning, "Your latest changes aren't protected on this computer", with **Export collection** and **Retry**. It keeps sending to the library and lists unprotected changes in the close prompt. Edits are never blocked, and nothing claims to be safe that isn't. S1 verified this path.
+- **External changes (A7).**
   - *Detection:* held documents' revisions are checked against the library every 10 s while visible, on window focus and after a host restart, with one `revisions(refs)` read. The read hits SQLite directly, so writes by another host process or a tool are seen.
-  - *Acknowledgement rule:* a check skips a document with a command in flight. Afterwards, the acknowledged revision is the baseline, and only a revision above it counts as external.
-  - *Effect:* a newer external revision of a clean document is applied, and its history scope is cleared ("Changed elsewhere; Undo starts here"). A document with outbox entries goes to `conflict`.
+  - *What counts:* a check **skips every document that has an outbox entry**. For a clean document, only a revision above the baseline A3 set counts as external, so a receipt replay never looks external.
+  - *Effect:* the newer revision is applied and its history scope cleared ("Changed elsewhere; Undo starts here").
+- **Optional: history chunks.** About 88 % of a look's autosave is its Undo history (141K of 160K units; around 580 MB of WAL writes an hour at one commit every 2 s). Splitting the look-level history into immutable, content-addressed chunk documents would cut that several-fold. It is done only if phase 1's data-drive run or the write volume calls for it.
 
 ### 2.3 Flush, close and one writer per workspace
 
 - **Flush.** `DocumentOwners.flush(signal)` resolves once the outbox is empty, or reports what is pending, in conflict or failed.
 - **Desktop close** (`desktop/workspace-close.ts`) acknowledges `saved` only after the workspace capture and an empty flush. Otherwise the "close anyway?" prompt names what is unsaved, and says whether the outbox holds it.
-- **Localhost** (development only) relies on the synchronous outbox.
+- **Localhost** (development only) relies on the synchronous outbox. That holds for a renderer crash, because `localStorage` lives in the browser process. A kill of the whole browser or WebView process tree may lose writes still inside the browser's storage commit delay. This is unmeasured; phase 1's harness kills the process tree once to measure it (on desktop too), and the library already holds most such writes within about 10 ms.
 - **One writer per workspace (proposed default).**
   - A second window opens read-only: "This workspace is open in another window." It offers **Use it here**. Read-only windows refuse every dispatch with `unavailable` and write nothing.
 - **Takeover happens only after release.**
@@ -202,11 +227,12 @@ flowchart TB
   - If the holder doesn't answer, the new window waits: "Waiting for the other window to finish saving. Close it to continue." The lease moves only when the holder terminates (localhost: the browser releases its Web Lock `xfs.workspace.<key>`; desktop: the host sees its page end).
   - There is no timed steal.
 - **Fencing at the host, as a backstop.** Every lease carries a generation. Document commands and desktop workspace writes carry it, and the host refuses an older generation. A late write from a released window can't land.
+- **The lease and takeover are the one persistence piece the spikes didn't cover.** They are phase 1's first task, with their own small harness: two windows on each host, the holder killed mid-drain, a hung holder, and a late write after release refused by fencing.
 
 ### 2.4 Compatibility
 
 - **Library: strictly backward-safe** under [library durability](library-durability.md). There are no new tables, no altered released tables, and `user_version` stays 2. Older builds see collections only through named versions.
-- **Workspace and layout data: a documented reset on downgrade.** An older build drops `profiles` and `outbox` when it saves. The legacy fields are frozen at the first migration and never mirrored, so an older build opens the workspace as it was before the upgrade. The next upgrade re-runs the migration (§8).
+- **Workspace and layout data: a documented reset on downgrade.** An older build drops `profiles` when it saves. It leaves the per-document outbox keys alone, and the next upgrade replays them under A1–A7. The legacy fields are frozen at the first migration and never mirrored, so an older build opens the workspace as it was before the upgrade. The next upgrade re-runs the migration (§8).
 - **Required round trip: upgrade, then edit and save in an older build, then upgrade again.**
   - Library rows the newer build wrote are unchanged.
   - The older build's named save and its edited draft come back as forks beside the working copy.
@@ -363,6 +389,33 @@ type LayoutFragment = {                                         // xfs/layout-fr
 | View graph, `MAX_VIEWS = 16` | Inside the session; each view has a `tab`; the limit goes (the workspace size budget bounds it) | Nodes, links, lighting setups |
 | `main` view, `head` panel | Ordinary views and instances. `main` and `head` survive only as aliases in capture tools and evidence keys ("the most recently focused 3D view in the visible tab"). | n/a |
 
+### 4.5 Scene runtimes and switching (phase 4a)
+
+S2 ([experiment 039](../../experiments/039-view-switch-spike/README.md)) found two things:
+
+- views of one scene already switch within budget (7–19 ms);
+- a V of another subject or body fails on today's path, which releases the WebGL context, reloads the head (1.3–2.2 s warm), shows a blank pane and drops a superseding request.
+
+Phase 4a therefore splits the scene host into one **renderer device** per window (context, scheduler, canvas, input routing) and one **scene runtime** per scene (core head, rig, character renderer, feature renderers, lighting stage). Several runtimes are resident on the device, and one view is drawn at a time. Simultaneous drawn views come later, in 4b. The rules:
+
+- **A scene draws only when a view shows it,** including while it is being built: a runtime is created hidden. The prototype drew 2 stray frames of a bare head.
+- **Prepare before switching.** A view, or a tab's views, and a resident subject are prepared while hidden: rig programs compiled asynchronously, and textures uploaded. Until the target is ready, the switch keeps the previous view drawn with progress in place, and never blocks the main thread.
+- **Residency is a budget.**
+  - Each subject has a measured memory cost (head only about 0.47 GB VRAM and 0.7 GB GPU-process memory; whole body about 0.7–1.2 GB VRAM).
+  - Resident runtimes are the shown subject plus at most one warm one (N = 1, a tunable budget). The least recently shown is evicted first.
+  - Eviction and closing a subject are ordinary disposal that **returns its memory**, with a test. The prototype leaked about 220 MB of VRAM and 200 MB of heap per disposed runtime on a shared renderer.
+- **Building a runtime takes an `AbortSignal`:** the core head, rig, motion and features, not only the detail load.
+- **A subject or body change never drops the person's request.** It is a per-scene subject change that supersedes any earlier one, including a reload in progress. The previous V stays drawn, with progress, until the new one is ready. It replaces `reloadHead` and its `not_ready` refusal.
+- **Camera input goes to the drawn view's camera node only,** never to every runtime on the canvas.
+- **Each runtime's draw sets its own renderer state** ([Assumptions](#assumptions)).
+
+**The two defects S2 found are closed by this phase:**
+
+- *The body switch shows the wrong V and drops the request:* closed by the superseding subject change.
+- *The first-draw shader-link freeze:* closed by preparing ahead.
+
+Both were queued as beta blockers. Phase 4a is where they are fixed and gated, so phase 2's tabs never inherit them.
+
 ## 5. Panel ownership
 
 The owner groups are a module's label, **Shared**, **Output** or **Tools**.
@@ -464,15 +517,21 @@ Ctrl+T, Ctrl+W, Ctrl+Tab and Ctrl+PageUp/PageDown are not used, because the brow
 A **resumable, atomic protocol**, `profiles-1`, runs per workspace (the normal one and `?verify=1` separately), by the lease holder:
 
 1. **Token.** The workspace synchronously records `{ id: "profiles-1", token, state: "started" }`.
-2. **One library transaction** (`/api/profiles/migrate`) takes a normalized snapshot of the workspace. A record `migration/profiles-1:<token>` returns its stored result, so a resumed run duplicates nothing. Otherwise it runs these steps:
-   1. **Collections and looks first.**
-      - Identity is `collections.collection.id`; `library.selected` is legacy preset selection and is not used.
-      - Each working copy that already exists (another host's migration or autosave) is compared **inside the transaction** by normalized content hash.
-      - Identical content is reused. Divergent content forks: new collection or look IDs, "(from this browser)", with an **ID map** in the result.
-      - Absent copies are created, based on `library.current` when it names the same collection.
-      - A newer named version also makes a fork. Nothing existing is overwritten.
-   2. **Subjects.** The whole normalized character state (source and decoded hash, body, voice, choices, kept and not-carried entries, clothing, own makeup) is compared with existing characters. An equal one is reused; otherwise a new character is created, with its decoded save, through `character.create`.
-   3. **Profile.** With none, create "My profile". With exactly one, use it. With several, create "From this browser". Add the members.
+2. **One library transaction** (`/api/profiles/migrate`) takes a normalized snapshot of the workspace. A record `migration/profiles-1:<token>` returns its stored result, so a resumed run duplicates nothing (the receipt mechanism of §2.1). Otherwise it runs these steps, the rules S3 proved ([M1–M6](../../experiments/038-profiles-spikes/README.md#migration-rules-s3)):
+   1. **Collections and looks first.** Identity is `collections.collection.id`; `library.selected` is legacy preset selection and is not used.
+      - **Compare through the part registry (M3).** Drafts, working copies and named-version rows are all read through the part registry before comparing. Released rows are stored in the oldest schema that holds them, so their raw JSON never matches a draft's.
+      - **Content, not IDs.** Collections are compared by content: look names and parts in order, in canonical key order, IDs ignored.
+      - **Compare against forks too (M2).** The draft is compared against the working copy **and every earlier fork of the same collection** (`origin`), so a re-upgrade whose draft was already brought back reuses that fork rather than making another.
+      - **Fork whole collections (M2).** Identical content is reused. Divergent content forks the **whole collection**, "(from this browser)", with new collection and look IDs, and an **ID map** in the result covering every look.
+      - **Newer named versions come back as forks (M3).** A named version newer than the working copy's `saved.revision` (or, with no working copy, newer than the draft's `library.current` revision) is brought back.
+        - With no working copy, the working copy is made from it, and a different draft forks.
+        - Otherwise it becomes a fork "(saved in an older version)", which joins the profile.
+      - Nothing existing is overwritten. Which of two divergent drafts keeps the original ID depends on commit order, by design.
+   2. **Subjects (M4).** The whole normalized character state (source and decoded hash, body, voice, choices, kept and not-carried entries, clothing, own makeup) is compared with existing characters. Decoded saves are compared by content hash. An equal character is reused; otherwise a new one is created, with its decoded save, through `character.create`.
+   3. **Profile (M5).**
+      - Prefer a profile that already holds this V and collection.
+      - Otherwise: with none, create "My profile"; with exactly one, use it; with several, create "From this browser".
+      - Add the members. Without the first rule, each re-upgrade with several profiles would make another "From this browser".
    4. **Own defaults** from saved layouts, deduplicated by name and dock hash.
    5. **Record** the result, including the ID map, under the token.
 3. **Session.** The workspace builds tab 1 and the graph from the result:
@@ -486,7 +545,12 @@ A **resumable, atomic protocol**, `profiles-1`, runs per workspace (the normal o
    - A crash after the commit returns the stored result.
    - A crash before step 3 rebuilds the session.
    - Two hosts migrating at once serialize on the library's write lock: the second sees the first's working copies and reuses or forks.
-5. **Downgrade and re-upgrade.** The older build edits its frozen draft and drops `profiles`. The next upgrade migrates again with a new token. Its divergent draft forks beside the working copy, and identical content is reused.
+5. **Downgrade and re-upgrade.** The older build edits its frozen draft, may save a named version, and drops `profiles`. The next upgrade migrates again with a new token. It gives back:
+   - the edited working copy, unchanged;
+   - a fork "(saved in an older version)";
+   - a fork "(from this browser)";
+
+   all in the one profile, with one V. A second round trip with nothing edited adds only its migration record (S3).
 
 | Kept | May be dropped |
 |---|---|
@@ -496,30 +560,32 @@ No schema migration: every record is a `documents` row, and `user_version` stays
 
 ## 9. Phases
 
-The whole proposal is pre-beta. Spikes come first, each with explicit gates. **The estimate is provisional and is redone when the spikes finish.** Every phase leaves `main` green and passes the UI review where anything visible changes. The multi-subject, multi-look and multi-view service tests (3 characters of both bodies, 3 looks, 5 views, 2 tabs; three Character panels pinned to three Vs) start in phase 1 and grow with each phase.
+The whole proposal is pre-beta. The spikes have run, and the estimate below is the post-spike one. Every phase leaves `main` green and passes the UI review where anything visible changes. The multi-subject, multi-look and multi-view service tests (3 characters of both bodies, 3 looks, 5 views, 2 tabs; three Character panels pinned to three Vs) start in phase 1 and grow with each phase.
 
 ### 9.1 Spikes
 
-| Spike | Pass gate | Fail means |
-|---|---|---|
-| **S1** Autosave of looks to the library, with the outbox | On the 2K reference recipe:<br>• commit to acknowledgement p95 ≤ 250 ms;<br>• main-thread cost per committed edit ≤ 4 ms, outbox write included.<br>A kill harness (renderer killed at 20 points, host at 20) finds after restart:<br>• every acknowledged or outbox-recorded mutation present;<br>• no corruption;<br>• two-window scripts never overwrite silently.<br>A forced outbox-write failure shows the warning. | Before phase 1, redesign the write unit (per layer rather than per look, or binary chunks), or keep look drafts in the workspace with only named versions in the library, and re-review |
-| **S2** Switching the drawn view | • Two views of one scene: ≤ 100 ms to first frame, no V reload, stable shader program count.<br>• Two different subjects (feminine and masculine): the first switch shows progress; a superseded preparation is cancelled within 100 ms; a late result for a superseded subject is never shown; warm switches take ≤ 100 ms within the memory budget. | Phase 4's scene-runtime split moves before phase 2, and tab switching waits for it |
-| **S3** Migration crash harness | • Kills at every protocol step, on two hosts migrating concurrently with identical and with divergent drafts, plus a downgrade and re-upgrade round trip.<br>• Exactly the expected profiles; no duplicated subjects; divergent content forked with references remapped; released tables byte-identical; re-runs idempotent. | The protocol is redesigned before phase 1 |
+| Spike (run 21 October) | Gates | Result | Consequence |
+|---|---|---|---|
+| **S1** Autosave of looks to the library, with the outbox ([experiment 038](../../experiments/038-profiles-spikes/README.md)) | Commit to acknowledgement p95 ≤ 250 ms; main-thread cost per edit ≤ 4 ms; renderer and host killed at 20 points each; two windows never overwrite silently; outbox-failure warning | **Pass.** p95 9.4 ms in the browser; about 1.4 ms of main-thread work (2.7 ms with a file outbox); 0 missing mutations across about 3,100 logged; 100 real conflicts became 100 forks | The write unit (one document per look) stands. The outbox rules A1–A7 and receipts are folded into §2.1–§2.2. To come in phase 1: a data-drive latency run, the autocheckpoint change, and a process-tree kill test. |
+| **S2** Switching the drawn view ([experiment 039](../../experiments/039-view-switch-spike/README.md)) | Two views of one scene: ≤ 100 ms, no reload, stable programs. Two subjects: progress shown, cancel ≤ 100 ms, no late result, warm switch ≤ 100 ms within a memory budget. | **Fail, as designed.** Views of one scene pass once their rig has been drawn (7–19 ms). Subjects fail today: a 1.3–2.2 s reload, a blank pane, a dropped request. A resident-runtime prototype passes cancel (79.5 ms) and warm switches (2.6–17 ms), but drew stray frames and leaked memory on disposal. | Phase 4 splits: **4a, scene runtimes**, moves before phase 2 (§4.5); 4b stays. A per-subject residency budget is defined. |
+| **S3** Migration crash harness (experiment 038) | Kills at every step; two hosts with identical and divergent drafts; downgrade and re-upgrade; released tables byte-identical; re-runs idempotent | **Pass.** 10 kill points in both variants, concurrent hosts, the downgrade round trip, all in 14 s | The protocol stands. Rules M1–M6 are folded into §8. |
 
 ### 9.2 Phases
 
-| # | Phase | Scope | Gates | Effort (provisional) |
+| # | Phase | Scope | Gates | Effort |
 |---|---|---|---|---|
-| 0 | Spikes | S1–S3 | The gates above | 5 |
-| 1 | **Core** | **Model:** the profile model and subject registry; `CharacterService` and the catalogue split; `CollectionService` commands, working copies and snapshots.<br>**Persistence:** outbox, conflicts, revision checks, flush and close; the lease with release-only takeover and host fencing; tombstones.<br>**Migration:** `profiles-1`.<br>**IDs and history:** explicit IDs and required targets everywhere; `FocusService`, captures and the resolver; editing-context history routing, with the `look` fallback removed.<br>**Data contracts:** session, tab, panel instance and binding data, with one tab and no tab UI.<br>**De-singletoning:** every singleton in §7, still one drawn view. | Existing single-V workflows pass scene parity and the latency budgets.<br>The service tests (several subjects, bodies, looks and views; cancellation; late results) pass.<br>The no-default boundary test is empty.<br>The S1 and S3 harnesses run in CI. | 20–24 |
-| 2 | **Tabs and contributed defaults** | `ProfileSessions` operations with history; fragments and substitution; feature defaults; Save as default; feature focus; tab strip, tab menu and substitution menu; **Choose…** routes; Modules menu and Layouts button removed | Close, Undo and reopen restore byte-identical sessions; fragment round trip; substitution with 0, 1 and 2 candidates; tab switch within S2's budget | 8–10 |
-| 3 | **Binding selector, instances, picker, empty states** | The binding selector; several instances per type; the panel picker; every empty and dangling state | Three Presets instances on three scenes edit independently; stale captures are refused; picker captures in light and dark, narrow and wide | 6–7 |
-| 4 | **Simultaneous views** | The scene-runtime split (view graph P3–P4): several drawn views, linking UI, frame budget | View graph P3–P4 gates; two Vs of different bodies drawn at once within budget | 10–12 |
-| 5 | **Several Vs and profiles in the UI** | Add and remove subjects, the full profile flyout, profile management, several looks rastered at once | Switching profile edits nothing; two Vs wearing one look update together; raster memory within budget | 6–8 |
-| 6 | **Polish lane** | Tab duplication, persistent reopen history, orphan listing, tombstone and decoded-save cleanup | Cleanup purges only what the retention rules allow; duplication shares nothing implicitly | 4–5 |
-| — | **Pre-beta total** | Phases 0–6 | | **59–71**, redone after the spikes |
+| 0 | Spikes | S1–S3 | Done (§9.1) | 5 (spent) |
+| 1 | **Core** | **First task:** the workspace lease, release-only takeover and host fencing, with its own harness (the one unspiked persistence piece, §2.3).<br>**Model:** the profile model and subject registry; `CharacterService` and the catalogue split; `CollectionService` commands, working copies and snapshots.<br>**Persistence:** the outbox (A1–A7), idempotent `transact` with receipts, revision checks, conflicts re-shown after restart, flush and close, the warning state, tombstones and cleanup; `wal_autocheckpoint` raised.<br>**Migration:** `profiles-1` (M1–M6).<br>**IDs and history:** explicit IDs and required targets; `FocusService`, captures and the resolver; editing-context history, with the `look` fallback removed.<br>**Data contracts:** session, tab, instance and binding data, with no tab UI.<br>**De-singletoning:** every singleton in §7, with one drawn view. | The lease harness passes.<br>Single-V workflows pass scene parity and the latency budgets.<br>The multi-subject service tests pass.<br>The no-default boundary test is empty.<br>The S1 and S3 harnesses run in CI.<br>The S1 latency run on the data drive stays within budget; it decides whether history chunks are split (§2.2).<br>A WebView or browser **process-tree kill** test measures the storage commit window. | 19–23 |
+| 4a | **Scene runtimes** (before phase 2) | §4.5: the renderer device and per-scene runtimes; hidden creation with an `AbortSignal`; prepare before switching, with progress; residency (shown plus one warm) and leak-free disposal; the superseding subject change replacing `reloadHead`; input to the drawn view; per-runtime renderer state | The S2 harness in CI form:<br>• warm subject switch ≤ 100 ms;<br>• cancel ≤ 100 ms;<br>• no stray frames;<br>• no late result shown;<br>• a superseding body switch shows the last choice;<br>• no main-thread link stall on a first draw;<br>• closing a subject returns its memory (test). | 7–9 |
+| 2 | **Tabs and contributed defaults** | `ProfileSessions` operations with history; fragments and substitution; feature defaults; Save as default; feature focus; tab strip, tab menu and substitution menu; **Choose…** routes; Modules menu and Layouts button removed | Close, Undo and reopen restore byte-identical sessions; fragment round trip; substitution with 0, 1 and 2 candidates; **tab switch within S2's budget, on 4a's runtimes** | 8–10 |
+| 3 | **Binding selector, instances, picker, empty states** | The binding selector; several instances per type; the panel picker; every empty and dangling state | Three Presets instances on three scenes edit independently; stale captures refused; picker captures in light and dark, narrow and wide | 6–7 |
+| 4b | **Simultaneous views** | Several drawn views: offscreen canvas and per-view blits, per-view frame budget and timing, linking UI | View graph P4 gates; two Vs of different bodies drawn at once within budget | 5–6 |
+| 5 | **Several Vs and profiles in the UI** | Add and remove subjects, the full profile flyout, profile management, several looks rastered at once | Switching profile edits nothing; two Vs wearing one look update together; raster and residency memory within budget | 6–8 |
+| 6 | **Polish lane** | Tab duplication, persistent reopen history, orphan listing, tombstone, receipt and decoded-save cleanup | Cleanup purges only what the retention rules allow; duplication shares nothing implicitly | 4–5 |
+| — | **Pre-beta total** | Phases 0–6 | | **60–73** (55–68 still to do) |
 
-Phase order is the order above. Phase 1 can begin its pure parts (types, resolver, focus, history routing) while the spikes run, but nothing persistent lands before S1 and S3 pass.
+- **Order:** 1, 4a, 2, 3, 4b, 5, 6. Phase 2's tab-switch gate waits for 4a.
+- **Where to look first if it runs over:** phase 1's lease and fencing, the one unspiked persistence piece.
 
 ## 10. Decisions and open questions
 
@@ -530,7 +596,7 @@ Phase order is the order above. Phase 1 can begin its pure parts (types, resolve
 - Ctrl+Z in a 3D view undoes the look.
 - The Clothing setting's separate Undo is retired.
 - Generic subjects, and nothing current.
-- The whole proposal is pre-beta, spikes first.
+- The whole proposal is pre-beta, spikes first (run: §9.1).
 
 **Proposed defaults** (from coordination; confirm or change):
 
@@ -579,7 +645,24 @@ Coordination added generic subjects, nothing current, and game-sourced [Assumpti
 | History routing circular | Editing context; the `look` fallback removed; focus and navigation never recorded (§3.7) |
 | Data contracts late; runtime gates thin | Session, tab and binding data in phase 1; S2 gates for different subjects, bodies, cancellation and late results (§9) |
 | Supersession too narrow | Superseded view-graph passages listed at the top |
-| Scope | The whole proposal is pre-beta, in the maintainer's order; the estimate is 59–71 days, redone after the spikes |
+| Scope | The whole proposal is pre-beta, in the maintainer's order |
+
+**Round 3** (the spikes, 21 October; [experiment 038](../../experiments/038-profiles-spikes/README.md), [experiment 039](../../experiments/039-view-switch-spike/README.md)):
+
+| Item | Change |
+|---|---|
+| Outbox rules | A sent entry is frozen; one successor per document; acknowledgement removes the entry and rebases its successor in one synchronous write; stale becomes conflict; revision checks skip documents with outbox entries (§2.2) |
+| Commands | `transact` takes command IDs; receipts are `documents` rows purged after 7 days; the equal-value fallback; one mechanism with the migration record (§2.1, §1.4) |
+| Conflicts | Each resolution is one outbox write; stored conflicts are shown again after a restart (§2.2) |
+| Outbox storage | One key per document, counted in the workspace budget (§1.1, §2.2) |
+| SQLite checkpoints | `wal_autocheckpoint` raised so the worker's flush checkpoints; a data-drive latency run in phase 1 (§2.1) |
+| History chunks | Optional; decided by the data-drive run (§2.2) |
+| Process-tree kill | Phase 1 measures a WebView or browser process-tree kill (§2.3, §9.2) |
+| Migration | Compare through the part registry, against forks too; fork whole collections; newer named versions return as their own fork; prefer an existing profile (§8) |
+| S2 | Phase 4 split into 4a (before phase 2) and 4b. New rules: no drawing while hidden, prepare before switching, residency budget and memory returned, `AbortSignal` on runtime creation, a superseding subject change, input to the drawn view, per-runtime renderer state (§4.5). The two S2 defects (wrong V and a dropped request on a body switch; the first-draw link freeze) close in 4a. |
+| Lease and takeover | Flagged as phase 1's first task, with its own harness (§2.3) |
+| Estimates | Phase 1 is 19–23; 4a is 7–9; 4b is 5–6; the pre-beta total is 60–73 (§9.2) |
+| Assumptions | Added: the residency budget, renderer state shared between runtimes, and synchronous program linking |
 
 ## Related pages
 
