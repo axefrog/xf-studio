@@ -74,3 +74,28 @@ export function withHair(): StudioComposition & { documents: DocumentModel } {
   const parts = new PartRegistry([...STUDIO_OWNERS.filter(owner => owner.owner === "feature"), HAIR]);
   return { registry: new Registry(owners), documents: Object.freeze({ parts, live: "eye-makeup" }), region: LIVE_REGION };
 }
+
+/**
+ * A feature with a content action that records no Undo step (`tint.try`, Undo policy `none`: a try-on value),
+ * beside eye makeup, as the step-5 review's probe composed it.
+ */
+export function withTint() {
+  const input = (type: "string") => ({ type, required: true, from: "input" as const });
+  const TINT = Object.freeze({ owner: "feature", id: featureId("tint"), api: 1, label: "Tint", stage: "dev",
+    part: { ...hairCodec, current: "xfs/tint-1", accepts: ["xfs/tint-1"], serialize: (part: unknown) => ({ schema: "xfs/tint-1", body: part }) },
+    editor: { empty: () => ({}), parse: () => ({}), serialize: () => ({}) },
+    actions: featureActionTable(
+      { "tint.set": { scope: ["workspace"], effect: "content", undo: "part", payload: { colour: input("string") } },
+        "tint.try": { scope: ["workspace"], effect: "content", undo: "none", payload: { colour: input("string") } } } as never,
+      { "tint.set": true, "tint.try": true } as never, {
+        capability: () => ({ available: true }),
+        apply: (state: { part: Hair; editor: unknown }, action: { kind: string }) => {
+          const colour = (action as { kind: string; colour: string }).colour;
+          return { part: { ...state.part, colour }, editor: state.editor, changed: state.part.colour !== colour, effect: { kind: "content" } };
+        },
+        label: (action: { kind: string }) => ({ label: action.kind, actionKind: action.kind }),
+      }),
+  });
+  return { registry: new Registry([...STUDIO_OWNERS, TINT as never]),
+    documents: Object.freeze({ parts: new PartRegistry([...STUDIO_OWNERS.filter(owner => owner.owner === "feature"), TINT as never]), live: "eye-makeup" }), region: LIVE_REGION };
+}

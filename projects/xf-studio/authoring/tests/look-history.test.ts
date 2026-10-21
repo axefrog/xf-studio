@@ -86,7 +86,7 @@ test("a gesture on one layer of a 32-layer look stores one layer chunk per step"
   expect(first.chunks).toBe(MAX_LAYERS + 1);   // the header and every layer, once
   drag(.001); drag(.001);
   expect(document.historyStats().chunks).toBe(first.chunks + 2);
-  expect(document.undoDepth).toBe(3);
+  expect(document.history.state().depth).toBe(3);
 });
 
 test("look steps record several parts at once; Undo and Redo restore them together with their identity", () => {

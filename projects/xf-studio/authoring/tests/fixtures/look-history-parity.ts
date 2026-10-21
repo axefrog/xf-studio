@@ -10,7 +10,7 @@
  * compared only for presence.
  */
 import { CollectionActions } from "../../src/collection-actions";
-import type { HistorySnapshot } from "../../src/authoring-history";
+import type { HistorySnapshot } from "../../src/platform/api/history";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
 import { createTrustedAuthoringCore } from "../../src/trusted-authoring-core";
 import { encodeWorkspaceAt } from "../../src/workspace-budget";

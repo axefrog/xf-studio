@@ -19,15 +19,13 @@ import { eyeMakeupPort } from "./fixtures/eye-region";
 
 function fixture() {
   const workspace = freshWorkspace(), document = new AuthoringDocument(workspace);
-  const undo = () => { const prior = document.undoRecipe(); if (!prior) return false;
-    document.recipe = prior; return true; };
   const recipe = new RecipeActions(() => ({ recipe: document.recipe, active: document.active,
     selected: document.selected, fieldSelection: document.fieldSelection }),
   (next, effect) => document.applyActionState(next, effect), document, {}, () => "draft");
   const eyeMakeup = eyeMakeupPort(document, recipe), editing = registeredEditing(eyeMakeup);
-  const gestures = new AuthoringGestures(document, editing.gestures, undo);
-  const controls = new AuthoringControlEdits(document, editing.controls, undo);
-  const app = new StudioApplication({ document, eyeMakeup, gestures, controls, undo }, STUDIO_REGISTRY);
+  const gestures = new AuthoringGestures(document, editing.gestures);
+  const controls = new AuthoringControlEdits(document, editing.controls);
+  const app = new StudioApplication({ document, eyeMakeup, gestures, controls }, STUDIO_REGISTRY);
   const collection: PresetCollection = { schema: "xfas/collection-1", id: crypto.randomUUID(),
     name: "Current", presets: [{ id: crypto.randomUUID(), name: "Look", revision: 1,
       recipe: recipeFile(structuredClone(document.recipe))! }] };

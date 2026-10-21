@@ -1,4 +1,4 @@
-import type { HistorySnapshot } from "../authoring-history";
+import type { HistorySnapshot } from "../platform/api/history";
 import type { StudioCapability } from "../studio-application";
 
 /**

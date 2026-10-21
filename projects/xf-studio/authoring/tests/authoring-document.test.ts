@@ -20,10 +20,12 @@ test("authoring document owns selection and Undo, and exposes detached snapshots
   expect(document.recipe.layers[0].color).toBe("#123456");
   (snapshot.recipe.layers[0] as { color: string }).color = "#fedcba";
   expect(document.recipe.layers[0].color).toBe("#123456");
-  expect(document.canUndo).toBe(true);
-  expect(document.undoRecipe()?.layers[0].color).toBe(original);
-  expect(document.canUndo).toBe(false);
-  expect(changes).toEqual(["history", "recipe", "history"]);
+  expect(document.history.canUndo()).toBe(true);
+  // A cancelled step's revert takes it off without Redo and republishes the recipe it held.
+  expect(document.history.revertTransaction(document.history.top())).toBe(true);
+  expect(document.recipe.layers[0].color).toBe(original);
+  expect(document.history.canUndo()).toBe(false);
+  expect(changes).toEqual(["history", "recipe", "history", "recipe"]);
 });
 
 test("authoring restore is atomic and validates recipe/history before publishing", () => {

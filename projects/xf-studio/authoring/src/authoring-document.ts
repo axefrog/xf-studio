@@ -1,13 +1,13 @@
-import { RECIPE_HISTORY, recipeHistory, type HistoryEntryId, type HistoryEntryInfo } from "./editor-actions";
+import { RECIPE_HISTORY, recipeHistory, type HistoryEntryId } from "./editor-actions";
 import { parseFieldSelection, type FieldSelection } from "./engines/layered-makeup/field-selection";
 import type { Recipe } from "./engines/layered-makeup/recipe";
 import { readRecipe as parseRecipe } from "./recipe-schema";
 import type { RecipeActionEffect, RecipeActionState } from "./engines/layered-makeup/recipe-actions";
 import type { ReadonlyDeep } from "./read-only";
 import type { HistoryLabel } from "./history-labels";
-import { LOOK_HISTORY_1, type HistoryParts, type LookHistoryData } from "./platform/api";
+import { LOOK_HISTORY_1, type HistoryParts, type HistoryTarget, type LookHistoryData } from "./platform/api";
 import { LookHistory } from "./platform/core/look-history";
-import type { TransactionHost } from "./platform/core/history-transaction";
+import { createHistoryService, LOOK_SCOPE, type HistoryScope, type HistoryService } from "./platform/core/history-service";
 import type { LiveFeatureState, LiveFeatures } from "./platform/core/live-features";
 
 /**
@@ -40,7 +40,12 @@ export type DocumentEffect = RecipeActionEffect | { kind: "gesture"; layerIndex:
  */
 export type DocumentParts = { readonly feature: string; readonly parts: HistoryParts; readonly others?: LiveFeatures };
 /** What an Undo, Redo or reverted step restored: this document's recipe when the step touched it, and the other features it restored. */
-export type LookRestore = { recipe?: Recipe; features: string[] };
+type LookRestore = { recipe?: Recipe; features: string[] };
+/**
+ * Where the document's look history lives (the session's history service; default: one of its own) and how a restored recipe
+ * resets the preview's layer resources (the trusted core's port).
+ */
+export type DocumentHistoryOptions = { readonly history?: HistoryService; readonly resetStack?: (previous: Recipe) => void };
 
 /** A look history from either form; throws on a damaged entry (checked before anything is published). */
 function lookHistory(value: DocumentHistory | undefined, trimmed: boolean, parts: DocumentParts): LookHistory {
@@ -53,22 +58,34 @@ function lookHistory(value: DocumentHistory | undefined, trimmed: boolean, parts
   return history;
 }
 
-/** The live in-process authoring document; snapshots never expose its mutable recipe. */
+/**
+ * The live in-process authoring document; snapshots never expose its mutable recipe. It is the target of the history
+ * service's look scope (`history`): the scope records and restores the look's parts through it, and the document carries the
+ * scope's steps in and out of its state (`export`, `restore`).
+ */
 export class AuthoringDocument {
   private state: Omit<DocumentState, "history" | "historyTrimmed">;
-  private history: LookHistory;
+  /** The look's Undo history: the history service's look scope over this document. */
+  readonly history: HistoryScope;
+  private readonly resetStack: (previous: Recipe) => void;
+  private restoring = false;
   private listeners = new Set<(change: DocumentChange) => void>();
   private effectListeners = new Set<(effect: DocumentEffect) => void>();
   private geometryRevision = 0;
   private changedLayerIndex: number | undefined;
   private changedGestureKind: string | undefined;
   /** `parts` names the feature this document edits and how its look history chunks parts (default: eye makeup's recipe). */
-  constructor(initial: DocumentState, private readonly parts: DocumentParts = RECIPE_HISTORY) {
+  constructor(initial: DocumentState, private readonly parts: DocumentParts = RECIPE_HISTORY, options: DocumentHistoryOptions = {}) {
     const recipe = parseRecipe(initial.recipe);
     this.state = { recipe, active: clamp(initial.active, recipe.layers.length),
       selected: clamp(initial.selected, recipe.layers[clamp(initial.active, recipe.layers.length)]?.points.length ?? 0),
       fieldSelection: parseFieldSelection(initial.fieldSelection, recipe) };
-    this.history = lookHistory(initial.history, initial.historyTrimmed === true, parts);
+    this.resetStack = options.resetStack ?? (() => {});
+    const target: HistoryTarget = { read: this.read, apply: values => this.applyHistory(values),
+      // The recipe's and the other parts' revisions: while unchanged, Redo stays valid without comparing content.
+      revision: () => `${this.geometryRevision}:${this.otherRevision}`, fingerprint: keys => this.contentKey(keys) };
+    this.history = (options.history ?? createHistoryService()).open(LOOK_SCOPE, target, {
+      stack: lookHistory(initial.history, initial.historyTrimmed === true, parts), changed: () => { if (!this.restoring) this.notify("history"); } });
     parts.others?.load(initial.liveFeatures);
     this.lockedReason = initial.liveLocked;
   }
@@ -170,100 +187,25 @@ export class AuthoringDocument {
     const prior = this.pendingLabel; this.pendingLabel = label;
     try { return change(); } finally { this.pendingLabel = prior; }
   }
-  /** Record the current recipe; returns the added entry, or undefined when it duplicated the top entry. */
+  /** Record this document's part before a change (eye makeup's actions); undefined when the top step already held it. */
   checkpoint(_recipe?: Recipe, label?: HistoryLabel): HistoryEntryId | undefined {
-    const added = this.history.checkpoint(this.read, [this.parts.feature], { label: label ?? this.pendingLabel });
-    this.notify("history");
-    return added;
+    return this.history.checkpoint([this.parts.feature], label ?? this.pendingLabel);
   }
-  /** Record a step for another live feature's part, before its action publishes; undefined when the top step already held it. */
-  checkpointFeature(feature: string, label?: HistoryLabel): HistoryEntryId | undefined {
-    const added = this.history.checkpoint(this.read, [feature], { label: label ?? this.pendingLabel });
-    this.notify("history");
-    return added;
-  }
-  /** Record one look step over several parts (a look transaction's checkpoint). */
-  checkpointLook(features: readonly string[], label: HistoryLabel): HistoryEntryId | undefined {
-    const added = this.history.checkpoint(this.read, features, { scope: "look", label });
-    this.notify("history");
-    return added;
-  }
-  /** Name an open transaction's entry once its first edit shows what it does. */
-  relabelCheckpoint(entry: HistoryEntryId, label: HistoryLabel) { this.history.relabel(entry, label); }
-  /** True while `entry` is the one the next Undo restores. */
-  isLatestCheckpoint(entry: HistoryEntryId) { return this.history.isTop(entry); }
-  /** Drop an empty transaction's own checkpoint; never removes an older entry. */
-  discardCheckpoint(entry: HistoryEntryId) {
-    const removed = this.history.discard(entry); if (removed) this.notify("history"); return removed;
-  }
-  historyLabel() { return this.history.topLabel(); }
-  /** The recipe the top step restores, leaving the history as it is (a cancelled transaction without its own step). */
-  topRecipe(): Recipe | undefined { return this.topLook()?.recipe; }
-  /** Take the latest checkpoint off without Redo (a cancelled transaction); returns the recipe it restores. */
-  undoRecipe() { return this.revertLook()?.recipe; }
   /**
-   * Undo `count` steps as one change (each onto the session's Redo list); returns the recipe to
-   * show, which the caller publishes once. Undefined when fewer steps are kept.
+   * Show what an Undo, Redo or cancelled transaction restored: the other features' parts go to their live documents, and the
+   * recipe (when the step touched it) is replaced once, keeping the active layer where it survives, and the preview's layer
+   * resources reset.
    */
-  undoSteps(count: number): Recipe | undefined { return this.undoLook(count)?.recipe; }
-  /** Redo `count` steps as one change, keeping each step's identity; returns the recipe to show. */
-  redoSteps(count: number): Recipe | undefined { return this.redoLook(count)?.recipe; }
-  /**
-   * What the top step restores, leaving the history as it is: the other features' parts are restored at
-   * once and the recipe (when the step touched it) is returned for the caller to publish.
-   */
-  topLook(): LookRestore | undefined {
-    return this.history.canUndo ? this.restored(this.history.stepParts(this.history.depth - 1)) : undefined;
+  private applyHistory(values: Readonly<Record<string, unknown>>): boolean {
+    const next = this.restored(values).recipe;
+    if (!next) return true;
+    const previous = this.state.recipe, activeId = previous.layers[this.state.active]?.id;
+    this.replaceRecipe(next, next.layers.findIndex(layer => layer.id === activeId));
+    this.resetStack(previous);
+    return true;
   }
-  /** Take the latest step off without Redo (a cancelled transaction) and restore what it held. */
-  revertLook(): LookRestore | undefined {
-    if (!this.history.canUndo) return undefined;
-    const parts = this.history.revert();
-    this.notify("history");
-    return this.restored(parts);
-  }
-  /** Undo `count` steps as one change: the other features' parts are restored, the recipe returned to publish. */
-  undoLook(count: number): LookRestore | undefined {
-    const result = this.history.undo(this.read, count);
-    if (!result) return undefined;
-    for (let i = 0; i < count; i++) this.notify("history");
-    return this.restored(result.parts);
-  }
-  /** Redo `count` steps as one change, keeping each step's identity. */
-  redoLook(count: number): LookRestore | undefined {
-    const result = this.history.redo(this.read, count);
-    if (!result) return undefined;
-    for (let i = 0; i < result.pushed; i++) this.notify("history");
-    return this.restored(result.parts);
-  }
-  /** Redo-able steps in Redo order (the next one first). Validity is the caller's decision. */
-  redoList() { return this.history.redoSteps(); }
-  get redoDepth() { return this.history.redoDepth; }
-  clearRedo() { this.history.clearRedo(); }
-  /**
-   * Where a gesture or form-control transaction records (the platform's `HistoryTransaction`): this
-   * look's history, with the recipe's JSON as the content fingerprint. `revert` restores and publishes.
-   */
-  transactionHost(revert: (step: HistoryEntryId | undefined) => void): TransactionHost<HistoryEntryId> {
-    return { checkpoint: () => this.checkpoint(), top: () => this.history.topId,
-      relabel: (step, label) => this.relabelCheckpoint(step, label),
-      discard: step => this.discardCheckpoint(step), revert, content: () => JSON.stringify(this.state.recipe) };
-  }
-  /** Kept Undo entries oldest first, without recipes. */
-  historyEntries(): HistoryEntryInfo[] { return this.history.list(); }
-  /** Identity of the entry the next Undo would restore (cheap; for Redo validity). */
-  get historyTop() { return this.history.topId; }
-  /** True when older Undo entries were dropped (at the limit or before a restore). */
-  get historyTrimmed() { return this.history.trimmed; }
-  get canUndo() { return this.history.canUndo; }
-  get undoDepth() { return this.history.depth; }
-  /** The kept entries as whole recipes, oldest first. */
-  historySnapshot(): Recipe[] { return this.history.bodies(this.parts.feature) as Recipe[]; }
   /** Distinct history chunks and their size (UTF-16 code units), for budgets and benchmarks. */
   historyStats() { return this.history.stats(); }
-  restoreHistory(entries: DocumentHistory, trimmed = false) {
-    this.history = lookHistory(entries, trimmed, this.parts); this.notify("history");
-  }
   snapshot(): ReadonlyDeep<DocumentState> { return this.export(); }
   /** The editor state with its look history as data (steps and chunks, never whole recipes per step). */
   export(): DocumentState {
@@ -278,10 +220,12 @@ export class AuthoringDocument {
     const history = lookHistory(value.history, value.historyTrimmed === true, this.parts);
     this.state = { recipe, active, selected: clamp(value.selected, recipe.layers[active]?.points.length ?? 0),
       fieldSelection };
-    this.history = history;
     this.parts.others?.load(value.liveFeatures); this.otherRevision++;
     this.lockedReason = value.liveLocked;
     this.geometryRevision++; this.changedLayerIndex = undefined; this.changedGestureKind = undefined;
+    // The restored look's history replaces the scope's steps, and their Redo with them (announced once, as the restore).
+    this.restoring = true;
+    try { this.history.replace(history); } finally { this.restoring = false; }
     this.notify("restore");
   }
 }

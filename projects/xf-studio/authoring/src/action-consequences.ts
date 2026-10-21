@@ -1,6 +1,6 @@
 import type { CollectionDraftSummary } from "./collection-actions";
 import type { CollectionRequest } from "./collection-service";
-import type { HistoryJumpPlan, HistoryState } from "./authoring-history";
+import type { HistoryJumpPlan, HistoryState } from "./platform/api/history";
 import { FILE_DESCRIPTORS } from "./studio-action-descriptors";
 import type { ActionEffect, ConsequenceOverride } from "./platform/api";
 import type { StudioAction } from "./studio-application";

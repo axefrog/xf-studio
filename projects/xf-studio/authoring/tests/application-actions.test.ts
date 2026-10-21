@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
 import { CollectionActions } from "../src/collection-actions";
 import { collectionDraft, editPresets, emptyMemory, newPresetName, type CollectionWorkspace } from "../src/collection-workspace";
-import { RecipeHistory } from "../src/editor-actions";
+import { RECIPE_HISTORY, recipeHistory } from "../src/editor-actions";
 import { recipeActionCapability, type RecipeActionState } from "../src/engines/layered-makeup/recipe-actions";
+import type { Recipe } from "../src/engines/layered-makeup/recipe";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { PreviewActions, type PreviewPort } from "../src/preview-actions";
 import { ViewportAdapter, type ViewportPort } from "../src/viewport-adapter";
@@ -48,20 +49,25 @@ test("collection commands keep UI views isolated and notify only after valid tra
   expect(changes).toBe(6);
 });
 
+/** One recipe's Undo stack on its own: the history service's stack over eye makeup's part. */
+const recipeStack = (entries: Recipe[] = []) => recipeHistory(entries);
+const EYE = RECIPE_HISTORY.feature;
+
 test("layer commands preserve source recipes and history restores a complete edit", () => {
-  const source = initialRecipe(), id = source.layers[0].id, history = new RecipeHistory();
-  history.checkpoint(source); history.checkpoint(source);
+  const source = initialRecipe(), id = source.layers[0].id;
+  let history = recipeStack();
+  history.checkpoint(() => source, [EYE]); history.checkpoint(() => source, [EYE]);
   const hidden = applyLayerAction(source, id, { kind: "layer.setEnabled", id, enabled: false });
   expect(source.layers[0].enabled).toBe(true);
   expect(hidden.recipe.layers[0].enabled).toBe(false);
   expect(hidden.structure).toBe(false);
   expect(layerCapability(source, { kind: "layer.edit", command: { kind: "move", id, to: 100 } }).available).toBe(false);
   expect(() => applyLayerAction(source, id, { kind: "layer.edit", command: { kind: "rename", id: "stale", name: "Lost" } })).toThrow("no longer exists");
-  expect(history.undo()).toEqual(source);
+  expect(history.revert()?.[EYE]).toEqual(source);
   expect(history.canUndo).toBe(false);
-  history.restore([source]);
-  const view = history.snapshot(); view[0].layers[0].name = "Changed";
-  expect(history.undo()!.layers[0].name).toBe(source.layers[0].name);
+  history = recipeStack([source]);
+  const view = history.bodies(EYE) as Recipe[]; view[0].layers[0].name = "Changed";
+  expect((history.revert()?.[EYE] as Recipe).layers[0].name).toBe(source.layers[0].name);
 });
 
 test("a new preset's default name never repeats another preset's", () => {
@@ -158,7 +164,7 @@ test("recipe edits through app.dispatch record discrete changes once and keep in
   const unsubscribe = recipe.subscribe(effect => effects.push(effect.kind));
   const dispatch = (action: Parameters<typeof app.dispatch>[0]) => app.dispatch(action);
   expect(dispatch({ kind: "layer.setFinish", layerId, finish: "glitter" }).ok).toBe(true);
-  expect(document.canUndo).toBe(true);
+  expect(document.history.canUndo()).toBe(true);
   expect(dispatch({ kind: "glitter.selectModel", layerId, model: "fine" }).ok).toBe(true);
   expect(glitterModel(document.recipe.layers[0].flakes)).toBe("fine");
   expect(dispatch({ kind: "glitter.setDirect", layerId, key: "strength", value: 2.1 }).ok).toBe(true);
@@ -171,7 +177,7 @@ test("recipe edits through app.dispatch record discrete changes once and keep in
   const detached = recipe.snapshot() as unknown as RecipeActionState;
   detached.recipe.layers[0].color = "#000000";
   expect(document.recipe.layers[0].color).toBe(original.layers[0].color);
-  expect(document.undoDepth).toBe(5);
+  expect(document.history.state().depth).toBe(5);
   for (let i = 0; i < 4; i++) app.dispatch({ kind: "history.undo" });
   expect(document.recipe.layers[0].finish).toBe("glitter");
   expect(effects).toEqual(["immediate", "immediate", "scheduled", "immediate", "immediate"]);
@@ -181,8 +187,8 @@ test("recipe edits through app.dispatch record discrete changes once and keep in
 test("pointer edits preserve target identity, reject stale presets and leave one gesture Undo entry", () => {
   const recipe = initialRecipe(), id = recipe.layers[0].id, target = recipe.layers[0], point = target.points[0];
   let state: RecipeActionState = { recipe, active: 0, selected: 0, fieldSelection: {} }, changes = 0;
-  const history = new RecipeHistory(), actions = new RecipeActions(() => state, next => state = next,
-    history, {}, () => "draft", () => changes++);
+  const history = recipeStack(), actions = new RecipeActions(() => state, next => state = next,
+    { checkpoint: (value: Recipe) => history.checkpoint(() => value, [EYE]) }, {}, () => "draft", () => changes++);
   // Eye makeup's registered gestures apply each frame; the recipe service publishes it.
   const gestures = EYE_MAKEUP.gestures!;
   const applyGesture = (edit: GestureEdit) => {
@@ -190,7 +196,7 @@ test("pointer edits preserve target identity, reject stale presets and leave one
     if (changed) actions.publishGesture(changed.layerIndex, changed.kind);
     return !!changed;
   };
-  history.checkpoint(recipe);
+  history.checkpoint(() => recipe, [EYE]);
   expect(applyGesture({ kind: "point.replace", layerId: id, expectedLayer: target,
     index: 0, expectedPoint: point, next: { u: point.u + .005 } })).toBe(true);
   expect(applyGesture({ kind: "point.replace", layerId: id, expectedLayer: target,
@@ -203,7 +209,7 @@ test("pointer edits preserve target identity, reject stale presets and leave one
   expect(applyGesture({ kind: "point.replace", layerId: id, expectedLayer: target,
     index: 0, expectedPoint: point, next: { u: .9 } })).toBe(false);
   expect(replaced.layers[0].points[0].u).not.toBe(.9);
-  expect(history.undo()!.layers[0].points[0].u).toBe(initialRecipe().layers[0].points[0].u);
+  expect((history.revert()?.[EYE] as Recipe).layers[0].points[0].u).toBe(initialRecipe().layers[0].points[0].u);
   expect(history.canUndo).toBe(false);
 });
 
