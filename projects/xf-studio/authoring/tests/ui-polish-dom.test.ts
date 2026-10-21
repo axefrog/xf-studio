@@ -661,3 +661,39 @@ describe("wording helpers", () => {
     expect(matchCommands(list, "").map(command => command.title)).toEqual(["Front view", "Quality 1K", "Calibrate"]);
   });
 });
+
+describe("Restoring changes from the last session (style guide t-recovering)", () => {
+  test("says so after a second, offers Try again with Keep working only where safe (else Export collection), and Discard for a missing save", async () => {
+    const { workspaceNotice } = await import("../src/studio-ui/app");
+    const sent: string[] = [];
+    const rt = { port: { workspace: { dispatch: async () => ({ ok: true }) }, documents: { dispatch: async (action: { kind: string }) => { sent.push(action.kind); return { ok: true }; } } },
+      file: (action: { kind: string }) => { sent.push(action.kind); }, feedback: { toast() {} } };
+    const notice = workspaceNotice(rt as never);
+    const root = notice.element as unknown as LightElement;
+    const frame = (recovering: { shown: boolean; long: boolean; safe: boolean; missing: number }) =>
+      ({ status: { outbox: { unprotected: 0, pending: 1, conflicts: 0, failing: false, recovering } } }) as never;
+    const visible = () => buttons(root).filter(button => !button.hidden).map(button => button.getAttribute("aria-label") ?? text(button));
+    notice.update(frame({ shown: false, long: false, safe: false, missing: 0 }));
+    expect(root.hidden).toBe(true);
+    notice.update(frame({ shown: true, long: false, safe: false, missing: 0 }));
+    expect(root.hidden).toBe(false);
+    expect(text(root.querySelector(".workspace-notice-text")!)).toBe("Restoring changes from your last session…");
+    expect(root.classList.contains("info")).toBe(true);
+    expect(visible()).toEqual([]);
+    notice.update(frame({ shown: true, long: true, safe: true, missing: 0 }));
+    expect(text(root.querySelector(".workspace-notice-text")!)).toBe("Restoring changes from your last session is taking a while.");
+    expect(root.classList.contains("warning")).toBe(true);
+    expect(visible()).toEqual(["Keep working on the restored version", "Try again"]);
+    const shown = (name: string) => buttons(root).find(button => !button.hidden && (button.getAttribute("aria-label") ?? text(button)) === name)!;
+    shown("Keep working on the restored version").click();
+    shown("Try again").click();
+    notice.update(frame({ shown: true, long: true, safe: false, missing: 0 }));
+    expect(visible()).toEqual(["Export collection", "Try again"]);
+    notice.update(frame({ shown: true, long: true, safe: false, missing: 1 }));
+    expect(text(root.querySelector(".workspace-notice-text")!)).toBe("Some restored changes need a save that's gone. Import it again, or discard them.");
+    expect(visible()).toEqual(["Discard those changes"]);
+    buttonNamed(root, "Discard those changes")!.click();
+    await settle();
+    expect(sent).toEqual(["documents.keepRestored", "documents.retryRecovery", "documents.discardWaiting"]);
+  });
+});

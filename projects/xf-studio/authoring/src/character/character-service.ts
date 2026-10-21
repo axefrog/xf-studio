@@ -76,6 +76,7 @@ const docRef = (id: CharacterId): DocumentRef => ({ kind: CHARACTER_DOCUMENT, id
 const saveRef = (id: string): DocumentRef => ({ kind: SAVED_V_DOCUMENT, id });
 const ELSEWHERE_NOTE = "Changed in another window. Undo starts here.";
 const CONFLICT_MESSAGE = "You changed this V here too. Which version should it keep?";
+const RESTORING = "This V is still being restored from your last session. It can be changed again in a moment.";
 
 export class CharacterService implements CharactersPort {
   private readonly entries = new Map<CharacterId, Entry>();
@@ -194,6 +195,7 @@ export class CharacterService implements CharactersPort {
         return conflict ? { message: CONFLICT_MESSAGE, keepBoth: conflict.writes.some(write => write.kind === CHARACTER_DOCUMENT && write.id === id) } : null;
       },
       resolve: keep => this.resolve(id, keep),
+      restoring: () => this.deps.outbox.recovering(docRef(id)) ? RESTORING : null,
     };
     const context = new CharacterContextActions({ ...ports, catalogue: this.deps.catalogue, requester: id, history: { service: this.deps.history, id }, document },
       { stored: storedOfDocument(doc), ...(save ? { save } : {}) });

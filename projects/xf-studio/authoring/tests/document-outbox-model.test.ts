@@ -81,6 +81,8 @@ type Intent = {
   callers: Caller[];
   /** Read back from storage when the page opened, and not answered since: no new edit is admitted on its documents until it is. */
   recovered?: boolean;
+  /** Bases it took from a lost answer of the intent before it (the page never learned them): by document, that intent's ID. */
+  from?: Record<string, string>;
 };
 /** `versions`: what a command reading each document names as its base, as the design states it: it moves with every change made here and
  * every change taken from elsewhere, never with an acknowledgement, and starts again at the library's revision when the page opens. */
@@ -103,7 +105,8 @@ function record(spec: Spec, id: string, edits: [string, unknown][], requires: st
     const last = touching(spec, edits[0]![0]).at(-1);
     if (last && last.writes.length === 1 && !last.put && (!last.sent || last.conflict)) {
       last.writes[0]![1] = edits[0]![1];
-      last.requires = [...new Set([...last.requires, ...requires])];
+      // The new value's references replace the old one's when it names any (an owner names them with every value it writes).
+      if (requires.length) last.requires = [...new Set(requires)];
       last.callers.push(caller);
       return "joined";
     }
@@ -129,6 +132,7 @@ const settle = (callers: Caller[], outcome: OutboxOutcome) => { for (const calle
 type Own = Readonly<Record<string, { readonly revision: number; readonly value: unknown }>>;
 function acknowledge(spec: Spec, id: string, revisions: Readonly<Record<string, number>>, current?: Readonly<Record<string, CurrentDocument>>, own?: Own) {
   const at = spec.intents.findIndex(intent => intent.id === id), intent = spec.intents[at]!;
+  const shown = keysOf(intent).map(key => [key, visible(spec, key)] as const);
   // An earlier intent still pending on one of its documents is one the library already holds (it is only being replayed): this answer
   // supersedes its write of that document; one left with no write is done.
   for (const earlier of spec.intents.slice(0, at)) {
@@ -143,8 +147,13 @@ function acknowledge(spec: Spec, id: string, revisions: Readonly<Record<string, 
   answered(spec, id, revisions, current);
   // A replay answered by its receipt adopts this workspace's later revisions as the baseline; the intents after it still go over the
   // revision it produced (their values were made over its value).
+  const adopted = new Set<string>();
+  // (Only of the documents it still writes: a copy an earlier answer superseded on one no longer speaks for it.)
   for (const [key, later] of Object.entries(own ?? {}))
-    if (later.revision > (spec.docs[key]?.revision ?? 0)) { spec.docs[key] = { revision: later.revision, value: structuredClone(later.value) }; moved(spec, key, later.revision); }
+    if (shown.some(([item]) => item === key) && later.revision > (spec.docs[key]?.revision ?? 0)) { spec.docs[key] = { revision: later.revision, value: structuredClone(later.value) }; moved(spec, key, later.revision); adopted.add(key); }
+  // An answer that changes what a document shows (a recovered intent's value giving way to the library's newer one) is a change from
+  // elsewhere for whoever holds the document.
+  for (const [key, before] of shown) if (!adopted.has(key) && !same(before, visible(spec, key))) moved(spec, key, spec.docs[key]?.revision ?? 0);
 }
 /** Whether a document still has an intent read back at the last opening and not yet answered: edits on it wait. */
 const recovering = (spec: Spec, key: string) => touching(spec, key).some(intent => intent.recovered && !intent.conflict);
@@ -162,7 +171,10 @@ function answered(spec: Spec, id: string, revisions: Readonly<Record<string, num
 function lost(spec: Spec, id: string, revisions: Readonly<Record<string, number>>) {
   const at = spec.intents.findIndex(intent => intent.id === id), intent = spec.intents[at]!;
   intent.committed = { ...revisions };
-  for (const [key] of intent.writes) { const next = nextOn(spec, at, key); if (next && next.bases[key] === null) next.bases[key] = revisions[key]!; }
+  for (const [key] of intent.writes) {
+    const next = nextOn(spec, at, key);
+    if (next && next.bases[key] === null) { next.bases[key] = revisions[key]!; (next.from ??= {})[key] = intent.id; }
+  }
 }
 function stale(spec: Spec, id: string, current: Readonly<Record<string, CurrentDocument>>) {
   const intent = spec.intents.find(item => item.id === id)!;
@@ -183,6 +195,9 @@ function stale(spec: Spec, id: string, current: Readonly<Record<string, CurrentD
 function keepMine(spec: Spec, id: string, freshId: string) {
   const intent = spec.intents.find(item => item.id === id)!;
   const theirs = intent.conflict!.theirs;
+  // A conflict on an intent the library had already taken (its answer lost, its receipt gone): the intents after it follow the fresh
+  // command again, as they did before its lost answer was known.
+  for (const [key] of intent.writes) { const next = nextOn(spec, spec.intents.indexOf(intent), key); if (next?.from?.[key] === intent.id) { next.bases[key] = null; delete next.from[key]; } }
   Object.assign(intent, { id: freshId, conflict: null, sent: false, committed: null, recovered: false,
     bases: Object.fromEntries(intent.writes.map(([key]) => [key, theirs[key]?.revision ?? 0])) });
 }
@@ -194,7 +209,8 @@ function useTheirs(spec: Spec, id: string) {
     spec.docs[key] = { revision: now?.revision ?? 0, value: now?.value };
     moved(spec, key, now?.revision ?? 0);
     const next = nextOn(spec, at, key);
-    if (next && next.bases[key] === null) next.bases[key] = intent.bases[key]!;
+    // (Over its stale base even where its lost answer had given them its revision: the page never learned that answer.)
+    if (next && (next.bases[key] === null || next.from?.[key] === intent.id)) next.bases[key] = intent.bases[key]!;
   }
   spec.intents.splice(at, 1);
   settle(intent.callers, "dropped");
@@ -283,6 +299,8 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
   };
   let spec: Spec = { docs: Object.fromEntries(keys.map(key => [key, { revision: 0, value: undefined }])), versions: {}, intents: [], acknowledged: [] };
   let life = 0, adopting = false, a!: DocumentOutbox;
+  let owner = new Map<string, unknown>();
+  let putting = false;
   /** Keeps generated command IDs unique (the random part alone collides about once in a few hundred runs). */
   let ids = 0;
   const deferred: TransactRequest[] = [];
@@ -357,13 +375,28 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
         // that arrives after a newer one (or after A's own write) is never taken.
         const key = documentKey(ref), held = a.document(ref), revision = held?.revision ?? 0;
         // A later revision of A's own, adopted with its receipt's answer (the specification already took it).
-        if (revision === (spec.docs[key]?.revision ?? 0) && same(spec.docs[key]?.value, held?.value)) continue;
+        // Or the value an answer revealed in place of a recovered intent's (the specification already moved it).
+        if (revision === (spec.docs[key]?.revision ?? 0) && same(visible(spec, key), held?.value)) continue;
         if (touching(spec, key).length || revision <= (spec.docs[key]?.revision ?? 0) || !history.has(`${key}@${revision}`) || !same(history.get(`${key}@${revision}`), held?.value))
           fail(`A took ${key} at revision ${revision} from a check the specification doesn't allow`);
         else { spec.docs[key] = { revision, value: structuredClone(held!.value) }; moved(spec, key, revision); }
       }
     });
     a.open();
+    // An owner holding every document from the moment the page opens (during recovery too), told only by the outbox's events: it must
+    // show what A shows after every step, or it would write over a value it never saw (finding 1 of the second 1c-ii review).
+    owner = new Map(keys.map(key => [key, a.document(refOf(key))?.value]));
+    a.subscribe(event => {
+      // A put A makes by itself: an immutable document a command requires that the library didn't have (purged, or not there yet when
+      // asked), put again from the content A holds. It changes no value; the specification holds it as A's intent from here on.
+      if (mine === life && event.kind === "recorded" && event.entry.command === "immutable.put" && !putting && !spec.intents.some(intent => intent.id === event.entry.id)) {
+        count("source put again");
+        spec.intents.push({ id: event.entry.id, writes: event.entry.writes.map(write => [documentKey(write), structuredClone(write.value)]), put: true, requires: [],
+          conflict: null, sent: false, committed: null, bases: Object.fromEntries(event.entry.writes.map(write => [documentKey(write), 0])), callers: [] });
+      }
+      if (mine !== life || event.kind === "status" || event.kind === "acknowledged" || event.kind === "conflict") return;
+      for (const ref of event.refs) owner.set(documentKey(ref), a.document(ref)?.value);
+    });
   };
   /** The specification after a restart; every intent the restarted page holds has a caller waiting for it again. */
   const adopt = (next: Spec) => {
@@ -488,7 +521,8 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
           const by = writers.get(key) ?? [];
           if ((now?.revision ?? 0) === (held?.revision ?? 0)) { count("snapshot checked"); if (!same(now?.value, held?.value)) fail(`the snapshot reads ${key} as ${JSON.stringify(now?.value)}, A shows ${JSON.stringify(held?.value)}`); }
           else for (let revision = (held?.revision ?? 0) + 1; revision <= (now?.revision ?? 0); revision++)
-            if (by[revision] === "A") fail(`the snapshot reads ${key} at revision ${now?.revision}, past A's own revision ${revision} that A doesn't show`);
+            // (A write of this launch's: one an earlier launch made may be lost to a crash with host writes pending.)
+            if (by[revision] === "A" && writerIds.get(`${key}@${revision}`)?.life === life) fail(`the snapshot reads ${key} at revision ${now?.revision}, past A's own revision ${revision} that A doesn't show`);
         }
       }
     } else {
@@ -522,7 +556,9 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
       // A imports an immutable document (its value is its ID); a command of its own then names it.
       const blob = rng.pick(BLOBS), item = caller();
       await onA(() => {
-        const put = a.put(blob, { blob: blob.id });
+        putting = true;
+        let put: OutboxEntry | null;
+        try { put = a.put(blob, { blob: blob.id }); } finally { putting = false; }
         if (put) bump(spec, documentKey(blob));
         if (put) spec.intents.push({ id: put.id, writes: [[documentKey(blob), { blob: blob.id }]], put: true, requires: [], conflict: null, sent: false, committed: null,
           bases: { [documentKey(blob)]: 0 }, callers: [item] });
@@ -556,7 +592,9 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
         });
         // After a crash with host writes pending, a recovered command whose predecessor's copy was lost goes over the revision the
         // repair could still prove (it may be older than A's own later write): a conflict there is allowed (never an overwrite).
-        const guessed = sent.request.writes.some(write => lossyBases.has(`${documentKey(write)}@${write.base}`));
+        // So may a recovered command the library had already taken, once its receipt is gone too (it was forgotten when the copy that
+        // the crash lost was written without it).
+        const guessed = lossyIds.has(sent.request.id) || sent.request.writes.some(write => lossyBases.has(`${documentKey(write)}@${write.base}`));
         if (!foreign && !guessed && !sent.request.writes.every(write => immutable(write.kind))) fail(`A's ${sent.request.id} went stale against its own writes`);
         if (!foreign && guessed) count("conflict after a lossy crash");
       }
@@ -689,7 +727,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
       if (app) {
         // A real app restart: everything the host was given lands first (a restart with copies still on their way is the protection
         // check's case, below: only what it says is protected must come back); then a new launch reads the host's copy alone.
-        for (let round = 0; round < 50 && hostWrites.some(write => write.life === life); round++) {
+        for (let round = 0; round < 1000 && hostWrites.some(write => write.life === life); round++) {
           const write = hostWrites.find(item => item.life === life)!;
           hostWrites.splice(hostWrites.indexOf(write), 1);
           if (write.text === null) host.delete(write.key); else host.set(write.key, write.text);
@@ -715,6 +753,8 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
     if (failures.length) break;
     const shown = real(), expected = specSignature(spec, keys);
     if (shown !== expected) { fail(`A shows ${shown}; the specification ${expected}`); break; }
+    for (const key of keys) if (!same(owner.get(key), a.document(refOf(key))?.value))
+      fail(`an owner holding ${key} since the page opened shows ${JSON.stringify(owner.get(key))}, A ${JSON.stringify(a.document(refOf(key))?.value)}`);
     // Baselines and versions, directly.
     for (const key of keys) {
       const held = a.document(refOf(key));
@@ -801,9 +841,10 @@ const RUNS = Number(process.env.XFS_OUTBOX_RUNS ?? 60);
  * desktop host's copy (desktop 1719423, 1806532), long recoveries (desktop 365274, 2519242), and (chunk 1c-ii) a kill between an
  * acknowledgement's keys bringing back a superseded copy's write (local 982956, desktop 476140); after crashes with host writes pending, a
  * recovered launch ordering its new commands before older ones that came back (desktop 792900) and a conflict overtaken by an own write
- * (desktop 491978).
+ * (desktop 491978); in the second review, an `own` answer for a document a superseded copy no longer writes (local 5132512), and two
+ * recovered commands on one document both ready to send (desktop 2986463, 2717217).
  */
-const FIXED = { local: [5979845, 2527161, 4609858, 982956], desktop: [1212607, 1719423, 1806532, 365274, 2519242, 476140, 792900, 491978] };
+const FIXED = { local: [5979845, 2527161, 4609858, 982956, 5132512], desktop: [1212607, 1719423, 1806532, 365274, 2519242, 476140, 792900, 491978, 2986463, 2717217] };
 const STEPS = 400;
 test(`the outbox meets its specification in seeded runs (kills while working and while recovering, late checks, failing storage, two windows)`, async () => {
   const all: string[] = [];

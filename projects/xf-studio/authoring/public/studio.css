@@ -1310,12 +1310,13 @@ span.category { border-color: transparent; background: transparent; padding-left
 /* Changes not protected on this computer (style guide t-unprotected): the same line; narrower than 720 px the message stays readable, its
    buttons showing only their icons and the message wrapping to a second line. */
 .workspace-notice { container-type: inline-size; }
-.workspace-notice.unprotected { height: auto; min-height: calc(var(--control-h-sm) + 2 * var(--sp-2) + 1px); }
+/* Restoring changes from the last session (style guide t-recovering) follows the same rules. */
+.workspace-notice.unprotected, .workspace-notice.recovering { height: auto; min-height: calc(var(--control-h-sm) + 2 * var(--sp-2) + 1px); }
 @container (max-width: 720px) {
-  .workspace-notice.unprotected .workspace-notice-text { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
-    padding-block: var(--sp-2); line-height: 1.3; }
-  .workspace-notice.unprotected .btn { width: var(--control-h-sm); padding: 0; }
-  .workspace-notice.unprotected .btn > span { display: none; }
+  .workspace-notice.unprotected .workspace-notice-text, .workspace-notice.recovering .workspace-notice-text { white-space: normal; display: -webkit-box;
+    -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; padding-block: var(--sp-2); line-height: 1.3; }
+  .workspace-notice.unprotected .btn, .workspace-notice.recovering .btn { width: var(--control-h-sm); padding: 0; }
+  .workspace-notice.unprotected .btn > span, .workspace-notice.recovering .btn > span { display: none; }
 }
 /* Changed in another window (style guide t-conflict): first in the owning section, the warning state line holding a lead-in sentence and
    the three ways out on one row of small buttons. */

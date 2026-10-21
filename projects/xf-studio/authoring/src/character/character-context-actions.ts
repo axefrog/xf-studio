@@ -134,7 +134,13 @@ export type CharacterDocumentPort = {
   conflict(): CharacterConflict | null;
   /** Keep mine (over theirs), Use theirs, or Keep both (mine becomes a copy of the V). */
   resolve(keep: "mine" | "theirs" | "both"): Capability;
+  /** Why the V can't take changes now (a change from the last session is still being restored, style guide t-recovering), or null. */
+  restoring?(): string | null;
 };
+/** Actions that change the V (refused while a change from the last session is still being restored). */
+const CHANGES = new Set<CharacterContextAction["kind"]>(["character.setSource", "character.setOption", "character.setOptions", "character.setOwnMakeup",
+  "character.reset", "character.resetAll", "character.useDefault", "character.loadSave", "character.loadPreset", "character.keepChanges",
+  "character.undo", "character.redo", "character.setClothing", "character.setClothingArea"]);
 export type ContextOrigin = { readonly kind: "default" } | { readonly kind: "save" } | { readonly kind: "preset"; readonly name: string | null };
 type State = {
   readonly origin: ContextOrigin;
@@ -808,6 +814,8 @@ export class CharacterContextActions {
   }
 
   capability(action: CharacterContextAction): Capability {
+    const restoring = CHANGES.has(action.kind) ? this.ports.document?.restoring?.() ?? null : null;
+    if (restoring) return refusal("not_ready", restoring);
     switch (action.kind) {
       case "character.setSource": {
         const source = sourceAction(action.source);

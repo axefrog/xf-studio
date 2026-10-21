@@ -49,9 +49,15 @@ export type OutboxView = {
   readonly conflicts: number;
   /** The library didn't answer the last send; changes are sent again shortly. */
   readonly failing: boolean;
+  /**
+   * Restoring changes from the last session (t-recovering): `shown` once it has taken over a second, `long` (offer a way on) after
+   * `RECOVERY_NOTICE_MS`, `safe` when keeping on working is safe; `missing`: changes waiting for a save that is gone.
+   */
+  readonly recovering: { readonly shown: boolean; readonly long: boolean; readonly safe: boolean; readonly missing: number };
 };
 export const outboxView = (status: OutboxStatus): OutboxView =>
-  ({ unprotected: status.unprotectedWarning ? status.unprotected.length : 0, pending: status.pending, conflicts: status.conflicts, failing: status.failing });
+  ({ unprotected: status.unprotectedWarning ? status.unprotected.length : 0, pending: status.pending, conflicts: status.conflicts, failing: status.failing,
+    recovering: { shown: status.recoveringShown, long: status.recoveringLong, safe: status.recoveringSafe, missing: status.missing.length } });
 
 export function emptyPresentationStatus(verification = false): PresentationStatus {
   return { verification, workspace: { kind: "idle", message: "" },

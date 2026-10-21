@@ -551,7 +551,7 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
  * A workspace open in another window (style guide t-read-only-window): one full-width line under the header in the warning tone, with
  * Use it here while it is offered. Every state has the same height, so a change of state moves nothing.
  */
-function workspaceNotice(rt: StudioRuntime) {
+export function workspaceNotice(rt: StudioRuntime) {
   const text = h("span", { class: "workspace-notice-text" });
   const act = (kind: "workspace.takeOver" | "workspace.retryRelease") => () => {
     void rt.port.workspace.dispatch({ kind }).then(outcome => {
@@ -567,28 +567,55 @@ function workspaceNotice(rt: StudioRuntime) {
       if (!outcome.ok) rt.feedback.toast("warning", "Workspace", outcome.message, [], { code: outcome.code });
     });
   } });
+  // Restoring changes from the last session (t-recovering): Keep working where that is safe, else Export collection; Try again; and
+  // Discard those changes for changes waiting for a save that is gone.
+  const documents = (kind: "documents.retryRecovery" | "documents.keepRestored" | "documents.discardWaiting") => () => {
+    void rt.port.documents.dispatch({ kind }).then(outcome => {
+      if (!outcome.ok) rt.feedback.toast("warning", "Workspace", outcome.message, [], { code: outcome.code });
+    });
+  };
+  const keepRestored = button({ label: "Keep working on the restored version", icon: "check", small: true, title: "Keep working on the restored version",
+    onClick: documents("documents.keepRestored") });
+  const retryRestore = button({ label: "Try again", icon: "refresh", small: true, title: "Try again", onClick: documents("documents.retryRecovery") });
+  const discardWaiting = button({ label: "Discard those changes", icon: "trash", small: true, title: "Discard those changes", onClick: documents("documents.discardWaiting") });
+  for (const [control, name] of [[keepRestored, "Keep working on the restored version"], [retryRestore, "Try again"], [discardWaiting, "Discard those changes"]] as const)
+    control.setAttribute("aria-label", name);
   exportCollection.setAttribute("aria-label", "Export collection");
   protect.setAttribute("aria-label", "Try again");
-  const element = h("div", { class: "state-line warning workspace-notice", role: "status", hidden: true }, text, takeOver, retry, exportCollection, protect);
+  const element = h("div", { class: "state-line warning workspace-notice", role: "status", hidden: true }, text, takeOver, retry, keepRestored, exportCollection,
+    discardWaiting, protect, retryRestore);
   return {
     element,
     update(frame: Frame) {
       const lease = frame.status.lease, leaseShown = !!lease?.message;
       const unprotected = !leaseShown && !!frame.status.outbox?.unprotected;
-      const message = leaseShown ? lease!.message : unprotected ? UNPROTECTED : "";
+      const restoring = frame.status.outbox?.recovering, missing = !leaseShown && !unprotected && !!restoring?.missing;
+      const recovering = !leaseShown && !unprotected && !missing && !!restoring?.shown, long = recovering && !!restoring?.long;
+      const message = leaseShown ? lease!.message : unprotected ? UNPROTECTED : missing ? MISSING_SAVE : long ? RESTORING_LONG : recovering ? RESTORING : "";
       element.hidden = !message;
       setText(text, message);
       text.title = message;
       takeOver.hidden = !lease?.canTakeOver;
       retry.hidden = !lease?.canRetry;
-      exportCollection.hidden = protect.hidden = !unprotected;
-      // Narrow, these two show only their icons (t-unprotected): their names stay their accessible names.
+      protect.hidden = !unprotected;
+      exportCollection.hidden = !unprotected && !(long && !restoring?.safe);
+      keepRestored.hidden = !(long && restoring?.safe);
+      retryRestore.hidden = !long;
+      discardWaiting.hidden = !missing;
+      // Narrow, these show only their icons (t-unprotected, t-recovering): their names stay their accessible names.
       element.classList.toggle("unprotected", unprotected);
+      element.classList.toggle("recovering", recovering || missing);
+      // Restoring starts in the neutral tone; once it takes a while, or a save is missing, it is a warning (t-recovering).
+      element.classList.toggle("info", recovering && !long);
+      element.classList.toggle("warning", !(recovering && !long));
     },
   };
 }
 
 const UNPROTECTED = "Your latest changes aren't protected on this computer.";
+const RESTORING = "Restoring changes from your last session…";
+const RESTORING_LONG = "Restoring changes from your last session is taking a while.";
+const MISSING_SAVE = "Some restored changes need a save that's gone. Import it again, or discard them.";
 /** Panels whose controls only read or open things (Help, Activity): a read-only window keeps them all (t-read-only-window). */
 const READ_SAFE_PANELS = new Set<string>(["help", "activity"]);
 function statusBar(rt: StudioRuntime) {

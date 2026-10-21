@@ -219,7 +219,12 @@ export const DESKTOP_APP_DESCRIPTORS = {
  */
 export const DOCUMENT_OUTBOX_DESCRIPTORS = {
   "documents.protect": request("host", "save"),
-} satisfies Record<"documents.protect", RequestDescriptor>;
+  // Restoring changes from the last session (style guide t-recovering): send them again now; keep working where that is safe; discard
+  // the changes waiting for a save that is gone.
+  "documents.retryRecovery": request("host", "save"),
+  "documents.keepRestored": request("host", "save"),
+  "documents.discardWaiting": request("host", "save"),
+} satisfies Record<"documents.protect" | "documents.retryRecovery" | "documents.keepRestored" | "documents.discardWaiting", RequestDescriptor>;
 export const WORKSPACE_LEASE_DESCRIPTORS = {
   "workspace.takeOver": request("host", "lease"),
   "workspace.retryRelease": request("host", "lease"),

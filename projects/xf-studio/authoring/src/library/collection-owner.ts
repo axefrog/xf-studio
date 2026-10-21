@@ -22,7 +22,7 @@
  * The running Studio still edits its one collection through `CollectionService` and the workspace; moving it here is the migration (1d).
  */
 import { refusal, type Capability } from "../platform/api/capability";
-import { COMMAND_LIMITS, documentKey, type DocumentRef, isTombstone, tombstoneOf } from "../platform/api/document-commands";
+import { COMMAND_LIMITS, type CurrentDocument, documentKey, type DocumentRef, isTombstone, tombstoneOf } from "../platform/api/document-commands";
 import type { DocumentStorePort } from "../platform/api/document-store";
 import { type DocumentOutbox, type OutboxEdit, type OutboxEntry, OutboxRecoveringError, OutboxTooLargeError } from "../platform/core/document-outbox";
 import { COLLECTION_WORKING, COLLECTION_WORKING_SCHEMA, type CollectionWorking, collectionRef, collectionWorkingOf, LOOK_WORKING, LOOK_WORKING_SCHEMA,
@@ -64,6 +64,7 @@ export type CollectionOwnerDeps = {
 };
 
 const NOT_FLUSHED = "Your latest changes haven't reached the library yet, so there's nothing coherent to save. They're kept here; try again in a moment.";
+const PURGED = "A look your version lists was deleted for good, so your version can't be kept as it is. Use theirs, or keep both.";
 const CANCELLED = "Cancelled. Your changes are still being saved.";
 export const INCOMPLETE = "This collection lists a look that isn't there any more, so it can't be saved or exported as it is. Open it to see what's missing.";
 /** The most looks a collection is made with in one command (each look is a document; one host transaction writes at most 64). */
@@ -317,7 +318,7 @@ export class CollectionOwner {
     const next: LookWorking = { ...stripLook(held), ...(change.name !== undefined ? { name: nameOf(change.name)! } : {}),
       ...(change.parts !== undefined ? { parts: change.parts } : {}), ...(change.memory !== undefined ? { memory: change.memory } : {}) };
     try { return { ok: true, entry: this.record("look.update", [{ ...lookRef(ref), value: next }]) }; }
-    catch (error) { return { ok: false, code: "unavailable", reason: (error as Error).message }; }
+    catch (error) { return { ok: false, code: error instanceof OutboxRecoveringError ? "not_ready" : "unavailable", reason: (error as Error).message }; }
   }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -340,8 +341,22 @@ export class CollectionOwner {
       try { await this.deps.outbox.check(); } catch (error) { this.deps.report?.(error); }
       if (!find()) return refusal("invalid_value", "That was already resolved.");
     }
+    // Keep mine over a collection reads every look it would list or remove, as the library holds them now (missing ones too).
+    let read: Readonly<Record<string, CurrentDocument>> = {};
+    if (keep === "mine" && collections) {
+      const refs = new Map<string, DocumentRef>();
+      for (const write of conflict.writes) {
+        if (write.kind !== COLLECTION_WORKING) continue;
+        const ids = [collectionWorkingOf(write.value), collectionWorkingOf(conflict.current?.[documentKey(write)]?.value)]
+          .flatMap(doc => doc ? [...doc.looks, ...doc.removed.map(item => item.look)] : []);
+        for (const look of ids) { const ref = lookRef({ collection: write.id, look }); refs.set(documentKey(ref), ref); }
+      }
+      try { read = refs.size ? await this.deps.documents.read([...refs.values()]) : {}; }
+      catch (error) { return refusal("unavailable", (error as Error).message || "The library can't be read right now. Try again in a moment."); }
+      if (!find()) return refusal("invalid_value", "That was already resolved.");
+    }
     try {
-      if (keep === "mine") this.deps.outbox.keepMine(conflict.id, collections ? mine => this.wholeMine(mine, conflict) : undefined);
+      if (keep === "mine") this.deps.outbox.keepMine(conflict.id, collections ? mine => this.wholeMine(mine, conflict, read) : undefined);
       else if (!forks) this.deps.outbox.useTheirs(conflict.id);
       else this.deps.outbox.keepBoth(conflict.id, mine => this.forkOf(mine));
     } catch (error) { return refusal("unavailable", (error as Error).message); }
@@ -352,17 +367,13 @@ export class CollectionOwner {
    * live, and every look its removed list names is removed, writing whichever look states another window changed. A look theirs added
    * that mine neither lists nor removed stays listed; a listed look nothing is left of (purged) leaves the list, as does a removed one.
    */
-  private wholeMine(mine: readonly OutboxEdit[], conflict: OutboxEntry): OutboxEdit[] {
-    const edits = mine.map(edit => ({ ...edit }));
-    const now = (ref: { kind: string; id: string }): unknown => {
-      const key = documentKey(ref), own = edits.find(edit => documentKey(edit) === key);
-      if (own) return own.value;
-      return key in (conflict.current ?? {}) ? conflict.current![key]?.value : this.deps.outbox.document(ref)?.value;
-    };
+  private wholeMine(mine: readonly OutboxEdit[], conflict: OutboxEntry, read: Readonly<Record<string, CurrentDocument>>): (OutboxEdit & { base?: number })[] {
+    const edits: (OutboxEdit & { base?: number })[] = mine.map(edit => ({ ...edit }));
+    const mineOf = (ref: { kind: string; id: string }) => mine.find(edit => documentKey(edit) === documentKey(ref));
     const lookOf = (value: unknown): LookWorking | null => lookWorkingOf(isTombstone(value) ? (value as { value: unknown }).value : value);
-    const set = (ref: { kind: string; id: string }, value: unknown) => {
+    const set = (ref: { kind: string; id: string }, value: unknown, base?: number) => {
       const at = edits.findIndex(edit => documentKey(edit) === documentKey(ref));
-      if (at >= 0) edits[at] = { ...edits[at]!, value }; else edits.push({ ...ref, value });
+      if (at >= 0) edits[at] = { ...edits[at]!, value }; else edits.push({ ...ref, value, ...(base !== undefined ? { base } : {}) });
     };
     for (const edit of mine) {
       const collection = edit.kind === COLLECTION_WORKING ? collectionWorkingOf(edit.value) : null;
@@ -371,12 +382,23 @@ export class CollectionOwner {
       const looks = [...collection.looks], removed = [...collection.removed];
       for (const id of theirs?.looks ?? []) if (!looks.includes(id) && !removed.some(item => item.look === id)) looks.push(id);
       const keep = (id: string, state: "live" | "removed"): boolean => {
-        const ref = lookRef({ collection: collection.id, look: id }), value = now(ref);
-        if (value === undefined && !this.deps.outbox.document(ref)) return state === "live";   // never read here: theirs' own look
-        const look = lookOf(value);
-        if (!look) return false;
-        // A look this window is still changing keeps its own entries; one in another state is written to the one the list needs.
-        if ((isTombstone(value) || look.state !== state) && !this.deps.outbox.document(ref)?.pending) set(ref, { ...look, state });
+        const ref = lookRef({ collection: collection.id, look: id }), own = mineOf(ref);
+        // Mine writes it itself: its value, in the state the list needs.
+        if (own) { const look = lookOf(own.value); if (!look) return false; if (look.state !== state || isTombstone(own.value)) set(ref, { ...look, state }); return true; }
+        // A look this window is still changing keeps its own entries (it is live here).
+        if (this.deps.outbox.document(ref)?.pending) return true;
+        // Otherwise as the library holds it now (read just before), whatever this page last saw of it.
+        const stored = read[documentKey(ref)];
+        if (stored) {
+          const look = lookOf(stored.value);
+          if (!look) { if (state === "removed") return false; throw Error(PURGED); }
+          if (isTombstone(stored.value) || look.state !== state) set(ref, { ...look, state }, stored.revision);
+          return true;
+        }
+        // Gone from the library (purged): the content this page still holds is written back, or a listed look can't be kept.
+        const held = lookOf(this.deps.outbox.document(ref)?.value);
+        if (!held) { if (state === "removed") return false; throw Error(PURGED); }
+        set(ref, { ...held, state }, 0);
         return true;
       };
       set(edit, { ...collection, looks: looks.filter(id => keep(id, "live")), removed: removed.filter(item => keep(item.look, "removed")) });

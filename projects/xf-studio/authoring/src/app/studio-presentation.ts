@@ -271,12 +271,25 @@ const NO_PREVIEW_SETUP: PreviewSetupSnapshot = Object.freeze({
   card: { open: false, title: "", body: "", progress: null, step: null, notice: null, primary: null, secondary: null, links: [], canDismiss: true, busy: false, route: null },
   consent: null, head: { phase: "unavailable", code: null, message: "", progress: null, next: null }, setupRequests: 0, showRequests: 0, autostart: true, wolvenKitStep: null,
 }) as PreviewSetupSnapshot;
-export type DocumentsAction = { kind: "documents.protect" };
-/** Try again is offered while a change's record couldn't be written, and refused in a page that doesn't hold its workspace. */
+export type DocumentsAction = { kind: "documents.protect" | "documents.retryRecovery" | "documents.keepRestored" | "documents.discardWaiting" };
+/**
+ * Try again is offered while a change's record couldn't be written; the restoring actions while changes from the last session are being
+ * restored (t-recovering): Keep working only where that is safe, Discard only for changes waiting for a save that is gone.
+ */
 function documentsCapability(outbox: DocumentOutbox | undefined, action: DocumentsAction): StudioCapability {
-  if (action?.kind !== "documents.protect") return { available: false, code: "invalid_value", reason: "Unknown command." };
-  if (!outbox || !outbox.status().unprotected.length) return { available: false, code: "invalid_value", reason: "Every change is recorded on this computer." };
-  return { available: true };
+  const status = outbox?.status();
+  switch (action?.kind) {
+    case "documents.protect":
+      return status?.unprotected.length ? { available: true } : { available: false, code: "invalid_value", reason: "Every change is recorded on this computer." };
+    case "documents.retryRecovery":
+      return status?.recovering.length || status?.missing.length ? { available: true } : { available: false, code: "invalid_value", reason: "Nothing from your last session is waiting." };
+    case "documents.keepRestored":
+      return status?.recoveringSafe ? { available: true }
+        : { available: false, code: "not_ready", reason: "Your restored changes may be older than what's in your library, so they can't be edited until it answers." };
+    case "documents.discardWaiting":
+      return status?.missing.length ? { available: true } : { available: false, code: "invalid_value", reason: "No change is waiting for a missing save." };
+    default: return { available: false, code: "invalid_value", reason: "Unknown command." };
+  }
 }
 /** Without a lease the page is the only one, and holds its workspace. */
 const SOLE_WINDOW: WorkspaceLeaseSnapshot = Object.freeze(leaseSnapshot({ phase: "holder", generation: null }));
@@ -529,7 +542,17 @@ export function createStudioPresentation<Slot>(sources: {
       async dispatch(action: DocumentsAction) {
         const allowed = documentsCapability(sources.outbox, action);
         if (!allowed.available) return { ok: false as const, code: allowed.code ?? "unavailable", message: allowed.reason ?? "Not available right now." };
-        return sources.outbox!.protect() ? { ok: true as const }
+        const outbox = sources.outbox!;
+        try {
+          switch (action.kind) {
+            case "documents.retryRecovery": outbox.retry(); return { ok: true as const };
+            case "documents.keepRestored": return outbox.keepRestored().length ? { ok: false as const, code: "not_ready",
+              message: "Some restored changes still need the library's answer before they can be edited." } : { ok: true as const };
+            case "documents.discardWaiting": outbox.discardWaiting(); return { ok: true as const };
+            default: break;
+          }
+        } catch (error) { return { ok: false as const, code: "unavailable", message: (error as Error).message }; }
+        return outbox.protect() ? { ok: true as const }
           : { ok: false as const, code: "unavailable", message: "Your changes still couldn't be recorded on this computer. Export your collection to keep a copy." };
       },
       descriptors: () => structuredClone(DOCUMENT_OUTBOX_DESCRIPTORS) }),

@@ -20,6 +20,7 @@ import { characterScope } from "../src/character/character-history";
 import { ProfileService, PROFILE_DOCUMENT, PROFILE_SCHEMA } from "../src/app/profiles/profile-service";
 import { createStudioSubjects } from "../src/compose/subjects";
 import { SubjectRegistry } from "../src/platform/core/subject-registry";
+import type { TransactRequest } from "../src/platform/api/document-commands";
 import { DocumentOutbox } from "../src/platform/core/document-outbox";
 import { immutableDocumentKind } from "../src/compose/document-kinds";
 import { createHistoryService } from "../src/platform/core/history-service";
@@ -777,6 +778,44 @@ describe("conflicts on a V (profiles design §2.2)", () => {
     expect(w.characters.document(id)!.choices).toEqual([{ part: "head", option: "eyes_color", choice: "he__01_brown" }]);
     expect(w.lib.value<{ subjects: unknown[] }>(PROFILE_DOCUMENT, pid)!.subjects).toEqual([characterRef(id), characterRef(copy.id)]);
     expect(libraryCharacter(w, copy.id)).toMatchObject({ name: "Mine (this window)" });
+  });
+
+  test("a V shown while the page recovers an older stored change ends up showing the library's newer one, and the next edit goes over it (second 1c-ii review, finding 1)", async () => {
+    // A library whose receipts are never forgotten (as when the host's copy of a key didn't land before a crash).
+    const lib = library();
+    const kept = { ...lib, port: { ...lib.port, transact: (request: TransactRequest) => lib.port.transact({ ...request, forget: [] }) } };
+    const firstStorage = memoryOutboxStorage(), first = await world(kept as typeof lib, firstStorage);
+    const { id, context } = await shownV(first);
+    // A: blue eyes. The stored copy of the outbox from while A was recorded is what a crash leaves.
+    lib.hold("*");
+    context.dispatch({ kind: "character.setOption", part: "head", option: "eyes_color", choice: "he__02_blue" });
+    const stale = new Map(firstStorage.keys);
+    lib.open(); await first.characters.flush();
+    // B: brown eyes, acknowledged.
+    context.dispatch({ kind: "character.setOption", part: "head", option: "eyes_color", choice: "he__01_brown" });
+    await first.characters.flush();
+    expect(libraryCharacter(first, id)!.choices).toEqual([{ part: "head", option: "eyes_color", choice: "he__01_brown" }]);
+    first.outbox.stop();
+    const storage = memoryOutboxStorage();
+    for (const [key, text] of stale) storage.keys.set(key, text);
+    // The next page replays A; its answer waits while a scene opens the V.
+    lib.hold("*");
+    const second = await world(kept as typeof lib, storage);
+    await second.characters.load();
+    const shown = second.characters.context(id, { showSave() {} });
+    shown.start(); await settle();
+    expect(second.outbox.recovering({ kind: CHARACTER_DOCUMENT, id })).toBe(true);
+    // Its controls say why they wait (style guide t-recovering).
+    expect(shown.capability({ kind: "character.setOwnMakeup", shown: false })).toMatchObject({ available: false, code: "not_ready" });
+    lib.open();
+    await until(() => !second.outbox.recovering({ kind: CHARACTER_DOCUMENT, id }));
+    await settle();
+    // The context was told: it shows B, and a makeup toggle now writes B with it, never A over B.
+    expect(second.characters.document(id)!.choices).toEqual([{ part: "head", option: "eyes_color", choice: "he__01_brown" }]);
+    shown.dispatch({ kind: "character.setOwnMakeup", shown: false });
+    await second.characters.flush();
+    expect(second.outbox.conflicts()).toEqual([]);
+    expect(libraryCharacter(second, id)).toMatchObject({ choices: [{ part: "head", option: "eyes_color", choice: "he__01_brown" }], ownMakeup: "hidden" });
   });
 
   test("Keep both over an existing membership (Sol's 1c-i note): a create whose profile went stale keeps theirs' profile, the copy added to it", async () => {

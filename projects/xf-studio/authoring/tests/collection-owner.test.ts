@@ -764,3 +764,171 @@ describe("review of chunk 1c-ii: regressions", () => {
     expect(documents.store.get<{ name: string }>(LOOK_WORKING, `${id}/${w.owner.looksOf(id)[0]!.ref.look}`)!.value.name).toBe("y");
   });
 });
+
+describe("second review of chunk 1c-ii: regressions", () => {
+  const purge = (store: ReturnType<typeof storeDocuments>["store"], kind: string, id: string) =>
+    (store as unknown as { db: { write(change: (db: { query(sql: string): { run(...args: unknown[]): unknown } }) => void): void } }).db
+      .write(db => { db.query("DELETE FROM documents WHERE kind = ? AND id = ?").run(kind, id); });
+
+  test("finding 2: Keep mine reads the looks it lists from the library: a purged one is written back from this page's copy, in the same command", async () => {
+    const documents = storeDocuments(), a = windowOn(documents), b = windowOn(documents);
+    await a.start();
+    const id = expectOk(a.owner.dispatch({ kind: "collection.create", name: "Shared", looks: [{ name: "x", parts: parts(1) }, { name: "y", parts: parts(2) }] })).collection;
+    await quiet(a.outbox);
+    await b.start();
+    const y = a.owner.looksOf(id)[1]!.ref;
+    expectOk(b.owner.dispatch({ kind: "collection.removeLook", collection: id, base: b.owner.collection(id)!.revision, look: y.look }));
+    await quiet(b.outbox);
+    // Expired and purged elsewhere: nothing of y is left in the library. This window still holds y as it last saw it (live).
+    const current = documents.store.get<Record<string, unknown>>(COLLECTION_WORKING, id)!;
+    documents.store.transact({ id: "expire", command: "collection.expire", writes: [{ ...collectionRef(id), base: current.revision, value: { ...current.value, removed: [] } }] });
+    purge(documents.store, LOOK_WORKING, `${id}/${y.look}`);
+    expectOk(a.owner.dispatch({ kind: "collection.rename", collection: id, base: a.owner.collection(id)!.revision, name: "Mine" }));
+    await quiet(a.outbox);
+    expect(await a.owner.resolve(a.owner.conflicts()[0]!.id, "mine")).toEqual({ available: true });
+    await quiet(a.outbox);
+    expect(a.owner.conflicts()).toEqual([]);
+    expect(documents.store.get<{ looks: string[] }>(COLLECTION_WORKING, id)!.value.looks).toContain(y.look);
+    expect(documents.store.get<{ state: string; name: string }>(LOOK_WORKING, `${id}/${y.look}`)!.value).toMatchObject({ state: "live", name: "y" });
+    const snapshot = await a.owner.snapshot(id);
+    expect("looks" in snapshot && snapshot.looks.map(look => look.name)).toEqual(["x", "y"]);
+  });
+
+  test("finding 2: a listed look nothing is left of anywhere refuses Keep mine before anything is written", async () => {
+    const documents = storeDocuments(), a = windowOn(documents), b = windowOn(documents);
+    await a.start();
+    const id = expectOk(a.owner.dispatch({ kind: "collection.create", name: "Shared", looks: [{ name: "x" }] })).collection;
+    await quiet(a.outbox);
+    await b.start();
+    // Another window adds z; this window never reads it; then z is purged.
+    const z = expectOk(b.owner.dispatch({ kind: "collection.addLook", collection: id, base: b.owner.collection(id)!.revision, look: { name: "z" } })).look!;
+    await quiet(b.outbox);
+    purge(documents.store, LOOK_WORKING, `${id}/${z.look}`);
+    expectOk(a.owner.dispatch({ kind: "collection.rename", collection: id, base: a.owner.collection(id)!.revision, name: "Mine" }));
+    await quiet(a.outbox);
+    const [conflict] = a.owner.conflicts();
+    const before = documents.store.get(COLLECTION_WORKING, id)!.revision;
+    expect(await a.owner.resolve(conflict!.id, "mine")).toMatchObject({ available: false, reason: expect.stringContaining("deleted for good") });
+    await quiet(a.outbox);
+    expect(a.owner.conflicts().map(entry => entry.id)).toEqual([conflict!.id]);
+    expect(documents.store.get(COLLECTION_WORKING, id)!.revision).toBe(before);
+    expect(await a.owner.resolve(conflict!.id, "theirs")).toEqual({ available: true });
+  });
+});
+
+describe("second review of chunk 1c-ii: recovery's sources and availability", () => {
+  const blob = { kind: "saved-v", id: "s-1" }, doc = { kind: "character", id: "c-1" };
+  const purgeSaves = (store: ReturnType<typeof storeDocuments>["store"]) =>
+    (store as unknown as { db: { write(change: (db: { query(sql: string): { run(...args: unknown[]): unknown } }) => void): void } }).db
+      .write(db => { db.query("DELETE FROM documents WHERE kind = 'saved-v'").run(); });
+  /** A port whose commands wait while `held` says so. */
+  const gated = (documents: ReturnType<typeof storeDocuments>) => {
+    let held = false; const waits: (() => void)[] = [];
+    const port: DocumentStorePort = { ...documents, async transact(request) { if (held) await new Promise<void>(resolve => waits.push(resolve)); return documents.store.transact(request); } };
+    return { port, hold() { held = true; }, open() { held = false; for (const resume of waits.splice(0)) resume(); } };
+  };
+  const immutable = (kind: string) => kind === "saved-v";
+
+  test("finding 3: a save the cleanup purged while a command naming it was stored is put again after a restart from the copy kept with that command", async () => {
+    const documents = storeDocuments(), gate = gated(documents), storage = memoryOutboxStorage();
+    const first = new DocumentOutbox(gate.port, storage, { retryMs: 5, immutable });
+    first.hold(blob, null); first.hold(doc, null); first.open();
+    first.put(blob, { save: 1 });
+    await quiet(first);
+    gate.hold();
+    first.commit("character.create", [{ ...doc, value: { decoded: "s-1" } }], { requires: [blob] });
+    await tick();
+    first.stop();
+    // The save's own key keeps its content while the command needs it.
+    expect(JSON.parse(storage.keys.get("saved-v/s-1")!).retained).toEqual({ save: 1 });
+    purgeSaves(documents.store);
+    gate.open();
+    // A restart that never read the save: it isn't in the library any more, and this page holds no other copy.
+    const second = new DocumentOutbox(gate.port, storage, { retryMs: 5, immutable });
+    second.hold(doc, null); second.open();
+    for (let i = 0; i < 50 && second.pendingEntries().length; i++) await tick(5);
+    expect(second.pendingEntries()).toEqual([]);
+    expect(documents.store.get("saved-v", "s-1")!.value).toEqual({ save: 1 });
+    expect(documents.store.get("character", "c-1")!.value).toEqual({ decoded: "s-1" });
+    // Nothing requires it any more: its key is let go.
+    expect(storage.keys.has("saved-v/s-1")).toBe(false);
+  });
+
+  test("finding 3: with no copy anywhere, the waiting change says so (missing), and can be discarded, or sent once the save is imported again", async () => {
+    for (const way of ["discard", "import"] as const) {
+      const documents = storeDocuments(), gate = gated(documents), storage = memoryOutboxStorage();
+      const first = new DocumentOutbox(gate.port, storage, { retryMs: 5, immutable });
+      first.hold(blob, null); first.hold(doc, null); first.open();
+      first.put(blob, { save: 1 });
+      await quiet(first);
+      gate.hold();
+      first.commit("character.create", [{ ...doc, value: { decoded: "s-1" } }], { requires: [blob] });
+      await tick();
+      first.stop();
+      // Not even the kept copy is left (an earlier build's record, or lost).
+      storage.keys.delete("saved-v/s-1");
+      purgeSaves(documents.store);
+      gate.open();
+      const second = new DocumentOutbox(gate.port, storage, { retryMs: 5, immutable });
+      second.hold(doc, null); second.open();
+      for (let i = 0; i < 20 && !second.status().missing.length; i++) await tick(5);
+      expect(second.status().missing).toEqual([doc]);
+      expect(second.recovering(doc)).toBe(true);
+      if (way === "discard") {
+        expect(second.discardWaiting()).toBe(1);
+        expect(second.status()).toMatchObject({ missing: [], recovering: [] });
+        second.commit("character.create", [{ ...doc, value: { decoded: "other" } }]);
+        await quiet(second);
+        expect(documents.store.get("character", "c-1")!.value).toEqual({ decoded: "other" });
+      } else {
+        second.put(blob, { save: 1 });
+        for (let i = 0; i < 50 && second.pendingEntries().length; i++) await tick(5);
+        expect(second.status().missing).toEqual([]);
+        expect(documents.store.get("character", "c-1")!.value).toEqual({ decoded: "s-1" });
+      }
+      second.stop();
+    }
+  });
+
+  test("availability: restoring says so, offers a way on after 5 s, and Keep working unlocks only a document whose restored change the library hadn't taken", async () => {
+    const { RECOVERY_NOTICE_MS } = await import("../src/platform/core/document-outbox");
+    for (const committed of [false, true]) {
+      let now = 1_000;
+      const documents = storeDocuments(), gate = gated(documents), storage = memoryOutboxStorage(), timers: (() => void)[] = [];
+      const options = { retryMs: 5, now: () => now, schedule: (_ms: number, run: () => void) => { timers.push(run); return { cancel() {} }; } };
+      const first = new DocumentOutbox(gate.port, storage, options);
+      first.hold(DOC, null); first.open();
+      if (committed) { first.commit("look.update", [{ ...DOC, value: { n: 0 } }]); await quiet(first); }
+      gate.hold();
+      first.commit("look.update", [{ ...DOC, value: { n: 1 } }]);
+      await tick();
+      const stored = new Map(storage.keys);
+      if (committed) { gate.open(); await quiet(first); }   // it reached the library, but the record of that didn't
+      first.stop();
+      storage.keys.clear(); for (const [key, text] of stored) storage.keys.set(key, text);
+      gate.hold();
+      const second = new DocumentOutbox(gate.port, storage, options);
+      second.hold(DOC, documents.store.read([DOC])[documentKey(DOC)]!); second.open();
+      expect(second.status()).toMatchObject({ recovering: [DOC], recoveringLong: false });
+      now += RECOVERY_NOTICE_MS;
+      let heard = 0; second.subscribe(event => { if (event.kind === "status") heard++; });
+      for (const run of timers.splice(0)) run();
+      expect(heard).toBeGreaterThan(0);
+      expect(second.status()).toMatchObject({ recoveringLong: true, recoveringSafe: !committed });
+      const left = second.keepRestored();
+      if (!committed) {
+        expect(left).toEqual([]);
+        second.commit("look.update", [{ ...DOC, value: { n: 2 } }]);
+        gate.open(); await quiet(second);
+        expect(documents.store.get(DOC.kind, DOC.id)).toMatchObject({ value: { n: 2 } });
+      } else {
+        // The library had taken it: keeping on would risk writing over a newer value, so it stays locked until the answer comes.
+        expect(left).toEqual([DOC]);
+        expect(() => second.commit("look.update", [{ ...DOC, value: { n: 2 } }])).toThrow(OutboxRecoveringError);
+        gate.open(); second.retry(); await quiet(second);
+        expect(second.status().recovering).toEqual([]);
+      }
+      second.stop();
+    }
+  });
+});
