@@ -9,7 +9,10 @@
  * literal and folded block scalars, comments, tags, anchors and aliases (an alias is the anchored node itself, tag included). It refuses,
  * with the line, what it does not read: complex `?` keys, tabs in indentation, unknown escapes, unterminated quotes or collections.
  * Merge keys (`<<`) stay ordinary keys, as yaml-cpp leaves them [hypothesis: TweakXL does no merge-key handling of its own].
+ * Aliases share nodes, so converting a tree (`toPlain`) spends a `YamlBudget` rather than expand them without limit (PIPE-139).
  */
+
+import { setOwn } from "../platform/api/own-property";
 
 export type YamlNode =
   | { readonly kind: "scalar"; readonly text: string; readonly tag: string | null; readonly style: "plain" | "single" | "double" | "block" }
@@ -448,15 +451,47 @@ export const scalarText = (node: YamlNode | null | undefined): string | null =>
 export const mapGet = (node: YamlNode | null | undefined, key: string): YamlNode | undefined =>
   node?.kind === "map" ? node.entries.find(([name]) => name === key)?.[1] : undefined;
 
+/** Most nodes and characters (keys and scalar text) a document may expand to once its aliases are followed (PIPE-139). */
+export const MAX_EXPANDED_NODES = MAX_NODES, MAX_EXPANDED_CHARS = 32 * 1024 * 1024;
+
+/** A document grew past its `YamlBudget`: the caller skips it (a gap), never fails. */
+export class YamlTooLarge extends Error {
+  override name = "YamlTooLarge";
+  constructor() { super("too large once its aliases are expanded"); }
+}
+
+/**
+ * What expanding one document may produce (PIPE-139). An alias is the anchored node itself, so a parsed tree is a graph that shares
+ * nodes, and a few lines of aliases to aliases describe a tree exponentially larger than the file, which the parser's node count doesn't
+ * see. Everything that walks a document into a new tree (`toPlain`, the overlay's `$instances` copies) spends one budget per file: a node
+ * for every node produced and a character for every character of a key or scalar it holds. Serialising what was produced is then bounded
+ * by it too. Throws `YamlTooLarge` when spent.
+ */
+export class YamlBudget {
+  private nodes = 0;
+  private chars = 0;
+  constructor(private readonly maxNodes = MAX_EXPANDED_NODES, private readonly maxChars = MAX_EXPANDED_CHARS) {}
+  /** One node produced, holding `chars` characters. */
+  spend(chars = 0, nodes = 1): void {
+    this.chars += chars;
+    this.nodes += nodes;
+    if (this.nodes > this.maxNodes || this.chars > this.maxChars) throw new YamlTooLarge();
+  }
+}
+
 /**
  * Plain JavaScript values: every scalar as its text (an empty or `null` plain scalar as null), sequences as arrays, mappings as objects
- * (for a key given twice, the later value, which is what a later assignment in TweakXL leaves). Tags are dropped.
+ * (for a key given twice, the later value, which is what a later assignment in TweakXL leaves; every key, `__proto__` included, an
+ * ordinary own key: platform/api/own-property.ts). Tags are dropped. Bounded by `budget`
+ * (by default a fresh one): throws `YamlTooLarge` rather than expand aliases without limit.
  */
-export function toPlain(node: YamlNode | null): unknown {
+export function toPlain(node: YamlNode | null, budget: YamlBudget = new YamlBudget()): unknown {
   if (!node) return null;
-  if (node.kind === "scalar") return scalarText(node);
-  if (node.kind === "seq") return node.items.map(toPlain);
+  if (node.kind === "scalar") { budget.spend(node.text.length); return scalarText(node); }
+  budget.spend();
+  if (node.kind === "seq") return node.items.map(item => toPlain(item, budget));
   const out: Record<string, unknown> = {};
-  for (const [key, value] of node.entries) out[key] = toPlain(value);
+  // A key such as `__proto__` stays an ordinary key, never the object's prototype.
+  for (const [key, value] of node.entries) { budget.spend(key.length); setOwn(out, key, toPlain(value, budget)); }
   return out;
 }

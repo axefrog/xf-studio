@@ -22,6 +22,7 @@
  * TweakDBIDs, and none was verified), and a type name the RTTI does not know as a class (rtti.ts `kindOf`) is refused rather than
  * read as a struct.
  */
+import { setOwn } from "../platform/api/own-property";
 import { float32Value } from "./json-numbers";
 import { DecodeSession } from "./limits";
 import { NativeMalformedError, NativeUnsupportedError } from "./native-errors";
@@ -110,7 +111,8 @@ class PackageDecoder implements ValueContext {
       try {
         noteStoredType(this.session, object.type, types, field.name, field.type);
         const compiled = this.layout === 2 && object.type === "worldCompiledEffectInfo" ? readCompiledEffectField(this, value, field.name) : undefined;
-        object.fields[field.name] = compiled !== undefined ? compiled : readValue(this, value, field.type, `${object.type}.${field.name}`);
+        // A field named from the package's name table is always an own key (`__proto__` too), never the fields' prototype.
+        setOwn(object.fields, field.name, compiled !== undefined ? compiled : readValue(this, value, field.type, `${object.type}.${field.name}`));
       }
       catch (error) {
         if (error instanceof Error && !error.message.startsWith("In ")) error.message = `In ${object.type}.${field.name} (${field.type}): ${error.message}`;

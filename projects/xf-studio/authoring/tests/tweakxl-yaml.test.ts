@@ -1,7 +1,7 @@
 // The TweakXL YAML reader (tweakxl-yaml.ts): tags and scalar text survive, the block and flow forms TweakXL files use parse to the same tree,
 // and what it doesn't read is refused with a line number.
 import { describe, expect, test } from "bun:test";
-import { mapGet, parseTweakYaml, scalarText, toPlain, YamlError, type YamlNode } from "../src/game/tweakxl-yaml";
+import { mapGet, parseTweakYaml, scalarText, toPlain, YamlBudget, YamlError, YamlTooLarge, type YamlNode } from "../src/game/tweakxl-yaml";
 
 const tags = (node: YamlNode | undefined) => node?.kind === "seq" ? node.items.map(item => [item.tag, scalarText(item)]) : null;
 
@@ -25,6 +25,30 @@ describe("the TweakXL YAML reader", () => {
     expect(tags(mapGet(doc, "same.indent"))).toEqual([["!prepend", "x"]]);
     expect(tags(mapGet(doc, "flow"))).toEqual([["!append", "y"], ["!append-once", "z z"], [null, "plain"]]);
     expect(tags(mapGet(doc, "removeAll"))).toEqual([["!remove-all", null]]);
+  });
+
+  test("converting a document spends a budget, so aliases to aliases can't expand without limit (PIPE-139)", () => {
+    // 60 doublings: a few lines that describe about 2^61 nodes once the aliases are followed.
+    const lines = ["a0: &a0 [x, x]", ...Array.from({ length: 60 }, (_, i) => `a${i + 1}: &a${i + 1} [*a${i}, *a${i}]`), "top: *a60"];
+    const doc = parseTweakYaml(lines.join("\n"));
+    expect(() => toPlain(mapGet(doc, "top")!)).toThrow(YamlTooLarge);
+    // The characters held count as well as the nodes: one long scalar repeated by alias.
+    const long = parseTweakYaml(`s: &s ${"x".repeat(1000)}\nl: [${Array(20).fill("*s").join(", ")}]\n`);
+    expect(() => toPlain(mapGet(long, "l")!, new YamlBudget(1000, 10_000))).toThrow(YamlTooLarge);
+    expect(toPlain(mapGet(long, "l")!, new YamlBudget(1000, 30_000))).toHaveLength(20);
+    expect(() => toPlain(mapGet(doc, "a3")!, new YamlBudget(10, 1000))).toThrow(YamlTooLarge);
+  });
+
+  test("a key named __proto__, constructor or prototype stays an ordinary key, never the object's prototype", () => {
+    const plain = toPlain(parseTweakYaml(["Items.X:", "  __proto__:", "    polluted: yes", "  constructor: c", "  prototype: p"].join("\n"))) as
+      Record<string, Record<string, unknown>>;
+    const record = plain["Items.X"]!;
+    expect(Object.keys(record)).toEqual(["__proto__", "constructor", "prototype"]);
+    expect(Object.getPrototypeOf(record)).toBe(Object.prototype);
+    expect(Object.getOwnPropertyDescriptor(record, "__proto__")!.value).toEqual({ polluted: "yes" });
+    expect(record.polluted).toBeUndefined();
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect(JSON.parse(JSON.stringify(plain))).toEqual(JSON.parse('{"Items.X":{"__proto__":{"polluted":"yes"},"constructor":"c","prototype":"p"}}'));
   });
 
   test("anchors and aliases share the node, tags included; duplicate keys stay in order", () => {

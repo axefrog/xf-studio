@@ -268,3 +268,11 @@ test("MO2 detection finds global instances and portable instances named by the d
   expect(result.instances.find(row => row.name === "portable")?.profiles).toEqual(["Main"]);
   expect(result.instances.find(row => row.name === "portable")?.selectedProfile).toBe("Main");
 });
+
+test("a Steam VDF key named __proto__ stays an ordinary key, never a node's prototype", () => {
+  const vdf = parseVdf(['"libraryfolders"', "{", ' "__proto__"', " {", '  "path" "X:/Elsewhere"', " }", ' "constructor" "c"', "}"].join(String.fromCharCode(10)));
+  const folders = vdf.libraryfolders as Record<string, unknown>;
+  expect(Object.getPrototypeOf(folders)).toBe(Object.prototype);
+  expect(Object.keys(folders)).toEqual(["__proto__", "constructor"]);
+  expect((folders as { path?: unknown }).path).toBeUndefined();
+});

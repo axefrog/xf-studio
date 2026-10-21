@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createModInstallTransport, declaredResources, extraFileKind, installedDuplicates } from "../src/installation/host/mod-install-transport";
@@ -588,5 +588,136 @@ test("the install target and private stores are kept apart however a folder is w
       expect(open(gameMods, f.receiptsRoot)).toThrow("must be separate");
       expect(open(f.store, `${join(f.game, "archive", "pc")}/MOD/`)).toThrow("must be separate");
     }
+  } finally { f.cleanup(); }
+});
+
+test("products sharing the game folder each keep their own receipt, under the folder's one lock (INSTALL-06)", () => {
+  const f = fixture("direct");
+  try {
+    const place = (product: string, modName: string) =>
+      createModInstallTransport({ candidateStore: f.store, receiptsRoot: f.receiptsRoot, settings: f.settings, modName, product });
+    productCandidate(f.store, "eyes", { archive: "xfs_ceyes", modName: "XF Eye Artistry", features: [{ feature: "eye-makeup", namespace: "xfs_ceyes" }] });
+    productCandidate(f.store, "smiles", { archive: "xfs_msmiles", modName: "XF Smiles", features: [{ feature: "expressions", namespace: "xfs_msmiles" }] });
+    const eyes = place("xfs_ceyes", "XF Eye Artistry"), smiles = place("xfs_msmiles", "XF Smiles");
+    eyes.install("eyes");
+    // A second collection with another archive installs beside the first rather than failing the first's namespace check.
+    expect(smiles.preflight("smiles").replacingOwned).toBe(false);
+    smiles.install("smiles");
+    expect([eyes.receipt()?.namespace, smiles.receipt()?.namespace]).toEqual(["xfs_ceyes", "xfs_msmiles"]);
+    expect(readdirSync(f.receiptsRoot).filter(name => name.endsWith(".json"))).toHaveLength(2);
+    // Each transport answers only for its own product.
+    expect(() => eyes.preflight("smiles")).toThrow("Nothing was installed");
+    // Uninstalling one leaves the other's files and record.
+    eyes.uninstall();
+    expect(existsSync(join(f.target, "xfs_ceyes.archive"))).toBe(false);
+    expect(readFileSync(join(f.target, "xfs_msmiles.archive"), "utf8")).toBe("smiles-0");
+    expect(smiles.receipt()?.candidateId).toBe("smiles");
+    expect(place("xfs_ceyes", "XF Eye Artistry").preflight("eyes").replacingOwned).toBe(false);
+  } finally { f.cleanup(); }
+});
+
+test("a record kept under the destination alone is taken over by its own product only (INSTALL-06)", () => {
+  const f = fixture("direct");
+  try {
+    f.candidate("first", "one"); // namespace xfs_test, recorded the earlier way (no product)
+    f.transport.install("first");
+    productCandidate(f.store, "other", { archive: "xfs_mother", modName: EYE_MAKEUP_MOD.modName, features: [{ feature: "lips", namespace: "xfs_mother" }] });
+    const other = createModInstallTransport({ candidateStore: f.store, receiptsRoot: f.receiptsRoot, settings: f.settings, product: "xfs_mother" });
+    expect(other.record()).toBeNull();
+    expect(other.preflight("other").replacingOwned).toBe(false);
+    const own = createModInstallTransport({ candidateStore: f.store, receiptsRoot: f.receiptsRoot, settings: f.settings, product: "xfs_test" });
+    expect(own.record()?.candidateId).toBe("first");
+    expect(f.transport.record()).toBeNull();
+    expect(own.preflight("first").replacingOwned).toBe(true);
+  } finally { f.cleanup(); }
+});
+
+test("a mod's own MO2 folder holds one product: another product of the same name waits for an uninstall (INSTALL-06)", () => {
+  const f = fixture("mo2");
+  try {
+    const place = (product: string) =>
+      createModInstallTransport({ candidateStore: f.store, receiptsRoot: f.receiptsRoot, settings: f.settings, modName: "XF Night", product });
+    productCandidate(f.store, "a", { archive: "xfs_ma", modName: "XF Night", features: [{ feature: "eye-makeup", namespace: "xfs_ma" }] });
+    productCandidate(f.store, "b", { archive: "xfs_mb", modName: "XF Night", features: [{ feature: "lips", namespace: "xfs_mb" }] });
+    place("xfs_ma").install("a");
+    expect(() => place("xfs_mb").preflight("b")).toThrow("Changing the installed namespace");
+    place("xfs_ma").uninstall();
+    expect(place("xfs_mb").install("b").namespace).toBe("xfs_mb");
+  } finally { f.cleanup(); }
+});
+
+test("only installs still there and loaded through the selected launch route count as another XF mod holding a feature (INSTALL-07)", () => {
+  const f = fixture("mo2");
+  try {
+    const modlist = join(f.mo2, "profiles", "2025 (again)", "modlist.txt");
+    const place = (modName: string, product: string, route: "mo2" | "direct" = "mo2") => createModInstallTransport({ candidateStore: f.store,
+      receiptsRoot: f.receiptsRoot, settings: { ...f.settings, launchRoute: route, installMode: route }, modName, product });
+    productCandidate(f.store, "night", { archive: "xfs_mnight", modName: "XF Night", features: [{ feature: "eye-makeup", namespace: "xfs_cshared" }] });
+    productCandidate(f.store, "day", { archive: "xfs_mday", modName: "XF Day", features: [{ feature: "eye-makeup", namespace: "xfs_cshared" }] });
+    place("XF Night", "xfs_mnight").install("night");
+    writeFileSync(modlist, "+XF Night\n+Other Mod\n");
+    // Switched on in the profile and its files in place: the same looks would appear twice in game.
+    expect(() => place("XF Day", "xfs_mday").preflight("day")).toThrow("already installed in another XF mod (xfs_cshared)");
+    // Launching the game directly never loads an MO2 mod.
+    expect(place("XF Day", "xfs_mday", "direct").preflight("day").files).toHaveLength(2);
+    // Switched off in the profile: not loaded, so not a duplicate.
+    writeFileSync(modlist, "-XF Night\n+Other Mod\n");
+    expect(place("XF Day", "xfs_mday").preflight("day").files).toHaveLength(2);
+    // Switched on again but removed in MO2 (its folder deleted): the old record no longer blocks a reinstall under another name.
+    writeFileSync(modlist, "+XF Night\n+Other Mod\n");
+    expect(() => place("XF Day", "xfs_mday").preflight("day")).toThrow("already installed in another XF mod");
+    rmSync(join(f.mo2, "mods", "XF Night"), { recursive: true });
+    expect(place("XF Day", "xfs_mday").install("day").namespace).toBe("xfs_mday");
+  } finally { f.cleanup(); }
+});
+
+test("taking over records kept under the destination alone resumes when stopped between its two moves (INSTALL-06)", () => {
+  const f = fixture("direct");
+  try {
+    f.candidate("first", "one"); f.candidate("second", "two"); f.candidate("third", "three");
+    f.transport.install("first");
+    const legacy = readdirSync(f.receiptsRoot).find(name => /^[a-f0-9]{24}\.json$/.test(name))!;
+    interrupt(f, "second", 2);
+    const bound = () => createModInstallTransport({ candidateStore: f.store, receiptsRoot: f.receiptsRoot, settings: f.settings, product: "xfs_test" });
+    // A first takeover moves both; stopping it after the journal moved is the receipt still under its old name.
+    bound();
+    const own = readdirSync(f.receiptsRoot).find(name => /^[a-f0-9]{24}\.json$/.test(name) && name !== legacy)!;
+    expect(existsSync(join(f.receiptsRoot, own.replace(".json", ".journal.json")))).toBe(true);
+    renameSync(join(f.receiptsRoot, own), join(f.receiptsRoot, legacy));
+    // The next takeover finishes it, so recovery and the update see one record of this product.
+    const transport = bound();
+    expect(existsSync(join(f.receiptsRoot, legacy))).toBe(false);
+    expect(transport.recover()).toMatchObject({ recovered: true, direction: "forward" });
+    expect(transport.receipt()!.candidateId).toBe("second");
+    expect(transport.preflight("third").replacingOwned).toBe(true);
+    transport.install("third");
+    // A legacy receipt of this product beside its own record (an earlier takeover stopped, then recovery wrote the record) is set
+    // aside, kept, and never counts as another installed copy.
+    writeFileSync(join(f.receiptsRoot, legacy), readFileSync(join(f.receiptsRoot, own)));
+    const again = bound();
+    expect(existsSync(join(f.receiptsRoot, legacy))).toBe(false);
+    expect(readdirSync(f.receiptsRoot).some(name => name.startsWith(`${legacy}.migrated-`))).toBe(true);
+    expect(again.receipt()!.candidateId).toBe("third");
+    expect(again.preflight("second").replacingOwned).toBe(true);
+  } finally { f.cleanup(); }
+});
+
+test("a partly removed or changed install still holds its features; only one with none of its files left is gone (INSTALL-07)", () => {
+  const f = extrasFixture("direct");
+  try {
+    extrasCandidate(f.store, "smiles", "one");
+    const placed = createModInstallTransport({ candidateStore: f.store, receiptsRoot: f.receiptsRoot, settings: f.settings, modName: EXPR, product: NS });
+    const files = placed.install("smiles").files.map(entry => entry.path);
+    productCandidate(f.store, "copy", { archive: "xfs_mcopy", modName: "XF Copy", features: [{ feature: "expressions", namespace: NS }] });
+    const copy = () => createModInstallTransport({ candidateStore: f.store, receiptsRoot: f.receiptsRoot, settings: f.settings, modName: "XF Copy", product: "xfs_mcopy" });
+    // Only its TweakXL file deleted: the archive and its declaration still load, so the same feature is still installed.
+    rmSync(f.at(`r6/tweaks/${NS}/${NS}.yaml`));
+    expect(() => copy().preflight("copy")).toThrow(`already installed in another XF mod (${NS})`);
+    // A file of another size doesn't prove it is gone either.
+    writeFileSync(f.at(files[0]!), "replaced with something longer than before");
+    expect(() => copy().preflight("copy")).toThrow("already installed in another XF mod");
+    // With none of its files left, it is gone.
+    for (const path of files) rmSync(f.at(path), { force: true });
+    expect(copy().preflight("copy").files).toHaveLength(2);
   } finally { f.cleanup(); }
 });

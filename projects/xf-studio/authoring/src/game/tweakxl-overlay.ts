@@ -24,8 +24,11 @@
  *   replacing it; untagged items in such a list are ignored (TweakXL warns). Mutations of one flat from every file accumulate in load order,
  *   separately from assignments, and apply after them (`TweakChangeset::Commit`): see `applyListEdit`.
  * - `.tweak` files (TweakXL's other format) are listed as a gap.
+ *
+ * Each file is read within one expansion budget (tweakxl-yaml.ts `YamlBudget`, PIPE-139) and applied only when it fits: a file whose
+ * aliases or `$instances` expand past it is skipped whole and listed as a gap, never an error.
  */
-import { mapGet, parseTweakYaml, scalarText, toPlain, type YamlNode } from "./tweakxl-yaml";
+import { mapGet, parseTweakYaml, scalarText, toPlain, YamlBudget, YamlTooLarge, type YamlNode } from "./tweakxl-yaml";
 
 export interface TweakFile {
   /** The path below the game folder (`r6/tweaks/…`), forward slashes. */
@@ -94,26 +97,37 @@ const OPERATIONS: Readonly<Record<string, ListOperation>> = {
   "!prepend": "prepend", "!prepend-once": "prepend-once", "!prepend-from": "prepend-from", "!remove": "remove", "!remove-all": "remove-all",
 };
 
-/** Replace `$(name)` and `${name}` in every scalar; a scalar that is only one placeholder takes the instance value whole. */
-function substitute(node: YamlNode, instance: ReadonlyMap<string, YamlNode>): YamlNode {
+/**
+ * Replace `$(name)` and `${name}` in every scalar; a scalar that is only one placeholder takes the instance value whole. The copy spends
+ * `budget` (PIPE-139): a template reached through aliases is copied whole, once per instance.
+ */
+function substitute(node: YamlNode, instance: ReadonlyMap<string, YamlNode>, budget: YamlBudget): YamlNode {
+  budget.spend(node.kind === "scalar" ? node.text.length : 0);
   if (node.kind === "scalar") {
     const whole = /^\$(?:\(([^)]+)\)|\{([^}]+)\})$/.exec(node.text);
     if (whole) { const value = instance.get(whole[1] ?? whole[2]!); return value ? (node.tag && value.kind === "scalar" ? { ...value, tag: node.tag } : value) : node; }
     const text = node.text.replace(/\$(?:\(([^)]+)\)|\{([^}]+)\})/g, (all, a: string | undefined, b: string | undefined) => {
       const value = instance.get(a ?? b!);
-      return value?.kind === "scalar" ? value.text : all;
+      if (value?.kind !== "scalar") return all;
+      budget.spend(value.text.length, 0);
+      return value.text;
     });
     return text === node.text ? node : { ...node, text };
   }
-  if (node.kind === "seq") return { ...node, items: node.items.map(item => substitute(item, instance)) };
-  return { ...node, entries: node.entries.map(([key, value]) => [key, substitute(value, instance)] as const) };
+  if (node.kind === "seq") return { ...node, items: node.items.map(item => substitute(item, instance, budget)) };
+  return { ...node, entries: node.entries.map(([key, value]) => { budget.spend(key.length, 0); return [key, substitute(value, instance, budget)] as const; }) };
 }
-const substituteText = (text: string, instance: ReadonlyMap<string, YamlNode>) =>
-  (substitute({ kind: "scalar", text, tag: null, style: "plain" }, instance) as { text?: string }).text ?? text;
+const substituteText = (text: string, instance: ReadonlyMap<string, YamlNode>, budget: YamlBudget) =>
+  (substitute({ kind: "scalar", text, tag: null, style: "plain" }, instance, budget) as { text?: string }).text ?? text;
 
-/** A list's operations, or null when no item carries an operation tag (a plain assignment). */
-function mutationsOf(node: YamlNode, file: string, gaps: string[], where: string): ListMutation[] | null {
+/** A list's operations, or null when no item carries an operation tag (a plain assignment). Spends `budget` for the list first. */
+function mutationsOf(node: YamlNode, file: string, gaps: string[], where: string, budget: YamlBudget): ListMutation[] | null {
   if (node.kind !== "seq" || !node.items.some(item => item.tag && item.tag.length > 1)) return null;
+  // Every item may become a mutation or a gap naming the flat: charged before any is made, since one anchored list of operations can be
+  // reused by many flats (PIPE-139).
+  let chars = 0;
+  for (const item of node.items) chars += (item.kind === "scalar" ? item.text.length : 0) + (item.tag?.length ?? 0) + where.length;
+  budget.spend(chars, node.items.length);
   const out: ListMutation[] = [];
   for (const item of node.items) {
     if (!item.tag || item.tag.length <= 1) continue;
@@ -165,12 +179,15 @@ export function applyListEdit(base: readonly string[] | null, edit: ListEdit | u
   return list;
 }
 
+/** One file's changes, staged until the whole file has been read within its budget. */
+type Staged = { readonly budget: YamlBudget; readonly apply: (() => void)[]; readonly gaps: string[] };
+
 export function readTweakOverlay(files: readonly TweakFile[], environment: OverlayEnvironment = { dlc: new Set() }): TweakOverlay {
   const records = new Map<string, { name: string; type: string | null; base: string | null; fields: Map<string, unknown>; from: string[]; setBy: Map<string, string> }>();
   const lists = new Map<string, { flat: string; assigned: { values: string[]; file: string } | null; mutations: ListMutation[] }>();
   const conflicts: { record: string; field: string; files: string[] }[] = [];
   const gaps: string[] = [];
-  const keep = (node: YamlNode, where: string) => {
+  const keep = (node: YamlNode, where: string, gaps: string[]) => {
     const dlc = scalarText(mapGet(node, "$dlc"));
     if (mapGet(node, "$dlc") && !environment.dlc.has((dlc ?? "").toUpperCase())) return false;
     if (mapGet(node, "$game")) gaps.push(`${where}: a $game condition is not compared with the installed game version; the node is read.`);
@@ -187,29 +204,57 @@ export function readTweakOverlay(files: readonly TweakFile[], environment: Overl
     if (!edit) { edit = { flat, assigned: null, mutations: [] }; lists.set(flat, edit); }
     return edit;
   };
-  const set = (target: ReturnType<typeof record>, field: string, node: YamlNode, file: TweakFile) => {
-    const flat = `${target.name}.${field}`;
-    const mutations = mutationsOf(node, file.path, gaps, flat);
-    if (mutations) { listOf(flat).mutations.push(...mutations); return; }
-    if (node.kind === "seq" && node.tag && node.tag.length > 1) gaps.push(`${file.path}: ${flat} tags the whole list with ${node.tag}; TweakXL reads only item tags, so the list replaces the value.`);
-    const value = toPlain(node);
-    if (Array.isArray(value)) listOf(flat).assigned = { values: value.map(item => typeof item === "string" ? item : JSON.stringify(item)), file: file.path };
-    const before = target.setBy.get(field);
-    if (before && before !== file.path && JSON.stringify(target.fields.get(field)) !== JSON.stringify(value)) {
-      const known = conflicts.find(entry => entry.record === target.name && entry.field === field);
-      if (known) { if (!known.files.includes(file.path)) known.files.push(file.path); }
-      else conflicts.push({ record: target.name, field, files: [before, file.path] });
-    }
-    target.fields.set(field, value);
-    target.setBy.set(field, file.path);
+  const set = (name: string, field: string, node: YamlNode, file: TweakFile, staged: Staged) => {
+    const flat = `${name}.${field}`;
+    const mutations = mutationsOf(node, file.path, staged.gaps, flat, staged.budget);
+    if (mutations) { staged.apply.push(() => { record(name, file); listOf(flat).mutations.push(...mutations); }); return; }
+    if (node.kind === "seq" && node.tag && node.tag.length > 1) staged.gaps.push(`${file.path}: ${flat} tags the whole list with ${node.tag}; TweakXL reads only item tags, so the list replaces the value.`);
+    const value = toPlain(node, staged.budget);
+    staged.apply.push(() => {
+      const target = record(name, file);
+      if (Array.isArray(value)) listOf(flat).assigned = { values: value.map(item => typeof item === "string" ? item : JSON.stringify(item)), file: file.path };
+      const before = target.setBy.get(field);
+      if (before && before !== file.path && JSON.stringify(target.fields.get(field)) !== JSON.stringify(value)) {
+        const known = conflicts.find(entry => entry.record === target.name && entry.field === field);
+        if (known) { if (!known.files.includes(file.path)) known.files.push(file.path); }
+        else conflicts.push({ record: target.name, field, files: [before, file.path] });
+      }
+      target.fields.set(field, value);
+      target.setBy.set(field, file.path);
+    });
   };
-  const define = (name: string, body: YamlNode & { kind: "map" }, file: TweakFile) => {
-    if (!name || name.length > MAX_NAME || !keep(body, `${file.path}: ${name}`)) return;
-    const target = record(name, file);
+  const define = (name: string, body: YamlNode & { kind: "map" }, file: TweakFile, staged: Staged) => {
+    if (!name || name.length > MAX_NAME || !keep(body, `${file.path}: ${name}`, staged.gaps)) return;
     const type = scalarText(mapGet(body, "$type")), base = scalarText(mapGet(body, "$base"));
-    if (type) target.type = shortType(type);
-    if (base) target.base = base;
-    for (const [field, value] of body.entries) if (!field.startsWith("$")) set(target, field, value, file);
+    staged.apply.push(() => {
+      const target = record(name, file);
+      if (type) target.type = shortType(type);
+      if (base) target.base = base;
+    });
+    for (const [field, value] of body.entries) if (!field.startsWith("$")) set(name, field, value, file, staged);
+  };
+  /**
+   * Read one file into staged changes, applied only when the whole file was read within its expansion budget: a file whose aliases or
+   * `$instances` expand past it is skipped whole and listed as a gap (PIPE-139), never half-applied.
+   */
+  const stage = (document: YamlNode & { kind: "map" }, file: TweakFile, staged: Staged) => {
+    for (const [key, value] of document.entries) {
+      if (key.startsWith("$")) continue;
+      if (value.kind === "map" && (mapGet(value, "$type") || mapGet(value, "$base") || mapGet(value, "$instances"))) {
+        const instancesNode = mapGet(value, "$instances");
+        if (!instancesNode) { define(key, value, file, staged); continue; }
+        const instances = instancesNode.kind === "seq" ? instancesNode.items.filter(item => item.kind === "map").slice(0, MAX_INSTANCES) : [];
+        const template = { ...value, entries: value.entries.filter(([field]) => field !== "$instances") };
+        for (const instance of instances) {
+          const values = new Map(instance.kind === "map" ? instance.entries : []);
+          define(substituteText(key, values, staged.budget), substitute(template, values, staged.budget) as YamlNode & { kind: "map" }, file, staged);
+        }
+      } else if (key.includes(".") && value.kind !== "map") {
+        // A flat: `Record.Name.field: value`.
+        const at = key.lastIndexOf(".");
+        set(key.slice(0, at), key.slice(at + 1), value, file, staged);
+      }
+    }
   };
   let tweakFiles = 0;
   for (const file of tweakOrder(files)) {
@@ -218,24 +263,16 @@ export function readTweakOverlay(files: readonly TweakFile[], environment: Overl
     let document: YamlNode | null;
     try { document = parseTweakYaml(file.text); }
     catch (error) { gaps.push(`${file.path}: not readable YAML (${(error as Error).message.slice(0, 120)}).`); continue; }
-    if (document?.kind !== "map" || !keep(document, file.path)) continue;
-    for (const [key, value] of document.entries) {
-      if (key.startsWith("$")) continue;
-      if (value.kind === "map" && (mapGet(value, "$type") || mapGet(value, "$base") || mapGet(value, "$instances"))) {
-        const instancesNode = mapGet(value, "$instances");
-        if (!instancesNode) { define(key, value, file); continue; }
-        const instances = instancesNode.kind === "seq" ? instancesNode.items.filter(item => item.kind === "map").slice(0, MAX_INSTANCES) : [];
-        const template = { ...value, entries: value.entries.filter(([field]) => field !== "$instances") };
-        for (const instance of instances) {
-          const values = new Map(instance.kind === "map" ? instance.entries : []);
-          define(substituteText(key, values), substitute(template, values) as YamlNode & { kind: "map" }, file);
-        }
-      } else if (key.includes(".") && value.kind !== "map") {
-        // A flat: `Record.Name.field: value`.
-        const at = key.lastIndexOf(".");
-        set(record(key.slice(0, at), file), key.slice(at + 1), value, file);
-      }
+    const staged: Staged = { budget: new YamlBudget(), apply: [], gaps: [] };
+    if (document?.kind !== "map" || !keep(document, file.path, staged.gaps)) { gaps.push(...staged.gaps); continue; }
+    try { stage(document, file, staged); }
+    catch (error) {
+      if (!(error instanceof YamlTooLarge)) throw error;
+      gaps.push(`${file.path}: skipped, ${error.message}.`);
+      continue;
     }
+    gaps.push(...staged.gaps);
+    for (const apply of staged.apply) apply();
   }
   const field = (name: string, wanted: string, depth = 0): unknown => {
     const known = records.get(name);

@@ -217,3 +217,25 @@ describe("the LUT host checks its route (PIPE-59)", () => {
     await host.settled();
   });
 });
+
+describe("a problem report's resources (DIAG-08)", () => {
+  test("come only from a route checked current: after its winning mod is switched off, the route is unavailable until it is opened again", async () => {
+    const s = setup();
+    const { CharacterDetailHost } = await import("../src/character/host/character-detail-host");
+    const host = new CharacterDetailHost({ cacheRoot: join(s.root, "host"), resolverCache: s.options.cacheDir, settings: () => s.settings,
+      exporter: () => ({}) as never, textureDecoder: false, geometryDecoder: false });
+    const hair = refFromPath("mod\hair.mesh");
+    // Not open yet: a report never opens it.
+    expect(await host.reportResources([hair])).toBeNull();
+    await installations.acquire(s.options);
+    expect((await host.reportResources([hair]))?.has(hair.hash)).toBe(true);
+    // The mod that won it is switched off: the opened route is out of date, so the report doesn't name its archive as the winner.
+    const modlist = join(s.mo2, "profiles", "Default", "modlist.txt");
+    put(modlist, "-Hair\n");
+    touchLater(modlist);
+    expect(await host.reportResources([hair])).toBeNull();
+    const reopened = await installations.acquire(s.options);
+    expect(reopened.depot.lookup(hair.hash).winner).toBeNull();
+    expect((await host.reportResources([hair]))?.get(hair.hash)).toBeNull();
+  });
+});

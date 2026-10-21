@@ -21,7 +21,7 @@ import { canonicalJson } from "../../legacy/eye-makeup/plate/eye-plate-recipe";
 import { writeFileAtomic } from "../../host/derived-cache";
 import { pathStamp, readListingStamp, type SourceDiscovery, type WatchedPath } from "./source-discovery";
 
-export const DISCOVERY_SNAPSHOT_SCHEMA = "xfs/discovery-snapshot-1" as const;
+export const DISCOVERY_SNAPSHOT_SCHEMA = "xfs/discovery-snapshot-2" as const;
 /** How many threads read stamps at once. */
 export const WATCH_CHECK_CONCURRENCY = 64;
 

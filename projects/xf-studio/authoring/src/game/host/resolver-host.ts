@@ -17,6 +17,7 @@
  * WolvenKit runs through the shared runner (`wolvenkit-cli.ts`: time limit, exit and log rules, missing
  * .NET), one batch at a time per cache folder, in a unique batch folder.
  */
+import { setOwn } from "../../platform/api/own-property";
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, stat as statAsync, writeFile } from "node:fs/promises";
@@ -30,7 +31,7 @@ import { touchUsed } from "./game-asset-export";
 import { defaultLocalSettings, type LocalSettings } from "../../setup/local-settings";
 import { readRdarIndexCount, readRdarIndexCountAsync, readRdarIndexHashes } from "./rdar-index-fs";
 import { type FetchedResource, type ResourceFetchPort, ResourceGraph } from "../resource-graph";
-import { discoverSources, listingStamp, pathStamp, type SourceCandidate, type SourceDiscovery, type WatchedPath } from "./source-discovery";
+import { discoverSources, pathStamp, type SourceCandidate, type SourceDiscovery, type WatchedPath } from "./source-discovery";
 import { folderStampMode, type FolderStampMode } from "./volume-info";
 import { runWolvenKit, type WolvenKitRun, WolvenKitRunError, type WolvenKitRunOptions, wolvenKitIdentity, wolvenKitIdentityKey } from "../../host/wolvenkit-cli";
 import { currentDiagnostics, hostFailure, hostTrace } from "../../diagnostics/host/host-log";
@@ -133,26 +134,6 @@ export interface UnreadIndex { readonly id: string; readonly name: string; reado
 
 const lower = (value: string) => value.toLowerCase();
 const XL_LOCATIONS = [/^red4ext\/plugins\/archivexl\/bundle\/.+\.xl$/, /^archive\/pc\/mod\/.+\.xl$/];
-
-/** The game-folder ArchiveXL bundle is outside source discovery's `archive/pc` scan. Its folder and files are watched too. */
-function gameBundleFiles(gameRoot: string, watched: WatchedPath[], byListing: boolean): SourceCandidate[] {
-  const bundle = join(gameRoot, "red4ext", "plugins", "ArchiveXL", "Bundle");
-  const stamp = (path: string) => { try { return pathStamp(lstatSync(path)); } catch { return pathStamp(null); } };
-  const folder = stamp(bundle);
-  let listed = folder;
-  if (byListing && folder.startsWith("dir|")) try { listed = listingStamp(readdirSync(bundle, { withFileTypes: true })); } catch { /* stamped by time */ }
-  watched.push({ path: bundle, stamp: listed });
-  if (!existsSync(bundle) || lstatSync(bundle).isSymbolicLink()) return [];
-  const now = new Date().toISOString();
-  return readdirSync(bundle).filter(name => /\.(archive|xl)$/i.test(name)).map(name => {
-    const physicalPath = join(bundle, name), stat = statSync(physicalPath);
-    watched.push({ path: physicalPath, stamp: stamp(physicalPath) });
-    return { id: `game:bundle:${lower(name)}`, provider: "game", providerName: "Installed game", route: "direct", profileId: null,
-      virtualPath: `red4ext/plugins/ArchiveXL/Bundle/${name}`, physicalPath, kind: /\.xl$/i.test(name) ? "archive-xl" : "archive",
-      active: true, priority: null, priorityEvidence: null, sizeBytes: stat.size, modifiedMs: stat.mtimeMs, sha256: null,
-      discoveredAt: now, limitations: [] } satisfies SourceCandidate;
-  });
-}
 
 const toArchiveFile = (candidate: SourceCandidate): ArchiveFile => ({ id: candidate.physicalPath, virtualPath: candidate.virtualPath,
   provider: candidate.provider, providerName: candidate.providerName, active: candidate.active, priority: candidate.priority });
@@ -264,7 +245,7 @@ export function trimBuffers(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(trimBuffers);
   if (!value || typeof value !== "object") return value;
   const out: Record<string, unknown> = {};
-  for (const [key, item] of Object.entries(value)) out[key] = key === "Bytes" && typeof item === "string" ? { $trimmedBase64Length: item.length } : trimBuffers(item);
+  for (const [key, item] of Object.entries(value)) setOwn(out, key, key === "Bytes" && typeof item === "string" ? { $trimmedBase64Length: item.length } : trimBuffers(item));
   return out;
 }
 
@@ -413,6 +394,9 @@ export class WolvenKitFetcher implements ResourceFetchPort {
     rmSync(marker, { force: true });
     return null;
   }
+
+  /** WolvenKit's cached answer for this archive's current bytes and this WolvenKit, or null; never runs WolvenKit (DIAG-08). */
+  cachedAnswer(archive: MountedArchive, ref: DepotRef): FetchedResource | null { return this.cached(this.cachePath(archive, ref.hash)) ?? null; }
 
   /** The cached answer: a resource, null for a lasting `.failed` marker, or undefined when WolvenKit must run. */
   private cached(path: string): FetchedResource | null | undefined {
@@ -769,6 +753,22 @@ export class ResolverFetcher implements ResourceFetchPort {
    * resource (PIPE-50). `reader` says which answered: `native` or WolvenKit's identity (`tool`). A null answer's `transient` says whether
    * it may not repeat; it counts in `jsonTransientNulls`, never in the preparations' `transientNulls` (NATIVE-50).
    */
+  /**
+   * One resource as this route serves it from `archive`, for a problem report (DIAG-08): the native reader's answer, else WolvenKit's
+   * cached answer for this archive's current bytes and this WolvenKit. Never starts WolvenKit and counts in no statistics; null when
+   * neither has it. `reader` says which answered.
+   */
+  async reportResource(archive: MountedArchive, ref: DepotRef): Promise<{ readonly document: unknown; readonly reader: string } | null> {
+    const decoder = this.native?.decoder;
+    if (decoder && (decoder.canAnswer?.() ?? true)) {
+      try {
+        const outcome = await decoder.decode({ archivePath: archive.id, hash: ref.hash, needName: !ref.path, priority: "background" });
+        if (outcome.ok) return { document: outcome.document, reader: "native" };
+      } catch { /* The cache may still have it. */ }
+    }
+    const cached = this.wolvenKit.cachedAnswer(archive, ref);
+    return cached ? { document: cached.document, reader: this.tool } : null;
+  }
   async fetchJsonResource(archive: MountedArchive, ref: DepotRef, payloads: readonly string[] = [...NATIVE_JSON_PAYLOADS]):
     Promise<(FetchedResource & { readonly reader: string }) | null> {
     const answer = this.counted(archive, ref, this.native
@@ -846,6 +846,41 @@ export function discoverRoute(options: Pick<InstallationOptions, "gameRoot" | "l
   const discovery = discoverSources(routeSettings(options), DISCOVERY_LIMITS, { folderStamps: options.folderStamps ?? folderStampMode });
   return options.baseOnly ? { ...discovery, candidates: discovery.candidates.filter(isBaseGameSource) } : discovery;
 }
+/** One resource of a problem report as the route serves it now (`reportResources`). */
+export interface ReportResource {
+  /** The archive that wins it now, and who supplied that archive. */
+  readonly archive: string;
+  readonly provider: string;
+  /** `native`, or the WolvenKit identity whose cached answer it is. */
+  readonly reader: string;
+  readonly document: unknown;
+}
+/**
+ * The resolver's one lookup for a problem report (DIAG-08): each resource's winner on the opened route now (copies and links followed,
+ * as the resolution follows them) and that archive's answer from the resolver's readers (`ResolverFetcher.reportResource`): never a
+ * cached file of another archive, an older version of it or another reader. Null for a resource no archive has, or that neither the
+ * native reader nor WolvenKit's cache can answer; WolvenKit never starts. Bounded by `limit`, read one at a time, at background priority.
+ */
+export async function reportResources(installation: Pick<Installation, "graph" | "fetcher">, refs: readonly DepotRef[], limit = 400,
+  progress: (done: number, total: number) => void = () => {}): Promise<Map<string, ReportResource | null>> {
+  const out = new Map<string, ReportResource | null>(), wanted = refs.slice(0, limit);
+  for (const [index, ref] of wanted.entries()) {
+    progress(index, wanted.length);
+    if (out.has(ref.hash)) continue;
+    let found: ReportResource | null = null;
+    try {
+      const { entry, lookup } = installation.graph.locate(ref);
+      const winner = lookup.winner;
+      if (winner) {
+        const answer = await installation.fetcher.reportResource(winner, entry);
+        if (answer) found = { archive: winner.name, provider: winner.providerName, reader: answer.reader, document: answer.document };
+      }
+    } catch { /* Not answerable now. */ }
+    out.set(ref.hash, found);
+  }
+  return out;
+}
+
 /** Only the installed game's content/expansion archives; never a mod, XL declaration or loose override. */
 export const isBaseGameSource = (source: Pick<SourceCandidate, "provider" | "kind" | "virtualPath">) =>
   source.provider === "game" && source.kind === "archive" && /^archive[\\/]pc[\\/](?:content|ep1)[\\/]/i.test(source.virtualPath);
@@ -855,10 +890,10 @@ const routeSettings = (options: Pick<InstallationOptions, "gameRoot" | "launchRo
 
 export function openInstallation(options: InstallationOptions): Installation {
   const log = options.log ?? (() => {});
-  const folderStamps = options.folderStamps ?? folderStampMode;
   const discovery = options.discovery ?? discoverRoute(options);
   const watch: WatchedPath[] = [...discovery.watched];
-  const candidates = [...discovery.candidates.filter(c => !options.baseOnly || isBaseGameSource(c)), ...(options.baseOnly ? [] : gameBundleFiles(options.gameRoot, watch, folderStamps(options.gameRoot) === "listing"))];
+  // The game's ArchiveXL bundle comes with the discovery: its `.xl` files at any depth, through the bounded scan (PIPE-142).
+  const candidates = discovery.candidates.filter(c => !options.baseOnly || isBaseGameSource(c));
   // The game's own version: an update replaces the executable (and usually its archives).
   const executable = join(options.gameRoot, "bin", "x64", "Cyberpunk2077.exe");
   let executableStat = null;

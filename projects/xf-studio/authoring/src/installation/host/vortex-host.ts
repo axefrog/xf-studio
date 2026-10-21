@@ -18,6 +18,7 @@
 import { lstatSync, readdirSync, readFileSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
+import { isLocalDrivePath } from "../../platform/api/path-containment";
 import { readLevelDb, type LevelDbFile, type LevelDbRead } from "../../formats/leveldb-read";
 import type { WatchedPath } from "../../game/host/source-discovery";
 import { combineVortexManifests, parseVortexManifest, vortexManifestModType, vortexManifestName, type VortexDeployment,
@@ -42,9 +43,10 @@ export type VortexReadOptions = {
 
 /**
  * A folder XF Studio may open: an absolute path on a local drive (`C:\…`, or `/…` off Windows). A network share (`\\server\…`,
- * `//server/…`) or a device path (`\\?\…`, `\\.\…`) is never opened for Vortex (VORTEX-06).
+ * `//server/…`, `/\server\…`) or a device path (`\\?\…`, `\\.\…`, `\??\…`) is never opened for Vortex (VORTEX-06): the
+ * separators are normalised before the path is classified (INSTALL-05; platform/api/path-containment.ts `isLocalDrivePath`).
  */
-export const isLocalFolder = (path: string) => /^[A-Za-z]:[\\/]/.test(path) || (path.startsWith("/") && !path.startsWith("//"));
+export const isLocalFolder = (path: string) => isLocalDrivePath(path);
 
 const lstatOrNull = (path: string) => { try { return lstatSync(path); } catch { return null; } };
 

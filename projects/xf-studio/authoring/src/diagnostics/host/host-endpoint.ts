@@ -21,11 +21,11 @@
  * exception becomes a logged failure and a plain 500 with its reference, and any other 5xx API answer is logged with one. Creating
  * the handler names the host's configured folders to its log and window (`HostDiagnostics.roots`), so they are redacted as written.
  */
-import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { closeSync, fstatSync, openSync, readSync } from "node:fs";
 import { DIAGNOSTIC_LIMITS, isErrorRef, parseForward, type DiagnosticEntry } from "../model";
 import { withDiagnostics, type HostDiagnostics } from "./host-log";
-import { buildHostReport, knownRoots, type HostReportSources, type PreparedHostReport } from "./host-report";
+import { buildHostReport, knownRoots, type HostReportSources, type PreparedHostReport, type ReviewedFile } from "./host-report";
 import { DESCRIPTION_LIMIT, issueUrl, reportFileName, reportIndex, reportSummary, type PageFacts, type ReportGroup,
   type ReportItemView } from "../report";
 import { redactValue, type Redactor } from "../redact";
@@ -136,9 +136,10 @@ export function createDiagnosticsHandler(diagnostics: HostDiagnostics, options: 
       const content = contents.get(item.id);
       if (content !== undefined) entries.push({ name: `${item.group}/${item.id}.json`, data: content });
       for (const file of files.get(item.id) ?? []) {
-        let bytes: Uint8Array;
-        try { bytes = readFileSync(file.path); }
+        let bytes: Uint8Array | null;
+        try { bytes = readReviewedFile(file); }
         catch { return refuse(409, "file_unreadable", `“${file.name}” couldn't be read any more. Turn it off, or prepare the report again.`); }
+        if (!bytes) return refuse(409, "file_changed", `“${file.name}” has changed since this report was prepared. Prepare the report again, then save.`);
         entries.push({ name: modFileEntryName(file.mod, file.name, redact), data: bytes });
       }
     }
@@ -208,6 +209,37 @@ export function createDiagnosticsHandler(diagnostics: HostDiagnostics, options: 
     }
     return refuse(404, "not_found", "Not found.");
   };
+}
+
+/**
+ * A mod's file exactly as the review showed it (DIAG-06): read through one open handle, only while its size and modification time are
+ * the ones recorded when the report was prepared, never past that size (so the report's limits hold for what is read), and, when the
+ * review showed its SHA-256, only when the bytes still hash to it. Without a hash, the handle's identity (size, modification and change
+ * times, file id) is read again after the bytes, so a file written while it was read is refused too. Null when the file has changed
+ * since; throws when it can't be read. `afterRead` is a test seam.
+ */
+export function readReviewedFile(file: Pick<ReviewedFile, "path" | "bytes" | "modified" | "sha256">, afterRead: () => void = () => {}): Uint8Array | null {
+  const fd = openSync(file.path, "r");
+  try {
+    const stat = fstatSync(fd);
+    if (!stat.isFile() || stat.size !== file.bytes || !Number.isSafeInteger(file.bytes) || file.bytes < 0 ||
+      (file.modified !== null && new Date(stat.mtimeMs).toISOString() !== file.modified)) return null;
+    const bytes = new Uint8Array(file.bytes);
+    let at = 0;
+    while (at < bytes.length) {
+      const read = readSync(fd, bytes, at, bytes.length - at, at);
+      if (read <= 0) return null;
+      at += read;
+    }
+    // Grown since its size was read: not the file reviewed.
+    if (readSync(fd, new Uint8Array(1), 0, 1, at) > 0) return null;
+    afterRead();
+    // Written while it was read (the same size and time put back included): not the bytes reviewed.
+    const after = fstatSync(fd);
+    if (after.size !== stat.size || after.mtimeMs !== stat.mtimeMs || after.ctimeMs !== stat.ctimeMs || after.ino !== stat.ino) return null;
+    if (file.sha256 !== null && createHash("sha256").update(bytes).digest("hex") !== file.sha256) return null;
+    return bytes;
+  } finally { closeSync(fd); }
 }
 
 const safeName = (name: string) => name.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "_").replace(/^\.+/, "_").slice(0, 120) || "file";

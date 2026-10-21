@@ -5,24 +5,16 @@ The open code and design findings of Medium severity and above, from merge revie
 - **High:** a correctness bug, a broken or bypassed boundary, a security or data-loss risk, or a design that would force rework of later features.
 - **Medium:** maintainability debt that will slow the next features.
 
-**More than 3 open High findings pause feature merges** until the count is back to 3 or fewer; cleanup and critical-path fixes may still merge. Open High findings today: 6 (feature merges paused until 3 or fewer). Each merge gets one independent Sol review ([AGENTS.md](../../AGENTS.md)); its fixed findings are not recorded here.
+**More than 3 open High findings pause feature merges** until the count is back to 3 or fewer; cleanup and critical-path fixes may still merge. Open High findings today: 4 (feature merges paused until 3 or fewer). Each merge gets one independent Sol review ([AGENTS.md](../../AGENTS.md)); its fixed findings are not recorded here.
 
 ## Open findings
 
 | ID | Severity | Area | Finding | Where |
 |---|---|---|---|---|
 | CORE-03 | High | Core (design) | Presets, Undo and routing were built for eye-makeup recipes. Steps 1–7 of the [feature-module platform](feature-module-platform.md) moved most of it onto the registry and per-feature parts; steps 8–9 remain (eye makeup's preview device, raster client and editors, its exporter and verifier) and the shell couplings in the [boundary assessment](ui-architecture-boundary.md#open-work). | `src/compose/studio-registry.ts`, the [design's file table](feature-module-platform.md#file-moves) |
-| INSTALL-05 | High | Security | The Vortex local-folder check accepts mixed-separator UNC paths (`/\host\share`) from a deployment manifest; normalised, they open an SMB path and can expose Windows authentication. | `src/installation/host/vortex-host.ts:47` |
-| PIPE-139 | High | Untrusted input | TweakXL YAML aliases expand without a budget in `toPlain()`; a small file of doubling aliases allocates exponentially during catalogue loading. | `src/game/tweakxl-yaml.ts:458` |
 | RB-119 | High | Bridge safety | Save preparation runs before relock cleanup is armed; if `SavePrepare` releases the lock and its reply times out, the lock stays off and later autosaves can persist experimental changes. | `projects/xf-runtime-bridge/native/src/core/Writes.cpp:1199` |
 | RB-120 | High | Bridge privacy | Capture bursts reuse the first frame's foreground state and screen rectangle; an Alt+Tab during the screen fallback saves another application's window. Explicit screen capture skips the foreground guard. | `projects/xf-runtime-bridge/tools/capture/capture.ts:280` |
 | RB-121 | High | Bridge safety | `bridge.kill`, stop and handover share the ordinary serial queue, so a `game.wait` can hold them for up to ten minutes while behaviours keep running. | `projects/xf-runtime-bridge/tools/api/command-api.ts:179` |
-| INSTALL-06 | Med | Mod install | Direct installs share one receipt identity (the destination folder only), so a second collection with another archive namespace fails the namespace check. | `src/installation/host/mod-install-transport.ts:303` |
-| INSTALL-07 | Med | Mod install | Duplicate detection treats historical receipts from every installation as live conflicts; a mod removed through MO2 can block its reinstall indefinitely. | `src/installation/host/mod-install-transport.ts:323` |
-| PIPE-142 | Med | Resolver | Game-folder ArchiveXL bundle discovery lists only immediate children, silently missing `.xl` declarations in `Bundle/` subfolders. | `src/game/host/resolver-host.ts:147` |
-| DIAG-06 | Med | Diagnostics | Report packaging rereads optional mod archives by the sizes recorded at preparation; a replaced archive bypasses the size limits and ships unreviewed bytes. | `src/diagnostics/host/host-endpoint.ts:140` |
-| DIAG-07 | Med | Diagnostics | The page's diagnostics flush overwrites entries queued during a POST (`queue = rest`), and overlapping flushes race; an error reference can vanish. | `src/diagnostics/browser/browser-device.ts:68` |
-| DIAG-08 | Med | Diagnostics | Resource excerpts pick cached JSON by depot hash and modification time, ignoring the winning archive, so a report can show a stale or losing resource as the winner. | `src/diagnostics/host/host-report.ts:169` |
 | RB-122 | Med | Bridge | Queued writes don't recheck the write pause on the game thread; `photo.open`'s final key send doesn't recheck pause and handover. | `projects/xf-runtime-bridge/native/src/core/Dispatcher.cpp:662` |
 | RB-123 | Med | Bridge | `scene.read` with `"points":[null]` dereferences an empty optional. | `projects/xf-runtime-bridge/native/src/core/Scene.cpp:51` |
 | RB-124 | Med | Bridge | Session-lock takeover moves the lock before checking its identity; two runners can both believe they own control. | `projects/xf-runtime-bridge/tools/session-lock.ts:152` |
