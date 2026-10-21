@@ -505,6 +505,23 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     characterDetails,
     /** WolvenKit setup (tests and shutdown). */
     wolvenKit,
-    stop() { diagnostics.trace.flush(); shutdown.abort(); previewCore.cancel(); characterDetails.cancel(); wolvenKit.cancel(); server.stop(true); facial.dispose(); collections.close(); verificationCollections.close(); partPresets.close(); verificationPartPresets.close(); documents.close(); verificationDocuments.close(); library.close(); verificationLibrary.close(); libraryLife.abort(); },
+    stop() {
+      diagnostics.trace.flush();
+      shutdown.abort();
+      previewCore.cancel();
+      characterDetails.cancel();
+      wolvenKit.cancel();
+      server.stop(true);
+      facial.dispose();
+      collections.close();
+      verificationCollections.close();
+      partPresets.close();
+      verificationPartPresets.close();
+      documents.close();
+      verificationDocuments.close();
+      library.close();
+      verificationLibrary.close();
+      libraryLife.abort();
+    },
   };
 }
