@@ -29,6 +29,8 @@ export const RESTORING_LOOK = "This look is still being restored from your last 
 export const CHANGED_ELSEWHERE = "Changed in another window. Undo starts here.";
 /** The scope the document is in while its scene shows no look (its collection's last preset was removed): nothing in it can be edited. */
 export const NO_LOOK_SCOPE = lookScope({ collection: "none", look: "none" });
+/** Why the document refuses edits while the scene's look is removed (the last preset of its collection, until it is restored). */
+export const REMOVED_LOOK = "This preset was removed. Restore it, or add a preset, to edit again.";
 
 /** A look working copy as the editor reads it: the look (parsed parts), its memory and the document state it shows. */
 export type LookContent = { readonly look: Look; readonly memory: LookMemory; readonly state: DocumentState };
@@ -82,7 +84,8 @@ export type LookEditorDeps = {
   readonly beforeExternal?: (record: () => void) => () => void;
 };
 
-type Shown = { ref: LookRef; session: LookSession; content: LookContent; written: string; unsubscribe: () => void };
+/** The look the scene names; `content` is null while it is removed (the document is empty and refuses edits until it is live again). */
+type Shown = { ref: LookRef; session: LookSession; content: LookContent | null; written: string; unsubscribe: () => void };
 
 export class LookEditor {
   private shown: Shown | null = null;
@@ -128,23 +131,41 @@ export class LookEditor {
     }
     const session = this.deps.sessions.open(ref), view = session.look();
     if (!view) { void session.release(); this.changed(); return false; }
-    let content: LookContent;
-    try { content = lookContent(view, this.deps.model); }
-    catch (error) { void session.release(); this.deps.report?.(error); this.changed(); return false; }
+    let content: LookContent | null = null;
+    if (view.state === "live") {
+      try { content = lookContent(view, this.deps.model); }
+      catch (error) { void session.release(); this.deps.report?.(error); this.changed(); return false; }
+    }
     const shown: Shown = { ref: { ...ref }, session, content, written: "", unsubscribe: () => {} };
     this.shown = shown;
-    shown.written = this.stored(content, content.state)?.key ?? "";
     shown.unsubscribe = session.subscribe(event => {
       if (this.shown !== shown) return;
+      // The look removed (its collection's last preset stays named by the scene) or restored: the document follows it.
+      const live = shown.session.look()?.state === "live";
+      if (live !== !!shown.content) this.present(shown);
       // A change taken from elsewhere (or a resolution that kept theirs): the document shows it, and its Undo starts there.
-      if (event.kind === "elsewhere" || event.kind === "resolved") this.reload(shown);
+      else if (live && (event.kind === "elsewhere" || event.kind === "resolved")) this.reload(shown);
       this.blocked();
       this.changed();
     });
-    this.display(content.state, lookScope(ref));
+    this.present(shown);
     this.blocked();
     this.changed();
     return true;
+  }
+  /** Show the look as it is now: its content with its Undo history when live, else an empty document that refuses edits. */
+  private present(shown: Shown) {
+    const view = shown.session.look();
+    if (view?.state !== "live") {
+      shown.content = null; shown.written = "";
+      this.display({ recipe: emptyRecipe(), active: 0, selected: 0, fieldSelection: {}, history: emptyLookHistory() }, NO_LOOK_SCOPE);
+      return;
+    }
+    let content: LookContent;
+    try { content = lookContent(view, this.deps.model); } catch (error) { this.deps.report?.(error); return; }
+    shown.content = content;
+    shown.written = this.stored(content, content.state)?.key ?? "";
+    this.display(content.state, lookScope(shown.ref));
   }
   private display(state: DocumentState, scope?: string) {
     this.applying = true;
@@ -154,6 +175,7 @@ export class LookEditor {
   /** The look as the library holds it now replaces what the document shows, when it differs from what this window wrote. */
   private reload(shown: Shown) {
     const view = shown.session.look();
+    if (!shown.content) return;
     if (!view || view.state !== "live") return;
     let content: LookContent;
     try { content = lookContent(view, this.deps.model); } catch (error) { this.deps.report?.(error); return; }
@@ -169,8 +191,8 @@ export class LookEditor {
   }
   /** The recovery gate: while the shown look is being restored, the document refuses edits with the reason. */
   private blocked() {
-    const ref = this.shown?.ref;
-    this.deps.document.setBlocked(ref && this.deps.restoring?.(ref) ? RESTORING_LOOK : undefined);
+    const shown = this.shown, ref = shown?.ref;
+    this.deps.document.setBlocked(ref && this.deps.restoring?.(ref) ? RESTORING_LOOK : shown && !shown.content ? REMOVED_LOOK : undefined);
   }
   /** The stored form of a look's content with the document's state written in, and its comparison key. */
   private stored(content: Pick<LookContent, "look" | "memory">, editor: DocumentState) {
@@ -190,10 +212,11 @@ export class LookEditor {
   commit(): boolean {
     this.cancel?.(); this.cancel = null;
     const shown = this.shown;
-    if (!shown) return true;
+    if (!shown || !shown.content) return true;
+    const content = shown.content;
     const editor = this.deps.document.export();
     let written: ReturnType<LookEditor["stored"]>;
-    try { written = this.stored(shown.content, editor); }
+    try { written = this.stored(content, editor); }
     catch (error) { this.deps.report?.(error); return false; }
     if (!written || written.key === shown.written) return true;
     const update = shown.session.update({ parts: written.parts, memory: written.memory });

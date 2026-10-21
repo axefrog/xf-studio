@@ -488,7 +488,9 @@ export class CollectionService {
         done(owner.dispatch({ kind: "collection.removeLook", collection: id, base: view.revision, look: command.id }));
         if (shown && sameLook(shown, { collection: id, look: command.id })) {
           const rest = owner.collection(id)!.looks, next = rest[Math.min(index, rest.length - 1)];
-          this.deps.scene.setLook(next ? { collection: id, look: next } : undefined);
+          // The last preset gone: the scene still names it (removed), so the collection stays shown, across a restart too, and Restore
+          // brings it back; the editor shows it empty meanwhile.
+          if (next) this.deps.scene.setLook({ collection: id, look: next });
         }
         break;
       }
@@ -781,6 +783,8 @@ export class CollectionService {
   private ensureShown() {
     const owner = this.deps.owner, ref = this.deps.scene.look();
     if (ref && owner.look(ref)?.state === "live" && owner.collection(ref.collection)?.looks.includes(ref.look)) return;
+    // A collection whose presets were all removed stays shown, named by its removed look (Restore brings it back).
+    if (ref && owner.collection(ref.collection)?.looks.length === 0) { this.current = ref.collection; return; }
     const same = owner.collection(ref?.collection ?? this.current ?? "");
     if (same) {
       this.current = same.id;

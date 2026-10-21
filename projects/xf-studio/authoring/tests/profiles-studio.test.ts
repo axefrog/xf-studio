@@ -157,6 +157,32 @@ describe("presets", () => {
     expect(again.document.recipe.layers[0]!.opacity).toBe(0.4);
   });
 
+  test("removing the last preset keeps its collection shown, across a restart, and Restore brings the preset back as it was", async () => {
+    const studio = await profileStudio({ looks: [{ name: "Only", recipe: initialRecipe() }] });
+    await studio.collection.initialize();
+    const collection = studio.shown()!, only = studio.scene.look()!;
+    dispatch(studio, { kind: "layer.setOpacity", layerId: layerId(studio), opacity: 0.42 });
+    dispatch(studio, { kind: "preset.edit", command: { kind: "remove", id: only.look } });
+    // The scene still names the removed look: the collection is the one shown, empty, and the editor refuses edits with the reason.
+    expect(studio.scene.look()).toEqual(only);
+    expect(studio.shown()).toBe(collection);
+    expect(studio.collection.summary().draft!.presets).toEqual([]);
+    expect(studio.document.recipe.layers).toEqual([]);
+    expect(studio.app.capability({ kind: "layer.add" } as never)).toMatchObject({ available: false });
+    // A restart shows the same, empty collection, and its removed preset is still there to restore.
+    const again = await restart(studio);
+    await again.collection.initialize();
+    expect(again.shown()).toBe(collection);
+    expect(again.owner.list().length).toBe(1);
+    expect(again.owner.restorable(collection).map(item => item.look)).toEqual([only.look]);
+    dispatch(again, { kind: "preset.edit", command: { kind: "restore" } });
+    expect(again.scene.look()).toEqual(only);
+    expect(again.collection.summary().draft!.presets.map(p => p.name)).toEqual(["Only"]);
+    expect(again.document.recipe.layers[0]!.opacity).toBe(0.42);
+    dispatch(again, { kind: "layer.setOpacity", layerId: layerId(again), opacity: 0.5 });
+    expect(again.document.recipe.layers[0]!.opacity).toBe(0.5);
+  });
+
   test("a recipe file becomes a preset of its own, shown at once", async () => {
     const studio = await profileStudio();
     await studio.collection.initialize();
