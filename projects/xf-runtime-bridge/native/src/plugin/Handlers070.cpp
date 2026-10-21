@@ -227,6 +227,16 @@ json UiState(const MethodContext& aContext)
         out["cet_overlay_note"] = "the CET layer hasn't reported its overlay yet (it does from bridge 0.7 when the overlay opens or closes)";
     }
     out["xf_panel"] = state.hud.Current().show;
+    // 0.8.2: the XF pins with the views that have drawn each (world.pin's drawn_by, read after the views ran).
+    try
+    {
+        out["pins"] = ScriptCall("XFInkPins", "Pins", {}, {}, aContext.cid).value("pins", json::array());
+    }
+    catch (const MethodError& e)
+    {
+        out["pins"] = nullptr;
+        out["pins_error"] = e.code;
+    }
     PendingAsk ask;
     out["pending_ask"] = state.messages.Pending(ask) ? json{{"id", ask.id}, {"text", ask.text}, {"choices", ask.choices}, {"remaining_ms", ask.remainingMs}} : json(nullptr);
     out["overlay_host"] = state.overlayHost.Snapshot();
@@ -324,7 +334,7 @@ void RegisterMethods070(Dispatcher& aDispatcher)
     aDispatcher.Register({"world.state", Access::Read, RunOn::GameThread, "The clock, rain, weather state, quest facts and photo mode's scene rows.", &WorldState});
     aDispatcher.Register({"world.probe", Access::Read, RunOn::BridgeThread, "Streaming, walkable ground, ground and ceiling at points (observe only).", &WorldProbe});
     aDispatcher.Register(MarkedWrite("world.weather.set", Access::WriteWorld, RunOn::GameThread, "Holds a weather state or gives the weather back to the game.", &WorldWeather));
-    aDispatcher.Register({"ui.state", Access::Read, RunOn::GameThread, "Menus, popups, photo mode's UI, the prompt, the CET overlay and the XF panels.", &UiState});
+    aDispatcher.Register({"ui.state", Access::Read, RunOn::GameThread, "Menus, popups, photo mode's UI, the prompt, the CET overlay, the ink panel and the XF pins.", &UiState});
     aDispatcher.Register({"ui.ask.state", Access::Read, RunOn::BridgeThread, "What became of a question (pending, answered, gone).", &UiAskState});
     aDispatcher.Register({"game.saves", Access::Read, RunOn::BridgeThread, "The save list with each save's details.", &GameSaves});
     aDispatcher.Register(MarkedWrite("photo.scene.set", Access::WritePhoto, RunOn::GameThread, "Photo mode's surrounding NPCs, weather and game speed rows.", &PhotoScene));

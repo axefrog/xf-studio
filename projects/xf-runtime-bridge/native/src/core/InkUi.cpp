@@ -224,8 +224,10 @@ Status Summarize(const BridgeView& aView)
     }
     else
     {
-        out.connection = aView.hasClient ? "XF Studio connected" : "XF Studio not connected";
-        out.connectionTone = aView.hasClient ? "ok" : "idle";
+        // 0.8.2 (session 9): the session, not each momentary connection (the coordinator's CLI connects per call).
+        const bool connected = aView.hasClient || aView.inSession;
+        out.connection = connected ? "XF Studio connected" : "XF Studio not connected";
+        out.connectionTone = connected ? "ok" : "idle";
         if (!aView.allowWrites)
         {
             out.changes = "read-only";
@@ -246,6 +248,29 @@ Status Summarize(const BridgeView& aView)
     }
     out.label = "XF Runtime Bridge \xC2\xB7 " + out.text;
     return out;
+}
+
+StatusSurface ChooseStatusSurface(const SurfaceFacts& aFacts)
+{
+    if (aFacts.inkShowing)
+    {
+        return StatusSurface::InkPanel;
+    }
+    return aFacts.overlayDrawing ? StatusSurface::OverlayPanel : StatusSurface::StatusLabel;
+}
+
+const char* SurfaceName(StatusSurface aSurface)
+{
+    switch (aSurface)
+    {
+    case StatusSurface::InkPanel:
+        return "ink_panel";
+    case StatusSurface::OverlayPanel:
+        return "overlay_panel";
+    case StatusSurface::StatusLabel:
+        break;
+    }
+    return "status_label";
 }
 
 json StatusJson(const BridgeView& aView)
@@ -302,7 +327,7 @@ std::string Remap(const std::string& aText, Put aPut)
         const size_t length = NextCodePoint(aText, i, cp);
         if (length == 0)
         {
-            out += kReplacementMark;
+            aPut(out, 0xFFFFFFFFu, std::string());
             i += 1;
             continue;
         }
@@ -318,11 +343,84 @@ std::string Remap(const std::string& aText, Put aPut)
     return out;
 }
 
+// 0.8.2: the ink font's glyphs (core/InkUi.hpp InkHas): the code points all four raj styles map, read from the game's .fnt
+// resources' cmap tables (2.31). The 0.8 keep-list assumed whole blocks and held 113 code points the fonts lack (U+00A4,
+// å, æ, ÿ, ő's neighbours, most of General Punctuation), each drawn as a blank gap.
+constexpr std::pair<uint32_t, uint32_t> kInkGlyphs[] = {
+    {0x0020, 0x007E}, {0x00A0, 0x00A3}, {0x00A5, 0x00A9}, {0x00AB, 0x00AB}, {0x00AE, 0x00B1}, {0x00B4, 0x00B4}, {0x00B6, 0x00B8},
+    {0x00BB, 0x00BB}, {0x00BF, 0x00C4}, {0x00C6, 0x00CF}, {0x00D1, 0x00DD}, {0x00DF, 0x00E4}, {0x00E7, 0x00EF}, {0x00F1, 0x00F6},
+    {0x00F8, 0x00FD}, {0x0100, 0x0107}, {0x010C, 0x010F}, {0x0112, 0x0113}, {0x0118, 0x011B}, {0x011E, 0x011F}, {0x012A, 0x012B},
+    {0x0130, 0x0131}, {0x0141, 0x0144}, {0x0147, 0x0148}, {0x014C, 0x0153}, {0x0158, 0x015B}, {0x015E, 0x0161}, {0x0164, 0x0165},
+    {0x016A, 0x016B}, {0x016E, 0x0171}, {0x0179, 0x017E}, {0x039C, 0x039C}, {0x03A3, 0x03A3}, {0x200B, 0x200B}, {0x2011, 0x2011},
+    {0x2013, 0x2014}, {0x2018, 0x201A}, {0x201C, 0x201E}, {0x2022, 0x2022}, {0x2026, 0x2026}, {0x20AC, 0x20AC}, {0x2122, 0x2122},
+    {0x2206, 0x2206}, {0x2212, 0x2212}, {0x2264, 0x2264},
+};
+
+// A Latin-1 character the ink font lacks, in plain letters (Latin Extended-A uses kLatinExtendedA, punctuation CetPunctuation).
+const char* InkLatin1(uint32_t aCp)
+{
+    switch (aCp)
+    {
+    case 0xAA:
+        return "a";
+    case 0xAC:
+        return "-";
+    case 0xAD:
+        return ""; // a soft hyphen draws nothing
+    case 0xB2:
+        return "2";
+    case 0xB3:
+        return "3";
+    case 0xB5:
+        return "u";
+    case 0xB9:
+        return "1";
+    case 0xBA:
+        return "o";
+    case 0xBC:
+        return "1/4";
+    case 0xBD:
+        return "1/2";
+    case 0xBE:
+        return "3/4";
+    case 0xC5:
+        return "A";
+    case 0xD0:
+        return "D";
+    case 0xDE:
+        return "Th";
+    case 0xE5:
+        return "a";
+    case 0xE6:
+        return "ae";
+    case 0xF0:
+        return "d";
+    case 0xF7:
+        return "/";
+    case 0xFE:
+        return "th";
+    case 0xFF:
+        return "y";
+    default:
+        return nullptr;
+    }
+}
+}
+
 bool InkHas(uint32_t aCp)
 {
-    return (aCp >= 0x20 && aCp <= 0x7E) || (aCp >= 0xA0 && aCp <= 0x17F) || (aCp >= 0x2010 && aCp <= 0x2027) || (aCp >= 0x2030 && aCp <= 0x203A) ||
-           aCp == 0x20AC || aCp == 0x2122;
+    for (const auto& [first, last] : kInkGlyphs)
+    {
+        if (aCp >= first && aCp <= last)
+        {
+            return true;
+        }
+    }
+    return false;
 }
+
+namespace
+{
 
 // Latin Extended-A (U+0100 to U+017F) in Basic Latin or Latin-1 letters, one entry per code point.
 const char* const kLatinExtendedA[128] = {
@@ -387,7 +485,23 @@ const char* CetPunctuation(uint32_t aCp)
 
 std::string ForInk(const std::string& aText)
 {
-    return Remap(aText, [](std::string& aOut, uint32_t aCp, const std::string& aRaw) { aOut += InkHas(aCp) ? aRaw : std::string(kReplacementMark); });
+    // 0.8.2: what the font lacks becomes its plain form where it has one (each piece of which the font has), else the ink mark.
+    auto out = Remap(aText, [](std::string& aOut, uint32_t aCp, const std::string& aRaw) {
+        if (InkHas(aCp))
+        {
+            aOut += aRaw;
+            return;
+        }
+        const char* plain = aCp == 0xC5 || aCp == 0xE5 || (aCp >= 0xA0 && aCp <= 0xFF) ? InkLatin1(aCp)
+                            : aCp >= 0x100 && aCp <= 0x17F                             ? kLatinExtendedA[aCp - 0x100]
+                                                                                       : CetPunctuation(aCp);
+        if (plain && aCp == 0x2022)
+        {
+            plain = nullptr; // CET's plain form of the bullet is a middle dot; the ink font has the bullet itself
+        }
+        aOut += plain ? std::string(plain) : std::string(kInkReplacementMark);
+    });
+    return out;
 }
 
 std::string ForCet(const std::string& aText)
@@ -430,7 +544,8 @@ std::string CleanField(const std::string& aText)
     return out;
 }
 
-std::string Frame(const HudSettings& aSettings, const BridgeView& aView, const std::vector<MessageLine>& aMessages, const AskView* aAsk)
+std::string Frame(const HudSettings& aSettings, const BridgeView& aView, const std::vector<MessageLine>& aMessages, const AskView* aAsk,
+                  StatusSurface aSurface)
 {
     const auto status = Summarize(aView);
     const bool show = aSettings.show && aView.pluginEnabled;
@@ -445,6 +560,7 @@ std::string Frame(const HudSettings& aSettings, const BridgeView& aView, const s
     out += std::string("live\t") + (aView.scriptReady ? "1" : "0") + "\n";
     out += "tone\t" + status.tone + "\n";
     out += "status\t" + CleanField(ForInk(status.text)) + "\n";
+    out += std::string("surface\t") + SurfaceName(aSurface) + "\n";
     if (!aView.killed)
     {
         for (const auto& message : aMessages)
@@ -473,7 +589,7 @@ std::string Frame(const HudSettings& aSettings, const BridgeView& aView, const s
 }
 
 std::string BuildFrame(const HudSettings& aSettings, const BridgeView& aView, MessageBoard& aBoard, const std::vector<std::string>& aAnswerKeys,
-                       uint64_t aInkShownAsk)
+                       uint64_t aInkShownAsk, StatusSurface aSurface)
 {
     std::vector<MessageLine> lines;
     AskView ask;
@@ -504,7 +620,7 @@ std::string BuildFrame(const HudSettings& aSettings, const BridgeView& aView, Me
             }
         }
     }
-    return Frame(aSettings, aView, lines, &ask);
+    return Frame(aSettings, aView, lines, &ask, aSurface);
 }
 
 json ParseFrame(const std::string& aFrame)

@@ -688,6 +688,12 @@ void DrawPanel(double aSeconds)
     {
         gR.panel = gPanel.Front();
     }
+    // 0.8.2: one status surface at a time; while the ink panel is on screen (or the status label is the fallback) this
+    // panel doesn't draw.
+    if (!gR.panel.show)
+    {
+        return;
+    }
     const auto scale = static_cast<float>(gR.height) / 1080.0f * gHost->Scale();
     ImGui::SetNextWindowPos(ImVec2(kPanelX, kPanelY), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(360.0f * scale, 0.0f), ImGuiCond_Always);
@@ -707,6 +713,17 @@ void DrawPanel(double aSeconds)
         const char* tone = gR.panel.tone == "ok" ? "XfSuccess" : gR.panel.tone == "killed" ? "XfDanger" : gR.panel.tone == "write" || gR.panel.tone == "paused" ? "XfWarning" : "TextDisabled";
         ImGui::PushTextWrapPos(0.0f);
         ImGui::TextColored(ThemeColour(tone), "%s", gR.panel.bridgeStatus.empty() ? "Not ready yet." : gR.panel.bridgeStatus.c_str());
+        // 0.8.2: as the status surface, the coordinator's lines and the question too (the ink panel's content), each level in
+        // the theme's colour, the question in the text colour with its answer keys under it.
+        for (const auto& [level, text] : gR.panel.lines)
+        {
+            const char* colour = level == "warn" ? "XfWarning" : level == "done" ? "XfSuccess" : "Text";
+            ImGui::TextColored(ThemeColour(colour), "%s", text.c_str());
+        }
+        if (!gR.panel.askHint.empty())
+        {
+            ImGui::TextColored(ThemeColour("XfAccentText"), "%s", gR.panel.askHint.c_str());
+        }
         ImGui::PopTextWrapPos();
         if (!gR.panel.diagnostics)
         {
@@ -1036,6 +1053,11 @@ void Publish(const PanelData& aData)
     back = aData;
     back.bridgeStatus = xfb::overlay::LimitToGlyphs(aData.bridgeStatus);
     back.pendingAsk = xfb::overlay::LimitToGlyphs(aData.pendingAsk);
+    for (auto& [level, text] : back.lines)
+    {
+        text = xfb::overlay::LimitToGlyphs(text);
+    }
+    back.askHint = xfb::overlay::LimitToGlyphs(aData.askHint);
     gPanel.Publish();
 }
 } // namespace xfb::plugin::overlay

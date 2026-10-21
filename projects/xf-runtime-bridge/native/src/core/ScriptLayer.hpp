@@ -43,7 +43,10 @@ public:
         Detached,    // the session detached (a load or a return to the main menu is under way)
     };
 
-    // "attach", "player_attach", "detach"; anything else is ignored (returns false). Any thread.
+    // "attach", "player_attach", "detach", and (0.8.2) "puppet": the loaded session's player puppet joined the world
+    // (PlayerPuppet.OnGameAttached). Between a puppet and the player's attach the game waits on its "press any key" screen
+    // after a load [hypothesis: session 9's load logged the puppet 9 s after the attach and the player 83 s later, when the
+    // maintainer pressed a key]; Describe's waiting_for_input says so. Anything else is ignored (returns false). Any thread.
     bool OnEvent(const std::string& aEvent, Clock::time_point aNow = Clock::now());
     void OnAttach(Clock::time_point aNow = Clock::now());
     void OnPlayerAttach(Clock::time_point aNow = Clock::now());
@@ -77,5 +80,7 @@ private:
     uint64_t m_attaches = 0;
     uint64_t m_detaches = 0;
     uint64_t m_detachesTaken = 0;
+    bool m_puppet = false; // 0.8.2: a puppet event since the last attach
+    Clock::time_point m_puppetAt{};
 };
 } // namespace xfb

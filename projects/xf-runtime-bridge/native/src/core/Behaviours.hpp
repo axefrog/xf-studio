@@ -46,6 +46,9 @@ inline constexpr double kMaxGlideSeconds = 30.0;
 // closest it came, after the first kLookDriftGraceS seconds (the game's look-at only ever turns the camera towards it).
 inline constexpr double kLookDriftDeg = 4.0;
 inline constexpr double kLookDriftGraceS = 0.25;
+// 0.8.2 (session 9: a 4 s look ran in 1.2 s): a look steers along its arc, a short look-at to the next place every
+// kLookStepS, so it takes its duration_s whatever pace the game's own look-at keeps.
+inline constexpr double kLookStepS = 0.1;
 
 // The game-side steps a behaviour may take. Each throws MethodError on a refusal (the behaviour stops with that code).
 struct Ops

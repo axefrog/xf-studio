@@ -12,6 +12,7 @@
 #include <RED4ext/Api/v1/Sdk.hpp>
 
 #include "core/Behaviours.hpp"
+#include "core/LayoutGuard.hpp"
 #include "core/Bridge.hpp"
 #include "core/Events.hpp"
 #include "core/Player.hpp"
@@ -89,6 +90,8 @@ struct State
     EventLog events;
     behave::Runner behaviours;
     player::TeleportPacer teleports;
+    // 0.8.2: player.stop's count (core/Player.hpp StopCount), checked by player.look's and player.teleport's later steps.
+    player::StopCount playerStops;
 
     // Bridge 0.5.3, temporary test feature: the ink HUD panel's settings (ui.hud), read with the bridge's state and the
     // message lines by the redscript layer through XFBridge_Hud (core/InkUi.hpp). Defaults from [ui] in config.ini.
@@ -105,6 +108,11 @@ struct State
     static constexpr int64_t kInkShownMs = 1500;
     std::atomic<uint64_t> inkShownAsk{0};
     std::atomic<int64_t> inkShownAtMs{0};
+    // 0.8.2: whether the ink panel reported itself on screen (its HUD shown), with the same staleness; and the status surface
+    // chosen this tick (core/InkUi.hpp ChooseStatusSurface).
+    std::atomic<bool> inkVisible{false};
+    std::atomic<int> statusSurface{static_cast<int>(inkui::StatusSurface::StatusLabel)};
+    bool InkVisible() const;
     uint64_t InkShownAsk() const;
 
     // 0.7: the XF ImGui overlay host (P0, draw-only; core/overlay/Host.hpp, plugin/Overlay.cpp), configured from [overlay].

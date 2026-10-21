@@ -233,6 +233,12 @@ struct Behaviour
     double firstAngle = -1.0;
     double lastAngle = -1.0;
     double minAngle = -1.0; // 0.8: the closest the camera came to the look's point so far (the drift check)
+    // 0.8.2 (session 9's D2: 4 s ran in 1.2 s; the game's look-at turns at its own pace whatever its duration): the look is
+    // steered along its arc, its view's yaw and pitch eased from where it started to the point over duration_s, one short
+    // look-at to the arc's next place every kLookStepS.
+    double yaw0 = 0.0, pitch0 = 0.0, yaw1 = 0.0, pitch1 = 0.0;
+    double lastIssue = -1.0;
+    bool finalIssued = false;
     // glide_path
     std::vector<Vec3> path;
     double pathLength = 0.0;
@@ -679,6 +685,22 @@ void StopTurntable(Behaviour& aB, const Ops& aOps)
     }
 }
 
+// 0.8.2: the view direction for a yaw and pitch (the game's yaw: 0 faces +Y, positive turns left), and its eased arc.
+Vec3 DirectionOf(double aYaw, double aPitch)
+{
+    return {-std::sin(aYaw * kDeg) * std::cos(aPitch * kDeg), std::cos(aYaw * kDeg) * std::cos(aPitch * kDeg), std::sin(aPitch * kDeg)};
+}
+
+Vec3 LookArcPoint(const Behaviour& aB, const Vec3& aCamera, double aFraction)
+{
+    const double f = std::clamp(aFraction, 0.0, 1.0);
+    const double eased = f * f * (3.0 - 2.0 * f); // smoothstep: eased in and out, as the game's own look-at
+    const double yaw = aB.yaw0 + std::remainder(aB.yaw1 - aB.yaw0, 360.0) * eased;
+    const double pitch = aB.pitch0 + (aB.pitch1 - aB.pitch0) * eased;
+    const auto d = DirectionOf(yaw, pitch);
+    return {aCamera[0] + d[0] * 10.0, aCamera[1] + d[1] * 10.0, aCamera[2] + d[2] * 10.0};
+}
+
 void StepLook(Behaviour& aB, const Ops& aOps, double aDt)
 {
     const auto camera = aOps.camera();
@@ -705,7 +727,7 @@ void StepLook(Behaviour& aB, const Ops& aOps, double aDt)
                 yaw = p.value("yaw", yaw);
                 pitch = p.value("pitch", pitch);
             }
-            const Vec3 d{-std::sin(yaw * kDeg) * std::cos(pitch * kDeg), std::cos(yaw * kDeg) * std::cos(pitch * kDeg), std::sin(pitch * kDeg)};
+            const auto d = DirectionOf(yaw, pitch);
             aB.point = {pos[0] + d[0] * 10.0, pos[1] + d[1] * 10.0, pos[2] + d[2] * 10.0};
         }
         aB.firstAngle = AngleDeg(forward, Sub(aB.point, pos));
@@ -713,7 +735,14 @@ void StepLook(Behaviour& aB, const Ops& aOps, double aDt)
         {
             aOps.watchInput(true); // design §4.2: the player's own input ends a look (0.7, session 7)
         }
-        aOps.lookAt(aB.point, aB.duration);
+        // 0.8.2: the arc from the view now to the point; its first step goes now.
+        aB.yaw0 = std::atan2(-forward[0], forward[1]) / kDeg;
+        aB.pitch0 = std::asin(std::clamp(forward[2], -1.0, 1.0)) / kDeg;
+        const auto toPoint = Normalise(Sub(aB.point, pos));
+        aB.yaw1 = std::atan2(-toPoint[0], toPoint[1]) / kDeg;
+        aB.pitch1 = std::asin(std::clamp(toPoint[2], -1.0, 1.0)) / kDeg;
+        aOps.lookAt(LookArcPoint(aB, pos, kLookStepS / std::max(aB.duration, kLookStepS)), kLookStepS * 1.5);
+        aB.lastIssue = 0.0;
         aB.state = Behaviour::State::Running;
         aB.summary = {{"point", VecJson(aB.point)}, {"angle_deg", Round4(aB.firstAngle)}};
         return;
@@ -746,9 +775,20 @@ void StepLook(Behaviour& aB, const Ops& aOps, double aDt)
         Finish(aB, "user_took_over", "info", {{"input", "camera_drift"}, {"angle_deg", Round4(angle)}, {"closest_deg", Round4(aB.minAngle)}});
         return;
     }
-    if (angle <= aB.tolerance)
+    // 0.8.2: the next place along the arc; once the time is up, the point itself, once.
+    if (aB.t < aB.duration && aB.t - aB.lastIssue >= kLookStepS)
     {
-        Finish(aB, "reached", "done", {{"angle_deg", Round4(angle)}, {"forward", VecJson(forward)}});
+        aOps.lookAt(LookArcPoint(aB, pos, (aB.t + kLookStepS) / aB.duration), kLookStepS * 1.5);
+        aB.lastIssue = aB.t;
+    }
+    else if (aB.t >= aB.duration && !aB.finalIssued)
+    {
+        aOps.lookAt(aB.point, 0.25);
+        aB.finalIssued = true;
+    }
+    if (angle <= aB.tolerance && aB.t >= aB.duration * 0.9)
+    {
+        Finish(aB, "reached", "done", {{"angle_deg", Round4(angle)}, {"forward", VecJson(forward)}, {"took_s", Round4(aB.t)}});
     }
     else if (aB.t > aB.duration + 2.0)
     {

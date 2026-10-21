@@ -838,6 +838,9 @@ json WorldPin(const MethodContext& aContext)
                           {&target, &x, &y, &z, &piece, &label, &variant, &lift}, aContext.cid);
     out["undo"] = {{"method", "world.pin.clear"}, {"params", {{"id", out.value("id", 0)}}}};
     out["temporary_test_feature"] = true;
+    // 0.8.2 (session 9's F1): the views draw a pin a moment after it is placed, so this answer's drawn_by is usually empty.
+    out["drawn_by_note"] = "drawn_by fills in as each view first draws the pin, a moment after it is placed (world, minimap, world_map, "
+                           "xf_overlay for the bridge's own mark in the world); ui_state's pins read it later";
     return out;
 }
 
@@ -1696,8 +1699,20 @@ showroom::Ops ShowroomOpsFor(const std::string& aCid)
 
 json ShowroomAnchor(const MethodContext& aContext)
 {
-    params::RequireOnly(aContext.params, {});
-    return CallScript("XFShowroom", "Anchor", {}, {}, aContext.cid);
+    const auto archives = showroom::ParseAnchorArchives(aContext.params);
+    auto out = CallScript("XFShowroom", "Anchor", {}, {}, aContext.cid);
+    if (!archives.empty())
+    {
+        // 0.8.2: which of these showroom archives the game loaded (Codeware's ResourceDepot.ArchiveExists).
+        std::string joined;
+        for (const auto& name : archives)
+        {
+            joined += (joined.empty() ? "" : ",") + name;
+        }
+        RED4ext::CString names(joined.c_str());
+        out["archives"] = CallScript("XFShowroom", "Archives", {"String"}, {&names}, aContext.cid).value("archives", json::object());
+    }
+    return out;
 }
 
 json ShowroomState(const MethodContext& aContext)
@@ -1762,6 +1777,13 @@ MethodSpec MarkedWrite(std::string aName, Access aAccess, RunOn aRunOn, std::str
                           aContext.cid);
                 return result;
             }};
+}
+
+json ClearShowroomForHandover(const std::string& aWhat, const std::string& aCid)
+{
+    auto out = ShowroomOpsFor(aCid).clear(aWhat);
+    out["what"] = aWhat;
+    return out;
 }
 
 void RestoreAfterKill()

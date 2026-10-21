@@ -1,4 +1,5 @@
 #include "core/overlay/Host.hpp"
+#include "core/LayoutGuard.hpp"
 
 #include <algorithm>
 #include <cmath>

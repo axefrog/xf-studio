@@ -13,6 +13,30 @@ namespace
 constexpr double kDeg = 3.14159265358979323846 / 180.0;
 }
 
+uint64_t StopCount::Current() const
+{
+    return m_count.load();
+}
+
+void StopCount::Stop()
+{
+    m_count.fetch_add(1);
+}
+
+bool StopCount::StoppedSince(uint64_t aSeen) const
+{
+    return m_count.load() != aSeen;
+}
+
+void StopCount::Require(uint64_t aSeen, const std::string& aWhat) const
+{
+    if (StoppedSince(aSeen))
+    {
+        throw MethodError("stopped", aWhat + ": player.stop (or a handover, or the kill switch) came while this was running, so it "
+                                             "stopped here; what it had already done stays done");
+    }
+}
+
 TeleportRequest ParseTeleport(const json& aParams)
 {
     params::RequireOnly(aParams, {"position", "offset", "yaw", "turn", "ground", "far"});

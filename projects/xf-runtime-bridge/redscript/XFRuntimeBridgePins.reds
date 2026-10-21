@@ -161,6 +161,15 @@ public abstract class XFInkPins {
       + ",\"position\":[" + XFJson.Num(entry.position.X) + "," + XFJson.Num(entry.position.Y) + "," + XFJson.Num(entry.position.Z) + "],\"drawn_by\":[" + drawn + "]}";
   }
 
+  // 0.8.2: ui.state's pins, with the views that have drawn each by now.
+  public static func Pins(cid: String) -> String {
+    let registry = XFPinRegistry.Get();
+    if !IsDefined(registry) {
+      return "{\"ok\":true,\"pins\":[]}";
+    }
+    return "{\"ok\":true,\"pins\":" + XFInkPins.List(registry) + "}";
+  }
+
   public static func List(registry: ref<XFPinRegistry>) -> String {
     let out = "";
     for entry in registry.Pins() {

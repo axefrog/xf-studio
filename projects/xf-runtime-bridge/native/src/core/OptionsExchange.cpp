@@ -1,4 +1,5 @@
 #include "core/OptionsExchange.hpp"
+#include "core/LayoutGuard.hpp"
 
 #include <algorithm>
 

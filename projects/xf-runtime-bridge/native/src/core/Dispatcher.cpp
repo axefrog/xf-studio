@@ -209,7 +209,7 @@ const std::set<std::string>& ControlMethods()
 }
 
 json RunTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout, const std::function<json()>& aTask,
-             const std::string& aLabel, bool aGated, const Dispatcher* aWriteGate);
+             const std::string& aLabel, bool aGated, const Dispatcher* aWriteGate, bool aDeferWhenClosed = false);
 } // namespace
 
 void SetGameGate(GameGate aGate)
@@ -260,14 +260,37 @@ json RunGameTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout, co
 json Dispatcher::RunWrite(std::chrono::milliseconds aTimeout, const std::function<json()>& aTask, const std::string& aLabel) const
 {
     // A step that puts something back is never refused; any other changing step passes the write gate on the game thread.
-    return RunTask(m_queue, aTimeout, aTask, aLabel, true, RestoreScope::Active() ? nullptr : this);
+    // 0.8.2: a put-back step that finds the queue closed by the kill switch goes on the cleanup lane instead (RunTask).
+    const bool restoring = RestoreScope::Active();
+    return RunTask(m_queue, aTimeout, aTask, aLabel, true, restoring ? nullptr : this, restoring);
 }
 
 namespace
 {
 json RunTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout, const std::function<json()>& aTask,
-             const std::string& aLabel, bool aGated, const Dispatcher* aWriteGate)
+             const std::string& aLabel, bool aGated, const Dispatcher* aWriteGate, bool aDeferWhenClosed)
 {
+    // 0.8.2 (the re-check's sixth finding): the kill switch closes the queue, which used to refuse a write's own put-back
+    // step too (photo.pose.set killed during its settle left the category changed). A put-back step (RestoreScope) that
+    // finds it closed goes on the cleanup lane, which the game thread runs before the kill switch's restore; it still checks
+    // the game gate there, so it never calls into a session that has gone.
+    if (aDeferWhenClosed && aQueue.IsClosed())
+    {
+        const bool posted = aQueue.PostCleanup(
+            [aTask, aGated, aLabel]() -> json {
+                if (aGated)
+                {
+                    RequireGameGate(aLabel);
+                }
+                return aTask();
+            },
+            aLabel);
+        if (!posted)
+        {
+            throw MethodError("killed", "the bridge was stopped and its cleanup lane is full, so this step can't put things back: " + aLabel);
+        }
+        return json{{"deferred_to_cleanup", true}};
+    }
     json envelope;
     std::string error;
     // RB-122: a changing step checks the kill switch, the pause and a handover on the game thread, right before it runs.
@@ -308,6 +331,11 @@ json RunTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout, const 
     case QueueResult::QueueFull:
         throw MethodError("busy", "too many requests are waiting for the game thread");
     case QueueResult::NotPumping:
+        // 0.8.2: a write refused because the kill switch closed the queue says so (it used to read "not running").
+        if (aWriteGate && aWriteGate->IsKilled())
+        {
+            throw MethodError("killed", "the kill switch stopped the bridge before this step ran (" + aLabel + ")");
+        }
         throw MethodError("game_not_running", "the game is not in its Running state");
     case QueueResult::Failed:
         break;
@@ -500,6 +528,17 @@ json Dispatcher::Describe() const
                 {"write_classes", WriteClassList(m_config)}};
 }
 
+int64_t Dispatcher::MsSinceLastRequest() const
+{
+    const auto last = m_lastRequestMs.load();
+    if (last < 0)
+    {
+        return -1;
+    }
+    const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    return now - last;
+}
+
 uint64_t Dispatcher::RequestCount() const
 {
     return m_requests.load();
@@ -657,6 +696,7 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
     }
 
     log::Info("bridge.request", "method=" + methodName + " access=" + accessName + pidText, cid);
+    m_lastRequestMs.store(std::chrono::duration_cast<std::chrono::milliseconds>(started.time_since_epoch()).count());
 
     // The session event stream hears every refused write too (0.6).
     const auto refusedEvent = [&](const std::string& aCode) {

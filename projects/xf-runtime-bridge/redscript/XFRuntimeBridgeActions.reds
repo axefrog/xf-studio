@@ -758,11 +758,27 @@ public class XFBridgeRegistry extends ScriptableSystem {
     let type = EnumValueToString("inkSaveType", Cast<Int64>(EnumInt(info.saveType)));
     let life = EnumValueToString("inkLifePath", Cast<Int64>(EnumInt(info.lifePath)));
     let text = "{\"index\":" + IntToString(info.saveIndex) + ",\"name\":" + XFJson.Str(info.internalName) + ",\"valid\":" + XFJson.Flag(info.isValid);
-    text += ",\"type\":" + XFJson.Str(type) + ",\"location\":" + XFJson.Str(info.locationName) + ",\"quest\":" + XFJson.Str(info.trackedQuest);
+    // 0.8.2 (session 9's I1): the location and the tracked quest in the game's language, as the Load menu shows them; the
+    // localisation keys stay beside them.
+    text += ",\"type\":" + XFJson.Str(type) + ",\"location\":" + XFJson.Str(XFBridgeRegistry.Localized(info.locationName)) + ",\"quest\":" + XFJson.Str(XFBridgeRegistry.Localized(info.trackedQuest));
+    text += ",\"location_key\":" + XFJson.Str(info.locationName) + ",\"quest_key\":" + XFJson.Str(info.trackedQuest);
     text += ",\"level\":" + XFJson.Num(Cast<Float>(info.level)) + ",\"life_path\":" + XFJson.Str(life) + ",\"timestamp\":" + ToString(info.timestamp);
     text += ",\"play_time_s\":" + XFJson.Num(Cast<Float>(info.playTime)) + ",\"game_version\":" + XFJson.Str(info.gameVersion) + ",\"modded\":" + XFJson.Flag(info.isModded) + ",\"ep1\":" + XFJson.Flag(info.IsEp1Save()) + "}";
     ArrayPush(this.m_saveMetadata, text);
     return true;
+  }
+
+  // 0.8.2: a "LocKey#..." text in the game's language (GetLocalizedText, as the game's menus resolve them), or the text itself
+  // when it isn't a key or doesn't resolve.
+  public static func Localized(key: String) -> String {
+    if !StrBeginsWith(key, "LocKey#") {
+      return key;
+    }
+    let text = GetLocalizedText(key);
+    if StrLen(text) == 0 || StrBeginsWith(text, "LocKey#") {
+      return key;
+    }
+    return text;
   }
 
   public func StartMetadata() -> Void {

@@ -288,6 +288,36 @@ json TurnPieces(const std::vector<Turn>& aTurns, const Ops& aOps)
     return out;
 }
 
+std::vector<std::string> ParseAnchorArchives(const json& aParams)
+{
+    RequireOnly(aParams, {"archives"}, "the parameters");
+    std::vector<std::string> out;
+    const auto it = aParams.find("archives");
+    if (it == aParams.end() || it->is_null())
+    {
+        return out;
+    }
+    if (!it->is_array() || it->size() > 16)
+    {
+        Bad("'archives' must be a list of at most 16 showroom archive names");
+    }
+    for (const auto& name : *it)
+    {
+        const auto text = name.is_string() ? name.get<std::string>() : std::string();
+        bool ok = text.size() == 13 + 32 && text.rfind("xfs_showroom_", 0) == 0;
+        for (size_t i = 13; ok && i < text.size(); ++i)
+        {
+            ok = (text[i] >= '0' && text[i] <= '9') || (text[i] >= 'a' && text[i] <= 'f');
+        }
+        if (!ok)
+        {
+            Bad("each of 'archives' must be a showroom archive's name (xfs_showroom_ and 32 hex digits, no extension)");
+        }
+        out.push_back(text);
+    }
+    return out;
+}
+
 json Clear(const std::string& aWhat, const Ops& aOps)
 {
     aOps.guard();

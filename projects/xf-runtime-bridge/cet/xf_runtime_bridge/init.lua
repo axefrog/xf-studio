@@ -1,17 +1,20 @@
 -- XF Runtime Bridge: CET (Cyber Engine Tweaks) layer.
 --
 -- Proves: CET events, per-mod logging, calls into the RED4ext natives (Game.XFBridge_*) and into
--- the redscript layer, a kill-switch hotkey, and a small always-visible status indicator with the
--- coordinator's messages under it (ui.message, bridge 0.4).
+-- the redscript layer, a kill-switch hotkey, and the status label (top left) with the coordinator's messages under it
+-- (ui.message, bridge 0.4). 0.8.2 (the maintainer's decision after session 9): one status surface at a time; the status
+-- label is the fallback, drawn only when neither the ink panel nor the overlay panel can show (the plugin says which: the
+-- HUD frame's surface record). The XF Runtime Bridge window (panel.lua) stays the interactive place.
 -- CET has no networking (its sandbox exposes no sockets or HTTP), so the external bridge lives
 -- in the RED4ext plugin; this layer only reports to it and shows its state.
 --
--- Logs: bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge/xf_runtime_bridge.log
+-- Logs: bin/x64/plugins/cyber_engine_tweaks/mods/XF_Runtime_Bridge/XF_Runtime_Bridge.log
 -- (CET per-mod rotating log, 5 MiB x 3) and, through XFBridge_Log, the plugin's RED4ext log
 -- with layer=cet. Every call here is pcall-guarded: if the plugin is missing, the mod says so
 -- once and keeps running.
 
-local MOD = "xf_runtime_bridge"
+-- 0.8.2: CET names the mod after its folder, XF_Runtime_Bridge, so its Bindings group reads "XF Runtime Bridge".
+local MOD = "XF_Runtime_Bridge"
 local REFRESH_SECONDS = 2.0
 local PENDING_REFRESH_SECONDS = 0.5
 local OPTIONS_POLL_SECONDS = 0.25
@@ -69,7 +72,8 @@ local state = {
   answeredAsk = nil, -- 0.8: the answered ask still showing: { id, text, label } (answered_ask)
   inkAsk = 0,        -- 0.8: the question the ink panel shows on screen now (the frame's inkask record), or 0
   comment = "",     -- 0.7: the commentary box's text
-  cetLabel = true, -- bridge 0.5.3: [ui] cet_label / ui.hud's cet_label (read from XFBridge_Hud's frame); the ink panel may replace it
+  cetLabel = true, -- bridge 0.5.3: [ui] cet_label / ui.hud's cet_label (read from XFBridge_Hud's frame)
+  surface = "status_label", -- 0.8.2: the status surface the plugin chose (ink_panel, overlay_panel, status_label)
   overlayOpen = false,
   cidCounter = 0,
   lastError = nil,
@@ -203,21 +207,33 @@ end
 -- A killed bridge answers none. Read-only; polled four times a second while the bridge is on.
 local function pollMessages()
   local bridge = state.info and state.info.bridge
+  -- 0.8.2: the status label shows only when the plugin names it the status surface (a plugin without the record, or none
+  -- answering: always), a stopped bridge included: while the HUD shows, its ink panel says how to reconnect.
+  local hudOk, frame = false, nil
+  if state.pluginPresent and bridge and bridge.enabled then
+    hudOk, frame = pcall(function() return Game.XFBridge_Hud() end)
+  end
+  local surface = hudOk and type(frame) == "string" and string.match(frame, "\nsurface\t([%a_]+)\n") or nil
+  state.surface = surface or "status_label"
   if not state.pluginPresent or not bridge or not bridge.enabled or bridge.killed then
     state.messages = {}
-    state.cetLabel = true -- a stopped bridge always shows its red label (the panel's Reconnect is here)
+    state.pendingAsk = nil
+    state.answeredAsk = nil
+    state.cetLabel = true -- cet_label never hides a stopped bridge's label (the window's Reconnect is named there)
     return
   end
   -- Bridge 0.5.3 (temporary test feature): the ink HUD panel's frame says whether this label should show (cet_label). A plugin
   -- without XFBridge_Hud (older builds) keeps the label.
-  local hudOk, frame = pcall(function() return Game.XFBridge_Hud() end)
   state.cetLabel = not (hudOk and type(frame) == "string" and string.find(frame, "\ncet_label\t0\n", 1, true) ~= nil)
   -- 0.8 (the UI review): while the ink panel shows the question on screen, this label keeps to the status and the keys.
   local inkAsk = hudOk and type(frame) == "string" and string.match(frame, "\ninkask\t(%d+)\n") or nil
   state.inkAsk = tonumber(inkAsk) or 0
   local ok, text = pcall(function() return Game.XFBridge_Messages() end)
   if not ok or type(text) ~= "string" or text == "" then
+    -- 0.8.2 (session 9: "Answer: F6 Done" stayed after the last answer): an empty board has no question either.
     state.messages = {}
+    state.pendingAsk = nil
+    state.answeredAsk = nil
     return
   end
   local decoded, answer = pcall(json.decode, text)
@@ -278,7 +294,7 @@ local function runAction(action)
     log("info", cid, "panel: writes paused=" .. tostring(answer and answer.writes_paused))
   elseif action.name == "mark" then
     -- 0.6: a marker in the session's event stream, for the coordinator to find (session.log); changes nothing.
-    local ok, noted = callNative("XFBridge_Note", "ask", "The player marked this moment in the XF panel")
+    local ok, noted = callNative("XFBridge_Note", "ask", "The player marked this moment in the XF Runtime Bridge window")
     state.message = (ok and noted) and "Marked: the session log has a marker at this moment." or "Couldn't add the marker."
     state.messageOk = ok and noted
     log("info", cid, "panel: marker noted=" .. tostring(ok and noted))
@@ -377,7 +393,9 @@ registerForEvent("onShutdown", function()
 end)
 
 -- Kill switch: bind it in CET's Bindings tab. The bridge refuses everything until it is reconnected (the
--- test builds' panel) or the game restarts.
+-- test builds' panel) or the game restarts. The ID, xf_bridge_kill, has never changed and must not: CET keys a binding by
+-- the mod's name and this ID. CET drops a mod's bindings at a launch where the mod isn't installed (its
+-- Developer.RemoveDeadBindings, on by default), so a launch of another profile without the bridge unbinds it (session 9).
 registerHotkey("xf_bridge_kill", "Stop XF Runtime Bridge", function()
   local cid = nextCid()
   local ok, killed = callNative("XFBridge_Kill", "cet-hotkey")
@@ -429,7 +447,7 @@ local function colouredWrapped(colour, text)
   ImGui.PopStyleColor(1)
 end
 
--- The always-visible label (0.8, the UI review): themed like the XF window; the status line (a bullet in its tone, the words
+-- The status label (0.8, the UI review): themed like the XF Runtime Bridge window; the status line (a bullet in its tone, the words
 -- muted); then, while the ink panel shows the question, only how to answer it; otherwise the messages, the question in the
 -- text colour, and how to answer it.
 local function drawLabelBody(which)
@@ -488,8 +506,9 @@ end
 registerForEvent("onDraw", function()
   local enabled = state.info and state.info.bridge and state.info.bridge.enabled
 
-  -- Always-visible indicator whenever the bridge is enabled: never hidden while the bridge can be used.
-  if enabled and state.cetLabel and not state.overlayOpen then
+  -- The status label whenever the bridge is enabled and it is the status surface (0.8.2: the fallback, when neither the
+  -- ink panel nor the overlay panel can show); while CET's overlay is open the XF Runtime Bridge window shows the status.
+  if enabled and state.cetLabel and not state.overlayOpen and state.surface == "status_label" then
     local drew, err = pcall(drawLabel)
     if not drew then
       state.lastError = tostring(err)
@@ -524,7 +543,7 @@ registerForEvent("onDraw", function()
 end)
 
 return {
-  version = "0.8.1",
-  -- For other CET mods: GetMod("xf_runtime_bridge").info()
+  version = "0.8.2",
+  -- For other CET mods: GetMod("XF_Runtime_Bridge").info()
   info = function() return state.info end,
 }

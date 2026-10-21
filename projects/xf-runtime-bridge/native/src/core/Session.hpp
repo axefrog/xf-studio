@@ -34,4 +34,8 @@ struct Session
 // environment variable changes the folder, so in game it is always the LOCALAPPDATA one.
 bool CreateSession(Session& aOut, std::string& aError, const std::filesystem::path& aRuntimeDirOverride = {});
 bool KillFilePresent(const Session& aSession);
+// 0.8.2: whether a session runner holds the session lock: tools/session-lock.ts's description file
+// (<runtime dir>/session-runner.lock) names a process that is still running. Read-only; a missing, unreadable or stale file
+// (its process gone) counts as no session.
+bool SessionRunnerActive(const Session& aSession);
 } // namespace xfb

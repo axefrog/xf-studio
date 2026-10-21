@@ -74,8 +74,29 @@ struct BridgeView
     bool allowWrites = false;
     bool writesPaused = false;
     bool hasClient = false;
+    bool inSession = false;   // 0.8.2: Bridge::InSession (a client now, a request in the last three minutes, or the session lock)
     bool scriptReady = false; // the script layer's gate (RB-76): world queries (nameplates) only while it is open
 };
+
+// 0.8.2: the in-game surfaces' rule (the maintainer's decision of 21 October, after session 9): one status surface at a
+// time. The ink panel while it is on screen (the game shows its HUD); otherwise the overlay panel (the XF ImGui panel with
+// the yellow heading: photo mode, menus), which then carries the messages and the question too; the status label (CET's,
+// top left) only when neither can draw. The XF Runtime Bridge window (CET's overlay) stays the interactive place and the
+// home for diagnostics; it isn't a status surface.
+enum class StatusSurface
+{
+    InkPanel,
+    OverlayPanel,
+    StatusLabel
+};
+struct SurfaceFacts
+{
+    bool inkShowing = false;     // the ink panel reported itself on screen in the last moment (XFBridge_InkDrawn)
+    bool overlayDrawing = false; // the overlay host is drawing (hooked, not refused, not stopped by the kill switch)
+};
+StatusSurface ChooseStatusSurface(const SurfaceFacts& aFacts);
+// The frame's and XFBridge_Info's name for it: ink_panel, overlay_panel, status_label.
+const char* SurfaceName(StatusSurface aSurface);
 
 // The status line: tone (ok, write, paused, killed, off, idle) and a plain sentence. 0.8 (the UI review): one wording on
 // every surface, made here. text is the ink panel's and the overlay panel's status line ("XF Studio connected · changes
@@ -97,13 +118,21 @@ json StatusJson(const BridgeView& aView);
 
 // ---- 0.8: text as each surface can draw it (session 8's I7) ------------------------------------------------------------
 
-// The one mark every surface draws for a character its font lacks: U+00A4 (the currency sign), which the game's Rajdhani
-// family, CET's Latin-1 font and the overlay's baked Segoe UI all carry. Session 8 saw blank gaps (the ink panel) and "?"
-// (CET, the overlay), which read as nothing or as a real question mark.
+// The mark a surface draws for a character its font lacks. Session 8 saw blank gaps (the ink panel) and "?" (CET, the
+// overlay), which read as nothing or as a real question mark. CET's Latin-1 font and the overlay's baked Segoe UI draw U+00A4
+// (the currency sign), kReplacementMark. 0.8.2 (session 9's B4: the ink panel drew U+00A4 as a blank gap too): the game's
+// ink font lacks it, so the ink panel draws U+2022 (the bullet), kInkReplacementMark, which all four of its styles carry
+// (read from the game's own font files: inkUiInkGlyphs below).
 inline constexpr const char* kReplacementMark = "\xC2\xA4";
-// The ink panel's copy: Latin, Latin-1, Latin Extended-A and the common punctuation (dashes, quotes, bullet, ellipsis, euro,
-// trade mark) stay, the ranges session 8 saw it draw; anything else becomes the mark. Control characters become spaces.
+inline constexpr const char* kInkReplacementMark = "\xE2\x80\xA2";
+// The ink panel's copy: a character every style of the game's ink font has stays; a Latin letter or punctuation mark it
+// lacks becomes its plain form (å to a, Æ to AE, ‰ to %), the way the CET copy does; anything else becomes the ink mark.
+// Control characters become spaces.
 std::string ForInk(const std::string& aText);
+// 0.8.2: whether every style the ink panel uses can draw this code point: the code points mapped in all four fonts of the
+// game's raj.inkfontfamily (raj-medium, raj-semibold, raj-bold, rajdhani-regular .fnt in basegame_1_engine.archive, game 2.31;
+// their cmap tables read offline, 249 code points). Session 9 saw U+00A4 drawn as a gap; the fonts don't map it.
+bool InkHas(uint32_t aCp);
 // The CET layer's copy: CET's own font covers Basic Latin and Latin-1 only (Dear ImGui's default glyph ranges, plus a
 // chosen language's), and the bridge never changes the player's CET setup, so Latin Extended-A letters are transliterated
 // (Ł to L, ż to z, Œ to OE), typographic punctuation becomes ASCII (em dash to -, the ellipsis to ...), and anything else
@@ -137,7 +166,10 @@ struct AskView
 // fields never contain tabs or newlines (message text is already one clean line; see CleanField). A disabled bridge
 // answers show 0 (the panel is only drawn while the bridge is on, like the CET label); a killed one shows its state and
 // no messages.
-std::string Frame(const HudSettings& aSettings, const BridgeView& aView, const std::vector<MessageLine>& aMessages, const AskView* aAsk = nullptr);
+// 0.8.2: a surface record ("surface<TAB>ink_panel|overlay_panel|status_label") says which status surface shows now; the CET
+// layer draws its status label only for status_label.
+std::string Frame(const HudSettings& aSettings, const BridgeView& aView, const std::vector<MessageLine>& aMessages, const AskView* aAsk = nullptr,
+                  StatusSurface aSurface = StatusSurface::StatusLabel);
 // Parses a frame back into JSON (the self-test and the tests read what the redscript layer would draw).
 json ParseFrame(const std::string& aFrame);
 // Replaces tabs, carriage returns and newlines with spaces.
@@ -147,7 +179,7 @@ std::string CleanField(const std::string& aText);
 // ask with the answer keys, its answered ask and the question the ink panel last reported drawing; the ink panel's copy of
 // every text.
 std::string BuildFrame(const HudSettings& aSettings, const BridgeView& aView, MessageBoard& aBoard, const std::vector<std::string>& aAnswerKeys,
-                       uint64_t aInkShownAsk);
+                       uint64_t aInkShownAsk, StatusSurface aSurface = StatusSurface::StatusLabel);
 // A key's name as the panels show it ("IK_F6" to "F6").
 std::string KeyLabel(const std::string& aKey);
 

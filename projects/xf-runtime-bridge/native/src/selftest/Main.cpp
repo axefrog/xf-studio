@@ -45,6 +45,8 @@
 #include <mutex>
 
 int RunUnitTests();
+int RunPipeStress(int aRounds);
+int RunLayoutRepro();
 
 namespace
 {
@@ -152,6 +154,16 @@ int wmain(int argc, wchar_t** argv)
         if (arg == L"--unit")
         {
             return RunUnitTests();
+        }
+        // 0.8.2: the crash investigation's checks (run them under AddressSanitizer): both pipes started and stopped over and
+        // over with clients racing them, and 0.8.1's stale allocation reproduced.
+        if (arg == L"--pipe-stress" && i + 1 < argc)
+        {
+            return RunPipeStress(std::max(1, _wtoi(argv[i + 1])));
+        }
+        if (arg == L"--layout-repro")
+        {
+            return RunLayoutRepro();
         }
         if (arg == L"--runtime-dir" && i + 1 < argc)
         {
@@ -557,7 +569,7 @@ int wmain(int argc, wchar_t** argv)
                              return json{{"writes_paused", dispatcher.WritesPaused()}};
                          }});
     dispatcher.Register({"selftest.script_layer", xfb::Access::Read, xfb::RunOn::BridgeThread,
-                         "Moves the simulated script layer (attach, player_attach, detach, detach_before_next_task, load_requested; self-test only).",
+                         "Moves the simulated script layer (attach, puppet, player_attach, detach, detach_before_next_task, load_requested; self-test only).",
                          [](const xfb::MethodContext& aContext) {
                              const auto event = aContext.params.value("event", std::string());
                              if (event == "detach_before_next_task")
@@ -570,7 +582,7 @@ int wmain(int argc, wchar_t** argv)
                              }
                              else if (!simLayer.OnEvent(event))
                              {
-                                 throw xfb::MethodError("bad_params", "event must be attach, player_attach, detach, detach_before_next_task or load_requested");
+                                 throw xfb::MethodError("bad_params", "event must be attach, puppet, player_attach, detach, detach_before_next_task or load_requested");
                              }
                              return simLayer.Describe();
                          }});
@@ -1499,11 +1511,13 @@ int wmain(int argc, wchar_t** argv)
                          }});
     // 0.8: what the ink panel last reported drawing (XFBridge_InkDrawn in the plugin): selftest.ink_drawn {id, shown}.
     static uint64_t inkShown = 0;
+    static bool inkVisible = false; // 0.8.2: the ink panel's own report of being on screen
     dispatcher.Register({"selftest.ink_drawn", xfb::Access::Read, xfb::RunOn::BridgeThread, "The ink panel reports the question it draws (self-test only).",
                          [](const xfb::MethodContext& aContext) {
                              const auto& p = aContext.params;
                              const auto id = p.is_object() ? p.value("id", 0ll) : 0ll;
                              inkShown = p.is_object() && p.value("shown", false) && id > 0 ? static_cast<uint64_t>(id) : 0;
+                             inkVisible = p.is_object() && p.value("shown", false);
                              return json{{"ok", true}, {"ink_shown", inkShown}};
                          }});
     dispatcher.Register({"selftest.hud", xfb::Access::Read, xfb::RunOn::BridgeThread, "The frame the ink HUD panel would draw (self-test only).",
@@ -1515,9 +1529,11 @@ int wmain(int argc, wchar_t** argv)
                              view.writesPaused = bridge.GetDispatcher().WritesPaused();
                              view.listening = bridge.IsListening();
                              view.hasClient = bridge.HasClient();
+                             view.inSession = bridge.InSession();
                              view.scriptReady = simLayer.Ready();
                              // 0.8: the plugin's own frame builder (core BuildFrame), and the status every surface shows.
-                             const auto frame = xfb::inkui::BuildFrame(hud.Current(), view, messages, config.answerKeys, inkShown);
+                             const auto surface = xfb::inkui::ChooseStatusSurface({inkVisible, false});
+                             const auto frame = xfb::inkui::BuildFrame(hud.Current(), view, messages, config.answerKeys, inkShown, surface);
                              auto out = xfb::inkui::ParseFrame(frame);
                              out["frame"] = frame;
                              out["status_all"] = xfb::inkui::StatusJson(view);
@@ -2248,9 +2264,10 @@ int wmain(int argc, wchar_t** argv)
         }
         return json{{"simulated", true}, {"codeware", sim.codeware}, {"pieces", pieces}, {"lights", lights}, {"pending", pending}};
     };
-    const auto showroomOps = [&queue, showroomRefusal, showroomStatus] {
+    const auto showroomOps = [&queue, &dispatcher, showroomRefusal, showroomStatus] {
         xfb::showroom::Ops ops;
-        ops.guard = [] {};
+        // 0.8.2: as the plugin's (RequireWritesOpen before each spawn), so a handover or a pause during a placement stops it.
+        ops.guard = [&dispatcher] { dispatcher.RequireWritesOpen(); };
         ops.spawn = [showroomRefusal](xfb::showroom::Kind aKind, const xfb::showroom::Placement& aItem) {
             std::scoped_lock _(sim.mutex);
             showroomRefusal();
@@ -2324,10 +2341,20 @@ int wmain(int argc, wchar_t** argv)
     };
     dispatcher.Register({"showroom.anchor", xfb::Access::Read, xfb::RunOn::GameThread, "Where V and the camera are (simulated).",
                          [](const xfb::MethodContext& aContext) {
-                             p::RequireOnly(aContext.params, {});
+                             const auto archives = xfb::showroom::ParseAnchorArchives(aContext.params);
                              std::scoped_lock _(sim.mutex);
                              json out{{"simulated", true}, {"codeware", sim.codeware}, {"phase", sim.phase},
                                       {"v", {{"position", {100.0, 200.0, 10.0}}, {"forward", {0.0, 1.0, 0.0}}}}};
+                             if (!archives.empty())
+                             {
+                                 // 0.8.2: the simulated game loaded every showroom archive whose key starts with a digit.
+                                 json loaded = json::object();
+                                 for (const auto& name : archives)
+                                 {
+                                     loaded[name] = sim.codeware && name[13] >= '0' && name[13] <= '9';
+                                 }
+                                 out["archives"] = loaded;
+                             }
                              if (sim.codeware)
                              {
                                  out["codeware_version"] = "1.20.5";
@@ -2549,6 +2576,11 @@ int wmain(int argc, wchar_t** argv)
             std::scoped_lock _(sim.mutex);
             sim.gameSaveLock = true;
         };
+        hooks.clearShowroom = [showroomOps](const std::string& aWhat) {
+            auto out = showroomOps().clear(aWhat);
+            out["what"] = aWhat;
+            return out;
+        };
         sim060 = std::make_unique<xfb::selftest::Sim060>(dispatcher, queue, config, std::move(hooks));
         sim060->Register();
     }
@@ -2597,6 +2629,7 @@ int wmain(int argc, wchar_t** argv)
             const bool due = std::chrono::steady_clock::now() - killedAt >= std::chrono::milliseconds(rearmAfterMs);
             if (pump)
             {
+                queue.DrainCleanup(4); // 0.8.2: put-back steps posted after the kill, before the restore (as the plugin)
                 restore.Tick(bridge.RestoreReady(), simulatedRestore, restoreFailed);
             }
             if (due && bridge.RearmRefusal().empty() && !restore.Pending())
@@ -2624,6 +2657,7 @@ int wmain(int argc, wchar_t** argv)
         if (pump)
         {
             queue.Drain(4); // the plugin does this once per engine tick
+            queue.DrainCleanup(4); // 0.8.2: and the kill switch's cleanup lane
             {
                 // Bridge 0.6: the simulated look-at and the behaviours, at tick rate (the plugin's TickBehaviours).
                 static auto last = std::chrono::steady_clock::now();
@@ -2685,6 +2719,7 @@ int wmain(int argc, wchar_t** argv)
                 else if (sim.loadTicks == 2)
                 {
                     simLayer.OnAttach();
+                    simLayer.OnEvent("puppet"); // 0.8.2: the press-any-key screen, until the player attaches
                 }
                 if (sim.loadTicks > 0 && --sim.loadTicks == 0)
                 {

@@ -1,4 +1,5 @@
 #include "core/Win32.hpp"
+#include "core/LayoutGuard.hpp"
 
 #include <Windows.h>
 #include <bcrypt.h>

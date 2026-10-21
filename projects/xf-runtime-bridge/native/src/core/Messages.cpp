@@ -1,4 +1,5 @@
 #include "core/Messages.hpp"
+#include "core/LayoutGuard.hpp"
 
 #include <algorithm>
 #include <vector>
@@ -179,7 +180,7 @@ json MessageBoard::Post(const MessageRequest& aRequest, Clock::time_point aNow)
         // for the player's answer, unless the caller withdraws questions too.
         const auto before = m_messages.size();
         m_messages.erase(std::remove_if(m_messages.begin(), m_messages.end(),
-                                        [&](const Message& aMessage) { return aRequest.clearAsks || aMessage.choices.empty(); }),
+                                        [&](const Message& aMessage) { return !aRequest.keepAsks || aMessage.choices.empty(); }),
                          m_messages.end());
         cleared = before - m_messages.size();
     }
@@ -192,7 +193,7 @@ json MessageBoard::Post(const MessageRequest& aRequest, Clock::time_point aNow)
         {
             out["withdrawn"] = withdrawn;
         }
-        if (aRequest.clear && !aRequest.clearAsks)
+        if (aRequest.clear && aRequest.keepAsks)
         {
             PendingAsk kept;
             if (PendingLocked(kept, aNow))
@@ -215,6 +216,24 @@ json MessageBoard::Post(const MessageRequest& aRequest, Clock::time_point aNow)
                 {
                     choices.push_back(clean);
                 }
+            }
+        }
+    }
+    // 0.8.2 (session 9's B6): one question at a time. A new ask withdraws every question still waiting, so answering the
+    // newest never reveals an older one with its own keys underneath.
+    json withdrawnAsks = json::array();
+    if (!choices.empty())
+    {
+        for (auto it = m_messages.begin(); it != m_messages.end();)
+        {
+            if (!it->choices.empty())
+            {
+                withdrawnAsks.push_back(it->id);
+                it = m_messages.erase(it);
+            }
+            else
+            {
+                ++it;
             }
         }
     }
@@ -252,6 +271,7 @@ json MessageBoard::Post(const MessageRequest& aRequest, Clock::time_point aNow)
     if (!choices.empty())
     {
         out["choices"] = choices;
+        out["withdrawn"] = withdrawnAsks;
     }
     if (aRequest.clear)
     {

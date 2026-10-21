@@ -1,6 +1,12 @@
 #include "core/Session.hpp"
+#include "core/LayoutGuard.hpp"
 
 #include <Windows.h>
+
+#include <fstream>
+#include <iterator>
+
+#include <nlohmann/json.hpp>
 
 #include "core/Win32.hpp"
 
@@ -42,5 +48,49 @@ bool KillFilePresent(const Session& aSession)
 {
     const auto attributes = GetFileAttributesW(aSession.KillFile().c_str());
     return attributes != INVALID_FILE_ATTRIBUTES;
+}
+
+bool SessionRunnerActive(const Session& aSession)
+{
+    if (aSession.runtimeDir.empty())
+    {
+        return false;
+    }
+    try
+    {
+        std::ifstream in(aSession.runtimeDir / L"session-runner.lock", std::ios::binary);
+        if (!in)
+        {
+            return false;
+        }
+        std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        if (text.size() > 4096)
+        {
+            return false;
+        }
+        const auto lock = nlohmann::json::parse(text, nullptr, false);
+        if (!lock.is_object() || !lock.contains("pid") || !lock["pid"].is_number_unsigned())
+        {
+            return false;
+        }
+        const auto pid = lock["pid"].get<uint64_t>();
+        if (pid == 0 || pid > 0xFFFFFFFFull)
+        {
+            return false;
+        }
+        const auto process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, static_cast<DWORD>(pid));
+        if (!process)
+        {
+            return false;
+        }
+        DWORD code = 0;
+        const bool alive = GetExitCodeProcess(process, &code) && code == STILL_ACTIVE;
+        CloseHandle(process);
+        return alive;
+    }
+    catch (...)
+    {
+        return false;
+    }
 }
 } // namespace xfb

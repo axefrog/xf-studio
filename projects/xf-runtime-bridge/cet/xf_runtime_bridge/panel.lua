@@ -14,7 +14,8 @@
 --   * Mark this moment (0.6): a marker in the session's event stream (XFBridge_Note), for the coordinator's session.log; the
 --     coordinator also treats it as "ready".
 --   * Stop the bridge (the kill switch), on its own row in the danger colour (0.8, the UI review), while it listens.
---   * A commentary box (0.7; XFBridge_Comment): Send, or Ctrl+Enter (0.8, session 8's request).
+--   * A commentary box (0.7; XFBridge_Comment): Send, or Ctrl+Enter (0.8, session 8's request; 0.8.2: read from the box's own
+--     validation, since Ctrl+Enter ends the box's editing before anything after it can see the key).
 -- Buttons only queue an action; init.lua carries it out in onUpdate, never while drawing.
 -- 0.7: the window takes the XF Studio theme (theme.lua, generated from the Studio's tokens): dark by default, light when
 -- the plugin's [overlay] theme says so; never switched automatically. init.lua themes its label through panel.pushTheme.
@@ -160,18 +161,22 @@ local function drawQuestion(state, queue, theme, which)
 end
 
 -- The commentary box: Send, disabled while the box is empty, or Ctrl+Enter while typing (session 8's request).
+-- 0.8.2 (session 9's C2: Ctrl+Enter only took the box out of editing): in a multi-line box Dear ImGui treats Ctrl+Enter as
+-- "done" and ends the editing inside the widget call, so by the time the code after it ran, the box was no longer active and
+-- the key went unseen. EnterReturnsTrue makes the call itself answer true for that Ctrl+Enter (plain Enter still starts a
+-- new line), and the text is taken every frame.
 local function drawComment(state, queue, theme, which)
   ImGui.Separator()
   ImGui.Text("Comment for XF Studio")
   local width = ImGui.GetFontSize() * WRAP_EM
-  local text, changed = ImGui.InputTextMultiline("##xf_comment_" .. tostring(state.commentGen or 0), state.comment or "", 1000, width, ImGui.GetFontSize() * 4)
-  if changed then
+  local flags = (ImGuiInputTextFlags and ImGuiInputTextFlags.EnterReturnsTrue) or 0
+  local text, submitted = ImGui.InputTextMultiline("##xf_comment_" .. tostring(state.commentGen or 0), state.comment or "", 1000, width,
+    ImGui.GetFontSize() * 4, flags)
+  if type(text) == "string" then
     state.comment = text
   end
-  local typing = ImGui.IsItemActive()
-  local ctrl = ImGui.IsKeyDown(ImGuiKey.LeftCtrl) or ImGui.IsKeyDown(ImGuiKey.RightCtrl)
   local empty = not state.comment or not string.find(state.comment, "%S")
-  if typing and ctrl and ImGui.IsKeyPressed(ImGuiKey.Enter) and not empty then
+  if submitted and not empty then
     queue("comment", state.comment)
   end
   ImGui.BeginDisabled(empty)

@@ -198,6 +198,12 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
                 log::Info("game.save_relock_dropped", "reason=session_detached (a load discards the bridge's changes)", "save-relock");
             }
         }
+        // 0.8.2: put-back steps a write posted after the kill switch closed the queue (GameThreadQueue::PostCleanup), before
+        // the kill switch's restore and only while the scripts can be called (they wait through a load).
+        if (scriptsReady)
+        {
+            state.queue.DrainCleanup(kMaxTasksPerTick);
+        }
         // Behaviours (0.6) at tick rate, before the kill switch's restore so their stop steps come first.
         {
             static auto last = std::chrono::steady_clock::now();
@@ -233,6 +239,9 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
             }
         }
         HandleRearm(state);
+        // 0.8.2: the status surface for this tick (one at a time: core/InkUi.hpp ChooseStatusSurface).
+        const auto surface = inkui::ChooseStatusSurface({state.InkVisible(), state.overlayHost.CanShowPanel()});
+        state.statusSurface.store(static_cast<int>(surface));
         // 0.7: the overlay host's panel data (the three-slot hand-off to the render thread) and its switches.
         if (state.overlayHost.Enabled())
         {
@@ -251,10 +260,30 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
             panel.tone = status.tone;
             panel.bridgeStatus = status.text;
             panel.diagnostics = state.config.overlayDiagnostics;
-            PendingAsk ask;
-            if (state.messages.Pending(ask))
+            panel.show = surface == inkui::StatusSurface::OverlayPanel;
+            if (panel.show && !killed)
             {
-                panel.pendingAsk = ask.text;
+                // 0.8.2: as the status surface, the coordinator's lines and the question with its keys (the ink panel's).
+                for (auto& [level, text] : state.messages.Lines())
+                {
+                    panel.lines.emplace_back(level, text);
+                }
+                PendingAsk ask;
+                AnsweredAsk answered;
+                if (state.messages.Pending(ask))
+                {
+                    panel.pendingAsk = ask.text;
+                    std::string hint;
+                    for (size_t i = 0; i < ask.choices.size() && i < state.config.answerKeys.size(); ++i)
+                    {
+                        hint += (hint.empty() ? "" : "   ") + inkui::KeyLabel(state.config.answerKeys[i]) + " " + ask.choices[i];
+                    }
+                    panel.askHint = hint.empty() ? "Answer in the XF Runtime Bridge window (CET overlay)." : hint;
+                }
+                else if (state.messages.Answered(answered))
+                {
+                    panel.askHint = "Answered: " + answered.label;
+                }
             }
             state.overlayHost.SetKilled(killed);
             state.overlayHost.SetCetOpen(state.cetOverlayOpen.load());
@@ -365,7 +394,7 @@ std::string SemVerText(const RED4ext::v1::SemVer* aVersion)
 void StartBridge(State& aState)
 {
     std::string error;
-    aState.bridge = std::make_unique<Bridge>(aState.config, aState.session, aState.queue);
+    aState.bridge = Bridge::Create(aState.config, aState.session, aState.queue);
     RegisterMethods(aState.bridge->GetDispatcher());
     if (aState.bridge->Start(error))
     {

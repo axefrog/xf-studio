@@ -10,7 +10,7 @@
 //   world.state (read)                the clock, rain, the weather state, named quest facts, photo mode's scene rows
 //   world.probe (read)                streaming, walkable ground, ground and ceiling at points (observe only)
 //   world.weather.set (write-world)   hold a weather state (Codeware), or give the weather back to the game's cycle
-//   ui.state (read)                   menus, popups, photo mode's UI, the prompt, the CET overlay, the XF panels
+//   ui.state (read)                   menus, popups, photo mode's UI, the prompt, the CET overlay, the ink panel and the XF pins
 //   game.saves (read)                 the save list with each save's metadata
 //   photo.scene.set (write-photo)     photo mode's surrounding NPCs, weather and game speed rows
 //   overlay.state (read)              the ImGui overlay host (core/overlay/Host.hpp)

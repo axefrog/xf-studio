@@ -166,6 +166,8 @@ public:
 
     nlohmann::json Describe() const;
     uint64_t RequestCount() const;
+    // 0.8.2: milliseconds since the last authenticated request (any method, either pipe), or -1 before the first.
+    int64_t MsSinceLastRequest() const;
 
 private:
     DispatchResult HandleUnchecked(const std::string& aLine, uint32_t aClientPid, bool aControlRoute);
@@ -184,6 +186,7 @@ private:
     std::atomic<bool> m_handover{false};
     EventSink m_eventSink;
     std::atomic<uint64_t> m_requests{0};
+    std::atomic<int64_t> m_lastRequestMs{-1}; // steady clock, milliseconds since its epoch
     std::atomic<uint64_t> m_cidCounter{0};
 
     // Token bucket: capacity = 2 s of the configured rate.

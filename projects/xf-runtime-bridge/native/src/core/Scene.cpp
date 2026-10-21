@@ -1,4 +1,5 @@
 #include "core/Scene.hpp"
+#include "core/LayoutGuard.hpp"
 
 #include <algorithm>
 

@@ -62,6 +62,9 @@ std::vector<Turn> ParseTurn(const json& aParams);
 
 // showroom.clear: {what: "all" (default), "pieces" or "lights"}.
 std::string ParseClear(const json& aParams);
+// 0.8.2: showroom.anchor's archives: up to 16 showroom archive names (xfs_showroom_<32 hex>, no extension) whose presence in
+// the game the answer reports, so the tools can find the staged showroom build without a manifest. Empty without the key.
+std::vector<std::string> ParseAnchorArchives(const json& aParams);
 
 // The XF Finish Showroom's templates and appearance names; nothing else can be spawned.
 bool TemplateOk(Kind aKind, const std::string& aPath);

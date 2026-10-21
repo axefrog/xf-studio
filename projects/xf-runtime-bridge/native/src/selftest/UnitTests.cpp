@@ -13,9 +13,11 @@
 #include <cmath>
 #include <cstring>
 #include <string>
+#include <fstream>
 #include <functional>
 #include <limits>
 #include <map>
+#include <new>
 #include <vector>
 #include <thread>
 
@@ -3185,8 +3187,10 @@ void Bridge070Tests()
         const auto scene = h::ParsePhotoScene(json{{"npcs", {{"label", "Off"}}}, {"game_speed", 0.5}});
         Check("0.7 photo.scene.set: a label row and a speed", scene.rows.size() == 2 && scene.rows[0].key == 54 && scene.rows[0].label == "Off" && scene.rows[1].key == 71);
         const auto saves = h::TrimSaves(json{{"ready", true}, {"names", {"a", "b", "c"}}, {"metadata", {{{"name", "a"}, {"timestamp", 1}}, {{"name", "b"}, {"timestamp", 3}}}}}, 1);
-        Check("0.7 game.saves keeps the newest and says when details are missing", saves["saves"].size() == 1 && saves["saves"][0]["name"] == "b" &&
-                                                                                        !saves["note"].get<std::string>().empty());
+        const auto three = h::TrimSaves(json{{"ready", true}, {"names", {"a", "b", "c"}}, {"metadata", {{{"name", "a"}, {"timestamp", 1}}, {{"name", "b"}, {"timestamp", 3}}}}}, 3);
+        Check("0.7 game.saves keeps the newest and says when details are missing (0.8.2: of the limit asked for)",
+              saves["saves"].size() == 1 && saves["saves"][0]["name"] == "b" && saves["note"].get<std::string>().empty() &&
+                  !three["note"].get<std::string>().empty());
     }
     {
         o::DeviceFacts facts;
@@ -3270,9 +3274,10 @@ void Bridge070ReviewTests()
         const auto askId = ask["id"].get<uint64_t>();
         board.Post({"a line", 60, "info", false}, t0);
         Check("RB-96 a posted question is pending", board.StateOf(askId, t0).state == "pending");
-        const auto cleared = board.Post({"", 8, "info", true}, t0);
+        // 0.8.2: a capture's clear (keep_asks) keeps the question; a plain clear withdraws it (Session9Tests).
+        const auto cleared = board.Post({"", 8, "info", true, {}, true}, t0);
         xfb::PendingAsk pending;
-        Check("RB-103 a clear takes the lines down but keeps the waiting question", cleared.value("cleared", 0) == 1 && board.Pending(pending, t0) &&
+        Check("RB-103 a capture's clear (keep_asks) takes the lines down but keeps the waiting question", cleared.value("cleared", 0) == 1 && board.Pending(pending, t0) &&
                                                                                         pending.id == askId && cleared.value("kept_question", 0ull) == askId,
               cleared.dump());
         board.Answer(askId, 0, t0);
@@ -3285,8 +3290,8 @@ void Bridge070ReviewTests()
         const auto third = board.Post({"Still there?", 5, "ask", false}, t0)["id"].get<uint64_t>();
         Check("RB-103 a question that ran out of time is gone", board.StateOf(third, t0 + std::chrono::seconds(6)).state == "gone");
         const auto fourth = board.Post({"Last one", 60, "ask", false}, t0)["id"].get<uint64_t>();
-        board.Post({"", 8, "info", true, {}, true}, t0);
-        Check("RB-103 clear_asks withdraws a waiting question too", board.StateOf(fourth, t0).state == "gone" && board.Active(t0) == 0);
+        board.Post({"", 8, "info", true}, t0);
+        Check("RB-103 a plain clear withdraws a waiting question too (0.8.2: the default)", board.StateOf(fourth, t0).state == "gone" && board.Active(t0) == 0);
         Check("RB-96 an id never posted is unknown", board.StateOf(9999, t0).state == "unknown");
         const auto undo = xfb::UiMessageUndo(json{{"id", 7}});
         Check("RB-103 a message's undo withdraws it by id", undo["params"]["withdraw"] == 7 && xfb::UiMessageUndo(json{{"cleared", 1}}).is_null());
@@ -3457,15 +3462,21 @@ void Bridge080Tests()
 
     // Session 8's I7 and the UI review: one mark on every surface; CET gets a Latin-1 copy.
     const std::string mixed = "\xC5\x81\xC3\xB3" "d\xC5\xBA \xE2\x80\x94 \xE6\x9D\xB1\xE4\xBA\xAC \xF0\x9F\x8C\x86";
-    Check("0.8 the ink panel keeps Latin Extended-A and the em dash, marks the rest",
-          k::ForInk(mixed) == "\xC5\x81\xC3\xB3" "d\xC5\xBA \xE2\x80\x94 \xC2\xA4\xC2\xA4 \xC2\xA4", k::ForInk(mixed));
+    // 0.8.2 (session 9's B4): the ink mark is the bullet, which the game's ink font has (it lacks U+00A4).
+    Check("0.8 the ink panel keeps the Polish letters and the em dash, marks the rest (0.8.2: with the bullet)",
+          k::ForInk(mixed) == "\xC5\x81\xC3\xB3" "d\xC5\xBA \xE2\x80\x94 \xE2\x80\xA2\xE2\x80\xA2 \xE2\x80\xA2", k::ForInk(mixed));
+    Check("0.8.2 the ink copy: what the font lacks becomes its plain letters (\xC3\xA5 a, \xC3\xA6 ae, \xC4\x88 C), U+00A4 the bullet, invalid bytes too",
+          k::ForInk("\xC3\xA5\xC3\xA6\xC4\x88 \xC2\xA4\xFF \xC5\x91") == "aaeC \xE2\x80\xA2\xE2\x80\xA2 \xC5\x91", k::ForInk("\xC3\xA5\xC3\xA6\xC4\x88 \xC2\xA4\xFF \xC5\x91"));
+    Check("0.8.2 the ink font's table: the bullet and the Polish letters in, U+00A4 and U+00E5 out",
+          k::InkHas(0x2022) && k::InkHas(0x0142) && k::InkHas(0x017C) && k::InkHas(0x00E9) && !k::InkHas(0x00A4) && !k::InkHas(0x00E5) && !k::InkHas(0x6771));
     Check("0.8 the CET copy transliterates Polish and punctuation to Latin-1, marks the rest",
           k::ForCet(mixed) == "L\xC3\xB3" "dz - \xC2\xA4\xC2\xA4 \xC2\xA4", k::ForCet(mixed));
     Check("0.8 the CET copy: zolc gesla jazn, the ellipsis, OE, euro",
           k::ForCet("\xC5\xBC\xC3\xB3\xC5\x82\xC4\x87 g\xC4\x99\xC5\x9Bl\xC4\x85 ja\xC5\xBA\xC5\x84\xE2\x80\xA6 \xC5\x92 \xE2\x82\xAC" "5") ==
               "z\xC3\xB3lc gesla jazn... OE EUR5");
     Check("0.8 the CET copy keeps Latin-1 (caf\xC3\xA9) and turns invalid bytes into the mark", k::ForCet("caf\xC3\xA9\xFF") == "caf\xC3\xA9\xC2\xA4");
-    Check("0.8 every surface uses the same mark", std::string(k::kReplacementMark) == "\xC2\xA4" && o::LimitToGlyphs("\xE6\x97\xA5") == k::kReplacementMark);
+    Check("0.8 CET and the overlay use the same mark (0.8.2: the ink panel its own)",
+          std::string(k::kReplacementMark) == "\xC2\xA4" && o::LimitToGlyphs("\xE6\x97\xA5") == k::kReplacementMark && std::string(k::kInkReplacementMark) == "\xE2\x80\xA2");
 
     // Session 8's item 17: a 600-character question reaches the ink panel and the CET layer whole.
     {
@@ -3953,6 +3964,504 @@ void Bridge081Tests()
     }
 }
 
+// 0.8.2: the re-check's findings (native side) and session 9's bridge fixes.
+void Bridge082Tests()
+{
+    namespace p = xfb::params;
+    namespace w = xfb::writes;
+
+    // A dispatcher with a pump thread draining the queue and the cleanup lane, as the plugin's Running update does.
+    struct Rig
+    {
+        xfb::Config config;
+        xfb::Session session;
+        xfb::GameThreadQueue queue;
+        std::unique_ptr<xfb::Dispatcher> dispatcher;
+        std::atomic<bool> stop{false};
+        std::thread pump;
+        Rig()
+        {
+            config.allowWrites = true;
+            std::string error;
+            wchar_t temp[MAX_PATH]{};
+            GetTempPathW(MAX_PATH, temp);
+            xfb::CreateSession(session, error, std::filesystem::path(temp) / L"xfb-unit-082-not-created");
+            queue.SetPumping(true);
+            dispatcher = std::make_unique<xfb::Dispatcher>(config, session, queue);
+            pump = std::thread([this] {
+                while (!stop.load())
+                {
+                    queue.Drain(4);
+                    queue.DrainCleanup(4);
+                    std::this_thread::sleep_for(1ms);
+                }
+            });
+        }
+        ~Rig()
+        {
+            stop.store(true);
+            pump.join();
+        }
+        void Kill()
+        {
+            dispatcher->Kill("unit");
+            queue.Close();
+        }
+    };
+    const auto waitFor = [](const std::function<bool()>& aDone) {
+        const auto deadline = std::chrono::steady_clock::now() + 2s;
+        while (!aDone() && std::chrono::steady_clock::now() < deadline)
+        {
+            std::this_thread::sleep_for(2ms);
+        }
+        return aDone();
+    };
+    xfb::SetGameGate({});
+
+    // Re-check finding 6: the kill switch during photo.pose.set's settle. The pose step is refused; the category's put-back
+    // goes on the cleanup lane (the queue is closed) and the game thread runs it.
+    {
+        Rig rig;
+        auto& d = *rig.dispatcher;
+        std::atomic<int> category{1};
+        std::atomic<int> poseSelected{0};
+        w::PoseSetOps ops;
+        ops.category = [&] {
+            return d.RunWrite(1000ms, [&] {
+                const int before = category.exchange(7);
+                return json{{"changed", true}, {"before_known", true}, {"before_category", before}, {"before_pose", 0}, {"category_value", 7}, {"category_text", "XF"}};
+            }, "unit.pose.category");
+        };
+        ops.settle = [&] { rig.Kill(); };
+        ops.pose = [&] { return d.RunWrite(1000ms, [&] { ++poseSelected; return json{{"changed", true}}; }, "unit.pose.pose"); };
+        ops.restoreCategory = [&](int32_t aValue) { d.RunWrite(1000ms, [&, aValue] { category = aValue; return json::object(); }, "unit.pose.restore"); };
+        std::string message;
+        try
+        {
+            w::PoseSet(ops);
+        }
+        catch (const xfb::MethodError& e)
+        {
+            message = std::string(e.code) + ": " + e.what();
+        }
+        const bool restored = waitFor([&] { return category.load() == 1; });
+        Check("0.8.2 (re-check 6): photo.pose.set killed during its settle selects no pose, and the category's put-back runs on the cleanup lane",
+              message.rfind("killed:", 0) == 0 && poseSelected == 0 && restored && message.find("put back") != std::string::npos,
+              message + " category=" + std::to_string(category.load()));
+        Check("0.8.2 (re-check 6): a forward write after the kill is still refused (never on the cleanup lane)",
+              ParamsCode([&] { d.RunWrite(200ms, [&] { category = 9; return json::object(); }, "unit.forward"); }) == "killed" && category.load() == 1 &&
+                  rig.queue.PendingCleanups() == 0);
+    }
+    {
+        xfb::GameThreadQueue queue;
+        queue.Close();
+        size_t accepted = 0;
+        for (size_t i = 0; i < xfb::GameThreadQueue::kCleanupCapacity + 3; ++i)
+        {
+            accepted += queue.PostCleanup([] { return json::object(); }, "unit.cap") ? 1 : 0;
+        }
+        const auto ran = queue.DrainCleanup(100);
+        std::atomic<int> after{0};
+        queue.PostCleanup([]() -> json { throw std::runtime_error("x"); }, "unit.throw");
+        queue.PostCleanup([&] { ++after; return json::object(); }, "unit.after");
+        queue.DrainCleanup(100);
+        Check("0.8.2: the cleanup lane is bounded, accepted while closed, and a failing step doesn't stop the next",
+              accepted == xfb::GameThreadQueue::kCleanupCapacity && ran == xfb::GameThreadQueue::kCleanupCapacity && after == 1 && queue.PendingCleanups() == 0,
+              std::to_string(accepted) + " " + std::to_string(ran));
+    }
+
+    // Re-check finding 4: place "camera" switches the light off and on; the switch on is the placement, so it is gated.
+    struct LightFake : FakePhoto
+    {
+        std::map<int32_t, std::array<double, 3>> at;
+        xfb::Dispatcher* d = nullptr;
+        xfb::writes::LightOps Ops(std::function<void()> aSettle)
+        {
+            auto ops = FakePhoto::Ops();
+            const auto base = ops.set;
+            ops.set = [this, base](int32_t aKey, float aValue) { return d->RunWrite(1000ms, [&] { return base(aKey, aValue); }, "unit.light.set"); };
+            ops.settle = aSettle;
+            ops.place = [this](int32_t aLight, const p::LightPlacement& aPlace) {
+                return d->RunWrite(1000ms, [&] {
+                    calls.push_back("place " + std::to_string(aLight));
+                    const auto before = at[aLight];
+                    at[aLight] = {aPlace.world[0], aPlace.world[1], aPlace.world[2]};
+                    const auto vec = [](const std::array<double, 3>& v) { return json{{"x", v[0]}, {"y", v[1]}, {"z", v[2]}}; };
+                    return json{{"before", vec(before)}, {"after", vec(at[aLight])}};
+                }, "unit.light.place");
+            };
+            ops.position = [this](int32_t aLight) {
+                const auto v = at[aLight];
+                return json{{"position", {{"x", v[0]}, {"y", v[1]}, {"z", v[2]}}}};
+            };
+            return ops;
+        }
+    };
+    {
+        Rig rig;
+        LightFake fake;
+        fake.d = rig.dispatcher.get();
+        fake.values[p::key::kLightSelect] = 0;
+        fake.values[p::key::kLightState] = 0; // off
+        fake.at[1] = {9.0, 9.0, 9.0};
+        bool paused = false;
+        const auto code = ParamsCode([&] {
+            w::LightSet(p::ParseLight(json{{"light", 1}, {"place", "camera"}}), fake.Ops([&] {
+                if (!paused)
+                {
+                    paused = true;
+                    rig.dispatcher->SetWritesPaused(true);
+                }
+            }));
+        });
+        Check("0.8.2 (re-check 4): a light that was off, placed at the camera and paused during the settle, stays off (the switch on is gated)",
+              code == "writes_paused" && fake.values[p::key::kLightState] == 0.0f &&
+                  std::find(fake.calls.begin(), fake.calls.end(), std::to_string(p::key::kLightState) + "=1") == fake.calls.end(),
+              code);
+    }
+    {
+        Rig rig;
+        LightFake fake;
+        fake.d = rig.dispatcher.get();
+        fake.values[p::key::kLightSelect] = 0;
+        fake.values[p::key::kLightState] = 1; // on
+        fake.at[1] = {9.0, 9.0, 9.0};
+        bool paused = false;
+        const auto code = ParamsCode([&] {
+            w::LightSet(p::ParseLight(json{{"light", 1}, {"place", "camera"}}), fake.Ops([&] {
+                if (!paused)
+                {
+                    paused = true;
+                    // In the game photo mode moves the light as it switches; here the pause comes first, so only the
+                    // light's earlier state may come back.
+                    fake.at[1] = {1.0, 2.0, 3.0};
+                    rig.dispatcher->SetWritesPaused(true);
+                }
+            }));
+        });
+        Check("0.8.2 (re-check 4): a light that was on comes back on and to where it stood (its earlier state, not the placement)",
+              code == "writes_paused" && fake.values[p::key::kLightState] == 1.0f && fake.at[1] == std::array<double, 3>{9.0, 9.0, 9.0}, code);
+    }
+
+    // Re-check finding 2: player.stop between a look's steps ends it there.
+    {
+        Rig rig;
+        auto& d = *rig.dispatcher;
+        xfb::player::StopCount stops;
+        std::atomic<int> turned{0}, looked{0};
+        const auto seen = stops.Current();
+        d.RunWrite(1000ms, [&] { stops.Require(seen, "unit.look"); ++turned; return json::object(); }, "unit.look.turn");
+        stops.Stop(); // player.stop on the control pipe during the one-tick wait
+        const auto code = ParamsCode([&] { d.RunWrite(1000ms, [&] { stops.Require(seen, "unit.look"); ++looked; return json::object(); }, "unit.look.at"); });
+        const auto fresh = stops.Current();
+        const auto again = ParamsCode([&] { d.RunWrite(1000ms, [&] { stops.Require(fresh, "unit.look"); ++looked; return json::object(); }, "unit.look.at"); });
+        Check("0.8.2 (re-check 2): a stop between a look's steps refuses the look-at (stopped), and a look started after it runs",
+              turned == 1 && code == "stopped" && again == "ok" && looked == 1 && stops.StoppedSince(seen) && !stops.StoppedSince(fresh), code + " " + again);
+    }
+}
+
+
+// 0.8.2: session 9's bridge fixes and the surfaces' rule (core pieces).
+void Session9Tests()
+{
+    namespace p = xfb::params;
+    namespace k = xfb::inkui;
+    namespace h = xfb::hooks;
+    namespace b = xfb::behave;
+    const auto t0 = xfb::MessageBoard::Clock::now();
+
+    // One question at a time (B6), a clear withdraws a waiting one, keep_asks keeps it (a capture's clear).
+    {
+        xfb::MessageBoard board;
+        const auto first = board.Post({"First question?", 60, "ask", false}, t0)["id"].get<uint64_t>();
+        const auto second = board.Post({"Second question?", 60, "ask", false}, t0);
+        xfb::PendingAsk pending;
+        Check("0.8.2 a new question withdraws the one still waiting (one pending ask at a time)",
+              board.StateOf(first, t0).state == "gone" && second["withdrawn"] == json::array({first}) && board.Pending(pending, t0) &&
+                  pending.id == second["id"].get<uint64_t>(),
+              second.dump());
+        board.Answer(pending.id, 0, t0);
+        xfb::PendingAsk none;
+        Check("0.8.2 answering it reveals no older question underneath", !board.Pending(none, t0));
+        const auto third = board.Post({"Third?", 60, "ask", false}, t0)["id"].get<uint64_t>();
+        board.Post({"", 8, "info", true, {}, true}, t0);
+        Check("0.8.2 keep_asks: a capture's clear keeps the waiting question", board.StateOf(third, t0).state == "pending");
+        board.Post({"", 8, "info", true}, t0);
+        Check("0.8.2 a plain clear withdraws the waiting question", board.StateOf(third, t0).state == "gone" && board.Active(t0) == 0);
+        Check("0.8.2 keep_asks goes with clear; clear_asks is still accepted (true only)",
+              ParamsCode([] { p::ParseMessage(json{{"keep_asks", true}}); }) == "bad_params" &&
+                  ParamsCode([] { p::ParseMessage(json{{"clear", true}, {"clear_asks", true}}); }) == "ok" &&
+                  ParamsCode([] { p::ParseMessage(json{{"clear", true}, {"clear_asks", false}}); }) == "bad_params" &&
+                  p::ParseMessage(json{{"clear", true}, {"keep_asks", true}}).keepAsks);
+        std::string message;
+        try
+        {
+            p::ParseMessage(json{{"text", "Which?"}, {"level", "ask"}, {"choices", {"A label well over twenty-four characters"}}});
+        }
+        catch (const xfb::MethodError& e)
+        {
+            message = e.what();
+        }
+        Check("0.8.2 (D2) a choice over 24 characters is refused, and the refusal says why and how long it may be",
+              message.find("24 characters") != std::string::npos && message.find("button label") != std::string::npos, message);
+        Check("0.8.2 a choice of exactly 24 characters is fine",
+              ParamsCode([] { p::ParseMessage(json{{"text", "Which?"}, {"level", "ask"}, {"choices", {std::string(24, 'x')}}}); }) == "ok");
+    }
+
+    // game.saves (I1): limit applies to names, one entry per save.
+    {
+        const auto twice = json{{"index", 0}, {"name", "AutoSave-17"}, {"timestamp", 9}};
+        const auto saves = h::TrimSaves(json{{"ready", true},
+                                             {"names", {"AutoSave-17", "AutoSave-16", "AutoSave-15", "ManualSave-1"}},
+                                             {"metadata", {twice, twice, {{"index", 1}, {"name", "AutoSave-16"}, {"timestamp", 8}}}}},
+                                        2);
+        Check("0.8.2 (I1) game.saves: the newest save once, names cut to limit, count the whole list",
+              saves["saves"].size() == 2 && saves["saves"][0]["name"] == "AutoSave-17" && saves["saves"][1]["name"] == "AutoSave-16" &&
+                  saves["names"] == json::array({"AutoSave-17", "AutoSave-16"}) && saves["count"] == 4 && saves["with_metadata"] == 2 &&
+                  saves["note"].get<std::string>().empty(),
+              saves.dump());
+    }
+
+    // The surfaces' rule and the frame's surface record.
+    {
+        Check("0.8.2 surfaces: the ink panel while it is on screen, else the overlay panel, else the status label",
+              k::ChooseStatusSurface({true, true}) == k::StatusSurface::InkPanel && k::ChooseStatusSurface({false, true}) == k::StatusSurface::OverlayPanel &&
+                  k::ChooseStatusSurface({false, false}) == k::StatusSurface::StatusLabel && k::ChooseStatusSurface({true, false}) == k::StatusSurface::InkPanel);
+        k::BridgeView view;
+        view.pluginEnabled = true;
+        view.listening = true;
+        xfb::MessageBoard board;
+        const auto frame = k::ParseFrame(k::BuildFrame(k::HudSettings{}, view, board, {"IK_F6"}, 0, k::StatusSurface::OverlayPanel));
+        Check("0.8.2 surfaces: the frame names the surface (the CET layer draws its label only for status_label)",
+              frame.value("surface", std::string()) == "overlay_panel" &&
+                  k::ParseFrame(k::BuildFrame(k::HudSettings{}, view, board, {"IK_F6"}, 0))["surface"] == "status_label",
+              frame.dump());
+        // Connection status follows the session (session 9): a request a moment ago counts as connected.
+        view.hasClient = false;
+        view.inSession = true;
+        const auto status = k::Summarize(view);
+        view.inSession = false;
+        Check("0.8.2 status: in a session (a recent request or the session lock) it says connected between calls",
+              status.connection == "XF Studio connected" && k::Summarize(view).connection == "XF Studio not connected", status.connection);
+    }
+
+    // The session lock read by the plugin (status follows the session).
+    {
+        wchar_t temp[MAX_PATH]{};
+        GetTempPathW(MAX_PATH, temp);
+        xfb::Session session;
+        session.runtimeDir = std::filesystem::path(temp) / L"xfb-unit-082-lock";
+        std::filesystem::create_directories(session.runtimeDir);
+        const auto lockFile = session.runtimeDir / L"session-runner.lock";
+        const auto write = [&](const std::string& aText) {
+            std::ofstream out(lockFile, std::ios::binary | std::ios::trunc);
+            out << aText;
+        };
+        std::filesystem::remove(lockFile);
+        const bool none = xfb::SessionRunnerActive(session);
+        write(json{{"pid", GetCurrentProcessId()}, {"script", "unit"}}.dump());
+        const bool mine = xfb::SessionRunnerActive(session);
+        write(json{{"pid", 4294967290ull}}.dump());
+        const bool gone = xfb::SessionRunnerActive(session);
+        write("not json");
+        const bool bad = xfb::SessionRunnerActive(session);
+        std::filesystem::remove_all(session.runtimeDir);
+        Check("0.8.2 status: the session lock counts while its process runs; a missing, stale or unreadable lock doesn't",
+              !none && mine && !gone && !bad);
+    }
+
+    // game.load's press-any-key screen: the puppet before the player.
+    {
+        xfb::ScriptLayer layer;
+        layer.OnEvent("attach");
+        const bool before = layer.Describe()["waiting_for_input"].get<bool>();
+        layer.OnEvent("puppet");
+        const auto waiting = layer.Describe();
+        layer.OnEvent("player_attach");
+        const auto ready = layer.Describe();
+        layer.OnEvent("detach");
+        layer.OnEvent("puppet"); // detached: no screen to wait on
+        Check("0.8.2 load: the puppet in and the player not yet is the press-any-key screen (waiting_for_input), cleared by the player",
+              !before && waiting["waiting_for_input"] == true && ready["waiting_for_input"] == false && layer.Describe()["waiting_for_input"] == false &&
+                  xfb::writes::StatusWhileLoading("loading", waiting)["waiting_for_input"] == true,
+              waiting.dump());
+    }
+
+    // showroom.anchor's archives.
+    {
+        namespace s = xfb::showroom;
+        const std::string key(32, 'a');
+        Check("0.8.2 showroom.anchor: archive names (xfs_showroom_ and 32 hex digits) up to 16, nothing else",
+              s::ParseAnchorArchives(json::object()).empty() && s::ParseAnchorArchives(json{{"archives", {"xfs_showroom_" + key}}}).size() == 1 &&
+                  ParamsCode([&] { s::ParseAnchorArchives(json{{"archives", {"xfs_showroom_" + key + ".archive"}}}); }) == "bad_params" &&
+                  ParamsCode([&] { s::ParseAnchorArchives(json{{"archives", {"..\\\\x"}}}); }) == "bad_params" &&
+                  ParamsCode([&] { s::ParseAnchorArchives(json{{"archives", json::array({json(1)})}}); }) == "bad_params" &&
+                  ParamsCode([&] { s::ParseAnchorArchives(json{{"other", 1}}); }) == "bad_params");
+    }
+
+    // behave.look takes its duration (D2: 4 s ran in 1.2 s): steered along its arc, reached only near the end.
+    {
+        b::Runner runner;
+        b::Ops fake;
+        double yaw = 0.0; // the camera's yaw, turned instantly towards each look-at point (a fast game look-at)
+        int lookAts = 0;
+        fake.camera = [&] {
+            const double r = yaw * 3.14159265358979 / 180.0;
+            return json{{"position", {0.0, 0.0, 1.7}}, {"forward", {-std::sin(r), std::cos(r), 0.0}}, {"right", {std::cos(r), std::sin(r), 0.0}},
+                        {"up", {0, 0, 1}}, {"fov", 60.0}};
+        };
+        fake.lookAt = [&](const b::Vec3& aPoint, double) {
+            ++lookAts;
+            yaw = std::atan2(-aPoint[0], aPoint[1]) * 180.0 / 3.14159265358979;
+        };
+        fake.player = [] { return json{{"busy", ""}, {"phase", "gameplay"}}; };
+        runner.Start(b::StartParams("look", json{{"turn", {{"yaw", 90}}}, {"duration_s", 4}}), [](xfb::Access) {});
+        double t = 0.0;
+        double halfway = -1.0;
+        while (runner.Active() && t < 10.0)
+        {
+            runner.Tick(0.05, fake, true);
+            t += 0.05;
+            if (halfway < 0.0 && t >= 2.0)
+            {
+                halfway = yaw;
+            }
+        }
+        Check("0.8.2 (D2) behave.look of 90 degrees over 4 s: half way at 2 s, done after about 4 s, steered in short steps",
+              !runner.Active() && t >= 3.6 && t <= 4.6 && std::abs(halfway - 45.0) < 8.0 && lookAts >= 30,
+              "t=" + std::to_string(t) + " halfway=" + std::to_string(halfway) + " lookAts=" + std::to_string(lookAts));
+    }
+}
+
+
+// 0.8.2: the crash investigation's offline checks (run under AddressSanitizer by the build record's ASan step).
+//
+// RunPipeStress: both pipes (the main one and <pipe>-control) started and stopped over and over, with clients connecting to
+// both from the moment the names exist, a kill racing the start in some rounds and two threads stopping at once in others;
+// each round builds the bridge through Bridge::Create as the plugin does, and tears it down again.
+// RunLayoutRepro: what 0.8.1's stale Main.obj did: a Bridge constructed in an allocation of 0x2F8 bytes (the size the old
+// object file asked for). Under AddressSanitizer this stops at once with a heap-buffer-overflow in the constructor; without
+// it the overrun corrupts the heap silently, as the game's three launches showed.
+namespace
+{
+std::wstring Widen(const std::string& aText)
+{
+    return std::wstring(aText.begin(), aText.end());
+}
+
+void StressClient(const std::wstring& aPipe, const std::string& aToken, int aWhich, std::atomic<bool>& aStop, std::atomic<int>& aAnswers)
+{
+    const std::wstring name = (aWhich % 2) ? aPipe + L"-control" : aPipe;
+    const std::string line = json{{"v", 1}, {"id", aWhich}, {"token", aToken}, {"method", (aWhich % 2) ? "behave.stop" : "stress.ping"}}.dump() + "\n";
+    while (!aStop.load())
+    {
+        HANDLE pipe = CreateFileW(name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+        if (pipe == INVALID_HANDLE_VALUE)
+        {
+            std::this_thread::sleep_for(std::chrono::microseconds(200));
+            continue;
+        }
+        DWORD written = 0;
+        if (WriteFile(pipe, line.data(), static_cast<DWORD>(line.size()), &written, nullptr))
+        {
+            char buffer[512];
+            DWORD read = 0;
+            if (ReadFile(pipe, buffer, sizeof(buffer), &read, nullptr) && read > 0)
+            {
+                ++aAnswers;
+            }
+        }
+        CloseHandle(pipe);
+    }
+}
+} // namespace
+
+int RunPipeStress(int aRounds)
+{
+    wchar_t temp[MAX_PATH]{};
+    GetTempPathW(MAX_PATH, temp);
+    std::atomic<int> answers{0};
+    int started = 0;
+    for (int round = 0; round < aRounds; ++round)
+    {
+        xfb::Config config;
+        config.bridgeEnabled = true;
+        config.idleDisconnectSeconds = 2;
+        xfb::Session session;
+        std::string error;
+        const auto dir = std::filesystem::path(temp) / (L"xfb-pipe-stress-" + std::to_wstring(GetCurrentProcessId()));
+        std::filesystem::create_directories(dir);
+        if (!xfb::CreateSession(session, error, dir))
+        {
+            std::printf("STRESS FAILED: session: %s\n", error.c_str());
+            return 1;
+        }
+        xfb::GameThreadQueue queue;
+        queue.SetPumping(true);
+        auto bridge = xfb::Bridge::Create(config, session, queue);
+        bridge->GetDispatcher().Register({"stress.ping", xfb::Access::Read, xfb::RunOn::BridgeThread, "stress", [](const xfb::MethodContext&) {
+                                              return json{{"pong", true}};
+                                          }});
+        std::atomic<bool> stop{false};
+        std::vector<std::thread> clients;
+        for (int c = 0; c < 4; ++c)
+        {
+            clients.emplace_back([&, c] { StressClient(session.pipeName, session.token, c, stop, answers); });
+        }
+        std::thread killer;
+        if (round % 3 == 1)
+        {
+            killer = std::thread([&] {
+                std::this_thread::sleep_for(std::chrono::microseconds(50 * (round % 7)));
+                bridge->Kill("stress");
+            });
+        }
+        if (bridge->Start(error))
+        {
+            ++started;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(round % 5));
+        if (killer.joinable())
+        {
+            killer.join();
+        }
+        if (round % 3 == 2)
+        {
+            std::thread other([&] { bridge->Stop("stress_other"); });
+            bridge->Stop("stress");
+            other.join();
+        }
+        else
+        {
+            bridge->Stop("stress");
+        }
+        bridge.reset();
+        stop.store(true);
+        for (auto& client : clients)
+        {
+            client.join();
+        }
+        std::filesystem::remove_all(dir);
+    }
+    std::printf("STRESS OK rounds=%d started=%d answers=%d\n", aRounds, started, answers.load());
+    return 0;
+}
+
+int RunLayoutRepro()
+{
+    xfb::Config config;
+    xfb::Session session;
+    xfb::GameThreadQueue queue;
+    std::printf("sizeof(Bridge)=0x%zx; 0.8.1's Main.obj allocated 0x2F8\n", sizeof(xfb::Bridge));
+    std::fflush(stdout);
+    void* memory = ::operator new(0x2F8);
+    auto* bridge = new (memory) xfb::Bridge(config, session, queue); // writes past the allocation's end
+    bridge->~Bridge();
+    ::operator delete(memory);
+    std::printf("REPRO RAN WITHOUT A REPORT (not an AddressSanitizer build?)\n");
+    return 2;
+}
+
 int RunUnitTests()
 {
     SanitizeTests();
@@ -3985,6 +4494,8 @@ int RunUnitTests()
     Bridge080Tests();
     Bridge070ReviewTests();
     Bridge081Tests();
+    Bridge082Tests();
+    Session9Tests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;
 }

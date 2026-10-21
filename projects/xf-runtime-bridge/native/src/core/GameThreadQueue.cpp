@@ -207,6 +207,58 @@ void GameThreadQueue::Close()
     }
 }
 
+bool GameThreadQueue::PostCleanup(Task aTask, const std::string& aLabel)
+{
+    std::scoped_lock _(m_mutex);
+    if (m_cleanup.size() >= kCleanupCapacity)
+    {
+        log::Warn("game.cleanup_dropped", "task=" + aLabel + " reason=full");
+        return false;
+    }
+    m_cleanup.emplace_back(std::move(aTask), aLabel);
+    log::Info("game.cleanup_posted", "task=" + aLabel + " pending=" + std::to_string(m_cleanup.size()));
+    return true;
+}
+
+size_t GameThreadQueue::DrainCleanup(size_t aMaxTasks)
+{
+    size_t ran = 0;
+    while (ran < aMaxTasks)
+    {
+        std::pair<Task, std::string> item;
+        {
+            std::scoped_lock _(m_mutex);
+            if (m_cleanup.empty())
+            {
+                break;
+            }
+            item = std::move(m_cleanup.front());
+            m_cleanup.pop_front();
+        }
+        ++ran;
+        try
+        {
+            item.first();
+            log::Info("game.cleanup_ran", "task=" + item.second);
+        }
+        catch (const std::exception& e)
+        {
+            log::Warn("game.cleanup_failed", "task=" + item.second + " what=" + e.what());
+        }
+        catch (...)
+        {
+            log::Warn("game.cleanup_failed", "task=" + item.second + " what=unknown");
+        }
+    }
+    return ran;
+}
+
+size_t GameThreadQueue::PendingCleanups() const
+{
+    std::scoped_lock _(m_mutex);
+    return m_cleanup.size();
+}
+
 void GameThreadQueue::Reopen(bool aPumping)
 {
     Close(); // releases anything still queued (nothing should be)

@@ -4,6 +4,7 @@
 // plugin and the self-test host share. The game side is the redscript layer's XFPlayer (XFRuntimeBridgePlayer.reds).
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <mutex>
@@ -75,6 +76,23 @@ struct ActionRequest
     std::string undoNote;
 };
 ActionRequest ParseAction(const json& aParams);
+
+// 0.8.2 (the re-check's second finding): player.stop's count. A multi-step player write (player.look, player.teleport) reads
+// it when it starts and checks it on the game thread right before each later step that moves V or her view, so a stop that
+// came in between (on the control pipe, beside the write) ends the write there: a look stopped during its one-tick wait
+// doesn't start its look-at afterwards. player.stop, a handover and the kill switch move it on before their own game step.
+class StopCount
+{
+public:
+    uint64_t Current() const;
+    void Stop();
+    // Throws MethodError "stopped" when a stop came after aSeen (Current() when the write started).
+    void Require(uint64_t aSeen, const std::string& aWhat) const;
+    bool StoppedSince(uint64_t aSeen) const;
+
+private:
+    std::atomic<uint64_t> m_count{0};
+};
 
 // Teleports at most kTeleportsPerSecond (design §4.3); thread-safe. Throws MethodError rate_limited when over.
 class TeleportPacer

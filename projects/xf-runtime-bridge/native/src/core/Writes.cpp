@@ -532,15 +532,38 @@ json LightSet(const params::LightRequest& aRequest, const LightOps& aOps)
                 {
                     placement["before_unknown"] = was["unknown"];
                 }
-                if (BeforeKnown(off) && off["before"].get<double>() < 0.5)
+                const bool wasOff = BeforeKnown(off) && off["before"].get<double>() < 0.5;
+                if (wasOff)
                 {
                     placeUndo["on"] = false;
                 }
                 aOps.settle();
+                // 0.8.2 (the re-check's fourth finding): switching the light on here is the requested placement (it lands at
+                // the camera), so it passes the write gate like any change. Only when the gate refuses it, and the light was
+                // on before, is it switched on again inside a RestoreScope, and moved back to where it stood when that's
+                // known: the light's earlier state, never the placement. A light that was off stays off.
+                try
                 {
-                    // Completes the switch the step above began: refusing it would leave the light off (RB-122).
-                    RestoreScope completing;
                     aOps.set(params::key::kLightState, 1.0f);
+                }
+                catch (const MethodError& e)
+                {
+                    if (!wasOff && (e.code == "writes_paused" || e.code == "handed_over" || e.code == "killed"))
+                    {
+                        RestoreScope restoring;
+                        aOps.set(params::key::kLightState, 1.0f);
+                        if (was["position"].is_object() && aOps.place)
+                        {
+                            const auto& p = was["position"];
+                            params::LightPlacement back;
+                            back.kind = params::LightPlacement::Kind::World;
+                            back.world = {p.value("x", 0.0f), p.value("y", 0.0f), p.value("z", 0.0f)};
+                            aOps.place(aRequest.light, back);
+                            moved = false;
+                            placement["restored"] = true;
+                        }
+                    }
+                    throw;
                 }
                 aOps.settle();
                 readPosition(placement, "now", "now_unknown");
@@ -1658,6 +1681,8 @@ json StatusWhileLoading(const std::string& aPhase, const json& aLayer)
     return json{{"phase", aPhase},
                 {"answered_by", "plugin"},
                 {"script_layer", aLayer},
+                // 0.8.2: the loaded world is in and the game waits for a key (the press-any-key screen) [hypothesis].
+                {"waiting_for_input", aLayer.value("waiting_for_input", false)},
                 {"player_present", false},
                 {"photo_mode_active", false},
                 {"photo_mode_can_open", false},

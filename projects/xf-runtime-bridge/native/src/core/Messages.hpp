@@ -26,12 +26,14 @@ struct MessageRequest
     std::string text;
     int32_t seconds = 8;
     std::string level = "info"; // info, ask, warn, done
-    bool clear = false;         // remove the lines first (with no text: only that); a question still waiting stays (RB-103)
+    // Remove the lines first (with no text: only that). 0.8.2 (session 9's B6): a question still waiting is withdrawn too, unless
+    // keepAsks (a capture's clear keeps it, RB-103: the player can still answer once the picture is taken).
+    bool clear = false;
     // 0.7 (session 7, in-game driving): an ask's answer buttons, 1 to kMaxChoices labels. 0.8 (session 8: Ready, Yes and No
     // on every question confused the maintainer): an ask without them gets DefaultChoices(), one "Done". Only asks carry
     // choices.
     std::vector<std::string> choices;
-    bool clearAsks = false; // with clear: a question still waiting is withdrawn too
+    bool keepAsks = false;  // with clear: a question still waiting stays (0.8.2; before, clear_asks asked for the opposite)
     uint64_t withdraw = 0;  // remove this one message first (an ask's undo)
 };
 
@@ -92,8 +94,10 @@ public:
     using Clock = std::chrono::steady_clock;
 
     // Shows a message (after clear or withdraw, if asked). Answers {id, shown, text, level, seconds, truncated,
-    // dropped (ids pushed out), active}; {cleared: n, active} for a clear without text. A clear keeps a question that
-    // is still waiting for its answer unless clearAsks (RB-103: a capture's clear took the maintainer's question away).
+    // dropped (ids pushed out), active}; {cleared: n, active} for a clear without text. A clear withdraws a question that
+    // is still waiting for its answer unless keepAsks (RB-103: a capture's clear must not take the question away). 0.8.2
+    // (session 9's B6): one question at a time: a new ask withdraws any question still waiting (withdrawn: [ids]; a
+    // session_wait on one ends with question_gone), so questions never stack.
     nlohmann::json Post(const MessageRequest& aRequest, Clock::time_point aNow = Clock::now());
     // The messages still showing, oldest first: {"messages":[{id, text, level, remaining_ms, choices?, answered?}],
     // pending_ask?, answered_ask?}, or an empty string when there are none (what XFBridge_Messages answers). aSurface, when

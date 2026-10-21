@@ -62,6 +62,12 @@ uint64_t State::InkShownAsk() const
     return now - inkShownAtMs.load() <= kInkShownMs ? inkShownAsk.load() : 0;
 }
 
+bool State::InkVisible() const
+{
+    const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    return now - inkShownAtMs.load() <= kInkShownMs && inkVisible.load();
+}
+
 inkui::BridgeView BridgeViewNow()
 {
     auto& state = Get();
@@ -76,6 +82,7 @@ inkui::BridgeView BridgeViewNow()
         view.writesPaused = dispatcher.WritesPaused();
         view.listening = state.bridge->IsListening();
         view.hasClient = state.bridge->HasClient();
+        view.inSession = state.bridge->InSession();
     }
     return view;
 }
@@ -84,7 +91,8 @@ std::string HudFrame()
 {
     // 0.8: made in one place (core BuildFrame), shared with the self-test's selftest.hud.
     auto& state = Get();
-    return inkui::BuildFrame(state.hud.Current(), BridgeViewNow(), state.messages, state.config.answerKeys, state.InkShownAsk());
+    return inkui::BuildFrame(state.hud.Current(), BridgeViewNow(), state.messages, state.config.answerKeys, state.InkShownAsk(),
+                             static_cast<inkui::StatusSurface>(state.statusSurface.load()));
 }
 
 nlohmann::json InfoJson()
@@ -117,6 +125,8 @@ nlohmann::json InfoJson()
                      {"diagnostics", state.config.overlayDiagnostics}}},
         // 0.8 (the UI review): the status wording every surface shows, made in one place (core/InkUi.cpp Summarize).
         {"status", inkui::StatusJson(BridgeViewNow())},
+        // 0.8.2: which status surface shows now (ink_panel, overlay_panel or status_label).
+        {"status_surface", inkui::SurfaceName(static_cast<inkui::StatusSurface>(state.statusSurface.load()))},
         {"answer_keys", state.config.answerKeys},
         {"last_rearm", [&state] {
              std::scoped_lock _(state.rearmMutex);

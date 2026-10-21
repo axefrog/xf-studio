@@ -25,6 +25,11 @@ Bridge::Bridge(const Config& aConfig, const Session& aSession, GameThreadQueue& 
                            }});
 }
 
+std::unique_ptr<Bridge> Bridge::Create(const Config& aConfig, const Session& aSession, GameThreadQueue& aQueue)
+{
+    return std::make_unique<Bridge>(aConfig, aSession, aQueue);
+}
+
 Bridge::~Bridge()
 {
     Stop("destructor");
@@ -233,6 +238,27 @@ bool Bridge::IsListening() const
 bool Bridge::HasClient() const
 {
     return m_server.HasClient();
+}
+
+bool Bridge::InSession() const
+{
+    if (m_server.HasClient() || m_control.HasClient())
+    {
+        return true;
+    }
+    const auto since = m_dispatcher.MsSinceLastRequest();
+    if (since >= 0 && since < kSessionQuietMs)
+    {
+        return true;
+    }
+    const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    const auto checked = m_runnerCheckedMs.load();
+    if (checked < 0 || now - checked >= 1000)
+    {
+        m_runnerCheckedMs.store(now);
+        m_runnerActive.store(SessionRunnerActive(m_session));
+    }
+    return m_runnerActive.load();
 }
 
 json Bridge::Status() const

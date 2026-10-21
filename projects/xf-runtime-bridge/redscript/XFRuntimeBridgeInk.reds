@@ -248,6 +248,13 @@ public abstract class XFInkStyle {
 
   // 0.8: where an anchor sits on the visible screen, as fractions across and down (0, 0.5 or 1); the panel's own point at that
   // place is the same fractions of its size, so it grows away from its corner or edge (and from the middle for center).
+  // 0.8.2: one edge of the panel along one axis of the visible screen (start, length): the anchor's fraction of it, moved by
+  // offset, less the same fraction of the panel's size (so top_right ends at the right edge, center sits in the middle).
+  // tools/test/ink-place.test.ts checks the same arithmetic for all nine anchors.
+  public static func PanelEdge(start: Float, length: Float, fraction: Float, offset: Float, size: Float) -> Float {
+    return start + fraction * length + offset - fraction * size;
+  }
+
   public static func AnchorPoint(name: String) -> Vector2 {
     let x = 0.0;
     let y = 0.0;
@@ -385,6 +392,8 @@ public class XFInkOverlay extends ScriptableSystem {
   private let m_units: Float;
   private let m_platesRoot: ref<inkCanvas>;
   private let m_plates: array<ref<inkText>>;
+  private let m_pinsRoot: ref<inkCanvas>;     // 0.8.2: the XF pins' marks in the world
+  private let m_pinMarks: array<ref<inkCanvas>>;
   private let m_frame: ref<XFHudFrame>;
   // RB-114: the frame whose question and answer keys are on screen now (set when Apply draws them).
   private let m_drawn: ref<XFHudFrame>;
@@ -474,6 +483,7 @@ public class XFInkOverlay extends ScriptableSystem {
     }
     ArrayClear(this.m_messages);
     ArrayClear(this.m_plates);
+    ArrayClear(this.m_pinMarks);
     if this.m_mounted {
       XFBridgeLog.Debug("ink", "ink overlay unmounted (" + why + ")");
     }
@@ -558,6 +568,13 @@ public class XFInkOverlay extends ScriptableSystem {
     plates.SetAnchor(inkEAnchor.Fill);
     plates.Reparent(root);
     this.m_platesRoot = plates;
+
+    // 0.8.2: the XF pins' marks, under the panel too.
+    let pins = new inkCanvas();
+    pins.SetName(n"xfs_pin_marks");
+    pins.SetAnchor(inkEAnchor.Fill);
+    pins.Reparent(root);
+    this.m_pinsRoot = pins;
 
     let panel = new inkCanvas();
     panel.SetName(n"xfs_hud_panel");
@@ -768,8 +785,13 @@ public class XFInkOverlay extends ScriptableSystem {
     this.m_edge.SetSize(new Vector2(4.0, h));
   }
 
-  // 0.8: the panel's place: the anchor's point of the visible screen, moved x and y inwards (from the middle for center),
-  // then kept whole inside the visible screen once the panel has been measured.
+  // 0.8.2 (session 9's B1 and B2): the panel's top-left corner, worked out here and set as a margin from the root's top
+  // left, the one placement proven in game (sessions 7 and 8: a margin of 40, 640 sat at 40, 360 of a 3840 x 1600 screen).
+  // 0.8's anchor point and translation put top_left half way down the screen and left every other anchor's panel hanging
+  // from its corner (top_right a sliver at the right edge, bottom_left below the screen). Now the anchor's point of the
+  // visible screen is moved inwards by x and y (from the middle for center), the panel's own point there is the same
+  // fractions of its measured size (scaled), and the whole panel is kept inside the visible screen. An anchor other than
+  // top_left waits unseen until the panel has been measured, so it never shows in the wrong place.
   private func Place(frame: ref<XFHudFrame>, scale: Float) -> Void {
     let point = XFInkStyle.AnchorPoint(frame.anchor);
     let v = this.m_visible;
@@ -777,22 +799,25 @@ public class XFInkOverlay extends ScriptableSystem {
       v = new Vector4(0.0, 0.0, this.m_width, this.m_height);
     }
     let units = this.m_units > 0.0 ? this.m_units : 1.0;
-    let dx = point.X > 0.9 ? -frame.x : frame.x;
-    let dy = point.Y > 0.9 ? -frame.y : frame.y;
-    let x = v.X + point.X * v.Z + dx * units;
-    let y = v.Y + point.Y * v.W + dy * units;
     let size = IsDefined(this.m_plate) ? this.m_plate.GetSize() : new Vector2(0.0, 0.0);
     let w = size.X * scale;
     let h = size.Y * scale;
-    let margin = 8.0 * units;
-    if w > 20.0 && h > 20.0 {
-      x = ClampF(x, v.X + margin + point.X * w, MaxF(v.X + margin + point.X * w, v.X + v.Z - margin - (1.0 - point.X) * w));
-      y = ClampF(y, v.Y + margin + point.Y * h, MaxF(v.Y + margin + point.Y * h, v.Y + v.W - margin - (1.0 - point.Y) * h));
+    let measured = w > 20.0 && h > 20.0;
+    let dx = point.X > 0.9 ? -frame.x : frame.x;
+    let dy = point.Y > 0.9 ? -frame.y : frame.y;
+    let left = XFInkStyle.PanelEdge(v.X, v.Z, point.X, dx * units, w);
+    let top = XFInkStyle.PanelEdge(v.Y, v.W, point.Y, dy * units, h);
+    if measured {
+      let margin = 8.0 * units;
+      left = ClampF(left, v.X + margin, MaxF(v.X + margin, v.X + v.Z - margin - w));
+      top = ClampF(top, v.Y + margin, MaxF(v.Y + margin, v.Y + v.W - margin - h));
     }
-    this.m_panel.SetAnchorPoint(point);
-    this.m_panel.SetRenderTransformPivot(point);
-    this.m_panel.SetMargin(new inkMargin(0.0, 0.0, 0.0, 0.0));
-    this.m_panel.SetTranslation(new Vector2(x, y));
+    this.m_panel.SetAnchor(inkEAnchor.TopLeft);
+    this.m_panel.SetAnchorPoint(new Vector2(0.0, 0.0));
+    this.m_panel.SetRenderTransformPivot(new Vector2(0.0, 0.0));
+    this.m_panel.SetTranslation(new Vector2(0.0, 0.0));
+    this.m_panel.SetMargin(new inkMargin(left, top, 0.0, 0.0));
+    this.m_panel.SetOpacity(measured || (point.X < 0.1 && point.Y < 0.1) ? 1.0 : 0.0);
   }
 
   // 0.8 (the UI review: a quest marker drew over the answer keys): the overlay is the layer root's last child, so it draws
@@ -809,11 +834,12 @@ public class XFInkOverlay extends ScriptableSystem {
   }
 
   // 0.8 (the UI review: the question showed in three places): tells the plugin which question the panel shows on screen
-  // now, so the CET label keeps to the status and the answer keys. The HUD layer is hidden outside normal play (menus,
+  // now. 0.8.2 (the surfaces' rule): and whether the panel is on screen at all, question or not: while it is, it is the one
+  // status surface and the overlay panel and the status label stay off. The HUD layer is hidden outside normal play (menus,
   // photo mode, the appearance screen), so there it counts as not shown; the world is only asked while the scripts are live.
   private func ReportDrawn(frame: ref<XFHudFrame>) -> Void {
     let id = frame.askId > 0 ? frame.askId : frame.answeredId;
-    let shown = frame.show && this.m_mounted && id > 0 && frame.live;
+    let shown = frame.show && this.m_mounted && frame.live;
     if shown && Equals(this.m_layer, "hud") {
       shown = Equals(XFBridgeActions.Phase(), "gameplay");
     }
@@ -849,6 +875,7 @@ public class XFInkOverlay extends ScriptableSystem {
   // Demo B: each spawned showroom head's preset name at the front of its pedestal, about 17 cm below the column's top
   // (the showroom build's column: 0.24 m wide, top 1.52 m above the entity's origin, centred 7 cm behind it).
   private func UpdatePlates() -> Void {
+    this.UpdatePinMarks();
     let frame = this.m_frame;
     if !IsDefined(frame) || !frame.nameplates || !frame.live || !IsDefined(this.m_platesRoot) {
       this.HidePlates(0);
@@ -891,11 +918,96 @@ public class XFInkOverlay extends ScriptableSystem {
     }
     let plate = this.Plate(slot);
     plate.SetText(IntToString(item.index + 1) + "  " + item.label);
-    plate.SetTranslation(new Vector2((s.X + 1.0) * 0.5 * this.m_width, (s.Y + 1.0) * 0.5 * this.m_height));
+    plate.SetTranslation(this.ScreenPoint(s));
     let size = ClampF(3.0 / MaxF(s.W, 0.5), 0.55, 1.0);
     plate.SetScale(new Vector2(size, size));
     plate.SetOpacity(ClampF((15.0 - s.W) / 5.0, 0.0, 1.0));
     plate.SetVisible(true);
+    return true;
+  }
+
+
+  // ---- 0.8.2: the XF pins' marks in the world ----------------------------------------------------------------------------------
+
+  private func PinMark(index: Int32) -> ref<inkCanvas> {
+    while ArraySize(this.m_pinMarks) <= index {
+      let mark = new inkCanvas();
+      mark.SetName(StringToName("pin" + IntToString(ArraySize(this.m_pinMarks))));
+      mark.SetAnchor(inkEAnchor.TopLeft);
+      mark.SetInteractive(false);
+      mark.SetVisible(false);
+      mark.Reparent(this.m_pinsRoot);
+      ArrayPush(this.m_pinMarks, mark);
+    }
+    return this.m_pinMarks[index];
+  }
+
+  // A projected point (the projector's -1..1 across and down the screen) in the root's units: the screen is the visible part
+  // of the root (m_visible), not the whole 2160-high canvas (0.8.2; the pedestal labels used the canvas before).
+  private func ScreenPoint(s: Vector4) -> Vector2 {
+    let v = this.m_visible;
+    if v.Z < 100.0 || v.W < 100.0 {
+      v = new Vector4(0.0, 0.0, this.m_width, this.m_height);
+    }
+    return new Vector2(v.X + (s.X + 1.0) * 0.5 * v.Z, v.Y + (s.Y + 1.0) * 0.5 * v.W);
+  }
+
+  // 0.8.2 (session 9's F1: in the world only the game's own marker showed, with no XF diamond and no label, although the
+  // world view's controller ran): each XF pin's diamond, "XF" and label drawn by the bridge's own overlay above the pin's
+  // world point, projected every tick as the pedestal labels are, while the scripts are live. The map and the minimap keep
+  // their controller badges. drawn_by gains "xf_overlay" the first time a pin's mark is on screen.
+  private func UpdatePinMarks() -> Void {
+    let frame = this.m_frame;
+    let used = 0;
+    if IsDefined(frame) && frame.show && frame.live && IsDefined(this.m_pinsRoot) {
+      let registry = XFPinRegistry.Get();
+      if IsDefined(registry) && registry.Count() > 0 {
+        let projector = XFProjector.Create();
+        if projector.ok {
+          for entry in registry.Pins() {
+            if this.PlacePinMark(entry, projector, used) {
+              used += 1;
+            }
+          }
+        }
+      }
+    }
+    let i = used;
+    while i < ArraySize(this.m_pinMarks) {
+      this.m_pinMarks[i].SetVisible(false);
+      i += 1;
+    }
+  }
+
+  private func PlacePinMark(entry: ref<XFPinEntry>, projector: ref<XFProjector>, slot: Int32) -> Bool {
+    let point = entry.position;
+    if entry.bound && entry.piece >= 0 {
+      let registry = XFShowroomRegistry.Get();
+      if IsDefined(registry) {
+        let item = registry.Piece(entry.piece);
+        if IsDefined(item) {
+          let entity = XFInkHost.Entity(item.id);
+          if IsDefined(entity) {
+            let at = entity.GetWorldPosition();
+            point = new Vector4(at.X, at.Y, entry.position.Z, 1.0);
+          }
+        }
+      }
+    }
+    let s = projector.Project(new Vector4(point.X, point.Y, point.Z, 1.0));
+    if s.W <= 0.0 || s.W > 200.0 || AbsF(s.X) > 1.1 || AbsF(s.Y) > 1.1 {
+      return false;
+    }
+    let mark = this.PinMark(slot);
+    XFInkPins.Badge(mark, entry.label, true);
+    let units = this.m_units > 0.0 ? this.m_units : 1.0;
+    let at = this.ScreenPoint(s);
+    // Above the game's own marker (about 60 design units tall at the point).
+    mark.SetTranslation(new Vector2(at.X, at.Y - 64.0 * units));
+    let size = ClampF(8.0 / MaxF(s.W, 1.0), 0.55, 1.0) * units;
+    mark.SetScale(new Vector2(size, size));
+    mark.SetVisible(true);
+    XFInkPins.NoteDrawn(entry, "xf_overlay");
     return true;
   }
 }

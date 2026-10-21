@@ -94,18 +94,24 @@ json SceneRead(const MethodContext& aContext)
 
 json BridgeHandover(const MethodContext& aContext)
 {
-    params::RequireOnly(aContext.params, {"on", "note"});
+    params::RequireOnly(aContext.params, {"on", "note", "lights"});
     const auto on = params::CheckBoolean(aContext.params, "on");
     if (!on)
     {
         params::CheckFail("'on' is required: true hands the session over to the player, false resumes it");
     }
     const auto note = params::CheckText(aContext.params, "note", 200).value_or("");
+    const auto lights = params::CheckText(aContext.params, "lights", 16).value_or("");
+    if (!lights.empty() && (lights != "clear" || !*on))
+    {
+        params::CheckFail("'lights' takes only \"clear\", with on: true (the showroom's rigs cleared once the handover refuses writes)");
+    }
     auto& dispatcher = TheDispatcher();
     const bool was = dispatcher.HandedOver();
     json released = nullptr;
     if (*on)
     {
+        Get().playerStops.Stop(); // 0.8.2: a look or teleport between its steps stops too
         Get().behaviours.StopAll("handed_over");
     }
     dispatcher.SetHandover(*on, note);
@@ -126,7 +132,23 @@ json BridgeHandover(const MethodContext& aContext)
             released = json{{"released", false}, {"why", e.code}, {"message", e.what()}};
         }
     }
-    return json{{"handed_over", *on}, {"was", was}, {"behaviours_stopped", *on}, {"player_released", released},
+    json lightsCleared = nullptr;
+    if (lights == "clear")
+    {
+        // 0.8.2 (the re-check's third finding): the rigs go after the write gate has closed, in this same request, so a
+        // showroom.lights still on its way (its spawn step refused on the game thread from here on) can't add one after the
+        // clear. Clearing puts the scene back, so it runs inside a RestoreScope.
+        try
+        {
+            RestoreScope restoring;
+            lightsCleared = ClearShowroomForHandover("lights", aContext.cid);
+        }
+        catch (const MethodError& e)
+        {
+            lightsCleared = json{{"error", e.code}, {"message", e.what()}};
+        }
+    }
+    return json{{"handed_over", *on}, {"was", was}, {"behaviours_stopped", *on}, {"player_released", released}, {"lights_cleared", lightsCleared},
                 {"undo", {{"method", "bridge.handover"}, {"params", {{"on", !*on}}}}},
                 {"undo_note", *on ? "bridge.handover {on: false} (session.resume) gives the bridge its writes back; what the handover lifted from V stays lifted" : "bridge.handover {on: true} hands over again"}};
 }
@@ -239,13 +261,15 @@ json PlayerTeleport(const MethodContext& aContext)
     const auto request = player::ParseTeleport(aContext.params);
     Get().teleports.Take();
     const auto cid = aContext.cid;
+    const auto seen = Get().playerStops.Current(); // 0.8.2: a player.stop from here on ends the teleport before it moves V
     const auto where = Game([cid] { return ScriptCall("XFPlayer", "Where", {}, {}, cid); }, "player.where");
     const auto from = VecOf(where.at("position"));
     const double yawBefore = where.value("yaw", 0.0);
     const auto [to, yaw] = player::Destination(request, from, yawBefore);
     TheDispatcher().RequireWritesOpen();
     const auto done = GameWrite(
-        [cid, to = to, yaw = yaw, request] {
+        [cid, to = to, yaw = yaw, request, seen] {
+            Get().playerStops.Require(seen, "player.teleport");
             float x = static_cast<float>(to[0]), y = static_cast<float>(to[1]), z = static_cast<float>(to[2]);
             float wanted = static_cast<float>(yaw.value_or(0.0));
             bool hasYaw = yaw.has_value();
@@ -273,6 +297,10 @@ json PlayerLook(const MethodContext& aContext)
 {
     const auto request = player::ParseLook(aContext.params);
     const auto cid = aContext.cid;
+    // 0.8.2 (the re-check's second finding): a player.stop on the control pipe during this look ends it at its next step, so a
+    // stop during the one-tick wait below doesn't see the look-at start again afterwards.
+    auto& stops = Get().playerStops;
+    const auto seen = stops.Current();
     const auto state = Game([cid] { return ScriptCall("XFPlayer", "State", {}, {}, cid); }, "player.state");
     const auto& camera = state.at("camera");
     if (camera.is_null())
@@ -289,7 +317,8 @@ json PlayerLook(const MethodContext& aContext)
         Get().teleports.Take();
         const auto position = state.at("position");
         GameWrite(
-            [cid, position, yaw = target.yaw] {
+            [cid, position, yaw = target.yaw, seen] {
+                Get().playerStops.Require(seen, "player.look");
                 float x = position[0].get<float>(), y = position[1].get<float>(), z = position[2].get<float>();
                 float wanted = static_cast<float>(yaw);
                 bool hasYaw = true;
@@ -302,7 +331,8 @@ json PlayerLook(const MethodContext& aContext)
     }
     // Aim at the wanted point from where the camera is after any turn (the camera moves with V's head slightly).
     GameWrite(
-        [cid, point = target.point, duration = request.duration] {
+        [cid, point = target.point, duration = request.duration, seen] {
+            Get().playerStops.Require(seen, "player.look");
             float x = static_cast<float>(point[0]), y = static_cast<float>(point[1]), z = static_cast<float>(point[2]);
             float d = static_cast<float>(duration);
             return ScriptCall("XFPlayer", "LookAt", {"Float", "Float", "Float", "Float"}, {&x, &y, &z, &d}, cid);
@@ -311,13 +341,18 @@ json PlayerLook(const MethodContext& aContext)
     // Wait for it: the look-at runs natively; read the camera until it stops moving or the time is up.
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(static_cast<int>(request.duration * 1000.0) + 700);
     json reached = camera;
+    bool stopped = false;
     while (std::chrono::steady_clock::now() < deadline)
     {
         writes::WaitTicks(Get().queue, 3, GameTimeout());
+        if (stops.StoppedSince(seen))
+        {
+            stopped = true; // player.stop broke the look-at; nothing here starts it again
+        }
         reached = Game([cid] { return ScriptCall("XFPlayer", "State", {}, {}, cid); }, "player.state").at("camera");
         const double dy = std::abs(std::remainder(reached.value("yaw", 0.0) - target.yaw, 360.0));
         const double dp = std::abs(reached.value("pitch", 0.0) - target.pitch);
-        if (dy < 1.0 && dp < 1.0)
+        if (stopped || (dy < 1.0 && dp < 1.0))
         {
             break;
         }
@@ -325,6 +360,7 @@ json PlayerLook(const MethodContext& aContext)
     const double errYaw = std::remainder(reached.value("yaw", 0.0) - target.yaw, 360.0);
     const double errPitch = reached.value("pitch", 0.0) - target.pitch;
     return json{{"mode", request.smooth ? "smooth" : "instant"}, {"wanted", {{"yaw", target.yaw}, {"pitch", target.pitch}}},
+                {"stopped", stopped},
                 {"reached", {{"yaw", reached.value("yaw", 0.0)}, {"pitch", reached.value("pitch", 0.0)}}},
                 {"error_deg", {{"yaw", std::round(errYaw * 100.0) / 100.0}, {"pitch", std::round(errPitch * 100.0) / 100.0}}},
                 {"within_2_deg", std::abs(errYaw) <= 2.0 && std::abs(errPitch) <= 2.0},
@@ -342,6 +378,7 @@ json PlayerLookStop(const MethodContext& aContext)
 json PlayerStop(const MethodContext& aContext)
 {
     params::RequireOnly(aContext.params, {});
+    Get().playerStops.Stop(); // 0.8.2: before the game step, so a look or teleport waiting between its steps never goes on
     Get().behaviours.StopAll("player_stop");
     const auto cid = aContext.cid;
     auto out = Game([cid] { return ScriptCall("XFPlayer", "Stop", {}, {}, cid); }, "player.stop");

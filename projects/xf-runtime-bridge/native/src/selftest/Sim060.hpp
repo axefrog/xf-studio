@@ -15,6 +15,7 @@
 #include "core/Dispatcher.hpp"
 #include "core/Events.hpp"
 #include "core/GameThreadQueue.hpp"
+#include "core/Player.hpp"
 
 namespace xfb::selftest
 {
@@ -37,6 +38,8 @@ struct SimHooks
     std::function<bool()> scriptsReady;
     std::function<void()> markWrite;
     std::function<void()> takeSaveLock;
+    // 0.8.2: bridge.handover's clearing of the showroom's rigs ("lights"), as the plugin's ClearShowroomForHandover.
+    std::function<json(const std::string& aWhat)> clearShowroom;
 };
 
 class Sim060
@@ -67,5 +70,6 @@ private:
     EventLog m_events;
     behave::Runner m_behaviours;
     behave::Ops m_ops;
+    player::StopCount m_playerStops; // 0.8.2, as the plugin's State::playerStops
 };
 } // namespace xfb::selftest

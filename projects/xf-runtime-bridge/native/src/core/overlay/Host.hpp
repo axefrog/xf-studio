@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -94,8 +95,14 @@ struct PanelData
     std::string tone;         // ok, write, paused, killed, off
     bool scriptsLive = false;
     uint64_t requests = 0;
-    std::string pendingAsk;   // the question waiting for an answer, if any (0.8: not drawn; the ink panel and CET window show it)
+    std::string pendingAsk;   // the question waiting for an answer, if any
     bool diagnostics = false; // 0.8: [overlay] diagnostics: the panel's diagnostic lines and moving bar
+    // 0.8.2 (the surfaces' rule): the panel shows only while it is the status surface (the ink panel off screen: photo mode,
+    // menus), and then carries the coordinator's lines (level, text, oldest first), the question's answer keys
+    // ("F6 Done · F7 Not yet") or what was answered ("Answered: Done").
+    bool show = false;
+    std::vector<std::pair<std::string, std::string>> lines;
+    std::string askHint;
     uint64_t tick = 0;
 };
 
@@ -126,6 +133,10 @@ public:
     // the overlay is off while frame generation is on.
     bool OffForFrameGeneration() const;
 
+    // 0.8.2: whether the panel can be the status surface: drawing (hooked, not refused or failed) and not stopped by the kill
+    // switch. A capture's hide and yielding to CET's overlay don't count: they are moments, and the status label must not
+    // take over during a capture.
+    bool CanShowPanel() const { return m_enabled.load() && m_phase.load() == Phase::Drawing && !m_killed.load() && !m_passThrough.load(); }
     // Render thread, every present: draw now? (enabled, drawing, not hidden for a capture, not yielding to CET, not killed)
     bool ShouldDraw(std::chrono::steady_clock::time_point aNow = std::chrono::steady_clock::now()) const;
     bool Active() const { return m_phase.load() == Phase::Waiting || m_phase.load() == Phase::Drawing; }

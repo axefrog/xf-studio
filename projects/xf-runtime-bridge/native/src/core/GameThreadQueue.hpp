@@ -77,6 +77,16 @@ public:
     // pumping to aPumping (Close() cleared it; the game thread is still running).
     void Reopen(bool aPumping);
 
+    // 0.8.2 (the re-check's sixth finding): the cleanup lane. A step that puts something back (inside a RestoreScope) and
+    // finds the queue closed by the kill switch is posted here instead of being refused, so a write cut short by the kill
+    // still undoes its half-done change (a pose category changed during photo.pose.set's settle). Accepted while the queue
+    // is closed, never waited for (the bridge thread goes on), at most kCleanupCapacity at a time; the game thread runs
+    // them with DrainCleanup, before the kill switch's restore, whenever the game's scripts can be called.
+    static constexpr size_t kCleanupCapacity = 32;
+    bool PostCleanup(Task aTask, const std::string& aLabel);
+    size_t DrainCleanup(size_t aMaxTasks);
+    size_t PendingCleanups() const;
+
 private:
     enum State : int
     {
@@ -104,6 +114,7 @@ private:
     mutable std::mutex m_mutex;
     std::deque<std::shared_ptr<Item>> m_items;
     std::shared_ptr<Item> m_current; // the task the game thread is running, if any
+    std::deque<std::pair<Task, std::string>> m_cleanup; // 0.8.2, under m_mutex
     std::atomic<bool> m_pumping{false};
     std::atomic<bool> m_closed{false};
     std::atomic<uint64_t> m_ticks{0};

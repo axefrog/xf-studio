@@ -6,6 +6,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -25,6 +26,9 @@ class Bridge
 public:
     Bridge(const Config& aConfig, const Session& aSession, GameThreadQueue& aQueue);
     ~Bridge();
+    // 0.8.2: the plugin creates its bridge here, so the allocation's size and the constructor come from one translation unit
+    // (0.8.1's DLL allocated a Bridge of an older layout in a stale Main.obj and the constructor overran it).
+    static std::unique_ptr<Bridge> Create(const Config& aConfig, const Session& aSession, GameThreadQueue& aQueue);
 
     // Starts listening and writes session.json. Call only when [bridge] enabled = true.
     bool Start(std::string& aError);
@@ -57,6 +61,11 @@ public:
     bool IsListening() const;
     // Whether a client holds the pipe now (the ink HUD panel's status line, bridge 0.5.3).
     bool HasClient() const;
+    // 0.8.2 (session 9: "XF Studio not connected" flickered between the coordinator's calls, each its own connection): the
+    // status follows the session, not each connection: a client on either pipe now, a request in the last kSessionQuietMs,
+    // or a session runner holding the session lock (checked at most once a second).
+    static constexpr int64_t kSessionQuietMs = 180000;
+    bool InSession() const;
 
 private:
     void Watch();
@@ -80,5 +89,7 @@ private:
     std::atomic<bool> m_sessionFileWritten{false};
     std::atomic<bool> m_idleDisconnect{false};
     std::atomic<uint32_t> m_rearms{0};
+    mutable std::atomic<int64_t> m_runnerCheckedMs{-1};
+    mutable std::atomic<bool> m_runnerActive{false};
 };
 } // namespace xfb
