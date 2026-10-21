@@ -429,6 +429,9 @@ function checkGlitterTextures(build: string, record: Node, preset: VerifierPlan[
     mips: { preset: preset.name, levels: levels.map(row => ({ level: row.level, width: Math.max(1, width >> row.level), height: Math.max(1, height >> row.level), partialTexels: 0 })) } };
 }
 
+/** Mean difference below which a reference counts as reading the same with its rows reversed (exact symmetry, up to rounding). */
+const ORIENTATION_SYMMETRY = 1e-9;
+
 function checkTextures(build: string, record: Node, preset: VerifierPlan["presets"][number], context: TextureContext) {
   const route = routeOf(preset);
   ensure(record.route === route, `Compiled record for ${preset.appearance} is ${record.route ?? "missing its route"}, but its recipe needs the ${route} route`);
@@ -462,14 +465,17 @@ function checkTextures(build: string, record: Node, preset: VerifierPlan["preset
     `Decoded base colour/coverage error too large for ${name}: ${JSON.stringify({ colour, alpha })}`);
   // Coverage joins the colour planes: an all-black preset has zero premultiplied colour everywhere,
   // so colour alone cannot tell the rows from their mirror.
+  // A reference that reads the same upside down (uniform coverage across the plate) cannot tell the rows from their mirror, so this
+  // heuristic applies only to asymmetric ones (PIPE-141); the stored-row and mapping checks below hold for every preset regardless.
   const oriented = (level: ContributionPlanes) => [...level.planes.slice(0, 3), level.planes[5]];
-  const flipped = oriented(actual).map(plane => {
+  const flipRows = (planes: readonly Float64Array[]) => planes.map(plane => {
     const out = new Float64Array(texels);
     for (let row = 0; row < height; row++) out.set(plane.subarray((height - 1 - row) * width, (height - row) * width), row * width);
     return out;
   });
-  ensure(mean(absoluteErrors(oriented(source), oriented(actual), null, texels)) <
-    mean(absoluteErrors(oriented(source), flipped, null, texels)), `Unexpected texture row orientation for ${name}`);
+  if (mean(absoluteErrors(oriented(source), flipRows(oriented(source)), null, texels)) > ORIENTATION_SYMMETRY)
+    ensure(mean(absoluteErrors(oriented(source), oriented(actual), null, texels)) <
+      mean(absoluteErrors(oriented(source), flipRows(oriented(actual)), null, texels)), `Unexpected texture row orientation for ${name}`);
   const scalar = {} as { roughness: ErrorStats; metalness: ErrorStats };
   for (const [channel, plane] of [["roughness", 3], ["metalness", 4]] as const) {
     const error = errorStats(absoluteErrors([source.planes[plane]], [actual.planes[plane]], active, covered));
