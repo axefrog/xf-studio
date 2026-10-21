@@ -5,9 +5,8 @@
  * either collection schema, readable by 0.1.0-alpha.1) and its dirty state.
  */
 import { expect, test } from "bun:test";
-import { CollectionActions } from "../src/library/collection-actions";
-import { CollectionService, type CollectionTransport } from "../src/library/collection-service";
-import type { EditorSnapshot } from "../src/library/collection-session";
+import { CollectionService } from "../src/library/collection-service";
+import { CollectionOwner, type CollectionVersionsPort } from "../src/library/collection-owner";
 import { collectionDraft, parseCollectionWorkspace, writeCollectionWorkspace, type DocumentModel } from "../src/app/workspace/collection-workspace";
 import { STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
 import { EYE_MAKEUP } from "../src/features/eye-makeup";
@@ -17,7 +16,10 @@ import { recipeFile, readRecipe } from "../src/legacy/eye-makeup/recipe-schema";
 import { initialRecipe } from "./fixtures/eye-region";
 import { HAIR } from "./fixtures/hair-feature";
 import { alphaParseCollection } from "./fixtures/alpha-0.1.0/collection-list";
-import { emptyMemory } from "../src/app/workspace/collection-workspace";
+import { openTestLibrary } from "./fixtures/library-file";
+import { libraryPort, libraryVersions, testScene } from "./fixtures/profile-studio";
+import { memoryOutboxStorage } from "./fixtures/platform-doubles";
+import { DocumentOutbox } from "../src/platform/core/document-outbox";
 
 const ID = "0ec3546e-3fac-43e7-8c19-a65d20383d41";
 const NEW = "11111111-2222-4333-8444-555555555555";
@@ -25,20 +27,27 @@ const recipe = () => readRecipe(initialRecipe());
 const collection = () => ({ schema: COLLECTION_1, id: ID, name: "Looks",
   presets: [{ id: "f25f8eb1-8a83-4f65-a111-b83086382c18", name: "One", revision: 1, recipe: recipeFile(recipe())! }] });
 
-function service(value: unknown = collection(), model: DocumentModel = STUDIO_DOCUMENTS) {
-  let editor: EditorSnapshot = { recipe: recipe(), ...emptyMemory() };
-  let saved: LookCollection | undefined;
-  const transport: CollectionTransport = { list: async () => [{ id: ID, name: "Looks", count: 1, revision: 1, updatedAt: "now" }],
-    get: async () => ({ collection: model.parts.readCollection(value, true), revision: 1, updatedAt: "now" }),
-    save: async (next, revision) => { saved = structuredClone(next); return { collection: next, revision: (revision ?? 0) + 1, updatedAt: "now" }; },
-    package: async () => { throw Error("unused"); } };
-  const svc = new CollectionService(model, collectionDraft(value, model, 1), { selected: "", name: "" }, () => editor, next => editor = next, transport,
-    () => ({ recipe: editor.recipe, revision: 0 }));
-  return { svc, saved: () => saved };
+/**
+ * The collection service over a library in memory holding `value` as its working copy (the scene shows its first look). `versions`: Save
+ * version as the host answers it (default: the library's). `saved()`: the collection as the library last saved it as a version.
+ */
+async function service(value: unknown = collection(), model: DocumentModel = STUDIO_DOCUMENTS, versions?: CollectionVersionsPort) {
+  const library = openTestLibrary(), port = libraryPort(library), outbox = new DocumentOutbox(port, memoryOutboxStorage(), { retryMs: 5 });
+  outbox.open();
+  const owner = new CollectionOwner({ documents: port, outbox, versions: versions ?? libraryVersions(library) });
+  await owner.load();
+  const read = model.parts.readCollection(value, true, "keep");
+  const made = owner.dispatch({ kind: "collection.create", id: read.id, name: read.name, looks: read.presets.map(look => ({ id: look.id, name: look.name,
+    parts: model.parts.minimalLook(look).parts })), ...((value as { packagePlan?: unknown }).packagePlan !== undefined ? { packagePlan: (value as { packagePlan?: unknown }).packagePlan } : {}) });
+  if (!made.ok) throw Error(made.reason);
+  const scene = testScene({ collection: read.id, look: read.presets[0]!.id });
+  const svc = new CollectionService({ model, owner, scene, transport: { list: async () => library.collections.list(), get: async id => library.collections.get(id),
+    package: async () => { throw Error("unused"); } }, readRecipe: () => ({ recipe: recipe(), revision: 0 }) });
+  return { svc, owner, scene, library, saved: () => { const list = library.collections.list(); return list.length ? library.collections.get(list.at(-1)!.id).collection : undefined; } };
 }
 
 test("with eye makeup alone there is one mod, named XF Eye Artistry; it can be renamed and named back, never split", async () => {
-  const f = service();
+  const f = await service();
   await f.svc.execute({ kind: "initialize" });
   expect(f.svc.summary().products!).toEqual([{ id: ID, isDefault: true, modName: "XF Eye Artistry", nameSource: "derived",
     features: [{ id: "eye-makeup", label: "Eye makeup" }] }]);
@@ -46,12 +55,14 @@ test("with eye makeup alone there is one mod, named XF Eye Artistry; it can be r
   expect(f.svc.actionCapability({ kind: "package.split", feature: "eye-makeup" }))
     .toMatchObject({ available: false, code: "unavailable", reason: "Eye makeup is already a mod of its own." });
   expect(f.svc.actionCapability({ kind: "package.rename", productId: ID, modName: "a/b" })).toMatchObject({ available: false, code: "invalid_value" });
+  expect(f.svc.persistence()?.dirty).toBe(true);
+  expect((await f.svc.execute({ kind: "save" })).ok).toBe(true);
   expect(f.svc.persistence()?.dirty).toBe(false);
   f.svc.dispatch({ kind: "package.rename", productId: ID, modName: "My looks" });
   expect(f.svc.summary().products![0]).toMatchObject({ modName: "My looks", nameSource: "plan" });
   // A mod name is part of the collection: the draft now has unsaved changes.
   expect(f.svc.persistence()).toMatchObject({ dirty: true, structureDirty: true, dirtyPresets: [] });
-  expect(f.svc.snapshot()!.collection.packagePlan).toEqual({ schema: PACKAGE_PLAN_1, products: [{ id: ID, name: "My looks", features: [] }] });
+  expect(f.owner.collection(ID)!.packagePlan).toEqual({ schema: PACKAGE_PLAN_1, products: [{ id: ID, name: "My looks", features: [] }] });
   // Saved as collection-1 with the plan beside it, which even the unpublished 0.1.0-alpha.1 reads (and ignores).
   expect((await f.svc.execute({ kind: "save" })).ok).toBe(true);
   const stored = STUDIO_PARTS.writeMinimal(f.saved()!);
@@ -61,7 +72,7 @@ test("with eye makeup alone there is one mod, named XF Eye Artistry; it can be r
   expect(STUDIO_PARTS.readCollection(JSON.parse(JSON.stringify(stored))).packagePlan).toEqual(stored.packagePlan as never);
   // An empty name goes back to the default: the plan disappears again.
   f.svc.dispatch({ kind: "package.rename", productId: ID, modName: "" });
-  expect(f.svc.snapshot()!.collection.packagePlan).toBeUndefined();
+  expect(f.owner.collection(ID)!.packagePlan).toBeUndefined();
   expect(f.svc.summary().products![0]).toMatchObject({ modName: "XF Eye Artistry", nameSource: "derived" });
 });
 
@@ -93,7 +104,7 @@ test("a newer or damaged plan opens, saves back verbatim, and refuses package ac
     expect(written.collection.packagePlan).toEqual(plan);
     expect(parseCollectionWorkspace(written, STUDIO_DOCUMENTS).collection.packagePlan).toEqual(read.packagePlan);
 
-    const f = service(stored);
+    const f = await service(stored);
     await f.svc.execute({ kind: "initialize" });
     expect(f.svc.summary()).toMatchObject({ products: [], packagePlanIssue: NEWER_PLAN_MESSAGE });
     for (const action of [{ kind: "package.rename", productId: ID, modName: "Other" }, { kind: "package.split", feature: "eye-makeup" }] as const)
@@ -105,7 +116,7 @@ test("a newer or damaged plan opens, saves back verbatim, and refuses package ac
     expect((await f.svc.execute({ kind: "save" })).ok).toBe(true);
     expect(STUDIO_PARTS.writeMinimal(f.saved()!).packagePlan).toEqual(plan);
   }
-  const damaged = service({ ...collection(), packagePlan: "not a plan" });
+  const damaged = await service({ ...collection(), packagePlan: "not a plan" });
   await damaged.svc.execute({ kind: "initialize" });
   expect(damaged.svc.summary().packagePlanIssue).toBe(DAMAGED_PLAN_MESSAGE);
   expect(damaged.svc.capability({ kind: "package", action: "check" })).toMatchObject({ available: false, code: "unavailable" });
@@ -117,41 +128,38 @@ test("Save as copy gives every mod of the copy a fresh ID, so no split-off mod s
   const value = { schema: COLLECTION_2, id: ID, name: "Looks", packagePlan: { schema: PACKAGE_PLAN_1, products: [{ id: NEW, name: "XF Hair Only", features: ["hair"] }] },
     presets: [{ id: "f25f8eb1-8a83-4f65-a111-b83086382c18", name: "One", revision: 1,
       parts: { "eye-makeup": { schema: "xfs/eye-makeup-part-1", body: recipeFile(recipe())! }, hair: { schema: "xfs/hair-part-1", body: { colour: "#112233", strands: [1] } } } }] };
-  const f = service(value, model);
+  // The library's named versions don't know hair: Save version answers as the host would, and the copy is read from its working copy.
+  const f = await service(value, model, { save: async () => ({ revision: 1, updatedAt: "now", documents: {} }) });
   await f.svc.execute({ kind: "initialize" });
   expect((await f.svc.execute({ kind: "saveCopy" })).ok).toBe(true);
-  const copy = f.saved()!, plan = copy.packagePlan as ModPackagePlan;
+  const copy = f.owner.collection(f.scene.look()!.collection)!, plan = copy.packagePlan as ModPackagePlan;
   expect(copy.id).not.toBe(ID);
   expect(plan.products).toHaveLength(1);
   expect(plan.products[0]).toMatchObject({ name: "XF Hair Only", features: ["hair"] });
   expect([ID, NEW, copy.id]).not.toContain(plan.products[0].id);
 });
 
-test("with two exporting features: split into its own mod, rename, assign back and merge, as collection actions", () => {
+test("with two exporting features: split into its own mod, rename, assign back and merge, as collection actions", async () => {
   const hair = { ...HAIR, exports: { exporterId: "hair/stub", brand: "XF Hair Artistry", selectorLabel: "XF Hair", selector: "vanilla" as const } };
   const model: DocumentModel = { parts: new PartRegistry([EYE_MAKEUP, hair]), live: STUDIO_DOCUMENTS.live };
   const value = { schema: COLLECTION_2, id: ID, name: "Looks", presets: [{ id: "f25f8eb1-8a83-4f65-a111-b83086382c18", name: "One", revision: 1,
     parts: { "eye-makeup": { schema: "xfs/eye-makeup-part-1", body: recipeFile(recipe())! }, hair: { schema: "xfs/hair-part-1", body: { colour: "#112233", strands: [1] } } } }] };
-  // The editor carries the look's other live parts (sparse: a feature absent here has no part), as the live document exports them.
-  let editor: EditorSnapshot = { recipe: recipe(), ...emptyMemory(), liveFeatures: { hair: { part: { colour: "#112233", strands: [1] }, editor: { strand: 0 } } } };
-  const ids = [NEW];
-  const actions = new CollectionActions(model, collectionDraft(value, model), () => editor, next => { editor = next; }, () => ids.shift()!);
-  const products = () => actions.productSummary().map(p => [p.modName, p.features.map(f => f.id)]);
+  const f = await service(value, model);
+  const products = () => f.svc.summary().products!.map(p => [p.modName, p.features.map(f => f.id)]);
   expect(products()).toEqual([["XF Looks", ["eye-makeup", "hair"]]]);
-  actions.dispatch({ kind: "package.split", feature: "hair" });
+  f.svc.dispatch({ kind: "package.split", feature: "hair", newId: NEW });
   expect(products()).toEqual([["XF Eye Artistry", ["eye-makeup"]], ["XF Hair Artistry", ["hair"]]]);
-  expect(actions.productSummary()[1].id).toBe(NEW);
-  actions.dispatch({ kind: "package.rename", productId: NEW, modName: "XF Hair Only" });
+  expect(f.svc.summary().products![1]!.id).toBe(NEW);
+  f.svc.dispatch({ kind: "package.rename", productId: NEW, modName: "XF Hair Only" });
   expect(products()).toEqual([["XF Eye Artistry", ["eye-makeup"]], ["XF Hair Only", ["hair"]]]);
-  expect(actions.check({ kind: "package.assign", feature: "hair", productId: NEW }))
+  expect(f.svc.actionCapability({ kind: "package.assign", feature: "hair", productId: NEW }))
     .toMatchObject({ available: false, reason: "Hair is already in that mod." });
-  actions.dispatch({ kind: "package.assign", feature: "eye-makeup", productId: NEW });
+  f.svc.dispatch({ kind: "package.assign", feature: "eye-makeup", productId: NEW });
   expect(products()).toEqual([["XF Hair Only", ["eye-makeup", "hair"]]]);
-  actions.dispatch({ kind: "package.merge", productId: NEW, intoId: ID });
+  f.svc.dispatch({ kind: "package.merge", productId: NEW, intoId: ID });
   expect(products()).toEqual([["XF Looks", ["eye-makeup", "hair"]]]);
-  expect(actions.view().collection.packagePlan).toBeUndefined();
-  // A collection-2 draft writes its plan beside its looks.
-  actions.dispatch({ kind: "package.split", feature: "hair", newId: "22222222-2222-4333-8444-555555555555" });
-  expect(model.parts.writeMinimal(actions.view().collection as LookCollection)).toMatchObject({ schema: COLLECTION_2,
-    packagePlan: { schema: PACKAGE_PLAN_1, products: [{ id: "22222222-2222-4333-8444-555555555555", features: ["hair"] }] } });
+  expect(f.owner.collection(ID)!.packagePlan).toBeUndefined();
+  // The working copy keeps its plan beside its looks, as a collection-2 file writes it.
+  f.svc.dispatch({ kind: "package.split", feature: "hair", newId: "22222222-2222-4333-8444-555555555555" });
+  expect(f.owner.collection(ID)!.packagePlan).toEqual({ schema: PACKAGE_PLAN_1, products: [{ id: "22222222-2222-4333-8444-555555555555", features: ["hair"] }] });
 });

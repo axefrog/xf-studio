@@ -46,12 +46,6 @@ export type CollectionDraft = {
 export const COLLECTION_RECOVERY_LIMIT = 4;
 export type CollectionWorkspace = CollectionDraft & { previous?: CollectionDraft; older?: CollectionDraft[] };
 export const emptyMemory = (): EditorMemory => ({ active: 0, selected: 0, history: [] });
-/**
- * A deep copy of an in-memory workspace. A workspace is JSON data (it is stored as JSON), and a JSON
- * copy takes about 25 ms on the large fixture where `structuredClone` takes 65 ms and a reparse 70 ms.
- * Undo histories are chunked look histories, so a copy no longer repeats every step's whole recipe.
- */
-export function copyWorkspace<T extends CollectionDraft>(value: T): T { return JSON.parse(JSON.stringify(value)); }
 
 /** The live document's memory in a look's memory (defaults when the look has none); its history is the look's. */
 export function liveMemory(memory: LookMemory | undefined, model: DocumentModel): EditorMemory {
@@ -315,40 +309,3 @@ export function newPresetName(presets: readonly { name: string }[], removed: rea
   return `Preset ${n}`;
 }
 
-/**
- * Pure collection operations: stable identities, explicit order and recoverable removal. `value`
- * is an in-memory workspace (already parsed), so it is copied, and only what an edit can change is
- * validated again: the collection's identities, names and looks, never the Undo histories (CORE-35).
- * A new look's ID comes with the command (`newId`); this never invents one (CORE-44).
- */
-export function editPresets(value: CollectionWorkspace, command: PresetCommand, model: DocumentModel): CollectionWorkspace {
-  const state = copyWorkspace(value), presets = state.collection.presets;
-  const index = "id" in command ? presets.findIndex(p => p.id === command.id) : -1;
-  if ("id" in command && index < 0) throw Error("That preset no longer exists.");
-  if (command.kind === "add" || command.kind === "copy") {
-    const id = command.newId;
-    if (!id) throw Error("A new preset needs its ID from the host.");
-    if (presets.some(p => p.id === id) || state.removed.some(entry => entry.preset.id === id)) throw Error("That preset ID is already in use.");
-    // A copy carries every part of the look; its editor memory starts fresh.
-    const preset: Preset = command.kind === "copy" ? { ...structuredClone(presets[index]), id,
-      name: `${presets[index].name.slice(0, 113)} (copy)`, revision: 1 } : starterLook(id, newPresetName(presets, state.removed.map(entry => entry.preset)), model);
-    presets.splice(command.kind === "copy" ? index + 1 : presets.length, 0, preset);
-    state.selected = preset.id; state.memory[preset.id] = withLiveMemory(undefined, emptyMemory(), model);
-  } else if (command.kind === "remove") {
-    const [preset] = presets.splice(index, 1);
-    state.removed.push({ preset, index, memory: state.memory[preset.id] ?? withLiveMemory(undefined, emptyMemory(), model) });
-    state.removed = state.removed.slice(-REMOVED_PRESET_LIMIT); delete state.memory[preset.id];
-    if (state.selected === preset.id) state.selected = presets[Math.min(index, presets.length - 1)]?.id;
-  } else if (command.kind === "restore") {
-    const entry = state.removed.pop();
-    if (!entry) throw Error("No removed preset to restore.");
-    if (presets.some(p => p.id === entry.preset.id)) throw Error("That preset already exists.");
-    presets.splice(Math.min(entry.index, presets.length), 0, entry.preset);
-    state.memory[entry.preset.id] = entry.memory; state.selected = entry.preset.id;
-  } else if (command.kind === "move") {
-    if (!Number.isInteger(command.to) || command.to < 0 || command.to >= presets.length) throw Error("Invalid preset position.");
-    presets.splice(command.to, 0, presets.splice(index, 1)[0]);
-  } else if (command.kind === "rename") presets[index].name = command.name.trim();
-  state.collection = model.parts.rereadCollection(state.collection);
-  return state;
-}

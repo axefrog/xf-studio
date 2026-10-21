@@ -14,9 +14,8 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openTestLibrary } from "./fixtures/library-file";
-import { CollectionService, type CollectionTransport } from "../src/library/collection-service";
-import type { EditorSnapshot } from "../src/library/collection-session";
-import { collectionDraft, emptyMemory, parseCollectionWorkspace, readCollectionWorkspaceV1 } from "../src/app/workspace/collection-workspace";
+import { collectionDraft, parseCollectionWorkspace, readCollectionWorkspaceV1 } from "../src/app/workspace/collection-workspace";
+import { profileStudio } from "./fixtures/profile-studio";
 import { LIVE_FEATURE, STUDIO_COMPOSITION, STUDIO_DOCUMENTS, STUDIO_PARTS, STUDIO_REGISTRY } from "../src/compose/studio-registry";
 import { defaultClusteredGlintFlakes, defaultDirectGlintFlakes } from "../src/engines/layered-makeup/direct-glint-settings";
 import { packagePresetIdentities } from "../src/legacy/eye-makeup/export/package-filter";
@@ -293,22 +292,18 @@ test("a look the legacy format cannot hold is saved as a collection-2 revision, 
 
 test("draft persistence compares canonically: a library revision read from collection-1 rows is clean until edited", async () => {
   const legacy = legacyLibrary();
-  const file = openTestLibrary(legacy.path), library = file.collections;
+  const file = openTestLibrary(legacy.path);
   try {
     const id = legacy.rows.list[1].id;
-    const transport: CollectionTransport = { list: async () => library.list(), get: async key => library.get(key),
-      save: async (collection, revision) => library.save({ collection, revision }), package: async () => { throw Error("unused"); } };
-    const stored = library.get(id);
-    let revision = 0;
-    // The editor shows the selected (first) look, as a restored workspace does.
-    let editor: EditorSnapshot = { recipe: structuredClone(recipeOf(stored.collection.presets[0])), ...emptyMemory() };
-    const service = new CollectionService(STUDIO_DOCUMENTS, collectionDraft(stored.collection, STUDIO_DOCUMENTS, stored.revision), { selected: "", name: "" },
-      () => editor, value => editor = value, transport, () => ({ recipe: editor.recipe, revision }));
-    await service.execute({ kind: "initialize" });
+    const studio = await profileStudio({ library: file, looks: [] });
+    await studio.collection.initialize();
+    // Opened from its collection-1 rows: its working copy is made from that version, which is its baseline.
+    expect(await studio.collection.execute({ kind: "open", id })).toMatchObject({ ok: true });
+    const service = studio.service;
     service.dispatch({ kind: "preset.select", id: service.summary().draft!.presets[1].id });
     service.dispatch({ kind: "preset.select", id: service.summary().draft!.presets[0].id });
     expect(service.persistence()).toMatchObject({ baseline: "known", dirty: false, dirtyPresets: [] });
-    editor.recipe.layers[0].opacity = 0.123; revision++;
+    studio.app.dispatch({ kind: "layer.setOpacity", layerId: studio.document.recipe.layers[0]!.id, opacity: 0.123 });
     expect(service.persistence()).toMatchObject({ dirty: true, dirtyPresets: [service.summary().draft!.presets[0].id] });
   } finally { file.close(); legacy.cleanup(); }
 });
@@ -317,13 +312,10 @@ test("draft persistence compares canonically: a library revision read from colle
 
 test("export writes collection-1 for eye-makeup looks, and both collection schemas import", async () => {
   const file = readFixture(COLLECTION_FIXTURES[1]);
-  let stored: { collection: LookCollection; revision: number } | undefined;
-  const transport: CollectionTransport = { list: async () => [], get: async () => { throw Error("none"); },
-    save: async (collection, revision) => (stored = { collection: structuredClone(collection), revision: (revision ?? 0) + 1 },
-      { ...stored, updatedAt: "now" }), package: async () => { throw Error("unused"); } };
-  let editor: EditorSnapshot = { recipe: parseRecipe(file.presets[0].recipe), ...emptyMemory() };
-  const service = new CollectionService(STUDIO_DOCUMENTS, collectionDraft(file, STUDIO_DOCUMENTS), { selected: "", name: "" }, () => editor, value => editor = value, transport);
+  const studio = await profileStudio({ looks: [] }), service = studio.service;
   await service.execute({ kind: "initialize" });
+  const text = JSON.stringify(file);
+  expect((await service.execute({ kind: "import", text, bytes: text.length })).ok).toBe(true);
   const exported = await service.execute({ kind: "exportCollection" });
   const json = exported.ok && exported.result.kind === "export" ? JSON.parse(exported.result.json) : undefined;
   expect(json.schema).toBe(COLLECTION_1);
@@ -336,7 +328,8 @@ test("export writes collection-1 for eye-makeup looks, and both collection schem
     expect((await service.execute({ kind: "import", text, bytes: text.length })).ok).toBe(true);
     expect(service.summary().draft?.presets.map(preset => preset.layers)).toEqual(file.presets.map((preset: { recipe: { layers: unknown[] } }) => preset.recipe.layers.length));
   }
-  expect(stored?.collection.schema).toBe(COLLECTION_2);
+  // Export saved a version first: the library holds it (read as collection-2 in memory).
+  expect(studio.library.collections.get(json.id).collection.schema).toBe(COLLECTION_2);
 });
 
 // ---- Eye makeup's pure capability and apply ----
@@ -427,18 +420,14 @@ test("workspace-1 collection drafts read through the generic reader match the wo
 
 // ---- CORE-05: routine queries never copy the draft ----
 
-test("target checks and context binding read the collection's identity without copying the draft (CORE-05)", async () => {
-  const workspace = freshWorkspace();
-  workspace.collections = collectionDraft(readFixture(COLLECTION_FIXTURES[1]), STUDIO_DOCUMENTS);
-  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "x" }, STUDIO_COMPOSITION);
-  let editor: EditorSnapshot = { recipe: core.document.recipe, ...emptyMemory() };
-  const service = new CollectionService(STUDIO_DOCUMENTS, workspace.collections, { selected: "", name: "" }, () => editor, value => editor = value,
-    { list: async () => [], get: async () => { throw Error(); }, save: async () => { throw Error(); }, package: async () => { throw Error(); } });
-  core.app.attach({ collection: service });
-  let views = 0, snapshots = 0;
-  const view = service.view.bind(service), snapshot = service.snapshot.bind(service);
+test("target checks and context binding read the collection's identity without copying it (CORE-05)", async () => {
+  const studio = await profileStudio({ looks: [] }), service = studio.service, core = studio.core;
+  await service.execute({ kind: "initialize" });
+  const text = JSON.stringify(readFixture(COLLECTION_FIXTURES[1]));
+  expect((await service.execute({ kind: "import", text, bytes: text.length })).ok).toBe(true);
+  let views = 0;
+  const view = service.view.bind(service);
   service.view = () => { views++; return view(); };
-  service.snapshot = () => { snapshots++; return snapshot(); };
   const preset = service.summary().draft!.presets[1].id;
   expect(core.app.targetCapability({ kind: "preset", id: preset })).toEqual({ available: true });
   expect(core.app.targetCapability({ kind: "preset", id: "gone" })).toMatchObject({ code: "missing_target" });
@@ -447,9 +436,8 @@ test("target checks and context binding read the collection's identity without c
   expect(query.context.collectionId).toBe(service.summary().draft!.id);
   expect(core.app.requestCapability({ kind: "exportCollection" })).toEqual({ available: true });
   expect(core.app.requestCapability({ kind: "package", action: "check" })).toEqual({ available: true });
-  expect({ views, snapshots }).toEqual({ views: 0, snapshots: 0 });
-  // An empty draft is still refused with the same message.
-  service.dispatch({ kind: "preset.edit", command: { kind: "remove", id: service.summary().draft!.presets[0].id } });
+  expect(views).toBe(0);
+  // An empty collection is still refused with the same message.
   while (service.summary().draft!.presets.length)
     service.dispatch({ kind: "preset.edit", command: { kind: "remove", id: service.summary().draft!.presets[0].id } });
   expect(core.app.requestCapability({ kind: "exportCollection" })).toMatchObject({ available: false,

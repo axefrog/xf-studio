@@ -4,8 +4,7 @@
  *   bun tests/fixtures/bench-look-history.ts
  * Prints medians in milliseconds and sizes in UTF-16 code units.
  */
-import { CollectionActions } from "../../src/library/collection-actions";
-import { copyWorkspace } from "../../src/app/workspace/collection-workspace";
+import { LegacyDraftActions as CollectionActions, copyWorkspace } from "./legacy-draft";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
 import { createTrustedAuthoringCore } from "../../src/app/trusted-authoring-core";
 import { encodeWorkspaceAt } from "../../src/app/workspace/workspace-budget";

@@ -67,6 +67,8 @@ export async function profileStudio(options: {
   pick?: () => StudioPickedFile | undefined;
   /** Save version as the host answers it (default: the library's own, at once). */
   versions?: (library: CollectionVersionsPort) => CollectionVersionsPort;
+  /** Where the editor's new items' IDs come from (default: random UUIDs). */
+  newId?: () => string;
 } = {}) {
   const library = options.library ?? openTestLibrary(), port = libraryPort(library), storage = memoryOutboxStorage();
   const outbox = new DocumentOutbox(port, storage, { retryMs: 5 });
@@ -85,7 +87,8 @@ export async function profileStudio(options: {
   const workspace = freshWorkspace();
   let application: CollectionApplication | undefined;
   const core = createTrustedAuthoringCore({ ...workspace, ...(first ? first.state : {}) }, { history, resetStack: () => {},
-    selectedCollection: () => application?.selectedPresetId() ?? "draft", ...(ref && first ? { scope: lookScope(ref) } : {}) }, STUDIO_COMPOSITION);
+    selectedCollection: () => application?.selectedPresetId() ?? "draft", ...(ref && first ? { scope: lookScope(ref) } : {}),
+    ...(options.newId ? { newId: options.newId } : {}) }, STUDIO_COMPOSITION);
   if (ref && first) history.focus(lookScope(ref));
   const lookEditor = new LookEditor({ model: MODEL, sessions, document: core.document, restoring: look => outbox.recovering(lookRef(look)) });
   const downloads: { name: string; text: string }[] = [];

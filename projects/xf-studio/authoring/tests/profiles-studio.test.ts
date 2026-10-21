@@ -140,7 +140,7 @@ describe("Save version, Check and Build", () => {
     const check = await studio.files.execute({ kind: "package.check" });
     expect(check.ok).toBe(true);
     const sent = studio.packageInput() as { id: string; presets: { name: string }[] };
-    expect([sent.id, sent.presets.map(p => p.name)]).toEqual([studio.shown(), ["A", "B"]]);
+    expect([sent.id, sent.presets.map(p => p.name)]).toEqual([studio.shown()!, ["A", "B"]] as never);
     expect(JSON.stringify(sent)).toContain("0.6");
     expect(studio.files.snapshot().package?.freshness).toBe("current");
     const build = await studio.files.execute({ kind: "package.build" });
