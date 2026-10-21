@@ -354,25 +354,30 @@ export class PreparedFiles {
     this.evictedAt = this.clock.monotonic();
     // A person's change doesn't wait for the count (it can walk tens of thousands of files): stopped, the check goes on as the job's tail,
     // as it always ran beside everything, and never evicts what this process used.
+    let scanned = false;
     const want = this.scheduler.want("prepared/budget", { key: "prepared:evict", lane: "ahead", run: context => {
-      const evicting = this.evict();
-      context.afterwards(evicting);
+      scanned = true;
+      // Its outcome is told once, whether it finished as the job or as its tail.
+      const scan = this.evict().then(result => {
+        if (result.removed) this.log(`Prepared game files: removed ${result.removed} least recently used (${(result.freed / 1024 ** 2).toFixed(0)} MB).`);
+        return result;
+      }, error => {
+        this.log(`Prepared game files could not be checked against their budget: ${(error as Error)?.message ?? error}`);
+        hostFailure("character", "prepared_budget_failed", "The prepared game files couldn't be checked against their space limit.", error, "warn");
+        return { removed: 0, freed: 0, bytes: 0 };
+      });
+      context.afterwards(scan);
       return new Promise<EvictResult>((resolve, reject) => {
         const stopped = () => resolve({ removed: 0, freed: 0, bytes: 0 });
         if (context.signal.aborted) { stopped(); return; }
         context.signal.addEventListener("abort", stopped, { once: true });
-        evicting.then(resolve, reject).finally(() => context.signal.removeEventListener("abort", stopped));
+        scan.then(resolve, reject).finally(() => context.signal.removeEventListener("abort", stopped));
       });
     } });
     const evicting: Promise<void> = want.settled.then(outcome => {
-      if (outcome.status === "done" && outcome.result.removed)
-        this.log(`Prepared game files: removed ${outcome.result.removed} least recently used (${(outcome.result.freed / 1024 ** 2).toFixed(0)} MB).`);
-      if (outcome.status === "failed") {
-        this.log(`Prepared game files could not be checked against their budget: ${(outcome.error as Error)?.message ?? outcome.error}`);
-        hostFailure("character", "prepared_budget_failed", "The prepared game files couldn't be checked against their space limit.", outcome.error, "warn");
-      }
-      // Stopped before it ran (Clear, or nothing wanted it): checked again next time.
-      if (outcome.status === "superseded") this.evictedAt = -Infinity;
+      // Stopped before its scan began (Clear, or nothing wanted it): checked again next time. A scan that began goes on as the job's tail
+      // and counts as this minute's check.
+      if (outcome.status === "superseded" && !scanned) this.evictedAt = -Infinity;
     }).finally(() => { if (this.evicting === evicting) this.evicting = null; });
     this.evicting = evicting;
     return evicting;

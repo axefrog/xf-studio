@@ -30,11 +30,28 @@ export const lowPriorityNow = (): boolean => !personWorking();
 /** Runs `work` as part of a job (the scheduler's `enter`); a test can run code in a lane with it too. */
 export async function inLane<T>(context: JobContext | JobLane, work: () => Promise<T>): Promise<T> {
   const job: JobContext = typeof context === "string" ? laneOnly(context) : context;
-  const person = job.lane() === "person";
-  if (person) { personRuns++; raiseBackgroundWolvenKit(); }
+  running.add(job);
+  countPerson(job);
   try { return await lanes.run(job, work); }
-  finally { if (person) personRuns--; }
+  finally {
+    running.delete(job);
+    if (counted.delete(job)) personRuns--;
+  }
 }
+/** Jobs running now, and those counted as person work (from their start, or from when a person raised them). */
+const running = new Set<JobContext>();
+const counted = new Set<JobContext>();
+function countPerson(job: JobContext): void {
+  if (job.lane() !== "person" || counted.has(job)) return;
+  counted.add(job);
+  personRuns++;
+  raiseBackgroundWolvenKit();
+}
+/**
+ * A running job a person now wants (the scheduler's `raised`): from now on it is person work, so background launches run at normal
+ * priority and WolvenKit runs already started below normal are raised.
+ */
+export function raisedToPerson(job: JobContext): void { if (running.has(job)) countPerson(job); }
 function laneOnly(lane: JobLane): JobContext {
   return { signal: new AbortController().signal, lane: () => lane, progress() {}, commit() {}, turn: async () => {}, afterwards() {} };
 }
@@ -42,5 +59,5 @@ function laneOnly(lane: JobLane): JobContext {
 /** The host's scheduler: its clock, a turn that lets waiting requests in (event-loop.ts), and every job in its lane. */
 export function hostJobs(options: { clock?: Clock; quietMs?: number; report?: (error: unknown, key: string) => void } = {}): JobScheduler {
   return createJobScheduler({ clock: options.clock ?? hostClock(), quietMs: options.quietMs, report: options.report, yieldTurn: yieldToEventLoop,
-    defer: run => { setImmediate(run); }, enter: inLane });
+    defer: run => { setImmediate(run); }, enter: inLane, raised: raisedToPerson });
 }

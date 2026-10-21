@@ -928,3 +928,30 @@ describe("preparing ahead without WolvenKit (NATIVE-48)", () => {
     expect(warmed).toEqual([[1, 2]]);
   });
 });
+
+test("a catalogue lookup under way never holds a person's change back, and its answer isn't written once the check was stopped (review 1)", async () => {
+  const jobs = testJobs();
+  let releaseLookup!: () => void, lookups = 0;
+  const lookup = new Promise<void>(resolve => { releaseLookup = resolve; });
+  const deps: PrefetchDeps = { jobs,
+    // The first lookup waits for the catalogue being built; later ones answer at once.
+    requestFor: async (_base, _option, position) => { if (lookups++ === 0) await lookup; return withChoice(position); },
+    readiness: async () => () => true,
+    warm: async requests => requests.map(() => ({ ready: true })),
+    preparedBytes: async () => 0 };
+  const service = new ChoicePrefetcher(deps, { batch: 2, maxBatch: 2, timeMs: 60_000, bytes: 1e12 });
+  ask(service, [0]);
+  await settle();
+  expect(lookups).toBe(1);
+  let started = 0;
+  const asked = performance.now();
+  const person = jobs.want("page/character", { key: "v", lane: "person", run: async () => { started = performance.now(); } });
+  expect((await person.settled).status).toBe("done");
+  expect(started - asked).toBeLessThan(50);
+  // The stopped check's lookup answers late: the choice isn't marked from it.
+  releaseLookup();
+  await settle();
+  expect(lookups).toBe(2);
+  expect(ask(service, [0]).states).toBe("r");
+  service.cancel();
+});

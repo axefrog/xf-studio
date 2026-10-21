@@ -419,7 +419,13 @@ export class CharacterDetailHost {
     const want = this.jobs.want(`${page}/character`, spec, held.lease.signal);
     if (!live) {
       entry.want = want;
-      void want.settled.then(() => { if (this.runs.get(key)?.token === token) this.runs.delete(key); });
+      void want.settled.then(outcome => {
+        if (this.runs.get(key)?.token !== token) return;
+        this.runs.delete(key);
+        // Stopped, perhaps before it ever started (its page's lease ran out while it waited): the key isn't being prepared any more, so a
+        // page that comes back is told `unknown` and asks again, never `preparing` with nothing running.
+        if (outcome.status === "superseded" && this.states.get(key)?.phase === "preparing") this.states.delete(key);
+      });
     }
     // The page's lease ends with the run it holds.
     void want.settled.then(() => { if (this.pages.get(page) === held) { this.pages.delete(page); held.end.abort(); } });

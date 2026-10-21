@@ -74,3 +74,24 @@ test("Clear stops every partition's work, waits for committed work, removes ever
   expect(readdirSync(a)).toEqual(["y.json.failed"]);
   expect(existsSync(join(kept, "record.json"))).toBe(false);
 });
+
+test("a budget check stopped by a person's change after its scan began still counts as this minute's check (review 6)", async () => {
+  const a = folder();
+  file(a, "x.json", 10, 0);
+  let scans = 0, finishScan!: () => void;
+  const scanning = new Promise<void>(resolve => { finishScan = resolve; });
+  const source = { ...filesSource(a, ".json"), bytes: async () => { scans++; await scanning; return 10; } };
+  const scheduler = jobs();
+  const files = new PreparedFiles({ budget: 100, scheduler });
+  files.partition({ name: "a", evictable: [source] });
+  const first = files.keepWithinBudget();
+  for (let i = 0; i < 50 && !scans; i++) await new Promise(resolve => setTimeout(resolve, 2));
+  expect(scans).toBe(1);
+  // A person's change stops the job; the scan goes on as its tail.
+  scheduler.want("page/character", { key: "v", lane: "person", run: async () => {} });
+  await first;
+  await files.keepWithinBudget();
+  finishScan();
+  await scheduler.idle();
+  expect(scans).toBe(1);
+});

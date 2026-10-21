@@ -360,3 +360,38 @@ describe("the job scheduler", () => {
     expect(ended.signal.aborted).toBe(false);
   });
 });
+
+describe("review fixes", () => {
+  test("a requester promoting its queued job to the person lane stops a running uncommitted lower job (review 2)", async () => {
+    const { jobs, flush, advance } = setup(0), log: string[] = [];
+    const running = manual(log, "running"), promoted = manual(log, "promoted");
+    want(jobs, "prefetch", "a", "ahead", running.run);
+    await advance(1);
+    want(jobs, "warm-up", "b", "ahead", promoted.run);
+    await flush();
+    expect(log).toEqual(["start running"]);
+    // The same requester wants the same run again, now as a person's.
+    want(jobs, "warm-up", "b", "person", promoted.run);
+    await flush();
+    expect(log).toEqual(["start running", "stop running"]);
+    running.finish();
+    await flush();
+    expect(log).toEqual(["start running", "stop running", "end running", "start promoted"]);
+  });
+
+  test("a requester's earlier signal no longer releases the run it wants again with a newer signal (review 4)", async () => {
+    const { jobs, flush } = setup(0), log: string[] = [];
+    const v = manual(log, "v");
+    const first = new AbortController(), second = new AbortController();
+    jobs.want("page/character", { key: "v", lane: "person", run: v.run }, first.signal);
+    const again = jobs.want("page/character", { key: "v", lane: "person", run: v.run }, second.signal);
+    await flush();
+    first.abort();
+    await flush();
+    expect(log).toEqual(["start v"]);
+    expect(again.state().phase).toBe("running");
+    second.abort();
+    await flush();
+    expect(log).toEqual(["start v", "stop v"]);
+  });
+});

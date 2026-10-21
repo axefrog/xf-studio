@@ -171,3 +171,49 @@ describe("the lanes below a job (host-jobs.ts)", () => {
     expect(launches).toEqual([{ hashes: "1", low: true }, { hashes: "3", low: false }]);
   });
 });
+
+describe("review fixes", () => {
+  test("a running job a person now wants counts as person work from then on: background launches go to normal priority (review 3)", async () => {
+    const jobs = hostJobs({ quietMs: 0 });
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const seen: unknown[] = [];
+    const shared = async () => { await sleep(1); seen.push(currentLane(), personWorking()); await gate; seen.push(currentLane(), personWorking(), lowPriorityNow()); };
+    jobs.want("prefetch", { key: "shared", lane: "ahead", run: shared });
+    await until(() => seen.length === 2);
+    expect(personWorking()).toBe(false);
+    jobs.want("page/character", { key: "shared", lane: "person", run: shared });
+    expect(personWorking()).toBe(true);
+    release();
+    await jobs.idle();
+    expect(seen).toEqual(["ahead", false, "person", true, false]);
+    expect(personWorking()).toBe(false);
+  });
+
+  test("a V whose page went away before it started isn't reported as preparing (review 5)", async () => {
+    const timers: { at: number; run: () => void; signal?: AbortSignal }[] = [];
+    let now = 0;
+    const clock: Clock = { now: () => now, monotonic: () => now, after: (ms, run, signal) => { timers.push({ at: now + ms, run, signal }); }, frame() {} };
+    const advance = (ms: number) => {
+      now += ms;
+      for (let again = true; again;) {
+        again = false;
+        for (const timer of [...timers]) if (timer.at <= now) { timers.splice(timers.indexOf(timer), 1); if (!timer.signal?.aborted) { timer.run(); again = true; } }
+      }
+    };
+    let finish!: () => void;
+    const host = new CharacterDetailHost({ cacheRoot: join(root, "lease-queued"), settings: () => settings, clock,
+      prepare: options => options.request === REQUEST_A ? new Promise(resolve => { finish = () => resolve(record("a")); }) : Promise.resolve(record("b")) });
+    const kept = host.request(REQUEST_A, "open-page");
+    const gone = host.request(REQUEST_B, "closed-page");
+    expect(host.state(gone.key).phase).toBe("preparing");
+    // The open page keeps polling its V; the closed one never asks again, and its V never started.
+    advance(PAGE_LEASE_MS / 2); host.state(kept.key);
+    advance(PAGE_LEASE_MS / 2 + 1); host.state(kept.key);
+    await sleep(5);
+    expect(host.state(gone.key).phase).toBe("unknown");
+    finish();
+    await host.settled();
+    expect(host.state(kept.key).phase).toBe("ready");
+  });
+});

@@ -30,6 +30,8 @@ export type JobSchedulerOptions = {
   readonly defer?: (run: () => void) => void;
   /** Wraps every run (the host follows the job through its async work with it, host-jobs.ts). */
   readonly enter?: <T>(context: JobContext, run: () => Promise<T>) => Promise<T>;
+  /** A running job was raised to a higher lane (a person now wants what it was doing ahead). */
+  readonly raised?: (context: JobContext) => void;
   /** A job's failure, once (never a stop). */
   readonly report?: (error: unknown, key: string) => void;
 };
@@ -46,8 +48,10 @@ type Job = {
   readonly controller: AbortController; committed: boolean;
   readonly wants: Set<Held>;
   readonly settled: Promise<RunOutcome<unknown>>; settle(outcome: RunOutcome<unknown>): void;
+  /** Its context while it runs. */
+  context?: JobContext;
 };
-type Held = { readonly requester: string; readonly job: Job; readonly want: Want<unknown> };
+type Held = { readonly requester: string; readonly job: Job; readonly want: Want<unknown>; unlisten: (() => void) | null };
 
 /** An `AbortError` for a stopped job's `turn()`. */
 function stoppedError(signal: AbortSignal): Error {
@@ -169,6 +173,7 @@ export function createJobScheduler(options: JobSchedulerOptions): JobScheduler {
         tails.add(settled);
       },
     };
+    job.context = context;
     let pending: Promise<unknown>;
     try { pending = options.enter ? options.enter(context, () => job.run(context)) : job.run(context); }
     catch (error) { pending = Promise.reject(error); }
@@ -186,7 +191,8 @@ export function createJobScheduler(options: JobSchedulerOptions): JobScheduler {
       try { options.report?.(ending.error, job.key); } catch { /* Reporting must not end the host either. */ }
     } else if (ending.status === "done") { job.phase = "done"; job.result = ending.result; }
     job.progress = null;
-    for (const held of job.wants) if (holders.get(held.requester) === held) holders.delete(held.requester);
+    job.context = undefined;
+    for (const held of job.wants) { held.unlisten?.(); if (holders.get(held.requester) === held) holders.delete(held.requester); }
     job.wants.clear();
     job.settle(outcome);
     schedule();
@@ -202,7 +208,7 @@ export function createJobScheduler(options: JobSchedulerOptions): JobScheduler {
     job.controller.abort(reason);
     if (wasWaiting) {
       queue.splice(queue.indexOf(job), 1);
-      for (const held of job.wants) if (holders.get(held.requester) === held) holders.delete(held.requester);
+      for (const held of job.wants) { held.unlisten?.(); if (holders.get(held.requester) === held) holders.delete(held.requester); }
       job.wants.clear();
       job.settle(SUPERSEDED);
     }
@@ -211,6 +217,7 @@ export function createJobScheduler(options: JobSchedulerOptions): JobScheduler {
   }
 
   function drop(held: Held): void {
+    held.unlisten?.();
     if (holders.get(held.requester) === held) holders.delete(held.requester);
     const job = held.job;
     if (!job.wants.delete(held)) return;
@@ -244,27 +251,28 @@ export function createJobScheduler(options: JobSchedulerOptions): JobScheduler {
       lastAt[spec.lane] = Math.max(lastAt[spec.lane], now());
       const previous = holders.get(requester);
       const existing = live.get(spec.key);
-      if (previous && previous.job === existing && existing) {
-        raise(existing, spec.lane);
-        listen(previous, signal);
-        schedule();
-        return previous.want as Want<T>;
+      let held: Held;
+      let job: Job;
+      if (previous && existing && previous.job === existing) {
+        // The same requester wanting the same run again: it keeps the run, and only the newest want's signal holds it.
+        held = previous;
+        job = existing;
+      } else {
+        if (previous) drop(previous);
+        job = existing ?? create(spec as JobSpec<unknown>);
+        held = { requester, job, want: { key: job.key, state: () => stateOf(job), settled: job.settled }, unlisten: null };
+        job.wants.add(held);
+        holders.set(requester, held);
       }
-      if (previous) drop(previous);
-      const job = existing ?? create(spec as JobSpec<unknown>);
       raise(job, spec.lane);
-      const want: Want<unknown> = { key: job.key, state: () => stateOf(job), settled: job.settled };
-      const held: Held = { requester, job, want };
-      job.wants.add(held);
-      holders.set(requester, held);
       listen(held, signal);
       // A person's work stops a running lower job that hasn't committed; it starts once that run returned.
-      if (RANK[spec.lane] === 0 && running && RANK[running.lane] > 0 && !running.committed && running !== job) stop(running, "pre-empted");
+      if (RANK[job.lane] === 0 && running && RANK[running.lane] > 0 && !running.committed && running !== job) stop(running, "pre-empted");
       // A person's job that can start now starts at once, not after the event loop's next turn (which a busy host may hold back).
       if (RANK[job.lane] === 0 && job.phase === "waiting" && !running && firstPerson() === job && !(job.exclusive && tails.size)) start(job);
       else schedule();
       notify();
-      return want as Want<T>;
+      return held.want as Want<T>;
     },
     release(requester) {
       const held = holders.get(requester);
@@ -293,9 +301,17 @@ export function createJobScheduler(options: JobSchedulerOptions): JobScheduler {
     if (RANK[lane] >= RANK[job.lane]) return;
     job.lane = lane;
     job.seq = ++seq;
+    // A running job raised: whoever follows its lane hears of it (the host's launch priority, host-jobs.ts).
+    if (job.phase === "running" && job.context) { try { options.raised?.(job.context); } catch { /* Advisory. */ } }
   }
+  /** The want's lifetime is `signal` from now on (an earlier want's signal no longer releases it). */
   function listen(held: Held, signal: AbortSignal | undefined): void {
-    signal?.addEventListener("abort", () => { if (holders.get(held.requester) === held) drop(held); }, { once: true });
+    held.unlisten?.();
+    held.unlisten = null;
+    if (!signal) return;
+    const released = () => { if (holders.get(held.requester) === held) drop(held); };
+    signal.addEventListener("abort", released, { once: true });
+    held.unlisten = () => signal.removeEventListener("abort", released);
   }
 }
 

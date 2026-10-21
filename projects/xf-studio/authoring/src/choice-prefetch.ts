@@ -117,6 +117,17 @@ export function withoutOption(request: CharacterRequest, option: string): Charac
   return (choices.length ? { ...rest, choices } : rest) as CharacterRequest;
 }
 const messageOf = (error: unknown) => (error as Error)?.message ?? String(error);
+/** `work`'s answer, or a stop as soon as the job is stopped; `work` itself goes on as the job's tail. */
+function untilStopped<T>(work: Promise<T>, context: JobContext): Promise<T> {
+  context.afterwards(work);
+  if (context.signal.aborted) return Promise.reject(new Error("Stopped."));
+  return new Promise<T>((resolve, reject) => {
+    const stop = () => reject(new Error("Stopped."));
+    context.signal.addEventListener("abort", stop, { once: true });
+    work.then(value => { context.signal.removeEventListener("abort", stop); resolve(value); },
+      error => { context.signal.removeEventListener("abort", stop); reject(error); });
+  });
+}
 
 export class ChoicePrefetcher {
   private job: Job | null = null;
@@ -296,18 +307,24 @@ export class ChoicePrefetcher {
         if (context.signal.aborted) return;
         this.deps.log?.(`Choices prepared earlier couldn't be checked; they are prepared again: ${messageOf(error)}`);
       }
-      if (context.signal.aborted) return;
+      // Stopped (a person's change), the check lets go at once: a lookup under way (the catalogue being built) goes on as the job's tail,
+      // and nothing it answers is written into the choices' states.
+      const stopped = () => context.signal.aborted || !live();
+      if (stopped()) return;
       for (const item of items) {
-        if (!live()) return;
+        if (stopped()) return;
         if (item.state !== "?") continue;
         let request: CharacterRequest | null;
-        try { request = await this.deps.requestFor(job.base, job.option, item.position); }
-        catch (error) { request = null; this.deps.log?.(`A choice couldn't be looked up to prepare it ahead: ${messageOf(error)}`); }
-        if (!live()) return;
+        try { request = await untilStopped(this.deps.requestFor(job.base, job.option, item.position), context); }
+        catch (error) {
+          if (stopped()) return;
+          request = null; this.deps.log?.(`A choice couldn't be looked up to prepare it ahead: ${messageOf(error)}`);
+        }
+        if (stopped()) return;
         // One unreadable manifest queues its choice; it never stops the job.
         let holds = false;
-        if (request) { try { holds = await ready(request); } catch { holds = false; } }
-        if (!live()) return;
+        if (request) { try { holds = await untilStopped(Promise.resolve(ready(request)), context); } catch { holds = false; } }
+        if (stopped()) return;
         if (item.state !== "?") continue;
         item.request = request;
         item.key = request ? requestKey(request) : null;
