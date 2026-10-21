@@ -33,7 +33,7 @@ export function renderCatalogue(): string {
   let actions = 0, requests = 0, gestures = 0;
   const sections = STUDIO_OWNERS.flatMap(owner => {
     const async = "async" in owner && owner.async === true;
-    const rows: Row[] = Object.entries(owner.actions as Record<string, { descriptor: Row }>)
+    const rows: Row[] = Object.entries(owner.actions as unknown as Record<string, { descriptor: Omit<Row, "kind"> }>)
       .map(([kind, spec]) => ({ ...spec.descriptor, kind }));
     const kind = owner.owner === "feature" ? "feature module" : async ? "system family, asynchronous requests" : "system family";
     const lines = ["", `## ${owner.label} (\`${owner.id}\`, ${kind})`, "", ...table(rows, async)];

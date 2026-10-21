@@ -23,8 +23,8 @@ function fixture() {
 test("the application's catalogue is the registry's: the hand-kept table plus the generically bound features' own", () => {
   // The registry is the one catalogue; research/authoring/ui-action-catalogue.md is generated from it (tests/action-catalogue.test.ts).
   const { app } = fixture();
-  expect(app.actionKinds()).toEqual([...STUDIO_REGISTRY.kinds()]);
-  expect(app.actionDescriptors()).toEqual(STUDIO_REGISTRY.descriptors());
+  expect(app.actionKinds() as readonly string[]).toEqual([...STUDIO_REGISTRY.kinds()]);
+  expect(app.actionDescriptors() as Readonly<Record<string, unknown>>).toEqual(STUDIO_REGISTRY.descriptors());
   // The hand-kept list covers the owners with bespoke handlers; generically bound features register their own descriptors only.
   const bespoke = Object.fromEntries(Object.entries(app.actionDescriptors()).filter(([kind]) => !GENERIC_KINDS.has(kind)));
   expect(JSON.stringify(bespoke)).toBe(JSON.stringify(ACTION_DESCRIPTORS));
