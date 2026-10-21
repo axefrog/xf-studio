@@ -7,6 +7,9 @@
  *   or option replaces that requester's job only; closing its row cancels it (`cancel(requester)`). Each requester's job is its own want
  *   with the scheduler, so two characters' rows never supersede each other. Each choice's request is the V with that choice set
  *   (`requestFor`).
+ * - **Admitted fairly.** At most `PREFETCH_REQUESTERS` jobs run at once; a requester beyond them waits its turn, nothing is cancelled for
+ *   it. Between completed units (a check or a batch), a running job whose requesters are waiting yields its place to the longest waiting
+ *   one and joins the end of the line, keeping everything it has done.
  * - **States** per choice, as one compact string (one character each, `ChoiceFetchState`): not known yet, not prepared, queued, being
  *   prepared, ready, or failed. A choice whose manifest holds (choice-manifest.ts) is ready at once, in this session or a later one;
  *   the rest are queued in the panel's order.
@@ -25,7 +28,8 @@
  *   Clear starts only after its reads have let go (PREV-102).
  * - **Bounded.** A job stops after `timeMs` of its own work (time spent waiting for a person's change or for a stopped batch isn't
  *   counted), and prefetching stops for the session once it has added `bytes` of prepared files; either
- *   leaves the remaining choices "not prepared" (the panel says why), and a click still prepares them. "Clear prepared game files"
+ *   leaves the remaining choices "not prepared" (the panel says why), and a click still prepares them. The byte budget is the session's:
+ *   once spent, every job stops before its next batch. "Clear prepared game files"
  *   starts the session's byte budget again (`resetBudget`, PREV-104). A job nobody has asked about for `unpolledMs` (the page closed or
  *   went away: its lease ran out) is stopped, its batch in WolvenKit too (PREV-105); asking again starts it afresh.
  * - **Never ends the host.** Background work has nobody to report to: an unexpected failure (a dependency throwing, a damaged manifest)
@@ -62,8 +66,10 @@ export type PrefetchAnswer = {
 };
 /** `requester`: who asks (a character's panel instance); absent, the page's one requester. */
 export type PrefetchInput = { base: CharacterRequest; option: string; positions: readonly number[]; focus?: number | null; requester?: string };
-/** Requesters with a job at once; asking for one more stops the oldest's. */
+/** Jobs that run at once; more requesters wait their turn. */
 export const PREFETCH_REQUESTERS = 8;
+/** Jobs held at all (running and waiting); one more stops the job asked about least recently. */
+export const PREFETCH_JOBS = 64;
 export type PrefetchDeps = {
   /** The host's scheduler: each readiness check and batch is one of its `ahead` jobs. */
   jobs: JobScheduler;
@@ -139,8 +145,11 @@ function untilStopped<T>(work: Promise<T>, context: JobContext): Promise<T> {
 }
 
 export class ChoicePrefetcher {
-  /** Each requester's job, oldest first. */
+  /** Each requester's job, the one asked about least recently first. */
   private jobs = new Map<string, Job>();
+  /** The requesters whose jobs may run now, and those waiting their turn (longest waiting first). */
+  private readonly admitted = new Set<string>();
+  private waiting: string[] = [];
   /** Prepared-file bytes when this session's first prefetch began, and whether the session's byte budget is spent. */
   private startBytes: number | null = null;
   private spent = false;
@@ -164,12 +173,14 @@ export class ChoicePrefetcher {
     let job = this.jobs.get(requester);
     if (job?.key !== key) {
       this.cancel(requester);
-      // Bounded: one more requester than the host keeps stops the oldest's job (it asks again if it still wants it).
-      while (this.jobs.size >= PREFETCH_REQUESTERS) this.cancel(this.jobs.keys().next().value!);
+      // Bounded: past every job the host holds, the one asked about least recently stops (it asks again if it still wants it).
+      while (this.jobs.size >= PREFETCH_JOBS) this.cancel(this.jobs.keys().next().value!);
       job = { requester, key, base, option: input.option, items: new Map(), controller: new AbortController(), startedAt: this.now(),
         stopped: this.spent ? "disk" : null, running: false, serial: 0, batches: 0, pausedMs: 0, current: null, lease: null };
-      this.jobs.set(requester, job);
     }
+    // Asked about now: the newest in the order the bound stops them.
+    this.jobs.delete(requester);
+    this.jobs.set(requester, job);
     job.lease?.renew();
     for (const position of input.positions) {
       if (!Number.isInteger(position) || position < 0 || job.items.has(position)) continue;
@@ -203,6 +214,28 @@ export class ChoicePrefetcher {
     job.current = null;
     this.jobs.delete(requester);
     this.stats.cancelled++;
+    this.vacate(requester);
+  }
+  /** A requester's job doesn't run any more: its place goes to the longest waiting job with work. */
+  private vacate(requester: string): void {
+    this.admitted.delete(requester);
+    this.waiting = this.waiting.filter(name => name !== requester);
+    while (this.admitted.size < PREFETCH_REQUESTERS && this.waiting.length) {
+      const next = this.jobs.get(this.waiting.shift()!);
+      if (next && !next.running && !next.stopped && this.hasWork(next)) this.start(next);
+    }
+  }
+  private hasWork(job: Job) { return [...job.items.values()].some(item => item.state === "?" || item.state === "q"); }
+  /** The session's byte budget is spent: every job stops before its next batch, and a batch waiting to start doesn't. */
+  private exhaust(): void {
+    this.spent = true;
+    for (const job of this.jobs.values()) {
+      if (job.stopped) continue;
+      job.stopped = "disk";
+      for (const item of job.items.values()) if (item.state === "q" || item.state === "?") item.state = "n";
+      if (job.current === "batch") this.deps.jobs.release(this.wantName(job.requester));
+    }
+    for (const name of [...this.admitted]) if (!this.jobs.get(name)?.running) this.vacate(name);
   }
 
   /**
@@ -261,9 +294,13 @@ export class ChoicePrefetcher {
     return [...job.items.values()].filter(item => item.state === state).sort((a, b) => a.order - b.order);
   }
 
-  /** Start a job's loop. The loop catches its own failures (PREV-101); this catch is the last resort. */
+  /** Start a job's loop once it has a place (otherwise it waits its turn). The loop catches its own failures (PREV-101); this catch is the last resort. */
   private start(job: Job): void {
-    this.startLease(job);
+    if (!job.lease) this.startLease(job);
+    if (!this.admitted.has(job.requester)) {
+      if (this.admitted.size >= PREFETCH_REQUESTERS) { if (!this.waiting.includes(job.requester)) this.waiting.push(job.requester); return; }
+      this.admitted.add(job.requester);
+    }
     this.run(job).catch(error => this.fail(job, error));
   }
   /** An unexpected failure: stop the job, leave its remaining choices not prepared, report it once. */
@@ -348,18 +385,29 @@ export class ChoicePrefetcher {
   private async run(job: Job): Promise<void> {
     job.running = true;
     const live = () => this.live(job);
+    let units = 0, yielded = false;
     try {
-      while (live()) {
+      while (live() && !job.stopped) {
+        // Between completed units: a waiting requester takes this job's place, and this one waits its turn again with what it has done.
+        if (units && this.waiting.length) {
+          yielded = true;
+          this.admitted.delete(job.requester);
+          this.waiting.push(job.requester);
+          return;
+        }
         const unknown = this.queued(job, "?").slice(0, 64);
         if (unknown.length) {
           const checked = await this.check(job, unknown, live);
           if (!live()) return;
           if (checked.status === "failed") throw checked.error;
+          units++;
           continue;
         }
         if (this.startBytes === null) this.startBytes = await this.deps.preparedBytes();
         if (!live()) return;
         if (this.now() - job.startedAt - job.pausedMs > this.limits.timeMs) { job.stopped = "time"; break; }
+        // The session's byte budget, spent by any job, stops this one before its next batch.
+        if (this.spent) { job.stopped = "disk"; break; }
         if (this.deps.needsSetup?.()) { job.stopped = "setup"; break; }
         if (!this.queued(job, "q").length) break;
         const size = Math.min(this.limits.maxBatch ?? this.limits.batch, this.limits.batch * 2 ** job.batches);
@@ -395,18 +443,24 @@ export class ChoicePrefetcher {
           continue;
         }
         if (!batch.length) continue;
+        units++;
         job.batches++;
         const outcomes = outcome.result;
         batch.forEach((item, index) => { if (item.state === "f") item.state = outcomes[index]?.ready ? "r" : "x"; });
         this.stats.warmed += batch.length;
         await this.deps.afterBatch?.();
-        if (await this.deps.preparedBytes() - this.startBytes > this.limits.bytes) { this.spent = true; job.stopped = "disk"; break; }
+        if (await this.deps.preparedBytes() - this.startBytes > this.limits.bytes) { this.exhaust(); break; }
       }
       if (job.stopped) for (const item of job.items.values()) if (item.state === "q" || item.state === "?") item.state = "n";
     } catch (error) {
       this.fail(job, error);
     } finally {
       job.running = false;
+      if (yielded) {
+        // Its place went to the longest waiting job.
+        this.vacate(job.requester);
+        if (!this.admitted.has(job.requester) && !this.waiting.includes(job.requester)) this.waiting.push(job.requester);
+      } else if (this.admitted.has(job.requester) && (job.stopped || !this.hasWork(job) || this.jobs.get(job.requester) !== job)) this.vacate(job.requester);
       // Nothing left to do: the lease has nothing to guard until the job starts again.
       if (this.jobs.get(job.requester) === job && (job.stopped || ![...job.items.values()].some(item => item.state === "?" || item.state === "q"))) this.endLease(job);
     }

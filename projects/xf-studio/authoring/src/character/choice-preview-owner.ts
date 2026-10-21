@@ -1,14 +1,17 @@
 /**
  * One owner of a choice-preview device (its worker and the picture URLs it hands out), shared by every requester of a character
  * (creator-requester.ts): each requester draws through its own lease. A lease that ends stops only its own questions, lets go only of
- * the URLs it was given and of the live turn while it holds it; the device itself (its worker) ends only with its owner.
+ * the URLs it was given and of the live turn while it holds it; the device itself (its worker) ends only with its owner. The worker draws
+ * one live turn at a time: a frame is drawn only for the lease whose turn it is, and one that comes back after the turn moved on (to
+ * another lease, or to another start of the same lease) is closed and refused, never shown as the wrong source.
  */
-import type { ChoicePreviewPort } from "./choice-preview-service";
+import { type ChoicePreviewPort, PreviewSuperseded } from "./choice-preview-service";
 
 export class ChoicePreviewOwner {
   private disposed = false;
-  /** The lease whose live turn the worker draws now. */
+  /** The lease whose live turn the worker draws now, and the turn's number (raised by every start and stop). */
   private live: object | null = null;
+  private turn = 0;
 
   constructor(private readonly device: ChoicePreviewPort) {}
 
@@ -33,14 +36,25 @@ export class ChoicePreviewOwner {
         life.abort();
         for (const url of urls) device.release?.(url);
         urls.clear();
-        if (this.live === token) { this.live = null; if (!this.disposed) device.live?.stop(); }
+        if (this.live === token) { this.live = null; this.turn++; if (!this.disposed) device.live?.stop(); }
       },
     };
     const live = device.live;
     if (live) port.live = {
-      start: source => { if (ended()) return Promise.reject(Error("The preview was closed.")); this.live = token; return live.start(source); },
-      frame: (turn, measure) => live.frame(turn, measure),
-      stop: () => { if (this.live === token) { this.live = null; live.stop(); } },
+      start: source => {
+        if (ended()) return Promise.reject(new PreviewSuperseded());
+        this.live = token;
+        this.turn++;
+        return live.start(source);
+      },
+      frame: async (angle, measure) => {
+        const turn = this.turn, mine = () => this.live === token && this.turn === turn && !ended();
+        if (!mine()) throw new PreviewSuperseded();
+        const drawn = await live.frame(angle, measure);
+        if (!mine()) { drawn.bitmap?.close?.(); throw new PreviewSuperseded(); }
+        return drawn;
+      },
+      stop: () => { if (this.live === token) { this.live = null; this.turn++; live.stop(); } },
     };
     return port;
   }

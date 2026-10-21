@@ -406,12 +406,15 @@ describe("review fixes (chunk 1b)", () => {
     const made = await characters.create(), id = made.ok ? made.character : "";
     const context = characters.context(id, { showSave: () => {} });
     context.start(); await settle();
-    failing.count = 1;
+    failing.count = 99;
     context.dispatch({ kind: "character.setOption", part: "head", option: "eyes_color", choice: "he__02_blue" });
+    await settle();
     await characters.flush();
     expect(characters.character(id)).toMatchObject({ unsaved: true, revision: 1 });
+    expect(await characters.settle(id)).toBe(false);
     expect((await w.documents.list<{ choices: unknown[] }>(CHARACTER_DOCUMENT))[0]!.value.choices).toHaveLength(0);
-    // Released: written again first, then let go.
+    // The library is back. Released: written again first, then let go.
+    failing.count = 0;
     expect(await characters.release(id)).toBe(true);
     expect(characters.character(id)).toMatchObject({ unsaved: false, revision: 2 });
     expect((await w.documents.list<{ choices: unknown[] }>(CHARACTER_DOCUMENT))[0]!.value.choices).toHaveLength(1);
@@ -488,6 +491,102 @@ describe("review fixes (chunk 1b)", () => {
     await catalogue.loadRow("female", "fixture-female", "head/eyes_color", "blue", 0, signal);
     expect(catalogue.asked.page).toBe(3);
     expect(catalogue.rowOf("female", "fixture-female", "head/eyes_color", "blue")).not.toBeNull();
+  });
+});
+
+/** The library through a port that holds the commits of `held` commands until `open` (and says when one is held). */
+function holding(documents: DocumentCommandPort, held: string) {
+  const waits: (() => void)[] = [];
+  let open = false;
+  const port: DocumentCommandPort = { list: (kind, signal) => documents.list(kind, signal),
+    commit: async command => { if (command.command === held && !open) await new Promise<void>(resolve => waits.push(resolve)); return documents.commit(command); } };
+  return { port, held: () => waits.length > 0, open() { open = true; for (const resume of waits.splice(0)) resume(); } };
+}
+
+describe("review fixes, second round (chunk 1b)", () => {
+  test("a late answer from before the catalogue was dropped never clears the newer catalogue (finding 5)", async () => {
+    let identity = "first";
+    const pages: (() => void)[] = [];
+    const port: CreatorPort = {
+      panel: async () => ({ phase: "ready" as const, message: "", panel: { identity } as never }),
+      page: (_gender, option, offset) => { const asked = identity; return new Promise(resolve => pages.push(() => resolve({ identity: asked, option, query: "", offset, total: 0, choices: [] } as never))); },
+      view: async () => ({}) as never, preset: async () => ({ text: "", values: 0, leftOut: 0, personal: 0 }), wait: async () => {},
+    };
+    const catalogue = new CreatorCatalogue(port), signal = new AbortController().signal;
+    await catalogue.panel("female", signal);
+    const late = catalogue.loadRow("female", "first", "head/eyes_color", "", 0, signal);
+    identity = "second";
+    catalogue.forget("female");
+    await catalogue.panel("female", signal);
+    expect(catalogue.identity("female")).toBe("second");
+    pages.shift()!();
+    await late;
+    expect(catalogue.identity("female")).toBe("second");
+  });
+
+  test("an edit made while a command commits is written after it, on the same queue, and flush waits for both (queue)", async () => {
+    const w = await world(), gate = holding(w.documents, "character.rename");
+    const characters = new CharacterService({ documents: gate.port, catalogue: w.catalogue, history: w.history });
+    const made = await characters.create(), id = made.ok ? made.character : "";
+    const context = characters.context(id, { showSave: () => {} });
+    context.start(); await settle(); await characters.flush();
+    const renaming = characters.rename(id, 1, "Named");
+    await until(gate.held);
+    context.dispatch({ kind: "character.setOption", part: "head", option: "eyes_color", choice: "he__02_blue" });
+    let flushed = false;
+    void characters.flush().then(() => { flushed = true; });
+    await settle();
+    expect(flushed).toBe(false);
+    gate.open();
+    expect(await renaming).toMatchObject({ ok: true, revision: 2 });
+    await characters.flush();
+    expect(flushed).toBe(true);
+    expect(characters.character(id)).toMatchObject({ conflict: false, unsaved: false, revision: 3 });
+    expect(characters.document(id)).toMatchObject({ name: "Named", choices: [{ option: "eyes_color", choice: "he__02_blue" }] });
+  });
+
+  test("a context opened while a source change commits follows the new source and never writes the earlier one back (source)", async () => {
+    const w = await world(), gate = holding(w.documents, "character.setSource");
+    const characters = new CharacterService({ documents: gate.port, catalogue: w.catalogue, history: w.history });
+    const made = await characters.create(), id = made.ok ? made.character : "";
+    const save = saveFor(descriptorsFromUiState(w.host.source.cco, { eyes_color: "he__02_blue" }));
+    const changing = characters.setSource({ kind: "character.setSource", character: id, base: 1, source: { kind: "save", value: save } });
+    await until(gate.held);
+    const shown: (SavedV | null)[] = [];
+    const context = characters.context(id, { showSave: value => shown.push(value) });
+    context.start();
+    expect(context.snapshot().origin).toEqual({ kind: "default" });
+    gate.open();
+    expect(await changing).toMatchObject({ ok: true, revision: 2 });
+    await settle(); await characters.flush();
+    expect(context.snapshot().origin).toEqual({ kind: "save" });
+    expect(shown.at(-1)).toEqual(save);
+    expect(characters.document(id)!.source.kind).toBe("save");
+    expect((await w.documents.list<{ source: { kind: string } }>(CHARACTER_DOCUMENT))[0]!.value.source.kind).toBe("save");
+  });
+
+  test("a lease draws only its own live turn: an obsolete one is refused and a frame drawn after the turn moved is closed (previews)", async () => {
+    const frames: ((value: { bitmap: { close(): void } }) => void)[] = [];
+    let closed = 0;
+    const device: ChoicePreviewPort = {
+      sources: async () => [], subject: async () => "subject", stored: async () => null, render: async (_source, key) => ({ url: `u:${key}` }),
+      live: { start: async () => {}, stop: () => {}, frame: () => new Promise(resolve => frames.push(resolve as never)) },
+    };
+    const owner = new ChoicePreviewOwner(device), first = owner.lease(), second = owner.lease(), source = {} as never;
+    const outcome = (frame: Promise<unknown>) => frame.then(() => "drawn", () => "refused");
+    await first.live!.start(source);
+    const drawing = outcome(first.live!.frame(0, false));
+    await second.live!.start(source);
+    frames.shift()!({ bitmap: { close: () => { closed++; } } });
+    expect(await drawing).toBe("refused");
+    expect(closed).toBe(1);
+    expect(await outcome(first.live!.frame(0, false))).toBe("refused");
+    first.dispose!();
+    expect(await outcome(first.live!.frame(0, false))).toBe("refused");
+    const own = outcome(second.live!.frame(0, false));
+    frames.shift()!({ bitmap: { close: () => { closed++; } } });
+    expect(await own).toBe("drawn");
+    expect(closed).toBe(1);
   });
 });
 

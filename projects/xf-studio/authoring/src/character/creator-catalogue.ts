@@ -161,8 +161,10 @@ export class CreatorCatalogue {
     if (kept) { this.join(rowKey, offset, kept); return Promise.resolve(kept); }
     const generation = this.generation(gender);
     return this.shared(key, signal, inner => { this.asked.page++; return this.host.page(gender, option, offset, inner, query || undefined); }).then(page => {
+      // An answer to a question asked before the body's answers were dropped tells nothing about the catalogue now.
+      if (generation !== this.generation(gender)) return page;
       this.seen(gender, page.identity);
-      if ((page.identity && identity && page.identity !== identity) || generation !== this.generation(gender)) return page;
+      if (page.identity && identity && page.identity !== identity) return page;
       const frozen = deepFreeze(page);
       if (identity && query) this.keepSearched(`search\n${gender}\n${identity}\n${query}`, key, frozen, rowKey);
       else if (identity) this.results.set(key, frozen);
@@ -184,8 +186,9 @@ export class CreatorCatalogue {
     if (!host.search) return Promise.reject(Error("The creator options can't be searched here."));
     const generation = this.generation(gender);
     return this.shared(key, signal, inner => { this.asked.search++; return host.search!(gender, query, inner); }).then(found => {
+      if (generation !== this.generation(gender)) return found;
       this.seen(gender, found.identity);
-      if (identity && generation === this.generation(gender) && (!found.identity || found.identity === identity)) this.keepSearched(key, key, deepFreeze(found));
+      if (identity && (!found.identity || found.identity === identity)) this.keepSearched(key, key, deepFreeze(found));
       return found;
     });
   }
@@ -197,9 +200,10 @@ export class CreatorCatalogue {
     if (!host.swatches) return Promise.reject(Error("This host has no swatches."));
     const generation = this.generation(gender);
     return this.shared(key, signal, inner => { this.asked.swatches++; return host.swatches!(gender, option, inner); }).then(answer => {
+      if (generation !== this.generation(gender)) return answer;
       this.seen(gender, answer.identity);
       // A table still being worked out is asked again; a settled one is kept.
-      if (!answer.pending && identity && generation === this.generation(gender) && (!answer.identity || answer.identity === identity))
+      if (!answer.pending && identity && (!answer.identity || answer.identity === identity))
         this.results.set(key, deepFreeze(answer));
       return answer;
     });
@@ -221,8 +225,11 @@ export class CreatorCatalogue {
       panel: (gender, signal) => this.panel(gender, signal),
       page: (gender, option, offset, signal, query) => this.page(gender, option, offset, signal, query),
       // The same request asked at once by two requesters (two scenes of one V) is one question; views are never kept.
-      view: (request, signal) => this.shared(`view\n${JSON.stringify(request)}`, signal, inner => { this.asked.view++; return host.view(request, inner); })
-        .then(view => { this.seen(request.bodyGender, view.identity); return view; }),
+      view: (request, signal) => {
+        const generation = this.generation(request.bodyGender);
+        return this.shared(`view\n${generation}\n${JSON.stringify(request)}`, signal, inner => { this.asked.view++; return host.view(request, inner); })
+          .then(view => { if (generation === this.generation(request.bodyGender)) this.seen(request.bodyGender, view.identity); return view; });
+      },
       preset: (request, name, kept) => host.preset(request, name, kept),
       wait: (ms, signal) => host.wait(ms, signal),
       retry: (gender, signal) => this.retry(gender, signal),
