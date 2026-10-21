@@ -776,7 +776,19 @@ Afterwards, record outcomes in the [design page](runtime-bridge-design.md) (unve
 
 ## Build record (bridge 0.8.2, branch build, not staged)
 
-Built from a clean build after the code and documentation commits; the next commit records its hashes and counts here.
+Built 21 October 2026 on `claude/bridge-080a` at `33233cd6b9bd`, clean tree, from a clean build (`cmake --build build --config Release --clean-first`; manifest `"commit": "33233cd6b9bde7dd8c5f0fa2d7fdd0b9b4bc0a05"`, `"source_tree_clean": true`), by `bun tools/package.ts`, then `bun tools/package.ts --allow-inventory` (the first run's -writes zip renamed to -writes-no-inventory; the second rewrote the default and diagnostic zips, whose hashes below are the files it left): version 0.8.2, the crash at load fixed (a stale object file, [game crashes §2.5](../../knowledge/game-crashes.md#25-a-stale-object-file-in-the-plugin-bridge-081)), the re-check's six findings, session 9's bridge findings and one status surface at a time ([design §3.10](runtime-bridge-design.md#310-bridge-082-the-crash-at-load-the-re-checks-findings-session-9-and-one-status-surface)). On that commit: `xfb_selftest --unit` UNIT OK (561 checks), self-test 628 of 628, `bun test tools` 363 pass and 4 skipped (the opt-in on-screen capture tests), typecheck, the Lua lint, the world-object lint, the theme tables against XF Studio's tokens, and the redscript lint without Codeware, with Codeware `v1.20.4`'s scripts, and with Codeware, the Equipment-EX stub and TweakXL `v1.11.4`'s scripts, each against a copy of the installed 2.31 `final.redscripts` (SHA-256 `2119046f…ee86`); links and private paths clean. Every run under `tools/memory_guard.py --limit 4` (peak 0.9 GB).
+
+The crash's checks, offline: every object file of the plugin, the core and the self-test carries the header stamp (`dumpbin /directives`), and `StartBridge` now calls `Bridge::Create`; a `Main.obj` kept from before a header change, linked again, fails with LNK2038 (`mismatch detected for 'xfb_header_stamp'`). A self-test built with MSVC's AddressSanitizer (RelWithDebInfo, `/fsanitize=address /bigobj`, a separate build folder) ran `--unit` (UNIT OK), `--pipe-stress 200` (both pipes started and stopped 200 times with four clients racing them, a kill during the start every third round and two threads stopping at once every third: no report) and `--layout-repro` (the current `Bridge`, sizeof 0x440, constructed in a 0x2F8-byte block as 0.8.1's `Main.obj` did: `heap-buffer-overflow … WRITE of size 16` in `PipeServer::PipeServer` from `Bridge::Bridge`, the control pipe's member).
+
+The plugin registers nineteen natives, as 0.8.1; `XFBridge_InkDrawn`'s `shown` means the ink panel is on screen, so the DLL and the scripts must be staged together, as the zip does. The CET folder is `XF_Runtime_Bridge` (it was `xf_runtime_bridge`): replace the MO2 entry's files. Stage the -writes zip only into the `XF Studio diagnostic` profile. A rebuild after merging gives new hashes.
+
+| File | SHA-256 |
+|---|---|
+| `xf-runtime-bridge-0.8.2.zip` (bridge off) | `9f2de34d607eb5f8be00b5d0f1c44f0d2569659a4bce512db5a1d8fdf9a05111` |
+| `xf-runtime-bridge-0.8.2-diagnostic.zip` (read-only) | `27fe545bedb14962a365585203c33cd95d9e66e035c344070415d6aa63b6438e` |
+| `xf-runtime-bridge-0.8.2-writes-no-inventory.zip` (writes, no inventory class) | `160c440603b964794898acffa4ad40e7ac4610a96db507dca74d476875a1b0df` |
+| `xf-runtime-bridge-0.8.2-writes.zip` (writes with the inventory class: session 10's zip) | `8101e948b1f56ff04d8a2f2bc67a2b1c005aeac47488e8776876f15750f53d92` |
+| (`XFRuntimeBridge.dll` inside each) | `b8165b4fb9d4d09a5a6af739f218ed8055d529db31f202a37b5963ff05306cc3` |
 
 ## Build record (bridge 0.8.1, branch build, not staged)
 
