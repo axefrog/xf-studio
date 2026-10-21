@@ -8,15 +8,14 @@
  * instead of doubling listeners (PREV-20). `dispose()` does the same for a head that loaded.
  */
 import { createBrowserCharacterDetailDevice } from "../../character/browser/browser-character-detail-device";
-import { createBrowserCreatorDevice } from "../../character/browser/browser-cc-catalogue-device";
 import { createBrowserChoicePreviewDevice } from "../../character/browser/browser-choice-preview-device";
 import { createBrowserScenePreviewPorts } from "./browser-scene-preview-ports";
 import { CharacterDetailActions } from "../../character/character-detail-actions";
 import type { CharacterWarmStart } from "../../character/browser/character-warm-start";
-import { CharacterContextActions, initialBodyGender, type ContextHistory, type CreatorPort } from "../../character/character-context-actions";
-import type { CreatorCatalogue } from "../../character/creator-catalogue";
-import type { CharacterHistoryHome } from "../../character/character-history";
+import type { CharacterContextActions } from "../../character/character-context-actions";
+import type { CharacterScenePorts } from "../../character/character-service";
 import type { CoreBody } from "../../character/render-detail";
+import type { SavedV } from "../../saves/save-reader";
 import { followCharacter } from "../../character/character-follow";
 import type { createBrowserPreviewDevice } from "../../legacy/eye-makeup/browser/browser-preview-device";
 import type { createBrowserViewportDevice } from "./browser-viewport-device";
@@ -77,27 +76,21 @@ export type HeadAttachmentPorts = {
   persist(): void;
   /** Tells the presentation that device status changed. */
   changed(): void;
-  /** The creator catalogue's host transport (default: the page's own host), when no shared `catalogue` is given. */
-  creator?: CreatorPort;
-  /** The page's creator catalogue, shared by every character and outliving any one head (creator-catalogue.ts). */
-  catalogue?: CreatorCatalogue;
   /**
-   * The character this head shows: its requester name with the catalogue and its Undo history's home (the session history service's
-   * `character:<id>` scope). Absent: a private history, carried to the next head through `history`.
+   * The V this head shows (profiles design §7): its body, the decoded save it comes from, and its context, which the character's owner
+   * makes on this head's scene ports (`CharacterService.context`) and lets go with the head (`release`). The context shares the page's
+   * creator catalogue, and its Undo history is the character's (`character:<id>`), so a head made again keeps both.
    */
-  character?: { requester: string; history: CharacterHistoryHome };
+  character: { body: CoreBody; save?: SavedV; context(ports: CharacterScenePorts): CharacterContextActions; release(context: CharacterContextActions): void;
+    /** Choice previews on this head's scene (default: the page's worker). */
+    previews?: CharacterScenePorts["previews"] | null };
   /**
    * Make sure a body's core head is prepared before it loads (the masculine V's is prepared on first use); rejects when it can't
    * be, and the feminine head is shown instead. Absent: the core is taken as prepared.
    */
   prepareCore?(body: CoreBody): Promise<void>;
-  /**
-   * The shown V now has the other body: load the head again (with the workspace as it is now), which re-attaches everything; the
-   * character panel's Undo history goes with it (`history` on the next attachment).
-   */
-  reload?(history: ContextHistory): void;
-  /** The character panel's Undo history from the head this one replaces (a V that changed body). */
-  history?: ContextHistory;
+  /** The shown V now has the other body: load the head again (with the workspace as it is now), which re-attaches everything. */
+  reload?(): void;
   /** A plain notice for the person (the masculine head couldn't be prepared, so the feminine one shows). */
   notice?(text: string): void;
   /** The page's warm start (character-warm-start.ts): the V's files read while the head loaded, and the request remembered for next time. */
@@ -132,7 +125,7 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     // The head is the shown V's body's own core (the masculine V's head is prepared on first use). The body comes from the stored
     // context and the restored save, as the character context below decides it. If the masculine head can't be prepared, the feminine
     // head shows (with a notice) so the Character panel stays usable, and the other body is tried again when the V changes body.
-    const wanted = initialBodyGender(ports.workspace.preview.character, ports.workspace.savedV);
+    const wanted = ports.character.body;
     let body: CoreBody = wanted, unavailable: string | null = null;
     if (wanted !== "female" && ports.prepareCore) {
       try { await ports.prepareCore(wanted); }
@@ -159,7 +152,8 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     // workspace.
     const characterDetails = new CharacterDetailActions(createBrowserCharacterDetailDevice(scene, undefined, ports.warmStart));
     releases.push(() => { characterDetails.dispose(); scene.setCharacterDetails(null); });
-    const services = createTrustedPreviewServices(ports.workspace, createBrowserScenePreviewPorts(scene, {
+    // The head takes the V's save (its facial shapes and body) before anything else follows it.
+    const services = createTrustedPreviewServices({ ...ports.workspace, savedV: ports.character.save }, createBrowserScenePreviewPorts(scene, {
       setSurfaceControls: enabled => surface?.setEnabled(enabled),
     }), ports.graph);
     savedAppearance = services.savedAppearance;
@@ -194,22 +188,16 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     ports.attach({ characterDetails });
     releases.push(() => ports.attach({ characterDetails: undefined }));
     releases.push(characterDetails.subscribe(ports.changed), characterDetails.subscribe(ports.persist));
-    // The character context: its V is the restored save (or the default V), with the workspace's stored choices on it. A save loaded
-    // later becomes its V as one undoable step; its Undo shows an earlier V through the saved-V service.
-    // Its Try again also retries a V whose preparation failed (PREV-86). An earlier build's tried piercing style (the retired preview
-    // fields) becomes Piercings choices once the catalogue is ready (CORE-74).
-    const saved = savedAppearance, retired = ports.workspace.preview;
-    const characterContext = new CharacterContextActions({
-      ...(ports.catalogue ? { catalogue: ports.catalogue } : { creator: ports.creator ?? createBrowserCreatorDevice() }),
-      ...(ports.character ? { requester: ports.character.requester, history: ports.character.history } : {}),
+    // The character context: the V's document (its source, with its decoded save, and every choice set on it), made by the V's owner on
+    // this head's scene ports. A save loaded later becomes its V as one undoable step; its Undo shows an earlier V through the saved-V
+    // service. Its Try again also retries a V whose preparation failed (PREV-86).
+    const saved = savedAppearance;
+    const characterContext = ports.character.context({
       showSave: save => { if (save) saved.dispatch({ kind: "savedV.restore", value: save }); else if (saved.hasSavedV()) saved.dispatch({ kind: "savedV.clear" }); },
       details: { failed: () => characterDetails.failed(), retry: () => void characterDetails.retry(),
         preload: (request, signal) => characterDetails.preload(request, signal) },
-      previews: ports.creator ? undefined : createBrowserChoicePreviewDevice() },
-    { stored: retired.character, save: savedAppearance.snapshot().savedV,
-      legacy: retired.piercingStyle && retired.piercingDefinition ? { style: retired.piercingStyle, definition: retired.piercingDefinition } : undefined,
-      history: ports.history });
-    releases.push(() => characterContext.dispose());
+      ...(ports.character.previews === null ? {} : { previews: ports.character.previews ?? createBrowserChoicePreviewDevice() }) });
+    releases.push(() => ports.character.release(characterContext));
     ports.attach({ characterContext });
     releases.push(() => ports.attach({ characterContext: undefined }));
     // The Body switch decides whether the body is prepared at all (PREV-108), and the uncensored setting how the game would draw it: the
@@ -250,7 +238,7 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
       const next = characterContext.shownBody();
       if (next === shownBody) return;
       shownBody = next;
-      if (next !== scene.body) setTimeout(() => { if (!released) ports.reload?.(characterContext.history()); }, 0);
+      if (next !== scene.body) setTimeout(() => { if (!released) ports.reload?.(); }, 0);
     }));
     if (unavailable !== null) ports.notice?.(`The masculine V's head couldn't be prepared from your Cyberpunk 2077 files, so the feminine head is shown. ${unavailable}`.trim());
     releases.push(characterContext.subscribe(ports.changed), characterContext.subscribe(ports.persist));

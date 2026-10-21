@@ -42,6 +42,8 @@ export type ProfileAction =
   | { kind: "profile.rename"; profile: ProfileId; base: number; name: string }
   | { kind: "profile.addSubject"; profile: ProfileId; base: number; subject: SubjectRef }
   | { kind: "profile.removeSubject"; profile: ProfileId; base: number; subject: SubjectRef }
+  /** The profile works on a collection too (one made here, imported or opened). */
+  | { kind: "profile.addCollection"; profile: ProfileId; base: number; collection: string }
   | { kind: "profile.delete"; profile: ProfileId; base: number };
 export type ProfileAnswer = { ok: true; profile: ProfileId; revision: number } | { ok: false; code: Capability["code"]; reason: string };
 
@@ -154,6 +156,9 @@ export class ProfileService {
       }
       case "profile.removeSubject":
         return profile.subjects.some(ref => sameSubject(ref, action.subject)) ? { available: true } : refusal("invalid_value", "The profile doesn't hold that.");
+      case "profile.addCollection":
+        if (typeof action.collection !== "string" || !action.collection) return refusal("invalid_value", "That isn't a collection.");
+        return profile.collections.includes(action.collection) ? refusal("invalid_value", "The profile already works on that collection.") : { available: true };
       case "profile.delete": return { available: true };
     }
   }
@@ -169,6 +174,7 @@ export class ProfileService {
       case "profile.rename": return { ...current, name: nameOf(action.name)! };
       case "profile.addSubject": return { ...current, subjects: [...current.subjects, { kind: action.subject.kind, id: action.subject.id }] };
       case "profile.removeSubject": return { ...current, subjects: current.subjects.filter(ref => !sameSubject(ref, action.subject)) };
+      case "profile.addCollection": return { ...current, collections: [...current.collections, action.collection] };
       case "profile.delete": return null;
     }
   }
@@ -194,5 +200,11 @@ export class ProfileService {
     if (!allowed.available) return allowed;
     if (!("id" in target)) return target;
     return { edit: { ...profileRef(profile), value: this.next({ kind: "profile.addSubject", profile, base, subject }, profile)! } };
+  }
+  /** A collection membership edit for another owner's command (a collection made, imported or opened): null when the profile lists it. */
+  collectionMembership(profile: ProfileId, collection: string): OutboxEdit | null {
+    const current = this.profile(profile);
+    if (!current || current.collections.includes(collection)) return null;
+    return { ...profileRef(profile), value: this.next({ kind: "profile.addCollection", profile, base: current.revision, collection }, profile)! };
   }
 }

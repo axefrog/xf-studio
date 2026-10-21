@@ -35,8 +35,11 @@ export type LayoutTab = { readonly id: TabId; readonly name: string; readonly or
 export type SessionScene = StoredNode & { readonly subject?: SubjectRef; readonly look?: LookRef; readonly gen: number };
 export type SessionView = (ViewRecord | KeptView) & { readonly tab: TabId };
 export type SessionViews = Omit<ViewGraphData, "views" | "scenes"> & { readonly views: readonly SessionView[]; readonly scenes: readonly SessionScene[] };
-/** Focus: each view's focus sequence number (the highest is the most recently focused), and the focused panel instance. */
-export type SessionFocus = { readonly views: Readonly<Record<string, number>>; readonly panel?: string };
+/**
+ * Focus: each view's focus sequence number (the highest is the most recently focused), the focused panel instance, and the editing
+ * context (§3.7): the history scope of the last editing interaction, where Undo goes.
+ */
+export type SessionFocus = { readonly views: Readonly<Record<string, number>>; readonly panel?: string; readonly editing?: string };
 export type ProfileSessionData = {
   readonly schema: typeof PROFILE_SESSION_SCHEMA;
   readonly tabs: readonly LayoutTab[];

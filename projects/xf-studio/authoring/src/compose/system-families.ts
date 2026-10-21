@@ -43,7 +43,7 @@ export const COLLECTION_FAMILY: SystemFamily<CollectionStudioAction, ActionScope
   owner: "system", id: COLLECTION_ID, label: "Collection",
   actions: actionTable<CollectionStudioAction, ActionScope>(ACTION_DESCRIPTORS, {
     "preset.edit": true, "preset.select": true, "collection.rename": true,
-    "collection.open": true, "collection.undoOpen": true, "collection.importRecipe": true,
+    "collection.undoOpen": true, "collection.importRecipe": true,
     "package.rename": true, "package.assign": true, "package.split": true, "package.merge": true },
     { "preset.edit": { "rename.name": "characters", "move.to": "index" }, "package.rename": { modName: "characters" } }),
 });

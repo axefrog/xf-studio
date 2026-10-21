@@ -224,6 +224,15 @@ export class CharacterService implements CharactersPort {
     this.drop(entry);
     return true;
   }
+  /**
+   * The scene showing the character let it go at once (its head is made again, for another body): its context goes now. Nothing is lost:
+   * every change a context makes is in the outbox the same turn, and the character's history stays (`character:<id>`), so the next
+   * context (`context`) shows the document as it is and moves through the same steps.
+   */
+  detach(id: CharacterId, context: CharacterContextActions): void {
+    const entry = this.entries.get(id);
+    if (entry?.context === context) this.drop(entry);
+  }
   private drop(entry: Entry) {
     entry.unsubscribe?.();
     entry.context?.dispose();

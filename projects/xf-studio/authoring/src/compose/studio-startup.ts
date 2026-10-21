@@ -29,15 +29,13 @@ import { builtModsOf, type BuiltMod } from "../installation/mod-install-actions"
 import { createBrowserPreviewDevice } from "../legacy/eye-makeup/browser/browser-preview-device";
 import { attachBrowserHead, type AttachedHead } from "../preview/browser/browser-head-attachment";
 import { CharacterWarmStart } from "../character/browser/character-warm-start";
-import type { ContextHistory } from "../character/character-context-actions";
 import { CreatorCatalogue } from "../character/creator-catalogue";
 import { createBrowserCreatorDevice } from "../character/browser/browser-cc-catalogue-device";
-import { newCharacterId } from "../character/character-document";
 import { readSavedV } from "../saves/save-reader";
 import { rasterRegion } from "../engines/layered-makeup/region";
 import { createBrowserViewportDevice } from "../preview/browser/browser-viewport-device";
 import { createBrowserWorkspaceSession, loadBrowserWorkspace } from "../app/browser/browser-workspace-device";
-import { collectionTransport } from "../library/browser/collection-transport";
+import { collectionTransport, collectionVersions } from "../library/browser/collection-transport";
 import { GlitterMeasurements } from "../legacy/eye-makeup/glitter-measurements";
 import type { LocalSetupActions } from "../setup/local-setup-actions";
 import type { DesktopAppActions } from "../setup/desktop-app";
@@ -60,7 +58,7 @@ import { TransitionSettings } from "../platform/core/transition-settings";
 import { createBrowserFacialDevice } from "../animation/browser/browser-facial-device";
 import { PartPresetService, partPresetTransport, setExportTransport } from "../library/part-presets";
 import { UIPreferenceActions } from "../app/ui-preferences";
-import { storedViewGraph } from "../preview/preview-view-graph";
+import { sessionViewGraph } from "../preview/preview-view-graph";
 import { DiagnosticsActions } from "../diagnostics/actions";
 import { createBrowserDiagnostics } from "../diagnostics/browser/browser-device";
 import { createBrowserUpdateCheck } from "../setup/browser/browser-update-check-device";
@@ -68,8 +66,17 @@ import { pageFailure, setPageDiagnostics } from "../diagnostics/page-sink";
 import type { WorkspaceLease } from "../app/workspace/workspace-lease";
 import type { StartedOutbox } from "../app/browser/document-outbox-device";
 import { PROFILES_MIGRATION_ENABLED, startProfilesMigration } from "../app/browser/profiles-migration-device";
-import type { WorkspaceState } from "../app/workspace/workspace-state";
+import { workspaceKeys, type WorkspaceState } from "../app/workspace/workspace-state";
+import { WorkspacePersistence } from "../app/workspace/workspace-persistence";
 import { outboxView } from "../app/presentation-status";
+import { createProfileServices, drawnScene, openProfileSession, sceneCharacter } from "../app/profiles/profile-window";
+import { createStudioSubjects } from "./subjects";
+import { LookEditor, lookContent } from "../library/look-editor";
+import { lookRef, type LookRef } from "../library/collection-documents";
+import { lookScope } from "../platform/core/history-service";
+import { MAIN_VIEW } from "../platform/api/view-graph";
+import { emptyLookHistory } from "../platform/core/look-history";
+import { emptyRecipe } from "../engines/layered-makeup/recipe";
 
 export type StudioHost = {
   /** Optional host capability; the desktop omits experimental modules until their assets are supported. */
@@ -113,7 +120,7 @@ export type StudioHost = {
    * The page's outbox, started (`app/browser/document-outbox-device.ts`, profiles design §2.2): the one way documents reach the library.
    * Its status is shown (the unprotected-changes warning), and it counts against the workspace's storage budget.
    */
-  documents?: StartedOutbox;
+  documents: StartedOutbox;
 };
 
 const byId = <T extends HTMLElement>(id: string) => {
@@ -158,7 +165,36 @@ async function start(host: StudioHost, root: HTMLElement) {
   // `?warm=off` leaves it out (a developer's A/B measurement, tools/measure-warm-restart.ts).
   const warmStart = new CharacterWarmStart({ storage, verification });
   if (new URLSearchParams(location.search).get("warm") !== "off") void warmStart.start();
-  const preferences = new UIPreferenceActions(workspace.uiPreferences);
+  const documents = host.documents, lease = host.lease, base = verification ? "/api/verification" : "/api";
+  // One history service for the session: every look's history (`look:<collection>/<look>`), every V's (`character:<id>`) and the View and
+  // lighting history, beside the experiments' documents (profiles design §3.7).
+  const historyService = ("historyService" in experiments && experiments.historyService) || createHistoryService();
+  // One creator catalogue for the page (creator-catalogue.ts): every character, and every head made again for another body, shares it.
+  const creatorCatalogue = new CreatorCatalogue(createBrowserCreatorDevice());
+  // The library's owners (profiles design §7): profiles, Vs, collections and looks, each changed only through its commands (the outbox).
+  const services = createProfileServices({ documents: documents.documents, outbox: documents.outbox, subjects: createStudioSubjects(),
+    catalogue: creatorCatalogue, history: historyService, versions: collectionVersions(`${base}/collection-versions`, fetch, documents.fence),
+    report: error => diagnostics.failure("library", "library_owner_failed", "Part of your library couldn't be read.", error, { level: "warn" }) });
+  // The profiles migration (profiles design §8) runs before anything is built, in the window holding the workspace: the Studio opens on the
+  // session it makes, and the workspace's own fields stay as they were (migration input only). A migrated workspace costs nothing.
+  if (PROFILES_MIGRATION_ENABLED && restored.writable && (!lease || lease.writable())) {
+    const life = new AbortController();
+    window.addEventListener("pagehide", () => life.abort(), { once: true });
+    const early = new WorkspacePersistence({ storage, key: workspaceKeys(verification).workspace, writable: true, capture: () => workspace,
+      budget: host.storageBudget, reserved: () => documents.outbox.storedSize(), model: STUDIO_COMPOSITION.documents,
+      ...(lease ? { canWrite: () => lease.draining() } : {}) });
+    early.activate();
+    await startProfilesMigration({ endpoint: `${base}/profiles/migrate`, send: fetch, workspace: documents.workspace, fence: documents.fence,
+      model: STUDIO_COMPOSITION.documents, state: () => workspace, marks: workspace, flush: () => early.flush(), signal: life.signal,
+      report: error => diagnostics.failure("library", "profiles_migration_failed", "Your work couldn't be moved into your profile yet; it will try again.", error, { level: "warn" }) });
+  }
+  await services.load();
+  // The session this window opens on (tab 1, the views and scenes, and what each scene shows).
+  const { state: sessionState, stored: sessionStored } = openProfileSession(workspace, services);
+  // Tab 1's arrangement is the dock's; the workspace's own arrangement stays as it was (migration input only).
+  const legacyLayout = workspace.uiPreferences.layout, tabDock = sessionState.dock();
+  const { layout: _legacy, ...uiPreferences } = workspace.uiPreferences;
+  const preferences = new UIPreferenceActions({ ...uiPreferences, ...(tabDock ? { layout: tabDock } : {}) });
   // How a held expression's changes animate (design §5.5): the workspace's setting, available before the head loads.
   const transitions = new TransitionSettings(workspace.preview.transitions);
   // A verification workspace has its own settings and never adds a mod (INSTALL-01, UI-98).
@@ -202,31 +238,32 @@ async function start(host: StudioHost, root: HTMLElement) {
   const liveSurface = STUDIO_LAYERED_SURFACES.get(STUDIO_COMPOSITION.documents.live);
   const measurements = new GlitterMeasurements({
     layers: () => core.document.recipe.layers, size: () => previewDevice.coordinator.size, fineGlitter: region.fineGlitter });
-  const lease = host.lease;
   const statusSource = new PresentationStatusSource(() => {
     const eye = scene?.eyeAppearance().optics;
-    return { ...status, ...(lease ? { lease: lease.snapshot() } : {}), ...(host.documents ? { outbox: outboxView(host.documents.outbox.status()) } : {}),
+    return { ...status, ...(lease ? { lease: lease.snapshot() } : {}), outbox: outboxView(documents.outbox.status()),
       glitter: measurements.snapshot(), assets: { ...status.assets,
       characterDetails: head?.characterDetails.snapshot(),
       eyeOptics: eye ? { requested: eye.requested, active: eye.active, reason: eye.reason, error: eye.error } : undefined } };
   });
   // The outbox's warning follows its status (a failed outbox write, a send that failed, a conflict).
-  host.documents?.outbox.subscribe(event => { if (event.kind !== "acknowledged") statusSource.changed(); });
+  documents.outbox.subscribe(event => { if (event.kind !== "acknowledged") statusSource.changed(); });
 
   let messageId = 0;
   const adapterMessage = (source: AdapterMessage["source"], text: string) => {
     status = { ...status, message: { id: ++messageId, source, text } }; statusSource.changed();
   };
-  // One history service for the session: the look's and the View and lighting history beside the experiments' documents, and the
-  // shown V's (`character:<id>`).
-  const historyService = ("historyService" in experiments && experiments.historyService) || createHistoryService();
-  // One creator catalogue for the page (creator-catalogue.ts): every character, and every head made again for another body, shares it.
-  const creatorCatalogue = new CreatorCatalogue(createBrowserCreatorDevice());
-  // The one V this Studio shows (one drawn view, one character) until the profiles migration gives it a stored character (phase 1d):
-  // its ID names its requester and its history scope for the session.
-  const shownCharacter = newCharacterId();
-  const core = createTrustedAuthoringCore(workspace, {
-    history: historyService,
+  // The look the drawn view's scene shows, read from its working copy: what the editor document starts with (the look editor keeps it).
+  const firstLook = sessionState.scene(drawnScene(sessionState)).look, firstView = firstLook ? services.collections.look(firstLook) : null;
+  let first: ReturnType<typeof lookContent> | null = null;
+  if (firstView?.state === "live") {
+    try { first = lookContent(firstView, STUDIO_COMPOSITION.documents); }
+    catch (error) { pageFailure("library", "look_unreadable", "A look couldn't be read.", error); }
+  }
+  const shownState = first?.state ?? { recipe: emptyRecipe(), active: 0, selected: 0, fieldSelection: {}, history: emptyLookHistory() };
+  const core = createTrustedAuthoringCore({ ...workspace, views: sessionState.graph(), recipe: shownState.recipe, active: shownState.active,
+    selected: shownState.selected, fieldSelection: shownState.fieldSelection, history: shownState.history, historyTrimmed: shownState.historyTrimmed,
+    liveFeatures: shownState.liveFeatures, liveLocked: shownState.liveLocked }, {
+    history: historyService, ...(first && firstLook ? { scope: lookScope(firstLook) } : {}),
     resetStack: previous => previewDevice?.coordinator.syncStack(previous),
     // A cheap read: Glitter-model and finish changes ask for it, and a snapshot would stash and copy the whole draft (CORE-05).
     selectedCollection: () => bootstrap?.collection.selectedPresetId() ?? "draft",
@@ -235,37 +272,58 @@ async function start(host: StudioHost, root: HTMLElement) {
   if (lease) core.app.attach({ access: lease });
   // The view graph the core owns (view-graph-design.md §3.3): the head restores and follows its main view.
   const views = core.views;
+  // Undo goes where it went when the session was last stored (the editing context, profiles design §3.7).
+  const editing = sessionState.editingContext();
+  if (editing) historyService.focus(editing);
+  // The scene the drawn view shows (phase 1 draws one view: the main one) and the look it shows, which the collection service changes.
+  const drawn = () => views.node(MAIN_VIEW, "scene").id;
+  const shownScene = { look: () => sessionState.scene(drawn()).look, setLook: (ref: LookRef | undefined) => sessionState.setLook(drawn(), ref),
+    subscribe: (listener: () => void) => sessionState.subscribe(listener) };
   const headHost = byId("device-head"), uvHost = byId("device-uv");
   const viewportDevice = createBrowserViewportDevice({ region, headHost, uvHost, queryContext: hit => core.app.contextQuery(hit), renderers: STUDIO_RENDERERS, optionalRenderers: experiments, referenceTextures: browserReferenceTextures(verification),
     onContext: event => event === "lost" ? diagnostics.contextLost("3D view") : diagnostics.contextRestored("3D view") });
-  // The profiles migration's mark and sessions (profiles design §8), stored with the workspace; the migration fills them in.
-  const profileMarks: Pick<WorkspaceState, "migration" | "profiles"> = { migration: workspace.migration, profiles: workspace.profiles };
+  // The workspace's own editor fields, V and arrangement as the migration found them: stored back unchanged (an older build opens them).
+  const frozenEditor = { recipe: workspace.recipe, active: workspace.active, selected: workspace.selected, fieldSelection: workspace.fieldSelection,
+    history: workspace.history, ...(workspace.historyTrimmed ? { historyTrimmed: true } : {}), ...(workspace.liveFeatures ? { liveFeatures: workspace.liveFeatures } : {}) };
+  // The session as it is now, stored with the migration's mark (a session made for this window from the library is stored nowhere).
+  const profileMarks = (): Pick<WorkspaceState, "migration" | "profiles"> => ({ migration: workspace.migration,
+    profiles: sessionStored ? sessionState.stored({ graph: sessionViewGraph(views), dock: preferences.snapshot().layout ?? null, editing: historyService.editing() },
+      workspace.profiles) : workspace.profiles });
   const session = createBrowserWorkspaceSession({
     workspace, restored, verification, storage, budget: host.storageBudget, model: STUDIO_COMPOSITION.documents,
     // The outbox's keys share the workspace's storage, so they count against its budget (profiles design §2.2).
-    reserved: host.documents ? () => host.documents!.outbox.storedSize() : undefined,
+    reserved: () => documents.outbox.storedSize(),
     capture: {
-      editor: () => core.document.export(),
+      editor: () => frozenEditor,
       uvView: () => uvEditor?.snapshot() ?? workspace.uvView,
-      savedV: () => savedAppearance?.snapshot().savedV ?? workspace.savedV,
-      collections: () => bootstrap?.collection.workspaceSnapshot() ?? workspace.collections,
+      savedV: () => workspace.savedV,
+      collections: () => workspace.collections,
       quality: () => previewDevice?.coordinator.quality.snapshot().size ?? workspace.preview.textureSize,
-      preview: () => previewActions?.snapshot(), motion: () => motionActions?.snapshot(), views: () => storedViewGraph(views),
-      character: () => head ? head.characterContext.stored() ?? null : undefined,
-      uiPreferences: () => preferences.snapshot(),
+      preview: () => previewActions?.snapshot(), motion: () => motionActions?.snapshot(), views: () => workspace.views,
+      uiPreferences: () => { const { layout: _live, ...rest } = preferences.snapshot(); return { ...rest, ...(legacyLayout ? { layout: legacyLayout } : {}) }; },
       previewSetup: () => ({ autostart, ...(declined ? { declined: true as const } : {}) }),
       transitions: () => transitions.stored(),
-      profiles: () => profileMarks,
+      profiles: profileMarks,
     },
-    sources: [core.document, preferences], window, document,
+    sources: [preferences, sessionState, views], window, document,
     onStatus: save => { status = { ...status, workspace: save }; statusSource.changed(); },
     canWrite: lease ? () => lease.draining() : undefined,
   });
-  host.onFlushRequest?.(() => session.flush());
+  // The shown look's edits are written through its session (the outbox); anything that needs them now writes them first.
+  let lookShown: (() => void) | undefined;
+  const lookEditor = new LookEditor({ model: STUDIO_COMPOSITION.documents, sessions: services.looks, document: core.document,
+    restoring: ref => documents.outbox.recovering(lookRef(ref)), shown: () => lookShown?.(), note: text => adapterMessage("preview", text),
+    report: error => diagnostics.failure("library", "look_write_failed", "Your latest look change couldn't be recorded yet; it will be tried again.", error, { level: "warn" }) });
+  // The editing context (§3.7) is stored with the session: a change of it is written like any other session change.
+  let editingNow = historyService.editing();
+  historyService.subscribe(() => { if (historyService.editing() !== editingNow) { editingNow = historyService.editing(); session.request(); } });
+  host.onFlushRequest?.(() => { lookEditor.commit(); session.flush(); });
+  window.addEventListener("pagehide", () => lookEditor.commit());
+  document.addEventListener("visibilitychange", () => { if (document.hidden) lookEditor.commit(); });
   if (lease) {
     // Releasing to another window: after the pending document saves drain (a step the host registered first), the workspace is
     // written a last time and its timers stop (§2.3 release steps 3 to 5).
-    lease.onReleaseStart(() => core.app.settleEdits());
+    lease.onReleaseStart(() => { core.app.settleEdits(); lookEditor.commit(); });
     // Every experiment document stored (an unsaved one written again), then the last workspace write: both must succeed, and
     // autosave retires only once the lease is released and confirmed.
     lease.onRelease(async () => await (experiments as ExperimentPort).settle?.() ?? true);
@@ -336,7 +394,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     loadHead: () => attachHead(),
   });
   bootstrap = createTrustedStudioBootstrap({
-    workspace, core, preferences, localSetup, installDetection, modInstall, previewSetup, viewport: viewportDevice.attachment,
+    core, preferences, localSetup, installDetection, modInstall, previewSetup, viewport: viewportDevice.attachment,
     links: { open: async link => {
       try { await (host.openLink ? host.openLink(link) : openProjectLinkInNewTab(link)); return { ok: true }; }
       catch (error) { return { ok: false, message: error instanceof Error ? error.message : "That page couldn't be opened. Try again." }; }
@@ -344,8 +402,14 @@ async function start(host: StudioHost, root: HTMLElement) {
     previewReadiness: previewDevice.coordinator, status: statusSource, about: host.about, desktopApp: host.desktopApp,
     // Both hosts serve the update check; a verification workspace keeps what it found apart (UI-98).
     updates: createBrowserUpdateCheck(verification ? "/api/verification/update-check" : "/api/update-check"),
-    transport: collectionTransport(verification ? "/api/verification/collections" : "/api/collections"),
-    onEditorRestored: () => { previewDevice.coordinator.resetStack(); drawUV(); },
+    collections: { owner: services.collections, scene: shownScene, transport: collectionTransport(`${base}/collections`),
+      flushLook: () => lookEditor.commit(),
+      membership: id => services.profiles.collectionMembership(sessionState.profile, id),
+      join: id => {
+        const profile = services.profiles.profile(sessionState.profile);
+        if (profile && !profile.collections.includes(id))
+          void services.profiles.dispatch({ kind: "profile.addCollection", profile: profile.id, base: profile.revision, collection: id });
+      } },
     onRecipeImported: persist,
     savedAppearance: {
       has: () => savedAppearance?.hasSavedV() ?? false,
@@ -361,8 +425,12 @@ async function start(host: StudioHost, root: HTMLElement) {
       ready: () => !!scene,
       unavailableReason: () => { const head = viewportDevice.attachment.snapshot().head; return head.error ?? head.message; },
     },
-    fileDevice, diagnostics, modules: moduleServices, experiments, lease, outbox: host.documents?.outbox,
+    fileDevice, diagnostics, modules: moduleServices, experiments, lease, outbox: documents.outbox,
   });
+  // The editor shows the scene's look, and follows it when the scene shows another one.
+  lookShown = () => { previewDevice.coordinator.resetStack(); drawUV(); };
+  lookEditor.show(shownScene.look());
+  sessionState.subscribe(() => lookEditor.show(shownScene.look()));
   // The only object handed to the presentation.
   const viewComposition = { ...STUDIO_VIEW_COMPOSITION, optional: () => experiments.registrations().map(item => ({ contribution: item.contribution, binding: item.binding })) };
   bootstrap.mount(publicPort => { port = publicPort; mountStudio(publicPort, root, viewComposition); });
@@ -414,23 +482,9 @@ async function start(host: StudioHost, root: HTMLElement) {
         return performance.now() - start;
       },
     } });
-  // Library content (preset edits, switches, saves) persists; the whole port is not watched,
-  // because it also publishes the save status and preview readiness (CORE-01).
-  session.watch(bootstrap.collection);
   void localSetup.dispatch({ kind: "setup.refresh" });
   for (let i = 0; i < core.document.recipe.layers.length; i++) previewDevice.coordinator.render(i);
   session.activate();
-  // The profiles migration (profiles design §8), in the background, by the window holding the workspace. Off until the Studio moves onto
-  // the profile services (phase 1d-ii's switch-over turns `PROFILES_MIGRATION_ENABLED` on), so today's paths are unchanged.
-  if (PROFILES_MIGRATION_ENABLED && host.documents && restored.writable && (!lease || lease.writable())) {
-    const life = new AbortController();
-    window.addEventListener("pagehide", () => life.abort(), { once: true });
-    lease?.onReleaseStart(() => life.abort());
-    void startProfilesMigration({ endpoint: `${verification ? "/api/verification" : "/api"}/profiles/migrate`, send: fetch,
-      workspace: host.documents.workspace, fence: host.documents.fence, model: STUDIO_COMPOSITION.documents, state: () => session.snapshot(),
-      marks: profileMarks, flush: () => session.flush(), signal: life.signal,
-      report: error => diagnostics.failure("library", "profiles_migration_failed", "Your work couldn't be moved into your profile yet; it will try again.", error, { level: "warn" }) });
-  }
   await port!.library.execute({ kind: "initialize" });
   followPreviewSetup();
 
@@ -459,22 +513,27 @@ async function start(host: StudioHost, root: HTMLElement) {
   }
 
   /** The workspace a head attaches with: the restored one, then (after a V changed body) the workspace as it was then. */
-  let headWorkspace = workspace, headHistory: ContextHistory | undefined;
+  let headWorkspace = workspace;
   /** Load the 3D head and connect every head-dependent service once the preview is ready. */
   async function attachHead() {
     core.app.setPreviewUnavailable("");
     // A retry starts from nothing: an earlier head and its connections are released first (PREV-20).
     releaseHead(head);
-    const priorAssets = status.assets, history = headHistory;
-    headHistory = undefined;
+    const priorAssets = status.assets;
     let attached: AttachedHead | undefined;
     try {
+      // The V the drawn view's scene shows (made when it has none), through its owner: its document says its body and its save.
+      const character = await sceneCharacter(sessionState, drawn(), services);
+      const shown = character ? services.characters.document(character) : null;
+      if (!character || !shown) throw Error("The V couldn't be shown: this window can't make one. Reload the window to continue.");
+      const save = shown.source.kind === "save" ? services.characters.decoded(shown.source.decoded) ?? undefined : undefined;
       attached = await attachBrowserHead({
         workspace: headWorkspace, graph: views, viewport: viewportDevice, preferences,
         // The shown V's body decides the core head (the masculine V's is prepared on first use); a V that changes body loads it again.
         prepareCore: body => host.previewPreparation.ensureBody(body, (message, progress) => viewportDevice.headPending("preparing", message, progress)),
-        reload: history => { headWorkspace = session.snapshot(); headHistory = history; previewSetup.reloadHead(); }, history,
-        catalogue: creatorCatalogue, character: { requester: shownCharacter, history: { service: historyService, id: shownCharacter } },
+        reload: () => { headWorkspace = session.snapshot(); previewSetup.reloadHead(); },
+        character: { body: shown.body, ...(save ? { save } : {}), context: ports => services.characters.context(character, ports),
+          release: context => services.characters.detach(character, context) },
         notice: text => adapterMessage("preview", text), warmStart,
         // The live feature's layered surface: the preview device fills its layers and the on-head editor edits it. Other composed layered
         // surfaces have no layer source until the core edits more than one live feature.

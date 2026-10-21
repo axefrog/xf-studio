@@ -102,7 +102,8 @@ describe("everything §8 keeps survives the migration", async () => {
     expect(views.lights.find(node => node.id === "l2")).toMatchObject({ setup: "creator" });
     expect(views.scenes).toEqual([expect.objectContaining({ id: "s1", subject: { kind: "character", id: record.character },
       look: { collection: COLLECTION, look: stored.collections.selected }, gen: 0 })]);
-    expect(session.focus).toEqual({ views: { v2: 1 } });
+    expect(session.focus).toMatchObject({ views: { v2: 1 } });
+    expect(session.focus.editing).toMatch(/^look:/);
   });
 
   test("the live arrangement as tab 1: panel IDs become instances (views pinned), parked places and closed panels kept", () => {
@@ -278,11 +279,11 @@ describe("the route", () => {
 });
 
 describe("in the Studio", () => {
-  test("off until the switch-over (phase 1d-ii): the Studio's start migrates nothing, captures nothing and sends nothing", async () => {
-    expect(PROFILES_MIGRATION_ENABLED).toBe(false);
+  test("on since the switch-over (phase 1d-ii); turned off, the Studio's start migrates nothing, captures nothing and sends nothing", async () => {
+    expect(PROFILES_MIGRATION_ENABLED).toBe(true);
     let touched = 0;
     const outcome = await startProfilesMigration({ endpoint: "/api/profiles/migrate", workspace: "browser-a", fence: () => null, model: MODEL, marks: {}, delayMs: 0,
-      state: () => { touched++; return realWorkspace(); }, flush: () => { touched++; return true; }, signal: new AbortController().signal,
+      enabled: false, state: () => { touched++; return realWorkspace(); }, flush: () => { touched++; return true; }, signal: new AbortController().signal,
       send: async () => { touched++; return new Response("{}"); } });
     expect([outcome, touched]).toEqual(["disabled", 0]);
   });

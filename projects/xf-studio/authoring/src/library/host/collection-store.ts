@@ -4,7 +4,7 @@ import { NEWER_LOOKS_LIBRARY_MESSAGE } from "../../app/workspace/collection-work
 import type { PartRegistry } from "../../platform/core/document";
 import { hostFailure } from "../../diagnostics/host/host-log";
 import type { LibraryDatabase } from "../../platform/persistence/library-database";
-import type { CollectionSummary, StoredCollection } from "../collection-session";
+import type { CollectionSummary, StoredCollection } from "../collection-actions";
 import { collectionRef, collectionWorkingOf, lookRef, lookWorkingOf } from "../collection-documents";
 import { documentKey } from "../../platform/api/document-commands";
 import { parseFence, WORKSPACE_FENCE_HEADER, type WorkspaceFence } from "../../platform/api/document-store";

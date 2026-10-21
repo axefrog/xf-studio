@@ -165,44 +165,22 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
 }
 
 /**
- * Opening keeps a bounded queue of browser drafts. Warn only when the next open
- * would evict the oldest recoverable draft.
- */
-export function confirmReplace(rt: StudioRuntime, anchor: MenuAnchor, title: string, run: () => void) {
-  // Opening and importing share one consequence: the application says what would be lost.
-  const consequence = rt.port.authoring.consequences({ file: { kind: "collection.import" } });
-  const oldest = consequence.discards.find(item => item.kind === "recovery-draft");
-  if (!consequence.confirm || !oldest) { run(); return; }
-  // A draft holding a look made with a newer version can't be saved to the library here: exporting it is how it's kept (CORE-49).
-  const detail = oldest.locked
-    ? `Your current draft joins the recovery queue, and its oldest draft “${oldest.label}” will be discarded. It has a look made with a newer version of XF Studio, which can't be saved to the library here, so that draft may be its only copy. Export it first to keep it.`
-    : `Your current draft joins the recovery queue, and its oldest draft “${oldest.label}” will be discarded. To keep it, recover it and save it to the library first.`;
-  const request = { kind: "exportCollection" as const, draft: oldest.id };
-  openMenu([{ kind: "heading", label: `${title}?`, detail },
-    ...(oldest.locked && oldest.id ? [{ kind: "action" as const, label: "Export collection", icon: "export" as const,
-      capability: rt.port.authoring.requestCapability(request), run: () => void rt.request(request) }] : []),
-    { kind: "action", label: "Continue", icon: "import", run },
-    { kind: "action", label: "Recover earlier drafts", icon: "undo", capability: rt.port.files.capability({ kind: "collection.recover" }),
-      run: () => void rt.file({ kind: "collection.recover" }) }],
-  anchor, { label: `${title} confirmation`, invoker: anchor instanceof Element ? anchor : undefined });
-}
-/**
- * “Undo open/import” swaps back to the draft that was current before the request, but
- * only while that is still the recoverable draft; otherwise it would swap the wrong one.
+ * “Undo open/import” shows the collection that was shown before the request again, but only while that is still the one to go back to;
+ * otherwise it would show the wrong one. Nothing is replaced by opening or importing: the collection shown before stays in the library.
  */
 export function undoReplaceAction(rt: StudioRuntime, label: string): FeedbackAction {
   const before = rt.port.library.summary().draft?.id;
   return { label, run: () => {
     if (!before || rt.port.library.summary().draft?.previous?.id !== before) {
-      rt.feedback.toast("warning", "Library", "The draft from before that change is no longer the first one to recover. Find it under Recent drafts in the Library panel.");
+      rt.feedback.toast("warning", "Library", "The collection from before that change is no longer the one to go back to. Open it from the Library panel.");
       return;
     }
     void rt.file({ kind: "collection.recover" });
   } };
 }
 /** Shared by the Library panel and the command palette. */
-export function importCollection(rt: StudioRuntime, anchor: MenuAnchor) {
-  confirmReplace(rt, anchor, "Import a collection", () => void rt.file({ kind: "collection.import" }, { actions: [undoReplaceAction(rt, "Undo import")] }));
+export function importCollection(rt: StudioRuntime, _anchor?: MenuAnchor) {
+  void rt.file({ kind: "collection.import" }, { actions: [undoReplaceAction(rt, "Undo import")] });
 }
 
 export function libraryPanel(rt: StudioRuntime): PanelController {
@@ -275,8 +253,7 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
           const current = item.id === draft?.id;
           // The row open now says so with its badge and background; its button has the same weight as every other row's Open.
           const open = button({ label: current ? "Reopen" : "Open", small: true,
-            onClick: event => confirmReplace(rt, event.currentTarget as Element, `Open “${item.name}”`,
-              () => void rt.request({ kind: "open", id: item.id }, { actions: [undoReplaceAction(rt, "Undo open")] })) });
+            onClick: () => void rt.request({ kind: "open", id: item.id }, { actions: [undoReplaceAction(rt, "Undo open")] }) });
           applyCapability(open, port.authoring.requestCapability({ kind: "open", id: item.id }));
           return { id: item.id, name: item.name, current, meta: [plural(item.count, "preset"), `version ${item.revision}`, recordTime(item.updatedAt)],
             ...(current ? { badge: { text: "This draft", tone: "info" as const } } : {}), action: open };

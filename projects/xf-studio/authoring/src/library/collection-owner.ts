@@ -19,7 +19,8 @@
  * - **Conflicts.** Keep mine; Use theirs, which for a look keeps mine as a fork, as Keep both does ("(this window)", added to the
  *   collection as it is now, theirs). A conflict on a collection document alone is Keep mine or Use theirs.
  *
- * The running Studio still edits its one collection through `CollectionService` and the workspace; moving it here is the migration (1d).
+ * The Studio's collection service (`collection-service.ts`) works on the collection its scene's look belongs to through these commands,
+ * and the look editor (`look-editor.ts`) writes the shown look through its session.
  */
 import { refusal, type Capability } from "../platform/api/capability";
 import { COMMAND_LIMITS, type CurrentDocument, documentKey, type DocumentRef, isTombstone, tombstoneOf } from "../platform/api/document-commands";
@@ -31,8 +32,11 @@ import { COLLECTION_WORKING, COLLECTION_WORKING_SCHEMA, type CollectionWorking, 
 /** A new look's content. */
 export type LookInput = { readonly name: string; readonly parts?: Readonly<Record<string, unknown>>; readonly memory?: unknown; readonly id?: string };
 export type CollectionCommand =
-  | { kind: "collection.create"; name: string; id?: string; looks?: readonly LookInput[]; packagePlan?: unknown }
+  /** `saved`: the named version it is made from (opening a collection saved before it had a working copy). */
+  | { kind: "collection.create"; name: string; id?: string; looks?: readonly LookInput[]; packagePlan?: unknown; saved?: { revision: number } }
   | { kind: "collection.rename"; collection: string; base: number; name: string }
+  /** The package plan (which features ship in which XF mod); `undefined` is the default plan. */
+  | { kind: "collection.plan"; collection: string; base: number; packagePlan: unknown }
   | { kind: "collection.reorder"; collection: string; base: number; looks: readonly string[] }
   | { kind: "collection.addLook"; collection: string; base: number; look?: LookInput; at?: number }
   | { kind: "collection.copyLook"; collection: string; base: number; from: LookRef; name?: string }
@@ -206,6 +210,7 @@ export class CollectionOwner {
     if (!("id" in view)) return view;
     switch (command.kind) {
       case "collection.rename": return nameOf(command.name) ? { available: true } : refusal("invalid_value", NAME_REASON);
+      case "collection.plan": return { available: true };
       case "collection.reorder":
         return command.looks.length === view.looks.length && new Set(command.looks).size === view.looks.length && command.looks.every(id => view.looks.includes(id))
           ? { available: true } : refusal("invalid_value", "That isn't an order of this collection's looks.");
@@ -253,8 +258,11 @@ export class CollectionOwner {
       ...(input.memory !== undefined ? { memory: structuredClone(input.memory) } : {}), state: "live" };
   }
 
-  /** Apply one command: recorded in the outbox at once (one entry, one host transaction), checked against the revision it read. */
-  dispatch(command: CollectionCommand): CollectionAnswer {
+  /**
+   * Apply one command: recorded in the outbox at once (one entry, one host transaction), checked against the revision it read. `also`:
+   * another owner's edits that belong to the same command (a profile listing the collection made), written in the same transaction.
+   */
+  dispatch(command: CollectionCommand, options: { also?: (collection: string) => readonly OutboxEdit[] } = {}): CollectionAnswer {
     const allowed = this.capability(command);
     if (!allowed.available) return failed(allowed);
     let edits: OutboxEdit[], id: string, look: LookRef | undefined;
@@ -262,13 +270,19 @@ export class CollectionOwner {
       id = command.id ?? this.newId();
       const looks = (command.looks ?? []).map(input => this.newLook(id, input));
       const doc: CollectionWorking = { schema: COLLECTION_WORKING_SCHEMA, id, name: nameOf(command.name)!, looks: looks.map(item => item.id), removed: [],
-        ...(command.packagePlan !== undefined ? { packagePlan: structuredClone(command.packagePlan) } : {}), createdAt: this.now() };
+        ...(command.packagePlan !== undefined ? { packagePlan: structuredClone(command.packagePlan) } : {}),
+        ...(command.saved ? { saved: { revision: command.saved.revision } } : {}), createdAt: this.now() };
       edits = [{ ...collectionRef(id), value: doc }, ...looks.map(item => ({ ...lookRef({ collection: id, look: item.id }), value: item }))];
     } else {
       const view = this.collection(command.collection)!;
       id = view.id;
       switch (command.kind) {
         case "collection.rename": edits = this.edits(view, { name: nameOf(command.name)! }, []); break;
+        case "collection.plan": {
+          const { packagePlan: _plan, ...rest } = stripView(view);
+          edits = this.edits(rest as CollectionWorking, command.packagePlan === undefined ? {} : { packagePlan: structuredClone(command.packagePlan) }, []);
+          break;
+        }
         case "collection.reorder": edits = this.edits(view, { looks: [...command.looks] }, []); break;
         case "collection.addLook": {
           const made = this.newLook(id, command.look ?? { name: "Look" });
@@ -287,14 +301,17 @@ export class CollectionOwner {
         }
         case "collection.removeLook": {
           const held = this.look({ collection: id, look: command.look })!;
-          edits = this.edits(view, { looks: view.looks.filter(item => item !== command.look), removed: [...view.removed, { look: command.look, at: this.now() }] },
+          edits = this.edits(view, { looks: view.looks.filter(item => item !== command.look),
+            removed: [...view.removed, { look: command.look, at: this.now(), index: view.looks.indexOf(command.look) }] },
             [{ ...stripLook(held), state: "removed" }]);
           look = held.ref;
           break;
         }
         case "collection.restoreLook": {
-          const held = this.look({ collection: id, look: command.look })!;
-          edits = this.edits(view, { looks: [...view.looks, command.look], removed: view.removed.filter(item => item.look !== command.look) },
+          // Back where it stood when it was removed (at the end when that isn't known).
+          const held = this.look({ collection: id, look: command.look })!, index = view.removed.find(item => item.look === command.look)?.index;
+          const at = Math.min(index ?? view.looks.length, view.looks.length);
+          edits = this.edits(view, { looks: [...view.looks.slice(0, at), command.look, ...view.looks.slice(at)], removed: view.removed.filter(item => item.look !== command.look) },
             [{ ...stripLook(held), state: "live" }]);
           look = held.ref;
           break;
@@ -304,6 +321,7 @@ export class CollectionOwner {
           break;
       }
     }
+    if (options.also) edits = [...edits, ...options.also(id)];
     try { this.record(command.kind, edits); }
     catch (error) { return failed(refusal(error instanceof OutboxTooLargeError ? "limit" : error instanceof OutboxRecoveringError ? "not_ready" : "unavailable", (error as Error).message)); }
     return { ok: true, collection: id, revision: this.deps.outbox.document(collectionRef(id))!.version, ...(look ? { look } : {}) };

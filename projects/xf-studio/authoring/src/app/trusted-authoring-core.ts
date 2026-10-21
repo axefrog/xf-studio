@@ -35,6 +35,8 @@ export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
   newId?(): string;
   /** The session's history service (the startup root creates it and shares it with the experiments); default: one of its own. */
   history?: HistoryService;
+  /** The history scope of the look the document shows first (`look:<collection>/<look>`); default: a look of its own (fixtures). */
+  scope?: string;
 }, composition: StudioComposition) {
   const { registry, documents } = composition;
   if (composition.region.id !== documents.live) throw Error(`The composition's layered-makeup region is not the live feature's (${documents.live}).`);
@@ -57,7 +59,7 @@ export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
     ...(workspace.historyTrimmed ? { historyTrimmed: true } : {}),
     ...(workspace.liveFeatures ? { liveFeatures: workspace.liveFeatures } : {}),
     ...(workspace.liveLocked ? { liveLocked: workspace.liveLocked } : {}) }, { feature: documents.live, parts: documents.parts, others },
-    { history, resetStack: previous => ports.resetStack(previous) });
+    { history, ...(ports.scope ? { scope: ports.scope } : {}), resetStack: previous => ports.resetStack(previous) });
   const geometry = new AuthoringGeometry(document);
   const presentation = new AuthoringPresentation(document, geometry);
   const recipe = new RecipeActions(

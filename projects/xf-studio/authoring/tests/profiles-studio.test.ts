@@ -1,0 +1,200 @@
+/**
+ * Profiles phase 1d-ii: the Studio on the profile services, single-V parity at the service level. The collection a scene's look belongs
+ * to is edited through owner commands, the shown look through its session (the outbox), Save is Save version, and a restart (a second
+ * window on the same library) brings everything back.
+ */
+import { describe, expect, test } from "bun:test";
+import { profileStudio, type ProfileStudio } from "./fixtures/profile-studio";
+import { initialRecipe } from "./fixtures/eye-region";
+import { lookRef } from "../src/library/collection-documents";
+import { lookScope } from "../src/platform/core/history-service";
+import { NOTHING_TO_UNDO } from "../src/app/studio-application";
+
+const layerId = (studio: ProfileStudio, index = 0) => studio.document.recipe.layers[index]!.id;
+const dispatch = (studio: ProfileStudio, action: Parameters<ProfileStudio["app"]["dispatch"]>[0]) => {
+  const result = studio.app.dispatch(action);
+  if (!result.ok) throw Error(result.message);
+  return result;
+};
+/** The same library opened by another window (a restart): showing the look the first one showed. */
+async function restart(studio: ProfileStudio) {
+  await studio.settle();
+  return profileStudio({ library: studio.library, show: studio.scene.look() });
+}
+
+describe("the shown look", () => {
+  test("opens on the scene's look, is edited in place and written through its session; a restart shows it with its Undo history", async () => {
+    const studio = await profileStudio();
+    await studio.collection.initialize();
+    const ref = studio.scene.look()!;
+    expect(studio.document.scopeId).toBe(lookScope(ref));
+    expect(studio.collection.summary().draft).toMatchObject({ name: "Current", selected: ref.look, presets: [{ id: ref.look, name: "Look", layers: initialRecipe().layers.length }] });
+    dispatch(studio, { kind: "layer.setOpacity", layerId: layerId(studio), opacity: 0.25 });
+    dispatch(studio, { kind: "layer.setOpacity", layerId: layerId(studio), opacity: 0.5 });
+    expect(studio.app.history()).toMatchObject({ depth: 2 });
+    expect(await studio.settle()).toBe(true);
+    const stored = studio.library.documents.read([lookRef(ref)])[`look-working/${ref.collection}/${ref.look}`];
+    expect(stored?.value).toMatchObject({ id: ref.look, state: "live" });
+    const again = await restart(studio);
+    expect(again.document.recipe.layers[0]!.opacity).toBe(0.5);
+    // The look's history came back with it: Undo reaches it at once (its scope is the editing context).
+    expect(again.app.history()).toMatchObject({ depth: 2 });
+    dispatch(again, { kind: "history.undo" });
+    expect(again.document.recipe.layers[0]!.opacity).toBe(0.25);
+    dispatch(again, { kind: "history.redo" });
+    expect(again.document.recipe.layers[0]!.opacity).toBe(0.5);
+  });
+
+  test("each look keeps its own history scope; with no editing context Undo is unavailable, with its reason", async () => {
+    const studio = await profileStudio({ looks: [{ name: "One", recipe: initialRecipe() }, { name: "Two", recipe: initialRecipe() }] });
+    await studio.collection.initialize();
+    const [one, two] = studio.owner.looksOf(studio.shown()!).map(look => look.id);
+    dispatch(studio, { kind: "layer.setOpacity", layerId: layerId(studio), opacity: 0.3 });
+    dispatch(studio, { kind: "preset.select", id: two! });
+    expect(studio.document.scopeId).toBe(lookScope({ collection: studio.shown()!, look: two! }));
+    expect(studio.document.recipe.layers[0]!.opacity).not.toBe(0.3);
+    expect(studio.app.history()).toMatchObject({ depth: 0 });
+    dispatch(studio, { kind: "preset.select", id: one! });
+    expect(studio.document.recipe.layers[0]!.opacity).toBe(0.3);
+    expect(studio.app.history()).toMatchObject({ depth: 1 });
+    // Nothing edited yet in a fresh history service: no editing context, no Undo.
+    studio.history.focus(null); studio.history.focus(null); studio.history.focus(null);
+    expect(studio.app.capability({ kind: "history.undo" })).toMatchObject({ available: false, reason: NOTHING_TO_UNDO });
+  });
+});
+
+describe("presets", () => {
+  test("add, copy, rename, move, remove and restore are owner commands on the shown collection; the scene follows the preset chosen", async () => {
+    const studio = await profileStudio();
+    await studio.collection.initialize();
+    const collection = studio.shown()!, first = studio.scene.look()!.look;
+    dispatch(studio, { kind: "layer.setOpacity", layerId: layerId(studio), opacity: 0.4 });
+    dispatch(studio, { kind: "preset.edit", command: { kind: "add" } });
+    const added = studio.scene.look()!.look;
+    expect(added).not.toBe(first);
+    expect(studio.collection.summary().draft!.presets.map(p => p.name)).toEqual(["Look", "Preset 2"]);
+    // A new preset starts with one layer, ready to shape (release-readiness-audit.md item 12), and an empty history.
+    expect(studio.document.recipe.layers).toHaveLength(1);
+    expect(studio.app.history()).toMatchObject({ depth: 0 });
+    dispatch(studio, { kind: "preset.select", id: first });
+    // The copy carries the look as edited (written first), named "(copy)", right after it; its history starts fresh.
+    dispatch(studio, { kind: "preset.edit", command: { kind: "copy", id: first } });
+    const copy = studio.scene.look()!.look;
+    expect(studio.collection.summary().draft!.presets.map(p => p.name)).toEqual(["Look", "Look (copy)", "Preset 2"]);
+    expect(studio.document.recipe.layers[0]!.opacity).toBe(0.4);
+    expect(studio.app.history()).toMatchObject({ depth: 0 });
+    dispatch(studio, { kind: "preset.edit", command: { kind: "rename", id: copy, name: "Smoky" } });
+    dispatch(studio, { kind: "preset.edit", command: { kind: "move", id: copy, to: 2 } });
+    expect(studio.collection.summary().draft!.presets.map(p => p.name)).toEqual(["Look", "Preset 2", "Smoky"]);
+    // Removing the shown preset shows the one that takes its place; Restore puts it back where it stood.
+    dispatch(studio, { kind: "preset.edit", command: { kind: "remove", id: added } });
+    expect(studio.collection.summary().draft).toMatchObject({ presets: [{ name: "Look" }, { name: "Smoky" }], removed: [{ id: added, name: "Preset 2", index: 1 }] });
+    expect(studio.scene.look()!.look).toBe(copy);
+    dispatch(studio, { kind: "preset.edit", command: { kind: "restore" } });
+    expect(studio.collection.summary().draft!.presets.map(p => p.name)).toEqual(["Look", "Preset 2", "Smoky"]);
+    expect(studio.scene.look()!.look).toBe(added);
+    expect(studio.app.capability({ kind: "preset.edit", command: { kind: "restore" } })).toMatchObject({ available: false });
+    // Everything reaches the library, and a restart shows the same collection.
+    const again = await restart(studio);
+    await again.collection.initialize();
+    expect(again.collection.summary().draft!.presets.map(p => p.name)).toEqual(["Look", "Preset 2", "Smoky"]);
+    expect(again.owner.collection(collection)!.looks).toHaveLength(3);
+    dispatch(again, { kind: "preset.select", id: first });
+    expect(again.document.recipe.layers[0]!.opacity).toBe(0.4);
+  });
+
+  test("a recipe file becomes a preset of its own, shown at once", async () => {
+    const studio = await profileStudio();
+    await studio.collection.initialize();
+    studio.collection.importRecipe(initialRecipe(), "Imported");
+    expect(studio.collection.summary().draft!.presets.map(p => p.name)).toEqual(["Look", "Imported"]);
+    expect(studio.document.recipe.layers).toHaveLength(initialRecipe().layers.length);
+  });
+});
+
+describe("Save version, Check and Build", () => {
+  test("Save version writes a named version from the library's snapshot; the collection then reads as saved until it changes", async () => {
+    const studio = await profileStudio();
+    expect((await studio.collection.initialize()).ok).toBe(true);
+    expect(studio.collection.persistence()).toMatchObject({ baseline: "none", dirty: true });
+    const saved = await studio.collection.execute({ kind: "save" });
+    expect(saved).toMatchObject({ ok: true, result: { kind: "saved", collection: { revision: 1 } } });
+    expect(studio.library.collections.list()).toMatchObject([{ id: studio.shown(), name: "Current", revision: 1, count: 1 }]);
+    expect(studio.collection.summary().draft).toMatchObject({ revision: 1 });
+    expect(studio.collection.persistence()).toMatchObject({ baseline: "known", dirty: false });
+    dispatch(studio, { kind: "layer.setOpacity", layerId: layerId(studio), opacity: 0.2 });
+    expect(studio.collection.persistence()).toMatchObject({ dirty: true, dirtyPresets: [studio.scene.look()!.look] });
+    expect(await studio.collection.execute({ kind: "save" })).toMatchObject({ ok: true, result: { collection: { revision: 2 } } });
+    const stored = studio.library.collections.get(studio.shown()!);
+    expect(JSON.stringify(stored.collection.presets[0]!.parts)).toContain("0.2");
+    // A restart knows which version it was saved as, and reads that version's content to compare.
+    const again = await restart(studio);
+    await again.collection.initialize();
+    expect(again.collection.persistence()).toMatchObject({ savedRevision: 2, baseline: "known", dirty: false });
+  });
+
+  test("Check and Build send the collection's snapshot, the shown look as edited; the result is current until the next change", async () => {
+    const studio = await profileStudio({ looks: [{ name: "A", recipe: initialRecipe() }, { name: "B", recipe: initialRecipe() }] });
+    await studio.collection.initialize();
+    dispatch(studio, { kind: "layer.setOpacity", layerId: layerId(studio), opacity: 0.6 });
+    const check = await studio.files.execute({ kind: "package.check" });
+    expect(check.ok).toBe(true);
+    const sent = studio.packageInput() as { id: string; presets: { name: string }[] };
+    expect([sent.id, sent.presets.map(p => p.name)]).toEqual([studio.shown(), ["A", "B"]]);
+    expect(JSON.stringify(sent)).toContain("0.6");
+    expect(studio.files.snapshot().package?.freshness).toBe("current");
+    const build = await studio.files.execute({ kind: "package.build" });
+    expect(build.ok).toBe(true);
+    dispatch(studio, { kind: "layer.setOpacity", layerId: layerId(studio), opacity: 0.7 });
+    expect(studio.files.snapshot().package?.freshness).toBe("stale");
+    // Nothing is saved as a version by Check or Build.
+    expect(studio.library.collections.list()).toEqual([]);
+  });
+});
+
+describe("opening, importing and copies", () => {
+  test("importing makes a new collection (nothing replaced); Undo import shows the one before; the import is a recent draft until saved", async () => {
+    const studio = await profileStudio();
+    await studio.collection.initialize();
+    const before = studio.shown()!;
+    const text = JSON.stringify({ schema: "xfs/collection-2", id: crypto.randomUUID(), name: "Imported", presets: [
+      { id: crypto.randomUUID(), name: "Gift", revision: 1, parts: studio.owner.look(studio.scene.look()!)!.parts }] });
+    expect(await studio.collection.execute({ kind: "import", text, bytes: text.length })).toMatchObject({ ok: true });
+    expect(studio.collection.summary().draft).toMatchObject({ name: "Imported", presets: [{ name: "Gift" }], previous: { id: before } });
+    expect(studio.owner.collection(before)).not.toBeNull();
+    dispatch(studio, { kind: "collection.undoOpen" });
+    expect(studio.shown()).toBe(before);
+    expect(studio.collection.summary().draft!.recovery).toMatchObject([{ name: "Imported", presets: 1, saved: "never" }]);
+    const imported = studio.collection.summary().draft!.recovery[0]!.id;
+    dispatch(studio, { kind: "collection.undoOpen", draft: imported });
+    expect(studio.shown()).toBe(imported);
+  });
+
+  test("opening a version saved before it had a working copy makes one from it; Save as new collection copies under fresh IDs", async () => {
+    const studio = await profileStudio();
+    await studio.collection.initialize();
+    const id = crypto.randomUUID(), look = crypto.randomUUID();
+    studio.library.collections.save({ collection: { schema: "xfs/collection-2", id, name: "Old", presets: [
+      { id: look, name: "Old look", revision: 1, parts: studio.owner.look(studio.scene.look()!)!.parts }] } });
+    await studio.collection.execute({ kind: "refresh" });
+    expect(await studio.collection.execute({ kind: "open", id })).toMatchObject({ ok: true });
+    expect(studio.scene.look()).toEqual({ collection: id, look });
+    expect(studio.collection.summary().draft).toMatchObject({ id, name: "Old", revision: 1 });
+    expect(studio.collection.persistence()).toMatchObject({ baseline: "known", dirty: false });
+    const copy = await studio.collection.execute({ kind: "saveCopy" });
+    expect(copy).toMatchObject({ ok: true, result: { collection: { collection: { name: "Old 2" }, revision: 1 } } });
+    expect(studio.shown()).not.toBe(id);
+    expect(studio.scene.look()!.look).not.toBe(look);
+    expect(studio.library.collections.list().map(item => item.name).sort()).toEqual(["Old", "Old 2"]);
+  });
+
+  test("Export collection saves a version first and exports the library's snapshot", async () => {
+    const studio = await profileStudio();
+    await studio.collection.initialize();
+    const outcome = await studio.collection.execute({ kind: "exportCollection" });
+    expect(outcome).toMatchObject({ ok: true, result: { kind: "export", name: "xfs.collection.json" } });
+    const json = JSON.parse((outcome as { result: { json: string } }).result.json);
+    expect(json.id).toBe(studio.shown());
+    expect(studio.library.collections.list()).toMatchObject([{ revision: 1 }]);
+  });
+});

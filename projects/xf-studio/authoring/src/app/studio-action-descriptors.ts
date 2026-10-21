@@ -53,7 +53,6 @@ export const ACTION_DESCRIPTORS = {
     move: { id: target("string"), to: input("integer", 0) } }, { remove: "recovery", restore: "recovery" }),
   "preset.select": desc("preset", "selection", "none", { id: target("string") }),
   "collection.rename": desc("collection", "library", "none", { name: input("string") }),
-  "collection.open": desc("collection", "library", "recovery", { collection: input("object"), revision: { ...state("integer"), required: false } }),
   "collection.undoOpen": desc("collection", "library", "recovery", { draft: { ...target("string"), required: false } }),
   "collection.importRecipe": desc("file", "library", "none", { recipe: input("object"), name: input("string") }),
   // The package plan (feature-module platform §6): which features ship in which XF mod; stored with the collection.

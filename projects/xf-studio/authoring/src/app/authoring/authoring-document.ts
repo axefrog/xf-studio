@@ -31,7 +31,8 @@ export type DocumentState = { recipe: Recipe; active: number; selected: number;
    */
   liveLocked?: string };
 /** `part`: another feature's live part changed (an action of that feature, or an Undo or Redo). */
-export type DocumentChange = "recipe" | "selection" | "history" | "restore" | "part";
+/** `access`: whether the document can be edited changed (`setBlocked`). */
+export type DocumentChange = "recipe" | "selection" | "history" | "restore" | "part" | "access";
 export type DocumentEffect = RecipeActionEffect | { kind: "gesture"; layerIndex: number };
 /**
  * Which feature's part the document edits and how the look history splits parts (the composition's part
@@ -102,8 +103,18 @@ export class AuthoringDocument {
   /** The shown look's scope ID (`look:<collection>/<look>`). */
   get scopeId(): string { return this.scope.id; }
   private lockedReason?: string;
-  /** Why the selected look is not editable in this version (it holds a newer build's data), or undefined. */
-  get locked(): string | undefined { return this.lockedReason; }
+  private blockedReason?: string;
+  /**
+   * Why the shown look can't be edited now, or undefined: it holds a newer build's data (kept exactly as it came), or it is being
+   * restored from the last session (`setBlocked`).
+   */
+  get locked(): string | undefined { return this.lockedReason ?? this.blockedReason; }
+  /** The look can't be edited for now (the reason), or can again (undefined): the look editor's recovery gate. */
+  setBlocked(reason: string | undefined) {
+    if (reason === this.blockedReason) return;
+    this.blockedReason = reason;
+    this.notify("access");
+  }
   /** The look as the history reads it: this document's feature is its recipe; the others are their live documents. */
   private readonly read = (feature: string) => feature === this.parts.feature ? this.state.recipe : this.parts.others?.read(feature);
   private recipeOf(parts: Record<string, unknown> | undefined) { return parts?.[this.parts.feature] as Recipe | undefined; }

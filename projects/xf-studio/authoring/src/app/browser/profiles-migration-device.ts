@@ -26,20 +26,16 @@ export function profilesMigrationTransport(endpoint: string, send: (url: string,
 }
 
 /**
- * Whether the Studio migrates its workspace at start. Off until the Studio moves onto the profile services (phase 1d-ii's switch-over turns
- * it on in the same change): until then the legacy fields stay the Studio's own and keep changing, so documents migrated earlier would go
- * stale. Phase 1 reaches `main` as a whole.
+ * Whether the Studio migrates its workspace at start (on since phase 1d-ii's switch-over: the Studio works on the profile services, and the
+ * legacy fields are migration input only, frozen as they were).
  */
-export const PROFILES_MIGRATION_ENABLED: boolean = false;
-
-/** How long after the Studio starts the migration begins. */
-export const START_DELAY_MS = 2_000;
+export const PROFILES_MIGRATION_ENABLED: boolean = true;
 
 /**
- * Starts the profiles migration for this window's workspace (profiles design §8): only in the window holding the workspace, and only for a
- * workspace it may write. `marks` is the workspace's own holder of the mark and sessions (what the workspace stores, through its capture);
- * `flush` writes the workspace at once and answers whether it is stored. It runs in the background and never blocks the Studio; it ends
- * with `signal`, and starts again with the next page load if it didn't finish.
+ * Runs the profiles migration for this window's workspace (profiles design §8): only in the window holding the workspace, and only for a
+ * workspace it may write. `marks` is the workspace's own holder of the mark and sessions (what the workspace stores); `flush` writes the
+ * workspace at once and answers whether it is stored. The Studio runs it before it builds anything, since it opens on the session the
+ * migration makes (a migrated workspace costs nothing). It ends with `signal`, and starts again with the next page load if it didn't finish.
  */
 export function startProfilesMigration(options: {
   endpoint: string;
@@ -52,9 +48,9 @@ export function startProfilesMigration(options: {
   flush: () => boolean;
   signal: AbortSignal;
   report?: (error: unknown) => void;
-  /** How long after the Studio starts it begins (it never competes with the first paint). */
+  /** How long to wait before it begins (default: none). */
   delayMs?: number;
-  /** Tests and the switch-over only: run whatever `PROFILES_MIGRATION_ENABLED` says. */
+  /** Tests only: run whatever `PROFILES_MIGRATION_ENABLED` says. */
   enabled?: boolean;
 }): Promise<ProfilesMigrationOutcome | "disabled"> {
   if (!(options.enabled ?? PROFILES_MIGRATION_ENABLED)) return Promise.resolve("disabled");
@@ -68,7 +64,7 @@ export function startProfilesMigration(options: {
     },
     send: profilesMigrationTransport(options.endpoint, options.send, options.fence), report: options.report });
   return new Promise<void>(resolve => {
-    const timer = setTimeout(done, options.delayMs ?? START_DELAY_MS);
+    const timer = setTimeout(done, options.delayMs ?? 0);
     function done() { clearTimeout(timer); options.signal.removeEventListener("abort", done); resolve(); }
     options.signal.addEventListener("abort", done, { once: true });
   }).then(() => options.signal.aborted ? "stopped" as const : migration.run(options.signal))

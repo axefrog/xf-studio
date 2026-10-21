@@ -18,6 +18,7 @@ import type { KeptView, StoredNode, ViewGraphData, ViewRecord } from "../../plat
 import { MAIN_VIEW, SLOT_COLLECTIONS, VIEW_SLOTS, type ViewSlot } from "../../platform/api/view-graph";
 import type { PartRegistry } from "../../platform/core/document";
 import { sha256Hex } from "../../platform/core/sha256";
+import { lookScope } from "../../platform/core/history-service";
 import { workspaceViewGraph } from "../../preview/preview-view-graph";
 import type { SavedV } from "../../saves/save-reader";
 import type { DockLayout, JsonValue } from "../ui-preferences";
@@ -268,6 +269,19 @@ export const FIRST_TAB_NAME = "Layout 1";
  */
 export function buildProfileSession(state: WorkspaceState, snapshot: Pick<MigrationSnapshot, "selected" | "layouts">, result: MigrationResult,
   random: () => number = Math.random): ProfileSessionData {
+  const active = snapshot.layouts.findIndex(layout => layout.active);
+  const lookId = snapshot.selected ? result.idMap.looks[snapshot.selected] : undefined;
+  return sessionOfWorkspace(state, { tab: active >= 0 ? snapshot.layouts[active]!.name : FIRST_TAB_NAME,
+    ...(active >= 0 && result.defaults[active] ? { origin: result.defaults[active] } : {}), character: result.character,
+    ...(lookId ? { look: { collection: result.collection, look: lookId } } : {}) }, random);
+}
+/**
+ * A session made from the workspace's live arrangement and view graph: tab 1 (named `tab`, made from the own default `origin`) holds the
+ * arrangement with its panels as instances; every view is in tab 1; every character scene shows `character` and `look`. Its editing
+ * context (§3.7) is the look's history, so Undo reaches it as it did before the session existed.
+ */
+export function sessionOfWorkspace(state: WorkspaceState, input: { tab: string; origin?: string; character?: string; look?: { collection: string; look: string } },
+  random: () => number = Math.random): ProfileSessionData {
   const tab = `t-${base36(random)}`;
   const live = state.uiPreferences.layout ?? null;
   const instances = new Map<string, PanelInstance>();
@@ -276,18 +290,14 @@ export function buildProfileSession(state: WorkspaceState, snapshot: Pick<Migrat
     instances.set(panel, view ? { id: `view--${base36(random)}`, type: "view", binding: { policy: "pinned", target: { view } } }
       : { id: `${panel}--${base36(random)}`, type: panel });
   }
-  const active = snapshot.layouts.findIndex(layout => layout.active);
-  const name = active >= 0 ? snapshot.layouts[active]!.name : FIRST_TAB_NAME;
-  const origin = active >= 0 ? result.defaults[active] : undefined;
-  const tabValue: LayoutTab = { id: tab, name, ...(origin ? { origin } : {}), dock: rewriteDock(live, panel => instances.get(panel)?.id ?? panel),
-    panels: [...instances.values()] };
-  const graph = workspaceViewGraph(state.preview, state.views);
-  const lookId = snapshot.selected ? result.idMap.looks[snapshot.selected] : undefined;
-  const look = lookId ? { collection: result.collection, look: lookId } : undefined;
+  const tabValue: LayoutTab = { id: tab, name: input.tab, ...(input.origin ? { origin: input.origin } : {}),
+    dock: rewriteDock(live, panel => instances.get(panel)?.id ?? panel), panels: [...instances.values()] };
+  const graph = workspaceViewGraph(state.preview, state.views), look = input.look;
   const scenes: SessionScene[] = graph.scenes.map(scene => scene.kind === "character"
-    ? { ...scene, subject: { kind: "character", id: result.character }, ...(look ? { look } : {}), gen: 0 } : { ...scene, gen: 0 });
+    ? { ...scene, ...(input.character ? { subject: { kind: "character", id: input.character } } : {}), ...(look ? { look } : {}), gen: 0 } : { ...scene, gen: 0 });
   const views: SessionView[] = graph.views.map(view => ({ ...(view as ViewRecord | KeptView), tab }));
-  return { schema: PROFILE_SESSION_SCHEMA, tabs: [tabValue], views: { ...graph, views, scenes }, focus: { views: { [graph.focused]: 1 } }, closed: [], seq: 1 };
+  return { schema: PROFILE_SESSION_SCHEMA, tabs: [tabValue], views: { ...graph, views, scenes },
+    focus: { views: { [graph.focused]: 1 }, ...(look ? { editing: lookScope(look) } : {}) }, closed: [], seq: 1 };
 }
 /** The workspace's `profiles` holding one session. */
 export const workspaceProfiles = (profile: string, session: ProfileSessionData): WorkspaceProfiles =>

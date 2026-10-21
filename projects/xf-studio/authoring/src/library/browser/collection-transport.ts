@@ -1,6 +1,6 @@
 import { CollectionServiceError, type CollectionTransport } from "../collection-service";
 import { PackageRequestError, requestPackage, requestPackageProgress } from "../../legacy/eye-makeup/export/package-action";
-import type { CollectionSummary, StoredCollection } from "../collection-session";
+import type { CollectionSummary, StoredCollection } from "../collection-actions";
 import type { CollectionVersionsPort, SavedVersion } from "../collection-owner";
 import { formatFence, WORKSPACE_FENCE_HEADER, type WorkspaceFence } from "../../platform/api/document-store";
 
@@ -20,7 +20,6 @@ export function collectionTransport(endpoint: string): CollectionTransport {
   return {
     list: () => api<CollectionSummary[]>(),
     get: id => api<StoredCollection>(`/${encodeURIComponent(id)}`),
-    save: (collection, revision) => api<StoredCollection>("", { collection, revision }),
     package: async (action, collection) => {
       try { return await requestPackage(action, collection); }
       catch (error) {

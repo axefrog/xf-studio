@@ -2,7 +2,7 @@ import type { DesktopAppActions } from "../setup/desktop-app";
 import type { UpdateCheckActions } from "../setup/update-check-actions";
 import { CollectionApplication } from "../library/collection-application";
 import type { AuthoringPreviewCoordinator } from "../legacy/eye-makeup/preview/authoring-preview-coordinator";
-import type { CollectionTransport } from "../library/collection-service";
+import type { CollectionServiceDeps } from "../library/collection-service";
 import type { SavedAppearanceState } from "../character/saved-appearance-actions";
 import type { SavedV } from "../saves/save-reader";
 import { StudioFileOperations, type StudioFilePort } from "./studio-file-operations";
@@ -11,7 +11,6 @@ import type { PresentationStatusSource } from "./presentation-status";
 import type { createTrustedAuthoringCore } from "./trusted-authoring-core";
 import type { UIPreferenceActions } from "./ui-preferences";
 import type { ViewportAttachment } from "./viewport-attachment";
-import type { WorkspaceState } from "./workspace/workspace-state";
 import { buildToolsChecking, type LocalSetupActions } from "../setup/local-setup-actions";
 import type { InstallDetectionActions } from "../installation/install-detection-actions";
 import type { ModInstallActions } from "../installation/mod-install-actions";
@@ -23,14 +22,16 @@ type Core = ReturnType<typeof createTrustedAuthoringCore>;
 
 /** Compose trusted services before mounting any presentation. No page control IDs are read here. */
 export function createTrustedStudioBootstrap<Slot>(options: {
-  workspace: WorkspaceState;
   core: Core;
   preferences: UIPreferenceActions;
   viewport: ViewportAttachment<Slot>;
   previewReadiness: Pick<AuthoringPreviewCoordinator, "readiness" | "subscribe">;
   fileDevice: StudioFilePort;
-  transport: CollectionTransport;
-  onEditorRestored(): void;
+  /**
+   * The collection service's owners and ports (profiles design §7): the collection owner, the scene whose look it works on, the released
+   * library and package routes, and the look editor's write.
+   */
+  collections: Omit<CollectionServiceDeps, "readRecipe" | "model">;
   /** Optional device status (autosave, asset diagnostics) exposed read-only to the view. */
   status?: Pick<PresentationStatusSource, "snapshot" | "subscribe">;
   localSetup?: LocalSetupActions;
@@ -65,7 +66,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     unavailableReason?(): string | undefined;
   };
 }) {
-  const { workspace, core } = options;
+  const { core } = options;
   let collection: CollectionApplication;
   const files = new StudioFileOperations(options.fileDevice, {
     recipe: () => core.presentation.recipe(), selectedLayer: () => core.presentation.layer(),
@@ -98,8 +99,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
       return setup.view.readiness.build.ready ? "ready" : buildToolsChecking(setup.view) ? "checking" : "needs-setup";
     }),
   });
-  collection = new CollectionApplication(core.documents, workspace.collections, workspace.library,
-    core.document, options.onEditorRestored, options.transport, core.app, files);
+  collection = new CollectionApplication({ ...options.collections, model: core.documents }, core.document, core.app, files);
   const port = createStudioPresentation({ authoring: core.app, library: collection,
     files, viewport: options.viewport, preferences: options.preferences,
     previewReadiness: options.previewReadiness, editor: core.presentation, status: options.status,
