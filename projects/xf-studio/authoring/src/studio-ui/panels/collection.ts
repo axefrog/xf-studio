@@ -10,6 +10,7 @@ import { icon } from "../icons";
 import { ItemList } from "../item-list";
 import { progressBar } from "../components/progress";
 import { RecordList, recordTime } from "../components/record-list";
+import { ConflictNotice, type ConflictKeep } from "../components/conflict-notice";
 import { modLine } from "../components/mod-line";
 import { menuCapability, menuFromSections, openMenu, openValuePopover, type MenuAnchor, type MenuItem } from "../menu";
 import type { PackageProductSummary as ProductSummary } from "../../library/collection-actions";
@@ -129,9 +130,14 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
     button({ label: "Retry", icon: "refresh", onClick: () => void rt.request({ kind: "initialize" }) }));
   const empty = emptyState("No presets yet", "A preset is one complete look — one choice in the in-game selector.",
     button({ label: "Add preset", icon: "plus", variant: "primary", onClick: () => rt.dispatch({ kind: "preset.edit", command: { kind: "add" } }) }));
+  // Changed in another window (t-conflict): one notice per conflict on the collection or a preset, under its name, while it waits.
+  const conflicts = h("div", { class: "stack-s doc-conflicts" });
+  let conflictsKey = "";
+  const notices = new Map<string, ConflictNotice>();
   const element = h("div", { class: "panel-content" },
     // The library chip is the header's alone (one place per state, release-readiness-audit.md C-18).
     h("div", { class: "panel-head" }, h("label", { class: "eyebrow", text: "Collection" }), h("div", { class: "row" }, nameInput, collectionMore)),
+    conflicts,
     h("div", { class: "list-head" }, h("span", { class: "control-line" }, h("span", { class: "eyebrow" }, "Presets ", count),
       helpTip("presets", "Each preset becomes one choice in the game's single eye-makeup selector, alongside Off.")), addButton),
     failed, empty, list.element,
@@ -142,6 +148,23 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
     update(frame) {
       const library = frame.library, draft = library.draft, busy = library.busy;
       if (draft) setValue(nameInput, draft.name);
+      const waiting = draft?.conflicts ?? [];
+      const key = JSON.stringify([waiting, busy]);
+      if (key !== conflictsKey) {
+        conflictsKey = key;
+        for (const id of [...notices.keys()]) if (!waiting.some(item => item.id === id)) notices.delete(id);
+        conflicts.replaceChildren(...waiting.map(item => {
+          let notice = notices.get(item.id);
+          if (!notice) {
+            const request = (keep: ConflictKeep) => ({ kind: "resolveConflict" as const, conflict: item.id, keep });
+            notices.set(item.id, notice = new ConflictNotice({ onResolve: keep => void rt.request(request(keep)),
+              capability: keep => port.authoring.requestCapability(request(keep)) }));
+          }
+          notice.update(item);
+          return notice.element;
+        }));
+        conflicts.hidden = !waiting.length;
+      }
       nameInput.disabled = busy || !draft;
       const presets = draft?.presets ?? [];
       setText(count, String(presets.length));

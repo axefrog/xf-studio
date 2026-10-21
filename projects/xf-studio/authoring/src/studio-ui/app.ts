@@ -479,7 +479,7 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
   const redo = button({ label: "Redo", icon: "redo", iconOnly: true, variant: "ghost", title: `Redo (${keys.redo})`, onClick: () => rt.dispatch({ kind: "history.redo" }) });
   const historyButton = button({ label: "History", icon: "history", iconOnly: true, variant: "ghost", title: `History: every recent change to this preset\n${HISTORY_SCOPE}`,
     onClick: () => rt.dock.reveal("history") });
-  const save = button({ label: "Save", icon: "save", title: `Save version (${keys.save})`, onClick: () => void rt.request({ kind: "save" }) });
+  const save = button({ label: "Save version", icon: "save", title: `Save version (${keys.save})`, onClick: () => void rt.request({ kind: "save" }) });
   const pkg = button({ label: "Package", icon: "package", variant: "quiet", title: "Open mod package review", onClick: () => rt.dock.reveal("package") });
   const palette = button({ label: "Commands", icon: "command", variant: "ghost", title: `Command palette (${keys.palette})`, onClick: () => {} });
   const helpButton = button({ label: "Help", icon: "help", iconOnly: true, variant: "ghost", title: `Help: tours, answers and shortcuts (${shortcutLabel("shell.help")})`, onClick: openHelp });

@@ -29,10 +29,12 @@ import { packageBuildStageLine } from "../legacy/eye-makeup/export/package-actio
 import { hostClock, type Clock } from "../platform/core/clock";
 import { collectionProducts, copyPackagePlan, editPackagePlan, packagePlanEditIssue, type PlannedProduct } from "../platform/core/package-plan";
 import { emptyMemory, NEWER_LOOKS_LIBRARY_MESSAGE, newPresetName, starterLook, withLiveMemory, withLivePart, type DocumentModel } from "../app/workspace/collection-workspace";
-import { type CollectionAction, type CodedCapability, type CollectionDraftSummary, packagePlanEdit, type PackageProductSummary, type ReadonlyDeep,
+import { type CollectionAction, type CodedCapability, type CollectionConflict, CONFLICT_FIRST, type CollectionDraftSummary, packagePlanEdit, type PackageProductSummary, type ReadonlyDeep,
   type CollectionSummary, type StoredCollection, PACKAGE_PLAN_KINDS, type PackagePlanAction } from "./collection-actions";
 import { type CollectionView, type CollectionOwner, type LookInput, MAX_LOOKS_AT_CREATE } from "./collection-owner";
-import { type LookRef, sameLook } from "./collection-documents";
+import { COLLECTION_WORKING, collectionRef, collectionWorkingOf, LOOK_WORKING, lookRef, lookWorkingOf, type LookRef, sameLook } from "./collection-documents";
+import { documentKey } from "../platform/api/document-commands";
+import type { OutboxEntry } from "../platform/core/document-outbox";
 
 /** The plain reasons a collection has nothing to put in a mod because of looks made with a newer version (PIPE-44). */
 export const EVERY_LOOK_NEWER_MESSAGE = "Every look in this collection was made with a newer version of XF Studio, so this version " +
@@ -49,7 +51,9 @@ export type CollectionRequest =
   | { kind: "exportCollection"; draft?: string }
   | { kind: "open"; id: string }
   | { kind: "import"; text: string; bytes: number }
-  | { kind: "package"; action: PackageAction };
+  | { kind: "package"; action: PackageAction }
+  /** Keep mine, Use theirs or Keep both for a conflict on this collection or one of its presets (style guide t-conflict). */
+  | { kind: "resolveConflict"; conflict: string; keep: "mine" | "theirs" | "both" };
 export type CollectionResult =
   | { kind: "list"; summaries: CollectionSummary[] }
   | { kind: "opened"; collection: StoredCollection }
@@ -57,7 +61,8 @@ export type CollectionResult =
   | { kind: "export"; name: string; json: string }
   | { kind: "imported" }
   | { kind: "packageCheck"; result: PackageCheckResult }
-  | { kind: "packageBuild"; result: PackageBuildResult };
+  | { kind: "packageBuild"; result: PackageBuildResult }
+  | { kind: "resolved" };
 export type CollectionProgress = { phase: "working" | "success" | "error"; code: string; message: string;
   /** How far the work has got (0–1), while it can say (a Build's stage, PIPE-131); absent while it can't. */
   fraction?: number;
@@ -238,7 +243,19 @@ export class CollectionService {
       presets: collection.presets.map(look => ({ id: look.id, name: look.name, revision: look.revision,
         layers: Number(this.deps.model.parts.summary(look, live)?.layers ?? 0), ...(look.locked ? { locked: true as const } : {}) })),
       removed, ...(previousView ? { previous: { id: previousView.id, name: previousView.name, ...(previousView.saved ? { revision: previousView.saved.revision } : {}) } } : {}),
-      recovery };
+      recovery, conflicts: this.conflictsOf(view.id) };
+  }
+  /** The conflicts on a collection or any of its presets (listed or removed), oldest first, as the Presets panel shows them. */
+  private conflictEntries(id: string): readonly OutboxEntry[] {
+    const view = this.deps.owner.collection(id);
+    if (!view) return [];
+    const keys = new Set([documentKey(collectionRef(id)), ...[...view.looks, ...view.removed.map(item => item.look)]
+      .map(look => documentKey(lookRef({ collection: id, look })))]);
+    return this.deps.owner.conflicts().filter(entry => entry.writes.some(write => keys.has(documentKey(write))));
+  }
+  private conflictsOf(id: string): CollectionConflict[] {
+    return this.conflictEntries(id).map(entry => ({ id: entry.id, message: conflictMessage(entry),
+      keepBoth: entry.writes.some(write => write.kind === LOOK_WORKING && lookWorkingOf(write.value)?.state === "live") }));
   }
   /** The library's other working copies never saved as a version, newest first. */
   private recent(except: string): readonly CollectionView[] {
@@ -363,6 +380,15 @@ export class CollectionService {
     // A look this build can't read is kept exactly as it came; the library's named versions never take it.
     if ((request.kind === "save" || request.kind === "saveCopy") && collection.presets.some(look => look.locked))
       return refusal("unavailable", NEWER_LOOKS_LIBRARY_MESSAGE);
+    if (request.kind === "resolveConflict") {
+      const conflict = this.conflictsOf(collection.id).find(item => item.id === request.conflict);
+      if (!conflict) return refusal("missing_target", "That was already resolved.");
+      if (!["mine", "theirs", "both"].includes(request.keep)) return refusal("invalid_value", "Choose Keep mine, Use theirs or Keep both.");
+      return request.keep === "both" && !conflict.keepBoth ? refusal("unavailable", "Only a preset can be kept as a copy; choose Keep mine or Use theirs.") : { available: true };
+    }
+    // A conflict waits on this collection or a preset: the person chooses first (the Presets panel shows how).
+    if (["save", "saveCopy", "exportCollection", "exportPlan", "package"].includes(request.kind) && this.conflictEntries(collection.id).length)
+      return refusal("stale", CONFLICT_FIRST);
     if ((request.kind === "exportCollection" || request.kind === "exportPlan" || request.kind === "package") && !collection.presets.length)
       return refusal("invalid_value", COLLECTION_MESSAGE);
     const issue = this.packagePlanIssue(collection);
@@ -680,6 +706,17 @@ export class CollectionService {
           result = { kind: "opened", collection: stored };
           message = `Opened “${stored.collection.name}”. Undo open shows the collection you had open.`; break;
         }
+        case "resolveConflict": {
+          // What waits in the editor joins this window's version first: Keep mine keeps it, Use theirs lets it go with the rest.
+          this.deps.flushLook?.();
+          const answer = await this.deps.owner.resolve(request.conflict, request.keep);
+          if (!answer.available) throw new CollectionServiceError(answer.code ?? "unavailable", answer.reason ?? "That couldn't be resolved right now.");
+          this.ensureShown();
+          result = { kind: "resolved" };
+          message = request.keep === "mine" ? "Kept this window's version." : request.keep === "theirs" ? "Showing the other window's version."
+            : "Kept this window's version as a copy, beside the other window's.";
+          break;
+        }
         case "save": case "saveCopy": {
           const view = this.shown()!;
           let stored: StoredCollection;
@@ -838,3 +875,30 @@ function liveParts(look: Readonly<Look>, recipe: Recipe, model: DocumentModel, o
 
 export { PACKAGE_PLAN_KINDS };
 export type { KeptPackagePlan };
+
+/** What a conflict is about and what differs, in a sentence ending with the question (style guide t-conflict). */
+export function conflictMessage(entry: OutboxEntry): string {
+  const theirsOf = (write: { kind: string; id: string }) => entry.current?.[documentKey(write)]?.value;
+  const look = entry.writes.find(write => write.kind === LOOK_WORKING), collection = entry.writes.find(write => write.kind === COLLECTION_WORKING);
+  const differs: string[] = [];
+  let what: string;
+  if (collection && (!look || entry.writes.length > 2)) {
+    const mine = collectionWorkingOf(collection.value), theirs = collectionWorkingOf(theirsOf(collection));
+    what = `the collection “${mine?.name ?? "Collection"}”`;
+    if (mine && theirs) {
+      if (mine.name !== theirs.name) differs.push("its name");
+      const listed = (doc: typeof mine) => [...doc.looks].sort().join("\n");
+      if (listed(mine) !== listed(theirs)) differs.push("which presets it lists");
+      else if (mine.looks.join("\n") !== theirs.looks.join("\n")) differs.push("the order of its presets");
+    } else if (!theirs) differs.push("the other window removed it");
+  } else {
+    const mine = lookWorkingOf(look?.value), theirs = look ? lookWorkingOf(theirsOf(look)) : null;
+    what = `the preset “${mine?.name ?? theirs?.name ?? "Preset"}”`;
+    if (mine && theirs) {
+      if (mine.name !== theirs.name) differs.push(`its name (“${theirs.name}” there)`);
+      if (JSON.stringify(mine.parts) !== JSON.stringify(theirs.parts)) differs.push("its makeup");
+      if (mine.state !== theirs.state) differs.push(theirs.state === "removed" ? "the other window removed it" : "the other window restored it");
+    } else if (!theirs) differs.push("the other window deleted it");
+  }
+  return `You changed ${what} here too${differs.length ? ` (${differs.join(", ")})` : ""}. Which version should it keep?`;
+}

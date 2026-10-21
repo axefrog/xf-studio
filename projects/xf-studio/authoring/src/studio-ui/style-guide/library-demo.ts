@@ -1,5 +1,5 @@
 /** Live specimens for the style guide's Component library section: each is the production component, wired to sample state. */
-import { badge, blockSection, button, setButtonLabel, setButtonVariant, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
+import { badge, blockSection, button, ConflictNotice, setButtonLabel, setButtonVariant, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
   PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, Splitter, stack, TabStrip,
   Toggle, ColorField, applyCapability, openMenu, openValuePopover, openConfirmPopover, TreeView, favouriteToggle, FolderSetting, BipolarSlider, ScrubSlider, ChoiceList, choiceItem, attachSwatchCard, contrastMark, setContrastMark,
   sampleBackground, LightList, DirectionDial, SizeBar, previewTile, previewStage, ScrollMemory, VIEW_KEY, stageTag, RecordList, recordTime, modLine, type LightListItem, type TabItem, type TreeNodeData } from "../components";
@@ -303,6 +303,12 @@ const MOUNTS: Record<string, Mount> = {
       modLine({ name: `${EYE_MAKEUP_MOD.modName} Night Market`, kind: "Eye makeup", action: more(`${EYE_MAKEUP_MOD.modName} Night Market`) }));
     return stack({ gap: "normal" }, h("ul", { class: "result-list package-mods", "aria-label": "Mods this collection builds" },
       modLine({ name: EYE_MAKEUP_MOD.modName, kind: "Eye makeup", action: more(EYE_MAKEUP_MOD.modName) })), narrow);
+  },
+  "lib-conflict-notice": () => {
+    const preset = new ConflictNotice({ onResolve: () => {} }), collection = new ConflictNotice({ onResolve: () => {} });
+    preset.update({ message: "You changed the preset “Smoky” here too (its makeup). Which version should it keep?", keepBoth: true });
+    collection.update({ message: "You changed the collection “Night market set” here too (the order of its presets). Which version should it keep?", keepBoth: false });
+    return stack({ gap: "normal" }, preset.element, collection.element);
   },
   "lib-record-list": () => {
     const saved = new RecordList({ label: "Saved collections" });

@@ -182,6 +182,8 @@ export const REQUEST_DESCRIPTORS = {
   exportPlan: request("collection", "download"),
   import: request("file", "import", { text: input("string"), bytes: input("integer", 0, 16_000_000) }),
   package: request("collection", "package", { action: enumerated(["check", "build"]) }),
+  // Keep mine, Use theirs or Keep both for a conflict on this collection or one of its presets (style guide t-conflict).
+  resolveConflict: request("collection", "save", { conflict: target("string"), keep: enumerated(["mine", "theirs", "both"]) }),
 } satisfies Record<CollectionRequest["kind"], RequestDescriptor>;
 
 /** Read-only host detection. Results are private host metadata (absolute paths) for a setup view to

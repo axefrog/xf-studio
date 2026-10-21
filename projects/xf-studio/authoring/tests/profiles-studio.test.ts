@@ -9,6 +9,7 @@ import { initialRecipe } from "./fixtures/eye-region";
 import { lookRef } from "../src/library/collection-documents";
 import { lookScope } from "../src/platform/core/history-service";
 import { NOTHING_TO_UNDO } from "../src/app/studio-application";
+import { CONFLICT_FIRST } from "../src/library/collection-actions";
 
 const layerId = (studio: ProfileStudio, index = 0) => studio.document.recipe.layers[index]!.id;
 const dispatch = (studio: ProfileStudio, action: Parameters<ProfileStudio["app"]["dispatch"]>[0]) => {
@@ -114,6 +115,82 @@ describe("another window's change to the shown look", () => {
     expect(mine.parts["eye-makeup"]!.body.layers[0]!.opacity).toBe(0.23);
     expect(theirs.parts["eye-makeup"]!.body.layers[0]!.opacity).toBe(0.78);
     expect(a.owner.look(ref)!.conflict).not.toBeNull();
+  });
+});
+
+describe("conflicts on presets and collections", () => {
+  /** Two windows on one library, each having changed the shown look before the other's change reached it: a conflict in `a`. */
+  async function lookConflict() {
+    const a = await profileStudio({ looks: [{ name: "Smoky", recipe: initialRecipe() }] });
+    await a.collection.initialize(); await a.settle();
+    const ref = a.scene.look()!;
+    const b = await profileStudio({ library: a.library, show: ref });
+    dispatch(a, { kind: "layer.setOpacity", layerId: layerId(a), opacity: 0.23 });
+    dispatch(b, { kind: "layer.setOpacity", layerId: layerId(b), opacity: 0.78 });
+    await b.settle();
+    await a.outbox.check(); await a.outbox.settle();
+    return { a, b, ref };
+  }
+  const opacityIn = (studio: ProfileStudio, ref: { collection: string; look: string }) =>
+    (studio.owner.look(ref)!.parts as { "eye-makeup": { body: { layers: { opacity: number }[] } } })["eye-makeup"].body.layers[0]!.opacity;
+
+  test("the Presets panel's summary says what differs; Save version, Check, Build and export wait with the reason", async () => {
+    const { a } = await lookConflict();
+    const [conflict] = a.collection.summary().draft!.conflicts;
+    expect(conflict).toMatchObject({ message: "You changed the preset “Smoky” here too (its makeup). Which version should it keep?", keepBoth: true });
+    for (const request of [{ kind: "save" }, { kind: "saveCopy" }, { kind: "exportCollection" }, { kind: "package", action: "check" }, { kind: "package", action: "build" }] as const)
+      expect(a.collection.service.capability(request)).toMatchObject({ available: false, reason: CONFLICT_FIRST });
+    expect(a.collection.service.capability({ kind: "resolveConflict", conflict: "nope", keep: "mine" })).toMatchObject({ available: false, code: "missing_target" });
+  });
+
+  test("Keep mine writes this window's version; Use theirs shows the other's; Keep both keeps mine as a copy beside theirs", async () => {
+    {
+      const { a, ref } = await lookConflict();
+      const id = a.collection.summary().draft!.conflicts[0]!.id;
+      expect(await a.collection.execute({ kind: "resolveConflict", conflict: id, keep: "mine" })).toMatchObject({ ok: true });
+      await a.settle();
+      expect(a.collection.summary().draft!.conflicts).toEqual([]);
+      expect(a.document.recipe.layers[0]!.opacity).toBe(0.23);
+      expect(opacityIn(a, ref)).toBe(0.23);
+      expect(a.collection.service.capability({ kind: "save" })).toMatchObject({ available: true });
+    }
+    {
+      const { a, ref } = await lookConflict();
+      const id = a.collection.summary().draft!.conflicts[0]!.id;
+      expect(await a.collection.execute({ kind: "resolveConflict", conflict: id, keep: "theirs" })).toMatchObject({ ok: true });
+      await a.settle();
+      expect(a.collection.summary().draft!.conflicts).toEqual([]);
+      expect(a.document.recipe.layers[0]!.opacity).toBe(0.78);
+      expect(opacityIn(a, ref)).toBe(0.78);
+    }
+    {
+      const { a, ref } = await lookConflict();
+      const id = a.collection.summary().draft!.conflicts[0]!.id;
+      expect(await a.collection.execute({ kind: "resolveConflict", conflict: id, keep: "both" })).toMatchObject({ ok: true });
+      await a.settle();
+      const presets = a.collection.summary().draft!.presets;
+      expect(presets).toHaveLength(2);
+      expect(opacityIn(a, ref)).toBe(0.78);
+      const copy = presets.find(preset => preset.id !== ref.look)!;
+      expect(opacityIn(a, { collection: ref.collection, look: copy.id })).toBe(0.23);
+    }
+  });
+
+  test("a conflict on the collection itself (its name) offers Keep mine and Use theirs only", async () => {
+    const a = await profileStudio({ looks: [{ name: "Smoky", recipe: initialRecipe() }] });
+    await a.collection.initialize(); await a.settle();
+    const b = await profileStudio({ library: a.library, show: a.scene.look() });
+    dispatch(a, { kind: "collection.rename", name: "Mine" });
+    dispatch(b, { kind: "collection.rename", name: "Theirs" });
+    await b.settle();
+    await a.outbox.settle();
+    const [conflict] = a.collection.summary().draft!.conflicts;
+    expect(conflict).toMatchObject({ keepBoth: false });
+    expect(conflict!.message).toContain("its name");
+    expect(a.collection.service.capability({ kind: "resolveConflict", conflict: conflict!.id, keep: "both" })).toMatchObject({ available: false });
+    expect(await a.collection.execute({ kind: "resolveConflict", conflict: conflict!.id, keep: "theirs" })).toMatchObject({ ok: true });
+    await a.settle();
+    expect(a.collection.summary().draft).toMatchObject({ name: "Theirs", conflicts: [] });
   });
 });
 

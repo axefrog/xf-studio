@@ -69,6 +69,14 @@ export type CollectionDraftSummary = {
   recovery: { id: string; name: string; revision?: number; presets: number; locked?: true;
     /** How it stands against the library: never saved, the same as its saved version, edited since it, or unknown (not loaded). */
     saved: "never" | "same" | "edited" | "unknown" }[];
+  /**
+   * Changes made here and in another window to this collection or its presets (style guide t-conflict), oldest first: what it is, what
+   * differs, and whether Keep both can keep this window's version as a copy (a preset can be copied; a collection's name or list can't).
+   */
+  conflicts: CollectionConflict[];
 };
+export type CollectionConflict = { id: string; message: string; keepBoth: boolean };
+/** Why a collection with a conflict waiting can't be saved, checked, built or exported yet. */
+export const CONFLICT_FIRST = "This collection or one of its presets was changed in another window too. Choose which version to keep first, in the Presets panel.";
 export type ReadonlyDeep<T> = T extends (infer U)[] ? readonly ReadonlyDeep<U>[] :
   T extends object ? { readonly [K in keyof T]: ReadonlyDeep<T[K]> } : T;

@@ -41,7 +41,7 @@ import { applyCapability, button, setButtonLabel, note, section, Segmented, Sele
 import type { ChoiceLayout, ChoiceSize } from "../../app/ui-preferences";
 import { h, isTextInput, setAttr, setText, setUnavailable, uid } from "../dom";
 import { ExpandAll, expander, expanderLabel, isExpanded, setExpanded } from "../expander";
-import { ChoiceList, propertyList, SearchField } from "../components";
+import { ChoiceList, ConflictNotice, propertyList, SearchField } from "../components";
 import { helpTip, setHelp } from "../help-tip";
 import type { Command } from "../commands";
 import { allSections, CHARACTER_CONTRIBUTIONS, characterPanelTree, type CharacterPanelGroup, type CharacterPanelSection, type CharacterSectionContribution,
@@ -157,14 +157,9 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   detailsToggle.setAttribute("aria-expanded", "false"); detailsToggle.setAttribute("aria-controls", "cc-messages");
   const status = h("div", { class: "cc-status" }, statusText, retry, setupWolvenKit.element, keep, detailsToggle);
   // Changed in another window (t-conflict): first in "Your V" while a conflict waits, with the three ways out.
-  const resolve = (keep: "mine" | "theirs" | "both") => () => dispatch({ kind: "character.resolveConflict", keep });
-  const keepMine = button({ label: "Keep mine", small: true, title: "Save this window's version over the other window's", onClick: resolve("mine") });
-  const useTheirs = button({ label: "Use theirs", small: true, title: "Show the other window's version here; this window's changes go", onClick: resolve("theirs") });
-  const keepBoth = button({ label: "Keep both", small: true, title: "Keep this window's version as a copy, and show the other window's here", onClick: resolve("both") });
-  const conflictText = h("span", {});
-  const conflict = h("div", { class: "state-line warning doc-conflict", role: "group", "aria-label": "Changed in another window", "aria-live": "polite", hidden: true },
-    h("p", { class: "doc-conflict-text" }, h("strong", {}, "Changed in another window."), " ", conflictText),
-    h("div", { class: "row wrap gap-s" }, keepMine, useTheirs, keepBoth));
+  const conflictNotice = new ConflictNotice({ onResolve: keep => dispatch({ kind: "character.resolveConflict", keep }),
+    capability: keep => port.authoring.capability({ kind: "character.resolveConflict", keep }) });
+  const conflict = conflictNotice.element;
   const messages = h("div", { class: "cc-messages", id: "cc-messages", hidden: true });
   let showMessages = false;
   // The library's search field (icon, clear button, Escape clears; the same as Poses): the panel filters on its pause, and each paint
@@ -776,11 +771,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
         messages.replaceChildren(...lines.map(text => note(text, "warning")));
       }
       // A conflict on this V (t-conflict): the notice and its three ways out, while it waits.
-      conflict.hidden = !context?.conflict;
-      setText(conflictText, context?.conflict?.message ?? "");
-      keepBoth.hidden = !context?.conflict?.keepBoth;
-      for (const [control, keep] of [[keepMine, "mine"], [useTheirs, "theirs"], [keepBoth, "both"]] as const)
-        applyCapability(control, port.authoring.capability({ kind: "character.resolveConflict", keep }));
+      conflictNotice.update(context?.conflict ?? null);
       // The one status line: what is on its way, what failed (with Try again), else the first of the Details lines, else that the V was
       // just replaced by another window's version (its Undo starts there).
       const line = !context ? "" : context.phase === "preparing" ? context.message || "Reading your game's character-creator options…"
