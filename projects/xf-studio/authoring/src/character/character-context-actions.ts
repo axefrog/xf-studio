@@ -136,6 +136,10 @@ export type CharacterDocumentPort = {
   resolve(keep: "mine" | "theirs" | "both"): Capability;
   /** Why the V can't take changes now (a change from the last session is still being restored, style guide t-recovering), or null. */
   restoring?(): string | null;
+  /** Whether a save being loaded is the very one the V comes from and can't show yet: loading it then only imports it (`importSave`). */
+  namesSave?(value: unknown): boolean;
+  /** Import that save (an immutable put, taken while restoring); the context is brought up to the V's document with it. */
+  importSave?(value: unknown): void;
 };
 /** Actions that change the V (refused while a change from the last session is still being restored). */
 const CHANGES = new Set<CharacterContextAction["kind"]>(["character.setSource", "character.setOption", "character.setOptions", "character.setOwnMakeup",
@@ -814,6 +818,8 @@ export class CharacterContextActions {
   }
 
   capability(action: CharacterContextAction): Capability {
+    // Loading the very save the V comes from, while it can't be shown, only imports it: taken even while the V is being restored.
+    if (this.importsOwnSave(action)) return { available: true };
     const restoring = CHANGES.has(action.kind) ? this.ports.document?.restoring?.() ?? null : null;
     if (restoring) return refusal("not_ready", restoring);
     switch (action.kind) {
@@ -909,6 +915,11 @@ export class CharacterContextActions {
   }
 
   /** Whether `value` is the save the V already comes from. */
+  private importsOwnSave(action: CharacterContextAction): boolean {
+    const value = action.kind === "character.loadSave" ? action.value
+      : action.kind === "character.setSource" && (action.source as { kind?: string } | null)?.kind === "save" ? (action.source as { value: unknown }).value : undefined;
+    return value !== undefined && !!this.ports.document?.namesSave?.(value);
+  }
   private sameSave(value: unknown): boolean {
     return this.state.origin.kind === "save" && !!this.state.save && saveKey(this.state.save.value) === saveKey(value as SavedV);
   }
@@ -916,6 +927,10 @@ export class CharacterContextActions {
   dispatch(action: CharacterContextAction): Record<string, never> {
     const allowed = this.capability(action);
     if (!allowed.available) throw Error(allowed.reason);
+    if (this.importsOwnSave(action)) {
+      this.ports.document!.importSave!(action.kind === "character.loadSave" ? action.value : (action as { source: { value: unknown } }).source.value);
+      return {};
+    }
     if (action.kind === "character.resolveConflict") {
       const done = this.ports.document!.resolve(action.keep);
       if (!done.available) throw Error(done.reason);

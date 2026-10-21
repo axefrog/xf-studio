@@ -25,9 +25,9 @@ export function browserDocuments(prefix: string, send: (url: string, init?: Requ
       if (!response.ok) throw await failure(response);
       return (await response.json() as { documents: StoredDocument<T>[] }).documents;
     },
-    async transact(request) {
+    async transact(request, signal) {
       const lease = fence?.();
-      const answer = await post<TransactAnswer & { code?: string }>("transact", request, undefined,
+      const answer = await post<TransactAnswer & { code?: string }>("transact", request, signal,
         lease ? { [WORKSPACE_FENCE_HEADER]: formatFence(lease) } : {});
       if (answer.status === 409) {
         if (answer.body.code === "superseded") return { ok: false, reason: "superseded" };

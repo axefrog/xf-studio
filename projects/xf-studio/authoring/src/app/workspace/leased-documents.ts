@@ -16,10 +16,10 @@ export function leasedDocuments(inner: DocumentStorePort, lease: { draining(): b
     list: (kind, signal) => inner.list(kind, signal),
     revisions: (refs, signal) => inner.revisions(refs, signal),
     read: (refs, signal) => inner.read(refs, signal),
-    transact(request) {
+    transact(request, signal) {
       if (!lease.draining()) return Promise.resolve({ ok: false, reason: "superseded" });
       inFlight++;
-      return inner.transact(request).finally(() => { inFlight--; });
+      return inner.transact(request, signal).finally(() => { inFlight--; });
     },
     pending: () => inFlight,
   };

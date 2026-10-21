@@ -52,7 +52,7 @@ describe("transact: one transaction, idempotent by command ID (§2.1)", () => {
     const { store } = storeDocuments();
     const request = { id: "a", command: "x", writes: [{ ...LOOK, base: 0, value: { n: 1 } }] };
     expect(store.transact(request)).toEqual({ ok: true, revisions: { [documentKey(LOOK)]: 1 } });
-    expect(store.transact(request)).toEqual({ ok: true, revisions: { [documentKey(LOOK)]: 1 }, replayed: "receipt" });
+    expect(store.transact(request)).toEqual({ ok: true, revisions: { [documentKey(LOOK)]: 1 }, replayed: "receipt", committed: { [documentKey(LOOK)]: { n: 1 } } });
     expect(store.get(LOOK.kind, LOOK.id)!.revision).toBe(1);
     // A later command forgets it: the replay is now answered by the equal-value rule while the value is still exactly the replayed one.
     store.transact({ id: "b", command: "y", writes: [{ ...COLLECTION, base: 0, value: 1 }], forget: ["a"] });

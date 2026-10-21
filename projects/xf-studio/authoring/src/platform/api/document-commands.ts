@@ -59,7 +59,12 @@ export type TransactAnswer =
      * A replay answered from its receipt, from the workspace that wrote it: each written document every later revision of which this
      * same workspace also wrote (its own receipts say so), as it is now. The page builds on these, never against them (§2.2).
      */
-    readonly own?: Readonly<Record<string, { readonly revision: number; readonly value: unknown }>> }
+    readonly own?: Readonly<Record<string, { readonly revision: number; readonly value: unknown }>>;
+    /**
+     * A replay answered from its receipt: each written document still at the revision the command produced, with the value it holds,
+     * which is what the command committed (a stored copy a crash left may be an older version of the same command).
+     */
+    readonly committed?: Readonly<Record<string, unknown>> }
   | { readonly ok: false; readonly reason: "stale"; readonly current: Readonly<Record<string, CurrentDocument>> }
   /** A document the command `requires` isn't in the library (purged): nothing was written; the page puts it again and resends. */
   | { readonly ok: false; readonly reason: "missing"; readonly missing: readonly string[] }

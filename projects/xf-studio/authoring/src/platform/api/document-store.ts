@@ -60,7 +60,7 @@ export interface DocumentStorePort {
   /** Every document of a kind, in the order they were first written; `signal` abandons the read. */
   list<T = unknown>(kind: string, signal?: AbortSignal): Promise<readonly StoredDocument<T>[]>;
   /** One command, in one host transaction, idempotent by its ID (profiles design §2.1). Throws when the host can't be reached. */
-  transact(request: TransactRequest): Promise<TransactAnswer>;
+  transact(request: TransactRequest, signal?: AbortSignal): Promise<TransactAnswer>;
   /** The current revision of each document (0: it doesn't exist), keyed `<kind>/<id>`, in one read (the revision check, §2.2). */
   revisions(refs: readonly DocumentRef[], signal?: AbortSignal): Promise<Readonly<Record<string, number>>>;
   /** Each document as it is now (null: it doesn't exist), keyed `<kind>/<id>`, in one read. */

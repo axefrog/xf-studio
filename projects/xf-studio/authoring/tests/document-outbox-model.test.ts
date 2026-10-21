@@ -41,7 +41,7 @@
  * A failing run prints its mode, seed and step: `XFS_OUTBOX_SEED=<seed> [XFS_OUTBOX_MODE=local|desktop] [XFS_OUTBOX_TRACE=1]` replays it.
  */
 import { expect, test } from "bun:test";
-import { DocumentOutbox, type OutboxEntry, type OutboxOutcome, OutboxRecoveringError } from "../src/platform/core/document-outbox";
+import { ATTEMPT_MS, DocumentOutbox, type OutboxEntry, type OutboxOutcome, OutboxRecoveringError } from "../src/platform/core/document-outbox";
 import { type CurrentDocument, documentKey, type DocumentRef, tombstoneOf, type TransactAnswer, type TransactRequest } from "../src/platform/api/document-commands";
 import type { DocumentStorePort } from "../src/platform/api/document-store";
 import { desktopOutboxStorage } from "../src/app/browser/outbox-storage";
@@ -130,6 +130,9 @@ function sendable(spec: Spec, intent: Intent, inLibrary: (key: string) => boolea
 }
 const settle = (callers: Caller[], outcome: OutboxOutcome) => { for (const caller of callers) caller.expected = outcome; };
 type Own = Readonly<Record<string, { readonly revision: number; readonly value: unknown }>>;
+/** What a receipt's answer says the command committed, as the documents' values at its revisions. */
+const committedOf = (answer: TransactAnswer & { ok: true }): Record<string, CurrentDocument> | undefined => answer.committed
+  ? Object.fromEntries(Object.entries(answer.committed).map(([key, value]) => [key, { revision: answer.revisions[key] ?? 0, value }])) : undefined;
 function acknowledge(spec: Spec, id: string, revisions: Readonly<Record<string, number>>, current?: Readonly<Record<string, CurrentDocument>>, own?: Own) {
   const at = spec.intents.findIndex(intent => intent.id === id), intent = spec.intents[at]!;
   const shown = keysOf(intent).map(key => [key, visible(spec, key)] as const);
@@ -229,7 +232,8 @@ const specSignature = (spec: Spec, keys: readonly string[]) => JSON.stringify({ 
 // ---------------------------------------------------------------------------------------------------------------------
 // One run.
 
-type Sent = { window: string; life: number; request: TransactRequest; resolve(answer: TransactAnswer): void; reject(error: Error): void };
+/** A command as the host receives it; `signal`: its attempt, which the sender may abandon (its deadline, Try again). */
+type Sent = { window: string; life: number; request: TransactRequest; resolve(answer: TransactAnswer): void; reject(error: Error): void; signal?: AbortSignal };
 /** A revision check's read: its answer is taken when the host reads it (`captured`, at the request or later) and arrives later still. */
 type Lookup = { kind: "revisions" | "read"; refs: readonly DocumentRef[]; resolve(value: unknown): void; captured: unknown };
 type HostWrite = { life: number; key: string; text: string | null; resolve(): void; reject(error: Error): void };
@@ -245,6 +249,8 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
   const keys = [...DOCS, MEMBERS, ...BLOBS].map(documentKey);
   const writers = new Map<string, string[]>();
   const queue: Sent[] = [], lookups: Lookup[] = [], hostWrites: HostWrite[] = [], retries: (() => void)[] = [];
+  /** Each attempt's deadline: when one runs, that attempt is abandoned and its command sent again. */
+  const deadlines: (() => void)[] = [];
   const failures: string[] = [], trace: string[] = [];
   let stepNow = 0;
   const fail = (message: string) => { if (failures.length < 3) failures.push(`${mode} seed ${seed}, step ${stepNow}: ${message}` +
@@ -314,11 +320,11 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
     intent.sent = true;
   };
   const transport = (window: string, lifeOf: () => number): DocumentStorePort => ({ ...documents,
-    transact: request => new Promise((resolve, reject) => {
+    transact: (request, signal) => new Promise((resolve, reject) => {
       const mine = lifeOf();
       trace.push(`send ${window}${mine} ${request.id} ${JSON.stringify(request.writes.map(write => [write.id, write.base, write.value]))}`);
       if (window === "A" && mine === life) { if (adopting) deferred.push(structuredClone(request)); else checkSend(request); }
-      queue.push({ window, life: mine, request: structuredClone(request), resolve, reject });
+      queue.push({ window, life: mine, request: structuredClone(request), resolve, reject, ...(signal ? { signal } : {}) });
     }),
     // A revision check's two reads are answered as the library was when the host read them (often at once, so a later change makes the
     // answer stale), and come back whenever the run lets them, in any order.
@@ -365,7 +371,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
     } else storage = desktopOutboxStorage(webviewStorage, "desktop", `launch-${launch}`, Object.fromEntries(host), (key, text) =>
       new Promise<void>((resolve, reject) => { hostWrites.push({ life: mine, key, text, resolve, reject }); }));
     a = new DocumentOutbox(transport("A", () => mine), storage, { immutable, newId: () => `a${mine}-${Math.floor(rng.next() * 1e9).toString(36)}${(++ids).toString(36)}`,
-      schedule: (_ms, task) => { retries.push(task); return { cancel: () => { const at = retries.indexOf(task); if (at >= 0) retries.splice(at, 1); } }; } });
+      schedule: (ms, task) => { const list = ms === ATTEMPT_MS ? deadlines : retries; list.push(task); return { cancel: () => { const at = list.indexOf(task); if (at >= 0) list.splice(at, 1); } }; } });
     for (const key of keys) { const now = library(key); a.hold(refOf(key), now.revision ? now : null); }
     // A check the outbox makes by itself (the host answered again after failing) is a change from elsewhere, as one asked for.
     a.subscribe(event => {
@@ -395,7 +401,12 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
           conflict: null, sent: false, committed: null, bases: Object.fromEntries(event.entry.writes.map(write => [documentKey(write), 0])), callers: [] });
       }
       if (mine !== life || event.kind === "status" || event.kind === "acknowledged" || event.kind === "conflict") return;
-      for (const ref of event.refs) owner.set(documentKey(ref), a.document(ref)?.value);
+      for (const ref of event.refs) {
+        // A dependency (an immutable document a held document names) arriving here, by a put or from the library: the owner hears it
+        // too, so whatever shows the dependent document can show its content before taking an edit.
+        if (immutable(ref.kind) && owner.get(documentKey(ref)) === undefined && a.document(ref)?.value !== undefined) count("dependency arrived");
+        owner.set(documentKey(ref), a.document(ref)?.value);
+      }
     });
   };
   /** The specification after a restart; every intent the restarted page holds has a caller waiting for it again. */
@@ -449,7 +460,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
 
   // Window B: edits the same documents and imports the same immutable documents, resolving its conflicts with Keep mine.
   const b = new DocumentOutbox(transport("B", () => 0), memoryOutboxStorage(), { immutable, newId: () => `b-${Math.floor(rng.next() * 1e9).toString(36)}${(++ids).toString(36)}`,
-    schedule: (_ms, task) => { retries.push(task); return { cancel() {} }; } });
+    schedule: (ms, task) => { (ms === ATTEMPT_MS ? deadlines : retries).push(task); return { cancel() {} }; } });
   for (const ref of [...DOCS, ...BLOBS]) b.hold(ref, null);
   b.open();
   b.subscribe(event => { if (event.kind === "conflict") queueMicrotask(() => { if (b.conflicts().some(item => item.id === event.entry.id)) b.keepMine(event.entry.id); }); });
@@ -473,9 +484,11 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
 
   /** Delivers A's first live send and keeps the specification in step (the end's and the snapshot's drive). */
   const deliverA = (sent: Sent) => {
-    const answer = deliver(sent, "ok");
+    const abandoned = !!sent.signal?.aborted;
+    const answer = deliver(sent, abandoned ? "lose" : "ok");
+    if (abandoned) { if (answer?.ok && spec.intents.some(intent => intent.id === sent.request.id)) lost(spec, sent.request.id, answer.revisions); return; }
     if (spec.intents.some(intent => intent.id === sent.request.id)) {
-      if (answer!.ok) acknowledge(spec, sent.request.id, answer!.revisions, undefined, answer!.own); else if (answer!.reason === "stale") stale(spec, sent.request.id, answer!.current);
+      if (answer!.ok) acknowledge(spec, sent.request.id, answer!.revisions, committedOf(answer!), answer!.own); else if (answer!.reason === "stale") stale(spec, sent.request.id, answer!.current);
     }
   };
   /** Every command ID some window still holds (stored, pending or in flight): their receipts must stay. */
@@ -487,6 +500,13 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
     return ids;
   };
   for (stepNow = 0; stepNow < steps && !failures.length; stepNow++) {
+    if (more.next() < 0.03 && deadlines.length) {
+      // The library takes too long: some attempts' deadlines pass (each is abandoned, and its command sent again under its ID).
+      for (const task of deadlines.splice(0, 1 + more.int(deadlines.length))) task();
+      count("attempt abandoned");
+      await ticks();
+      continue;
+    }
     if (more.next() < 0.03) {
       // The host purges receipts no window can replay any more (as its 7-day purge does): later replays then learn less of their own.
       const keep = held();
@@ -580,7 +600,10 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
       await ticks();
     } else if (roll < 0.66) {
       if (!queue.length) continue;
-      const sent = rng.pick(queue), how = rng.next() < 0.8 ? "ok" : rng.next() < 0.5 ? "lose" : "fail";
+      const sent = rng.pick(queue), chosen = rng.next() < 0.8 ? "ok" : rng.next() < 0.5 ? "lose" : "fail";
+      // An answer to an attempt A abandoned (its deadline passed, or Try again) reaches nobody: for A it is lost.
+      if (sent.signal?.aborted && sent.window === "A") count("answer to an abandoned attempt");
+      const how = sent.signal?.aborted && chosen === "ok" ? "lose" : chosen;
       const live = sent.window === "A" && sent.life === life;
       const before = structuredClone(spec);
       const answer = deliver(sent, how);
@@ -612,7 +635,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
           for (const earlier of reduced.intents.slice(0, at)) if (!earlier.conflict && earlier.committed)
             earlier.writes = earlier.writes.filter(([key]) => !keysOf(reduced.intents[at]!).includes(key));
           if (reduced.intents.every(intent => intent.writes.length)) between.push(reduced);
-          acknowledge(spec, sent.request.id, answer.revisions, undefined, answer.own);
+          acknowledge(spec, sent.request.id, answer.revisions, committedOf(answer), answer.own);
         } else if (answer.reason === "stale") stale(spec, sent.request.id, answer.current);
       }, between);
     } else if (roll < 0.7) {
@@ -796,7 +819,8 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
   // ---- The end: everything delivered, every conflict resolved, every host write landed.
   memory.fail = false;
   for (let round = 0; round < 4000 && !failures.length; round++) {
-    for (const task of retries.splice(0)) task();
+    // Retries only once nothing else is waiting: a resend loop must never starve the answers it waits for.
+    if (!queue.length && !hostWrites.length && !lookups.length) for (const task of retries.splice(0)) task();
     await ticks();
     if (hostWrites.length) { const write = hostWrites.shift()!;
       if (write.life !== life) write.reject(Error("Superseded.")); else { if (write.text === null) host.delete(write.key); else host.set(write.key, write.text); write.resolve(); }
@@ -842,9 +866,10 @@ const RUNS = Number(process.env.XFS_OUTBOX_RUNS ?? 60);
  * acknowledgement's keys bringing back a superseded copy's write (local 982956, desktop 476140); after crashes with host writes pending, a
  * recovered launch ordering its new commands before older ones that came back (desktop 792900) and a conflict overtaken by an own write
  * (desktop 491978); in the second review, an `own` answer for a document a superseded copy no longer writes (local 5132512), and two
- * recovered commands on one document both ready to send (desktop 2986463, 2717217).
+ * recovered commands on one document both ready to send (desktop 2986463, 2717217); in the third, a stored copy older than its command as
+ * sent, replayed by receipt (desktop 2028264, 990875).
  */
-const FIXED = { local: [5979845, 2527161, 4609858, 982956, 5132512], desktop: [1212607, 1719423, 1806532, 365274, 2519242, 476140, 792900, 491978, 2986463, 2717217] };
+const FIXED = { local: [5979845, 2527161, 4609858, 982956, 5132512], desktop: [1212607, 1719423, 1806532, 365274, 2519242, 476140, 792900, 491978, 2986463, 2717217, 2028264, 990875] };
 const STEPS = 400;
 test(`the outbox meets its specification in seeded runs (kills while working and while recovering, late checks, failing storage, two windows)`, async () => {
   const all: string[] = [];
@@ -861,5 +886,5 @@ test(`the outbox meets its specification in seeded runs (kills while working and
     "app restart", "resolve mine", "resolve theirs", "resolve both", "answer stale", "answer receipt", "answer equal", "answer lost", "send failed", "late read",
     "storage failing", "host write landed", "host write failed", "host write fenced", "B imports", "protected document checked", "three-document command",
     "snapshot checked", "read captured earlier", "stale read delivered", "own adopted", "edit refused while recovering", "receipts purged",
-    "app crash with host writes pending"]) expect(seen[name] ?? 0, name).toBeGreaterThan(0);
+    "app crash with host writes pending", "answer to an abandoned attempt", "attempt abandoned", "dependency arrived"]) expect(seen[name] ?? 0, name).toBeGreaterThan(0);
 }, 600_000);

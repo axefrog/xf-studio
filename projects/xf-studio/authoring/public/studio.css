@@ -1312,11 +1312,20 @@ span.category { border-color: transparent; background: transparent; padding-left
 .workspace-notice { container-type: inline-size; }
 /* Restoring changes from the last session (style guide t-recovering) follows the same rules. */
 .workspace-notice.unprotected, .workspace-notice.recovering { height: auto; min-height: calc(var(--control-h-sm) + 2 * var(--sp-2) + 1px); }
+/* Its message keeps room to be read: labelled buttons that don't fit beside it go to a row of their own. */
+.workspace-notice.recovering { flex-wrap: wrap; row-gap: var(--sp-2); padding-block: var(--sp-2); }
+.workspace-notice.recovering .workspace-notice-text { flex: 1 1 14em; }
 @container (max-width: 720px) {
   .workspace-notice.unprotected .workspace-notice-text, .workspace-notice.recovering .workspace-notice-text { white-space: normal; display: -webkit-box;
     -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; padding-block: var(--sp-2); line-height: 1.3; }
   .workspace-notice.unprotected .btn, .workspace-notice.recovering .btn { width: var(--control-h-sm); padding: 0; }
   .workspace-notice.unprotected .btn > span, .workspace-notice.recovering .btn > span { display: none; }
+  /* A destructive action, and one whose icon alone would read as "done", keep their labels at every width (t-recovering). */
+  .workspace-notice.recovering .btn.keep-label { width: auto; padding: 0 var(--sp-4); }
+  .workspace-notice.recovering .btn.keep-label > span { display: inline; }
+  /* Narrow, its message takes a row of its own, whole, and its buttons the row under it. */
+  .workspace-notice.recovering .workspace-notice-text { flex-basis: 100%; -webkit-line-clamp: 4; line-clamp: 4; padding-block: 0; }
+
 }
 /* Changed in another window (style guide t-conflict): first in the owning section, the warning state line holding a lead-in sentence and
    the three ways out on one row of small buttons. */

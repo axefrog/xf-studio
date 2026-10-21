@@ -37,6 +37,7 @@ import { readinessText } from "./readiness-text";
 import { SETTINGS_PANEL, type SettingsSection } from "./settings-sections";
 import { bindViewState, PreferenceViewState } from "./view-state";
 import { flushScrollMemories } from "./scroll-anchor";
+import { MISSING_SAVE, RESTORING, RESTORING_LONG, UNPROTECTED } from "./notice-text";
 
 /**
  * Mount the XF Studio presentation. It receives only the public presentation
@@ -574,16 +575,20 @@ export function workspaceNotice(rt: StudioRuntime) {
       if (!outcome.ok) rt.feedback.toast("warning", "Workspace", outcome.message, [], { code: outcome.code });
     });
   };
-  const keepRestored = button({ label: "Keep working on the restored version", icon: "check", small: true, title: "Keep working on the restored version",
+  const keepRestored = button({ label: "Use restored", icon: "check", small: true, title: "Keep working on the restored version", className: "keep-label",
     onClick: documents("documents.keepRestored") });
   const retryRestore = button({ label: "Try again", icon: "refresh", small: true, title: "Try again", onClick: documents("documents.retryRecovery") });
-  const discardWaiting = button({ label: "Discard those changes", icon: "trash", small: true, title: "Discard those changes", onClick: documents("documents.discardWaiting") });
-  for (const [control, name] of [[keepRestored, "Keep working on the restored version"], [retryRestore, "Try again"], [discardWaiting, "Discard those changes"]] as const)
+  // The missing save: import it again with the usual save import, which is taken while restoring, or discard the changes waiting for it.
+  const importSave = button({ label: "Import save…", icon: "import", small: true, title: "Import the save again", className: "keep-label",
+    onClick: () => void rt.file({ kind: "savedV.import" }) });
+  const discardWaiting = button({ label: "Discard those changes", icon: "trash", small: true, title: "Discard those changes", className: "keep-label",
+    onClick: documents("documents.discardWaiting") });
+  for (const [control, name] of [[keepRestored, "Use restored"], [retryRestore, "Try again"], [importSave, "Import save…"], [discardWaiting, "Discard those changes"]] as const)
     control.setAttribute("aria-label", name);
   exportCollection.setAttribute("aria-label", "Export collection");
   protect.setAttribute("aria-label", "Try again");
   const element = h("div", { class: "state-line warning workspace-notice", role: "status", hidden: true }, text, takeOver, retry, keepRestored, exportCollection,
-    discardWaiting, protect, retryRestore);
+    importSave, discardWaiting, protect, retryRestore);
   return {
     element,
     update(frame: Frame) {
@@ -601,7 +606,7 @@ export function workspaceNotice(rt: StudioRuntime) {
       exportCollection.hidden = !unprotected && !(long && !restoring?.safe);
       keepRestored.hidden = !(long && restoring?.safe);
       retryRestore.hidden = !long;
-      discardWaiting.hidden = !missing;
+      discardWaiting.hidden = importSave.hidden = !missing;
       // Narrow, these show only their icons (t-unprotected, t-recovering): their names stay their accessible names.
       element.classList.toggle("unprotected", unprotected);
       element.classList.toggle("recovering", recovering || missing);
@@ -612,10 +617,6 @@ export function workspaceNotice(rt: StudioRuntime) {
   };
 }
 
-const UNPROTECTED = "Your latest changes aren't protected on this computer.";
-const RESTORING = "Restoring changes from your last session…";
-const RESTORING_LONG = "Restoring changes from your last session is taking a while.";
-const MISSING_SAVE = "Some restored changes need a save that's gone. Import it again, or discard them.";
 /** Panels whose controls only read or open things (Help, Activity): a read-only window keeps them all (t-read-only-window). */
 const READ_SAFE_PANELS = new Set<string>(["help", "activity"]);
 function statusBar(rt: StudioRuntime) {

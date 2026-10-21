@@ -6,7 +6,7 @@ import { INITIAL_LEASE, LEASE_MESSAGES, leaseTransition, WorkspaceLease, type Le
 import { leasedDocuments } from "../src/app/workspace/leased-documents";
 import { WorkspacePersistence } from "../src/app/workspace/workspace-persistence";
 import { documentOwners } from "../src/platform/core/saved-document";
-import { DocumentOutbox } from "../src/platform/core/document-outbox";
+import { ATTEMPT_MS, DocumentOutbox } from "../src/platform/core/document-outbox";
 import type { TransactAnswer } from "../src/platform/api/document-commands";
 import { formatFence, parseFence, WORKSPACE_FENCE_HEADER, type DocumentStorePort } from "../src/platform/api/document-store";
 import { memoryOutboxStorage } from "./fixtures/platform-doubles";
@@ -343,7 +343,8 @@ test("the outbox's drain reports a command that failed while it waited, and stop
     transact: () => new Promise((resolve, reject) => { answer = resolve; fail = reject; }) };
   let retry: (() => void) | null = null;
   const outbox = new DocumentOutbox(leasedDocuments(store, { draining: () => true }), memoryOutboxStorage(),
-    { schedule: (_ms, run) => { retry = run; return { cancel: () => { retry = null; } }; } });
+    // The retry delay is the test's to run (each attempt's own deadline never passes here).
+    { schedule: (ms, run) => { if (ms === ATTEMPT_MS) return { cancel() {} }; retry = run; return { cancel: () => { retry = null; } }; } });
   outbox.open();
   outbox.commit("sample.write", [{ kind: "sample", id: "a", value: 1 }]);
   const drained = outbox.settle();

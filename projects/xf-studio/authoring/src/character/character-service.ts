@@ -77,6 +77,8 @@ const saveRef = (id: string): DocumentRef => ({ kind: SAVED_V_DOCUMENT, id });
 const ELSEWHERE_NOTE = "Changed in another window. Undo starts here.";
 const CONFLICT_MESSAGE = "You changed this V here too. Which version should it keep?";
 const RESTORING = "This V is still being restored from your last session. It can be changed again in a moment.";
+const SAVE_MISSING = "This V's save isn't on this computer. Import the same save again to keep working on this V.";
+const RESTORED_NOTE = "Restored from your last session. Undo starts here.";
 
 export class CharacterService implements CharactersPort {
   private readonly entries = new Map<CharacterId, Entry>();
@@ -89,6 +91,10 @@ export class CharacterService implements CharactersPort {
   constructor(private readonly deps: CharacterServiceDeps) {
     deps.outbox.subscribe(event => {
       if (event.kind === "status") { if (this.entries.size) this.changed(); return; }
+      // A decoded save arriving here (put by any V, read from the library, kept with a restored command): every context of a V that
+      // comes from it and couldn't show it yet shows it now, before it takes another change.
+      const saves = (event.kind === "acknowledged" || event.kind === "conflict" ? event.entry.writes : event.refs).filter(ref => ref.kind === SAVED_V_DOCUMENT);
+      for (const ref of saves) this.saveArrived(ref.id);
       // Another owner's command (a profile's) or this service's own: what a character reads as may have changed.
       if (event.kind === "recorded") { if (event.refs.some(ref => ref.kind === CHARACTER_DOCUMENT)) { this.summaries = null; } return; }
       if (event.kind === "external") { for (const ref of event.refs) if (ref.kind === CHARACTER_DOCUMENT) this.fromElsewhere(ref.id); }
@@ -195,7 +201,9 @@ export class CharacterService implements CharactersPort {
         return conflict ? { message: CONFLICT_MESSAGE, keepBoth: conflict.writes.some(write => write.kind === CHARACTER_DOCUMENT && write.id === id) } : null;
       },
       resolve: keep => this.resolve(id, keep),
-      restoring: () => this.deps.outbox.recovering(docRef(id)) ? RESTORING : null,
+      restoring: () => this.blocked(id),
+      namesSave: value => this.namesSave(id, value),
+      importSave: value => this.importSave(id, value),
     };
     const context = new CharacterContextActions({ ...ports, catalogue: this.deps.catalogue, requester: id, history: { service: this.deps.history, id }, document },
       { stored: storedOfDocument(doc), ...(save ? { save } : {}) });
@@ -248,6 +256,38 @@ export class CharacterService implements CharactersPort {
       this.deps.report?.(error);
     }
     this.changed();
+  }
+  /** A decoded save is here now: each context of a V from it that couldn't show it yet is brought up to its document, with the save. */
+  private saveArrived(saveId: string) {
+    for (const entry of this.entries.values()) {
+      const doc = entry.context ? this.doc(entry.id) : null;
+      if (!doc || doc.source.kind !== "save" || doc.source.decoded !== saveId) continue;
+      const save = this.decoded(saveId), shown = entry.context!.shownSave();
+      if (!save || (shown && this.saveId(shown) === saveId)) continue;
+      entry.context!.replace(storedOfDocument(doc), save, RESTORED_NOTE);
+    }
+  }
+  /** Whether `value` is the very save this V comes from while it can't show it (missing here, or being restored): importing it only puts it. */
+  private namesSave(id: CharacterId, value: unknown): boolean {
+    const doc = this.doc(id);
+    if (doc?.source.kind !== "save" || !this.blocked(id)) return false;
+    try { return this.saveId(parseSavedV(value)) === doc.source.decoded; } catch { return false; }
+  }
+  /**
+   * Import the save a V comes from again (style guide t-recovering): an immutable put, which changes no V and is taken while restoring;
+   * every context of a V from it shows it at once, and commands waiting for it are sent.
+   */
+  private importSave(_id: CharacterId, value: unknown): void {
+    const save = parseSavedV(value), saveId = this.saveId(save);
+    this.putSave(saveId, save);
+    this.saveArrived(saveId);
+  }
+  /** Why a V can't take changes now: still being restored, or its save isn't here to show (a change made then would drop its source). */
+  private blocked(id: CharacterId): string | null {
+    if (this.deps.outbox.recovering(docRef(id))) return RESTORING;
+    const doc = this.doc(id), shown = this.entries.get(id)?.context?.shownSave();
+    if (doc?.source.kind === "save" && (!this.decoded(doc.source.decoded) || !shown || this.saveId(shown) !== doc.source.decoded)) return SAVE_MISSING;
+    return null;
   }
   /** The character's document changed from elsewhere: a context shows it, its Undo starting there; commands read before it are stale. */
   private fromElsewhere(id: CharacterId) {

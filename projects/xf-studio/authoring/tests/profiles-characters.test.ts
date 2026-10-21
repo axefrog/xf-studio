@@ -818,6 +818,45 @@ describe("conflicts on a V (profiles design §2.2)", () => {
     expect(libraryCharacter(second, id)).toMatchObject({ choices: [{ part: "head", option: "eyes_color", choice: "he__01_brown" }], ownMakeup: "hidden" });
   });
 
+  test("third 1c-ii review: a V restored without its save shows the save once it is imported (through another V, or its own Load save), and an edit keeps its source", async () => {
+    for (const through of ["another V", "its own Load save"] as const) {
+      const lib = library(), storage = memoryOutboxStorage();
+      const first = await world(lib, storage);
+      const { id, context } = await shownV(first);
+      // The V's source becomes a save, but nothing of it reaches the library, and the page dies: the record of the save is lost too.
+      lib.hold("*");
+      const save = blueSave(first);
+      context.dispatch({ kind: "character.setSource", source: { kind: "save", value: save } });
+      await settle();
+      first.outbox.stop();
+      for (const key of [...storage.keys.keys()]) if (key.startsWith(`${SAVED_V_DOCUMENT}/`)) storage.keys.delete(key);
+      // The next page (its commands go straight to the library) restores the V's change; the save is nowhere.
+      const direct = { ...lib, port: { ...lib.documents, transact: (request: TransactRequest) => Promise.resolve(lib.store.transact(request)) } };
+      const second = await world(direct as typeof lib, storage);
+      await second.characters.load();
+      const shown = second.characters.context(id, { showSave() {} });
+      shown.start(); await settle();
+      await until(() => second.outbox.status().missing.length > 0);
+      expect(second.characters.document(id)!.source.kind).toBe("save");
+      // It can't show its save: changes are refused with the reason, never made over a V without its source.
+      expect(shown.capability({ kind: "character.setClothing", state: "underwear" })).toMatchObject({ available: false, code: "not_ready" });
+      if (through === "another V") expect(await second.characters.create({ source: { kind: "save", value: save } })).toMatchObject({ ok: true });
+      else {
+        // Importing the same save for this V is taken while it is restored (an immutable put; the V's source doesn't change).
+        expect(shown.capability({ kind: "character.setSource", source: { kind: "save", value: save } })).toEqual({ available: true });
+        shown.dispatch({ kind: "character.setSource", source: { kind: "save", value: save } });
+      }
+      await until(() => !second.outbox.recovering({ kind: CHARACTER_DOCUMENT, id }) && !second.outbox.status().missing.length);
+      await settle();
+      expect(shown.shownSave()).not.toBeNull();
+      shown.dispatch({ kind: "character.setClothing", state: "underwear" });
+      await second.characters.flush();
+      expect(second.outbox.conflicts()).toEqual([]);
+      expect(libraryCharacter(second, id)).toMatchObject({ source: { kind: "save" }, clothing: { state: "underwear" } });
+      second.outbox.stop();
+    }
+  });
+
   test("Keep both over an existing membership (Sol's 1c-i note): a create whose profile went stale keeps theirs' profile, the copy added to it", async () => {
     const w = await world();
     const made = await w.profiles.dispatch({ kind: "profile.create", name: "Mine" });

@@ -34,10 +34,15 @@
  *   V's context, a look's session, a profile, a collection) replaces what it shows before it takes another edit. A slow or absent answer
  *   is said so (`status().recovering`, `recoveringShown`, `recoveringLong`), and `retry`, and `keepRestored` where that is safe, are the
  *   ways on; no timer ever unlocks a document.
+ * - **Attempts have deadlines.** Each send is one attempt with a deadline (`ATTEMPT_MS`); past it, or on Try again (`retry`), the attempt
+ *   is abandoned, the command is sent again under its own ID, and the abandoned attempt's late answer is ignored. The recovery gate stays
+ *   throughout: abandoning an attempt never unlocks a document. A receipt's answer says what the command committed (`committed`), so a
+ *   stored copy older than the command as sent never becomes the baseline.
  * - **Required content is kept with the commands that need it.** An immutable document a stored command requires keeps its content in
  *   its own key's record (`retained`), so the library's cleanup and a restart together can't leave the command waiting for nothing: it
  *   is put again. Where no copy is left anywhere, the commands keep waiting, `status().missing` says so, and importing the same save
- *   again sends them, or `discardWaiting` drops them.
+ *   again sends them, or `discardWaiting` drops them. A required document this page doesn't hold is read whole from the library, and its
+ *   arrival is announced like any change from elsewhere, so whatever shows a document depending on it can show it before another edit.
  * - **A4, A5** are the host's (`DocumentStore.transact`): receipts, and the equal-value rule.
  * - **A6, stale.** A stale answer makes the entry a conflict holding the documents as they are now, and nothing retries it.
  *   Single-document successors fold into its "mine"; multi-document successors stay blocked. Keep mine, Use theirs and Keep both are
@@ -106,7 +111,9 @@ export interface OutboxStorage {
    */
   durable?(): ReadonlyMap<string, string>;
 }
-export type OutboxTransport = { transact(request: TransactRequest): Promise<TransactAnswer>;
+export type OutboxTransport = {
+  /** `signal` ends the attempt (its deadline passed, or Try again): the command is sent again under its ID, and a late answer is ignored. */
+  transact(request: TransactRequest, signal?: AbortSignal): Promise<TransactAnswer>;
   revisions(refs: readonly DocumentRef[], signal?: AbortSignal): Promise<Readonly<Record<string, number>>>;
   read(refs: readonly DocumentRef[], signal?: AbortSignal): Promise<Readonly<Record<string, CurrentDocument>>> };
 
@@ -152,6 +159,10 @@ export type OutboxStatus = {
 };
 /** How long restoring may take before it is said so, and before the person is offered a way on. */
 export const RECOVERY_SHOW_MS = 1000, RECOVERY_NOTICE_MS = 5000;
+/** How long one attempt to send a command may take: past it the attempt is abandoned and the command sent again under its own ID. */
+export const ATTEMPT_MS = 15_000;
+/** Why an attempt was abandoned. */
+const EXPIRED = "expired", RETRIED = "retried";
 /** A document as an owner sees it: the baseline revision the library acknowledged, and the value with this page's entries on top. */
 export type OutboxDocument = {
   readonly revision: number;
@@ -173,6 +184,8 @@ export type OutboxOptions = {
   readonly now?: () => number;
   /** How long after a failed send the outbox sends again. */
   readonly retryMs?: number;
+  /** How long one attempt to send a command may take before it is given up and sent again (`ATTEMPT_MS`). */
+  readonly attemptMs?: number;
   /** Whether this page may record changes now (it holds its workspace); default always. */
   readonly writable?: () => boolean;
   /** Whether this page may still send what it recorded (it holds its workspace, or is draining it as it releases); default `writable`. */
@@ -211,6 +224,8 @@ export class DocumentOutbox {
   private readonly held = new Map<string, Held>();
   private entries: OutboxEntry[] = [];
   private readonly inFlight = new Set<string>();
+  /** Each command in flight's current attempt: abandoning it (its deadline, Try again) sends the command again and ignores a late answer. */
+  private readonly attempts = new Map<string, AbortController>();
   /** Keys whose latest write isn't stored yet: since when it has waited, and whether a write of it failed. */
   private readonly unprotectedKeys = new Map<string, { since: number; failed: boolean }>();
   /**
@@ -580,6 +595,8 @@ export class DocumentOutbox {
    */
   retry(): void {
     this.retryTimer?.cancel(); this.retryTimer = null;
+    // A hung attempt is abandoned and its command sent again (under its own ID: a late answer to the old attempt is ignored).
+    for (const attempt of this.attempts.values()) attempt.abort(RETRIED);
     for (const key of this.missing) this.looking.delete(key);
     this.pump();
   }
@@ -632,12 +649,17 @@ export class DocumentOutbox {
       if (!this.looking.has(key)) {
         this.looking.add(key);
         const ref = refOfKey(key);
-        void this.transport.revisions([ref]).then(revisions => {
+        // Read whole: an immutable document's content never changes, so whoever needs it here (a V whose save it is) can show it now.
+        void this.transport.read([ref]).then(read => {
           this.looking.delete(key);
-          const revision = revisions[key] ?? 0;
+          const found = read[key], revision = found?.revision ?? 0;
           if (revision > 0) {
-            const local = this.local(ref); local.known = true; local.revision = Math.max(local.revision, revision);
+            const local = this.local(ref), arrived = local.base === undefined && !this.entriesFor(key).length;
+            local.known = true; local.revision = Math.max(local.revision, revision);
+            if (arrived) { local.base = found!.value; this.moved(local, revision); }
             if (this.missing.delete(key)) this.emit({ kind: "status" });
+            // The content arriving here is a change every owner holding something that depends on it must hear (they show it now).
+            if (arrived) this.emit({ kind: "external", refs: [local.ref] });
             this.pump();
           }
           else this.restore([key]);
@@ -674,12 +696,12 @@ export class DocumentOutbox {
 
   /**
    * A required immutable document that neither the library nor this page holds (a missing source): the commands needing it keep
-   * waiting, and are looked for again now and then; `status().missing` names their documents, so the person can import the source again
+   * waiting, and are looked for again whenever the outbox next sends; `status().missing` names their documents, so the person can import the source again
    * (a put of it sends them) or `discard` them. Nothing waits silently for ever.
    */
   private missingSource(key: string): void {
+    // Not polled: it is looked for again whenever the outbox next sends (any change, a put of it, Try again).
     if (!this.missing.has(key)) { this.missing.add(key); this.emit({ kind: "status" }); }
-    this.later();
   }
 
   private pump(): void {
@@ -701,26 +723,39 @@ export class DocumentOutbox {
     this.frozenIds.add(entry.id); // A1: from here its ID, bases and values are fixed.
     this.inFlight.add(entry.id);
     const forget = this.forget; this.forget = [];
+    // One attempt, with its deadline: abandoned (expired, or Try again), it ends here as a lost answer would, and whatever answer comes
+    // later is ignored; the command is sent again under its ID, so the host's receipt decides (A4). The recovery gate stays throughout.
+    const attempt = new AbortController();
+    this.attempts.set(entry.id, attempt);
+    const deadline = (this.options.schedule ?? defaultSchedule)(this.options.attemptMs ?? ATTEMPT_MS, () => attempt.abort(EXPIRED));
+    const abandoned = new Promise<never>((_resolve, reject) => attempt.signal.addEventListener("abort", () => reject(Error("The library took too long to answer.")), { once: true }));
     let answer: TransactAnswer;
     try {
-      answer = await this.transport.transact({ id: entry.id, command: entry.command, forget,
+      answer = await Promise.race([this.transport.transact({ id: entry.id, command: entry.command, forget,
         writes: entry.writes.map(write => ({ kind: write.kind, id: write.id, base: write.base as number, value: write.value })),
-        ...(entry.requires?.length ? { requires: entry.requires.map(refOfKey) } : {}) });
+        ...(entry.requires?.length ? { requires: entry.requires.map(refOfKey) } : {}) }, attempt.signal), abandoned]);
     } catch (error) {
       // Lost: maybe committed, maybe not. Sent again with the same ID later (A1); the host's receipt decides (A4).
+      deadline.cancel();
+      if (this.attempts.get(entry.id) === attempt) this.attempts.delete(entry.id);
       this.inFlight.delete(entry.id);
       this.forget.push(...forget);
       this.failures++;
       if (!this.failing) { this.failing = true; this.emit({ kind: "status" }); } else this.wake();
       this.options.report?.(error);
-      this.later();
+      // Try again sends it again at once; otherwise after the retry delay.
+      if (attempt.signal.reason === RETRIED) this.pump(); else this.later();
       return;
     }
+    deadline.cancel();
+    if (this.attempts.get(entry.id) === attempt) this.attempts.delete(entry.id);
     this.inFlight.delete(entry.id);
     const recovered = this.failing;
     if (this.failing) { this.failing = false; this.emit({ kind: "status" }); }
     if (!this.entries.includes(entry) || this.stopped) { this.forget.push(...forget); return; }
-    if (answer.ok) this.acknowledge(entry, answer.revisions, answer.replayed, undefined, answer.own);
+    // A receipt's answer carries what the command committed: the baseline is that, never a stored copy's older version of the command.
+    if (answer.ok) this.acknowledge(entry, answer.revisions, answer.replayed,
+      answer.committed ? Object.fromEntries(Object.entries(answer.committed).map(([key, value]) => [key, { revision: answer.revisions[key] ?? 0, value }])) : undefined, answer.own);
     else if (answer.reason === "stale" && entry.writes.every(write => this.immutable(write.kind))) {
       // An immutable document already there is the same content (its ID is its content): this write is acknowledged as it stands.
       const revisions = Object.fromEntries(entry.writes.map(write => [documentKey(write), answer.current[documentKey(write)]?.revision ?? 0]));

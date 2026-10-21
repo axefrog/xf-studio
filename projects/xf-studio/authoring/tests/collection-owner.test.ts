@@ -895,7 +895,11 @@ describe("second review of chunk 1c-ii: recovery's sources and availability", ()
     for (const committed of [false, true]) {
       let now = 1_000;
       const documents = storeDocuments(), gate = gated(documents), storage = memoryOutboxStorage(), timers: (() => void)[] = [];
-      const options = { retryMs: 5, now: () => now, schedule: (_ms: number, run: () => void) => { timers.push(run); return { cancel() {} }; } };
+      // The notice's timers are the test's to run; retries and attempt deadlines run on the real clock.
+      const options = { retryMs: 5, now: () => now, schedule: (ms: number, run: () => void) => {
+        if (ms === RECOVERY_NOTICE_MS || ms === 1000) { timers.push(run); return { cancel() {} }; }
+        const timer = setTimeout(run, ms); return { cancel: () => clearTimeout(timer) };
+      } };
       const first = new DocumentOutbox(gate.port, storage, options);
       first.hold(DOC, null); first.open();
       if (committed) { first.commit("look.update", [{ ...DOC, value: { n: 0 } }]); await quiet(first); }
@@ -930,5 +934,86 @@ describe("second review of chunk 1c-ii: recovery's sources and availability", ()
       }
       second.stop();
     }
+  });
+});
+
+describe("third review of chunk 1c-ii: a hung request", () => {
+  test("finding 3: Try again abandons a hung attempt and sends the command again under its ID; the late answer changes nothing; the gate holds until then", async () => {
+    const documents = storeDocuments(), storage = memoryOutboxStorage();
+    // A command stored by an earlier page, never answered.
+    const hang = new DocumentOutbox({ ...documents, transact: () => new Promise<TransactAnswer>(() => {}) }, storage, { retryMs: 5 });
+    hang.hold(DOC, null); hang.open();
+    const entry = hang.commit("look.update", [{ ...DOC, value: { n: 1 } }]);
+    hang.stop();
+    // The next page's first attempt hangs (the host never answers it); later ones are answered.
+    const calls: { id: string; signal?: AbortSignal }[] = [];
+    let late: ((answer: TransactAnswer) => void) | null = null;
+    const port: DocumentStorePort = { ...documents, transact: (request, signal) => {
+      calls.push({ id: request.id, signal });
+      if (calls.length === 1) return new Promise<TransactAnswer>(resolve => { late = resolve; });
+      return Promise.resolve(documents.store.transact(request));
+    } };
+    const second = new DocumentOutbox(port, storage, { retryMs: 5 });
+    second.hold(DOC, null); second.open();
+    await tick(5);
+    expect(calls.length).toBe(1);
+    expect(second.recovering(DOC)).toBe(true);
+    // Waiting changes nothing, and the gate holds (no timer unlocks it).
+    await tick(20);
+    expect(calls.length).toBe(1);
+    expect(() => second.commit("look.update", [{ ...DOC, value: { n: 2 } }])).toThrow(OutboxRecoveringError);
+    second.retry();
+    await quiet(second);
+    expect(calls.map(call => call.id)).toEqual([entry.id, entry.id]);
+    expect(calls[0]!.signal!.aborted).toBe(true);
+    expect(second.recovering(DOC)).toBe(false);
+    expect(documents.store.get(DOC.kind, DOC.id)).toMatchObject({ revision: 1, value: { n: 1 } });
+    // The abandoned attempt's answer finally arrives: it is ignored (the command is already acknowledged), nothing is applied twice.
+    (late as unknown as (answer: TransactAnswer) => void)({ ok: true, revisions: { [documentKey(DOC)]: 7 } });
+    await tick(5);
+    expect(second.document(DOC)).toMatchObject({ revision: 1, value: { n: 1 }, pending: false });
+    second.commit("look.update", [{ ...DOC, value: { n: 2 } }]);
+    await quiet(second);
+    expect(documents.store.get(DOC.kind, DOC.id)).toMatchObject({ revision: 2, value: { n: 2 } });
+    second.stop();
+  });
+
+  test("finding 3: an attempt past its deadline is abandoned and sent again by itself", async () => {
+    const documents = storeDocuments();
+    let calls = 0;
+    const port: DocumentStorePort = { ...documents, transact: request => {
+      calls++;
+      return calls === 1 ? new Promise<TransactAnswer>(() => {}) : Promise.resolve(documents.store.transact(request));
+    } };
+    const outbox = new DocumentOutbox(port, memoryOutboxStorage(), { retryMs: 5, attemptMs: 20 });
+    outbox.hold(DOC, null); outbox.open();
+    outbox.commit("look.update", [{ ...DOC, value: { n: 1 } }]);
+    for (let i = 0; i < 50 && outbox.status().pending; i++) await tick(5);
+    expect(calls).toBe(2);
+    expect(documents.store.get(DOC.kind, DOC.id)).toMatchObject({ value: { n: 1 } });
+    outbox.stop();
+  });
+});
+
+describe("third review of chunk 1c-ii: found by the extended specification test", () => {
+  test("a replay of a stored copy older than the command as sent takes what the library committed, never the copy's older value", async () => {
+    const documents = storeDocuments(), storage = memoryOutboxStorage();
+    let held = true; const waits: (() => void)[] = [];
+    const port: DocumentStorePort = { ...documents, async transact(request) { if (held) await new Promise<void>(resolve => waits.push(resolve)); return documents.store.transact({ ...request, forget: [] }); } };
+    const first = new DocumentOutbox(port, storage, { retryMs: 5 });
+    first.hold(DOC, null); first.open();
+    first.commit("look.update", [{ ...DOC, value: { n: 12 } }]);
+    const older = new Map(storage.keys);   // the copy a crash keeps: the command before its last edit joined it
+    first.commit("look.update", [{ ...DOC, value: { n: 13 } }]);
+    held = false; for (const resume of waits.splice(0)) resume();
+    await quiet(first);
+    expect(documents.store.get(DOC.kind, DOC.id)!.value).toEqual({ n: 13 });
+    first.stop();
+    storage.keys.clear(); for (const [key, text] of older) storage.keys.set(key, text);
+    const second = new DocumentOutbox(port, storage, { retryMs: 5 });
+    second.hold(DOC, null); second.open();
+    await quiet(second);
+    expect(second.document(DOC)).toMatchObject({ revision: 1, value: { n: 13 }, pending: false });
+    second.stop();
   });
 });

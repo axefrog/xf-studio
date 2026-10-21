@@ -683,17 +683,21 @@ describe("Restoring changes from the last session (style guide t-recovering)", (
     notice.update(frame({ shown: true, long: true, safe: true, missing: 0 }));
     expect(text(root.querySelector(".workspace-notice-text")!)).toBe("Restoring changes from your last session is taking a while.");
     expect(root.classList.contains("warning")).toBe(true);
-    expect(visible()).toEqual(["Keep working on the restored version", "Try again"]);
+    expect(visible()).toEqual(["Use restored", "Try again"]);
+    expect(buttons(root).find(button => button.getAttribute("aria-label") === "Use restored")!.getAttribute("title")).toBe("Keep working on the restored version");
     const shown = (name: string) => buttons(root).find(button => !button.hidden && (button.getAttribute("aria-label") ?? text(button)) === name)!;
-    shown("Keep working on the restored version").click();
+    shown("Use restored").click();
     shown("Try again").click();
     notice.update(frame({ shown: true, long: true, safe: false, missing: 0 }));
     expect(visible()).toEqual(["Export collection", "Try again"]);
     notice.update(frame({ shown: true, long: true, safe: false, missing: 1 }));
     expect(text(root.querySelector(".workspace-notice-text")!)).toBe("Some restored changes need a save that's gone. Import it again, or discard them.");
-    expect(visible()).toEqual(["Discard those changes"]);
-    buttonNamed(root, "Discard those changes")!.click();
+    expect(visible()).toEqual(["Import save…", "Discard those changes"]);
+    // Both keep their labels at every width (a destructive action never shrinks to an icon).
+    for (const name of ["Import save…", "Discard those changes", "Use restored"]) expect(buttons(root).find(button => button.getAttribute("aria-label") === name)!.classList.contains("keep-label")).toBe(true);
+    shown("Import save…").click();
+    shown("Discard those changes").click();
     await settle();
-    expect(sent).toEqual(["documents.keepRestored", "documents.retryRecovery", "documents.discardWaiting"]);
+    expect(sent).toEqual(["documents.keepRestored", "documents.retryRecovery", "savedV.import", "documents.discardWaiting"]);
   });
 });

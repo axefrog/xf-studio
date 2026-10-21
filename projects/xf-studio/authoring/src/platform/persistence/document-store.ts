@@ -107,7 +107,12 @@ export class DocumentStore {
       if (receipt) {
         const stored = JSON.parse(receipt.value) as Receipt;
         const own = fence && stored.workspace === fence.workspace ? this.ownLater(stored.revisions, fence) : null;
-        return { ok: true, revisions: stored.revisions, replayed: "receipt", ...(own ? { own } : {}) };
+        const committed: Record<string, unknown> = {};
+        for (const [key, revision] of Object.entries(stored.revisions)) {
+          const at = key.indexOf("/"), row = this.row(key.slice(0, at), key.slice(at + 1));
+          if (row && row.revision === revision) committed[key] = JSON.parse(row.value);
+        }
+        return { ok: true, revisions: stored.revisions, replayed: "receipt", ...(own ? { own } : {}), ...(Object.keys(committed).length ? { committed } : {}) };
       }
       // What it requires must be in the library now, inside this transaction (a cleanup may have purged it since the page last knew).
       const missing = checked.requires.filter(ref => { const row = this.row(ref.kind, ref.id); return !row || isTombstone(JSON.parse(row.value)); }).map(documentKey);
