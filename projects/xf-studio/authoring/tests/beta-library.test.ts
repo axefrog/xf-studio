@@ -3,7 +3,7 @@
  * empty, Add preset starts from the starter look, Save as new collection names itself uniquely, the saved list is read quietly, and
  * an earlier draft is picked from the recent-drafts list.
  */
-import { expect, test } from "bun:test";
+import { expect, setSystemTime, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -101,6 +101,20 @@ test("the saved list is read quietly: never busy, no progress line, and only a c
     expect(events).toBe(1);
     expect(lib.service.summary().summaries.map(item => item.name)).toContain("From another window");
   } finally { lib.close(); }
+});
+
+test("collections saved in the same millisecond list in the order they were saved, whatever their IDs (LIB-01)", async () => {
+  const lib = library();
+  try {
+    await lib.service.execute({ kind: "initialize" });
+    const draft = lib.service.view().draft!.collection;
+    // IDs that sort against the save order: a tie-break on the ID would list them backwards.
+    const ids = ["ffffffff-0000-4000-8000-000000000000", "88888888-0000-4000-8000-000000000000", "00000000-0000-4000-8000-000000000000"];
+    setSystemTime(new Date("2026-10-21T12:00:00.000Z"));
+    for (const [n, id] of ids.entries()) lib.db.save({ collection: { ...structuredClone(draft), id, name: `Same instant ${n + 1}` } });
+    setSystemTime();
+    expect(lib.db.list().map(item => item.id)).toEqual(ids);
+  } finally { setSystemTime(); lib.close(); }
 });
 
 test("Recent drafts: any earlier draft is picked by name, and the open one becomes the newest (item 13)", async () => {

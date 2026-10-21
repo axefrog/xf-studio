@@ -22,9 +22,11 @@ export type CollectionSummary = { id: string; name: string; revision: number; co
 export class CollectionLibrary {
   constructor(private readonly db: LibraryDatabase, private parts: PartRegistry) {}
   list(): CollectionSummary[] {
-    return (this.db.read(db => db.query(`SELECT collection_json, revision, created_at AS updatedAt FROM collection_revisions r
-      WHERE revision=(SELECT MAX(revision) FROM collection_revisions WHERE collection_id=r.collection_id)
-      ORDER BY (SELECT created_at FROM collections WHERE id=r.collection_id), collection_id`).all() as
+    // Oldest first; collections made in the same millisecond keep the order they were made in (their rowid; LIB-01), never their random IDs'.
+    return (this.db.read(db => db.query(`SELECT r.collection_json, r.revision, r.created_at AS updatedAt FROM collection_revisions r
+      JOIN collections c ON c.id=r.collection_id
+      WHERE r.revision=(SELECT MAX(revision) FROM collection_revisions WHERE collection_id=r.collection_id)
+      ORDER BY c.created_at, c.rowid`).all() as
       { collection_json: string; revision: number; updatedAt: string }[])).map(row => {
         // Identity only: listing never parses parts, so a collection with a newer build's parts still lists.
         const collection = this.parts.readIdentity(JSON.parse(row.collection_json));
