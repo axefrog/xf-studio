@@ -600,6 +600,24 @@ A **resumable, atomic protocol**, `profiles-1`, runs per workspace (the normal o
 
 No schema migration: every record is a `documents` row, and `user_version` stays 2.
 
+**Built in phase 1d-i.**
+
+- **Where it runs.** The host transaction is `src/app/profiles/host/profiles-migrate.ts`, at `/api/profiles/migrate` and its verification twin. It is fenced by the lease. `migration` is a host-only kind.
+- **Pre-migration copy.** The library is copied before its first `profiles-1` run only, and the copy is discarded if that run rolls back.
+- **IDs never reused.** An identity taken by a deleted collection is never reused: such a draft is recovered under fresh IDs.
+- **Reuse is lossless.** It requires equal live content and matching histories, and every removed look the draft keeps must be restorable in the existing working copy. Otherwise the draft forks.
+- **Forks and versions.**
+  - Recovery drafts fork as "(earlier draft)" and don't join the profile.
+  - A loose look becomes "My looks", with IDs derived from the workspace.
+  - A named version brought back joins the profile whether it was created or found.
+- **Snapshot digest.** Each request carries its snapshot's digest. If the result came from a different snapshot, or the workspace changed since capture, the page migrates again under a new token before `done`. That re-run may fork an edit made in that short window; nothing is lost.
+- **Session build.**
+  - Tab 1 is named after the active saved layout, and its origin is that layout's own default.
+  - Panel IDs, parked places and `lastPlace` keys, groups and anchors are all rewritten to instance IDs.
+  - A tab's `dock` may be null, meaning the default arrangement.
+  - Own defaults are `layout-default` documents holding a graph fragment with slots `v1` and `look1`.
+- **Start trigger.** The migration's start trigger (`PROFILES_MIGRATION_ENABLED`) stays off until the phase 1d-ii switch-over, so migrated documents never go stale.
+
 ## 9. Phases
 
 The whole proposal is pre-beta. The spikes have run, and the estimate below is the post-spike one. Every phase leaves `main` green and passes the UI review where anything visible changes. The multi-subject, multi-look and multi-view service tests (3 characters of both bodies, 3 looks, 5 views, 2 tabs; three Character panels pinned to three Vs) start in phase 1 and grow with each phase.
