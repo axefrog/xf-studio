@@ -26,6 +26,7 @@
 | `Codeware.dll+0x36a59` | read at a heap address | A launch after a crash (report `…-182616-…`), in Codeware | [runtime]; cause unknown |
 | `Cyberpunk2077.exe+0x2a52f36`, code `0x80000003` | *Watchdog timeout! (120 seconds)* | The engine's watchdog: the main loop didn't report for 120 s (report `…-20260913-195258-…`) | [runtime]; trigger unknown |
 | `KERNELBASE.dll+0xc41ca`, code `0xE06D7363` | unknown | A C++ exception thrown and not caught, during a machine-wide memory exhaustion (report `…-20260926-165006-…`) | [runtime] |
+| `ntdll.dll+0x88f9` (inside the heap allocator; `rbx` a heap's base) | read at a small address (`0x38c`, `0x508`), or heap corruption `0xc0000374` | **A plugin DLL linked from a stale object file** (§2.5): the XF bridge 0.8.1's `Main.obj` allocated its `Bridge` at an older, smaller size than the constructor wrote, so every launch overran a heap block and the heap failed on the next thread to allocate: during RED4ext's plugin loading, or a moment after it, before the scripts compiled (reports `…-20261021-182300-…`, `…-182324-…`; 3 crashes in 3 launches, 0.8.0 fine) | [runtime] the reports; cause [offline] disassembly of the shipped objects |
 
 ### 2.1 Calling scripts from native code
 
@@ -60,6 +61,34 @@ What the instructions say (confidence: high) [runtime: `dumpbin /disasm` of the 
 Why (confidence: medium) [hypothesis]: the VM leaves an operand's value pointer null when the expression that should produce it doesn't run, the known behaviour of a call on a null object inside an expression handed to a native. Which call left the null isn't settled: the two suspects were `GetDisplayName` and `IsInteractionLookAtTarget` on the door (both native; a door's display name comes from its device data, and `GetLookAtObject` answers objects of any type). The bridge's own concatenations take their operands from script functions, never from such calls directly.
 
 **Rule for the bridge (0.7, the world-object rule, `XFScene.Identity`):** on a world object of unknown type call only the natives every entity answers (`GetEntityID`, `GetClassName`, `GetWorldPosition`, `GetWorldForward`, `GetWorldYaw`), keep each answer in a local before building text, read a record's name only after a cast to the class that declares `GetRecordID` (`gamePuppetBase`, `VehicleObject`), and take what the HUD shows (the interaction prompt) from its blackboard. Session 8 looks at a door, a vending machine, an NPC and a car to check it.
+
+### 2.5 A stale object file in the plugin (bridge 0.8.1)
+
+What happened [runtime] (21 October 2026, session 9's first three launches, the XF bridge 0.8.1 with the same frameworks as
+0.8.0, which ran fine): the game died at its start three times. The first launch's RED4ext log ends at "Loading plugin
+from …XFRuntimeBridge.dll"; the other two at "RED4ext has been started", the bridge's own log at `bridge.enabled`, before its
+RTTI registration (about 0.16 s later in a good launch). Two crash reports came: an access violation at `ntdll.dll+0x88f9`,
+once on the main thread (inside COM and the network list manager) and once on a game worker thread, both inside the heap
+allocator (`rbx` a heap's base, `r8`/`r9` its free lists, `rax` a small address read from a damaged entry). The bridge's
+own threads were idle in their waits. An allocation failing on whatever thread comes next is what heap corruption looks
+like; the thread names the victim, not the culprit.
+
+Why (confidence: high) [offline: `dumpbin /disasm` of the build's object files, and the build's timestamps]: the 0.8.1 DLL
+linked a `Main.obj` compiled before `Bridge` gained a second `PipeServer` member (the control pipe). Its `StartBridge` asks
+`operator new` for **0x2F8** bytes (`mov ecx,2F8h`), while `Bridge::Bridge`, compiled fresh in `Bridge.obj`, initialises
+fields up to offset **0x424** (sizeof 0x428): every launch wrote 0x130 bytes past the block, over the next block's header.
+The object file was older than the header it depends on (`Main.obj` 17:32, `Bridge.hpp` 18:04, the DLL 18:14), and the
+plugin's MSBuild include record (`CL.read.1.tlog`) had no entry for `Main.cpp`, so the incremental build never rebuilt it.
+Run under AddressSanitizer, constructing the current `Bridge` in a 0x2F8-byte block stops at once with a heap-buffer-overflow
+in the constructor (`xfb_selftest --layout-repro`).
+
+**Rules for a native plugin:** package only from a clean build (`cmake --build … --clean-first`; the XF bridge's
+`tools/package.ts` refuses a build with any object file older than a source file); make the linker refuse objects compiled
+against different headers (the XF bridge stamps every translation unit with a hash of its headers through
+`#pragma detect_mismatch`, so a stale object fails with LNK2038); and create a long-lived object in the translation unit
+that defines its constructor (`Bridge::Create`). A crash at plugin load that a previous build didn't have, in `ntdll`'s heap,
+on an unrelated thread, points at memory written past an allocation, and a mixed-up build is the cheapest cause to rule
+out first.
 
 ## 3. Finding the crashing call in few restarts
 
