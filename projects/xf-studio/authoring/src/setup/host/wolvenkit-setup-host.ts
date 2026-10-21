@@ -2,11 +2,11 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { delimiter, join, resolve } from "node:path";
 import { fileSha256 } from "../../host/derived-cache";
-import { detectDotNet, forgetDotNetRegistry, missingFramework, runtimeGuidance, runtimeRequirementFor, type DotNetInstall, type FrameworkReference } from "./dotnet-runtime";
+import { detectDotNet, forgetDotNetRegistry, missingFramework, runtimeGuidance, runtimeRequirementFor, type DotNetInstall } from "./dotnet-runtime";
 import { DownloadError, downloadVerified, type DownloadOptions } from "./tool-download";
 import { probeWolvenKitCliAsync, SUPPORTED_WOLVENKIT_VERSIONS, wolvenKitIdentity } from "../../host/wolvenkit-cli";
 import { extractionIssue, MANAGED_INSTALL_SCHEMA, megabytes, parseInstallManifest, WOLVENKIT_RELEASE,
-  type ManagedInstallManifest, type ManagedToolRelease } from "../wolvenkit-release";
+  type FrameworkReference, type ManagedInstallManifest, type ManagedToolRelease } from "../wolvenkit-release";
 import { extractZip, ZipError } from "./zip-extract";
 import { WOLVENKIT_UNSET } from "./local-settings-readiness";
 

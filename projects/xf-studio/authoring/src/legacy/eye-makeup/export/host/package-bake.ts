@@ -17,10 +17,9 @@ import { readRecipe } from "../../recipe-schema";
 import { compileGlitterPreset } from "../glitter-route";
 import type { UvWindow } from "../../../../engines/layered-makeup/plate-uv-window";
 import { compilePreset, presetCoverage, type TextureSpace } from "../../../../engines/layered-makeup/preset-compiler";
-import { planCollection } from "../preset-collection";
+import { planCollection, type CollectionPlan } from "../preset-collection";
 import { COVERAGE_REFERENCE_GRID } from "../plate-reach";
 
-export type CollectionPlan = ReturnType<typeof planCollection>;
 /** The flat route's channels, kept for callers that predate the other routes. */
 export const BAKED_CHANNELS = ROUTE_CHANNELS.flat;
 export type BakedChannel = TextureChannel;

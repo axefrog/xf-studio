@@ -1,6 +1,7 @@
 import { execFile, spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join, win32 } from "node:path";
+import type { FrameworkReference } from "../wolvenkit-release";
 
 /**
  * Which .NET runtime a framework-dependent program needs, and whether this computer has it.
@@ -10,7 +11,6 @@ import { basename, dirname, join, win32 } from "node:path";
  * `%ProgramFiles%\dotnet`. Nothing is installed or changed here.
  * [source: learn.microsoft.com/dotnet/core/versions/selection; dotnet/runtime docs/design/features/host-probing]
  */
-export type FrameworkReference = { name: string; version: string };
 export type RollForward = "LatestPatch" | "Minor" | "LatestMinor" | "Major" | "LatestMajor" | "Disable";
 export type RuntimeRequirement = { frameworks: FrameworkReference[]; rollForward: RollForward };
 export type DotNetInstall = {

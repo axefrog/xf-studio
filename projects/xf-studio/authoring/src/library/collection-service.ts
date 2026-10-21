@@ -6,7 +6,7 @@ import { COLLECTION_MESSAGE } from "../platform/core/document";
 import { eyeMakeupCollection, planCollection } from "../legacy/eye-makeup/export/preset-collection";
 import type { Recipe } from "../engines/layered-makeup/recipe";
 import { COLLECTION_2, type Look, type LookCollection } from "../platform/api";
-import type { CollectionSummary, StoredCollection } from "./host/collection-store";
+import type { CollectionSummary, StoredCollection } from "./collection-session";
 import type { LibraryState } from "../app/workspace/workspace-state";
 import type { PackageAction } from "../legacy/eye-makeup/export/package-action";
 import { packageBuildLine, packageCheckLine } from "../legacy/eye-makeup/export/package-filter";

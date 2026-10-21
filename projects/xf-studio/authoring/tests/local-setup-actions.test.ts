@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { LocalSetupFields, LocalSetupView } from "../src/setup/host/local-settings-server";
+import type { LocalSetupFields, LocalSetupView } from "../src/setup/local-settings";
 import { BUILD_TOOLS_CHECKING } from "../src/setup/local-readiness-codes";
 import { BUILD_TOOLS_RECHECK_MS, buildToolsChecking, LocalSetupActions } from "../src/setup/local-setup-actions";
 

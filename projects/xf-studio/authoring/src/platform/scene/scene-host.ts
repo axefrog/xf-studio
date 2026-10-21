@@ -3,7 +3,8 @@ import { BODY_ENVELOPE, bodyClipPlanes, previewClipPlanes } from "../../preview/
 import { BODY_FRAME, BODY_SUBJECT, bodyCameraDistance, CAMERA_DISTANCE_RANGE, frontCameraDistance, HEAD_SUBJECT, posedBodyFrame, posedBodySubject, surfaceAnchoredDistance,
   type JointBox, type Subject } from "../../preview/camera-framing";
 import type { PoseSample } from "../../animation/pose-sample";
-import { poseClip, type PosePlacement } from "../../animation/render/pose-clip";
+import { poseClip } from "../../animation/render/pose-clip";
+import type { PosePlacement } from "../../animation/pose-sample";
 import { coreSceneEvidence, idleEvidence } from "../../character/render/scene-evidence";
 import { bindRenderTriggers, createRenderScheduler, invalidating } from "../../preview/render/render-scheduler";
 import { retainedViewportAspect, visibleViewportSize } from "../../preview/viewport-size";

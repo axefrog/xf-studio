@@ -6,7 +6,7 @@
 // Field order and handle numbering follow that builder, so the converted resources are
 // byte-identical to the ones the Python oracle produces.
 import { createHash } from "node:crypto";
-import type { CollectionPlan } from "./host/package-bake";
+import type { CollectionPlan } from "./preset-collection";
 import type { UvTransformConstants } from "../../../engines/layered-makeup/plate-uv-window";
 import { archiveXlText, type XlFragment } from "../../../platform/api";
 

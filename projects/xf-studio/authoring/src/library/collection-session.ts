@@ -4,8 +4,12 @@ import { COLLECTION_RECOVERY_LIMIT, collectionDraft, copyWorkspace, editPresets,
 import type { Recipe } from "../engines/layered-makeup/recipe";
 import type { LiveFeatureState } from "../platform/core/live-features";
 import { isKeptPackagePlan, type LookCollection } from "../platform/api";
-import type { StoredCollection } from "./host/collection-store";
 import { editPackagePlan, type PackagePlanEdit, type PlannedProduct } from "../platform/core/package-plan";
+
+/** A library revision: the collection as looks (`xfs/collection-2` in memory), whatever schema its row was written in. */
+export type StoredCollection = { collection: LookCollection; revision: number; updatedAt: string };
+/** One collection as the library lists it. */
+export type CollectionSummary = { id: string; name: string; revision: number; count: number; updatedAt: string };
 
 /** The live editor document: its recipe (the look's eye-makeup part) and its memory for that look. */
 export type EditorSnapshot = EditorMemory & { recipe: Recipe;

@@ -1,42 +1,16 @@
 import { statSync } from "node:fs";
 import { isAbsolute } from "node:path";
-import { defaultLocalSettings, type LocalSettings, type LocalSettingsDraft } from "../local-settings";
-import { evaluateLocalReadiness, packageToolPaths, type HostFeatures, type LocalReadiness } from "./local-settings-readiness";
+import { defaultLocalSettings, type LocalSavesView, type LocalSettings, type LocalSettingsDraft, type LocalSetupFields,
+  type LocalSetupView } from "../local-settings";
+import { evaluateLocalReadiness, packageToolPaths, type HostFeatures } from "./local-settings-readiness";
 import { LocalSettingsStore } from "./local-settings-store";
 import { EYE_PLATE_HEAD_CHOICES, EYE_PLATE_HEAD_SETTING, type EyePlateHead } from "../../legacy/eye-makeup/plate/eye-plate-head-choice";
 
-export type LocalSetupFields = Pick<LocalSettings, "gameRoot" | "launchRoute" | "mo2Root" | "mo2ProfileId" |
-  "manualModRoot" | "wolvenKitCli" | "eyePlateHead" | "savesDirectory"> & {
-  /** Settings › Updates: whether XF Studio looks for a newer version when it starts (`updates.checkOnStart`). */
-  checkForUpdates: boolean;
-};
-/**
- * Where the game's saves are read from (the Save Explorer and its endpoints): the folder the person chose, else the one the host
- * detected, unless a developer override (`XFS_SAVES_DIR`, localhost only) names another. The detected folder is only ever described
- * ("Saved Games › CD Projekt Red › Cyberpunk 2077"); its path, which holds the person's profile folder, never leaves the host.
- */
-export type LocalSavesView = {
-  source: "chosen" | "detected" | "developer";
-  /** The detected folder, described; null where there is nothing to detect (not Windows, or no user profile). */
-  detected: { display: string; found: boolean } | null;
-  /** Whether the chosen folder is there (null when none is chosen). */
-  chosenFound: boolean | null;
-};
 /** The host's saves folder detection, for the settings view (`saves-host-sources.ts` provides it). */
 export type SavesFolderProbe = {
   detected(): Promise<{ path: string; display: string } | null>;
   /** Whether a developer override names the saves folder instead. */
   developerOverride(): boolean;
-};
-export type LocalSetupView = {
-  revision: number;
-  source: "new" | "primary" | "backup";
-  fields: LocalSetupFields;
-  readiness: LocalReadiness;
-  overridden: string[];
-  /** How the Studio names the eye plate head choice, so its form and Build's messages agree. */
-  eyePlateHead: { label: string; options: { value: EyePlateHead; label: string }[] };
-  saves: LocalSavesView;
 };
 const fieldNames = ["gameRoot", "launchRoute", "mo2Root", "mo2ProfileId", "manualModRoot",
   "wolvenKitCli", "eyePlateHead", "savesDirectory", "checkForUpdates"] as const;

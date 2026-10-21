@@ -5,7 +5,7 @@ import { BLINK_REPEAT_SECONDS, GAME_BLINK_MISSING, IDLE_FACE_MISSING, IDLE_MASCU
 import { pageFailure } from "../diagnostics/page-sink";
 import { DEFAULT_IDLE, type IdleEntry } from "./idle-catalogue";
 import type { PoseSample } from "./pose-sample";
-import type { PosePlacement } from "./render/pose-clip";
+import type { PosePlacement } from "./pose-sample";
 
 /** A photo-mode pose as the body source (pose-library-design.md §5.2): its record, label and whether it moves. */
 export type MotionPose = { readonly id: string; readonly label: string; readonly moves: boolean };

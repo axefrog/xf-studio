@@ -1,7 +1,7 @@
 import { CollectionSession, type EditorSnapshot } from "./collection-session";
 import { COLLECTION_RECOVERY_LIMIT, holdsLocked } from "../app/workspace/collection-workspace";
 import type { CollectionWorkspace, DocumentModel, PresetCommand } from "../app/workspace/collection-workspace";
-import type { StoredCollection } from "./host/collection-store";
+import type { StoredCollection } from "./collection-session";
 import type { Look, LookCollection } from "../platform/api";
 import type { Recipe } from "../engines/layered-makeup/recipe";
 import { nameIssue, positionIssue, refuse, type ValidationIssue } from "../platform/api/validation-issues";

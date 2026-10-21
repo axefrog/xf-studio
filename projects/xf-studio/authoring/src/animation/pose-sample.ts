@@ -26,3 +26,8 @@ export interface PoseMotion {
   readonly frames: number;
   readonly channels: readonly { readonly bone: string; readonly channel: "translation" | "rotation" | "scale"; readonly values: readonly number[] }[];
 }
+/**
+ * Where a pose puts the whole character (the record's `positionOffset` and `rotation`, applied to `Root`): offset in metres, rotation as
+ * Euler degrees about the game's X, Y then Z axes (pose-clip.ts).
+ */
+export type PosePlacement = { readonly offset: readonly [number, number, number]; readonly rotation: readonly [number, number, number] };

@@ -1,5 +1,5 @@
 import { BUILD_TOOLS_CHECKING } from "./local-readiness-codes";
-import type { LocalSetupFields, LocalSetupView } from "./host/local-settings-server";
+import type { LocalSetupFields, LocalSetupView } from "./local-settings";
 
 /**
  * `setup.update` changes only the named fields: it waits for any request in flight, reads the saved

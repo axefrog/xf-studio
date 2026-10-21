@@ -1,4 +1,5 @@
-import type { FrameworkReference } from "./host/dotnet-runtime";
+/** A shared framework a program names in its `runtimeconfig.json` (dotnet-runtime.ts reads them). */
+export type FrameworkReference = { name: string; version: string };
 
 /**
  * The WolvenKit CLI release XF Studio downloads for users who don't have one: pinned to one

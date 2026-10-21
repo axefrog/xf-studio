@@ -1,6 +1,6 @@
 import { CollectionServiceError, type CollectionTransport } from "../collection-service";
 import { PackageRequestError, requestPackage, requestPackageProgress } from "../../legacy/eye-makeup/export/package-action";
-import type { CollectionSummary, StoredCollection } from "../host/collection-store";
+import type { CollectionSummary, StoredCollection } from "../collection-session";
 
 /** Local HTTP is an injected detail, rather than a dependency of collection commands. */
 export function collectionTransport(endpoint: string): CollectionTransport {

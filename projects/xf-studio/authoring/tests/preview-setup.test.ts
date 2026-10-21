@@ -6,7 +6,7 @@ import { HeadLoadError, headLoadFailureCode } from "../src/preview/head-load-err
 import { PolledHostState } from "../src/app/host-state-poller";
 import type { InstallDetectionActions } from "../src/installation/install-detection-actions";
 import { XBOX_UNSUPPORTED_MESSAGE } from "../src/installation/install-detection";
-import type { LocalSetupFields, LocalSetupView } from "../src/setup/host/local-settings-server";
+import type { LocalSetupFields, LocalSetupView } from "../src/setup/local-settings";
 import { LocalSetupActions } from "../src/setup/local-setup-actions";
 import { PreviewPreparationActions, type PreviewState } from "../src/preview/preview-preparation";
 import { PreviewSetupActions, type PreviewSetupSnapshot } from "../src/preview/preview-setup";

@@ -3,13 +3,8 @@ import { dirname, join } from "node:path";
 import type { FrameworkVersionCheck } from "../../installation/framework-versions";
 import type { LocalSettings } from "../local-settings";
 import { readConfiguredMo2Instance } from "../../installation/host/install-detection-host";
-import { BUILD_TOOLS_CHECKING } from "../local-readiness-codes";
+import { BUILD_TOOLS_CHECKING, type CapabilityReadiness, type LocalReadiness, type ReadinessIssue } from "../local-readiness-codes";
 
-export type LocalCapability = "author" | "check" | "sourceDiscovery" | "sourceCache" | "previewStorage" | "build" |
-  "frameworks" | "install" | "updates";
-export type ReadinessIssue = { code: string; reason: string };
-export type CapabilityReadiness = { ready: boolean; issues: ReadinessIssue[]; limits: string[] };
-export type LocalReadiness = Record<LocalCapability, CapabilityReadiness>;
 /** Last recorded built-in eye plate outcome for this game folder (see `eyePlateReadiness`). */
 export type EyePlateHostReadiness = { issue: ReadinessIssue | null; limit: string };
 export type HostFeatures = { updater: boolean; installer: boolean; packageCheck?: boolean; packageBuild?: boolean;

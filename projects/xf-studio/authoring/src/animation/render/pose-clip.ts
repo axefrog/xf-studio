@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { PoseSample } from "../pose-sample";
+import type { PosePlacement, PoseSample } from "../pose-sample";
 
 /**
  * A photo-mode pose as a body clip for the preview's idle rig (pose-library-design.md §5.2, P2). The host samples the pose's clip on its
@@ -14,7 +14,6 @@ import type { PoseSample } from "../pose-sample";
  *   Offset in metres and rotation as Euler degrees about the game's X, Y then Z axes [hypothesis: G7 in the design's in-game checks].
  * - `Trajectory` and motion extraction are left as the clip holds them (the decoder leaves root motion out), so V stays in place.
  */
-export type PosePlacement = { readonly offset: readonly [number, number, number]; readonly rotation: readonly [number, number, number] };
 export type PoseClip = {
   readonly clip: THREE.AnimationClip;
   /** Whether the body moves by itself (a moving pose), so playback must keep drawing. */

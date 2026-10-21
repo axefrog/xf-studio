@@ -169,6 +169,9 @@ export const masculinePlanPaths = (depot: string): MasculinePlan => ({ app: `${d
   customization: `${depot}/xfs_collection_pma.inkcharcustomization`, mesh: `${depot}/models/xfs_eye_plate_pma.mesh`,
   morph: `${depot}/models/xfs_eye_plate_pma.morphtarget` });
 
+/** A collection's package plan (`planCollection`): what the bake and the resource definitions read. */
+export type CollectionPlan = ReturnType<typeof planCollection>;
+
 /** `masculine`: also plan the masculine V's selector (his plate is ready); otherwise the plan is the feminine one alone. */
 export function planCollection(value: unknown, options: { readonly masculine?: boolean } = {}) {
   const collection = parseCollection(value), key = collection.id.replaceAll("-", "");

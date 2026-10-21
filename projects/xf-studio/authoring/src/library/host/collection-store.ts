@@ -4,10 +4,8 @@ import { NEWER_LOOKS_LIBRARY_MESSAGE } from "../../app/workspace/collection-work
 import type { PartRegistry } from "../../platform/core/document";
 import { hostFailure } from "../../diagnostics/host/host-log";
 import type { LibraryDatabase } from "../../platform/persistence/library-database";
+import type { CollectionSummary, StoredCollection } from "../collection-session";
 
-/** A library revision: the collection as looks (`xfs/collection-2` in memory), whatever schema its row was written in. */
-export type StoredCollection = { collection: LookCollection; revision: number; updatedAt: string };
-export type CollectionSummary = { id: string; name: string; revision: number; count: number; updatedAt: string };
 /**
  * The local collection library (SQLite v2; no DDL change for the look model). Rows describe their
  * own schema: rows written before the look model hold `xfas/collection-1` JSON and are never

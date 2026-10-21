@@ -1,5 +1,6 @@
 import { isAbsolute, normalize, resolve } from "node:path";
 import { EYE_PLATE_HEAD_CHOICES, type EyePlateHead } from "../legacy/eye-makeup/plate/eye-plate-head-choice";
+import type { LocalReadiness } from "./local-readiness-codes";
 
 export const LOCAL_SETTINGS_SCHEMA = "xfs/local-settings-1" as const;
 export type LaunchRoute = "direct" | "mo2";
@@ -32,6 +33,35 @@ export interface LocalSettings {
 }
 
 export type LocalSettingsDraft = Omit<LocalSettings, "schema" | "revision">;
+
+/** The settings endpoint's view of the local setup (`local-settings-server.ts`), as the page's setup service reads it. */
+export type LocalSetupFields = Pick<LocalSettings, "gameRoot" | "launchRoute" | "mo2Root" | "mo2ProfileId" |
+  "manualModRoot" | "wolvenKitCli" | "eyePlateHead" | "savesDirectory"> & {
+  /** Settings › Updates: whether XF Studio looks for a newer version when it starts (`updates.checkOnStart`). */
+  checkForUpdates: boolean;
+};
+/**
+ * Where the game's saves are read from (the Save Explorer and its endpoints): the folder the person chose, else the one the host
+ * detected, unless a developer override (`XFS_SAVES_DIR`, localhost only) names another. The detected folder is only ever described
+ * ("Saved Games › CD Projekt Red › Cyberpunk 2077"); its path, which holds the person's profile folder, never leaves the host.
+ */
+export type LocalSavesView = {
+  source: "chosen" | "detected" | "developer";
+  /** The detected folder, described; null where there is nothing to detect (not Windows, or no user profile). */
+  detected: { display: string; found: boolean } | null;
+  /** Whether the chosen folder is there (null when none is chosen). */
+  chosenFound: boolean | null;
+};
+export type LocalSetupView = {
+  revision: number;
+  source: "new" | "primary" | "backup";
+  fields: LocalSetupFields;
+  readiness: LocalReadiness;
+  overridden: string[];
+  /** How the Studio names the eye plate head choice, so its form and Build's messages agree. */
+  eyePlateHead: { label: string; options: { value: EyePlateHead; label: string }[] };
+  saves: LocalSavesView;
+};
 export const defaultLocalSettings = (): LocalSettings => ({
   schema: LOCAL_SETTINGS_SCHEMA,
   revision: 0,
