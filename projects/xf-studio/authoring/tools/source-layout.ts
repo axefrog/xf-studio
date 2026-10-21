@@ -38,8 +38,10 @@ const raw = JSON.parse(readFileSync(mapFile, "utf8")) as Record<string, string>;
 /** Absolute old path → absolute new path, and back. */
 const forward = new Map(Object.entries(raw).map(([from, to]) => [resolve(APP, from), resolve(APP, to)]));
 const backward = new Map([...forward].map(([from, to]) => [to, from]));
+/** A file name as a module names it: a code module without its extension, a data file with it. */
+const moduleName = (path: string) => path.split(/[\\/]/).pop()!.replace(/\.(?:ts|tsx|js|mjs)$/, "");
 /** The file names the map moves: an unresolved import is reported only when it names one (others are probes and data). */
-const MAPPED_NAMES = new Set([...forward.keys()].map(path => path.split(sep).pop()!.replace(/\.\w+$/, "")));
+const MAPPED_NAMES = new Set([...forward.keys()].map(moduleName));
 
 const CODE = /\.(?:ts|tsx|js|mjs)$/;
 const SKIP_DIRS = new Set(["node_modules", ".hutch", "build", "dist", "generated", ".git"]);
@@ -79,9 +81,13 @@ function specifierFor(dir: string, file: string, original: string): string {
 
 /** Quoted or template literals that start like a relative path (`./`, `../`). */
 const LITERAL = /(["'`])(\.\.?\/[^"'`$\n]*)\1/g;
-/** Whether a literal stands where a module is named: after `from`, `import`, `import(`, `require(` or `new URL(`. */
+/**
+ * Whether a literal stands where a module is named (after `from`, `import`, `import(`, `require(` or `new URL(`) in code, not inside
+ * a template the code builds (the boundary tests' probes are source text in templates).
+ */
 const inImportPosition = (text: string, literal: string) =>
-  new RegExp(String.raw`(?:\bfrom\s*|\bimport\s*\(?\s*|require\s*\(\s*|new\s+URL\s*\(\s*)` + escape(literal)).test(text);
+  [...text.matchAll(new RegExp(String.raw`^([^\n]*?)(?:\bfrom\s*|\bimport\s*\(?\s*|require\s*\(\s*|new\s+URL\s*\(\s*)` + escape(literal), "gm"))]
+    .some(match => [`"`, "'", "`"].every(quote => match[1].split(quote).length % 2 === 1));
 
 type Result = { changed: number; unresolved: string[] };
 /** Rewrites the relative specifiers of the file at `path`; `movedFrom` is its old path when this run moved it. */
@@ -91,10 +97,11 @@ function rewriteImports(path: string, movedFrom?: string): Result {
   const unresolved: string[] = [];
   let changed = 0;
   const next = text.replace(LITERAL, (whole, quote: string, specifier: string) => {
-    if (!movedFrom && target(dir, specifier, isFile)) return whole;
+    // Only module specifiers: a string that merely looks like a path is data.
+    if (!inImportPosition(text, whole) || !movedFrom && target(dir, specifier, isFile)) return whole;
     const was = target(oldDir, specifier, existedBefore);
     if (!was) {
-      if (MAPPED_NAMES.has(specifier.split("/").pop()!.replace(/\.\w+$/, "")) && inImportPosition(text, whole)) unresolved.push(specifier);
+      if (MAPPED_NAMES.has(moduleName(specifier))) unresolved.push(specifier);
       return whole;
     }
     const rewritten = specifierFor(dir, forward.get(was) ?? was, specifier);
