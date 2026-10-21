@@ -272,7 +272,8 @@ export class ModInstallHost {
         `close it, ${CHECK_AGAIN}`);
     }
     const open = (receiptsRoot: string) => createModInstallTransport({ candidateStore: resolve(this.ports.candidateStore), receiptsRoot,
-      settings: { ...settings, installMode: route }, modName, product: manifest.archive });
+      settings: { ...settings, installMode: route }, modName, product: manifest.archive,
+      ansiCodePage: this.ports.ansiCodePage?.() ?? null });
     let transport: ReturnType<typeof createModInstallTransport>;
     try { transport = open(this.ports.receiptsRoot); } catch (error) { return refused(error); }
 

@@ -645,3 +645,28 @@ test("a mod's own MO2 folder holds one product: another product of the same name
     expect(place("xfs_mb").install("b").namespace).toBe("xfs_mb");
   } finally { f.cleanup(); }
 });
+
+test("only installs still there and loaded through the selected launch route count as another XF mod holding a feature (INSTALL-07)", () => {
+  const f = fixture("mo2");
+  try {
+    const modlist = join(f.mo2, "profiles", "2025 (again)", "modlist.txt");
+    const place = (modName: string, product: string, route: "mo2" | "direct" = "mo2") => createModInstallTransport({ candidateStore: f.store,
+      receiptsRoot: f.receiptsRoot, settings: { ...f.settings, launchRoute: route, installMode: route }, modName, product });
+    productCandidate(f.store, "night", { archive: "xfs_mnight", modName: "XF Night", features: [{ feature: "eye-makeup", namespace: "xfs_cshared" }] });
+    productCandidate(f.store, "day", { archive: "xfs_mday", modName: "XF Day", features: [{ feature: "eye-makeup", namespace: "xfs_cshared" }] });
+    place("XF Night", "xfs_mnight").install("night");
+    writeFileSync(modlist, "+XF Night\n+Other Mod\n");
+    // Switched on in the profile and its files in place: the same looks would appear twice in game.
+    expect(() => place("XF Day", "xfs_mday").preflight("day")).toThrow("already installed in another XF mod (xfs_cshared)");
+    // Launching the game directly never loads an MO2 mod.
+    expect(place("XF Day", "xfs_mday", "direct").preflight("day").files).toHaveLength(2);
+    // Switched off in the profile: not loaded, so not a duplicate.
+    writeFileSync(modlist, "-XF Night\n+Other Mod\n");
+    expect(place("XF Day", "xfs_mday").preflight("day").files).toHaveLength(2);
+    // Switched on again but removed in MO2 (its folder deleted): the old record no longer blocks a reinstall under another name.
+    writeFileSync(modlist, "+XF Night\n+Other Mod\n");
+    expect(() => place("XF Day", "xfs_mday").preflight("day")).toThrow("already installed in another XF mod");
+    rmSync(join(f.mo2, "mods", "XF Night"), { recursive: true });
+    expect(place("XF Day", "xfs_mday").install("day").namespace).toBe("xfs_mday");
+  } finally { f.cleanup(); }
+});

@@ -18,7 +18,9 @@ import { readConfiguredMo2Instance } from "./install-detection-host";
 import { duplicatedNamespaces, isOverlayArchive, readPackageManifest, type PackageManifestView } from "../../platform/export/manifest";
 import { EYE_MAKEUP_FEATURE } from "../../legacy/eye-makeup/recipe-schema";
 import { modNameIssue } from "../../platform/api";
-import { isBelow as inside, overlaps } from "../../platform/api/path-containment";
+import { containmentKey, isBelow as inside, overlaps } from "../../platform/api/path-containment";
+import { parseMo2Modlist } from "../mo2-instance";
+import { decodeModlist } from "../mo2-modlist-text";
 
 const schema = "xfs/install-receipt-1" as const;
 const fileNames = ["archive", "archive.xl"] as const;
@@ -65,6 +67,8 @@ export type InstallTransportConfig = { candidateStore: string; receiptsRoot: str
    * stays per destination (INSTALL-06). A candidate of another product is refused. Without it, one record per destination.
    */
   product?: string;
+  /** The system's ANSI code page, for reading an MO2 mod list not stored as UTF-8 (mo2-modlist-text.ts). */
+  ansiCodePage?: number | null;
   /** Test seam: runs once the payload is staged, before the journal (a test makes an install fail there). */
   afterStaging?: () => void };
 export type InstallPreview = { route: InstallRoute; target: string; candidateId: string;
@@ -180,7 +184,9 @@ type Target = { route: InstallRoute; target: string; activation: string; legacyI
   /** The mod's own MO2 folder (`mods/<mod name>`), or null on the direct route. */
   modFolder: string | null;
   /** What package paths are below: the mod's own MO2 folder, or the game folder on the direct route (`target` is its `archive/pc/mod`). */
-  root: string };
+  root: string;
+  /** The instance's mods folder and the profile's `modlist.txt` (MO2 route), for which mods the game loads through it. */
+  mo2: { mods: string; modlist: string } | null };
 function targetFor(settings: LocalSettings, modName: string): Target {
   const route = settings.installMode;
   assert(route !== "none" && route === settings.launchRoute, "Select a matching install and launch route.");
@@ -193,7 +199,7 @@ function targetFor(settings: LocalSettings, modName: string): Target {
     const target = join(settings.gameRoot, "archive", "pc", "mod");
     noLinks(target);
     return { route, target, activation: "Files are staged in the game's archive/pc/mod folder; game loading is unverified.",
-      legacyInstall: null, modFolder: null, root: settings.gameRoot };
+      legacyInstall: null, modFolder: null, root: settings.gameRoot, mo2: null };
   }
   assert(settings.mo2Root && isAbsolute(settings.mo2Root) && settings.mo2ProfileId && profileSegment(settings.mo2ProfileId),
     "Configured MO2 instance and profile are missing.");
@@ -211,6 +217,7 @@ function targetFor(settings: LocalSettings, modName: string): Target {
   const target = join(paths.mods, modName, "archive", "pc", "mod");
   noLinks(target);
   return { route, target, legacyInstall, modFolder: join(paths.mods, modName), root: join(paths.mods, modName),
+    mo2: { mods: paths.mods, modlist: join(paths.profiles, settings.mo2ProfileId, "modlist.txt") },
     activation: `Enable the dedicated ${modName} mod in the chosen MO2 profile; activation and game loading are unverified.` };
 }
 
@@ -339,9 +346,47 @@ export function createModInstallTransport(config: InstallTransportConfig) {
         return receipt?.schema === schema && safeName(receipt.namespace) ? [receipt] : [];
       } catch { return []; }
     });
-  /** What every other record's receipt says is installed (their feature namespaces). */
-  const otherReceipts = () => otherRecords().map(receipt =>
-    ({ features: Array.isArray(receipt.features) ? receipt.features : [{ feature: EYE_MAKEUP_FEATURE, namespace: receipt.namespace }] }));
+  /**
+   * The `archive/pc/mod` folders the game loads through the selected launch route, compared as Windows compares folders: the game
+   * folder's, and on the MO2 route each mod switched on in the profile. Null when the profile's mod list can't be read (then every
+   * record counts).
+   */
+  const loadedFolders = (): Set<string> | null => {
+    const folders = new Set<string>();
+    const add = (folder: string) => { const key = containmentKey(folder); if (key) folders.add(key); };
+    add(join(config.settings.gameRoot!, "archive", "pc", "mod"));
+    if (target.mo2) {
+      let text: string | null = null;
+      try { noLinks(target.mo2.modlist); text = decodeModlist(readFileSync(target.mo2.modlist), config.ansiCodePage ?? null)?.text ?? null; } catch { /* Unreadable. */ }
+      if (text === null) return null;
+      for (const entry of parseMo2Modlist(text).entries) if (entry.enabled && entry.kind === "mod") add(join(target.mo2.mods, entry.name, "archive", "pc", "mod"));
+    }
+    return folders;
+  };
+  /**
+   * Whether a record's install is still there: every file it names present at its size below its install folder (`target` is that
+   * folder's `archive/pc/mod`). A mod removed in the mod manager, or its files deleted, is no longer installed (INSTALL-07). A
+   * record this can't judge counts as installed.
+   */
+  const stillInstalled = (receipt: InstallReceipt) => {
+    if (typeof receipt.target !== "string" || !isAbsolute(receipt.target) || !validEntries(receipt.files, receipt.namespace)) return true;
+    const root = dirname(dirname(dirname(receipt.target)));
+    return receipt.files.every(entry => {
+      const file = join(root, ...entry.path.split("/"));
+      try { const stat = lstatSync(file); return inside(file, root) && stat.isFile() && stat.size === entry.bytes; } catch { return false; }
+    });
+  };
+  /**
+   * What the other records say is installed (their feature namespaces), counting only installs still there and loaded through the
+   * selected launch route: a record whose files are gone, or in a mod the profile doesn't switch on (or, on the direct route, anywhere
+   * but the game folder), can't put anything in game twice (INSTALL-07).
+   */
+  const otherReceipts = () => {
+    const loaded = loadedFolders();
+    return otherRecords().filter(receipt => (loaded === null || (typeof receipt.target === "string" && loaded.has(containmentKey(receipt.target) ?? ""))) &&
+      stillInstalled(receipt)).map(receipt =>
+      ({ features: Array.isArray(receipt.features) ? receipt.features : [{ feature: EYE_MAKEUP_FEATURE, namespace: receipt.namespace }] }));
+  };
   const owned = (): InstallReceipt | null => {
     noLinks(receiptFile);
     const receipt = readJson<InstallReceipt>(receiptFile);
@@ -480,7 +525,7 @@ export function createModInstallTransport(config: InstallTransportConfig) {
     const refused = unplaceable(manifest);
     assert(!refused.length, `This build has files XF Studio doesn't know where to put (${refused.join(", ")}), so nothing was installed.`);
     checkCurrent(prior, manifest.files, gone);
-    const { legacyInstall: _legacy, modFolder: _folder, ...route } = target;
+    const { legacyInstall: _legacy, modFolder: _folder, mo2: _mo2, ...route } = target;
     return { ...route, candidateId, files: manifest.files, replacingOwned: !!prior, reinstalling: !!gone,
       removing: droppedBy(prior, manifest.files) };
   };
