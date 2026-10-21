@@ -1,8 +1,7 @@
-import { Database } from "bun:sqlite";
 import type { Recipe } from "./engines/layered-makeup/recipe";
 import { readRecipe as parseRecipe, recipeFile } from "./recipe-schema";
 import { hostFailure } from "./diagnostics/host-log";
-import { useWriteAheadLog, type LibraryWrites } from "./platform/persistence/library-durability";
+import type { LibraryDatabase } from "./platform/persistence/library-database";
 
 export type LookSummary = { id: string; name: string; revision: number; updatedAt: string };
 export type StoredLook = LookSummary & { recipe: Recipe };
@@ -10,42 +9,21 @@ export class LibraryError extends Error {
   constructor(message: string, public status = 400) { super(message); }
 }
 
-/** Local editable source library. Exported game resources are separate build artifacts. */
+/**
+ * Local editable source library. Exported game resources are separate build artifacts. Its tables are the library file's
+ * `looks-1` step (library-migrations.ts); the file's owner (`LibraryDatabase`) holds the connection.
+ */
 export class LookLibrary {
-  private db: Database;
-  /** `writes`: the file's durability, told of each commit (library-durability.ts). */
-  constructor(path: string, private readonly writes?: LibraryWrites) {
-    this.db = new Database(path, { create: true, strict: true });
-    const version = this.db.query("PRAGMA user_version").get() as { user_version: number };
-    if (version.user_version > 2) {
-      this.db.close();
-      throw Error("This library needs a newer version of XF Studio.");
-    }
-    this.db.exec("PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;");
-    useWriteAheadLog(this.db);
-    if (version.user_version === 0) this.db.transaction(() => {
-      this.db.exec(`
-        CREATE TABLE looks (id TEXT PRIMARY KEY, created_at TEXT NOT NULL);
-        CREATE TABLE look_revisions (
-          look_id TEXT NOT NULL REFERENCES looks(id), revision INTEGER NOT NULL,
-          name TEXT NOT NULL, recipe_json TEXT NOT NULL, created_at TEXT NOT NULL,
-          PRIMARY KEY (look_id, revision)
-        );
-        PRAGMA user_version=1;
-      `);
-    })();
-    if (version.user_version === 0) writes?.wrote();
-  }
-  close() { this.db.close(); }
+  constructor(private readonly db: LibraryDatabase) {}
   list(): LookSummary[] {
-    return this.db.query(`SELECT look_id AS id, name, revision, created_at AS updatedAt
+    return this.db.read(db => db.query(`SELECT look_id AS id, name, revision, created_at AS updatedAt
       FROM look_revisions r WHERE revision=(SELECT MAX(revision) FROM look_revisions WHERE look_id=r.look_id)
-      ORDER BY created_at DESC, look_id`).all() as LookSummary[];
+      ORDER BY created_at DESC, look_id`).all() as LookSummary[]);
   }
   get(id: string, revision?: number): StoredLook {
-    const row = this.db.query(`SELECT look_id AS id, name, revision, created_at AS updatedAt, recipe_json
+    const row = this.db.read(db => db.query(`SELECT look_id AS id, name, revision, created_at AS updatedAt, recipe_json
       FROM look_revisions WHERE look_id=? AND (? IS NULL OR revision=?) ORDER BY revision DESC LIMIT 1`)
-      .get(id, revision ?? null, revision ?? null) as (LookSummary & { recipe_json: string }) | null;
+      .get(id, revision ?? null, revision ?? null) as (LookSummary & { recipe_json: string }) | null);
     if (!row) throw new LibraryError("Look not found.", 404);
     const { recipe_json, ...summary } = row;
     return { ...summary, recipe: parseRecipe(JSON.parse(recipe_json)) };
@@ -60,7 +38,7 @@ export class LookLibrary {
     if (id && (!Number.isSafeInteger(input.revision) || Number(input.revision) < 1))
       throw new LibraryError("A revision is required to update a look.");
     const name = input.name.trim();
-    const saved = this.db.transaction(() => {
+    return this.db.write(db => {
       const lookId = id ?? crypto.randomUUID();
       let revision = 1;
       if (id) {
@@ -70,14 +48,12 @@ export class LookLibrary {
         revision = current.revision + 1;
       }
       const now = new Date().toISOString();
-      if (!id) this.db.query("INSERT INTO looks VALUES (?, ?)").run(lookId, now);
-      this.db.query("INSERT INTO look_revisions VALUES (?, ?, ?, ?, ?)")
+      if (!id) db.query("INSERT INTO looks VALUES (?, ?)").run(lookId, now);
+      db.query("INSERT INTO look_revisions VALUES (?, ?, ?, ?, ?)")
         // Rows hold a recipe file in the oldest schema that holds it, which older builds read.
         .run(lookId, revision, name, JSON.stringify(recipeFile(recipe) ?? recipe), now);
       return { id: lookId, name, revision, updatedAt: now, recipe };
-    }).immediate();
-    this.writes?.wrote();
-    return saved;
+    });
   }
 }
 

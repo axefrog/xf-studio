@@ -14,10 +14,10 @@
  *
  * Removal criterion: delete this file and its call sites after the first public beta.
  */
-import { Database } from "bun:sqlite";
-import { existsSync } from "node:fs";
+import type { Database } from "bun:sqlite";
 import { EXPERIMENT_FLAGS } from "../api/experiments";
 import type { DocumentStore } from "./document-store";
+import type { LibraryDatabase } from "./library-database";
 
 /** Hair Lab's document kind (`features/hair-lab/service.ts` `HAIR_GROOM_KIND`; the import's test checks they agree). */
 export const LEGACY_HAIR_GROOM_KIND = "hair-groom";
@@ -92,15 +92,11 @@ function latestRecords(db: Database, types: readonly string[]): { id: string; ty
 }
 
 /**
- * Copies the old log's latest preference and grooms into `store`, if the library file has that log. Only documents the
- * store doesn't have yet are written. Reads the file through a read-only connection of its own.
+ * Copies the old log's latest preference and grooms in library file `library` into `store` (the same file's document
+ * store), if the file has that log. Only documents the store doesn't have yet are written.
  */
-export function importLegacyExperiments(store: DocumentStore, log?: (message: string) => void): LegacyImport {
-  if (!existsSync(store.path)) return { flags: false, grooms: 0 };
-  const db = new Database(store.path, { readonly: true });
-  let records: ReturnType<typeof latestRecords>;
-  try { db.exec("PRAGMA busy_timeout=5000;"); records = latestRecords(db, ["experimental-features", "experiment-document"]); }
-  finally { db.close(); }
+export function importLegacyExperiments(library: LibraryDatabase, store: DocumentStore, log?: (message: string) => void): LegacyImport {
+  const records = library.read(db => latestRecords(db, ["experimental-features", "experiment-document"]));
   let flags = false, grooms = 0;
   for (const record of records) {
     if (record.type === "experimental-features") {

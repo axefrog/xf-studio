@@ -4,7 +4,8 @@
  */
 import type { Clock } from "../../src/platform/core/clock";
 import type { DocumentStorePort } from "../../src/platform/api/document-store";
-import { DocumentStore } from "../../src/platform/persistence/document-store";
+import type { DocumentStore } from "../../src/platform/persistence/document-store";
+import { openTestLibrary } from "./library-file";
 
 type Timer = { id: number; due: number; run: () => void; cancelled?: boolean };
 
@@ -47,8 +48,8 @@ export class ManualClock implements Clock {
 /** Lets pending promise reactions run. */
 export async function settle(turns = 24): Promise<void> { for (let i = 0; i < turns; i++) await Promise.resolve(); }
 
-/** The document store's port over a real store; `store.close()` when done with a file. */
+/** The document store's port over a real store (in memory by default; a file's is closed with the test library). */
 export function storeDocuments(path = ":memory:"): DocumentStorePort & { store: DocumentStore } {
-  const store = new DocumentStore(path);
+  const store = openTestLibrary(path).documents;
   return { store, list: async kind => store.list(kind), put: async (kind, id, value, revision) => store.put(kind, id, value, revision) };
 }

@@ -13,7 +13,7 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CollectionLibrary } from "../src/collection-store";
+import { openTestLibrary } from "./fixtures/library-file";
 import { CollectionService, type CollectionTransport } from "../src/collection-service";
 import type { EditorSnapshot } from "../src/collection-session";
 import { collectionDraft, emptyMemory, parseCollectionWorkspace, readCollectionWorkspaceV1 } from "../src/collection-workspace";
@@ -218,7 +218,7 @@ function legacyLibrary() {
 
 test("a pre-migration SQLite library lists and reads unchanged, and old rows are never rewritten", () => {
   const legacy = legacyLibrary();
-  const library = new CollectionLibrary(legacy.path, STUDIO_PARTS);
+  const file = openTestLibrary(legacy.path), library = file.collections;
   try {
     expect(library.list().map(({ updatedAt: _u, ...item }) => item)).toEqual(legacy.rows.list);
     // Every stored revision reads as looks whose eye-makeup view is the collection the old store returned.
@@ -232,12 +232,12 @@ test("a pre-migration SQLite library lists and reads unchanged, and old rows are
     for (const { collection } of revisions as { collection: LookCollection }[])
       for (const preset of eyeMakeupCollection(collection).presets) expect(preset.recipe.schema).toBe(recipeFile(preset.recipe)!.schema);
     expect(legacy.dump()).toEqual(legacy.rows.rows);
-  } finally { library.close(); legacy.cleanup(); }
+  } finally { file.close(); legacy.cleanup(); }
 });
 
 test("saving an unchanged collection adds no preset revision; a change adds exactly one; old rows stay byte-unchanged", () => {
   const legacy = legacyLibrary();
-  const library = new CollectionLibrary(legacy.path, STUDIO_PARTS);
+  const file = openTestLibrary(legacy.path), library = file.collections;
   try {
     const editorId = legacy.rows.list[1].id, latest = library.get(editorId);
     const versions = () => legacy.dump().collection_preset_versions.length;
@@ -262,19 +262,19 @@ test("saving an unchanged collection adds no preset revision; a change adds exac
     expect(JSON.parse(preset.preset_json as string)).toHaveProperty("recipe");
     expect(parseCollection(JSON.parse(newest.collection_json as string)).presets[2].recipe.layers[0].opacity).toBe(0.25);
     // Reopening compares canonically too.
-    library.close();
-    const reopened = new CollectionLibrary(legacy.path, STUDIO_PARTS);
+    file.close();
+    const reopenedFile = openTestLibrary(legacy.path), reopened = reopenedFile.collections;
     try {
       const again = reopened.save({ collection: reopened.get(editorId).collection, revision: saved.revision });
       expect(again.collection.presets.map(item => item.revision)).toEqual(saved.collection.presets.map(item => item.revision));
       expect(legacy.dump().collection_preset_versions).toHaveLength(before + 1);
-    } finally { reopened.close(); }
-  } finally { try { library.close(); } catch { /* already closed */ } legacy.cleanup(); }
+    } finally { reopenedFile.close(); }
+  } finally { file.close(); legacy.cleanup(); }
 });
 
 test("a look the legacy format cannot hold is saved as a collection-2 revision, and older rows are never rewritten", () => {
   const legacy = legacyLibrary();
-  const library = new CollectionLibrary(legacy.path, STUDIO_PARTS);
+  const file = openTestLibrary(legacy.path), library = file.collections;
   try {
     const current = library.get(legacy.rows.list[2].id), edited = structuredClone(current.collection);
     edited.presets[0].parts.hair = { schema: "xfs/hair-part-3", body: { strands: 3 } };
@@ -288,12 +288,12 @@ test("a look the legacy format cannot hold is saved as a collection-2 revision, 
     expect(JSON.parse(newest.collection_json as string).schema).toBe(COLLECTION_2);
     expect(library.get(current.collection.id).collection.presets[0].parts.hair).toEqual({ schema: "xfs/hair-part-3", body: { strands: 3 } });
     expect(library.list().find(item => item.id === current.collection.id)?.revision).toBe(saved.revision);
-  } finally { library.close(); legacy.cleanup(); }
+  } finally { file.close(); legacy.cleanup(); }
 });
 
 test("draft persistence compares canonically: a library revision read from collection-1 rows is clean until edited", async () => {
   const legacy = legacyLibrary();
-  const library = new CollectionLibrary(legacy.path, STUDIO_PARTS);
+  const file = openTestLibrary(legacy.path), library = file.collections;
   try {
     const id = legacy.rows.list[1].id;
     const transport: CollectionTransport = { list: async () => library.list(), get: async key => library.get(key),
@@ -310,7 +310,7 @@ test("draft persistence compares canonically: a library revision read from colle
     expect(service.persistence()).toMatchObject({ baseline: "known", dirty: false, dirtyPresets: [] });
     editor.recipe.layers[0].opacity = 0.123; revision++;
     expect(service.persistence()).toMatchObject({ dirty: true, dirtyPresets: [service.summary().draft!.presets[0].id] });
-  } finally { library.close(); legacy.cleanup(); }
+  } finally { file.close(); legacy.cleanup(); }
 });
 
 // ---- Portable files and the published alpha ----

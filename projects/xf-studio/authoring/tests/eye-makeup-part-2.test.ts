@@ -9,7 +9,7 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CollectionLibrary } from "../src/collection-store";
+import { openTestLibrary } from "./fixtures/library-file";
 import { STUDIO_PARTS, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { defaultClusteredGlintFlakes, defaultDirectGlintFlakes, defaultFineSpeckleFlakes } from "../src/engines/layered-makeup/direct-glint-settings";
 import { EYE_MAKEUP, EYE_MAKEUP_PART_1, EYE_MAKEUP_PART_2, eyeMakeupPartCodec } from "../src/features/eye-makeup";
@@ -171,14 +171,14 @@ test("saving a library whose rows hold pinned part-1 recipes adds no revision; a
   new Database(path, { create: true }).exec(`CREATE TABLE looks (id TEXT PRIMARY KEY, created_at TEXT NOT NULL);
     CREATE TABLE look_revisions (look_id TEXT NOT NULL, revision INTEGER NOT NULL, name TEXT NOT NULL, recipe_json TEXT NOT NULL,
       created_at TEXT NOT NULL, PRIMARY KEY (look_id, revision)); PRAGMA user_version=1;`);
-  let library = new CollectionLibrary(path, STUDIO_PARTS), raw: Database | undefined;
+  let store = openTestLibrary(path), library = store.collections, raw: Database | undefined;
   try {
     // Rows as the step-2 build wrote them: collection-1 with a pinned recipe-11, and collection-2 with a part-1 body.
     const file = readFixture("016-finish-board/finish-board.collection.json");
     const hair = { schema: "xfs/hair-part-3", body: { strands: 3 } };
     const v2 = { schema: COLLECTION_2, id: fixedId(700), name: "Mixed", presets: file.presets.slice(0, 3).map((preset: { id: string; name: string; revision: number; recipe: unknown }, i: number) =>
       ({ id: preset.id, name: preset.name, revision: preset.revision, parts: { [EYE]: { schema: EYE_MAKEUP_PART_1, body: preset.recipe }, ...(i === 0 ? { hair } : {}) } })) };
-    library.close();
+    store.close();
     raw = new Database(path);
     const now = new Date().toISOString();
     for (const collection of [file, v2]) {
@@ -190,7 +190,7 @@ test("saving a library whose rows hold pinned part-1 recipes adds no revision; a
     const count = () => (raw!.query("SELECT COUNT(*) AS n FROM collection_preset_versions").get() as { n: number }).n;
     const rowsBefore = raw.query("SELECT * FROM collection_preset_versions ORDER BY rowid").all();
     const before = count();
-    library = new CollectionLibrary(path, STUDIO_PARTS);
+    store = openTestLibrary(path); library = store.collections;
     const current = library.get(file.id);
     const saved = library.save({ collection: current.collection, revision: current.revision });
     expect(saved.collection.presets.map(p => p.revision)).toEqual(current.collection.presets.map(p => p.revision));
@@ -218,7 +218,7 @@ test("saving a library whose rows hold pinned part-1 recipes adds no revision; a
     expect(collectionRow.schema).toBe(COLLECTION_1);
     // Old rows are never rewritten.
     expect(raw.query("SELECT * FROM collection_preset_versions ORDER BY rowid").all().slice(0, rowsBefore.length)).toEqual(rowsBefore);
-  } finally { library.close(); raw?.close(); try { rmSync(dir, { recursive: true, force: true }); } catch { /* WAL files may still be closing on Windows. */ } }
+  } finally { store.close(); raw?.close(); try { rmSync(dir, { recursive: true, force: true }); } catch { /* WAL files may still be closing on Windows. */ } }
 });
 
 // ---- Writers: the oldest schema that holds the content ----

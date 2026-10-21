@@ -9,7 +9,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, s
 import { basename, dirname, join } from "node:path";
 import type { Clock } from "../core/clock";
 
-export type BackupKind = "daily" | "pre-restore";
+export type BackupKind = "daily" | "pre-restore" | "pre-migration";
 export type Backup = { readonly file: string; readonly kind: BackupKind; readonly day: string; readonly bytes: number };
 
 /** How long after the host starts the first daily check runs (it never competes with startup), and how often it repeats. */
@@ -67,6 +67,16 @@ export class LibraryBackups {
   }
 
   /**
+   * A copy taken before migration `id` changes existing rows (library-database.ts), through the migrating connection, before its
+   * transaction starts. Named `<stem>.pre-migration.<day>.<id>.sqlite` and kept until removed deliberately. Throws when the copy
+   * fails, so the migration doesn't run.
+   */
+  beforeMigration(id: string, through: Database): string {
+    if (!/^[a-z0-9-]+$/.test(id)) throw Error("A migration ID names its backup, so it is lowercase letters, digits and dashes.");
+    return this.copy(this.name("pre-migration", isoDay(this.now()), `.${id}`), through);
+  }
+
+  /**
    * Keeps taking the daily copy for as long as `signal` lives: the first check `FIRST_BACKUP_DELAY_MS` from now, then one
    * every `BACKUP_CHECK_MS`, so a Studio left running takes a copy each day. A failed copy never stops the Studio; it is
    * tried again at the next check.
@@ -79,7 +89,7 @@ export class LibraryBackups {
 
   /**
    * Keeps the seven newest daily copies and, among older ones, the newest copy of each of the four newest weeks;
-   * removes the other daily copies. Pre-restore copies are kept until removed deliberately.
+   * removes the other daily copies. Pre-restore and pre-migration copies are kept until removed deliberately.
    */
   prune(): void {
     const daily = this.list().filter(item => item.kind === "daily").sort((a, b) => a.day < b.day ? 1 : -1);
@@ -97,7 +107,7 @@ export class LibraryBackups {
   /** Every copy, newest first. */
   list(): Backup[] {
     if (!existsSync(this.folder)) return [];
-    const pattern = new RegExp(`^${this.stem.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\.(daily|pre-restore)\\.(\\d{4}-\\d{2}-\\d{2})(?:\\..*)?\\.sqlite$`);
+    const pattern = new RegExp(`^${this.stem.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\.(daily|pre-restore|pre-migration)\\.(\\d{4}-\\d{2}-\\d{2})(?:\\..*)?\\.sqlite$`);
     return readdirSync(this.folder).flatMap(name => {
       const match = pattern.exec(name);
       if (!match) return [];

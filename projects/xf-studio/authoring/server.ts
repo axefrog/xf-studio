@@ -2,15 +2,9 @@ import { createReferenceCharacterRoutes } from "./src/reference-character-server
 import { resolve, sep } from "node:path";
 import { isBelow } from "./src/platform/api/path-containment";
 import { existsSync, mkdirSync } from "node:fs";
-import { LookLibrary, libraryRequest } from "./src/library-store";
-import { CollectionLibrary, collectionRequest } from "./src/collection-store";
-import { PartPresetLibrary, partPresetRequest } from "./src/part-preset-store";
-// The library files' host side: durability, daily backups and the document store (src/platform/persistence).
+// The library files: one owner per file, its stores, durability, daily backups and routes (src/library-files.ts).
 import { hostClock } from "./src/platform/core/clock";
-import { LibraryDurability } from "./src/platform/persistence/library-durability";
-import { LibraryBackups } from "./src/platform/persistence/backups";
-import { createDocumentsHandler, DocumentStore } from "./src/platform/persistence/document-store";
-import { importLegacyExperiments } from "./src/platform/persistence/legacy-experiment-import";
+import { openLibraryFiles } from "./src/library-files";
 import { EXPERIMENT_FLAGS, type ExperimentFlagsDocument } from "./src/platform/api/experiments";
 // A composition root: the part registry is built once and injected (CORE-29).
 import { STUDIO_PARTS } from "./src/compose/studio-registry";
@@ -66,27 +60,12 @@ setProcessDiagnostics(diagnostics);
 // A background failure nobody caught is logged; it never ends the dev server (PREV-101).
 logUnhandledRejections();
 const clock = hostClock();
-// Each library file's durability (library-durability.ts): commits don't wait for the disk, and a flush a few seconds after the last
-// one makes them durable, so a power cut loses at most those seconds. Open for the process's lifetime (a kill loses nothing: the commits are already with the OS).
-const libraryLife = new AbortController();
-const durable = (file: string) => new LibraryDurability(resolve(dataRoot, file), { clock, signal: libraryLife.signal,
-  report: error => hostFailure("library", "flush_failed", "The library couldn't be flushed to disk yet; it will try again.", error, "warn") });
-const libraryFile = durable("library.sqlite"), verificationFile = durable("verification.sqlite");
-const library = new LookLibrary(resolve(dataRoot, "library.sqlite"), libraryFile);
-const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqlite"), verificationFile);
-const collections = new CollectionLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS, libraryFile);
-const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS, verificationFile);
-// Named part presets (an expression today) in their own table of the same library files (part-preset-store.ts).
-const partPresets = new PartPresetLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS, undefined, libraryFile);
-const verificationPartPresets = new PartPresetLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS, undefined, verificationFile);
-// Typed documents (the experimental-features preference, experiments' documents) in their own table of the same files.
-const documents = new DocumentStore(resolve(dataRoot, "library.sqlite"), { writes: libraryFile, now: () => clock.now() });
-const verificationDocuments = new DocumentStore(resolve(dataRoot, "verification.sqlite"), { writes: verificationFile, now: () => clock.now() });
-for (const store of [documents, verificationDocuments]) importLegacyExperiments(store, message => diagnostics.log.info("library", "legacy_import", message));
-const documentRequests = [["/api/documents", createDocumentsHandler(documents, "/api/documents")],
-  ["/api/verification/documents", createDocumentsHandler(verificationDocuments, "/api/verification/documents")]] as const;
-// The library's daily backup, a moment after starting and each day after (never for an isolated server's own library).
-if (!state.isolated) new LibraryBackups(resolve(dataRoot, "library.sqlite"), () => clock.now()).keepDaily(clock, libraryLife.signal);
+// The library files (library.sqlite and verification.sqlite), each with one owner: migrations, transactions and durability
+// (commits don't wait for the disk; a flush a few seconds after the last makes them durable). Open for the process's lifetime: a kill
+// loses nothing, the commits are already with the OS. The main file is backed up daily, never for an isolated server's own library.
+const libraries = openLibraryFiles(dataRoot, { clock, parts: STUDIO_PARTS, isolated: state.isolated,
+  log: message => diagnostics.log.info("library", "legacy_import", message) });
+const documents = libraries.main.documents;
 const localSettings = new LocalSettingsStore(state.settingsDirectory);
 // A verification workspace (?verify) edits its own copy of the settings, starting from these (UI-98).
 const verificationSettings = new LocalSettingsStore(verificationSettingsDirectory(dataRoot), { seed: () => localSettings.load().settings });
@@ -305,14 +284,8 @@ const server = Bun.serve({
     if (url.pathname === GRADING_LUT_ENDPOINT) return gradingLutRequest(request);
     if (url.pathname === FACIAL_ENDPOINT || url.pathname.startsWith(`${FACIAL_ENDPOINT}/`)) return facialRequest(request);
     if (url.pathname === "/api/wolvenkit") return wolvenKitRequest(request);
-    for (const [prefix, store] of [["/api/collections", collections], ["/api/verification/collections", verificationCollections]] as const)
-      if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return collectionRequest(request, store, prefix);
-    for (const [prefix, store] of [["/api/part-presets", partPresets], ["/api/verification/part-presets", verificationPartPresets]] as const)
-      if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return partPresetRequest(request, store, prefix);
-    for (const [prefix, handle] of documentRequests) if (url.pathname === prefix) return handle(request);
-    for (const [prefix, store] of [["/api/looks", library], ["/api/verification/looks", verificationLibrary]] as const)
-      if (url.pathname === prefix || url.pathname.startsWith(prefix + "/"))
-        return libraryRequest(request, store, prefix);
+    const libraryAnswer = libraries.handle(request, url);
+    if (libraryAnswer) return libraryAnswer;
     if (request.method !== "GET" && request.method !== "HEAD")
       return new Response("Method not allowed", { status: 405 });
     if (url.pathname === "/health")

@@ -7,10 +7,9 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CollectionLibrary } from "../src/collection-store";
 import { CollectionService, uniqueCollectionName, type CollectionTransport } from "../src/collection-service";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
-import { LookLibrary } from "../src/library-store";
+import { openTestLibrary } from "./fixtures/library-file";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { freshWorkspace } from "./fixtures/eye-region";
 
@@ -22,7 +21,7 @@ function coreFixture() {
 
 function library() {
   const dir = mkdtempSync(join(tmpdir(), "xfs-beta-library-")), path = join(dir, "library.sqlite");
-  const looks = new LookLibrary(path), db = new CollectionLibrary(path, STUDIO_PARTS);
+  const file = openTestLibrary(path), db = file.collections;
   let lists = 0;
   const transport: CollectionTransport = {
     list: async () => { lists++; return db.list(); },
@@ -35,7 +34,7 @@ function library() {
     editor => fixture.document.restore({ ...editor, fieldSelection: editor.fieldSelection ?? {} }), transport,
     () => ({ recipe: fixture.document.recipe, revision: fixture.document.geometryVersion.revision }));
   return { db, service, fixture, get lists() { return lists; },
-    close() { db.close(); looks.close(); rmSync(dir, { recursive: true, force: true }); } };
+    close() { file.close(); rmSync(dir, { recursive: true, force: true }); } };
 }
 
 test("a fresh library is empty, so the first draft is the starter collection, not saved yet (item 11)", async () => {
