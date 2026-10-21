@@ -107,4 +107,4 @@ Why it mattered now: rendering is data driven, so the V's own eye makeup (vanill
 
 ## Related
 
-[CC file chain](../../knowledge/cc-file-chain.md) (presentation, links, R5), [CCXL capabilities](ccxl-character-creator-capabilities.md), [preview fidelity](preview-fidelity.md), [catalogue probe (superseded)](../character-customization/catalog-prototype.md), [action catalogue](../authoring/ui-action-catalogue.md#the-character-namespace).
+[CC file chain](../../knowledge/cc-file-chain.md) (presentation, links, R5), [CCXL capabilities](ccxl-character-creator-capabilities.md), [preview fidelity](preview-fidelity.md), [catalogue probe (superseded)](../character-customization/catalog-prototype.md), [action catalogue](../authoring/ui-action-catalogue.md#character-charactercontext-system-family).

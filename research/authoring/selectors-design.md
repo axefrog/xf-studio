@@ -33,7 +33,7 @@ It extends the [feature-module platform](feature-module-platform.md) (§2 docume
 - **No worry about row counts.** A crash report from someone who adds 50 rows would itself be useful.
 - **Save identity is auto-generated**, with sensible values. The game silently ignores a saved reference to something missing.
 
-**The model in one paragraph.** A **selector** is a document-level node in the reactive graph: a **feature type** × a **target**. The target is either a **new XF row** or an **existing vanilla row** that the selector adds choices to. A selector holds:
+**The model in one paragraph.** A **selector** is a document-level record: a **feature type** × a **target**. The target is either a **new XF row** or an **existing vanilla row** that the selector adds choices to. A selector holds:
 
 - its **looks** (the authored choices; a look belongs to exactly one selector);
 - its **settings** (name, "XF" shown, placement);
@@ -75,7 +75,7 @@ A **selector type registry** says, per feature type, which targets it allows, it
 | **Worn look** | Which look (or Off) V wears in this row in the Studio | Workspace |
 | **Visibility** | Whether the selector's content draws in the views | Workspace |
 
-**Why it is a graph node.** The "Reactive graph by default" rule applies. A selector feeds several consumers, all derived rather than written:
+**Why it is a shared record.** A selector has one owner and feeds several consumers, all derived rather than written:
 
 - the scene nodes' content (its worn look, drawn by its feature's renderer);
 - the Character panel's rows;
@@ -391,7 +391,7 @@ All phases come after **view graph P2** (modules, parked layouts, derived tools)
 | # | Phase | Scope | Gates | Effort |
 |---|---|---|---|---|
 | S0 | Design | This page; the questions | The maintainer's answers | done |
-| S1 | Selector domain model | `platform/api/selector.ts`; the type registry in `compose/`; eye makeup's type (own row, cap 1); the implicit selector; `xfs/collection-3` read and write under the oldest-schema rule; the `selector.*` actions with caps and plain refusals; workspace `selectors` block; renderers per (scene, selector) with the single-surface assumption removed | Collection-1 and collection-2 fixtures round-trip byte-identical; the SQLite fixture's rows unchanged; the registry golden changes only by the `selector.*` kinds; `raster()` and plan parity for the implicit selector | 4 |
+| S1 | Selector domain model | `platform/api/selector.ts`; the type registry in `compose/`; eye makeup's type (own row, cap 1); the implicit selector; `xfs/collection-3` read and write under the oldest-schema rule; the `selector.*` actions with caps and plain refusals; workspace `selectors` block; renderers per (scene, selector) with the single-surface assumption removed | Collection-1 and collection-2 fixtures round-trip byte-identical; the SQLite fixture's rows unchanged; the registry gains only the `selector.*` kinds; `raster()` and plan parity for the implicit selector | 4 |
 | S2 | Selectors panel and activation | The panel, Add selector, settings, activation-driven module visibility (on P2's parked layouts), pinning, the Presets panel scoped to the active selector, the crumb | Pure derivation tests (activation × pin × module); `?verify=1`: add a second type's placeholder, switch, reload, layout returns | 4 |
 | S3 | Export by selector | `SelectorPlanInput`; `xfs/package-plan-2`; label composition and the verifier's label rule; placement from the merged catalogue; the creator-resource uniqueness check; manifest `selectors` | **Byte-identical** finish-board build for the implicit selector (`tools/compare-package-candidates.ts`); a two-selector synthetic product with a stub type; split per feature and per selector; namespace-duplication refusal per selector | 5 |
 | S4 | Character panel integration | XF rows and XF entries in the Character panel; wear and displacement text; the installed build superseded by the collection's | The context's derivation with XF rows; `?verify=1` with the reference save | 3 |

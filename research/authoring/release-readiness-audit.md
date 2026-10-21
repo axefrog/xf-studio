@@ -366,7 +366,7 @@ The **budgets** are from the [performance backlog](../backlog/performance.md) (s
     - the Panels menu height (group or scroll);
     - the popover anchoring. **M–L**
 
-    **Done** on `claude/track-d-layout` (`bd83678`, `5400891`): C-26 to C-33 as each row above says, with UI-139..162 and DESK-06 in the [ledger](code-health.md#fixed-in-claudetrack-d-layout). C-29's "a folder" wording came with the Folder setting change. DESK-05 (the Build line after Add) was already fixed by `efb79ac`, verified on `claude/track-d-copy`.
+    **Done** on `claude/track-d-layout` (`bd83678`, `5400891`): C-26 to C-33 as each row above says, with UI-139..162 and DESK-06; they are fixed. C-29's "a folder" wording came with the Folder setting change. DESK-05 (the Build line after Add) was already fixed by `efb79ac`, verified on `claude/track-d-copy`.
 20. **The status line fits one line** (C-14) and the ledger's UI-151 paths go. **S**. **Done** (`a6cf806`): Check and Build say one line of 70 characters or fewer; the result card holds the rest
 
 ### Track E: beta framing (blocks: "Beta scope" row)

@@ -77,10 +77,10 @@ Everything runs in game space; the adapter converts V's driven joints from Three
 - Arithmetic is `+ − × ÷` and `sqrt` in doubles (IEEE-exact on every engine); no `Math.random`. Trigonometry is needed only once per cone, at setup (its cosine and half-angle rotation), through one helper. The game computes in single precision; the knowledge page's test vectors hold to about 1e-6 relative.
 - Scene parity (`tools/scene-parity.ts`) stays byte-identical with physics off. With physics on, a capture is identical run to run on one machine; that is its own golden test.
 
-### 3.6 View graph and the reactive graph
+### 3.6 View graph
 
 - **A scene-node setting, not a per-view one.** In the [view graph](../authoring/view-graph-design.md) a scene node owns the subject's motion (idle, blink, later a pose). Physics joins that group as `motion.physics: "off" | "on"`. A simulation is state of the scene, so two views linked to one scene show the same hair. A view that wants physics off while its neighbour has it on forks the scene, as for any other difference in content. Offering a per-view switch that silently runs two simulations of one V would break the "one source, many views" model and double the cost.
-- **Derived nodes.** `DangleSpec` is derived data of each resolved component (a graph node keyed by content hash); the solver instance is derived from the spec set and the scene's motion. A hairstyle change swaps only the affected specs.
+- **Derived data.** `DangleSpec` is derived from each resolved component (cached by content hash); the solver instance is derived from the spec set and the scene's motion. A hairstyle change swaps only the affected specs.
 - **Surfaces.** A character-scene view tool beside Idle ("Hair physics"), the Motion panel's switch and a palette command, all through one typed action (`motion.setPhysics`) with a capability that refuses in plain words when nothing on V has physics ("This hairstyle doesn't move on its own") or when a part's graph is unsupported. The detail status line and the Activity view report what is simulated.
 - **Default off** until P4; decided: on by default after calibration (Q1).
 

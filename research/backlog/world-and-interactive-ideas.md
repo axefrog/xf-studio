@@ -74,7 +74,7 @@ ArchiveXL already changes world data as it loads. It appends mods' blocks to the
 - **Deterministic procedural placement:** props, clutter, foliage scatter and instanced-mesh buffers generated from a model and a seed as a sector streams in. The same model and seed always produce the same result, so saves and other mods see stable node IDs.
 - **Content that follows the player's setup or game state:** generated from what is installed or what has happened, rather than frozen at Build time.
 - **Navigation for new geometry:** the game's navigation is already tiled (17,363 `worldNavigationNode`s, each with a `worldNavigationTileResource` and a `.navmesh`, in dedicated navigation sectors at level 3). So only the tiles that new geometry touches would need rebuilding, offline or at load. It still needs the tile format decoded and a generator. Baking at load changes where the generator runs, not whether we need one. [hypothesis: the tiling suggests a tile-rebuildable design; the format is unread]
-- **The game-side Strata kernel as a load-time erector:** world content declared as models, erected by the plugin when its sector streams in. This is the "one engine under all of it" direction applied to the world.
+- **World content declared as data:** the plugin builds the content from a plain definition when its sector streams in, so the same definition drives the Studio's editor and the game.
 
 **Constraints:**
 - **Streaming budgets:** sectors load while V drives fast, so generation must fit in milliseconds or come from a cache warmed ahead.

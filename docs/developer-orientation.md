@@ -21,9 +21,26 @@ The [architecture contract](../research/authoring/architecture-contract.md) gove
 
 The first local survey was on 23 September 2026; it required no game launch or mod deployment. It recorded metadata and exclusions, not a reading of every source file or decoding of every archive. Later authorized reference updates have their own before/after record in the inventory. Original projects remain research inputs in their original locations; new implementation belongs in these peer projects and does not inherit the old toolbox architecture. The repository keeps source and reviewed, provenance-tracked work. Personal inventories, credentials, saves, SQLite libraries, extracted game/mod assets and the game-derived Blender master remain local; links into those folders work only in the original workspace. A clone is therefore not a self-contained asset bundle. Put experimental output under `experiments/<id>/`, extracted consumer resources under `research/consumers/`, and releasable output only under a project's `dist/`; do not package research dumps or reference assets.
 
-## The graph engine
+## Platform subsystems
 
-[XF Strata](../projects/strata/README.md) (`projects/strata/`, Strata for short) is the standalone graph engine the Studio's state is moving onto: every node is a stream, nothing runs without demand, cycles are glitch-free, and authored nodes are event-sourced with layering, undo, time views and conflicts. A native implementation for the game side is planned. It imports nothing from the Studio; Studio code reaches it only through `strata` and `strata/testing`, with its adapters in `src/platform/graph-adapters/` and its node types and rules in `src/platform/graph-types/` (the [profiles and graph design](../research/authoring/profiles-and-graph-design.md) says what moves onto it, slice by slice). New Studio code may not read the clock, randomness, files, the network or the bridge directly; take them from sources.
+Studio code is split into subsystems with one owner each, under `projects/xf-studio/authoring/src/platform/` and `src/engines/` (the [architecture contract](../research/authoring/architecture-contract.md) has the rules). The ones a newcomer meets first:
+
+| Subsystem | Where | What it owns |
+|---|---|---|
+| Clock and randomness | `platform/core/clock.ts`, `random.ts` | Time and seedable randomness, injected into services so tests control them |
+| Tasks | `platform/core/tasks.ts` | Work the user can supersede: the newest request wins, the older one is aborted through its `AbortSignal`, and the task publishes its state |
+| Persistence | `platform/persistence/` | The typed, versioned document store in `library.sqlite` (served at `/api/documents`), library durability and automatic backups |
+| History | `platform/core/history-transaction.ts`, `document-history.ts` | Undo and redo for documents |
+| View graph | `platform/core/view-graph.ts` ([design](../research/authoring/view-graph-design.md)) | Views, cameras, lights, overlays and module contributions, shared or linked between views |
+| Experiment flags | a per-library document in the document store (kind `experiment-flags`, id `preferences`) | Which optional experiments are on; a verification workspace keeps its own |
+
+New Studio code takes time and randomness from the clock and random services rather than reading globals, and runs cancellable work as a task.
+
+## Checks
+
+- **Studio:** from `projects/xf-studio/authoring/`, `bun run check` (type checks for the app, tools and experiment scripts), `bun test` and `bun run build`. Run the full suite under the memory guard (`python tools/memory_guard.py --limit 6 -- bun test`); a targeted test file is enough while developing. The boundary tests (`architecture-import-boundary`, `studio-ui-boundary`, `ui-component-ratchet`) keep the layers in the [architecture contract](../research/authoring/architecture-contract.md) honest.
+- **Documentation:** `python tools/check_links.py` and `python tools/check_private_paths.py` before committing; CI runs both on every push.
+- **UI changes:** exercise them in an isolated `?verify=1` workspace and attach light and dark captures, as the [visual QA checklist](../research/authoring/ui-visual-qa-checklist.md) asks.
 
 ## Naming and path boundaries
 
@@ -43,6 +60,6 @@ The old directory spelling remains only in captured, immutable output evidence a
 
 ## Parallel work, worktrees and the local archive
 
-Code-changing parallel work uses a separate Git worktree at `D:/Dev/worktrees/<slug>` on a `claude/<slug>` branch; the agent edits, tests and commits only there, and the result is reviewed and merged or cherry-picked into `main` in the primary checkout. Remove the worktree and branch only after integration and a check for uncommitted work. Read-only research may use the primary checkout.
+Code-changing parallel work uses a separate Git worktree at `%USERPROFILE%/xfs-worktrees/<slug>` on a `claude/<slug>` branch; the agent edits, tests and commits only there, and the result is reviewed and merged or cherry-picked into `main` in the primary checkout. Remove the worktree and branch only after integration and a check for uncommitted work. Read-only research may use the primary checkout.
 
 On 25 September 2026 all earlier `D:/Dev/worktrees/*` checkouts and `codex/*` branches were removed after integration. Private, ignored experiment outputs that had existed only in those worktrees were moved to their canonical ignored locations in the primary checkout (for example `experiments/*/generated/`). Copies that conflicted with existing files were kept under the ignored `local/worktree-archive/<old-worktree>/` folder, alongside `consolidation-manifest.json` (every move and its destination), `branch-tips.txt` and a `codex-branches.bundle`. Check that manifest before assuming a historical private output is lost.
