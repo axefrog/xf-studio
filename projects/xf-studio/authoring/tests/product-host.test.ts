@@ -118,6 +118,30 @@ test("deadlines, cancellation, refusals and prerequisite failures answer with pl
   expect(unready).toEqual({ ok: false, code: "package_build_unavailable", message: "WolvenKit isn't set up yet.", status: 503 });
 }, 60_000);
 
+test("a Build cancelled while its setup is probed, or before it starts, prepares and builds nothing (PIPE-140)", async () => {
+  const cancelled = { ok: false, code: "package_build_cancelled", status: 499 };
+  const prepared: string[] = [];
+  const watched = (base: ReturnType<typeof host>, buildIssue: PackageHostAdapter["buildIssue"]): PackageHostAdapter => ({ ...base.adapter, buildIssue,
+    prerequisites: { [EYE_PLATE_PREREQUISITE]: { ...base.adapter.prerequisites[EYE_PLATE_PREREQUISITE], prepare: async signal => {
+      prepared.push("plate");
+      return base.adapter.prerequisites[EYE_PLATE_PREREQUISITE].prepare(signal);
+    } } } });
+  // The page closes while the desktop host is still probing its tools; the probe then answers "ready".
+  const during = host(), cancel = new AbortController();
+  const probing = runProductBuild(watched(during, async () => { cancel.abort(); await Bun.sleep(20); return null; }), fixture, cancel.signal);
+  expect(await probing).toMatchObject(cancelled);
+  expect(prepared).toEqual([]);
+  expect(during.runs).toEqual([]);
+  // A request whose signal is already aborted does not even probe.
+  const before = host(), aborted = new AbortController();
+  aborted.abort();
+  let probed = false;
+  expect(await runProductBuild(watched(before, () => { probed = true; return null; }), fixture, aborted.signal)).toMatchObject(cancelled);
+  expect(probed).toBe(false);
+  expect(prepared).toEqual([]);
+  expect(before.runs).toEqual([]);
+}, 60_000);
+
 test("a builder answer that differs from the host's own plan is refused", async () => {
   const { adapter } = host();
   const tampered: PackageHostAdapter = { ...adapter, async runBuilder(args, run) {

@@ -277,39 +277,44 @@ async function attempt(adapter: PackageHostAdapter, value: unknown, signal: Abor
   let looks: number | undefined;
   const report = (stage: PackageBuildStage) => onProgress({ stage, step: PACKAGE_BUILD_STAGES.indexOf(stage) + 1, steps: PACKAGE_BUILD_STAGES.length,
     ...looks !== undefined ? { looks } : {} });
-  let issue: string | null;
-  try { issue = await adapter.buildIssue(); }
-  catch (error) { adapter.log("build", "package_build_unavailable", "Build readiness could not be checked.", error); issue = "Package Build could not check its setup. Restart XF Studio and try again."; }
-  if (issue) return failure("package_build_unavailable", issue);
-  let collection: Record<string, unknown>;
-  try { collection = hostCollection(value); } catch (error) { return refusalOf(error)!; }
-  const source = JSON.stringify(collection), collectionSha256 = sha256(source);
-  // Refuse what no prerequisite can change (nothing exportable, a damaged plan) before preparing anything.
-  try { checkProducts({ collection, exporters: adapter.exporters, prerequisites: {}, diagnostics: false, preflight: false, collectionSha256 }); }
-  catch (error) {
-    const refused = refusalOf(error);
-    if (refused) return refused;
-    adapter.log("build", "package_build_failed", (error as Error).message, error);
-    return failure("package_build_failed", "Package Build could not plan these mod files. No candidate was published.");
-  }
-  // Which features this collection holds decides which prerequisites to prepare.
-  const present = adapter.exporters.filter(entry => { try { return entry.exporter.present(collection); } catch { return false; } });
-  const required = [...new Set(present.flatMap(entry => entry.exporter.prerequisites))];
-  const missing = required.filter(id => !adapter.prerequisites[id]);
-  // Optional prerequisites are prepared when this host offers them (eye makeup: the masculine eye plate).
-  const needed = [...new Set([...required, ...present.flatMap(entry => entry.exporter.optionalPrerequisites ?? [])
-    .filter(id => adapter.prerequisites[id])])];
-  if (missing.length) return failure("package_build_unavailable", "This host can't prepare everything these mod files need.");
-  report("prepare");
+  // Cancellation is connected before anything is awaited, and checked before each step starts: closing the page while the setup is
+  // still being probed stops the Build there (PIPE-140).
   const deadline = new AbortController();
   const timer = setTimeout(() => deadline.abort(), timeoutMs);
   const stop = () => deadline.abort();
   signal.addEventListener("abort", stop, { once: true });
+  if (signal.aborted) deadline.abort();
   const stopped = () => signal.aborted ? failure("package_build_cancelled", "Package Build was cancelled. Your draft is unchanged; nothing was installed.")
     : failure("package_build_timeout", "Package Build exceeded its time limit and was stopped. Your draft is unchanged; nothing was installed.");
   const prepared: Record<string, PreparedPrerequisite> = {};
   let setup: ReturnType<PackageHostAdapter["buildSetup"]> | undefined;
   try {
+    if (deadline.signal.aborted) return stopped();
+    let issue: string | null;
+    try { issue = await adapter.buildIssue(); }
+    catch (error) { adapter.log("build", "package_build_unavailable", "Build readiness could not be checked.", error); issue = "Package Build could not check its setup. Restart XF Studio and try again."; }
+    if (deadline.signal.aborted) return stopped();
+    if (issue) return failure("package_build_unavailable", issue);
+    let collection: Record<string, unknown>;
+    try { collection = hostCollection(value); } catch (error) { return refusalOf(error)!; }
+    const source = JSON.stringify(collection), collectionSha256 = sha256(source);
+    // Refuse what no prerequisite can change (nothing exportable, a damaged plan) before preparing anything.
+    try { checkProducts({ collection, exporters: adapter.exporters, prerequisites: {}, diagnostics: false, preflight: false, collectionSha256 }); }
+    catch (error) {
+      const refused = refusalOf(error);
+      if (refused) return refused;
+      adapter.log("build", "package_build_failed", (error as Error).message, error);
+      return failure("package_build_failed", "Package Build could not plan these mod files. No candidate was published.");
+    }
+    // Which features this collection holds decides which prerequisites to prepare.
+    const present = adapter.exporters.filter(entry => { try { return entry.exporter.present(collection); } catch { return false; } });
+    const required = [...new Set(present.flatMap(entry => entry.exporter.prerequisites))];
+    const missing = required.filter(id => !adapter.prerequisites[id]);
+    // Optional prerequisites are prepared when this host offers them (eye makeup: the masculine eye plate).
+    const needed = [...new Set([...required, ...present.flatMap(entry => entry.exporter.optionalPrerequisites ?? [])
+      .filter(id => adapter.prerequisites[id])])];
+    if (missing.length) return failure("package_build_unavailable", "This host can't prepare everything these mod files need.");
+    report("prepare");
     for (const id of needed) {
       try { prepared[id] = await adapter.prerequisites[id].prepare(deadline.signal); }
       catch (error) {
@@ -321,6 +326,8 @@ async function attempt(adapter: PackageHostAdapter, value: unknown, signal: Abor
         return failure("package_build_failed", "Something XF Studio needs for these mod files could not be prepared. No candidate was published.");
       }
     }
+    // A preparation that finished without heeding the signal still stops here, before the builder starts.
+    if (deadline.signal.aborted) return stopped();
     // The host's own plan, on the prepared prerequisites: what the builder's answer must equal.
     let expected: ProductsCheck;
     try {
