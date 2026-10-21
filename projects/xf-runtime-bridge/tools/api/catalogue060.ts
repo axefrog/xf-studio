@@ -31,6 +31,21 @@ async function attempt(context: CommandContext, method: string, params: Record<s
   return response.ok ? (response.result as Json) : { error: response.error };
 }
 
+/**
+ * 0.8.2 (the re-check's fifth finding): a forward step that may fail without failing the command, sent only while the command
+ * hasn't been cancelled (an emergency control's signal); attempt() stays for the steps that put things back.
+ */
+async function forward(context: CommandContext, method: string, params: Record<string, unknown>): Promise<Json> {
+  const response = await context.api.callBridge(method, params, context.cid, undefined, context.signal);
+  return response.ok ? (response.result as Json) : { error: response.error };
+}
+
+/** Throws the plain "interrupted" error once the command's signal has fired (0.8.2): no further capture is taken. */
+export function stopIfCancelled(context: CommandContext, what: string): void {
+  if (!context.signal?.aborted) return;
+  throw planError("interrupted", `Stopped before ${what}: an emergency control (or Ctrl+C) cancelled this command. Nothing more was captured.`);
+}
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export const point3 = (description: string): JsonSchema => ({ type: "array", description, items: num("A coordinate in metres."), minItems: 3, maxItems: 3 });
 
@@ -45,15 +60,17 @@ export const point3 = (description: string): JsonSchema => ({ type: "array", des
  */
 export async function withOverlayCleared<T>(context: CommandContext, run: () => T | Promise<T>, hideMs = 5000): Promise<{ value: T; overlay: Json }> {
   if (!context.api.session()) return { value: await run(), overlay: { cleared: false, why: "the game bridge isn't running" } };
-  const cleared = await attempt(context, "ui.message", { clear: true });
-  const hud = await attempt(context, "ui.hud", { show: false, cet_label: false });
+  // 0.8.2: the preparation is forward work, so a cancelled command sends none of it; only the put-back below always runs.
+  const cleared = await forward(context, "ui.message", { clear: true, keep_asks: true });
+  const hud = await forward(context, "ui.hud", { show: false, cet_label: false });
   // 0.7: the XF ImGui overlay too (it lapses by itself after hideMs, 5 s by default and at most 10 s), and whether Cyber
   // Engine Tweaks' overlay is open (its windows would be in the picture: session 4's teeth frames were lost to it).
-  const host = await attempt(context, "overlay.hide", { hidden: true, ms: Math.max(1000, Math.min(10000, Math.round(hideMs))) });
-  const ui = await attempt(context, "ui.state", {});
+  const host = await forward(context, "overlay.hide", { hidden: true, ms: Math.max(1000, Math.min(10000, Math.round(hideMs))) });
+  const ui = await forward(context, "ui.state", {});
   const restore = hud.error ? null : ((hud.undo as Json | undefined)?.params as Json | undefined) ?? null;
   if (!hud.error || !host.error) await sleep(120); // the panel's next frames (the overlay pulls every sixth tick)
   try {
+    stopIfCancelled(context, "the capture");
     return {
       value: await run(),
       overlay: {
@@ -194,10 +211,19 @@ async function runHandover(input: Json, context: CommandContext): Promise<Comman
   if (input.restore_ui !== false && status.phase === "photo_mode" && (status.photo_ui_hidden === true || status.cursor_hidden === true)) {
     await step("show photo mode's menu and cursor", "photo.hud.hide", { hidden: false, cursor: true });
   }
-  if (input.lights === "clear") await step("clear the showroom's rigs", "showroom.clear", { what: "lights" });
   // bridge.handover also gives V back (RB-82): the effects the bridge put on her lifted and any look ended, as player_stop
-  // does, in the same step that starts refusing writes.
-  const handed = await call(context, "bridge.handover", { on: true, ...(input.note ? { note: input.note } : {}) });
+  // does, in the same step that starts refusing writes. 0.8.2 (the re-check's third finding): the showroom's rigs are cleared
+  // inside that same step too, after the write gate has closed, so a showroom.lights still on its way can't add a rig after
+  // the clear.
+  const handed = await call(context, "bridge.handover", { on: true, ...(input.lights === "clear" ? { lights: "clear" } : {}), ...(input.note ? { note: input.note } : {}) });
+  const lights = handed.lights_cleared as Json | null | undefined;
+  if (input.lights === "clear") {
+    steps.push({
+      step: "clear the showroom's rigs",
+      ok: !!lights && !lights.error,
+      ...(lights && lights.error ? { why: lights.error } : {}),
+    });
+  }
   const released = handed.player_released as Json | null | undefined;
   if (released !== undefined) {
     steps.push({
@@ -243,6 +269,10 @@ async function runCaptureSheet(input: Json, context: CommandContext): Promise<Co
   const widest = maxCellWidth(cellsIn.length, { columns: input.columns as number | undefined, maxWidth: (input.max_width as number | undefined) ?? 2400 });
   try {
     for (const [i, cell] of cellsIn.entries()) {
+      // 0.8.2: a kill or a handover during a sheet stops it before the next picture, not after all of them.
+      if (!cell.path && context.signal?.aborted) {
+        throw planError("interrupted", `Stopped after ${cells.length} of ${cellsIn.length} cells: an emergency control (or Ctrl+C) cancelled the sheet, so no further picture was taken.`);
+      }
       if (cell.path) {
         cells.push(readCell(checkedCapturePath(root, cell.path), cell.label, widest));
         continue;

@@ -9,8 +9,9 @@
 //   r6/tweaks/XFRuntimeBridge/xf_runtime_bridge.yaml     (TweakXL)
 //   r6/tweaks/XFRuntimeBridge/^xf_photo_mode_presets.yaml (TweakXL; diagnostic and writes packages only; the
 //                                                         "^" makes TweakXL read it last, after other mods' presets)
-//   bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge/init.lua   (CET)
-//   bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge/panel.lua  (CET panel; diagnostic and writes packages only)
+//   bin/x64/plugins/cyber_engine_tweaks/mods/XF_Runtime_Bridge/init.lua   (CET; 0.8.2: the folder's name is CET's mod name,
+//                                                                          so its Bindings tab heads it "XF Runtime Bridge")
+//   bin/x64/plugins/cyber_engine_tweaks/mods/XF_Runtime_Bridge/panel.lua  (CET panel; diagnostic and writes packages only)
 // The live-pose carrier is a separate test package (tools/live-pose/build-carrier.ts), never in these.
 //   red4ext/plugins/XFRuntimeBridge/THIRD_PARTY_NOTICES.txt  (nlohmann/json, RED4ext.SDK and Dear ImGui, MIT)
 //   red4ext/plugins/XFRuntimeBridge/manifest.json        (versions and SHA-256 of every other file)
@@ -44,11 +45,38 @@ export const STAGING_NOTES: readonly string[] = [
   `Replace the mod's files rather than copying over them, and make sure ${OLD_PRESETS_FILE} (0.3.x's name) is gone: with both present TweakXL still reads the new file last, but the leftover is confusing.`,
   `${PRESETS_FILE} is read after every other tweak file, so for the whole profile it overrides any other mod's photo_mode.std_preset_6..9 (Portrait Enhancer's among them); stage this package only in the dedicated test profile.`,
 ];
-export const CET_DIR = "bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge";
+/**
+ * 0.8.2: CET names a mod after its folder and heads its Bindings group with that name, spaces for underscores and each word's
+ * first letter raised ("xf_runtime_bridge" read "Xf Runtime Bridge"; CET 1.37.1 src/overlay/widgets/Bindings.cpp
+ * UpdateAndDrawModBindings), so the folder is XF_Runtime_Bridge. CET keys a binding by mod name and hotkey ID
+ * (src/VKBindings.cpp), so a binding made under the old folder name has to be made once more.
+ */
+export const CET_MOD_NAME = "XF_Runtime_Bridge";
+export const CET_DIR = `bin/x64/plugins/cyber_engine_tweaks/mods/${CET_MOD_NAME}`;
 export const PANEL_FILE = `${CET_DIR}/panel.lua`;
 export const THEME_FILE = `${CET_DIR}/theme.lua`;
 
 export const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
+
+/**
+ * 0.8.2: the clean-build gate. 0.8.1's DLL linked an object file compiled before a header it depends on changed (MSBuild's
+ * include record for Main.cpp was missing), and the game's heap was corrupted at load. A package is made only from a build in
+ * which every object file is newer than every native source file, which a clean build (`cmake --build build --config Release
+ * --clean-first`) always gives. Answers the first object file older than the newest source, or null when the build is clean.
+ */
+export function staleObject(buildDir: string, sourceDir: string): { object: string; source: string } | null {
+  const sources = listFiles(sourceDir).filter((p) => /\.(c|cc|cpp|h|hpp|rc|cmake)$/i.test(p) || p.endsWith("CMakeLists.txt"));
+  if (!sources.length) return null;
+  let newest = sources[0]!;
+  for (const path of sources) if (statSync(path).mtimeMs > statSync(newest).mtimeMs) newest = path;
+  const newestMs = statSync(newest).mtimeMs;
+  const objects = listFiles(buildDir).filter((p) => p.toLowerCase().endsWith(".obj") && !/[\\/](_deps|CMakeFiles)[\\/]/.test(p));
+  if (!objects.length) return { object: "(no object files)", source: newest };
+  for (const object of objects) {
+    if (statSync(object).mtimeMs < newestMs) return { object, source: newest };
+  }
+  return null;
+}
 
 function listFiles(dir: string): string[] {
   const out: string[] = [];

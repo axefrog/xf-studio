@@ -134,6 +134,9 @@ export async function runSessionWait(input: Json, context: CommandContext): Prom
         continue;
       }
     }
+    // 0.8.2 (session 9: a waiting session_wait held the pipe, so every other XF tool's call was refused bridge_busy): the
+    // connection is let go between polls, and the next poll opens it again.
+    context.api.disconnect();
     await sleep(interval, context.signal);
   }
   return { value: { timed_out: !context.signal?.aborted, aborted: context.signal?.aborted === true, waited_s: waited(), events: [], next: since } };
@@ -146,7 +149,7 @@ export const COMMANDS_070: CommandDef[] = [
     name: "session.wait",
     title: "Wait for the player's answer",
     description:
-      "Waits until the player answers a question from the game or sends a comment (or another event kind you name), then returns it: kinds (default answer and comment; note catches notes from the game, such as Mark this moment, never a client's own), message_id (only the answer to that ui_message question counts, even one given before this call; other kinds still end the wait from now on; a question withdrawn, cleared or run out of time without an answer ends it with question_gone), after (the event sequence to wait after; default: now) and timeout_s (1 to 600, default 120). Answers come from the XF panel's answer keys or the buttons in the XF window of the Cyber Engine Tweaks overlay; comments from that window's comment box. Use it after ui_message with level ask instead of polling session_log. Changes nothing.",
+      "Waits until the player answers a question from the game or sends a comment (or another event kind you name), then returns it: kinds (default answer and comment; note catches notes from the game, such as Mark this moment, never a client's own), message_id (only the answer to that ui_message question counts, even one given before this call; other kinds still end the wait from now on; a question withdrawn, cleared or run out of time without an answer ends it with question_gone), after (the event sequence to wait after; default: now) and timeout_s (1 to 600, default 120). Answers come from the answer keys or the buttons in the XF Runtime Bridge window of the Cyber Engine Tweaks overlay; comments from that window's comment box. Use it after ui_message with level ask instead of polling session_log. Changes nothing.",
     permission: "read",
     input: obj({
       kinds: { type: "array", description: "Event kinds that end the wait (default answer and comment).", items: oneOf("An event kind.", [...WAIT_KINDS]), minItems: 1, maxItems: WAIT_KINDS.length },
@@ -247,7 +250,7 @@ export const COMMANDS_070: CommandDef[] = [
     name: "ui.state",
     title: "Read what the game's UI shows",
     description:
-      "What is on screen besides the world: the game's phase, a menu or popup, the appearance screen, photo mode and whether the bridge hid its menu or the cursor, the gameplay tier, the HUD's interaction prompt and dialogue choices, whether Cyber Engine Tweaks' overlay is open (its windows would be in a capture), the XF panel, the question waiting for the player's answer, and the XF overlay host's state. Changes nothing.",
+      "What is on screen besides the world: the game's phase, a menu or popup, the appearance screen, photo mode and whether the bridge hid its menu or the cursor, the gameplay tier, the HUD's interaction prompt and dialogue choices, whether Cyber Engine Tweaks' overlay is open (its windows would be in a capture), the ink panel, the status surface showing, the XF pins and what drew each, the question waiting for the player's answer, and the XF overlay host's state. Changes nothing.",
     permission: "read",
     input: obj({}),
     bridge: { method: "ui.state" },

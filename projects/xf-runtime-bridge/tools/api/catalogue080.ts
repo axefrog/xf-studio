@@ -131,7 +131,7 @@ const PLAYER = ["not_in_gameplay", "not_v", "in_combat", "in_vehicle", "in_scene
 const PHOTO = ["not_in_photo_mode", "unavailable", "write_mismatch", "timeout"];
 /** Refusals of every clothing and cyberware change. */
 const INVENTORY = ["not_in_gameplay", "not_safe_now", "not_v", "not_in_inventory", "call_failed"];
-const SHOWROOM = ["codeware_missing", "showroom_missing", "showroom_manifest_missing", "showroom_manifest_bad", "not_in_world", "not_ready", "too_far"];
+const SHOWROOM = ["codeware_missing", "showroom_missing", "showroom_manifest_missing", "showroom_manifest_bad", "showroom_not_staged", "not_in_world", "not_ready", "too_far"];
 const CAPTURE = ["capture_no_window", "capture_minimized", "capture_not_foreground", "capture_blank", "capture_failed"];
 
 /**
@@ -185,6 +185,7 @@ export const REFUSALS: Readonly<Record<string, readonly string[]>> = {
   "cc.back": ["creator_leave_disabled", "not_in_character_menu"],
   "game.save": ["bridge_save_lock", "bridge_effects_active", "saving_locked", "no_free_slot", "save_failed", "save_uncertain", "not_in_gameplay"],
   "game.load": ["not_in_gameplay", "save_not_found", "metadata_pending", "unavailable", "timeout"],
+  "game.continue": ["interrupted"],
   "ui.message": [],
   "ui.hud": [],
   "world.time.set": ["not_in_gameplay", "not_in_photo_mode", "unavailable"],

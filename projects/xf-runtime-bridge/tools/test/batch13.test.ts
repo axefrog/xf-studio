@@ -117,7 +117,7 @@ describe("0.7 review against the self-test host", () => {
   });
 
   test("RB-103: a clear (a capture's) keeps the waiting question; withdrawing it ends session.wait with question_gone", async () => {
-    await ok(api, "ui.message", { clear: true, clear_asks: true });
+    await ok(api, "ui.message", { clear: true });
     const ask = await ok(api, "ui.message", { text: "Keep me through the capture", level: "ask", seconds: 60 });
     await ok(api, "ui.message", { text: "an info line" });
     const context = { api, cid: "t-cap", captureRoot: tempDir("xfb-b13-c-") } as CommandContext;

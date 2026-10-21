@@ -212,7 +212,7 @@ describe("0.7 against the self-test host", () => {
   });
 
   test("custom choices, pinning, and 600 characters", async () => {
-    await ok(api, "ui.message", { clear: true, clear_asks: true });
+    await ok(api, "ui.message", { clear: true });
     const ask = await ok(api, "ui.message", { text: "Which light reads best?", level: "ask", choices: ["Key", "Fill", "Rim"], seconds: 60 });
     for (let i = 0; i < 5; i++) await ok(api, "ui.message", { text: `note ${i}` });
     const read = await api.callBridge("selftest.messages", {}, "t-lines");

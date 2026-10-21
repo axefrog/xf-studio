@@ -68,6 +68,8 @@ const ERROR_FILE_NOT_FOUND = 2;
 const ERROR_ACCESS_DENIED = 5;
 const ERROR_PIPE_BUSY = 231;
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 let kernel32: ReturnType<typeof openKernel32> | null = null;
 function openKernel32() {
   const { ptr, u32, u64, i32 } = FFIType;
@@ -75,7 +77,6 @@ function openKernel32() {
     CreateFileW: { args: [ptr, u32, u32, ptr, u32, u32, u64], returns: u64 },
     CloseHandle: { args: [u64], returns: i32 },
     GetLastError: { args: [], returns: u32 },
-    WaitNamedPipeW: { args: [ptr, u32], returns: i32 },
     GetNamedPipeServerProcessId: { args: [u64, ptr], returns: i32 },
     WriteFile: { args: [u64, ptr, u32, ptr, ptr], returns: i32 },
     ReadFile: { args: [u64, ptr, u32, ptr, ptr], returns: i32 },
@@ -96,22 +97,32 @@ export class PipeConnectError extends Error {
   }
 }
 
+/** How often a connection tries a busy pipe again (0.8.2): short, so a client that just closed is followed at once. */
+export const BUSY_RETRY_MS = 15;
+
 /** One synchronous pipe handle, opened at the Identification impersonation level. */
 class PipeHandle {
   private open = true;
   private constructor(private readonly handle: bigint) {}
 
-  static connect(pipe: string, expectedServerPid: number, timeoutMs: number): PipeHandle {
+  /**
+   * Opens the pipe. A busy pipe (another client connected) is tried again every BUSY_RETRY_MS for up to busyWaitMs, each wait
+   * an asynchronous sleep (0.8.2, the re-check's first finding: WaitNamedPipeW blocked the event loop for up to eight
+   * seconds, so a second emergency control kept the first from finishing). busyWaitMs 0 tries once.
+   */
+  static async connect(pipe: string, expectedServerPid: number, busyWaitMs: number): Promise<PipeHandle> {
     const api = k32();
     const name = Buffer.from(`${pipe}\0`, "utf16le");
     const flags = SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION;
+    const deadline = performance.now() + Math.max(0, busyWaitMs);
     let handle = api.CreateFileW(name, GENERIC_READ | GENERIC_WRITE, 0, null, OPEN_EXISTING, flags, 0n) as bigint;
-    if (handle === INVALID_HANDLE_VALUE && api.GetLastError() === ERROR_PIPE_BUSY) {
-      api.WaitNamedPipeW(name, timeoutMs);
+    let error = handle === INVALID_HANDLE_VALUE ? api.GetLastError() : 0;
+    while (handle === INVALID_HANDLE_VALUE && error === ERROR_PIPE_BUSY && performance.now() < deadline) {
+      await sleep(BUSY_RETRY_MS);
       handle = api.CreateFileW(name, GENERIC_READ | GENERIC_WRITE, 0, null, OPEN_EXISTING, flags, 0n) as bigint;
+      error = handle === INVALID_HANDLE_VALUE ? api.GetLastError() : 0;
     }
     if (handle === INVALID_HANDLE_VALUE) {
-      const error = api.GetLastError();
       if (error === ERROR_FILE_NOT_FOUND) throw new PipeConnectError("no such pipe (the game closed or crashed?)", "not_found");
       if (error === ERROR_PIPE_BUSY) throw new PipeConnectError("pipe busy (another client is connected)", "busy");
       if (error === ERROR_ACCESS_DENIED) throw new PipeConnectError("access denied", "access_denied");
@@ -166,8 +177,6 @@ class PipeHandle {
 
 // --- protocol client ------------------------------------------------------------------------
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
 export class BridgeClient {
   private pipe: PipeHandle | null = null;
   private buffer = "";
@@ -185,10 +194,11 @@ export class BridgeClient {
 
   /**
    * Opens the pipe, checks the server PID, then starts reading replies. `read: false` never
-   * reads (for the self-test's non-reading client).
+   * reads (for the self-test's non-reading client). busyWaitMs: how long a busy pipe is tried again (default the client's
+   * timeout; 0 tries once), never blocking the event loop.
    */
-  async connect(options: { read?: boolean } = {}): Promise<void> {
-    this.pipe = PipeHandle.connect(this.session.pipe, this.session.pid, this.timeoutMs);
+  async connect(options: { read?: boolean; busyWaitMs?: number } = {}): Promise<void> {
+    this.pipe = await PipeHandle.connect(this.session.pipe, this.session.pid, options.busyWaitMs ?? this.timeoutMs);
     if (options.read !== false) void this.pump();
   }
 

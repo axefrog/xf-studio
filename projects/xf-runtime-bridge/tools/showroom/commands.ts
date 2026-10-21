@@ -6,7 +6,7 @@
 import { captureWindow, CaptureError, type CaptureRecord } from "../capture/capture.ts";
 import type { CommandContext, CommandResult } from "../api/catalogue.ts";
 import {
-  choosePieces, eyesOf, facingOf, PEDESTAL_BELOW_M, planError, planLayout, planOnRay, readShowroom, spill, spacingFor, toWorld, yawFacing,
+  choosePieces, chooseStagedShowroom, eyesOf, facingOf, PEDESTAL_BELOW_M, planError, planLayout, planOnRay, readShowroom, showroomBuilds, spill, spacingFor, toWorld, yawFacing,
   type Anchor, type Placement, type RigPlacement, type RigProfile, type Showroom, type Vec3,
 } from "./plan.ts";
 import { modelForRead, modelFromFov, poseOf, project, type Calibration, type CameraModel, type CameraPose } from "../scene/camera.ts";
@@ -35,11 +35,22 @@ async function anchorOf(context: CommandContext, wanted: string | undefined): Pr
   return { anchor: { origin: source.position, forward: source.forward, ground: v.position[2] }, from, raw };
 }
 
-const manifestsOf = (input: Json): Showroom[] => {
+/**
+ * The showroom builds to use: the manifests given, or (0.8.2) the staged build found by itself (plan.ts chooseStagedShowroom:
+ * this machine's builds, the ones the game loaded). found says which, for the answer.
+ */
+async function manifestsOf(input: Json, context: CommandContext): Promise<{ showrooms: Showroom[]; found?: Json }> {
   const paths = [...(input.manifest ? [input.manifest as string] : []), ...((input.manifests as string[] | undefined) ?? [])];
-  if (!paths.length) throw planError("bad_input", "Give manifest: the showroom build's folder or its manifest.json (from tools/build_showroom_package.ts).");
-  return paths.map(readShowroom);
-};
+  if (paths.length) return { showrooms: paths.map(readShowroom) };
+  const builds = showroomBuilds();
+  const archives = [...new Set(builds.map((b) => b.archive))].slice(0, 16);
+  const raw = archives.length ? await call(context, "showroom.anchor", { archives }) : {};
+  const chosen = chooseStagedShowroom(builds, (raw.archives as Record<string, boolean> | undefined) ?? {});
+  return {
+    showrooms: [readShowroom(chosen.manifest)],
+    found: { manifest: chosen.manifest, archive: chosen.archive, how: "the newest build on this machine whose archive the game loaded", ...(chosen.also_staged.length ? { also_staged: chosen.also_staged } : {}) },
+  };
+}
 
 /**
  * showroom.spawn: the chosen presets' heads in a row or an arc in front of V or the camera. Distances run from the camera
@@ -50,7 +61,7 @@ const manifestsOf = (input: Json): Showroom[] => {
  * with V as anchor the heads stand at their natural height.
  */
 export async function runShowroomSpawn(input: Json, context: CommandContext): Promise<CommandResult> {
-  const showrooms = manifestsOf(input);
+  const { showrooms, found } = await manifestsOf(input, context);
   const pieces = choosePieces(showrooms, input.presets as string[] | undefined);
   const { anchor, from, raw } = await anchorOf(context, input.anchor as string | undefined);
   const layout = (input.layout as "row" | "arc" | undefined) ?? "arc";
@@ -90,7 +101,7 @@ export async function runShowroomSpawn(input: Json, context: CommandContext): Pr
   const projected = pose ? await projectEyes(context, pose, placements.map((p) => p.eyes!)) : null;
   for (const a of adjusted) notes.push(a.note);
   if (projected?.some((p) => !p.in_frame)) notes.push(`Head ${projected.filter((p) => !p.in_frame).map((p) => p.index).join(", ")} is outside the frame (projected eyes); fewer heads, a smaller spacing_m or a larger distance_m brings it in.`);
-  return { value: { anchor: from, layout, spacing_m: spacing, distance_m: distance, lateral_m: lateral, height_m: height,
+  return { value: { ...(found ? { showroom_found: found } : {}), anchor: from, layout, spacing_m: spacing, distance_m: distance, lateral_m: lateral, height_m: height,
     height_from: heightFrom, raised_m: raise,
     measured_to: "each head's eyes, from the camera (or V's eyes)",
     pieces: items.map((item, i) => ({ index: item.index, label: item.label, appearance: item.appearance, position: [item.x, item.y, item.z], eyes: placements[i]!.eyes, yaw: item.yaw,
@@ -234,7 +245,7 @@ export async function runShowroomLight(input: Json, context: CommandContext): Pr
     const cleared = await call(context, "showroom.clear", { what: "lights" });
     return { value: { rig: "none", ...cleared, undo: null, undo_note: "showroom_light with a rig lights the heads again" } };
   }
-  const showrooms = manifestsOf(input);
+  const { showrooms, found } = await manifestsOf(input, context);
   const showroom = showrooms[0]!;
   const profile = ((input.rig as RigProfile | undefined) ?? "creator") as RigProfile;
   const rig = showroom.rigs[profile];
@@ -262,7 +273,7 @@ export async function runShowroomLight(input: Json, context: CommandContext): Pr
   const advice = worst >= 0.05
     ? `Each head also gets about ${Math.round(worst * 100)} % of its own rig's light from its neighbours' rigs. For identical light, use rig key, light fewer heads, or spawn them at least ${spacingFor(rig.lights, showroom.headJoint, rigs.length)} m apart.`
     : undefined;
-  return { value: { rig: profile, target, lights_per_rig: rig.lights.length, rigs: items.map((i) => ({ for: i.index, position: [i.x, i.y, i.z], yaw: i.yaw })),
+  return { value: { ...(found ? { showroom_found: found } : {}), rig: profile, target, lights_per_rig: rig.lights.length, rigs: items.map((i) => ({ for: i.index, position: [i.x, i.y, i.z], yaw: i.yaw })),
     ...(spills.length ? { spill: spills, spill_worst: worst } : {}), ...(advice ? { warning: advice } : {}), ...placed } };
 }
 

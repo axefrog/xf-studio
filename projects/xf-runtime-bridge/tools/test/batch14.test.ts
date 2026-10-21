@@ -57,11 +57,11 @@ describe("0.8 offline", () => {
   test("the MCP server says the tools' own version (package.json), not 0.3.0", () => {
     const pkg = JSON.parse(readFileSync(join(projectDir, "package.json"), "utf8"));
     expect(SERVER_VERSION).toBe(pkg.version);
-    expect(pkg.version).toBe("0.8.1");
+    expect(pkg.version).toBe("0.8.2");
   });
 
   test("every command lists its own refusal codes, and every listed code has plain words or is a tools code", () => {
-    const tools = new Set(["bad_input", "too_many", "expectation_failed", "no_showroom", "showroom_manifest_missing", "showroom_manifest_bad", "framing_bound", "no_projection",
+    const tools = new Set(["bad_input", "too_many", "expectation_failed", "no_showroom", "showroom_manifest_missing", "showroom_manifest_bad", "showroom_not_staged", "framing_bound", "no_projection",
       "no_response", "no_capture", "not_found", "photo_not_allowed", "key_unsupported", "no_window", "photo_open_timeout", "interrupted", "wait_timeout", "question_gone",
       "capture_no_window", "capture_minimized", "capture_not_foreground", "capture_blank", "capture_failed", "tweakxl_missing", "no_such_pin", "too_many_pins", "pin_refused"]);
     for (const command of CATALOGUE) {
@@ -139,7 +139,8 @@ describe("0.8 offline", () => {
   test("a load from the main menu may wait for the save's details: the client waits long enough, and the header agrees", () => {
     const writes = readFileSync(join(projectDir, "native", "src", "core", "Writes.hpp"), "utf8");
     expect(writes).toContain(`kSaveDetailsWaitMs = ${SAVE_DETAILS_WAIT_MS};`);
-    expect(findCommand("game.load")!.bridge!.timeoutMs!({})).toBe(loadClientTimeoutMs());
+    // 0.8.2: game.load runs in the tools now (the load, then the press-any-key screen), its bridge call with this wait.
+    expect(readFileSync(join(projectDir, "tools", "api", "catalogue.ts"), "utf8")).toContain('callBridge("game.load", loadParams(rest), context.cid, loadClientTimeoutMs()');
     expect(loadClientTimeoutMs()).toBeGreaterThanOrEqual(5000 + SAVE_DETAILS_WAIT_MS);
   });
 });
@@ -171,7 +172,7 @@ describe("0.8 against the self-test host", () => {
     const after = (await api.callBridge("selftest.hud", {}, "t-hud2")) as Any;
     expect(after.result.answered).toMatchObject({ id: ask.id, label: "Partly cut off" });
     expect(after.result.messages.map((m: Any) => m.text)).toContain("Łódź: fully visible?");
-    await ok(api, "ui.message", { clear: true, clear_asks: true });
+    await ok(api, "ui.message", { clear: true });
   });
 
   test("ui.hud takes center and bottom_center; the default is top left, 40 by 360", async () => {

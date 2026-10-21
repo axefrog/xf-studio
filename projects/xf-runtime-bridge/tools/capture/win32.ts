@@ -96,6 +96,11 @@ function windowPid(hwnd: bigint): number {
 
 /** The executable file name (e.g. "Cyberpunk2077.exe") of a process, or null if it can't be read. */
 export function processImageName(pid: number): string | null {
+  return processImagePath(pid)?.split(/[\\/]/).pop() ?? null;
+}
+
+/** 0.8.2: a process's executable, full path, or null if it can't be read. */
+export function processImagePath(pid: number): string | null {
   const { kernel32 } = api();
   const handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) as bigint;
   if (!handle) return null;
@@ -103,8 +108,7 @@ export function processImageName(pid: number): string | null {
     const buffer = new Uint16Array(1024);
     const size = new Uint32Array([buffer.length]);
     if (!kernel32.QueryFullProcessImageNameW(handle, 0, buffer, size)) return null;
-    const full = Buffer.from(buffer.buffer, 0, size[0] * 2).toString("utf16le");
-    return full.split(/[\\/]/).pop() ?? null;
+    return Buffer.from(buffer.buffer, 0, size[0] * 2).toString("utf16le");
   } finally {
     kernel32.CloseHandle(handle);
   }

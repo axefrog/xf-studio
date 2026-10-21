@@ -16,7 +16,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { DESCRIBE, SUFFIX, VARIANTS, sha256, stageVariant, type Variant } from "./packaging.ts";
+import { DESCRIBE, SUFFIX, VARIANTS, sha256, stageVariant, staleObject, type Variant } from "./packaging.ts";
 
 const projectDir = resolve(import.meta.dir, "..");
 const cmake = readFileSync(join(projectDir, "native", "CMakeLists.txt"), "utf8");
@@ -51,7 +51,17 @@ const [, builtCommit, builtDirty] = marker;
 if (builtDirty !== "0" || builtCommit !== head) {
   console.error(
     `refusing to package: the DLL was built from ${builtCommit}${builtDirty === "1" ? " with uncommitted changes" : ""}, ` +
-      `but HEAD is ${head}. Rebuild from the clean tree: cmake --build build --config Release`,
+      `but HEAD is ${head}. Rebuild from the clean tree: cmake --build build --config Release --clean-first`,
+  );
+  process.exit(3);
+}
+
+// 0.8.2: the clean-build gate (packaging.ts staleObject): every object file newer than every native source file.
+const stale = staleObject(join(projectDir, "build"), join(projectDir, "native"));
+if (stale) {
+  console.error(
+    `refusing to package: ${stale.object} is older than ${stale.source}, so the DLL may link a stale object file ` +
+      `(0.8.1's crash at load). Rebuild from clean: cmake --build build --config Release --clean-first`,
   );
   process.exit(3);
 }

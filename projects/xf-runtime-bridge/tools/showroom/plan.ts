@@ -7,7 +7,7 @@
 // as the teleportation facility and Codeware's spawn orientation take it [hypothesis until the first spawn is seen: the
 // test card's first step checks that the heads face the camera].
 
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 export const SHOWROOM_SCHEMA = "xfs/showroom-package-1";
@@ -49,6 +49,48 @@ export const planError = (code: string, message: string) => new PlanError(code, 
 
 const depot = (path: string) => path.replaceAll("/", "\\");
 const isVec = (v: unknown): v is Vec3 => Array.isArray(v) && v.length === 3 && v.every((n) => typeof n === "number" && Number.isFinite(n));
+
+/**
+ * 0.8.2: XF Finish Showroom's builds on this machine, newest first: each folder of the Studio's dist (by default
+ * projects/xf-studio/dist beside this project; XFS_SHOWROOM_DIST names another) holding a showroom manifest, with its
+ * archive's name and when it was built. Unreadable folders are skipped.
+ */
+export function showroomBuilds(distDir = process.env.XFS_SHOWROOM_DIST ?? join(import.meta.dir, "..", "..", "..", "xf-studio", "dist")): { manifest: string; archive: string; builtMs: number }[] {
+  if (!existsSync(distDir)) return [];
+  const out: { manifest: string; archive: string; builtMs: number }[] = [];
+  for (const name of readdirSync(distDir)) {
+    if (!name.startsWith("xfs_showroom_")) continue;
+    const manifest = join(distDir, name, "manifest.json");
+    try {
+      const value = JSON.parse(readFileSync(manifest, "utf8").replace(/^\uFEFF/, ""));
+      if (value?.schema !== SHOWROOM_SCHEMA || typeof value.archive !== "string" || !/^xfs_showroom_[0-9a-f]{32}$/.test(value.archive)) continue;
+      out.push({ manifest, archive: value.archive, builtMs: statSync(manifest).mtimeMs });
+    } catch {
+      // not a readable build
+    }
+  }
+  return out.sort((a, b) => b.builtMs - a.builtMs);
+}
+
+/**
+ * 0.8.2 (session 9: the card said "showroom_spawn {manifest}" but named no manifest): with no manifest given, the newest build
+ * of each showroom archive on this machine is a candidate, the game says which archives it loaded, and the newest loaded
+ * one is used. Answers the chosen build and why; refuses plainly when none is built or none is staged.
+ */
+export function chooseStagedShowroom(builds: ReturnType<typeof showroomBuilds>, loaded: Record<string, boolean>, distDir?: string): { manifest: string; archive: string; also_staged: string[] } {
+  if (!builds.length) {
+    throw planError("showroom_manifest_missing", `No XF Finish Showroom build was found${distDir ? ` in ${distDir}` : ""}. Build one (projects/xf-studio/authoring/tools/build_showroom_package.ts), stage it, or give manifest: the build's folder or its manifest.json.`);
+  }
+  const newestPerArchive = builds.filter((b, i) => builds.findIndex((o) => o.archive === b.archive) === i);
+  const staged = newestPerArchive.filter((b) => loaded[b.archive] === true);
+  if (!staged.length) {
+    throw planError(
+      "showroom_not_staged",
+      `None of this machine's XF Finish Showroom builds is loaded in the game (${newestPerArchive.map((b) => b.archive).join(", ")}). Stage one in the test profile and restart the game, or give manifest.`,
+    );
+  }
+  return { manifest: staged[0]!.manifest, archive: staged[0]!.archive, also_staged: staged.slice(1).map((b) => b.archive) };
+}
 
 /** Reads a showroom build's manifest (the file, or the build folder holding it) and checks what the bridge relies on. */
 export function readShowroom(path: string): Showroom {

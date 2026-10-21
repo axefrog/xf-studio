@@ -19,6 +19,7 @@
 // The game side enforces the real gate: every write is refused unless the bridge's config.ini
 // has allow_writes = true, which only the dedicated test profile sets.
 
+import { pressPastLoadPrompt } from "./load-continue.ts";
 import { captureBurst, captureWindow, CaptureError, grabForAnalysis, recrop, type CaptureRecord } from "../capture/capture.ts";
 import { NAMED_REGIONS, type RegionSpec } from "../capture/regions.ts";
 import type { CommandApi, ImageRef } from "./command-api.ts";
@@ -54,7 +55,7 @@ export const PERMISSIONS: Record<Permission, { label: string; description: strin
   notify: {
     label: "Show messages in the game",
     description:
-      "Shows short messages to the player under the bridge's status label in the game, and shows, hides or moves the bridge's own XF panel there. Changes nothing in the game; the messages fade by themselves.",
+      "Shows short messages to the player in the game (the ink panel while the HUD shows, the overlay panel in photo mode and menus, the status label when neither can draw), and shows, hides or moves the ink panel. Changes nothing in the game; the messages fade by themselves.",
   },
   "write-photo": {
     label: "Control photo mode",
@@ -602,6 +603,18 @@ export function lightParams(input: Record<string, unknown>): Record<string, unkn
 }
 
 /** game.load: exactly one of latest and name, and discard_unsaved: true (RB-56). */
+/** game.load (0.8.2): the bridge's load, then the wait and the key past the press-any-key screen (api/load-continue.ts). */
+async function runGameLoad(input: Record<string, unknown>, context: CommandContext): Promise<CommandResult> {
+  const { continue_wait_s: waitS, ...rest } = input;
+  const response = await context.api.callBridge("game.load", loadParams(rest), context.cid, loadClientTimeoutMs(), context.signal);
+  if (!response.ok) throw Object.assign(new Error(response.error.message), { plain: response.error });
+  const loaded = response.result as Record<string, unknown>;
+  const wait = ((waitS as number | undefined) ?? 75) * 1000;
+  if (wait <= 0) return { value: loaded };
+  const continued = await pressPastLoadPrompt(context, { waitMs: wait });
+  return { value: { ...loaded, continued, note: continued.reached === "gameplay" ? "the save loaded and gameplay started" : loaded.note } };
+}
+
 function loadParams(input: Record<string, unknown>): Record<string, unknown> {
   if ((input.latest === true) === (input.name !== undefined)) throw planError("bad_input", "Give latest: true or a save's name (one of them).");
   if (input.latest === false) throw planError("bad_input", "latest takes true (the most recent save); give a name instead to load another.");
@@ -841,19 +854,17 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
     permission: "read",
     input: obj(
       {
+        // 0.8.2 (session 9): one phase as text, or a list of them.
         phase: {
-          type: "array",
-          description: "Phases to wait for (any one of them).",
-          items: oneOf("A game phase.", PHASES),
-          minItems: 1,
-          maxItems: PHASES.length,
+          description: "The phase to wait for, or a list of phases (any one of them).",
+          anyOf: [oneOf("A game phase.", PHASES), { type: "array", description: "Phases (any one of them).", items: oneOf("A game phase.", PHASES), minItems: 1, maxItems: PHASES.length }],
         },
         timeout_ms: int("How long to wait, in milliseconds (default 60000, at most 600000).", 0, 600000),
       },
       ["phase"],
     ),
     local: async (input, { api, cid, signal }) => {
-      const wanted = input.phase as string[];
+      const wanted = typeof input.phase === "string" ? [input.phase] : (input.phase as string[]);
       const timeout = (input.timeout_ms as number | undefined) ?? 60000;
       const started = performance.now();
       let last = "unknown";
@@ -1441,18 +1452,29 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
     name: "game.load",
     title: "Load a save",
     description:
-      "Loads the most recent save of this playthrough (latest: true, the game's quick load) or one save by its name in the game's list (for example ManualSave-12); an unknown name is refused with some of the names the game lists. From normal play or the pause menu, and from the main menu (0.8: the menu's own paths, so the player only has to launch the game: latest is its Continue, a name its Load menu's, both through the modded-save path for a save made with mods). Everything since that save is discarded, unsaved progress and the bridge's save lock with it, and the game doesn't ask first, so discard_unsaved: true is required. Not from photo mode or the appearance screen. Wait with game_wait for phase gameplay afterwards. Needs the save permission.",
+      "Loads the most recent save of this playthrough (latest: true, the game's quick load) or one save by its name in the game's list (for example ManualSave-12); an unknown name is refused with some of the names the game lists. From normal play or the pause menu, and from the main menu (0.8: the menu's own paths, so the player only has to launch the game: latest is its Continue, a name its Load menu's, both through the modded-save path for a save made with mods). Everything since that save is discarded, unsaved progress and the bridge's save lock with it, and the game doesn't ask first, so discard_unsaved: true is required. Not from photo mode or the appearance screen. Then (0.8.2) it waits up to continue_wait_s (default 75) for the load to end and presses past the game's press-any-key screen with the game's continue key (Space), the way photo_open presses its key: only to the game window, only while it is in front, and only while the game still shows that screen. If the load takes longer, game_continue goes on waiting and pressing; continue_wait_s 0 only starts the load (then game_continue or game_wait). Needs the save permission.",
     permission: "write-save",
     input: obj(
       {
         latest: bool("true: load the most recent save of this playthrough."),
         name: str("A save's name as the game lists it (for example ManualSave-12).", { pattern: "^[A-Za-z0-9 ._-]{1,64}$", maxLength: 64 }),
         discard_unsaved: bool("Must be true: everything since that save, unsaved progress included, is discarded."),
+        continue_wait_s: int("How long to wait for the load to end and press past the press-any-key screen, 0 to 85 seconds. Default 75; 0 only starts the load.", 0, 85),
       },
       ["discard_unsaved"],
     ),
     undo: "None: loading discards everything since that save.",
-    bridge: { method: "game.load", params: loadParams, timeoutMs: () => loadClientTimeoutMs() },
+    local: runGameLoad,
+  },
+  {
+    name: "game.continue",
+    title: "Press past the press-any-key screen",
+    description:
+      "After a load, waits up to wait_s (default 60) for gameplay and presses past the game's press-any-key screen with the game's continue key (its skip_loading binding, Space by default): the way photo_open presses its key, only to the game window, only while it is in front, and only while the bridge still sees the screen (the loaded player's puppet is in, the player not yet). Presses at most three times, a few seconds apart. Answers when gameplay starts or the time is up, with each press. game_load does this by itself; this is for a load that took longer. Needs the save permission (as game_load).",
+    permission: "write-save",
+    input: obj({ wait_s: int("How long to wait, 1 to 85 seconds. Default 60.", 1, 85) }),
+    undo: "None: the key only ends the loading screen.",
+    local: async (input, context) => ({ value: await pressPastLoadPrompt(context, { waitMs: ((input.wait_s as number | undefined) ?? 60) * 1000 }) }),
   },
 
   // The player's view
@@ -1460,15 +1482,15 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
     name: "ui.message",
     title: "Show a message in the game",
     description:
-      "Shows a message to the player in the game, so the player never has to leave it: under the bridge's status label in the top-left corner and in the XF panel, and a question also in the XF window of the Cyber Engine Tweaks overlay. Up to 600 characters, wrapped, for seconds seconds (default 8); a longer text is cut at a word with an ellipsis. At most four show at once; a new one pushes out the oldest, except the newest unanswered question, which stays pinned until it is answered or its seconds end. level colours it: info, ask (a question for the player), warn or done. A question (level ask) shows only the answers choices gives (1 to 4 short labels, such as Fully visible and Partly cut off, or Yes and No); without choices it shows one Done button, for a step the player confirms. The player answers with the key the XF panel shows next to each answer (F6, F7, F8, F11 by default) or the button in the XF window, and the answer (with this message's id) goes into the session's event stream, where session_wait returns it; the question stays with Answered: and the answer until the next message. Characters a surface can't draw show as one replacement mark there, and Cyber Engine Tweaks' label writes Polish and other Latin letters without their accents. clear: true takes the lines down but leaves a question still waiting for its answer (clear_asks: true withdraws it too); withdraw takes one message down by its id (a question's undo). The kill switch clears them all.",
+      "Shows a message to the player in the game, so the player never has to leave it: on the one status surface showing (0.8.2: the ink panel while the game shows its HUD, the overlay panel in photo mode and menus, the status label at the top left only when neither can draw), and a question also in the XF Runtime Bridge window of the Cyber Engine Tweaks overlay. Up to 600 characters, wrapped, for seconds seconds (default 8); a longer text is cut at a word with an ellipsis. At most four show at once; a new one pushes out the oldest, except the newest unanswered question, which stays pinned until it is answered or its seconds end. level colours it: info, ask (a question for the player), warn or done. A question (level ask) shows only the answers choices gives (1 to 4 short labels, such as Fully visible and Partly cut off, or Yes and No); without choices it shows one Done button, for a step the player confirms. The player answers with the key shown next to each answer (F6, F7, F8, F11 by default) or the button in the XF Runtime Bridge window, and the answer (with this message's id) goes into the session's event stream, where session_wait returns it; the question stays with Answered: and the answer until the next message. Characters a surface can't draw show as one replacement mark there, and Cyber Engine Tweaks' label writes Polish and other Latin letters without their accents. One question at a time: a new question withdraws one still waiting (its session_wait ends with question_gone). Each answer in choices is a button label of at most 24 characters; put any detail in the question's text. clear: true takes the lines down and withdraws a question still waiting (keep_asks: true keeps it); withdraw takes one message down by its id (a question's undo). The kill switch clears them all.",
     permission: "notify",
     input: obj({
       text: str("The message (at most 600 characters are shown).", { minLength: 1, maxLength: 2000 }),
       seconds: int("How long it shows, 1 to 600 seconds. Default 8; give a question long enough for the player to answer.", 1, 600),
       level: oneOf("info (default), ask, warn or done.", ["info", "ask", "warn", "done"]),
-      choices: { type: "array", description: "With level ask: the answers offered, only these, 1 to 4 short labels (default one Done button).", items: str("An answer's label (1 to 24 characters).", { minLength: 1, maxLength: 24 }), minItems: 1, maxItems: 4 },
-      clear: bool("Remove the lines first (alone: only that); a question still waiting for its answer stays."),
-      clear_asks: bool("With clear: withdraw a waiting question too (a session_wait on it ends with question_gone)."),
+      choices: { type: "array", description: "With level ask: the answers offered, only these, 1 to 4 button labels of at most 24 characters each (default one Done button).", items: str("An answer: a button label in the game, 1 to 24 characters (put the detail in the question's text).", { minLength: 1, maxLength: 24 }), minItems: 1, maxItems: 4 },
+      clear: bool("Remove the lines first (alone: only that), and withdraw a question still waiting for its answer (a session_wait on it ends with question_gone)."),
+      keep_asks: bool("With clear: keep a question still waiting for its answer (a capture's clear does)."),
       withdraw: int("Take down the message with this id (ui_message's id); a question withdrawn this way ends its session_wait with question_gone.", 1, 1e9),
     }),
     undo: "The result's undo withdraws the message by its id; messages also fade by themselves.",
@@ -1476,9 +1498,9 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
   },
   {
     name: "ui.hud",
-    title: "Show, hide or move the XF panel in the game",
+    title: "Show, hide or move the ink panel in the game",
     description:
-      "Temporary test feature (bridge 0.5.3). The XF panel is drawn in the game's own HUD (ink, in the game's font and colours on the game's own dark plate; it needs Codeware, not Cyber Engine Tweaks): the bridge's connection state and the messages ui.message shows. show hides or shows it; anchor (top_left, top_center, top_right, center_left, center, center_right, bottom_left, bottom_center, bottom_right) with x and y (distance inwards from that corner or edge of the visible screen, in the HUD's design units: the HUD is laid out on a 3840 by 2160 canvas that covers the screen, so a 21:9 or 32:9 screen shows its full width and the middle of its height; for center, x and y move it from the middle) places it, and it is kept whole on screen; the default is top_left, 40, 360, below the CET label and the overlay panel. scale sizes it (0.5 to 2.5). layer chooses where it draws: hud (default; hidden wherever the game hides its HUD: menus, photo mode, the appearance screen), notifications or top (research). nameplates switches XF Finish Showroom's pedestal name labels; cet_label switches the Cyber Engine Tweaks status label. With no values it only reads the settings; reset: true goes back to the bridge's configured settings. Changes nothing in the game itself.",
+      "Temporary test feature (bridge 0.5.3). The ink panel is drawn in the game's own HUD (ink, in the game's font and colours on the game's own dark plate; it needs Codeware, not Cyber Engine Tweaks): the bridge's connection state and the messages ui.message shows. show hides or shows it; anchor (top_left, top_center, top_right, center_left, center, center_right, bottom_left, bottom_center, bottom_right) with x and y (distance inwards from that corner or edge of the visible screen, in the HUD's design units: the HUD is laid out on a 3840 by 2160 canvas that covers the screen, so a 21:9 or 32:9 screen shows its full width and the middle of its height; for center, x and y move it from the middle) places it, and it is kept whole on screen; the default is top_left, 40, 360, below where the status label sits. scale sizes it (0.5 to 2.5). layer chooses where it draws: hud (default; hidden wherever the game hides its HUD: menus, photo mode, the appearance screen), notifications or top (research). nameplates switches XF Finish Showroom's pedestal name labels; cet_label switches the status label (Cyber Engine Tweaks', the fallback status surface). With no values it only reads the settings; reset: true goes back to the bridge's configured settings. Changes nothing in the game itself.",
     permission: "notify",
     input: obj({
       show: bool("true shows the panel, false hides it."),
@@ -1560,7 +1582,7 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
       "Spawns XF Finish Showroom's mannequin heads, one per makeup preset of a showroom build (its folder or manifest.json from tools/build_showroom_package.ts), each on a black pedestal: in an arc about the camera (default; every head faces it) or a row across the view, spacing_m apart, each head's eyes distance_m from the camera (in photo mode) or V's eyes, as photo_frame's distance_m measures to V, and at height_m above V's ground (default: the camera's height with the camera as anchor, so the heads look straight into it; a head's natural height with V as anchor). Needs Codeware in the game and the showroom's archive staged. Nothing is saved: showroom.clear, the kill switch or loading a save removes them.",
     permission: "write-showroom",
     input: obj({
-      manifest: str("The showroom build's folder, or its manifest.json.", { maxLength: 1024 }),
+      manifest: str("The showroom build's folder, or its manifest.json. Default (0.8.2): the newest XF Finish Showroom build on this machine (projects/xf-studio/dist) whose archive the game loaded; the answer's showroom_found names it.", { maxLength: 1024 }),
       manifests: { type: "array", description: "Several showroom builds' folders or manifests, to set out their presets together.", items: str("A showroom build's folder or manifest.json.", { maxLength: 1024 }), minItems: 1, maxItems: 4 },
       presets: { type: "array", description: "Which presets, by name, preset ID or appearance, in lineup order. Default: all of them (at most 24).", items: str("A preset's name, ID or appearance.", { maxLength: 120 }), minItems: 1, maxItems: 24 },
       layout: oneOf("arc (default): on a circle about the camera or V, each head facing it. row: a straight line across the view, all facing back along it.", ["arc", "row"]),
@@ -1583,7 +1605,7 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
     permission: "write-showroom",
     input: obj(
       {
-        manifest: str("The showroom build's folder, or its manifest.json (its rig entity is used). Needed for every rig but none (0.7: none takes no manifest).", { maxLength: 1024 }),
+        manifest: str("The showroom build's folder, or its manifest.json (its rig entity is used). Default (0.8.2): the staged build, found as showroom_spawn finds it.", { maxLength: 1024 }),
         rig: oneOf("creator (default), creator_face, key, or none (remove every rig and keep the heads, as showroom_clear with what: lights).", ["creator", "creator_face", "key", "none"]),
         target: oneOf("each (default): a rig per head; piece: the head given by piece; v: V herself.", ["each", "piece", "v"]),
         piece: int("The head's index in the lineup (0 is the first), with target piece.", 0, 23),

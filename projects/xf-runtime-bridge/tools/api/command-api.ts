@@ -32,7 +32,11 @@ export interface BridgeTransport {
   call(method: string, params: Record<string, unknown>, cid: string, timeoutMs?: number): Promise<BridgeResponse>;
   close(): void;
 }
-export type TransportFactory = (session: BridgeSession) => Promise<BridgeTransport>;
+/**
+ * Opens a connection. busyWaitMs (0.8.2): how long a pipe another client holds is tried again, asynchronously (0: once, so a
+ * kill falls back to the KILL file at once); the default is the client's timeout.
+ */
+export type TransportFactory = (session: BridgeSession, options?: { busyWaitMs?: number }) => Promise<BridgeTransport>;
 
 export type CommandApiOptions = {
   /** Runtime folder holding session.json; the default is the one the plugin uses. Tests pass their own. */
@@ -102,18 +106,18 @@ export function rateLimitWaits(patienceMs: number): number[] {
 
 const pipeTransport =
   (timeoutMs: number): TransportFactory =>
-  async (session) => {
+  async (session, options = {}) => {
     const client = new BridgeClient(session, timeoutMs);
-    await client.connect();
+    await client.connect({ busyWaitMs: options.busyWaitMs });
     return { call: (method, params, cid, timeoutMs) => client.call(method, params, cid, {}, timeoutMs), close: () => client.close() };
   };
 
 /** The control pipe (RB-121): the same client, aimed at session.json's control_pipe. */
 const controlPipeTransport =
   (timeoutMs: number): TransportFactory =>
-  async (session) => {
+  async (session, options = {}) => {
     if (!session.control_pipe) throw new PipeConnectError("this bridge has no control pipe", "not_found");
-    return pipeTransport(timeoutMs)({ ...session, pipe: session.control_pipe });
+    return pipeTransport(timeoutMs)({ ...session, pipe: session.control_pipe }, options);
   };
 
 type BridgeAnswer = { ok: true; result: unknown } | { ok: false; error: PlainError };
@@ -155,6 +159,12 @@ export class CommandApi {
    * session.resume sent right after a session.handover can't land first and leave the session handed over.
    */
   private barrier: Promise<void> = Promise.resolve();
+  /**
+   * 0.8.2 (the re-check's first finding): this API's control-pipe calls, one after another. The pipe takes one client at a
+   * time, so a behave.stop sent right after a player.stop waits here (asynchronously) for the first to close its connection,
+   * instead of both racing for the pipe. bridge.kill never waits: it tries the pipe once and falls back to the KILL file.
+   */
+  private controlChain: Promise<unknown> = Promise.resolve();
   private readonly controlFactory: TransportFactory | null;
   private readonly pacer: RequestPacer;
   private readonly rateLimitPatienceMs: number;
@@ -347,11 +357,21 @@ export class CommandApi {
       const answer = await this.callBridge(method, params, cid, timeoutMs);
       return !answer.ok && kill && answer.error.code === "bridge_busy" ? this.killByFile() : answer;
     }
+    if (kill) return this.controlOnce(session, method, params, cid, timeoutMs, true);
+    const turn = this.controlChain.then(() => this.controlOnce(session, method, params, cid, timeoutMs, false));
+    this.controlChain = turn.catch(() => undefined);
+    return turn;
+  }
+
+  /** One control-pipe call on its own connection (RB-121), closed as soon as it is answered. */
+  private async controlOnce(session: BridgeSession, method: string, params: Record<string, unknown>, cid: string, timeoutMs: number | undefined, kill: boolean): Promise<BridgeAnswer> {
     let transport: BridgeTransport;
     try {
-      transport = await this.controlFactory(session);
+      // A kill tries once: while the control pipe is busy (another emergency control, another tool) the KILL file stops the
+      // bridge within half a second, sooner than waiting for the pipe.
+      transport = await this.controlFactory!(session, kill ? { busyWaitMs: 0 } : {});
     } catch (error) {
-      if (kill) return this.killByFile("The bridge's control pipe couldn't be reached");
+      if (kill) return this.killByFile(error instanceof PipeConnectError && error.code === "busy" ? "The bridge's control pipe was busy" : "The bridge's control pipe couldn't be reached");
       const kind = error instanceof PipeConnectError ? error.code : "failed";
       return { ok: false, error: connectError(kind, (error as Error).message) };
     }
