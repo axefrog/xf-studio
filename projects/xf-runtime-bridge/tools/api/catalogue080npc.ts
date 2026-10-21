@@ -17,7 +17,7 @@ export const NPC_EXPRESSIONS = ["neutral", "joy", "smile", "sad", "surprise", "a
 /** Vanilla voice triggers npc.say may play (core/Npc.cpp VoiceTriggers()). */
 export const NPC_TRIGGERS = ["greeting", "bump", "stlh_curious_grunt", "coop_irritation", "battlecry_curse", "fear_foll", "fear_beg", "fear_run", "danger", "vehicle_bump"] as const;
 /** Gestures in the XF gesture carrier (core/Npc.cpp Gestures()). */
-export const NPC_GESTURES = ["talk", "talk_hips", "wave", "shrug", "nod", "arms_crossed"] as const;
+export const NPC_GESTURES = ["talk", "talk_hips", "wave", "shrug", "nod", "arms_crossed", "facepalm", "check_phone"] as const;
 /** The npc.* events in the session's event stream (session_wait's kinds). */
 export const NPC_WAIT_KINDS = [
   "npc.spawned",

@@ -192,8 +192,9 @@ const std::vector<std::string>& VoiceTriggers()
 
 const std::vector<Gesture>& Gestures()
 {
-    // Vanilla standing clips that exist under the same name for woman_average and man_average (AMM's workspot catalogue, its
-    // db.sqlite3 table workspots [resource]); seconds are estimates until session 9 (N11) [hypothesis].
+    // Vanilla standing clips that exist under the same name for woman_average and man_average: found in AMM's workspot
+    // catalogue (its db.sqlite3 table workspots) and confirmed in the game's own animsets, which tools/npc/gesture-carrier.ts
+    // lists per rig [resource]; seconds are estimates until session 9 (N11) [hypothesis].
     static const std::vector<Gesture> gestures{
         {"talk", "stand__2h_on_sides__01__talk__neutral__02", "stand__2h_on_sides__01__talk__neutral__02", 4.0},
         {"talk_hips", "stand__2h_on_hip__01__talk__neutral__01", "stand__2h_on_hip__01__talk__neutral__01", 4.0},
@@ -201,6 +202,8 @@ const std::vector<Gesture>& Gestures()
         {"shrug", "stand__2h_on_sides__01__shrug__01", "stand__2h_on_sides__01__shrug__01", 2.5},
         {"nod", "stand__2h_front__01__nod__respectful__01", "stand__2h_front__01__nod__respectful__01", 2.5},
         {"arms_crossed", "stand__arms_crossed_front__01", "stand__arms_crossed_front__01", 6.0},
+        {"facepalm", "stand__2h_on_sides__01__facepalm__01", "stand__2h_on_sides__01__facepalm__01", 3.0},
+        {"check_phone", "stand__2h_on_sides__01__check_phone__01", "stand__2h_on_sides__01__check_phone__01", 5.0},
     };
     return gestures;
 }
