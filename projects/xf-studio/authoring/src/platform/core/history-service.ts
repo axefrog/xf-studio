@@ -2,7 +2,8 @@
  * The history service (feature-module platform §3): every Undo history of the session, as scoped stacks over one stack type
  * (`HistoryStack`). DOM-free; imports only the platform API and the platform's own history pieces.
  *
- * - **Scopes.** `look` is the selected look's history (its stack is persisted in the workspace as `xfs/look-history-1`);
+ * - **Scopes** (profiles design §3.7). `look:<collection>/<look>` is one look's history (its stack is persisted with the look's
+ *   working copy as `xfs/look-history-1`); `character:<id>` is one V's creator choices, Clothing and own makeup (session-only);
  *   `view` is the View and lighting history; `doc:<id>` is one experiment document's (Hair Lab's grooms). Each scope's
  *   target (`HistoryTarget`) owns its state: the scope reads and applies values through it and owns the steps, Redo
  *   validity, jumps, coalescing and transactions.
@@ -13,9 +14,12 @@
  *   refuses them (an inconsistent replay, CORE-94) makes the scope drop its steps, and nothing changes.
  * - **Transactions.** `begin` opens the platform's `HistoryTransaction` over the scope: one checkpoint, labelled by the first
  *   change, discarded when empty, reverted on cancel without Redo (CORE-42).
- * - **Focus.** Global Undo and Redo reach the focused scope (`focused()`): the look, or an experiment's document while one is
- *   focused and its experiment still offers it (a participant). A step kept in the look's history returns the focus to the look.
- *   The View and lighting history has commands of its own (`view.undo`, `view.redo`).
+ * - **The editing context** (`focused()`, §3.7). Global Undo and Redo reach the scope of the last editing interaction: a step kept
+ *   in a look's or a V's history (an edit, an Undo, a look shown again) makes that scope the editing context, and an experiment's
+ *   document takes it when it records or moves (while its experiment offers it, a participant). The recent editing contexts are kept,
+ *   newest first: one that can't act now (a closed scope, a document no experiment offers) gives way to the one before it. There is
+ *   no other fallback: with none (`null`), Undo is unavailable. The View and lighting history has commands of its own (`view.undo`,
+ *   `view.redo`) and never takes the editing context.
  * - **Documents.** `documents` is the `DocumentHistory` API over the `doc:*` scopes: a step keeps the document's value after it
  *   by reference (no copy, whatever its size), and moving hands back the value to restore.
  */
@@ -26,9 +30,15 @@ import { HISTORY_LIMIT, HISTORY_START_ID, UNKNOWN_HISTORY_LABEL, type DocumentHi
 import { HistoryStack, ReferenceStore, WHOLE_VALUES, type LookReader } from "./history-stack";
 import { HistoryTransaction, type TransactionHost, type TransactionPolicy } from "./history-transaction";
 
-export const LOOK_SCOPE = "look";
 export const VIEW_SCOPE = "view";
 const DOCUMENT_PREFIX = "doc:";
+export const LOOK_SCOPE_PREFIX = "look:";
+const CHARACTER_PREFIX = "character:";
+/** One look's history scope (`look:<collection>/<look>`, §3.7). */
+export const lookScope = (ref: { readonly collection: string; readonly look: string }) => `${LOOK_SCOPE_PREFIX}${ref.collection}/${ref.look}`;
+export const isLookScope = (id: string) => id.startsWith(LOOK_SCOPE_PREFIX);
+/** Scopes whose kept steps make them the editing context: looks and Vs (documents take it through their own focus). */
+const editing = (id: string) => id.startsWith(LOOK_SCOPE_PREFIX) || id.startsWith(CHARACTER_PREFIX);
 
 export type ScopeOptions = {
   /** Steps kept (default `HISTORY_LIMIT`). */
@@ -109,9 +119,12 @@ export interface HistoryService {
   open(id: HistoryScopeId, target: HistoryTarget, options?: ScopeOptions): HistoryScope;
   close(id: HistoryScopeId): void;
   scope(id: HistoryScopeId): HistoryScope | undefined;
-  /** Where global Undo and Redo go; null is the look. */
+  /** Make `id` the editing context, where global Undo and Redo go; null gives it back to the one before. */
   focus(id: HistoryScopeId | null): void;
-  focused(): HistoryScope;
+  /** The editing context's scope: the newest recent one that can act now, or null (none, so Undo is unavailable). */
+  focused(): HistoryScope | null;
+  /** The newest look's or V's editing context, as set, whether or not its scope is open now (stored with the session). */
+  editing(): HistoryScopeId | null;
   /** The experiments' document histories: the existing API over `doc:*` scopes. */
   readonly documents: DocumentHistory;
   /** The documents an experiment currently offers to global Undo (`HistoryParticipant`); returns the unregister. */
@@ -275,7 +288,9 @@ export function createHistoryService(): HistoryService {
   const scopes = new Map<HistoryScopeId, Scope>();
   const listeners = new Set<() => void>(), documentListeners = new Set<() => void>();
   const providers = new Set<() => readonly HistoryParticipant[]>();
-  let focus: HistoryScopeId | null = null;
+  /** The recent editing contexts, newest first (bounded). */
+  let recent: HistoryScopeId[] = [];
+  const RECENT_LIMIT = 8;
   const emit = (set: Set<() => void>) => { for (const listener of [...set]) listener(); };
   /** Inside `batch`, listeners hear once at the end, however many changes the operation made. */
   let batching = 0, pending = { all: false, documents: false };
@@ -295,10 +310,15 @@ export function createHistoryService(): HistoryService {
       }
     }
   };
-  const setFocus = (id: HistoryScopeId | null) => { if (focus === id) return false; focus = id; notify(true); return true; };
+  const setFocus = (id: HistoryScopeId | null) => {
+    if (id === null ? !recent.length : recent[0] === id) return false;
+    recent = id === null ? recent.slice(1) : [id, ...recent.filter(item => item !== id)].slice(0, RECENT_LIMIT);
+    notify(true);
+    return true;
+  };
   const hub = { changed(scope: Scope, kept: boolean) {
-    // A step kept in the look's history (an edit, an Undo, a preset switch) returns global Undo to the look.
-    if (kept && scope.id === LOOK_SCOPE && focus !== null) setFocus(null);
+    // A step kept in a look's or a V's history (an edit, an Undo, a look shown again) makes it the editing context.
+    if (kept && editing(scope.id)) setFocus(scope.id);
     notify(scope.id.startsWith(DOCUMENT_PREFIX));
   } };
   const participant = (id: string) => {
@@ -309,8 +329,6 @@ export function createHistoryService(): HistoryService {
     scopes.set(id, scope);
     return scope;
   };
-  const look = () => scopes.get(LOOK_SCOPE) ?? openScope(LOOK_SCOPE, { read: () => undefined, apply: () => true });
-
   // ----- Documents -----
   /** Each document's value as its history last left it (a step keeps the value after it), and its label and step IDs. */
   const held = new Map<string, unknown>(), labels = new Map<string, string>();
@@ -340,8 +358,11 @@ export function createHistoryService(): HistoryService {
     return scope ? scope.timeline() : { startId: `${id}:start`, steps: [], current: -1, redoCount: 0, trimmed: false };
   };
   const documents: DocumentHistory = {
-    selected: () => focus?.startsWith(DOCUMENT_PREFIX) ? focus.slice(DOCUMENT_PREFIX.length) : null,
-    focus: id => { setFocus(id === null ? null : DOCUMENT_PREFIX + id); },
+    selected: () => recent[0]?.startsWith(DOCUMENT_PREFIX) ? recent[0].slice(DOCUMENT_PREFIX.length) : null,
+    focus: id => {
+      if (id !== null) setFocus(DOCUMENT_PREFIX + id);
+      else if (recent[0]?.startsWith(DOCUMENT_PREFIX)) setFocus(null);
+    },
     snapshot,
     record: (id, documentLabel, entry, change) => batch(() => {
       const scope = ensureDocument(id), known = held.has(id);
@@ -371,19 +392,22 @@ export function createHistoryService(): HistoryService {
 
   return {
     open: openScope,
-    close(id) { scopes.delete(id); if (focus === id) setFocus(null); },
+    close(id) { scopes.delete(id); },
     scope: id => scopes.get(id),
     focus: id => { setFocus(id); },
     focused() {
-      if (focus?.startsWith(DOCUMENT_PREFIX)) {
-        const id = focus.slice(DOCUMENT_PREFIX.length);
-        if (participant(id)) return ensureDocument(id);
-      } else if (focus !== null) {
-        const scope = scopes.get(focus);
-        if (scope) return scope;
+      for (const id of recent) {
+        if (id.startsWith(DOCUMENT_PREFIX)) {
+          const document = id.slice(DOCUMENT_PREFIX.length);
+          if (participant(document)) return ensureDocument(document);
+        } else {
+          const scope = scopes.get(id);
+          if (scope) return scope;
+        }
       }
-      return look();
+      return null;
     },
+    editing: () => recent.find(editing) ?? null,
     documents,
     participants(provider) { providers.add(provider); return () => { providers.delete(provider); }; },
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },

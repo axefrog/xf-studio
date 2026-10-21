@@ -6,7 +6,8 @@
 import { expect, test } from "bun:test";
 import { HISTORY_LIMIT, type HistoryLabel, type HistoryTarget } from "../src/platform/api/history";
 import { MAIN_VIEW } from "../src/platform/api/view-graph";
-import { createHistoryService, LOOK_SCOPE, VIEW_SCOPE } from "../src/platform/core/history-service";
+import { createHistoryService, lookScope as lookScopeOf, VIEW_SCOPE } from "../src/platform/core/history-service";
+const LOOK_SCOPE = lookScopeOf({ collection: "c", look: "l" });
 import { CONTROL_TRANSACTION, GESTURE_TRANSACTION } from "../src/platform/core/history-transaction";
 import { createStudioViewGraph, defaultViewGraph, STUDIO_VIEW_GRAPH_RULES } from "../src/preview/preview-view-graph";
 import { ViewGraph } from "../src/platform/core/view-graph";
@@ -47,8 +48,8 @@ test("scopes are isolated and global Undo goes to the focused one; a document is
   expect(service.focused()).toBe(lookScope);
   const offered = new Set(["hair:g"]);
   const off = service.participants(() => [...offered].map(id => ({ id, dispatch: () => true })));
-  expect(service.focused().id).toBe("doc:hair:g");
-  expect(service.focused().timeline()).toMatchObject({ startId: "hair:g:start", documentLabel: "Hair Lab", steps: [{ id: "g1", label: "Hair length" }] });
+  expect(service.focused()!.id).toBe("doc:hair:g");
+  expect(service.focused()!.timeline()).toMatchObject({ startId: "hair:g:start", documentLabel: "Hair Lab", steps: [{ id: "g1", label: "Hair length" }] });
   offered.clear();
   expect(service.focused()).toBe(lookScope);
   off();
@@ -179,10 +180,10 @@ test("at the limit a new step displaces the oldest, and undoing it brings that o
 test("the trusted core's look, View and lighting history live in the one service it is given", () => {
   const service = createHistoryService();
   const core = createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft", history: service }, STUDIO_COMPOSITION);
-  expect(service.scope(LOOK_SCOPE)).toBe(core.document.history);
+  expect(service.scope(core.document.scopeId)).toBe(core.document.history);
   core.app.dispatch({ kind: "layer.setOpacity", layerId: core.document.recipe.layers[0].id, opacity: 0.3 });
   core.views.edit(MAIN_VIEW, "lights", { state: { creatorLighting: { ...DEFAULT_CREATOR_LIGHTING, exposure: 2 } } }, { label: "Exposure" });
-  expect(service.focused().state()).toMatchObject({ undo: { label: "Opacity" }, depth: 1 });
+  expect(service.focused()!.state()).toMatchObject({ undo: { label: "Opacity" }, depth: 1 });
   expect(service.scope(VIEW_SCOPE)!.state()).toMatchObject({ undo: { label: "Exposure" }, depth: 1 });
 });
 

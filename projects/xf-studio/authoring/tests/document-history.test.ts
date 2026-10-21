@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createDocumentHistory } from "../src/platform/core/document-history";
-import { createHistoryService, LOOK_SCOPE } from "../src/platform/core/history-service";
+import { createHistoryService } from "../src/platform/core/history-service";
 import { HISTORY_LIMIT } from "../src/platform/api/history";
 const step = (id: string, label = "Hair length") => ({ id, label, actionKind: "hairLab.set" });
 
@@ -9,18 +9,18 @@ test("global history reaches the focused document through its participant, keeps
   book.record("a", "Hair", step("one"), { before: 1, after: 2 });
   book.record("b", "Other groom", step("two", "Hair waves"), { before: 10, after: 20 });
   expect(book.move("b", -1)).toBe(10); expect(book.snapshot("b").steps[0].id).toBe("two"); expect(book.snapshot("a").current).toBe(0);
-  // Without a participant (the experiment no longer shows the document) global Undo stays with the look.
-  expect(service.focused().id).toBe(LOOK_SCOPE);
+  // Without a participant (the experiment no longer shows the document) and no other editing context, global Undo has nowhere to go.
+  expect(service.focused()).toBeNull();
   let moves = 0;
   service.participants(() => [{ id: "b", dispatch() { moves++; book.move("b", 0); return true; } }]);
-  expect(service.focused().capability({ kind: "history.redo" }).available).toBe(true);
-  expect(service.focused().command({ kind: "history.redo" })).toBe(true);
+  expect(service.focused()!.capability({ kind: "history.redo" }).available).toBe(true);
+  expect(service.focused()!.command({ kind: "history.redo" })).toBe(true);
   expect(moves).toBe(1);
-  expect(service.focused().timeline().documentLabel).toBe("Other groom");
+  expect(service.focused()!.timeline().documentLabel).toBe("Other groom");
   book.move("b", -1); book.record("b", "Other groom", step("three", "Hair volume"), { before: 10, after: 30 });
   expect(book.snapshot("b").steps.map(s => s.id)).toEqual(["three"]); expect(book.snapshot("a").steps.map(s => s.id)).toEqual(["one"]);
   expect(book.move("b", 0)).toBe(30); expect(book.move("b", -1)).toBe(10);
-  book.focus(null); expect(service.focused().id).toBe(LOOK_SCOPE);
+  book.focus(null); expect(service.focused()).toBeNull();
 });
 
 test("a step keeps the value after it: Undo, Redo and jumps hand back the value to restore, and a document without history has none", () => {

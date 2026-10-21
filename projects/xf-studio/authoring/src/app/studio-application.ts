@@ -31,7 +31,7 @@ import { coded, refusal, undoPolicyOf, type ActionDescriptor as PlatformDescript
   type ValidationIssue } from "../platform/api";
 import type { AnyOwner, Registry } from "../platform/core/registry";
 import { CONTROL_TRANSACTION, type HistoryTransaction } from "../platform/core/history-transaction";
-import { LOOK_SCOPE, type HistoryScope, type HistoryService } from "../platform/core/history-service";
+import { isLookScope, type HistoryScope, type HistoryService } from "../platform/core/history-service";
 import type { StudioFileAction, StudioFileOperations, StudioFileOutcome } from "./studio-file-operations";
 import type { PartPresetList, PartPresetOutcome, PartPresetRequest, PartPresetService, PartPresetSetList, SetExportState } from "../library/part-presets";
 import type { FacialPreview } from "../animation/facial-preview";
@@ -43,6 +43,8 @@ import { mottleCatalogue } from "../engines/layered-makeup/mottle";
 import { layerExport, planPresetExport, type LayerExport } from "../engines/layered-makeup/finish-export";
 import { layerEdgeReach, type SurfaceOutline } from "../engines/layered-makeup/surface-edge";
 
+/** Undo and Redo with no editing context (profiles design §3.7). */
+export const NOTHING_TO_UNDO = "Nothing to undo here yet.";
 /**
  * Each owner this application binds a handler for, with its action union, keyed by owner ID. The
  * composition list (`compose/studio-registry.ts`) must register exactly these owners: it checks
@@ -491,18 +493,22 @@ export class StudioApplication {
       undoLimit: RECIPE_HISTORY_LIMIT, removedLimit: REMOVED_PRESET_LIMIT, jump, ...(own ? { action: own } : {}) });
   }
   /** What Undo and Redo would change next (labels are session-only; restored history reads "Earlier change"). */
-  history(): HistoryState { return this.focusedHistory().state(); }
-  /** Where global Undo and Redo go: the history service's focused scope, the look's unless an experiment's document is focused. */
-  private focusedHistory(): HistoryScope {
-    const focused = this.services.history?.focused();
-    return focused && focused.id !== LOOK_SCOPE ? focused : this.services.document.history;
+  history(): HistoryState { return this.focusedHistory()?.state() ?? { depth: 0, redoDepth: 0 }; }
+  /**
+   * Where global Undo and Redo go: the editing context (profiles design §3.7), the scope of the last editing interaction (a look, a V
+   * or an experiment's document); none (undefined) before anything was edited. Without a history service (fixtures), the look's.
+   */
+  private focusedHistory(): HistoryScope | undefined {
+    return this.services.history ? this.services.history.focused() ?? undefined : this.services.document.history;
   }
   /**
    * Read-only timeline of the current preset's history (oldest first, redo-able steps after
    * the current one) for a history list. Labels and times are session-only; steps restored
    * from a saved workspace read "Earlier change". It exposes no recipes.
    */
-  historyTimeline(): HistorySnapshot { return this.focusedHistory().timeline(); }
+  historyTimeline(): HistorySnapshot {
+    return this.focusedHistory()?.timeline() ?? { startId: "start", steps: [], current: -1, redoCount: 0, trimmed: false };
+  }
   /** Static finish and Glitter-model descriptors, including the compiler's export gate. */
   finishCatalogue() { return finishCatalogue(this.services.eyeMakeup.region.wording); }
   /**
@@ -739,9 +745,14 @@ export class StudioApplication {
     return {
       // Global Undo, Redo and jumps reach the focused history scope, which decides what is available.
       history: {
-        capability: action => app.focusedHistory().capability(action),
-        // A document's move (through its experiment) has no result of its own; the look's says whether it moved.
-        dispatch: action => { const scope = app.focusedHistory(), moved = scope.command(action); return scope.id === LOOK_SCOPE ? moved : undefined; },
+        capability: action => app.focusedHistory()?.capability(action) ?? refusal("unavailable", NOTHING_TO_UNDO),
+        // A document's move (through its experiment) has no result of its own; a look's says whether it moved.
+        dispatch: action => {
+          const scope = app.focusedHistory();
+          if (!scope) return undefined;
+          const moved = scope.command(action);
+          return isLookScope(scope.id) || !app.services.history ? moved : undefined;
+        },
       },
       "eye-makeup": {
         capability: action => app.eyeMakeupSpec(action).capability(app.services.eyeMakeup.state(), action),
