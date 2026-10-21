@@ -11,7 +11,7 @@ import { personalRoots, RedactionRoots } from "../src/diagnostics/host/host-root
 import { DIAGNOSTIC_FORWARD_SCHEMA, type DiagnosticEntry } from "../src/diagnostics/model";
 import { DiagnosticLog, hostDiagnosticsAt, hostFailure, withDiagnostics } from "../src/diagnostics/host/host-log";
 import { TraceWindow } from "../src/diagnostics/host/trace-window";
-import { createDiagnosticsHandler, modFileEntryName, withRequestDiagnostics, type DiagnosticsHandlerOptions } from "../src/diagnostics/host/host-endpoint";
+import { createDiagnosticsHandler, modFileEntryName, readReviewedFile, withRequestDiagnostics, type DiagnosticsHandlerOptions } from "../src/diagnostics/host/host-endpoint";
 import { hideProfileName, resolutionResources } from "../src/diagnostics/host/host-report";
 import { RESOLUTION_TRACE_OPTIONS, resolutionTrace } from "../src/diagnostics/resolution-trace";
 import { hashingSettled, involvedMods, readOwnInstalls } from "../src/diagnostics/host/mod-identity";
@@ -580,4 +580,18 @@ describe("the game folder is not one mod, and hashing is bounded in time (DIAG-0
     const again = await involvedMods([{ archive: "late.archive", provider: "Installed game", group: "mod", alternatives: [] }], settings, none, { hashBudgetMs: 0 });
     expect(again[0]!.archives[0]).toMatchObject({ identifiedBy: "sha-256", sha256: new Bun.CryptoHasher("sha256").update(readFileSync(fresh)).digest("hex") });
   });
+});
+
+test("a mod file without a reviewed hash, written while it is read, is refused (DIAG-06)", async () => {
+  const file = join(root, "while-read.archive");
+  writeFileSync(file, "reviewed bytes");
+  const stat = statSync(file);
+  const reviewed = { path: file, bytes: stat.size, modified: new Date(stat.mtimeMs).toISOString(), sha256: null };
+  expect(new TextDecoder().decode(readReviewedFile(reviewed)!)).toBe("reviewed bytes");
+  // Rewritten during the read with bytes of the same size.
+  expect(readReviewedFile(reviewed, () => writeFileSync(file, "REVIEWED BYTES"))).toBeNull();
+  // ... and with its modification time put back: its change time still tells.
+  writeFileSync(file, "reviewed bytes"); utimesSync(file, stat.atime, stat.mtime);
+  await new Promise(resolve => setTimeout(resolve, 20));
+  expect(readReviewedFile(reviewed, () => { writeFileSync(file, "REVIEWED BYTES"); utimesSync(file, stat.atime, stat.mtime); })).toBeNull();
 });

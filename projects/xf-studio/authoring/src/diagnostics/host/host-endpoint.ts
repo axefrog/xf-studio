@@ -214,9 +214,11 @@ export function createDiagnosticsHandler(diagnostics: HostDiagnostics, options: 
 /**
  * A mod's file exactly as the review showed it (DIAG-06): read through one open handle, only while its size and modification time are
  * the ones recorded when the report was prepared, never past that size (so the report's limits hold for what is read), and, when the
- * review showed its SHA-256, only when the bytes still hash to it. Null when the file has changed since; throws when it can't be read.
+ * review showed its SHA-256, only when the bytes still hash to it. Without a hash, the handle's identity (size, modification and change
+ * times, file id) is read again after the bytes, so a file written while it was read is refused too. Null when the file has changed
+ * since; throws when it can't be read. `afterRead` is a test seam.
  */
-export function readReviewedFile(file: Pick<ReviewedFile, "path" | "bytes" | "modified" | "sha256">): Uint8Array | null {
+export function readReviewedFile(file: Pick<ReviewedFile, "path" | "bytes" | "modified" | "sha256">, afterRead: () => void = () => {}): Uint8Array | null {
   const fd = openSync(file.path, "r");
   try {
     const stat = fstatSync(fd);
@@ -231,6 +233,10 @@ export function readReviewedFile(file: Pick<ReviewedFile, "path" | "bytes" | "mo
     }
     // Grown since its size was read: not the file reviewed.
     if (readSync(fd, new Uint8Array(1), 0, 1, at) > 0) return null;
+    afterRead();
+    // Written while it was read (the same size and time put back included): not the bytes reviewed.
+    const after = fstatSync(fd);
+    if (after.size !== stat.size || after.mtimeMs !== stat.mtimeMs || after.ctimeMs !== stat.ctimeMs || after.ino !== stat.ino) return null;
     if (file.sha256 !== null && createHash("sha256").update(bytes).digest("hex") !== file.sha256) return null;
     return bytes;
   } finally { closeSync(fd); }
