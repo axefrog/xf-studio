@@ -9,12 +9,12 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { Scheduler, simClock } from "strata/testing";
-import { checkpointDone, checkpointInWorker, checkpointLibrary, LIBRARY_FLUSH, LibraryDurability, useWriteAheadLog } from "../src/platform/graph-adapters/library-durability";
+import { checkpointDone, checkpointInWorker, checkpointLibrary, LIBRARY_FLUSH, LibraryDurability, useWriteAheadLog } from "../src/platform/persistence/library-durability";
 import { LookLibrary } from "../src/library-store";
 import { CollectionLibrary } from "../src/collection-store";
 import { PartPresetLibrary } from "../src/part-preset-store";
-import { SqliteGraphStore } from "../src/platform/graph-adapters/sqlite-store";
+import { DocumentStore } from "../src/platform/persistence/document-store";
+import { ManualClock } from "./fixtures/platform-doubles";
 import { STUDIO_PARTS } from "../src/compose/studio-registry";
 import { initialRecipe } from "./fixtures/eye-region";
 
@@ -24,10 +24,10 @@ afterEach(() => { for (const dir of folders.splice(0)) try { rmSync(dir, { recur
 
 /** A durability on simulated time whose flushes are recorded (and fail while `fail` says so). */
 function simulated(options: { fail?: () => boolean; throws?: () => boolean } = {}) {
-  const scheduler = new Scheduler(), life = new AbortController(), flushes: number[] = [], reports: unknown[] = [];
-  const durability = new LibraryDurability("sim.sqlite", { clock: simClock(scheduler), signal: life.signal, report: error => reports.push(error),
+  const scheduler = new ManualClock(), life = new AbortController(), flushes: number[] = [], reports: unknown[] = [];
+  const durability = new LibraryDurability("sim.sqlite", { clock: scheduler, signal: life.signal, report: error => reports.push(error),
     sync: () => {
-      flushes.push(scheduler.now);
+      flushes.push(scheduler.time);
       if (options.throws?.()) throw new Error("disk unavailable");
       return !options.fail?.();
     } });
@@ -69,7 +69,7 @@ test("under steady writing a flush runs at least every maxMs, so nothing waits l
   let lastFlushed = 0, oldestUnflushed: number | undefined;
   for (let t = 0; t < 60_000; t += 250) {
     durability.wrote();
-    oldestUnflushed ??= scheduler.now;
+    oldestUnflushed ??= scheduler.time;
     const before = flushes.length;
     scheduler.advance(250);
     if (flushes.length > before) {
@@ -135,16 +135,16 @@ const walState = (path: string) => {
 
 test("every library store runs WAL with synchronous=NORMAL; a file that can't use WAL keeps FULL", () => {
   const path = library(), life = new AbortController();
-  const durability = new LibraryDurability(path, { clock: simClock(new Scheduler()), signal: life.signal });
+  const durability = new LibraryDurability(path, { clock: new ManualClock(), signal: life.signal });
   const looks = new LookLibrary(path, durability), collections = new CollectionLibrary(path, STUDIO_PARTS, durability);
-  const presets = new PartPresetLibrary(path, STUDIO_PARTS, undefined, durability), graph = new SqliteGraphStore(path, { writes: durability });
-  const stores = [looks, collections, presets, graph] as unknown as { db: Database }[];
+  const presets = new PartPresetLibrary(path, STUDIO_PARTS, undefined, durability), documents = new DocumentStore(path, { writes: durability });
+  const stores = [looks, collections, presets, documents] as unknown as { db: Database }[];
   try {
     for (const store of stores) {
       expect(store.db.query("PRAGMA journal_mode").get()).toEqual({ journal_mode: "wal" });
       expect(store.db.query("PRAGMA synchronous").get()).toEqual({ synchronous: 1 });
     }
-  } finally { looks.close(); collections.close(); presets.close(); graph.close(); life.abort(); }
+  } finally { looks.close(); collections.close(); presets.close(); documents.close(); life.abort(); }
   const memory = new Database(":memory:");
   expect(useWriteAheadLog(memory)).toBe(false);
   expect(memory.query("PRAGMA synchronous").get()).toEqual({ synchronous: 2 });
@@ -169,8 +169,8 @@ test("a library in rollback-journal mode moves to WAL when it opens, its rows in
 });
 
 test("a flush checkpoints every committed frame; a reader holding the log makes it report unfinished until it lets go", async () => {
-  const path = library(), scheduler = new Scheduler(), life = new AbortController();
-  const durability = new LibraryDurability(path, { clock: simClock(scheduler), signal: life.signal });
+  const path = library(), scheduler = new ManualClock(), life = new AbortController();
+  const durability = new LibraryDurability(path, { clock: scheduler, signal: life.signal });
   const looks = new LookLibrary(path, durability), recipe = initialRecipe();
   try {
     expect(durability.flush()).toBe(true);     // the schema
@@ -202,10 +202,10 @@ test("a flush checkpoints every committed frame; a reader holding the log makes 
 });
 
 test("closing the library (the host's stop, on quit) flushes what the last seconds wrote", () => {
-  const path = library(), scheduler = new Scheduler(), life = new AbortController();
-  const durability = new LibraryDurability(path, { clock: simClock(scheduler), signal: life.signal });
+  const path = library(), scheduler = new ManualClock(), life = new AbortController();
+  const durability = new LibraryDurability(path, { clock: scheduler, signal: life.signal });
   const looks = new LookLibrary(path, durability), collections = new CollectionLibrary(path, STUDIO_PARTS, durability);
-  const presets = new PartPresetLibrary(path, STUDIO_PARTS, undefined, durability), graph = new SqliteGraphStore(path, { writes: durability });
+  const presets = new PartPresetLibrary(path, STUDIO_PARTS, undefined, durability), documents = new DocumentStore(path, { writes: durability });
   const holder = new Database(path);   // another connection (a second window, a tool) keeps the log after the stores close
   try {
     durability.flush();
@@ -213,7 +213,7 @@ test("closing the library (the host's stop, on quit) flushes what the last secon
     expect(durability.pending).toBe(true);
     const unsynced = walState(path);
     expect(unsynced.checkpointed).toBeLessThan(unsynced.log);
-    looks.close(); collections.close(); presets.close(); graph.close();
+    looks.close(); collections.close(); presets.close(); documents.close();
     life.abort();
     expect(durability.pending).toBe(false);
     const synced = walState(path);
@@ -226,7 +226,7 @@ test("each store tells the durability of its commits", async () => {
   let writes = 0;
   const counter = { wrote: () => { writes++; } };
   const looks = new LookLibrary(path, counter), collections = new CollectionLibrary(path, STUDIO_PARTS, counter);
-  const presets = new PartPresetLibrary(path, STUDIO_PARTS, undefined, counter), graph = new SqliteGraphStore(path, { writes: counter });
+  const presets = new PartPresetLibrary(path, STUDIO_PARTS, undefined, counter), documents = new DocumentStore(path, { writes: counter });
   try {
     let at = writes;
     const look = looks.save({ name: "A look", recipe: initialRecipe() });
@@ -240,10 +240,12 @@ test("each store tells the durability of its commits", async () => {
     const list = collections.list();
     expect(Array.isArray(list)).toBe(true);
     at = writes;
-    await graph.putSnapshot({ node: { type: "t", id: "n" }, seq: 1, pos: 1, schema: "1", state: { name: "n", own: {}, layers: [], trashed: false, retracted: false } });
-    await graph.dropSnapshots({ type: "t", id: "n" });
+    documents.put("sample", "n", { a: 1 }, 0);
+    documents.put("sample", "n", { a: 2 }, 1);
     expect(writes).toBe(at + 2);
-  } finally { looks.close(); collections.close(); presets.close(); graph.close(); life.abort(); }
+    expect(documents.put("sample", "n", { a: 3 }, 1).ok).toBe(false);
+    expect(writes).toBe(at + 2);   // stale: nothing committed
+  } finally { looks.close(); collections.close(); presets.close(); documents.close(); life.abort(); }
 });
 
 test("a process killed while it saves leaves a valid database holding every save it acknowledged", async () => {
@@ -280,9 +282,9 @@ test("a process killed while it saves leaves a valid database holding every save
 }, 60_000);
 
 test("the scheduled flush runs off the host's thread; writes made meanwhile stay pending; the end of the lifetime flushes on it (PIPE-137)", async () => {
-  const scheduler = new Scheduler(), life = new AbortController(), onThread: number[] = [], background: (() => void)[] = [];
-  const durability = new LibraryDurability("sim.sqlite", { clock: simClock(scheduler), signal: life.signal,
-    sync: () => { onThread.push(scheduler.now); return true; },
+  const scheduler = new ManualClock(), life = new AbortController(), onThread: number[] = [], background: (() => void)[] = [];
+  const durability = new LibraryDurability("sim.sqlite", { clock: scheduler, signal: life.signal,
+    sync: () => { onThread.push(scheduler.time); return true; },
     syncInBackground: () => new Promise<boolean>(resolve => background.push(() => resolve(true))) });
   durability.wrote();
   scheduler.advance(LIBRARY_FLUSH.quietMs);
@@ -301,7 +303,7 @@ test("the scheduled flush runs off the host's thread; writes made meanwhile stay
   // Quitting with a write pending flushes it at once, on this thread.
   durability.wrote();
   life.abort();
-  expect(onThread).toEqual([scheduler.now]);
+  expect(onThread).toEqual([scheduler.time]);
   expect(durability.pending).toBe(false);
 });
 

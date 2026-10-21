@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import type { Recipe } from "./engines/layered-makeup/recipe";
 import { readRecipe as parseRecipe, recipeFile } from "./recipe-schema";
 import { hostFailure } from "./diagnostics/host-log";
-import { useWriteAheadLog, type LibraryWrites } from "./platform/graph-adapters/library-durability";
+import { useWriteAheadLog, type LibraryWrites } from "./platform/persistence/library-durability";
 
 export type LookSummary = { id: string; name: string; revision: number; updatedAt: string };
 export type StoredLook = LookSummary & { recipe: Recipe };

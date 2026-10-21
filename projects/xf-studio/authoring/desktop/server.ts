@@ -6,12 +6,12 @@ import { randomBytes } from "node:crypto";
 import { LookLibrary, libraryRequest } from "../src/library-store";
 import { CollectionLibrary, collectionRequest } from "../src/collection-store";
 import { PartPresetLibrary, partPresetRequest } from "../src/part-preset-store";
-// The graph (XF Strata): its store and backups in the library files, its host transport and inspector feed (profiles and
-// graph design, G1). Nothing in the page uses it yet; later slices move V, presets and profiles onto it.
-import { createGraphHandler, GraphLibrary } from "../src/platform/graph-adapters/graph-host";
-import { hostClock, hostRandom } from "../src/platform/graph-adapters/host-sources";
-import { LibraryDurability } from "../src/platform/graph-adapters/library-durability";
-import { STUDIO_GRAPH_RULES, STUDIO_GRAPH_TYPES } from "../src/compose/graph";
+// The library files' host side: durability, daily backups and the document store (src/platform/persistence).
+import { hostClock } from "../src/platform/core/clock";
+import { LibraryDurability } from "../src/platform/persistence/library-durability";
+import { LibraryBackups } from "../src/platform/persistence/backups";
+import { createDocumentsHandler, DocumentStore } from "../src/platform/persistence/document-store";
+import { importLegacyExperiments } from "../src/platform/persistence/legacy-experiment-import";
 import { createLocalSettingsHandler } from "../src/local-settings-server";
 import { FOLDER_FIELDS, type FolderField } from "../src/local-setup-actions";
 import { createInstallDetectionHandler, hostFrameworkCheck, profileFrameworkMods } from "../src/install-detection-server";
@@ -131,11 +131,11 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     requestWorkspaceFlush(nonce: string): void; flushTimeoutMs?: number },
   previewExporter?: (cli: string | null) => GameAssetExporter, hostOptions: DesktopHostOptions = {}) {
   mkdirSync(dataRoot, { recursive: true });
-  const graphOptions = { types: STUDIO_GRAPH_TYPES, rules: STUDIO_GRAPH_RULES, clock: hostClock(), random: hostRandom() };
+  const clock = hostClock();
   // Each library file's durability (library-durability.ts): commits don't wait for the disk, and a flush a few seconds after the last
   // one makes them durable, so a power cut loses at most those seconds. Open until the app stops (`stop()`, on quit).
   const libraryLife = new AbortController();
-  const durable = (file: string) => new LibraryDurability(resolve(dataRoot, file), { clock: graphOptions.clock, signal: libraryLife.signal,
+  const durable = (file: string) => new LibraryDurability(resolve(dataRoot, file), { clock, signal: libraryLife.signal,
     report: error => hostFailure("library", "flush_failed", "The library couldn't be flushed to disk yet; it will try again.", error, "warn") });
   const libraryFile = durable("library.sqlite"), verificationFile = durable("verification.sqlite");
   const library = new LookLibrary(resolve(dataRoot, "library.sqlite"), libraryFile);
@@ -145,12 +145,13 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   // Named part presets (an expression today) in their own table of the same library files (part-preset-store.ts).
   const partPresets = new PartPresetLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS, undefined, libraryFile);
   const verificationPartPresets = new PartPresetLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS, undefined, verificationFile);
-  const graphLibrary = new GraphLibrary(resolve(dataRoot, "library.sqlite"), { ...graphOptions, writes: libraryFile });
-  const verificationGraphLibrary = new GraphLibrary(resolve(dataRoot, "verification.sqlite"), { ...graphOptions, writes: verificationFile });
-  const graphRequests = [["/api/graph", createGraphHandler(graphLibrary, "/api/graph")],
-    ["/api/verification/graph", createGraphHandler(verificationGraphLibrary, "/api/verification/graph")]] as const;
-  // The library's daily backup, a moment after starting.
-  const backupTimer = setTimeout(() => graphLibrary.dailyBackup(), 2000);
+  // Typed documents (the experimental-features preference, experiments' documents) in their own table of the same files.
+  const documents = new DocumentStore(resolve(dataRoot, "library.sqlite"), { writes: libraryFile, now: () => clock.now() });
+  const verificationDocuments = new DocumentStore(resolve(dataRoot, "verification.sqlite"), { writes: verificationFile, now: () => clock.now() });
+  const documentRequests = [["/api/documents", createDocumentsHandler(documents, "/api/documents")],
+    ["/api/verification/documents", createDocumentsHandler(verificationDocuments, "/api/verification/documents")]] as const;
+  // The library's daily backup, a moment after starting and each day after, until the app stops.
+  new LibraryBackups(resolve(dataRoot, "library.sqlite"), () => clock.now()).keepDaily(clock, libraryLife.signal);
   // Desktop settings follow the Electrobun identity and channel. Never inherit
   // localhost's per-user default or developer XFS_PACKAGE_* environment paths.
   const settingsStore = new LocalSettingsStore(dataRoot);
@@ -168,6 +169,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   // One structured log and rolling detail window in <data>/diagnostics/ (docs/diagnostics.md). Host events go there by area;
   // `onReport` adds a listener (tests), it doesn't replace the log.
   const diagnostics = hostDiagnosticsAt(dataRoot);
+  for (const store of [documents, verificationDocuments]) importLegacyExperiments(store, message => diagnostics.log.info("library", "legacy_import", message));
   setProcessDiagnostics(diagnostics);
   // The resolver reads game files natively first, in a worker; the packaged app starts the built one.
   if (hostOptions.nativeDecodeWorker) {
@@ -450,7 +452,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return collectionRequest(routedRequest, store, prefix);
       for (const [prefix, store] of [["/api/part-presets", partPresets], ["/api/verification/part-presets", verificationPartPresets]] as const)
         if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return partPresetRequest(routedRequest, store, prefix);
-      for (const [prefix, handle] of graphRequests) if (url.pathname.startsWith(prefix + "/")) return handle(routedRequest);
+      for (const [prefix, handle] of documentRequests) if (url.pathname === prefix) return handle(routedRequest);
       for (const [prefix, store] of [["/api/looks", library], ["/api/verification/looks", verificationLibrary]] as const)
         if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return libraryRequest(routedRequest, store, prefix);
       if (request.method !== "GET" && request.method !== "HEAD") return new Response("Method not allowed", { status: 405 });
@@ -503,6 +505,6 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     characterDetails,
     /** WolvenKit setup (tests and shutdown). */
     wolvenKit,
-    stop() { diagnostics.trace.flush(); shutdown.abort(); previewCore.cancel(); characterDetails.cancel(); wolvenKit.cancel(); server.stop(true); facial.dispose(); collections.close(); verificationCollections.close(); partPresets.close(); verificationPartPresets.close(); clearTimeout(backupTimer); graphLibrary.close(); verificationGraphLibrary.close(); library.close(); verificationLibrary.close(); libraryLife.abort(); },
+    stop() { diagnostics.trace.flush(); shutdown.abort(); previewCore.cancel(); characterDetails.cancel(); wolvenKit.cancel(); server.stop(true); facial.dispose(); collections.close(); verificationCollections.close(); partPresets.close(); verificationPartPresets.close(); documents.close(); verificationDocuments.close(); library.close(); verificationLibrary.close(); libraryLife.abort(); },
   };
 }

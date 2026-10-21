@@ -18,13 +18,22 @@ export type HistoryState = { undo?: HistoryLabel; redo?: HistoryLabel; depth: nu
 export type HistoryStep = HistoryLabel & { id: string; at?: number; state: "done" | "undone" };
 export type HistorySnapshot = { startId: string; steps: HistoryStep[]; current: number; redoCount: number; trimmed: boolean; documentLabel?: string };
 export type HistoryParticipant = { id: string; dispatch(action: HistoryCommand): boolean };
-/** Session metadata only; document contents and compensation remain in their owning graph. */
+/**
+ * The Undo history of separately stored documents (an experiment's documents, scoped by ID such as `hair:<id>`), beside the
+ * look history. Each document's history is linear and isolated; global Undo and Redo reach the selected one. A step keeps
+ * the document's value after it (and the history its value before the first step), so moving through the history hands
+ * back the value to restore. Session only, like the look history's labels and Redo.
+ */
 export type DocumentHistory = {
   selected(): string | null;
   focus(id: string | null): void;
   snapshot(id: string): HistorySnapshot;
-  record(id: string, documentLabel: string, entry: HistoryLabel & { id: string }): void;
-  move(id: string, current: number): void;
+  /** Records a step after the current one (dropping the redo branch), with the document's value before and after it. */
+  record(id: string, documentLabel: string, entry: HistoryLabel & { id: string }, change: { readonly before: unknown; readonly after: unknown }): void;
+  /** Moves to step `current` (-1: before the first step) and returns the document's value there; undefined when it has no history. */
+  move(id: string, current: number): unknown;
+  /** Calls `listener` after every change (selection, a step recorded or moved); returns the unsubscribe. */
+  subscribe(listener: () => void): () => void;
 };
 
 /** The label of a step whose label was not kept (restored from a saved workspace). */

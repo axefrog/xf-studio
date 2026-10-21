@@ -1,5 +1,5 @@
 import { LocalSetupActions, type FolderPicker } from "./local-setup-actions";
-import { hostClock } from "./platform/graph-adapters/host-sources";
+import { hostClock } from "./platform/core/clock";
 
 /**
  * The page's settings service over `/api/local-settings`; `pickFolder` is the host's native folder picker, when it has one. A

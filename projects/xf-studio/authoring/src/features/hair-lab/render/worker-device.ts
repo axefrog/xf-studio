@@ -1,8 +1,7 @@
 /** Worker transport/source adapter. Persistent per-scene workers retain geometry-revision contact caches. */
-import type { AbortSignalLike } from "../../../platform/api/graph";
 import type { Generation, GenerationDevice } from "../service";
 import type { Groom, HeadSurface } from "../types";
-export function workerGeneration(lifetime: AbortSignalLike, options: { shape?: string } = {}): GenerationDevice {
+export function workerGeneration(lifetime: AbortSignal, options: { shape?: string } = {}): GenerationDevice {
   const workers = new Map<string, Worker>(), pending = new Map<number, { publish(result: Generation): void; resolve(): void; reject(error: Error): void }>();
   let sequence = 0;
   lifetime.addEventListener("abort", () => { for (const worker of workers.values()) worker.terminate(); workers.clear(); for (const item of pending.values()) item.resolve(); pending.clear(); });

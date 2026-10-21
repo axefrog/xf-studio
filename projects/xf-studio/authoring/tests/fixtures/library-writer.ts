@@ -5,8 +5,8 @@
  *   bun tests/fixtures/library-writer.ts <library.sqlite>
  */
 import { LookLibrary } from "../../src/library-store";
-import { LibraryDurability } from "../../src/platform/graph-adapters/library-durability";
-import { hostClock } from "../../src/platform/graph-adapters/host-sources";
+import { LibraryDurability } from "../../src/platform/persistence/library-durability";
+import { hostClock } from "../../src/platform/core/clock";
 import { initialRecipe } from "./eye-region";
 
 const path = process.argv[2];

@@ -5,7 +5,7 @@ import { COLLECTION_1, COLLECTION_2, isNewerData, type Look, type LookCollection
 import { NEWER_LOOKS_LIBRARY_MESSAGE } from "./collection-workspace";
 import type { PartRegistry } from "./platform/core/document";
 import { hostFailure } from "./diagnostics/host-log";
-import { useWriteAheadLog, type LibraryWrites } from "./platform/graph-adapters/library-durability";
+import { useWriteAheadLog, type LibraryWrites } from "./platform/persistence/library-durability";
 
 /** A library revision: the collection as looks (`xfs/collection-2` in memory), whatever schema its row was written in. */
 export type StoredCollection = { collection: LookCollection; revision: number; updatedAt: string };

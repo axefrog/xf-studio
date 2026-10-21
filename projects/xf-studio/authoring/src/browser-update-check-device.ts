@@ -1,4 +1,4 @@
-import { hostClock } from "./platform/graph-adapters/host-sources";
+import { hostClock } from "./platform/core/clock";
 import { hostRequest } from "./browser-host-request";
 import { UpdateCheckActions } from "./update-check-actions";
 

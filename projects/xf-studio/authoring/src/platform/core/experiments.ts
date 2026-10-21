@@ -1,16 +1,22 @@
-import type { ExperimentContext } from "../api/graph";
-/** Generic experiment preferences and loader. Feature implementations are reached only through injected lazy loaders. */
-import { Aborter, createEnvironment, createGraph, defineType, erector, standardOperators } from "strata";
-import type { AbortSignalLike, GraphModel, GraphStore, Json, KNode, NodeId, Sources } from "strata";
-import type { ExperimentInfo, ExperimentPort, ExperimentRegistration, ExperimentState } from "../api/experiments";
-import { documentHistory } from "./document-history";
+/**
+ * The experiments platform: the experimental-features preference and the loading of each enabled experiment. Feature
+ * implementations are reached only through injected lazy loaders, so an experiment that is off loads nothing.
+ *
+ * The preference is one document in the library's document store (`EXPERIMENT_FLAGS`). It sits beside the experiments'
+ * own documents rather than in the local settings: it is a per-library choice (a verification workspace's library keeps
+ * its own), toggled one flag at a time with no settings revision to collide with, and the experiments platform then needs
+ * one transport only.
+ */
+import type { ExperimentContext, ExperimentFlagsDocument, ExperimentInfo, ExperimentPort, ExperimentRegistration, ExperimentState } from "../api/experiments";
+import { EXPERIMENT_FLAGS } from "../api/experiments";
+import type { DocumentStorePort } from "../api/document-store";
+import type { Random } from "./random";
+import { createDocumentHistory } from "./document-history";
+import { documentOwners } from "./saved-document";
+import { createTask, type Task } from "./tasks";
 
-export const EXPERIMENT_TYPES = [
-  defineType({ type: "experimental-features", owner: "platform", schema: "1", fields: { flags: { kind: "map", of: { kind: "value" } } }, defaults: () => ({ flags: {} }) }),
-  defineType({ type: "experiment-document", owner: "platform", schema: "1", fields: { module: { kind: "value" }, document: { kind: "value" }, values: { kind: "map", of: { kind: "value" } } }, defaults: () => ({ values: {} }) }),
-];
 export type ExperimentDefinition<T extends ExperimentRegistration = ExperimentRegistration> = ExperimentInfo & {
-  load(signal: AbortSignalLike): Promise<{ create(context: ExperimentContext): T }>;
+  load(signal: AbortSignal): Promise<{ create(context: ExperimentContext): T | Promise<T> }>;
 };
 export function experimentOverrides(query: string, known: readonly string[], verification = false): Record<string, boolean> {
   const params = new URLSearchParams(query), result: Record<string, boolean> = {};
@@ -18,140 +24,122 @@ export function experimentOverrides(query: string, known: readonly string[], ver
   for (const id of known) { const values = params.getAll(`experiment.${id}`); if (values.length === 1 && /^[01]$/.test(values[0])) result[id] = values[0] === "1"; }
   return result;
 }
-type ExperimentOptions<T extends ExperimentRegistration> = {
-  definitions: readonly ExperimentDefinition<T>[]; overrides: Readonly<Record<string, boolean>>; sources: Sources; store?: GraphStore; signal: AbortSignalLike;
+export type ExperimentOptions<T extends ExperimentRegistration> = {
+  definitions: readonly ExperimentDefinition<T>[]; overrides: Readonly<Record<string, boolean>>;
+  documents: DocumentStorePort; random: Random; signal: AbortSignal;
 };
-export async function createExperiments<T extends ExperimentRegistration>(options: ExperimentOptions<T>): Promise<Omit<ExperimentPort, "registrations"> & { registrations(): readonly T[]; context: ExperimentContext }> {
-  const life = new Aborter(options.signal), { definitions, sources } = options;
-  const graph = createGraph({ types: EXPERIMENT_TYPES, sources, store: options.store, actor: "studio-experiments", signal: life.signal,
-    snapshotEvery: Number.MAX_SAFE_INTEGER, snapshotFoldMs: Infinity });
-  await graph.load();
-  const env = createEnvironment({ clock: sources.clock });
-  const preferenceRef = () => graph.list().find(ref => ref.type === "experimental-features");
-  const existing = preferenceRef();
-  const flags = env.seed<Record<string, boolean>>({ initial: existing ? graph.resolve(existing, ["flags"]) as Record<string, boolean> : {}, signal: life.signal });
-  const states = env.seed<Record<string, { phase: ExperimentState["phase"]; message: string }>>({ initial: {}, signal: life.signal });
-  // Per-experiment save problems, shown instead of the load message until a later save of that experiment succeeds.
-  const saveErrors = env.seed<Record<string, string>>({ initial: {}, signal: life.signal });
-  const updates = env.seed<number>({ initial: 0, signal: life.signal });
-  const registrations = new Map<string, { life: Aborter; contribution?: T }>(); // Adapter runtimes, keyed by experiment request.
-  const effective = (id: string) => options.overrides[id] ?? flags.value()?.[id] ?? false;
-  const history = documentHistory(env, life.signal);
-  const context: ExperimentContext = { graph, env, sources, signal: life.signal, history };
-  const publish = (id: string, phase: ExperimentState["phase"], message = "") => env.observe(states, { ...states.value(), [id]: { phase, message } });
-  const model: GraphModel = { nodes: [{ id: "load", kind: "driver", op: "load-experiments" }] };
-  const modelNode = env.seed<GraphModel>({ initial: model, signal: life.signal });
-  const erected = erector(env, modelNode, { ...standardOperators, "load-experiments": { kind: "driver", create: () => ({ name: "Load requested experiments", start(run) {
-    run.effect({ inputs: [flags], run: () => {
-      for (const definition of definitions) {
-        const previous = registrations.get(definition.id), enabled = effective(definition.id);
-        if (!enabled) { if (previous) { registrations.delete(definition.id); previous.life.abort("experiment off"); publish(definition.id, "off"); } continue; }
-        if (previous) continue;
-        const token = new Aborter(run.signal), runtime = { life: token, contribution: undefined as T | undefined };
-        registrations.set(definition.id, runtime); publish(definition.id, "loading");
-        const process = run.spawn(`Load ${definition.label}`, async (signal): Promise<Json> => {
-          try {
-            const loaded = await definition.load(signal);
-            if (signal.aborted || token.signal.aborted || registrations.get(definition.id) !== runtime) return null;
-            runtime.contribution = loaded.create({ ...context, signal: token.signal });
-            if (token.signal.aborted) return null;
-            const off = runtime.contribution.service.subscribe(() => env.observe(updates, (updates.value() ?? 0) + 1));
-            token.signal.addEventListener("abort", off);
-            publish(definition.id, "ready");
-            return { experiment: definition.id };
-          } catch (error) {
-            if (!signal.aborted && !token.signal.aborted) publish(definition.id, "failed", `Couldn't open ${definition.label}. Turn it off and on to try again.`);
-            return { error: error instanceof Error ? error.message : "Experiment loading failed." };
-          }
-        });
-        token.signal.addEventListener("abort", () => process.abort("superseded"));
-      }
+export type Experiments<T extends ExperimentRegistration> = Omit<ExperimentPort, "registrations" | "history"> & {
+  registrations(): readonly T[]; readonly history: ExperimentContext["history"]; readonly context: ExperimentContext;
+};
+
+/** Reads the stored preference, then loads every enabled experiment (each in a task of its own) for as long as `signal` lives. */
+export async function createExperiments<T extends ExperimentRegistration>(options: ExperimentOptions<T>): Promise<Experiments<T>> {
+  const { definitions, documents, signal } = options;
+  const stored = (await documents.list<ExperimentFlagsDocument>(EXPERIMENT_FLAGS.kind, signal)).find(item => item.id === EXPERIMENT_FLAGS.id);
+  signal.throwIfAborted();
+  // One holder per stored document for the page's lifetime, shared by every experiment instance (the one-owner rule).
+  const owners = documentOwners(documents);
+  const preference = owners.open<ExperimentFlagsDocument>(EXPERIMENT_FLAGS.kind, EXPERIMENT_FLAGS.id, { schema: EXPERIMENT_FLAGS.schema, flags: {} }, stored);
+  const history = createDocumentHistory();
+  const contextFor = (lifetime: AbortSignal): ExperimentContext => ({ history, signal: lifetime, newId: () => options.random.uuid(),
+    task: () => createTask({ signal: lifetime }),
+    document: (kind, id, initial, stored) => owners.open(kind, id, initial, stored),
+    async loadDocuments<T>(kind: string, read?: AbortSignal) {
+      for (const item of await documents.list<T>(kind, read)) owners.open(kind, item.id, item.value, item);
+      return owners.held<T>(kind);
     } });
-    run.signal.addEventListener("abort", () => { for (const r of registrations.values()) r.life.abort(); registrations.clear(); });
-  } }) } });
-  erected.driver.start(life.signal);
-  // Erected drivers are declarative entries; demand starts this root request and lasts with the page.
-  (erected.live("load") as import("strata").Driver).start(life.signal, { reason: "experimental feature preference", goal: "registered while enabled" });
+  const context = contextFor(signal);
+  const listeners = new Set<() => void>();
+  const changed = () => { for (const listener of [...listeners]) listener(); };
+  const phases: Record<string, { phase: ExperimentState["phase"]; message: string }> = {};
+  // Per-experiment save problems, shown instead of the load message until a later save of that experiment succeeds.
+  const saveErrors: Record<string, string> = {};
+  const effective = (id: string) => options.overrides[id] ?? preference.value.flags?.[id] ?? false;
+  const publish = (id: string, phase: ExperimentState["phase"], message = "") => { phases[id] = { phase, message }; changed(); };
+  /** Each enabled experiment's loading and, once loaded, its contribution; the run's signal is the contribution's lifetime. */
+  const loads = new Map<string, Task<T>>();
+  const unsubscribe = history.subscribe(changed);
+  signal.addEventListener("abort", unsubscribe, { once: true });
+
+  const reconcile = () => {
+    for (const definition of definitions) {
+      const task = loads.get(definition.id);
+      if (!effective(definition.id)) {
+        if (task) { loads.delete(definition.id); task.cancel("experiment off"); publish(definition.id, "off"); }
+        continue;
+      }
+      if (task || signal.aborted) continue;
+      const load = createTask<T>({ signal });
+      loads.set(definition.id, load);
+      publish(definition.id, "loading");
+      void load.run(async run => {
+        const loaded = await definition.load(run);
+        run.throwIfAborted();
+        const contribution = await loaded.create(contextFor(run));
+        run.throwIfAborted();
+        const off = contribution.service.subscribe(changed);
+        run.addEventListener("abort", off, { once: true });
+        return contribution;
+      }).then(outcome => {
+        if (outcome.status === "done") publish(definition.id, "ready");
+        else if (outcome.status === "failed") publish(definition.id, "failed", `Couldn't open ${definition.label}. Turn it off and on to try again.`);
+      });
+    }
+  };
+  reconcile();
+
   return {
     context,
     history,
     snapshot: () => definitions.map(info => ({ id: info.id, label: info.label, description: info.description, enabled: effective(info.id), overridden: info.id in options.overrides,
-      phase: states.value()?.[info.id]?.phase ?? "off", message: saveErrors.value()?.[info.id] || states.value()?.[info.id]?.message || "" })),
-    registrations: () => [...registrations.values()].flatMap(r => r.contribution ? [r.contribution] : []),
+      phase: phases[info.id]?.phase ?? "off", message: saveErrors[info.id] || phases[info.id]?.message || "" })),
+    registrations: () => [...loads.values()].flatMap(task => { const state = task.state(); return state.phase === "done" ? [state.result] : []; }),
     async set(id, enabled) {
       if (!definitions.some(d => d.id === id) || typeof enabled !== "boolean") return { ok: false, message: "That experiment isn't available." };
       if (id in options.overrides) return { ok: false, message: "This verification page fixes that experiment setting. Open a page without the override to change it." };
-      const before = flags.value()!;
-      let committed = false;
+      // The choice applies at once; a save that can't be confirmed never rolls it back behind what the store may already hold.
+      const saved = preference.save({ schema: EXPERIMENT_FLAGS.schema, flags: { ...preference.value.flags, [id]: enabled } });
+      reconcile();
+      changed();
       try {
-        let ref = preferenceRef();
-        if (!ref) {
-          const created = graph.commit([{ op: "create", id: "xfs-experimental-preferences" as NodeId, type: "experimental-features", as: "flags" }], { scope: "experiment-settings" });
-          if (!created.ok) throw Error(created.message); ref = created.created.flags;
-        }
-        const result = graph.commit([{ op: "set", node: ref, path: ["flags", id], value: enabled }], { scope: "experiment-settings", action: "experiment.set" });
-        if (!result.ok) throw Error(result.message);
-        committed = true;
-        env.observe(flags, { ...before, [id]: enabled });
-        await graph.flush();
-        env.observe(saveErrors, { ...saveErrors.value(), [id]: "" });
+        await saved;
+        if (saveErrors[id]) { saveErrors[id] = ""; changed(); }
         return { ok: true };
       } catch {
-        // The store may have written before its acknowledgement failed: keep the graph's accepted truth rather than rolling back behind it.
-        const message = committed ? "This change applies for this session, but Studio couldn't confirm saving it. Try again."
-          : "Couldn't change this experimental setting. Try again.";
-        if (committed) { const ref = preferenceRef(); if (ref) env.observe(flags, graph.resolve(ref, ["flags"]) as Record<string, boolean>); }
-        env.observe(saveErrors, { ...saveErrors.value(), [id]: message });
+        const message = "This change applies for this session, but Studio couldn't confirm saving it. Try again.";
+        saveErrors[id] = message; changed();
         return { ok: false, message };
       }
     },
-    subscribe(listener) {
-      const subscription = new Aborter(life.signal);
-      const driver = env.driver({ name: "Observe experiments", start(run) { run.effect({ inputs: [flags, states, updates, saveErrors], run: () => listener() }); } }, undefined, subscription.signal);
-      driver.start(subscription.signal); return () => subscription.abort();
-    },
+    subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
   };
 }
 
 export const OFF_EXPERIMENTS = Object.freeze({ snapshot: () => [], registrations: () => [],
   set: async () => ({ ok: false, message: "Experimental features aren't available in this host yet." }), subscribe: () => () => {} }) satisfies ExperimentPort;
 
-/** Mount immediately; the requested background read cannot delay or fail the ordinary shell. */
+/** Mounts immediately: the preference is read in the background, and that read can't delay or fail the ordinary shell. */
 export function startExperiments<T extends ExperimentRegistration>(options: ExperimentOptions<T>) {
-  const life = new Aborter(options.signal), env = createEnvironment({ clock: options.sources.clock });
   const initial: ExperimentState[] = options.definitions.map(info => ({ id: info.id, label: info.label, description: info.description, enabled: false, overridden: info.id in options.overrides, phase: "off", message: "" }));
-  const observations = env.seed<readonly ExperimentState[]>({ initial, signal: life.signal });
-  // The loaded platform is an abort-owned runtime; its public observations remain stream data.
-  let runtime: Awaited<ReturnType<typeof createExperiments<T>>> | undefined;
-  let finish!: (ok: boolean) => void;
-  const ready = new Promise<boolean>(resolve => { finish = resolve; });
-  life.signal.addEventListener("abort", () => finish(false));
-  const driver = env.driver({ name: "Read optional experimental preferences", start(run) {
-    run.spawn("Read experimental preferences", async signal => {
-      try {
-        const loaded = await createExperiments({ ...options, signal });
-        if (signal.aborted) return null;
-        runtime = loaded;
-        const observe = () => env.observe(observations, loaded.snapshot());
-        const off = loaded.subscribe(observe); signal.addEventListener("abort", off); observe(); finish(true);
-        return { ready: true };
-      } catch {
-        if (!signal.aborted) env.observe(observations, initial.map(info => ({ ...info, phase: "failed", message: "Couldn't read experimental settings. Reload Studio to try again." })));
-        finish(false); return { ready: false };
-      }
-    });
-  } }, undefined, life.signal);
-  driver.start(life.signal, { reason: "optional experimental preferences", goal: "experiments available without delaying Studio startup" });
+  const failed = initial.map(info => ({ ...info, phase: "failed" as const, message: "Couldn't read experimental settings. Reload Studio to try again." }));
+  const listeners = new Set<() => void>();
+  const changed = () => { for (const listener of [...listeners]) listener(); };
+  const reading = createTask<Experiments<T>>({ signal: options.signal });
+  reading.subscribe(changed);
+  const runtime = () => { const state = reading.state(); return state.phase === "done" ? state.result : undefined; };
+  const ready = reading.run(async signal => {
+    const loaded = await createExperiments({ ...options, signal });
+    const off = loaded.subscribe(changed);
+    signal.addEventListener("abort", off, { once: true });
+    return loaded;
+  }).then(outcome => outcome.status === "done");
   return {
     ready,
-    get context() { return runtime?.context; },
-    get history() { return runtime?.history; },
-    snapshot: () => observations.value()!,
-    registrations: () => runtime?.registrations() ?? [],
-    async set(id: string, enabled: boolean) { return await ready && runtime ? runtime.set(id, enabled) : { ok: false, message: "Couldn't read experimental settings. Reload Studio to try again." }; },
-    subscribe(listener: () => void) {
-      const token = new Aborter(life.signal), observer = env.driver({ name: "Observe experimental startup", start(run) { run.effect({ inputs: [observations], run: () => listener() }); } }, undefined, token.signal);
-      observer.start(token.signal); return () => token.abort();
-    },
+    get context() { return runtime()?.context; },
+    get history() { return runtime()?.history; },
+    snapshot: (): readonly ExperimentState[] => runtime()?.snapshot() ?? (reading.state().phase === "failed" ? failed : initial),
+    registrations: () => runtime()?.registrations() ?? [],
+    async set(id: string, enabled: boolean) { return await ready && runtime() ? runtime()!.set(id, enabled) : { ok: false, message: "Couldn't read experimental settings. Reload Studio to try again." }; },
+    subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
   };
 }
