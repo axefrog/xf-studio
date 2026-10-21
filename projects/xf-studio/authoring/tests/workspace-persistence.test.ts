@@ -148,14 +148,13 @@ test("a realistic workspace fits the storage budget with the standard policy and
 
 test("an oversized workspace is stored in the look-level form, then trims further and says so instead of silently failing", () => {
   jest.useFakeTimers();
-  // A budget the whole-part form exceeds (the host file's is larger; the browser's was this).
-  const state = realisticWorkspace(16), storage = memoryStorage(), budget = 2_000_000;
-  expect(fitWorkspace(state, STUDIO_DOCUMENTS, Infinity).size).toBeGreaterThan(budget);
+  const state = realisticWorkspace(16), storage = memoryStorage();
+  expect(fitWorkspace(state, STUDIO_DOCUMENTS, Infinity).size).toBeGreaterThan(WORKSPACE_STORAGE_BUDGET);
   // Its whole-part form is over budget; the look-level form keeps every step (CORE-39), so nothing is lost.
-  const writer = new WorkspacePersistence({ storage, key, writable: true, capture: () => state, model: STUDIO_DOCUMENTS, budget });
+  const writer = new WorkspacePersistence({ storage, key, writable: true, capture: () => state, model: STUDIO_DOCUMENTS });
   writer.activate(); writer.flush();
   expect(storage.writes()).toBe(1);
-  expect(writer.storedSize()).toBeLessThanOrEqual(budget);
+  expect(writer.storedSize()).toBeLessThanOrEqual(WORKSPACE_STORAGE_BUDGET);
   expect(writer.snapshot()).toEqual({ kind: "saved", message: SAVE_MESSAGES.saved });
   const restored = parseWorkspace(JSON.parse(storage.stored.get(key)!), STUDIO_DOCUMENTS);
   expect(restored.collections!.collection.presets).toHaveLength(16);
@@ -170,34 +169,23 @@ test("an oversized workspace is stored in the look-level form, then trims furthe
   expect(parseWorkspace(JSON.parse(tight.stored.get(key)!), STUDIO_DOCUMENTS).collections!.collection.presets).toHaveLength(16);
 }, HEAVY_WORKSPACE_TIMEOUT_MS);
 
-test("a host write that fails says so, and the next flush writes the draft again; only the newest write's outcome counts", async () => {
-  const workspace = freshWorkspace(), written: string[] = [];
-  let answer: Promise<void> = Promise.resolve(), refuse = false;
-  const storage = { setItem: (_k: string, v: string) => { written.push(v); return answer = refuse ? Promise.reject(Error("503")) : Promise.resolve(); } };
-  const writer = new WorkspacePersistence({ storage, key, writable: true, capture: () => workspace, model: STUDIO_DOCUMENTS });
-  writer.activate();
-  refuse = true; writer.flush();
-  await answer.catch(() => {}); await Promise.resolve();
-  expect(writer.snapshot()).toEqual({ kind: "unavailable", message: SAVE_MESSAGES.failed });
-  // Unchanged, it is written again, since the last write didn't land.
-  refuse = false; writer.flush();
-  await answer; await Promise.resolve();
-  expect(written).toHaveLength(2);
-  expect(writer.snapshot()).toEqual({ kind: "saved", message: SAVE_MESSAGES.saved });
-  // An older write's failure arriving after a newer write doesn't override the newer one's outcome.
-  let failOld!: (error: Error) => void;
-  storage.setItem = (_k, v) => { written.push(v); return answer = new Promise<void>((_, reject) => { failOld = reject; }); };
-  workspace.recipe.layers[0].opacity = .31; writer.flush();
-  const old = answer, rejectOld = failOld;
-  storage.setItem = (_k, v) => { written.push(v); return answer = Promise.resolve(); };
-  workspace.recipe.layers[0].opacity = .32; writer.flush();
-  rejectOld(Error("late")); await old.catch(() => {}); await answer; await Promise.resolve();
-  expect(writer.snapshot().kind).toBe("saved");
+test("a storage quota refusal falls back to smaller forms, then reports that autosave stopped", () => {
+  const state = realisticWorkspace(), stored = new Map<string, string>();
+  let limit = 400_000;
+  const quota = () => Object.assign(Error("The quota has been exceeded."), { name: "QuotaExceededError" });
+  const storage = { setItem: (k: string, v: string) => { if (v.length > limit) throw quota(); stored.set(k, v); } };
+  const writer = new WorkspacePersistence({ storage, key, writable: true, capture: () => state, model: STUDIO_DOCUMENTS });
+  writer.activate(); writer.flush();
+  expect(stored.get(key)!.length).toBeLessThanOrEqual(limit);
+  expect(writer.snapshot().kind).toBe("nearly-full");
+  limit = 10; state.recipe.layers[0].opacity = .77; recipeOf(state.collections!.collection.presets[2]).layers[0].opacity = .77;
+  writer.flush();
+  expect(writer.snapshot()).toEqual({ kind: "full", message: SAVE_MESSAGES.full });
   const blocked = new WorkspacePersistence({ storage: { setItem() { throw Error("SecurityError"); } }, key, writable: true,
-    capture: () => workspace, model: STUDIO_DOCUMENTS });
+    capture: () => state, model: STUDIO_DOCUMENTS });
   blocked.activate(); blocked.flush();
   expect(blocked.snapshot().kind).toBe("unavailable");
-});
+}, HEAVY_WORKSPACE_TIMEOUT_MS);
 
 // ---- CORE-10: damaged non-current entries ----
 

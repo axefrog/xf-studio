@@ -5,13 +5,9 @@ import { existsSync, mkdirSync } from "node:fs";
 // The library files: one owner per file, its stores, durability, daily backups and routes (src/library-files.ts).
 import { hostClock } from "./src/platform/core/clock";
 import { openLibraryFiles } from "./src/library-files";
-// The workspace draft's file, as on the desktop (src/workspace-host.ts).
-import { openWorkspaceFile } from "./src/workspace-host";
-import { workspaceRequest } from "./src/platform/persistence/workspace-file";
-import { WORKSPACE_ADOPT_ENDPOINT, WORKSPACE_ENDPOINT, WORKSPACE_START_FRESH_ENDPOINT } from "./src/platform/api/workspace-file";
 import { EXPERIMENT_FLAGS, type ExperimentFlagsDocument } from "./src/platform/api/experiments";
 // A composition root: the part registry is built once and injected (CORE-29).
-import { STUDIO_DOCUMENTS, STUDIO_PARTS } from "./src/compose/studio-registry";
+import { STUDIO_PARTS } from "./src/compose/studio-registry";
 import { EXPRESSIONS_GAME_PREREQUISITE } from "./src/features/expressions/export/game";
 import { createPackageHandler, localCandidateStore, localEyePlate, localExpressionsGame, localMasculineEyePlate, testMasculineEyePlate, localPackageAdapter, localPackageTools, localPlateCache, localToolsRoot, packageRequestSettings } from "./src/package-server";
 import { createModInstallHandler, explorerReveal, ModInstallHost, READ_ONLY_TEST_SERVER, READ_ONLY_VERIFICATION, systemAnsiCodePage, windowsRunningApps } from "./src/mod-install-host";
@@ -70,8 +66,6 @@ const clock = hostClock();
 const libraries = openLibraryFiles(dataRoot, { clock, parts: STUDIO_PARTS, isolated: state.isolated,
   log: message => diagnostics.log.info("library", "legacy_import", message) });
 const documents = libraries.main.documents;
-// The workspace draft: data/workspace.json (verification-workspace.json for ?verify), the page's one place for it.
-const workspaceFile = openWorkspaceFile(dataRoot, STUDIO_DOCUMENTS);
 const localSettings = new LocalSettingsStore(state.settingsDirectory);
 // A verification workspace (?verify) edits its own copy of the settings, starting from these (UI-98).
 const verificationSettings = new LocalSettingsStore(verificationSettingsDirectory(dataRoot), { seed: () => localSettings.load().settings });
@@ -290,8 +284,6 @@ const server = Bun.serve({
     if (url.pathname === GRADING_LUT_ENDPOINT) return gradingLutRequest(request);
     if (url.pathname === FACIAL_ENDPOINT || url.pathname.startsWith(`${FACIAL_ENDPOINT}/`)) return facialRequest(request);
     if (url.pathname === "/api/wolvenkit") return wolvenKitRequest(request);
-    if (url.pathname === WORKSPACE_ENDPOINT || url.pathname === WORKSPACE_START_FRESH_ENDPOINT || url.pathname === WORKSPACE_ADOPT_ENDPOINT)
-      return workspaceRequest(request, workspaceFile, url);
     const libraryAnswer = libraries.handle(request, url);
     if (libraryAnswer) return libraryAnswer;
     if (request.method !== "GET" && request.method !== "HEAD")

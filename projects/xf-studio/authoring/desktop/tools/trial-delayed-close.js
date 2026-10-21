@@ -3,7 +3,7 @@
   const originalFetch = window.fetch.bind(window);
   window.fetch = (input, options) => {
     const url = typeof input === "string" ? input : input.url;
-    if (url === "/api/workspace?verify=1" && options?.method === "POST")
+    if (url === "/api/desktop/workspace?verify=1" && options?.method === "POST")
       return new Promise(resolve => setTimeout(() => resolve(originalFetch(input, options)), 2500));
     return originalFetch(input, options);
   };

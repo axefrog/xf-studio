@@ -77,7 +77,7 @@ test("the host records when the WebView loads the page and the bootstrap reaches
     const page = await fetch(app.url);
     const cookie = page.headers.get("set-cookie")!.split(";")[0];
     expect(app.renderer().pageServed).toBe(true);
-    await fetch(`http://127.0.0.1:${app.port}/api/workspace`, { headers: { Cookie: cookie } });
+    await fetch(`http://127.0.0.1:${app.port}/api/desktop/workspace`, { headers: { Cookie: cookie } });
     expect(app.renderer()).toMatchObject({ pageServed: true, bootstrapped: true });
     expect(reports).toEqual(["WebView requested the Studio page.", "Renderer bootstrap loaded the workspace."]);
   } finally { app.stop(); }
@@ -150,22 +150,22 @@ describe("a damaged or newer workspace never bricks the app", () => {
       const cookie = page.headers.get("set-cookie")!.split(";")[0];
       const base = `http://127.0.0.1:${app.port}`;
       const headers = { Cookie: cookie, Origin: base };
-      const load = await fetch(base + "/api/workspace", { headers });
+      const load = await fetch(base + "/api/desktop/workspace", { headers });
       expect(load.status).toBe(409);
       expect(await load.json()).toMatchObject({ code: "workspace_unreadable", file: "workspace.json" });
       expect(app.renderer().bootstrapped).toBe(false);
       // Saves are still refused while the unreadable file is in place (nothing is overwritten).
-      expect((await fetch(base + "/api/workspace", { method: "POST", headers: { ...headers, "Content-Type": "application/json" },
+      expect((await fetch(base + "/api/desktop/workspace", { method: "POST", headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({ workspace: "{}" }) })).status).toBe(422);
-      expect((await fetch(base + "/api/workspace/start-fresh", { method: "POST", headers: { ...headers, "Content-Type": "text/plain" },
+      expect((await fetch(base + "/api/desktop/workspace/start-fresh", { method: "POST", headers: { ...headers, "Content-Type": "text/plain" },
         body: "{}" })).status).toBe(415);
-      const fresh = await fetch(base + "/api/workspace/start-fresh", { method: "POST",
+      const fresh = await fetch(base + "/api/desktop/workspace/start-fresh", { method: "POST",
         headers: { ...headers, "Content-Type": "application/json" }, body: "{}" });
       const { keptAs } = await fresh.json();
       expect(keptAs).toMatch(/^workspace\.broken-.+\.json$/);
       expect(readFileSync(resolve(data, keptAs), "utf8")).toContain("a newer XF Studio");
-      const reload = await fetch(base + "/api/workspace", { headers });
-      expect(await reload.json()).toEqual({ schema: "xfs/host-workspace-1", workspace: null, revision: null });
+      const reload = await fetch(base + "/api/desktop/workspace", { headers });
+      expect(await reload.json()).toEqual({ schema: "xfs/desktop-workspace-1", workspace: null });
       expect(app.renderer().bootstrapped).toBe(true);
     } finally { app.stop(); }
   });

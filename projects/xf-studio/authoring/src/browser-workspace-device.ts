@@ -1,5 +1,5 @@
 import { WorkspaceComposer, type WorkspaceCapturePorts } from "./workspace-composer";
-import { WorkspacePersistence, type WorkspacePersistencePort, type WorkspaceSaveStatus } from "./workspace-persistence";
+import { WorkspacePersistence, type WorkspaceSaveStatus } from "./workspace-persistence";
 import type { DocumentModel } from "./collection-workspace";
 import { loadWorkspace, workspaceKeys, type WorkspaceState } from "./workspace-state";
 
@@ -16,7 +16,7 @@ export function createBrowserWorkspaceSession(options: {
   workspace: WorkspaceState;
   verification: boolean;
   restored: { writable: boolean; error?: string; warning?: string };
-  storage: WorkspacePersistencePort;
+  storage: Pick<Storage, "setItem">;
   capture: WorkspaceCapturePorts;
   /**
    * Domain and content sources whose changes need saving. Never pass the whole presentation
@@ -26,7 +26,7 @@ export function createBrowserWorkspaceSession(options: {
   window: EventSource;
   document: EventSource & { hidden: boolean };
   onStatus(status: WorkspaceSaveStatus): void;
-  /** Serialized size budget (default: the host file's, `WORKSPACE_STORAGE_BUDGET`). */
+  /** Serialized size budget; the desktop host file allows more than browser storage. */
   budget?: number;
   /** The document model the workspace is stored with (from the composition root). */
   model: DocumentModel;
@@ -48,4 +48,3 @@ export function createBrowserWorkspaceSession(options: {
     setPreviewReady: () => composer.setPreviewReady(),
     snapshot: () => composer.capture(), status: () => persistence.snapshot() };
 }
-

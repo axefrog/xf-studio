@@ -5,11 +5,12 @@ import { trimLookHistory } from "./platform/core/look-history";
 import { serializeWorkspace, type WorkspaceState } from "./workspace-state";
 
 /**
- * Size policy for the persisted workspace (feature-module platform §3, CORE-02). The draft lives in the host's workspace file
- * on both hosts (platform/persistence/workspace-file.ts, at most 16 MB), so a stored draft targets at most this many UTF-16
- * code units (`string.length`), leaving room under the file's limit.
+ * Size policy for the persisted workspace (feature-module platform §3, CORE-02). Browsers give an
+ * origin roughly five million UTF-16 code units of `localStorage`, shared by the normal and
+ * `?verify=1` workspace keys, so each key targets at most this many code units (`string.length`).
+ * The desktop host file passes a larger budget.
  */
-export const WORKSPACE_STORAGE_BUDGET = 12_000_000;
+export const WORKSPACE_STORAGE_BUDGET = 2_000_000;
 /** Undo steps persisted for each preset that is not selected (the selected preset keeps its full history). */
 export const PERSISTED_BACKGROUND_HISTORY = 5;
 /** Undo steps the selected look keeps however tight the budget, unless its looks alone leave no room for them. */

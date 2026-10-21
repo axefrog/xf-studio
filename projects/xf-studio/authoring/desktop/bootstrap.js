@@ -1,20 +1,20 @@
 // This device bootstrap is intentionally outside shared Studio presentation.
 // It adds the desktop first-run welcome, About (version, licences, updates; opened
-// from the Studio's Help panel and command palette), the close handshake's workspace flush,
+// from the Studio's Help panel and command palette), the host-owned workspace storage,
 // and then starts the shared Studio composition root (`src/studio-startup.ts`) with
 // those desktop host services. Settings have one form, the Studio's Settings panel (UI-03, UI-109).
 import { createBrowserLocalSetup, desktopFolderPicker } from "../src/browser-local-setup-device";
 import { createBrowserPreviewPreparation } from "../src/preview-preparation";
 import { createBrowserWolvenKitSetup } from "../src/wolvenkit-setup";
 import { EYE_MAKEUP_MOD } from "../src/mod-branding";
-import { openHostWorkspace, startFreshWorkspace } from "../src/host-workspace-device";
-import { showWorkspaceUnreadable } from "../src/studio-ui/workspace-unreadable";
 const capabilities = await fetch("/api/desktop/capabilities").then(response => response.json());
 if (capabilities.schema !== "xfs/desktop-capabilities-1") throw Error("Desktop host capabilities are unavailable.");
-// The workspace draft lives in the host's file (src/platform/persistence/workspace-file.ts), as on localhost: it is loaded
-// before the Studio constructs its services, and the loopback port changing on each launch doesn't matter.
+// The loopback port changes on each launch, so WebView localStorage alone does
+// not survive a full desktop restart. Load the host-owned draft before Studio
+// constructs its services; keep the browser copy for same-process reloads.
 const verification = new URLSearchParams(location.search).has("verify");
 const workspaceKey = verification ? "xfas.workspace.verification.v1" : "xfas.workspace.v1";
+const workspaceEndpoint = `/api/desktop/workspace${verification ? "?verify=1" : ""}`;
 const workspaceAlert = message => {
   let alert = document.getElementById("desktop-workspace-error");
   if (!message) { alert?.remove(); return; }
@@ -29,31 +29,93 @@ const workspaceAlert = message => {
 // Installed before anything can fail, so the host's close handshake always gets an answer.
 window.xfDesktopWorkspaceError = workspaceAlert;
 window.xfDesktopWorkspaceFlush = async () => {};
-let browserStorage = null, sessionStore = null;
-try { browserStorage = localStorage; sessionStore = sessionStorage; } catch { /* Storage unavailable: the host file keeps the workspace. */ }
-const opening = await openHostWorkspace({ fetch: (input, init) => fetch(input, init), verification, key: workspaceKey,
-  browser: browserStorage, session: sessionStore, locks: navigator.locks ?? null });
-if (!opening.ok) {
+const workspaceResponse = await fetch(workspaceEndpoint, { cache: "no-store" });
+if (!workspaceResponse.ok) {
   // A damaged workspace, or one written by a newer XF Studio, must never brick the app.
-  showWorkspaceUnreadable(document.getElementById("studio"), { file: opening.file,
-    startFresh: () => startFreshWorkspace(fetch, verification), reload: () => location.reload() });
+  let kept = "";
+  try { kept = (await workspaceResponse.json()).file ?? ""; } catch { /* Plain error. */ }
+  const root = document.getElementById("studio");
+  const box = document.createElement("div");
+  box.className = "boot-failed";
+  box.setAttribute("role", "alert");
+  box.style.cssText = "display:grid;justify-items:start;gap:12px;max-width:560px;margin:15vh auto;padding:24px;" +
+    "font:14px/1.5 'Segoe UI',sans-serif;text-transform:none;letter-spacing:normal;color:#f0f2f2;background:#20272f;border:1px solid #59616b";
+  const title = Object.assign(document.createElement("strong"), { textContent: "Your last session couldn't be opened." });
+  const text = Object.assign(document.createElement("p"), { textContent:
+    "XF Studio's saved workspace is damaged or was written by a newer version, so nothing was changed. " +
+    "Start fresh to continue: the old workspace file is kept beside it, and your saved library is not affected." });
+  const status = Object.assign(document.createElement("p"), { textContent: kept ? `Saved workspace file: ${kept}` : "" });
+  const fresh = Object.assign(document.createElement("button"), { type: "button", textContent: "Start fresh" });
+  fresh.onclick = async () => {
+    fresh.disabled = true;
+    const response = await fetch(`/api/desktop/workspace/start-fresh${verification ? "?verify=1" : ""}`, { method: "POST",
+      credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: "{}" });
+    if (response.ok) {
+      const { keptAs } = await response.json();
+      try { localStorage.removeItem(workspaceKey); } catch { /* Storage unavailable. */ }
+      status.textContent = `Your old workspace was kept as ${keptAs}. Starting fresh…`;
+      location.reload();
+    } else { status.textContent = "XF Studio couldn't set the old workspace aside. Restart XF Studio and try again."; fresh.disabled = false; }
+  };
+  box.append(title, text, status, fresh);
+  root?.removeAttribute("aria-busy");
+  root?.replaceChildren(box);
   throw Error("Saved desktop workspace is unreadable; waiting for the user to start fresh.");
 }
-const hostWorkspace = opening.workspace;
+const workspaceDocument = await workspaceResponse.json();
+if (workspaceDocument.schema !== "xfs/desktop-workspace-1" ||
+    (workspaceDocument.workspace !== null && typeof workspaceDocument.workspace !== "string"))
+  throw Error("Desktop workspace response is invalid.");
+let localCopy = null;
+try { localCopy = localStorage.getItem(workspaceKey); } catch { /* Storage unavailable. */ }
+let workspaceText = workspaceDocument.workspace ?? localCopy;
+// Autosave: at most one host write in flight; the newest draft wins. The host file is the
+// source of truth on desktop, so browser storage failures never block it.
+let pendingText = null, inFlight = null, lastSaveFailed = false;
 const SAVE_FAILED = "Your latest changes could not be saved. Keep this window open and export your collection from the Library panel.";
-// The close and update handshakes (workspace-close.ts): the Studio writes its newest draft, then every write must have landed.
+async function postWorkspace(text, headers = {}) {
+  const response = await fetch(workspaceEndpoint, { method: "POST", credentials: "same-origin",
+    headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify({ workspace: text }),
+    keepalive: new TextEncoder().encode(text).length < 60_000 });
+  if (!response.ok) throw Error(SAVE_FAILED);
+}
+function saveWorkspace(text) {
+  pendingText = text;
+  if (!inFlight) inFlight = (async () => {
+    while (pendingText !== null) {
+      const next = pendingText; pendingText = null;
+      try { await postWorkspace(next); lastSaveFailed = false; workspaceAlert(""); }
+      catch (error) { lastSaveFailed = true; workspaceAlert(error.message); }
+    }
+    inFlight = null;
+  })();
+  return inFlight;
+}
 window.xfDesktopWorkspaceFlush = async updateNonce => {
   window.dispatchEvent(new Event("xfs-desktop-close-flush"));
-  try { await hostWorkspace.flush(); workspaceAlert(""); }
-  catch { workspaceAlert(SAVE_FAILED); throw Error(SAVE_FAILED); }
+  if (inFlight) await inFlight;
+  if (lastSaveFailed && workspaceText !== null) await saveWorkspace(workspaceText);
+  if (lastSaveFailed) throw Error(SAVE_FAILED);
   if (updateNonce !== undefined) {
-    if (typeof updateNonce !== "string" || !/^[0-9a-f-]{36}$/.test(updateNonce) || hostWorkspace.storage.getItem(workspaceKey) === null)
+    if (typeof updateNonce !== "string" || !/^[0-9a-f-]{36}$/.test(updateNonce) || workspaceText === null)
       throw Error("The update workspace snapshot is unavailable.");
-    await hostWorkspace.flush({ "X-XFS-Update-Flush": updateNonce }).catch(() => {
+    await postWorkspace(workspaceText, { "X-XFS-Update-Flush": updateNonce }).catch(() => {
       throw Error("The update workspace snapshot could not be saved.");
     });
   }
 };
+const workspaceStorage = {
+  getItem(key) {
+    if (key === workspaceKey) return workspaceText;
+    try { return localStorage.getItem(key); } catch { return null; }
+  },
+  setItem(key, value) {
+    if (key === workspaceKey) { workspaceText = value; saveWorkspace(value); }
+    // Same-process reload convenience only; a full or blocked browser store is not an error here.
+    try { localStorage.setItem(key, value); } catch { /* The host file already has it. */ }
+  },
+};
+if (workspaceDocument.workspace === null && workspaceText !== null) saveWorkspace(workspaceText);
 const stylesheet = document.createElement("link");
 stylesheet.rel = "stylesheet";
 stylesheet.href = "/about.css";
@@ -233,7 +295,9 @@ const startup = { editorReadyMs: undefined, previewReadyMs: undefined };
 let flushRequest = null;
 window.addEventListener("xfs-desktop-close-flush", () => flushRequest?.());
 void import("/build/studio-startup.js").then(({ startStudio }) => startStudio({
-  storage: hostWorkspace.storage,
+  storage: workspaceStorage,
+  // The desktop host file (16 MB limit) holds more than browser storage.
+  storageBudget: 12_000_000,
   previewPreparation: createBrowserPreviewPreparation("/api/desktop/preview"),
   wolvenKitSetup: createBrowserWolvenKitSetup("/api/desktop/wolvenkit"),
   localSetup: setupActions,
