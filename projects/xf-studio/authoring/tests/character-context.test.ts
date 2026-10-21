@@ -1,3 +1,4 @@
+import { createHistoryService } from "../src/platform/core/history-service";
 import { describe, expect, test } from "bun:test";
 import { descriptorsFromUiState, type CcoResource } from "../src/character/cco-model";
 import { buildCatalogue, CatalogueIndex } from "../src/character/cc-catalogue";
@@ -334,21 +335,22 @@ describe("the character context in the Studio (CharacterContextActions)", () => 
     expect(initialBodyGender({ origin: "save", choices: [] }, { ...save, isMale: true })).toBe("male");
     expect(initialBodyGender({ origin: "preset", bodyGender: "female", choices: [] }, { ...save, isMale: true })).toBe("female");
     const shown: (SavedV | null)[] = [];
-    const context = new CharacterContextActions({ creator: await port(), showSave: saved => shown.push(saved) }, { save });
+    // Both heads' contexts are the one V's: its history home is the session's `character:<id>` scope.
+    const home = { service: createHistoryService(), id: "c-travel" };
+    const context = new CharacterContextActions({ creator: await port(), showSave: saved => shown.push(saved), history: home }, { save });
     context.dispatch({ kind: "character.useDefault", bodyGender: "male" });
     expect(context.shownBody()).toBe("male");
     expect(context.stored()).toEqual({ origin: "default", bodyGender: "male", choices: [] });
     expect(context.detailRequest()).toMatchObject({ source: "default", bodyGender: "male" });
     // The next head's context starts from the stored masculine V with the same Undo: back to the save.
-    const next = new CharacterContextActions({ creator: await port(), showSave: saved => shown.push(saved) },
-      { stored: context.stored(), history: context.history() });
+    context.dispose();
+    const next = new CharacterContextActions({ creator: await port(), showSave: saved => shown.push(saved), history: home },
+      { stored: context.stored() });
     expect(next.shownBody()).toBe("male");
     expect(next.snapshot().undo).toBe("Show the default V");
     next.dispatch({ kind: "character.undo" });
     expect(next.snapshot()).toMatchObject({ origin: { kind: "save" }, bodyGender: "female", redo: "Show the default V" });
     expect(shown.at(-1)?.groups).toEqual(save.groups);
-    // A history of another kind is ignored.
-    expect(new CharacterContextActions({ creator: await port(), showSave: () => {} }, { history: { kind: "nope" } as never }).snapshot().undo).toBeNull();
   });
 
   test("the view follows the state; nothing is stored until something is set", async () => {

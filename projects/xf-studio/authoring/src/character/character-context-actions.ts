@@ -157,16 +157,6 @@ type State = {
   /** A loaded preset's entries the page couldn't carry to the host (PIPE-79): reported, never sent. */
   readonly notCarried: readonly MissingChoice[];
 };
-/**
- * Where the panel's Undo history lives (the history service's `character:<id>` scope, character-history.ts), carried from one head to the
- * next when the V changes body (each body has its own head, so the head attachment is made again; browser-head-attachment.ts): the next
- * context binds to the same scope. Opaque to everyone but this service.
- */
-export type ContextHistory = { readonly kind: "xfs/character-history"; readonly history: unknown };
-const isHome = (value: unknown): value is CharacterHistoryHome => {
-  const home = value as CharacterHistoryHome | null;
-  return !!home && typeof home === "object" && typeof home.id === "string" && typeof home.service?.open === "function";
-};
 /** The workspace's form (preview state `character`): what was set and where the V came from, and the Clothing setting when not the default. */
 export type StoredCharacter = { origin: "default" | "save" | "preset"; name?: string; bodyGender?: BodyGender; choices: CharacterChoice[];
   kept?: Record<string, unknown>; clothing?: ClothingSetting; ownMakeup?: "hidden" };
@@ -345,8 +335,7 @@ export class CharacterContextActions {
   /** Whether the V's own makeup shows (a viewing setting like Clothing; its steps join the character's one history). */
   private ownMakeup = true;
 
-  constructor(private readonly ports: CharacterContextPorts, initial: { stored?: unknown; save?: SavedV; legacy?: { style: string; definition: string };
-    history?: ContextHistory } = {}) {
+  constructor(private readonly ports: CharacterContextPorts, initial: { stored?: unknown; save?: SavedV; legacy?: { style: string; definition: string } } = {}) {
     const stored = storedCharacterOf(initial.stored);
     const save = initial.save ? this.saveOf(initial.save) : null;
     const origin = originOf(stored, !!save);
@@ -364,15 +353,12 @@ export class CharacterContextActions {
     this.creator = this.shared.port(this.requesterName);
     this.previewOwner = ports.previews ? new ChoicePreviewOwner(ports.previews) : null;
     this.main = this.requester("panel");
-    // The history carried from the previous head of this V, else the character's own home, else a private one.
-    const carried = initial.history?.kind === "xfs/character-history" && isHome(initial.history.history) ? initial.history.history : null;
-    this.home = carried ?? ports.history ?? privateHistory();
+    // The character's own history home (`character:<id>`: a head made again for another body binds to the same one), else a private one.
+    this.home = ports.history ?? privateHistory();
     const history = characterHistory(this.home);
     this.scope = history.scope;
     this.unbind = history.bind({ read: key => this.historyRead(key), apply: values => this.historyApply(values) });
   }
-  /** Where the panel's Undo history lives, for the head made next when the V changes body (`initial.history`). */
-  history(): ContextHistory { return { kind: "xfs/character-history", history: this.home }; }
   /**
    * What one panel instance of this character asks of the catalogue (its open rows, search, choices prepared ahead and previews), made
    * the first time it is named. The Character panel's is `panel`.
