@@ -15,8 +15,8 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 ### In flight
 - **Wave-4 review fixes** (7 open High, so feature merges are paused): `claude/fix-export` (NATIVE-80, PIPE-140/141, PREV-202), `claude/fix-install` (INSTALL-05..07, PIPE-139/142, DIAG-06..08), and bridge 0.8.1 (RB-119..128) now owned by XF · Runtime bridge. The core review follows profiles phase 2. *21 Oct*
 - **Profiles phase 1** (the single primary focus; `claude/profiles-p1`). The design is approved, with the four defaults confirmed. Chunks run one at a time:
-  1. 1a: lease, takeover and fencing (running);
-  2. 1b: profile model and character service;
+  1. 1a: lease, takeover and fencing (done: harness 34/34, three Sol rounds);
+  2. 1b: profile model and character service (running);
   3. 1c: collection commands, outbox, conflicts and close;
   4. 1d: migration;
   5. 1e: IDs, focus, history, data contracts, de-singletoning;
