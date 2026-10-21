@@ -413,9 +413,12 @@ export class CharacterDetailHost {
     this.pages.set(page, held);
     const token = {};
     const spec = live ? { key, lane: "person" as const, run: async () => {} } : this.preparation(request, key, route, fingerprint, token);
+    // The run is known by its key before it is wanted: a person's job may start within `want`.
+    const entry = { want: null as unknown as Want<void>, token };
+    if (!live) this.runs.set(key, entry);
     const want = this.jobs.want(`${page}/character`, spec, held.lease.signal);
     if (!live) {
-      this.runs.set(key, { want, token });
+      entry.want = want;
       void want.settled.then(() => { if (this.runs.get(key)?.token === token) this.runs.delete(key); });
     }
     // The page's lease ends with the run it holds.
@@ -597,7 +600,11 @@ export class CharacterDetailHost {
   private async readiness(context: JobContext): Promise<(request: CharacterRequest) => Promise<boolean>> {
     const route = this.route();
     if (!route) return async () => false;
-    const installation = await this.backgroundInstallation({ ...route, cacheDir: this.resolverCache, log: this.options.log });
+    // Opening the installation can take a second after a start: a person's change doesn't wait for it (it goes on as the job's tail, and
+    // the change's own open joins it).
+    const opening = this.backgroundInstallation({ ...route, cacheDir: this.resolverCache, log: this.options.log });
+    context.afterwards(opening);
+    const installation = await untilStopped(opening, context.signal);
     const exporter = this.exporterFor(route.wolvenKitCli), manifests = this.manifests(route);
     const check = { graph: installation.graph, fetcher: installation.fetcher, exporter, gameRoot: route.gameRoot, tool: installation.fetcher.tool,
       xl: xlIdentity(installation) };

@@ -352,7 +352,18 @@ export class PreparedFiles {
   keepWithinBudget(): Promise<void> {
     if (this.evicting || this.clock.monotonic() - this.evictedAt < EVICT_INTERVAL_MS) return this.evicting ?? Promise.resolve();
     this.evictedAt = this.clock.monotonic();
-    const want = this.scheduler.want("prepared/budget", { key: "prepared:evict", lane: "ahead", run: () => this.evict() });
+    // A person's change doesn't wait for the count (it can walk tens of thousands of files): stopped, the check goes on as the job's tail,
+    // as it always ran beside everything, and never evicts what this process used.
+    const want = this.scheduler.want("prepared/budget", { key: "prepared:evict", lane: "ahead", run: context => {
+      const evicting = this.evict();
+      context.afterwards(evicting);
+      return new Promise<EvictResult>((resolve, reject) => {
+        const stopped = () => resolve({ removed: 0, freed: 0, bytes: 0 });
+        if (context.signal.aborted) { stopped(); return; }
+        context.signal.addEventListener("abort", stopped, { once: true });
+        evicting.then(resolve, reject).finally(() => context.signal.removeEventListener("abort", stopped));
+      });
+    } });
     const evicting: Promise<void> = want.settled.then(outcome => {
       if (outcome.status === "done" && outcome.result.removed)
         this.log(`Prepared game files: removed ${outcome.result.removed} least recently used (${(outcome.result.freed / 1024 ** 2).toFixed(0)} MB).`);

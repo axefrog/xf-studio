@@ -106,8 +106,7 @@ describe("two open pages on one host", () => {
     expect(host.state(a1.key).phase).toBe("unknown");
     expect(host.state(b1.key).phase).toBe("ready");
     expect(host.state(other.key).phase).toBe("ready");
-    // V1 never finishes: replaced before the scheduler started it, it never even starts (once started, it is stopped).
-    expect(log.filter(line => line.endsWith("skin_type_01"))).toEqual([]);
+    expect(log.filter(line => line.startsWith("cancelled"))).toEqual(["cancelled skin_type_01"]);
   });
 
   test("two pages on the same V share one preparation", async () => {

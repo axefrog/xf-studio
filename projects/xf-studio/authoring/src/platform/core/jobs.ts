@@ -3,7 +3,7 @@
  *
  * Rules (research/backlog/performance.md, scheduling):
  * - **One run at a time.** The host's preparations share one on-disk cache and one thread, so a job starts only once the run before it
- *   returned. The person lane runs in the order asked (PIPE-103); below it, `shown` before `ahead`, each by `order`, then the order asked.
+ *   returned (a person's job that can start at once starts within its `want`; the rest on the next turn of the event loop). The person lane runs in the order asked (PIPE-103); below it, `shown` before `ahead`, each by `order`, then the order asked.
  * - **A person comes first.** The lanes below start only when no person work waits or runs, no `hold` is open and the person lane has
  *   been quiet for `quietMs` (and `ahead` waits the same for `shown`). Wanting person work stops a running lower job at once unless it
  *   committed, and starts once that run returned (a committed one finishes first; its result is kept).
@@ -260,7 +260,9 @@ export function createJobScheduler(options: JobSchedulerOptions): JobScheduler {
       listen(held, signal);
       // A person's work stops a running lower job that hasn't committed; it starts once that run returned.
       if (RANK[spec.lane] === 0 && running && RANK[running.lane] > 0 && !running.committed && running !== job) stop(running, "pre-empted");
-      schedule();
+      // A person's job that can start now starts at once, not after the event loop's next turn (which a busy host may hold back).
+      if (RANK[job.lane] === 0 && job.phase === "waiting" && !running && firstPerson() === job && !(job.exclusive && tails.size)) start(job);
+      else schedule();
       notify();
       return want as Want<T>;
     },

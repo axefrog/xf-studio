@@ -291,7 +291,12 @@ export class ChoicePrefetcher {
     return this.unit("check", async context => {
       let ready: (request: CharacterRequest) => boolean | Promise<boolean> = () => false;
       try { ready = await this.deps.readiness(context); }
-      catch (error) { this.deps.log?.(`Choices prepared earlier couldn't be checked; they are prepared again: ${messageOf(error)}`); }
+      catch (error) {
+        // Stopped while it opened what it checks against: checked again later, never taken as not prepared.
+        if (context.signal.aborted) return;
+        this.deps.log?.(`Choices prepared earlier couldn't be checked; they are prepared again: ${messageOf(error)}`);
+      }
+      if (context.signal.aborted) return;
       for (const item of items) {
         if (!live()) return;
         if (item.state !== "?") continue;
