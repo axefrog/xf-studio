@@ -126,6 +126,8 @@ export type CharacterContextPorts = {
   /** Choice previews (choice-preview-service.ts): pictures of a shape row's choices, drawn off the main thread. */
   previews?: ChoicePreviewPort;
 };
+/** The status line's note once another version replaced the V (the owner names where it came from: `replace`'s `note`). */
+const ELSEWHERE = "Changed elsewhere. Undo starts here.";
 /** A conflict on the character's document (profiles design §2.2), as the Character panel shows it. */
 export type CharacterConflict = { readonly message: string; readonly keepBoth: boolean };
 export type CharacterDocumentPort = {
@@ -859,7 +861,7 @@ export class CharacterContextActions {
         return this.prepared.bytes === 0 ? refusal("invalid_value", "There are no prepared game files to clear.") : { available: true };
       case "character.resolveConflict": {
         const conflict = this.ports.document?.conflict();
-        if (!conflict) return refusal("invalid_value", "Nothing about this V changed in another window.");
+        if (!conflict) return refusal("invalid_value", "There is no other version of this V to choose from.");
         if (action.keep === "both" && !conflict.keepBoth) return refusal("unavailable", "This V can't be copied right now.");
         return action.keep === "mine" || action.keep === "theirs" || action.keep === "both" ? { available: true } : refusal("invalid_value", "Choose which V to keep.");
       }
@@ -1067,7 +1069,7 @@ export class CharacterContextActions {
    * Another window's version of the V replaced this one's (a change made elsewhere, or Use theirs, profiles design §2.2): the context
    * shows `stored` (with `save`, its decoded save), and its Undo starts here, since the steps before it were of the version replaced.
    */
-  replace(stored: unknown, save?: SavedV): void {
+  replace(stored: unknown, save?: SavedV, note = ELSEWHERE): void {
     const form = storedCharacterOf(stored), parsed = save ? this.saveOf(save) : null;
     const origin = originOf(form, !!parsed);
     let kept: CcPreset | null = null;
@@ -1077,7 +1079,7 @@ export class CharacterContextActions {
     this.clothing = form?.clothing ?? DEFAULT_CLOTHING;
     this.ownMakeup = form?.ownMakeup !== "hidden";
     this.scope.clear();
-    this.elsewhere = "Changed in another window. Undo starts here.";
+    this.elsewhere = note;
     this.apply({ origin, bodyGender: initialBodyGender(stored, save), save: origin.kind === "save" ? parsed : null, choices: form?.choices ?? [], kept, notCarried: [] });
     if (saveKey(previous.save?.value) !== saveKey(this.state.save?.value)) this.showSave(this.state.save?.value ?? null);
   }

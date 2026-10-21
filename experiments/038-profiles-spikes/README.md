@@ -126,16 +126,27 @@ harness/file-storage.ts The browser's or WebView's storage as a file the rendere
 tools/s1-outbox.ts     The scenarios on both hosts; tests/s1-outbox.test.ts runs them
 ```
 
-Results (22 October 2026; 8 scenarios in 176 s, peak 1.0 GB), all **PASS**:
+Results (22 October 2026, after the review fixes below; 8 scenarios in 153 s, peak 1.0 GB), all **PASS**:
 
 | Scenario | Localhost | Desktop |
 |---|---|---|
-| Renderer killed at 20 points (16 protocol points, 4 timed) | 300 mutations logged, 0 missing at any restart, 0 false conflicts, 8 lost acknowledgements replayed by receipt | 378 logged, 0 missing, 0 false conflicts, 16 receipt replays |
-| Host killed at 20 points | 10 inside the transaction, 10 after commit: 660 logged, 0 missing, 0 false conflicts, 12 receipt replays | 10 after commit, 10 timed; each kill ends the app, so the page restarts as a new launch and reads its outbox from the host's files: 1,046 logged, 0 missing, 0 false conflicts, 14 receipt replays |
-| Two windows, both renderers and the host killed (15 kills) | 586 logged, 537 commits checked: 0 silent overwrites, 87 real conflicts became 86 forks (a conflict re-raised after a restart counts again), 0 missing | The desktop page and a second writer on the same library: 575 logged, 301 commits checked, 0 silent overwrites, 41 conflicts, 39 forks, 0 missing |
-| Forced outbox-write failure (edits 5–25) | 22 changes recorded unprotected; the warning showed, every edit still reached the library, and the warning cleared | The same, with the WebView copy failing and the host copy landing |
+| Renderer killed at 20 points (16 protocol points, 4 timed) | 309 mutations logged, 0 missing at any restart, 0 false conflicts, 11 lost acknowledgements replayed by receipt | 367 logged, 0 missing, 0 false conflicts, 20 receipt replays |
+| Host killed at 20 points | 10 inside the transaction, 10 after commit: 660 logged, 0 missing, 0 false conflicts, 11 receipt replays | 10 after commit, 10 timed; each kill ends the app, so the page restarts as a new launch and reads its outbox from the host's files: 1,018 logged, 0 missing, 0 false conflicts, 24 receipt replays |
+| Two windows, both renderers and the host killed (15 kills) | 607 logged, 583 commits checked: 0 silent overwrites, 97 real conflicts became 96 forks (a conflict re-raised after a restart counts again), 0 missing | The desktop page and a second writer on the same library: 560 logged, 274 commits checked, 0 silent overwrites, 37 conflicts, 37 forks, 0 missing |
+| Forced outbox-write failure (edits 5–25) | 22 changes recorded unprotected; the warning showed, every edit still reached the library, and the warning cleared | The same (30 unprotected: on desktop a key is protected only once the host's copy lands) |
 
 `integrity_check` was ok after every scenario. The lease harness (above) now drains the real outbox on release; it still passes 34 of 34 checks in about 15 s.
+
+**The model test** (`projects/xf-studio/authoring/tests/document-outbox-model.test.ts`) is the outbox's main gate. A reference model states the rules plainly and slowly (no keys, stamps, storage or repair); seeded random runs drive the real outbox and the model together through edits on one and several documents, immutable puts and commands that require them, sends, acknowledgements, stale answers, lost answers and failed sends, Keep mine, Use theirs and Keep both, revision checks, restarts that read the keys back in a shuffled order, kills between any two key writes, and a second window. After every step the outbox's visible state, entries and bases equal the model's (after a kill, the model's state on either side of the interrupted step), every request is one the model holds as sendable with its values, no conflict is against the page's own write, and every reference to an immutable document resolves; at the end every save's promise has settled and the page, the model and the library agree. In CI: 100 seeds of 500 steps in about 6 s (a sweep of 800 seeds, 400,000 steps, also passed). Removing any of the waiter moves, or the rewrite of rebased successors, makes it fail within those seeds. A failing run prints its seed (`XFS_OUTBOX_SEED=<seed>`, with `XFS_OUTBOX_TRACE=1` for the last steps).
+
+**Review of chunk 1c-i.** An independent review reproduced eight defects; the fixes are structural, and each finding also has an explicit test (`tests/document-outbox.test.ts`, `tests/profiles-characters.test.ts`, "review findings"):
+
+- **Visible state is a pure function** of the acknowledged baseline and the remaining entries, computed on every read: Use theirs on a command over several documents can no longer hide a surviving successor's value (finding 4).
+- **Waiters move with their values** (`DocumentOutbox.settled`): a successor folded into a conflict, or a conflict replaced by Keep mine, carries its callers, so every save settles (finding 7).
+- **Repair by stamps.** Every change of an entry raises its stamp and rewrites every key holding it (a rebased successor's copies included); on open the newest copy wins whatever order the keys are read in, and an entry the repair changed is written again everywhere (finding 6; the model test found the last part).
+- **Immutable, content-addressed documents.** Decoded saves are written once, each by its own create-only command (`put`); an equal copy written elsewhere is acknowledged; a command naming one waits until it is in the library; no resolution removes one. This closes the lost decoded save after Keep both (finding 1), a save discarded by Use theirs while another V names it (finding 5), and false conflicts between two windows importing one save (finding 8).
+- **Owners hear every recorded command** (`recorded` events): a profile changed by another owner's command is read fresh by the next command (finding 2).
+- **Desktop reload:** this launch's copy of a key newer than the host's is given to the host at load; the key is unprotected until it lands, and a settle (the release, the close flush) waits for it. On desktop a key is protected only once the host's copy lands (finding 3).
 
 What the port caught:
 

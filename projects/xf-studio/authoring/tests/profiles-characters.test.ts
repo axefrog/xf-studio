@@ -21,6 +21,7 @@ import { ProfileService, PROFILE_DOCUMENT, PROFILE_SCHEMA } from "../src/app/pro
 import { createStudioSubjects } from "../src/compose/subjects";
 import { SubjectRegistry } from "../src/platform/core/subject-registry";
 import { DocumentOutbox } from "../src/platform/core/document-outbox";
+import { immutableDocumentKind } from "../src/compose/document-kinds";
 import { createHistoryService } from "../src/platform/core/history-service";
 import { createJobScheduler } from "../src/platform/core/jobs";
 import { hostClock } from "../src/platform/core/clock";
@@ -140,7 +141,7 @@ function library() {
 }
 
 async function world(lib = library(), storage = memoryOutboxStorage()) {
-  const host = await fixtureHost(), outbox = new DocumentOutbox(lib.port, storage, { retryMs: 5 });
+  const host = await fixtureHost(), outbox = new DocumentOutbox(lib.port, storage, { retryMs: 5, immutable: immutableDocumentKind });
   outbox.open();
   const subjects = createStudioSubjects(), history = createHistoryService(), catalogue = new CreatorCatalogue(host.port);
   const profiles = new ProfileService({ documents: lib.documents, outbox, subjects });
@@ -786,7 +787,7 @@ describe("conflicts on a V (profiles design §2.2)", () => {
     shown.context.dispatch({ kind: "character.useDefault", bodyGender: "male" });
     await until(() => first.characters.character(shown.id)!.conflict);
     first.outbox.stop();
-    const host = await fixtureHost(), outbox = new DocumentOutbox(lib.port, storage, { retryMs: 5 });
+    const host = await fixtureHost(), outbox = new DocumentOutbox(lib.port, storage, { retryMs: 5, immutable: immutableDocumentKind });
     const characters = new CharacterService({ documents: lib.documents, outbox, catalogue: new CreatorCatalogue(host.port), history: createHistoryService() });
     outbox.open();
     await characters.load();
@@ -817,5 +818,76 @@ describe("boundaries (profiles design §3.6, §7)", () => {
     expect(features.length).toBeGreaterThan(0);
     for (const name of features) for (const path of imports(src(name)).map(specifier => resolveFrom(name, specifier)))
       expect(path.startsWith("character/") || path.startsWith("app/profiles/") ? `${name} → ${path}` : "").toBe("");
+  });
+});
+
+/** Review findings on chunk 1c-i (Sol's report) at the owners: decoded saves are immutable documents, and profiles hear every change. */
+describe("review findings (chunk 1c-i): owners", () => {
+  const saved = (w: Awaited<ReturnType<typeof world>>, id: string) => w.lib.store.get(SAVED_V_DOCUMENT, id);
+
+  test("finding 1: Keep both after a new save keeps the copy's decoded save; it reads back after a restart", async () => {
+    const w = await world();
+    const { id, context } = await shownV(w, { name: "Mine" });
+    w.lib.other("character.rename", { kind: CHARACTER_DOCUMENT, id }, value => ({ ...value as object, name: "Theirs" }));
+    const save = blueSave(w);
+    context.dispatch({ kind: "character.setSource", source: { kind: "save", value: save } });
+    await until(() => w.characters.character(id)!.conflict);
+    context.dispatch({ kind: "character.resolveConflict", keep: "both" });
+    await w.outbox.settle();
+    const copy = w.characters.list().find(item => item.id !== id)!;
+    const decoded = (libraryCharacter(w, copy.id)!.source as { decoded: string }).decoded;
+    expect(saved(w, decoded)).not.toBeNull();
+    const later = await world(w.lib);
+    await later.characters.load();
+    expect(later.characters.decoded(decoded)).not.toBeNull();
+  });
+
+  test("finding 2: two Vs added to one profile while the first command is held both stay members", async () => {
+    const w = await world();
+    const made = await w.profiles.dispatch({ kind: "profile.create", name: "Crew" });
+    const pid = made.ok ? made.profile : "";
+    await w.outbox.settle();
+    w.lib.hold("character.create");
+    const a = await w.characters.create({ profile: { id: pid, base: w.profiles.profile(pid)!.revision } });
+    const b = await w.characters.create({ profile: { id: pid, base: w.profiles.profile(pid)!.revision } });
+    expect([a.ok, b.ok]).toEqual([true, true]);
+    w.lib.open();
+    await w.outbox.settle();
+    expect(w.lib.value<{ subjects: { id: string }[] }>(PROFILE_DOCUMENT, pid)!.subjects.map(ref => ref.id).sort())
+      .toEqual([a.ok ? a.character : "", b.ok ? b.character : ""].sort());
+  });
+
+  test("finding 5: a decoded save another V references is never removed by Use theirs on the V that brought it", async () => {
+    const w = await world();
+    const made = await w.profiles.dispatch({ kind: "profile.create", name: "Crew" });
+    const pid = made.ok ? made.profile : "";
+    await w.outbox.settle();
+    const save = blueSave(w);
+    w.lib.hold("character.create");
+    // A's membership goes stale: another window renamed the profile meanwhile.
+    const a = await w.characters.create({ source: { kind: "save", value: save }, profile: { id: pid, base: w.profiles.profile(pid)!.revision } });
+    w.lib.other("profile.rename", { kind: PROFILE_DOCUMENT, id: pid }, value => ({ ...value as object, name: "Renamed" }));
+    const b = await w.characters.create({ source: { kind: "save", value: structuredClone(save) } });
+    w.lib.open();
+    await until(() => w.outbox.conflicts().length === 1);
+    await w.outbox.settle();
+    w.outbox.useTheirs(w.outbox.conflicts()[0]!.id);
+    await w.outbox.settle();
+    expect(w.characters.character(a.ok ? a.character : "")).toBeNull();
+    const decoded = (libraryCharacter(w, b.ok ? b.character : "")!.source as { decoded: string }).decoded;
+    expect(saved(w, decoded)).not.toBeNull();
+  });
+
+  test("finding 8: two windows importing the same save make no conflict; the library holds one decoded save", async () => {
+    const lib = library();
+    const one = await world(lib), two = await world(lib);
+    await one.characters.load(); await two.characters.load();
+    const save = blueSave(one);
+    await one.characters.create({ source: { kind: "save", value: save } });
+    await two.characters.create({ source: { kind: "save", value: structuredClone(save) } });
+    await one.outbox.settle(); await two.outbox.settle();
+    expect([one.outbox.conflicts().length, two.outbox.conflicts().length]).toEqual([0, 0]);
+    expect(lib.store.list(SAVED_V_DOCUMENT)).toHaveLength(1);
+    expect(lib.store.list(CHARACTER_DOCUMENT)).toHaveLength(2);
   });
 });

@@ -27,6 +27,8 @@ export function startDocumentOutbox(options: {
   /** The workspace's identity: its lease fences every command with it. */
   workspace: string;
   lease?: WorkspaceLease;
+  /** The immutable, content-addressed document kinds (`compose/document-kinds.ts`). */
+  immutable?: (kind: string) => boolean;
   report?: (error: unknown) => void;
   /** Where focus and visibility are heard (the page's window and document). */
   page?: { addEventListener(type: string, listener: () => void): void; removeEventListener(type: string, listener: () => void): void; visible(): boolean };
@@ -36,7 +38,8 @@ export function startDocumentOutbox(options: {
     () => { const generation = lease?.generation() ?? null; return generation === null ? null : { workspace: options.workspace, generation }; });
   const documents = lease ? leasedDocuments(transport, lease) : transport;
   const outbox = new DocumentOutbox(documents, options.storage, {
-    writable: () => lease?.writable() ?? true, sendable: () => lease?.draining() ?? true, report: options.report });
+    writable: () => lease?.writable() ?? true, sendable: () => lease?.draining() ?? true, report: options.report,
+    ...(options.immutable ? { immutable: options.immutable } : {}) });
   if (!lease || lease.writable()) outbox.open();
   const check = () => { void outbox.check().catch(error => options.report?.(error)); };
   const page = options.page;

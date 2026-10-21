@@ -12,6 +12,7 @@ import { browserExperiments } from "./experiments";
 import { startBrowserWorkspaceLease } from "../app/browser/workspace-lease-device";
 import { browserPage, startDocumentOutbox } from "../app/browser/document-outbox-device";
 import { localOutboxStorage } from "../app/browser/outbox-storage";
+import { immutableDocumentKind } from "./document-kinds";
 
 const verification = new URLSearchParams(location.search).has("verify");
 // One writer per workspace (profiles design §2.3): the lease is settled before the Studio builds anything, so a second tab opens read-only.
@@ -19,7 +20,7 @@ const workspaceLease = await startBrowserWorkspaceLease({ verification }).catch(
 // The outbox (§2.2): the one way documents reach the library, kept in this browser's storage under the workspace's identity.
 const workspace = workspaceLease?.workspace ?? (verification ? "browser-verification" : "browser");
 const documents = startDocumentOutbox({ prefix: `${verification ? "/api/verification" : "/api"}/documents`, send: fetch, workspace,
-  storage: localOutboxStorage(localStorage, workspace), ...(workspaceLease ? { lease: workspaceLease.lease } : {}), page: browserPage() });
+  storage: localOutboxStorage(localStorage, workspace), immutable: immutableDocumentKind, ...(workspaceLease ? { lease: workspaceLease.lease } : {}), page: browserPage() });
 void startStudio({
   storage: localStorage,
   ...(workspaceLease ? { lease: workspaceLease.lease } : {}),

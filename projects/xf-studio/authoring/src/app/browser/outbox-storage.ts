@@ -34,6 +34,7 @@ export function localOutboxStorage(storage: KeyStorage, workspace: string): Outb
   };
 }
 
+const isEmpty = (text: string) => { try { return !(JSON.parse(text) as { entries?: unknown[] }).entries?.length; } catch { return false; } };
 const stampOf = (text: string) => { try { return Number((JSON.parse(text) as { stamp?: unknown }).stamp) || 0; } catch { return -1; } };
 
 /**
@@ -52,6 +53,12 @@ export function desktopOutboxStorage(local: KeyStorage, workspace: string, launc
   const browser = localOutboxStorage(local, `${workspace}~${launch}`);
   const writers = new Map<string, { latest: string | null; pending: boolean; running: Promise<void> | null; failed: boolean }>();
   let listener: ((key: string, stored: boolean) => void) | null = null;
+  const queue = (key: string, sent: string | null) => {
+    let writer = writers.get(key);
+    if (!writer) writers.set(key, writer = { latest: sent, pending: false, running: null, failed: false });
+    writer.latest = sent; writer.pending = true;
+    void send(key);
+  };
   const send = (key: string) => {
     const writer = writers.get(key)!;
     if (writer.running) return writer.running;
@@ -68,19 +75,24 @@ export function desktopOutboxStorage(local: KeyStorage, workspace: string, launc
   };
   return {
     load() {
-      const keys = new Map(browser.load());
+      const keys = new Map(browser.load()), newer: string[] = [];
+      for (const key of keys.keys()) if (!(key in host) || stampOf(keys.get(key)!) > stampOf(host[key]!)) newer.push(key);
       for (const [key, text] of Object.entries(host)) {
         const mine = keys.get(key);
         if (mine === undefined || stampOf(text) > stampOf(mine)) keys.set(key, text);
       }
+      // This launch's copy is newer than the host's (the page reloaded before a host write landed): the host is given it now, and until
+      // it lands the key isn't protected and a settle waits for it.
+      for (const key of newer) {
+        const text = keys.get(key)!, empty = isEmpty(text);
+        if (empty && !(key in host)) continue;
+        queue(key, empty ? null : text);
+        listener?.(key, false);
+      }
       return keys;
     },
     write(key, text, empty) {
-      const sent = empty ? null : text;
-      let writer = writers.get(key);
-      if (!writer) writers.set(key, writer = { latest: sent, pending: false, running: null, failed: false });
-      writer.latest = sent; writer.pending = true;
-      void send(key);
+      queue(key, empty ? null : text);
       // The synchronous copy: a renderer crash in this launch keeps it. An emptied key keeps its (newer) empty text here, so a host copy
       // whose removal hadn't landed yet is never read back over it.
       browser.write(key, text, false);
@@ -88,10 +100,10 @@ export function desktopOutboxStorage(local: KeyStorage, workspace: string, launc
     watch(next) { listener = next; },
     async settle() {
       for (const [key, writer] of writers) {
-        if (writer.running) await writer.running;
+        while (writer.running) await writer.running;
         if (writer.failed) { writer.pending = true; await send(key); }
       }
-      return [...writers.values()].every(writer => !writer.failed);
+      return [...writers.values()].every(writer => !writer.failed && !writer.pending && !writer.running);
     },
   };
 }

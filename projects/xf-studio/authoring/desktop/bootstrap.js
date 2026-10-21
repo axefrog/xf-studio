@@ -13,6 +13,7 @@ import { DESKTOP_SAVE_FAILED, desktopWorkspaceWriter } from "../src/app/browser/
 import { formatFence, WORKSPACE_FENCE_HEADER } from "../src/platform/api/document-store";
 import { browserPage, startDocumentOutbox } from "../src/app/browser/document-outbox-device";
 import { desktopOutboxStorage } from "../src/app/browser/outbox-storage";
+import { immutableDocumentKind } from "../src/compose/document-kinds";
 const capabilities = await fetch("/api/desktop/capabilities").then(response => response.json());
 if (capabilities.schema !== "xfs/desktop-capabilities-1") throw Error("Desktop host capabilities are unavailable.");
 // The loopback port changes on each launch, so WebView localStorage alone does
@@ -116,7 +117,7 @@ const outboxStorage = desktopOutboxStorage(localStorage, outboxWorkspace, outbox
   if (!response.ok) throw Error("The outbox key wasn't stored.");
 });
 const documents = startDocumentOutbox({ prefix: `${verification ? "/api/verification" : "/api"}/documents`, send: fetch, workspace: "desktop",
-  storage: outboxStorage, lease, page: browserPage() });
+  storage: outboxStorage, immutable: immutableDocumentKind, lease, page: browserPage() });
 window.xfDesktopWorkspaceFlush = async updateNonce => {
   window.dispatchEvent(new Event("xfs-desktop-close-flush"));
   await writer.idle();

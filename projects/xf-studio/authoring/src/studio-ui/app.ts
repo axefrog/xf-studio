@@ -561,12 +561,14 @@ function workspaceNotice(rt: StudioRuntime) {
   const takeOver = button({ label: "Use it here", small: true, onClick: act("workspace.takeOver") });
   const retry = button({ label: "Try again", small: true, onClick: act("workspace.retryRelease") });
   // Changes not protected on this computer (t-unprotected): the same line, while this window holds its workspace.
-  const exportCollection = button({ label: "Export collection", icon: "export", small: true, onClick: () => void rt.file({ kind: "collection.export" }) });
-  const protect = button({ label: "Try again", icon: "refresh", small: true, onClick: () => {
+  const exportCollection = button({ label: "Export collection", icon: "export", small: true, title: "Export collection", onClick: () => void rt.file({ kind: "collection.export" }) });
+  const protect = button({ label: "Try again", icon: "refresh", small: true, title: "Write the record of your changes again", onClick: () => {
     void rt.port.documents.dispatch({ kind: "documents.protect" }).then(outcome => {
       if (!outcome.ok) rt.feedback.toast("warning", "Workspace", outcome.message, [], { code: outcome.code });
     });
   } });
+  exportCollection.setAttribute("aria-label", "Export collection");
+  protect.setAttribute("aria-label", "Try again");
   const element = h("div", { class: "state-line warning workspace-notice", role: "status", hidden: true }, text, takeOver, retry, exportCollection, protect);
   return {
     element,
@@ -580,6 +582,8 @@ function workspaceNotice(rt: StudioRuntime) {
       takeOver.hidden = !lease?.canTakeOver;
       retry.hidden = !lease?.canRetry;
       exportCollection.hidden = protect.hidden = !unprotected;
+      // Narrow, these two show only their icons (t-unprotected): their names stay their accessible names.
+      element.classList.toggle("unprotected", unprotected);
     },
   };
 }

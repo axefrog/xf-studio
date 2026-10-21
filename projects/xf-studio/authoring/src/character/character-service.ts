@@ -73,6 +73,7 @@ const canonical = (value: unknown): string => JSON.stringify(value, (_key, item)
 const failed = (capability: Capability): CharacterAnswer => ({ ok: false, code: capability.code, reason: capability.reason ?? "That can't be done." });
 const docRef = (id: CharacterId): DocumentRef => ({ kind: CHARACTER_DOCUMENT, id });
 const saveRef = (id: string): DocumentRef => ({ kind: SAVED_V_DOCUMENT, id });
+const ELSEWHERE_NOTE = "Changed in another window. Undo starts here.";
 const CONFLICT_MESSAGE = "You changed this V here too. Which version should it keep?";
 
 export class CharacterService implements CharactersPort {
@@ -86,6 +87,8 @@ export class CharacterService implements CharactersPort {
   constructor(private readonly deps: CharacterServiceDeps) {
     deps.outbox.subscribe(event => {
       if (event.kind === "status") { if (this.entries.size) this.changed(); return; }
+      // Another owner's command (a profile's) or this service's own: what a character reads as may have changed.
+      if (event.kind === "recorded") { if (event.refs.some(ref => ref.kind === CHARACTER_DOCUMENT)) { this.summaries = null; } return; }
       if (event.kind === "external") { for (const ref of event.refs) if (ref.kind === CHARACTER_DOCUMENT) this.fromElsewhere(ref.id); }
       else if (event.kind === "resolved") {
         for (const ref of event.refs) if (ref.kind === CHARACTER_DOCUMENT) {
@@ -157,11 +160,22 @@ export class CharacterService implements CharactersPort {
     if (!id) this.saveIds.set(save, id = decodedSaveId(save));
     return id;
   }
-  /** The decoded save's write when this window doesn't hold it yet (content-addressed: base 0, and an equal copy is acknowledged). */
-  private saveEdits(id: string | null, save: SavedV | null): OutboxEdit[] {
-    if (!id || !save || this.deps.outbox.document(saveRef(id))?.value !== undefined) return [];
+  /**
+   * A decoded save, written once by its own command (an immutable, content-addressed document: an equal copy written elsewhere is
+   * acknowledged, never a conflict, and no resolution removes it). Commands naming it wait until it is in the library (`record`).
+   */
+  private putSave(id: string | null, save: SavedV | null) {
+    if (!id || !save) return;
     this.parsed.set(id, save);
-    return [{ ...saveRef(id), value: save }];
+    this.deps.outbox.put(saveRef(id), save);
+  }
+  /** The decoded saves a command's character values come from: it is sent only once each is in the library. */
+  private requires(edits: readonly OutboxEdit[]): DocumentRef[] {
+    return edits.flatMap(edit => {
+      if (edit.kind !== CHARACTER_DOCUMENT || isTombstone(edit.value)) return [];
+      const source = (edit.value as CharacterDocument | undefined)?.source;
+      return source?.kind === "save" ? [saveRef(source.decoded)] : [];
+    });
   }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -222,7 +236,9 @@ export class CharacterService implements CharactersPort {
     if (canonical(next) === canonical(doc)) return;
     const sourceChanged = canonical(next.source) !== canonical(doc.source) || next.body !== doc.body;
     try {
-      this.deps.outbox.commit(sourceChanged ? "character.setSource" : "character.update", [...this.saveEdits(decoded, save), { ...docRef(entry.id), value: next }]);
+      this.putSave(decoded, save);
+      const edits = [{ ...docRef(entry.id), value: next }];
+      this.deps.outbox.commit(sourceChanged ? "character.setSource" : "character.update", edits, { requires: this.requires(edits) });
       entry.failure = null;
     } catch (error) {
       entry.failure = (error as Error).message;
@@ -238,7 +254,7 @@ export class CharacterService implements CharactersPort {
     if (!entry.context) return;
     if (!doc) { this.drop(entry); return; }
     const save = doc.source.kind === "save" ? this.decoded(doc.source.decoded) ?? undefined : undefined;
-    entry.context.replace(storedOfDocument(doc), save);
+    entry.context.replace(storedOfDocument(doc), save, ELSEWHERE_NOTE);
   }
 
   /** Keep mine, Use theirs, or Keep both (mine becomes a copy of the V, in the profiles that list it), each one outbox write. */
@@ -291,7 +307,7 @@ export class CharacterService implements CharactersPort {
   }
   /** Records one command; a refusal when this window may not record it (it doesn't hold its workspace). */
   private record(command: string, edits: OutboxEdit[]): Capability {
-    try { this.deps.outbox.commit(command, edits); return { available: true }; }
+    try { this.deps.outbox.commit(command, edits, { requires: this.requires(edits) }); return { available: true }; }
     catch (error) { return refusal("unavailable", (error as Error).message); }
   }
 
@@ -306,12 +322,16 @@ export class CharacterService implements CharactersPort {
     const name = input.name?.trim();
     const doc: CharacterDocument = { schema: CHARACTER_SCHEMA, id, ...(name && name.length <= 80 ? { name } : {}), body: made.body, source: made.source,
       choices: made.choices };
-    const edits: OutboxEdit[] = [...this.saveEdits(made.decoded?.id ?? null, made.decoded?.value ?? null), { ...docRef(id), value: doc }];
+    const edits: OutboxEdit[] = [{ ...docRef(id), value: doc }];
     if (input.profile) {
       if (!this.deps.profiles) return failed(refusal("unavailable", "Profiles aren't available here."));
       const planned = this.deps.profiles.membership(input.profile.id, input.profile.base, characterRef(id));
       if (!("edit" in planned)) return failed(planned);
       edits.push(planned.edit);
+    }
+    if (!this.deps.outbox.status().stopped) {
+      try { this.putSave(made.decoded?.id ?? null, made.decoded?.value ?? null); }
+      catch (error) { return failed(refusal("unavailable", (error as Error).message)); }
     }
     const recorded = this.record("character.create", edits);
     if (!recorded.available) return failed(recorded);
@@ -343,8 +363,10 @@ export class CharacterService implements CharactersPort {
       catch (error) { return failed(refusal("invalid_value", (error as Error).message)); }
       if (entry.failure) return failed(refusal("unavailable", entry.failure));
     } else if (!same) {
-      const recorded = this.record("character.setSource", [...this.saveEdits(made.decoded?.id ?? null, made.decoded?.value ?? null),
-        { ...docRef(entry.id), value: { ...doc, body: made.body, source: made.source, choices: made.choices } satisfies CharacterDocument }]);
+      try { this.putSave(made.decoded?.id ?? null, made.decoded?.value ?? null); }
+      catch (error) { return failed(refusal("unavailable", (error as Error).message)); }
+      const recorded = this.record("character.setSource",
+        [{ ...docRef(entry.id), value: { ...doc, body: made.body, source: made.source, choices: made.choices } satisfies CharacterDocument }]);
       if (!recorded.available) return failed(recorded);
     }
     // A save reference names where the save is on disk; the context's mirror keeps the one it had for the same save.

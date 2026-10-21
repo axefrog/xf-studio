@@ -88,7 +88,9 @@ export class ProfileService {
     // Acknowledgements, conflicts, resolutions and changes from elsewhere all change what a profile reads as.
     deps.outbox.subscribe(event => {
       if (event.kind === "status") return;
-      const refs = event.kind === "external" || event.kind === "resolved" ? event.refs : event.entry.writes;
+      // `recorded` too: another owner's command (`character.create` with a membership) changes a profile here at once, and the next
+      // command must read that, never this service's earlier view.
+      const refs = event.kind === "external" || event.kind === "resolved" || event.kind === "recorded" ? event.refs : event.entry.writes;
       if (refs.some(ref => ref.kind === PROFILE_DOCUMENT)) { for (const ref of refs) if (ref.kind === PROFILE_DOCUMENT) this.ids.add(ref.id); this.changed(); }
     });
   }

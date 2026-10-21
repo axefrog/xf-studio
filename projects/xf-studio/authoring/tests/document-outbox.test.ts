@@ -34,7 +34,7 @@ function rig() {
 }
 const value = (store: ReturnType<typeof storeDocuments>["store"], ref = LOOK) => store.get(ref.kind, ref.id);
 async function quiet(outbox: DocumentOutbox) { for (let i = 0; i < 100 && outbox.status().pending; i++) await tick(5); }
-function events(outbox: DocumentOutbox) { const seen: OutboxEvent[] = []; outbox.subscribe(event => { if (event.kind !== "status") seen.push(event); }); return seen; }
+function events(outbox: DocumentOutbox) { const seen: OutboxEvent[] = []; outbox.subscribe(event => { if (event.kind !== "status" && event.kind !== "recorded") seen.push(event); }); return seen; }
 
 describe("transact: one transaction, idempotent by command ID (§2.1)", () => {
   test("a command is all or nothing across its documents, and a stale one answers what the documents hold now", () => {
@@ -401,5 +401,113 @@ describe("the page's storage for the outbox", () => {
       const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)));
       expect(sha256Hex(text)).toBe(Array.from(digest, byte => byte.toString(16).padStart(2, "0")).join(""));
     }
+  });
+});
+
+/** Review findings on chunk 1c-i (Sol's report), each as a test of the structural fix that closes it. */
+describe("review findings (chunk 1c-i)", () => {
+  test("finding 4: after Use theirs on a multi-document conflict, a surviving successor's value is what the document shows (visible state is computed)", async () => {
+    const r = rig();
+    r.store.transact({ id: "other", command: "x", writes: [{ ...COLLECTION, base: 0, value: { theirs: true } }] });
+    const { outbox } = memoryOutbox(r.port);
+    outbox.commit("collection.removeLook", [{ ...COLLECTION, value: { removed: ["l-1"] } }, { ...LOOK, value: { state: "removed" } }]);
+    outbox.commit("look.edit", [{ ...LOOK, value: "new mine" }]);
+    await tick(20);
+    outbox.useTheirs(outbox.conflicts()[0]!.id);
+    expect(outbox.document(LOOK)!.value).toBe("new mine");
+    await quiet(outbox);
+    expect(value(r.store)).toMatchObject({ value: "new mine" });
+    expect(outbox.document(LOOK)).toMatchObject({ value: "new mine", revision: 1 });
+    expect(outbox.document(COLLECTION)!.value).toEqual({ theirs: true });
+  });
+
+  test("finding 6: a multi-document successor's copies are all rewritten when it is rebased, and a restart in any key order takes the newest", async () => {
+    for (const order of ["forward", "reverse"] as const) {
+      const r = rig(), storage = memoryOutboxStorage();
+      const first = memoryOutbox(r.port, storage).outbox;
+      const open = r.gate();
+      first.commit("look.edit", [{ ...LOOK, value: { n: 1 } }]);
+      await tick();
+      first.commit("pair", [{ ...LOOK, value: { n: 2 } }, { ...COLLECTION, value: { c: 2 } }]);
+      // The host goes away right after the first answer: the successor is rebased, and not yet sent.
+      first.subscribe(event => { if (event.kind === "acknowledged") r.setDown(true); });
+      open();
+      await tick(10);
+      first.stop();
+      r.setDown(false);
+      // Both keys hold the successor, rebased on the acknowledged revision with the same, newest stamp.
+      const copies = [...storage.keys.values()].map(text => JSON.parse(text).entries.find((entry: { command: string }) => entry.command === "pair"));
+      expect(copies.map(copy => copy?.writes[0].base)).toEqual([1, 1]);
+      const load = storage.load.bind(storage);
+      const shuffled = { ...storage, load: () => new Map(order === "forward" ? [...load()] : [...load()].reverse()), write: storage.write.bind(storage) };
+      const second = new DocumentOutbox(r.port, shuffled, { retryMs: 5 });
+      second.open();
+      await quiet(second);
+      expect(second.conflicts()).toEqual([]);
+      expect(value(r.store)).toMatchObject({ revision: 2, value: { n: 2 } });
+    }
+  });
+
+  test("finding 7: a successor folded into a conflict carries its callers; after Keep mine every save settles", async () => {
+    const r = rig();
+    r.store.transact({ id: "other", command: "x", writes: [{ ...LOOK, base: 0, value: { theirs: 1 } }] });
+    const { outbox } = memoryOutbox(r.port);
+    outbox.hold(LOOK, null);
+    const open = r.gate();
+    const first = outbox.commit("look.edit", [{ ...LOOK, value: { mine: 1 } }]);
+    await tick();
+    const second = outbox.commit("look.edit", [{ ...LOOK, value: { mine: 2 } }]);
+    expect(second.id).not.toBe(first.id);
+    const outcomes = [outbox.settled(first.id), outbox.settled(second.id)];
+    open();
+    await tick(20);
+    expect(outbox.pendingEntries().length).toBe(1);
+    outbox.keepMine(outbox.conflicts()[0]!.id);
+    expect(await Promise.all(outcomes)).toEqual(["acknowledged", "acknowledged"]);
+    expect(value(r.store)).toMatchObject({ value: { mine: 2 } });
+  });
+
+  test("immutable documents: written once by their own command, an equal copy written elsewhere acknowledged, and a command requiring one waits", async () => {
+    const BLOB = { kind: "saved-v", id: "sv-1" };
+    const r = rig(), immutable = (kind: string) => kind === "saved-v";
+    // Another page wrote the same content first.
+    r.store.transact({ id: "elsewhere", command: "immutable.put", writes: [{ ...BLOB, base: 0, value: { save: 1 } }, { kind: "character", id: "other", base: 0, value: 1 }] });
+    const { outbox } = memoryOutbox(r.port, memoryOutboxStorage(), { immutable });
+    const open = r.gate();
+    const put = outbox.put(BLOB, { save: 1 })!;
+    expect(outbox.put(BLOB, { save: 1 })).toBeNull();
+    expect(() => outbox.commit("x", [{ ...BLOB, value: 2 }])).toThrow("put");
+    outbox.commit("character.create", [{ kind: "character", id: "c-1", value: { source: "sv-1" } }], { requires: [BLOB] });
+    await tick();
+    // Only the put is sent: the command naming it waits until it is in the library.
+    expect(r.calls.map(call => call.id)).toEqual([put.id]);
+    open();
+    await quiet(outbox);
+    expect(outbox.conflicts()).toEqual([]);
+    expect(r.calls.map(call => call.command)).toEqual(["immutable.put", "character.create"]);
+    expect(value(r.store, { kind: "character", id: "c-1" })).toMatchObject({ revision: 1 });
+  });
+
+  test("finding 3: a desktop page's copy newer than the host's is given to the host at load, unprotected until it lands, and settle waits for it", async () => {
+    const local = new Map<string, string>([["xfs.outbox.desktop~now.look-working/b", JSON.stringify({ schema: "xfs/outbox-1", stamp: 9, entries: [{ id: "mine", seq: 1, writes: [] }] })]]);
+    const browser = { get length() { return local.size; }, key: (i: number) => [...local.keys()][i] ?? null, getItem: (key: string) => local.get(key) ?? null,
+      setItem: (key: string, text: string) => { local.set(key, text); }, removeItem: (key: string) => { local.delete(key); } };
+    const host = { "look-working/b": JSON.stringify({ schema: "xfs/outbox-1", stamp: 4, entries: [{ id: "older", seq: 1, writes: [] }] }) };
+    let land!: () => void;
+    const posted: string[] = [];
+    const storage = desktopOutboxStorage(browser, "desktop", "now", host, async (key, text) => { posted.push(`${key}:${JSON.parse(text!).stamp}`); await new Promise<void>(resolve => { land = resolve; }); });
+    const heard: [string, boolean][] = [];
+    storage.watch!((key, stored) => heard.push([key, stored]));
+    storage.load();
+    expect(posted).toEqual(["look-working/b:9"]);
+    expect(heard).toEqual([["look-working/b", false]]);
+    let settled = false;
+    void storage.settle().then(ok => { settled = ok; });
+    await tick(5);
+    expect(settled).toBe(false);
+    land();
+    await tick(5);
+    expect(settled).toBe(true);
+    expect(heard.at(-1)).toEqual(["look-working/b", true]);
   });
 });
