@@ -22,6 +22,7 @@ import type { FeatureRenderer, FeatureRendererFactory } from "../api/scene";
 import { createFeatureRenderers, type FeatureRenderers } from "./feature-renderers";
 import { characterGeometry } from "./character-geometry";
 import type { ExperimentPort } from "../api/experiments";
+import { followOptionalRenderers } from "./optional-renderers";
 import { createHeadRig, type MotionLoader } from "./head-rig";
 import { afterTask, createCharacterRenderer } from "./character-renderer";
 import { createCameraSettle } from "./camera-settle";
@@ -302,19 +303,7 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     supersededChanged: () => { character.refreshVisibility(); invalidate(); },
     ...(options.onRendererError ? { report: options.onRendererError } : {}) }, options.renderers ?? []);
   releases.push(() => features?.dispose());
-  if (options.optionalRenderers) {
-    const registered = new Map<FeatureRendererFactory, AbortController>();
-    const sync = () => {
-      const wanted = options.optionalRenderers!.registrations().map(item => item.renderer);
-      for (const [factory, token] of registered) if (!wanted.includes(factory)) { registered.delete(factory); token.abort(); }
-      for (const factory of wanted) if (!registered.has(factory)) {
-        const token = new AbortController(); features!.register(factory, token.signal); registered.set(factory, token);
-      }
-    };
-    releases.push(options.optionalRenderers.subscribe(sync));
-    releases.push(() => { for (const token of registered.values()) token.abort(); registered.clear(); });
-    sync();
-  }
+  if (options.optionalRenderers) releases.push(followOptionalRenderers(options.optionalRenderers, (factory, signal) => features!.register(factory, signal)));
   // A renderer that replaces resolved parts hides them from the start.
   if (features.superseded().length) character.refreshVisibility();
   resize();
