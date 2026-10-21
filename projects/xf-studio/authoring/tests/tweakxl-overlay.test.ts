@@ -54,6 +54,25 @@ describe("the TweakXL overlay", () => {
     expect(overlay.list("Items.X.tags", ["b"])).toEqual(["a"]);
   });
 
+  test("a file whose aliases or instances expand past the budget is skipped whole as a gap, never an error (PIPE-139)", () => {
+    const doubling = (depth: number) => ["a0: &a0 [x, x]", ...Array.from({ length: depth }, (_, i) => `a${i + 1}: &a${i + 1} [*a${i}, *a${i}]`)];
+    const overlay = readTweakOverlay([
+      file("r6/tweaks/a_ok.yaml", "Items.Kept.tags: [a]\n"),
+      // A record before the bomb in the same file is not applied either: the file is skipped whole.
+      file("r6/tweaks/b_bomb.yaml", ["Items.Early.label: early", ...doubling(22), "Items.Bomb.tags: *a22"].join("\n")),
+      // One long scalar repeated by alias: few nodes, too many characters.
+      file("r6/tweaks/c_long.yaml", [`s: &s ${"x".repeat(1024 * 1024)}`, `Items.Long.tags: [${Array(40).fill("*s").join(", ")}]`].join("\n")),
+      // A small template copied once per instance.
+      file("r6/tweaks/d_instances.yaml", [...doubling(14), "Items.T_$(n):", "  $type: Item", "  payload: *a14", "  $instances:",
+        ...Array.from({ length: 100 }, (_, i) => `    - { n: i${i} }`)].join("\n")),
+    ]);
+    for (const name of ["b_bomb.yaml", "c_long.yaml", "d_instances.yaml"])
+      expect(overlay.gaps.filter(gap => gap.startsWith(`r6/tweaks/${name}: skipped`))).toHaveLength(1);
+    expect(overlay.list("Items.Kept.tags", null)).toEqual(["a"]);
+    expect([...overlay.records.keys()]).toEqual(["Items.Kept"]);
+    expect(overlay.files).toBe(4);
+  });
+
   test("scalars keep their text: a label written 01 stays \"01\", not the number 1", () => {
     const overlay = readTweakOverlay([file("r6/tweaks/p.yaml", "PhotoModePoses.a:\n  $base: PhotoModePoses.idle_stand_01\n  displayName: 01\n  animationTime: 0.50\n  locked: false\n")]);
     expect(overlay.field("PhotoModePoses.a", "displayName")).toBe("01");
