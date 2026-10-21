@@ -395,3 +395,52 @@ describe("review fixes", () => {
     expect(log).toEqual(["start v", "stop v"]);
   });
 });
+
+describe("the raised hook re-entering the scheduler (review 4, second round)", () => {
+  /** A scheduler whose `raised` hook runs `hook` once, with a job running in the ahead lane that a person then wants. */
+  async function promoting(hook: (jobs: JobScheduler) => void) {
+    const time = simulatedClock(), log: string[] = [];
+    let jobs!: JobScheduler, once = true;
+    jobs = createJobScheduler({ clock: time.clock, quietMs: 0, raised: () => { if (once) { once = false; hook(jobs); } } });
+    const shared = manual(log, "shared");
+    jobs.want("page/character", { key: "shared", lane: "ahead", run: shared.run }, old.signal);
+    await time.advance(1);
+    return { jobs, time, log, shared };
+  }
+  let old = new AbortController();
+
+  test("the hook aborting the old signal doesn't cancel the replacement", async () => {
+    old = new AbortController();
+    const fresh = new AbortController();
+    const { jobs, time, log } = await promoting(() => old.abort());
+    const wanted = jobs.want("page/character", { key: "shared", lane: "person", run: async () => "unused" }, fresh.signal);
+    await time.flush();
+    expect(log).toEqual(["start shared"]);
+    expect(wanted.state().phase).toBe("running");
+  });
+
+  test("the hook aborting the new signal releases the want", async () => {
+    old = new AbortController();
+    const fresh = new AbortController();
+    const { jobs, time, log } = await promoting(() => fresh.abort());
+    const wanted = jobs.want("page/character", { key: "shared", lane: "person", run: async () => "unused" }, fresh.signal);
+    await time.flush();
+    expect(log).toEqual(["start shared", "stop shared"]);
+    expect(wanted.state().phase).toBe("stopped");
+  });
+
+  test("a want the hook makes keeps its own signal", async () => {
+    old = new AbortController();
+    const fresh = new AbortController(), newest = new AbortController();
+    const { jobs, time, log } = await promoting(inner => { inner.want("page/character", { key: "shared", lane: "person", run: async () => "unused" }, newest.signal); });
+    jobs.want("page/character", { key: "shared", lane: "person", run: async () => "unused" }, fresh.signal);
+    await time.flush();
+    // The hook's want is the newest: the outer call's signal doesn't hold the run, the hook's does.
+    fresh.abort();
+    await time.flush();
+    expect(log).toEqual(["start shared"]);
+    newest.abort();
+    await time.flush();
+    expect(log).toEqual(["start shared", "stop shared"]);
+  });
+});

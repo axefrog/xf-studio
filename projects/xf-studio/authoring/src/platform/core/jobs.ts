@@ -264,8 +264,11 @@ export function createJobScheduler(options: JobSchedulerOptions): JobScheduler {
         job.wants.add(held);
         holders.set(requester, held);
       }
-      raise(job, spec.lane);
+      // The want's lifetime first: raising may call out (`raised`), and what that does to either signal, or a want it makes, then holds.
       listen(held, signal);
+      raise(job, spec.lane);
+      // Released or replaced meanwhile (by the hook): nothing more to admit for this want.
+      if (holders.get(requester) !== held) { schedule(); notify(); return held.want as Want<T>; }
       // A person's work stops a running lower job that hasn't committed; it starts once that run returned.
       if (RANK[job.lane] === 0 && running && RANK[running.lane] > 0 && !running.committed && running !== job) stop(running, "pre-empted");
       // A person's job that can start now starts at once, not after the event loop's next turn (which a busy host may hold back).
