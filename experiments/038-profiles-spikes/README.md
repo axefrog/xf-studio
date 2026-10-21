@@ -92,7 +92,7 @@ harness/web-locks-model.ts     The browser's Web Locks (exclusive mode) for the 
 tools/lease-harness.ts         The scenarios on both hosts; tests/lease-harness.test.ts runs them
 ```
 
-Each window edits one document (a save every 15 ms, or every 1 ms where a write must be in flight) and writes its workspace every fourth edit, with a marker. Results (21 October 2026; 34 checks in about 16 s, peak 0.8 GB), all **PASS**:
+Each window edits one document through the production outbox (a save every 15 ms, or every 1 ms where a write must be in flight) and writes its workspace every fourth edit, with a marker; a release drains the outbox. Results (21 October 2026; 34 checks in about 16 s, peak 0.8 GB), all **PASS**:
 
 | Scenario | Checks |
 |---|---|
@@ -114,6 +114,36 @@ What stands in for what: on desktop everything is real but the WebView (a Bun pr
 A release first ends any open pointer gesture or slider drag, committed as one Undo step, before it refuses edits and drains; the authoring unit tests cover that case (`tests/workspace-lease.test.ts`), since it lives in the application, not the transport.
 
 Reproduce: `bun tools/lease-harness.ts <scratch>`, or `bun test tests/lease-harness.test.ts`, under `tools/memory_guard.py --limit 3`.
+
+## The outbox in production (phase 1, chunk 1c-i)
+
+The S1 prototype became product code: the outbox (`src/platform/core/document-outbox.ts`, rules A1–A7 below), idempotent `transact` with receipts on the host (`DocumentStore.transact`, routes `/api/documents/transact`, `/revisions` and `/read`), the page's storage for it (`src/app/browser/outbox-storage.ts`: `localStorage` on localhost; on desktop, this launch's WebView storage plus one host file per document key, `desktop/outbox-store.ts`), and its start on both hosts with the lease's release steps and the 10 s revision check (`src/app/browser/document-outbox-device.ts`). It is the one sync mechanism: `CharacterService`, `ProfileService` and the experiments' document holders all read a document as its acknowledged value with the outbox's entries on top, and write only by recording commands there. The S1 kill harness was ported onto it and runs on both hosts:
+
+```
+harness/s1-host.ts     Host process: localhost = the real document store and routes; desktop = the real desktop server (commands through a logging front)
+harness/s1-window.ts   Renderer process: the page's real outbox, transport, storage adapter and (desktop) lease adapter; scripted edits with sequence numbers
+harness/file-storage.ts The browser's or WebView's storage as a file the renderer writes synchronously (it outlives the renderer)
+tools/s1-outbox.ts     The scenarios on both hosts; tests/s1-outbox.test.ts runs them
+```
+
+Results (22 October 2026; 8 scenarios in 176 s, peak 1.0 GB), all **PASS**:
+
+| Scenario | Localhost | Desktop |
+|---|---|---|
+| Renderer killed at 20 points (16 protocol points, 4 timed) | 300 mutations logged, 0 missing at any restart, 0 false conflicts, 8 lost acknowledgements replayed by receipt | 378 logged, 0 missing, 0 false conflicts, 16 receipt replays |
+| Host killed at 20 points | 10 inside the transaction, 10 after commit: 660 logged, 0 missing, 0 false conflicts, 12 receipt replays | 10 after commit, 10 timed; each kill ends the app, so the page restarts as a new launch and reads its outbox from the host's files: 1,046 logged, 0 missing, 0 false conflicts, 14 receipt replays |
+| Two windows, both renderers and the host killed (15 kills) | 586 logged, 537 commits checked: 0 silent overwrites, 87 real conflicts became 86 forks (a conflict re-raised after a restart counts again), 0 missing | The desktop page and a second writer on the same library: 575 logged, 301 commits checked, 0 silent overwrites, 41 conflicts, 39 forks, 0 missing |
+| Forced outbox-write failure (edits 5–25) | 22 changes recorded unprotected; the warning showed, every edit still reached the library, and the warning cleared | The same, with the WebView copy failing and the host copy landing |
+
+`integrity_check` was ok after every scenario. The lease harness (above) now drains the real outbox on release; it still passes 34 of 34 checks in about 15 s.
+
+What the port caught:
+
+- **A receipt was forgotten before every copy of its entry was gone.** A multi-document entry is kept under each of its documents' keys. When one key's write after the acknowledgement was lost (a kill between keys, a failed write, or a desktop host copy not yet written) while the next command already told the host to forget the receipt, the copy came back after a restart as a stale command: a phantom conflict. A receipt is now forgotten only once every key that held its entry is stored without it (on desktop, once the host's copy is written).
+- **A desktop launch could read an earlier launch's WebView copy.** The WebView's storage belongs to the loopback port, and a later launch can get the same port. The synchronous copy is now kept under this launch's ID, earlier launches' copies are dropped at start, and an emptied key keeps an empty record with a newer stamp until the host's copy is removed too.
+- **A window with no baseline wrote over nothing.** The lease harness's windows saved without reading the document first; every command was then stale against the library and became a conflict (correctly: nothing retried it). Owners read their documents before recording changes to them.
+
+Reproduce, under `tools/memory_guard.py --limit 4`: `bun tools/s1-outbox.ts <scratch> [payload.json|""] [localhost,desktop] [renderer,host,two,failure]`, or `bun test tests/s1-outbox.test.ts`.
 
 ## Acknowledgement and rebasing rules (S1, answering Sol's Medium point)
 

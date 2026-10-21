@@ -1,5 +1,12 @@
 # Profiles phase 1b: handover to 1c
 
+**Status (chunk 1c-i):** done. The interim path described below is gone: `CharacterService` keeps no queue, generations or reflection,
+and a character, like every document, reaches the library only through the outbox
+([document-outbox.ts](../../projects/xf-studio/authoring/src/platform/core/document-outbox.ts)). Each of the 17 scenarios is a test named
+`scenario N` in [profiles-characters.test.ts](../../projects/xf-studio/authoring/tests/profiles-characters.test.ts) (13 and 14 also in
+[choice-prefetch.test.ts](../../projects/xf-studio/authoring/tests/choice-prefetch.test.ts)), and all pass. The rest of this note is the
+record of what 1b left.
+
 Phase 1b built the profile model, the subject registry, `CharacterService` and the creator catalogue split ([design §7](../../research/authoring/profiles-views-layouts-design.md#7-de-singletoning)). Its character write path is an interim mechanism. Chunk 1c replaces it with the design's outbox (§2.2, rules A1–A7), the single document sync mechanism for every document, characters included. This note says what the interim path does, where it lives, and which reproduced races 1c's tests must cover.
 
 Line numbers are as of the 1b branch's last commit.
@@ -10,7 +17,7 @@ All in [character-service.ts](../../projects/xf-studio/authoring/src/character/c
 
 | Piece | Where | What it does |
 |---|---|---|
-| Write port | [document-commands.ts](../../projects/xf-studio/authoring/src/platform/core/document-commands.ts) `storeCommands` (line 19) | Owner commands written through the document store one document at a time, in order. Receipts last for the session only. Includes the equal-value fallback (A5). Not atomic across documents. |
+| Write port | `platform/core/document-commands.ts` `storeCommands` (line 19; removed in 1c) | Owner commands written through the document store one document at a time, in order. Receipts last for the session only. Includes the equal-value fallback (A5). Not atomic across documents. |
 | Per-character state | `Entry` (line 62) | `revision`, `commandRevision` (the revision the last command left), `sourceGen`, `preparing`, `dirty`, `failure`, `conflict`, and the queue (`tail`, `queued`, `writeQueued`). |
 | One queue per character | `enqueue` (line 210) | Commands and edit write-backs run one at a time, in the order asked. |
 | Edit write-back | `persist` (line 217), `writeBack` (line 231) | A context change queues one write-back; later edits join it until it starts. The context's whole form is written over `entry.revision`. `stale` marks `conflict`; a failure keeps `dirty` and records `failure`. |

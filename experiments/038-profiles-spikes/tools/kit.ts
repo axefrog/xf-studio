@@ -9,9 +9,9 @@ export const BUN = process.execPath;
 export type Child = { proc: Bun.Subprocess<"ignore", "pipe", "pipe">; lines: string[]; exited: Promise<number>; killed: boolean;
   wait(match: (line: string) => boolean, ms?: number): Promise<string | null> };
 
-export function spawn(script: string, args: string[], kill?: string): Child {
+export function spawn(script: string, args: string[], kill?: string, env: Record<string, string> = {}): Child {
   const proc = Bun.spawn([BUN, join(HERE, script), ...args], { stdin: "ignore", stdout: "pipe", stderr: "pipe",
-    env: { ...process.env, XFS_KILL: kill ?? "" } });
+    env: { ...process.env, XFS_KILL: kill ?? "", ...env } });
   const lines: string[] = [];
   const watchers: { match(line: string): boolean; resolve(line: string | null): void }[] = [];
   const child: Child = { proc, lines, killed: false, exited: proc.exited,
