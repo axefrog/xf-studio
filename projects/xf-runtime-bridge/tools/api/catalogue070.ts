@@ -15,7 +15,7 @@ const planError = (code: string, message: string, detail?: unknown) =>
   Object.assign(new Error(message), { plain: { code, message, ...(detail !== undefined ? { detail: typeof detail === "string" ? detail : JSON.stringify(detail) } : {}) } });
 
 async function call(context: CommandContext, method: string, params: Record<string, unknown>, timeoutMs?: number): Promise<Json> {
-  const response = await context.api.callBridge(method, params, context.cid, timeoutMs);
+  const response = await context.api.callBridge(method, params, context.cid, timeoutMs, context.signal);
   if (!response.ok) throw Object.assign(new Error(response.error.message), { plain: response.error });
   return response.result as Json;
 }
@@ -95,7 +95,7 @@ export async function runSessionWait(input: Json, context: CommandContext): Prom
     };
   };
   const askState = async (): Promise<Json | null> => {
-    const response = await context.api.callBridge("ui.ask.state", { id: messageId }, context.cid);
+    const response = await context.api.callBridge("ui.ask.state", { id: messageId }, context.cid, undefined, context.signal);
     return response.ok ? (response.result as Json) : null; // an older plugin without it: poll the stream only
   };
 

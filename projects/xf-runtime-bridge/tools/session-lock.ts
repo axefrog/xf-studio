@@ -1,17 +1,20 @@
-// Advisory lock held by the session runner while it drives the game, so that the MCP server
-// doesn't talk to the bridge in the middle of a scripted session (the bridge takes one client at
-// a time, and a stray call could fail or reorder a session step).
+// Lock held by the session runner while it drives the game, so that the MCP server doesn't talk to the bridge in the middle
+// of a scripted session (the bridge takes one client at a time, and a stray call could fail or reorder a session step).
 //
-// The lock is a small JSON file beside the bridge's session.json (<runtime dir>/session-runner.lock),
-// created exclusively. It names the runner's process by PID and by the process's start time, so a
-// PID that Windows has since given to another process doesn't keep the lock alive. A lock whose
-// process has gone is stale and is taken over; the takeover moves the stale file aside first and
-// checks it moved the file it judged, so two runners starting at once can't both win. Advisory
-// only: the bridge itself never reads it.
+// Ownership is a Windows named mutex per runtime folder (0.8.1, RB-124): the kernel lets one process hold it, and frees it
+// when that process ends, however it ends, so there is no stale lock to judge and take over. The earlier file-only protocol
+// moved a stale file aside before checking it, which could displace a fresh owner while a third runner claimed the free
+// name, leaving two runners each believing it had control.
+//
+// Beside the mutex, the owner writes a small JSON file (<runtime dir>/session-runner.lock) naming itself (PID, the
+// process's start time, the script), which the MCP server reads to refuse plainly and say who is running. Only the mutex's
+// owner writes or removes that file. A file whose process has gone (a crash) is stale and ignored, and the next owner
+// overwrites it. Advisory only: the bridge itself never reads either.
 
 import { dlopen, FFIType, ptr } from "bun:ffi";
-import { linkSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { createHash } from "node:crypto";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 
 export type SessionLock = {
   pid: number;
@@ -29,6 +32,7 @@ export const lockPath = (runtimeDir: string) => join(runtimeDir, LOCK_FILE);
 
 const PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
 const ERROR_INVALID_PARAMETER = 87;
+const STILL_ACTIVE = 259;
 
 let kernel32: ReturnType<typeof openKernel32> | null | undefined;
 function openKernel32() {
@@ -36,8 +40,12 @@ function openKernel32() {
   return dlopen("kernel32.dll", {
     OpenProcess: { args: [u32, i32, u32], returns: u64 },
     GetProcessTimes: { args: [u64, FFIType.ptr, FFIType.ptr, FFIType.ptr, FFIType.ptr], returns: i32 },
+    GetExitCodeProcess: { args: [u64, FFIType.ptr], returns: i32 },
     CloseHandle: { args: [u64], returns: i32 },
     GetLastError: { args: [], returns: u32 },
+    CreateMutexW: { args: [FFIType.ptr, i32, FFIType.ptr], returns: u64 },
+    WaitForSingleObject: { args: [u64, u32], returns: u32 },
+    ReleaseMutex: { args: [u64], returns: i32 },
   }).symbols;
 }
 function k32() {
@@ -52,7 +60,7 @@ function k32() {
 }
 
 /**
- * The process's creation time as a decimal FILETIME, `null` when no process has this PID, or
+ * The process's creation time as a decimal FILETIME, `null` when no process has this PID (or it has ended), or
  * `"unknown"` when it exists but can't be queried (or this isn't Windows).
  */
 export function processStartTime(pid: number): string | null | "unknown" {
@@ -64,6 +72,10 @@ export function processStartTime(pid: number): string | null | "unknown" {
   try {
     const times = new BigUint64Array(4); // creation, exit, kernel, user
     const at = (i: number) => ptr(times) + i * 8;
+    // A process that has ended can still be opened while anyone holds a handle to it (its parent, for one), so an ended
+    // process counts as gone (0.8.1).
+    const exit = new Uint32Array(1);
+    if (k.GetExitCodeProcess(handle, exit) && exit[0] !== STILL_ACTIVE) return null;
     if (!k.GetProcessTimes(handle, at(0), at(1), at(2), at(3))) return "unknown";
     return times[0].toString();
   } finally {
@@ -114,60 +126,46 @@ export function readSessionLock(runtimeDir: string): SessionLock | null {
   return lock && lockAlive(lock) ? lock : null;
 }
 
-/**
- * Puts a moved-aside lock back at `path` only if nothing is there now, atomically (RB-33): a hard link
- * fails when the name exists, where a rename would silently replace a lock a third runner wrote in
- * between. Where hard links aren't possible, an exclusive (`wx`) copy does the same. The aside file is
- * removed either way. Returns whether the lock was put back.
- */
-export function putBackLock(aside: string, path: string): boolean {
-  let restored = false;
-  try {
-    linkSync(aside, path);
-    restored = true;
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code !== "EEXIST") {
-      const raw = readRaw(aside);
-      if (raw !== null) {
-        try {
-          writeFileSync(path, raw, { flag: "wx" });
-          restored = true;
-        } catch {
-          // someone else's lock is there now; theirs wins
-        }
-      }
-    }
-  }
-  rmSync(aside, { force: true });
-  return restored;
+const WAIT_OBJECT_0 = 0;
+const WAIT_ABANDONED = 0x80;
+
+/** The mutex's name for one runtime folder: per user session (Local\), the folder's full path hashed. */
+export function lockMutexName(runtimeDir: string): string {
+  const key = createHash("sha256").update(resolve(runtimeDir).toLowerCase()).digest("hex").slice(0, 32);
+  return `Local\\XFRuntimeBridge.SessionRunner.${key}`;
 }
 
-// Removes a stale lock only if it is still the file that was judged stale (aSeen): the file is
-// moved aside atomically, compared, and put back if another runner had replaced it meanwhile, never
-// over a lock a third runner has written since.
-function takeOverStale(path: string, seen: string): void {
-  const aside = `${path}.stale-${process.pid}-${Math.random().toString(36).slice(2)}`;
-  try {
-    renameSync(path, aside);
-  } catch {
-    return; // gone already, or someone else is moving it
-  }
-  if (readRaw(aside) === seen) {
-    rmSync(aside, { force: true });
-    return;
-  }
-  // It was another runner's fresh lock: put it back unless a third one has written a new lock.
-  putBackLock(aside, path);
-}
+/** Mutexes this process holds, by name: a mutex is re-entrant for its owning thread, so a second take here is refused. */
+const held = new Map<string, bigint>();
 
 /**
- * Takes the lock for this process. Returns a release function, or the other runner's lock when
- * one is running. A stale lock (its process has gone) is replaced.
+ * Takes the lock for this process. Returns a release function, or the other runner's lock when one is running (its file,
+ * or a placeholder when the holder hasn't written it yet). Never waits.
  */
 export function acquireSessionLock(runtimeDir: string, script: string): { release: () => void } | { heldBy: SessionLock } {
   mkdirSync(runtimeDir, { recursive: true });
   const path = lockPath(runtimeDir);
+  const holder = (): SessionLock => parse(readRaw(path)) ?? { pid: 0, script: "another session runner", started_at: "" };
+  const k = k32();
+  if (!k) throw new Error("The session lock needs Windows (the bridge runs only there).");
+  const name = lockMutexName(runtimeDir);
+  if (held.has(name)) return { heldBy: holder() };
+  const handle = k.CreateMutexW(null, 0, Buffer.from(`${name}\0`, "utf16le")) as bigint;
+  if (!handle) throw new Error(`The session lock's mutex couldn't be opened (Windows error ${k.GetLastError()}).`);
+  const wait = k.WaitForSingleObject(handle, 0);
+  // WAIT_ABANDONED: the last owner ended without releasing it (a crash); the mutex is ours now, and its file is stale.
+  if (wait !== WAIT_OBJECT_0 && wait !== WAIT_ABANDONED) {
+    k.CloseHandle(handle);
+    return { heldBy: holder() };
+  }
+  // A runner from before 0.8.1 holds only the file: honour it while its process lives.
+  const before = parse(readRaw(path));
+  if (before && before.pid !== process.pid && lockAlive(before)) {
+    k.ReleaseMutex(handle);
+    k.CloseHandle(handle);
+    return { heldBy: before };
+  }
+  held.set(name, handle);
   const started = processStartTime(process.pid);
   const mine: SessionLock = {
     pid: process.pid,
@@ -175,28 +173,19 @@ export function acquireSessionLock(runtimeDir: string, script: string): { releas
     started_at: new Date().toISOString(),
     ...(started && started !== "unknown" ? { process_started: started } : {}),
   };
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      writeFileSync(path, JSON.stringify(mine) + "\n", { flag: "wx" });
-      let released = false;
-      const release = () => {
-        if (released) return;
-        released = true;
-        const current = parse(readRaw(path));
-        if (current?.pid === process.pid && current.started_at === mine.started_at) rmSync(path, { force: true });
-      };
-      process.once("exit", release);
-      return { release };
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      const raw = readRaw(path);
-      const held = parse(raw);
-      if (held && held.pid !== process.pid && lockAlive(held)) return { heldBy: held };
-      if (raw !== null) takeOverStale(path, raw); // stale, unreadable, or left by this process
-    }
-  }
-  const held = parse(readRaw(path));
-  return { heldBy: held ?? { pid: 0, script: "unknown", started_at: "" } };
+  writeFileSync(path, JSON.stringify(mine) + "\n");
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    process.off("exit", release);
+    rmSync(path, { force: true });
+    held.delete(name);
+    k.ReleaseMutex(handle);
+    k.CloseHandle(handle);
+  };
+  process.once("exit", release);
+  return { release };
 }
 
 /** The plain sentence a frontend shows while a session runner holds the lock. */

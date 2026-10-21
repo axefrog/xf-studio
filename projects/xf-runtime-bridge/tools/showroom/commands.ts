@@ -16,7 +16,7 @@ import { withOverlayCleared } from "../api/catalogue060.ts";
 type Json = Record<string, any>;
 
 async function call(context: CommandContext, method: string, params: Record<string, unknown>, timeoutMs?: number): Promise<Json> {
-  const response = await context.api.callBridge(method, params, context.cid, timeoutMs);
+  const response = await context.api.callBridge(method, params, context.cid, timeoutMs, context.signal);
   if (!response.ok) throw Object.assign(new Error(response.error.message), { plain: response.error });
   return response.result as Json;
 }
@@ -130,7 +130,7 @@ export type SpaceReport = { index: number; checked: boolean; clear: boolean; cle
 export async function findFreeSpace(context: CommandContext, placements: Placement[], anchorEye: Vec3, forward: Vec3, report: SpaceReport[] = []): Promise<Adjustment[]> {
   const out: Adjustment[] = [];
   const probe = async (point: Vec3) => {
-    const response = await context.api.callBridge("world.probe", { points: [point], clearance_m: CLEARANCE_M, sight_from: anchorEye }, context.cid);
+    const response = await context.api.callBridge("world.probe", { points: [point], clearance_m: CLEARANCE_M, sight_from: anchorEye }, context.cid, undefined, context.signal);
     if (!response.ok) return { failed: response.error.code, message: response.error.message } as const;
     const r = ((response.result as Json).probes as Json[])[0] ?? {};
     const blockedSides = Number(r.clearance?.blocked ?? 0);
@@ -266,7 +266,21 @@ export async function runShowroomLight(input: Json, context: CommandContext): Pr
     ...(spills.length ? { spill: spills, spill_worst: worst } : {}), ...(advice ? { warning: advice } : {}), ...placed } };
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const sleep = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    const timer = setTimeout(done, ms);
+    function done() {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
+      resolve();
+    }
+    signal?.addEventListener("abort", done, { once: true });
+  });
+
+/** A sweep stops at its next step once an emergency control (or Ctrl+C) cancels it (RB-121); its return still runs. */
+function stopIfCancelled(context: CommandContext) {
+  if (context.signal?.aborted) throw planError("interrupted", "The sweep was stopped before its next step.");
+}
 
 /** 0.8: the sweep's capture step (a test replaces it to see that the overlay is out of every frame). */
 export const SWEEP_CAPTURE = { capture: captureWindow };
@@ -288,11 +302,15 @@ export async function runShowroomRotate(input: Json, context: CommandContext): P
   const settle = (sweep.settle_ms as number | undefined) ?? 400;
   const startYaws = new Map(heads.map((h) => [h.index, h.yaw]));
   const frames: Json[] = [], images: NonNullable<CommandResult["images"]> = [];
+  const undo = { method: "showroom.turn", params: { turns: [...startYaws].map(([index, yaw]) => ({ index, yaw: normalise(yaw) })) } };
+  let failure: unknown = null;
   try {
     for (let i = 0; i < steps; i++) {
+      stopIfCancelled(context);
       const angle = steps === 1 ? from : from + ((to - from) * i) / (steps - 1);
       await turnTo((h) => h.base_yaw + angle);
-      await sleep(settle);
+      await sleep(settle, context.signal);
+      stopIfCancelled(context);
       const frame: Json = { step: i + 1, angle_deg: Math.round(angle * 100) / 100 };
       if (sweep.capture === true) {
         try {
@@ -310,11 +328,35 @@ export async function runShowroomRotate(input: Json, context: CommandContext): P
       }
       frames.push(frame);
     }
-  } finally {
-    if (sweep.return !== false) await call(context, "showroom.turn", { turns: [...startYaws].map(([index, yaw]) => ({ index, yaw: normalise(yaw) })) }).catch(() => undefined);
+  } catch (error) {
+    failure = error;
   }
-  return { value: { swept: heads.map((h) => h.index), from_deg: from, to_deg: to, steps, frames, returned: sweep.return !== false,
-    undo: { method: "showroom.turn", params: { turns: [...startYaws].map(([index, yaw]) => ({ index, yaw: normalise(yaw) })) } } }, images };
+  // Turning the heads back is reported, never swallowed (RB-128): a refused return leaves them turned, so the answer (or
+  // the sweep's own error) says so and keeps the exact undo.
+  let returnError: { code: string; message: string } | null = null;
+  if (sweep.return !== false) {
+    try {
+      // Cleanup: sent even after a cancellation (no signal); a handover or the kill switch then refuses it, and that is said.
+      const back = await context.api.callBridge("showroom.turn", undo.params, context.cid);
+      if (!back.ok) throw Object.assign(new Error(back.error.message), { plain: back.error });
+    } catch (error) {
+      const plain = (error as { plain?: { code: string; message: string } }).plain;
+      returnError = { code: plain?.code ?? "failed", message: plain?.message ?? (error as Error).message };
+    }
+  }
+  const notReturned = returnError
+    ? `The heads weren't turned back (${returnError.code}: ${returnError.message}); they stay at the sweep's last angle until showroom_turn runs the undo: ${JSON.stringify(undo)}.`
+    : null;
+  if (failure) {
+    const plain = (failure as { plain?: { code: string; message: string; detail?: string } }).plain;
+    if (notReturned) {
+      if (plain) plain.detail = [plain.detail, notReturned].filter(Boolean).join(" ");
+      else if (failure instanceof Error) failure.message = `${failure.message} ${notReturned}`;
+    }
+    throw failure;
+  }
+  return { value: { swept: heads.map((h) => h.index), from_deg: from, to_deg: to, steps, frames, returned: sweep.return !== false && !returnError,
+    ...(returnError ? { return_failed: returnError, warning: notReturned } : {}), undo }, images };
 }
 
 /** Wraps a yaw into −180…180. */

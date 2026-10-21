@@ -12,7 +12,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { spawnSync } from "node:child_process";
 import { CATALOGUE, toolName } from "../api/catalogue.ts";
 import { parsePermissionFlags } from "../mcp/server.ts";
-import { acquireSessionLock, LOCK_FILE, lockPath, processStartTime, putBackLock, readSessionLock, sessionRunningMessage } from "../session-lock.ts";
+import { acquireSessionLock, LOCK_FILE, lockPath, processStartTime, readSessionLock, sessionRunningMessage } from "../session-lock.ts";
 import { CommandApi } from "../api/command-api.ts";
 import { PipeConnectError } from "../bridge-lib.ts";
 import { BridgeClient } from "../bridge-lib.ts";
@@ -615,22 +615,6 @@ describe("session runner lock", () => {
     const message = sessionRunningMessage({ pid: 1, script: "s", started_at: "" }, lockPath(dir));
     expect(message).toContain(lockPath(dir));
     expect(message).toContain("KILL file");
-  });
-
-  test("RB-33: putting a moved-aside lock back never replaces a lock a third runner wrote meanwhile", () => {
-    const dir = tempDir("xfb-lock-back-");
-    const path = lockPath(dir);
-    const aside = `${path}.stale-test`;
-    writeFileSync(aside, "second runner");
-    writeFileSync(path, "third runner");
-    expect(putBackLock(aside, path)).toBe(false);
-    expect(readFileSync(path, "utf8")).toBe("third runner");
-    expect(existsSync(aside)).toBe(false);
-    rmSync(path, { force: true });
-    writeFileSync(aside, "second runner");
-    expect(putBackLock(aside, path)).toBe(true);
-    expect(readFileSync(path, "utf8")).toBe("second runner");
-    expect(existsSync(aside)).toBe(false);
   });
 
   test("RB-30: bridge.kill falls back to the KILL file while another client holds the pipe", async () => {

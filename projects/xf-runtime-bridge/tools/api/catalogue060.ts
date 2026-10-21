@@ -20,12 +20,12 @@ const planError = (code: string, message: string, detail?: unknown) =>
   Object.assign(new Error(message), { plain: { code, message, ...(detail !== undefined ? { detail: typeof detail === "string" ? detail : JSON.stringify(detail) } : {}) } });
 
 async function call(context: CommandContext, method: string, params: Record<string, unknown>, timeoutMs?: number): Promise<Json> {
-  const response = await context.api.callBridge(method, params, context.cid, timeoutMs);
+  const response = await context.api.callBridge(method, params, context.cid, timeoutMs, context.signal);
   if (!response.ok) throw Object.assign(new Error(response.error.message), { plain: response.error });
   return response.result as Json;
 }
 
-/** A bridge call that may fail without failing the command: the answer, or {error}. */
+/** A bridge call that may fail without failing the command: the answer, or {error}. Sent even after a cancellation (cleanup). */
 async function attempt(context: CommandContext, method: string, params: Record<string, unknown>): Promise<Json> {
   const response = await context.api.callBridge(method, params, context.cid);
   return response.ok ? (response.result as Json) : { error: response.error };

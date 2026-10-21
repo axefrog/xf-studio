@@ -268,7 +268,7 @@ export type ReportOptions = {
 };
 
 async function call(context: CommandContext, method: string, params: Record<string, unknown>): Promise<Json> {
-  const response = await context.api.callBridge(method, params, context.cid);
+  const response = await context.api.callBridge(method, params, context.cid, undefined, context.signal);
   if (!response.ok) throw Object.assign(new Error(response.error.message), { plain: response.error });
   return response.result as Json;
 }

@@ -97,20 +97,20 @@ const refused = (error: { code: string; message: string; detail?: string }) => O
  */
 export async function runCyberwareChange(method: "cyberware.equip" | "cyberware.unequip", input: Json, context: CommandContext): Promise<CommandResult> {
   const { holster_first: holsterFirst, ...params } = input;
-  let response = await context.api.callBridge(method, params, context.cid, 12000);
+  let response = await context.api.callBridge(method, params, context.cid, 12000, context.signal);
   let holstered = false;
   if (!response.ok && response.error.code === "arms_drawn" && holsterFirst !== false) {
-    const holster = await context.api.callBridge("player.action", { name: "weapon.holster" }, context.cid);
+    const holster = await context.api.callBridge("player.action", { name: "weapon.holster" }, context.cid, undefined, context.signal);
     if (!holster.ok) {
       throw refused({ ...response.error, detail: `${response.error.detail ?? ""} The holster first was refused too: ${holster.error.code} (${holster.error.message}).`.trim() });
     }
     holstered = true;
     for (let i = 0; i < 15 && !context.signal?.aborted; i++) {
       await sleep(200, context.signal);
-      const state = await context.api.callBridge("cyberware.state", { areas: ["ArmsCW"] }, context.cid);
+      const state = await context.api.callBridge("cyberware.state", { areas: ["ArmsCW"] }, context.cid, undefined, context.signal);
       if (state.ok && (state.result as Json)?.arms?.drawn === false) break;
     }
-    response = await context.api.callBridge(method, params, context.cid, 12000);
+    response = await context.api.callBridge(method, params, context.cid, 12000, context.signal);
   }
   if (!response.ok) throw refused(response.error);
   const value = response.result as Json;
@@ -132,7 +132,7 @@ const PHOTO = ["not_in_photo_mode", "unavailable", "write_mismatch", "timeout"];
 /** Refusals of every clothing and cyberware change. */
 const INVENTORY = ["not_in_gameplay", "not_safe_now", "not_v", "not_in_inventory", "call_failed"];
 const SHOWROOM = ["codeware_missing", "showroom_missing", "showroom_manifest_missing", "showroom_manifest_bad", "not_in_world", "not_ready", "too_far"];
-const CAPTURE = ["capture_no_window", "capture_minimized", "capture_blank", "capture_failed"];
+const CAPTURE = ["capture_no_window", "capture_minimized", "capture_not_foreground", "capture_blank", "capture_failed"];
 
 /**
  * Each command's own refusal codes (0.8, for the MCP reference): the codes its handlers raise (the tools' planError, the
@@ -182,7 +182,7 @@ export const REFUSALS: Readonly<Record<string, readonly string[]>> = {
   "wardrobe.state": ["not_in_gameplay", "unavailable"],
   "wardrobe.equip": [...INVENTORY, "no_active_outfit", "outfit_managed_elsewhere", "script_outfit_api_changed", "timeout"],
   "inventory.unequip": [...INVENTORY, "not_added_by_bridge", "timeout"],
-  "cc.back": ["creator_leave_disabled", "not_in_character_menu", "busy"],
+  "cc.back": ["creator_leave_disabled", "not_in_character_menu"],
   "game.save": ["bridge_save_lock", "bridge_effects_active", "saving_locked", "no_free_slot", "save_failed", "save_uncertain", "not_in_gameplay"],
   "game.load": ["not_in_gameplay", "save_not_found", "metadata_pending", "unavailable", "timeout"],
   "ui.message": [],

@@ -2,7 +2,8 @@
 // message says what happened and the one next step; the bridge's own technical message is kept
 // separately as `detail` for logs and bug reports.
 
-export type PlainError = { code: string; message: string; detail?: string };
+/** cause (0.8.1): for a superseded command, the code it stopped with. */
+export type PlainError = { code: string; message: string; detail?: string; cause?: string };
 
 export const BRIDGE_MESSAGES: Readonly<Record<string, string>> = {
   bad_request: "The game bridge didn't understand the request. This is a bug in the tool that sent it.",
@@ -30,6 +31,8 @@ export const BRIDGE_MESSAGES: Readonly<Record<string, string>> = {
   timeout_after_start:
     "The game started this action but took too long to confirm it. It may still have happened: check the game (or the plugin log) before repeating it.",
   busy: "The game has too many requests waiting. Wait a moment and try again.",
+  superseded:
+    "An emergency control (bridge_kill or session_handover) came after this command and cancelled it: a command still waiting never ran, and a running one stopped at its next step. Check the game's state, then send it again if it is still wanted.",
   too_large: "The request was too large for the game bridge.",
   rtti_missing:
     "This game version doesn't have a function the bridge needs for this action, so nothing was changed. The game may have been updated: the bridge needs a rebuild for it.",

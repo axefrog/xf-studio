@@ -282,8 +282,9 @@ export function livePoseParams(input: Record<string, unknown>): Record<string, u
 }
 
 /** Sends one bridge method from inside a local command; a refusal becomes a plain error. */
-async function bridgeCall(context: CommandContext, method: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const response = await context.api.callBridge(method, params, context.cid);
+async function bridgeCall(context: CommandContext, method: string, params: Record<string, unknown>, cleanup = false): Promise<Record<string, unknown>> {
+  // A forward step isn't sent once the command is cancelled (RB-121); a step that puts things back (cleanup) always is.
+  const response = await context.api.callBridge(method, params, context.cid, undefined, cleanup ? undefined : context.signal);
   if (!response.ok) throw Object.assign(new Error(response.error.message), { plain: response.error });
   return response.result as Record<string, unknown>;
 }
@@ -295,16 +296,26 @@ const sleepMs = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * send; approved for the test profile), after the bridge says V is in the world and photo mode is
  * allowed, then waits for photo mode.
  */
+/**
+ * The key press changes the game like a photo write, so it follows the bridge's own write gate: allow_writes and the photo
+ * class in the plugin's config.ini, the in-game panel's pause, a handover to the player (0.6), and an emergency control
+ * that superseded this command (RB-121). Checked from game.status before anything else and again right before the key
+ * goes (RB-122).
+ */
+export function photoKeyGate(status: Record<string, unknown>, signal?: AbortSignal): void {
+  const refuse = (code: string) => {
+    throw Object.assign(new Error(code), { plain: plainBridgeError(code) });
+  };
+  const classes = Array.isArray(status.write_classes) ? (status.write_classes as string[]) : [];
+  if (status.allow_writes !== true || !classes.includes("photo")) refuse(status.allow_writes === true ? "write_class_disabled" : "writes_disabled");
+  if (status.writes_paused === true) refuse("writes_paused");
+  if (status.handed_over === true) refuse("handed_over");
+  if (signal?.aborted) refuse("superseded");
+}
+
 async function runPhotoOpen(input: Record<string, unknown>, context: CommandContext): Promise<CommandResult> {
   const status = await bridgeCall(context, "game.status", {});
-  // The key press changes the game like a photo write, so it follows the bridge's own write gate:
-  // allow_writes and the photo class in the plugin's config.ini.
-  const classes = Array.isArray(status.write_classes) ? (status.write_classes as string[]) : [];
-  if (status.allow_writes !== true || !classes.includes("photo")) throw Object.assign(new Error("writes"), { plain: plainBridgeError(status.allow_writes === true ? "write_class_disabled" : "writes_disabled") });
-  // The in-game panel can pause writes; the key press is a write too.
-  if (status.writes_paused === true) throw Object.assign(new Error("writes"), { plain: plainBridgeError("writes_paused") });
-  // 0.6: a session handed over to the player is the player's; the key is a change too.
-  if (status.handed_over === true) throw Object.assign(new Error("writes"), { plain: plainBridgeError("handed_over") });
+  photoKeyGate(status, context.signal);
   const phase = String(status.phase);
   if (phase === "photo_mode") return { value: { changed: false, note: "Photo mode was already open." } };
   if (phase !== "gameplay") throw planError("not_in_gameplay", `Photo mode opens only from normal play; the game is in ${phase}. Close menus first.`);
@@ -329,6 +340,8 @@ async function runPhotoOpen(input: Record<string, unknown>, context: CommandCont
   // play or stopped allowing photo mode meanwhile, the key isn't sent.
   const beforeSend = async () => {
     const now = await bridgeCall(context, "game.status", {});
+    // RB-122: the write gate again too: a pause, a handover or an emergency control while the window came forward stops it.
+    photoKeyGate(now, context.signal);
     if (String(now.phase) !== "gameplay" || now.photo_mode_can_open !== true) {
       throw planError("photo_not_allowed", `The game changed while its window came to the front (it is in ${String(now.phase)}), so the key wasn't sent. Try again from normal play.`);
     }
@@ -506,7 +519,7 @@ async function runFrame(input: Record<string, unknown>, context: CommandContext)
     const undo = Object.keys(own).length ? { method: "photo.camera.set", params: { ...own, ...frameUndo } } : (framing?.restore?.undo ?? null);
     if (Object.keys(own).length) {
       try {
-        await bridgeCall(context, "photo.camera.set", undo!.params);
+        await bridgeCall(context, "photo.camera.set", undo!.params, true);
         restoreNote = ` The ${Object.keys(own).map((k) => k.replace("_", " ")).join(", ")} set before framing ${Object.keys(own).length === 1 ? "was" : "were"} put back too.`;
       } catch (restoreError) {
         restored = false;
@@ -523,7 +536,7 @@ async function runFrame(input: Record<string, unknown>, context: CommandContext)
     }
     throw error;
   } finally {
-    if (hudUndo) await bridgeCall(context, "photo.hud.hide", hudUndo).catch(() => undefined);
+    if (hudUndo) await bridgeCall(context, "photo.hud.hide", hudUndo, true).catch(() => undefined);
   }
 }
 
@@ -727,7 +740,7 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
     input: obj({
       ...regionInput,
       route: oneOf(
-        "How to grab the window. auto (default) reads Windows' copy of the game window, then the screen if the game is in front; printwindow and screen force one route.",
+        "How to grab the window. auto (default) reads Windows' copy of the game window, then the screen if the game is in front; printwindow and screen force one route. The screen route reads only while the game is the front window (checked right before and after each grab), otherwise it refuses capture_not_foreground.",
         ["auto", "printwindow", "screen"],
       ),
       clear_overlay: bool("Keep the bridge's own overlay out of the picture: its message lines are cleared and its HUD panel and label hidden for the capture, then the panel comes back (default true; needs the game bridge)."),
@@ -845,7 +858,7 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
       const started = performance.now();
       let last = "unknown";
       for (;;) {
-        const status = await api.callBridge("game.status", {}, cid);
+        const status = await api.callBridge("game.status", {}, cid, undefined, signal);
         // While a save loads the engine may not tick for a moment: a step that timed out or found the queue busy is
         // the loading screen, not a failure (0.5.2), so the wait goes on.
         if (!status.ok && !WAIT_THROUGH.has(status.error.code)) throw Object.assign(new Error(status.error.message), { plain: status.error });
@@ -855,7 +868,16 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
           throw planError("wait_timeout", `The game didn't reach ${wanted.join(" or ")} within ${Math.round(timeout / 1000)} s; it is in ${last}.`);
         }
         if (signal?.aborted) throw planError("interrupted", "Stopped before the game reached the phase.");
-        await new Promise((r) => setTimeout(r, 500));
+        // The pause ends at once when the signal aborts (an emergency control, RB-121; the session runner's Ctrl+C).
+        await new Promise<void>((r) => {
+          const timer = setTimeout(done, 500);
+          function done() {
+            clearTimeout(timer);
+            signal?.removeEventListener("abort", done);
+            r();
+          }
+          signal?.addEventListener("abort", done, { once: true });
+        });
         if (signal?.aborted) throw planError("interrupted", "Stopped before the game reached the phase.");
       }
     },
@@ -1294,10 +1316,11 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
         item: str("The item record, for example Items.Helmet_01_basic_01.", { pattern: "^[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+$", maxLength: 128 }),
         slot: oneOf("The clothing slot, checked against the item's own (optional).", ["Head", "Face", "OuterChest", "InnerChest", "Legs", "Feet", "Outfit"]),
         add_if_missing: bool("Add the item to V's inventory if V doesn't have it. Default false."),
+        id: str("The exact copy to equip, as an undo names it (the decimal identity the game gave); without it, any copy of the record. When V no longer has that copy, another copy is equipped and the answer says exact: false.", { pattern: "^[0-9]{1,20}$", maxLength: 20 }),
       },
       ["item"],
     ),
-    undo: "the result's undo equips the earlier item again, or empties the slot (removing an item the bridge added); loading a save also undoes it.",
+    undo: "the result's undo equips the earlier item's exact copy again (its id), or empties the slot (removing an item the bridge added); loading a save also undoes it.",
     bridge: { method: "inventory.equip", timeoutMs: () => 15000 },
   },
   {
@@ -1392,7 +1415,7 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
   {
     name: "cc.back",
     title: "Leave the appearance screen without keeping changes",
-    description: "Presses Back on the open appearance screen and confirms it, discarding every change made there and closing the screen. Only in the XF test profile.",
+    description: "Presses Back on the open appearance screen and confirms it, discarding every change made there and closing the screen. It works even while the screen still seems busy with a change (a completion that never came): Back discards that change too, and the answer says busy_cleared. Only in the XF test profile.",
     permission: "write-character",
     input: obj(),
     undo: "Nothing to undo: the changes made on the screen were discarded.",

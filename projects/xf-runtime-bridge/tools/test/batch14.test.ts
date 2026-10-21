@@ -57,13 +57,13 @@ describe("0.8 offline", () => {
   test("the MCP server says the tools' own version (package.json), not 0.3.0", () => {
     const pkg = JSON.parse(readFileSync(join(projectDir, "package.json"), "utf8"));
     expect(SERVER_VERSION).toBe(pkg.version);
-    expect(pkg.version).toBe("0.8.0");
+    expect(pkg.version).toBe("0.8.1");
   });
 
   test("every command lists its own refusal codes, and every listed code has plain words or is a tools code", () => {
     const tools = new Set(["bad_input", "too_many", "expectation_failed", "no_showroom", "showroom_manifest_missing", "showroom_manifest_bad", "framing_bound", "no_projection",
       "no_response", "no_capture", "not_found", "photo_not_allowed", "key_unsupported", "no_window", "photo_open_timeout", "interrupted", "wait_timeout", "question_gone",
-      "capture_no_window", "capture_minimized", "capture_blank", "capture_failed", "tweakxl_missing", "no_such_pin", "too_many_pins", "pin_refused"]);
+      "capture_no_window", "capture_minimized", "capture_not_foreground", "capture_blank", "capture_failed", "tweakxl_missing", "no_such_pin", "too_many_pins", "pin_refused"]);
     for (const command of CATALOGUE) {
       expect(Array.isArray(command.refusals), command.name).toBe(true);
       for (const code of command.refusals ?? []) {

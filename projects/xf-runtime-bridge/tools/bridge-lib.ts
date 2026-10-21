@@ -22,6 +22,8 @@ export type BridgeSession = {
   started_at: string;
   plugin_version: string;
   allow_writes: boolean;
+  /** 0.8.1 (RB-121): the control pipe for the emergency controls, beside the main one; absent in older builds. */
+  control_pipe?: string;
 };
 
 export type BridgeError = { code: string; message: string };
