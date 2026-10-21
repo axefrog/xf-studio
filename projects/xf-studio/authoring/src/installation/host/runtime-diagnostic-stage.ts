@@ -221,7 +221,7 @@ export function stageRuntimeDiagnostic(options: RuntimeDiagnosticOptions) {
   settings.launchRoute = "mo2"; settings.installMode = "mo2";
   // The candidate's own mod name flows through to the transport, so a renamed mod stages under its name (PIPE-90).
   const transport = createModInstallTransport({ candidateStore: paths.store,
-    receiptsRoot: join(paths.stage, "receipts"), settings, modName: plan.modName });
+    receiptsRoot: join(paths.stage, "receipts"), settings, modName: plan.modName, product: plan.namespace });
   const preflight = transport.preflight(options.candidateId);
   requireValue(preflight.route === "mo2" && within(preflight.target, paths.stage),
     "Transport target escaped the diagnostic root.");

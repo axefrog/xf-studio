@@ -590,3 +590,58 @@ test("the install target and private stores are kept apart however a folder is w
     }
   } finally { f.cleanup(); }
 });
+
+test("products sharing the game folder each keep their own receipt, under the folder's one lock (INSTALL-06)", () => {
+  const f = fixture("direct");
+  try {
+    const place = (product: string, modName: string) =>
+      createModInstallTransport({ candidateStore: f.store, receiptsRoot: f.receiptsRoot, settings: f.settings, modName, product });
+    productCandidate(f.store, "eyes", { archive: "xfs_ceyes", modName: "XF Eye Artistry", features: [{ feature: "eye-makeup", namespace: "xfs_ceyes" }] });
+    productCandidate(f.store, "smiles", { archive: "xfs_msmiles", modName: "XF Smiles", features: [{ feature: "expressions", namespace: "xfs_msmiles" }] });
+    const eyes = place("xfs_ceyes", "XF Eye Artistry"), smiles = place("xfs_msmiles", "XF Smiles");
+    eyes.install("eyes");
+    // A second collection with another archive installs beside the first rather than failing the first's namespace check.
+    expect(smiles.preflight("smiles").replacingOwned).toBe(false);
+    smiles.install("smiles");
+    expect([eyes.receipt()?.namespace, smiles.receipt()?.namespace]).toEqual(["xfs_ceyes", "xfs_msmiles"]);
+    expect(readdirSync(f.receiptsRoot).filter(name => name.endsWith(".json"))).toHaveLength(2);
+    // Each transport answers only for its own product.
+    expect(() => eyes.preflight("smiles")).toThrow("Nothing was installed");
+    // Uninstalling one leaves the other's files and record.
+    eyes.uninstall();
+    expect(existsSync(join(f.target, "xfs_ceyes.archive"))).toBe(false);
+    expect(readFileSync(join(f.target, "xfs_msmiles.archive"), "utf8")).toBe("smiles-0");
+    expect(smiles.receipt()?.candidateId).toBe("smiles");
+    expect(place("xfs_ceyes", "XF Eye Artistry").preflight("eyes").replacingOwned).toBe(false);
+  } finally { f.cleanup(); }
+});
+
+test("a record kept under the destination alone is taken over by its own product only (INSTALL-06)", () => {
+  const f = fixture("direct");
+  try {
+    f.candidate("first", "one"); // namespace xfs_test, recorded the earlier way (no product)
+    f.transport.install("first");
+    productCandidate(f.store, "other", { archive: "xfs_mother", modName: EYE_MAKEUP_MOD.modName, features: [{ feature: "lips", namespace: "xfs_mother" }] });
+    const other = createModInstallTransport({ candidateStore: f.store, receiptsRoot: f.receiptsRoot, settings: f.settings, product: "xfs_mother" });
+    expect(other.record()).toBeNull();
+    expect(other.preflight("other").replacingOwned).toBe(false);
+    const own = createModInstallTransport({ candidateStore: f.store, receiptsRoot: f.receiptsRoot, settings: f.settings, product: "xfs_test" });
+    expect(own.record()?.candidateId).toBe("first");
+    expect(f.transport.record()).toBeNull();
+    expect(own.preflight("first").replacingOwned).toBe(true);
+  } finally { f.cleanup(); }
+});
+
+test("a mod's own MO2 folder holds one product: another product of the same name waits for an uninstall (INSTALL-06)", () => {
+  const f = fixture("mo2");
+  try {
+    const place = (product: string) =>
+      createModInstallTransport({ candidateStore: f.store, receiptsRoot: f.receiptsRoot, settings: f.settings, modName: "XF Night", product });
+    productCandidate(f.store, "a", { archive: "xfs_ma", modName: "XF Night", features: [{ feature: "eye-makeup", namespace: "xfs_ma" }] });
+    productCandidate(f.store, "b", { archive: "xfs_mb", modName: "XF Night", features: [{ feature: "lips", namespace: "xfs_mb" }] });
+    place("xfs_ma").install("a");
+    expect(() => place("xfs_mb").preflight("b")).toThrow("Changing the installed namespace");
+    place("xfs_ma").uninstall();
+    expect(place("xfs_mb").install("b").namespace).toBe("xfs_mb");
+  } finally { f.cleanup(); }
+});

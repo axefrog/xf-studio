@@ -58,6 +58,13 @@ export type InstallTransportConfig = { candidateStore: string; receiptsRoot: str
    * can be placed (PIPE-90); defaults to eye makeup's brand. A candidate of another mod is refused.
    */
   modName?: string;
+  /**
+   * The product this transport places, by its archive name (`xfs_c<collection>` or `xfs_m<product>`, derived from the product's id,
+   * so the same across builds and renames: platform/core/package-plan.ts). Its receipt and journal are kept per product and
+   * destination, so products that share a destination (the game folder, on the direct route) each keep their own record; the lock
+   * stays per destination (INSTALL-06). A candidate of another product is refused. Without it, one record per destination.
+   */
+  product?: string;
   /** Test seam: runs once the payload is staged, before the journal (a test makes an install fail there). */
   afterStaging?: () => void };
 export type InstallPreview = { route: InstallRoute; target: string; candidateId: string;
@@ -300,15 +307,20 @@ export function createModInstallTransport(config: InstallTransportConfig) {
   // Compared as Windows compares folders (case, separators): the same folder written differently still overlaps (PIPE-08).
   assert(!overlaps(target.target, store) && !overlaps(target.target, receipts),
     "Install target and private stores must be separate.");
+  const product = config.product ?? null;
+  assert(product === null || (safeName(product) && product.startsWith("xfs_")), "This build's archive name can't be used.");
+  // The destination's identity names the lock (one install at a time into a folder) and is recorded in every receipt; the record's
+  // identity adds the product, so products sharing a destination keep a record each (INSTALL-06).
   const targetId = id(`${target.route}\0${resolve(target.target)}`);
-  const receiptFile = join(receipts, `${targetId}.json`);
-  const journalFile = join(receipts, `${targetId}.journal.json`);
+  const recordId = product ? id(`${target.route}\0${resolve(target.target)}\0${product}`) : targetId;
+  const receiptFile = join(receipts, `${recordId}.json`);
+  const journalFile = join(receipts, `${recordId}.journal.json`);
   const lockFile = join(receipts, `${targetId}.lock`);
   const validReceipt = (value: unknown, allowRollback = true): value is InstallReceipt => {
     if (!value || typeof value !== "object") return false;
     const receipt = value as InstallReceipt;
     if (receipt.schema !== schema || receipt.targetId !== targetId || receipt.target !== target.target ||
-      receipt.route !== target.route || !safeName(receipt.candidateId) ||
+      receipt.route !== target.route || !safeName(receipt.candidateId) || (product !== null && receipt.namespace !== product) ||
       typeof receipt.installedAt !== "string" || !Number.isFinite(Date.parse(receipt.installedAt)) ||
       !validEntries(receipt.files, receipt.namespace)) return false;
     if (receipt.rollback === null) return true;
@@ -319,15 +331,17 @@ export function createModInstallTransport(config: InstallTransportConfig) {
   const candidate = (candidateId: string) => {
     return inspectLocalPackageCandidate(store, candidateId);
   };
-  /** What every other target's receipt says is installed there (their feature namespaces). */
-  const otherReceipts = () => readdirSync(receipts).filter(name => /^[a-f0-9]{24}\.json$/.test(name) && name !== `${targetId}.json`)
+  /** Every other record's receipt in this store (other products, other destinations), as written. */
+  const otherRecords = () => readdirSync(receipts).filter(name => /^[a-f0-9]{24}\.json$/.test(name) && name !== `${recordId}.json`)
     .flatMap(name => {
       try {
         const receipt = JSON.parse(readFileSync(join(receipts, name), "utf8")) as InstallReceipt;
-        if (receipt?.schema !== schema || !safeName(receipt.namespace)) return [];
-        return [{ features: Array.isArray(receipt.features) ? receipt.features : [{ feature: EYE_MAKEUP_FEATURE, namespace: receipt.namespace }] }];
+        return receipt?.schema === schema && safeName(receipt.namespace) ? [receipt] : [];
       } catch { return []; }
     });
+  /** What every other record's receipt says is installed (their feature namespaces). */
+  const otherReceipts = () => otherRecords().map(receipt =>
+    ({ features: Array.isArray(receipt.features) ? receipt.features : [{ feature: EYE_MAKEUP_FEATURE, namespace: receipt.namespace }] }));
   const owned = (): InstallReceipt | null => {
     noLinks(receiptFile);
     const receipt = readJson<InstallReceipt>(receiptFile);
@@ -365,6 +379,28 @@ export function createModInstallTransport(config: InstallTransportConfig) {
     writeFileSync(fd, JSON.stringify({ pid: process.pid, started: Date.now() })); fsyncSync(fd);
     try { return work(); } finally { closeSync(fd); rmSync(lockFile); }
   };
+  /**
+   * A record kept under the destination's identity alone (before INSTALL-06) becomes this product's when it is this product's
+   * install (its namespace) and the product has no record of its own yet: the journal and receipt are moved, not copied, under the
+   * lock. Skipped while another operation holds the lock (the next transport takes it over).
+   */
+  if (product && recordId !== targetId) {
+    const legacyReceipt = join(receipts, `${targetId}.json`), legacyJournal = join(receipts, `${targetId}.journal.json`);
+    const productOf = (file: string, read: (value: Record<string, unknown>) => unknown) => {
+      try { noLinks(file); const value = readJson<Record<string, unknown>>(file); return value ? read(value) : null; } catch { return null; }
+    };
+    const journalProduct = productOf(legacyJournal, value => Array.isArray(value.next) ? basename(String((value.next[0] as FileEntry | undefined)?.path ?? ""), ".archive") : null);
+    const receiptProduct = productOf(legacyReceipt, value => value.namespace);
+    if (journalProduct === product || (receiptProduct === product && journalProduct === null)) {
+      try {
+        withLock(() => {
+          if (existsSync(receiptFile) || existsSync(journalFile)) return;
+          if (journalProduct === product && existsSync(legacyJournal)) renameSync(legacyJournal, journalFile);
+          if (receiptProduct === product && existsSync(legacyReceipt)) renameSync(legacyReceipt, receiptFile);
+        });
+      } catch { /* Locked: another operation is running; the next transport moves it. */ }
+    }
+  }
   /** Where a package file goes: its path below the install root (the pair and overlay archives land in `target`). */
   const destination = (entry: FileEntry) => {
     const file = join(target.root, ...entry.path.split("/"));
@@ -422,6 +458,11 @@ export function createModInstallTransport(config: InstallTransportConfig) {
     noLinks(journalFile);
     assert(!existsSync(journalFile), "An interrupted install needs recovery before another action.");
     const { live: prior, gone } = recorded();
+    // A mod's own MO2 folder holds one product: another product's live install there is replaced only after it is uninstalled.
+    // The game folder (the direct route) is shared by every product, each with its own record (INSTALL-06).
+    if (product && target.route === "mo2" && !prior && otherRecords().some(receipt => receipt.targetId === targetId &&
+      receipt.namespace !== product && validEntries(receipt.files, receipt.namespace) && receipt.files.every(entry => existsSync(destination(entry)))))
+      throw Error("Changing the installed namespace requires uninstalling the owned pair first.");
     assert(!foreignFolder(prior, gone), `Mod Organizer 2 already has a mod called “${modName}” that XF Studio didn't put there, so nothing was ` +
       "installed. Rename your mod in Mod package, or rename that mod in Mod Organizer 2, then try again.");
     assert(!target.legacyInstall, `MO2 already has an earlier ${EYE_MAKEUP_MOD.modName} install under the legacy ` +
@@ -430,6 +471,7 @@ export function createModInstallTransport(config: InstallTransportConfig) {
     // A product of another mod belongs in that mod's own folder.
     assert(manifest.schema === "xfs/local-package-1" || manifest.modName === modName,
       `This build is the mod “${manifest.modName}”, but this transfer places “${modName}”. Nothing was installed.`);
+    assert(product === null || manifest.archive === product, "This build is another product than this transfer places. Nothing was installed.");
     // A feature namespace may be present in only one installed XF mod (feature-module platform §6).
     const elsewhere = otherReceipts();
     const duplicated = duplicatedNamespaces(manifest, elsewhere);
