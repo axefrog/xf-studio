@@ -14,7 +14,15 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 
 ### In flight
 - **Wave-4 review fixes** (7 open High, so feature merges are paused): `claude/fix-export` (NATIVE-80, PIPE-140/141, PREV-202), `claude/fix-install` (INSTALL-05..07, PIPE-139/142, DIAG-06..08), and bridge 0.8.1 (RB-119..128) now owned by XF · Runtime bridge. The core review follows profiles phase 2. *21 Oct*
-- **Profiles and layouts:** design revision 2 cleared by Sol (START SPIKES). Running: spikes S1+S3 (`claude/spike-persistence`: looks autosave with outbox, migration crash harness) and S2 (`claude/spike-views`: switching the drawn view). Estimate 59–71 agent-days, provisional until the spikes report. Four defaults await the maintainer's confirmation (design §Open questions). Phase 1 (the profile and V model, with migration) starts once wave 3 merges, and the tab strip and panel picker components are built alongside by the UI component track. Defaults are adopted for the design's five questions. *21 Oct*
+- **Profiles phase 1** (the single primary focus; `claude/profiles-p1`). The design is approved, with the four defaults confirmed. Chunks run one at a time:
+  1. 1a: lease, takeover and fencing (running);
+  2. 1b: profile model and character service;
+  3. 1c: collection commands, outbox, conflicts and close;
+  4. 1d: migration;
+  5. 1e: IDs, focus, history, data contracts, de-singletoning;
+  6. 1f: gate runs.
+
+  It merges once the open High findings are 3 or fewer (bridge 0.8.1). *21 Oct*
 - **Polish batch 1** (`claude/polish-1`): thumbnail drag direction, repeated layer names, collection tie order, the flaky mottle test, Build wording, the masculine-plate warning. *21 Oct*
 
 ### Beta blockers
