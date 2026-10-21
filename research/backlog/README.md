@@ -45,6 +45,15 @@ The classic glitter model's macro dot array reads less like glitter than like a 
 Working name options: Dot Matrix, Pixel, Polka Chrome, Sequin (the maintainer decides). Until then, the classic dots stay available behind the Studio's research tools.
 
 
+### Banked: user-defined shortcuts (21 October 2026; waits until the current product reaches 1.0)
+
+Shortcuts today are one fixed table (`input-bindings.ts`, the single source for dispatch, menus, the palette and the Keyboard & mouse reference), with no way for a person to change them. The plan:
+- a user layer of overrides (rebind, add or unbind a chord per binding), stored with the UI preferences;
+- conflicts shown at the moment of rebinding;
+- every default chord, Ctrl+P included, reassignable.
+
+The desktop app can capture chords a browser tab can't (Ctrl+W, Ctrl+T, Ctrl+N); the browser host lists those as unavailable.
+
 ### Queued R&D: custom material shaders in REDengine (29 September 2026)
 
 Goal: procedural finishes computed in the game's own material shader, the way the Studio preview's glint models already work (hashed flake cells with per-flake orientation, size and colour; view- and light-dependent sparkle; in-shader filtering so glitter becomes sheen at a distance), blended with skin's decal lighting so the plate still sits naturally on the face. That removes the baked-texture limits: mip blur, texture resolution and the decal mode's ~11.5° normal fade. Routes to research:
