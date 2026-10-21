@@ -108,8 +108,16 @@ export interface HistoryTarget {
    * drops its steps, since they could never apply again, and nothing changes.
    */
   apply(values: Readonly<Record<string, unknown | undefined>>, cause: HistoryCause): boolean;
-  /** A cheap token that changes whenever the content may have: while it is what the last Undo or Redo left, Redo stays valid. */
+  /**
+   * A cheap token that changes whenever the content may have: while it is what the last Undo or Redo left, Redo stays valid
+   * without comparing content. Without it, Redo validity compares the fingerprint every time.
+   */
   revision?(): unknown;
+  /**
+   * Called once a move has settled (Redo validity included), after `apply`: a target that publishes its change from here hands
+   * subscribers the history state as it stands.
+   */
+  settled?(): void;
   /**
    * The content under `keys` (all, when omitted). Redo is valid only while it is what the last Undo or Redo left (CORE-46): a
    * change that records no step hides Redo, which would overwrite it. A transaction compares it to tell an empty one. Targets

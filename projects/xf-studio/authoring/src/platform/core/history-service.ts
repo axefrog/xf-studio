@@ -177,7 +177,9 @@ class Scope implements HistoryScope {
       : this.stack.isTop(step) ? this.stack.revert() : undefined;
     if (!values) return false;
     if (step !== undefined) this.changed();
-    return this.target.apply(values, "revert");
+    const applied = this.target.apply(values, "revert");
+    this.target.settled?.();
+    return applied;
   }
 
   canUndo() { return this.stack.canUndo; }
@@ -246,6 +248,7 @@ class Scope implements HistoryScope {
     }
     this.expected = { revision: this.target.revision?.(), fingerprint: this.target.fingerprint?.() ?? "", top: this.stack.topId };
     this.changed(true);
+    this.target.settled?.();
     return true;
   }
   private redoValid() {
@@ -254,8 +257,9 @@ class Scope implements HistoryScope {
     // Any step added since (an edit, or an open transaction's checkpoint) hides Redo; a cancelled transaction removes its own
     // step again, so Redo comes back.
     if (this.stack.topId !== expected.top) return false;
+    // The cheap shortcut only for a target that has a revision; otherwise the content decides.
     const revision = this.target.revision?.();
-    if (revision === expected.revision) return true;
+    if (this.target.revision && revision === expected.revision) return true;
     // A change that records no step (CORE-46) hides Redo, which would overwrite it; one that republishes the same content keeps it.
     if ((this.target.fingerprint?.() ?? "") !== expected.fingerprint) return false;
     expected.revision = revision;

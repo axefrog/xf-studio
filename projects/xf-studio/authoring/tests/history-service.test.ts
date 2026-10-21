@@ -8,7 +8,8 @@ import { HISTORY_LIMIT, type HistoryLabel, type HistoryTarget } from "../src/pla
 import { MAIN_VIEW } from "../src/platform/api/view-graph";
 import { createHistoryService, LOOK_SCOPE, VIEW_SCOPE } from "../src/platform/core/history-service";
 import { CONTROL_TRANSACTION, GESTURE_TRANSACTION } from "../src/platform/core/history-transaction";
-import { createStudioViewGraph } from "../src/preview-view-graph";
+import { createStudioViewGraph, defaultViewGraph, STUDIO_VIEW_GRAPH_RULES } from "../src/preview-view-graph";
+import { ViewGraph } from "../src/platform/core/view-graph";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { DEFAULT_CREATOR_LIGHTING } from "../src/creator-lighting";
@@ -183,4 +184,43 @@ test("the trusted core's look, View and lighting history live in the one service
   core.views.edit(MAIN_VIEW, "lights", { state: { creatorLighting: { ...DEFAULT_CREATOR_LIGHTING, exposure: 2 } } }, { label: "Exposure" });
   expect(service.focused().state()).toMatchObject({ undo: { label: "Opacity" }, depth: 1 });
   expect(service.scope(VIEW_SCOPE)!.state()).toMatchObject({ undo: { label: "Exposure" }, depth: 1 });
+});
+
+// ----- Review regressions -----
+
+test("a target with a fingerprint and no revision has Redo checked against its content every time (CORE-46)", () => {
+  const service = createHistoryService(), values: Record<string, unknown> = { a: 1 };
+  const scope = service.open(LOOK_SCOPE, { read: key => values[key], apply: next => { Object.assign(values, next); return true; },
+    fingerprint: () => JSON.stringify(values) });
+  scope.checkpoint(["a"], label("A")); values.a = 2;
+  expect(scope.undo()).toBe(true);
+  expect(scope.canRedo()).toBe(true);
+  // A change that records no step: Redo would overwrite it, so it is refused and the change stays.
+  values.a = 3;
+  expect(scope.canRedo()).toBe(false);
+  expect(scope.redo()).toBe(false);
+  expect(values.a).toBe(3);
+});
+
+test("a stored node whose ID reads like the history's structure key is still an ordinary node", () => {
+  const stored = defaultViewGraph(freshWorkspace().preview), lights = stored.lights[0].id;
+  const data = { ...stored, lights: [{ ...stored.lights[0], id: "structure" }],
+    views: stored.views.map(view => ({ ...view, lights: view.lights === lights ? "structure" : view.lights })) };
+  const views = new ViewGraph(data, STUDIO_VIEW_GRAPH_RULES);
+  const exposure = () => views.state<{ creatorLighting: { exposure: number } }>(MAIN_VIEW, "lights").creatorLighting.exposure, start = exposure();
+  views.edit(MAIN_VIEW, "lights", { state: { creatorLighting: { ...DEFAULT_CREATOR_LIGHTING, exposure: 9 } } }, { label: "Exposure" });
+  expect(views.undo()).toBe(true);
+  expect(exposure()).toBe(start);
+  expect(views.redo()).toBe(true);
+  expect(exposure()).toBe(9);
+});
+
+test("the view graph publishes an Undo once its history has settled, so subscribers read Redo as it stands", () => {
+  const views = createStudioViewGraph(freshWorkspace().preview), seen: unknown[] = [];
+  views.edit(MAIN_VIEW, "lights", { state: { creatorLighting: { ...DEFAULT_CREATOR_LIGHTING, exposure: 2 } } }, { label: "Exposure" });
+  views.subscribe(change => seen.push({ origin: change.origin, history: views.history() }));
+  views.undo();
+  expect(seen).toEqual([{ origin: "history", history: { redo: "Exposure", depth: 0, redoDepth: 1 } }]);
+  views.redo();
+  expect(seen.at(-1)).toEqual({ origin: "history", history: { undo: "Exposure", depth: 1, redoDepth: 0 } });
 });

@@ -5818,6 +5818,53 @@
    "what": "redo at the limit"
   }
  ],
+ "persistence": [
+  {
+   "edited": "5c0a231ced839faf1fb68d0fcf5fe22761bb26673ec1a2596edb0c032dbc192a",
+   "first": {
+    "exported": "7a858bd43aa7e5ff2968d5aac4ebcd33587a5739f58a5ee309834efb9bd2e9ac",
+    "roundTrips": true,
+    "stored": "12994eb5d9a4f3513f0be57d9dcea5608b35c654e44dfc2fe96dfe6a835450b2"
+   },
+   "name": "small",
+   "redone": "5c0a231ced839faf1fb68d0fcf5fe22761bb26673ec1a2596edb0c032dbc192a",
+   "storedAfter": "12994eb5d9a4f3513f0be57d9dcea5608b35c654e44dfc2fe96dfe6a835450b2",
+   "undone": {
+    "back": true,
+    "exported": "7a858bd43aa7e5ff2968d5aac4ebcd33587a5739f58a5ee309834efb9bd2e9ac"
+   }
+  },
+  {
+   "edited": "92b97d497c3412a8fe0d9a1ea629290c39fb966bf6f007d9cdf7cf4f208456dc",
+   "first": {
+    "exported": "ac0c07289930ca4a3b86f62bdffc3b0fe2de78233977a631f9e3317cafc47673",
+    "roundTrips": true,
+    "stored": "9d3587745b8bef1995dcfb4355b864f57e91f27f72b821b0c44071dcb0c043c5"
+   },
+   "name": "loose",
+   "redone": "92b97d497c3412a8fe0d9a1ea629290c39fb966bf6f007d9cdf7cf4f208456dc",
+   "storedAfter": "2502df1153351855fab7a3f9e5333abb78907c9ea321bcfe37a38d9cb5827aa5",
+   "undone": {
+    "back": true,
+    "exported": "ac0c07289930ca4a3b86f62bdffc3b0fe2de78233977a631f9e3317cafc47673"
+   }
+  },
+  {
+   "edited": "40d1d5fb8c6b30b57358ad6b7ef6360d8143b273a49c7cb988c15ed5c2f6b382",
+   "first": {
+    "exported": "7478e911bd0d1ee104ee2681a0c6cd30f4b94581880604350fdb4b196c289e39",
+    "roundTrips": true,
+    "stored": "c84b50d026bd292d4ded911a6d6cb6d6d6818e7cd8f722ffefe32fee2f05d049"
+   },
+   "name": "large",
+   "redone": "40d1d5fb8c6b30b57358ad6b7ef6360d8143b273a49c7cb988c15ed5c2f6b382",
+   "storedAfter": "c84b50d026bd292d4ded911a6d6cb6d6d6818e7cd8f722ffefe32fee2f05d049",
+   "undone": {
+    "back": true,
+    "exported": "7478e911bd0d1ee104ee2681a0c6cd30f4b94581880604350fdb4b196c289e39"
+   }
+  }
+ ],
  "redoValidity": [
   {
    "at": {

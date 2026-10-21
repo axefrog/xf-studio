@@ -80,3 +80,15 @@ test("a step's time is optional", () => {
   stack.checkpoint(() => 2, ["a"]);
   expect(typeof stack.list()[1].at).toBe("number");
 });
+
+test("a step recorded as distinct keeps its identity through Undo and Redo", () => {
+  let value: unknown = "A";
+  const stack = whole(), read = () => value, B = "B";
+  stack.checkpoint(read, ["d"], { distinct: true }); value = B;
+  stack.checkpoint(read, ["d"], { distinct: true });
+  const last = stack.checkpoint(read, ["d"], { distinct: true })!;
+  expect(stack.depth).toBe(3);
+  stack.undo(read);
+  expect(stack.redo(read)?.pushed).toBe(1);
+  expect([stack.depth, stack.topId]).toEqual([3, last]);
+});

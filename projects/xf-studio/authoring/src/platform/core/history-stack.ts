@@ -88,8 +88,9 @@ export const WHOLE_VALUES: HistoryParts = Object.freeze({ chunks: (_key: string,
   join: (_key: string, chunks: readonly unknown[]) => chunks[0] });
 
 type Refs = Record<string, ChunkId[] | null>;
-type Entry = HistoryStepInfo & { scope: HistoryScope; before: Refs; coalesce?: string };
-type RedoEntry = { id: HistoryEntryId; label: HistoryLabel; at?: number; scope: HistoryScope; after: Refs };
+/** `distinct`: the step was recorded although the top step held the same content, so Redo puts it back the same way. */
+type Entry = HistoryStepInfo & { scope: HistoryScope; before: Refs; coalesce?: string; distinct?: true };
+type RedoEntry = { id: HistoryEntryId; label: HistoryLabel; at?: number; scope: HistoryScope; after: Refs; distinct?: true };
 export type CheckpointOptions = {
   scope?: HistoryScope; label?: HistoryLabel;
   /** Joins the top step while it is unsealed under the same key (a continuous edit). */
@@ -188,7 +189,7 @@ export class HistoryStack {
     }
     return this.push({ id: newId(), scope: options.scope ?? (keys.length > 1 ? "look" : "part"),
       label: copyLabel(options.label), ...(options.timed === false ? {} : { at: Date.now() }), before,
-      ...(options.coalesce === undefined ? {} : { coalesce: options.coalesce }) });
+      ...(options.coalesce === undefined ? {} : { coalesce: options.coalesce }), ...(options.distinct ? { distinct: true as const } : {}) });
   }
   /** End the current continuous edit: the next checkpoint starts a step of its own even with the same key (CORE-95). */
   seal() { const top = this.entries.at(-1); if (top) delete top.coalesce; }
@@ -245,7 +246,7 @@ export class HistoryStack {
       const after: Refs = {};
       for (const key of Object.keys(entry.before)) after[key] = this.current(state, read, key);
       this.redoList.push({ id: entry.id, label: entry.label ? { ...entry.label } : { ...UNKNOWN_HISTORY_LABEL },
-        ...(entry.at === undefined ? {} : { at: entry.at }), scope: entry.scope, after });
+        ...(entry.at === undefined ? {} : { at: entry.at }), scope: entry.scope, after, ...(entry.distinct ? { distinct: true as const } : {}) });
       steps.push({ id: entry.id, ...(entry.label ? { label: { ...entry.label } } : {}), ...(entry.at === undefined ? {} : { at: entry.at }) });
       for (const [key, refs] of Object.entries(entry.before)) this.replace(state, key, refs);
     }
@@ -264,9 +265,9 @@ export class HistoryStack {
       const step = this.redoList.pop()!;
       const before: Refs = {};
       for (const key of Object.keys(step.after)) before[key] = this.current(state, read, key);
-      if (this.sameAsTop(before)) this.releaseRefs(before);
+      if (!step.distinct && this.sameAsTop(before)) this.releaseRefs(before);
       else { pushed++; this.push({ id: this.entries.some(entry => entry.id === step.id) ? newId() : step.id, label: { ...step.label },
-        ...(step.at === undefined ? {} : { at: step.at }), scope: step.scope, before }); }
+        ...(step.at === undefined ? {} : { at: step.at }), scope: step.scope, before, ...(step.distinct ? { distinct: true as const } : {}) }); }
       for (const [key, refs] of Object.entries(step.after)) this.replace(state, key, refs);
     }
     return { parts: this.settle(state), pushed };

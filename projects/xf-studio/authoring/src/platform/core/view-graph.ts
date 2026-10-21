@@ -41,8 +41,9 @@ type KeptNode = { slot: ViewSlot; record: StoredNode };
 /** A view this build can't show, with its place in the stored list (so a round trip keeps the order). */
 type KeptEntry = { at: number; record: KeptView };
 type Structure = { views: ViewRecord[]; focused: ViewId };
-/** The View and lighting history's key for the views and the focus (beside node IDs, which are never this). */
-const STRUCTURE = "structure";
+/** The View and lighting history's key for the views and the focus: outside the node-ID grammar, so no node can take it. */
+export const VIEW_HISTORY_STRUCTURE = "@structure";
+const STRUCTURE = VIEW_HISTORY_STRUCTURE;
 type Trail = { back: Record<string, unknown>[]; forward: Record<string, unknown>[] };
 type Parsed = { views: ViewRecord[]; nodes: Map<string, NodeEntry>; focused: ViewId; keptViews: KeptEntry[]; keptNodes: Map<string, KeptNode> };
 const clone = <T>(value: T): T => structuredClone(value);
@@ -185,7 +186,8 @@ export class ViewGraph {
     this.keptNodes = parsed.keptNodes;
     this.keptRefs = usedNodes([], parsed.keptViews);
     // Values are kept by reference (each step holds detached copies), so a drag costs no serialisation.
-    this.scope = history.open(VIEW_SCOPE, { read: key => this.readHistory(key), apply: values => this.applyHistory(values) },
+    this.scope = history.open(VIEW_SCOPE, { read: key => this.readHistory(key), apply: values => this.applyHistory(values),
+      settled: () => this.publishHistory() },
       { limit: VIEW_HISTORY_LIMIT });
   }
 
@@ -417,9 +419,17 @@ export class ViewGraph {
     for (const id of ids) { const value = values[id] as NodeEntry | undefined; if (value) this.nodes.set(id, clone(value)); else this.nodes.delete(id); }
     const touched = [...ids];
     this.collect(touched);
-    this.emit(touched, !!structure, "history", false);
+    // Published once the scope has settled (`publishHistory`), so subscribers read the history as it stands (Redo included).
+    this.settling = { touched, structure: !!structure };
     return true;
   }
+  /** Publish what the last Undo or Redo changed, now that the View and lighting history has settled. */
+  private publishHistory() {
+    const settled = this.settling;
+    this.settling = undefined;
+    if (settled) this.emit(settled.touched, settled.structure, "history", false);
+  }
+  private settling?: { touched: string[]; structure: boolean };
   /** Whether views over nodes form a graph this service can hold (the replay check, CORE-94). */
   private consistent(views: readonly ViewRecord[], nodes: ReadonlyMap<string, NodeEntry>): boolean {
     const ids = new Set(views.map(view => view.id));

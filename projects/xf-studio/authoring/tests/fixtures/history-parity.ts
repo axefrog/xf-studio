@@ -20,7 +20,11 @@ import { STUDIO_MODULE_REGISTRATION } from "../../src/compose/modules";
 import { freshWorkspace } from "./eye-region";
 import { withHair, withTint, type Hair } from "./hair-feature";
 import { Ids, timeline } from "./look-history-parity";
-import { digest } from "./workspace-observable";
+import { digest, restore } from "./workspace-observable";
+import { createHash } from "node:crypto";
+import { encodeWorkspaceAt } from "../../src/workspace-budget";
+import { STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
+import { largeWorkspaceV1, looseWorkspaceV1, smallWorkspaceV1 } from "./workspace-v1-fixtures";
 
 type Core = ReturnType<typeof createTrustedAuthoringCore>;
 
@@ -33,9 +37,9 @@ export function wiring() {
   const service = createHistoryService(), documents = service.documents;
   return {
     documents,
-    core(composition: StudioComposition, resetStack: () => void) {
+    core(composition: StudioComposition, resetStack: () => void, workspace = freshWorkspace()) {
       let n = 0;
-      return createTrustedAuthoringCore(freshWorkspace(), { resetStack, selectedCollection: () => "draft", history: service,
+      return createTrustedAuthoringCore(workspace, { resetStack, selectedCollection: () => "draft", history: service,
         newId: () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}` }, composition);
     },
     /** The presentation port over a core, with experiments that contribute `participants` and use `documents`. */
@@ -285,4 +289,30 @@ export function routedSession() {
   shown = true; note("shown again");
   note("focus back to the look", documents.focus(null));
   return seen;
+}
+
+// ----- Persistence -----
+
+/** The exact text (not canonical: key order is part of the stored bytes). */
+const bytes = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+
+/**
+ * A restored workspace's look history through the core: what the document exports (exactly the restored data), what a save
+ * stores, and both again after an edit, an Undo and a Redo.
+ */
+export function persistenceSession() {
+  const fixtures = { small: smallWorkspaceV1, loose: looseWorkspaceV1, large: () => largeWorkspaceV1(8, 30) };
+  return Object.entries(fixtures).map(([name, fixture]) => {
+    const state = restore(fixture()).state, restored = JSON.stringify(state.history);
+    const c = wiring().core(STUDIO_COMPOSITION, () => {}, state);
+    const exported = () => c.document.export().history, stored = () => encodeWorkspaceAt({ ...state, ...c.document.export() }, 0, STUDIO_DOCUMENTS).encoded;
+    const first = { roundTrips: JSON.stringify(exported()) === restored, exported: bytes(exported()), stored: createHash("sha256").update(stored()).digest("hex") };
+    const layerId = c.document.recipe.layers[0].id;
+    c.app.dispatch({ kind: "layer.setOpacity", layerId, opacity: 0.37 });
+    const edited = bytes(exported());
+    c.app.dispatch({ kind: "history.undo" });
+    const undone = { exported: bytes(exported()), back: JSON.stringify(exported()) === restored };
+    c.app.dispatch({ kind: "history.redo" });
+    return { name, first, edited, undone, redone: bytes(exported()), storedAfter: createHash("sha256").update(stored()).digest("hex") };
+  });
 }
