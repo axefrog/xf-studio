@@ -2,6 +2,8 @@ import type { DocumentStorePort, SavedDocument, StoredDocument } from "../api/do
 
 /** The saves waiting for one write: the newest value, and everyone whose value that write covers. */
 type Batch<T> = { value: T; waiters: { resolve(): void; reject(error: unknown): void }[] };
+/** A holder as its owner sees it: it can also take a newer stored revision while it has nothing unsaved. */
+type HeldDocument<T> = SavedDocument<T> & { refresh(stored: StoredDocument<T>): void };
 
 /**
  * One stored document as this page holds it (`SavedDocument`): its value changes at once (the person's edit shows
@@ -14,10 +16,13 @@ type Batch<T> = { value: T; waiters: { resolve(): void; reject(error: unknown): 
  * Use one per document for the page's lifetime (`documentOwners`): two holders of the same document would each queue
  * writes over the other's.
  */
-export function savedDocument<T>(store: DocumentStorePort, kind: string, id: string, initial: T, stored?: StoredDocument<T>): SavedDocument<T> {
+
+export function savedDocument<T>(store: DocumentStorePort, kind: string, id: string, initial: T, stored?: StoredDocument<T>): HeldDocument<T> {
   let current = stored ? stored.value : initial;
   let revision = stored?.revision ?? 0;
   let waiting: Batch<T> | null = null, writing = false;
+  /** Whether the value holds an edit the store hasn't confirmed (a new document starts unsaved). */
+  let dirty = !stored;
   const write = async (value: T): Promise<void> => {
     let result = await store.put(kind, id, value, revision);
     if (!result.ok) result = await store.put(kind, id, value, result.current?.revision ?? 0);
@@ -28,15 +33,21 @@ export function savedDocument<T>(store: DocumentStorePort, kind: string, id: str
     if (writing || !waiting) return;
     const batch = waiting;
     waiting = null; writing = true;
-    write(batch.value).then(() => { for (const waiter of batch.waiters) waiter.resolve(); },
+    write(batch.value).then(() => { if (!waiting) dirty = false; for (const waiter of batch.waiters) waiter.resolve(); },
       error => { for (const waiter of batch.waiters) waiter.reject(error); })
       .finally(() => { writing = false; next(); });
   };
   return {
     kind, id,
     get value() { return current; },
+    /** Takes a newer stored revision, only while nothing here is unsaved, waiting or being written. */
+    refresh(newer) {
+      if (dirty || writing || waiting || newer.revision <= revision) return;
+      current = newer.value; revision = newer.revision;
+    },
     save(value) {
       current = value;
+      dirty = true;
       const batch = waiting ??= { value, waiters: [] };
       batch.value = value;
       const saved = new Promise<void>((resolve, reject) => { batch.waiters.push({ resolve, reject }); });
@@ -53,13 +64,17 @@ export function savedDocument<T>(store: DocumentStorePort, kind: string, id: str
  * queue, rather than a second copy read back from the store.
  */
 export function documentOwners(store: DocumentStorePort) {
-  const owners = new Map<string, SavedDocument<unknown>>();
+  const owners = new Map<string, HeldDocument<unknown>>();
   const key = (kind: string, id: string) => `${kind}\u0000${id}`;
   return {
-    /** The document's holder; `initial` and `stored` are used only when the page doesn't hold it yet. */
+    /**
+     * The document's holder; `initial` and `stored` make it when the page doesn't hold it yet. A held document with nothing
+     * unsaved takes a newer `stored` revision (a change made elsewhere); unsaved edits and the write queue stay as they are.
+     */
     open<T>(kind: string, id: string, initial: T, stored?: StoredDocument<T>): SavedDocument<T> {
       let owner = owners.get(key(kind, id));
       if (!owner) owners.set(key(kind, id), owner = savedDocument<unknown>(store, kind, id, initial, stored));
+      else if (stored) owner.refresh(stored);
       return owner as SavedDocument<T>;
     },
     /** The holders of every document of `kind` the page holds, in the order it first held them. */

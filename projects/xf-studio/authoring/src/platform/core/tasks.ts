@@ -22,9 +22,13 @@ export function createTask<T>(options: TaskOptions = {}): Task<T> {
   let state: TaskState<T> = IDLE;
   let current: Run<T> | null = null;
   const listeners = new Set<(state: TaskState<T>) => void>();
+  /** Counts publications: a transition a listener makes ends the publication the others were still hearing. */
+  let publication = 0;
   const publish = (next: TaskState<T>) => {
     state = next;
+    const own = ++publication;
     for (const listener of [...listeners]) {
+      if (publication !== own) return;
       try { listener(next); } catch (error) { reportListenerError(error); }
     }
   };
