@@ -11,7 +11,7 @@ import type { ExperimentContext, ExperimentFlagsDocument, ExperimentInfo, Experi
 import { EXPERIMENT_FLAGS } from "../api/experiments";
 import type { DocumentStorePort } from "../api/document-store";
 import type { Random } from "./random";
-import { createDocumentHistory } from "./document-history";
+import { createHistoryService, type HistoryService } from "./history-service";
 import { documentOwners } from "./saved-document";
 import { createTask, type Task } from "./tasks";
 
@@ -27,6 +27,8 @@ export function experimentOverrides(query: string, known: readonly string[], ver
 export type ExperimentOptions<T extends ExperimentRegistration> = {
   definitions: readonly ExperimentDefinition<T>[]; overrides: Readonly<Record<string, boolean>>;
   documents: DocumentStorePort; random: Random; signal: AbortSignal;
+  /** The session's history service: the experiments' documents are its `doc:*` scopes (default: one of their own). */
+  history?: HistoryService;
 };
 export type Experiments<T extends ExperimentRegistration> = Omit<ExperimentPort, "registrations" | "history"> & {
   registrations(): readonly T[]; readonly history: ExperimentContext["history"]; readonly context: ExperimentContext;
@@ -40,7 +42,10 @@ export async function createExperiments<T extends ExperimentRegistration>(option
   // One holder per stored document for the page's lifetime, shared by every experiment instance (the one-owner rule).
   const owners = documentOwners(documents);
   const preference = owners.open<ExperimentFlagsDocument>(EXPERIMENT_FLAGS.kind, EXPERIMENT_FLAGS.id, { schema: EXPERIMENT_FLAGS.schema, flags: {} }, stored);
-  const history = createDocumentHistory();
+  // Each document's history is a scope of the session's history service; the documents an experiment offers reach global Undo.
+  const service = options.history ?? createHistoryService(), history = service.documents;
+  const registered = () => [...loads.values()].flatMap(task => { const state = task.state(); return state.phase === "done" ? [state.result] : []; });
+  signal.addEventListener("abort", service.participants(() => registered().flatMap(item => item.histories?.() ?? [])), { once: true });
   const contextFor = (lifetime: AbortSignal): ExperimentContext => ({ history, signal: lifetime, newId: () => options.random.uuid(),
     task: () => createTask({ signal: lifetime }),
     document: (kind, id, initial, stored) => owners.open(kind, id, initial, stored),
@@ -93,7 +98,7 @@ export async function createExperiments<T extends ExperimentRegistration>(option
     history,
     snapshot: () => definitions.map(info => ({ id: info.id, label: info.label, description: info.description, enabled: effective(info.id), overridden: info.id in options.overrides,
       phase: phases[info.id]?.phase ?? "off", message: saveErrors[info.id] || phases[info.id]?.message || "" })),
-    registrations: () => [...loads.values()].flatMap(task => { const state = task.state(); return state.phase === "done" ? [state.result] : []; }),
+    registrations: registered,
     async set(id, enabled) {
       if (!definitions.some(d => d.id === id) || typeof enabled !== "boolean") return { ok: false, message: "That experiment isn't available." };
       if (id in options.overrides) return { ok: false, message: "This verification page fixes that experiment setting. Open a page without the override to change it." };
@@ -124,17 +129,20 @@ export function startExperiments<T extends ExperimentRegistration>(options: Expe
   const failed = initial.map(info => ({ ...info, phase: "failed" as const, message: "Couldn't read experimental settings. Reload Studio to try again." }));
   const listeners = new Set<() => void>();
   const changed = () => { for (const listener of [...listeners]) listener(); };
+  const history = options.history ?? createHistoryService();
   const reading = createTask<Experiments<T>>({ signal: options.signal });
   reading.subscribe(changed);
   const runtime = () => { const state = reading.state(); return state.phase === "done" ? state.result : undefined; };
   const ready = reading.run(async signal => {
-    const loaded = await createExperiments({ ...options, signal });
+    const loaded = await createExperiments({ ...options, history, signal });
     const off = loaded.subscribe(changed);
     signal.addEventListener("abort", off, { once: true });
     return loaded;
   }).then(outcome => outcome.status === "done");
   return {
     ready,
+    /** The history service the experiments' documents live in, for the startup root to share with the look (`studio-startup.ts`). */
+    historyService: history,
     get context() { return runtime()?.context; },
     get history() { return runtime()?.history; },
     snapshot: (): readonly ExperimentState[] => runtime()?.snapshot() ?? (reading.state().phase === "failed" ? failed : initial),

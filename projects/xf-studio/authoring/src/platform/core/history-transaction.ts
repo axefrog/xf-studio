@@ -33,6 +33,8 @@ export interface TransactionHost<Id> {
   revert(step: Id | undefined): void;
   /** A fingerprint of the edited content (equal fingerprints: nothing changed). */
   content(): string;
+  /** Told when a commit keeps a change (its own step, or the top step that already reverts to the start). */
+  kept?(): void;
 }
 
 /**
@@ -78,10 +80,11 @@ export class HistoryTransaction<Id> {
    */
   commit() {
     if (this.checkpoint === undefined) {
-      if (this.top !== undefined && this.label && !this.empty()) this.host.relabel(this.top, this.label);
+      if (this.top !== undefined && this.label && !this.empty()) { this.host.relabel(this.top, this.label); this.host.kept?.(); }
       return;
     }
     if (this.empty()) this.host.discard(this.checkpoint);
+    else this.host.kept?.();
   }
   /**
    * Escape: restore the start state without Redo (or, when nothing needs restoring, drop an empty

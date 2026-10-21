@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { MAX_LAYERS } from "../src/engines/layered-makeup/recipe";
-import { RecipeHistory } from "../src/editor-actions";
+import { RECIPE_HISTORY, recipeHistory } from "../src/editor-actions";
 import { parseWorkspace } from "../src/workspace-state";
 import { historyRecipes, storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
@@ -50,8 +50,8 @@ test("layer operations preserve identity, isolate copies, allow removal of the l
 });
 
 test("a new layer starts as a four-point upper-lid wash without changing saved or copied contours", () => {
-  const original = initialRecipe(), saved = JSON.stringify(original), history = new RecipeHistory();
-  history.checkpoint(original);
+  const original = initialRecipe(), saved = JSON.stringify(original), history = recipeHistory([]);
+  history.checkpoint(() => original, [RECIPE_HISTORY.feature]);
   const added = editLayers(original, original.layers[0].id, { kind: "add", newId: "added-1" });
   const layer = added.recipe.layers[added.active];
   expect(layer.points).toHaveLength(4);
@@ -63,7 +63,7 @@ test("a new layer starts as a four-point upper-lid wash without changing saved o
   expect(coverage(.63, .225, layer)).toBe(coverage(.37, .225, layer));
   expect(coverage(.37, .27, layer)).toBe(0);
   expect(JSON.stringify(original)).toBe(saved);
-  expect(history.undo()).toEqual(parseRecipe(original));
+  expect(history.revert()?.[RECIPE_HISTORY.feature]).toEqual(parseRecipe(original));
   const blank = editLayers({ ...original, layers: [] }, undefined, { kind: "add", newId: "added-2" });
   expect(parseRecipe(blank.recipe).layers[0].points).toEqual(layer.points);
   expect(compileFlatPreset(blank.recipe, 128).metadata.coveredTexels).toBeGreaterThan(0);

@@ -19,7 +19,7 @@ import { EXPERIMENT_FLAGS } from "../api/experiments";
 import type { DocumentStore } from "./document-store";
 import type { LibraryDatabase } from "./library-database";
 
-/** Hair Lab's document kind (`features/hair-lab/service.ts` `HAIR_GROOM_KIND`; the import's test checks they agree). */
+/** The document kind Hair Lab's grooms are kept under. */
 export const LEGACY_HAIR_GROOM_KIND = "hair-groom";
 
 /** What one import copied. */

@@ -7,7 +7,6 @@ import { existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from
 export const browserEntries = [
   "src/studio-main.ts",
   "src/raster-worker.ts",
-  "src/features/hair-lab/render/hair-worker.ts",
   "src/choice-preview-worker.ts",
   "src/render-fidelity-study.ts",
   "tools/glitter-head-study.ts",

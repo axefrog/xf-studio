@@ -205,13 +205,12 @@ test("shift edits are labelled by what they change", () => {
   expect(f.app.history().undo).toMatchObject({ label: "Shift strength", actionKind: "layer.setShift", layerId: id });
 });
 
-test("a host without user-level history reads the same timeline mapper", () => {
+test("a host without the session's history service reads the document's look history", () => {
   const f = fixture(), id = f.layer(0).id;
   f.ok({ kind: "layer.setOpacity", layerId: id, opacity: .4 });
-  const { history: _history, ...services } = { document: f.document, eyeMakeup: f.eyeMakeup,
-    undo: f.undo, history: f.history, gestures: f.gestures, controls: f.controls };
+  const services = { document: f.document, eyeMakeup: f.eyeMakeup, gestures: f.gestures, controls: f.controls };
   const bare = new StudioApplication(services, STUDIO_REGISTRY);
-  expect(bare.historyTimeline()).toEqual({ ...f.app.historyTimeline(), redoCount: 0 });
+  expect(bare.historyTimeline()).toEqual(f.app.historyTimeline());
   expect(bare.historyTimeline().steps.map(step => step.label)).toEqual(["Opacity"]);
 });
 

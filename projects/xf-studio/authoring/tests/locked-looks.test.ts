@@ -75,7 +75,7 @@ test("a newer look opens locked while the rest of the workspace stays editable",
   expect(core.app.dispatch({ kind: "layer.setOpacity", layerId: layer, opacity: .3 })).toMatchObject({ ok: true });
   // Selecting B shows nothing to edit and refuses every edit, with the plain reason.
   draft.select(ID.b);
-  expect([core.document.locked, core.document.recipe.layers.length, core.document.undoDepth]).toEqual([NEWER_LOOK_MESSAGE, 0, 0]);
+  expect([core.document.locked, core.document.recipe.layers.length, core.document.history.state().depth]).toEqual([NEWER_LOOK_MESSAGE, 0, 0]);
   const refused = { available: false as const, code: "unavailable" as const, reason: NEWER_LOOK_MESSAGE };
   expect(core.app.featureEditable(EYE)).toEqual(refused);
   // The presentation reads it on the eye-makeup facade (the Layers view shows the notice from it).

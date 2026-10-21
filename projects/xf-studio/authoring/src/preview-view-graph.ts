@@ -10,6 +10,7 @@
  */
 import { MAIN_VIEW, VIEW_GRAPH_1, type NodeCodec, type ViewGraphData, type ViewGraphRules, type ViewRecord } from "./platform/api/view-graph";
 import { parseViewGraph, ViewGraph } from "./platform/core/view-graph";
+import type { HistoryService } from "./platform/core/history-service";
 import type { CameraState, PreviewState } from "./workspace-state";
 import { DEFAULT_CREATOR_LIGHTING, LIGHTING_PRESETS, readCreatorLighting, storedCreatorLighting, type CreatorLightingOptions,
   type LightingPreset } from "./creator-lighting";
@@ -216,8 +217,8 @@ export function workspaceViewGraph(preview: PreviewState, stored: ViewGraphData 
 }
 
 /** A graph service for a workspace's preview (and its stored views, if any). */
-export function createStudioViewGraph(preview: PreviewState, stored?: ViewGraphData) {
-  return new ViewGraph(workspaceViewGraph(preview, stored), STUDIO_VIEW_GRAPH_RULES);
+export function createStudioViewGraph(preview: PreviewState, stored?: ViewGraphData, history?: HistoryService) {
+  return new ViewGraph(workspaceViewGraph(preview, stored), STUDIO_VIEW_GRAPH_RULES, history);
 }
 
 /**

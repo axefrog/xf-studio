@@ -9,8 +9,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openTestLibrary } from "./fixtures/library-file";
-import { importLegacyExperiments, LEGACY_HAIR_GROOM_KIND } from "../src/platform/persistence/legacy-experiment-import";
-import { HAIR_GROOM_KIND } from "../src/features/hair-lab/service";
+import { importLegacyExperiments, LEGACY_HAIR_GROOM_KIND as HAIR_GROOM_KIND } from "../src/platform/persistence/legacy-experiment-import";
+
 import { EXPERIMENT_FLAGS } from "../src/platform/api/experiments";
 
 const folders: string[] = [];
@@ -116,6 +116,3 @@ test("a library without the old log (every released build's) imports nothing", (
   } finally { file.close(); }
 });
 
-test("the import writes Hair Lab's own document kind", () => {
-  expect(LEGACY_HAIR_GROOM_KIND).toBe(HAIR_GROOM_KIND);
-});

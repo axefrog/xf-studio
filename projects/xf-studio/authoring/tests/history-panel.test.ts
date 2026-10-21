@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { HISTORY_START_ID, type HistorySnapshot } from "../src/authoring-history";
+import { HISTORY_START_ID, type HistorySnapshot } from "../src/platform/api/history";
 import { shortcutLabel } from "../src/input-bindings";
 import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
 import { STUDIO_REGISTRY } from "../src/compose/studio-registry";

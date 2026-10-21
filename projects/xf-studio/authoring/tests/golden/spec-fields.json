@@ -6619,7 +6619,7 @@
     "{\"kind\":\"history.jumpTo\",\"entryId\":\"start\"}": {
      "replaces": "layer-content",
      "discards": [],
-     "recoverableBy": "none",
+     "recoverableBy": "history.redo",
      "confirm": false
     },
     "{\"kind\":\"preset.edit\",\"command\":{\"kind\":\"remove\",\"id\":\"<preset>\"}}": {
@@ -9999,7 +9999,7 @@
     "{\"kind\":\"history.jumpTo\",\"entryId\":\"start\"}": {
      "replaces": "layer-content",
      "discards": [],
-     "recoverableBy": "none",
+     "recoverableBy": "history.redo",
      "confirm": false
     },
     "{\"kind\":\"preset.edit\",\"command\":{\"kind\":\"remove\",\"id\":\"<preset>\"}}": {
@@ -13377,7 +13377,7 @@
     "{\"kind\":\"history.jumpTo\",\"entryId\":\"start\"}": {
      "replaces": "layer-content",
      "discards": [],
-     "recoverableBy": "none",
+     "recoverableBy": "history.redo",
      "confirm": false
     },
     "{\"kind\":\"preset.edit\",\"command\":{\"kind\":\"remove\",\"id\":\"<preset>\"}}": {
@@ -16755,7 +16755,7 @@
     "{\"kind\":\"history.jumpTo\",\"entryId\":\"start\"}": {
      "replaces": "layer-content",
      "discards": [],
-     "recoverableBy": "none",
+     "recoverableBy": "history.redo",
      "confirm": false
     },
     "{\"kind\":\"preset.edit\",\"command\":{\"kind\":\"remove\",\"id\":\"<preset>\"}}": {
@@ -20077,46 +20077,86 @@
    "consequences": {
     "{\"kind\":\"layer.setOpacity\",\"layerId\":\"layer-1\",\"opacity\":0.5}": {
      "recoverableBy": "history.undo",
-     "discards": [],
+     "discards": [
+      {
+       "kind": "redo",
+       "label": "Point edge softness"
+      }
+     ],
      "confirm": false
     },
     "{\"kind\":\"point.remove\",\"layerId\":\"layer-1\",\"index\":0}": {
      "replaces": "layer-content",
      "recoverableBy": "history.undo",
-     "discards": [],
+     "discards": [
+      {
+       "kind": "redo",
+       "label": "Point edge softness"
+      }
+     ],
      "confirm": false
     },
     "{\"kind\":\"field.remove\",\"layerId\":\"layer-1\",\"fieldId\":\"layer-1-field-1\"}": {
      "replaces": "layer-content",
      "recoverableBy": "history.undo",
-     "discards": [],
+     "discards": [
+      {
+       "kind": "redo",
+       "label": "Point edge softness"
+      }
+     ],
      "confirm": false
     },
     "{\"kind\":\"field.add\",\"layerId\":\"layer-1\"}": {
      "recoverableBy": "history.undo",
-     "discards": [],
+     "discards": [
+      {
+       "kind": "redo",
+       "label": "Point edge softness"
+      }
+     ],
      "confirm": false
     },
     "{\"kind\":\"layer.edit\",\"command\":{\"kind\":\"remove\",\"id\":\"layer-1\"}}": {
      "replaces": "layer-content",
      "recoverableBy": "history.undo",
-     "discards": [],
+     "discards": [
+      {
+       "kind": "redo",
+       "label": "Point edge softness"
+      }
+     ],
      "confirm": false
     },
     "{\"kind\":\"layer.edit\",\"command\":{\"kind\":\"reset\",\"id\":\"layer-1\"}}": {
      "replaces": "layer-content",
      "recoverableBy": "history.undo",
-     "discards": [],
+     "discards": [
+      {
+       "kind": "redo",
+       "label": "Point edge softness"
+      }
+     ],
      "confirm": false
     },
     "{\"kind\":\"layer.edit\",\"command\":{\"kind\":\"duplicate\",\"id\":\"layer-1\"}}": {
      "recoverableBy": "history.undo",
-     "discards": [],
+     "discards": [
+      {
+       "kind": "redo",
+       "label": "Point edge softness"
+      }
+     ],
      "confirm": false
     },
     "{\"kind\":\"layer.edit\",\"command\":{\"kind\":\"add\"}}": {
      "recoverableBy": "history.undo",
-     "discards": [],
+     "discards": [
+      {
+       "kind": "redo",
+       "label": "Point edge softness"
+      }
+     ],
      "confirm": false
     },
     "{\"kind\":\"layer.select\",\"layerId\":\"layer-1\"}": {
@@ -20139,7 +20179,7 @@
     "{\"kind\":\"history.jumpTo\",\"entryId\":\"start\"}": {
      "replaces": "layer-content",
      "discards": [],
-     "recoverableBy": "none",
+     "recoverableBy": "history.redo",
      "confirm": false
     },
     "{\"kind\":\"preset.edit\",\"command\":{\"kind\":\"remove\",\"id\":\"<preset>\"}}": {

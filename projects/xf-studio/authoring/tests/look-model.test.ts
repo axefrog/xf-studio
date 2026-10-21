@@ -392,11 +392,11 @@ test("apply is pure and matches the recipe service; the application dispatches t
   const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "preset-a" }, STUDIO_COMPOSITION);
   expect(core.app.dispatch({ kind: "glitter.selectModel", layerId: "pure-glit", model: "irregular" }).ok).toBe(true);
   expect(core.document.recipe).toEqual(selected.part);
-  expect(core.document.undoDepth).toBe(1);
+  expect(core.document.history.state().depth).toBe(1);
   expect(workspace.glitterChoices["preset-a/pure-glit"].classic).toBeDefined();
   expect(core.app.dispatch({ kind: "layer.edit", command: { kind: "duplicate", id: "pure-gloss" } }).ok).toBe(true);
   expect(core.document.recipe.layers).toHaveLength(5);
-  expect(core.document.undoDepth).toBe(2);
+  expect(core.document.history.state().depth).toBe(2);
 });
 
 // ---- Codec rules ----
