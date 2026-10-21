@@ -51,7 +51,11 @@ The disk's flush cost varies a lot between drives; the installed app's 40–100 
 
 ## Backups
 
-The library is the only home of the work, so it is also copied without asking (`platform/persistence/backups.ts`): once each day the Studio runs and before every migration, into a `backups` folder beside the library. Each copy is made with SQLite's `VACUUM INTO`, so it is consistent and compact, and it is renamed into place so a half-made copy is never seen. Seven daily and four weekly copies are kept. A permanent delete reaches every copy; a copy that can't be purged yet (locked) stays on a pending list and is retried, and never fails the delete. Restoring is refused while another connection has the library open, keeps the current file first, and applies any pending purge to the restored copy.
+The library is the only home of the work, so it is also copied without asking (`platform/persistence/backups.ts`). The first check runs about 2 seconds after the host starts and repeats hourly, so a Studio left running still takes one copy for each day it runs. Copies go into a `backups` folder beside the library. Each is made with SQLite's `VACUUM INTO`, so it is consistent and compact, and it is written beside its final name and renamed into place so a half-made copy is never seen. Seven daily copies are kept, plus the newest copy of each of the four newest older weeks.
+
+**Restoring** a copy first keeps the current library as a pre-restore copy (kept until removed deliberately), then swaps the chosen copy in with a single rename. It is refused while any other connection has the library open, so nobody's open library is replaced under them.
+
+Not built yet: a copy taken automatically before a library migration runs. The one-time move of existing presets and collections to the document store in the [profiles entry](../backlog/README.md#profiles-and-multiple-vs-after-the-beta) needs it. A permanent delete does not reach existing backup copies either; copies keep what the library held on the day they were made, until they are pruned.
 
 ## Tests
 
