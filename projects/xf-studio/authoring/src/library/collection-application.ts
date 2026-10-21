@@ -27,7 +27,8 @@ export type CollectionViewPort = {
  * view receives only `CollectionViewPort`.
  */
 export class CollectionApplication implements CollectionViewPort {
-  private service: CollectionService;
+  /** The trusted service (the composition root and tests); views get only `CollectionViewPort`. */
+  readonly service: CollectionService;
   constructor(deps: Omit<CollectionServiceDeps, "readRecipe">, private document: AuthoringDocument, private app: StudioApplication,
     private files: StudioFileOperations) {
     this.service = new CollectionService({ ...deps, readRecipe: () => {

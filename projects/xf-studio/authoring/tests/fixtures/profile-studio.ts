@@ -65,11 +65,13 @@ export async function profileStudio(options: {
   check?: (input: unknown) => PackageCheckResult;
   /** A file the picker answers (import). */
   pick?: () => StudioPickedFile | undefined;
+  /** Save version as the host answers it (default: the library's own, at once). */
+  versions?: (library: CollectionVersionsPort) => CollectionVersionsPort;
 } = {}) {
   const library = options.library ?? openTestLibrary(), port = libraryPort(library), storage = memoryOutboxStorage();
   const outbox = new DocumentOutbox(port, storage, { retryMs: 5 });
   outbox.open();
-  const owner = new CollectionOwner({ documents: port, outbox, versions: libraryVersions(library) });
+  const owner = new CollectionOwner({ documents: port, outbox, versions: options.versions?.(libraryVersions(library)) ?? libraryVersions(library) });
   await owner.load();
   let ref = options.show;
   if (!ref && (options.looks ?? [{ name: "Look", recipe: freshWorkspace().recipe }]).length) {
@@ -111,7 +113,8 @@ export async function profileStudio(options: {
     .map(look => lookRef({ collection: view.id, look }))])];
   return {
     library, port, outbox, storage, owner, sessions, scene, history, core, app: core.app, document: core.document, lookEditor, collection: application, files,
-    downloads, packageInput: () => packageInput,
+    service: application.service,
+    downloads, packageInput: () => packageInput, transport,
     /** Writes the shown look, then waits until the library holds every change. */
     async settle() { lookEditor.commit(); return outbox.settle(all()); },
     /** The shown collection's ID. */

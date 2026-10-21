@@ -154,6 +154,8 @@ export class CollectionService {
   private previous: LookRef[] = [];
   /** The look last shown in each collection, to come back to it. */
   private lastShown = new Map<string, string>();
+  /** The collection shown: the scene's look's, kept while the scene shows no look (its last preset was removed). */
+  private current: string | undefined;
   private readonly clock: Clock;
   private readonly unsubscribe: () => void;
 
@@ -165,9 +167,10 @@ export class CollectionService {
       this.persistenceCache = undefined;
       this.notify();
     };
+    this.current = deps.scene.look()?.collection;
     const offOwner = deps.owner.subscribe(changed), offScene = deps.scene.subscribe(() => {
       const ref = deps.scene.look();
-      if (ref) this.lastShown.set(ref.collection, ref.look);
+      if (ref) { this.lastShown.set(ref.collection, ref.look); this.current = ref.collection; }
       changed();
     });
     this.unsubscribe = () => { offOwner(); offScene(); };
@@ -183,13 +186,13 @@ export class CollectionService {
   /** What `content` follows: the shown collection's identity and structure, and the look shown. */
   private structureKey(): string {
     const view = this.shown();
-    return JSON.stringify(view ? [view.id, view.name, view.saved?.revision, view.looks, view.removed.map(item => item.look),
+    return JSON.stringify(view ? [view.id, view.name, view.looks, view.removed.map(item => item.look),
       this.deps.owner.looksOf(view.id).map(look => look.name), this.selectedId(), view.packagePlan ?? null] : null);
   }
-  /** The collection the scene's look belongs to (null: none shown, or it is gone). */
+  /** The collection the scene's look belongs to, or the one shown last while the scene shows no look (null: none, or it is gone). */
   private shown(): CollectionView | null {
-    const ref = this.deps.scene.look();
-    return ref ? this.deps.owner.collection(ref.collection) : null;
+    const id = this.deps.scene.look()?.collection ?? this.current;
+    return id ? this.deps.owner.collection(id) : null;
   }
   private selectedId(): string | undefined {
     const ref = this.deps.scene.look(), view = this.shown();

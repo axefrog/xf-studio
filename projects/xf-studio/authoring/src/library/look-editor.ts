@@ -18,6 +18,7 @@ import { liveFeatureStates, liveMemory, livePart, withLiveFeatures, withLiveMemo
 import { emptyRecipe } from "../engines/layered-makeup/recipe";
 import { COLLECTION_2, isNewerData, type Look, type LookMemory } from "../platform/api";
 import { lookScope } from "../platform/core/history-service";
+import { emptyLookHistory } from "../platform/core/look-history";
 import type { LookRef, LookWorking } from "./collection-documents";
 import { sameLook } from "./collection-documents";
 import type { LookSession, LookSessions } from "./look-sessions";
@@ -26,6 +27,8 @@ import type { LookSession, LookSessions } from "./look-sessions";
 export const LOOK_WRITE_DELAY_MS = 250;
 export const RESTORING_LOOK = "This look is still being restored from your last session. It can be changed again in a moment.";
 export const CHANGED_ELSEWHERE = "Changed in another window. Undo starts here.";
+/** The scope the document is in while its scene shows no look (its collection's last preset was removed): nothing in it can be edited. */
+export const NO_LOOK_SCOPE = lookScope({ collection: "none", look: "none" });
 
 /** A look working copy as the editor reads it: the look (parsed parts), its memory and the document state it shows. */
 export type LookContent = { readonly look: Look; readonly memory: LookMemory; readonly state: DocumentState };
@@ -78,6 +81,8 @@ type Shown = { ref: LookRef; session: LookSession; content: LookContent; written
 
 export class LookEditor {
   private shown: Shown | null = null;
+  /** The document shows no look (and is empty). */
+  private empty = false;
   private cancel: (() => void) | null = null;
   private applying = false;
   private readonly listeners = new Set<() => void>();
@@ -103,9 +108,16 @@ export class LookEditor {
    */
   show(ref: LookRef | undefined): boolean {
     if (ref && this.shown && sameLook(ref, this.shown.ref)) return true;
+    if (!ref && !this.shown && this.empty) return true;
     this.commit();
     this.close();
-    if (!ref) { this.blocked(); this.changed(); return true; }
+    this.empty = !ref;
+    if (!ref) {
+      // No look shown: the document is empty (edits are refused while no preset owns it).
+      this.display({ recipe: emptyRecipe(), active: 0, selected: 0, fieldSelection: {}, history: emptyLookHistory() }, NO_LOOK_SCOPE);
+      this.blocked(); this.changed();
+      return true;
+    }
     const session = this.deps.sessions.open(ref), view = session.look();
     if (!view) { void session.release(); this.changed(); return false; }
     let content: LookContent;
