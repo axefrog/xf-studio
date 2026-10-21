@@ -602,7 +602,7 @@ No schema migration: every record is a `documents` row, and `user_version` stays
 
 **Built in phase 1d-i.**
 
-- **Where it runs.** The host transaction is `src/app/profiles/host/profiles-migrate.ts`, at `/api/profiles/migrate` and its verification twin. It is fenced by the lease. `migration` is a host-only kind.
+- **Where it runs.** The host transaction is `profiles-migrate.ts` (in `app/profiles/host/` on the phase-1 branch), at `/api/profiles/migrate` and its verification twin. It is fenced by the lease. `migration` is a host-only kind.
 - **Pre-migration copy.** The library is copied before its first `profiles-1` run only, and the copy is discarded if that run rolls back.
 - **IDs never reused.** An identity taken by a deleted collection is never reused: such a draft is recovered under fresh IDs.
 - **Reuse is lossless.** It requires equal live content and matching histories, and every removed look the draft keeps must be restorable in the existing working copy. Otherwise the draft forks.
