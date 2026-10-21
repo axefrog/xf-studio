@@ -72,10 +72,10 @@ export interface OutboxStorage {
    */
   write(key: string, text: string, empty: boolean): void;
   /**
-   * Where a key is also stored in the background (the desktop host's file): `listener` hears whether each background write of a key
-   * landed, so a failed one makes that document unprotected until its next write lands.
+   * Where a key is also stored in the background (the desktop host's file): `listener` hears when a key's background write is queued
+   * (`pending`: not protected yet), when its latest one landed (`stored`) and when one failed (`failed`, and it is sent again).
    */
-  watch?(listener: (key: string, stored: boolean) => void): void;
+  watch?(listener: (key: string, state: "pending" | "stored" | "failed") => void): void;
 }
 export type OutboxTransport = { transact(request: TransactRequest): Promise<TransactAnswer>;
   revisions(refs: readonly DocumentRef[], signal?: AbortSignal): Promise<Readonly<Record<string, number>>>;
@@ -99,8 +99,10 @@ export type OutboxStatus = {
   /** Commands recorded and not yet acknowledged (in conflict excluded). */
   readonly pending: number;
   readonly conflicts: number;
-  /** Documents whose latest change isn't protected on this computer (their key's last write failed). */
+  /** Documents whose latest change isn't protected on this computer yet (their key's write failed, or its background copy hasn't landed). */
   readonly unprotected: readonly DocumentRef[];
+  /** Whether to warn: a write failed, or a background copy has been waiting longer than `WARN_AFTER_MS`. */
+  readonly unprotectedWarning: boolean;
   /** The last send failed (the host didn't answer); it is sent again shortly. */
   readonly failing: boolean;
   /** Stopped: the page released or lost its workspace, and nothing is written or sent again. */
@@ -138,6 +140,8 @@ export type OutboxOptions = {
 };
 
 const SCHEMA = "xfs/outbox-1";
+/** How long a background copy may wait before the page warns that changes aren't protected (a write that fails warns at once). */
+export const WARN_AFTER_MS = 2000;
 export type StoredKey = { schema: typeof SCHEMA; stamp: number; entries: OutboxEntry[]; dropped?: string[] };
 /** A document's acknowledged baseline: the library's revision and value as this page last learned them. */
 type Held = { ref: DocumentRef; revision: number; base: unknown; known: boolean; version: number };
@@ -147,7 +151,14 @@ export class DocumentOutbox {
   private readonly held = new Map<string, Held>();
   private entries: OutboxEntry[] = [];
   private readonly inFlight = new Set<string>();
-  private readonly unprotectedKeys = new Set<string>();
+  /** Keys whose latest write isn't stored yet: since when it has waited, and whether a write of it failed. */
+  private readonly unprotectedKeys = new Map<string, { since: number; failed: boolean }>();
+  /**
+   * Entries a resolution or a repair removed, with the keys that may still hold a stale copy of each: every key written carries their
+   * IDs as markers until each of those keys is stored without the copy, so a crash at any point (during a recovery too) never brings
+   * one back.
+   */
+  private readonly graves = new Map<string, Set<string>>();
   private readonly listeners = new Set<(event: OutboxEvent) => void>();
   private wakers: (() => void)[] = [];
   /** Callers waiting to hear what became of an entry, by entry ID (they move with its value: `move`). */
@@ -172,11 +183,10 @@ export class DocumentOutbox {
   private sizes = new Map<string, number>();
 
   constructor(private readonly transport: OutboxTransport, private readonly storage: OutboxStorage, private readonly options: OutboxOptions = {}) {
-    storage.watch?.((key, stored) => {
+    storage.watch?.((key, state) => {
       if (this.stopped) return;
-      if (stored) this.stored(key);
-      const changed = stored ? this.unprotectedKeys.delete(key) : !this.unprotectedKeys.has(key) && !!this.unprotectedKeys.add(key);
-      if (changed) this.emit({ kind: "status" });
+      if (state === "stored") { this.stored(key); if (this.unprotectedKeys.delete(key)) this.emit({ kind: "status" }); }
+      else this.unprotect(key, state === "failed");
     });
   }
 
@@ -208,6 +218,7 @@ export class DocumentOutbox {
     }
     const repaired = repair(records);
     this.entries = repaired.entries;
+    for (const [id, keys] of repaired.graves) this.graves.set(id, keys);
     this.stamp = Math.max(0, ...[...records.values()].map(record => record.stamp), ...this.entries.map(entry => entry.stamp ?? 0));
     // An entry the repair changed, or whose copies disagree, is written again everywhere with a newer stamp, so no stale copy outlives it.
     const changed = this.entries.filter(entry => repaired.changed.has(entry.id));
@@ -219,13 +230,18 @@ export class DocumentOutbox {
     }
     // Rewrite every key whose stored form the repair changed, and drop keys left empty.
     const keys = new Set([...records.keys(), ...this.entries.flatMap(entry => entry.writes.map(write => documentKey(write)))]);
+    // Every write carries the pending markers, so any order is safe; once no stale copy is left, keys holding only spent markers are
+    // written again without them (a crash between leaves markers with nothing to mark: harmless).
     const rewrite = new Set(this.keysOf(...changed));
     for (const key of keys) {
-      if (rewrite.has(key)) { this.persistKey(key); continue; }
       const stored = records.get(key);
       const now = this.entriesFor(key);
-      if (!stored || stored.dropped?.length || stored.entries.length !== now.length ||
+      if (rewrite.has(key) || !stored || stored.entries.length !== now.length ||
         stored.entries.some((entry, i) => entry.id !== now[i]!.id || (entry.stamp ?? 0) !== (now[i]!.stamp ?? 0))) this.persistKey(key);
+    }
+    for (const key of keys) {
+      const stored = records.get(key);
+      if (stored?.dropped?.some(id => !this.graves.has(id)) && !this.unprotectedKeys.has(key)) this.persistKey(key);
     }
     for (const entry of this.entries) if (entry.state === "conflict") this.emit({ kind: "conflict", entry });
     this.pump();
@@ -245,11 +261,12 @@ export class DocumentOutbox {
   /** The entry changed: its stamp rises, so its copies written now win over older ones on open. */
   private touch(entry: OutboxEntry) { entry.stamp = ++this.stamp; }
 
-  /** Writes one document's key (its entries, oldest first); false when it couldn't be stored. */
-  private persistKey(key: string, dropped?: readonly string[]): boolean {
+  /** Writes one document's key (its entries, oldest first, and every pending marker); false when it couldn't be stored. */
+  private persistKey(key: string): boolean {
     if (this.stopped) return false;
-    const entries = this.entriesFor(key), empty = !entries.length && !dropped?.length;
-    const record: StoredKey = { schema: SCHEMA, stamp: ++this.stamp, entries, ...(dropped?.length ? { dropped: [...dropped] } : {}) };
+    const dropped = [...this.graves.keys()];
+    const entries = this.entriesFor(key), empty = !entries.length && !dropped.length;
+    const record: StoredKey = { schema: SCHEMA, stamp: ++this.stamp, entries, ...(dropped.length ? { dropped } : {}) };
     const text = JSON.stringify(record);
     try {
       this.storage.write(key, text, empty);
@@ -259,23 +276,34 @@ export class DocumentOutbox {
       return true;
     } catch (error) {
       this.options.report?.(error);
-      if (!this.unprotectedKeys.has(key)) { this.unprotectedKeys.add(key); this.emit({ kind: "status" }); }
+      this.unprotect(key, true);
       return false;
     }
   }
-  /** `key`'s latest text is stored: receipts waiting only for it can be forgotten. */
+  /** `key`'s latest text is stored: receipts and markers waiting only for it can go. */
   private stored(key: string) {
     for (const [id, keys] of this.forgetting) if (keys.delete(key) && !keys.size) { this.forgetting.delete(id); this.forget.push(id); }
+    for (const [id, keys] of this.graves) if (keys.delete(key) && !keys.size) this.graves.delete(id);
   }
+  /** `key` isn't protected (yet): a failure warns at once, a background copy still waiting after `WARN_AFTER_MS` too. */
+  private unprotect(key: string, failed: boolean) {
+    const known = this.unprotectedKeys.get(key);
+    if (known && (known.failed || !failed)) return;
+    this.unprotectedKeys.set(key, { since: known?.since ?? this.now(), failed });
+    this.emit({ kind: "status" });
+    if (!failed) (this.options.schedule ?? defaultSchedule)(WARN_AFTER_MS, () => { if (this.unprotectedKeys.has(key) && !this.stopped) this.emit({ kind: "status" }); });
+  }
+  /** Removed entries' markers: kept in every key written until every key that held a copy is stored without it. */
+  private bury(entry: OutboxEntry) { this.graves.set(entry.id, new Set(this.keysOf(entry))); }
   /** Writes `keys`, each once: each document's own key. */
-  private persist(keys: Iterable<string>, dropped?: readonly string[]) { for (const key of new Set(keys)) this.persistKey(key, dropped); }
+  private persist(keys: Iterable<string>) { for (const key of new Set(keys)) this.persistKey(key); }
   /**
    * Try again: writes every unprotected document's key again; false when one still couldn't be written. A key with a background copy is
    * protected again once that copy lands (`status` follows).
    */
   protect(): boolean {
     let ok = true;
-    for (const key of [...this.unprotectedKeys]) ok = this.persistKey(key) && ok;
+    for (const key of [...this.unprotectedKeys.keys()]) ok = this.persistKey(key) && ok;
     return ok;
   }
   /** UTF-16 units the outbox's keys take in storage (counted in the workspace budget). */
@@ -322,7 +350,9 @@ export class DocumentOutbox {
   pendingEntries(): readonly OutboxEntry[] { return this.entries; }
   status(): OutboxStatus {
     return { pending: this.entries.filter(entry => entry.state === "queued").length, conflicts: this.conflicts().length,
-      unprotected: [...this.unprotectedKeys].map(key => this.held.get(key)?.ref ?? refOfKey(key)), failing: this.failing, stopped: this.stopped };
+      unprotected: [...this.unprotectedKeys.keys()].map(key => this.held.get(key)?.ref ?? refOfKey(key)),
+      unprotectedWarning: [...this.unprotectedKeys.values()].some(item => item.failed || this.now() - item.since >= WARN_AFTER_MS),
+      failing: this.failing, stopped: this.stopped };
   }
   subscribe(listener: (event: OutboxEvent) => void): () => void { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
   private emit(event: OutboxEvent) {
@@ -552,6 +582,7 @@ export class DocumentOutbox {
       ...(old.requires?.length ? { requires: [...old.requires] } : {}) };
     this.touch(fresh);
     this.entries = this.entries.map(entry => entry === old ? fresh : entry);
+    this.bury(old);
     const successors = this.repoint(old.id, () => ({ after: fresh.id }));
     for (const other of successors) this.touch(other);
     this.move(old.id, fresh.id);
@@ -567,7 +598,8 @@ export class DocumentOutbox {
     const successors = this.repoint(old.id, write => old.writes.find(item => documentKey(item) === documentKey(write))?.base ?? 0);
     for (const other of successors) this.touch(other);
     this.entries = this.entries.filter(entry => entry !== old);
-    this.persist([...this.keysOf(old), ...this.keysOf(...successors)], [old.id]);
+    this.bury(old);
+    this.persist([...this.keysOf(old), ...this.keysOf(...successors)]);
     this.finish(old.id, "dropped");
     this.emit({ kind: "resolved", entry: old, how: "theirs", refs: old.writes.map(write => ({ kind: write.kind, id: write.id })) });
     queueMicrotask(() => this.pump());
@@ -584,6 +616,7 @@ export class DocumentOutbox {
     const successors = this.repoint(old.id, write => old.writes.find(item => documentKey(item) === documentKey(write))?.base ?? 0);
     for (const other of successors) this.touch(other);
     this.entries = this.entries.filter(entry => entry !== old);
+    this.bury(old);
     const copy: OutboxEntry = { id: this.newId(), seq: ++this.seq, command: "conflict.keepBoth", at: this.now(), state: "queued", replaces: [old.id],
       writes: edits.map(edit => ({ kind: edit.kind, id: edit.id, base: this.baseFor(documentKey(edit)), value: edit.value })),
       ...(old.requires?.length ? { requires: [...old.requires] } : {}) };
@@ -591,7 +624,7 @@ export class DocumentOutbox {
     this.entries.push(copy);
     for (const edit of edits) this.local(edit).version++;
     // The copy's keys first: a kill after them leaves the copy stored and the conflict dropped on open (it is replaced).
-    this.persist([...this.keysOf(copy), ...this.keysOf(old), ...this.keysOf(...successors)], [old.id]);
+    this.persist([...this.keysOf(copy), ...this.keysOf(old), ...this.keysOf(...successors)]);
     this.finish(old.id, "dropped");
     this.emit({ kind: "resolved", entry: old, how: "both", refs: [...old.writes, ...edits].map(write => ({ kind: write.kind, id: write.id })), replacement: copy });
     queueMicrotask(() => this.pump());
@@ -676,13 +709,14 @@ const refOfKey = (key: string): DocumentRef => { const at = key.indexOf("/"); re
  *   document, else onto the dropped entry's stale base);
  * - a successor of an entry no key holds any more goes stale against the library rather than writing over it.
  */
-export function repair(records: ReadonlyMap<string, StoredKey>): { entries: OutboxEntry[]; changed: Set<string> } {
-  const byId = new Map<string, OutboxEntry>(), dropped = new Set<string>(), copies = new Map<string, string[]>();
-  for (const record of records.values()) {
+export function repair(records: ReadonlyMap<string, StoredKey>): { entries: OutboxEntry[]; changed: Set<string>; graves: Map<string, Set<string>> } {
+  const byId = new Map<string, OutboxEntry>(), dropped = new Set<string>(), copies = new Map<string, string[]>(), holders = new Map<string, Set<string>>();
+  for (const [key, record] of records) {
     for (const id of record.dropped ?? []) dropped.add(id);
     for (const entry of record.entries) {
       if (!entry || typeof entry.id !== "string" || !Array.isArray(entry.writes)) continue;
       copies.set(entry.id, [...copies.get(entry.id) ?? [], JSON.stringify(entry)]);
+      holders.set(entry.id, new Set([...holders.get(entry.id) ?? [], key]));
       const known = byId.get(entry.id), stamp = entry.stamp ?? 0, knownStamp = known?.stamp ?? 0;
       if (!known || stamp > knownStamp || (stamp === knownStamp && known.state !== "conflict" && entry.state === "conflict"))
         byId.set(entry.id, structuredClone(entry));
@@ -713,6 +747,9 @@ export function repair(records: ReadonlyMap<string, StoredKey>): { entries: Outb
     const kept = copies.get(entry.id) ?? [];
     if (new Set(kept).size > 1 || kept.length !== new Set(entry.writes.map(documentKey)).size) changed.add(entry.id);
   }
-  return { entries, changed };
+  // Every removed entry still held somewhere stays marked until each key holding it is written again without it.
+  const graves = new Map<string, Set<string>>();
+  for (const id of gone.keys()) graves.set(id, new Set(holders.get(id)));
+  return { entries, changed, graves };
 }
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);

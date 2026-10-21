@@ -42,7 +42,7 @@ export type PresentationStatus = {
 
 /** What the presentation shows of the outbox: the unprotected-changes warning, and how many changes wait or are in conflict. */
 export type OutboxView = {
-  /** Documents whose latest change isn't protected on this computer (their outbox write failed); 0 when every change is. */
+  /** Documents whose latest change isn't protected on this computer, once that warrants the warning (a failed write, or a long wait); else 0. */
   readonly unprotected: number;
   /** Changes not yet in the library. */
   readonly pending: number;
@@ -51,7 +51,7 @@ export type OutboxView = {
   readonly failing: boolean;
 };
 export const outboxView = (status: OutboxStatus): OutboxView =>
-  ({ unprotected: status.unprotected.length, pending: status.pending, conflicts: status.conflicts, failing: status.failing });
+  ({ unprotected: status.unprotectedWarning ? status.unprotected.length : 0, pending: status.pending, conflicts: status.conflicts, failing: status.failing });
 
 export function emptyPresentationStatus(verification = false): PresentationStatus {
   return { verification, workspace: { kind: "idle", message: "" },

@@ -52,11 +52,13 @@ export function desktopOutboxStorage(local: KeyStorage, workspace: string, launc
   }
   const browser = localOutboxStorage(local, `${workspace}~${launch}`);
   const writers = new Map<string, { latest: string | null; pending: boolean; running: Promise<void> | null; failed: boolean }>();
-  let listener: ((key: string, stored: boolean) => void) | null = null;
+  let listener: ((key: string, state: "pending" | "stored" | "failed") => void) | null = null;
   const queue = (key: string, sent: string | null) => {
     let writer = writers.get(key);
     if (!writer) writers.set(key, writer = { latest: sent, pending: false, running: null, failed: false });
     writer.latest = sent; writer.pending = true;
+    // Queued for the host: not protected until it lands.
+    listener?.(key, "pending");
     void send(key);
   };
   const send = (key: string) => {
@@ -67,7 +69,8 @@ export function desktopOutboxStorage(local: KeyStorage, workspace: string, launc
         writer.pending = false;
         const text = writer.latest;
         try { await post(key, text); writer.failed = false; } catch { writer.failed = true; }
-        if (!writer.pending) listener?.(key, !writer.failed);
+        if (writer.failed) listener?.(key, "failed");
+        else if (!writer.pending) listener?.(key, "stored");
       }
       writer.running = null;
     })();
@@ -87,7 +90,6 @@ export function desktopOutboxStorage(local: KeyStorage, workspace: string, launc
         const text = keys.get(key)!, empty = isEmpty(text);
         if (empty && !(key in host)) continue;
         queue(key, empty ? null : text);
-        listener?.(key, false);
       }
       return keys;
     },
@@ -95,7 +97,13 @@ export function desktopOutboxStorage(local: KeyStorage, workspace: string, launc
       queue(key, empty ? null : text);
       // The synchronous copy: a renderer crash in this launch keeps it. An emptied key keeps its (newer) empty text here, so a host copy
       // whose removal hadn't landed yet is never read back over it.
-      browser.write(key, text, false);
+      try { browser.write(key, text, false); }
+      catch (error) {
+        // An older copy left here would be read back over the host's newer one at the next load: it goes, and the key is unprotected
+        // (as the error says) until its host write lands.
+        try { local.removeItem(`${family}${launch}.${key}`); } catch { /* Nothing more can be done here. */ }
+        throw error;
+      }
     },
     watch(next) { listener = next; },
     async settle() {

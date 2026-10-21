@@ -384,11 +384,12 @@ describe("the page's storage for the outbox", () => {
     const loaded = storage.load();
     expect(JSON.parse(loaded.get("look-working/b")!).entries[0].id).toBe("mine");
     expect(JSON.parse(loaded.get("look-working/c")!).entries[0].id).toBe("host");
-    const heard: [string, boolean][] = [];
+    const heard: [string, string][] = [];
     storage.watch!((key, stored) => heard.push([key, stored]));
     storage.write("look-working/b", JSON.stringify({ schema: "xfs/outbox-1", stamp: 8, entries: [] }), true);
     await tick(5);
-    expect(heard).toEqual([["look-working/b", false]]);
+    expect(heard.map(item => item[1])).toContain("pending");
+    expect(heard.at(-1)).toEqual(["look-working/b", "failed"]);
     // The emptied key keeps its newer empty text here, so the host's older copy is never read back over it.
     expect(JSON.parse(local.getItem("xfs.outbox.desktop~now.look-working/b")!).stamp).toBe(8);
     failing = false;
@@ -496,11 +497,11 @@ describe("review findings (chunk 1c-i)", () => {
     let land!: () => void;
     const posted: string[] = [];
     const storage = desktopOutboxStorage(browser, "desktop", "now", host, async (key, text) => { posted.push(`${key}:${JSON.parse(text!).stamp}`); await new Promise<void>(resolve => { land = resolve; }); });
-    const heard: [string, boolean][] = [];
+    const heard: [string, string][] = [];
     storage.watch!((key, stored) => heard.push([key, stored]));
     storage.load();
     expect(posted).toEqual(["look-working/b:9"]);
-    expect(heard).toEqual([["look-working/b", false]]);
+    expect(heard).toEqual([["look-working/b", "pending"]]);
     let settled = false;
     void storage.settle().then(ok => { settled = ok; });
     await tick(5);
@@ -508,6 +509,79 @@ describe("review findings (chunk 1c-i)", () => {
     land();
     await tick(5);
     expect(settled).toBe(true);
-    expect(heard.at(-1)).toEqual(["look-working/b", true]);
+    expect(heard.at(-1)).toEqual(["look-working/b", "stored"]);
+  });
+});
+
+/** Second review of chunk 1c-i (Sol's report): each finding as a test. */
+describe("review findings, second round (chunk 1c-i)", () => {
+  test("a second crash during recovery never brings back a conflict Use theirs discarded: markers stay until every stale copy is gone", async () => {
+    const r = rig(), storage = memoryOutboxStorage();
+    r.store.transact({ id: "other", command: "x", writes: [{ ...COLLECTION, base: 0, value: { theirs: true } }] });
+    const first = memoryOutbox(r.port, storage).outbox;
+    first.commit("pair", [{ ...COLLECTION, value: { mine: 1 } }, { ...LOOK, value: { mine: 1 } }]);
+    await tick(20);
+    expect(first.conflicts().length).toBe(1);
+    // Use theirs: the window dies after the first key's write (it carries the marker; the second key still holds the conflict).
+    storage.killAfter(1, () => first.stop());
+    first.useTheirs(first.conflicts()[0]!.id);
+    // Recovery: every write it makes may be the last; whatever point it dies at, the next start never shows the conflict again.
+    for (let writes = 0; writes < 4; writes++) {
+      storage.killAfter(writes, () => second.stop());
+      const second: DocumentOutbox = new DocumentOutbox(r.port, storage, { retryMs: 5 });
+      second.open();
+      second.stop();
+      storage.killAfter(Infinity);
+      const third = new DocumentOutbox(r.port, storage, { retryMs: 5 });
+      third.hold(LOOK, null); third.hold(COLLECTION, r.store.read([COLLECTION])[documentKey(COLLECTION)]!);
+      third.open();
+      expect(third.conflicts()).toEqual([]);
+      expect(third.document(LOOK)!.value).toBeUndefined();
+      expect(third.document(COLLECTION)!.value).toEqual({ theirs: true });
+      third.stop();
+    }
+    // Once a recovery finishes, no stale copy and no marker is left.
+    storage.killAfter(Infinity);
+    const last = new DocumentOutbox(r.port, storage, { retryMs: 5 });
+    last.open();
+    expect([...storage.keys.values()].filter(text => JSON.parse(text).entries.length)).toEqual([]);
+  });
+
+  test("a desktop WebView write that fails leaves no older copy to be read back over the host's newer one (found by the model test)", async () => {
+    const local = new Map<string, string>();
+    let full = false;
+    const browser = { get length() { return local.size; }, key: (i: number) => [...local.keys()][i] ?? null, getItem: (key: string) => local.get(key) ?? null,
+      setItem: (key: string, text: string) => { if (full) throw new DOMException("Full.", "QuotaExceededError"); local.set(key, text); }, removeItem: (key: string) => { local.delete(key); } };
+    const host = new Map<string, string>();
+    const post = async (key: string, text: string | null) => { if (text === null) host.delete(key); else host.set(key, text); };
+    const storage = desktopOutboxStorage(browser, "desktop", "now", {}, post);
+    storage.write("blob/b0", JSON.stringify({ schema: "xfs/outbox-1", stamp: 1, entries: [{ id: "put" }] }), false);
+    full = true;
+    // The put was acknowledged: its key empties, the WebView can't take the write, the host removes it.
+    expect(() => storage.write("blob/b0", JSON.stringify({ schema: "xfs/outbox-1", stamp: 2, entries: [] }), true)).toThrow();
+    await tick(5);
+    const reloaded = desktopOutboxStorage(browser, "desktop", "now", Object.fromEntries(host), post);
+    expect([...reloaded.load().keys()]).toEqual([]);
+  });
+
+  test("an ordinary desktop write still on its way to the host is unprotected, and warns once it waits too long", async () => {
+    const local = new Map<string, string>();
+    const browser = { get length() { return local.size; }, key: (i: number) => [...local.keys()][i] ?? null, getItem: (key: string) => local.get(key) ?? null,
+      setItem: (key: string, text: string) => { local.set(key, text); }, removeItem: (key: string) => { local.delete(key); } };
+    const lands: (() => void)[] = [];
+    const storage = desktopOutboxStorage(browser, "desktop", "now", {}, async () => { await new Promise<void>(resolve => lands.push(resolve)); });
+    const timers: (() => void)[] = [];
+    let now = 0;
+    const r = rig();
+    const outbox = new DocumentOutbox(r.port, storage, { now: () => now, schedule: (_ms, run) => { timers.push(run); return { cancel() {} }; } });
+    outbox.open();
+    outbox.commit("look.edit", [{ ...LOOK, value: { n: 1 } }]);
+    expect(outbox.status()).toMatchObject({ unprotected: [LOOK], unprotectedWarning: false });
+    now += 2500;
+    for (const run of timers.splice(0)) run();
+    expect(outbox.status().unprotectedWarning).toBe(true);
+    // The host copies land (the acknowledgement's rewrite of the key too): protected again.
+    for (let i = 0; i < 10 && lands.length; i++) { for (const land of lands.splice(0)) land(); await tick(5); }
+    expect(outbox.status().unprotected.filter(ref => documentKey(ref) === documentKey(LOOK))).toEqual([]);
   });
 });
