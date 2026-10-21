@@ -80,6 +80,15 @@ export class LibraryBackups {
   }
 
   /**
+   * Removes a pre-migration copy that a failed migration made: its transaction rolled back, so the file is still exactly what the
+   * copy holds, and keeping it would only add a copy at every retry. Anything but this library's pre-migration copies is refused.
+   */
+  discardMigrationCopy(file: string): void {
+    if (!this.list().some(item => item.file === file && item.kind === "pre-migration")) throw Error("That isn't one of this library's migration copies.");
+    rmSync(file, { force: true });
+  }
+
+  /**
    * Keeps taking the daily copy for as long as `signal` lives: the first check `FIRST_BACKUP_DELAY_MS` from now, then one
    * every `BACKUP_CHECK_MS`, so a Studio left running takes a copy each day. A failed copy never stops the Studio; it is
    * tried again at the next check.

@@ -80,11 +80,12 @@ function connect(path: string, options: LibraryDatabaseOptions): { db: Database;
       if (!pending(db, migration)) continue;
       // The file's write lock first: another opener migrating at the same time waits here, then finds the step done.
       db.exec("BEGIN IMMEDIATE");
+      let copy: string | undefined;
       try {
         if (!pending(db, migration)) { db.exec("COMMIT"); continue; }
         // The copy reads the file as committed, which this transaction hasn't changed yet; it runs on a connection of its own
         // (a copy can't be made inside a transaction) while the lock keeps every other writer out.
-        if (migration.rewritesRows) options.backups?.beforeMigration(migration.id);
+        if (migration.rewritesRows) copy = options.backups?.beforeMigration(migration.id);
         migration.apply(db);
         if (userVersion(db) > RELEASED_LIBRARY_VERSION) throw Error(`Migration ${migration.id} raised the library version.`);
         db.exec(`CREATE TABLE IF NOT EXISTS ${LEDGER} (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL)`);
@@ -95,7 +96,11 @@ function connect(path: string, options: LibraryDatabaseOptions): { db: Database;
         db.exec("COMMIT");
         migrated = true;
       } catch (error) {
-        if (db.inTransaction) db.exec("ROLLBACK");
+        if (db.inTransaction) {
+          db.exec("ROLLBACK");
+          // Rolled back: the file is what the copy holds, so a retry's copy would only repeat it.
+          if (copy) try { options.backups?.discardMigrationCopy(copy); } catch { /* Kept: a spare copy is harmless. */ }
+        }
         throw error;
       }
     }

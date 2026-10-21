@@ -300,6 +300,27 @@ test("a step that rewrites rows runs only after a copy of the file; if the copy 
   expect(names(again.find(item => item.file !== copies[0].file)!.file)).toEqual([{ name: "Between" }]);
 });
 
+test("a row-rewriting step that fails rolls back and leaves no copy behind, however often it is retried; one that succeeds keeps its copy", () => {
+  const dir = folder(), path = join(dir, "library.sqlite");
+  const file = openTestLibrary(path);
+  file.looks.save({ name: "Before", recipe: initialRecipe() });
+  file.close();
+  const backups = new LibraryBackups(path, () => Date.UTC(2026, 9, 21));
+  let fail = true;
+  const step: LibraryMigration = { id: "test-flaky-1", rewritesRows: true, applied: () => false,
+    apply: raw => { raw.query("UPDATE look_revisions SET name = 'After'").run(); if (fail) throw Error("step failed"); } };
+  const before = dump(path);
+  for (let attempt = 0; attempt < 3; attempt++)
+    expect(() => LibraryDatabase.open(path, { clock: hostClock(), migrations: [...LIBRARY_MIGRATIONS, step], backups })).toThrow("step failed");
+  expect(dump(path)).toEqual(before);
+  expect(backups.list().filter(item => item.kind === "pre-migration")).toEqual([]);
+  fail = false;
+  LibraryDatabase.open(path, { clock: hostClock(), migrations: [...LIBRARY_MIGRATIONS, step], backups }).close();
+  expect(backups.list().filter(item => item.kind === "pre-migration")).toHaveLength(1);
+  // Only this library's migration copies can be discarded.
+  expect(() => backups.discardMigrationCopy(path)).toThrow("migration copies");
+});
+
 test("a step another opener ran meanwhile is seen inside the write lock: no copy is taken and it doesn't run again", () => {
   const dir = folder(), path = join(dir, "library.sqlite");
   openTestLibrary(path).close();
