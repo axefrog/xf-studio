@@ -10,12 +10,8 @@ import { mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { checkpointDone, checkpointInWorker, checkpointLibrary, LIBRARY_FLUSH, LibraryDurability, useWriteAheadLog } from "../src/platform/persistence/library-durability";
-import { LookLibrary } from "../src/library-store";
-import { CollectionLibrary } from "../src/collection-store";
-import { PartPresetLibrary } from "../src/part-preset-store";
-import { DocumentStore } from "../src/platform/persistence/document-store";
 import { ManualClock } from "./fixtures/platform-doubles";
-import { STUDIO_PARTS } from "../src/compose/studio-registry";
+import { openTestLibrary } from "./fixtures/library-file";
 import { initialRecipe } from "./fixtures/eye-region";
 
 const folders: string[] = [];
@@ -133,18 +129,13 @@ const walState = (path: string) => {
   try { return db.query("PRAGMA wal_checkpoint(NOOP)").get() as { log: number; checkpointed: number }; } finally { db.close(); }
 };
 
-test("every library store runs WAL with synchronous=NORMAL; a file that can't use WAL keeps FULL", () => {
-  const path = library(), life = new AbortController();
-  const durability = new LibraryDurability(path, { clock: new ManualClock(), signal: life.signal });
-  const looks = new LookLibrary(path, durability), collections = new CollectionLibrary(path, STUDIO_PARTS, durability);
-  const presets = new PartPresetLibrary(path, STUDIO_PARTS, undefined, durability), documents = new DocumentStore(path, { writes: durability });
-  const stores = [looks, collections, presets, documents] as unknown as { db: Database }[];
+test("the library file's one connection, which every store writes through, runs WAL with synchronous=NORMAL; a file that can't use WAL keeps FULL", () => {
+  const path = library(), file = openTestLibrary(path, { clock: new ManualClock() });
   try {
-    for (const store of stores) {
-      expect(store.db.query("PRAGMA journal_mode").get()).toEqual({ journal_mode: "wal" });
-      expect(store.db.query("PRAGMA synchronous").get()).toEqual({ synchronous: 1 });
-    }
-  } finally { looks.close(); collections.close(); presets.close(); documents.close(); life.abort(); }
+    expect(file.database.read(db => db.query("PRAGMA journal_mode").get())).toEqual({ journal_mode: "wal" });
+    expect(file.database.read(db => db.query("PRAGMA synchronous").get())).toEqual({ synchronous: 1 });
+    expect(file.database.read(db => db.query("PRAGMA busy_timeout").get())).toEqual({ timeout: 5000 });
+  } finally { file.close(); }
   const memory = new Database(":memory:");
   expect(useWriteAheadLog(memory)).toBe(false);
   expect(memory.query("PRAGMA synchronous").get()).toEqual({ synchronous: 2 });
@@ -153,14 +144,14 @@ test("every library store runs WAL with synchronous=NORMAL; a file that can't us
 
 test("a library in rollback-journal mode moves to WAL when it opens, its rows intact", () => {
   const path = library(), recipe = initialRecipe();
-  const first = new LookLibrary(path), saved = first.save({ name: "Before", recipe });
+  const first = openTestLibrary(path), saved = first.looks.save({ name: "Before", recipe });
   first.close();
   const raw = new Database(path);
   expect(raw.query("PRAGMA journal_mode=DELETE").get()).toEqual({ journal_mode: "delete" });
   raw.close();
-  const reopened = new LookLibrary(path);
+  const reopened = openTestLibrary(path);
   try {
-    expect(reopened.get(saved.id).name).toBe("Before");
+    expect(reopened.looks.get(saved.id).name).toBe("Before");
     const check = new Database(path, { readonly: true });
     expect(check.query("PRAGMA journal_mode").get()).toEqual({ journal_mode: "wal" });
     expect(check.query("PRAGMA integrity_check").get()).toEqual({ integrity_check: "ok" });
@@ -170,8 +161,8 @@ test("a library in rollback-journal mode moves to WAL when it opens, its rows in
 
 test("a flush checkpoints every committed frame; a reader holding the log makes it report unfinished until it lets go", async () => {
   const path = library(), scheduler = new ManualClock(), life = new AbortController();
-  const durability = new LibraryDurability(path, { clock: scheduler, signal: life.signal });
-  const looks = new LookLibrary(path, durability), recipe = initialRecipe();
+  const file = openTestLibrary(path, { clock: scheduler, signal: life.signal });
+  const durability = file.database.durability!, looks = file.looks, recipe = initialRecipe();
   try {
     expect(durability.flush()).toBe(true);     // the schema
     looks.save({ name: "One", recipe });
@@ -198,14 +189,13 @@ test("a flush checkpoints every committed frame; a reader holding the log makes 
     expect(durability.pending).toBe(false);
     const done = walState(path);
     expect(done.checkpointed).toBe(done.log);
-  } finally { looks.close(); life.abort(); }
+  } finally { file.close(); life.abort(); }
 });
 
 test("closing the library (the host's stop, on quit) flushes what the last seconds wrote", () => {
   const path = library(), scheduler = new ManualClock(), life = new AbortController();
-  const durability = new LibraryDurability(path, { clock: scheduler, signal: life.signal });
-  const looks = new LookLibrary(path, durability), collections = new CollectionLibrary(path, STUDIO_PARTS, durability);
-  const presets = new PartPresetLibrary(path, STUDIO_PARTS, undefined, durability), documents = new DocumentStore(path, { writes: durability });
+  const file = openTestLibrary(path, { clock: scheduler, signal: life.signal });
+  const durability = file.database.durability!, looks = file.looks;
   const holder = new Database(path);   // another connection (a second window, a tool) keeps the log after the stores close
   try {
     durability.flush();
@@ -213,8 +203,7 @@ test("closing the library (the host's stop, on quit) flushes what the last secon
     expect(durability.pending).toBe(true);
     const unsynced = walState(path);
     expect(unsynced.checkpointed).toBeLessThan(unsynced.log);
-    looks.close(); collections.close(); presets.close(); documents.close();
-    life.abort();
+    file.close();
     expect(durability.pending).toBe(false);
     const synced = walState(path);
     expect(synced.checkpointed).toBe(synced.log);
@@ -222,11 +211,10 @@ test("closing the library (the host's stop, on quit) flushes what the last secon
 });
 
 test("each store tells the durability of its commits", async () => {
-  const path = library(), life = new AbortController();
+  const path = library();
   let writes = 0;
   const counter = { wrote: () => { writes++; } };
-  const looks = new LookLibrary(path, counter), collections = new CollectionLibrary(path, STUDIO_PARTS, counter);
-  const presets = new PartPresetLibrary(path, STUDIO_PARTS, undefined, counter), documents = new DocumentStore(path, { writes: counter });
+  const file = openTestLibrary(path, { writes: counter }), { looks, collections, partPresets: presets, documents } = file;
   try {
     let at = writes;
     const look = looks.save({ name: "A look", recipe: initialRecipe() });
@@ -245,7 +233,13 @@ test("each store tells the durability of its commits", async () => {
     expect(writes).toBe(at + 2);
     expect(documents.put("sample", "n", { a: 3 }, 1).ok).toBe(false);
     expect(writes).toBe(at + 2);   // stale: nothing committed
-  } finally { looks.close(); collections.close(); presets.close(); documents.close(); life.abort(); }
+    at = writes;
+    const preset = presets.save({ feature: "expressions", name: "Smile", part: { schema: "xfs/expression-part-1", body: { controls: { jaw_mid_open: 0.1 }, links: {} } } });
+    presets.rename(preset.id, { name: "Grin", revision: 1 });
+    expect(writes).toBe(at + 2);
+    expect(() => presets.rename(preset.id, { name: "Late", revision: 1 })).toThrow("another window");
+    expect(writes).toBe(at + 2);   // refused
+  } finally { file.close(); }
 });
 
 test("a process killed while it saves leaves a valid database holding every save it acknowledged", async () => {
@@ -276,8 +270,8 @@ test("a process killed while it saves leaves a valid database holding every save
       for (const id of acknowledged) expect(ids.has(id), `round ${round}: acknowledged ${id}`).toBe(true);
     } finally { db.close(); }
     // The stores open it again and read every look.
-    const reopened = new LookLibrary(path);
-    try { expect(reopened.list().length).toBeGreaterThanOrEqual(acknowledged.length); } finally { reopened.close(); }
+    const reopened = openTestLibrary(path);
+    try { expect(reopened.looks.list().length).toBeGreaterThanOrEqual(acknowledged.length); } finally { reopened.close(); }
   }
 }, 60_000);
 
@@ -308,8 +302,7 @@ test("the scheduled flush runs off the host's thread; writes made meanwhile stay
 });
 
 test("the checkpoint worker makes a real library's commits durable on its own connection; a busy checkpoint is never done", async () => {
-  const path = library(), life = new AbortController();
-  const looks = new LookLibrary(path, { wrote() {} });
+  const path = library(), file = openTestLibrary(path, { writes: { wrote() {} } }), looks = file.looks;
   try {
     looks.save({ name: "One", recipe: initialRecipe() });
     const before = walState(path);
@@ -319,7 +312,7 @@ test("the checkpoint worker makes a real library's commits durable on its own co
     expect(after.checkpointed).toBe(after.log);
     const missing = await checkpointInWorker(join(path, "..", "missing.sqlite")).then(() => null, (error: Error) => error);
     expect(missing?.message).toContain("unable to open");
-  } finally { looks.close(); life.abort(); }
+  } finally { file.close(); }
   // SQLite reports -1 frames when another checkpoint held the lock: that is busy, not a file outside WAL.
   expect(checkpointDone({ busy: 1, log: -1, checkpointed: -1 })).toBe(false);
   expect(checkpointDone({ busy: 0, log: -1, checkpointed: -1 })).toBe(true);

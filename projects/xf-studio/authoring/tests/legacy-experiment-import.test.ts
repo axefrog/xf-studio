@@ -8,7 +8,7 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DocumentStore } from "../src/platform/persistence/document-store";
+import { openTestLibrary } from "./fixtures/library-file";
 import { importLegacyExperiments, LEGACY_HAIR_GROOM_KIND as HAIR_GROOM_KIND } from "../src/platform/persistence/legacy-experiment-import";
 
 import { EXPERIMENT_FLAGS } from "../src/platform/api/experiments";
@@ -79,40 +79,40 @@ test("the latest preference and Hair Lab grooms are copied into the document sto
   const path = library();
   writeFixture(path, FIXTURE);
   const before = oldRows(path), logged: string[] = [];
-  const store = new DocumentStore(path);
+  const file = openTestLibrary(path), store = file.documents;
   try {
-    expect(importLegacyExperiments(store, message => logged.push(message))).toEqual({ flags: true, grooms: 2 });
+    expect(importLegacyExperiments(file.database, store, message => logged.push(message))).toEqual({ flags: true, grooms: 2 });
     expect(store.list(EXPERIMENT_FLAGS.kind).map(item => item.value)).toEqual([{ schema: EXPERIMENT_FLAGS.schema, flags: { "hair-lab": true } }]);
     const grooms = store.list<typeof GROOM>(HAIR_GROOM_KIND);
     expect(grooms.map(item => [item.id, item.revision])).toEqual([["groom-1", 1], ["groom-2", 1]]);
     expect(grooms[0].value).toEqual({ ...GROOM, fields: { ...GROOM.fields, length: length(.29) } });
     expect(grooms[1].value).toEqual({ ...GROOM, name: "Second", fields: { ...GROOM.fields, length: length(.7) } });
     expect(logged).toEqual(["Copied earlier experiment data into the document store: the experimental-features preference, 2 Hair Lab grooms."]);
-  } finally { store.close(); }
+  } finally { file.close(); }
   expect(oldRows(path)).toBe(before);
 });
 
 test("the import is idempotent: a second run copies nothing and never overwrites a document changed since", () => {
   const path = library();
   writeFixture(path, FIXTURE);
-  const store = new DocumentStore(path);
+  const file = openTestLibrary(path), store = file.documents;
   try {
-    importLegacyExperiments(store);
+    importLegacyExperiments(file.database, store);
     store.put(HAIR_GROOM_KIND, "groom-1", { edited: true }, 1);
     store.put(EXPERIMENT_FLAGS.kind, EXPERIMENT_FLAGS.id, { schema: EXPERIMENT_FLAGS.schema, flags: { "hair-lab": false } }, 1);
     const logged: string[] = [];
-    expect(importLegacyExperiments(store, message => logged.push(message))).toEqual({ flags: false, grooms: 0 });
+    expect(importLegacyExperiments(file.database, store, message => logged.push(message))).toEqual({ flags: false, grooms: 0 });
     expect(logged).toEqual([]);
     expect(store.get(HAIR_GROOM_KIND, "groom-1")).toMatchObject({ revision: 2, value: { edited: true } });
     expect(store.get(EXPERIMENT_FLAGS.kind, EXPERIMENT_FLAGS.id)).toMatchObject({ revision: 2, value: { flags: { "hair-lab": false } } });
-  } finally { store.close(); }
+  } finally { file.close(); }
 });
 
 test("a library without the old log (every released build's) imports nothing", () => {
-  const path = library(), store = new DocumentStore(path);
+  const path = library(), file = openTestLibrary(path), store = file.documents;
   try {
-    expect(importLegacyExperiments(store)).toEqual({ flags: false, grooms: 0 });
+    expect(importLegacyExperiments(file.database, store)).toEqual({ flags: false, grooms: 0 });
     expect(store.list(HAIR_GROOM_KIND)).toEqual([]);
-  } finally { store.close(); }
+  } finally { file.close(); }
 });
 

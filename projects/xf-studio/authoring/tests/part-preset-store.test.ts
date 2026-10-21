@@ -9,22 +9,33 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CollectionLibrary } from "../src/collection-store";
 import { STUDIO_PARTS } from "../src/compose/studio-registry";
-import { LookLibrary } from "../src/library-store";
-import { PartPresetLibrary, partPresetRequest } from "../src/part-preset-store";
+import { LIBRARY_MIGRATIONS } from "../src/library-migrations";
+import { partPresetRequest } from "../src/part-preset-store";
+import { hostClock } from "../src/platform/core/clock";
+import { LibraryDatabase } from "../src/platform/persistence/library-database";
+import { openTestLibrary } from "./fixtures/library-file";
 import { alphaList } from "./fixtures/alpha-0.1.0/collection-list";
 import { COLLECTION_FIXTURES, readFixture } from "./fixtures/capture-plan-golden";
 import { parseRecipeFile } from "../src/recipe-schema";
 
 const expression = (controls: Record<string, number>) => ({ schema: "xfs/expression-part-1", body: { controls, links: {} } });
 
+/** A library as builds before part presets left it (the look and collection tables only), open on its own connection. */
+const beforePresets = (path: string) => LibraryDatabase.open(path, { clock: hostClock(), migrations: LIBRARY_MIGRATIONS.slice(0, 2), backups: null });
+/** The file's part presets, closed with their file. */
+function presetLibrary(path: string, newId?: () => string) {
+  const file = openTestLibrary(path, {}, newId);
+  return Object.assign(file.partPresets, { close: () => file.close() });
+}
+
 function library() {
   const dir = mkdtempSync(join(tmpdir(), "xfs-part-presets-")), path = join(dir, "library.sqlite");
-  new LookLibrary(path).close();
+  beforePresets(path).close();
   return { path, cleanup: () => { try { rmSync(dir, { recursive: true, force: true }); } catch { /* WAL files may still be closing. */ } } };
 }
 
 test("saving, renaming and deleting presets leaves the released tables, their version and alpha.1's list untouched", () => {
-  const temp = library(), collections = new CollectionLibrary(temp.path, STUDIO_PARTS);
+  const temp = library(), early = beforePresets(temp.path), collections = new CollectionLibrary(early, STUDIO_PARTS);
   const saved = collections.save({ collection: STUDIO_PARTS.readCollection(readFixture(COLLECTION_FIXTURES[0])) });
   const before = new Database(temp.path, { readonly: true });
   const version = (before.query("PRAGMA user_version").get() as { user_version: number }).user_version;
@@ -32,7 +43,7 @@ test("saving, renaming and deleting presets leaves the released tables, their ve
   const released = tables(before);
   before.close();
   let n = 0;
-  const presets = new PartPresetLibrary(temp.path, STUDIO_PARTS, () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`);
+  const presets = presetLibrary(temp.path, () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`);
   try {
     const smile = presets.save({ feature: "expressions", name: " Soft smile ", part: expression({ lips_l_corner_up: 0.3, lips_r_corner_up: 0.3 }) });
     presets.save({ feature: "expressions", name: "a slight frown", part: expression({ eye_l_brows_lower: 0.2 }) });
@@ -55,24 +66,25 @@ test("saving, renaming and deleting presets leaves the released tables, their ve
   const after = new Database(temp.path, { readonly: true });
   try {
     expect((after.query("PRAGMA user_version").get() as { user_version: number }).user_version).toBe(version);
-    expect(tables(after)).toEqual([...released, "part_preset_sets", "part_presets"].sort());
+    // Opening the file adds the presets' tables beside the released ones, with the document store's and the migration ledger.
+    expect(tables(after)).toEqual([...new Set([...released, "documents", "part_preset_sets", "part_presets", "xfs_migrations"])].sort());
     // The release's own list reads the library exactly as before.
     const alpha = alphaList(after, parseRecipeFile);
     expect(alpha.map(({ id, name, revision, count }) => ({ id, name, revision, count })))
       .toEqual(collections.list().map(({ id, name, revision, count }) => ({ id, name, revision, count })));
     expect(alpha.map(item => item.id)).toContain(saved.collection.id);
-  } finally { after.close(); collections.close(); temp.cleanup(); }
+  } finally { after.close(); early.close(); temp.cleanup(); }
 });
 
 test("a row of a newer part schema is kept and left out of the list; the table is created only once", () => {
   const temp = library();
-  const first = new PartPresetLibrary(temp.path, STUDIO_PARTS);
+  const first = presetLibrary(temp.path);
   first.save({ feature: "expressions", name: "Kept", part: expression({ jaw_mid_open: 0.1 }) });
   first.close();
   const raw = new Database(temp.path);
   raw.query("INSERT INTO part_presets VALUES ('expressions', '00000000-0000-4000-8000-000000000099', 'Newer', 1, 'xfs/expression-part-9', '{}', 'x', 'x')").run();
   raw.close();
-  const again = new PartPresetLibrary(temp.path, STUDIO_PARTS);
+  const again = presetLibrary(temp.path);
   try {
     expect(again.list("expressions").map(item => item.name)).toEqual(["Kept"]);
     const db = new Database(temp.path, { readonly: true });
@@ -82,7 +94,7 @@ test("a row of a newer part schema is kept and left out of the list; the table i
 });
 
 test("the endpoint lists, saves, renames and deletes for the local studio only", async () => {
-  const temp = library(), presets = new PartPresetLibrary(temp.path, STUDIO_PARTS);
+  const temp = library(), presets = presetLibrary(temp.path);
   const base = "http://127.0.0.1:1/api/part-presets", origin = "http://127.0.0.1:1";
   const send = (method: string, path = "", body?: unknown, headers: Record<string, string> = { Origin: origin, "Content-Type": "application/json" }) =>
     partPresetRequest(new Request(base + path, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), presets, "/api/part-presets");
@@ -129,7 +141,7 @@ test("the presets family's service lists on first ask, keeps names sorted and re
 test("expression sets: created, renamed, filled, named for export and deleted, revision-guarded, beside the presets", async () => {
   const temp = library();
   let n = 0;
-  const presets = new PartPresetLibrary(temp.path, STUDIO_PARTS, () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`);
+  const presets = presetLibrary(temp.path, () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`);
   try {
     const smile = presets.save({ feature: "expressions", name: "Smile", part: expression({ lips_l_corner_up: 0.3 }) });
     const frown = presets.save({ feature: "expressions", name: "Frown", part: expression({ eye_l_brows_lower: 0.2 }) });
@@ -176,7 +188,7 @@ test("expression sets: created, renamed, filled, named for export and deleted, r
 test("a damaged set row never stops a preset's delete or restore: it is skipped and kept as it is (CORE-116)", () => {
   const temp = library();
   let n = 0;
-  const presets = new PartPresetLibrary(temp.path, STUDIO_PARTS, () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`);
+  const presets = presetLibrary(temp.path, () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`);
   try {
     const smile = presets.save({ feature: "expressions", name: "Smile", part: expression({ lips_l_corner_up: 0.3 }) });
     const good = presets.createSet({ feature: "expressions", name: "Good", members: [smile.id] });

@@ -8,7 +8,7 @@ import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BACKUP_CHECK_MS, FIRST_BACKUP_DELAY_MS, LibraryBackups } from "../src/platform/persistence/backups";
-import { DocumentStore } from "../src/platform/persistence/document-store";
+import { openTestLibrary } from "./fixtures/library-file";
 import { ManualClock } from "./fixtures/platform-doubles";
 
 const folders: string[] = [];
@@ -18,8 +18,8 @@ const DAY = 86_400_000, START = Date.UTC(2026, 8, 1, 9);
 
 /** A library file holding one document. */
 function libraryWith(path: string, value: unknown): void {
-  const store = new DocumentStore(path);
-  try { store.put("sample", "a", value, store.get("sample", "a")?.revision ?? 0); } finally { store.close(); }
+  const file = openTestLibrary(path), store = file.documents;
+  try { store.put("sample", "a", value, store.get("sample", "a")?.revision ?? 0); } finally { file.close(); }
 }
 
 test("daily backups: one a day, seven daily and four weekly kept, and restore keeps the current file", () => {
@@ -37,15 +37,15 @@ test("daily backups: one a day, seven daily and four weekly kept, and restore ke
   const kept = backups.restore(daily[3].file);
   expect(existsSync(kept)).toBe(true);
   expect(readdirSync(join(dir, "backups")).some(name => name.includes("pre-restore"))).toBe(true);
-  const restored = new DocumentStore(path);
-  try { expect(restored.get("sample", "a")?.value).toBe("kept"); } finally { restored.close(); }
+  const restored = openTestLibrary(path);
+  try { expect(restored.documents.get("sample", "a")?.value).toBe("kept"); } finally { restored.close(); }
   expect(readdirSync(join(dir, "backups")).some(name => name.endsWith(".tmp"))).toBe(false);
 }, 30_000);   // Several backup rounds on disk: a few seconds on CI's Windows runner.
 
 test("restore is refused while another connection has the library open", () => {
   const dir = folder(), path = join(dir, "library.sqlite");
   libraryWith(path, "kept");
-  const store = new DocumentStore(path);
+  const store = openTestLibrary(path);
   const backups = new LibraryBackups(path, () => START);
   const copy = backups.daily()!;
   expect(() => backups.restore(copy)).toThrow("other windows");

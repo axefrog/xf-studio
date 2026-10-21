@@ -3,8 +3,12 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CollectionLibrary, collectionRequest } from "../src/collection-store";
+import { collectionRequest } from "../src/collection-store";
 import { LookLibrary } from "../src/library-store";
+import { LIBRARY_MIGRATIONS } from "../src/library-migrations";
+import { hostClock } from "../src/platform/core/clock";
+import { LibraryDatabase } from "../src/platform/persistence/library-database";
+import { openTestLibrary, type TestLibrary } from "./fixtures/library-file";
 import { CollectionSession, type EditorSnapshot } from "../src/collection-session";
 import { COLLECTION_RECOVERY_LIMIT, collectionDraft, emptyMemory, emptyRecipe } from "../src/collection-workspace";
 import { historyRecipes } from "./fixtures/looks";
@@ -88,11 +92,15 @@ test("recovery is bounded and follows the opened drafts in order", () => {
 
 test("SQLite migration preserves look revisions; collection saves are atomic, ordered and conflict-protected", () => {
   const dir = mkdtempSync(join(tmpdir(), "xfs-collections-")), path = join(dir, "library.sqlite");
-  let looks = new LookLibrary(path), db: CollectionLibrary | undefined;
+  // A version-1 library (looks only), as builds before the collection library left it.
+  const v1 = LibraryDatabase.open(path, { clock: hostClock(), migrations: LIBRARY_MIGRATIONS.slice(0, 1), backups: null });
+  let file: TestLibrary | undefined;
   try {
-    const old = looks.save({ name: "Old look", recipe: initialRecipe() });
+    const old = new LookLibrary(v1).save({ name: "Old look", recipe: initialRecipe() });
+    v1.close();
     const raw = new Database(path), originalRows = raw.query("SELECT * FROM look_revisions").all();
-    db = new CollectionLibrary(path, STUDIO_PARTS);
+    file = openTestLibrary(path);
+    let db = file.collections;
     const initial = db.get(db.list()[0].id);
     expect(initial.collection.presets[0].id).toBe(old.id); expect(initial.revision).toBe(1);
     expect(raw.query("SELECT * FROM look_revisions").all()).toEqual(originalRows);
@@ -110,20 +118,20 @@ test("SQLite migration preserves look revisions; collection saves are atomic, or
     const recovered = db.save({ collection: initial.collection, revision: 4 });
     expect(recovered.collection.presets[0].revision).toBe(3); // Never reuse revision 1 after removal and older restoration.
     expect(db.get(initial.collection.id, 2)).toEqual(second);
-    raw.close(); db.close(); looks.close();
-    looks = new LookLibrary(path); db = new CollectionLibrary(path, STUDIO_PARTS);
-    expect(looks.get(old.id)).toEqual(old); expect(db.get(initial.collection.id)).toEqual(recovered);
+    raw.close(); file.close();
+    file = openTestLibrary(path); db = file.collections;
+    expect(file.looks.get(old.id)).toEqual(old); expect(db.get(initial.collection.id)).toEqual(recovered);
     const separate = db.save({ collection: { ...edited, id: crypto.randomUUID() } });
     expect(separate.revision).toBe(1); expect(db.list()).toHaveLength(2);
     expect(() => db!.save({ collection: { ...edited, presets: [{ ...edited.presets[0],
       parts: { "eye-makeup": { schema: "xfs/eye-makeup-part-1", body: {} } } }] }, revision: 5 })).toThrow("Invalid");
     expect(db.get(initial.collection.id)).toEqual(recovered);
-  } finally { db?.close(); looks.close(); rmSync(dir, { recursive: true, force: true }); }
+  } finally { v1.close(); file?.close(); rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("collection API preserves legacy looks and rejects foreign, stale and destructive requests", async () => {
   const dir = mkdtempSync(join(tmpdir(), "xfs-collection-api-")), path = join(dir, "test.sqlite");
-  const looks = new LookLibrary(path), db = new CollectionLibrary(path, STUDIO_PARTS);
+  const file = openTestLibrary(path), looks = file.looks, db = file.collections;
   const prefix = "/api/verification/collections", origin = "http://127.0.0.1:4317";
   const request = (suffix: string, method = "GET", value?: unknown, source = origin) => new Request(origin + prefix + suffix,
     { method, headers: { Origin: source, "Content-Type": "application/json" }, body: value ? JSON.stringify(value) : undefined });
@@ -139,5 +147,5 @@ test("collection API preserves legacy looks and rejects foreign, stale and destr
     const got = await (await collectionRequest(request("/" + initial.collection.id), db, prefix)).json();
     expect(parseCollection(got.collection, true).id).toBe(initial.collection.id);
     expect(looks.list()).toHaveLength(0);
-  } finally { db.close(); looks.close(); rmSync(dir, { recursive: true, force: true }); }
+  } finally { file.close(); rmSync(dir, { recursive: true, force: true }); }
 });

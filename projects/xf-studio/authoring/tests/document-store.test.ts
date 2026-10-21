@@ -7,30 +7,28 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createDocumentsHandler, DocumentStore } from "../src/platform/persistence/document-store";
+import { createDocumentsHandler } from "../src/platform/persistence/document-store";
 import { browserDocuments } from "../src/browser-documents-device";
 import { savedDocument } from "../src/platform/core/saved-document";
 import type { DocumentStorePort } from "../src/platform/api/document-store";
-import { LookLibrary } from "../src/library-store";
-import { CollectionLibrary } from "../src/collection-store";
-import { PartPresetLibrary } from "../src/part-preset-store";
 import { STUDIO_PARTS } from "../src/compose/studio-registry";
 import { COLLECTION_FIXTURES, readFixture } from "./fixtures/capture-plan-golden";
 import { alphaList } from "./fixtures/alpha-0.1.0/collection-list";
 import { readRecipe } from "../src/recipe-schema";
-import { settle, storeDocuments } from "./fixtures/platform-doubles";
+import { ManualClock, settle, storeDocuments } from "./fixtures/platform-doubles";
+import { openTestLibrary } from "./fixtures/library-file";
 
 const folders: string[] = [];
 function library(): string { const dir = mkdtempSync(join(tmpdir(), "xfs-documents-")); folders.push(dir); return join(dir, "library.sqlite"); }
 afterEach(() => { for (const dir of folders.splice(0)) try { rmSync(dir, { recursive: true, force: true }); } catch { /* closing */ } });
 
 test("a write names the revision it read; a stale one changes nothing and answers the current document", () => {
-  let now = 1_000;
-  const store = new DocumentStore(":memory:", { now: () => now });
+  const clock = new ManualClock(1_000);
+  const file = openTestLibrary(":memory:", { clock }), store = file.documents;
   try {
     const first = store.put("sample", "a", { n: 1 }, 0);
     expect(first).toEqual({ ok: true, document: { kind: "sample", id: "a", revision: 1, value: { n: 1 }, updatedAt: 1_000 } });
-    now = 2_000;
+    clock.advance(1_000);
     expect(store.put("sample", "a", { n: 2 }, 1).ok).toBe(true);
     const stale = store.put("sample", "a", { n: 3 }, 1);
     expect(stale).toEqual({ ok: false, reason: "stale", current: { kind: "sample", id: "a", revision: 2, value: { n: 2 }, updatedAt: 2_000 } });
@@ -43,48 +41,44 @@ test("a write names the revision it read; a stale one changes nothing and answer
     expect(() => store.put("sample", "", 1, 0)).toThrow("ID");
     expect(() => store.put("sample", "a", 1, -1)).toThrow("revision");
     expect(() => store.put("sample", "a", undefined, 2)).toThrow("JSON");
-  } finally { store.close(); }
+  } finally { file.close(); }
 });
 
 test("documents reload from the same file, and each committed write (only) is reported to the file's durability", () => {
   const path = library();
   let writes = 0;
-  const store = new DocumentStore(path, { writes: { wrote: () => { writes++; } } });
+  const file = openTestLibrary(path, { writes: { wrote: () => { writes++; } } }), store = file.documents;
+  writes = 0;   // creating the file's tables was a write of its own
   store.put("hair-groom", "g1", { fields: { length: .5 } }, 0);
   store.put("hair-groom", "g1", { fields: { length: .6 } }, 1);
   store.put("hair-groom", "g1", { fields: { length: .7 } }, 1);   // stale
   expect(writes).toBe(2);
-  store.close();
-  const reopened = new DocumentStore(path);
-  try { expect(reopened.list("hair-groom")).toMatchObject([{ id: "g1", revision: 2, value: { fields: { length: .6 } } }]); }
+  file.close();
+  const reopened = openTestLibrary(path);
+  try { expect(reopened.documents.list("hair-groom")).toMatchObject([{ id: "g1", revision: 2, value: { fields: { length: .6 } } }]); }
   finally { reopened.close(); }
 });
 
 test("a library with the documents table still opens in earlier XF Studio stores, user_version stays 2, and collections list as before", () => {
   const path = library();
-  new LookLibrary(path).close();
-  const collections = new CollectionLibrary(path, STUDIO_PARTS);
-  for (const fixture of COLLECTION_FIXTURES) collections.save({ collection: STUDIO_PARTS.readCollection(readFixture(fixture)) });
-  const before = collections.list();
-  collections.close();
-  const documents = new DocumentStore(path);
-  documents.put("experiment-flags", "preferences", { flags: {} }, 0);
-  documents.close();
+  const file = openTestLibrary(path);
+  for (const fixture of COLLECTION_FIXTURES) file.collections.save({ collection: STUDIO_PARTS.readCollection(readFixture(fixture)) });
+  const before = file.collections.list();
+  file.documents.put("experiment-flags", "preferences", { flags: {} }, 0);
+  file.close();
   const db = new Database(path, { readonly: true });
   try {
     expect((db.query("PRAGMA user_version").get() as { user_version: number }).user_version).toBe(2);
     // 0.1.0-alpha.1's own list query and reader, vendored from its tag, read the same collections.
     expect(alphaList(db, value => readRecipe(value)).map(item => [item.id, item.revision, item.count])).toEqual(before.map(item => [item.id, item.revision, item.count]));
   } finally { db.close(); }
-  new LookLibrary(path).close();
-  const reopened = new CollectionLibrary(path, STUDIO_PARTS);
-  expect(reopened.list()).toEqual(before);
+  const reopened = openTestLibrary(path);
+  expect(reopened.collections.list()).toEqual(before);
   reopened.close();
-  new PartPresetLibrary(path, STUDIO_PARTS).close();
 });
 
 test("the page's transport: the browser device lists and writes through the host endpoint, and a stale write answers the current document", async () => {
-  const store = new DocumentStore(":memory:"), handler = createDocumentsHandler(store, "/api/documents");
+  const file = openTestLibrary(), store = file.documents, handler = createDocumentsHandler(store, "/api/documents");
   try {
     const page = browserDocuments("/api/documents", (url, init) => handler(new Request(`http://127.0.0.1:4317${url}`,
       { ...init, headers: { ...(init?.headers as Record<string, string>), Origin: "http://127.0.0.1:4317" } })));
@@ -96,11 +90,11 @@ test("the page's transport: the browser device lists and writes through the host
     expect(stale.ok).toBe(false);
     expect(!stale.ok && stale.current?.revision).toBe(1);
     await expect(page.put("Not a kind", "x", 1, 0)).rejects.toThrow("kind");
-  } finally { store.close(); }
+  } finally { file.close(); }
 });
 
 test("the endpoint answers local, same-origin pages only, and refuses what isn't a document write", async () => {
-  const store = new DocumentStore(":memory:"), handler = createDocumentsHandler(store, "/api/documents");
+  const file = openTestLibrary(), store = file.documents, handler = createDocumentsHandler(store, "/api/documents");
   const put = (url: string, body: string, headers: Record<string, string> = { Origin: "http://127.0.0.1", "Content-Type": "application/json" }) =>
     handler(new Request(url, { method: "PUT", headers, body }));
   try {
@@ -116,7 +110,7 @@ test("the endpoint answers local, same-origin pages only, and refuses what isn't
     expect(store.list("a")).toEqual([]);
     expect((await put("http://127.0.0.1/api/documents?kind=a&id=b", JSON.stringify({ revision: 0, value: { ok: true } }))).status).toBe(200);
     expect((await put("http://127.0.0.1/api/documents?kind=a&id=b", JSON.stringify({ revision: 0, value: { ok: false } }))).status).toBe(409);
-  } finally { store.close(); }
+  } finally { file.close(); }
 });
 
 test("a saved document changes at once, writes one at a time with the newest value, and the newest edit here wins over one made elsewhere", async () => {

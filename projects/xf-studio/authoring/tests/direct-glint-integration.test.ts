@@ -7,7 +7,7 @@ import {assessPreviewQuality} from "../src/preview-quality";
 import { UnsupportedMaterialError } from "../src/engines/layered-makeup/preset-compiler";
 import { parseWorkspace } from "../src/workspace-state";
 import {parseCollection} from "../src/preset-collection";
-import {LookLibrary} from "../src/library-store";
+import {openTestLibrary} from "./fixtures/library-file";
 import { storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { initialRecipe, raster, compileFlatPreset, freshWorkspace, EYE_RASTER_REGION } from "./fixtures/eye-region";
@@ -23,10 +23,10 @@ test("direct-light model is explicit recipe-8 browser data and stays game-export
   const collection=parseCollection({schema:"xfas/collection-1",id:crypto.randomUUID(),name:"Direct study",
     presets:[{id:crypto.randomUUID(),name:"Purple glints",revision:1,recipe:recipeFile(recipe)}]});
   expect(collection.presets[0]!.recipe.layers[0]!.flakes).toEqual(recipe.layers[0]!.flakes);
-  const db=new LookLibrary(":memory:");
+  const file=openTestLibrary(),db=file.looks;
   try{const saved=db.save({name:"Direct study",recipe});
     expect(db.get(saved.id).recipe.layers[0]!.flakes).toEqual(recipe.layers[0]!.flakes);
-  }finally{db.close();}
+  }finally{file.close();}
   expect(()=>parseRecipe({...recipe,schema:"xfs/recipe-7"})).toThrow();
   for(const flakes of [{...recipe.layers[0]!.flakes,density:2},
     {...recipe.layers[0]!.flakes,extra:1}])
@@ -47,9 +47,9 @@ test("clustered study is recipe-9 only and round-trips without changing the orig
   expect(recipeFile(recipe)!.schema).toBe("xfs/recipe-9");
   expect(parseRecipe(recipe)).toEqual(recipe);
   expect(parseWorkspace(storedWorkspace(freshWorkspace(recipe)), STUDIO_DOCUMENTS).recipe).toEqual(recipe);
-  const db=new LookLibrary(":memory:");
+  const file=openTestLibrary(),db=file.looks;
   try{const saved=db.save({name:"Clustered study",recipe});expect(db.get(saved.id).recipe).toEqual(recipe);}
-  finally{db.close();}
+  finally{file.close();}
   expect(()=>parseRecipe({...recipe,schema:"xfs/recipe-8"})).toThrow();
   expect(()=>compileFlatPreset(recipe,32)).toThrow(UnsupportedMaterialError);
   expect(JSON.stringify(parseRecipe(old))).toBe(oldBytes);
@@ -67,9 +67,9 @@ test("denser fine speckles opt into recipe-10 while old direct looks remain byte
   const collection=parseCollection({schema:"xfas/collection-1",id:crypto.randomUUID(),name:"Fine study",
     presets:[{id:crypto.randomUUID(),name:"Speckles",revision:1,recipe:recipeFile(recipe)}]});
   expect(collection.presets[0]!.recipe).toEqual(recipeFile(recipe)!);
-  const db=new LookLibrary(":memory:");
+  const file=openTestLibrary(),db=file.looks;
   try{const saved=db.save({name:"Fine study",recipe});expect(db.get(saved.id).recipe).toEqual(recipe);}
-  finally{db.close();}
+  finally{file.close();}
   expect(()=>parseRecipe({...recipe,schema:"xfs/recipe-9"})).toThrow();
   expect(()=>compileFlatPreset(recipe,32)).toThrow(UnsupportedMaterialError);
   expect(JSON.stringify(parseRecipe(old))).toBe(oldBytes);
