@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { AuthoringDocument } from "../src/authoring-document";
-import { AuthoringGeometry } from "../src/authoring-geometry";
-import { AuthoringPresentation } from "../src/authoring-presentation";
+import { AuthoringDocument } from "../src/app/authoring/authoring-document";
+import { AuthoringGeometry } from "../src/app/authoring/authoring-geometry";
+import { AuthoringPresentation } from "../src/app/authoring/authoring-presentation";
 import { freshWorkspace } from "./fixtures/eye-region";
 
 test("control read port detaches live recipe, caches repeated reads and tracks selection", () => {

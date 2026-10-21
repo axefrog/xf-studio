@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { type Layer } from "../src/engines/layered-makeup/recipe";
-import { createSurfaceEditor } from "../src/surface-editor";
+import { createSurfaceEditor } from "../src/legacy/eye-makeup/browser/surface-editor";
 import { applyAdapterProposal } from "./gesture-test-adapter";
 import { initialRecipe, EYE_REGION } from "./fixtures/eye-region";
 

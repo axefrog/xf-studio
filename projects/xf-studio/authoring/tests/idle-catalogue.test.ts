@@ -1,14 +1,14 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { BUILT_IN_CATALOGUE, DEFAULT_IDLE, IDLE_CATALOGUE_SCHEMA, parseIdleCatalogue, type IdleEntry } from "../src/idle-catalogue";
-import { IdleAnimation } from "../src/idle-animation";
-import { MotionActions, type MotionPort } from "../src/motion-actions";
-import { bodyStateFor, creatorPuppetFeet } from "../src/character-detail-plan";
-import { WorkspaceComposer } from "../src/workspace-composer";
-import { parseWorkspace, serializeWorkspace } from "../src/workspace-state";
+import { BUILT_IN_CATALOGUE, DEFAULT_IDLE, IDLE_CATALOGUE_SCHEMA, parseIdleCatalogue, type IdleEntry } from "../src/animation/idle-catalogue";
+import { IdleAnimation } from "../src/animation/render/idle-animation";
+import { MotionActions, type MotionPort } from "../src/animation/motion-actions";
+import { bodyStateFor, creatorPuppetFeet } from "../src/character/character-detail-plan";
+import { WorkspaceComposer } from "../src/app/workspace/workspace-composer";
+import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
-import type { CcoResource } from "../src/cco-model";
+import type { CcoResource } from "../src/character/cco-model";
 
 const entry = (id: string, extra: Partial<IdleEntry> = {}): IdleEntry => ({ id, label: id, clip: `ui_${id}`, body: `cc-idle-body-${id}.glb`, duration: 10,
   screen: "creator", state: id, flags: [], face: null, puppet: "creator", evidence: "[resource] test", ...extra });

@@ -2,16 +2,16 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CharacterDetailActions, type CharacterDetailPort, type HostCharacterState } from "../src/character-detail-actions";
-import { CHARACTER_REQUEST_SCHEMA, characterRequestFor, characterRequestFromSave, type CharacterRequest } from "../src/character-detail-request";
-import { prepareCharacterDetails } from "../src/character-detail-service";
-import { depotHash } from "../src/depot-path";
-import type { ExportedGeometry, ExportedMask, ExportedTexture, GameAssetExporter } from "../src/game-asset-export";
-import { encodePng } from "../src/png";
-import { CHARACTER_DETAIL_SCHEMA, type CharacterDetail } from "../src/render-detail";
-import { SavedAppearanceActions, type SavedAppearanceResult } from "../src/saved-appearance-actions";
-import type { SavedV } from "../src/save-reader";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
+import { CharacterDetailActions, type CharacterDetailPort, type HostCharacterState } from "../src/character/character-detail-actions";
+import { CHARACTER_REQUEST_SCHEMA, characterRequestFor, characterRequestFromSave, type CharacterRequest } from "../src/character/character-detail-request";
+import { prepareCharacterDetails } from "../src/character/host/character-detail-service";
+import { depotHash } from "../src/game/depot-path";
+import type { ExportedGeometry, ExportedMask, ExportedTexture, GameAssetExporter } from "../src/game/host/game-asset-export";
+import { encodePng } from "../src/formats/png";
+import { CHARACTER_DETAIL_SCHEMA, type CharacterDetail } from "../src/character/render-detail";
+import { SavedAppearanceActions, type SavedAppearanceResult } from "../src/character/saved-appearance-actions";
+import type { SavedV } from "../src/saves/save-reader";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { detailFixture, FACE, P, REQUEST_A, REQUEST_B } from "./character-detail-fixtures";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
@@ -255,8 +255,8 @@ test("a change that can't be prepared keeps the V as it was shown and says why; 
 });
 
 test("a host of another version is reported with the version-skew code, not as silence (the app updated while it ran)", async () => {
-  const { createBrowserCharacterDetailDevice } = await import("../src/browser-character-detail-device");
-  const { loadCharacterDetails } = await import("../src/character-detail-loader");
+  const { createBrowserCharacterDetailDevice } = await import("../src/character/browser/browser-character-detail-device");
+  const { loadCharacterDetails } = await import("../src/character/render/character-detail-loader");
   // The scene host's detail loader, as the host binds it (platform/scene/character-renderer.ts).
   const scene = { setCharacterDetails: () => ({ limits: [] }), details: { load: (record: Parameters<typeof loadCharacterDetails>[0],
     options: Omit<Parameters<typeof loadCharacterDetails>[1], "anisotropy" | "context">) => loadCharacterDetails(record,
@@ -281,7 +281,7 @@ test("a host of another version is reported with the version-skew code, not as s
   // An ordinary failure keeps its plain message and no notice.
   expect(await run(() => new Response("boom", { status: 500 }))).toMatchObject({ phase: "failed", notice: null });
   // The host answers an unknown request version with `unsupported_version`, naming the versions it reads.
-  const { createCharacterDetailHandler } = await import("../src/character-detail-server");
+  const { createCharacterDetailHandler } = await import("../src/character/host/character-detail-server");
   const handler = createCharacterDetailHandler({ request: () => { throw Error("unused"); }, state: () => { throw Error("unused"); } } as never);
   const refused = await handler(new Request("http://127.0.0.1/api/preview-character", { method: "POST", headers: { "Content-Type": "application/json",
     Origin: "http://127.0.0.1" }, body: JSON.stringify({ schema: "xfs/character-request-10", source: "default", bodyGender: "female" }) }));

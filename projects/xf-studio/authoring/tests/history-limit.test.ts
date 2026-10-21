@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
-import { RECIPE_HISTORY, RECIPE_HISTORY_LIMIT } from "../src/editor-actions";
-import type { AuthoringDocument } from "../src/authoring-document";
+import { RECIPE_HISTORY, RECIPE_HISTORY_LIMIT } from "../src/legacy/eye-makeup/editor-actions";
+import type { AuthoringDocument } from "../src/app/authoring/authoring-document";
 import type { Recipe } from "../src/engines/layered-makeup/recipe";
 import { lookHistoryBodies } from "../src/platform/core/look-history";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 

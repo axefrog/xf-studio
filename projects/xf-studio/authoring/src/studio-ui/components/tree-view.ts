@@ -1,9 +1,9 @@
-import { keyBinding } from "../../input-bindings";
+import { keyBinding } from "../../app/input-bindings";
 import { h, setAttr, setText } from "../dom";
 import { icon } from "../icons";
 import { ScrollMemory, type RestoreResult } from "../scroll-anchor";
 import { rowWords, SizeBar } from "./size-bar";
-import type { ScrollAnchor } from "../../ui-preferences";
+import type { ScrollAnchor } from "../../app/ui-preferences";
 
 /**
  * Tree view (style guide "Tree view"): legacy groups of rows, or recursive `nodes`, virtualised for thousands of visible rows.

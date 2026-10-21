@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { ViewportAttachment, retainedViewportAspect, visibleViewportSize,
-  type ViewportAttachmentPort, type ViewportHostKind } from "../src/viewport-attachment";
+  type ViewportAttachmentPort, type ViewportHostKind } from "../src/app/viewport-attachment";
 
 test("rehosting keeps the same hosts, cancels the target gesture and resizes only the moved viewport", () => {
   const head = { id: "head" }, uv = { id: "uv" }, events: string[] = [];

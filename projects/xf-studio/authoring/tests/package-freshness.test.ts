@@ -5,11 +5,11 @@
  */
 import { expect, test } from "bun:test";
 import { eyeCheck } from "./fixtures/package-results";
-import { CollectionService, type CollectionTransport } from "../src/collection-service";
-import type { EditorSnapshot } from "../src/collection-session";
+import { CollectionService, type CollectionTransport } from "../src/library/collection-service";
+import type { EditorSnapshot } from "../src/library/collection-session";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
-import { eyeMakeupCollection, parseCollection } from "../src/preset-collection";
-import { StudioFileOperations } from "../src/studio-file-operations";
+import { eyeMakeupCollection, parseCollection } from "../src/legacy/eye-makeup/export/preset-collection";
+import { StudioFileOperations } from "../src/app/studio-file-operations";
 import { restore } from "./fixtures/workspace-observable";
 import { largeWorkspaceV1 } from "./fixtures/workspace-v1-fixtures";
 

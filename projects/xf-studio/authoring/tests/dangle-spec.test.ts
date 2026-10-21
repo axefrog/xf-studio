@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { compileDangleSpec, DangleSpecError, parseDangleSpec } from "../src/dangle-spec";
-import type { JsonObject } from "../src/red-json";
-import { readComponents } from "../src/resource-graph";
-import { HandleScope } from "../src/red-json";
+import { compileDangleSpec, DangleSpecError, parseDangleSpec } from "../src/animation/dangle-spec";
+import type { JsonObject } from "../src/game/red-json";
+import { readComponents } from "../src/game/resource-graph";
+import { HandleScope } from "../src/game/red-json";
 
 // A dangle rig and graph in the resolver's JSON shape (WolvenKit's serialization: handles, CNames, QsTransforms, enums as names).
 const cn = (value: string) => ({ $type: "CName", $storage: "string", $value: value });

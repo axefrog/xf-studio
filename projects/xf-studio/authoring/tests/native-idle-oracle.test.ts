@@ -5,7 +5,7 @@
 import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { installations } from "../src/installation-registry";
+import { installations } from "../src/game/host/installation-registry";
 import { compareIdles } from "../tools/native-idle-oracle";
 import { oracleDescribe } from "./optional-oracles";
 

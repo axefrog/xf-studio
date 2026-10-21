@@ -10,11 +10,11 @@
  * Types and one pure helper only: the shell builds the contexts (`feature-context.ts`), and a feature's
  * view imports this module to bind its factories (`featureView`).
  */
-import type { StudioCapability, StudioOwnerActions, StudioOwnerId, StudioTarget } from "../../studio-application";
+import type { StudioCapability, StudioOwnerActions, StudioOwnerId, StudioTarget } from "../../app/studio-application";
 import type { EasingId } from "../../platform/api/easing";
-import type { StudioContextHit } from "../../studio-context-targets";
-import type { FacialPort, FeatureFacade, GenericFeatureFacade, PresentationFeatures, ProjectLinkPort } from "../../studio-presentation";
-import type { PartPresetList, PartPresetOutcome, PartPresetRequest, PartPresetSetList, SetExportState } from "../../part-presets";
+import type { StudioContextHit } from "../../app/studio-context-targets";
+import type { FacialPort, FeatureFacade, GenericFeatureFacade, PresentationFeatures, ProjectLinkPort } from "../../app/studio-presentation";
+import type { PartPresetList, PartPresetOutcome, PartPresetRequest, PartPresetSetList, SetExportState } from "../../library/part-presets";
 import type { ModuleService } from "../../platform/api";
 import type { Command } from "../commands";
 import type { Feedback, FeedbackAction } from "../feedback";

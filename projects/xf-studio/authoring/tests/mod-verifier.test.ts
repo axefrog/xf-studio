@@ -14,8 +14,8 @@ import { verifyBuild, verifyEyeMakeupBuild, type ToolResult, type VerifierTools,
 import { oracleTest } from "./optional-oracles";
 // Test-only use of the plate cut and lift: they make a real single-chunk plate and its packaged form,
 // which the verifier's own decoder must accept (and reject when tampered).
-import { derivePlateDocuments } from "../src/eye-plate-cut";
-import { liftPlate } from "../src/plate-lift";
+import { derivePlateDocuments } from "../src/legacy/eye-makeup/plate/eye-plate-cut";
+import { liftPlate } from "../src/legacy/eye-makeup/export/plate-lift";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "./eye-plate-fixture";
 import { coverageReference, plateWindow, storedBc4, texelUv, WINDOW_H, WINDOW_W } from "./window-fixture";
 

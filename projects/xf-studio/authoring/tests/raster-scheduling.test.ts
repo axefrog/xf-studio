@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createRasterProcessor, type RasterRequest, type RasterResponse } from "../src/engines/layered-makeup/raster-processor";
-import { type RasterPort } from "../src/raster-client";
+import { type RasterPort } from "../src/legacy/eye-makeup/browser/raster-client";
 import { createRasterJob, coverage, initialRecipe, raster, EYE_RASTER_REGION } from "./fixtures/eye-region";
 import { createRasterClient } from "./fixtures/eye-region";
 

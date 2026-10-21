@@ -13,7 +13,7 @@ import { defaultClusteredGlintFlakes, defaultDirectGlintFlakes } from "../../src
 import { defaultFlakes } from "../../src/engines/layered-makeup/finish";
 import { planPresetExport } from "../../src/engines/layered-makeup/finish-export";
 import { maskAlphaKey } from "../../src/engines/layered-makeup/makeup-dependencies";
-import { parseCollection, planCollection } from "../../src/preset-collection";
+import { parseCollection, planCollection } from "../../src/legacy/eye-makeup/export/preset-collection";
 import { type Layer } from "../../src/engines/layered-makeup/recipe";
 import { type RecipeAction } from "../../src/engines/layered-makeup/recipe-actions";
 import type { GlitterChoices } from "../../src/engines/layered-makeup/glitter-model";
@@ -23,7 +23,7 @@ import { canonical, digest, observeRoundTrips } from "./workspace-observable";
 import { damagedWorkspaceV1, glitterRecipe, largeWorkspaceV1, looseWorkspaceV1, opticsRecipe, recipe3,
   smallWorkspaceV1 } from "./workspace-v1-fixtures";
 import { previewOpticalKey, compilePreset, initialRecipe, newLayerTemplate, raster, applyRecipeAction } from "./eye-region";
-import { readRecipe as parseRecipe } from "../../src/recipe-schema";
+import { readRecipe as parseRecipe } from "../../src/legacy/eye-makeup/recipe-schema";
 import { preparePackageCollection } from "./eye-exporter";
 
 const UV = "gltf-uv0-top-left";

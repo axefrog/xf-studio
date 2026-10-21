@@ -7,8 +7,8 @@ import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { routeStamps } from "../src/route-fingerprint";
-import { planRuntimeDiagnostic } from "../src/runtime-diagnostic-stage";
+import { routeStamps } from "../src/game/host/route-fingerprint";
+import { planRuntimeDiagnostic } from "../src/installation/host/runtime-diagnostic-stage";
 
 /** An instance whose ini keeps its profiles, mods and overwrite in folders of their own names. */
 function movedInstance(root: string) {

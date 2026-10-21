@@ -1,9 +1,9 @@
 import Electrobun, { BrowserWindow, PATHS, Utils } from "electrobun/main";
 import { resolve } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
-import { machineInstallReceiptsRoot } from "../src/host-state";
+import { machineInstallReceiptsRoot } from "../src/setup/host/host-state";
 import { createDesktopServer } from "./server";
-import { logUnhandledRejections } from "../src/diagnostics/host-log";
+import { logUnhandledRejections } from "../src/diagnostics/host/host-log";
 import { desktopVersionFromMetadata } from "./host";
 import { DesktopWorkspaceClose, desktopFlushScript } from "./workspace-close";
 import { createHostLog } from "./host-log";

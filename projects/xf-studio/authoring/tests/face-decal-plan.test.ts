@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { descriptorsFromUiState } from "../src/cco-model";
-import { inputFromCharacterRequest } from "../src/character-detail-request";
-import { FACE_GROUPS, planCharacterDetails, type TemplateIdentities } from "../src/character-detail-plan";
-import { templateIdentity } from "../src/character-detail-service";
-import { loadMergedCco, resolveCharacter, type ResolvedParam } from "../src/character-resolver";
-import { refFromPath, refLabel } from "../src/depot-path";
-import { templateDefaults } from "../src/material-template";
-import { priorityRank, renderTemplate } from "../src/render-templates";
+import { descriptorsFromUiState } from "../src/character/cco-model";
+import { inputFromCharacterRequest } from "../src/character/character-detail-request";
+import { FACE_GROUPS, planCharacterDetails, type TemplateIdentities } from "../src/character/character-detail-plan";
+import { templateIdentity } from "../src/character/host/character-detail-service";
+import { loadMergedCco, resolveCharacter, type ResolvedParam } from "../src/character/character-resolver";
+import { refFromPath, refLabel } from "../src/game/depot-path";
+import { templateDefaults } from "../src/game/material-template";
+import { priorityRank, renderTemplate } from "../src/materials/render-templates";
 import { BEARD, beardRequest, detailFixture, FACE, P, REQUEST_A, REQUEST_B } from "./character-detail-fixtures";
 
 // Face details (rank 2 of the head render plan) chosen from the synthetic installation: by the game's structure (groups,

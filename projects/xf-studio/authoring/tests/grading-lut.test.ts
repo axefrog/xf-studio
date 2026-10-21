@@ -2,14 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadGradingLut } from "../src/browser-grading-lut-device";
-import { GradingLutHost } from "../src/grading-lut-host";
+import { loadGradingLut } from "../src/preview/render/browser-grading-lut-device";
+import { GradingLutHost } from "../src/preview/host/grading-lut-host";
 import { CREATOR_ENVIRONMENT, decodeGradingLut, decodeGradingLutBinary, displayTransform, encodeGradingLut, invertNeutralAxis,
   logC3Decode, logC3Encode, lutCoordinate, neutralGradingLut, readEnvironmentGrading, sampleGradingLut, selectGradingLut, srgbDecode,
-  VANILLA_SDR_LUT, type GradingLut } from "../src/grading-lut";
-import { depotHash } from "../src/depot-path";
-import type { Installation } from "../src/resolver-host";
-import { WolvenKitRunError } from "../src/wolvenkit-cli";
+  VANILLA_SDR_LUT, type GradingLut } from "../src/preview/grading-lut";
+import { depotHash } from "../src/game/depot-path";
+import type { Installation } from "../src/game/host/resolver-host";
+import { WolvenKitRunError } from "../src/host/wolvenkit-cli";
 import { cr2w, fixtureInstallation, rp } from "./resolver-fixtures";
 
 /** A WolvenKit-shaped CBitmapTexture LUT whose texel (r, g, b) holds `value(r, g, b)`, blob in [B][G][R] order. */

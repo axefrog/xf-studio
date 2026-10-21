@@ -18,7 +18,7 @@
  * Structured values are redacted string by string (`redactValue`), never as serialised JSON, so a pattern can't break an escape.
  * DOM-free and host-free, so the host and the page apply exactly the same rules.
  */
-import { isPlaceholderUser, personalDataIn, redactPersonalData } from "../private-data";
+import { isPlaceholderUser, personalDataIn, redactPersonalData } from "../app/private-data";
 
 /** A folder (`path`) or an account name (`word`) to replace with `label`. */
 export type KnownRoot = { label: string; path?: string | null; word?: string | null };

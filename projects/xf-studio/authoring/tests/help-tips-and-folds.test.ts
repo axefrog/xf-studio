@@ -1,7 +1,7 @@
 // Help tips (help-tip.ts): what something is, in a keyboard-reachable tip whose text is the icon's description; and the remembered folds
 // of panel headings (the `folded` UI preference).
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { foldedKeys, parseUIPreferences, UIPreferenceActions } from "../src/ui-preferences";
+import { foldedKeys, parseUIPreferences, UIPreferenceActions } from "../src/app/ui-preferences";
 import { installLightDom, type LightElement, uninstallLightDom } from "./light-dom";
 
 beforeAll(() => installLightDom());

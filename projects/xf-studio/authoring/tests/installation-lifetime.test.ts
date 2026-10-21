@@ -3,12 +3,12 @@ import { mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } f
 import { lstat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { installationFingerprint, type CharacterDetailSettings } from "../src/character-detail-host";
-import { depotHash, refFromPath } from "../src/depot-path";
-import { GradingLutHost } from "../src/grading-lut-host";
-import { InstallationRegistry, installations } from "../src/installation-registry";
-import { openInstallation, type Installation, type InstallationOptions } from "../src/resolver-host";
-import { pathStamp } from "../src/source-discovery";
+import { installationFingerprint, type CharacterDetailSettings } from "../src/character/host/character-detail-host";
+import { depotHash, refFromPath } from "../src/game/depot-path";
+import { GradingLutHost } from "../src/preview/host/grading-lut-host";
+import { InstallationRegistry, installations } from "../src/game/host/installation-registry";
+import { openInstallation, type Installation, type InstallationOptions } from "../src/game/host/resolver-host";
+import { pathStamp } from "../src/game/host/source-discovery";
 import { cr2w } from "./resolver-fixtures";
 
 /**

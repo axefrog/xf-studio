@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { createCharacterRenderer } from "../src/platform/scene/character-renderer";
 import type { HeadRig } from "../src/platform/scene/head-rig";
-import type { LoadedCharacterComponent, LoadedCharacterDetails } from "../src/character-detail-loader";
+import type { LoadedCharacterComponent, LoadedCharacterDetails } from "../src/character/render/character-detail-loader";
 import type { CharacterSlot, SupersededPart } from "../src/platform/api/scene";
 import { setBodyCastersOnly } from "../src/platform/scene/shadow-casters";
 

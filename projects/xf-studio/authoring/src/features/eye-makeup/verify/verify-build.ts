@@ -22,7 +22,7 @@
 // every recipe in the build record must equal it.
 //
 // WolvenKit runs through injected tools: hosts supply the shared runner's adapter
-// (src/verifier-wolvenkit.ts), which keeps process mechanics out of this directory.
+// (src/legacy/eye-makeup/export/host/verifier-wolvenkit.ts), which keeps process mechanics out of this directory.
 //
 // Differences from verify.py, all deliberate:
 // - Base-map inputs are the baked raw maps, checked against the build record's
@@ -70,7 +70,7 @@ export interface FeatureVerifyOptions extends Omit<VerifyBuildOptions, "build"> 
 export interface VerifyBuildOptions {
   /** Intermediate build directory containing build.json (a product holding only eye makeup, in the standalone layout). */
   readonly build: string;
-  /** The verifier's WolvenKit operations (src/verifier-wolvenkit.ts, or a test fake). */
+  /** The verifier's WolvenKit operations (src/legacy/eye-makeup/export/host/verifier-wolvenkit.ts, or a test fake). */
   readonly tools: VerifierTools;
   /** The Build's cancellation, followed by every WolvenKit step (a failed step also stops its siblings). */
   readonly signal?: AbortSignal;

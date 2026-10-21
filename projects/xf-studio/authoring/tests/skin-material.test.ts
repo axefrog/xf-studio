@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import * as THREE from "three";
-import { materialAdapter, type AdapterContext, type ChunkTextures } from "../src/character-material-adapters";
-import { compareHeadSurfaces, type HeadSurface } from "../src/head-surface";
-import type { RenderChunkMaterial, RenderSkinProfile, RenderTexture } from "../src/render-detail";
+import { materialAdapter, type AdapterContext, type ChunkTextures } from "../src/materials/render/character-material-adapters";
+import { compareHeadSurfaces, type HeadSurface } from "../src/character/head-surface";
+import type { RenderChunkMaterial, RenderSkinProfile, RenderTexture } from "../src/character/render-detail";
 import { createSkinMaterial, imageTexels, patchSkinShader, SKIN_TEMPLATE_DEFAULTS, SKIN_TINT_ENCODING, skinBaseColour, skinBaseImage, skinBaseTexels, skinLobes, skinParameters,
-  skinRoughness, tintChannel, tintUnits, VANILLA_SKIN_PROFILE } from "../src/skin-material";
-import { sampleUnderlayAlbedo } from "../src/brow-material";
+  skinRoughness, tintChannel, tintUnits, VANILLA_SKIN_PROFILE } from "../src/materials/render/skin-material";
+import { sampleUnderlayAlbedo } from "../src/materials/render/brow-material";
 import { passParticipation } from "../src/platform/api/scene";
 
 const close = (a: readonly number[], b: readonly number[], digits = 6) => a.forEach((value, k) => expect(value).toBeCloseTo(b[k]!, digits));

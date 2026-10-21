@@ -1,17 +1,17 @@
 import { afterAll, expect, test } from "bun:test";
-import { depotHash } from "../src/depot-path";
+import { depotHash } from "../src/game/depot-path";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { accessorFloats, GlbWriter, parseGlb, readAccessor } from "../src/glb";
-import { decodePng, encodePng } from "../src/png";
-import { adaptMap, checkMap } from "../src/preview-core-maps";
-import { appearanceMaterials, decodedTexturePath, parseMaterialExport, resolveTextureParameter } from "../src/preview-core-materials";
-import { assemblePreviewGlb, bindPoseDeviation, plateSelection, verifyPreviewGlb } from "../src/preview-core-assemble";
-import { ensurePreviewCore, PreviewCoreCache, PreviewCoreError, previewCoreReadiness } from "../src/preview-core-service";
-import { uncookArguments, uncookByHashArguments } from "../src/game-asset-export-wolvenkit";
-import { createGameAssetExporter, GameAssetExportError, gameContentSource } from "../src/game-asset-export";
-import { PREVIEW_CORE_FILES } from "../src/preview-core-recipe";
+import { accessorFloats, GlbWriter, parseGlb, readAccessor } from "../src/formats/glb";
+import { decodePng, encodePng } from "../src/formats/png";
+import { adaptMap, checkMap } from "../src/preview/preview-core-maps";
+import { appearanceMaterials, decodedTexturePath, parseMaterialExport, resolveTextureParameter } from "../src/preview/preview-core-materials";
+import { assemblePreviewGlb, bindPoseDeviation, plateSelection, verifyPreviewGlb } from "../src/preview/preview-core-assemble";
+import { ensurePreviewCore, PreviewCoreCache, PreviewCoreError, previewCoreReadiness } from "../src/preview/host/preview-core-service";
+import { uncookArguments, uncookByHashArguments } from "../src/game/host/game-asset-export-wolvenkit";
+import { createGameAssetExporter, GameAssetExportError, gameContentSource } from "../src/game/host/game-asset-export";
+import { PREVIEW_CORE_FILES } from "../src/preview/preview-core-recipe";
 import {
   EYE_MORPH_LIFT, eyeGlb, eyeMorphGlb, fakeUncook, fixturePlateRecipe, fixturePreviewRecipe, headGlb, HEAD_TRIANGLES, HEAD_VERTICES, materialExports, plateVertexIds,
 } from "./preview-core-fixture";
@@ -335,7 +335,7 @@ test("export and preview caches are keyed by the exporting tool, which the manif
 });
 
 test("the derived cache carries a render record that names, hashes and sources every core file", async () => {
-  const { parseCoreDetail, CORE_TEXTURE_SLOTS } = await import("../src/render-detail");
+  const { parseCoreDetail, CORE_TEXTURE_SLOTS } = await import("../src/character/render-detail");
   const plate = fixturePlateRecipe(), recipe = fixturePreviewRecipe(plate);
   const result = await ensurePreviewCore({ gameRoot: gameFolder(), cacheRoot: temporary("cache"), recipe, plateRecipe: plate,
     exporter: fresh(fakeUncook(plate, recipe)) });

@@ -7,8 +7,8 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BUILD_TOOLS_SCHEMA, bcnCandidates, bcnEntry, builderEntry } from "../src/packaged-build-tools";
-import { loadNativeWriterLibraries } from "../src/native-resource-tools";
+import { BUILD_TOOLS_SCHEMA, bcnCandidates, bcnEntry, builderEntry } from "../src/legacy/eye-makeup/export/host/packaged-build-tools";
+import { loadNativeWriterLibraries } from "../src/legacy/eye-makeup/export/host/native-resource-tools";
 import type { BcnLibrary } from "../src/native/write/bcn";
 import * as desktopBuild from "../desktop/build";
 

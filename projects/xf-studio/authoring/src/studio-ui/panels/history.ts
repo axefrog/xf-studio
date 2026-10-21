@@ -1,4 +1,4 @@
-import { keyBinding, shortcutLabel } from "../../input-bindings";
+import { keyBinding, shortcutLabel } from "../../app/input-bindings";
 import { button, emptyState } from "../controls";
 import { h, setAttr, setText, setUnavailable } from "../dom";
 import { helpTip } from "../help-tip";

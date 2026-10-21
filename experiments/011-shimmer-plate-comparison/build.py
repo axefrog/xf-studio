@@ -186,7 +186,7 @@ def main(args):
     cc_path = f'{DEPOT}/xfs_shimmer_plate.inkcharcustomization'
     option = base_cc['Data']['RootChunk']['headCustomizationOptions'][0]['Data']
     option['name'] = option['uiSlot'] = cname(NAMESPACE)
-    # Mod branding comes from the Studio (src/mod-branding.ts) through the scaffold plan.
+    # Mod branding comes from the Studio (src/legacy/eye-makeup/mod-branding.ts) through the scaffold plan.
     option['localizedName'] = f"{plan['modName']} Shimmer diagnostic"
     option['resource'] = ref(app_path, True)
     base_cc['Data']['RootChunk']['headGroups'][0]['options'] = [cname(NAMESPACE)]

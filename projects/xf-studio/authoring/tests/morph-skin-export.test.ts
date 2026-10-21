@@ -5,9 +5,9 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { archiveExportSource, createGameAssetExporter, glbSkinState, type MorphTargetSkin, type UncookRun } from "../src/game-asset-export";
-import { createWolvenKitMorphSkin } from "../src/game-asset-export-wolvenkit";
-import { GlbWriter } from "../src/glb";
+import { archiveExportSource, createGameAssetExporter, glbSkinState, type MorphTargetSkin, type UncookRun } from "../src/game/host/game-asset-export";
+import { createWolvenKitMorphSkin } from "../src/game/host/game-asset-export-wolvenkit";
+import { GlbWriter } from "../src/formats/glb";
 
 const root = mkdtempSync(join(tmpdir(), "xfs-morph-skin-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));

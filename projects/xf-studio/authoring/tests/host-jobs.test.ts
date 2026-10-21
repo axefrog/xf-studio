@@ -4,11 +4,11 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CharacterDetailHost, PAGE_LEASE_MS, type CharacterDetailSettings } from "../src/character-detail-host";
-import type { CharacterRequest } from "../src/character-detail-request";
-import { currentLane, hostJobs, lowPriorityNow, personWorking } from "../src/host-jobs";
+import { CharacterDetailHost, PAGE_LEASE_MS, type CharacterDetailSettings } from "../src/character/host/character-detail-host";
+import type { CharacterRequest } from "../src/character/character-detail-request";
+import { currentLane, hostJobs, lowPriorityNow, personWorking } from "../src/host/host-jobs";
 import type { Clock } from "../src/platform/core/clock";
-import { WolvenKitFetcher } from "../src/resolver-host";
+import { WolvenKitFetcher } from "../src/game/host/resolver-host";
 import { REQUEST_A, REQUEST_B } from "./character-detail-fixtures";
 import { cr2w } from "./resolver-fixtures";
 

@@ -7,7 +7,7 @@ import { expect, test } from "bun:test";
 import { createTask } from "../src/platform/core/tasks";
 import { savedDocument } from "../src/platform/core/saved-document";
 import { createExperiments, startExperiments } from "../src/platform/core/experiments";
-import { browserDocuments } from "../src/browser-documents-device";
+import { browserDocuments } from "../src/app/browser/browser-documents-device";
 import { seededRandom } from "../src/platform/core/random";
 import type { DocumentStorePort, SavedDocument } from "../src/platform/api/document-store";
 import type { ExperimentContext } from "../src/platform/api/experiment-context";

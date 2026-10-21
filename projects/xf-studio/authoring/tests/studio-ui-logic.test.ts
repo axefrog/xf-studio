@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
-import { contextCandidates, type StudioContextHit } from "../src/studio-context-targets";
+import { ACTION_DESCRIPTORS } from "../src/app/studio-action-descriptors";
+import { contextCandidates, type StudioContextHit } from "../src/app/studio-context-targets";
 import { convertToBezier } from "../src/engines/layered-makeup/bezier-path";
 import { matchCommands } from "../src/studio-ui/commands";
 import { libraryState } from "../src/studio-ui/panels/collection";

@@ -2,10 +2,10 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { defaultLocalSettings, migrateLocalSettings, parseLocalSettings } from "../src/local-settings";
-import { evaluateLocalReadiness, packageToolPaths } from "../src/local-settings-readiness";
-import { LocalSettingsStore } from "../src/local-settings-store";
-import { BUILD_TOOLS_CHECKING } from "../src/local-readiness-codes";
+import { defaultLocalSettings, migrateLocalSettings, parseLocalSettings } from "../src/setup/local-settings";
+import { evaluateLocalReadiness, packageToolPaths } from "../src/setup/host/local-settings-readiness";
+import { LocalSettingsStore } from "../src/setup/host/local-settings-store";
+import { BUILD_TOOLS_CHECKING } from "../src/setup/local-readiness-codes";
 
 const withDirectory = (run: (dir: string) => void) => {
   const dir = mkdtempSync(join(tmpdir(), "xfs-settings-test-"));

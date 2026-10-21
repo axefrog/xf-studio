@@ -6,14 +6,14 @@ import { afterAll, afterEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { labelsOf, loadCreatorCatalogue, readTextResources } from "../src/cc-catalogue-host";
-import { depotHash, refFromPath } from "../src/depot-path";
-import { readOnscreenEntries, type TextEntry } from "../src/game-text";
+import { labelsOf, loadCreatorCatalogue, readTextResources } from "../src/character/host/cc-catalogue-host";
+import { depotHash, refFromPath } from "../src/game/depot-path";
+import { readOnscreenEntries, type TextEntry } from "../src/game/game-text";
 import { NativeArchivePool } from "../src/native/archive-reader";
 import { type DecodeWorker, jsonPayloadClass, type NativeDecodeOutcome, type NativeDecoder, type NativeDecodeRequest, type WorkerDecodeMessage,
   WorkerDecoder, type WorkerInit } from "../src/native/native-decode";
 import { inProcessDecoder, NATIVE_JSON_PAYLOADS, type NativeReader, nativeReaderIdentity } from "../src/native/native-fetch-port";
-import { type InstallationOptions, openInstallation, type ResolverFetcher } from "../src/resolver-host";
+import { type InstallationOptions, openInstallation, type ResolverFetcher } from "../src/game/host/resolver-host";
 import { BASE_CCO, TEXTS, vanillaCreator } from "./cc-fixtures";
 import { fakeDecompress, syntheticArchive } from "./fixtures/native-archive";
 import { Cr2wBuilder, prop, v } from "./fixtures/native-cr2w";

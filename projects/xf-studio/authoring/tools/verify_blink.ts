@@ -7,8 +7,8 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { readdirSync, existsSync, readFileSync, writeFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import { GameBlink, parseGameBlink } from "../src/game-blink";
-import { extendSkin, restoreFirstWeights, skinSets } from "../src/skin";
+import { GameBlink, parseGameBlink } from "../src/animation/render/game-blink";
+import { extendSkin, restoreFirstWeights, skinSets } from "../src/materials/render/skin";
 
 const app = resolve(import.meta.dir, "..");
 const cache = resolve(app, "data/preview-cache");

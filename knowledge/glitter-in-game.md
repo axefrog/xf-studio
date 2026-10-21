@@ -114,7 +114,7 @@ The framings are estimates. A negative upscaler mip bias would move every row on
 
 ### Glitter flakes 2 (board 2)
 
-After session 6 the route's flake statistics gained optional fields that reproduce the Studio's glint models ([`glitter-studio-flakes.ts`](../projects/xf-studio/authoring/src/glitter-studio-flakes.ts)); regions without them draw exactly the recipe above:
+After session 6 the route's flake statistics gained optional fields that reproduce the Studio's glint models ([`glitter-studio-flakes.ts`](../projects/xf-studio/authoring/src/legacy/eye-makeup/export/glitter-studio-flakes.ts)); regions without them draw exactly the recipe above:
 
 | Field | Board 2 (reference: the Studio's Dense fine speckles at full strength) | Why |
 |---|---|---|

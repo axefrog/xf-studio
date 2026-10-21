@@ -2,10 +2,10 @@
 // decoded `linearFalloff` at ten distances, every other light unchanged, and what it changes on the creator rig (Rim_Top's crown).
 import { describe, expect, test } from "bun:test";
 import * as THREE from "three";
-import { CREATOR_HEAD_SLOT, CREATOR_RIGS, inverseSquareFalloff, linearFalloff, spotLightSpec, DEFAULT_CREATOR_LIGHTING } from "../src/creator-lighting";
-import { creatorSetup } from "../src/lighting-setups";
-import { distanceAttenuation, installLinearFalloff, LINEAR_FALLOFF_DECAY } from "../src/linear-falloff";
-import { parseSetupLight } from "../src/lighting-setups";
+import { CREATOR_HEAD_SLOT, CREATOR_RIGS, inverseSquareFalloff, linearFalloff, spotLightSpec, DEFAULT_CREATOR_LIGHTING } from "../src/preview/creator-lighting";
+import { creatorSetup } from "../src/preview/lighting-setups";
+import { distanceAttenuation, installLinearFalloff, LINEAR_FALLOFF_DECAY } from "../src/preview/render/linear-falloff";
+import { parseSetupLight } from "../src/preview/lighting-setups";
 
 describe("per-fragment linear falloff", () => {
   test("the patched attenuation is 1 − saturate(d/r) for a marked light at ten distances, and Three's physical falloff otherwise", () => {

@@ -3,7 +3,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
-import { parseEyeManifest } from "../src/eye-study-fixture";
+import { parseEyeManifest } from "../src/studies/eye-study-fixture";
 
 const root = resolve(import.meta.dir, "../../../.."), out = resolve(import.meta.dir, "../public/assets/eyes");
 const source = resolve(root, "research/consumers/saved-v-eyes/raw/kala/eye_16_diffuse.png");

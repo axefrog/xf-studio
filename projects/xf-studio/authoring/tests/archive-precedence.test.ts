@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { type ArchiveFile, buildMountPlan, DepotIndex, parseArchiveModlist } from "../src/archive-precedence";
-import { depotHash, isDecimalHash, sanitizeDepotPath } from "../src/depot-path";
-import { parseRdarHeader, parseRdarIndexHashes } from "../src/rdar-index";
+import { type ArchiveFile, buildMountPlan, DepotIndex, parseArchiveModlist } from "../src/game/archive-precedence";
+import { depotHash, isDecimalHash, sanitizeDepotPath } from "../src/game/depot-path";
+import { parseRdarHeader, parseRdarIndexHashes } from "../src/game/rdar-index";
 
 const file = (virtualPath: string, extra: Partial<ArchiveFile> = {}): ArchiveFile => ({ id: `${extra.providerName ?? "game"}:${virtualPath}`,
   virtualPath, provider: "game", providerName: "game", active: true, priority: null, ...extra });

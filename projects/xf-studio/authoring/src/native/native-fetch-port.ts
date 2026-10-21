@@ -24,9 +24,9 @@
  *   fails, so the resource graph reads it again later instead of settling on the fallback's lasting failure.
  */
 import { createHash } from "node:crypto";
-import type { MountedArchive } from "../archive-precedence";
-import { depotHash, type DepotRef } from "../depot-path";
-import type { FetchedResource, ResourceFetchPort } from "../resource-graph";
+import type { MountedArchive } from "../game/archive-precedence";
+import { depotHash, type DepotRef } from "../game/depot-path";
+import type { FetchedResource, ResourceFetchPort } from "../game/resource-graph";
 import { NativeArchivePool } from "./archive-reader";
 import type { Decompress } from "./kark";
 import { DEFAULT_LIMITS, type DefaultedProperty, type NativeLimits, type NativeNote } from "./limits";

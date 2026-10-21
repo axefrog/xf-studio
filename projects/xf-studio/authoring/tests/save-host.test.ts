@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, unlinkSync, utimesSync, wr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSavesHandler, describeSave, listSaves } from "../src/features/save-explorer/host/saves-server";
-import { cyberpunkSavesFolder, expandEnvironment, savedGamesFromRegistry, SAVES_FOLDER_DISPLAY, savesLocation, scriptBundleCandidates, SHELL_FOLDERS_KEY } from "../src/saves-host-sources";
+import { cyberpunkSavesFolder, expandEnvironment, savedGamesFromRegistry, SAVES_FOLDER_DISPLAY, savesLocation, scriptBundleCandidates, SHELL_FOLDERS_KEY } from "../src/saves/host/saves-host-sources";
 import { parseSaveListing, parseSaveTypeNames } from "../src/features/save-explorer";
 import { scriptBundle } from "./fixtures/synthetic-save";
 

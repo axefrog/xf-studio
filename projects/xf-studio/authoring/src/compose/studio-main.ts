@@ -1,0 +1,21 @@
+/**
+ * Localhost entry for the XF Studio page: the shared composition root with browser storage and
+ * the local server's 3D preview preparation. The desktop bootstrap starts the same root with its
+ * own host services instead of loading this entry.
+ */
+import { LOCALHOST_SETUP_PLACE } from "../app/alpha-availability";
+import { createBrowserPreviewPreparation } from "../preview/preview-preparation";
+import { startStudio } from "./studio-startup";
+import { createBrowserDesktopApp } from "../setup/browser/browser-desktop-app-device";
+import { createBrowserWolvenKitSetup } from "../setup/wolvenkit-setup";
+import { browserExperiments } from "./experiments";
+
+void startStudio({
+  storage: localStorage,
+  experiments: (verification, signal) => browserExperiments(location.search, fetch, signal, verification),
+  previewPreparation: createBrowserPreviewPreparation("/api/preview-core"),
+  wolvenKitSetup: createBrowserWolvenKitSetup("/api/wolvenkit"),
+  setupPlace: LOCALHOST_SETUP_PLACE,
+  // Localhost-only: offer the desktop app (a verification workspace checks it too, but never starts anything).
+  desktopApp: createBrowserDesktopApp(new URLSearchParams(location.search).has("verify") ? "/api/verification/desktop-app" : "/api/desktop-app"),
+});

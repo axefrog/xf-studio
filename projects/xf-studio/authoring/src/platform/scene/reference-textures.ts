@@ -1,7 +1,7 @@
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 /** Generic resolver source for baseline template textures. It never changes the character the scene shows. */
 import * as THREE from "three";
-import { CHARACTER_DETAIL_ASSETS, chunkOfMesh, parseCharacterDetail } from "../../render-detail";
+import { CHARACTER_DETAIL_ASSETS, chunkOfMesh, parseCharacterDetail } from "../../character/render-detail";
 import type { CharacterSlot, ReferenceTextures } from "../api/scene";
 
 export async function referenceTextures(slot: CharacterSlot, signal: AbortSignal, characterRequest: unknown, route: { endpoint: string; assets: string; headers?: Record<string, string> } = { endpoint: "/api/preview-character", assets: CHARACTER_DETAIL_ASSETS }): Promise<ReferenceTextures> {

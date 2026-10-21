@@ -1,8 +1,8 @@
 // Diagnostic affine skin transport for a fixed saved shape. No asset mutation.
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { IdleAnimation } from "../src/idle-animation";
-import { extendSkin, restoreFirstWeights, skinSets } from "../src/skin";
+import { IdleAnimation } from "../src/animation/render/idle-animation";
+import { extendSkin, restoreFirstWeights, skinSets } from "../src/materials/render/skin";
 import { resolve } from "node:path";
 const experiment = resolve(import.meta.dir, "../../../../experiments/006-plate-clearance");
 const root = (await Bun.file(resolve(experiment, "latest-build.json")).json()).root;

@@ -6,11 +6,11 @@
  */
 import { expect, test } from "bun:test";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
-import { CollectionSession } from "../src/collection-session";
-import { collectionDraft } from "../src/collection-workspace";
+import { CollectionSession } from "../src/library/collection-session";
+import { collectionDraft } from "../src/app/workspace/collection-workspace";
 import { COLLECTION_2 } from "../src/platform/api";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { parseWorkspace, serializeWorkspace } from "../src/workspace-state";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
 import { withHair, withTint, type Hair } from "./fixtures/hair-feature";
 import { initialRecipe, freshWorkspace } from "./fixtures/eye-region";
 

@@ -20,10 +20,10 @@ import { archiveEqualExceptTimes, crc64xz, fileTimeOf, packArchive, walkOrder } 
 import { NativeWriteRefusal, propertiesToWrite } from "../src/native/write/red-encoder";
 import { karkSegment, LEVEL_OPTIMAL2 } from "../src/native/write/segments";
 import { blockLayout, flipLevels, importPlan, importTexture, readDds } from "../src/native/write/xbm-writer";
-import { createNativeResourceTools, loadNativeWriterLibraries, NATIVE_WRITER_ORACLES, oracleRefusal, wolvenKitRefusal } from "../src/native-resource-tools";
+import { createNativeResourceTools, loadNativeWriterLibraries, NATIVE_WRITER_ORACLES, oracleRefusal, wolvenKitRefusal } from "../src/legacy/eye-makeup/export/host/native-resource-tools";
 import { nodeWriterHost } from "../tools/native-writer-host";
 import { encodeDds } from "../src/engines/layered-makeup/flat-mip-chain";
-import { EYE_MAKEUP_WRITER_ORACLE, TEXTURE_GROUP_SETTINGS } from "../src/package-resource-builder";
+import { EYE_MAKEUP_WRITER_ORACLE, TEXTURE_GROUP_SETTINGS } from "../src/legacy/eye-makeup/export/host/package-resource-builder";
 import type { ResourceTools, TextureImportSettings } from "../src/platform/api";
 import { oracleDescribe } from "./optional-oracles";
 

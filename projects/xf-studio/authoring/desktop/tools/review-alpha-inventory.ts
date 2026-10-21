@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { resolve, sep } from "node:path";
 import { launch } from "../../tools/cdp";
 import { createDesktopServer } from "../server";
-import { USER_FACING_JARGON } from "../../src/alpha-availability";
+import { USER_FACING_JARGON } from "../../src/app/alpha-availability";
 
 type Entry = { surface: string; control: string; available: boolean; reason: string };
 const directory = mkdtempSync(resolve(tmpdir(), "xfs-alpha-inventory-"));

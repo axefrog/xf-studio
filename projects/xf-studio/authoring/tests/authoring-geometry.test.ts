@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { AuthoringDocument } from "../src/authoring-document";
-import { AuthoringGeometry } from "../src/authoring-geometry";
+import { AuthoringDocument } from "../src/app/authoring/authoring-document";
+import { AuthoringGeometry } from "../src/app/authoring/authoring-geometry";
 import { freshWorkspace } from "./fixtures/eye-region";
 
 function fixture() {

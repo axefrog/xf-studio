@@ -5,8 +5,8 @@
  */
 import { expect, test } from "bun:test";
 import { STUDIO_REGISTRY } from "../src/compose/studio-registry";
-import { createStudioPresentation } from "../src/studio-presentation";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
+import { createStudioPresentation } from "../src/app/studio-presentation";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { trustedFixture } from "./studio-presentation-fixture";
 import { withHair, type Hair } from "./fixtures/hair-feature";
 import { freshWorkspace } from "./fixtures/eye-region";

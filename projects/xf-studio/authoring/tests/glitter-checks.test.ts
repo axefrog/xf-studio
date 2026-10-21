@@ -1,14 +1,14 @@
 import { expect, test } from "bun:test";
 // Test-only use of the builder side (glitter route, region rules, planning) against the independent verifier's
 // restatements: the verifier must accept the builder's chains and refuse every tampered copy (PIPE-68..73, PIPE-76).
-import { derivePlateDocuments } from "../src/eye-plate-cut";
-import { clipRect, flakeCount, layerOutlineBounds, MAX_REGION_FLAKES } from "../src/glitter-region";
+import { derivePlateDocuments } from "../src/legacy/eye-makeup/plate/eye-plate-cut";
+import { clipRect, flakeCount, layerOutlineBounds, MAX_REGION_FLAKES } from "../src/legacy/eye-makeup/export/glitter-region";
 import { checkGlitterChains, levelDims, restatedCatalogue } from "../src/features/eye-makeup/verify/glitter-checks";
 import { glitterOf, restatedOutline } from "../src/features/eye-makeup/verify/resource-checks";
 import { expectedChain } from "../src/features/eye-makeup/verify/texture-checks";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "./eye-plate-fixture";
 import { plateWindow } from "./window-fixture";
-import { readRecipe as parseRecipe } from "../src/recipe-schema";
+import { readRecipe as parseRecipe } from "../src/legacy/eye-makeup/recipe-schema";
 import { raster } from "./fixtures/eye-region";
 import { compileGlitterPreset, preparePackageCollection, preflightPackageCollection } from "./fixtures/eye-exporter";
 
@@ -161,7 +161,7 @@ const FLAKES_2 = { ...FLAKES, sizeMm: .13, sizeSigma: .25, cover: .2, tiltSigmaD
 const SECOND = compiled([patch("left", LEFT)], [{ layer: "left", mips: "nested", flakes: FLAKES_2 }]);
 
 test("glitter flakes 2: the builder's catalogue is the verifier's restatement, flake for flake", async () => {
-  const { flakeCatalogue } = await import("../src/glitter-route");
+  const { flakeCatalogue } = await import("../src/legacy/eye-makeup/export/glitter-route");
   const rect = clipRect(layerOutlineBounds(patch("left", LEFT) as never), WINDOW)!;
   const built = flakeCatalogue(rect, WINDOW, FLAKES_2 as never), restated = restatedCatalogue(rect, WINDOW, FLAKES_2 as never);
   expect(restated.cx.length).toBe(built.cx.length);
@@ -176,7 +176,7 @@ test("glitter flakes 2: the builder's catalogue is the verifier's restatement, f
 });
 
 test("glitter flakes 2: the first recipe's catalogue is unchanged when no optional field is set", async () => {
-  const { flakeCatalogue, tiltVariance } = await import("../src/glitter-route");
+  const { flakeCatalogue, tiltVariance } = await import("../src/legacy/eye-makeup/export/glitter-route");
   const rect = clipRect(layerOutlineBounds(patch("left", LEFT) as never), WINDOW)!, c = flakeCatalogue(rect, WINDOW, FLAKES as never);
   // Pinned before the change: the first flake of seed 2077 on this rectangle, and the tilt variance of 25°/50°.
   expect(c.rough.every(r => r === FLAKES.roughness) && c.metal.every(m => m === FLAKES.metalness)).toBe(true);

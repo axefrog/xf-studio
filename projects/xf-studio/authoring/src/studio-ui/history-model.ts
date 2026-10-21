@@ -1,5 +1,5 @@
 import type { HistorySnapshot } from "../platform/api/history";
-import type { StudioCapability } from "../studio-application";
+import type { StudioCapability } from "../app/studio-application";
 
 /**
  * Pure presentation logic for the History panel and the Undo/Redo entry points: rows,

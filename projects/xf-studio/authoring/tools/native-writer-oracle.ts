@@ -15,14 +15,14 @@
  */
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { LocalSettingsStore } from "../src/local-settings-store";
+import { LocalSettingsStore } from "../src/setup/host/local-settings-store";
 import { loadGameOodle } from "../src/native/oodle";
 import { loadBcnLibrary } from "../src/native/write/bcn";
 import { writeCr2wDocument } from "../src/native/write/cr2w-writer";
 import { archiveEqualExceptTimes, fileTimeOf, packArchive, walkOrder } from "../src/native/write/rdar-writer";
 import { karkSegment, LEVEL_OPTIMAL2 } from "../src/native/write/segments";
 import { importTexture } from "../src/native/write/xbm-writer";
-import { TEXTURE_GROUP_SETTINGS } from "../src/package-resource-builder";
+import { TEXTURE_GROUP_SETTINGS } from "../src/legacy/eye-makeup/export/host/package-resource-builder";
 
 const app = resolve(import.meta.dir, "..");
 const DEFAULT_ORACLE = resolve(app, "data", "native-writer-oracle");

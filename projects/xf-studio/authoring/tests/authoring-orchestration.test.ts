@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
-import { AuthoringDocument } from "../src/authoring-document";
-import { AuthoringGestures } from "../src/authoring-gestures";
-import { AuthoringRenderScheduler } from "../src/authoring-render-scheduler";
+import { AuthoringDocument } from "../src/app/authoring/authoring-document";
+import { AuthoringGestures } from "../src/app/authoring/authoring-gestures";
+import { AuthoringRenderScheduler } from "../src/legacy/eye-makeup/preview/authoring-render-scheduler";
 import { registeredEditing } from "./gesture-test-adapter";
-import { RecipeActions } from "../src/authoring-eye-makeup";
+import { RecipeActions } from "../src/legacy/eye-makeup/authoring-eye-makeup";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { eyeMakeupPort } from "./fixtures/eye-region";
 

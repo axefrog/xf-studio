@@ -1,6 +1,6 @@
 import type { PackageBuildResult, PackageCheckResult } from "../../platform/api";
-import { EYE_MAKEUP_MOD, MOD_NAME_HINT } from "../../mod-branding";
-import type { ReadonlyDeep } from "../../read-only";
+import { EYE_MAKEUP_MOD, MOD_NAME_HINT } from "../../legacy/eye-makeup/mod-branding";
+import type { ReadonlyDeep } from "../../platform/api/read-only";
 import { applyCapability, badge, button, setButtonLabel, emptyState, note, section } from "../controls";
 import { h, setAttr, setText, setValue } from "../dom";
 import { helpTip, setHelp } from "../help-tip";
@@ -12,7 +12,7 @@ import { progressBar } from "../components/progress";
 import { RecordList, recordTime } from "../components/record-list";
 import { modLine } from "../components/mod-line";
 import { menuCapability, menuFromSections, openMenu, openValuePopover, type MenuAnchor, type MenuItem } from "../menu";
-import type { PackageProductSummary as ProductSummary } from "../../collection-actions";
+import type { PackageProductSummary as ProductSummary } from "../../library/collection-actions";
 type PackageProductSummary = ReadonlyDeep<ProductSummary>;
 import type { FeedbackAction } from "../feedback";
 import type { Frame, StudioRuntime } from "../runtime";

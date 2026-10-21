@@ -2,11 +2,11 @@ import { expect, test } from "bun:test";
 import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
-import { defaultLocalSettings } from "../src/local-settings";
-import { discoverSources } from "../src/source-discovery";
-import { compareWithDeployment } from "../src/vortex-deployment";
-import { inspectVortexSetup, isLocalFolder, readVortexManifests, readVortexStateFolder } from "../src/vortex-host";
-import { readVortexGameState, resolveVortexInstallPath, stateFromPairs } from "../src/vortex-state";
+import { defaultLocalSettings } from "../src/setup/local-settings";
+import { discoverSources } from "../src/game/host/source-discovery";
+import { compareWithDeployment } from "../src/installation/vortex-deployment";
+import { inspectVortexSetup, isLocalFolder, readVortexManifests, readVortexStateFolder } from "../src/installation/host/vortex-host";
+import { readVortexGameState, resolveVortexInstallPath, stateFromPairs } from "../src/installation/vortex-state";
 
 const fixtures = join(import.meta.dir, "fixtures", "vortex");
 const withFolder = (run: (base: string) => void) => {
@@ -317,7 +317,7 @@ test("the Vortex check tool leaves the profile's name out of what testers paste 
 
 test("Vortex parsing modules stay pure", () => {
   const IMPORTS = /\bfrom\s+["']([^"']+)["']|\bimport\s*\(\s*["']([^"']+)["']\s*\)/g;
-  for (const name of ["vortex-deployment", "vortex-state", "leveldb-read"]) {
+  for (const name of ["installation/vortex-deployment", "installation/vortex-state", "formats/leveldb-read"]) {
     const text = readFileSync(join(import.meta.dir, "..", "src", `${name}.ts`), "utf8");
     for (const match of text.matchAll(IMPORTS)) expect(match[1] ?? match[2], `${name}`).not.toMatch(/^node:|-host$|^\.\/source-discovery$/);
   }

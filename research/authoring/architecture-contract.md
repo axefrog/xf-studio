@@ -12,15 +12,16 @@ This is the default rule for new XF Studio work and for changes to an existing f
 
 Dependencies point inward. Presentation calls typed application actions and reads detached snapshots and capabilities. Application services use typed ports for device work, and adapters implement those ports. Pure evaluators, recipe parsing, the compiler and serialization run without a browser.
 
-**One composition root.** `studio-startup.ts` wires services and devices. The localhost entry (`studio-main.ts`) and the desktop bootstrap both start it with a typed `StudioHost`, so host differences reach it only through that object, never through page globals or data attributes. A presentation is mounted by the root through `createTrustedAuthoringCore`, `createTrustedPreviewServices` and `createTrustedStudioBootstrap`, and receives only the `StudioPresentationPort`. A view never receives the bootstrap object, `AuthoringDocument`, the raw collection service, a renderer or a writable recipe. A new host starts the same root with its own `StudioHost`. The root is not a place for behaviour just because a feature has a button.
+**One composition root.** `compose/studio-startup.ts` wires services and devices. The localhost entry (`compose/studio-main.ts`) and the desktop bootstrap both start it with a typed `StudioHost`, so host differences reach it only through that object, never through page globals or data attributes. A presentation is mounted by the root through `createTrustedAuthoringCore`, `createTrustedPreviewServices` and `createTrustedStudioBootstrap`, and receives only the `StudioPresentationPort`. A view never receives the bootstrap object, `AuthoringDocument`, the raw collection service, a renderer or a writable recipe. A new host starts the same root with its own `StudioHost`. The root is not a place for behaviour just because a feature has a button.
 
-**Source layout.** Studio code follows the [feature-module platform layout](feature-module-platform.md#layout) under `projects/xf-studio/authoring/src/`:
+**Source layout.** Studio code under `projects/xf-studio/authoring/src/` is organised by subsystem ([source layout plan](../../docs/source-layout-plan.md), [feature-module platform layout](feature-module-platform.md#layout)):
 
-- `platform/api` is the only platform import a feature may use.
-- `platform/core` holds platform services; `platform/persistence/` holds the durable stores (the typed document store, library durability and backups); `platform/scene/` is the scene host and names no feature.
-- `engines/<name>/` holds shared pure engines (the layered-makeup recipe, raster, finishes and compiler; Three only in its `render/`). An engine holds no feature's data: a feature hands it configuration.
-- `features/<id>/` holds a feature's module. Its core imports only the platform API, engines, pure helpers and its own folder. Its `view/` acts only through the `FeatureViewContext` over its facade. Its `render/` is a `FeatureRenderer` that reaches the scene only through the scene port.
-- `compose/` holds the composition lists (registry, views, renderers), which only the composition roots import.
+- `platform/api` is the only platform import a feature may use. `platform/core` holds platform services, `platform/persistence/` the durable stores, `platform/export/` the export host, and `platform/scene/` the scene host, which names no feature.
+- `engines/<name>/` holds shared pure engines (Three only in their `render/`). An engine holds no feature's data: a feature hands it configuration.
+- `features/<id>/` holds a feature's module. Its core imports only the platform API, engines and its own folder. Its `view/` acts only through the `FeatureViewContext` over its facade. Its `render/` reaches the scene only through the scene port.
+- `compose/` holds the composition lists and the browser roots; only the composition imports it. `studio-ui/` is the presentation shell.
+- The shell and the shared subsystems: `app/` (the application services behind the presentation port), `library/`, `game/`, `character/`, `materials/`, `animation/`, `preview/`, `saves/`, `installation/`, `setup/`, `host/` (shared host infrastructure), `formats/`, `native/`, `diagnostics/` and `studies/`. `legacy/eye-makeup/` holds eye makeup's modules the shell still reaches; nothing new goes there.
+- Inside a subsystem, pure and application code sits at its root; `host/` holds Bun-only code (files, processes, the OS, endpoints), `browser/` page devices and `render/` Three renderer modules.
 
 New feature code goes into its feature folder or an engine, never into the shell or the top of `src/`.
 
@@ -54,7 +55,7 @@ All UI composes the one reusable component library documented in the [interface 
 
 ## Boundary tests
 
-- `tests/architecture-import-boundary.test.ts` guards dependencies from trusted services into browser and renderer modules, and from core modules into presentation modules or browser entries. Its platform rules follow imports transitively (no feature reaches platform internals, no pure engine module reaches a renderer) and scan pure engine and feature code for page and host globals. Each rule is shown to fail on an injected violation.
+- `tests/architecture-import-boundary.test.ts` enforces the layers by folder: host access only in host folders; no pure or page module imports host code, even by type; nothing the page loads reaches host code; Three only in `render/` and `browser/` folders; devices wired only by the composition; renderer modules only for renderers; pure modules load no scene host, composition or presentation. Its platform, engine, feature and scene-host rules follow imports transitively and scan pure engine and feature code for page and host globals. Each rule is shown to fail on an injected violation.
 - `tests/studio-ui-boundary.test.ts` guards the presentation's imports and that the composition root reads no page globals.
 - `tests/style-guide.test.ts` keeps the generated style guide current.
 

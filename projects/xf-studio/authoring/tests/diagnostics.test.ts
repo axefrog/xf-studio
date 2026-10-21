@@ -3,17 +3,17 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, wri
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { inflateRawSync } from "node:zlib";
-import { personalDataIn, redactPersonalData } from "../src/private-data";
+import { personalDataIn, redactPersonalData } from "../src/app/private-data";
 import { redactKnownRoots, redactSaveNames, redactText } from "../src/diagnostics/redact";
 import { boundJson, DIAGNOSTIC_FORWARD_SCHEMA, DIAGNOSTIC_LIMITS, isErrorRef, isExpectedFailure, newErrorRef, parseForward } from "../src/diagnostics/model";
-import { DiagnosticLog, hostDiagnosticsAt, hostFailure, hostTrace, withDiagnostics } from "../src/diagnostics/host-log";
-import { TRACE_BOUNDS, TraceWindow } from "../src/diagnostics/trace-window";
-import { createDiagnosticsHandler, ERROR_REF_HEADER, withRequestDiagnostics } from "../src/diagnostics/host-endpoint";
+import { DiagnosticLog, hostDiagnosticsAt, hostFailure, hostTrace, withDiagnostics } from "../src/diagnostics/host/host-log";
+import { TRACE_BOUNDS, TraceWindow } from "../src/diagnostics/host/trace-window";
+import { createDiagnosticsHandler, ERROR_REF_HEADER, withRequestDiagnostics } from "../src/diagnostics/host/host-endpoint";
 import { ISSUE_URL_LIMIT, issueUrl, reportLeaks, type ReportManifest } from "../src/diagnostics/report";
 import { DiagnosticsActions, type DiagnosticsDevice } from "../src/diagnostics/actions";
-import { involvedMods } from "../src/diagnostics/mod-identity";
-import { crc32, zip } from "../src/diagnostics/zip";
-import { defaultLocalSettings } from "../src/local-settings";
+import { involvedMods } from "../src/diagnostics/host/mod-identity";
+import { crc32, zip } from "../src/diagnostics/host/zip";
+import { defaultLocalSettings } from "../src/setup/local-settings";
 
 const vectors = JSON.parse(readFileSync(resolve(import.meta.dir, "../../../../tools/private-data.json"), "utf8")).vectors as
   { userPath: string[]; email: string[]; clean: string[] };

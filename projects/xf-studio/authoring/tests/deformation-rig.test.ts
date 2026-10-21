@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { compileDeformationRig, DEFORMATION_LIMITS, DeformationRigError, evaluateDeformationRig, identity, multiply, parseDeformationProgram, programWork, twistAngle,
-  type DeformationOp, type DeformationProgram, type Mat4 } from "../src/deformation-rig";
-import type { JsonObject } from "../src/red-json";
-import { animatedComponents, logRigRefusalOnce, puppetDeformationRigs } from "../src/deformation-rig-host";
+  type DeformationOp, type DeformationProgram, type Mat4 } from "../src/animation/deformation-rig";
+import type { JsonObject } from "../src/game/red-json";
+import { animatedComponents, logRigRefusalOnce, puppetDeformationRigs } from "../src/animation/host/deformation-rig-host";
 
 // ---- a tiny rig and graph in the resolver's JSON shape ----
 const cn = (value: string) => ({ $type: "CName", $storage: "string", $value: value });

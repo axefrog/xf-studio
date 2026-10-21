@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { type ArchiveFile, buildMountPlan, DepotIndex, type MountedArchive } from "../src/archive-precedence";
-import { readArchiveXlConfig, type XlDocument } from "../src/archivexl-config";
-import { ccoPath, loadMergedCco, resolveCharacter } from "../src/character-resolver";
-import { depotHash, type DepotRef, refFromPath } from "../src/depot-path";
-import { chunkInScene, type FetchedResource, type ResourceFetchPort, ResourceGraph } from "../src/resource-graph";
+import { type ArchiveFile, buildMountPlan, DepotIndex, type MountedArchive } from "../src/game/archive-precedence";
+import { readArchiveXlConfig, type XlDocument } from "../src/game/archivexl-config";
+import { ccoPath, loadMergedCco, resolveCharacter } from "../src/character/character-resolver";
+import { depotHash, type DepotRef, refFromPath } from "../src/game/depot-path";
+import { chunkInScene, type FetchedResource, type ResourceFetchPort, ResourceGraph } from "../src/game/resource-graph";
 import { app, cco, cr2w, ent, mesh, meshComponent, morphtarget, rp } from "./resolver-fixtures";
 
 /**

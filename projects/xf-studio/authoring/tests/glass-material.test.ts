@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import * as THREE from "three";
-import { materialAdapter } from "../src/character-material-adapters";
-import { createGlassMaterial, glassGrazingPower, glassParameters, glassTransmittance, patchGlassShader } from "../src/glass-material";
-import { renderTemplate } from "../src/render-templates";
+import { materialAdapter } from "../src/materials/render/character-material-adapters";
+import { createGlassMaterial, glassGrazingPower, glassParameters, glassTransmittance, patchGlassShader } from "../src/materials/render/glass-material";
+import { renderTemplate } from "../src/materials/render-templates";
 
 // glass_onesided.mt's transmission pass (research/materials/shader-metal-glass.md §4.3, rank 3 of §7): the arithmetic against the
 // decompiled program's formulas, the Gorilla Arms pane's values (§5), and the blend that multiplies what is behind the pane.

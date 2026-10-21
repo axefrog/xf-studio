@@ -284,11 +284,11 @@ Polish on existing features, not new work. Each is one line; the code-health led
 - **Choice thumbnails turn the wrong way when dragged** (21 October 2026). Dragging a hairstyle thumbnail left or right turns it opposite to the hand. The drag sets `angle = start + dx·360/(width·1.5)` in `src/studio-ui/components/choice-preview.ts` (`PreviewSpin`, about line 238). Flip the sign so the surface under the pointer follows it, check the frame order in `turntableYaw` agrees, and keep the hover spin's direction consistent with the drag.
 - **Build has no Stop.** A Build runs for many seconds and can't be stopped from the Mod panel; the host already stops a Build whose request is dropped, so the panel only needs a Stop button.
 - **Two windows overwrite each other's draft.** Two Studio tabs or windows on one workspace each autosave over the other's draft; the second should see the first's changes, or at least warn.
-- **Collection order on a tie** (LIB-01): two saves in the same millisecond list in random order (`src/collection-store.ts` orders by `created_at`, then a random UUID); add a stable insertion tie-break.
+- **Collection order on a tie** (LIB-01): two saves in the same millisecond list in random order (`src/library/host/collection-store.ts` orders by `created_at`, then a random UUID); add a stable insertion tie-break.
 - **Repeated layer names** (CORE-125): a new layer is named `Layer <count+1>`, so it can repeat a name after a removal (`src/engines/layered-makeup/layer-stack.ts`); skip names in use, as presets already do.
 - **A damaged masculine plate blocks the feminine export** (PIPE-122): it reaches `refuse("invalid_collection")` in `src/features/eye-makeup/export/index.ts`; treat it as unavailable with a warning instead.
-- **Developer wording in localhost Build reasons** (PIPE-134): `src/package-server.ts` names `bun tools/setup-wolvenkit.ts`, `XFS_PACKAGE_*` overrides and "Game input".
-- **Install receipts matched on name and size** (CORE-118): an archive not hashed within the problem report's budget matches a receipt on name and size alone (`src/diagnostics/mod-identity.ts`).
+- **Developer wording in localhost Build reasons** (PIPE-134): `src/host/package-server.ts` names `bun tools/setup-wolvenkit.ts`, `XFS_PACKAGE_*` overrides and "Game input".
+- **Install receipts matched on name and size** (CORE-118): an archive not hashed within the problem report's budget matches a receipt on name and size alone (`src/diagnostics/host/mod-identity.ts`).
 - **WebView2 runs with `--disable-web-security`** (DESK-09): Electrobun's native wrapper hard-codes the flag and no setting removes it; the CSP, session cookie and navigation rules still hold. Raise it upstream, or bundle CEF at the cost of a much larger installer.
 
 ## Working rules for this queue

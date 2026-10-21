@@ -1,4 +1,4 @@
-import { readSavedV } from "../src/save-reader";
+import { readSavedV } from "../src/saves/save-reader";
 import { resolve } from "node:path";
 const [source, destination] = Bun.argv.slice(2);
 if (!source || !destination || resolve(source) === resolve(destination))

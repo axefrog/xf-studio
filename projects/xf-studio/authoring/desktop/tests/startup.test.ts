@@ -8,7 +8,7 @@ import { blankWindowNotice, mainWindowPlacement, trialWindowPosition } from "../
 import { createHostLog } from "../host-log";
 import { DesktopWorkspaceClose } from "../workspace-close";
 import { createDesktopServer } from "../server";
-import { USER_FACING_JARGON } from "../../src/alpha-availability";
+import { USER_FACING_JARGON } from "../../src/app/alpha-availability";
 
 const root = mkdtempSync(resolve(tmpdir(), "xfs-desktop-startup-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));

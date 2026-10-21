@@ -4,10 +4,10 @@
  * rows carry no files), and a rewrite changes only the sign of the rows it switches.
  */
 import { expect, test } from "bun:test";
-import { mo2ModlistRows, parseMo2Modlist, splitMo2ModlistLines } from "../src/mo2-instance";
-import { disableMo2Mods, mo2ModlistEntry } from "../src/mo2-placement";
-import { diagnosticModlist, enabledMo2Mods } from "../src/runtime-diagnostic-stage";
-import { EYE_MAKEUP_MOD } from "../src/mod-branding";
+import { mo2ModlistRows, parseMo2Modlist, splitMo2ModlistLines } from "../src/installation/mo2-instance";
+import { disableMo2Mods, mo2ModlistEntry } from "../src/installation/mo2-placement";
+import { diagnosticModlist, enabledMo2Mods } from "../src/installation/host/runtime-diagnostic-stage";
+import { EYE_MAKEUP_MOD } from "../src/legacy/eye-makeup/mod-branding";
 
 const LIST = "# written by MO2\r\n+High\nPlain\r\n-Off\n*DLC\n+Tools_separator\n  +Padded  \r\n+High\n";
 

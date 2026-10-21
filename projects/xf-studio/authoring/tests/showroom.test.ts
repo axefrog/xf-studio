@@ -6,13 +6,13 @@ import { createHash } from "node:crypto";
 import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, sep } from "node:path";
-import { CREATOR_HEAD_SLOT, CREATOR_RIG_FEMALE } from "../src/creator-lighting";
+import { CREATOR_HEAD_SLOT, CREATOR_RIG_FEMALE } from "../src/preview/creator-lighting";
 import {
   aimQuaternion, entityTemplate, HEAD_JOINT, NECK_CUT_Z, pedestalBoxes, rigAppearanceResource, rigLights, RIG_PROFILES, rigAppearance,
   showroomAppearanceResource, showroomCollectionId, showroomComponentId, showroomPaths, studioToEntity,
 } from "../src/showroom/resources";
-import { showroomCollection } from "../src/showroom/build";
-import { verifyShowroomArchive } from "../src/showroom/verify";
+import { showroomCollection } from "../src/showroom/host/build";
+import { verifyShowroomArchive } from "../src/showroom/host/verify";
 import type { GeneratedFile, VerifierTools } from "../src/platform/api";
 
 const near = (a: number, b: number, e = 1e-6) => Math.abs(a - b) <= e;

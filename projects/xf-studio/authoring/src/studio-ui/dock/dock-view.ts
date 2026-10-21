@@ -1,4 +1,4 @@
-import { keyBinding, panelModifiersHeld } from "../../input-bindings";
+import { keyBinding, panelModifiersHeld } from "../../app/input-bindings";
 import { button } from "../controls";
 import { clamp, h, setAttr } from "../dom";
 import { icon, type IconName } from "../icons";

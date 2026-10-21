@@ -7,29 +7,29 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
-import { planCollection } from "../src/preset-collection";
+import { planCollection } from "../src/legacy/eye-makeup/export/preset-collection";
 import {
   appearanceResource, archiveXlDeclaration, customizationResource, HandleCounter, resourceJson, rewritePlateMorph, SELECTOR_OPTION_INDEX,
   selectorBodies, SELECTOR_VISUAL_TAG,
-} from "../src/package-resources";
-import { expectedPaths } from "../src/archive-inventory";
-import { plateTopology, weldedSeams } from "../src/eye-plate-verify";
+} from "../src/legacy/eye-makeup/export/package-resources";
+import { expectedPaths } from "../src/legacy/eye-makeup/export/archive-inventory";
+import { plateTopology, weldedSeams } from "../src/legacy/eye-makeup/plate/eye-plate-verify";
 import { AUDIENCE_BOTH, AUDIENCE_FEMININE, CHECK_BUILD_DECIDES_NOTE, CHECK_MASCULINE_NOTE, EYE_MAKEUP_EXPORTER, MASCULINE_NOT_PREPARED,
   MASCULINE_WINDOW } from "../src/features/eye-makeup/export";
-import { PLATE_REACH_UNCHECKED_NOTE, describePackageBuild } from "../src/package-filter";
-import { EYE_PLATE_HEAD_SETTING } from "../src/eye-plate-head-choice";
+import { PLATE_REACH_UNCHECKED_NOTE, describePackageBuild } from "../src/legacy/eye-makeup/export/package-filter";
+import { EYE_PLATE_HEAD_SETTING } from "../src/legacy/eye-makeup/plate/eye-plate-head-choice";
 import { EYE_PLATE_MASCULINE_PREREQUISITE, EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
 import { checkArchiveXl, verifierBodies, VERIFIER_BODY_RULES, type VerifierPlan } from "../src/features/eye-makeup/verify/resource-checks";
-import { EyePlateError, packagePlateRecord, type EyePlateManifest, type EyePlateTools } from "../src/eye-plate-service";
-import { eyePlateRouteKeyFor, masculineEyePlatePrerequisite, masculineUnavailable, unreadArchives } from "../src/eye-plate-prerequisite";
-import { testMasculineEyePlate } from "../src/package-server";
-import { EyePlateCache, contentFingerprint } from "../src/eye-plate-cache";
-import { EYE_PLATE_MASCULINE_RECIPE } from "../src/eye-plate-recipe";
+import { EyePlateError, packagePlateRecord, type EyePlateManifest, type EyePlateTools } from "../src/legacy/eye-makeup/plate/host/eye-plate-service";
+import { eyePlateRouteKeyFor, masculineEyePlatePrerequisite, masculineUnavailable, unreadArchives } from "../src/legacy/eye-makeup/plate/host/eye-plate-prerequisite";
+import { testMasculineEyePlate } from "../src/host/package-server";
+import { EyePlateCache, contentFingerprint } from "../src/legacy/eye-makeup/plate/host/eye-plate-cache";
+import { EYE_PLATE_MASCULINE_RECIPE } from "../src/legacy/eye-makeup/plate/eye-plate-recipe";
 import { runProductCommand, type ProductCommandOptions } from "../src/platform/export/product-builder";
 import { verifyProductBuildResult } from "../src/platform/export/product-host";
 import { checkProducts } from "../src/platform/export/product-check";
 import type { PackageBuildResult } from "../src/platform/api";
-import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/plate-uv-footprint-io";
+import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/legacy/eye-makeup/export/host/plate-uv-footprint-io";
 import { eyeEntry, fakeEyeVerifier, fakeTools, fakeVerifierTools, FOOTPRINT, sha, writePlate } from "./fixtures/product-fixture";
 
 const app = resolve(import.meta.dir, "..");

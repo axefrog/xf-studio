@@ -11,7 +11,7 @@
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { defaultClusteredGlintFlakes, defaultDirectGlintFlakes } from "../../projects/xf-studio/authoring/src/engines/layered-makeup/direct-glint-settings";
-import { studioGlitterFlakes } from "../../projects/xf-studio/authoring/src/glitter-studio-flakes";
+import { studioGlitterFlakes } from "../../projects/xf-studio/authoring/src/legacy/eye-makeup/export/glitter-studio-flakes";
 
 type Rect = [u0: number, v0: number, u1: number, v1: number];
 const PLUM = "#6d4a7e", GOLD = "#e8c46a", WINE = "#620422";

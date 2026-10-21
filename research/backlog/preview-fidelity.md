@@ -48,7 +48,7 @@ Study the actual game skin/eye shaders, textures and parameter semantics (SSS, r
 Open bugs:
 
 - **Beard colour** (PREV-201): beard cards render lighter and more golden than the stubble under the same hair colour; needs material and colour diagnosis.
-- **Creator lighting on the masculine body** (PREV-166): the refit gains were fitted on feminine captures but apply by light name to the masculine rig too (`src/creator-lighting.ts`); key the calibration by body, or mark the masculine rig as not fitted.
+- **Creator lighting on the masculine body** (PREV-166): the refit gains were fitted on feminine captures but apply by light name to the masculine rig too (`src/preview/creator-lighting.ts`); key the calibration by body, or mark the masculine rig as not fitted.
 - **Wrap lighting steps at triangle edges** (PREV-137, fallback paths only): `xfsSurfaceCurvature` takes `fwidth` of the interpolated normal, nearly constant per triangle; only the `direct`/`srgb8` paths still use the wrap.
 - **Idle switch jump** (PREV-141): choosing the eyes-section idle during playback starts its face clip at 0, so the face jumps from the running loop's phase; a runtime two-clip blend would remove it.
 

@@ -2,8 +2,8 @@
 // Does not execute the game's animation graph; all outputs are local research data.
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { IdleAnimation } from "../src/idle-animation";
-import { extendSkin, restoreFirstWeights } from "../src/skin";
+import { IdleAnimation } from "../src/animation/render/idle-animation";
+import { extendSkin, restoreFirstWeights } from "../src/materials/render/skin";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 

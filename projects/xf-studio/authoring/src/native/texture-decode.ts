@@ -9,7 +9,7 @@
  * decode holds the resource, its texture data and the compressed PNG (for a 4096² BC7 map about 16, 21 and 12 MB).
  */
 import { createHash } from "node:crypto";
-import { encodePngRows } from "../png";
+import { encodePngRows } from "../formats/png";
 import type { NativeArchivePool } from "./archive-reader";
 import { readCr2w } from "./cr2w-reader";
 import type { Decompress } from "./kark";

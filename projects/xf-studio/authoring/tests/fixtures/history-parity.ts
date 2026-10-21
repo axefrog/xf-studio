@@ -11,18 +11,18 @@
 import { MAIN_VIEW, type ViewGraphChange } from "../../src/platform/api/view-graph";
 import type { HistoryParticipant, HistorySnapshot, HistoryCommand } from "../../src/platform/api/history";
 import { STUDIO_COMPOSITION } from "../../src/compose/studio-registry";
-import { DEFAULT_CREATOR_LIGHTING } from "../../src/creator-lighting";
+import { DEFAULT_CREATOR_LIGHTING } from "../../src/preview/creator-lighting";
 import { createHistoryService } from "../../src/platform/core/history-service";
-import { createStudioPresentation } from "../../src/studio-presentation";
-import { createTrustedAuthoringCore, type StudioComposition } from "../../src/trusted-authoring-core";
-import { createViewServices } from "../../src/view-actions";
+import { createStudioPresentation } from "../../src/app/studio-presentation";
+import { createTrustedAuthoringCore, type StudioComposition } from "../../src/app/trusted-authoring-core";
+import { createViewServices } from "../../src/app/view-actions";
 import { STUDIO_MODULE_REGISTRATION } from "../../src/compose/modules";
 import { freshWorkspace } from "./eye-region";
 import { withHair, withTint, type Hair } from "./hair-feature";
 import { Ids, timeline } from "./look-history-parity";
 import { digest, restore } from "./workspace-observable";
 import { createHash } from "node:crypto";
-import { encodeWorkspaceAt } from "../../src/workspace-budget";
+import { encodeWorkspaceAt } from "../../src/app/workspace/workspace-budget";
 import { STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
 import { largeWorkspaceV1, looseWorkspaceV1, smallWorkspaceV1 } from "./workspace-v1-fixtures";
 

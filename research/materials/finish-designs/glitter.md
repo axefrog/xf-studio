@@ -14,7 +14,7 @@ Individually visible reflective flakes of varied size and spacing over visible p
 
 The Studio's glint models, Direct-light glints, Clustered fine glints and Dense fine speckles, looked right to the maintainer; the classic macro dots did not. The reference is the maintainer's "Glitterati" preset, read from a copy of the library: Dense fine speckles, density 0.88, fine share 0.88, strength 16, pink `#fa006c` over `#620422` ([experiment 032 §1](../../../experiments/033-finishes-rework/README.md#1-the-reference-models)).
 
-[`glitter-studio-flakes.ts`](../../../projects/xf-studio/authoring/src/glitter-studio-flakes.ts) maps a glint layer's settings onto the route's flakes as faithfully as the decal allows:
+[`glitter-studio-flakes.ts`](../../../projects/xf-studio/authoring/src/legacy/eye-makeup/export/glitter-studio-flakes.ts) maps a glint layer's settings onto the route's flakes as faithfully as the decal allows:
 - **Where the flakes are:** the model's own count per mm² and cluster envelope.
 - **How big they are:** its facet sizes, but never below two window texels (0.13 mm), plus its large population.
 - **How they tilt:** a **14° floor** above mode 1's fade, then |N(0, 16°)| to 65°.

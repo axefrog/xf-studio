@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { raster } from "../../projects/xf-studio/authoring/src/engines/layered-makeup/recipe";
-import { readRecipeFile } from "../../projects/xf-studio/authoring/src/recipe-schema";
+import { readRecipeFile } from "../../projects/xf-studio/authoring/src/legacy/eye-makeup/recipe-schema";
 import { EYE_MAKEUP_REGION, initialRecipe } from "../../projects/xf-studio/authoring/src/features/eye-makeup/region";
 
 const [source, layerId, out, sizeArg] = process.argv.slice(2);

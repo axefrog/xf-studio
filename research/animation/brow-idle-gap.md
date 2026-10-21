@@ -46,7 +46,7 @@ Thus the current pipeline demonstrably omits changing brow-region shading signal
 
 ## Evidence and provenance
 
-Source paths: [existing extraction/bake research](cc-idle.md), [bake adapter](../../projects/xf-studio/authoring/tools/bake_idle_face.py), [playback adapter](../../projects/xf-studio/authoring/src/idle-animation.ts), [current offline verification](../../projects/xf-studio/authoring/tools/verify_idle.ts). The numerical probes were read-only commands against the current ignored local assets; figures above are recorded observations rather than a new permanent test harness.
+Source paths: [existing extraction/bake research](cc-idle.md), [bake adapter](../../projects/xf-studio/authoring/tools/bake_idle_face.py), [playback adapter](../../projects/xf-studio/authoring/src/animation/render/idle-animation.ts), [current offline verification](../../projects/xf-studio/authoring/tools/verify_idle.ts). The numerical probes were read-only commands against the current ignored local assets; figures above are recorded observations rather than a new permanent test harness.
 
 Community learning/tool use: [Cyberpunk Blender Add-on / IO Suite](https://github.com/WolvenKit/Cyberpunk-Blender-add-on), pinned commit `7a4ee793c36d9615946fe87ec9d42cde7568021d`, specifically `i_scene_cp77_gltf/animation/facial/solver.py` and its processed wrinkle outputs. The original unmodified numerical modules were executed offline again; no upstream implementation was copied. Existing WolvenKit extraction and Three.js adapter dependencies remain as credited in [the central learning record](../../docs/community-credits.md). The parent task updates that shared record before the checkpoint.
 

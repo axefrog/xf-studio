@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
-import { derivePlateDocuments } from "../src/eye-plate-cut";
-import { decodeDec4Normal, liftPlate, MAX_PLATE_LIFT_MM, PLATE_LIFT_MM } from "../src/plate-lift";
-import { parseCollection, planCollection } from "../src/preset-collection";
-import { HandleCounter, HIDDEN_CHUNK_ENTRY, rewritePlateMesh } from "../src/package-resources";
+import { derivePlateDocuments } from "../src/legacy/eye-makeup/plate/eye-plate-cut";
+import { decodeDec4Normal, liftPlate, MAX_PLATE_LIFT_MM, PLATE_LIFT_MM } from "../src/legacy/eye-makeup/export/plate-lift";
+import { parseCollection, planCollection } from "../src/legacy/eye-makeup/export/preset-collection";
+import { HandleCounter, HIDDEN_CHUNK_ENTRY, rewritePlateMesh } from "../src/legacy/eye-makeup/export/package-resources";
 import { plateUvWindow, uvTransformConstants } from "../src/engines/layered-makeup/plate-uv-window";
-import { SURFACE_OVERRIDE_RANGES } from "../src/export-diagnostics";
+import { SURFACE_OVERRIDE_RANGES } from "../src/legacy/eye-makeup/export/export-diagnostics";
 import { VERIFIER_PLATE_LIFT_MM } from "../src/features/eye-makeup/verify/plate-geometry";
 import { VERIFIER_SURFACE_RANGES } from "../src/features/eye-makeup/verify/resource-checks";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe } from "./eye-plate-fixture";

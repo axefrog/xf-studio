@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { referenceTextures } from "../src/platform/scene/reference-textures";
-import { createReferenceCharacterRoutes } from "../src/reference-character-server";
+import { createReferenceCharacterRoutes } from "../src/character/host/reference-character-server";
 test("reference routes refuse preparation and assets before verification or experiment demand",async()=>{
   let settingsReads=0;
   const routes=createReferenceCharacterRoutes({cacheRoot:"build/reference-test-unused",enabled:()=>false,settings:()=>{settingsReads++;return{gameRoot:null,launchRoute:"direct",mo2Root:null,mo2ProfileId:null,manualModRoot:null,wolvenKitCli:null};}});

@@ -3,13 +3,13 @@ import { readFileSync } from "node:fs";
 import { STUDIO_OWNERS, STUDIO_REGISTRY, STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { EYE_MAKEUP } from "../src/features/eye-makeup";
 import { EXPRESSIONS } from "../src/features/expressions";
-import { IDLE_UNAVAILABLE, MotionActions } from "../src/motion-actions";
+import { IDLE_UNAVAILABLE, MotionActions } from "../src/animation/motion-actions";
 import { actionTable, familyId, featureId, type SystemFamily } from "../src/platform/api";
 import { Registry } from "../src/platform/core/registry";
 import { RECIPE_ACTION_KINDS } from "../src/engines/layered-makeup/recipe-actions";
-import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
-import { StudioApplication } from "../src/studio-application";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
+import { ACTION_DESCRIPTORS } from "../src/app/studio-action-descriptors";
+import { StudioApplication } from "../src/app/studio-application";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { freshWorkspace } from "./fixtures/eye-region";
 
 /** Actions of features the application binds generically (no bespoke handler, not in the hand-kept `ACTION_DESCRIPTORS`). */
@@ -103,7 +103,7 @@ test("routing is exhaustive: every owner needs a handler and unknown kinds are r
 });
 
 test("reason codes are structured where refusals are decided, not read from message text (CORE-15)", () => {
-  const source = readFileSync(new URL("../src/studio-application.ts", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../src/app/studio-application.ts", import.meta.url), "utf8");
   expect(source).not.toMatch(/reason(?:\?)?\.includes\(|function reasonCode|startsWith\("(?:preview|camera|motion|quality|savedV)\./);
   // A device error whose text never says "unavailable" is still an unavailable asset.
   const { app } = fixture();

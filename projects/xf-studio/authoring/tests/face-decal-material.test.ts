@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import * as THREE from "three";
-import { materialAdapter, type AdapterContext, type ChunkTextures } from "../src/character-material-adapters";
-import { decodeSrgbByte, nearestVertices, sampleAtVertices, transferDeltas, VertexGrid } from "../src/decal-underlay";
+import { materialAdapter, type AdapterContext, type ChunkTextures } from "../src/materials/render/character-material-adapters";
+import { decodeSrgbByte, nearestVertices, sampleAtVertices, transferDeltas, VertexGrid } from "../src/materials/render/decal-underlay";
 import { createFaceDecalMaterial, decalColourUnits, decalContrast, decalCoverage, decalTargets, doubleDiffuseCoverage, faceDecalParameters,
-  forwardDecal, forwardSurface, gbufferColour, patchFaceDecalShader, type Rgb } from "../src/face-decal-material";
-import type { RenderChunkMaterial, RenderTexture } from "../src/render-detail";
-import { VANILLA_SKIN_PROFILE, skinParameters } from "../src/skin-material";
+  forwardDecal, forwardSurface, gbufferColour, patchFaceDecalShader, type Rgb } from "../src/materials/render/face-decal-material";
+import type { RenderChunkMaterial, RenderTexture } from "../src/character/render-detail";
+import { VANILLA_SKIN_PROFILE, skinParameters } from "../src/materials/render/skin-material";
 
 const close = (a: readonly number[], b: readonly number[], digits = 6) => a.forEach((value, k) => expect(value).toBeCloseTo(b[k]!, digits));
 const srgb = (byte: number) => decodeSrgbByte(byte);

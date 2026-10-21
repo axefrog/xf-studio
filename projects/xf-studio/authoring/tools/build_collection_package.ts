@@ -24,13 +24,13 @@ import { runProductCommand } from "../src/platform/export/product-builder";
 import { ExportRefusal, PACKAGE_PROGRESS_PREFIX, PrerequisiteStale } from "../src/platform/api";
 import { STUDIO_EXPORTERS } from "../src/compose/exporters";
 import { EYE_PLATE_MASCULINE_PREREQUISITE, EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
-import { createWolvenKitPackageTools, DEFAULT_WOLVENKIT_CONCURRENCY } from "../src/package-build-wolvenkit";
-import { createWolvenKitVerifierTools } from "../src/verifier-wolvenkit";
-import { closeNativeWriterLibraries, createNativeResourceTools, loadNativeWriterLibraries, type NativeWriterLibraries } from "../src/native-resource-tools";
+import { createWolvenKitPackageTools, DEFAULT_WOLVENKIT_CONCURRENCY } from "../src/legacy/eye-makeup/export/host/package-build-wolvenkit";
+import { createWolvenKitVerifierTools } from "../src/legacy/eye-makeup/export/host/verifier-wolvenkit";
+import { closeNativeWriterLibraries, createNativeResourceTools, loadNativeWriterLibraries, type NativeWriterLibraries } from "../src/legacy/eye-makeup/export/host/native-resource-tools";
 import { loadGameOodle } from "../src/native/oodle";
 import { loadBcnLibrary } from "../src/native/write/bcn";
 import { nodeWriterHost } from "./native-writer-host";
-import { bcnCandidates } from "../src/packaged-build-tools";
+import { bcnCandidates } from "../src/legacy/eye-makeup/export/host/packaged-build-tools";
 
 const app = resolve(import.meta.dir, "..");
 const project = resolve(app, "..");

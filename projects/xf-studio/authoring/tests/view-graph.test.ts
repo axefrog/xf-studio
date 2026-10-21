@@ -7,13 +7,13 @@ import { MAIN_VIEW, validViewId, viewPanelId, type ViewGraphChange } from "../sr
 import { parseViewGraph, VIEW_HISTORY_STRUCTURE, ViewGraph } from "../src/platform/core/view-graph";
 import { createHistoryService, VIEW_SCOPE } from "../src/platform/core/history-service";
 import { createStudioViewGraph, defaultViewGraph, isDefaultViewGraph, previewMirror, storedViewGraph, STUDIO_VIEW_GRAPH_RULES,
-  workspaceViewGraph } from "../src/preview-view-graph";
-import { PreviewActions, type PreviewPort } from "../src/preview-actions";
-import { parseWorkspace, serializeWorkspace } from "../src/workspace-state";
-import { WorkspaceComposer } from "../src/workspace-composer";
+  workspaceViewGraph } from "../src/preview/preview-view-graph";
+import { PreviewActions, type PreviewPort } from "../src/preview/preview-actions";
+import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
+import { WorkspaceComposer } from "../src/app/workspace/workspace-composer";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
-import { DEFAULT_CREATOR_LIGHTING } from "../src/creator-lighting";
+import { DEFAULT_CREATOR_LIGHTING } from "../src/preview/creator-lighting";
 
 /** A lights-node edit: the creator calibration's exposure (the node's own values; its studio mirror is derived from the setups). */
 const calibrated = (exposure: unknown) => ({ state: { creatorLighting: { ...DEFAULT_CREATOR_LIGHTING, exposure } } });

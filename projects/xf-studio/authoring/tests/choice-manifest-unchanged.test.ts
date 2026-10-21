@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync, statSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { writeChoiceManifest } from "../src/choice-manifest";
+import { writeChoiceManifest } from "../src/character/host/choice-manifest";
 
 test("an unchanged choice manifest is not rewritten, so what was derived from its stamp stays valid", () => {
   const dir = mkdtempSync(join(tmpdir(), "xfs-manifest-"));

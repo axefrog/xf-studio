@@ -8,7 +8,7 @@ This page covers hair cards, and lashes that use hair materials. How hair moves 
 
 ## 1. Inputs
 
-For generated preview geometry, copy template shading independently of the source mesh's skinning extension. The Hair Lab cap probe found that copying an eight-influence compile wrapper onto geometry with only four skin attributes hid otherwise valid geometry. The [material-copy adapter](../projects/xf-studio/authoring/src/skin.ts) retains the base template hook, while the scene surface API prepares template attributes on the caller's geometry. This is an offline Studio finding; it does not change the decoded game shader model below.
+For generated preview geometry, copy template shading independently of the source mesh's skinning extension. The Hair Lab cap probe found that copying an eight-influence compile wrapper onto geometry with only four skin attributes hid otherwise valid geometry. The [material-copy adapter](../projects/xf-studio/authoring/src/materials/render/skin.ts) retains the base template hook, while the scene surface API prepares template attributes on the caller's geometry. This is an offline Studio finding; it does not change the decoded game shader model below.
 
 | Input | Meaning | Grade |
 |---|---|---|
@@ -153,7 +153,7 @@ For the saved hair, `38_ash_brown` resolves to redacted-c01's `ash_brown.hp` thr
 
 ## 8. Browser preview mapping
 
-Code: `src/hair-colour-model.ts` (pure, tested), `src/hair-shading.ts` and `src/brow-material.ts` (Three adapters), selected per chunk by its template in `src/character-material-adapters.ts`; `src/stage-backdrop.ts` and `src/viewport-backdrop.ts` (the opaque stage). Since P0 the inputs are the resolved chunk's own: effective `hair.mt` scalars (instance chain, then template defaults), the winning `.hp`, and each texture with its `isGamma` flag, for any vanilla or CCXL hair, lash or brow choice.
+Code: `src/materials/hair-colour-model.ts` (pure, tested), `src/materials/render/hair-shading.ts` and `src/materials/render/brow-material.ts` (Three adapters), selected per chunk by its template in `src/materials/render/character-material-adapters.ts`; `src/preview/stage-backdrop.ts` and `src/preview/render/viewport-backdrop.ts` (the opaque stage). Since P0 the inputs are the resolved chunk's own: effective `hair.mt` scalars (instance chain, then template defaults), the winning `.hp`, and each texture with its `isGamma` flag, for any vanilla or CCXL hair, lash or brow choice.
 
 | Game step | Preview | Status |
 |---|---|---|
@@ -168,16 +168,16 @@ Code: `src/hair-colour-model.ts` (pure, tested), `src/hair-shading.ts` and `src/
 
 The engine's coverage (§2) is a shared per-pixel threshold, resolved over frames. The preview reproduces its two properties that matter for how dense hair looks:
 
-- **Nesting.** MSAA alpha-to-coverage (`STRAND_COVERAGE_MATERIAL` in `src/hair-shading.ts`) gives each fragment a sample mask that grows with its alpha, so overlapping layers cover about as much as the most opaque one, as in the game. Stochastic or hashed alpha with an independent threshold per layer would give `1 − Π(1−a)` and make hair denser than the game. Alpha blending also combines layers independently, and it is order-dependent as well.
+- **Nesting.** MSAA alpha-to-coverage (`STRAND_COVERAGE_MATERIAL` in `src/materials/render/hair-shading.ts`) gives each fragment a sample mask that grows with its alpha, so overlapping layers cover about as much as the most opaque one, as in the game. Stochastic or hashed alpha with an independent threshold per layer would give `1 − Π(1−a)` and make hair denser than the game. Alpha blending also combines layers independently, and it is order-dependent as well.
 - **Range.** The fragment alpha is `hairResolvedCoverage(remapped alpha)`, which stretches coverage over the dither range, so strands above about 0.84 are solid.
 
 Alpha-to-coverage is deterministic, so there is no grain to accumulate over frames and render-on-demand needs nothing extra. Its limits: four MSAA samples quantise coverage (the driver dithers the masks); colour within a pixel comes from whichever layer owns each sample, not from the alpha-weighted average of the three nearest layers; and TAA's temporal smoothing is not reproduced (the [Hair look](#hair-look) approximates it on request).
 
-**The canvas is opaque.** Three.js always creates its WebGL context with an alpha channel (its `alpha: false` only clears alpha to one), and alpha-to-coverage and the cap wrote their partial alpha into it. The page's CSS stage then showed through the hair, most of all where strands cross the scalp, so saved hair looked much lighter in the light UI theme than in the dark one. The Studio now creates the context with `alpha: false` and draws the theme's stage gradient itself (`src/viewport-backdrop.ts`). The gradient is an untone-mapped background that does not light the scene. After the fix, hair over the character measures the same in both themes ([coverage note](../research/eye-artistry/hair-coverage-2026-09-25.md)).
+**The canvas is opaque.** Three.js always creates its WebGL context with an alpha channel (its `alpha: false` only clears alpha to one), and alpha-to-coverage and the cap wrote their partial alpha into it. The page's CSS stage then showed through the hair, most of all where strands cross the scalp, so saved hair looked much lighter in the light UI theme than in the dark one. The Studio now creates the context with `alpha: false` and draws the theme's stage gradient itself (`src/preview/render/viewport-backdrop.ts`). The gradient is an untone-mapped background that does not light the scene. After the fix, hair over the character measures the same in both themes ([coverage note](../research/eye-artistry/hair-coverage-2026-09-25.md)).
 
 ### Hair look
 
-The preview's faithful coverage (above) draws strands thinner and crisper than the game shows them: the game's dithered coverage is smoothed over frames by TAA or DLSS, and may be boosted by the ×1.33 flag (§2), neither of which the preview reproduces. **Hair look** (Preview quality › Rendering) is a viewing preference from **Crisp** (0, the default: exactly the coverage above) to **Game-like** (1). It blends three terms linearly with the slider, all in the strand coverage shader (`STRAND_COVERAGE_GLSL` in `src/hair-shading.ts`, mirrored by `hairLookCoverage` in `src/hair-colour-model.ts`, constants `HAIR_LOOK`):
+The preview's faithful coverage (above) draws strands thinner and crisper than the game shows them: the game's dithered coverage is smoothed over frames by TAA or DLSS, and may be boosted by the ×1.33 flag (§2), neither of which the preview reproduces. **Hair look** (Preview quality › Rendering) is a viewing preference from **Crisp** (0, the default: exactly the coverage above) to **Game-like** (1). It blends three terms linearly with the slider, all in the strand coverage shader (`STRAND_COVERAGE_GLSL` in `src/materials/render/hair-shading.ts`, mirrored by `hairLookCoverage` in `src/materials/hair-colour-model.ts`, constants `HAIR_LOOK`):
 
 | Term | At Game-like | Grade |
 |---|---|---|

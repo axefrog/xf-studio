@@ -11,11 +11,11 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { FacialHost } from "../src/facial-host";
-import { IdleHost } from "../src/idle-host";
-import { characterRoute, installationFingerprint } from "../src/character-detail-host";
-import { LocalSettingsStore } from "../src/local-settings-store";
-import { packageToolPaths } from "../src/local-settings-readiness";
+import { FacialHost } from "../src/animation/host/facial-host";
+import { IdleHost } from "../src/animation/host/idle-host";
+import { characterRoute, installationFingerprint } from "../src/character/host/character-detail-host";
+import { LocalSettingsStore } from "../src/setup/host/local-settings-store";
+import { packageToolPaths } from "../src/setup/host/local-settings-readiness";
 import type { FaceMotionClip, FaceMotionRest } from "../src/platform/api/facial";
 
 type Glb = { json: { nodes: { name?: string }[]; asset: { extras?: Record<string, unknown> }; animations: { name: string; channels: { sampler: number; target: { node: number; path: string } }[];

@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { createSurfaceEditor } from "../src/surface-editor";
+import { createSurfaceEditor } from "../src/legacy/eye-makeup/browser/surface-editor";
 import { applyAdapterProposal } from "./gesture-test-adapter";
-import { SurfaceMap } from "../src/surface-map";
+import { SurfaceMap } from "../src/legacy/eye-makeup/browser/surface-map";
 import { initialRecipe, EYE_REGION } from "./fixtures/eye-region";
 
 /** Real geometry/ray tests: the eye blocks painted-surface gestures, not an

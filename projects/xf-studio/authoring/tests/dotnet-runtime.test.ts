@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { detectDotNet, frameworkSatisfied, missingFramework, parseRuntimeConfig, runtimeGuidance, type DotNetPorts } from "../src/dotnet-runtime";
+import { detectDotNet, frameworkSatisfied, missingFramework, parseRuntimeConfig, runtimeGuidance, type DotNetPorts } from "../src/setup/host/dotnet-runtime";
 
 const WOLVENKIT_9 = `\uFEFF{ "runtimeOptions": { "tfm": "net10.0", "framework": { "name": "Microsoft.NETCore.App", "version": "10.0.0" },
   "configProperties": { "System.Runtime.Serialization.EnableUnsafeBinaryFormatterSerialization": false } } }`;

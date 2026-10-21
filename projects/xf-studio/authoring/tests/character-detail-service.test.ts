@@ -3,19 +3,19 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync
 import { tmpdir } from "node:os";
 import { deflateSync } from "node:zlib";
 import { join } from "node:path";
-import { CharacterDetailHost, characterRequestKey, installationFingerprint, type CharacterDetailSettings } from "../src/character-detail-host";
-import { createBrowserCharacterDetailDevice } from "../src/browser-character-detail-device";
-import type { DetailLimit, SlotLimits } from "../src/detail-limits";
-import type { DetailSlot } from "../src/render-detail";
+import { CharacterDetailHost, characterRequestKey, installationFingerprint, type CharacterDetailSettings } from "../src/character/host/character-detail-host";
+import { createBrowserCharacterDetailDevice } from "../src/character/browser/browser-character-detail-device";
+import type { DetailLimit, SlotLimits } from "../src/character/detail-limits";
+import type { DetailSlot } from "../src/character/render-detail";
 import { CacheRun, CENSORED_BODY, CharacterDetailError, CharacterPreparationCache, gradientStops, hairProfileStops, halveImage, pngSize, prepareCharacterDetails, RECORD_NOTE_CAP, recordNotes,
-  skinProfileValues, storeScaledTexture, templateIdentity, textureIsGamma, withCacheRun } from "../src/character-detail-service";
-import { DEFAULT_CHARACTER } from "../src/character-detail-request";
-import { readChoiceManifest } from "../src/choice-manifest";
-import { depotHash } from "../src/depot-path";
-import { decodePng, decodePngHalved, encodePng, encodePngAsync } from "../src/png";
+  skinProfileValues, storeScaledTexture, templateIdentity, textureIsGamma, withCacheRun } from "../src/character/host/character-detail-service";
+import { DEFAULT_CHARACTER } from "../src/character/character-detail-request";
+import { readChoiceManifest } from "../src/character/host/choice-manifest";
+import { depotHash } from "../src/game/depot-path";
+import { decodePng, decodePngHalved, encodePng, encodePngAsync } from "../src/formats/png";
 import { archiveExportSource, BY_HASH_CONCURRENCY, createGameAssetExporter, GameAssetExportCache, GameAssetExportError, type ExportedGeometry,
-  type ExportedMask, type ExportedTexture, type GameAssetExporter } from "../src/game-asset-export";
-import { parseCharacterDetail, UNCOVERED_BODY } from "../src/render-detail";
+  type ExportedMask, type ExportedTexture, type GameAssetExporter } from "../src/game/host/game-asset-export";
+import { parseCharacterDetail, UNCOVERED_BODY } from "../src/character/render-detail";
 import { BEARD, beardRequest, BODY_REQUEST, detailFixture, eyeRequest, FACE, P, REQUEST_A, REQUEST_B, TONES } from "./character-detail-fixtures";
 
 const root = mkdtempSync(join(tmpdir(), "xfs-character-"));
@@ -426,7 +426,7 @@ describe("host preparation", () => {
     const host = new CharacterDetailHost({ cacheRoot: join(root, "host"), settings: () => settings, exporter: () => fakeExporter(),
       prepare: async options => {
         started.push(options.request.source === "save" ? options.request.appearances[0]!.option : "default");
-        if (started.length === 1) { await gate; if (options.signal?.aborted) throw new (await import("../src/character-detail-service")).CharacterDetailError("character_cancelled", "cancelled"); }
+        if (started.length === 1) { await gate; if (options.signal?.aborted) throw new (await import("../src/character/host/character-detail-service")).CharacterDetailError("character_cancelled", "cancelled"); }
         return prepareCharacterDetails({ ...options, open: () => detailFixture().installation() });
       } });
     const a = host.request(REQUEST_A);
@@ -515,8 +515,8 @@ describe("host preparation", () => {
   });
 
   test("without WolvenKit the host stops at once as a need, resolving nothing and reporting no failure (NATIVE-47, NATIVE-48)", async () => {
-    const { hostDiagnosticsAt, withDiagnostics } = await import("../src/diagnostics/host-log");
-    const { TOOL_MISSING } = await import("../src/character-detail-service");
+    const { hostDiagnosticsAt, withDiagnostics } = await import("../src/diagnostics/host/host-log");
+    const { TOOL_MISSING } = await import("../src/character/host/character-detail-service");
     const diagnostics = hostDiagnosticsAt(join(root, "diagnostics-need"));
     const settings: CharacterDetailSettings = { gameRoot: route.gameRoot, launchRoute: "direct", mo2Root: null, mo2ProfileId: null,
       manualModRoot: null, wolvenKitCli: null };
@@ -540,7 +540,7 @@ describe("host preparation", () => {
     });
     // The page's reader keeps the need of a failed state only.
     const device = createBrowserCharacterDetailDevice({ setCharacterDetails: () => ({ limits: [] }), details: {} as never }, async () => new Response(JSON.stringify({
-      ...host.state(characterRequestKey(REQUEST_A, installationFingerprint(settings))), recordSchema: (await import("../src/render-detail")).CHARACTER_DETAIL_SCHEMA })));
+      ...host.state(characterRequestKey(REQUEST_A, installationFingerprint(settings))), recordSchema: (await import("../src/character/render-detail")).CHARACTER_DETAIL_SCHEMA })));
     expect(await device.poll("k", new AbortController().signal)).toMatchObject({ phase: "failed", need: "wolvenkit" });
   });
 

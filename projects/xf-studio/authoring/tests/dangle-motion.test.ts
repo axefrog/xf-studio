@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import * as THREE from "three";
-import { IdleAnimation } from "../src/idle-animation";
-import { DANGLE_SPEC, type DangleSpec, type Transform } from "../src/dangle-spec";
-import { DANGLE_FRAME } from "../src/dangle-motion";
-import { composePreviewMotion } from "../src/preview-motion";
+import { IdleAnimation } from "../src/animation/render/idle-animation";
+import { DANGLE_SPEC, type DangleSpec, type Transform } from "../src/animation/dangle-spec";
+import { DANGLE_FRAME } from "../src/animation/render/dangle-motion";
+import { composePreviewMotion } from "../src/animation/render/preview-motion";
 
 // A V in glTF space (Y up) and a hair part whose dangle rig is in the game's (Z up): game (x, y, z) = glTF (x, −z, y).
 const gl = (x: number, y: number, z: number) => new THREE.Vector3(x, z, -y);

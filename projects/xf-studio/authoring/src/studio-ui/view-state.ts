@@ -1,4 +1,4 @@
-import { parseScrollAnchor, type ScrollAnchor, type UIPreferenceAction } from "../ui-preferences";
+import { parseScrollAnchor, type ScrollAnchor, type UIPreferenceAction } from "../app/ui-preferences";
 
 /**
  * View state (style guide "Remembered view state"): what a person folded or opened, where each scroll container was, and the height

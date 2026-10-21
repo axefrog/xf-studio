@@ -3,18 +3,18 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createPackageHandler, localEyePlate, localPackageAdapter, localPackageTools, localPlateRouteKey, packageRequestSettings, SETUP_UNREADABLE_MESSAGE,
-  type PackageTools } from "../src/package-server";
+  type PackageTools } from "../src/host/package-server";
 import type { BuilderRun, HostPrerequisite, PackageHostAdapter } from "../src/platform/export/product-host";
 import type { PackageCheckResult } from "../src/platform/api";
 import { STUDIO_EXPORTERS } from "../src/compose/exporters";
 import { EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
-import { LocalSettingsStore } from "../src/local-settings-store";
-import { defaultLocalSettings } from "../src/local-settings";
-import { contentFingerprint, EyePlateCache } from "../src/eye-plate-cache";
-import { EYE_PLATE_MANIFEST_SCHEMA } from "../src/eye-plate-service";
-import { EYE_PLATE_RECIPE } from "../src/eye-plate-recipe";
-import { OFF_PLATE_REASON, PLATE_REACH_UNCHECKED_NOTE } from "../src/package-filter";
-import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/plate-uv-footprint-io";
+import { LocalSettingsStore } from "../src/setup/host/local-settings-store";
+import { defaultLocalSettings } from "../src/setup/local-settings";
+import { contentFingerprint, EyePlateCache } from "../src/legacy/eye-makeup/plate/host/eye-plate-cache";
+import { EYE_PLATE_MANIFEST_SCHEMA } from "../src/legacy/eye-makeup/plate/host/eye-plate-service";
+import { EYE_PLATE_RECIPE } from "../src/legacy/eye-makeup/plate/eye-plate-recipe";
+import { OFF_PLATE_REASON, PLATE_REACH_UNCHECKED_NOTE } from "../src/legacy/eye-makeup/export/package-filter";
+import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/legacy/eye-makeup/export/host/plate-uv-footprint-io";
 import { withGlitterKnob } from "./glitter-knob-fixture";
 import { preparePackageCollection } from "./fixtures/eye-exporter";
 import { FOOTPRINT } from "./fixtures/product-fixture";
@@ -195,7 +195,7 @@ test("PIPE-70: a posted collection's glitter knob gives no glitter route and no 
   expect((await building(request({ action: "build", collection: knob }))).status).toBe(422);
   expect(snapshot && Object.keys(snapshot)).not.toContain("diagnostics");
   expect(args).not.toContain("--diagnostics");
-  expect(readFileSync(resolve(import.meta.dir, "../src/package-server.ts"), "utf8")).not.toContain("--diagnostics");
+  expect(readFileSync(resolve(import.meta.dir, "../src/host/package-server.ts"), "utf8")).not.toContain("--diagnostics");
 });
 
 test("unreadable Local setup: Check still answers with the defaults, Build answers a plain JSON refusal (PIPE-94)", async () => {

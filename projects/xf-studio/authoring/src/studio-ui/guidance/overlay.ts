@@ -1,4 +1,4 @@
-import { keyBinding, type KeyEvent } from "../../input-bindings";
+import { keyBinding, type KeyEvent } from "../../app/input-bindings";
 import { button } from "../controls";
 import { iconButton } from "../components/icon-button";
 import { h, reducedMotion, setAttr, setText, uid } from "../dom";

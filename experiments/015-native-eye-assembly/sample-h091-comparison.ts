@@ -2,8 +2,8 @@
 // XFS_PRIVATE_ASSETS points to the existing ignored CC-idle intake.
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { IdleAnimation } from "../../projects/xf-studio/authoring/src/idle-animation";
-import { extendSkin, restoreFirstWeights } from "../../projects/xf-studio/authoring/src/skin";
+import { IdleAnimation } from "../../projects/xf-studio/authoring/src/animation/render/idle-animation";
+import { extendSkin, restoreFirstWeights } from "../../projects/xf-studio/authoring/src/materials/render/skin";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";

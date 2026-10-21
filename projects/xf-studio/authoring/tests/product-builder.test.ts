@@ -9,9 +9,9 @@ import { checkProducts } from "../src/platform/export/product-check";
 import { ExportRefusal, PrerequisiteStale, type PackageBuildResult, type PackageCheckResult } from "../src/platform/api";
 import { EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
 import { VERIFICATION_LIMITS } from "../src/features/eye-makeup/verify";
-import { packagePlateRecord, type EyePlateManifest } from "../src/eye-plate-service";
-import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/plate-uv-footprint-io";
-import { OFF_PLATE_REASON } from "../src/package-filter";
+import { packagePlateRecord, type EyePlateManifest } from "../src/legacy/eye-makeup/plate/host/eye-plate-service";
+import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/legacy/eye-makeup/export/host/plate-uv-footprint-io";
+import { OFF_PLATE_REASON } from "../src/legacy/eye-makeup/export/package-filter";
 import { preparePackageCollection } from "./fixtures/eye-exporter";
 import { eyeEntry, fakeEyeVerifier, fakeTools, fakeVerifierTools, FOOTPRINT, sha, writePlate } from "./fixtures/product-fixture";
 

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { isBaseGameSource } from "../src/resolver-host";
-import { routeIdentity } from "../src/route-fingerprint";
+import { isBaseGameSource } from "../src/game/host/resolver-host";
+import { routeIdentity } from "../src/game/host/route-fingerprint";
 
 test("baseline references include game content and expansion archives, excluding every mod and XL source", () => {
   const base = { provider: "game", kind: "archive", virtualPath: "archive/pc/content/basegame_4_appearance.archive" } as const;

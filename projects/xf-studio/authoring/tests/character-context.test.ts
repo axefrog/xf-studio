@@ -1,15 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { descriptorsFromUiState, type CcoResource } from "../src/cco-model";
-import { buildCatalogue, CatalogueIndex } from "../src/cc-catalogue";
+import { descriptorsFromUiState, type CcoResource } from "../src/character/cco-model";
+import { buildCatalogue, CatalogueIndex } from "../src/character/cc-catalogue";
 import { activeOptions, CHARACTER_CONTEXT_FAMILY, type CharacterChoice, type CharacterSource, choicesOfPreset, deriveCharacter, linkedChoice, presetOfChoices,
-  recoverSave, savedDescriptorsOf } from "../src/character-context";
-import { CharacterContextActions, type CreatorPort, initialBodyGender, storedCharacterOf } from "../src/character-context-actions";
-import { CC_PRESET_LIMITS, CC_PRESET_SCHEMA, parseCcPreset, readCcPreset, readPresetJson, serializeCcPreset, writeCcPreset } from "../src/cc-preset";
-import { catalogueCoverage } from "../src/cc-render-coverage";
-import { panelProjection } from "../src/cc-panel";
+  recoverSave, savedDescriptorsOf } from "../src/character/character-context";
+import { CharacterContextActions, type CreatorPort, initialBodyGender, storedCharacterOf } from "../src/character/character-context-actions";
+import { CC_PRESET_LIMITS, CC_PRESET_SCHEMA, parseCcPreset, readCcPreset, readPresetJson, serializeCcPreset, writeCcPreset } from "../src/character/cc-preset";
+import { catalogueCoverage } from "../src/character/cc-render-coverage";
+import { panelProjection } from "../src/character/cc-panel";
 import { Registry } from "../src/platform/core/registry";
 import { STUDIO_OWNERS } from "../src/compose/studio-registry";
-import type { SavedV } from "../src/save-reader";
+import type { SavedV } from "../src/saves/save-reader";
 import { fixtureSource, MOD_NAME } from "./cc-fixtures";
 
 /** A decoded save holding what R5 derives for a creator state (the save stores resolved output, per group). */
@@ -236,7 +236,7 @@ describe("the character context in the Studio (CharacterContextActions)", () => 
   async function port(withMod = true): Promise<CreatorPort & { views: number }> {
     const source = await fixtureSource(withMod);
     const { panel, mods } = panelProjection(source.catalogue, catalogueCoverage(source.catalogue), "fixture");
-    const { choicePage } = await import("../src/cc-panel");
+    const { choicePage } = await import("../src/character/cc-panel");
     const index = new CatalogueIndex(source.catalogue);
     const counter = { views: 0 };
     return Object.assign(counter, {

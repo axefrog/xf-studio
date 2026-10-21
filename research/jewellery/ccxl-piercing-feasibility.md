@@ -27,7 +27,7 @@ Main risks: missing-mod save behaviour (unknown, and the same unknown XF Eye Art
 | Installed game resources | 2.31 (`GameVersion` 2310), extracted with WolvenKit CLI 8.17.4 into the ignored caches `research/consumers/cc-file-chain/` and `research/consumers/vanilla-piercings/` | Creator options, piercing `.app`, `.morphtarget` and `.mesh` structure, per-chunk geometry from the exported GLBs |
 | ArchiveXL source | 1.27.3, commit `5474e34d56112f5d8843ae863e1e72ff510957c0` (local clone `D:/Dev/cp2077-archive-xl`) | `src/App/Extensions/Customization/Extension.cpp`: merge rules, activation of new options, app overrides, dynamic appearances |
 | Modding Docs clone | commit `be2f44eed8419342ec13f72ed9cab008e9f7b289` (local clone `../Cyberpunk-Modding-Docs`) | CCXL overview, switcher theory, creating-a-switcher guide, character-creator cheat sheet (pages and images cited below) |
-| XF Studio | this worktree, `projects/xf-studio/authoring/src/package-resources.ts` | The runtime-proven shape of the XF Eye Artistry option |
+| XF Studio | this worktree, `projects/xf-studio/authoring/src/legacy/eye-makeup/export/package-resources.ts` | The runtime-proven shape of the XF Eye Artistry option |
 | Reference MO2 installation | local, read-only | 31 installed jewellery or piercing mods checked for CCXL declarations |
 
 ## 1. How vanilla piercings work in the creator

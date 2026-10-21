@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { depotHash } from "../src/depot-path";
+import { depotHash } from "../src/game/depot-path";
 import { NativeArchive, NativeArchivePool } from "../src/native/archive-reader";
 import { decodeSegment, SegmentError } from "../src/native/kark";
 import { parseRdarHeader, RdarIndex } from "../src/native/rdar-archive";

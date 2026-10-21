@@ -1,4 +1,4 @@
-import { recoverDockLayout, type DockLayout, type JsonValue } from "../../ui-preferences";
+import { recoverDockLayout, type DockLayout, type JsonValue } from "../../app/ui-preferences";
 import { DOCK_FORMAT, DOCK_VERSION, keepDockExpanded, parkPanels, parseTree, recoverWindows, unparkPanels, type DockState, type DockTree, type PanelId,
   type Rect } from "./layout";
 import { defaultDockState } from "../layout-defaults";

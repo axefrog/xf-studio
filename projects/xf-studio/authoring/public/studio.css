@@ -1201,7 +1201,7 @@ span.category { border-color: transparent; background: transparent; padding-left
 .uv-warning { font-size: var(--fs-xs); line-height: 1.35; color: var(--stage-warning); background: var(--stage-chip-strong); padding: 4px 8px; border-left: 2px solid var(--stage-warning); }
 
 /* ---------- Input hints, target tooltips and gesture cursors ----------
- * Derived from the input binding catalogue (src/input-bindings.ts): the strip lists what the
+ * Derived from the input binding catalogue (src/app/input-bindings.ts): the strip lists what the
  * pointer and held keys do here; cursors come from the same bindings. Never interactive. */
 .input-hints { display: flex; flex-wrap: wrap; align-items: center; gap: 3px var(--sp-5); font-size: var(--fs-xs); line-height: 1.35; pointer-events: none; min-width: 0; }
 /* Vertical spacing is a transparent border, not padding: overflow clips at the padding edge, so a third row

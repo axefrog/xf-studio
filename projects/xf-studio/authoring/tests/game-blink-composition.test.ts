@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { BLINK_REPEAT_SECONDS, GAME_BLINK_DAMAGED, GAME_BLINK_MISSING, GAME_BLINK_NO_JOINTS, GAME_BLINK_OTHER_HEAD, GAME_BLINK_SCHEMA,
-  GameBlink, loadGameBlink, parseGameBlink, type BlinkTimer, type GameBlinkDescription } from "../src/game-blink";
-import { IdleAnimation } from "../src/idle-animation";
+  GameBlink, loadGameBlink, parseGameBlink, type BlinkTimer, type GameBlinkDescription } from "../src/animation/render/game-blink";
+import { IdleAnimation } from "../src/animation/render/idle-animation";
 import { FaceDriver } from "../src/platform/scene/face-driver";
-import { IDLE_FACE_MISSING, MotionActions, type MotionPort } from "../src/motion-actions";
-import { composePreviewMotion } from "../src/preview-motion";
-import { createRenderScheduler } from "../src/render-scheduler";
+import { IDLE_FACE_MISSING, MotionActions, type MotionPort } from "../src/animation/motion-actions";
+import { composePreviewMotion } from "../src/animation/render/preview-motion";
+import { createRenderScheduler } from "../src/preview/render/render-scheduler";
 import { blinkHelp, blinkNoteLine } from "../src/studio-ui/panels/preview";
 import { freshWorkspace } from "./fixtures/eye-region";
 

@@ -1,6 +1,6 @@
-import { cursorFor, targetTip, viewportHints, type CursorKind, type ViewportInputContext } from "../../input-bindings";
+import { cursorFor, targetTip, viewportHints, type CursorKind, type ViewportInputContext } from "../../app/input-bindings";
 import { hintStripMarkup, targetTipMarkup } from "../input-hints";
-import { EYE_MAKEUP_MOD } from "../../mod-branding";
+import { EYE_MAKEUP_MOD } from "../../legacy/eye-makeup/mod-branding";
 import { helpMarkup } from "../guidance/render";
 import { TOURS } from "../guidance/tours";
 import { badge, btn, chip, code, empty, expandAll, expander, eyebrow, helpTip, i, menu, menuHeading, menuItem, menuSep, note, pattern, reasonTip, row, section, segmented, slider, toast,
@@ -277,7 +277,7 @@ export function components() {
       when: "3D view and UV map panels, on by default. View preferences › Show input hints (also in the Keyboard & mouse dialog and the palette) hides the strip and tooltips; cursors stay because they describe the gesture itself.",
       combine: "Never interactive (pointer-events: none) and never covering the stage centre: the strip overlays the bottom-left corner of both stages, beside the readiness badge on the head. The UV map's Fit keeps a band clear for it. Its last item points to the ? Keyboard & mouse dialog.",
       adapt: "The strip wraps within 72% of the head stage (the full width of the UV stage) and is clamped to two rows; items that do not fit are clipped, never pushing the canvas; below 720 px the Hold/? discovery group hides and only what the pointer does now remains. The tooltip flips to stay inside the panel.",
-      drives: `Derived only from ${code("src/input-bindings.ts")}: ${code("viewportHints()")}, ${code("targetTip()")} and ${code("cursorFor()")} over the read-only ${code("viewport.input()")} snapshot (held modifiers plus each adapter's hover target and gesture), on its own ${code("viewport.subscribeInput")} channel; ${code("preferences.inputHints")}. The gesture adapters resolve the same bindings, so hint, cursor and behaviour cannot disagree.`,
+      drives: `Derived only from ${code("src/app/input-bindings.ts")}: ${code("viewportHints()")}, ${code("targetTip()")} and ${code("cursorFor()")} over the read-only ${code("viewport.input()")} snapshot (held modifiers plus each adapter's hover target and gesture), on its own ${code("viewport.subscribeInput")} channel; ${code("preferences.inputHints")}. The gesture adapters resolve the same bindings, so hint, cursor and behaviour cannot disagree.`,
       a11y: "Not a live region (it changes with every hover); the same bindings are in each viewport's accessible name and the Keyboard & mouse dialog. Both strips use the theme-aware --stage-* tokens. Custom cursors are white glyphs with a dark halo and fall back to grab / nwse-resize keywords; blur or a hidden page clears held modifiers. Reduced motion removes the tooltip fade." }),
     pattern({ id: "c-handles", title: "Selection and editing handles", status: "implemented",
       specimen: `<svg class="handle-legend" viewBox="0 0 440 120" role="img" aria-label="Handle legend"><rect width="440" height="120" fill="#253132"/>

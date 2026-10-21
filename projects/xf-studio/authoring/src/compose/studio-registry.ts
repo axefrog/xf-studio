@@ -14,9 +14,9 @@ import { EXPRESSIONS } from "../features/expressions";
 import { CHARACTER_CONTEXT_FAMILY, COLLECTION_FAMILY, FILES_FAMILY, HISTORY_FAMILY, LIBRARY_FAMILY, MOTION_FAMILY, PREVIEW_FAMILY, PRESETS_FAMILY, QUALITY_FAMILY,
   SAVED_V_FAMILY, TRANSITIONS_FAMILY, VIEWS_FAMILY } from "./system-families";
 import { STUDIO_MODULE_REGISTRATION } from "./modules";
-import type { DocumentModel } from "../collection-workspace";
-import type { StudioOwnerActions, StudioOwnerId, StudioRequestOwnerId } from "../studio-application";
-import type { StudioComposition } from "../trusted-authoring-core";
+import type { DocumentModel } from "../app/workspace/collection-workspace";
+import type { StudioOwnerActions, StudioOwnerId, StudioRequestOwnerId } from "../app/studio-application";
+import type { StudioComposition } from "../app/trusted-authoring-core";
 
 export type { StudioOwnerActions, StudioOwnerId };
 

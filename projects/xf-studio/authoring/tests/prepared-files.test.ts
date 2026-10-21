@@ -4,7 +4,7 @@ import { afterAll, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { filesSource, keptSource, markUsed, PreparedFiles } from "../src/prepared-files";
+import { filesSource, keptSource, markUsed, PreparedFiles } from "../src/host/prepared-files";
 import { hostClock } from "../src/platform/core/clock";
 import { createJobScheduler } from "../src/platform/core/jobs";
 

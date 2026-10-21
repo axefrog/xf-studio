@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { MAX_PIXEL_RATIO, viewportPixelRatio, watchDevicePixelRatio } from "../src/device-pixel-ratio";
+import { MAX_PIXEL_RATIO, viewportPixelRatio, watchDevicePixelRatio } from "../src/preview/render/device-pixel-ratio";
 
 /** A display whose ratio can change; each media query matches only the ratio it was made for. */
 function display(initial: number) {

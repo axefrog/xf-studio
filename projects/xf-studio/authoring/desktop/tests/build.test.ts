@@ -3,22 +3,22 @@ import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, linkSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { defaultLocalSettings } from "../../src/local-settings";
-import { LocalSettingsStore } from "../../src/local-settings-store";
+import { defaultLocalSettings } from "../../src/setup/local-settings";
+import { LocalSettingsStore } from "../../src/setup/host/local-settings-store";
 import { BUILD_TOOLS_SCHEMA, bcnEntry, BUN_RETRY_MS, builderEntry, cachedBunProbe, privateBuildRootsIssue, cachedWolvenKitProbe, desktopBuildIssue, desktopPackageAdapter, PROBE_PENDING, probeBun, useBuilderBun,
   warmBuildProbes, type WolvenKitProbe } from "../build";
-import { probeWolvenKitCliAsync } from "../../src/wolvenkit-cli";
-import { discardCachedPlate, EyePlateError, packagePlateRecord, type EyePlateManifest } from "../../src/eye-plate-service";
+import { probeWolvenKitCliAsync } from "../../src/host/wolvenkit-cli";
+import { discardCachedPlate, EyePlateError, packagePlateRecord, type EyePlateManifest } from "../../src/legacy/eye-makeup/plate/host/eye-plate-service";
 import { runProductBuild, hostCollection, type HostPrerequisite, type PackageHostOutcome } from "../../src/platform/export/product-host";
 import { checkProducts } from "../../src/platform/export/product-check";
 import { STUDIO_EXPORTERS } from "../../src/compose/exporters";
 import { EYE_PLATE_PREREQUISITE } from "../../src/features/eye-makeup";
 import { PACKAGE_BUILD_2, type PackageBuildResult } from "../../src/platform/api";
-import type { LocalSettings } from "../../src/local-settings";
+import type { LocalSettings } from "../../src/setup/local-settings";
 import { createDesktopServer } from "../server";
-import { derivePlateDocuments } from "../../src/eye-plate-cut";
+import { derivePlateDocuments } from "../../src/legacy/eye-makeup/plate/eye-plate-cut";
 import { plateUvFootprint } from "../../src/engines/layered-makeup/plate-uv-window";
-import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../../src/plate-uv-footprint-io";
+import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../../src/legacy/eye-makeup/export/host/plate-uv-footprint-io";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "../../tests/eye-plate-fixture";
 import { withGlitterKnob } from "../../tests/glitter-knob-fixture";
 import { preparePackageCollection } from "../../tests/fixtures/eye-exporter";
@@ -300,7 +300,7 @@ test("a matching staged result is promoted with partial-export identities and no
 
 test("Build readiness turns green once XF Studio's own WolvenKit is downloaded, and official pages open by name", async () => {
   const { makeZip } = await import("../../tests/zip-fixture");
-  const { WOLVENKIT_RELEASE } = await import("../../src/wolvenkit-release");
+  const { WOLVENKIT_RELEASE } = await import("../../src/setup/wolvenkit-release");
   const files = { "WolvenKit.CLI.exe": "MZ fixture launcher", "WolvenKit.CLI.dll": "MZ fixture entry",
     "WolvenKit.CLI.runtimeconfig.json": JSON.stringify({ runtimeOptions: { framework: { name: "Microsoft.NETCore.App", version: "10.0.0" } } }) };
   const zip = makeZip(Object.entries(files).map(([name, data]) => ({ name, data })));

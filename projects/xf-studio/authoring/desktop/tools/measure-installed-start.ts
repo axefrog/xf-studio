@@ -17,9 +17,9 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import { recipeFile } from "../../src/recipe-schema";
+import { recipeFile } from "../../src/legacy/eye-makeup/recipe-schema";
 import { starterRecipe } from "../../src/features/eye-makeup/region";
-import { LocalSettingsStore } from "../../src/local-settings-store";
+import { LocalSettingsStore } from "../../src/setup/host/local-settings-store";
 
 const [appArg, dataArg, portArg, runsArg = "3", looksArg = "0"] = process.argv.slice(2);
 if (!appArg || !dataArg || !portArg) throw Error("Usage: bun tools/measure-installed-start.ts <app folder> <scratch LocalAppData> <debug port> [runs] [library looks]");

@@ -14,9 +14,9 @@ import type { GlitterChoices, LayerChoices } from "../../engines/layered-makeup/
 import { applyLayerAction, layerCapability, type LayerAction } from "../../engines/layered-makeup/layer-stack";
 import { applyRecipeAction, recipeActionCapability } from "../../engines/layered-makeup/recipe-actions";
 import { EYE_MAKEUP_REGION } from "./region";
-import type { EyeMakeupAction, EyeMakeupResult, EyeMakeupState } from "../../eye-makeup-model";
+import type { EyeMakeupAction, EyeMakeupResult, EyeMakeupState } from "../../legacy/eye-makeup/eye-makeup-model";
 
-export type { EyeMakeupAction, EyeMakeupEditorState, EyeMakeupEffect, EyeMakeupResult, EyeMakeupState } from "../../eye-makeup-model";
+export type { EyeMakeupAction, EyeMakeupEditorState, EyeMakeupEffect, EyeMakeupResult, EyeMakeupState } from "../../legacy/eye-makeup/eye-makeup-model";
 
 const isLayerAction = (action: EyeMakeupAction): action is LayerAction =>
   action.kind === "layer.edit" || action.kind === "layer.setEnabled";

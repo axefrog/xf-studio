@@ -13,11 +13,11 @@
  */
 import * as THREE from "three";
 import { createSceneHost } from "../src/platform/scene/scene-host";
-import type { LoadedCoreDetail } from "../src/core-detail-loader";
+import type { LoadedCoreDetail } from "../src/character/render/core-detail-loader";
 import type { MotionLoader } from "../src/platform/scene/head-rig";
-import type { IdleAnimation } from "../src/idle-animation";
-import { GlbWriter } from "../src/glb";
-import { CHARACTER_DETAIL_ASSETS, CHARACTER_DETAIL_SCHEMA, type CharacterDetail, type CoreDetail, type RenderComponent, type RenderTexture } from "../src/render-detail";
+import type { IdleAnimation } from "../src/animation/render/idle-animation";
+import { GlbWriter } from "../src/formats/glb";
+import { CHARACTER_DETAIL_ASSETS, CHARACTER_DETAIL_SCHEMA, type CharacterDetail, type CoreDetail, type RenderComponent, type RenderTexture } from "../src/character/render-detail";
 import { STUDIO_RENDERERS } from "../src/compose/renderers";
 import { EYE_MAKEUP_RENDERER } from "../src/features/eye-makeup/render";
 import { featureId } from "../src/platform/api";

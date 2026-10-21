@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { FACE_REST_KEY, lipParting, mouthAperture, mouthLipJoints, type FaceRest, type MouthLipJoints, type Vec3 } from "../../mouth-aperture";
+import { FACE_REST_KEY, lipParting, mouthAperture, mouthLipJoints, type FaceRest, type MouthLipJoints, type Vec3 } from "../../animation/mouth-aperture";
 
 /**
  * The lips' aperture on the drawn head, measured on its posed bones each frame (the renderer side of mouth-aperture.ts): whatever owns the

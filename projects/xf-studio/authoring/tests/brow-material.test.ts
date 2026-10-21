@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { browCoverage, createDoubleDiffuseDecalMaterial, doubleDiffuseParameters, DOUBLE_DIFFUSE_BROW_DEFAULTS, sampleUnderlayAlbedo } from "../src/brow-material";
-import { parseBrowManifest, verifyBrowImage } from "../src/brow-study-fixture";
-import { srgbToLinear } from "../src/hair-colour-model";
-import { extendSkin } from "../src/skin";
+import { browCoverage, createDoubleDiffuseDecalMaterial, doubleDiffuseParameters, DOUBLE_DIFFUSE_BROW_DEFAULTS, sampleUnderlayAlbedo } from "../src/materials/render/brow-material";
+import { parseBrowManifest, verifyBrowImage } from "../src/studies/brow-study-fixture";
+import { srgbToLinear } from "../src/materials/hair-colour-model";
+import { extendSkin } from "../src/materials/render/skin";
 
 const image = (name: string) => ({ url: `/assets/brows/${name}.png`, sha256: "a".repeat(64), width: 32, height: 4 });
 const manifest = { schema: "xfs/brow-preview-1", appearanceHash: "10685882159528859062",

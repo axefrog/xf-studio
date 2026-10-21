@@ -12,10 +12,10 @@ import { COLLECTION_2, ExportRefusal } from "../../src/platform/api";
 import { EYE_MAKEUP_EXPORTER } from "../../src/features/eye-makeup/export";
 import { EYE_PLATE_MASCULINE_PREREQUISITE, EYE_PLATE_PREREQUISITE, EYE_MAKEUP_EXPORTER_ID } from "../../src/features/eye-makeup";
 import { VERIFICATION_LIMITS } from "../../src/features/eye-makeup/verify";
-import { derivePlateDocuments } from "../../src/eye-plate-cut";
+import { derivePlateDocuments } from "../../src/legacy/eye-makeup/plate/eye-plate-cut";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "../eye-plate-fixture";
 import { plateUvFootprint } from "../../src/engines/layered-makeup/plate-uv-window";
-import { PLATE_UV_FILE, plateUvManifestRecord } from "../../src/plate-uv-footprint-io";
+import { PLATE_UV_FILE, plateUvManifestRecord } from "../../src/legacy/eye-makeup/export/host/plate-uv-footprint-io";
 
 /** A synthetic plate over the fixture's lids (UVs like the built-in plate's rectangle), and its UV footprint. */
 export const PLATE = withPlateUvs(derivePlateDocuments(fixtureHeadMesh(), fixtureHeadMorph(), fixtureRecipe(), "xfs\\eye_plate\\xfs_eye_plate.mesh"), plateLikeUv);
