@@ -62,6 +62,7 @@
   - Input is bounded: 64 KiB per line and 32 levels of nesting, and only scalar `id` values are echoed. Deep nesting would otherwise overflow the stack when a value is copied or serialised [offline: a 5,000-deep request crashed the host before the fix].
   - A rate limit covers unauthenticated requests too. Five malformed or unauthenticated requests drop the connection. Every refusal is logged.
   - A kill switch covers the CET hotkey, `bridge.kill` and a `KILL` file. Stopping is bounded and never waits for a client to read.
+  - A pipe serves one request at a time, so the emergency controls have a second pipe of their own (0.8.1): `<pipe>-control`, served on its own thread with the same token and checks, answering only the kill switch, the stops and a handover's steps. A stop is then read at once while the main pipe still serves a long request such as a five-second smooth look [offline].
   - Every request is logged with a correlation ID. No C++ exception can unwind into the game.
   - A named pipe was chosen over loopback HTTP because browsers and other network clients cannot reach it ([design §3.1](../research/runtime/runtime-bridge-design.md#31-choosing-the-external-transport)).
 - **Threading:** the pipe thread never touches the game. Game work is queued and drained from the plugin's Running `OnUpdate` (at most four tasks per tick), which runs on the game's main thread, in the same state tick as CET's Lua `onUpdate` [runtime; source CET `GameHooks.cpp:93-104`].
@@ -90,7 +91,7 @@
   Session 4's half-open creator came from the older route (0.3.0–0.4.1), which raised an added event on the idle scenario without the pause menu, not from the edit tag.
 - **The world clock and a freeze:** `SetGameTimeByHMS` / `SetGameTimeBySeconds`, and time dilation 0 on the world and V as the mirror screen does [source]. The clock may also be set with the appearance screen open: the game's own time-skip menu sets it while its full-screen menu is open (`timeSkipPopup.script:274`), and the screen only freezes the world with time dilation [source]; whether the screen's light follows the new time is the next session's check [unverified].
 - **Settings for the record:** `game.options.read` (read) returns the user settings of the graphics and display groups and, through the CET layer (two natives, `XFBridge_OptionsWanted` and `XFBridge_OptionsReport`, polled four times a second; the plugin checks every answer), the engine's character render options [offline].
-- **Captures** are external (`PrintWindow` or the screen), cropped to named regions sized in window heights so they frame the same area on 16:9 and 21:9, saved at full resolution and returned downscaled with an exact area filter [offline].
+- **Captures** are external (`PrintWindow` or the screen), cropped to named regions sized in window heights so they frame the same area on 16:9 and 21:9, saved at full resolution and returned downscaled with an exact area filter [offline]. The screen route copies the monitor's pixels, so whatever covers the game is what it reads: it is used only while the game is the front window, checked right before and right after each grab (each frame of a burst too), and a grab during which the game lost the front or moved is thrown away (0.8.1) [offline].
 
 | API | Grade | Status |
 |---|---|---|
@@ -110,7 +111,7 @@
 | CET `GameOptions.Get(category, name)` | [source] CET 1.37.1 | `game.options.read`'s render options, through the CET layer [unverified] |
 | `TimeSystem.SetGameTimeByHMS`, `SetGameTimeBySeconds`, `SetTimeDilation`, `SetTimeDilationOnLocalPlayerZero` | [source] 2.31 | Used for the clock (also with the appearance screen open, batch 3 [unverified]) and the freeze |
 | `TimeSystem.SetPausedState()` | [source] 2.31, no parameters | Not used |
-| `SaveLocksManager.RequestSaveLockAdd/Remove` | [source] 2.31 | Held from the first write until a save is loaded (the kill switch keeps it); blocking autosaves in practice [unverified] |
+| `SaveLocksManager.RequestSaveLockAdd/Remove` | [source] 2.31 | Held from the first write until a save is loaded (the kill switch keeps it); blocking autosaves in practice [unverified]. `game.save` with `override_lock` releases it for one save and owns taking it back before it releases it, so an answer lost on the way (a game-thread timeout, the kill switch) can't leave it off (0.8.1) [offline] |
 | Autosave triggers: vendor, ripperdoc and perk exits (`MenuUIUtils.RequestAutoSave`), fast travel, legendary loot, drop points, quest checkpoints, the timed autosave setting | [source] 2.31 | Why sessions start with a manual save and end by loading it |
 
 ### 5.1 Bridge 0.7 (offline; [hook inventory](../research/runtime/bridge-hook-inventory.md))
