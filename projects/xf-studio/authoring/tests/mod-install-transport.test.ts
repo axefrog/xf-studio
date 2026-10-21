@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createModInstallTransport, declaredResources, extraFileKind, installedDuplicates } from "../src/installation/host/mod-install-transport";
@@ -668,5 +668,36 @@ test("only installs still there and loaded through the selected launch route cou
     expect(() => place("XF Day", "xfs_mday").preflight("day")).toThrow("already installed in another XF mod");
     rmSync(join(f.mo2, "mods", "XF Night"), { recursive: true });
     expect(place("XF Day", "xfs_mday").install("day").namespace).toBe("xfs_mday");
+  } finally { f.cleanup(); }
+});
+
+test("taking over records kept under the destination alone resumes when stopped between its two moves (INSTALL-06)", () => {
+  const f = fixture("direct");
+  try {
+    f.candidate("first", "one"); f.candidate("second", "two"); f.candidate("third", "three");
+    f.transport.install("first");
+    const legacy = readdirSync(f.receiptsRoot).find(name => /^[a-f0-9]{24}\.json$/.test(name))!;
+    interrupt(f, "second", 2);
+    const bound = () => createModInstallTransport({ candidateStore: f.store, receiptsRoot: f.receiptsRoot, settings: f.settings, product: "xfs_test" });
+    // A first takeover moves both; stopping it after the journal moved is the receipt still under its old name.
+    bound();
+    const own = readdirSync(f.receiptsRoot).find(name => /^[a-f0-9]{24}\.json$/.test(name) && name !== legacy)!;
+    expect(existsSync(join(f.receiptsRoot, own.replace(".json", ".journal.json")))).toBe(true);
+    renameSync(join(f.receiptsRoot, own), join(f.receiptsRoot, legacy));
+    // The next takeover finishes it, so recovery and the update see one record of this product.
+    const transport = bound();
+    expect(existsSync(join(f.receiptsRoot, legacy))).toBe(false);
+    expect(transport.recover()).toMatchObject({ recovered: true, direction: "forward" });
+    expect(transport.receipt()!.candidateId).toBe("second");
+    expect(transport.preflight("third").replacingOwned).toBe(true);
+    transport.install("third");
+    // A legacy receipt of this product beside its own record (an earlier takeover stopped, then recovery wrote the record) is set
+    // aside, kept, and never counts as another installed copy.
+    writeFileSync(join(f.receiptsRoot, legacy), readFileSync(join(f.receiptsRoot, own)));
+    const again = bound();
+    expect(existsSync(join(f.receiptsRoot, legacy))).toBe(false);
+    expect(readdirSync(f.receiptsRoot).some(name => name.startsWith(`${legacy}.migrated-`))).toBe(true);
+    expect(again.receipt()!.candidateId).toBe("third");
+    expect(again.preflight("second").replacingOwned).toBe(true);
   } finally { f.cleanup(); }
 });

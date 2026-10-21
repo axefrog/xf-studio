@@ -425,27 +425,31 @@ export function createModInstallTransport(config: InstallTransportConfig) {
     try { return work(); } finally { closeSync(fd); rmSync(lockFile); }
   };
   /**
-   * A record kept under the destination's identity alone (before INSTALL-06) becomes this product's when it is this product's
-   * install (its namespace) and the product has no record of its own yet: the journal and receipt are moved, not copied, under the
-   * lock. Skipped while another operation holds the lock (the next transport takes it over).
+   * Records kept under the destination's identity alone (before INSTALL-06) that are this product's (by their namespace) become its
+   * own, under the lock, each move on its own so a migration stopped between them resumes next time: the journal first, then the
+   * receipt. A legacy record of this product beside one the product already has (left by an interrupted migration, or since replaced
+   * by recovery) is set aside, renamed and kept, so it can never count as another installed copy. The product's own record wins.
+   * Skipped while another operation holds the lock (the next transport does it).
    */
-  if (product && recordId !== targetId) {
+  const migrateLegacyRecords = () => {
     const legacyReceipt = join(receipts, `${targetId}.json`), legacyJournal = join(receipts, `${targetId}.journal.json`);
     const productOf = (file: string, read: (value: Record<string, unknown>) => unknown) => {
       try { noLinks(file); const value = readJson<Record<string, unknown>>(file); return value ? read(value) : null; } catch { return null; }
     };
-    const journalProduct = productOf(legacyJournal, value => Array.isArray(value.next) ? basename(String((value.next[0] as FileEntry | undefined)?.path ?? ""), ".archive") : null);
-    const receiptProduct = productOf(legacyReceipt, value => value.namespace);
-    if (journalProduct === product || (receiptProduct === product && journalProduct === null)) {
-      try {
-        withLock(() => {
-          if (existsSync(receiptFile) || existsSync(journalFile)) return;
-          if (journalProduct === product && existsSync(legacyJournal)) renameSync(legacyJournal, journalFile);
-          if (receiptProduct === product && existsSync(legacyReceipt)) renameSync(legacyReceipt, receiptFile);
-        });
-      } catch { /* Locked: another operation is running; the next transport moves it. */ }
-    }
-  }
+    const journalOf = (value: Record<string, unknown>) => Array.isArray(value.next) ? basename(String((value.next[0] as FileEntry | undefined)?.path ?? ""), ".archive") : null;
+    const ours = () => ({ journal: productOf(legacyJournal, journalOf) === product, receipt: productOf(legacyReceipt, value => value.namespace) === product });
+    if (!ours().journal && !ours().receipt) return;
+    const aside = (file: string) => renameSync(file, `${file}.migrated-${Date.now()}-${randomUUID().slice(0, 8)}`);
+    try {
+      withLock(() => {
+        // Read again under the lock: another transport may have moved them meanwhile.
+        const now = ours();
+        if (now.journal) { if (!existsSync(journalFile)) renameSync(legacyJournal, journalFile); else aside(legacyJournal); }
+        if (now.receipt) { if (!existsSync(receiptFile)) renameSync(legacyReceipt, receiptFile); else aside(legacyReceipt); }
+      });
+    } catch { /* Locked: another operation is running; the next transport moves them. */ }
+  };
+  if (product && recordId !== targetId) migrateLegacyRecords();
   /** Where a package file goes: its path below the install root (the pair and overlay archives land in `target`). */
   const destination = (entry: FileEntry) => {
     const file = join(target.root, ...entry.path.split("/"));
