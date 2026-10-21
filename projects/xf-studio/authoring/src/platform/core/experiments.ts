@@ -12,7 +12,7 @@ import { EXPERIMENT_FLAGS } from "../api/experiments";
 import type { DocumentStorePort } from "../api/document-store";
 import type { Random } from "./random";
 import { createDocumentHistory } from "./document-history";
-import { savedDocument } from "./saved-document";
+import { documentOwners } from "./saved-document";
 import { createTask, type Task } from "./tasks";
 
 export type ExperimentDefinition<T extends ExperimentRegistration = ExperimentRegistration> = ExperimentInfo & {
@@ -35,12 +35,19 @@ export type Experiments<T extends ExperimentRegistration> = Omit<ExperimentPort,
 /** Reads the stored preference, then loads every enabled experiment (each in a task of its own) for as long as `signal` lives. */
 export async function createExperiments<T extends ExperimentRegistration>(options: ExperimentOptions<T>): Promise<Experiments<T>> {
   const { definitions, documents, signal } = options;
-  const stored = (await documents.list<ExperimentFlagsDocument>(EXPERIMENT_FLAGS.kind)).find(item => item.id === EXPERIMENT_FLAGS.id);
-  const preference = savedDocument<ExperimentFlagsDocument>(documents, EXPERIMENT_FLAGS.kind, EXPERIMENT_FLAGS.id,
-    { schema: EXPERIMENT_FLAGS.schema, flags: {} }, stored);
+  const stored = (await documents.list<ExperimentFlagsDocument>(EXPERIMENT_FLAGS.kind, signal)).find(item => item.id === EXPERIMENT_FLAGS.id);
+  signal.throwIfAborted();
+  // One holder per stored document for the page's lifetime, shared by every experiment instance (the one-owner rule).
+  const owners = documentOwners(documents);
+  const preference = owners.open<ExperimentFlagsDocument>(EXPERIMENT_FLAGS.kind, EXPERIMENT_FLAGS.id, { schema: EXPERIMENT_FLAGS.schema, flags: {} }, stored);
   const history = createDocumentHistory();
-  const contextFor = (lifetime: AbortSignal): ExperimentContext => ({ documents, history, signal: lifetime, newId: () => options.random.uuid(),
-    task: () => createTask({ signal: lifetime }), document: (kind, id, initial, stored) => savedDocument(documents, kind, id, initial, stored) });
+  const contextFor = (lifetime: AbortSignal): ExperimentContext => ({ history, signal: lifetime, newId: () => options.random.uuid(),
+    task: () => createTask({ signal: lifetime }),
+    document: (kind, id, initial, stored) => owners.open(kind, id, initial, stored),
+    async loadDocuments<T>(kind: string, read?: AbortSignal) {
+      for (const item of await documents.list<T>(kind, read)) owners.open(kind, item.id, item.value, item);
+      return owners.held<T>(kind);
+    } });
   const context = contextFor(signal);
   const listeners = new Set<() => void>();
   const changed = () => { for (const listener of [...listeners]) listener(); };

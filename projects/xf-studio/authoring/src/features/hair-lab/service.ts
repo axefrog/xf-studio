@@ -1,6 +1,6 @@
 import type { ModuleService } from "../../platform/api";
 import type { ExperimentContext } from "../../platform/api/experiment-context";
-import type { SavedDocument, StoredDocument } from "../../platform/api/document-store";
+import type { SavedDocument } from "../../platform/api/document-store";
 import type { HistoryCommand, HistoryParticipant } from "../../platform/api/history";
 import type { Task } from "../../platform/api/tasks";
 import { constant } from "./fields";
@@ -40,17 +40,17 @@ function refinedPasses(result: Generation): boolean {
  * The Hair Lab service. Each groom is a stored document (`HAIR_GROOM_KIND`), edited through the shared document history
  * (scope `hair:<document id>`); each scene's session and its generated result are session state. Every active scene has
  * one generation task: a newer request (an edit, a retry, a new surface) supersedes the one before, and a superseded
- * run's results never reach the session. `stored` is the grooms already in the store.
+ * run's results never reach the session. `grooms` is the grooms the page already holds (`context.loadDocuments`).
  */
-export function createHairLab(context: ExperimentContext, device: GenerationDevice, stored: readonly StoredDocument<Groom>[] = []) {
+export function createHairLab(context: ExperimentContext, device: GenerationDevice, grooms: readonly SavedDocument<Groom>[] = []) {
   const { history, signal: lifetime } = context;
   let sessions: Record<string, Session> = {};
   const listeners = new Set<() => void>();
   const notify = () => { for (const listener of [...listeners]) listener(); };
   const change = (id: string, update: Partial<Session>) => { const row = sessions[id]; if (row) { sessions = { ...sessions, [id]: { ...row, ...update } }; notify(); } };
-  const documents = new Map<string, SavedDocument<Groom>>(stored.map(item => [item.id, context.document(HAIR_GROOM_KIND, item.id, item.value, item)]));
-  /** Each scene's generation task and the session revision it was started for. */
-  const jobs = new Map<string, { revision: number; task: Task<void> }>();
+  const documents = new Map<string, SavedDocument<Groom>>(grooms.map(item => [item.id, item]));
+  /** Each scene's generation task and the session revision its current run is for (null: none). */
+  const jobs = new Map<string, { revision: number | null; task: Task<void> }>();
   const readGroom = (row: Session): Groom | null => {
     const value = row.document ? documents.get(row.document)?.value : undefined;
     return value ? Object.freeze({ ...value, fields: Object.freeze({ ...value.fields }) }) : null;
@@ -92,17 +92,25 @@ export function createHairLab(context: ExperimentContext, device: GenerationDevi
       throw error;
     }
   };
-  /** Brings the generation tasks in line with the sessions: one per active scene, started again when its revision moves on. */
+  /**
+   * Brings the generation tasks in line with the sessions. Each scene keeps one task: a session that is active (with the
+   * coverage it needs) runs once per revision, a newer revision's run supersedes the one before, and anything else cancels it.
+   */
   const demand = () => {
     if (lifetime.aborted) return;
-    for (const [id, job] of jobs) { const row = sessions[id]; if (!row?.active || row.revision !== job.revision) { job.task.cancel("newer hair request"); jobs.delete(id); } }
+    for (const [id, job] of jobs) if (!sessions[id]) { job.task.cancel("scene closed"); jobs.delete(id); }
     for (const row of Object.values(sessions)) {
-      if (!row.active || jobs.has(row.id)) continue;
-      if (row.surface.coverageRequired && !row.surface.coverageSurface) continue;
-      const task = context.task<void>();
-      jobs.set(row.id, { revision: row.revision, task });
+      const job = jobs.get(row.id);
+      if (!row.active || row.surface.coverageRequired && !row.surface.coverageSurface) {
+        if (job && job.revision !== null) { job.revision = null; job.task.cancel("newer hair request"); }
+        continue;
+      }
+      if (job?.revision === row.revision) continue;
+      const scene = job ?? { revision: null, task: context.task<void>() };
+      jobs.set(row.id, scene);
+      scene.revision = row.revision;
       change(row.id, { phase: "shaping", message: "Shaping hair…", result: null });
-      void task.run(generate(sessions[row.id]));
+      void scene.task.run(generate(sessions[row.id]));
     }
   };
   lifetime.addEventListener("abort", () => { for (const job of jobs.values()) job.task.cancel(); jobs.clear(); }, { once: true });

@@ -26,8 +26,8 @@ export type DocumentWrite<T = unknown> =
   | { readonly ok: false; readonly reason: "stale"; readonly current: StoredDocument<T> | null };
 
 export interface DocumentStorePort {
-  /** Every document of a kind, in the order they were first written. */
-  list<T = unknown>(kind: string): Promise<readonly StoredDocument<T>[]>;
+  /** Every document of a kind, in the order they were first written; `signal` abandons the read. */
+  list<T = unknown>(kind: string, signal?: AbortSignal): Promise<readonly StoredDocument<T>[]>;
   /** Writes `value` over revision `revision` (0: the document doesn't exist yet). */
   put<T = unknown>(kind: string, id: string, value: T, revision: number): Promise<DocumentWrite<T>>;
 }

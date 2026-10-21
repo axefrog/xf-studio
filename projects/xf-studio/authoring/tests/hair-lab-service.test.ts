@@ -94,7 +94,7 @@ test("a groom reloads from the document store: a new session on the same head fi
   documents.store.put(HAIR_GROOM_KIND, "kept-groom", { ...groom, scalp }, 0);
   documents.store.put(HAIR_GROOM_KIND, "other-head", { ...groom, scalp: { ...scalp, resource: "another-head" } }, 0);
   const life = new AbortController(), platform = await createExperiments({ random: seededRandom(5), documents, signal: life.signal, definitions: [], overrides: {} });
-  const lab = createHairLab(platform.context, { generate: async () => {} }, await documents.list(HAIR_GROOM_KIND));
+  const lab = createHairLab(platform.context, { generate: async () => {} }, await platform.context.loadDocuments(HAIR_GROOM_KIND));
   lab.bind("head", head, life.signal);
   expect(lab.session("head")!.document).toBe("kept-groom");
   expect(lab.facade.snapshot().sessions[0].groom!.name).toBe(groom.name);
@@ -103,5 +103,21 @@ test("a groom reloads from the document store: a new session on the same head fi
   expect((await lab.facade.dispatch({ kind: "hairLab.undo", target: "head" })).ok).toBe(true); await settle();
   expect(documents.store.get(HAIR_GROOM_KIND, "kept-groom")).toMatchObject({ revision: 3, value: { fields: { waves: groom.fields.waves } } });
   expect((await lab.facade.dispatch({ kind: "hairLab.undo", target: "head" })).ok).toBe(false);   // nothing before the first edit
+  life.abort();
+});
+
+test("each scene keeps one generation task across edits, so slider edits don't pile up tasks", async () => {
+  const documents = storeDocuments(), head = sphereSurface(), life = new AbortController();
+  const platform = await createExperiments({ random: seededRandom(6), documents, signal: life.signal, definitions: [], overrides: {} });
+  let tasks = 0;
+  const context = { ...platform.context, task: <T>() => { tasks++; return platform.context.task<T>(); } };
+  const lab = createHairLab(context, { generate: async (_target, surface, _groom, _signal, publish) => {
+    publish({ groom: defaultGroom(surface), paths: { paths: [] }, stage: "coarse", residuals: null, milliseconds: {} }); } });
+  lab.bind("head", head, life.signal);
+  await lab.facade.dispatch({ kind: "hairLab.activate", target: "head", active: true }); await settle();
+  for (let i = 0; i < 20; i++) await lab.facade.dispatch({ kind: "hairLab.set", target: "head", field: "length", value: .3 + i / 100 });
+  await lab.facade.dispatch({ kind: "hairLab.activate", target: "head", active: false });
+  await lab.facade.dispatch({ kind: "hairLab.activate", target: "head", active: true }); await settle();
+  expect(tasks).toBe(1);
   life.abort();
 });

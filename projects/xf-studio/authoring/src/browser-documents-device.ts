@@ -10,8 +10,8 @@ export function browserDocuments(prefix: string, send: (url: string, init?: Requ
     return new Error(body?.error ?? "Saved documents are unavailable right now.");
   };
   return {
-    async list<T>(kind: string) {
-      const response = await send(`${prefix}?kind=${encodeURIComponent(kind)}`, { headers: { Accept: "application/json" } });
+    async list<T>(kind: string, signal?: AbortSignal) {
+      const response = await send(`${prefix}?kind=${encodeURIComponent(kind)}`, { headers: { Accept: "application/json" }, ...(signal ? { signal } : {}) });
       if (!response.ok) throw await failure(response);
       return (await response.json() as { documents: StoredDocument<T>[] }).documents;
     },
