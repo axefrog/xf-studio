@@ -16,7 +16,7 @@ Built and tested offline only; nothing staged into MO2 or the game. 0.8.2 is 0.8
 
 ## Verification
 
-The test card's "Build record (bridge 0.8.2, branch build, not staged)": built at `33233cd6b9bd` from a clean build; `xfb_selftest --unit` UNIT OK (561), self-test 628 of 628, `bun test tools` 363 pass and 4 skipped (opt-in on-screen), typecheck, the Lua, world-object and theme checks, the redscript lint in three configurations against a copy of 2.31's `final.redscripts`, links and private paths; the AddressSanitizer self-test (`--unit`, `--pipe-stress 200`, `--layout-repro`). The -writes zip with inventory is `8101e948…3d92`, the DLL `b8165b4f…6cc3`.
+The test card's "Build record (bridge 0.8.2, branch build, not staged)": built at `27206d07dcea` from a clean build, after the 0.8.2 review's fixes; `xfb_selftest --unit` UNIT OK (566), self-test 633 of 633, `bun test tools` 365 pass and 4 skipped (opt-in on-screen), typecheck, the Lua, world-object and theme checks, the redscript lint in three configurations against a copy of 2.31's `final.redscripts`, links and private paths; the AddressSanitizer self-test (`--unit`, `--pipe-stress 200`, `--layout-repro`). The -writes zip with inventory is `69ec4319…3107`, the DLL `2b44e580…9a8e`.
 
 ## For the coordinator
 
