@@ -14,7 +14,11 @@
  * acknowledgements, stale answers, lost answers and failed sends; Keep mine, Use theirs and Keep both; revision checks whose answers come
  * late; window B's edits; storage writes that fail; clean restarts that read the keys back in a shuffled order; and kills after any number
  * of key writes, during a step or during the opening and repair that follow one, repeatedly. In the desktop mode the outbox's storage is
- * the desktop adapter, and each host write of a key is its own step, which lands or fails.
+ * the desktop adapter, and each host write of a key is its own step, which lands or fails. Chunk 1c-ii added the collection's shapes:
+ * three-document commands (a collection, a look and a look it drops as a tombstone); a membership document that Keep both adds each fork
+ * to, over its value as it is now, and that window B edits too; reads answered as the library was when the host read them and delivered
+ * late and out of order (a stale one is never taken); and snapshots (Save version, export): flush some documents, then read them in one
+ * read transaction, each with no conflict reading as A shows it unless only another window's writes moved it on.
  *
  * **After every step:**
  * - A's visible values and its pending intents and conflicts equal the specification's. After a kill, they equal one of the states the
@@ -34,12 +38,14 @@
  */
 import { expect, test } from "bun:test";
 import { DocumentOutbox, type OutboxEntry, type OutboxOutcome } from "../src/platform/core/document-outbox";
-import { type CurrentDocument, documentKey, type DocumentRef, type TransactAnswer, type TransactRequest } from "../src/platform/api/document-commands";
+import { type CurrentDocument, documentKey, type DocumentRef, tombstoneOf, type TransactAnswer, type TransactRequest } from "../src/platform/api/document-commands";
 import type { DocumentStorePort } from "../src/platform/api/document-store";
 import { desktopOutboxStorage } from "../src/app/browser/outbox-storage";
 import { memoryOutboxStorage, storeDocuments } from "./fixtures/platform-doubles";
 
 const DOCS = ["d0", "d1", "d2", "d3"].map(id => ({ kind: "doc", id }));
+/** A membership document (a profile's subjects, a collection's looks): Keep both adds each fork to it, over its value as it is now. */
+const MEMBERS = { kind: "doc", id: "m" };
 const BLOBS = ["b0", "b1", "b2"].map(id => ({ kind: "blob", id }));
 const immutable = (kind: string) => kind === "blob";
 const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
@@ -189,13 +195,14 @@ function restarted(spec: Spec, library: (key: string) => { revision: number; val
   return copy;
 }
 const specSignature = (spec: Spec, keys: readonly string[]) => JSON.stringify({ visible: keys.map(key => [key, visible(spec, key) ?? null]),
-  intents: spec.intents.map(intent => [intent.id, intent.conflict ? "conflict" : "queued"]) });
+  intents: spec.intents.map(intent => [intent.id, intent.conflict ? "conflict" : "queued", keysOf(intent)]) });
 
 // ---------------------------------------------------------------------------------------------------------------------
 // One run.
 
 type Sent = { window: string; life: number; request: TransactRequest; resolve(answer: TransactAnswer): void; reject(error: Error): void };
-type Lookup = { kind: "revisions" | "read"; refs: readonly DocumentRef[]; resolve(value: unknown): void };
+/** A revision check's read: its answer is taken when the host reads it (`captured`, at the request or later) and arrives later still. */
+type Lookup = { kind: "revisions" | "read"; refs: readonly DocumentRef[]; resolve(value: unknown): void; captured: unknown };
 type HostWrite = { life: number; key: string; text: string | null; resolve(): void; reject(error: Error): void };
 /** What the runs exercised (printed once): every kind of event must come up. */
 const seen: Record<string, number> = {};
@@ -203,7 +210,10 @@ const count = (name: string) => { seen[name] = (seen[name] ?? 0) + 1; };
 
 async function run(mode: "local" | "desktop", seed: number, steps: number): Promise<string[]> {
   const rng = random(seed), documents = storeDocuments(), store = documents.store;
-  const keys = [...DOCS, ...BLOBS].map(documentKey);
+  // A second stream for what chunk 1c-ii added (snapshots, three-document commands with tombstones, membership edits, captured reads),
+  // so the first stream's sequences stay as they were where those don't change the state.
+  const more = random(seed ^ 0x5bd1e995);
+  const keys = [...DOCS, MEMBERS, ...BLOBS].map(documentKey);
   const writers = new Map<string, string[]>();
   const queue: Sent[] = [], lookups: Lookup[] = [], hostWrites: HostWrite[] = [], retries: (() => void)[] = [];
   const failures: string[] = [], trace: string[] = [];
@@ -212,6 +222,12 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
     (process.env.XFS_OUTBOX_TRACE ? [""].concat(trace.slice(-50)).join(String.fromCharCode(10)) : "")); };
   const library = (key: string) => { const ref = refOf(key), now = store.get(ref.kind, ref.id); return { revision: now?.revision ?? 0, value: now?.value }; };
   const ticks = async () => { for (let i = 0; i < 16; i++) await Promise.resolve(); };
+  /** Every value each document has had in the library, by `<key>@<revision>` (what a late read may still carry). */
+  const history = new Map<string, unknown>();
+  const answerOf = (kind: Lookup["kind"], refs: readonly DocumentRef[]) => kind === "revisions"
+    ? Object.fromEntries(refs.map(ref => [documentKey(ref), library(documentKey(ref)).revision]))
+    : Object.fromEntries(refs.map(ref => { const now = store.get(ref.kind, ref.id); return [documentKey(ref), now ? { revision: now.revision, value: structuredClone(now.value) } : null]; }));
+  const answerLookup = (lookup: Lookup) => lookup.resolve(lookup.captured ?? answerOf(lookup.kind, lookup.refs));
 
   // The host, the transports and the late revision checks.
   const deliver = (sent: Sent, how: "ok" | "lose" | "fail") => {
@@ -222,6 +238,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
     count(`answer ${answer.ok ? answer.replayed ?? "ok" : answer.reason}`);
     if (answer.ok && !answer.replayed) for (const write of sent.request.writes) {
       const list = writers.get(documentKey(write)) ?? []; list[answer.revisions[documentKey(write)]!] = sent.window; writers.set(documentKey(write), list);
+      history.set(`${documentKey(write)}@${answer.revisions[documentKey(write)]}`, structuredClone(write.value));
     }
     if (how === "lose") { count("answer lost"); sent.reject(Error("The answer was lost.")); } else sent.resolve(answer);
     return answer;
@@ -245,11 +262,10 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
       if (window === "A" && mine === life) { if (adopting) deferred.push(structuredClone(request)); else checkSend(request); }
       queue.push({ window, life: mine, request: structuredClone(request), resolve, reject });
     }),
-    // A revision check's two reads come back whenever the run lets them.
-    revisions: refs => new Promise(resolve => { lookups.push({ kind: "revisions", refs, resolve }); }),
-    read: refs => new Promise(resolve => { lookups.push({ kind: "read", refs, resolve }); }) });
-  /** Values a delivered read gave, which a check may then take (A7). */
-  const readValues = new Map<string, CurrentDocument>();
+    // A revision check's two reads are answered as the library was when the host read them (often at once, so a later change makes the
+    // answer stale), and come back whenever the run lets them, in any order.
+    revisions: refs => new Promise(resolve => { lookups.push({ kind: "revisions", refs, resolve, captured: more.next() < 0.5 ? answerOf("revisions", refs) : null }); }),
+    read: refs => new Promise(resolve => { lookups.push({ kind: "read", refs, resolve, captured: more.next() < 0.5 ? answerOf("read", refs) : null }); }) });
 
   // Window A's storage: memory (local) or the desktop adapter (its WebView copy and the host's, each host write its own step).
   const memory = memoryOutboxStorage();
@@ -297,9 +313,12 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
     a.subscribe(event => {
       if (event.kind !== "external" || mine !== life) return;
       for (const ref of event.refs) {
-        const key = documentKey(ref), read = readValues.get(key);
-        if (!read || touching(spec, key).length || read.revision <= (spec.docs[key]?.revision ?? 0)) fail(`A took ${key} from a check the specification doesn't allow`);
-        else { spec.docs[key] = { revision: read.revision, value: read.value }; moved(spec, key, read.revision); }
+        // What A took must be a value the library held at that revision, newer than the one A had, for a document with no intent: a read
+        // that arrives after a newer one (or after A's own write) is never taken.
+        const key = documentKey(ref), held = a.document(ref), revision = held?.revision ?? 0;
+        if (touching(spec, key).length || revision <= (spec.docs[key]?.revision ?? 0) || !history.has(`${key}@${revision}`) || !same(history.get(`${key}@${revision}`), held?.value))
+          fail(`A took ${key} at revision ${revision} from a check the specification doesn't allow`);
+        else { spec.docs[key] = { revision, value: structuredClone(held!.value) }; moved(spec, key, revision); }
       }
     });
     a.open();
@@ -311,7 +330,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
   };
   /** A's state as the specification states it. */
   const real = () => JSON.stringify({ visible: keys.map(key => [key, a.document(refOf(key))?.value ?? null]),
-    intents: a.pendingEntries().map(entry => [entry.id, entry.state]) });
+    intents: a.pendingEntries().map(entry => [entry.id, entry.state, entry.writes.map(write => documentKey(write))]) });
   /** A was killed: it restarts (perhaps dying again while it opens and repairs); its state must be one the specification allows. */
   const recover = async (allowed: Spec[], labels: string[] = allowed.map(() => "current")) => {
     for (let attempt = 0; ; attempt++) {
@@ -365,7 +384,42 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
   let counter = 0, forks = 0;
   const value = (window: string, blob?: string) => ({ w: window, n: ++counter, ...(blob ? { ref: blob } : {}) });
 
+  /** Delivers A's first live send and keeps the specification in step (the end's and the snapshot's drive). */
+  const deliverA = (sent: Sent) => {
+    const answer = deliver(sent, "ok");
+    if (spec.intents.some(intent => intent.id === sent.request.id)) {
+      if (answer!.ok) acknowledge(spec, sent.request.id, answer!.revisions); else if (answer!.reason === "stale") stale(spec, sent.request.id, answer!.current);
+    }
+  };
   for (stepNow = 0; stepNow < steps && !failures.length; stepNow++) {
+    if (more.next() < 0.04) {
+      // Save version or export: flush the documents (only A's sends are answered meanwhile), then read them in one read transaction.
+      // Each one with no conflict must read as A shows it, unless the library moved on by another window's writes alone.
+      const refs = [MEMBERS, ...DOCS].filter(() => more.next() < 0.5);
+      if (!refs.length) continue;
+      trace.push(`step ${stepNow} snapshot ${refs.map(ref => ref.id)}`);
+      let done: boolean | null = null;
+      void a.settle(refs).then(ok => { done = ok; });
+      for (let round = 0; round < 80 && done === null && !failures.length; round++) {
+        await ticks();
+        const sent = queue.find(item => item.window === "A" && item.life === life);
+        if (sent) { deliverA(sent); continue; }
+        if (lookups.length) { answerLookup(lookups.shift()!); continue; }
+        for (const task of retries.splice(0)) task();
+      }
+      await ticks();
+      if (done) {
+        const read = store.read(refs);
+        for (const ref of refs) {
+          const key = documentKey(ref), held = a.document(ref), now = read[key];
+          if (held?.conflict || held?.pending) continue;
+          const by = writers.get(key) ?? [];
+          if ((now?.revision ?? 0) === (held?.revision ?? 0)) { count("snapshot checked"); if (!same(now?.value, held?.value)) fail(`the snapshot reads ${key} as ${JSON.stringify(now?.value)}, A shows ${JSON.stringify(held?.value)}`); }
+          else for (let revision = (held?.revision ?? 0) + 1; revision <= (now?.revision ?? 0); revision++)
+            if (by[revision] === "A") fail(`the snapshot reads ${key} at revision ${now?.revision}, past A's own revision ${revision} that A doesn't show`);
+        }
+      }
+    } else {
     const roll = rng.next();
     trace.push(`step ${stepNow} ${roll.toFixed(3)}`);
     if (roll < 0.2) {
@@ -380,7 +434,13 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
     } else if (roll < 0.27) {
       const one = rng.pick(DOCS), two = rng.pick(DOCS);
       if (one.id === two.id) continue;
-      const edits = [{ ...one, value: value("A") }, { ...two, value: value("A") }], item = caller();
+      const edits: { kind: string; id: string; value: unknown }[] = [{ ...one, value: value("A") }, { ...two, value: value("A") }], item = caller();
+      // A collection command: the collection (the membership document), a look and a look it drops as a tombstone (removeLook).
+      if (more.next() < 0.3) {
+        const third = more.next() < 0.5 ? MEMBERS : DOCS.find(doc => doc.id !== one.id && doc.id !== two.id)!;
+        edits.push({ ...third, value: more.next() < 0.5 ? tombstoneOf(value("A"), counter) : value("A") });
+        count("three-document command");
+      }
       await onA(() => {
         const entry = a.commit("pair", edits);
         record(spec, entry.id, edits.map(edit => [documentKey(edit), edit.value]), [], item);
@@ -406,7 +466,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
       });
     } else if (roll < 0.4) {
       // Window B edits, or imports an immutable document and names it.
-      const ref = rng.pick(DOCS.slice(0, 3));
+      const ref = more.next() < 0.15 ? MEMBERS : rng.pick(DOCS.slice(0, 3));
       if (rng.next() < 0.25) { const blob = rng.pick(BLOBS); b.put(blob, { blob: blob.id }); b.commit("edit", [{ ...ref, value: value("B", blob.id) }], { requires: [blob] }); count("B imports"); }
       else b.commit("edit", [{ ...ref, value: value("B") }]);
       await ticks();
@@ -433,6 +493,11 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
           const partial = structuredClone(before);
           lost(partial, sent.request.id, answer.revisions);
           between.push(partial);
+          // Or with the earlier stored copies it supersedes already reduced (they are written first).
+          const reduced = structuredClone(partial), at = reduced.intents.findIndex(intent => intent.id === sent.request.id);
+          for (const earlier of reduced.intents.slice(0, at)) if (!earlier.conflict && earlier.committed)
+            earlier.writes = earlier.writes.filter(([key]) => !keysOf(reduced.intents[at]!).includes(key));
+          if (reduced.intents.every(intent => intent.writes.length)) between.push(reduced);
           acknowledge(spec, sent.request.id, answer.revisions);
         } else if (answer.reason === "stale") stale(spec, sent.request.id, answer.current);
       }, between);
@@ -449,12 +514,18 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
       await onA(() => {
         if (how === "mine") { keepMine(spec, conflict.id, a.keepMine(conflict.id).id); callers.splice(callers.indexOf(item), 1); return; }
         if (how === "theirs") { a.useTheirs(conflict.id); useTheirs(spec, conflict.id); callers.splice(callers.indexOf(item), 1); return; }
-        const fork = ++forks;
-        const copy = a.keepBoth(conflict.id, mine => mine.map(edit => ({ ...edit, id: `${edit.id}~${fork}` })));
+        const fork = ++forks, members = documentKey(MEMBERS);
+        /** The membership document with this fork added: over its value as it is now (theirs, with any surviving successors). */
+        const joined = (now: unknown) => ({ ...(now && typeof now === "object" ? now : {}), forks: [...((now as { forks?: number[] } | undefined)?.forks ?? []), fork] });
+        const copy = a.keepBoth(conflict.id, mine => [...mine.map(edit => ({ ...edit, id: `${edit.id}~${fork}` })), { ...MEMBERS, value: joined(a.document(MEMBERS)?.value) }]);
         const dropped = useTheirs(spec, conflict.id);
         for (const [key] of dropped.writes) { keys.push(`${key}~${fork}`); spec.docs[`${key}~${fork}`] = { revision: 0, value: undefined }; spec.versions[`${key}~${fork}`] = 1; }
-        spec.intents.push({ id: copy.id, writes: dropped.writes.map(([key, value]) => [`${key}~${fork}`, value]), put: false, requires: [...dropped.requires], conflict: null,
-          sent: false, committed: null, bases: Object.fromEntries(dropped.writes.map(([key]) => [`${key}~${fork}`, 0])), callers: [item] });
+        const membership = joined(visible(spec, members));
+        spec.intents.push({ id: copy.id, writes: [...dropped.writes.map(([key, value]) => [`${key}~${fork}`, value] as [string, unknown]), [members, membership]], put: false,
+          requires: [...dropped.requires], conflict: null, sent: false, committed: null,
+          bases: { ...Object.fromEntries(dropped.writes.map(([key]) => [`${key}~${fork}`, 0])), [members]: touching(spec, members).length ? null : spec.docs[members]?.revision ?? 0 },
+          callers: [item] });
+        bump(spec, members);
         watch(copy, item);
       }, [], 0.45);
     } else if (roll < 0.82) {
@@ -466,12 +537,11 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
       if (!lookups.length) continue;
       const lookup = lookups.splice(rng.int(lookups.length), 1)[0]!;
       count(`late ${lookup.kind}`);
-      if (lookup.kind === "revisions") lookup.resolve(Object.fromEntries(lookup.refs.map(ref => [documentKey(ref), library(documentKey(ref)).revision])));
-      else {
-        const answer = Object.fromEntries(lookup.refs.map(ref => { const now = store.get(ref.kind, ref.id); return [documentKey(ref), now ? { revision: now.revision, value: now.value } : null]; }));
-        for (const [key, now] of Object.entries(answer)) readValues.set(key, now);
-        lookup.resolve(answer);
+      if (lookup.captured) {
+        count("read captured earlier");
+        if (lookup.kind === "read" && lookup.refs.some(ref => ((lookup.captured as Record<string, CurrentDocument>)[documentKey(ref)]?.revision ?? 0) < library(documentKey(ref)).revision)) count("stale read delivered");
       }
+      answerLookup(lookup);
       await ticks();
     } else if (mode === "desktop" ? roll < 0.95 : roll < 0.9) {
       if (mode !== "desktop") continue;
@@ -518,6 +588,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
       for (const request of deferred.splice(0)) checkSend(request);
       await ticks();
     } else continue;
+    }
 
     // ---- Invariants after every step.
     if (failures.length) break;
@@ -569,15 +640,10 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
     if (hostWrites.length) { const write = hostWrites.shift()!;
       if (write.life !== life) write.reject(Error("Superseded.")); else { if (write.text === null) host.delete(write.key); else host.set(write.key, write.text); write.resolve(); }
       await ticks(); continue; }
-    if (lookups.length) { const lookup = lookups.shift()!; lookup.resolve(lookup.kind === "revisions" ? Object.fromEntries(lookup.refs.map(ref => [documentKey(ref), library(documentKey(ref)).revision]))
-      : Object.fromEntries(lookup.refs.map(ref => { const now = store.get(ref.kind, ref.id); const value = now ? { revision: now.revision, value: now.value } : null; readValues.set(documentKey(ref), value); return [documentKey(ref), value]; }))); await ticks(); continue; }
+    if (lookups.length) { answerLookup(lookups.shift()!); await ticks(); continue; }
     const sent = queue[0];
     if (sent) {
-      const live = sent.window === "A" && sent.life === life;
-      const answer = deliver(sent, "ok");
-      if (live && spec.intents.some(intent => intent.id === sent.request.id)) {
-        if (answer!.ok) acknowledge(spec, sent.request.id, answer!.revisions); else if (answer!.reason === "stale") stale(spec, sent.request.id, answer!.current);
-      }
+      if (sent.window === "A" && sent.life === life) deliverA(sent); else deliver(sent, "ok");
       await ticks();
       continue;
     }
@@ -586,11 +652,9 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
     if (!a.pendingEntries().length && !b.pendingEntries().length) break;
   }
   if (!failures.length) {
-    if (a.pendingEntries().length || b.pendingEntries().length) fail(`not quiet: A holds ${a.pendingEntries().length}, B ${b.pendingEntries().length}`);
+    if (a.pendingEntries().length || b.pendingEntries().length) fail(`not quiet: A holds ${a.pendingEntries().length}, B ${b.pendingEntries().length} ${JSON.stringify(a.pendingEntries().slice(0, 6).map(e => [e.id, e.state, e.requires, e.writes.map(w => [w.id, w.base])]))} queue ${queue.length} lookups ${lookups.length} retries ${retries.length}`);
     const checking = a.check();
-    for (let i = 0; i < 4; i++) { await ticks(); for (const lookup of lookups.splice(0)) lookup.resolve(lookup.kind === "revisions"
-      ? Object.fromEntries(lookup.refs.map(ref => [documentKey(ref), library(documentKey(ref)).revision]))
-      : Object.fromEntries(lookup.refs.map(ref => { const now = store.get(ref.kind, ref.id); const value = now ? { revision: now.revision, value: now.value } : null; readValues.set(documentKey(ref), value); return [documentKey(ref), value]; }))); }
+    for (let i = 0; i < 4; i++) { await ticks(); for (const lookup of lookups.splice(0)) lookup.resolve(answerOf(lookup.kind, lookup.refs)); }
     await checking; await ticks();
     for (const key of keys) {
       const held = library(key).value;
@@ -610,9 +674,10 @@ const RUNS = Number(process.env.XFS_OUTBOX_RUNS ?? 60);
 /**
  * Seeds that found defects in deeper sweeps, run every time: a replayed copy of an acknowledged command followed by the next edit (local
  * 5979845, desktop 1212607), immutable baselines learned by lookup (local 2527161, 4609858), discarded conflicts brought back from the
- * desktop host's copy (desktop 1719423, 1806532), and long recoveries (desktop 365274, 2519242).
+ * desktop host's copy (desktop 1719423, 1806532), long recoveries (desktop 365274, 2519242), and (chunk 1c-ii) a kill between an
+ * acknowledgement's keys bringing back a superseded copy's write (local 982956, desktop 476140).
  */
-const FIXED = { local: [5979845, 2527161, 4609858], desktop: [1212607, 1719423, 1806532, 365274, 2519242] };
+const FIXED = { local: [5979845, 2527161, 4609858, 982956], desktop: [1212607, 1719423, 1806532, 365274, 2519242, 476140] };
 const STEPS = 400;
 test(`the outbox meets its specification in seeded runs (kills while working and while recovering, late checks, failing storage, two windows)`, async () => {
   const all: string[] = [];
@@ -627,5 +692,6 @@ test(`the outbox meets its specification in seeded runs (kills while working and
   expect(all).toEqual([]);
   if (!pinned) for (const name of ["killed (local)", "killed (desktop)", "killed while opening", "recovered after", "recovered before", "recovered between", "restart",
     "app restart", "resolve mine", "resolve theirs", "resolve both", "answer stale", "answer receipt", "answer equal", "answer lost", "send failed", "late read",
-    "storage failing", "host write landed", "host write failed", "host write fenced", "B imports", "protected document checked"]) expect(seen[name] ?? 0, name).toBeGreaterThan(0);
+    "storage failing", "host write landed", "host write failed", "host write fenced", "B imports", "protected document checked", "three-document command",
+    "snapshot checked", "read captured earlier", "stale read delivered"]) expect(seen[name] ?? 0, name).toBeGreaterThan(0);
 }, 600_000);

@@ -22,11 +22,15 @@
  *   Multi-document commands never coalesce: they queue behind every earlier entry touching any of their documents.
  * - **A3, acknowledgement.** The answer, fresh or from a receipt, removes the entry, makes its revisions and values the documents'
  *   baselines and rebases every `{ after }` successor onto them; every key holding a changed entry is written again. The command's
- *   receipt is forgotten (named in a later command's `forget`) once no stored key holds the entry any more.
+ *   receipt is forgotten (named in a later command's `forget`) once no stored key holds the entry any more. A replay answered from its
+ *   receipt names (`own`) the documents every later revision of which this same workspace wrote (receipts record the workspace and lease
+ *   generation): an earlier launch's write a crash left the stored copy older than; they become the baseline its successors build on,
+ *   so a crash with host writes pending never brings a conflict against this page's own write. Another workspace's never counts.
  * - **A4, A5** are the host's (`DocumentStore.transact`): receipts, and the equal-value rule.
  * - **A6, stale.** A stale answer makes the entry a conflict holding the documents as they are now, and nothing retries it.
  *   Single-document successors fold into its "mine"; multi-document successors stay blocked. Keep mine, Use theirs and Keep both are
- *   each one outbox write, and stored conflicts are raised again when the outbox opens.
+ *   each one outbox write, and stored conflicts are raised again when the outbox opens. Keep both takes theirs before asking its owner
+ *   for the copy, so a membership the copy is added to (a profile, a collection) is written over theirs, never over mine's version.
  * - **A7, revision checks** (`check`) skip every document with an entry; a clean document takes a stored revision only above its
  *   baseline, so a receipt replay never shows as an external change.
  *
@@ -38,6 +42,8 @@
  */
 import type { CurrentDocument, DocumentRef, TransactAnswer, TransactRequest } from "../api/document-commands";
 import { documentKey } from "../api/document-commands";
+
+type TransactAnswerOwn = Extract<TransactAnswer, { ok: true }>["own"];
 
 export type OutboxBase = number | { readonly after: string };
 export type OutboxWrite = { readonly kind: string; readonly id: string; base: OutboxBase; value: unknown };
@@ -52,6 +58,11 @@ export type OutboxEntry = {
   current?: Record<string, CurrentDocument>;
   /** Entries this one replaced when a conflict was resolved (Keep mine, Keep both): a crash between key writes drops them on open. */
   replaces?: string[];
+  /**
+   * Keep both's copy: it replaces the conflict it resolves but never takes over that conflict's successors, even on a document it also
+   * writes (a membership): they go stale over the dropped base, and the copy comes after them.
+   */
+  fork?: true;
   /** Immutable documents (keys) this command references: it is sent only once each of them is in the library. */
   requires?: string[];
   /** Raised on every change of the entry: the copy with the highest stamp is the current one. */
@@ -519,7 +530,7 @@ export class DocumentOutbox {
     const recovered = this.failing;
     if (this.failing) { this.failing = false; this.emit({ kind: "status" }); }
     if (!this.entries.includes(entry) || this.stopped) { this.forget.push(...forget); return; }
-    if (answer.ok) this.acknowledge(entry, answer.revisions, answer.replayed);
+    if (answer.ok) this.acknowledge(entry, answer.revisions, answer.replayed, undefined, answer.own);
     else if (answer.reason === "stale" && entry.writes.every(write => this.immutable(write.kind))) {
       // An immutable document already there is the same content (its ID is its content): this write is acknowledged as it stands.
       const revisions = Object.fromEntries(entry.writes.map(write => [documentKey(write), answer.current[documentKey(write)]?.revision ?? 0]));
@@ -531,15 +542,19 @@ export class DocumentOutbox {
     this.pump();
   }
 
-  /** A3. */
+  /**
+   * A3. `own`: a receipt replay's documents whose every later revision this workspace wrote too (an earlier launch's commands whose
+   * stored copies a crash left older than they were): this page takes them as its baseline and its successors build on them, so its own
+   * later write is never a conflict.
+   */
   private acknowledge(entry: OutboxEntry, revisions: Readonly<Record<string, number>>, replayed?: "receipt" | "equal",
-    current?: Readonly<Record<string, CurrentDocument>>): void {
+    current?: Readonly<Record<string, CurrentDocument>>, own?: TransactAnswerOwn): void {
     const at = this.entries.indexOf(entry);
     this.entries = this.entries.filter(other => other !== entry);
     // An earlier entry still held on one of its documents is a stored copy of a command already in the library (a crash left it, and it
     // is being replayed for its receipt): this answer supersedes its write of that document, which must neither show as the value nor
     // be what the next edit follows. An earlier entry left with no write is done.
-    const superseded = new Set<OutboxEntry>(), done: OutboxEntry[] = [];
+    const superseded = new Set<OutboxEntry>(), done: OutboxEntry[] = [], taken: DocumentRef[] = [];
     for (const earlier of this.entries.slice(0, Math.max(0, at))) {
       if (earlier.state !== "queued") continue;
       const kept = earlier.writes.filter(write => !entry.writes.some(item => documentKey(item) === documentKey(write)));
@@ -553,19 +568,29 @@ export class DocumentOutbox {
       if (revision === undefined) continue;
       held.known = true;
       if (revision >= held.revision) { held.revision = revision; held.base = current?.[key] ? current[key]!.value : write.value; }
+      const later = own?.[key];
+      if (later && later.revision > held.revision) { held.revision = later.revision; held.base = later.value; this.moved(held, later.revision); taken.push(held.ref); }
     }
     const rebased = new Set<OutboxEntry>();
     for (const other of this.entries) for (const write of other.writes)
-      if (typeof write.base === "object" && write.base.after === entry.id) { write.base = revisions[documentKey(write)] ?? 0; rebased.add(other); }
+      if (typeof write.base === "object" && write.base.after === entry.id) {
+        const key = documentKey(write);
+        write.base = Math.max(own?.[key]?.revision ?? 0, revisions[key] ?? 0); rebased.add(other);
+      }
     for (const other of rebased) this.touch(other);
     // Its receipt is forgotten once every key it was kept under is stored without it.
     const keys = this.keysOf(entry);
     this.forgetting.set(entry.id, new Set(keys));
     for (const other of done) this.bury(other);
-    this.persist([...keys, ...this.keysOf(...rebased), ...this.keysOf(...superseded), ...this.keysOf(...done)]);
+    // The superseded copies first: a kill after them leaves the acknowledged entry stored, to be replayed by its receipt, beside the
+    // superseded copy as it now is (its newer stamp wins on open); a kill after the acknowledgement's own keys can then never bring back
+    // a superseded copy's write as the document's value.
+    this.persist([...this.keysOf(...superseded), ...keys, ...this.keysOf(...rebased), ...this.keysOf(...done)]);
     for (const other of done) this.finish(other.id, "acknowledged");
     this.finish(entry.id, "acknowledged");
     this.emit({ kind: "acknowledged", entry, revisions, ...(replayed ? { replayed } : {}) });
+    // A later revision of its own this page hadn't read yet is a change to what owners show.
+    if (taken.length) this.emit({ kind: "external", refs: taken });
   }
 
   /** A6. */
@@ -642,14 +667,25 @@ export class DocumentOutbox {
    */
   keepBoth(conflictId: string, fork: (mine: readonly OutboxEdit[]) => readonly OutboxEdit[]): OutboxEntry {
     const old = this.conflictEntry(conflictId);
-    const edits = fork(old.writes.map(write => ({ kind: write.kind, id: write.id, value: write.value })));
-    if (!edits.length) throw Error("Keep both needs somewhere to keep mine.");
+    const mine = old.writes.map(write => ({ kind: write.kind, id: write.id, value: write.value }));
+    // Theirs first, so `fork` reads every document it also updates (a membership: a profile, a collection) as it is now, theirs with any
+    // surviving successors on top, never as mine had it: mine's other changes there are not carried over theirs.
+    const before = { entries: this.entries, held: old.writes.map(write => { const held = this.local(write); return [held, { ...held }] as const; }) };
     this.takeTheirs(old);
+    this.entries = this.entries.filter(entry => entry !== old);
+    let edits: readonly OutboxEdit[];
+    try {
+      edits = fork(mine);
+      if (!edits.length) throw Error("Keep both needs somewhere to keep mine.");
+    } catch (error) {
+      this.entries = before.entries;
+      for (const [held, copy] of before.held) Object.assign(held, copy);
+      throw error;
+    }
     const successors = this.repoint(old.id, write => old.writes.find(item => documentKey(item) === documentKey(write))?.base ?? 0);
     for (const other of successors) this.touch(other);
-    this.entries = this.entries.filter(entry => entry !== old);
     this.bury(old);
-    const copy: OutboxEntry = { id: this.newId(), seq: ++this.seq, command: "conflict.keepBoth", at: this.now(), state: "queued", replaces: [old.id],
+    const copy: OutboxEntry = { id: this.newId(), seq: ++this.seq, command: "conflict.keepBoth", at: this.now(), state: "queued", replaces: [old.id], fork: true,
       writes: edits.map(edit => ({ kind: edit.kind, id: edit.id, base: this.baseFor(documentKey(edit)), value: edit.value })),
       ...(old.requires?.length ? { requires: [...old.requires] } : {}) };
     this.touch(copy);
@@ -737,8 +773,9 @@ const refOfKey = (key: string): DocumentRef => { const at = key.indexOf("/"); re
 /**
  * The entries a set of stored keys holds, oldest first, with what a crash between two keys' writes left half-done put right:
  * - an entry kept under several keys counts once, as its copy with the highest stamp (a conflict copy over a queued one when stamps tie);
- * - an entry a resolution dropped or replaced is gone, and its successors follow the resolution (onto the replacement when it writes their
- *   document, else onto the dropped entry's stale base);
+ * - an entry a resolution dropped or replaced is gone, and its successors follow the resolution (onto Keep mine's replacement when it
+ *   writes their document, else onto the dropped entry's stale base; Keep both's copy never takes them over, even where it also writes
+ *   their document, a membership: it comes after them);
  * - a successor of an entry no key holds any more goes stale against the library rather than writing over it.
  */
 export function repair(records: ReadonlyMap<string, StoredKey>, alsoDropped: readonly string[] = []):
@@ -768,7 +805,8 @@ export function repair(records: ReadonlyMap<string, StoredKey>, alsoDropped: rea
       const removed = gone.get(base.after);
       if (!removed) return 0;
       const replacement = replacedBy.get(base.after);
-      if (replacement && byId.has(replacement.id) && replacement.writes.some(item => documentKey(item) === documentKey(write))) return { after: replacement.id };
+      if (replacement && !replacement.fork && byId.has(replacement.id) && replacement.writes.some(item => documentKey(item) === documentKey(write)))
+        return { after: replacement.id };
       write = { ...write, base: removed.writes.find(item => documentKey(item) === documentKey(write))?.base ?? 0 };
     }
     return 0;

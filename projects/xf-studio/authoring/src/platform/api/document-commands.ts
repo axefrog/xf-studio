@@ -49,10 +49,20 @@ export type CommandRevisions = Readonly<Record<string, number>>;
  * holds its workspace (a newer lease generation, §2.3).
  */
 export type TransactAnswer =
-  | { readonly ok: true; readonly revisions: CommandRevisions; readonly replayed?: "receipt" | "equal" }
+  | { readonly ok: true; readonly revisions: CommandRevisions; readonly replayed?: "receipt" | "equal";
+    /**
+     * A replay answered from its receipt, from the workspace that wrote it: each written document every later revision of which this
+     * same workspace also wrote (its own receipts say so), as it is now. The page builds on these, never against them (§2.2).
+     */
+    readonly own?: Readonly<Record<string, { readonly revision: number; readonly value: unknown }>> }
   | { readonly ok: false; readonly reason: "stale"; readonly current: Readonly<Record<string, CurrentDocument>> }
   | { readonly ok: false; readonly reason: "superseded" };
 
+/**
+ * A stored receipt: the command, the revisions it produced and, when the command carried a workspace lease, the workspace and lease
+ * generation that wrote it (so a later replay can tell this workspace's own later revisions from another's).
+ */
+export type Receipt = { readonly command: string; readonly revisions: CommandRevisions; readonly workspace?: string; readonly generation?: number };
 /** The `documents` kind command receipts are kept under (ID: the command's). */
 export const RECEIPT_KIND = "xfs-receipt";
 /** How long a receipt is kept when no later command forgets it. */

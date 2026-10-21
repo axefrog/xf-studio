@@ -108,16 +108,23 @@ export class ProfileService {
 
   /** Every live profile, in the order they were made (frozen; the same array until something changes). */
   list(): readonly ProfileView[] {
-    this.views ??= Object.freeze([...this.ids].flatMap(id => {
+    this.views ??= this.read();
+    return this.views;
+  }
+  /**
+   * The profiles as the outbox holds them now. Commands and other owners' memberships read this, never the cached list: inside a
+   * resolution (Keep both reads theirs before announcing it) the outbox has changed and no event has been heard yet.
+   */
+  private read(): readonly ProfileView[] {
+    return Object.freeze([...this.ids].flatMap(id => {
       const held = this.deps.outbox.document(profileRef(id));
       const value = held && !isTombstone(held.value) ? profileDocumentOf(held.value) : null;
       return value ? [Object.freeze({ ...value, revision: held!.version })] : [];
     }).sort((a, b) => a.createdAt - b.createdAt));
-    return this.views;
   }
-  profile(id: ProfileId): ProfileView | null { return this.list().find(profile => profile.id === id) ?? null; }
+  profile(id: ProfileId): ProfileView | null { return this.read().find(profile => profile.id === id) ?? null; }
   /** The profiles that list a subject (named before the subject is deleted, §1.4). */
-  holding(subject: SubjectRef): readonly ProfileView[] { return this.list().filter(profile => profile.subjects.some(ref => sameSubject(ref, subject))); }
+  holding(subject: SubjectRef): readonly ProfileView[] { return this.read().filter(profile => profile.subjects.some(ref => sameSubject(ref, subject))); }
 
   private target(id: ProfileId, base: number): ProfileView | Capability {
     const profile = this.profile(id);

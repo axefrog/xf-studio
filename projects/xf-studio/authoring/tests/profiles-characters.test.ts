@@ -779,6 +779,29 @@ describe("conflicts on a V (profiles design §2.2)", () => {
     expect(libraryCharacter(w, copy.id)).toMatchObject({ name: "Mine (this window)" });
   });
 
+  test("Keep both over an existing membership (Sol's 1c-i note): a create whose profile went stale keeps theirs' profile, the copy added to it", async () => {
+    const w = await world();
+    const made = await w.profiles.dispatch({ kind: "profile.create", name: "Mine" });
+    if (!made.ok) throw Error(made.reason);
+    await w.outbox.settle();
+    w.lib.other("profile.rename", { kind: PROFILE_DOCUMENT, id: made.profile }, value => ({ ...value as object, name: "Renamed elsewhere" }));
+    const created = await w.characters.create({ name: "New V", profile: { id: made.profile, base: w.profiles.profile(made.profile)!.revision } });
+    if (!created.ok) throw Error(created.reason);
+    await until(() => w.outbox.conflicts().length > 0);
+    // Before resolving, the profile shows mine (the new V listed); the stored one is theirs (renamed).
+    expect(w.profiles.profile(made.profile)!.subjects).toEqual([characterRef(created.character)]);
+    const context = w.characters.context(created.character, { showSave() {} });
+    context.dispatch({ kind: "character.resolveConflict", keep: "both" });
+    await w.characters.flush(); await w.outbox.settle();
+    expect(w.outbox.conflicts()).toEqual([]);
+    const stored = w.lib.value<{ name: string; subjects: { kind: string; id: string }[] }>(PROFILE_DOCUMENT, made.profile)!;
+    // Theirs' rename is kept (mine's copy of the profile never lands over it), and the copy of the new V is listed there.
+    expect(stored.name).toBe("Renamed elsewhere");
+    expect(stored.subjects.length).toBe(1);
+    expect(libraryCharacter(w, stored.subjects[0]!.id)).toMatchObject({ name: "New V (this window)" });
+    expect(w.profiles.profile(made.profile)).toMatchObject({ name: "Renamed elsewhere", subjects: stored.subjects });
+  });
+
   test("a stored conflict is shown again after a restart, and a change from elsewhere replaces a clean V's context (A7)", async () => {
     const storage = memoryOutboxStorage(), lib = library();
     const first = await world(lib, storage);

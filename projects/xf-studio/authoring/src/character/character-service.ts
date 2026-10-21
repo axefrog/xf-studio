@@ -35,7 +35,8 @@ import { closeCharacterHistory } from "./character-history";
 import { CHARACTER_DOCUMENT, CHARACTER_SCHEMA, type CharacterDocument, type CharacterSource, characterDocumentOf, type CharacterId, characterLabel, decodedSaveId,
   documentOfForm, newCharacterId, SAVED_V_DOCUMENT, type SaveReference, storedOfDocument } from "./character-document";
 import type { CreatorCatalogue } from "./creator-catalogue";
-import type { ProfileId, ProfileService, ProfileView } from "../app/profiles/profile-service";
+import { PROFILE_DOCUMENT, profileDocumentOf, type ProfileId, type ProfileService, type ProfileView } from "../app/profiles/profile-service";
+import { sameSubject } from "../platform/api/subjects";
 
 /** What a scene gives the character it shows: applying a save on its head, its V's preparation, its choice previews. */
 export type CharacterScenePorts = Pick<CharacterContextPorts, "showSave" | "details" | "previews">;
@@ -268,7 +269,11 @@ export class CharacterService implements CharactersPort {
     } catch (error) { return refusal("unavailable", (error as Error).message); }
     return { available: true };
   }
-  /** Keep both: this window's version of `id` as a new V named "(this window)", added to every profile that lists the original. */
+  /**
+   * Keep both: this window's version of `id` as a new V named "(this window)", added to every profile that lists the original, now
+   * (theirs) or in mine (a `character.create` whose membership went stale). Each membership is written over the profile as it is now
+   * (the outbox has taken theirs before calling this), so mine's other changes to a profile never land over theirs.
+   */
   private copyOf(id: CharacterId, mine: readonly OutboxEdit[]): OutboxEdit[] {
     const value = mine.find(edit => edit.kind === CHARACTER_DOCUMENT && edit.id === id)?.value;
     const doc = value === undefined || isTombstone(value) ? null : characterDocumentOf(value);
@@ -276,9 +281,17 @@ export class CharacterService implements CharactersPort {
     const copy = newCharacterId(this.deps.random);
     const name = `${characterLabel(doc).slice(0, 66)} (this window)`;
     this.entryOf(copy);
-    const profiles = this.deps.profiles?.holding(characterRef(id)) ?? [];
+    const profiles = this.deps.profiles;
+    const listed = new Set((profiles?.holding(characterRef(id)) ?? []).map(profile => profile.id));
+    for (const edit of mine) if (edit.kind === PROFILE_DOCUMENT && !isTombstone(edit.value) &&
+      profileDocumentOf(edit.value)?.subjects.some(ref => sameSubject(ref, characterRef(id)))) listed.add(edit.id);
     return [{ ...docRef(copy), value: { ...doc, id: copy, name } satisfies CharacterDocument },
-      ...profiles.flatMap(profile => { const planned = this.deps.profiles!.membership(profile.id, profile.revision, characterRef(copy)); return "edit" in planned ? [planned.edit] : []; })];
+      ...[...listed].flatMap(profileId => {
+        const profile = profiles?.profile(profileId);
+        if (!profile) return [];
+        const planned = profiles!.membership(profile.id, profile.revision, characterRef(copy));
+        return "edit" in planned ? [planned.edit] : [];
+      })];
   }
 
   // -------------------------------------------------------------------------------------------------------------

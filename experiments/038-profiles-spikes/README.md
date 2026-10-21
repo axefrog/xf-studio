@@ -147,7 +147,7 @@ CI runs 60 local and 30 desktop seeds of 400 steps, plus eight fixed seeds that 
 
 - **Markers wait for the durable copy.** On desktop, a renderer reload reads the WebView's newer records, which hid a stale entry the host still held; the repair took the markers as spent and its cleanup reached the host before that key's replacement, so a new launch brought the discarded conflict back. The outbox now also reads the durable copy (`OutboxStorage.durable`): a stale entry there keeps its marker until that key is written again and the host confirms it. A record holding only markers is never treated as empty. The exact sequence is a deterministic test.
 - **Found by the specification test:** after a crash left a stored copy of a command already in the library, a later command on the same document could be acknowledged first; the stored copy then stayed the "last" entry on that document, so the next edit followed it and went stale against the window's own write. An acknowledgement now supersedes an earlier stored copy's write of its documents (one left with no write is done).
-- **Known limit (desktop, rare):** when the app dies while host copies are still on their way, a new launch may read an older entry for a document the page had since written (that document was reported unprotected). The entry replays by its receipt, and the next edit of that document can then conflict with the page's own newer write: shown as a conflict, never written over. The desktop host-kill scenario of the S1 harness hit this once in ten runs (23 conflicts in that run, a cascade from one such document). Removing it needs the host to say, when it answers a replay, whether the later revisions are the same workspace's (receipts would record the workspace); that is left for phase 1.
+- **Known limit (desktop, rare), fixed in chunk 1c-ii:** when the app died while host copies were still on their way, a new launch could read an older entry for a document the page had since written (that document was reported unprotected). The entry replayed by its receipt, and the next edit of that document then conflicted with the page's own newer write: shown as a conflict, never written over. The desktop host-kill scenario hit this once in ten runs (23 conflicts in that run, a cascade from one such document). See the next section for the fix.
 
 **Review of chunk 1c-i.** An independent review reproduced eight defects; the fixes are structural, and each finding also has an explicit test (`tests/document-outbox.test.ts`, `tests/profiles-characters.test.ts`, "review findings"):
 
@@ -165,6 +165,25 @@ What the port caught:
 - **A window with no baseline wrote over nothing.** The lease harness's windows saved without reading the document first; every command was then stale against the library and became a conflict (correctly: nothing retried it). Owners read their documents before recording changes to them.
 
 Reproduce, under `tools/memory_guard.py --limit 4`: `bun tools/s1-outbox.ts <scratch> [payload.json|""] [localhost,desktop] [renderer,host,two,failure]`, or `bun test tests/s1-outbox.test.ts`.
+
+## Collections and looks on the outbox (phase 1, chunk 1c-ii)
+
+Product code: the working-copy documents (`src/library/collection-documents.ts`), the collection owner (`src/library/collection-owner.ts`), look sessions (`src/library/look-sessions.ts`), Save version on the host (`saveCollectionVersion` and its route `/api/collection-versions`, `src/library/host/collection-store.ts`), the retention job (`DocumentStore.cleanup`, `keepLibraryClean`) and the raised autocheckpoint (`WAL_AUTOCHECKPOINT_PAGES`). The running Studio still edits its one collection through the workspace; moving it here is chunk 1d.
+
+- **Receipts know their workspace.** A receipt records the workspace and lease generation of the command that wrote it. A replay answered from its receipt, from the same workspace, also names (`own`) each written document every later revision of which that workspace wrote, at a generation no newer than the replay's, as its own receipts record. The outbox takes those as the baseline and rebases the replayed command's successors onto them. A revision with no such receipt (another workspace's write, or a receipt forgotten or purged) is never treated as its own. Deterministic regression: `tests/collection-owner.test.ts`, "the S1 desktop host-kill case" (it fails without the fix).
+- **Keep both reads theirs first.** The outbox takes theirs before asking the owner for the copy, so a membership the copy is added to (a profile, a collection) is written over theirs, never over mine's version of it; a failed fork restores the conflict untouched. Keep both's copy is marked (`fork`), so a crash repair never makes it take over the conflict's successors on a membership document it also writes (that ordering made a cycle the specification test found).
+- **Superseded copies are written first.** When an acknowledgement supersedes an earlier stored copy's write, the copy's keys are rewritten before the acknowledgement's own, so a kill between them can't bring the superseded write back as the document's value (found by a 600-run sweep of the extended specification test; local seed 982956, desktop 476140, now pinned).
+
+Results (22 October 2026), each under `tools/memory_guard.py --limit 4`:
+
+| Run | Result |
+|---|---|
+| S1 outbox harness, both hosts, all 8 scenarios | **PASS** in 172 s, peak 1.1 GB. Localhost: renderer 308 logged, host 660, two windows 607 (101 real conflicts, 100 forks, 0 silent overwrites), failure 22 unprotected. Desktop: renderer 356, host 1,059, two windows 560 (34 conflicts, 34 forks, 0 silent overwrites), failure 44 unprotected. 0 missing, 0 false conflicts, `integrity_check` ok everywhere. |
+| Desktop host killed at 20 points, 10 runs (the 1c-i limit's regression) | **PASS** 10 of 10 in 1,207 s, peak 0.9 GB: 10,350 mutations logged, 0 missing, **0 false conflicts** in every run, 8–24 receipt replays a run, `integrity_check` ok. |
+| Lease harness | **PASS** 34 of 34 checks in 15.4 s, peak 0.8 GB. |
+| Specification test, deep sweep | 400 local and 200 desktop seeds of 400 steps (240,000 steps) pass in 50 s. CI runs 60 local and 30 desktop seeds plus 10 fixed in about 8 s. |
+
+Reproduce the regression: `bun tools/s1-outbox.ts <scratch> "" desktop host 10`.
 
 ## Acknowledgement and rebasing rules (S1, answering Sol's Medium point)
 

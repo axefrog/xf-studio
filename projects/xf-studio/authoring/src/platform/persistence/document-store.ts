@@ -12,9 +12,10 @@
  */
 import { DOCUMENT_ID, DOCUMENT_KIND, parseFence, WORKSPACE_FENCE_HEADER, WORKSPACE_LEASE_KIND, type DocumentWrite, type StoredDocument,
   type WorkspaceFence } from "../api/document-store";
-import { COMMAND_LIMITS, type CommandRevisions, type CurrentDocument, type DocumentRef, documentKey, isHostKind, RECEIPT_KIND, RECEIPT_TTL_MS,
+import { COMMAND_LIMITS, type CurrentDocument, type DocumentRef, documentKey, isHostKind, type Receipt, RECEIPT_KIND, RECEIPT_TTL_MS,
   type TransactAnswer, type TransactRequest, type TransactWrite } from "../api/document-commands";
 import type { LibraryDatabase } from "./library-database";
+import type { Clock } from "../core/clock";
 
 export type DocumentStoreOptions = {
   /** Wall time for `updatedAt` (the host clock's `now`). */
@@ -103,7 +104,11 @@ export class DocumentStore {
       const remove = db.query("DELETE FROM documents WHERE kind = ? AND id = ?");
       for (const id of checked.forget) remove.run(RECEIPT_KIND, id);
       const receipt = this.row(RECEIPT_KIND, checked.id);
-      if (receipt) return { ok: true, revisions: (JSON.parse(receipt.value) as { revisions: CommandRevisions }).revisions, replayed: "receipt" };
+      if (receipt) {
+        const stored = JSON.parse(receipt.value) as Receipt;
+        const own = fence && stored.workspace === fence.workspace ? this.ownLater(stored.revisions, fence) : null;
+        return { ok: true, revisions: stored.revisions, replayed: "receipt", ...(own ? { own } : {}) };
+      }
       const rows = checked.writes.map(write => this.row(write.kind, write.id));
       if (checked.writes.some((write, i) => (rows[i]?.revision ?? 0) !== write.base)) {
         if (rows.every((row, i) => row && row.value === texts[i]))
@@ -120,10 +125,41 @@ export class DocumentStore {
         else insert.run(write.kind, write.id, revision, texts[i]!, now, now);
         revisions[documentKey(write)] = revision;
       });
-      insert.run(RECEIPT_KIND, checked.id, 1, JSON.stringify({ command: checked.command, revisions }), now, now);
+      const receiptValue: Receipt = { command: checked.command, revisions, ...(fence ? { workspace: fence.workspace, generation: fence.generation } : {}) };
+      insert.run(RECEIPT_KIND, checked.id, 1, JSON.stringify(receiptValue), now, now);
       this.options.beforeCommit?.(request);
       return { ok: true, revisions };
     });
+  }
+
+  /**
+   * A replay's own later revisions (the 1c-i known limit): for each document the replayed command wrote, its current revision and value
+   * when every revision after the receipt's was written by `fence`'s workspace, at a lease generation no newer than `fence`'s, as that
+   * workspace's own receipts record. A revision with no such receipt (another workspace's write, or a receipt since forgotten or purged)
+   * makes the document not own. Null when no document qualifies.
+   */
+  private ownLater(revisions: Readonly<Record<string, number>>, fence: WorkspaceFence): Record<string, { revision: number; value: unknown }> | null {
+    const later = Object.entries(revisions).flatMap(([key, revision]) => {
+      const at = key.indexOf("/"), row = this.row(key.slice(0, at), key.slice(at + 1));
+      return row && row.revision > revision ? [{ key, revision, row }] : [];
+    });
+    if (!later.length) return null;
+    const writers = new Map<string, Set<number>>();
+    for (const { value } of this.db.read(db => db.query("SELECT value FROM documents WHERE kind = ?").all(RECEIPT_KIND) as { value: string }[])) {
+      let receipt: Receipt;
+      try { receipt = JSON.parse(value) as Receipt; } catch { continue; }
+      if (receipt.workspace !== fence.workspace || (receipt.generation ?? Infinity) > fence.generation) continue;
+      for (const [key, revision] of Object.entries(receipt.revisions ?? {})) {
+        const set = writers.get(key) ?? new Set<number>(); set.add(revision); writers.set(key, set);
+      }
+    }
+    const own: Record<string, { revision: number; value: unknown }> = {};
+    for (const { key, revision, row } of later) {
+      let mine = true;
+      for (let next = revision + 1; next <= row.revision && mine; next++) mine = writers.get(key)?.has(next) ?? false;
+      if (mine) own[key] = { revision: row.revision, value: JSON.parse(row.value) };
+    }
+    return Object.keys(own).length ? own : null;
   }
 
   /** The current revision of each document (0: none), keyed `<kind>/<id>`, in one read: the revision check (§2.2). */
@@ -131,18 +167,62 @@ export class DocumentStore {
     const checked = checkRefs(refs);
     return this.db.read(() => Object.fromEntries(checked.map(ref => [documentKey(ref), this.revisionOf(ref.kind, ref.id)])));
   }
-  /** Each document as it is now (null: none), keyed `<kind>/<id>`, in one read. */
+  /**
+   * Each document as it is now (null: none), keyed `<kind>/<id>`, in one read transaction: a coherent snapshot (§2.1), so no other
+   * connection's commit (a second host, a tool) lands between two of its documents.
+   */
   read(refs: readonly DocumentRef[]): Record<string, CurrentDocument> {
     const checked = checkRefs(refs);
-    return this.db.read(() => Object.fromEntries(checked.map(ref => {
-      const row = this.row(ref.kind, ref.id);
-      return [documentKey(ref), row ? { revision: row.revision, value: JSON.parse(row.value) } : null];
-    })));
+    return this.db.read(db => {
+      const own = !db.inTransaction;
+      if (own) db.exec("BEGIN DEFERRED");
+      try {
+        return Object.fromEntries(checked.map(ref => {
+          const row = this.row(ref.kind, ref.id);
+          return [documentKey(ref), row ? { revision: row.revision, value: JSON.parse(row.value) } : null];
+        }));
+      } finally { if (own) db.exec("COMMIT"); }
+    });
   }
   /** Deletes receipts older than `olderThan` ms, in one transaction (host start, §1.4); answers how many. */
   purgeReceipts(olderThan = RECEIPT_TTL_MS): number {
     const cutoff = (this.options.now ?? Date.now)() - olderThan;
     return this.db.write(db => db.query("DELETE FROM documents WHERE kind = ? AND updated_at < ?").run(RECEIPT_KIND, cutoff).changes);
+  }
+
+  /**
+   * The library's retention (profiles design §1.4), in one transaction; answers what it removed. Retention roots are profiles, own
+   * defaults and collections: nothing is removed for being unreferenced except an immutable document. It removes:
+   * - every tombstone older than `tombstoneMs` (30 days), with the child documents of a purged parent (`children`: a collection's look
+   *   working copies, IDs `<collection>/<look>`);
+   * - every immutable, content-addressed document (`immutable`: decoded saves) that no other document names (its ID, quoted, in any
+   *   document's value; a tombstone's kept value counts, so a restorable V keeps its save) and that was written over `tombstoneMs` ago
+   *   (a page's command may still be on its way to name a newer one);
+   * - receipts older than `receiptMs` (7 days).
+   */
+  cleanup(options: CleanupOptions = {}): CleanupReport {
+    const now = (this.options.now ?? Date.now)();
+    const tombstoneCutoff = now - (options.tombstoneMs ?? TOMBSTONE_TTL_MS), receiptCutoff = now - (options.receiptMs ?? RECEIPT_TTL_MS);
+    const immutable = options.immutable ?? ["saved-v"], children = options.children ?? { "collection-working": "look-working" };
+    return this.db.write(db => {
+      const receipts = db.query("DELETE FROM documents WHERE kind = ? AND updated_at < ?").run(RECEIPT_KIND, receiptCutoff).changes;
+      const dead = db.query(`SELECT kind, id FROM documents WHERE kind NOT LIKE 'xfs-%' AND json_valid(value)
+        AND json_extract(value, '$.tombstone') = 1 AND json_extract(value, '$.at') < ?`).all(tombstoneCutoff) as { kind: string; id: string }[];
+      const remove = db.query("DELETE FROM documents WHERE kind = ? AND id = ?");
+      let tombstones = 0, childCount = 0;
+      for (const doc of dead) {
+        tombstones += remove.run(doc.kind, doc.id).changes;
+        const child = children[doc.kind];
+        if (child) childCount += db.query("DELETE FROM documents WHERE kind = ? AND substr(id, 1, ?) = ?").run(child, doc.id.length + 1, `${doc.id}/`).changes;
+      }
+      let orphans = 0;
+      const named = db.query(`SELECT 1 FROM documents WHERE kind NOT LIKE 'xfs-%' AND kind NOT IN (SELECT value FROM json_each(?)) AND instr(value, ?) > 0 LIMIT 1`);
+      for (const kind of immutable) {
+        const old = db.query("SELECT id FROM documents WHERE kind = ? AND updated_at < ?").all(kind, tombstoneCutoff) as { id: string }[];
+        for (const { id } of old) if (!named.get(JSON.stringify(immutable), JSON.stringify(id))) orphans += remove.run(kind, id).changes;
+      }
+      return { receipts, tombstones, children: childCount, orphans };
+    });
   }
 
   private row(kind: string, id: string): { revision: number; value: string } | null {
@@ -151,6 +231,22 @@ export class DocumentStore {
   private revisionOf(kind: string, id: string): number {
     return (this.db.read(db => db.query("SELECT revision FROM documents WHERE kind = ? AND id = ?").get(kind, id) as { revision: number } | null))?.revision ?? 0;
   }
+}
+
+/** How long a tombstone is kept before the cleanup purges it (and how long an unreferenced immutable document is kept). */
+export const TOMBSTONE_TTL_MS = 30 * 24 * 3600_000;
+export type CleanupOptions = { readonly tombstoneMs?: number; readonly receiptMs?: number; readonly immutable?: readonly string[];
+  readonly children?: Readonly<Record<string, string>> };
+export type CleanupReport = { readonly receipts: number; readonly tombstones: number; readonly children: number; readonly orphans: number };
+/** When the host's cleanup runs: a while after it starts (out of the way of the first page load), then daily. */
+export const CLEANUP_FIRST_MS = 60_000, CLEANUP_EVERY_MS = 24 * 3600_000;
+/**
+ * The library's retention as a background job on the host's scheduler (its clock): `cleanup` a minute after start and daily after,
+ * until `signal` aborts. A failed run is reported and tried at the next.
+ */
+export function keepLibraryClean(store: DocumentStore, clock: Clock, signal: AbortSignal, report?: (error: unknown) => void, options?: CleanupOptions): void {
+  const run = () => { try { store.cleanup(options); } catch (error) { report?.(error); } clock.after(CLEANUP_EVERY_MS, run, signal); };
+  clock.after(CLEANUP_FIRST_MS, run, signal);
 }
 
 const COMMAND_NAME = /^[a-z][A-Za-z0-9.-]{0,63}$/;

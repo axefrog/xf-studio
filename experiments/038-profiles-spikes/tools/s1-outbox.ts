@@ -2,7 +2,9 @@
  * The S1 kill harness on the production outbox (phase 1 chunk 1c), on both hosts: the renderer killed at 20 points, the host killed at
  * 20 points, two windows with kills of both, and a forced outbox-write failure. A real library file each; prints one JSON summary and
  * exits 1 when a gate fails.
- *   bun tools/s1-outbox.ts <scratch-dir> [payload.json|""] [localhost,desktop] [renderer,host,two,failure]
+ *   bun tools/s1-outbox.ts <scratch-dir> [payload.json|""] [localhost,desktop] [renderer,host,two,failure] [repeat]
+ * `repeat` runs the chosen scenarios that many times (the desktop host-kill regression for the 1c-i known limit runs it 10 times);
+ * each run's results are keyed `<host>.<scenario>#<run>`.
  *
  * What stands in for what: the renderer is a Bun process running the page's real outbox, transport, storage adapter and (desktop) lease
  * adapter; the browser's or WebView's storage is a file it writes synchronously (it outlives the renderer, as the browser process's does).
@@ -15,7 +17,8 @@ import { openLibraryDatabase } from "../../../projects/xf-studio/authoring/src/l
 import { integrity, readDocs, spawn, terminate, type Child } from "./kit";
 import { readOutboxes } from "../harness/file-storage";
 
-const [scratch, payload, hostsArg, onlyArg] = process.argv.slice(2);
+const [scratch, payload, hostsArg, onlyArg, repeatArg] = process.argv.slice(2);
+const repeat = Math.max(1, Number(repeatArg ?? 1) || 1);
 if (!scratch) throw Error("Usage: bun tools/s1-outbox.ts <scratch-dir> [payload.json] [localhost,desktop] [renderer,host,two,failure]");
 const hosts = (hostsArg || "localhost,desktop").split(",") as ("localhost" | "desktop")[];
 const run = (name: string) => !onlyArg || onlyArg.split(",").includes(name);
@@ -84,7 +87,8 @@ function overwrites(commits: string) {
 const results: Record<string, unknown> = {};
 let failed = false;
 const started = performance.now();
-for (const mode of hosts) {
+for (let round = 1; round <= repeat; round++) for (const mode of hosts) {
+  const key = (name: string) => repeat > 1 ? `${mode}.${name}#${round}` : `${mode}.${name}`;
   const main = (setup: Setup, name: string): Win => ({ name, mode: mode === "desktop" ? "desktop" : "localhost", storage: join(setup.dir, `storage-${name}.json`) });
 
   // --- Renderer killed at 20 points ---------------------------------------------------------------------------------------
@@ -113,7 +117,7 @@ for (const mode of hosts) {
     const end = missing(setup, all, []);
     const ok = gaps.length === 0 && end.length === 0 && conflicts === 0 && integrity(setup.library) === "ok" && last.lines.includes("done");
     failed ||= !ok;
-    results[`${mode}.renderer`] = { ok, kills: points.length + timed.length, notReached, mutationsLogged: all.length, gaps, missingAtEnd: end.length,
+    results[key("renderer")] = { ok, kills: points.length + timed.length, notReached, mutationsLogged: all.length, gaps, missingAtEnd: end.length,
       falseConflicts: conflicts, replayedAcks: replayed, integrity: integrity(setup.library) };
   }
 
@@ -147,7 +151,7 @@ for (const mode of hosts) {
     const end = missing(setup, logs, []);
     const ok = !!done && end.length === 0 && conflicts === 0 && integrity(setup.library) === "ok";
     failed ||= !ok;
-    results[`${mode}.host`] = { ok, kills, mutationsLogged: logs.length, missingAtEnd: end.length, missing: end.slice(0, 5), falseConflicts: conflicts,
+    results[key("host")] = { ok, kills, mutationsLogged: logs.length, missingAtEnd: end.length, missing: end.slice(0, 5), falseConflicts: conflicts,
       replayedAcks: replayed, integrity: integrity(setup.library) };
   }
 
@@ -186,7 +190,7 @@ for (const mode of hosts) {
     const forks = [...readDocs(setup.library, "look-working").keys()].filter(id => id.includes("~")).length;
     const ok = settled.every(Boolean) && silent.found.length === 0 && end.length === 0 && integrity(setup.library) === "ok";
     failed ||= !ok;
-    results[`${mode}.twoWindows`] = { ok, kills, mutationsLogged: logs.length, realConflicts: conflicts, forks, silentOverwrites: silent.found.slice(0, 5),
+    results[key("twoWindows")] = { ok, kills, mutationsLogged: logs.length, realConflicts: conflicts, forks, silentOverwrites: silent.found.slice(0, 5),
       missingAtEnd: end.slice(0, 5), commitsChecked: silent.checked, integrity: integrity(setup.library) };
   }
 
@@ -202,7 +206,7 @@ for (const mode of hosts) {
     const end = missing(setup, parsed.logs, []);
     const ok = !!done && parsed.unprotected > 0 && parsed.warnings[0] === "1" && parsed.warnings.at(-1) === "0" && end.length === 0 && parsed.conflicts === 0;
     failed ||= !ok;
-    results[`${mode}.failure`] = { ok, unprotectedRecords: parsed.unprotected, warnings: parsed.warnings, mutationsLogged: parsed.logs.length,
+    results[key("failure")] = { ok, unprotectedRecords: parsed.unprotected, warnings: parsed.warnings, mutationsLogged: parsed.logs.length,
       missingAtEnd: end.length, conflicts: parsed.conflicts };
   }
 }

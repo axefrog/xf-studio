@@ -5,6 +5,10 @@ import type { PartRegistry } from "../../platform/core/document";
 import { hostFailure } from "../../diagnostics/host/host-log";
 import type { LibraryDatabase } from "../../platform/persistence/library-database";
 import type { CollectionSummary, StoredCollection } from "../collection-session";
+import { collectionRef, collectionWorkingOf, lookRef, lookWorkingOf } from "../collection-documents";
+import { documentKey } from "../../platform/api/document-commands";
+import { parseFence, WORKSPACE_FENCE_HEADER } from "../../platform/api/document-store";
+import type { DocumentStore } from "../../platform/persistence/document-store";
 
 /**
  * The local collection library (SQLite v2; no DDL change for the look model). Rows describe their
@@ -109,4 +113,57 @@ export async function collectionRequest(request: Request, library: CollectionLib
     hostFailure("library", "collection_request_failed", "The collection library couldn't be read or written.", e);
     return json({ error: "Collection unavailable; your browser draft is still available." }, 500);
   }
+}
+
+/**
+ * Save version (profiles design §2.1): a named version of a collection's working copies, in the released tables older builds read,
+ * from one snapshot taken inside the same host transaction: the collection working copy and every live look it lists. The page flushes
+ * its outbox for the collection first. Every save is a new version over the latest (two windows saving the same working copy both
+ * succeed); the working copies are what conflicts are kept on. Answers the version and the working copies' revisions it was made from.
+ */
+export function saveCollectionVersion(collections: CollectionLibrary, documents: DocumentStore, database: LibraryDatabase, id: string):
+  { revision: number; updatedAt: string; documents: Record<string, number> } {
+  return database.write(db => {
+    const key = documentKey(collectionRef(id));
+    const head = documents.read([collectionRef(id)])[key];
+    const working = collectionWorkingOf(head?.value);
+    if (!head || !working) throw new LibraryError("That collection doesn't exist any more.", 404);
+    const refs = working.looks.map(look => lookRef({ collection: id, look }));
+    const read = documents.read(refs);
+    const looks = refs.flatMap(ref => { const look = lookWorkingOf(read[documentKey(ref)]?.value); return look?.state === "live" ? [look] : []; });
+    const latest = db.query("SELECT MAX(revision) AS revision FROM collection_revisions WHERE collection_id=?").get(id) as { revision: number | null } | null;
+    const collection = { schema: COLLECTION_2, id, name: working.name,
+      presets: looks.map(look => ({ id: look.id, name: look.name, revision: 1, parts: look.parts })),
+      ...(working.packagePlan !== undefined ? { packagePlan: working.packagePlan } : {}) };
+    const saved = collections.save({ collection, ...(latest?.revision ? { revision: latest.revision } : {}) });
+    return { revision: saved.revision, updatedAt: saved.updatedAt,
+      documents: { [key]: head.revision, ...Object.fromEntries(refs.map(ref => [documentKey(ref), read[documentKey(ref)]?.revision ?? 0])) } };
+  });
+}
+
+/**
+ * `POST <path>` with `{ collection }`: Save version, answering `{ revision, updatedAt, documents }`. Local, same-origin pages only; a page
+ * whose workspace lease is older than the newest is refused (409 `superseded`), as its document commands are.
+ */
+export function collectionVersionsHandler(collections: CollectionLibrary, documents: DocumentStore, database: LibraryDatabase, path: string): (request: Request) => Promise<Response> {
+  const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
+  return async request => {
+    const url = new URL(request.url), origin = request.headers.get("Origin");
+    if (url.pathname !== path) return json({ error: "Not found." }, 404);
+    if (!["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) || origin !== url.origin) return json({ error: "Local studio requests only." }, 403);
+    if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
+    const fence = parseFence(request.headers.get(WORKSPACE_FENCE_HEADER));
+    if (fence === "invalid") return json({ error: "That isn't a workspace lease." }, 400);
+    if (fence && fence.generation < documents.leaseGeneration(fence.workspace))
+      return json({ code: "superseded", error: "This workspace is now open elsewhere, so this version wasn't saved here." }, 409);
+    let body: { collection?: unknown };
+    try { body = await request.json() as typeof body; } catch { return json({ error: "Invalid JSON." }, 400); }
+    if (typeof body?.collection !== "string" || !/^[0-9a-f-]{36}$/.test(body.collection)) return json({ error: "That isn't a collection." }, 400);
+    try { return json(saveCollectionVersion(collections, documents, database, body.collection)); }
+    catch (error) {
+      if (error instanceof LibraryError) return json({ error: error.message }, error.status);
+      hostFailure("library", "collection_version_failed", "A collection version couldn't be saved.", error);
+      return json({ error: "The version couldn't be saved right now. Your working copy is safe." }, 500);
+    }
+  };
 }
