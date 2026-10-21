@@ -61,7 +61,9 @@ test("--imports-only rewrites only the imports a move broke, and a second run ch
   mkdirSync(join(scratch, "src", "legacy", "eye-makeup"), { recursive: true });
   writeFileSync(join(scratch, "src", "legacy", "eye-makeup", "recipe-schema.ts"), "export const readRecipe = 1;\n");
   writeFileSync(join(scratch, "src", "platform.ts"), "export const api = 1;\n");
-  writeFileSync(join(scratch, "map.json"), JSON.stringify({ "src/recipe-schema.ts": "src/legacy/eye-makeup/recipe-schema.ts" }));
+  // The old path is built, not written out, so the tool's own text pass over tracked files never rewrites this fixture.
+  const old = "recipe-schema";
+  writeFileSync(join(scratch, "map.json"), JSON.stringify({ [`src/${old}.ts`]: "src/legacy/eye-makeup/recipe-schema.ts" }));
   const branch = [`import { readRecipe } from "./recipe-schema";`, `import { api } from "./platform";`, `const data = "./recipe-schema";`,
     `// import { readRecipe } from "./recipe-schema";`, "const probe = `", `import { readRecipe } from "./recipe-schema";`, "`;", ""].join("\n");
   writeFileSync(join(scratch, "src", "hair.ts"), branch);
