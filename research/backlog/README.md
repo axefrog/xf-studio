@@ -26,6 +26,12 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
   - first-run preparation;
   - Build's verifier and first plate cut (PIPE-130). *29 Sep*
 - **Finish verdicts in game:** Glitter and Shimmer reworked offline, waiting for in-game sessions ([finishes](glitter-material.md)). *29 Sep*
+- **Make the Save Explorer worth having** (21 Oct). Today it's an early-access curiosity that lets you look inside a save, read-only ([save editor design](../save/save-editor-design.md)). When this comes up, an agent studies it and reports back:
+  - what players and modders would actually use it for;
+  - its gaps;
+  - which ideas are cheap to build and turn it into a real value-add for the first release, such as finding which mods a save depends on, explaining what changed between two saves, or checking a save before a mod update.
+
+  Then the maintainer decides: build the chosen ideas, or move the panel behind research tools for the beta, in line with the "exportable first" bar. *21 Oct*
 - **Consistency leftovers:** UI-142's build steps, and repeated layer names (CORE-125) ([readiness](../../docs/release-readiness.md)). *29 Sep*
 
 ### Polish lane (before 1.0)
