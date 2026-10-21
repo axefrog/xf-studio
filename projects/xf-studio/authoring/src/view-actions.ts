@@ -5,7 +5,7 @@
  *   affordances: they record no View and lighting step. A hidden module's tools stay dispatchable (module visibility is
  *   presentation state the application never reads, design §4.2); they simply are not derived into any view, and the presentation
  *   withdraws them (`withdraw`), so no device acts on them while they aren't offered (UI-102).
- * - `view.undo` and `view.redo` step the View and lighting history, separate from look history.
+ * - `view.undo` and `view.redo` step the View and lighting history (the history service's view scope), separate from look history.
  * - `view.endEdit` ends a continuous edit: the next light or display change starts a new step even with the same key (a slider was
  *   released, CORE-95). Controls send it when a drag or a keyboard burst ends.
  *
@@ -14,6 +14,7 @@
 import { refusal, deriveViewSummaries, deriveViewTools, SET_VIEW_TOOL, type Capability, type ModuleRegistration, type SceneKind, type ViewId,
   type ViewGraphData, type ViewToolFilter } from "./platform/api";
 import type { ViewGraph } from "./platform/core/view-graph";
+import type { HistoryService } from "./platform/core/history-service";
 import { PLATFORM_VIEW_TOOLS } from "./platform/core/view-tools";
 import { createStudioViewGraph, RESEARCH_RENDERING } from "./preview-view-graph";
 import type { PreviewState } from "./workspace-state";
@@ -31,8 +32,9 @@ export const NO_MODULES: ModuleRegistration = Object.freeze({ modules: [], tools
  * The view graph over a workspace's preview (and its stored views) and the views family over it, with the platform's tools beside
  * the composition's modules. The trusted core builds one per session; fixtures build their own.
  */
-export function createViewServices(preview: PreviewState, stored?: ViewGraphData, modules: ModuleRegistration = NO_MODULES) {
-  const views = createStudioViewGraph(preview, stored);
+export function createViewServices(preview: PreviewState, stored?: ViewGraphData, modules: ModuleRegistration = NO_MODULES,
+  history?: HistoryService) {
+  const views = createStudioViewGraph(preview, stored, history);
   const viewActions = new ViewActions(views, { ...modules, tools: [...PLATFORM_VIEW_TOOLS, ...modules.tools.filter(tool => tool.module !== "platform")] });
   return { views, viewActions };
 }

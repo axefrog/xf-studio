@@ -1,7 +1,7 @@
 import type { AuthoringDocument } from "./authoring-document";
 import type { AuthoringControlEdits } from "./authoring-control-edits";
 import { fromView3d, gestureSource, type AuthoringGestures, type GestureOrigin, type GestureSource } from "./authoring-gestures";
-import { historyTimeline, type AuthoringHistory, type HistoryAction, type HistorySnapshot, type HistoryState } from "./authoring-history";
+import type { HistoryCommand as HistoryAction, HistorySnapshot, HistoryState } from "./platform/api/history";
 import { nameIssue } from "./validation-issues";
 import { consequenceOf, type Consequence, type ConsequenceSubject } from "./action-consequences";
 import { RECIPE_HISTORY_LIMIT } from "./editor-actions";
@@ -30,7 +30,8 @@ import { coded, refusal, undoPolicyOf, type ActionDescriptor as PlatformDescript
   type Capability, type FeatureActionSpec, type PartEnvelope, type FeatureModule, type FieldLimit, inputLimits, type FeatureState, type HistoryEntryId, type HistoryLabel, type ReasonCode, type UndoPolicy,
   type ValidationIssue } from "./platform/api";
 import type { AnyOwner, Registry } from "./platform/core/registry";
-import { CONTROL_TRANSACTION, HistoryTransaction, type TransactionHost } from "./platform/core/history-transaction";
+import { CONTROL_TRANSACTION, type HistoryTransaction } from "./platform/core/history-transaction";
+import { LOOK_SCOPE, type HistoryScope, type HistoryService } from "./platform/core/history-service";
 import type { StudioFileAction, StudioFileOperations, StudioFileOutcome } from "./studio-file-operations";
 import type { PartPresetList, PartPresetOutcome, PartPresetRequest, PartPresetService, PartPresetSetList, SetExportState } from "./part-presets";
 import type { FacialPreview } from "./facial-preview";
@@ -105,11 +106,14 @@ type AsyncHandlers = {
 };
 type Services = { document: AuthoringDocument;
   /** Eye makeup's live part and editor state, and where its pure action results are published. */
-  eyeMakeup: EyeMakeupPort; undo: () => boolean;
+  eyeMakeup: EyeMakeupPort;
   /** Where new items' IDs come from for the other features' actions (default: random UUIDs). */
   newId?: () => string;
-  /** Optional user-level history with Redo and labels; hosts without it offer Undo only. */
-  history?: AuthoringHistory;
+  /**
+   * The session's history service: global Undo and Redo go to its focused scope (the look's, or an experiment's document). Without
+   * one (fixtures) they go to the document's look history.
+   */
+  history?: HistoryService;
   gestures: AuthoringGestures; controls: AuthoringControlEdits;
   collection?: CollectionService; files?: StudioFileOperations; preview?: PreviewActions; motion?: MotionActions;
   /** How a held expression's changes animate (platform/core/transition-settings.ts); the composition root attaches it at start. */
@@ -471,29 +475,28 @@ export class StudioApplication {
   }
   /** What an action, file workflow or library request replaces, writes or discards, and how to recover. */
   consequences(subject: ConsequenceSubject): Consequence {
-    const jump = "action" in subject && subject.action.kind === "history.jumpTo"
-      ? this.services.history?.plan(subject.action.entryId) : undefined;
+    const look = this.services.document.history;
+    const jump = "action" in subject && subject.action.kind === "history.jumpTo" ? look.plan(subject.action.entryId) : undefined;
     // An action's own consequence: the generic rule from its descriptor, with its spec's override.
     const route = "action" in subject ? this.routes.route(subject.action.kind) : undefined;
     const own = route?.ok ? { effect: route.spec.descriptor.effect,
       override: (route.spec as Partial<FeatureActionSpec<unknown, unknown>>).consequence?.((subject as { action: StudioAction }).action) } : undefined;
-    return consequenceOf(subject, { draft: this.services.collection?.summary().draft, history: this.history(),
+    return consequenceOf(subject, { draft: this.services.collection?.summary().draft, history: look.state(),
       undoLimit: RECIPE_HISTORY_LIMIT, removedLimit: REMOVED_PRESET_LIMIT, jump, ...(own ? { action: own } : {}) });
   }
   /** What Undo and Redo would change next (labels are session-only; restored history reads "Earlier change"). */
-  history(): HistoryState {
-    const s = this.services;
-    return s.history?.state() ?? { undo: s.document.canUndo ? s.document.historyLabel() : undefined,
-      depth: s.document.undoDepth, redoDepth: 0 };
+  history(): HistoryState { return this.focusedHistory().state(); }
+  /** Where global Undo and Redo go: the history service's focused scope, the look's unless an experiment's document is focused. */
+  private focusedHistory(): HistoryScope {
+    const focused = this.services.history?.focused();
+    return focused && focused.id !== LOOK_SCOPE ? focused : this.services.document.history;
   }
   /**
    * Read-only timeline of the current preset's history (oldest first, redo-able steps after
    * the current one) for a history list. Labels and times are session-only; steps restored
    * from a saved workspace read "Earlier change". It exposes no recipes.
    */
-  historyTimeline(): HistorySnapshot {
-    return this.services.history?.snapshot() ?? historyTimeline(this.services.document);
-  }
+  historyTimeline(): HistorySnapshot { return this.focusedHistory().timeline(); }
   /** Static finish and Glitter-model descriptors, including the compiler's export gate. */
   finishCatalogue() { return finishCatalogue(this.services.eyeMakeup.region.wording); }
   /**
@@ -652,7 +655,7 @@ export class StudioApplication {
         const concrete = spec.assignIds?.(action, app.services.newId ?? (() => crypto.randomUUID())) ?? action;
         const result = spec.apply(document.state(), concrete);
         if (!result.changed) return result.effect;
-        if (!app.look && app.routes.undoPolicy(concrete) !== "none") app.services.document.checkpointFeature(feature, spec.label(concrete));
+        if (!app.look && app.routes.undoPolicy(concrete) !== "none") app.services.document.history.checkpoint([feature], spec.label(concrete));
         document.set(result.part, result.editor);
         app.services.document.partChanged();
         return result.effect;
@@ -677,14 +680,8 @@ export class StudioApplication {
     const unknown = features.filter(feature => feature !== s.document.feature && !s.document.others?.has(feature));
     if (!features.length || unknown.length)
       return { ok: false, code: "invalid_value", message: `These parts can't be changed together here: ${unknown.join(", ") || "none named"}.` };
-    const document = s.document, history = s.history;
-    const host: TransactionHost<HistoryEntryId> = {
-      checkpoint: () => document.checkpointLook(features, label), top: () => document.historyTop,
-      relabel: (step, name) => document.relabelCheckpoint(step, name), discard: step => document.discardCheckpoint(step),
-      revert: step => { if (history) history.revertTransaction(step); },
-      content: () => document.contentKey(features),
-    };
-    const transaction = HistoryTransaction.open(host, CONTROL_TRANSACTION, () => true);
+    // One `look` step over the named parts, with the form-control policy: empty when the content is back at its start.
+    const transaction = s.document.history.begin(features, CONTROL_TRANSACTION, { label, scope: "look" });
     this.look = { features };
     let result: NotThenable<T>;
     try { result = fn(); }
@@ -725,25 +722,11 @@ export class StudioApplication {
     // Inside a look transaction the transaction records the one step.
     const recorded = (action: StudioAction) => !this.look && this.routes.undoPolicy(action) !== "none";
     return {
+      // Global Undo, Redo and jumps reach the focused history scope, which decides what is available.
       history: {
-        capability: action => {
-          const s = app.services;
-          if (action.kind === "history.jumpTo") {
-            const plan = s.history?.plan(action.entryId);
-            return !s.history ? refusal("invalid_value", "History steps are not available in this host.") :
-              !plan ? refusal("missing_target", "That history step no longer exists.") :
-              plan.direction === "none" ? refusal("invalid_value", "This is already the current step.") : { available: true };
-          }
-          if (action.kind === "history.undo") return s.document.canUndo ? { available: true } :
-            refusal("invalid_value", "There is no change to undo.");
-          return !s.history ? refusal("invalid_value", "Redo is not available in this host.") :
-            s.history.canRedo() ? { available: true } : refusal("invalid_value", "There is no undone change to redo.");
-        },
-        dispatch: action => {
-          const s = app.services;
-          return action.kind === "history.jumpTo" ? s.history!.jumpTo(action.entryId) :
-            action.kind === "history.undo" ? s.undo() : s.history!.redo();
-        },
+        capability: action => app.focusedHistory().capability(action),
+        // A document's move (through its experiment) has no result of its own; the look's says whether it moved.
+        dispatch: action => { const scope = app.focusedHistory(), moved = scope.command(action); return scope.id === LOOK_SCOPE ? moved : undefined; },
       },
       "eye-makeup": {
         capability: action => app.eyeMakeupSpec(action).capability(app.services.eyeMakeup.state(), action),
@@ -908,14 +891,7 @@ export class StudioApplication {
     if (open) this.featureControlCommit(open.id);
     if (this.gesture || this.look || this.services.controls.snapshot() || this.unowned() || this.services.document.locked
       || !this.featureHandlers.has(feature)) return false;
-    const document = this.services.document, history = this.services.history, features = [feature];
-    const host: TransactionHost<HistoryEntryId> = {
-      checkpoint: () => document.checkpointFeature(feature), top: () => document.historyTop,
-      relabel: (step, name) => document.relabelCheckpoint(step, name), discard: step => document.discardCheckpoint(step),
-      revert: step => { if (history) history.revertTransaction(step); },
-      content: () => document.contentKey(features),
-    };
-    this.featureControl = { feature, id, transaction: HistoryTransaction.open(host, CONTROL_TRANSACTION, () => true) };
+    this.featureControl = { feature, id, transaction: this.services.document.history.begin([feature], CONTROL_TRANSACTION) };
     this.notify();
     return true;
   }

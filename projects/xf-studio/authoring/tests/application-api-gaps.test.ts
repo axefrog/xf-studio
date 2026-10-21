@@ -47,7 +47,7 @@ test("a gesture commits an open form transaction, so a late Escape cannot revert
   app.controlCancel("opacity");
   expect(document.recipe.layers[0].opacity).toBe(.42);
   expect(document.recipe.layers[0].points[0].u).toBeCloseTo(u + .002, 9);
-  expect(document.undoDepth).toBe(2);
+  expect(document.history.state().depth).toBe(2);
 });
 
 test("content edits are refused while a loaded collection has no selected preset", () => {

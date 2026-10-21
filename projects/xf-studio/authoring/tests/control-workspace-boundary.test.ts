@@ -10,25 +10,24 @@ import { freshWorkspace } from "./fixtures/eye-region";
 import { eyeMakeupPort } from "./fixtures/eye-region";
 
 test("form edits group a slider gesture into one Undo and Escape restores its starting value", () => {
-  const document = new AuthoringDocument(freshWorkspace());
+  // Escape restores the start through the look scope, which resets the preview's layers once per restore.
+  let restores = 0;
+  const document = new AuthoringDocument(freshWorkspace(), undefined, { resetStack: () => restores++ });
   const actions = new RecipeActions(() => ({ recipe: document.recipe, active: document.active,
     selected: document.selected, fieldSelection: document.fieldSelection }),
   (next, effect) => document.applyActionState(next, effect), document, {}, () => "draft");
-  let restores = 0;
-  const edits = new AuthoringControlEdits(document, registeredEditing(eyeMakeupPort(document, actions)).controls, () => {
-    restores++;
-    const prior = document.undoRecipe();
-    if (prior) document.recipe = prior;
-  });
+  const edits = new AuthoringControlEdits(document, registeredEditing(eyeMakeupPort(document, actions)).controls);
   const layer = document.recipe.layers[0], original = layer.opacity;
   edits.begin("opacity", layer.id);
   edits.edit("opacity", layer.id, { kind: "layer.setOpacity", layerId: layer.id, opacity: .55 });
   edits.edit("opacity", layer.id, { kind: "layer.setOpacity", layerId: layer.id, opacity: .6 });
   edits.commit("opacity");
   expect(document.recipe.layers[0].opacity).toBe(.6);
-  expect(document.undoDepth).toBe(1);
-  expect(document.undoRecipe()?.layers[0].opacity).toBe(original);
+  expect(document.history.state().depth).toBe(1);
+  expect(document.history.undo()).toBe(true);
+  expect(document.recipe.layers[0].opacity).toBe(original);
   document.recipe = freshWorkspace().recipe;
+  restores = 0;
 
   const next = document.recipe.layers[0];
   edits.begin("opacity", next.id);
@@ -39,17 +38,17 @@ test("form edits group a slider gesture into one Undo and Escape restores its st
 });
 
 test("empty and stale form transactions cannot consume an unrelated Undo entry", () => {
-  const document = new AuthoringDocument(freshWorkspace());
   let restores = 0;
-  const edits = new AuthoringControlEdits(document, () => false, () => { restores++; });
+  const document = new AuthoringDocument(freshWorkspace(), undefined, { resetStack: () => restores++ });
+  const edits = new AuthoringControlEdits(document, () => false);
   const layer = document.recipe.layers[0];
   edits.begin("weight", layer.id); edits.commit("weight");
-  expect(document.undoDepth).toBe(0);
+  expect(document.history.state().depth).toBe(0);
   edits.begin("weight", layer.id);
   document.recipe = structuredClone(document.recipe);
   edits.cancel("weight");
   expect(restores).toBe(0);
-  expect(document.undoDepth).toBe(1);
+  expect(document.history.state().depth).toBe(1);
 });
 
 test("workspace composer keeps pre-preview restoration safe and later uses typed snapshots", () => {

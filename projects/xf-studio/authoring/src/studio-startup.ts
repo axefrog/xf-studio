@@ -1,5 +1,6 @@
 import { browserReferenceTextures } from "./browser-reference-textures-device";
 import { OFF_EXPERIMENTS } from "./platform/core/experiments";
+import { createHistoryService, type HistoryService } from "./platform/core/history-service";
 import type { ExperimentPort } from "./platform/api/experiments";
 import type { ExperimentRegistration } from "./platform/api/experiments";
 import type { ViewContribution } from "./studio-ui/views/contribution";
@@ -65,6 +66,8 @@ export type StudioHost = {
   /** Optional host capability; the desktop omits experimental modules until their assets are supported. */
   experiments?: (verification: boolean, signal: AbortSignal) => Omit<ExperimentPort, "registrations"> & {
     registrations(): readonly (ExperimentRegistration & { contribution: ViewContribution; binding: ModuleViewBinding })[];
+    /** The history service the experiments' documents live in, shared with the look's history. */
+    readonly historyService?: HistoryService;
   };
   /** Where the workspace draft is stored: browser storage, or the desktop's host-owned file. */
   storage: Pick<Storage, "getItem" | "setItem">;
@@ -192,6 +195,8 @@ async function start(host: StudioHost, root: HTMLElement) {
     status = { ...status, message: { id: ++messageId, source, text } }; statusSource.changed();
   };
   const core = createTrustedAuthoringCore(workspace, {
+    // One history service for the session: the look's and the View and lighting history beside the experiments' documents.
+    history: ("historyService" in experiments && experiments.historyService) || createHistoryService(),
     resetStack: previous => previewDevice?.coordinator.syncStack(previous),
     // A cheap read: Glitter-model and finish changes ask for it, and a snapshot would stash and copy the whole draft (CORE-05).
     selectedCollection: () => bootstrap?.collection.selectedPresetId() ?? "draft",

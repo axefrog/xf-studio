@@ -8,7 +8,7 @@ import { actionTable, asyncActionTable, familyId, type AsyncSystemFamily, type S
 import type { CollectionRequest } from "../collection-service";
 import type { StudioFileAction } from "../studio-file-operations";
 import type { CollectionStudioAction } from "../collection-actions";
-import type { HistoryAction } from "../authoring-history";
+import type { HistoryCommand as HistoryAction } from "../platform/api/history";
 import type { MotionAction } from "../motion-actions";
 import type { TransitionAction } from "../platform/core/transition-settings";
 import type { PreviewAction } from "../preview-actions";

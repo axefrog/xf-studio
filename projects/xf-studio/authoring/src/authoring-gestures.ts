@@ -2,8 +2,8 @@ import type { AuthoringDocument } from "./authoring-document";
 import type { GestureEdit } from "./engines/layered-makeup/recipe-actions";
 import type { Layer } from "./engines/layered-makeup/recipe";
 import { gestureHistoryLabel, type HistoryLabel } from "./history-labels";
+import { GESTURE_TRANSACTION, type HistoryTransaction } from "./platform/core/history-transaction";
 import type { HistoryEntryId } from "./editor-actions";
-import { GESTURE_TRANSACTION, HistoryTransaction } from "./platform/core/history-transaction";
 
 import { MAIN_VIEW, type ViewId } from "./platform/api/view-graph";
 
@@ -33,14 +33,13 @@ export class AuthoringGestures {
   private active?: { source: GestureSource; layer: Layer; transaction: HistoryTransaction<HistoryEntryId> };
   /** `actions.applyGesture` applies one frame through the feature's registered gestures (the eye-makeup port). */
   constructor(private document: AuthoringDocument, private actions: { applyGesture(edit: GestureEdit): boolean },
-    /** Restores a cancelled gesture's start: `step` is its own checkpoint, undefined when the top step held the start. */
-    private restoreUndo: (step: HistoryEntryId | undefined) => void,
     /** The Undo step's name from a frame: the trusted core passes the registered gestures' `label`. */
     private label: (edit: GestureEdit) => HistoryLabel = gestureHistoryLabel) {}
   begin(origin: GestureOrigin, layer: Layer | undefined) {
     if (!layer || !this.document.recipe.layers.includes(layer)) return false;
-    this.active = { source: gestureSource(origin), layer, transaction: HistoryTransaction.open(this.document.transactionHost(this.restoreUndo),
-      GESTURE_TRANSACTION, () => this.document.recipe.layers.includes(layer)) };
+    // The look scope's transaction over this document's part: Escape restores the start through the scope, without Redo.
+    this.active = { source: gestureSource(origin), layer, transaction: this.document.history.begin([this.document.feature],
+      GESTURE_TRANSACTION, { present: () => this.document.recipe.layers.includes(layer) }) };
     return true;
   }
   apply(source: GestureOrigin, action: GestureEdit) {
