@@ -244,6 +244,11 @@ export type StudioPresentationPort<Slot> = {
    * The outbox (profiles design §2.2): Try again for changes whose record on this computer couldn't be written (`status.outbox` says
    * how many). Without an outbox (fixtures, tools) there is nothing to try again.
    */
+  /**
+   * The panel instances of the tab shown (profiles design §1.1; phase 1, one instance of each panel): a module panel's own instance ID
+   * (`<panel>--<base36>`), which names its session in its module's service.
+   */
+  readonly panels: { instance(panel: string): string };
   readonly documents: {
     capability(action: DocumentsAction): StudioCapability;
     dispatch(action: DocumentsAction): Promise<{ ok: true } | { ok: false; code: string; message: string }>;
@@ -329,6 +334,8 @@ export function createStudioPresentation<Slot>(sources: {
   workspace?: WorkspaceLease;
   /** The page's outbox; without it (fixtures, tools) nothing is recorded there. */
   outbox?: DocumentOutbox;
+  /** A panel's instance in the tab shown (the session's); without it (fixtures, tools) each panel is one instance, `<panel>--local`. */
+  panelInstance?: (panel: string) => string;
 }): StudioPresentationPort<Slot> {
   const a = sources.authoring, l = sources.library, f = sources.files,
     v = sources.viewport, p = sources.preferences, r = sources.previewReadiness,
@@ -537,6 +544,7 @@ export function createStudioPresentation<Slot>(sources: {
     installDetection: Object.freeze(leased(installDetection)), modInstall: Object.freeze(leased(modInstall)), previewSetup: Object.freeze(leased(previewSetup)),
     desktopApp: Object.freeze(leased(desktopApp)), updates: Object.freeze(leased(updates)),
     status: Object.freeze({ snapshot: () => s.snapshot() }), links, about, diagnostics: Object.freeze(diagnostics),
+    panels: Object.freeze({ instance: (panel: string) => sources.panelInstance?.(panel) ?? `${panel}--local` }),
     documents: Object.freeze({
       capability: (action: DocumentsAction) => documentsCapability(sources.outbox, action),
       async dispatch(action: DocumentsAction) {

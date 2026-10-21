@@ -426,6 +426,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       unavailableReason: () => { const head = viewportDevice.attachment.snapshot().head; return head.error ?? head.message; },
     },
     fileDevice, diagnostics, modules: moduleServices, experiments, lease, outbox: documents.outbox,
+    panelInstance: panel => sessionState.instance(panel),
   });
   // The editor shows the scene's look, and follows it when the scene shows another one.
   lookShown = () => { previewDevice.coordinator.resetStack(); drawUV(); };

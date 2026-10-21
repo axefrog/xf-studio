@@ -35,7 +35,7 @@ function harness(options: { phase?: string; worn?: string[] } = {}) {
   const revealed: string[] = [];
   let panel!: ReturnType<typeof posesPanel>;
   const ctx: ModuleViewContext<PoseLibraryFacade> = {
-    facade,
+    facade, instance: panelId => `${panelId}--test`,
     dispatch: async action => { const outcome = await facade.dispatch(action as never); panel.update(undefined as never); return outcome.ok; },
     feedback: { toast: () => undefined as never, announce: () => {}, record: () => undefined as never },
     anchors: { register: () => () => {} }, reveal: () => {}, openSettings: section => { revealed.push(`settings:${section}`); }, links: { open: async () => ({ ok: true }) }, changed: () => panel.update(undefined as never),

@@ -116,6 +116,7 @@ export function moduleViewContext(rt: StudioRuntime, owner: string): ModuleViewC
   if (!facade) throw Error(`The ${owner} view has no registered module service.`);
   return Object.freeze({
     facade,
+    instance: (panel: string) => rt.port.panels.instance(panel),
     dispatch: async (action: { kind: string }, options?: Parameters<StudioRuntime["report"]>[2]) => {
       let outcome: Awaited<ReturnType<typeof facade.dispatch>>;
       try { outcome = await facade.dispatch(action); }

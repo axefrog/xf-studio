@@ -2,7 +2,7 @@
 // shown, a row opens its save, the tree is a keyboard tree (arrows move focus, Right opens, Enter shows a node), a node's objects open
 // the inspector, and the mod-data view lists namespaces. It reaches the service only through its module context.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { SaveExplorerActions, saveExplorerFacade, type SaveExplorerDevice, type SaveExplorerFacade } from "../src/features/save-explorer";
+import { SaveExplorerActions, SaveExplorerSessions, saveExplorerFacade, type SaveExplorerAction, type SaveExplorerDevice, type SaveExplorerFacade } from "../src/features/save-explorer";
 import { explorerPanel } from "../src/features/save-explorer/view/panel";
 import type { ModuleViewContext } from "../src/studio-ui/views/feature-view";
 import { installLightDom, lightDocument, lightEvent, type LightElement, uninstallLightDom } from "./light-dom";
@@ -22,19 +22,23 @@ function harness(overrides: Partial<SaveExplorerDevice> = {}, options: Construct
       scripts: { available: true, names: ["DoorControllerPS", "m_isOpen", "SomeMod.OutfitState", "App.DynamicEntitySystemPS"] } }),
     ...overrides,
   };
-  const facade = saveExplorerFacade(new SaveExplorerActions(device, () => Promise.resolve(), options));
+  const service = new SaveExplorerSessions(device, () => Promise.resolve(), options), module = saveExplorerFacade(service);
+  // The panel is one instance; the test reads and acts on that instance's session.
+  const INSTANCE = "save-explorer.explorer--test";
+  const facade = { snapshot: () => module.snapshot(INSTANCE), tree: () => module.tree(INSTANCE),
+    dispatch: (action: SaveExplorerAction) => module.dispatch({ ...action, instance: INSTANCE }), subscribe: module.subscribe };
   const toasts: string[] = [];
   let panel!: ReturnType<typeof explorerPanel>;
   const ctx: ModuleViewContext<SaveExplorerFacade> = {
-    facade,
-    dispatch: async (action, _options) => { const outcome = await facade.dispatch(action as never); if (!outcome.ok) toasts.push(outcome.message); panel.update(undefined as never); return outcome.ok; },
+    facade: module, instance: panelId => `${panelId}--test`,
+    dispatch: async (action, _options) => { const outcome = await module.dispatch(action); if (!outcome.ok) toasts.push(outcome.message); panel.update(undefined as never); return outcome.ok; },
     feedback: { toast: (_tone, _source, message) => { toasts.push(message); return undefined as never; }, announce: () => {}, record: () => undefined as never },
     anchors: { register: () => () => {} }, reveal: () => {}, openSettings: section => { settingsOpened.push(section); }, links: { open: async () => ({ ok: true }) }, changed: () => panel.update(undefined as never),
   };
   panel = explorerPanel(ctx);
   facade.subscribe(() => panel.update(undefined as never));
   const root = panel.spec.element as unknown as LightElement;
-  return { panel, facade, root, toasts, settingsOpened };
+  return { panel, facade, root, toasts, settingsOpened, service };
 }
 const texts = (elements: LightElement[]) => elements.map(element => element.textContent);
 
@@ -168,5 +172,21 @@ describe("Save Explorer panel", () => {
     expect(list.childElementCount).toBe(200);
     // Each row is closed and empty in turn until opened.
     expect(list.querySelector("details.save-field")!.querySelector("ul")!.childElementCount).toBe(0);
+  });
+
+  test("each panel instance has its own session: another instance opens nothing of this one's, and a released one forgets its save", async () => {
+    const { panel, root, facade, service } = harness();
+    panel.spec.visibility?.(true);
+    await settle();
+    root.querySelector("button.save-row")!.dispatchEvent(lightEvent("click"));
+    await settle(20);
+    expect(facade.snapshot().open.phase).toBe("ready");
+    expect(service.snapshot("save-explorer.explorer--other").open.phase).toBe("none");
+    expect(service.capability({ kind: "saves.close", instance: "save-explorer.explorer--other" })).toMatchObject({ available: false, code: "missing_target" });
+    expect(service.capability({ kind: "saves.close" } as never)).toMatchObject({ available: false, code: "missing_target" });
+    expect(service.instances()).toContain("save-explorer.explorer--test");
+    panel.dispose?.();
+    expect(service.instances()).not.toContain("save-explorer.explorer--test");
+    expect(facade.snapshot().open.phase).toBe("none");
   });
 });

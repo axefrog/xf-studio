@@ -177,6 +177,8 @@ export function featureView<V extends ViewContribution,
  */
 export type ModuleViewContext<F extends ModuleService = ModuleService> = {
   readonly facade: F;
+  /** A panel's instance (`<panel>--<base36>`, profiles design §1.1): what names its own session in the module's service. */
+  instance(panel: string): string;
   /** The facade's dispatch, awaited, with the shell's feedback (a refusal or failure toasts its reason unless quiet). */
   dispatch(action: Parameters<F["dispatch"]>[0], options?: DispatchFeedback): Promise<boolean>;
   readonly feedback: Pick<Feedback, "toast" | "announce" | "record">;

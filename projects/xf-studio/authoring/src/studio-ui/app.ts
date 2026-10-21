@@ -268,7 +268,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     if (key === optionalKey) return;
     const owners = new Set(optional.map(item => item.contribution.owner));
     const gone = panels.filter(panel => { const entry = catalogue.panels.find(item => item.id === panel.spec.id); return entry && !views.catalogue.ids.includes(entry.id) && !owners.has(entry.owner); });
-    for (const panel of gone) { panel.spec.visibility?.(false); byId.delete(panel.spec.id); panels.splice(panels.indexOf(panel), 1); }
+    for (const panel of gone) { panel.spec.visibility?.(false); panel.dispose?.(); byId.delete(panel.spec.id); panels.splice(panels.indexOf(panel), 1); }
     if (gone.length) dock.removePanels(gone.map(panel => panel.spec.id));
     const extra = viewCatalogue(optional.map(item => item.contribution));
     catalogue.panels.splice(0, catalogue.panels.length, ...views.catalogue.panels, ...extra.panels);

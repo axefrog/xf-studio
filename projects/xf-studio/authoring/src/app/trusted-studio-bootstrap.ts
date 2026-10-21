@@ -57,6 +57,8 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   lease?: import("./workspace/workspace-lease").WorkspaceLease;
   /** The page's outbox (profiles design §2.2). */
   outbox?: import("../platform/core/document-outbox").DocumentOutbox;
+  /** A panel's instance in the tab shown (the profile session's). */
+  panelInstance?: (panel: string) => string;
   onRecipeImported(): void;
   savedAppearance: {
     has(): boolean;
@@ -105,7 +107,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     previewReadiness: options.previewReadiness, editor: core.presentation, status: options.status,
     localSetup: options.localSetup, installDetection: options.installDetection, modInstall: options.modInstall, previewSetup: options.previewSetup,
     desktopApp: options.desktopApp, updates: options.updates, links: options.links, about: options.about, diagnostics: options.diagnostics, modules: options.modules, experiments: options.experiments,
-    workspace: options.lease, outbox: options.outbox });
+    workspace: options.lease, outbox: options.outbox, ...(options.panelInstance ? { panelInstance: options.panelInstance } : {}) });
   return {
     /** Trusted handles are retained by the composition root; never pass this object to a UI. */
     files, collection,

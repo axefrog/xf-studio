@@ -2,7 +2,7 @@
 // node and object inspections with names resolved by source, world objects paged and filtered, the generic mod-data view, and the
 // service's actions, capabilities and stale-result handling over a fake device. No real save is read.
 import { describe, expect, test } from "bun:test";
-import { MAX_SAVE_BYTES, openExplorer, SaveExplorerActions, saveExplorerFacade, type SaveExplorerDevice, type SaveListing, type SaveTypeNames } from "../src/features/save-explorer";
+import { MAX_SAVE_BYTES, openExplorer, SaveExplorerActions, SaveExplorerSessions, saveExplorerFacade, type SaveExplorerDevice, type SaveListing, type SaveTypeNames } from "../src/features/save-explorer";
 import { fnv1a64 } from "../src/engines/red-object/hash";
 import { EXPLORER_NAMES as NAMES, EXPLORER_TYPES as TYPES, manyEntriesSave, syntheticSave } from "./fixtures/synthetic-explorer-save";
 
@@ -96,8 +96,23 @@ describe("explorer service", () => {
     names: async () => names, thumbnail: folder => `/thumb/${folder}`, ...overrides });
   const now = () => Promise.resolve();
 
+  test("the module's facade keeps one session per panel instance: each action and read names its instance", async () => {
+    const facade = saveExplorerFacade(new SaveExplorerSessions(device(), now));
+    const one = "save-explorer.explorer--aaaa", two = "save-explorer.explorer--bbbb";
+    expect(await facade.dispatch({ kind: "saves.refresh", instance: one })).toEqual({ ok: true });
+    expect(await facade.dispatch({ kind: "saves.open", folder: "QuickSave-0", instance: one })).toEqual({ ok: true });
+    expect(facade.snapshot(one).open.phase).toBe("ready");
+    expect(facade.snapshot(two)).toMatchObject({ open: { phase: "none" }, listing: { phase: "idle" } });
+    expect(facade.tree(two)).toEqual([]);
+    expect(facade.capability({ kind: "saves.open", folder: "QuickSave-0", instance: two })).toMatchObject({ available: false, code: "missing_target" });
+    expect(facade.descriptors()["saves.open"].payload).toEqual({ folder: "text", instance: "text" });
+    facade.release(one);
+    expect(facade.snapshot(one).open.phase).toBe("none");
+  });
+
   test("lists, opens a listed save and fills in the tree's status, then closes", async () => {
-    const service = new SaveExplorerActions(device(), now), facade = saveExplorerFacade(service);
+    // One session (one panel instance's); the module's facade over several is below.
+    const service = new SaveExplorerActions(device(), now), facade = service;
     let changes = 0;
     const unsubscribe = facade.subscribe(() => changes++);
     expect(facade.capability({ kind: "saves.open", folder: "QuickSave-0" })).toMatchObject({ available: false, code: "missing_target" });
