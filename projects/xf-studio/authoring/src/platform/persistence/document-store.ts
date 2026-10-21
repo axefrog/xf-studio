@@ -12,7 +12,7 @@
  */
 import { DOCUMENT_ID, DOCUMENT_KIND, parseFence, WORKSPACE_FENCE_HEADER, WORKSPACE_LEASE_KIND, type DocumentWrite, type StoredDocument,
   type WorkspaceFence } from "../api/document-store";
-import { COMMAND_LIMITS, type CurrentDocument, type DocumentRef, documentKey, isHostKind, type Receipt, RECEIPT_KIND, RECEIPT_TTL_MS,
+import { COMMAND_LIMITS, type CurrentDocument, type DocumentRef, documentKey, isHostKind, isTombstone, type Receipt, RECEIPT_KIND, RECEIPT_TTL_MS,
   type TransactAnswer, type TransactRequest, type TransactWrite } from "../api/document-commands";
 import type { LibraryDatabase } from "./library-database";
 import type { Clock } from "../core/clock";
@@ -109,6 +109,9 @@ export class DocumentStore {
         const own = fence && stored.workspace === fence.workspace ? this.ownLater(stored.revisions, fence) : null;
         return { ok: true, revisions: stored.revisions, replayed: "receipt", ...(own ? { own } : {}) };
       }
+      // What it requires must be in the library now, inside this transaction (a cleanup may have purged it since the page last knew).
+      const missing = checked.requires.filter(ref => { const row = this.row(ref.kind, ref.id); return !row || isTombstone(JSON.parse(row.value)); }).map(documentKey);
+      if (missing.length) return { ok: false, reason: "missing", missing };
       const rows = checked.writes.map(write => this.row(write.kind, write.id));
       if (checked.writes.some((write, i) => (rows[i]?.revision ?? 0) !== write.base)) {
         if (rows.every((row, i) => row && row.value === texts[i]))
@@ -194,7 +197,7 @@ export class DocumentStore {
    * The library's retention (profiles design §1.4), in one transaction; answers what it removed. Retention roots are profiles, own
    * defaults and collections: nothing is removed for being unreferenced except an immutable document. It removes:
    * - every tombstone older than `tombstoneMs` (30 days), with the child documents of a purged parent (`children`: a collection's look
-   *   working copies, IDs `<collection>/<look>`);
+   *   working copies, IDs `<collection>/<look>`), except a child a live parent still lists (`listedBy`);
    * - every immutable, content-addressed document (`immutable`: decoded saves) that no other document names (its ID, quoted, in any
    *   document's value; a tombstone's kept value counts, so a restorable V keeps its save) and that was written over `tombstoneMs` ago
    *   (a page's command may still be on its way to name a newer one);
@@ -204,6 +207,7 @@ export class DocumentStore {
     const now = (this.options.now ?? Date.now)();
     const tombstoneCutoff = now - (options.tombstoneMs ?? TOMBSTONE_TTL_MS), receiptCutoff = now - (options.receiptMs ?? RECEIPT_TTL_MS);
     const immutable = options.immutable ?? ["saved-v"], children = options.children ?? { "collection-working": "look-working" };
+    const listedBy = options.listedBy ?? { "look-working": { kind: "collection-working", field: "looks" } };
     return this.db.write(db => {
       const receipts = db.query("DELETE FROM documents WHERE kind = ? AND updated_at < ?").run(RECEIPT_KIND, receiptCutoff).changes;
       const dead = db.query(`SELECT kind, id FROM documents WHERE kind NOT LIKE 'xfs-%' AND json_valid(value)
@@ -211,6 +215,10 @@ export class DocumentStore {
       const remove = db.query("DELETE FROM documents WHERE kind = ? AND id = ?");
       let tombstones = 0, childCount = 0;
       for (const doc of dead) {
+        // A child a live parent still lists (a look its collection names) is never purged, whatever its own state says.
+        const parent = listedBy[doc.kind], at = doc.id.indexOf("/");
+        if (parent && at > 0 && db.query(`SELECT 1 FROM documents AS parent WHERE parent.kind = ? AND parent.id = ? AND json_valid(parent.value)
+          AND json_extract(parent.value, '$.tombstone') IS NOT 1 AND EXISTS (SELECT 1 FROM json_each(parent.value, ?) AS listed WHERE listed.value = ?)`).get(parent.kind, doc.id.slice(0, at), `$.${parent.field}`, doc.id.slice(at + 1))) continue;
         tombstones += remove.run(doc.kind, doc.id).changes;
         const child = children[doc.kind];
         if (child) childCount += db.query("DELETE FROM documents WHERE kind = ? AND substr(id, 1, ?) = ?").run(child, doc.id.length + 1, `${doc.id}/`).changes;
@@ -236,7 +244,9 @@ export class DocumentStore {
 /** How long a tombstone is kept before the cleanup purges it (and how long an unreferenced immutable document is kept). */
 export const TOMBSTONE_TTL_MS = 30 * 24 * 3600_000;
 export type CleanupOptions = { readonly tombstoneMs?: number; readonly receiptMs?: number; readonly immutable?: readonly string[];
-  readonly children?: Readonly<Record<string, string>> };
+  readonly children?: Readonly<Record<string, string>>;
+  /** A child kind (IDs `<parent>/<child>`) whose tombstone is kept while its live parent lists it in `field`. */
+  readonly listedBy?: Readonly<Record<string, { readonly kind: string; readonly field: string }>> };
 export type CleanupReport = { readonly receipts: number; readonly tombstones: number; readonly children: number; readonly orphans: number };
 /** When the host's cleanup runs: a while after it starts (out of the way of the first page load), then daily. */
 export const CLEANUP_FIRST_MS = 60_000, CLEANUP_EVERY_MS = 24 * 3600_000;
@@ -260,7 +270,7 @@ function checkRefs(refs: readonly DocumentRef[]): DocumentRef[] {
   });
 }
 /** A command the store takes: an ID, a name, 1–64 writes of distinct page-writable documents, and receipts to forget. */
-function checkTransact(request: TransactRequest): { id: string; command: string; writes: TransactWrite[]; forget: string[] } {
+function checkTransact(request: TransactRequest): { id: string; command: string; writes: TransactWrite[]; forget: string[]; requires: DocumentRef[] } {
   const r = request as Partial<TransactRequest> | null;
   if (!r || typeof r !== "object") throw new DocumentStoreError("That isn't a command.");
   if (typeof r.id !== "string" || !DOCUMENT_ID.test(r.id)) throw new DocumentStoreError("That isn't a command ID.");
@@ -279,7 +289,9 @@ function checkTransact(request: TransactRequest): { id: string; command: string;
     if (JSON.stringify(write.value) === undefined) throw new DocumentStoreError("A document must be a JSON value.");
     return { ...ref!, base: write.base, value: write.value };
   });
-  return { id: r.id, command: r.command, writes, forget: [...forget] };
+  const requires = r.requires === undefined ? [] : checkRefs(r.requires as DocumentRef[]);
+  if (requires.length > COMMAND_LIMITS.writes) throw new DocumentStoreError("A command requires at most 64 documents.");
+  return { id: r.id, command: r.command, writes, forget: [...forget], requires };
 }
 
 /** Most bytes of one document write's request body. */

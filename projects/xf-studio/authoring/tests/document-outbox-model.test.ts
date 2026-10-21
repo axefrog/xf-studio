@@ -18,7 +18,11 @@
  * three-document commands (a collection, a look and a look it drops as a tombstone); a membership document that Keep both adds each fork
  * to, over its value as it is now, and that window B edits too; reads answered as the library was when the host read them and delivered
  * late and out of order (a stale one is never taken); and snapshots (Save version, export): flush some documents, then read them in one
- * read transaction, each with no conflict reading as A shows it unless only another window's writes moved it on.
+ * read transaction, each with no conflict reading as A shows it unless only another window's writes moved it on. Its review added each
+ * window's workspace and lease generation on every command (so receipts know their writer and replays answer `own`, checked against the
+ * specification's own log of who wrote each revision), host purges of receipts no window can replay, desktop app crashes with host writes
+ * still on their way (each key keeps a prefix of them; the specification then adopts what A recovered), and the recovery gate: an edit of
+ * a document with a recovered intent not yet answered is refused.
  *
  * **After every step:**
  * - A's visible values and its pending intents and conflicts equal the specification's. After a kill, they equal one of the states the
@@ -37,7 +41,7 @@
  * A failing run prints its mode, seed and step: `XFS_OUTBOX_SEED=<seed> [XFS_OUTBOX_MODE=local|desktop] [XFS_OUTBOX_TRACE=1]` replays it.
  */
 import { expect, test } from "bun:test";
-import { DocumentOutbox, type OutboxEntry, type OutboxOutcome } from "../src/platform/core/document-outbox";
+import { DocumentOutbox, type OutboxEntry, type OutboxOutcome, OutboxRecoveringError } from "../src/platform/core/document-outbox";
 import { type CurrentDocument, documentKey, type DocumentRef, tombstoneOf, type TransactAnswer, type TransactRequest } from "../src/platform/api/document-commands";
 import type { DocumentStorePort } from "../src/platform/api/document-store";
 import { desktopOutboxStorage } from "../src/app/browser/outbox-storage";
@@ -75,6 +79,8 @@ type Intent = {
   /** The library already holds it (its answer was lost): it is replayed, and answered by its receipt. */
   committed: Record<string, number> | null;
   callers: Caller[];
+  /** Read back from storage when the page opened, and not answered since: no new edit is admitted on its documents until it is. */
+  recovered?: boolean;
 };
 /** `versions`: what a command reading each document names as its base, as the design states it: it moves with every change made here and
  * every change taken from elsewhere, never with an acknowledgement, and starts again at the library's revision when the page opens. */
@@ -120,7 +126,8 @@ function sendable(spec: Spec, intent: Intent, inLibrary: (key: string) => boolea
   return intent.requires.every(key => ((spec.docs[key]?.revision ?? 0) > 0 || inLibrary(key)) && touching(spec, key).every(other => other.committed));
 }
 const settle = (callers: Caller[], outcome: OutboxOutcome) => { for (const caller of callers) caller.expected = outcome; };
-function acknowledge(spec: Spec, id: string, revisions: Readonly<Record<string, number>>, current?: Readonly<Record<string, CurrentDocument>>) {
+type Own = Readonly<Record<string, { readonly revision: number; readonly value: unknown }>>;
+function acknowledge(spec: Spec, id: string, revisions: Readonly<Record<string, number>>, current?: Readonly<Record<string, CurrentDocument>>, own?: Own) {
   const at = spec.intents.findIndex(intent => intent.id === id), intent = spec.intents[at]!;
   // An earlier intent still pending on one of its documents is one the library already holds (it is only being replayed): this answer
   // supersedes its write of that document; one left with no write is done.
@@ -133,8 +140,14 @@ function acknowledge(spec: Spec, id: string, revisions: Readonly<Record<string, 
     spec.acknowledged.push(earlier.id);
     settle(earlier.callers, "acknowledged");
   }
-  return answered(spec, id, revisions, current);
+  answered(spec, id, revisions, current);
+  // A replay answered by its receipt adopts this workspace's later revisions as the baseline; the intents after it still go over the
+  // revision it produced (their values were made over its value).
+  for (const [key, later] of Object.entries(own ?? {}))
+    if (later.revision > (spec.docs[key]?.revision ?? 0)) { spec.docs[key] = { revision: later.revision, value: structuredClone(later.value) }; moved(spec, key, later.revision); }
 }
+/** Whether a document still has an intent read back at the last opening and not yet answered: edits on it wait. */
+const recovering = (spec: Spec, key: string) => touching(spec, key).some(intent => intent.recovered && !intent.conflict);
 function answered(spec: Spec, id: string, revisions: Readonly<Record<string, number>>, current?: Readonly<Record<string, CurrentDocument>>) {
   const at = spec.intents.findIndex(intent => intent.id === id), intent = spec.intents[at]!;
   for (const [key, value] of intent.writes) {
@@ -170,7 +183,7 @@ function stale(spec: Spec, id: string, current: Readonly<Record<string, CurrentD
 function keepMine(spec: Spec, id: string, freshId: string) {
   const intent = spec.intents.find(item => item.id === id)!;
   const theirs = intent.conflict!.theirs;
-  Object.assign(intent, { id: freshId, conflict: null, sent: false, committed: null,
+  Object.assign(intent, { id: freshId, conflict: null, sent: false, committed: null, recovered: false,
     bases: Object.fromEntries(intent.writes.map(([key]) => [key, theirs[key]?.revision ?? 0])) });
 }
 /** Use theirs (and the first half of Keep both): the documents take theirs; the next intents go over the stale bases, to go stale too. */
@@ -191,7 +204,7 @@ function useTheirs(spec: Spec, id: string) {
 function restarted(spec: Spec, library: (key: string) => { revision: number; value: unknown }, nextCaller: () => Caller): Spec {
   const copy: Spec = structuredClone(spec);
   for (const key of Object.keys(copy.docs)) { copy.docs[key] = library(key); copy.versions[key] = copy.docs[key]!.revision; }
-  for (const intent of copy.intents) { intent.sent = true; intent.callers = [nextCaller()]; }
+  for (const intent of copy.intents) { intent.sent = true; intent.recovered = true; intent.callers = [nextCaller()]; }
   return copy;
 }
 const specSignature = (spec: Spec, keys: readonly string[]) => JSON.stringify({ visible: keys.map(key => [key, visible(spec, key) ?? null]),
@@ -224,6 +237,12 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
   const ticks = async () => { for (let i = 0; i < 16; i++) await Promise.resolve(); };
   /** Every value each document has had in the library, by `<key>@<revision>` (what a late read may still carry). */
   const history = new Map<string, unknown>();
+  /** The command, window and life that wrote each document's revision, by `<key>@<revision>`. */
+  const writerIds = new Map<string, { id: string; window: string; life: number }>();
+  /** The bases recovered commands had after a crash with host writes pending (`<key>@<base>`). */
+  const lossyBases = new Set<string>();
+  /** The commands recovered after such a crash. */
+  const lossyIds = new Set<string>();
   const answerOf = (kind: Lookup["kind"], refs: readonly DocumentRef[]) => kind === "revisions"
     ? Object.fromEntries(refs.map(ref => [documentKey(ref), library(documentKey(ref)).revision]))
     : Object.fromEntries(refs.map(ref => { const now = store.get(ref.kind, ref.id); return [documentKey(ref), now ? { revision: now.revision, value: structuredClone(now.value) } : null]; }));
@@ -233,18 +252,39 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
   const deliver = (sent: Sent, how: "ok" | "lose" | "fail") => {
     queue.splice(queue.indexOf(sent), 1);
     if (how === "fail") { count("send failed"); sent.reject(Error("The host didn't answer.")); return null; }
-    const answer = store.transact(sent.request);
+    // Each window is its own workspace: A's lease generation is its life (a restart is a new one), B's is 1.
+    const answer = store.transact(sent.request, sent.window === "A" ? { workspace: "A", generation: Math.max(1, sent.life) } : { workspace: "B", generation: 1 });
     trace.push(`deliver ${how} ${sent.window}${sent.life} ${sent.request.id} ${JSON.stringify(answer)}`);
     count(`answer ${answer.ok ? answer.replayed ?? "ok" : answer.reason}`);
     if (answer.ok && !answer.replayed) for (const write of sent.request.writes) {
       const list = writers.get(documentKey(write)) ?? []; list[answer.revisions[documentKey(write)]!] = sent.window; writers.set(documentKey(write), list);
       history.set(`${documentKey(write)}@${answer.revisions[documentKey(write)]}`, structuredClone(write.value));
+      writerIds.set(`${documentKey(write)}@${answer.revisions[documentKey(write)]}`, { id: sent.request.id, window: sent.window, life: Math.max(1, sent.life) });
+    }
+    // The host's `own` (receipt replays) is what the specification says: every later revision of each document written by A, at a life
+    // no newer than this one, with A's receipt for it still in the library.
+    if (answer.ok && answer.replayed === "receipt" && sent.window === "A") {
+      const expected: Record<string, { revision: number; value: unknown }> = {};
+      for (const [key, revision] of Object.entries(answer.revisions)) {
+        const now = library(key);
+        if (now.revision <= revision) continue;
+        let mine = true;
+        for (let next = revision + 1; next <= now.revision && mine; next++) {
+          const writer = writerIds.get(`${key}@${next}`);
+          mine = !!writer && writer.window === "A" && writer.life <= Math.max(1, sent.life) && !!store.get("xfs-receipt", writer.id);
+        }
+        if (mine) expected[key] = { revision: now.revision, value: now.value };
+      }
+      if (!same(answer.own ?? {}, expected)) fail(`the host answered ${sent.request.id} with own ${JSON.stringify(answer.own ?? {})}, the specification ${JSON.stringify(expected)}`);
+      if (answer.own) count("own adopted");
     }
     if (how === "lose") { count("answer lost"); sent.reject(Error("The answer was lost.")); } else sent.resolve(answer);
     return answer;
   };
   let spec: Spec = { docs: Object.fromEntries(keys.map(key => [key, { revision: 0, value: undefined }])), versions: {}, intents: [], acknowledged: [] };
   let life = 0, adopting = false, a!: DocumentOutbox;
+  /** Keeps generated command IDs unique (the random part alone collides about once in a few hundred runs). */
+  let ids = 0;
   const deferred: TransactRequest[] = [];
   const checkSend = (request: TransactRequest) => {
     const intent = spec.intents.find(item => item.id === request.id);
@@ -306,7 +346,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
         for (let i = entries.length - 1; i > 0; i--) { const j = rng.int(i + 1); [entries[i], entries[j]] = [entries[j]!, entries[i]!]; } return new Map(entries); } };
     } else storage = desktopOutboxStorage(webviewStorage, "desktop", `launch-${launch}`, Object.fromEntries(host), (key, text) =>
       new Promise<void>((resolve, reject) => { hostWrites.push({ life: mine, key, text, resolve, reject }); }));
-    a = new DocumentOutbox(transport("A", () => mine), storage, { immutable, newId: () => `a${mine}-${Math.floor(rng.next() * 1e9).toString(36)}`,
+    a = new DocumentOutbox(transport("A", () => mine), storage, { immutable, newId: () => `a${mine}-${Math.floor(rng.next() * 1e9).toString(36)}${(++ids).toString(36)}`,
       schedule: (_ms, task) => { retries.push(task); return { cancel: () => { const at = retries.indexOf(task); if (at >= 0) retries.splice(at, 1); } }; } });
     for (const key of keys) { const now = library(key); a.hold(refOf(key), now.revision ? now : null); }
     // A check the outbox makes by itself (the host answered again after failing) is a change from elsewhere, as one asked for.
@@ -316,6 +356,8 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
         // What A took must be a value the library held at that revision, newer than the one A had, for a document with no intent: a read
         // that arrives after a newer one (or after A's own write) is never taken.
         const key = documentKey(ref), held = a.document(ref), revision = held?.revision ?? 0;
+        // A later revision of A's own, adopted with its receipt's answer (the specification already took it).
+        if (revision === (spec.docs[key]?.revision ?? 0) && same(spec.docs[key]?.value, held?.value)) continue;
         if (touching(spec, key).length || revision <= (spec.docs[key]?.revision ?? 0) || !history.has(`${key}@${revision}`) || !same(history.get(`${key}@${revision}`), held?.value))
           fail(`A took ${key} at revision ${revision} from a check the specification doesn't allow`);
         else { spec.docs[key] = { revision, value: structuredClone(held!.value) }; moved(spec, key, revision); }
@@ -373,7 +415,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
   };
 
   // Window B: edits the same documents and imports the same immutable documents, resolving its conflicts with Keep mine.
-  const b = new DocumentOutbox(transport("B", () => 0), memoryOutboxStorage(), { immutable, newId: () => `b-${Math.floor(rng.next() * 1e9).toString(36)}`,
+  const b = new DocumentOutbox(transport("B", () => 0), memoryOutboxStorage(), { immutable, newId: () => `b-${Math.floor(rng.next() * 1e9).toString(36)}${(++ids).toString(36)}`,
     schedule: (_ms, task) => { retries.push(task); return { cancel() {} }; } });
   for (const ref of [...DOCS, ...BLOBS]) b.hold(ref, null);
   b.open();
@@ -382,16 +424,46 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
   openA();
   adopt(restarted(spec, library, caller));
   let counter = 0, forks = 0;
+  /**
+   * An edit of documents the specification still recovers: A must refuse it (`OutboxRecoveringError`) and change nothing. True when it
+   * was refused (the step is over).
+   */
+  const refusedWhileRecovering = (keys: readonly string[], attempt: () => unknown, item: Caller) => {
+    if (!keys.some(key => recovering(spec, key))) return false;
+    try { attempt(); fail(`A took an edit of ${keys} while the specification still recovers it`); }
+    catch (error) { if (!(error instanceof OutboxRecoveringError)) throw error; }
+    callers.splice(callers.indexOf(item), 1);
+    count("edit refused while recovering");
+    return true;
+  };
   const value = (window: string, blob?: string) => ({ w: window, n: ++counter, ...(blob ? { ref: blob } : {}) });
 
   /** Delivers A's first live send and keeps the specification in step (the end's and the snapshot's drive). */
   const deliverA = (sent: Sent) => {
     const answer = deliver(sent, "ok");
     if (spec.intents.some(intent => intent.id === sent.request.id)) {
-      if (answer!.ok) acknowledge(spec, sent.request.id, answer!.revisions); else if (answer!.reason === "stale") stale(spec, sent.request.id, answer!.current);
+      if (answer!.ok) acknowledge(spec, sent.request.id, answer!.revisions, undefined, answer!.own); else if (answer!.reason === "stale") stale(spec, sent.request.id, answer!.current);
     }
   };
+  /** Every command ID some window still holds (stored, pending or in flight): their receipts must stay. */
+  const held = () => {
+    const ids = new Set<string>([...a.pendingEntries(), ...b.pendingEntries()].map(entry => entry.id));
+    for (const item of queue) ids.add(item.request.id);
+    for (const text of [...memory.keys.values(), ...webview.values(), ...host.values()])
+      try { for (const entry of (JSON.parse(text) as { entries?: { id: string }[] }).entries ?? []) ids.add(entry.id); } catch { /* not a record */ }
+    return ids;
+  };
   for (stepNow = 0; stepNow < steps && !failures.length; stepNow++) {
+    if (more.next() < 0.03) {
+      // The host purges receipts no window can replay any more (as its 7-day purge does): later replays then learn less of their own.
+      const keep = held();
+      const purge = store.list<unknown>("xfs-receipt").filter(item => !keep.has(item.id)).map(item => item.id);
+      (store as unknown as { db: { write(change: (db: { query(sql: string): { run(...args: unknown[]): unknown } }) => void): void } }).db
+        .write(db => { for (const id of purge) db.query("DELETE FROM documents WHERE kind = 'xfs-receipt' AND id = ?").run(id); });
+      if (purge.length) count("receipts purged");
+      trace.push(`step ${stepNow} purge ${purge.length}`);
+      continue;
+    }
     if (more.next() < 0.04) {
       // Save version or export: flush the documents (only A's sends are answered meanwhile), then read them in one read transaction.
       // Each one with no conflict must read as A shows it, unless the library moved on by another window's writes alone.
@@ -424,7 +496,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
     trace.push(`step ${stepNow} ${roll.toFixed(3)}`);
     if (roll < 0.2) {
       const ref = rng.pick(DOCS), next = value("A"), item = caller();
-      await onA(() => {
+      if (!refusedWhileRecovering([documentKey(ref)], () => a.commit("edit", [{ ...ref, value: next }]), item)) await onA(() => {
         const entry = a.commit("edit", [{ ...ref, value: next }]);
         const how = record(spec, entry.id, [[documentKey(ref), next]], [], item);
         if (how === "joined" && !spec.intents.some(intent => intent.id === entry.id)) fail(`A joined the edit to ${entry.id}, the specification to another intent`);
@@ -441,7 +513,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
         edits.push({ ...third, value: more.next() < 0.5 ? tombstoneOf(value("A"), counter) : value("A") });
         count("three-document command");
       }
-      await onA(() => {
+      if (!refusedWhileRecovering(edits.map(documentKey), () => a.commit("pair", edits), item)) await onA(() => {
         const entry = a.commit("pair", edits);
         record(spec, entry.id, edits.map(edit => [documentKey(edit), edit.value]), [], item);
         watch(entry, item);
@@ -459,7 +531,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
         watch(put, item);
       });
       const ref = rng.pick(DOCS), next = value("A", blob.id), named = caller();
-      await onA(() => {
+      if (!refusedWhileRecovering([documentKey(ref)], () => a.commit("edit", [{ ...ref, value: next }], { requires: [blob] }), named)) await onA(() => {
         const entry = a.commit("edit", [{ ...ref, value: next }], { requires: [blob] });
         record(spec, entry.id, [[documentKey(ref), next]], [documentKey(blob)], named);
         watch(entry, named);
@@ -482,7 +554,11 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
           for (let revision = write.base + 1; revision <= now; revision++) if (list[revision] !== "A") return true;
           return false;
         });
-        if (!foreign && !sent.request.writes.every(write => immutable(write.kind))) fail(`A's ${sent.request.id} went stale against its own writes`);
+        // After a crash with host writes pending, a recovered command whose predecessor's copy was lost goes over the revision the
+        // repair could still prove (it may be older than A's own later write): a conflict there is allowed (never an overwrite).
+        const guessed = sent.request.writes.some(write => lossyBases.has(`${documentKey(write)}@${write.base}`));
+        if (!foreign && !guessed && !sent.request.writes.every(write => immutable(write.kind))) fail(`A's ${sent.request.id} went stale against its own writes`);
+        if (!foreign && guessed) count("conflict after a lossy crash");
       }
       if (!answer || !live || !spec.intents.some(intent => intent.id === sent.request.id)) { await ticks(); continue; }
       const between: Spec[] = [];
@@ -498,7 +574,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
           for (const earlier of reduced.intents.slice(0, at)) if (!earlier.conflict && earlier.committed)
             earlier.writes = earlier.writes.filter(([key]) => !keysOf(reduced.intents[at]!).includes(key));
           if (reduced.intents.every(intent => intent.writes.length)) between.push(reduced);
-          acknowledge(spec, sent.request.id, answer.revisions);
+          acknowledge(spec, sent.request.id, answer.revisions, undefined, answer.own);
         } else if (answer.reason === "stale") stale(spec, sent.request.id, answer.current);
       }, between);
     } else if (roll < 0.7) {
@@ -512,7 +588,11 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
       if (!spec.intents.some(intent => intent.id === conflict.id && intent.conflict)) { fail(`A's conflict ${conflict.id} isn't the specification's`); break; }
       const item = caller();
       await onA(() => {
-        if (how === "mine") { keepMine(spec, conflict.id, a.keepMine(conflict.id).id); callers.splice(callers.indexOf(item), 1); return; }
+        if (how === "mine") {
+          // A conflict on a command recovered after a crash with host writes pending was taken against what that recovery could prove;
+          // a later write of A's own (an earlier recovered command) may have overtaken it, and Keep mine then goes stale against it.
+          if (lossyIds.has(conflict.id)) for (const [key, now] of Object.entries(conflict.current ?? {})) lossyBases.add(`${key}@${now?.revision ?? 0}`);
+          keepMine(spec, conflict.id, a.keepMine(conflict.id).id); callers.splice(callers.indexOf(item), 1); return; }
         if (how === "theirs") { a.useTheirs(conflict.id); useTheirs(spec, conflict.id); callers.splice(callers.indexOf(item), 1); return; }
         const fork = ++forks, members = documentKey(MEMBERS);
         /** The membership document with this fork added: over its value as it is now (theirs, with any surviving successors). */
@@ -566,6 +646,46 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
       memory.fail = false;
       a.protect();
       const app = mode === "desktop" && rng.next() < 0.5;
+      if (app && more.next() < 0.4) {
+        // The app crashes with host copies still on their way: each key's pending host writes land only in part (a prefix), so the new
+        // launch may read an entry older than what the library holds of this workspace's own (the 1c-i known limit). The state it reads
+        // isn't the specification's to choose: the specification adopts what A recovered (each intent committed when its receipt is in the
+        // library), and from there every send, refusal and answer is checked against it, `own` adoption and the recovery gate included.
+        settle(spec.intents.flatMap(intent => intent.callers), "stopped");
+        a.stop(); await ticks();
+        // The host dies with the page: each of A's commands in flight either committed before the crash (its answer lost) or never
+        // arrived. Nothing from this launch reaches the host afterwards (the next launch's lease fences it).
+        for (const sent of queue.filter(item => item.window === "A")) { if (more.next() < 0.5) deliver(sent, "lose"); else { queue.splice(queue.indexOf(sent), 1); sent.reject(Error("The host died.")); } }
+        const pending = hostWrites.splice(0).filter(write => write.life === life);
+        for (const key of new Set(pending.map(write => write.key))) {
+          const writes = pending.filter(write => write.key === key), landed = more.int(writes.length + 1);
+          for (const write of writes.slice(0, landed)) if (write.text === null) host.delete(write.key); else host.set(write.key, write.text);
+        }
+        launch++;
+        count("app crash with host writes pending");
+        degraded = false;
+        adopting = true;
+        openA();
+        const rebuilt: Spec = { docs: {}, versions: {}, intents: [], acknowledged: [...spec.acknowledged] };
+        for (const key of keys) { rebuilt.docs[key] = library(key); rebuilt.versions[key] = rebuilt.docs[key]!.revision; }
+        for (const entry of a.pendingEntries()) {
+          lossyIds.add(entry.id);
+          for (const write of entry.writes) if (typeof write.base === "number") lossyBases.add(`${documentKey(write)}@${write.base}`);
+          // A conflict brought back (its resolution's copy was lost): Keep mine goes over the revision it recorded then.
+          for (const [key, now] of Object.entries(entry.current ?? {})) lossyBases.add(`${key}@${now?.revision ?? 0}`);
+          // Committed: its receipt says so, or (a receipt already forgotten) the library's log of who wrote each revision does.
+          const logged = [...writerIds].filter(([, writer]) => writer.id === entry.id).map(([at]) => [at.slice(0, at.lastIndexOf("@")), Number(at.slice(at.lastIndexOf("@") + 1))]);
+          const receipt = store.get<{ revisions: Record<string, number> }>("xfs-receipt", entry.id)?.value ?? (logged.length ? { revisions: Object.fromEntries(logged) } : undefined);
+          rebuilt.intents.push({ id: entry.id, writes: entry.writes.map(write => [documentKey(write), structuredClone(write.value)]), put: entry.command === "immutable.put",
+            requires: [...entry.requires ?? []], conflict: entry.state === "conflict" ? { theirs: { ...entry.current } } : null, sent: true,
+            bases: Object.fromEntries(entry.writes.map(write => [documentKey(write), typeof write.base === "number" ? write.base : null])),
+            committed: receipt ? { ...receipt.revisions } : null, callers: [caller()], recovered: true });
+        }
+        adopt(rebuilt);
+        adopting = false;
+        for (const request of deferred.splice(0)) checkSend(request);
+        await ticks();
+      } else {
       if (app) {
         // A real app restart: everything the host was given lands first (a restart with copies still on their way is the protection
         // check's case, below: only what it says is protected must come back); then a new launch reads the host's copy alone.
@@ -587,6 +707,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
       adopting = false;
       for (const request of deferred.splice(0)) checkSend(request);
       await ticks();
+      }
     } else continue;
     }
 
@@ -648,7 +769,10 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
       continue;
     }
     const conflict = a.conflicts()[0];
-    if (conflict) { keepMine(spec, conflict.id, a.keepMine(conflict.id).id); await ticks(); continue; }
+    if (conflict) {
+      if (lossyIds.has(conflict.id)) for (const [key, now] of Object.entries(conflict.current ?? {})) lossyBases.add(`${key}@${now?.revision ?? 0}`);
+      keepMine(spec, conflict.id, a.keepMine(conflict.id).id); await ticks(); continue;
+    }
     if (!a.pendingEntries().length && !b.pendingEntries().length) break;
   }
   if (!failures.length) {
@@ -675,9 +799,11 @@ const RUNS = Number(process.env.XFS_OUTBOX_RUNS ?? 60);
  * Seeds that found defects in deeper sweeps, run every time: a replayed copy of an acknowledged command followed by the next edit (local
  * 5979845, desktop 1212607), immutable baselines learned by lookup (local 2527161, 4609858), discarded conflicts brought back from the
  * desktop host's copy (desktop 1719423, 1806532), long recoveries (desktop 365274, 2519242), and (chunk 1c-ii) a kill between an
- * acknowledgement's keys bringing back a superseded copy's write (local 982956, desktop 476140).
+ * acknowledgement's keys bringing back a superseded copy's write (local 982956, desktop 476140); after crashes with host writes pending, a
+ * recovered launch ordering its new commands before older ones that came back (desktop 792900) and a conflict overtaken by an own write
+ * (desktop 491978).
  */
-const FIXED = { local: [5979845, 2527161, 4609858, 982956], desktop: [1212607, 1719423, 1806532, 365274, 2519242, 476140] };
+const FIXED = { local: [5979845, 2527161, 4609858, 982956], desktop: [1212607, 1719423, 1806532, 365274, 2519242, 476140, 792900, 491978] };
 const STEPS = 400;
 test(`the outbox meets its specification in seeded runs (kills while working and while recovering, late checks, failing storage, two windows)`, async () => {
   const all: string[] = [];
@@ -693,5 +819,6 @@ test(`the outbox meets its specification in seeded runs (kills while working and
   if (!pinned) for (const name of ["killed (local)", "killed (desktop)", "killed while opening", "recovered after", "recovered before", "recovered between", "restart",
     "app restart", "resolve mine", "resolve theirs", "resolve both", "answer stale", "answer receipt", "answer equal", "answer lost", "send failed", "late read",
     "storage failing", "host write landed", "host write failed", "host write fenced", "B imports", "protected document checked", "three-document command",
-    "snapshot checked", "read captured earlier", "stale read delivered"]) expect(seen[name] ?? 0, name).toBeGreaterThan(0);
+    "snapshot checked", "read captured earlier", "stale read delivered", "own adopted", "edit refused while recovering", "receipts purged",
+    "app crash with host writes pending"]) expect(seen[name] ?? 0, name).toBeGreaterThan(0);
 }, 600_000);

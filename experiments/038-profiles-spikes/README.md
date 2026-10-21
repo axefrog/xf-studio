@@ -185,6 +185,17 @@ Results (22 October 2026), each under `tools/memory_guard.py --limit 4`:
 
 Reproduce the regression: `bun tools/s1-outbox.ts <scratch> "" desktop host 10`.
 
+**Review of chunk 1c-ii** (seven findings, all reproduced, each with a regression test in `tests/collection-owner.test.ts`, "review of chunk 1c-ii"):
+
+- **Recovery gate (High).** `own` used to rebase a replayed command's successors onto the later own revision, so an edit made over the recovered (older) copy could put that older content back without a conflict. Now no edit is admitted on a document with a recovered entry until the library has answered it (`OutboxRecoveringError`), `own` only becomes the baseline, and successors go over the replayed command's own revision. The gate is also what removes the 1c-i false conflict.
+- **Keep mine makes membership whole (High).** Keep mine on a collection now writes, in the same command, every look its list names as live and every look its removed list names as removed (restoring tombstoned ones); looks the other window added stay listed. Snapshots and Save version refuse a collection that lists a missing or non-live look; the cleanup never purges a look a live collection lists.
+- **Dependencies checked by the host (High).** A command carries what it `requires`; the host checks it inside the transaction and answers `missing`; the outbox puts the content again from what the page holds and resends.
+- **Write limit (Medium).** Commands over 64 writes are refused before they are recorded (`OutboxTooLargeError`); a collection is made with at most 63 looks at once (`MAX_LOOKS_AT_CREATE`).
+- **Save version's lease (Medium)** is rechecked inside the saving transaction. **Cancellation (Medium):** `settle(refs, signal)`; a snapshot's or save's wait ends with its signal, the changes are still sent. **Sessions (Low)** with no handles close once their changes reach the library.
+- **The specification test** now gives each window a workspace and lease generation on every command (the host's `own` is checked against the specification's own log of who wrote each revision), purges receipts no window can replay, and crashes the desktop app with host writes still on their way (each key keeps a prefix of them; the specification adopts what was recovered). It found three more defects after such crashes, now fixed: a repaired successor no longer jumps ahead of an earlier entry on its document; sequence numbers never fall below the clock, so a launch that recovered fewer entries still orders its new commands after older ones that come back; and the harness's own command IDs could collide. A conflict on a document whose predecessor's copy was lost may still be a false one after such a crash (shown, never written over).
+
+Results after the review fixes (22 October 2026): S1 on both hosts **PASS** (8 scenarios, 113 s; 0 missing, 0 false conflicts, 0 silent overwrites, 97 and 28 real conflicts all forked); desktop host-kill **PASS** 5 of 5 (4,727 mutations, 0 missing, 0 false conflicts); lease harness 34 of 34; specification test deep sweep of 400 local and 200 desktop seeds (244,000 steps) passes in 31 s, with 241 app crashes with host writes pending, 105 `own` adoptions and 27,097 edits refused while recovering; CI's run takes about 5 s.
+
 ## Acknowledgement and rebasing rules (S1, answering Sol's Medium point)
 
 - **A1, freeze on send.** From its first send, an outbox entry's command ID, bases and values never change. Every resend, after a timeout, a host restart or a renderer restart, reuses the ID.

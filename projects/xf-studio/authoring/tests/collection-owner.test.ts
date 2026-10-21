@@ -5,7 +5,7 @@
  * existing membership documents.
  */
 import { describe, expect, test } from "bun:test";
-import { DocumentOutbox } from "../src/platform/core/document-outbox";
+import { DocumentOutbox, OutboxRecoveringError } from "../src/platform/core/document-outbox";
 import { documentKey, isTombstone, tombstoneOf, type TransactAnswer } from "../src/platform/api/document-commands";
 import type { DocumentStorePort, WorkspaceFence } from "../src/platform/api/document-store";
 import { memoryOutboxStorage, storeDocuments } from "./fixtures/platform-doubles";
@@ -60,7 +60,7 @@ describe("receipts know their workspace: no false conflict after a crash with ho
     expect(fresh.transact({ id: "e1", command: "x", writes: [{ ...DOC, base: 0, value: 1 }] }, g)).not.toHaveProperty("own");
   });
 
-  test("the S1 desktop host-kill case: a new launch replays an older host copy, edits at once, and its edit lands over its own later write", async () => {
+  test("the S1 desktop host-kill case: a new launch replays an older host copy; no edit is made over it, and none conflicts with its own later write", async () => {
     for (const other of [false, true]) {
       const documents = storeDocuments(), store = documents.store;
       let fence: WorkspaceFence = { workspace: "desktop", generation: store.nextLease("desktop") };
@@ -75,33 +75,56 @@ describe("receipts know their workspace: no false conflict after a crash with ho
       const land = (n: number) => { for (const write of waiting.splice(0, n)) { if (write.text === null) delete host[write.key]; else host[write.key] = write.text; write.done(); } };
       const first = new DocumentOutbox(port, storageFor("one"), { retryMs: 5 });
       first.hold(DOC, null); first.open();
-      const e1 = first.commit("look.update", [{ ...DOC, value: { n: 1 } }]);
+      // Shape A, then (acknowledged later) shape B with more work in it.
+      const e1 = first.commit("look.update", [{ ...DOC, value: { shape: "A", name: "Look" } }]);
       land(1);   // the host's copy holds e1
       await quiet(first);
-      first.commit("look.update", [{ ...DOC, value: { n: 2 } }]);
+      first.commit("look.update", [{ ...DOC, value: { shape: "B", name: "Look" } }]);
       await quiet(first);
       expect(store.get(DOC.kind, DOC.id)!.revision).toBe(2);
       // The app dies: every later host write of the key is lost, so the next launch reads e1 back from the host's copy.
       first.stop(); waiting.splice(0);
-      if (other) store.transact({ id: "b", command: "x", writes: [{ ...DOC, base: 2, value: { n: "theirs" } }] }, { workspace: "browser-9", generation: 1 });
+      if (other) store.transact({ id: "b", command: "x", writes: [{ ...DOC, base: 2, value: { shape: "theirs", name: "Look" } }] }, { workspace: "browser-9", generation: 1 });
       fence = { workspace: "desktop", generation: store.nextLease("desktop") };
       const second = new DocumentOutbox(port, storageFor("two"), { retryMs: 5 });
       second.hold(DOC, store.read([DOC])[documentKey(DOC)]!);
       second.open();
       expect(second.pendingEntries().map(entry => entry.id)).toEqual([e1.id]);
-      second.commit("look.update", [{ ...DOC, value: { n: 3 } }]);
+      // A rename while e1 is replayed would be made over shape A: it waits for the replay's answer (finding 1 of the 1c-ii review).
+      expect(second.recovering(DOC)).toBe(true);
+      expect(() => second.commit("look.update", [{ ...DOC, value: { shape: "A", name: "Renamed" } }])).toThrow(OutboxRecoveringError);
       await quiet(second);
-      if (!other) {
-        expect(second.conflicts()).toEqual([]);
-        expect(store.get(DOC.kind, DOC.id)).toMatchObject({ revision: 3, value: { n: 3 } });
-        expect(second.document(DOC)).toMatchObject({ revision: 3, value: { n: 3 }, pending: false });
-      } else {
-        // Another workspace wrote after it: a real conflict, never written over.
-        expect(second.conflicts().length).toBe(1);
-        expect(store.get(DOC.kind, DOC.id)).toMatchObject({ revision: 3, value: { n: "theirs" } });
-      }
+      expect(second.recovering(DOC)).toBe(false);
+      const now = second.document(DOC)!.value as { shape: string };
+      expect(now.shape).toBe(other ? "theirs" : "B");
+      second.commit("look.update", [{ ...DOC, value: { ...now, name: "Renamed" } }]);
+      await quiet(second);
+      expect(second.conflicts()).toEqual([]);
+      expect(store.get(DOC.kind, DOC.id)).toMatchObject({ revision: other ? 4 : 3, value: { shape: other ? "theirs" : "B", name: "Renamed" } });
       second.stop();
     }
+  });
+
+  test("own: a replay answered by its receipt adopts this workspace's later revision as the baseline, and its successors still go over the receipt's", async () => {
+    const documents = storeDocuments(), store = documents.store;
+    const fence: WorkspaceFence = { workspace: "w", generation: store.nextLease("w") };
+    const { port } = fenced(documents, () => fence);
+    // Committed earlier by this workspace: e1 (A) then e2 (B). The page holds only e1, as a stored copy, plus a stored successor of it
+    // that was never sent; it never read the document.
+    store.transact({ id: "e1", command: "x", writes: [{ ...DOC, base: 0, value: { shape: "A" } }] }, fence);
+    store.transact({ id: "e2", command: "x", writes: [{ ...DOC, base: 1, value: { shape: "B" } }] }, fence);
+    const storage = memoryOutboxStorage();
+    storage.keys.set(documentKey(DOC), JSON.stringify({ schema: "xfs/outbox-1", stamp: 2, entries: [
+      { id: "e1", seq: 1, command: "x", writes: [{ ...DOC, base: 0, value: { shape: "A" } }], at: 0, state: "queued", stamp: 1 },
+      { id: "s", seq: 2, command: "x", writes: [{ ...DOC, base: { after: "e1" }, value: { shape: "A", name: "stale" } }], at: 0, state: "queued", stamp: 2 }] }));
+    const outbox = new DocumentOutbox(port, storage, { retryMs: 5 });
+    outbox.open();
+    await quiet(outbox);
+    // The successor went over revision 1 (what e1 produced), so it is a conflict against B, never written over it.
+    expect(outbox.conflicts().map(entry => entry.id)).toEqual(["s"]);
+    expect(store.get(DOC.kind, DOC.id)!.value).toEqual({ shape: "B" });
+    outbox.useTheirs("s");
+    expect(outbox.document(DOC)).toMatchObject({ revision: 2, value: { shape: "B" } });
   });
 });
 
@@ -582,5 +605,162 @@ describe("expiry between windows", () => {
     const stored = documents.store.get<{ name: string; removed: unknown[] }>(COLLECTION_WORKING, id)!.value;
     expect(stored).toMatchObject({ name: "Renamed elsewhere", removed: [] });
     expect(isTombstone(documents.store.get(LOOK_WORKING, `${id}/${first!.ref.look}`)!.value)).toBe(true);
+  });
+});
+
+describe("review of chunk 1c-ii: regressions", () => {
+  test("finding 2: Keep mine on a stale collection makes its membership whole in one command, restoring the looks it lists", async () => {
+    for (const how of ["removed", "pushed out"] as const) {
+      const documents = storeDocuments(), a = windowOn(documents), b = windowOn(documents);
+      await a.start();
+      const id = expectOk(a.owner.dispatch({ kind: "collection.create", name: "Shared", looks: [{ name: "x", parts: parts(1) }, { name: "y", parts: parts(2) }] })).collection;
+      await quiet(a.outbox);
+      await b.start();
+      const y = a.owner.looksOf(id)[1]!.ref;
+      expectOk(b.owner.dispatch({ kind: "collection.removeLook", collection: id, base: b.owner.collection(id)!.revision, look: y.look }));
+      await quiet(b.outbox);
+      if (how === "pushed out") {
+        // Another window's expiry: the look's tombstone, and the collection no longer names it.
+        const current = documents.store.get<Record<string, unknown>>(COLLECTION_WORKING, id)!, look = documents.store.get(LOOK_WORKING, `${id}/${y.look}`)!;
+        documents.store.transact({ id: "expire", command: "collection.expire", writes: [
+          { ...collectionRef(id), base: current.revision, value: { ...current.value, removed: [] } },
+          { kind: LOOK_WORKING, id: `${id}/${y.look}`, base: look.revision, value: tombstoneOf(look.value, 1) }] });
+      }
+      expectOk(a.owner.dispatch({ kind: "collection.rename", collection: id, base: a.owner.collection(id)!.revision, name: "Mine" }));
+      await quiet(a.outbox);
+      const [conflict] = a.owner.conflicts();
+      expect(await a.owner.resolve(conflict!.id, "mine")).toEqual({ available: true });
+      // One command: the collection and the look it lists, live again.
+      expect(a.outbox.pendingEntries().at(-1)!.writes.map(write => write.kind)).toEqual([COLLECTION_WORKING, LOOK_WORKING]);
+      await quiet(a.outbox);
+      const stored = documents.store.get<{ name: string; looks: string[]; removed: unknown[] }>(COLLECTION_WORKING, id)!.value;
+      expect(stored).toMatchObject({ name: "Mine", looks: [a.owner.looksOf(id)[0]!.ref.look, y.look], removed: [] });
+      expect(documents.store.get<{ state: string }>(LOOK_WORKING, `${id}/${y.look}`)!.value).toMatchObject({ state: "live", name: "y" });
+      const snapshot = await a.owner.snapshot(id);
+      expect("looks" in snapshot && snapshot.looks.map(look => look.name)).toEqual(["x", "y"]);
+    }
+  });
+
+  test("finding 2: a snapshot or a version never leaves out a listed look; cleanup never purges a look a live collection lists", async () => {
+    let now = 1_000_000_000_000;
+    const file = openTestLibrary(":memory:");
+    (file.documents as unknown as { options: { now: () => number } }).options.now = () => now;
+    try {
+      const source = STUDIO_PARTS.readCollection(readFixture(COLLECTION_FIXTURES[0]!));
+      const [first, second] = source.presets;
+      file.documents.transact({ id: "c", command: "collection.create", writes: [
+        { ...collectionRef(source.id), base: 0, value: { schema: "xfs/collection-working-1", id: source.id, name: "Broken", looks: [first!.id, second!.id], removed: [], createdAt: 1 } },
+        { ...lookRef({ collection: source.id, look: first!.id }), base: 0, value: { schema: "xfs/look-working-1", collection: source.id, id: first!.id, name: "a", parts: JSON.parse(JSON.stringify(first!.parts)), state: "live" } },
+        { ...lookRef({ collection: source.id, look: second!.id }), base: 0, value: tombstoneOf({ schema: "xfs/look-working-1", collection: source.id, id: second!.id, name: "b", parts: {}, state: "removed" }, now) }] });
+      expect(() => saveCollectionVersion(file.collections, file.documents, file.database, source.id)).toThrow("isn't there any more");
+      expect(file.collections.list()).toEqual([]);
+      const documents = { store: file.documents, list: async (kind: string) => file.documents.list(kind), transact: async (request: never) => file.documents.transact(request),
+        revisions: async (refs: never) => file.documents.revisions(refs), read: async (refs: never) => file.documents.read(refs) } as unknown as ReturnType<typeof storeDocuments>;
+      const w = windowOn(documents);
+      await w.start();
+      expect(await w.owner.snapshot(source.id)).toMatchObject({ available: false, code: "invalid_value" });
+      now += 40 * DAY;
+      file.documents.cleanup();
+      expect(file.documents.get(LOOK_WORKING, `${source.id}/${second!.id}`)).not.toBeNull();
+    } finally { file.close(); }
+  });
+
+  test("finding 3: a decoded save the cleanup purged before a command naming it landed is put again from this page, then the command lands", async () => {
+    const documents = storeDocuments(), store = documents.store;
+    const outbox = new DocumentOutbox(documents, memoryOutboxStorage(), { retryMs: 5, immutable: kind => kind === "saved-v" });
+    const blob = { kind: "saved-v", id: "s-1" }, doc = { kind: "character", id: "c-1" };
+    outbox.hold(blob, null); outbox.hold(doc, null); outbox.open();
+    outbox.put(blob, { save: 1 });
+    await quiet(outbox);
+    // The cleanup purges it (old, and nothing names it yet); this page still believes it is there.
+    (store as unknown as { db: { write(change: (db: { query(sql: string): { run(...args: unknown[]): unknown } }) => void): void } }).db
+      .write(db => { db.query("DELETE FROM documents WHERE kind = 'saved-v'").run(); });
+    expect(store.transact({ id: "probe", command: "x", writes: [{ ...doc, base: 0, value: 1 }], requires: [blob] })).toEqual({ ok: false, reason: "missing", missing: ["saved-v/s-1"] });
+    outbox.commit("character.create", [{ ...doc, value: { source: { decoded: "s-1" } } }], { requires: [blob] });
+    await quiet(outbox); await tick(20); await quiet(outbox);
+    expect(outbox.pendingEntries()).toEqual([]);
+    expect(store.get("saved-v", "s-1")!.value).toEqual({ save: 1 });
+    expect(store.get("character", "c-1")!.value).toEqual({ source: { decoded: "s-1" } });
+  });
+
+  test("finding 4: a command over the host's write limit is refused before it is recorded; the largest one allowed lands", async () => {
+    const { MAX_LOOKS_AT_CREATE } = await import("../src/library/collection-owner");
+    const documents = storeDocuments(), w = windowOn(documents);
+    await w.start();
+    const looks = (n: number) => Array.from({ length: n }, (_, i) => ({ name: `L${i}` }));
+    expect(w.owner.dispatch({ kind: "collection.create", name: "Too many", looks: looks(MAX_LOOKS_AT_CREATE + 1) })).toMatchObject({ ok: false, code: "limit" });
+    expect(w.outbox.pendingEntries()).toEqual([]);
+    expect(() => w.outbox.commit("x", looks(65).map((_, i) => ({ kind: "doc", id: `d${i}`, value: i })))).toThrow("too many");
+    const made = expectOk(w.owner.dispatch({ kind: "collection.create", name: "Full", looks: looks(MAX_LOOKS_AT_CREATE) }));
+    await quiet(w.outbox);
+    expect(documents.store.list(LOOK_WORKING).length).toBe(MAX_LOOKS_AT_CREATE);
+    expect(w.owner.looksOf(made.collection).length).toBe(MAX_LOOKS_AT_CREATE);
+  });
+
+  test("finding 5: Save version checks the lease inside its transaction: a lease issued while the request arrived refuses it", async () => {
+    const { collectionVersionsHandler } = await import("../src/library/host/collection-store");
+    const file = openTestLibrary(":memory:");
+    try {
+      const source = STUDIO_PARTS.readCollection(readFixture(COLLECTION_FIXTURES[0]!));
+      file.documents.transact({ id: "c", command: "collection.create", writes: [
+        { ...collectionRef(source.id), base: 0, value: { schema: "xfs/collection-working-1", id: source.id, name: "A", looks: [], removed: [], createdAt: 1 } }] });
+      const generation = file.documents.nextLease("desktop");
+      const handle = collectionVersionsHandler(file.collections, file.documents, file.database, "/api/collection-versions");
+      let release!: () => void;
+      const arrived = new Promise<void>(resolve => { release = resolve; });
+      const body = new ReadableStream({ async pull(controller) {
+        await arrived; controller.enqueue(new TextEncoder().encode(JSON.stringify({ collection: source.id }))); controller.close();
+      } });
+      const answer = handle(new Request("http://127.0.0.1:4317/api/collection-versions", { method: "POST", body, duplex: "half",
+        headers: { Origin: "http://127.0.0.1:4317", "Content-Type": "application/json", "X-XFS-Workspace-Lease": `${generation} desktop` } } as RequestInit));
+      await tick(5);
+      file.documents.nextLease("desktop");   // another page takes the workspace while the body is still arriving
+      release();
+      const response = await answer;
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({ code: "superseded" });
+      expect(file.collections.list()).toEqual([]);
+    } finally { file.close(); }
+  });
+
+  test("finding 6: a snapshot's or a save's wait for the flush ends with its signal; the changes are still sent", async () => {
+    const documents = storeDocuments();
+    let open!: () => void;
+    let hung = true;
+    const port: DocumentStorePort = { ...documents, async transact(request) {
+      if (hung) await new Promise<void>(resolve => { open = resolve; });
+      return documents.store.transact(request);
+    } };
+    const w = windowOn(documents, { port, versions: { save: async () => ({ revision: 1, updatedAt: "", documents: {} }) } });
+    await w.start();
+    const id = expectOk(w.owner.dispatch({ kind: "collection.create", name: "Hung", looks: [{ name: "x" }] })).collection;
+    const stop = new AbortController();
+    const snapshot = w.owner.snapshot(id, stop.signal), saved = w.owner.saveVersion(id, stop.signal);
+    await tick(5);
+    stop.abort();
+    expect(await snapshot).toMatchObject({ available: false, code: "not_ready" });
+    expect(await saved).toMatchObject({ ok: false, code: "not_ready" });
+    hung = false; open();
+    await quiet(w.outbox);
+    expect(documents.store.get(COLLECTION_WORKING, id)).not.toBeNull();
+  });
+
+  test("finding 7: a session whose last release couldn't wait for the library closes once its changes arrive", async () => {
+    const documents = storeDocuments();
+    let down = false;
+    const port: DocumentStorePort = { ...documents, async transact(request) { if (down) throw Error("The host didn't answer."); return documents.store.transact(request); } };
+    const w = windowOn(documents, { port });
+    await w.start();
+    const id = expectOk(w.owner.dispatch({ kind: "collection.create", name: "C", looks: [{ name: "x" }] })).collection;
+    await quiet(w.outbox);
+    const session = w.sessions.open(w.owner.looksOf(id)[0]!.ref);
+    down = true;
+    session.update({ name: "y" });
+    expect(await session.release()).toBe(false);
+    expect(w.sessions.held().length).toBe(1);
+    down = false;
+    await tick(30); await quiet(w.outbox);
+    expect(w.sessions.held()).toEqual([]);
+    expect(documents.store.get<{ name: string }>(LOOK_WORKING, `${id}/${w.owner.looksOf(id)[0]!.ref.look}`)!.value.name).toBe("y");
   });
 });

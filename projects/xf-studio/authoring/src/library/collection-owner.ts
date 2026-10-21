@@ -22,9 +22,9 @@
  * The running Studio still edits its one collection through `CollectionService` and the workspace; moving it here is the migration (1d).
  */
 import { refusal, type Capability } from "../platform/api/capability";
-import { documentKey, type DocumentRef, tombstoneOf } from "../platform/api/document-commands";
+import { COMMAND_LIMITS, documentKey, type DocumentRef, isTombstone, tombstoneOf } from "../platform/api/document-commands";
 import type { DocumentStorePort } from "../platform/api/document-store";
-import type { DocumentOutbox, OutboxEdit, OutboxEntry } from "../platform/core/document-outbox";
+import { type DocumentOutbox, type OutboxEdit, type OutboxEntry, OutboxRecoveringError, OutboxTooLargeError } from "../platform/core/document-outbox";
 import { COLLECTION_WORKING, COLLECTION_WORKING_SCHEMA, type CollectionWorking, collectionRef, collectionWorkingOf, LOOK_WORKING, LOOK_WORKING_SCHEMA,
   type LookRef, lookRef, type LookWorking, lookWorkingOf, lookOfDocument, nameOf, pruneRemoved, REMOVED_FOR_MS, type RemovedLook, suffixed } from "./collection-documents";
 
@@ -64,6 +64,10 @@ export type CollectionOwnerDeps = {
 };
 
 const NOT_FLUSHED = "Your latest changes haven't reached the library yet, so there's nothing coherent to save. They're kept here; try again in a moment.";
+const CANCELLED = "Cancelled. Your changes are still being saved.";
+export const INCOMPLETE = "This collection lists a look that isn't there any more, so it can't be saved or exported as it is. Open it to see what's missing.";
+/** The most looks a collection is made with in one command (each look is a document; one host transaction writes at most 64). */
+export const MAX_LOOKS_AT_CREATE = COMMAND_LIMITS.writes - 1;
 const IN_CONFLICT = "This collection changed in another window too. Choose which version to keep first.";
 const NAME_REASON = "A name is 1 to 120 characters.";
 const failed = (capability: Capability): CollectionAnswer => ({ ok: false, code: capability.code, reason: capability.reason ?? "That can't be done." });
@@ -193,6 +197,8 @@ export class CollectionOwner {
       if (command.id !== undefined && (typeof command.id !== "string" || !command.id || command.id.includes("/") || this.deps.outbox.document(collectionRef(command.id))?.value !== undefined))
         return refusal("invalid_value", "That collection already exists.");
       if ((command.looks ?? []).some(look => !nameOf(look.name))) return refusal("invalid_value", NAME_REASON);
+      if ((command.looks ?? []).length > MAX_LOOKS_AT_CREATE)
+        return refusal("limit", `A collection is made with up to ${MAX_LOOKS_AT_CREATE} looks at once. Add the rest to it afterwards.`);
       return { available: true };
     }
     const view = this.target(command.collection, command.base);
@@ -298,7 +304,7 @@ export class CollectionOwner {
       }
     }
     try { this.record(command.kind, edits); }
-    catch (error) { return failed(refusal("unavailable", (error as Error).message)); }
+    catch (error) { return failed(refusal(error instanceof OutboxTooLargeError ? "limit" : error instanceof OutboxRecoveringError ? "not_ready" : "unavailable", (error as Error).message)); }
     return { ok: true, collection: id, revision: this.deps.outbox.document(collectionRef(id))!.version, ...(look ? { look } : {}) };
   }
 
@@ -327,17 +333,55 @@ export class CollectionOwner {
     const conflict = find();
     if (!conflict) return refusal("invalid_value", "That was already resolved.");
     const forks = conflict.writes.some(write => write.kind === LOOK_WORKING && lookWorkingOf(write.value)?.state === "live");
+    const collections = conflict.writes.some(write => write.kind === COLLECTION_WORKING);
     if (keep === "both" && !forks) return refusal("invalid_value", "There's no look of yours to keep beside theirs.");
-    if (keep !== "mine" && forks) {
+    // Each resolution that makes membership (forks, or mine's collection over theirs) reads the looks as the library holds them now.
+    if ((keep !== "mine" && forks) || (keep === "mine" && collections)) {
       try { await this.deps.outbox.check(); } catch (error) { this.deps.report?.(error); }
       if (!find()) return refusal("invalid_value", "That was already resolved.");
     }
     try {
-      if (keep === "mine") this.deps.outbox.keepMine(conflict.id);
+      if (keep === "mine") this.deps.outbox.keepMine(conflict.id, collections ? mine => this.wholeMine(mine, conflict) : undefined);
       else if (!forks) this.deps.outbox.useTheirs(conflict.id);
       else this.deps.outbox.keepBoth(conflict.id, mine => this.forkOf(mine));
     } catch (error) { return refusal("unavailable", (error as Error).message); }
     return { available: true };
+  }
+  /**
+   * Keep mine over a collection, made whole in the same command (finding 2 of the 1c-ii review): every look mine's collection lists is
+   * live, and every look its removed list names is removed, writing whichever look states another window changed. A look theirs added
+   * that mine neither lists nor removed stays listed; a listed look nothing is left of (purged) leaves the list, as does a removed one.
+   */
+  private wholeMine(mine: readonly OutboxEdit[], conflict: OutboxEntry): OutboxEdit[] {
+    const edits = mine.map(edit => ({ ...edit }));
+    const now = (ref: { kind: string; id: string }): unknown => {
+      const key = documentKey(ref), own = edits.find(edit => documentKey(edit) === key);
+      if (own) return own.value;
+      return key in (conflict.current ?? {}) ? conflict.current![key]?.value : this.deps.outbox.document(ref)?.value;
+    };
+    const lookOf = (value: unknown): LookWorking | null => lookWorkingOf(isTombstone(value) ? (value as { value: unknown }).value : value);
+    const set = (ref: { kind: string; id: string }, value: unknown) => {
+      const at = edits.findIndex(edit => documentKey(edit) === documentKey(ref));
+      if (at >= 0) edits[at] = { ...edits[at]!, value }; else edits.push({ ...ref, value });
+    };
+    for (const edit of mine) {
+      const collection = edit.kind === COLLECTION_WORKING ? collectionWorkingOf(edit.value) : null;
+      if (!collection) continue;
+      const theirs = collectionWorkingOf(conflict.current?.[documentKey(edit)]?.value);
+      const looks = [...collection.looks], removed = [...collection.removed];
+      for (const id of theirs?.looks ?? []) if (!looks.includes(id) && !removed.some(item => item.look === id)) looks.push(id);
+      const keep = (id: string, state: "live" | "removed"): boolean => {
+        const ref = lookRef({ collection: collection.id, look: id }), value = now(ref);
+        if (value === undefined && !this.deps.outbox.document(ref)) return state === "live";   // never read here: theirs' own look
+        const look = lookOf(value);
+        if (!look) return false;
+        // A look this window is still changing keeps its own entries; one in another state is written to the one the list needs.
+        if ((isTombstone(value) || look.state !== state) && !this.deps.outbox.document(ref)?.pending) set(ref, { ...look, state });
+        return true;
+      };
+      set(edit, { ...collection, looks: looks.filter(id => keep(id, "live")), removed: removed.filter(item => keep(item.look, "removed")) });
+    }
+    return edits;
   }
   /**
    * Keep both: each live look of mine as a new look named "(this window)", added to its collection as the collection is now (theirs,
@@ -373,11 +417,12 @@ export class CollectionOwner {
     return [collectionRef(collection), ...(this.collection(collection)?.looks ?? []).map(look => lookRef({ collection, look }))];
   }
   /** Flushes the collection's entries: a refusal when they couldn't all reach the library, or one is a conflict. */
-  private async flushed(collection: string): Promise<Capability> {
+  private async flushed(collection: string, signal?: AbortSignal): Promise<Capability> {
     if (!this.collection(collection)) return refusal("missing_target", "That collection doesn't exist any more.");
     const refs = this.refsOf(collection);
     if (refs.some(ref => this.deps.outbox.document(ref)?.conflict)) return refusal("stale", IN_CONFLICT);
-    if (!await this.deps.outbox.settle(refs)) return refusal("unavailable", NOT_FLUSHED);
+    // `signal` ends only the wait: the changes are still sent.
+    if (!await this.deps.outbox.settle(refs, signal)) return signal?.aborted ? refusal("not_ready", CANCELLED) : refusal("unavailable", NOT_FLUSHED);
     if (this.refsOf(collection).some(ref => this.deps.outbox.document(ref)?.conflict)) return refusal("stale", IN_CONFLICT);
     return { available: true };
   }
@@ -386,7 +431,7 @@ export class CollectionOwner {
    * reached it (export records its revisions). A look order another window changed between the flush and the read is read again.
    */
   async snapshot(collection: string, signal?: AbortSignal): Promise<CollectionSnapshot | Capability> {
-    const ready = await this.flushed(collection);
+    const ready = await this.flushed(collection, signal);
     if (!ready.available) return ready;
     let refs = this.refsOf(collection);
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -396,6 +441,8 @@ export class CollectionOwner {
       const wanted = doc.looks.map(look => lookRef({ collection, look }));
       if (wanted.every(ref => documentKey(ref) in read)) {
         const looks = wanted.flatMap(ref => { const look = lookWorkingOf(read[documentKey(ref)]?.value); return look?.state === "live" ? [look] : []; });
+        // Never a snapshot with a listed look left out: the collection names a look that isn't there (or isn't live).
+        if (looks.length !== wanted.length) return refusal("invalid_value", INCOMPLETE);
         return { collection: doc, looks, revisions: Object.fromEntries([refs[0]!, ...wanted].map(ref => [documentKey(ref), read[documentKey(ref)]?.revision ?? 0])) };
       }
       refs = [refs[0]!, ...wanted];
@@ -408,7 +455,7 @@ export class CollectionOwner {
    */
   async saveVersion(collection: string, signal?: AbortSignal): Promise<{ ok: true; version: SavedVersion } | { ok: false; code: Capability["code"]; reason: string }> {
     if (!this.deps.versions) return { ok: false, code: "unavailable", reason: "Saving versions isn't available here." };
-    const ready = await this.flushed(collection);
+    const ready = await this.flushed(collection, signal);
     if (!ready.available) return { ok: false, code: ready.code, reason: ready.reason ?? NOT_FLUSHED };
     let version: SavedVersion;
     try { version = await this.deps.versions.save(collection, signal); }

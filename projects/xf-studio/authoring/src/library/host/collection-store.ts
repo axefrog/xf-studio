@@ -7,7 +7,8 @@ import type { LibraryDatabase } from "../../platform/persistence/library-databas
 import type { CollectionSummary, StoredCollection } from "../collection-session";
 import { collectionRef, collectionWorkingOf, lookRef, lookWorkingOf } from "../collection-documents";
 import { documentKey } from "../../platform/api/document-commands";
-import { parseFence, WORKSPACE_FENCE_HEADER } from "../../platform/api/document-store";
+import { parseFence, WORKSPACE_FENCE_HEADER, type WorkspaceFence } from "../../platform/api/document-store";
+import { INCOMPLETE } from "../collection-owner";
 import type { DocumentStore } from "../../platform/persistence/document-store";
 
 /**
@@ -121,9 +122,11 @@ export async function collectionRequest(request: Request, library: CollectionLib
  * its outbox for the collection first. Every save is a new version over the latest (two windows saving the same working copy both
  * succeed); the working copies are what conflicts are kept on. Answers the version and the working copies' revisions it was made from.
  */
-export function saveCollectionVersion(collections: CollectionLibrary, documents: DocumentStore, database: LibraryDatabase, id: string):
-  { revision: number; updatedAt: string; documents: Record<string, number> } {
+export function saveCollectionVersion(collections: CollectionLibrary, documents: DocumentStore, database: LibraryDatabase, id: string,
+  fence?: WorkspaceFence | null): { revision: number; updatedAt: string; documents: Record<string, number> } {
   return database.write(db => {
+    // The lease is checked inside the saving transaction: one issued while the request was arriving refuses it.
+    if (fence && fence.generation < documents.leaseGeneration(fence.workspace)) throw new SupersededSave();
     const key = documentKey(collectionRef(id));
     const head = documents.read([collectionRef(id)])[key];
     const working = collectionWorkingOf(head?.value);
@@ -131,6 +134,8 @@ export function saveCollectionVersion(collections: CollectionLibrary, documents:
     const refs = working.looks.map(look => lookRef({ collection: id, look }));
     const read = documents.read(refs);
     const looks = refs.flatMap(ref => { const look = lookWorkingOf(read[documentKey(ref)]?.value); return look?.state === "live" ? [look] : []; });
+    // Never a version with a listed look silently left out.
+    if (looks.length !== refs.length) throw new LibraryError(INCOMPLETE, 409);
     const latest = db.query("SELECT MAX(revision) AS revision FROM collection_revisions WHERE collection_id=?").get(id) as { revision: number | null } | null;
     const collection = { schema: COLLECTION_2, id, name: working.name,
       presets: looks.map(look => ({ id: look.id, name: look.name, revision: 1, parts: look.parts })),
@@ -140,6 +145,9 @@ export function saveCollectionVersion(collections: CollectionLibrary, documents:
       documents: { [key]: head.revision, ...Object.fromEntries(refs.map(ref => [documentKey(ref), read[documentKey(ref)]?.revision ?? 0])) } };
   });
 }
+
+/** Save version from a page whose workspace lease is no longer the newest. */
+class SupersededSave extends Error {}
 
 /**
  * `POST <path>` with `{ collection }`: Save version, answering `{ revision, updatedAt, documents }`. Local, same-origin pages only; a page
@@ -154,13 +162,14 @@ export function collectionVersionsHandler(collections: CollectionLibrary, docume
     if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
     const fence = parseFence(request.headers.get(WORKSPACE_FENCE_HEADER));
     if (fence === "invalid") return json({ error: "That isn't a workspace lease." }, 400);
-    if (fence && fence.generation < documents.leaseGeneration(fence.workspace))
-      return json({ code: "superseded", error: "This workspace is now open elsewhere, so this version wasn't saved here." }, 409);
+    const superseded = () => json({ code: "superseded", error: "This workspace is now open elsewhere, so this version wasn't saved here." }, 409);
+    if (fence && fence.generation < documents.leaseGeneration(fence.workspace)) return superseded();
     let body: { collection?: unknown };
     try { body = await request.json() as typeof body; } catch { return json({ error: "Invalid JSON." }, 400); }
     if (typeof body?.collection !== "string" || !/^[0-9a-f-]{36}$/.test(body.collection)) return json({ error: "That isn't a collection." }, 400);
-    try { return json(saveCollectionVersion(collections, documents, database, body.collection)); }
+    try { return json(saveCollectionVersion(collections, documents, database, body.collection, fence)); }
     catch (error) {
+      if (error instanceof SupersededSave) return superseded();
       if (error instanceof LibraryError) return json({ error: error.message }, error.status);
       hostFailure("library", "collection_version_failed", "A collection version couldn't be saved.", error);
       return json({ error: "The version couldn't be saved right now. Your working copy is safe." }, 500);

@@ -6,7 +6,7 @@
  *
  * A session hears its own look only: its edits here, an acknowledgement, a conflict and its resolution, and a change taken from another
  * window (`elsewhere`: "Changed elsewhere; Undo starts here" once the look history moves here). Releasing the last handle waits until
- * the library holds the look's changes; one that can't yet keeps the session open (the outbox still holds and resends them).
+ * the library holds the look's changes; one that can't yet keeps the session until they have (the outbox still holds and resends them).
  */
 import type { Capability } from "../platform/api/capability";
 import { documentKey } from "../platform/api/document-commands";
@@ -47,6 +47,9 @@ export class LookSessions {
         if (!session) continue;
         for (const listener of [...session.listeners]) listener({ kind });
       }
+      // A session whose last opener let go before its changes reached the library closes once they have.
+      for (const [key, session] of this.sessions)
+        if (session.handles === 0 && !outbox.document(lookRef(session.ref))?.pending) this.sessions.delete(key);
     });
   }
 

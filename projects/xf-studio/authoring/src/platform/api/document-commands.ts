@@ -38,6 +38,11 @@ export type TransactRequest = {
   readonly writes: readonly TransactWrite[];
   /** Earlier command IDs whose receipts this page no longer needs. */
   readonly forget?: readonly string[];
+  /**
+   * Immutable, content-addressed documents the command references (a decoded save a character names): checked inside the command's
+   * transaction, so a cleanup that purged one meanwhile makes the answer `missing`, never a reference to nothing.
+   */
+  readonly requires?: readonly DocumentRef[];
 };
 /** A document as it is now, in a stale answer or a read (null: it doesn't exist). */
 export type CurrentDocument = { readonly revision: number; readonly value: unknown } | null;
@@ -45,8 +50,8 @@ export type CurrentDocument = { readonly revision: number; readonly value: unkno
 export type CommandRevisions = Readonly<Record<string, number>>;
 /**
  * A command's answer: committed, with every written document's revision (`replayed` when it was answered from a receipt or by the
- * equal-value rule); `stale` with the written documents as they are now (nothing was written); `superseded` when the page no longer
- * holds its workspace (a newer lease generation, §2.3).
+ * equal-value rule); `stale` with the written documents as they are now (nothing was written); `missing` when a document it requires
+ * isn't in the library; `superseded` when the page no longer holds its workspace (a newer lease generation, §2.3).
  */
 export type TransactAnswer =
   | { readonly ok: true; readonly revisions: CommandRevisions; readonly replayed?: "receipt" | "equal";
@@ -56,6 +61,8 @@ export type TransactAnswer =
      */
     readonly own?: Readonly<Record<string, { readonly revision: number; readonly value: unknown }>> }
   | { readonly ok: false; readonly reason: "stale"; readonly current: Readonly<Record<string, CurrentDocument>> }
+  /** A document the command `requires` isn't in the library (purged): nothing was written; the page puts it again and resends. */
+  | { readonly ok: false; readonly reason: "missing"; readonly missing: readonly string[] }
   | { readonly ok: false; readonly reason: "superseded" };
 
 /**
