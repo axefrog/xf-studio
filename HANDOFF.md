@@ -19,7 +19,7 @@ Built and tested offline only; nothing staged into MO2 or the game. 0.8.1 is 0.8
 
 ## Verification
 
-The test card's "Build record (bridge 0.8.1, branch build, not staged)": built at `9eeb9a09018f`; `xfb_selftest --unit` UNIT OK (537), self-test 604 of 604, `bun test tools` 337 pass and 4 skipped (opt-in on-screen), typecheck, the Lua, world-object and theme checks, the redscript lint in three configurations against a copy of 2.31's `final.redscripts`, links and private paths; zip and DLL hashes there. The -writes zip with inventory is `4ceb756b…6c5e`, the DLL `dac4f75d…4498`.
+The test card's "Build record (bridge 0.8.1, branch build, not staged)": built at `c9ed3f2e6cc6`; `xfb_selftest --unit` UNIT OK (538), self-test 605 of 605, `bun test tools` 342 pass and 4 skipped (opt-in on-screen), typecheck, the Lua, world-object and theme checks, the redscript lint in three configurations against a copy of 2.31's `final.redscripts`, links and private paths; zip and DLL hashes there. The -writes zip with inventory is `6a07307c…5676`, the DLL `1a1b925f…baf7`.
 
 ## For the coordinator
 
