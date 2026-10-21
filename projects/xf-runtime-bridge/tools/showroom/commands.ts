@@ -35,6 +35,16 @@ async function anchorOf(context: CommandContext, wanted: string | undefined): Pr
   return { anchor: { origin: source.position, forward: source.forward, ground: v.position[2] }, from, raw };
 }
 
+/** 0.8.2 (the review): which archives the game loaded, asked of showroom.anchor 16 at a time (its limit) and combined. */
+export async function loadedArchives(context: CommandContext, archives: readonly string[]): Promise<Record<string, boolean>> {
+  const loaded: Record<string, boolean> = {};
+  for (let i = 0; i < archives.length; i += 16) {
+    const raw = await call(context, "showroom.anchor", { archives: archives.slice(i, i + 16) });
+    Object.assign(loaded, (raw.archives as Record<string, boolean> | undefined) ?? {});
+  }
+  return loaded;
+}
+
 /**
  * The showroom builds to use: the manifests given, or (0.8.2) the staged build found by itself (plan.ts chooseStagedShowroom:
  * this machine's builds, the ones the game loaded). found says which, for the answer.
@@ -43,9 +53,8 @@ async function manifestsOf(input: Json, context: CommandContext): Promise<{ show
   const paths = [...(input.manifest ? [input.manifest as string] : []), ...((input.manifests as string[] | undefined) ?? [])];
   if (paths.length) return { showrooms: paths.map(readShowroom) };
   const builds = showroomBuilds();
-  const archives = [...new Set(builds.map((b) => b.archive))].slice(0, 16);
-  const raw = archives.length ? await call(context, "showroom.anchor", { archives }) : {};
-  const chosen = chooseStagedShowroom(builds, (raw.archives as Record<string, boolean> | undefined) ?? {});
+  const loaded = await loadedArchives(context, [...new Set(builds.map((b) => b.archive))]);
+  const chosen = chooseStagedShowroom(builds, loaded);
   return {
     showrooms: [readShowroom(chosen.manifest)],
     found: { manifest: chosen.manifest, archive: chosen.archive, how: "the newest build on this machine whose archive the game loaded", ...(chosen.also_staged.length ? { also_staged: chosen.also_staged } : {}) },
@@ -326,8 +335,8 @@ export async function runShowroomRotate(input: Json, context: CommandContext): P
       if (sweep.capture === true) {
         try {
           // 0.8 (session 8's G4: the sweep's frames showed the XF overlay): the same hide as capture_screenshot's.
-          const shot = await withOverlayCleared(context, () => SWEEP_CAPTURE.capture({ target: context.api.captureTarget(), region: sweep.region ? { name: sweep.region } as never : undefined,
-            name: `${(sweep.name as string | undefined) ?? "showroom-sweep"}-${String(i + 1).padStart(2, "0")}`, outDir: context.captureRoot, route: "auto" }));
+          const shot = await withOverlayCleared(context, () => (stopIfCancelled(context), SWEEP_CAPTURE.capture({ target: context.api.captureTarget(), region: sweep.region ? { name: sweep.region } as never : undefined,
+            name: `${(sweep.name as string | undefined) ?? "showroom-sweep"}-${String(i + 1).padStart(2, "0")}`, outDir: context.captureRoot, route: "auto" })));
           const record: CaptureRecord = shot.value;
           frame.capture = { full: record.full?.path ?? null, view: record.view.path };
           frame.overlay = shot.overlay;

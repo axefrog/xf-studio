@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { BridgeClient, type BridgeResponse } from "../bridge-lib.ts";
 import type { CommandContext } from "../api/catalogue.ts";
 import { CommandApi, type BridgeTransport, type CommandOutcome } from "../api/command-api.ts";
-import { pressPastLoadPrompt, readSkipLoadingKey } from "../api/load-continue.ts";
+import { waitForLoadEnd } from "../api/load-continue.ts";
 import { validate } from "../api/schema.ts";
 import { findCommand } from "../api/catalogue.ts";
 import { chooseStagedShowroom, showroomBuilds } from "../showroom/plan.ts";
@@ -184,63 +184,51 @@ describe("0.8.2 session 9 (offline)", () => {
     expect(problems.join(" ")).toContain("button label");
   });
 
-  test("game.load waits for the press-any-key screen and presses past it with the game's continue key, once, only while it shows", async () => {
-    const statuses = [{ phase: "loading" }, { phase: "loading", waiting_for_input: true, allow_writes: true, write_classes: ["save"] }];
-    let pressed = 0;
+  test("game.load's wait answers when the press-any-key screen waits, and never sends a key (review: no synthetic key)", async () => {
     let now = 0;
+    let keys = 0;
     const context = {
       cid: "t",
       api: {
-        callBridge: async () => {
-          const s = pressed > 0 ? { phase: "gameplay" } : statuses[Math.min(1, Math.floor(now / 1000))]!;
-          return { ok: true, result: s };
-        },
-        session: () => ({ pid: 0 }),
-        keyTarget: () => ({ hwnd: 1n, pid: 1 }),
-        keySender: () => async (_target: unknown, vk: number, route: string, options: Any) => {
-          await options.beforeSend();
-          expect(vk).toBe(0x20);
-          expect(route).toBe("sendinput");
-          expect(options.focus).toBe("require");
-          pressed++;
-          return { route, focused_by_bridge: false };
-        },
-      },
-    } as unknown as CommandContext;
-    const out = await pressPastLoadPrompt(context, { waitMs: 30_000, now: () => now, sleep: async (ms) => void (now += ms) });
-    expect(out.reached).toBe("gameplay");
-    expect(out.presses.length).toBe(1);
-    expect(out.presses[0].key).toBe("IK_Space");
-    expect(pressed).toBe(1);
-  });
-
-  test("no key goes while the screen isn't showing (still loading), and a slow load answers in time with the way on", async () => {
-    let now = 0;
-    let sent = 0;
-    const context = {
-      cid: "t",
-      api: {
-        callBridge: async () => ({ ok: true, result: { phase: "loading" } }),
+        callBridge: async () => ({ ok: true, result: now < 2000 ? { phase: "loading" } : { phase: "loading", waiting_for_input: true } }),
         session: () => ({ pid: 0 }),
         keyTarget: () => ({ hwnd: 1n, pid: 1 }),
         keySender: () => async () => {
-          sent++;
+          keys++;
           return {};
         },
       },
     } as unknown as CommandContext;
-    const out = await pressPastLoadPrompt(context, { waitMs: 5000, now: () => now, sleep: async (ms) => void (now += ms) });
-    expect(sent).toBe(0);
-    expect(out.reached).toBe("loading");
-    expect(out.notes.join(" ")).toContain("game_continue");
+    const out = await waitForLoadEnd(context, { waitMs: 30_000, now: () => now, sleep: async (ms) => void (now += ms) });
+    expect(out.reached).toBe("press_any_key");
+    expect(out.waiting_for_input).toBe(true);
+    expect(out.note).toContain("ask the player to press a key");
+    expect(now).toBeGreaterThanOrEqual(2000 + 1500);
+    expect(keys).toBe(0);
+    expect(readFileSync(join(projectDir, "tools", "api", "load-continue.ts"), "utf8")).not.toMatch(/keySender|SendInput|sendKeyToWindow/);
   });
 
-  test("the continue key is the game's skip_loading binding from its input mappings (keyboard), else Space", () => {
-    const dir = tempDir("xfb-082-map-");
-    const file = join(dir, "inputUserMappings.xml");
-    writeFileSync(file, `<bindings>\n<mapping name="skip_loading" type="Button">\n<button id="IK_Pad_B_CIRCLE" />\n<button id="IK_Enter" />\n</mapping>\n</bindings>`);
-    expect(readSkipLoadingKey(file)).toEqual({ name: "IK_Enter", source: "input_mappings" });
-    expect(readSkipLoadingKey(join(dir, "missing.xml"))).toEqual({ name: "IK_Space", source: "default" });
+  test("a load that reaches gameplay answers gameplay; a slow one answers in time with the way on", async () => {
+    let now = 0;
+    const context = (result: Any) => ({ cid: "t", api: { callBridge: async () => ({ ok: true, result: typeof result === "function" ? result() : result }) } }) as unknown as CommandContext;
+    const done = await waitForLoadEnd(context(() => (now >= 1000 ? { phase: "gameplay" } : { phase: "loading" })), { waitMs: 30_000, now: () => now, sleep: async (ms) => void (now += ms) });
+    expect(done.reached).toBe("gameplay");
+    now = 0;
+    const slow = await waitForLoadEnd(context({ phase: "loading" }), { waitMs: 5000, now: () => now, sleep: async (ms) => void (now += ms) });
+    expect(slow.reached).toBe("loading");
+    expect(slow.note).toContain("game_wait");
+  });
+
+  test("game.continue refuses plainly: no route inside the game is known, and no key is sent", async () => {
+    const dir = tempDir("xfb-082-cont-");
+    fakeSession(dir);
+    const sent: string[] = [];
+    const api = new CommandApi({ runtimeDir: dir, auditDir: join(dir, "logs"), captureRoot: join(dir, "captures"), transport: async () => ({ call: async (m) => (sent.push(m), answer({})), close: () => undefined }) });
+    const out = await api.run("game.continue", {});
+    expect(codeOf(out)).toBe("no_safe_route");
+    expect(!out.ok && out.error.message).toContain("never sends one");
+    expect(sent).toEqual([]);
+    api.close();
   });
 
   test("the staged showroom is found by itself: the newest build per archive, the newest the game loaded", () => {
@@ -373,5 +361,42 @@ describe("0.8.2 against the self-test host", () => {
 
   test("the tools' version is 0.8.2", () => {
     expect(JSON.parse(readFileSync(join(projectDir, "package.json"), "utf8")).version).toBe("0.8.2");
+  });
+});
+
+describe("0.8.2 review fixes (tools)", () => {
+  test("review 6: a cancelled screenshot takes no picture without a bridge, or with clear_overlay false", async () => {
+    for (const withSession of [false, true]) {
+      const dir = tempDir("xfb-082-cap-");
+      if (withSession) fakeSession(dir);
+      const sent: string[] = [];
+      const api = new CommandApi({ runtimeDir: dir, auditDir: join(dir, "logs"), captureRoot: join(dir, "captures"), transport: async () => ({ call: async (m) => (sent.push(m), answer({})), close: () => undefined }) });
+      const controller = new AbortController();
+      controller.abort("test");
+      const out = await api.run("capture.screenshot", withSession ? { clear_overlay: false } : {}, { signal: controller.signal });
+      expect(codeOf(out)).toBe("interrupted");
+      expect(readdirSync(dir)).not.toContain("captures");
+      expect(sent).toEqual([]);
+      api.close();
+    }
+  });
+
+  test("review 7: showroom discovery asks about every archive, 16 at a time, and combines the answers", async () => {
+    const { loadedArchives } = await import("../showroom/commands.ts");
+    const archives = Array.from({ length: 17 }, (_, i) => "xfs_showroom_" + i.toString(16).padStart(32, "0"));
+    const asked: string[][] = [];
+    const context = {
+      cid: "t",
+      api: {
+        callBridge: async (_method: string, params: Any) => {
+          asked.push(params.archives);
+          return { ok: true, result: { archives: Object.fromEntries(params.archives.map((a: string) => [a, a === archives[16]])) } };
+        },
+      },
+    } as unknown as CommandContext;
+    const loaded = await loadedArchives(context, archives);
+    expect(asked.map((a) => a.length)).toEqual([16, 1]);
+    expect(loaded[archives[16]!]).toBe(true);
+    expect(Object.keys(loaded).length).toBe(17);
   });
 });

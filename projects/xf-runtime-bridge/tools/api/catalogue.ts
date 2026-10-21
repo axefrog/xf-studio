@@ -19,7 +19,7 @@
 // The game side enforces the real gate: every write is refused unless the bridge's config.ini
 // has allow_writes = true, which only the dedicated test profile sets.
 
-import { pressPastLoadPrompt } from "./load-continue.ts";
+import { refuseContinue, waitForLoadEnd } from "./load-continue.ts";
 import { captureBurst, captureWindow, CaptureError, grabForAnalysis, recrop, type CaptureRecord } from "../capture/capture.ts";
 import { NAMED_REGIONS, type RegionSpec } from "../capture/regions.ts";
 import type { CommandApi, ImageRef } from "./command-api.ts";
@@ -32,7 +32,7 @@ import { bool, int, num, obj, oneOf, str, type JsonSchema } from "./schema.ts";
 import { isMatch, matchLabel } from "./labels.ts";
 import { runShowroomLight, runShowroomRotate, runShowroomSpawn } from "../showroom/commands.ts";
 import { eyesOf, facingOf, toWorld, type Vec3 as ShowroomVec3 } from "../showroom/plan.ts";
-import { BEHAVE_COMMANDS, PLAYER_COMMANDS, PRESET_COMMAND, SCENE_COMMANDS, withOverlayCleared } from "./catalogue060.ts";
+import { BEHAVE_COMMANDS, PLAYER_COMMANDS, PRESET_COMMAND, SCENE_COMMANDS, stopIfCancelled, withOverlayCleared } from "./catalogue060.ts";
 import { COMMANDS_070 } from "./catalogue070.ts";
 import { applyCatalogue080 } from "./catalogue080.ts";
 import { frameStatsInCapture, judgeAfter, judgeBefore, pickSubject, runSceneReport, type Expectation } from "../scene/report.ts";
@@ -222,8 +222,10 @@ async function runScreenshot(input: Record<string, unknown>, context: CommandCon
       throw planError("expectation_failed", `The pre-capture check didn't pass, so no screenshot was taken: ${failed.map((f) => f.detail).join("; ")}. Fix the framing or light, drop a check that can't run here, or pass on_fail: warn.`);
     }
   }
-  const grab = () =>
-    captureWindow({
+  // 0.8.2 (the review): the cancellation is checked right before the picture, on every path (clear_overlay false too).
+  const grab = () => {
+    stopIfCancelled(context, "the capture");
+    return captureWindow({
       target: context.api.captureTarget(),
       region: regionOf(input),
       view: viewOf(input),
@@ -231,6 +233,7 @@ async function runScreenshot(input: Record<string, unknown>, context: CommandCon
       name: input.name as string | undefined,
       outDir: context.captureRoot,
     });
+  };
   let record!: CaptureRecord;
   let overlay: Record<string, unknown> | null = null;
   try {
@@ -402,6 +405,7 @@ async function runFrame(input: Record<string, unknown>, context: CommandContext)
         await sleepMs(500);
       }
       try {
+        stopIfCancelled(context, "the frame's capture");
         return grabForAnalysis(context.api.captureTarget(), 960);
       } catch (error) {
         captureFailure(error);
@@ -603,7 +607,7 @@ export function lightParams(input: Record<string, unknown>): Record<string, unkn
 }
 
 /** game.load: exactly one of latest and name, and discard_unsaved: true (RB-56). */
-/** game.load (0.8.2): the bridge's load, then the wait and the key past the press-any-key screen (api/load-continue.ts). */
+/** game.load (0.8.2): the bridge's load, then the wait for its end, saying when the press-any-key screen waits (api/load-continue.ts). */
 async function runGameLoad(input: Record<string, unknown>, context: CommandContext): Promise<CommandResult> {
   const { continue_wait_s: waitS, ...rest } = input;
   const response = await context.api.callBridge("game.load", loadParams(rest), context.cid, loadClientTimeoutMs(), context.signal);
@@ -611,8 +615,8 @@ async function runGameLoad(input: Record<string, unknown>, context: CommandConte
   const loaded = response.result as Record<string, unknown>;
   const wait = ((waitS as number | undefined) ?? 75) * 1000;
   if (wait <= 0) return { value: loaded };
-  const continued = await pressPastLoadPrompt(context, { waitMs: wait });
-  return { value: { ...loaded, continued, note: continued.reached === "gameplay" ? "the save loaded and gameplay started" : loaded.note } };
+  const continued = await waitForLoadEnd(context, { waitMs: wait });
+  return { value: { ...loaded, continued, note: continued.reached === "gameplay" ? "the save loaded and gameplay started" : continued.note } };
 }
 
 function loadParams(input: Record<string, unknown>): Record<string, unknown> {
@@ -808,8 +812,9 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
         // capture_screenshot's, held for the burst's length.
         const shot = await withOverlayCleared(
           context,
-          () =>
-            captureBurst({
+          () => {
+            stopIfCancelled(context, "the burst");
+            return captureBurst({
               target: api.captureTarget(),
               region: regionOf(input),
               view: viewOf(input),
@@ -819,7 +824,8 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
               frames,
               intervalMs,
               signal,
-            }),
+            });
+          },
           frames * (intervalMs + 60) + 2000,
         );
         const record = shot.value;
@@ -1452,14 +1458,14 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
     name: "game.load",
     title: "Load a save",
     description:
-      "Loads the most recent save of this playthrough (latest: true, the game's quick load) or one save by its name in the game's list (for example ManualSave-12); an unknown name is refused with some of the names the game lists. From normal play or the pause menu, and from the main menu (0.8: the menu's own paths, so the player only has to launch the game: latest is its Continue, a name its Load menu's, both through the modded-save path for a save made with mods). Everything since that save is discarded, unsaved progress and the bridge's save lock with it, and the game doesn't ask first, so discard_unsaved: true is required. Not from photo mode or the appearance screen. Then (0.8.2) it waits up to continue_wait_s (default 75) for the load to end and presses past the game's press-any-key screen with the game's continue key (Space), the way photo_open presses its key: only to the game window, only while it is in front, and only while the game still shows that screen. If the load takes longer, game_continue goes on waiting and pressing; continue_wait_s 0 only starts the load (then game_continue or game_wait). Needs the save permission.",
+      "Loads the most recent save of this playthrough (latest: true, the game's quick load) or one save by its name in the game's list (for example ManualSave-12); an unknown name is refused with some of the names the game lists. From normal play or the pause menu, and from the main menu (0.8: the menu's own paths, so the player only has to launch the game: latest is its Continue, a name its Load menu's, both through the modded-save path for a save made with mods). Everything since that save is discarded, unsaved progress and the bridge's save lock with it, and the game doesn't ask first, so discard_unsaved: true is required. Not from photo mode or the appearance screen. Then (0.8.2) it waits up to continue_wait_s (default 75) for the load to end and answers as soon as the game is in normal play or waits on its press-any-key screen (continued.reached press_any_key: ask the player to press a key; the bridge never sends one). continue_wait_s 0 only starts the load (then game_wait). Needs the save permission.",
     permission: "write-save",
     input: obj(
       {
         latest: bool("true: load the most recent save of this playthrough."),
         name: str("A save's name as the game lists it (for example ManualSave-12).", { pattern: "^[A-Za-z0-9 ._-]{1,64}$", maxLength: 64 }),
         discard_unsaved: bool("Must be true: everything since that save, unsaved progress included, is discarded."),
-        continue_wait_s: int("How long to wait for the load to end and press past the press-any-key screen, 0 to 85 seconds. Default 75; 0 only starts the load.", 0, 85),
+        continue_wait_s: int("How long to wait for the load to end (gameplay, or the press-any-key screen), 0 to 85 seconds. Default 75; 0 only starts the load.", 0, 85),
       },
       ["discard_unsaved"],
     ),
@@ -1470,11 +1476,11 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
     name: "game.continue",
     title: "Press past the press-any-key screen",
     description:
-      "After a load, waits up to wait_s (default 60) for gameplay and presses past the game's press-any-key screen with the game's continue key (its skip_loading binding, Space by default): the way photo_open presses its key, only to the game window, only while it is in front, and only while the bridge still sees the screen (the loaded player's puppet is in, the player not yet). Presses at most three times, a few seconds apart. Answers when gameplay starts or the time is up, with each press. game_load does this by itself; this is for a load that took longer. Needs the save permission (as game_load).",
+      "Not available yet: refuses (no_safe_route). The bridge would press past the game's press-any-key screen after a load only through a route inside the game (the loading screen's own controller); the only route it has is a synthetic key press, which could reach another window or gameplay, so it never sends one. Ask the player to press a key; game_load says when the screen waits.",
     permission: "write-save",
-    input: obj({ wait_s: int("How long to wait, 1 to 85 seconds. Default 60.", 1, 85) }),
-    undo: "None: the key only ends the loading screen.",
-    local: async (input, context) => ({ value: await pressPastLoadPrompt(context, { waitMs: ((input.wait_s as number | undefined) ?? 60) * 1000 }) }),
+    input: obj({}),
+    undo: "None.",
+    local: async () => refuseContinue(),
   },
 
   // The player's view

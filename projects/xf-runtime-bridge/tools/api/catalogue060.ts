@@ -59,7 +59,10 @@ export const point3 = (description: string): JsonSchema => ({ type: "array", des
  * bridge (or a bridge too old for ui.hud) the capture just runs.
  */
 export async function withOverlayCleared<T>(context: CommandContext, run: () => T | Promise<T>, hideMs = 5000): Promise<{ value: T; overlay: Json }> {
-  if (!context.api.session()) return { value: await run(), overlay: { cleared: false, why: "the game bridge isn't running" } };
+  if (!context.api.session()) {
+    stopIfCancelled(context, "the capture");
+    return { value: await run(), overlay: { cleared: false, why: "the game bridge isn't running" } };
+  }
   // 0.8.2: the preparation is forward work, so a cancelled command sends none of it; only the put-back below always runs.
   const cleared = await forward(context, "ui.message", { clear: true, keep_asks: true });
   const hud = await forward(context, "ui.hud", { show: false, cet_label: false });
@@ -278,9 +281,10 @@ async function runCaptureSheet(input: Json, context: CommandContext): Promise<Co
         continue;
       }
       // No path: take the picture now (the XF overlay out of it).
-      const shot = await withOverlayCleared(context, () =>
-        captureWindow({ target: context.api.captureTarget(), region: input.region ? ({ name: input.region } as never) : undefined, name: `${(input.name as string | undefined) ?? "sheet"}-${String(i + 1).padStart(2, "0")}`, outDir: root, route: "auto" }),
-      );
+      const shot = await withOverlayCleared(context, () => {
+        stopIfCancelled(context, "the sheet's next picture");
+        return captureWindow({ target: context.api.captureTarget(), region: input.region ? ({ name: input.region } as never) : undefined, name: `${(input.name as string | undefined) ?? "sheet"}-${String(i + 1).padStart(2, "0")}`, outDir: root, route: "auto" });
+      });
       overlay = shot.overlay;
       cells.push({ label: cell.label, pixels: shrinkCell(decodePng(new Uint8Array(readFileSync(shot.value.full.path))), widest), source: shot.value.full.path });
     }

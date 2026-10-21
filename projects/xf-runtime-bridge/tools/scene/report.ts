@@ -374,6 +374,11 @@ export async function runSceneReport(input: Json, context: CommandContext) {
     if (!subject?.bounds) {
       value.frame = { error: "no subject with screen bounds to measure (is it in front of the camera?)" };
     } else {
+      // 0.8.2 (the review): no capture once the command is cancelled.
+      if (context.signal?.aborted) {
+        const message = "Stopped before the frame's capture: an emergency control (or Ctrl+C) cancelled this command.";
+        throw Object.assign(new Error(message), { plain: { code: "interrupted", message } });
+      }
       const pixels = grabForAnalysis(context.api.captureTarget(), options.frame?.max_width ?? 960);
       const stats = frameStats(pixels, subject.bounds, (model as CameraModel | undefined)?.aspect);
       value.frame = { subject: subject.id, ...stats };

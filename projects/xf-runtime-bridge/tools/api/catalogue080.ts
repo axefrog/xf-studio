@@ -185,7 +185,7 @@ export const REFUSALS: Readonly<Record<string, readonly string[]>> = {
   "cc.back": ["creator_leave_disabled", "not_in_character_menu"],
   "game.save": ["bridge_save_lock", "bridge_effects_active", "saving_locked", "no_free_slot", "save_failed", "save_uncertain", "not_in_gameplay"],
   "game.load": ["not_in_gameplay", "save_not_found", "metadata_pending", "unavailable", "timeout"],
-  "game.continue": ["interrupted"],
+  "game.continue": ["no_safe_route"],
   "ui.message": [],
   "ui.hud": [],
   "world.time.set": ["not_in_gameplay", "not_in_photo_mode", "unavailable"],
