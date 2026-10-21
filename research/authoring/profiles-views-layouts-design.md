@@ -226,6 +226,13 @@ flowchart TB
   - The holder is asked to release. It stops accepting edits at once, drains its outbox (flushes), stops its timers and callbacks, writes the workspace a last time, then releases the lease and confirms.
   - If the holder doesn't answer, the new window waits: "Waiting for the other window to finish saving. Close it to continue." The lease moves only when the holder terminates (localhost: the browser releases its Web Lock `xfs.workspace.<key>`; desktop: the host sees its page end).
   - There is no timed steal.
+- **Built in phase 1a, with these details:**
+  - **The desktop app is single-instance.** A second launch brings the running window forward and quits, so two host processes never share `workspace.json`.
+  - **Release order.** A release first ends any open gesture or control edit, committed as one Undo step. Then it refuses edits, drains, makes the last workspace write, and releases.
+  - **What stays available.** A read-only window still reads the library and keeps diagnostics. Its UI preferences work in memory, but are never written while it is read-only.
+  - **Workspace identity.** On localhost the workspace key is a per-browser ID. Fencing generations and the outbox keys use the same ID.
+  - **Takeover restarts the page,** until scene runtimes (phase 4a) allow switching in place.
+  - **Where the read-only message shows.** It is a full-width notice under the header (style-guide pattern `t-read-only-window`). Editing controls show as unavailable, with the reason.
 - **Fencing at the host, as a backstop.** Every lease carries a generation. Document commands and desktop workspace writes carry it, and the host refuses an older generation. A late write from a released window can't land.
 - **The lease and takeover are the one persistence piece the spikes didn't cover.** They are phase 1's first task, with their own small harness: two windows on each host, the holder killed mid-drain, a hung holder, and a late write after release refused by fencing.
 
