@@ -701,3 +701,23 @@ test("taking over records kept under the destination alone resumes when stopped 
     expect(again.preflight("second").replacingOwned).toBe(true);
   } finally { f.cleanup(); }
 });
+
+test("a partly removed or changed install still holds its features; only one with none of its files left is gone (INSTALL-07)", () => {
+  const f = extrasFixture("direct");
+  try {
+    extrasCandidate(f.store, "smiles", "one");
+    const placed = createModInstallTransport({ candidateStore: f.store, receiptsRoot: f.receiptsRoot, settings: f.settings, modName: EXPR, product: NS });
+    const files = placed.install("smiles").files.map(entry => entry.path);
+    productCandidate(f.store, "copy", { archive: "xfs_mcopy", modName: "XF Copy", features: [{ feature: "expressions", namespace: NS }] });
+    const copy = () => createModInstallTransport({ candidateStore: f.store, receiptsRoot: f.receiptsRoot, settings: f.settings, modName: "XF Copy", product: "xfs_mcopy" });
+    // Only its TweakXL file deleted: the archive and its declaration still load, so the same feature is still installed.
+    rmSync(f.at(`r6/tweaks/${NS}/${NS}.yaml`));
+    expect(() => copy().preflight("copy")).toThrow(`already installed in another XF mod (${NS})`);
+    // A file of another size doesn't prove it is gone either.
+    writeFileSync(f.at(files[0]!), "replaced with something longer than before");
+    expect(() => copy().preflight("copy")).toThrow("already installed in another XF mod");
+    // With none of its files left, it is gone.
+    for (const path of files) rmSync(f.at(path), { force: true });
+    expect(copy().preflight("copy").files).toHaveLength(2);
+  } finally { f.cleanup(); }
+});

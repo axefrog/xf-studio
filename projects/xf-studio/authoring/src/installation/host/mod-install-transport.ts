@@ -364,16 +364,17 @@ export function createModInstallTransport(config: InstallTransportConfig) {
     return folders;
   };
   /**
-   * Whether a record's install is still there: every file it names present at its size below its install folder (`target` is that
-   * folder's `archive/pc/mod`). A mod removed in the mod manager, or its files deleted, is no longer installed (INSTALL-07). A
-   * record this can't judge counts as installed.
+   * Whether a record's install may still be there (INSTALL-07). Only an install with none of its files left is gone, as after removing
+   * the mod in the mod manager or deleting its files: a partly removed install, or a file of another size, doesn't prove its features are
+   * gone (its archive and `.xl` may still load), so it still counts. A record this can't judge, or a file this can't inspect, counts too.
    */
   const stillInstalled = (receipt: InstallReceipt) => {
     if (typeof receipt.target !== "string" || !isAbsolute(receipt.target) || !validEntries(receipt.files, receipt.namespace)) return true;
     const root = dirname(dirname(dirname(receipt.target)));
-    return receipt.files.every(entry => {
+    return receipt.files.some(entry => {
       const file = join(root, ...entry.path.split("/"));
-      try { const stat = lstatSync(file); return inside(file, root) && stat.isFile() && stat.size === entry.bytes; } catch { return false; }
+      if (!inside(file, root)) return true;
+      try { lstatSync(file); return true; } catch (error) { return (error as NodeJS.ErrnoException).code !== "ENOENT"; }
     });
   };
   /**
@@ -510,7 +511,7 @@ export function createModInstallTransport(config: InstallTransportConfig) {
     // A mod's own MO2 folder holds one product: another product's live install there is replaced only after it is uninstalled.
     // The game folder (the direct route) is shared by every product, each with its own record (INSTALL-06).
     if (product && target.route === "mo2" && !prior && otherRecords().some(receipt => receipt.targetId === targetId &&
-      receipt.namespace !== product && validEntries(receipt.files, receipt.namespace) && receipt.files.every(entry => existsSync(destination(entry)))))
+      receipt.namespace !== product && stillInstalled(receipt)))
       throw Error("Changing the installed namespace requires uninstalling the owned pair first.");
     assert(!foreignFolder(prior, gone), `Mod Organizer 2 already has a mod called “${modName}” that XF Studio didn't put there, so nothing was ` +
       "installed. Rename your mod in Mod package, or rename that mod in Mod Organizer 2, then try again.");
