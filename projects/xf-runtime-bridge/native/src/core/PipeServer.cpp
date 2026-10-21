@@ -282,8 +282,9 @@ void PipeServer::Run()
         m_connections.fetch_add(1);
         m_hasClient.store(true);
         ResetEvent(drop);
+        // 0.8.3: which pipe (session 10 couldn't tell the control pipe's connections from the main pipe's in the log).
         log::Info("bridge.client_connected", "client_pid=" + std::to_string(clientPid) +
-                                                 " connection=" + std::to_string(m_connections.load()));
+                                                 " connection=" + std::to_string(m_connections.load()) + " pipe=" + PipeKind());
 
         const auto reason = ServeClient(clientPid);
         if (reason == EndReason::Dropped || reason == EndReason::TooLarge || reason == EndReason::TooManyRejected)
@@ -293,7 +294,7 @@ void PipeServer::Run()
         // No FlushFileBuffers: it waits until the client reads, which a client can refuse to do.
         DisconnectNamedPipe(pipe);
         m_hasClient.store(false);
-        log::Info("bridge.client_disconnected", "client_pid=" + std::to_string(clientPid) +
+        log::Info("bridge.client_disconnected", "pipe=" + PipeKind() + " client_pid=" + std::to_string(clientPid) +
                                                     " reason=" + ReasonName(static_cast<int>(reason)));
         if (reason == EndReason::TooManyRejected)
         {
@@ -308,6 +309,12 @@ void PipeServer::Run()
 
     CloseHandle(connectEvent);
     log::Info("bridge.stopped", "connections_served=" + std::to_string(m_connections.load()));
+}
+
+std::string PipeServer::PipeKind() const
+{
+    const std::wstring suffix = L"-control";
+    return m_pipeName.size() >= suffix.size() && m_pipeName.compare(m_pipeName.size() - suffix.size(), suffix.size(), suffix) == 0 ? "control" : "main";
 }
 
 PipeServer::EndReason PipeServer::ServeClient(uint32_t aClientPid)

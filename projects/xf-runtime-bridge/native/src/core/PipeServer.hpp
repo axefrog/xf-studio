@@ -75,6 +75,8 @@ private:
 
     void Run();
     EndReason ServeClient(uint32_t aClientPid);
+    // 0.8.3: "control" for the <pipe>-control server, else "main" (the log names which pipe a client used).
+    std::string PipeKind() const;
     void Linger();
     bool WriteAll(const std::string& aData);
 
