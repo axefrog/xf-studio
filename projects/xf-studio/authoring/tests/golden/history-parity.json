@@ -6565,7 +6565,7 @@
     "code": "unavailable",
     "reason": "There is no matching change in this document."
    },
-   "what": "jump to a look step is refused"
+   "what": "jump to a step it doesn't hold is refused"
   },
   {
    "groom": 0,
@@ -6818,47 +6818,6 @@
    "what": "groom step 3"
   },
   {
-   "groom": 3,
-   "history": {
-    "depth": 1,
-    "redoDepth": 0,
-    "undo": {
-     "actionKind": "hairLab.set",
-     "id": "g3",
-     "label": "Hair volume",
-     "state": "done"
-    }
-   },
-   "recipe": "0.55",
-   "redo": {
-    "available": false,
-    "code": "unavailable",
-    "reason": "There is no matching change in this document."
-   },
-   "result": null,
-   "selected": "hair:g",
-   "timeline": {
-    "current": 0,
-    "documentLabel": "Hair Lab",
-    "redoCount": 0,
-    "start": "hair:g:start",
-    "steps": [
-     {
-      "actionKind": "hairLab.set",
-      "at": "none",
-      "id": 4,
-      "label": "Hair volume",
-      "state": "done"
-     }
-    ],
-    "trimmed": false
-   },
-   "undo": {
-    "available": true
-   },
-   "what": "a committed control under the groom's focus"
-  },
-  {
    "groom": 4,
    "history": {
     "depth": 2,
@@ -6870,7 +6829,7 @@
      "state": "done"
     }
    },
-   "recipe": "0.55",
+   "recipe": "0.4",
    "redo": {
     "available": false,
     "code": "unavailable",
@@ -6909,26 +6868,29 @@
   {
    "groom": 4,
    "history": {
-    "depth": 2,
-    "redoDepth": 0,
+    "depth": 1,
+    "redo": {
+     "actionKind": "layer.setOpacity",
+     "label": "Opacity",
+     "layerId": "layer-1"
+    },
+    "redoDepth": 1,
     "undo": {
      "actionKind": "layer.setOpacity",
      "label": "Opacity",
      "layerId": "layer-1"
     }
    },
-   "recipe": "0.55",
+   "recipe": "0.4",
    "redo": {
-    "available": false,
-    "code": "invalid_value",
-    "reason": "There is no undone change to redo."
+    "available": true
    },
    "result": null,
    "selected": "hair:g",
    "timeline": {
-    "current": 1,
+    "current": 0,
     "documentLabel": null,
-    "redoCount": 0,
+    "redoCount": 1,
     "start": "start",
     "steps": [
      {
@@ -6942,10 +6904,10 @@
      {
       "actionKind": "layer.setOpacity",
       "at": "set",
-      "id": 6,
+      "id": 3,
       "label": "Opacity",
       "layerId": "layer-1",
-      "state": "done"
+      "state": "undone"
      }
     ],
     "trimmed": false
@@ -6967,7 +6929,7 @@
      "state": "done"
     }
    },
-   "recipe": "0.55",
+   "recipe": "0.4",
    "redo": {
     "available": false,
     "code": "unavailable",
@@ -7006,26 +6968,29 @@
   {
    "groom": 4,
    "history": {
-    "depth": 2,
-    "redoDepth": 0,
+    "depth": 1,
+    "redo": {
+     "actionKind": "layer.setOpacity",
+     "label": "Opacity",
+     "layerId": "layer-1"
+    },
+    "redoDepth": 1,
     "undo": {
      "actionKind": "layer.setOpacity",
      "label": "Opacity",
      "layerId": "layer-1"
     }
    },
-   "recipe": "0.55",
+   "recipe": "0.4",
    "redo": {
-    "available": false,
-    "code": "invalid_value",
-    "reason": "There is no undone change to redo."
+    "available": true
    },
    "result": null,
    "selected": null,
    "timeline": {
-    "current": 1,
+    "current": 0,
     "documentLabel": null,
-    "redoCount": 0,
+    "redoCount": 1,
     "start": "start",
     "steps": [
      {
@@ -7039,10 +7004,10 @@
      {
       "actionKind": "layer.setOpacity",
       "at": "set",
-      "id": 6,
+      "id": 3,
       "label": "Opacity",
       "layerId": "layer-1",
-      "state": "done"
+      "state": "undone"
      }
     ],
     "trimmed": false
@@ -8120,6 +8085,15 @@
    "events": [
     {
      "applied": false,
+     "nodes": [],
+     "origin": "edit",
+     "structure": true,
+     "views": [
+      "main"
+     ]
+    },
+    {
+     "applied": false,
      "nodes": [
       "d4",
       "l6",
@@ -8160,7 +8134,7 @@
    "what": "close view"
   },
   {
-   "data": "880b1fa141b29f0e9908a48c525968d99a1876f6394ad0b83da8f8ae49890b84",
+   "data": "82974eaa2dbd76878aa97dbfc3a6b183d1dbfc8012544ad963622b270c89faa4",
    "events": [
     {
      "applied": false,

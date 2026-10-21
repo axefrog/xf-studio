@@ -5,6 +5,7 @@
 import { expect, test } from "bun:test";
 import { MAIN_VIEW, validViewId, viewPanelId, type ViewGraphChange } from "../src/platform/api/view-graph";
 import { parseViewGraph, ViewGraph } from "../src/platform/core/view-graph";
+import { createHistoryService, VIEW_SCOPE } from "../src/platform/core/history-service";
 import { createStudioViewGraph, defaultViewGraph, isDefaultViewGraph, previewMirror, storedViewGraph, STUDIO_VIEW_GRAPH_RULES,
   workspaceViewGraph } from "../src/preview-view-graph";
 import { PreviewActions, type PreviewPort } from "../src/preview-actions";
@@ -238,7 +239,7 @@ test("preview actions edit the graph node of the view they name, and the device 
 });
 
 test("every structure edit records a step, an unrecorded one clears the history it would break, and a replay is checked first (CORE-94)", () => {
-  const { graph: views } = graph();
+  const history = createHistoryService(), views = createStudioViewGraph(freshWorkspace().preview, undefined, history);
   const v2 = views.addView(MAIN_VIEW, { scene: true });
   expect(views.history()).toMatchObject({ undo: "New view", depth: 1 });
   expect(views.unlink(v2, "scene")).toBe(true);
@@ -252,7 +253,7 @@ test("every structure edit records a step, an unrecorded one clears the history 
   // The check itself: a step whose views would name a missing node is dropped with the steps behind it, and nothing changes.
   views.edit(MAIN_VIEW, "lights", calibrated(2), { label: "Exposure" });
   const broken = { views: [{ id: MAIN_VIEW, kind: "3d", scene: "s1", camera: "gone", lights: "l1", display: "d1", tools: "t1" }], focused: MAIN_VIEW };
-  (views as unknown as { undoSteps: unknown[] }).undoSteps.push({ label: "Broken", nodes: new Map(), structure: { before: broken, after: broken } });
+  history.scope(VIEW_SCOPE)!.checkpoint(["structure"], { label: "Broken", actionKind: "view.edit" }, { read: () => broken });
   const changes: ViewGraphChange[] = [];
   views.subscribe(change => changes.push(change));
   expect(views.undo()).toBe(false);

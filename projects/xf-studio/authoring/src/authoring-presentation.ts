@@ -17,7 +17,7 @@ export class AuthoringPresentation {
   get selected() { return this.document.selected; }
   /** Increments with every published geometry change, including in-place gesture updates. */
   get revision() { return this.document.geometryVersion.revision; }
-  get canUndo() { return this.document.canUndo; }
+  get canUndo() { return this.document.history.canUndo(); }
   selectedField(): ReadonlyDeep<WarpField> | undefined {
     const layer = this.layer();
     if (!layer) return;

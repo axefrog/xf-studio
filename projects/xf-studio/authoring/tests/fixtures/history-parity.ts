@@ -12,7 +12,7 @@ import { MAIN_VIEW, type ViewGraphChange } from "../../src/platform/api/view-gra
 import type { HistoryParticipant, HistorySnapshot, HistoryCommand } from "../../src/platform/api/history";
 import { STUDIO_COMPOSITION } from "../../src/compose/studio-registry";
 import { DEFAULT_CREATOR_LIGHTING } from "../../src/creator-lighting";
-import { createDocumentHistory } from "../../src/platform/core/document-history";
+import { createHistoryService } from "../../src/platform/core/history-service";
 import { createStudioPresentation } from "../../src/studio-presentation";
 import { createTrustedAuthoringCore, type StudioComposition } from "../../src/trusted-authoring-core";
 import { createViewServices } from "../../src/view-actions";
@@ -24,18 +24,23 @@ import { digest } from "./workspace-observable";
 
 type Core = ReturnType<typeof createTrustedAuthoringCore>;
 
-/** How a session is assembled: the only part of this observer that follows the code (see the header). */
+/**
+ * How a session is assembled: the only part of this observer that follows the code (see the header). Before the service the
+ * documents were a `createDocumentHistory()` of their own, routed by the presentation; now one history service holds the look's
+ * history and the documents, and the experiments register their participants with it.
+ */
 export function wiring() {
-  const documents = createDocumentHistory();
+  const service = createHistoryService(), documents = service.documents;
   return {
     documents,
     core(composition: StudioComposition, resetStack: () => void) {
       let n = 0;
-      return createTrustedAuthoringCore(freshWorkspace(), { resetStack, selectedCollection: () => "draft",
+      return createTrustedAuthoringCore(freshWorkspace(), { resetStack, selectedCollection: () => "draft", history: service,
         newId: () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}` }, composition);
     },
     /** The presentation port over a core, with experiments that contribute `participants` and use `documents`. */
     port(core: Core, participants: () => HistoryParticipant[]) {
+      service.participants(participants);
       const experiments = { history: documents, snapshot: () => [], set: async () => ({ ok: true }), subscribe: () => () => {},
         registrations: () => [{ histories: participants } as never] };
       return createStudioPresentation({ authoring: core.app, library: {} as never, files: {} as never, viewport: {} as never,
@@ -113,9 +118,9 @@ export function lookSession() {
   note("control commit", app.controlCommit("opacity"));
   note("one-shot control edit", app.controlEdit("colour", { kind: "layer.setColor", layerId: layerId(), color: "#123456" } as never));
   // A generic feature control and a look transaction.
-  note("feature control", [app.featureControlBegin("hair", "drag"), app.featureControlEdit("hair", "drag", { kind: "hair.setColour", colour: "#010101" }),
-    app.featureControlEdit("hair", "drag", { kind: "hair.setColour", colour: "#020202" }), app.featureControlCommit("drag")]);
-  note("feature control cancel", [app.featureControlBegin("hair", "drag"), app.featureControlEdit("hair", "drag", { kind: "hair.setColour", colour: "#030303" }),
+  note("feature control", [app.featureControlBegin("hair", "drag"), app.featureControlEdit("hair", "drag", { kind: "hair.setColour", colour: "#010101" } as never),
+    app.featureControlEdit("hair", "drag", { kind: "hair.setColour", colour: "#020202" } as never), app.featureControlCommit("drag")]);
+  note("feature control cancel", [app.featureControlBegin("hair", "drag"), app.featureControlEdit("hair", "drag", { kind: "hair.setColour", colour: "#030303" } as never),
     app.featureControlCancel("drag")]);
   const RESET = { label: "Reset look", actionKind: "look.reset" };
   note("look transaction", app.transaction(RESET, ["eye-makeup", "hair"], () => {
@@ -195,6 +200,9 @@ export function viewSession() {
   note("unlink lights", views.unlink(v2, "lights"));
   note("link camera", views.link(v2, "camera", MAIN_VIEW));
   note("focus records nothing", views.focusView(v2));
+  // (Focus back on the main view before the next step: Redo now restores what the Undo replaced, focus included, where the code
+  // before the service restored what the step left. history-service.test.ts says what holds.)
+  views.focusView(MAIN_VIEW);
   note("close view", views.closeView(v2, { label: "Close view" }));
   note("undo close", run({ kind: "view.undo" }));
   note("undo link", run({ kind: "view.undo" }));
@@ -263,15 +271,15 @@ export function routedSession() {
   note("undo goes to the groom", a.dispatch({ kind: "history.undo" }));
   note("redo goes to the groom", a.dispatch({ kind: "history.redo" }));
   note("jump to the groom's start", a.dispatch({ kind: "history.jumpTo", entryId: documents.snapshot("hair:g").startId }));
-  note("jump to a look step is refused", a.capability({ kind: "history.jumpTo", entryId: c.app.historyTimeline().steps[0].id }));
+  note("jump to a step it doesn't hold is refused", a.capability({ kind: "history.jumpTo", entryId: "step-999999" }));
   note("busy while a control is open", [a.controlBegin("opacity", layerId), a.capability({ kind: "history.undo" }), a.dispatch({ kind: "history.undo" })]);
-  a.controlCancel("opacity");
+  // (Whether a control cancelled or committed under the document's focus moves the focus is not compared: the code before the
+  // service returned it to the look after a cancel and kept it after a commit, by accident. history-service.test.ts says what holds.)
+  a.controlCancel("opacity"); documents.focus(null);
   note("after the cancelled control");
   note("a look edit returns Undo to the look", a.dispatch({ kind: "layer.setOpacity", layerId, opacity: 0.5 }));
   note("look undo", a.dispatch({ kind: "history.undo" }));
   record(3, "Hair volume"); note("groom step 3");
-  a.controlBegin("opacity", layerId); a.controlEdit("opacity", { kind: "layer.setOpacity", layerId, opacity: 0.55 });
-  note("a committed control under the groom's focus", a.controlCommit("opacity"));
   record(4, "Hair length"); note("groom step 4");
   shown = false; note("a groom no longer shown leaves Undo with the look");
   shown = true; note("shown again");

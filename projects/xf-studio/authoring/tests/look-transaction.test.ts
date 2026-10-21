@@ -45,7 +45,7 @@ test("a feature without a handler of its own runs its registered capability and 
   // A selection records nothing.
   c.app.dispatch({ kind: "hair.addStrand", length: 2 } as never);
   expect(c.app.dispatch({ kind: "hair.selectStrand", index: 0 } as never)).toMatchObject({ ok: true });
-  expect(c.document.undoDepth).toBe(2);
+  expect(c.document.history.state().depth).toBe(2);
   // Undo restores the hair part only: eye makeup is not republished.
   expect(c.app.dispatch({ kind: "history.undo" })).toMatchObject({ ok: true });
   expect(hair(c)).toEqual({ colour: "#aa3300", strands: [] });
@@ -67,7 +67,7 @@ test("app.transaction records one look step over several parts; Undo and Redo mo
   });
   expect(outcome).toEqual({ ok: true, result: "done" });
   expect(c.app.historyTimeline().steps.map(step => step.label)).toEqual(["Opacity", "Reset look"]);
-  expect(c.document.undoDepth).toBe(2);
+  expect(c.document.history.state().depth).toBe(2);
   expect(c.app.dispatch({ kind: "history.undo" })).toMatchObject({ ok: true });
   expect([opacity(c), hair(c)]).toEqual([.25, undefined]);
   expect(c.app.dispatch({ kind: "history.redo" })).toMatchObject({ ok: true });
@@ -81,21 +81,21 @@ test("app.transaction records one look step over several parts; Undo and Redo mo
 test("a transaction that changes nothing leaves no step; one that fails is reverted without Redo", () => {
   const c = core();
   expect(c.app.transaction(RESET, ["eye-makeup", "hair"], () => setOpacity(c, opacity(c)))).toMatchObject({ ok: true });
-  expect(c.document.undoDepth).toBe(0);
+  expect(c.document.history.state().depth).toBe(0);
   const start = opacity(c);
   const thrown = c.app.transaction(RESET, ["eye-makeup", "hair"], () => {
     setOpacity(c, .1); c.app.dispatch({ kind: "hair.addStrand", length: 3 } as never);
     throw Error("The save could not be read.");
   });
   expect(thrown).toEqual({ ok: false, code: "invalid_value", message: "The save could not be read." });
-  expect([opacity(c), hair(c), c.document.undoDepth, c.app.history().redoDepth]).toEqual([start, undefined, 0, 0]);
+  expect([opacity(c), hair(c), c.document.history.state().depth, c.app.history().redoDepth]).toEqual([start, undefined, 0, 0]);
   // A failed dispatch inside reverts the whole transaction too.
   const failed = c.app.transaction(RESET, ["eye-makeup", "hair"], () => {
     setOpacity(c, .2);
     return c.app.dispatch({ kind: "hair.setColour", colour: "nope" } as never);
   });
   expect(failed).toMatchObject({ ok: false, code: "invalid_value", message: "Pick a colour." });
-  expect([opacity(c), c.document.undoDepth]).toEqual([start, 0]);
+  expect([opacity(c), c.document.history.state().depth]).toEqual([start, 0]);
 });
 
 test("inside a transaction only the named parts change; Undo, other owners and nested transactions are refused", () => {
@@ -133,7 +133,7 @@ test("each look keeps its own hair part and editor memory through preset switche
   c.app.dispatch({ kind: "hair.addStrand", length: 6 } as never);
   session.select(b);
   expect(hair(c)).toBeUndefined();
-  expect(c.document.undoDepth).toBe(0);
+  expect(c.document.history.state().depth).toBe(0);
   // Look B gains hair only when it is edited; it had none.
   expect(session.snapshot().collection.presets[1].parts.hair).toBeUndefined();
   c.app.dispatch({ kind: "hair.setColour", colour: "#222222" } as never);
@@ -186,7 +186,7 @@ test("a change that records no step hides Redo, which would overwrite it (CORE-4
 });
 
 test("a transaction body that returns a promise is refused and reverted (CORE-48)", async () => {
-  const c = core(), before = c.document.undoDepth;
+  const c = core(), before = c.document.history.state().depth;
   let resumed = false;
   // @ts-expect-error: a look transaction's body can't be async (its awaited edits could not join the step).
   const outcome = c.app.transaction(RESET, ["hair"], async () => {
@@ -196,7 +196,7 @@ test("a transaction body that returns a promise is refused and reverted (CORE-48
   });
   expect(outcome).toMatchObject({ ok: false, code: "invalid_value" });
   // What ran before the first await is reverted with no step and no Redo; nothing else is open.
-  expect([hair(c), c.document.undoDepth, c.app.history().redoDepth]).toEqual([undefined, before, 0]);
+  expect([hair(c), c.document.history.state().depth, c.app.history().redoDepth]).toEqual([undefined, before, 0]);
   await Promise.resolve(); await Promise.resolve();
   expect(resumed).toBe(true);
   expect(c.app.transaction(RESET, ["hair"], () => c.app.dispatch({ kind: "hair.setColour", colour: "#aa3300" } as never))).toMatchObject({ ok: true });

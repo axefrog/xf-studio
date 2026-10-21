@@ -1,0 +1,387 @@
+/**
+ * The history service (feature-module platform §3): every Undo history of the session, as scoped stacks over one stack type
+ * (`HistoryStack`). DOM-free; imports only the platform API and the platform's own history pieces.
+ *
+ * - **Scopes.** `look` is the selected look's history (its stack is persisted in the workspace as `xfs/look-history-1`);
+ *   `view` is the View and lighting history; `doc:<id>` is one experiment document's (Hair Lab's grooms). Each scope's
+ *   target (`HistoryTarget`) owns its state: the scope reads and applies values through it and owns the steps, Redo
+ *   validity, jumps, coalescing and transactions.
+ * - **Redo validity** (CORE-46). Redo stays valid only while the top step is the one the last Undo, Redo or jump left and the
+ *   target's content is what it left (its `revision`, else its `fingerprint`); an open transaction's checkpoint hides Redo
+ *   and cancelling it brings Redo back. Otherwise the undone steps are discarded at the next move.
+ * - **Moves apply once.** Undo, Redo and a jump over several steps apply the values they reach as one change. A target that
+ *   refuses them (an inconsistent replay, CORE-94) makes the scope drop its steps, and nothing changes.
+ * - **Transactions.** `begin` opens the platform's `HistoryTransaction` over the scope: one checkpoint, labelled by the first
+ *   change, discarded when empty, reverted on cancel without Redo (CORE-42).
+ * - **Focus.** Global Undo and Redo reach the focused scope (`focused()`): the look, or an experiment's document while one is
+ *   focused and its experiment still offers it (a participant). A step kept in the look's history returns the focus to the look.
+ *   The View and lighting history has commands of its own (`view.undo`, `view.redo`).
+ * - **Documents.** `documents` is the `DocumentHistory` API over the `doc:*` scopes: a step keeps the document's value after it
+ *   by reference (no copy, whatever its size), and moving hands back the value to restore.
+ */
+import type { Capability } from "../api/capability";
+import { HISTORY_LIMIT, HISTORY_START_ID, UNKNOWN_HISTORY_LABEL, type DocumentHistory, type HistoryCommand, type HistoryEntryId,
+  type HistoryJumpPlan, type HistoryLabel, type HistoryParticipant, type HistoryParts, type HistoryScope as StoredScope,
+  type HistoryScopeId, type HistorySnapshot, type HistoryState, type HistoryStep, type HistoryTarget, type LookHistoryData } from "../api/history";
+import { HistoryStack, ReferenceStore, WHOLE_VALUES, type LookReader } from "./history-stack";
+import { HistoryTransaction, type TransactionHost, type TransactionPolicy } from "./history-transaction";
+
+export const LOOK_SCOPE = "look";
+export const VIEW_SCOPE = "view";
+const DOCUMENT_PREFIX = "doc:";
+
+export type ScopeOptions = {
+  /** Steps kept (default `HISTORY_LIMIT`). */
+  limit?: number;
+  /** The scope's steps to start from (a restored look's, already validated). Default: an empty stack. */
+  stack?: HistoryStack;
+  /** How values split into chunks; without it values are kept whole and by reference (a session-only scope). */
+  parts?: HistoryParts;
+  /** The timeline's start ID (default `HISTORY_START_ID`) and each step's ID there (default `step-<id>`). */
+  startId?: string;
+  stepId?(id: HistoryEntryId): string;
+  /** Global Undo and Redo while the scope is focused, when it moves otherwise than through its own steps (an experiment's participant). */
+  command?(action: HistoryCommand): boolean;
+  capability?(action: HistoryCommand): Capability;
+  /** What Undo and Redo would change next, when the scope words it otherwise (a document's: its timeline steps). */
+  state?(timeline: HistorySnapshot): HistoryState;
+  /** The name of what the scope's steps change (the History panel's "Changes to …"), when it is not the look. */
+  documentLabel?(): string | undefined;
+  /** Called after every change to the scope's steps or Redo. */
+  changed?(): void;
+};
+export type CheckpointFlags = {
+  /** Joins the top step while it is unsealed under the same key (CORE-95). */
+  coalesce?: string;
+  /** Reads the values as they were before the change, when the target already shows the change. */
+  read?: LookReader;
+  /** `look`: one transaction over several parts (stored with the look's history). */
+  scope?: StoredScope;
+  /** Whether the step records its time (default true). */
+  timed?: boolean;
+  /** Add a step even when the top step holds the same values (a document records every edit). */
+  distinct?: boolean;
+};
+
+export interface HistoryScope {
+  readonly id: HistoryScopeId;
+  /** Record `keys` as they are now (before a change); the new step's ID, or undefined when no step was added. */
+  checkpoint(keys: readonly string[], label?: HistoryLabel, options?: CheckpointFlags): HistoryEntryId | undefined;
+  relabel(step: HistoryEntryId, label: HistoryLabel): void;
+  /** Remove `step` only while it is the top step (an empty transaction's checkpoint). */
+  discard(step: HistoryEntryId): boolean;
+  /** End the current continuous edit (a slider was released). */
+  seal(): void;
+  /** Drop every step and Redo (a change the history does not hold would leave them naming what no longer exists). */
+  clear(): void;
+  /** Open a transaction over `keys`: one step for a gesture's frames or a control's edits. */
+  begin(keys: readonly string[], policy: TransactionPolicy, options?: { present?: () => boolean; label?: HistoryLabel; scope?: StoredScope }):
+    HistoryTransaction<HistoryEntryId>;
+  /** Restore a cancelled transaction's start without Redo: its own `step` comes off; without one the top step's values are shown. */
+  revertTransaction(step: HistoryEntryId | undefined): boolean;
+  undo(): boolean;
+  redo(): boolean;
+  /** Go to the state right after step `stepId` (or the start) as one change. */
+  jumpTo(stepId: string): boolean;
+  plan(stepId: string): HistoryJumpPlan | undefined;
+  canUndo(): boolean;
+  canRedo(): boolean;
+  /** Global Undo, Redo or a jump while this scope is focused, and whether it is available. */
+  command(action: HistoryCommand): boolean;
+  capability(action: HistoryCommand): Capability;
+  state(): HistoryState;
+  timeline(): HistorySnapshot;
+  /** The step the next Undo reverts, if any. */
+  top(): HistoryEntryId | undefined;
+  /** Whether checkpoints record (false inside `withoutHistory`). */
+  readonly recording: boolean;
+  withoutHistory<T>(apply: () => T): T;
+  /** Replace the steps (a preset switch or restore); Redo goes with them. */
+  replace(stack: HistoryStack): void;
+  readonly trimmed: boolean;
+  /** Plain data of the kept steps (only the look's is persisted). */
+  data(): LookHistoryData;
+  stats(): { chunks: number; units: number };
+}
+
+export interface HistoryService {
+  /** Open (or reopen, replacing it) a scope over `target`. */
+  open(id: HistoryScopeId, target: HistoryTarget, options?: ScopeOptions): HistoryScope;
+  close(id: HistoryScopeId): void;
+  scope(id: HistoryScopeId): HistoryScope | undefined;
+  /** Where global Undo and Redo go; null is the look. */
+  focus(id: HistoryScopeId | null): void;
+  focused(): HistoryScope;
+  /** The experiments' document histories: the existing API over `doc:*` scopes. */
+  readonly documents: DocumentHistory;
+  /** The documents an experiment currently offers to global Undo (`HistoryParticipant`); returns the unregister. */
+  participants(provider: () => readonly HistoryParticipant[]): () => void;
+  /** Calls `listener` after every change to any scope or the focus. */
+  subscribe(listener: () => void): () => void;
+}
+
+const refusal = (reason: string, code: Capability["code"] = "invalid_value"): Capability => ({ available: false, code, reason });
+
+class Scope implements HistoryScope {
+  private stack: HistoryStack;
+  /** The scope as the last Undo, Redo or jump left it: the target's revision and content, and the top step. */
+  private expected?: { revision: unknown; fingerprint: string; top?: HistoryEntryId };
+  private recordingNow = true;
+  constructor(readonly id: HistoryScopeId, private readonly target: HistoryTarget, private readonly options: ScopeOptions,
+    private readonly service: { changed(scope: Scope, kept: boolean): void }) {
+    this.stack = options.stack ?? new HistoryStack(options.parts ?? WHOLE_VALUES, options.limit ?? HISTORY_LIMIT,
+      options.parts ? undefined : new ReferenceStore());
+  }
+  private readonly read: LookReader = key => this.target.read(key);
+  private changed(kept = false) { this.options.changed?.(); this.service.changed(this, kept); }
+
+  get recording() { return this.recordingNow; }
+  get trimmed() { return this.stack.trimmed; }
+  withoutHistory<T>(apply: () => T): T {
+    const was = this.recordingNow; this.recordingNow = false;
+    try { return apply(); } finally { this.recordingNow = was; }
+  }
+  checkpoint(keys: readonly string[], label?: HistoryLabel, options: CheckpointFlags = {}): HistoryEntryId | undefined {
+    if (!this.recordingNow) return undefined;
+    const added = this.stack.checkpoint(options.read ?? this.read, keys, { label, coalesce: options.coalesce, scope: options.scope,
+      timed: options.timed, distinct: options.distinct });
+    this.changed(true);
+    return added;
+  }
+  private checkpointOpen(keys: readonly string[], label: HistoryLabel | undefined, scope: StoredScope | undefined) {
+    const added = this.stack.checkpoint(this.read, keys, { label, scope });
+    this.changed();
+    return added;
+  }
+  relabel(step: HistoryEntryId, label: HistoryLabel) { this.stack.relabel(step, label); }
+  discard(step: HistoryEntryId) { const removed = this.stack.discard(step); if (removed) this.changed(); return removed; }
+  seal() { this.stack.seal(); }
+  clear() { this.stack.clear(); this.expected = undefined; this.changed(); }
+  replace(stack: HistoryStack) { this.stack = stack; this.expected = undefined; this.changed(true); }
+  top() { return this.stack.topId; }
+  data() { return this.stack.data(); }
+  stats() { return this.stack.stats(); }
+
+  begin(keys: readonly string[], policy: TransactionPolicy, options: { present?: () => boolean; label?: HistoryLabel; scope?: StoredScope } = {}) {
+    const host: TransactionHost<HistoryEntryId> = {
+      checkpoint: () => this.checkpointOpen(keys, options.label, options.scope), top: () => this.stack.topId,
+      relabel: (step, label) => this.relabel(step, label), discard: step => this.discard(step),
+      revert: step => { this.revertTransaction(step); }, content: () => this.target.fingerprint?.(keys) ?? "",
+      // A kept step is a change to this scope like any other checkpoint.
+      kept: () => this.service.changed(this, true),
+    };
+    return HistoryTransaction.open(host, policy, options.present ?? (() => true));
+  }
+  revertTransaction(step: HistoryEntryId | undefined): boolean {
+    const values = step === undefined ? (this.stack.canUndo ? this.stack.stepParts(this.stack.depth - 1) : undefined)
+      : this.stack.isTop(step) ? this.stack.revert() : undefined;
+    if (!values) return false;
+    if (step !== undefined) this.changed();
+    return this.target.apply(values, "revert");
+  }
+
+  canUndo() { return this.stack.canUndo; }
+  canRedo() { return this.redoValid(); }
+  undo() { return this.stack.canUndo && this.move({ direction: "undo", count: 1 }); }
+  redo() { return this.move({ direction: "redo", count: 1 }); }
+  plan(stepId: string): HistoryJumpPlan | undefined {
+    const timeline = this.timeline();
+    const index = stepId === timeline.startId ? -1 : timeline.steps.findIndex(step => step.id === stepId);
+    if (index < 0 && stepId !== timeline.startId) return undefined;
+    const delta = index - timeline.current;
+    return { direction: delta < 0 ? "undo" : delta > 0 ? "redo" : "none", count: Math.abs(delta) };
+  }
+  jumpTo(stepId: string) {
+    const plan = this.plan(stepId);
+    return !!plan && plan.direction !== "none" && this.move(plan);
+  }
+  command(action: HistoryCommand): boolean {
+    if (this.options.command) return this.options.command(action);
+    return action.kind === "history.jumpTo" ? this.jumpTo(action.entryId) : action.kind === "history.undo" ? this.undo() : this.redo();
+  }
+  capability(action: HistoryCommand): Capability {
+    if (this.options.capability) return this.options.capability(action);
+    if (action.kind === "history.jumpTo") {
+      const plan = this.plan(action.entryId);
+      return !plan ? refusal("That history step no longer exists.", "missing_target") :
+        plan.direction === "none" ? refusal("This is already the current step.") : { available: true };
+    }
+    if (action.kind === "history.undo") return this.stack.canUndo ? { available: true } : refusal("There is no change to undo.");
+    return this.redoValid() ? { available: true } : refusal("There is no undone change to redo.");
+  }
+  state(): HistoryState {
+    if (this.options.state) return this.options.state(this.timeline());
+    const valid = this.redoValid(), redo = valid ? this.stack.redoSteps()[0]?.label : undefined;
+    return { undo: this.stack.canUndo ? this.stack.topLabel() : undefined, redo: redo && { ...redo }, depth: this.stack.depth,
+      redoDepth: valid ? this.stack.redoDepth : 0 };
+  }
+  /** Kept steps oldest first, then the redo-able ones in Redo order (only while Redo is valid). */
+  timeline(): HistorySnapshot {
+    const stepId = this.options.stepId ?? (id => `step-${id}`);
+    const done: HistoryStep[] = this.stack.list().map(entry => ({ ...(entry.label ?? UNKNOWN_HISTORY_LABEL), id: stepId(entry.id),
+      ...(entry.at === undefined ? {} : { at: entry.at }), state: "done" }));
+    const undone: HistoryStep[] = (this.redoValid() ? this.stack.redoSteps() : []).map(entry => ({ ...entry.label, id: stepId(entry.id),
+      ...(entry.at === undefined ? {} : { at: entry.at }), state: "undone" }));
+    const documentLabel = this.options.documentLabel?.();
+    return { startId: this.options.startId ?? HISTORY_START_ID, steps: [...done, ...undone], current: done.length - 1,
+      redoCount: undone.length, trimmed: this.stack.trimmed, ...(documentLabel === undefined ? {} : { documentLabel }) };
+  }
+
+  private move(plan: HistoryJumpPlan): boolean {
+    let moved: { parts: Record<string, unknown> } | undefined;
+    if (plan.direction === "undo") {
+      if (this.stack.depth < plan.count) return false;
+      if (!this.redoValid()) this.clearRedo();
+      moved = this.stack.undo(this.read, plan.count);
+    } else if (plan.direction === "redo") {
+      if (!this.redoValid()) { this.clearRedo(); return false; }
+      if (this.stack.redoDepth < plan.count) return false;
+      moved = this.stack.redo(this.read, plan.count);
+    }
+    if (!moved) return false;
+    if (!this.target.apply(moved.parts, plan.direction === "undo" ? "undo" : "redo")) {
+      // The steps could never apply again (CORE-94): drop them, so nothing names what no longer exists.
+      this.stack.clear(); this.expected = undefined; this.changed();
+      return false;
+    }
+    this.expected = { revision: this.target.revision?.(), fingerprint: this.target.fingerprint?.() ?? "", top: this.stack.topId };
+    this.changed(true);
+    return true;
+  }
+  private redoValid() {
+    const expected = this.expected;
+    if (!this.stack.redoDepth || !expected) return false;
+    // Any step added since (an edit, or an open transaction's checkpoint) hides Redo; a cancelled transaction removes its own
+    // step again, so Redo comes back.
+    if (this.stack.topId !== expected.top) return false;
+    const revision = this.target.revision?.();
+    if (revision === expected.revision) return true;
+    // A change that records no step (CORE-46) hides Redo, which would overwrite it; one that republishes the same content keeps it.
+    if ((this.target.fingerprint?.() ?? "") !== expected.fingerprint) return false;
+    expected.revision = revision;
+    return true;
+  }
+  /** Drop the undone steps (a document's new step replaces its redo branch). */
+  clearRedo() { this.stack.clearRedo(); this.expected = undefined; }
+  /** The step IDs the scope still holds: done, undone and displaced at the limit. */
+  held(): Set<HistoryEntryId> { return this.stack.heldIds(); }
+}
+
+export function createHistoryService(): HistoryService {
+  const scopes = new Map<HistoryScopeId, Scope>();
+  const listeners = new Set<() => void>(), documentListeners = new Set<() => void>();
+  const providers = new Set<() => readonly HistoryParticipant[]>();
+  let focus: HistoryScopeId | null = null;
+  const emit = (set: Set<() => void>) => { for (const listener of [...set]) listener(); };
+  /** Inside `batch`, listeners hear once at the end, however many changes the operation made. */
+  let batching = 0, pending = { all: false, documents: false };
+  const notify = (documentChange: boolean) => {
+    if (batching) { pending.all = true; pending.documents ||= documentChange; return; }
+    if (documentChange) emit(documentListeners);
+    emit(listeners);
+  };
+  const batch = <T>(work: () => T): T => {
+    batching++;
+    try { return work(); }
+    finally {
+      if (--batching === 0 && pending.all) {
+        const documentChange = pending.documents;
+        pending = { all: false, documents: false };
+        notify(documentChange);
+      }
+    }
+  };
+  const setFocus = (id: HistoryScopeId | null) => { if (focus === id) return false; focus = id; notify(true); return true; };
+  const hub = { changed(scope: Scope, kept: boolean) {
+    // A step kept in the look's history (an edit, an Undo, a preset switch) returns global Undo to the look.
+    if (kept && scope.id === LOOK_SCOPE && focus !== null) setFocus(null);
+    notify(scope.id.startsWith(DOCUMENT_PREFIX));
+  } };
+  const participant = (id: string) => {
+    for (const provider of providers) { const found = provider().find(item => item.id === id); if (found) return found; }
+  };
+  const openScope = (id: HistoryScopeId, target: HistoryTarget, options: ScopeOptions = {}): Scope => {
+    const scope = new Scope(id, target, options, hub);
+    scopes.set(id, scope);
+    return scope;
+  };
+  const look = () => scopes.get(LOOK_SCOPE) ?? openScope(LOOK_SCOPE, { read: () => undefined, apply: () => true });
+
+  // ----- Documents -----
+  /** Each document's value as its history last left it (a step keeps the value after it), and its label and step IDs. */
+  const held = new Map<string, unknown>(), labels = new Map<string, string>();
+  const stepIds = new Map<string, Map<HistoryEntryId, string>>();
+  const documentScope = (id: string) => scopes.get(DOCUMENT_PREFIX + id);
+  const ensureDocument = (id: string): Scope => documentScope(id) ?? openScope(DOCUMENT_PREFIX + id, {
+    read: () => held.get(id),
+    apply: values => { held.set(id, values[id]); return true; },
+  }, { startId: `${id}:start`, stepId: step => stepIds.get(id)?.get(step) ?? `step-${step}`,
+    // Global Undo and Redo move the document through its experiment, which restores and saves the value.
+    command: action => {
+      const found = participant(id);
+      if (!found) return false;
+      if (!found.dispatch(action)) throw Error("That history step could not be applied.");
+      return true;
+    },
+    state: t => ({ undo: t.steps[t.current], redo: t.steps[t.current + 1], depth: t.current + 1, redoDepth: t.redoCount }),
+    documentLabel: () => labels.get(id),
+    capability: action => {
+      const t = snapshot(id);
+      const available = action.kind === "history.undo" ? t.current >= 0 : action.kind === "history.redo" ? t.redoCount > 0
+        : action.entryId === t.startId || t.steps.some(step => step.id === action.entryId);
+      return available ? { available: true } : refusal("There is no matching change in this document.", "unavailable");
+    } });
+  const snapshot = (id: string): HistorySnapshot => {
+    const scope = documentScope(id);
+    return scope ? scope.timeline() : { startId: `${id}:start`, steps: [], current: -1, redoCount: 0, trimmed: false };
+  };
+  const documents: DocumentHistory = {
+    selected: () => focus?.startsWith(DOCUMENT_PREFIX) ? focus.slice(DOCUMENT_PREFIX.length) : null,
+    focus: id => { setFocus(id === null ? null : DOCUMENT_PREFIX + id); },
+    snapshot,
+    record: (id, documentLabel, entry, change) => batch(() => {
+      const scope = ensureDocument(id), known = held.has(id);
+      // A step after the current one drops the redo branch. Its "before" is the value the history last left (the first step's
+      // is the caller's), so a step always undoes to the value after the one before it.
+      scope.clearRedo();
+      const { id: external, ...label } = entry;
+      const added = scope.checkpoint([id], label, { read: () => known ? held.get(id) : change.before, timed: false, distinct: true });
+      // Step IDs of steps the history no longer holds (dropped at the limit or with a redo branch) are forgotten.
+      const ids = stepIds.get(id) ?? new Map<HistoryEntryId, string>(), kept = scope.held();
+      for (const step of [...ids.keys()]) if (!kept.has(step)) ids.delete(step);
+      if (added !== undefined) ids.set(added, external);
+      stepIds.set(id, ids);
+      held.set(id, change.after); labels.set(id, documentLabel);
+      setFocus(DOCUMENT_PREFIX + id); notify(true);
+    }),
+    move: (id, current) => batch(() => {
+      const scope = documentScope(id);
+      if (!scope) return undefined;
+      const t = scope.timeline(), bounded = Math.max(-1, Math.min(t.steps.length - 1, current));
+      if (bounded !== t.current) scope.jumpTo(bounded < 0 ? t.startId : t.steps[bounded].id);
+      setFocus(DOCUMENT_PREFIX + id); notify(true);
+      return held.get(id);
+    }),
+    subscribe(listener) { documentListeners.add(listener); return () => { documentListeners.delete(listener); }; },
+  };
+
+  return {
+    open: openScope,
+    close(id) { scopes.delete(id); if (focus === id) setFocus(null); },
+    scope: id => scopes.get(id),
+    focus: id => { setFocus(id); },
+    focused() {
+      if (focus?.startsWith(DOCUMENT_PREFIX)) {
+        const id = focus.slice(DOCUMENT_PREFIX.length);
+        if (participant(id)) return ensureDocument(id);
+      } else if (focus !== null) {
+        const scope = scopes.get(focus);
+        if (scope) return scope;
+      }
+      return look();
+    },
+    documents,
+    participants(provider) { providers.add(provider); return () => { providers.delete(provider); }; },
+    subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
+  };
+}

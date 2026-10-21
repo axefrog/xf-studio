@@ -31,7 +31,7 @@ test("controlEdit validates like dispatch, returns typed results and never opens
   const refused = app.controlEdit("opacity", { kind: "layer.setOpacity", layerId: id, opacity: 7 });
   expect(refused).toMatchObject({ ok: false, code: "limit" });
   expect(app.snapshot().control).toBeUndefined();
-  expect(document.undoDepth).toBe(0);
+  expect(document.history.state().depth).toBe(0);
   expect(app.controlEdit("opacity", { kind: "layer.setOpacity", layerId: "missing", opacity: .5 }))
     .toMatchObject({ ok: false, code: "missing_target" });
   expect(app.controlEdit("opacity", { kind: "layer.select", layerId: id })).toMatchObject({ ok: false, code: "invalid_value" });
@@ -46,18 +46,19 @@ test("controlEdit validates like dispatch, returns typed results and never opens
   expect(app.controlEdit("opacity", { kind: "layer.setOpacity", layerId: id, opacity: .4 })).toEqual({ ok: true, result: false });
   app.controlCommit("opacity");
   expect(app.snapshot().control).toBeUndefined();
-  expect(document.undoDepth).toBe(1);
-  expect(document.undoRecipe()?.layers[0].opacity).toBe(before);
+  expect(document.history.state().depth).toBe(1);
+  expect(document.history.undo()).toBe(true);
+  expect(document.recipe.layers[0].opacity).toBe(before);
 });
 
 test("controlEdit reports a domain rejection thrown after validation and closes an implicit transaction", () => {
   const { app, document } = makeCore(), id = document.recipe.layers[0].id;
-  const depth = document.undoDepth;
+  const depth = document.history.state().depth;
   // Passes the descriptor (a string) but the recipe parser rejects it.
   const outcome = app.controlEdit("color", { kind: "layer.setColor", layerId: id, color: "not a colour" });
   expect(outcome).toMatchObject({ ok: false, code: "invalid_value" });
   expect(app.snapshot().control).toBeUndefined();
-  expect(document.undoDepth).toBe(depth);
+  expect(document.history.state().depth).toBe(depth);
 });
 
 test("controlEdit refuses while a pointer gesture owns the Undo transaction", () => {

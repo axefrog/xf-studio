@@ -31,7 +31,7 @@ test("facade discovers target-specific commands, validates at invocation and det
   const duplicate = choices.find(item => item.action.kind === "layer.edit" && item.action.command.kind === "duplicate")!;
   expect(app.dispatch(duplicate.action).ok).toBe(true);
   expect(document.recipe.layers).toHaveLength(5);
-  expect(document.undoDepth).toBe(1);
+  expect(document.history.state().depth).toBe(1);
   expect(app.dispatch({ kind: "layer.edit", command: { kind: "remove", id: "stale" } })).toMatchObject({ ok: false });
   expect(notifications).toBeGreaterThan(0);
   unsubscribe();
@@ -112,8 +112,9 @@ test("facade groups form changes and hides live gesture targets", () => {
   app.controlEdit("opacity", { kind: "layer.setOpacity", layerId: id, opacity: .5 });
   app.controlEdit("opacity", { kind: "layer.setOpacity", layerId: id, opacity: .6 });
   app.controlCommit("opacity");
-  expect(document.undoDepth).toBe(1);
-  expect(document.undoRecipe()?.layers[0].opacity).toBe(before);
+  expect(document.history.state().depth).toBe(1);
+  expect(document.history.undo()).toBe(true);
+  expect(document.recipe.layers[0].opacity).toBe(before);
   expect(app.canBeginGesture("uv", "stale")).toMatchObject({ available: false, code: "missing_target" });
   expect(app.beginGesture("uv", id)).toBe(true);
   expect(app.canBeginGesture("surface", id)).toMatchObject({ available: false, code: "busy" });

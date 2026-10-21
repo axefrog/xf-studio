@@ -3,7 +3,7 @@ import type { RecipeAction } from "./engines/layered-makeup/recipe-actions";
 import type { Layer } from "./engines/layered-makeup/recipe";
 import { historyLabel, type HistoryLabel } from "./history-labels";
 import type { HistoryEntryId } from "./editor-actions";
-import { CONTROL_TRANSACTION, HistoryTransaction } from "./platform/core/history-transaction";
+import { CONTROL_TRANSACTION, type HistoryTransaction } from "./platform/core/history-transaction";
 
 /** `transaction` is the platform's Undo transaction this control's run of edits records into. */
 type Transaction = { id: string; layer: Layer; transaction?: HistoryTransaction<HistoryEntryId> };
@@ -21,8 +21,6 @@ export class AuthoringControlEdits {
   private active?: Transaction;
   constructor(private document: AuthoringDocument,
     private dispatch: (action: RecipeAction) => boolean,
-    /** Restores a cancelled transaction's start: `step` is its own checkpoint, undefined when the top step held the start. */
-    private restoreUndo: (step: HistoryEntryId | undefined) => void,
     /** The Undo step's name for an edit: the trusted core passes the registered spec's `label`. */
     private label: (action: RecipeAction) => HistoryLabel = historyLabel) {}
   begin(id: string, layerId: string | undefined) {
@@ -33,8 +31,8 @@ export class AuthoringControlEdits {
     if (!layer) return false;
     // Each edit replaces the layer object; the transaction follows the current one.
     const active: Transaction = { id, layer };
-    active.transaction = HistoryTransaction.open(this.document.transactionHost(this.restoreUndo), CONTROL_TRANSACTION,
-      () => this.document.recipe.layers.includes(active.layer));
+    active.transaction = this.document.history.begin([this.document.feature], CONTROL_TRANSACTION,
+      { present: () => this.document.recipe.layers.includes(active.layer) });
     this.active = active;
     return true;
   }
