@@ -30,7 +30,7 @@ import { touchUsed } from "./game-asset-export";
 import { defaultLocalSettings, type LocalSettings } from "../../setup/local-settings";
 import { readRdarIndexCount, readRdarIndexCountAsync, readRdarIndexHashes } from "./rdar-index-fs";
 import { type FetchedResource, type ResourceFetchPort, ResourceGraph } from "../resource-graph";
-import { discoverSources, listingStamp, pathStamp, type SourceCandidate, type SourceDiscovery, type WatchedPath } from "./source-discovery";
+import { discoverSources, pathStamp, type SourceCandidate, type SourceDiscovery, type WatchedPath } from "./source-discovery";
 import { folderStampMode, type FolderStampMode } from "./volume-info";
 import { runWolvenKit, type WolvenKitRun, WolvenKitRunError, type WolvenKitRunOptions, wolvenKitIdentity, wolvenKitIdentityKey } from "../../host/wolvenkit-cli";
 import { currentDiagnostics, hostFailure, hostTrace } from "../../diagnostics/host/host-log";
@@ -133,26 +133,6 @@ export interface UnreadIndex { readonly id: string; readonly name: string; reado
 
 const lower = (value: string) => value.toLowerCase();
 const XL_LOCATIONS = [/^red4ext\/plugins\/archivexl\/bundle\/.+\.xl$/, /^archive\/pc\/mod\/.+\.xl$/];
-
-/** The game-folder ArchiveXL bundle is outside source discovery's `archive/pc` scan. Its folder and files are watched too. */
-function gameBundleFiles(gameRoot: string, watched: WatchedPath[], byListing: boolean): SourceCandidate[] {
-  const bundle = join(gameRoot, "red4ext", "plugins", "ArchiveXL", "Bundle");
-  const stamp = (path: string) => { try { return pathStamp(lstatSync(path)); } catch { return pathStamp(null); } };
-  const folder = stamp(bundle);
-  let listed = folder;
-  if (byListing && folder.startsWith("dir|")) try { listed = listingStamp(readdirSync(bundle, { withFileTypes: true })); } catch { /* stamped by time */ }
-  watched.push({ path: bundle, stamp: listed });
-  if (!existsSync(bundle) || lstatSync(bundle).isSymbolicLink()) return [];
-  const now = new Date().toISOString();
-  return readdirSync(bundle).filter(name => /\.(archive|xl)$/i.test(name)).map(name => {
-    const physicalPath = join(bundle, name), stat = statSync(physicalPath);
-    watched.push({ path: physicalPath, stamp: stamp(physicalPath) });
-    return { id: `game:bundle:${lower(name)}`, provider: "game", providerName: "Installed game", route: "direct", profileId: null,
-      virtualPath: `red4ext/plugins/ArchiveXL/Bundle/${name}`, physicalPath, kind: /\.xl$/i.test(name) ? "archive-xl" : "archive",
-      active: true, priority: null, priorityEvidence: null, sizeBytes: stat.size, modifiedMs: stat.mtimeMs, sha256: null,
-      discoveredAt: now, limitations: [] } satisfies SourceCandidate;
-  });
-}
 
 const toArchiveFile = (candidate: SourceCandidate): ArchiveFile => ({ id: candidate.physicalPath, virtualPath: candidate.virtualPath,
   provider: candidate.provider, providerName: candidate.providerName, active: candidate.active, priority: candidate.priority });
@@ -855,10 +835,10 @@ const routeSettings = (options: Pick<InstallationOptions, "gameRoot" | "launchRo
 
 export function openInstallation(options: InstallationOptions): Installation {
   const log = options.log ?? (() => {});
-  const folderStamps = options.folderStamps ?? folderStampMode;
   const discovery = options.discovery ?? discoverRoute(options);
   const watch: WatchedPath[] = [...discovery.watched];
-  const candidates = [...discovery.candidates.filter(c => !options.baseOnly || isBaseGameSource(c)), ...(options.baseOnly ? [] : gameBundleFiles(options.gameRoot, watch, folderStamps(options.gameRoot) === "listing"))];
+  // The game's ArchiveXL bundle comes with the discovery: its `.xl` files at any depth, through the bounded scan (PIPE-142).
+  const candidates = discovery.candidates.filter(c => !options.baseOnly || isBaseGameSource(c));
   // The game's own version: an update replaces the executable (and usually its archives).
   const executable = join(options.gameRoot, "bin", "x64", "Cyberpunk2077.exe");
   let executableStat = null;

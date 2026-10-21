@@ -117,6 +117,8 @@ const extensions: Record<string, SourceFileKind> = {
   ".archive": "archive", ".xl": "archive-xl", ".inkcharcustomization": "loose-customization",
 };
 const defaults = { maxEntries: 150_000, maxDepth: 12, maxProfileBytes: 4 * 1024 * 1024 };
+/** ArchiveXL's bundle folder below the game folder (its plugin folder's `Bundle`) [source: ArchiveXL 1.27.3 `App/Environment.hpp`]. */
+export const ARCHIVE_XL_BUNDLE = "red4ext/plugins/ArchiveXL/Bundle";
 const archiveLimit = "Archive members, hash winners, ArchiveXL patches/merges, REDmod, and actual game loading are unresolved.";
 const iniBytes = 4 * 1024 * 1024;
 const key = (path: string) => path.replaceAll("\\", "/").toLowerCase();
@@ -157,8 +159,10 @@ export function discoverSources(input: LocalSettings, requested: ScanLimits = {}
   const note = (code: string, detail: string) => { issues.push({ code, detail, blocking: false }); };
   let skipDirectories: readonly string[] = [];
 
+  /** `accept` narrows which candidate files below the root count (by the folder below the root they are in, and their kind). */
   const scan = (root: string, provider: SourceProviderKind, providerName: string, active: boolean,
-    priority: number | null, prefix = "", profile: string | null = null, evidence: string | null = null) => {
+    priority: number | null, prefix = "", profile: string | null = null, evidence: string | null = null,
+    accept: (folder: string, kind: SourceFileKind) => boolean = () => true) => {
     const absoluteRoot = resolve(root);
     let rootStat;
     try { rootStat = lstatSync(absoluteRoot); }
@@ -212,7 +216,7 @@ export function discoverSources(input: LocalSettings, requested: ScanLimits = {}
         }
         if (type !== "file") continue;
         const kind = kindOf(virtualPath);
-        if (!kind) continue;
+        if (!kind || !accept(rel, kind)) continue;
         try { stat ??= lstatSync(path); }
         catch { issue("entry_unreadable", `${provider} entry could not be inspected.`); continue; }
         // Replaced by a link or a folder since the listing: judged again by the next scan (its directory's stamp changed).
@@ -237,6 +241,12 @@ export function discoverSources(input: LocalSettings, requested: ScanLimits = {}
     const tweaks = join(settings.gameRoot, "r6", "tweaks"), tweakStat = lstatOrNull(tweaks);
     if (tweakStat?.isDirectory()) scan(tweaks, "game", "Installed game", true, null, "r6/tweaks/");
     else watch(tweaks, tweakStat);
+    // ArchiveXL's own bundle, beside its plugin: its `.archive` files directly in the folder, its `.xl` declarations at any depth, as
+    // ArchiveXL reads them (PIPE-142; knowledge/mod-loading.md). Optional too: scanned (and watched) only when it is there.
+    const bundle = join(settings.gameRoot, ...ARCHIVE_XL_BUNDLE.split("/")), bundleStat = lstatOrNull(bundle);
+    if (bundleStat?.isDirectory() || bundleStat?.isSymbolicLink()) scan(bundle, "game", "Installed game", true, null, `${ARCHIVE_XL_BUNDLE}/`, null, null,
+      (folder, kind) => kind === "archive-xl" || (kind === "archive" && folder === ""));
+    else watch(bundle, bundleStat);
   }
   // A separate manual root has the same install tree shape as a game root.
   if (settings.manualModRoot) scan(join(settings.manualModRoot, "archive", "pc"), "manual", "Manual files", true,
