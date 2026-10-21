@@ -1017,3 +1017,45 @@ describe("third review of chunk 1c-ii: found by the extended specification test"
     second.stop();
   });
 });
+
+describe("fourth review of chunk 1c-ii", () => {
+  test("finding 1: a hung lookup of a required document is abandoned on Try again and made again; its late answer is ignored", async () => {
+    const documents = storeDocuments(), blob = { kind: "saved-v", id: "s-1" }, doc = { kind: "character", id: "c-1" };
+    documents.store.put("saved-v", "s-1", { save: 1 }, 0);
+    const reads: ((value: Record<string, unknown>) => void)[] = [];
+    let hang = true;
+    const port: DocumentStorePort = { ...documents, read: async (refs, signal) => {
+      if (hang) { hang = false; return new Promise(resolve => { reads.push(resolve as never); }); }
+      return documents.read(refs, signal);
+    } };
+    const outbox = new DocumentOutbox(port, memoryOutboxStorage(), { retryMs: 5, immutable: kind => kind === "saved-v" });
+    outbox.hold(doc, null); outbox.open();
+    outbox.commit("character.create", [{ ...doc, value: { decoded: "s-1" } }], { requires: [blob] });
+    await tick(10);
+    expect(reads.length).toBe(1);
+    expect(outbox.status().pending).toBe(1);
+    outbox.retry();
+    await quiet(outbox);
+    expect(documents.store.get("character", "c-1")!.value).toEqual({ decoded: "s-1" });
+    // The first lookup answers at last, saying the save isn't there: nothing follows from it.
+    reads[0]!({ "saved-v/s-1": null });
+    await tick(5);
+    expect(outbox.status()).toMatchObject({ missing: [], pending: 0 });
+    expect(outbox.pendingEntries()).toEqual([]);
+    outbox.stop();
+  });
+
+  test("finding 1: a lookup past its deadline is abandoned and made again by itself", async () => {
+    const documents = storeDocuments(), blob = { kind: "saved-v", id: "s-1" }, doc = { kind: "character", id: "c-1" };
+    documents.store.put("saved-v", "s-1", { save: 1 }, 0);
+    let reads = 0;
+    const port: DocumentStorePort = { ...documents, read: async (refs, signal) => ++reads === 1 ? new Promise(() => {}) : documents.read(refs, signal) };
+    const outbox = new DocumentOutbox(port, memoryOutboxStorage(), { retryMs: 5, attemptMs: 20, immutable: kind => kind === "saved-v" });
+    outbox.hold(doc, null); outbox.open();
+    outbox.commit("character.create", [{ ...doc, value: { decoded: "s-1" } }], { requires: [blob] });
+    for (let i = 0; i < 60 && outbox.status().pending; i++) await tick(5);
+    expect(reads).toBe(2);
+    expect(documents.store.get("character", "c-1")).not.toBeNull();
+    outbox.stop();
+  });
+});

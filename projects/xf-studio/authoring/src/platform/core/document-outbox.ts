@@ -245,7 +245,8 @@ export class DocumentOutbox {
    */
   private readonly forgetting = new Map<string, Set<string>>();
   /** Immutable documents being looked up in the library (a command requires one this page holds no record of). */
-  private readonly looking = new Set<string>();
+  /** Immutable documents being looked up in the library, each lookup with its deadline (abandoned like a send attempt: `retry`). */
+  private readonly looking = new Map<string, AbortController>();
   /** Sent at least once, or read back from storage (it may have been sent): its ID, bases and values never change again (A1). */
   private readonly frozenIds = new Set<string>();
   /** Documents the person chose to keep working on before their restored changes were answered (`keepRestored`). */
@@ -429,8 +430,12 @@ export class DocumentOutbox {
     const revision = stored?.revision ?? 0;
     if (!held.known) {
       held.known = true;
+      const before = this.visible(documentKey(ref));
       if (revision >= held.revision) { held.revision = revision; held.base = stored?.value; }
       held.version = Math.max(held.version, revision);
+      // An immutable document's content arriving with its first read (a reload that finds a save another V imported) is a dependency
+      // arriving: owners of what depends on it hear, as when a lookup or a put brings it.
+      if (this.immutable(ref.kind) && before === undefined && this.visible(documentKey(ref)) !== undefined) this.emit({ kind: "external", refs: [held.ref] });
       queueMicrotask(() => this.pump());
       return;
     }
@@ -597,7 +602,9 @@ export class DocumentOutbox {
     this.retryTimer?.cancel(); this.retryTimer = null;
     // A hung attempt is abandoned and its command sent again (under its own ID: a late answer to the old attempt is ignored).
     for (const attempt of this.attempts.values()) attempt.abort(RETRIED);
-    for (const key of this.missing) this.looking.delete(key);
+    // A hung lookup is abandoned too, and looked up again (its late answer ignored); so is one for a source known to be missing.
+    for (const lookup of this.looking.values()) lookup.abort(RETRIED);
+    this.looking.clear();
     this.pump();
   }
   /**
@@ -647,10 +654,19 @@ export class DocumentOutbox {
       if (held?.known && held.revision > 0) continue;
       ready = false;
       if (!this.looking.has(key)) {
-        this.looking.add(key);
+        const lookup = new AbortController();
+        this.looking.set(key, lookup);
         const ref = refOfKey(key);
+        const current = () => this.looking.get(key) === lookup && !lookup.signal.aborted;
+        const deadline = (this.options.schedule ?? defaultSchedule)(this.options.attemptMs ?? ATTEMPT_MS, () => {
+          if (!current()) return;
+          lookup.abort(EXPIRED); this.looking.delete(key); this.later();
+        });
         // Read whole: an immutable document's content never changes, so whoever needs it here (a V whose save it is) can show it now.
-        void this.transport.read([ref]).then(read => {
+        void this.transport.read([ref], lookup.signal).then(read => {
+          deadline.cancel();
+          // An abandoned lookup's late answer is ignored: the lookup made since (or the next send's) decides.
+          if (!current()) return;
           this.looking.delete(key);
           const found = read[key], revision = found?.revision ?? 0;
           if (revision > 0) {
@@ -663,7 +679,7 @@ export class DocumentOutbox {
             this.pump();
           }
           else this.restore([key]);
-        }, error => { this.looking.delete(key); this.options.report?.(error); this.later(); });
+        }, error => { deadline.cancel(); if (!current()) return; this.looking.delete(key); this.options.report?.(error); this.later(); });
       }
     }
     return ready;

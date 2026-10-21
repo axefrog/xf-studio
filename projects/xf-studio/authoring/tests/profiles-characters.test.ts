@@ -857,6 +857,37 @@ describe("conflicts on a V (profiles design §2.2)", () => {
     }
   });
 
+  test("fourth 1c-ii review: a V shown without its save shows it once a library reload finds it (imported elsewhere), and takes edits again", async () => {
+    const lib = library(), first = await world(lib);
+    const save = blueSave(first);
+    const made = await first.characters.create({ source: { kind: "save", value: save } });
+    if (!made.ok) throw Error(made.reason);
+    await first.characters.flush(); await first.outbox.settle();
+    const decoded = (first.characters.document(made.character)!.source as { decoded: string }).decoded;
+    first.outbox.stop();
+    // The library's copy of the save is gone (purged) when the next page opens the V.
+    const saved = lib.store.get(SAVED_V_DOCUMENT, decoded)!;
+    (lib.store as unknown as { db: { write(change: (db: { query(sql: string): { run(...args: unknown[]): unknown } }) => void): void } }).db
+      .write(db => { db.query("DELETE FROM documents WHERE kind = ? AND id = ?").run(SAVED_V_DOCUMENT, decoded); });
+    const second = await world(lib);
+    await second.characters.load();
+    const shown = second.characters.context(made.character, { showSave() {} });
+    shown.start(); await settle();
+    // Opening it never writes its source away (a context without its save would otherwise show, and record, the default V).
+    expect(second.characters.document(made.character)!.source).toMatchObject({ kind: "save", decoded });
+    expect(shown.shownSave()).toBeNull();
+    expect(shown.capability({ kind: "character.setClothing", state: "underwear" })).toMatchObject({ available: false, code: "not_ready" });
+    // Another window imports the same save; this page reads the library again.
+    lib.store.put(SAVED_V_DOCUMENT, decoded, saved.value, 0);
+    await second.characters.load();
+    await settle();
+    expect(shown.shownSave()).not.toBeNull();
+    shown.dispatch({ kind: "character.setClothing", state: "underwear" });
+    await second.characters.flush();
+    expect(libraryCharacter(second, made.character)).toMatchObject({ source: { kind: "save", decoded }, clothing: { state: "underwear" } });
+    second.outbox.stop();
+  });
+
   test("Keep both over an existing membership (Sol's 1c-i note): a create whose profile went stale keeps theirs' profile, the copy added to it", async () => {
     const w = await world();
     const made = await w.profiles.dispatch({ kind: "profile.create", name: "Mine" });

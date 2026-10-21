@@ -246,7 +246,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
   // A second stream for what chunk 1c-ii added (snapshots, three-document commands with tombstones, membership edits, captured reads),
   // so the first stream's sequences stay as they were where those don't change the state.
   const more = random(seed ^ 0x5bd1e995);
-  const keys = [...DOCS, MEMBERS, ...BLOBS].map(documentKey);
+  const keys = [...DOCS, MEMBERS, ...BLOBS].map(documentKey), loaded = [...keys];
   const writers = new Map<string, string[]>();
   const queue: Sent[] = [], lookups: Lookup[] = [], hostWrites: HostWrite[] = [], retries: (() => void)[] = [];
   /** Each attempt's deadline: when one runs, that attempt is abandoned and its command sent again. */
@@ -306,6 +306,9 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
   let spec: Spec = { docs: Object.fromEntries(keys.map(key => [key, { revision: 0, value: undefined }])), versions: {}, intents: [], acknowledged: [] };
   let life = 0, adopting = false, a!: DocumentOutbox;
   let owner = new Map<string, unknown>();
+  /** The immutable documents this launch's owners haven't read yet: A holds nothing of them (the specification neither). */
+  const unheld = new Set<string>();
+  const asHeld = (key: string) => unheld.has(key) ? { revision: 0, value: undefined } : library(key);
   let putting = false;
   /** Keeps generated command IDs unique (the random part alone collides about once in a few hundred runs). */
   let ids = 0;
@@ -372,7 +375,17 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
       new Promise<void>((resolve, reject) => { hostWrites.push({ life: mine, key, text, resolve, reject }); }));
     a = new DocumentOutbox(transport("A", () => mine), storage, { immutable, newId: () => `a${mine}-${Math.floor(rng.next() * 1e9).toString(36)}${(++ids).toString(36)}`,
       schedule: (ms, task) => { const list = ms === ATTEMPT_MS ? deadlines : retries; list.push(task); return { cancel: () => { const at = list.indexOf(task); if (at >= 0) list.splice(at, 1); } }; } });
-    for (const key of keys) { const now = library(key); a.hold(refOf(key), now.revision ? now : null); }
+    // An owner that never read some immutable documents (a V shown before its save was read): those come later, by a lookup, a put or
+    // a reload (`hold`), and must then reach every owner.
+    unheld.clear();
+    for (const key of keys) {
+      // (Not one the outbox keeps itself: content kept with a stored command, or a stored put of it.)
+      const stored = [...memory.keys, ...webview, ...host].filter(([name]) => name === key || name.endsWith(`.${key}`)).some(([, text]) => {
+        try { const record = JSON.parse(text) as { entries?: unknown[]; retained?: unknown }; return !!record.entries?.length || record.retained !== undefined; } catch { return false; }
+      });
+      if (immutable(refOf(key).kind) && !stored && more.next() < 0.3) { unheld.add(key); continue; }
+      const now = library(key); a.hold(refOf(key), now.revision ? now : null);
+    }
     // A check the outbox makes by itself (the host answered again after failing) is a change from elsewhere, as one asked for.
     a.subscribe(event => {
       if (event.kind !== "external" || mine !== life) return;
@@ -427,7 +440,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
       await ticks();
       killAfter(Infinity);
       if (a.status().stopped) { count("killed while opening"); continue; }
-      const now = real(), candidates = allowed.map(candidate => restarted(candidate, library, () => ({ id: 0, expected: null, actual: null })));
+      const now = real(), candidates = allowed.map(candidate => restarted(candidate, asHeld, () => ({ id: 0, expected: null, actual: null })));
       const match = candidates.find(candidate => specSignature(candidate, keys) === now);
       adopting = false;
       if (!match) { fail(`after a kill A shows ${now}; the specification allows ${candidates.map(candidate => specSignature(candidate, keys)).join(" or ")}`); return; }
@@ -500,7 +513,15 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
     return ids;
   };
   for (stepNow = 0; stepNow < steps && !failures.length; stepNow++) {
-    if (more.next() < 0.03 && deadlines.length) {
+    if (more.next() < 0.02) {
+      // The owners read the library again (a reload): every document they hold takes a newer revision, and every immutable one they
+      // hadn't read arrives; each change reaches every owner (the outbox announces it), which the owner check after the step verifies.
+      // (What owners load: the documents they list; copies Keep both made here are this page's own until acknowledged.)
+      for (const key of loaded) { const now = library(key); a.hold(refOf(key), now.revision ? now : null); }
+      if (unheld.size) count("owners reload");
+      unheld.clear();
+      await ticks();
+    } else if (more.next() < 0.03 && deadlines.length) {
       // The library takes too long: some attempts' deadlines pass (each is abandoned, and its command sent again under its ID).
       for (const task of deadlines.splice(0, 1 + more.int(deadlines.length))) task();
       count("attempt abandoned");
@@ -607,7 +628,8 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
       const live = sent.window === "A" && sent.life === life;
       const before = structuredClone(spec);
       const answer = deliver(sent, how);
-      if (answer && !answer.ok && answer.reason === "stale" && live) {
+      // (An abandoned attempt's answer reaches nobody: a later attempt of the same command may already have landed and been forgotten.)
+      if (answer && !answer.ok && answer.reason === "stale" && live && !sent.signal?.aborted) {
         const foreign = sent.request.writes.some(write => {
           const list = writers.get(documentKey(write)) ?? [], now = answer.current[documentKey(write)]?.revision ?? 0;
           for (let revision = write.base + 1; revision <= now; revision++) if (list[revision] !== "A") return true;
@@ -728,7 +750,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
         adopting = true;
         openA();
         const rebuilt: Spec = { docs: {}, versions: {}, intents: [], acknowledged: [...spec.acknowledged] };
-        for (const key of keys) { rebuilt.docs[key] = library(key); rebuilt.versions[key] = rebuilt.docs[key]!.revision; }
+        for (const key of keys) { rebuilt.docs[key] = asHeld(key); rebuilt.versions[key] = rebuilt.docs[key]!.revision; }
         for (const entry of a.pendingEntries()) {
           lossyIds.add(entry.id);
           for (const write of entry.writes) if (typeof write.base === "number") lossyBases.add(`${documentKey(write)}@${write.base}`);
@@ -764,7 +786,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
       a.stop(); await ticks();
       adopting = true;
       openA();
-      adopt(restarted(spec, library, caller));
+      adopt(restarted(spec, asHeld, caller));
       adopting = false;
       for (const request of deferred.splice(0)) checkSend(request);
       await ticks();
@@ -782,7 +804,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
     for (const key of keys) {
       const held = a.document(refOf(key));
       if (!immutable(refOf(key).kind) && (held?.revision ?? 0) !== (spec.docs[key]?.revision ?? 0)) fail(`A's baseline of ${key} is revision ${held?.revision}, the specification's ${spec.docs[key]?.revision}`);
-      if ((held?.version ?? 0) !== (spec.versions[key] ?? 0)) fail(`A's version of ${key} is ${held?.version}, the specification's ${spec.versions[key] ?? 0}`);
+      if (!immutable(refOf(key).kind) && (held?.version ?? 0) !== (spec.versions[key] ?? 0)) fail(`A's version of ${key} is ${held?.version}, the specification's ${spec.versions[key] ?? 0}`);
     }
     // Protected means recoverable, for every document: what A doesn't report unprotected comes back from the durable storage (memory, or
     // the desktop host's copy, as a new launch reads it) as A shows it, and nothing discarded or acknowledged comes back as a change.
@@ -841,6 +863,10 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
   }
   if (!failures.length) {
     if (a.pendingEntries().length || b.pendingEntries().length) fail(`not quiet: A holds ${a.pendingEntries().length}, B ${b.pendingEntries().length} ${JSON.stringify(a.pendingEntries().slice(0, 6).map(e => [e.id, e.state, e.requires, e.writes.map(w => [w.id, w.base])]))} queue ${queue.length} lookups ${lookups.length} retries ${retries.length}`);
+    // The owners read everything once more (a reload): every document is then held, unread immutable ones included.
+    for (const key of loaded) { const now = library(key); a.hold(refOf(key), now.revision ? now : null); }
+    unheld.clear();
+    await ticks();
     const checking = a.check();
     for (let i = 0; i < 4; i++) { await ticks(); for (const lookup of lookups.splice(0)) lookup.resolve(answerOf(lookup.kind, lookup.refs)); }
     await checking; await ticks();
@@ -867,9 +893,10 @@ const RUNS = Number(process.env.XFS_OUTBOX_RUNS ?? 60);
  * recovered launch ordering its new commands before older ones that came back (desktop 792900) and a conflict overtaken by an own write
  * (desktop 491978); in the second review, an `own` answer for a document a superseded copy no longer writes (local 5132512), and two
  * recovered commands on one document both ready to send (desktop 2986463, 2717217); in the third, a stored copy older than its command as
- * sent, replayed by receipt (desktop 2028264, 990875).
+ * sent, replayed by receipt (desktop 2028264, 990875); in the fourth, an abandoned attempt's late answer (local 5710599) and a reload of
+ * documents a Keep both copy wrote (desktop 349436).
  */
-const FIXED = { local: [5979845, 2527161, 4609858, 982956, 5132512], desktop: [1212607, 1719423, 1806532, 365274, 2519242, 476140, 792900, 491978, 2986463, 2717217, 2028264, 990875] };
+const FIXED = { local: [5979845, 2527161, 4609858, 982956, 5132512, 5710599], desktop: [1212607, 1719423, 1806532, 365274, 2519242, 476140, 792900, 491978, 2986463, 2717217, 2028264, 990875, 349436] };
 const STEPS = 400;
 test(`the outbox meets its specification in seeded runs (kills while working and while recovering, late checks, failing storage, two windows)`, async () => {
   const all: string[] = [];
@@ -886,5 +913,5 @@ test(`the outbox meets its specification in seeded runs (kills while working and
     "app restart", "resolve mine", "resolve theirs", "resolve both", "answer stale", "answer receipt", "answer equal", "answer lost", "send failed", "late read",
     "storage failing", "host write landed", "host write failed", "host write fenced", "B imports", "protected document checked", "three-document command",
     "snapshot checked", "read captured earlier", "stale read delivered", "own adopted", "edit refused while recovering", "receipts purged",
-    "app crash with host writes pending", "answer to an abandoned attempt", "attempt abandoned", "dependency arrived"]) expect(seen[name] ?? 0, name).toBeGreaterThan(0);
+    "app crash with host writes pending", "answer to an abandoned attempt", "attempt abandoned", "dependency arrived", "owners reload"]) expect(seen[name] ?? 0, name).toBeGreaterThan(0);
 }, 600_000);

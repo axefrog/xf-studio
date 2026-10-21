@@ -214,6 +214,12 @@ Results after the second review's fixes (22 October 2026): S1 on both hosts **PA
 - **UI review.** The missing-save line offers Import save… (the usual save import) beside Discard those changes; Keep working is now "Use restored", its full wording the tooltip; Use restored, Import save… and Discard those changes keep their labels at every width, and narrow the message takes a row of its own. Recaptured in `generated/recovering-ui/`.
 - **Found by the extended specification test:** a stored copy older than its command as sent (a later edit had joined it before the send) replayed by receipt took the copy's older value as the baseline; a receipt's answer now carries what the command committed. The test also no longer lets its own retry loop starve the answers it waits for, and missing sources are looked for at the next send rather than polled.
 
+**Fourth review of chunk 1c-ii** (two Medium findings, regression tests in `tests/collection-owner.test.ts` "fourth review" and `tests/profiles-characters.test.ts` "fourth 1c-ii review"):
+
+- **Dependency lookups have deadlines.** A lookup of a required document this page doesn't hold is an attempt like a send: its own `AbortSignal`, the `ATTEMPT_MS` deadline, abandoned on Try again, and its late answer ignored.
+- **A reload brings a waiting V its save.** The first read of an immutable document that brings its content is announced like its arrival by a lookup or a put, and `CharacterService.load` also brings every V shown without its save up to it. A V whose save isn't here records nothing from its context (it would otherwise record the stand-in default V over its source) and refuses changes until the save arrives.
+- **The specification test** now leaves some immutable documents unread when the page opens and adds reloads (owners reading the library again); the owner check covers both. It also skips the own-write check for an abandoned attempt's answer. A sweep of 800 local and 400 desktop seeds passes in 56 s at 0.4 GB.
+
 ## Acknowledgement and rebasing rules (S1, answering Sol's Medium point)
 
 - **A1, freeze on send.** From its first send, an outbox entry's command ID, bases and values never change. Every resend, after a timeout, a host restart or a renderer restart, reuses the ID.

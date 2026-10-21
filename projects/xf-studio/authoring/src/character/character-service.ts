@@ -115,6 +115,8 @@ export class CharacterService implements CharactersPort {
   async load(signal?: AbortSignal): Promise<void> {
     const [characters, saves] = await Promise.all([this.deps.documents.list(CHARACTER_DOCUMENT, signal), this.deps.documents.list(SAVED_V_DOCUMENT, signal)]);
     for (const save of saves) this.deps.outbox.hold(saveRef(save.id), { revision: save.revision, value: save.value });
+    // A V shown before its save was here shows it now (whether or not the outbox announced the save's arrival).
+    for (const save of saves) this.saveArrived(save.id);
     for (const document of characters) {
       this.deps.outbox.hold(docRef(document.id), { revision: document.revision, value: document.value });
       this.entryOf(document.id);
@@ -242,6 +244,9 @@ export class CharacterService implements CharactersPort {
   private mirror(entry: Entry) {
     const context = entry.context, doc = this.doc(entry.id);
     if (!context || !doc) return;
+    // A context that can't show the save its V comes from (it isn't here yet) shows a stand-in: nothing of it is the V's, so nothing is
+    // recorded until the save arrives and the context is brought up to the document (`saveArrived`). Its changes are refused meanwhile.
+    if (doc.source.kind === "save" && this.blocked(entry.id) === SAVE_MISSING) return;
     const save = context.shownSave(), decoded = save ? this.saveId(save) : null;
     const next = documentOfForm(entry.id, context.form(), context.shownBody(), decoded, doc);
     if (canonical(next) === canonical(doc)) return;
@@ -285,8 +290,9 @@ export class CharacterService implements CharactersPort {
   /** Why a V can't take changes now: still being restored, or its save isn't here to show (a change made then would drop its source). */
   private blocked(id: CharacterId): string | null {
     if (this.deps.outbox.recovering(docRef(id))) return RESTORING;
-    const doc = this.doc(id), shown = this.entries.get(id)?.context?.shownSave();
-    if (doc?.source.kind === "save" && (!this.decoded(doc.source.decoded) || !shown || this.saveId(shown) !== doc.source.decoded)) return SAVE_MISSING;
+    // (Its content not being here at all: a context mid-way through changing the V's source shows another save for a moment.)
+    const doc = this.doc(id);
+    if (doc?.source.kind === "save" && !this.decoded(doc.source.decoded)) return SAVE_MISSING;
     return null;
   }
   /** The character's document changed from elsewhere: a context shows it, its Undo starting there; commands read before it are stale. */
