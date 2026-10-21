@@ -183,6 +183,8 @@ test("a read-only window refuses every dispatch with unavailable, keeps reads, a
   expect(await shell.localSetup.dispatch({ kind: "setup.refresh" })).toMatchObject({ ok: false, code: "unavailable" });
   expect(await shell.modInstall.dispatch({ kind: "install.refresh" } as never)).toMatchObject({ ok: false, code: "unavailable" });
   expect(await shell.updates.dispatch({ kind: "updates.check" })).toMatchObject({ ok: false, code: "unavailable" });
+  // The header's Save is unavailable with the lease's reason, as every other editing command is.
+  expect(shell.authoring.requestCapability({ kind: "save" })).toEqual({ available: false, code: "unavailable", reason: LEASE_MESSAGES.refused });
   // Reads stay: the library list loads.
   expect(shell.authoring.requestCapability({ kind: "refresh" }).code).not.toBe("unavailable");
   expect(shell.workspace.snapshot()).toMatchObject({ phase: "read-only", canTakeOver: true });
