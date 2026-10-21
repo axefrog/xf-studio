@@ -421,10 +421,10 @@ Add these to `tests/architecture-import-boundary.test.ts`, with a recursive walk
 
 **Enforced today** (`tests/architecture-import-boundary.test.ts`, `tests/studio-ui-boundary.test.ts`, `tests/studio-registry.test.ts`):
 
-- Rules 1 and 1a. A feature's core imports only its allowlist: `platform/api`, engines (not their renderers), the pure helpers (`read-only`, `validation-issues`), its own folder and an explicit legacy list whose entries each name the step that removes them (`recipe-schema`, `history-labels`, `eye-makeup-model`, `eye-makeup-descriptors`; the list only shrinks, and a test fails when an entry is no longer imported). Its core never imports its view.
+- Rules 1 and 1a. A feature's core imports only its allowlist: `platform/api` (which holds the small pure helpers, `read-only` and `validation-issues` among them), engines (not their renderers), its own folder and an explicit legacy list whose entries each name the step that removes them (`recipe-schema`, `history-labels`, `eye-makeup-model`, `eye-makeup-descriptors`; the list only shrinks, and a test fails when an entry is no longer imported). Its core never imports its view.
 - No feature reaches `platform/core`, `platform/scene` or `platform/export`, even through other modules: a core by any import, types included; a view by the imports that load code. A core also never reaches Three, `node:`/`bun:`, a browser device, studio-ui, `compose/` or its own view, render or export folder, and it reads no page or host global (CORE-77).
 - Rule 2 for Three and `node:`, rules 4 and 5.
-- The engine rules: engines import only engines, `platform/api` and the pure helpers; only an engine's `render/` imports Three and the scene's shared materials; no other engine module reaches a renderer or Three, even through other modules; and the pure engine reads no page or host global: the window in any use but a property name, `self.`, `document.`, `globalThis`, storage, the navigator, `fetch`, `process.env` or `Bun.env`, scanned in code with comments and literals blanked (CORE-78). studio-ui and the platform import no engine.
+- The engine rules: engines import only engines and `platform/api`; only an engine's `render/` imports Three and the scene's shared materials; no other engine module reaches a renderer or Three, even through other modules; and the pure engine reads no page or host global: the window in any use but a property name, `self.`, `document.`, `globalThis`, storage, the navigator, `fetch`, `process.env` or `Bun.env`, scanned in code with comments and literals blanked (CORE-78). studio-ui and the platform import no engine.
 - The view rules: views receive a `FeatureViewContext` over their facade, never the shell's runtime or the port, by type (UI-73); the import scan sees every import form (UI-74).
 - The registry completeness checks of rule 7 (`tests/studio-registry.test.ts`).
 
@@ -800,7 +800,7 @@ Built on 26 September in `claude/platform-step7`, as reviewable commits: the sce
 **What remains.**
 
 - **Step 8** (done, [step 8 status](#step-8-status)): exporters and verifiers; `mod-verifier/` moved into `features/eye-makeup/verify/`, and eye makeup's exporter in `features/eye-makeup/export/` wraps the package pipeline still in `src/`.
-- **Eye makeup's devices:** its preview device (`browser-preview-device.ts`), raster client and on-head editor are still at the top of `src/`, driven through the renderer's `layers` and `surface`.
+- **Eye makeup's devices:** its preview device (`browser-preview-device.ts`), raster client and on-head editor are still outside the feature, in `legacy/eye-makeup/browser/`, driven through the renderer's `layers` and `surface`.
 - **Port additions on demand:** `sync`/`readiness` and the port's `details`, `jobs` and `textures` wait for a feature that needs them; picking through the port (`pick` and its dispatch) waits for a second pickable feature.
 - **Step 9** moves the scene host's listed device modules under `platform/scene/`.
 
