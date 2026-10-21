@@ -2,7 +2,7 @@
 // against the self-test host: emergency controls that never block the event loop and never race for the control pipe (1),
 // a handover that clears the rigs after the write gate closes (3), captures that stop when cancelled (5), a look stopped
 // mid-way (2), game.wait with one phase, the press-any-key screen after a load, the staged showroom found by itself, the
-// clean-build gate, the schema's anyOf and its plain length message, and the ink panel's placement for all nine anchors.
+// clean-build gate, and the schema's anyOf and its plain length message (the ink panel's placement is batch17's since 0.8.3).
 // Proves nothing about the game.
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
@@ -267,28 +267,8 @@ describe("0.8.2 session 9 (offline)", () => {
     expect(staleObject(join(root, "build"), join(root, "native"))).toBeNull();
   });
 
-  test("the ink panel's placement: every anchor keeps the whole panel inside the visible screen at its offset", () => {
-    // The redscript's arithmetic (XFRuntimeBridgeInk.reds Place and XFInkStyle.PanelEdge), mirrored here.
-    const reds = readFileSync(join(projectDir, "redscript", "XFRuntimeBridgeInk.reds"), "utf8");
-    expect(reds).toContain("return start + fraction * length + offset - fraction * size;");
-    const edge = (start: number, length: number, fraction: number, offset: number, size: number) => start + fraction * length + offset - fraction * size;
-    const anchorPoint = (name: string) => ({ x: name.endsWith("_right") ? 1 : name.endsWith("_center") || name === "center" ? 0.5 : 0, y: name.startsWith("bottom_") ? 1 : name.startsWith("center") ? 0.5 : 0 });
-    const visible = { x: 0, y: 280, w: 3840, h: 1600 }; // 3840 x 1600 on the 3840 x 2160 canvas
-    const w = 900, h = 300, x = 40, y = 360;
-    for (const anchor of ["top_left", "top_center", "top_right", "center_left", "center", "center_right", "bottom_left", "bottom_center", "bottom_right"]) {
-      const p = anchorPoint(anchor);
-      const dx = p.x > 0.9 ? -x : x, dy = p.y > 0.9 ? -y : y;
-      let left = edge(visible.x, visible.w, p.x, dx, w), top = edge(visible.y, visible.h, p.y, dy, h);
-      left = Math.min(Math.max(left, visible.x + 8), Math.max(visible.x + 8, visible.x + visible.w - 8 - w));
-      top = Math.min(Math.max(top, visible.y + 8), Math.max(visible.y + 8, visible.y + visible.h - 8 - h));
-      expect(left >= visible.x && left + w <= visible.x + visible.w, anchor).toBe(true);
-      expect(top >= visible.y && top + h <= visible.y + visible.h, anchor).toBe(true);
-      if (anchor === "top_left") expect([left, top - visible.y]).toEqual([40, 360]);
-      if (anchor === "top_right") expect(visible.x + visible.w - (left + w)).toBe(40);
-      if (anchor === "bottom_left") expect(visible.y + visible.h - (top + h)).toBe(360);
-      if (anchor === "center") expect(left + w / 2 - (visible.x + visible.w / 2)).toBe(40);
-    }
-  });
+  // The ink panel's placement for all nine anchors moved to batch17 (0.8.3): session 10 showed 0.8.2's visible-screen model
+  // (the middle 1600 units of the 2160 canvas) put every anchor about 280 units too low.
 });
 
 // --- against the self-test host ----------------------------------------------------------------------------------------
@@ -352,15 +332,15 @@ describe("0.8.2 against the self-test host", () => {
 
   test("the frame names the status surface; a client on the control pipe alone still counts as the session", async () => {
     const frame = (await api.callBridge("selftest.hud", {}, "t-hud")) as Any;
-    expect(frame.ok && frame.result.surface).toBe("status_label");
+    expect(frame.ok && frame.result.surface).toBe("cet_line");
     expect(frame.result.status_all.connection).toBe("XF Studio connected");
     const client = new BridgeClient({ ...host.session, pipe: host.session.control_pipe! }, 5000);
     await client.connect();
     client.close();
   }, 20_000);
 
-  test("the tools' version is 0.8.2", () => {
-    expect(JSON.parse(readFileSync(join(projectDir, "package.json"), "utf8")).version).toBe("0.8.2");
+  test("the tools' version is 0.8.3", () => {
+    expect(JSON.parse(readFileSync(join(projectDir, "package.json"), "utf8")).version).toBe("0.8.3");
   });
 });
 

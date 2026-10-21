@@ -117,7 +117,7 @@ export function variantConfig(base: string, variant: Variant, options: { allowIn
     if (!/^\[overlay\]\n(?:;.*\n)*enabled = true$/m.test(config)) throw new Error(`${variant} config did not switch the overlay host on`);
   }
   if (variant === "diagnostic") {
-    // 0.8 (the UI review): the overlay panel's diagnostic lines and moving bar in the diagnostic package only.
+    // 0.8 (the UI review): the XF box's diagnostic lines and moving bar in the diagnostic package only.
     config = config.replace(/^diagnostics = false$/m, "diagnostics = true");
     if (!/^diagnostics = true$/m.test(config)) throw new Error("diagnostic config did not switch the overlay's diagnostics on");
   }
@@ -175,7 +175,7 @@ export type Manifest = {
   cet_panel: boolean;
   /** 0.7: whether the XF overlay host is on ([overlay] enabled): the test packages only. */
   overlay_host: boolean;
-  /** 0.8: whether the overlay panel shows its diagnostic lines ([overlay] diagnostics): the diagnostic package only. */
+  /** 0.8: whether the XF box shows its diagnostic lines ([overlay] diagnostics): the diagnostic package only. */
   overlay_diagnostics: boolean;
   commit: string;
   source_tree_clean: true;

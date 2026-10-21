@@ -129,9 +129,11 @@ const nextCid = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${++ci
 
 /**
  * Emergency controls (0.8.1, RB-121): answered at once on a path of their own, never behind the serial queue, where a
- * game.wait could hold them for up to ten minutes while behaviours went on running in the game.
+ * game.wait could hold them for up to ten minutes while behaviours went on running in the game. 0.8.3 (session 10's L2c):
+ * session.resume too, so taking the game back never waits behind another process's polling on the main pipe; its steps
+ * (bridge.handover {on: false}, ui.message) are on the control route.
  */
-export const EMERGENCY_COMMANDS: ReadonlySet<string> = new Set(["bridge.kill", "behave.stop", "player.stop", "session.handover"]);
+export const EMERGENCY_COMMANDS: ReadonlySet<string> = new Set(["bridge.kill", "behave.stop", "player.stop", "session.handover", "session.resume"]);
 /** Of those, the ones that supersede everything sent before them: queued commands are cancelled and running ones aborted. */
 export const SUPERSEDING_COMMANDS: ReadonlySet<string> = new Set(["bridge.kill", "session.handover"]);
 
@@ -159,6 +161,8 @@ export class CommandApi {
    * session.resume sent right after a session.handover can't land first and leave the session handed over.
    */
   private barrier: Promise<void> = Promise.resolve();
+  /** 0.8.3: the emergency controls still running, in the order they were sent (the kill doesn't wait for them). */
+  private emergencies: Promise<void> = Promise.resolve();
   /**
    * 0.8.2 (the re-check's first finding): this API's control-pipe calls, one after another. The pipe takes one client at a
    * time, so a behave.stop sent right after a player.stop waits here (asynchronously) for the first to close its connection,
@@ -223,8 +227,14 @@ export class CommandApi {
     return session ? { pid: session.pid } : { processName: "Cyberpunk2077.exe" };
   }
 
-  /** Runs one command. Never throws: every failure comes back as a plain-language error. */
+  /**
+   * Runs one command. Never throws: every failure comes back as a plain-language error. name is the catalogue's name or the
+   * MCP tool's (session_handover); 0.8.3 (session 10's L2c): either way the command is recognised for what it is, so an
+   * emergency control typed with underscores on the command line still goes on the control pipe at once (before, only
+   * the dotted name did, and session_handover from a second process waited behind the first one's game_wait).
+   */
   run(name: string, input: unknown = {}, options: RunOptions = {}): Promise<CommandOutcome> {
+    name = findCommand(name)?.name ?? name;
     // Emergency controls go now, beside whatever is running (RB-121); kill and handover first cancel everything sent
     // before them (queued commands never start; a running one sees its signal abort and stops at its next step).
     if (EMERGENCY_COMMANDS.has(name)) {
@@ -233,7 +243,18 @@ export class CommandApi {
         this.epoch = new AbortController();
       }
       // Through the bridge's control pipe (beside whatever the main pipe serves), and a barrier for what comes after it.
-      const operation = this.runNow(name, input ?? {}, options, true);
+      // 0.8.3: in the order they were sent: an emergency control other than the kill waits for the emergency controls sent
+      // before it (short: each is a few control-pipe calls), so a session.resume sent right after a session.handover can't
+      // interleave its steps with the handover's. The kill never waits.
+      const earlier = this.emergencies;
+      const operation =
+        name === "bridge.kill"
+          ? this.runNow(name, input ?? {}, options, true)
+          : earlier.then(() => this.runNow(name, input ?? {}, options, true));
+      this.emergencies = operation.then(
+        () => undefined,
+        () => undefined,
+      );
       const settled = operation.then(
         () => undefined,
         () => undefined,

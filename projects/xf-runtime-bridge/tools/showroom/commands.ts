@@ -6,8 +6,8 @@
 import { captureWindow, CaptureError, type CaptureRecord } from "../capture/capture.ts";
 import type { CommandContext, CommandResult } from "../api/catalogue.ts";
 import {
-  choosePieces, chooseStagedShowroom, eyesOf, facingOf, PEDESTAL_BELOW_M, planError, planLayout, planOnRay, readShowroom, showroomBuilds, spill, spacingFor, toWorld, yawFacing,
-  type Anchor, type Placement, type RigPlacement, type RigProfile, type Showroom, type Vec3,
+  choosePieces, chooseStagedShowroom, eyesOf, facingOf, PEDESTAL_BELOW_M, planError, planLayout, planOnRay, readShowroom, resolveStaged, showroomBuilds, spill, spacingFor, toWorld, yawFacing,
+  type Anchor, type Placement, type RigPlacement, type RigProfile, type Showroom, type StagedArchive, type Vec3,
 } from "./plan.ts";
 import { modelForRead, modelFromFov, poseOf, project, type Calibration, type CameraModel, type CameraPose } from "../scene/camera.ts";
 import { frameOf } from "../scene/report.ts";
@@ -46,12 +46,53 @@ export async function loadedArchives(context: CommandContext, archives: readonly
 }
 
 /**
- * The showroom builds to use: the manifests given, or (0.8.2) the staged build found by itself (plan.ts chooseStagedShowroom:
- * this machine's builds, the ones the game loaded). found says which, for the answer.
+ * 0.8.3: the staged showroom archives as the game itself sees them (the bridge's showroom.staged: its archive/pc/mod, which is
+ * MO2's virtual folder when MO2 launched the game), or null from a bridge that doesn't know the method (before 0.8.3).
+ */
+export async function stagedArchives(context: CommandContext): Promise<StagedArchive[] | null> {
+  const response = await context.api.callBridge("showroom.staged", {}, context.cid, undefined, context.signal);
+  if (!response.ok) {
+    if (response.error.code === "unknown_method") return null;
+    throw Object.assign(new Error(response.error.message), { plain: response.error });
+  }
+  return ((response.result as Json).archives as StagedArchive[] | undefined) ?? [];
+}
+
+/**
+ * The showroom builds to use: the manifests given, or the staged builds found by themselves. 0.8.3 (session 10's G1: the
+ * staged mods were found by no one, because the tools looked only in their own checkout's dist): the game says which
+ * showroom archives it has (showroom.staged), and each is resolved to its manifest, the one a self-describing build ships
+ * inside the mod, else this machine's build with the same bytes (plan.ts resolveStaged, which also looks in the primary
+ * checkout's dist). Every resolved build is used, so a preset is found in whichever holds it. An older bridge falls back to
+ * 0.8.2's route (the newest local build whose archive the game loaded). found says which, for the answer.
  */
 async function manifestsOf(input: Json, context: CommandContext): Promise<{ showrooms: Showroom[]; found?: Json }> {
   const paths = [...(input.manifest ? [input.manifest as string] : []), ...((input.manifests as string[] | undefined) ?? [])];
   if (paths.length) return { showrooms: paths.map(readShowroom) };
+  const staged = await stagedArchives(context);
+  if (staged) {
+    if (!staged.length) {
+      throw planError(
+        "showroom_not_staged",
+        "The game has no XF Finish Showroom archive in its archive/pc/mod folder. Stage one (in MO2, enable an XF Finish Showroom mod in this profile) and restart the game, or give manifest.",
+      );
+    }
+    const { resolved, unresolved } = resolveStaged(staged, showroomBuilds());
+    if (!resolved.length) {
+      throw planError(
+        "showroom_manifest_missing",
+        `The game has ${staged.map((s) => s.archive).join(", ")} staged, but no manifest for ${staged.length > 1 ? "them" : "it"}: ${unresolved.map((u) => `${u.archive}: ${u.why}`).join("; ")}. Rebuild XF Finish Showroom (projects/xf-studio/authoring/tools/build_showroom_package.ts, which ships its manifest inside the mod since 0.8.3) and restage it, or give manifest.`,
+      );
+    }
+    return {
+      showrooms: resolved.map((r) => r.showroom),
+      found: {
+        how: "the showroom archives the game itself sees in archive/pc/mod (showroom.staged), each with its manifest",
+        builds: resolved.map((r) => ({ archive: r.archive, manifest: r.by === "shipped_manifest" ? "shipped in the staged mod" : r.manifest, by: r.by })),
+        ...(unresolved.length ? { unresolved } : {}),
+      },
+    };
+  }
   const builds = showroomBuilds();
   const loaded = await loadedArchives(context, [...new Set(builds.map((b) => b.archive))]);
   const chosen = chooseStagedShowroom(builds, loaded);

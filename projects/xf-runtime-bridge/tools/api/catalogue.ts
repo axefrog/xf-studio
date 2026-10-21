@@ -55,7 +55,7 @@ export const PERMISSIONS: Record<Permission, { label: string; description: strin
   notify: {
     label: "Show messages in the game",
     description:
-      "Shows short messages to the player in the game (the ink panel while the HUD shows, the overlay panel in photo mode and menus, the status label when neither can draw), and shows, hides or moves the ink panel. Changes nothing in the game; the messages fade by themselves.",
+      "Shows short messages to the player in the game (the ink panel while the HUD shows, the XF box (the small box with the yellow heading) in photo mode and menus, the CET line (one line with a coloured dot at the far top left) when neither can draw; none on a loading screen), and shows, hides or moves the ink panel. Changes nothing in the game; the messages fade by themselves.",
   },
   "write-photo": {
     label: "Control photo mode",
@@ -1341,6 +1341,19 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
     bridge: { method: "inventory.equip", timeoutMs: () => 15000 },
   },
   {
+    // 0.8.3 (session 10's L1 and L4: no way to name a jacket V owns).
+    name: "inventory.list",
+    title: "List the clothing V owns",
+    description:
+      "Observe only: the clothing items in V's own inventory, one entry per copy: its item record (inventory_equip's item), clothing slot (Head, Face, OuterChest, InnerChest, Legs, Feet, Outfit), id (that exact copy's identity, inventory_equip's id), its name in the game's language and whether V wears it now; count says how many there are in all, listed how many the answer carries. slot lists one slot only. Nothing is changed, and the inventory permission isn't needed. Items stored only in the wardrobe aren't listed (wardrobe_state shows those).",
+    permission: "read",
+    input: obj({
+      slot: oneOf("Only this clothing slot.", ["Head", "Face", "OuterChest", "InnerChest", "Legs", "Feet", "Outfit"]),
+      limit: int("At most this many entries, 1 to 200. Default 100.", 1, 200),
+    }),
+    bridge: { method: "inventory.list" },
+  },
+  {
     name: "wardrobe.state",
     title: "Read V's wardrobe outfit",
     description:
@@ -1488,7 +1501,7 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
     name: "ui.message",
     title: "Show a message in the game",
     description:
-      "Shows a message to the player in the game, so the player never has to leave it: on the one status surface showing (0.8.2: the ink panel while the game shows its HUD, the overlay panel in photo mode and menus, the status label at the top left only when neither can draw), and a question also in the XF Runtime Bridge window of the Cyber Engine Tweaks overlay. Up to 600 characters, wrapped, for seconds seconds (default 8); a longer text is cut at a word with an ellipsis. At most four show at once; a new one pushes out the oldest, except the newest unanswered question, which stays pinned until it is answered or its seconds end. level colours it: info, ask (a question for the player), warn or done. A question (level ask) shows only the answers choices gives (1 to 4 short labels, such as Fully visible and Partly cut off, or Yes and No); without choices it shows one Done button, for a step the player confirms. The player answers with the key shown next to each answer (F6, F7, F8, F11 by default) or the button in the XF Runtime Bridge window, and the answer (with this message's id) goes into the session's event stream, where session_wait returns it; the question stays with Answered: and the answer until the next message. Characters a surface can't draw show as one replacement mark there, and Cyber Engine Tweaks' label writes Polish and other Latin letters without their accents. One question at a time: a new question withdraws one still waiting (its session_wait ends with question_gone). Each answer in choices is a button label of at most 24 characters; put any detail in the question's text. clear: true takes the lines down and withdraws a question still waiting (keep_asks: true keeps it); withdraw takes one message down by its id (a question's undo). The kill switch clears them all.",
+      "Shows a message to the player in the game, so the player never has to leave it: on the one status surface showing (0.8.2: the ink panel while the game shows its HUD, the XF box with the yellow heading in photo mode and menus, the CET line with a coloured dot at the far top left only when neither can draw; 0.8.3: none on a loading screen), and a question also in the XF Runtime Bridge window of the Cyber Engine Tweaks overlay. Up to 600 characters, wrapped, for seconds seconds (default 8); a longer text is cut at a word with an ellipsis. At most four show at once; a new one pushes out the oldest, except the newest unanswered question, which stays pinned until it is answered or its seconds end. level colours it: info, ask (a question for the player), warn or done. A question (level ask) shows only the answers choices gives (1 to 4 short labels, such as Fully visible and Partly cut off, or Yes and No); without choices it shows one Done button, for a step the player confirms. The player answers with the key shown next to each answer (F6, F7, F8, F11 by default) or the button in the XF Runtime Bridge window, and the answer (with this message's id) goes into the session's event stream, where session_wait returns it; the question stays with Answered: and the answer until the next message. Characters a surface can't draw show as one replacement mark there, and Cyber Engine Tweaks' label writes Polish and other Latin letters without their accents. One question at a time: a new question withdraws one still waiting (its session_wait ends with question_gone). Each answer in choices is a button label of at most 24 characters; put any detail in the question's text. clear: true takes the lines down and withdraws a question still waiting (keep_asks: true keeps it); withdraw takes one message down by its id (a question's undo). The kill switch clears them all.",
     permission: "notify",
     input: obj({
       text: str("The message (at most 600 characters are shown).", { minLength: 1, maxLength: 2000 }),
@@ -1506,7 +1519,7 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
     name: "ui.hud",
     title: "Show, hide or move the ink panel in the game",
     description:
-      "Temporary test feature (bridge 0.5.3). The ink panel is drawn in the game's own HUD (ink, in the game's font and colours on the game's own dark plate; it needs Codeware, not Cyber Engine Tweaks): the bridge's connection state and the messages ui.message shows. show hides or shows it; anchor (top_left, top_center, top_right, center_left, center, center_right, bottom_left, bottom_center, bottom_right) with x and y (distance inwards from that corner or edge of the visible screen, in the HUD's design units: the HUD is laid out on a 3840 by 2160 canvas that covers the screen, so a 21:9 or 32:9 screen shows its full width and the middle of its height; for center, x and y move it from the middle) places it, and it is kept whole on screen; the default is top_left, 40, 360, below where the status label sits. scale sizes it (0.5 to 2.5). layer chooses where it draws: hud (default; hidden wherever the game hides its HUD: menus, photo mode, the appearance screen), notifications or top (research). nameplates switches XF Finish Showroom's pedestal name labels; cet_label switches the status label (Cyber Engine Tweaks', the fallback status surface). With no values it only reads the settings; reset: true goes back to the bridge's configured settings. Changes nothing in the game itself.",
+      "Temporary test feature (bridge 0.5.3). The ink panel is drawn in the game's own HUD (ink, in the game's font and colours on the game's own dark plate; it needs Codeware, not Cyber Engine Tweaks): the bridge's connection state and the messages ui.message shows. show hides or shows it; anchor (top_left, top_center, top_right, center_left, center, center_right, bottom_left, bottom_center, bottom_right) with x and y (distance inwards from that corner or edge of the visible screen, in the HUD layer's units: its 3840-wide canvas spans the screen's width from the top-left corner, so on 21:9 the screen shows its top 1600 units, on 32:9 its top 1080; for center, x and y move it from the middle) places it, at least far enough in to keep clear of the game's own HUD blocks (0.8.3: the minimap and quest tracker at the top right, so top_right, center_right and bottom_right sit left of them; the status bars at the top left; the status and cyberware icons at the bottom left; subtitles and prompts at the bottom), and it is kept whole on screen; the default is top_left, 40, 360, under the status bars. scale sizes it (0.5 to 2.5). layer chooses where it draws: hud (default; hidden wherever the game hides its HUD: menus, photo mode, the appearance screen), notifications or top (research). nameplates switches XF Finish Showroom's pedestal name labels; cet_label switches the CET line (Cyber Engine Tweaks' one line with a coloured dot at the far top left, the fallback status surface). With no values it only reads the settings; reset: true goes back to the bridge's configured settings. Changes nothing in the game itself.",
     permission: "notify",
     input: obj({
       show: bool("true shows the panel, false hides it."),
@@ -1516,7 +1529,7 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
       scale: num("Size, 0.5 to 2.5. Default 1.", 0.5, 2.5),
       layer: oneOf("Where the panel draws: hud (default), notifications or top (research).", ["hud", "notifications", "top"]),
       nameplates: bool("Show each XF Finish Showroom head's preset name on its pedestal."),
-      cet_label: bool("Show the Cyber Engine Tweaks status label and message lines (top-left)."),
+      cet_label: bool("Show the CET line (Cyber Engine Tweaks' status line with a coloured dot, far top left) and its message lines."),
       reset: bool("Go back to the configured settings (alone)."),
     }),
     undo: "the result's undo: ui.hud with the earlier settings.",
@@ -1588,7 +1601,7 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
       "Spawns XF Finish Showroom's mannequin heads, one per makeup preset of a showroom build (its folder or manifest.json from tools/build_showroom_package.ts), each on a black pedestal: in an arc about the camera (default; every head faces it) or a row across the view, spacing_m apart, each head's eyes distance_m from the camera (in photo mode) or V's eyes, as photo_frame's distance_m measures to V, and at height_m above V's ground (default: the camera's height with the camera as anchor, so the heads look straight into it; a head's natural height with V as anchor). Needs Codeware in the game and the showroom's archive staged. Nothing is saved: showroom.clear, the kill switch or loading a save removes them.",
     permission: "write-showroom",
     input: obj({
-      manifest: str("The showroom build's folder, or its manifest.json. Default (0.8.2): the newest XF Finish Showroom build on this machine (projects/xf-studio/dist) whose archive the game loaded; the answer's showroom_found names it.", { maxLength: 1024 }),
+      manifest: str("The showroom build's folder, or its manifest.json. Default (0.8.3): the XF Finish Showroom builds the game itself has staged (its archive/pc/mod folder), each with the manifest it ships inside the mod or, for an older build, this machine's build with the same bytes; every one is used, so a preset is found in whichever holds it. The answer's showroom_found names them.", { maxLength: 1024 }),
       manifests: { type: "array", description: "Several showroom builds' folders or manifests, to set out their presets together.", items: str("A showroom build's folder or manifest.json.", { maxLength: 1024 }), minItems: 1, maxItems: 4 },
       presets: { type: "array", description: "Which presets, by name, preset ID or appearance, in lineup order. Default: all of them (at most 24).", items: str("A preset's name, ID or appearance.", { maxLength: 120 }), minItems: 1, maxItems: 24 },
       layout: oneOf("arc (default): on a circle about the camera or V, each head facing it. row: a straight line across the view, all facing back along it.", ["arc", "row"]),
@@ -1611,7 +1624,7 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
     permission: "write-showroom",
     input: obj(
       {
-        manifest: str("The showroom build's folder, or its manifest.json (its rig entity is used). Default (0.8.2): the staged build, found as showroom_spawn finds it.", { maxLength: 1024 }),
+        manifest: str("The showroom build's folder, or its manifest.json (its rig entity is used). Default (0.8.3): the staged builds, found as showroom_spawn finds them (the first one's rig).", { maxLength: 1024 }),
         rig: oneOf("creator (default), creator_face, key, or none (remove every rig and keep the heads, as showroom_clear with what: lights).", ["creator", "creator_face", "key", "none"]),
         target: oneOf("each (default): a rig per head; piece: the head given by piece; v: V herself.", ["each", "piece", "v"]),
         piece: int("The head's index in the lineup (0 is the first), with target piece.", 0, 23),

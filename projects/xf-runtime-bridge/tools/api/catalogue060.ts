@@ -596,7 +596,7 @@ export const PLAYER_COMMANDS: CommandDef[] = [
     name: "player.look",
     title: "Turn V's view",
     description:
-      `Turns V's view to yaw and pitch (degrees; relative adds them to the current view) or towards a world point (at): instant (her facing by a teleport in place, the pitch by a very short look-at) or smooth over duration_s (the game's own look-at, which the player's mouse or stick breaks). Answers the angles reached and whether they are within 2 degrees. Normal play only. ${playerBusyNote}`,
+      `Turns V's view to yaw and pitch (degrees; relative adds them to the current view) or towards a world point (at): instant (her facing by a teleport in place, the pitch by a very short look-at) or smooth over duration_s (along the shortest arc, eased in and out, in short steps of the game's own look-at, so it takes duration_s; the player's mouse or stick ends it, took_over camera_drift). Answers the angles reached, whether they are within 2 degrees, took_s and whether player_stop stopped it. Normal play only. ${playerBusyNote}`,
     permission: "write-player",
     input: obj({
       yaw: num("Yaw, degrees (0 along the world's +Y, counter-clockwise).", -360, 360),
@@ -607,7 +607,8 @@ export const PLAYER_COMMANDS: CommandDef[] = [
       duration_s: num("A smooth look's time, 0.05 to 5 s. Default 1.", 0.05, 5),
     }),
     undo: "The result's undo turns the view back to the earlier angles.",
-    bridge: { method: "player.look", timeoutMs: () => 8000 },
+    // 0.8.3: a smooth look now takes its duration_s (up to 5 s), plus a moment to confirm.
+    bridge: { method: "player.look", timeoutMs: (p) => 5000 + 1000 * ((p.mode === "smooth" ? (p.duration_s as number | undefined) ?? 1 : 0)) },
   },
   {
     name: "player.look.stop",
