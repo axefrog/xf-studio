@@ -2,6 +2,9 @@
 
 #include "core/Log.hpp"
 
+#include <set>
+#include <utility>
+
 namespace xfb
 {
 namespace
@@ -192,6 +195,21 @@ namespace
 {
 std::mutex gGateMutex;
 GameGate gGate;
+
+// RB-122 (0.8.1): how many RestoreScopes are open on this thread. Steps queued inside one put something back (a relock, a
+// withdrawal, the selection after a failure), so Dispatcher::RunWrite doesn't refuse them on a closed write gate.
+thread_local int tRestoreDepth = 0;
+
+// The control pipe's methods (0.8.1, RB-121): the emergency controls and the steps a handover takes.
+const std::set<std::string>& ControlMethods()
+{
+    static const std::set<std::string> methods{"bridge.kill", "behave.stop", "player.stop", "bridge.handover",
+                                               "game.status", "photo.hud.hide", "showroom.clear", "ui.message"};
+    return methods;
+}
+
+json RunTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout, const std::function<json()>& aTask,
+             const std::string& aLabel, bool aGated, const Dispatcher* aWriteGate);
 } // namespace
 
 void SetGameGate(GameGate aGate)
@@ -213,18 +231,58 @@ void RequireGameGate(const std::string& aWhat)
     }
 }
 
+RestoreScope::RestoreScope()
+{
+    ++tRestoreDepth;
+}
+
+RestoreScope::~RestoreScope()
+{
+    --tRestoreDepth;
+}
+
+bool RestoreScope::Active()
+{
+    return tRestoreDepth > 0;
+}
+
+bool IsControlRouteMethod(const std::string& aMethod)
+{
+    return ControlMethods().count(aMethod) != 0;
+}
+
 json RunGameTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout, const std::function<json()>& aTask,
                  const std::string& aLabel, bool aGated)
 {
+    return RunTask(aQueue, aTimeout, aTask, aLabel, aGated, nullptr);
+}
+
+json Dispatcher::RunWrite(std::chrono::milliseconds aTimeout, const std::function<json()>& aTask, const std::string& aLabel) const
+{
+    // A step that puts something back is never refused; any other changing step passes the write gate on the game thread.
+    return RunTask(m_queue, aTimeout, aTask, aLabel, true, RestoreScope::Active() ? nullptr : this);
+}
+
+namespace
+{
+json RunTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout, const std::function<json()>& aTask,
+             const std::string& aLabel, bool aGated, const Dispatcher* aWriteGate)
+{
     json envelope;
     std::string error;
+    // RB-122: a changing step checks the kill switch, the pause and a handover on the game thread, right before it runs.
+    // Safe to keep the pointer: Run returns only once the task has run, has started (past this check) or will never run.
     const auto result = aQueue.Run(
-        [aTask, aGated, aLabel]() -> json {
+        [aTask, aGated, aLabel, aWriteGate]() -> json {
             try
             {
                 if (aGated)
                 {
                     RequireGameGate(aLabel);
+                }
+                if (aWriteGate)
+                {
+                    aWriteGate->RequireWritesOpen();
                 }
                 return json{{"ok", true}, {"result", aTask()}};
             }
@@ -256,6 +314,7 @@ json RunGameTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout, co
     }
     throw MethodError("failed", error.empty() ? "game-thread step failed" : error);
 }
+} // namespace
 
 bool IsValidCid(const std::string& aCid)
 {
@@ -467,11 +526,11 @@ std::string Dispatcher::NextCid()
     return "n" + std::to_string(m_cidCounter.fetch_add(1) + 1);
 }
 
-DispatchResult Dispatcher::Handle(const std::string& aLine, uint32_t aClientPid) noexcept
+DispatchResult Dispatcher::Handle(const std::string& aLine, uint32_t aClientPid, bool aControlRoute) noexcept
 {
     try
     {
-        return HandleUnchecked(aLine, aClientPid);
+        return HandleUnchecked(aLine, aClientPid, aControlRoute);
     }
     catch (const std::exception& e)
     {
@@ -492,7 +551,7 @@ DispatchResult Dispatcher::Handle(const std::string& aLine, uint32_t aClientPid)
     }
 }
 
-DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aClientPid)
+DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aClientPid, bool aControlRoute)
 {
     const auto started = std::chrono::steady_clock::now();
     m_requests.fetch_add(1);
@@ -588,6 +647,14 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
     }
     const auto& spec = specIt->second;
     const std::string accessName(AccessName(spec.access));
+    // RB-121 (0.8.1): the control pipe answers only the emergency controls and a handover's steps, beside whatever the main
+    // pipe is still serving.
+    if (aControlRoute && !IsControlRouteMethod(methodName))
+    {
+        return refuse("bridge.not_control", id, cid, "not_on_control_route",
+                      "the control pipe takes only the emergency controls (kill, stops, handover); send this on the main pipe", false,
+                      "method=" + methodName);
+    }
 
     log::Info("bridge.request", "method=" + methodName + " access=" + accessName + pidText, cid);
 
@@ -654,12 +721,20 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
             json envelope;
             std::string error;
             const auto grace = GameThreadQueue::kDefaultRunningGrace;
+            // RB-122: a write is checked against the kill switch, the panel's pause and a handover again on the game thread,
+            // right before it runs: one accepted just before the player paused must not change the game on the next tick.
+            // `this` outlives the task: Run returns only once it has run, has started (past this check) or will never run.
+            const Dispatcher* writeGate = IsWrite(spec.access) ? this : nullptr;
             const auto result = m_queue.Run(
-                [fn, context, methodName]() -> json {
+                [fn, context, methodName, writeGate]() -> json {
                     try
                     {
                         // Checked here, on the game thread just before the call, not when the request was queued (RB-76).
                         RequireGameGate(methodName);
+                        if (writeGate)
+                        {
+                            writeGate->RequireWritesOpen();
+                        }
                         return json{{"ok", true}, {"result", fn(context)}};
                     }
                     catch (const MethodError& e)

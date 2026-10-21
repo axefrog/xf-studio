@@ -62,6 +62,23 @@ public:
 
 std::atomic<bool> gStop{false};
 
+// A simulated item copy (RB-125): an inventory entry is the record name, or "<record>#<n>" for a further copy of the same
+// record (selftest.give); its identity, digits like XFInventory.Hash's, is FNV-1a over the whole entry.
+std::string SimRecord(const std::string& aEntry)
+{
+    return aEntry.substr(0, aEntry.find('#'));
+}
+
+std::string SimItemId(const std::string& aItem)
+{
+    uint64_t hash = 1469598103934665603ull;
+    for (const unsigned char c : aItem)
+    {
+        hash = (hash ^ c) * 1099511628211ull;
+    }
+    return std::to_string(hash);
+}
+
 // The simulated creator option's value names (player.appearance and cc.apply agree on them): internal names
 // xfs_value_00..12, except "hairstyle", which carries session 4's kind of names (CCXL hair).
 const char* const kSimHair[13] = {"01", "02", "LONG PAK - #011", "MEDIUM PAK - #007", "Grace - Side Swept Bob - V4",
@@ -283,6 +300,14 @@ int wmain(int argc, wchar_t** argv)
                              std::this_thread::sleep_for(std::chrono::milliseconds(ms));
                              xfb::log::Info("selftest.slow_done", "ms=" + std::to_string(ms), aContext.cid);
                              return json{{"slept_ms", ms}};
+                         }});
+    // RB-121: holds the pipe's own thread for params.ms with the game thread free, as player.look's smooth wait does.
+    dispatcher.Register({"selftest.hold", xfb::Access::Read, xfb::RunOn::BridgeThread,
+                         "Holds the pipe thread for params.ms (the game thread stays free).",
+                         [](const xfb::MethodContext& aContext) {
+                             const auto ms = std::clamp(aContext.params.value("ms", 0), 0, 10000);
+                             std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+                             return json{{"held_ms", ms}};
                          }});
     // Returns text that is not valid UTF-8, as raw game strings can be.
     dispatcher.Register({"selftest.bad_utf8", xfb::Access::Read, xfb::RunOn::BridgeThread,
@@ -813,11 +838,12 @@ int wmain(int argc, wchar_t** argv)
     // set) at aspect 2.4. Enough to drive tools/api/framing.ts end to end offline.
     // photo.camera.place (0.5.2), simulated: the camera entity moves, and photo mode keeps it there only with camera_holds.
     dispatcher.Register(simWrite("photo.camera.place", xfb::Access::WritePhoto, xfb::RunOn::BridgeThread, "Camera placement (simulated).",
-                                 [&queue](const xfb::MethodContext& aContext) {
+                                 [&queue, &dispatcher](const xfb::MethodContext& aContext) {
                                      const auto request = p::ParseCameraPlace(aContext.params);
                                      const auto vec = [](const std::array<double, 3>& aV) { return json{{"x", aV[0]}, {"y", aV[1]}, {"z", aV[2]}}; };
-                                     const auto step = xfb::RunGameTask(
-                                         queue, std::chrono::milliseconds(1000),
+                                     // As the plugin: a changing step passes the write gate on the game thread (RB-122).
+                                     const auto step = dispatcher.RunWrite(
+                                         std::chrono::milliseconds(1000),
                                          [&request, vec] {
                                              std::scoped_lock _(sim.mutex);
                                              if (sim.phase != "photo_mode")
@@ -1645,11 +1671,14 @@ int wmain(int argc, wchar_t** argv)
     };
     const auto inventoryOps = [&queue, slotOf] {
         w::InventoryOps ops;
-        ops.slot = [slotOf](const std::string& aSlot, const std::string& aItem) {
+        ops.slot = [slotOf](const std::string& aSlot, const std::string& aItem, const std::string& aId) {
             std::scoped_lock _(sim.mutex);
             const auto slot = aItem.empty() ? aSlot : slotOf(aItem);
-            const auto item = sim.worn.count(slot) ? sim.worn[slot] : std::string();
-            return json{{"slot", slot}, {"item", item}, {"empty", item.empty()}, {"matches", !aItem.empty() && item == aItem}};
+            const auto entry = sim.worn.count(slot) ? sim.worn[slot] : std::string();
+            // As XFInventory.Slot: the record, and with an id the exact copy too (RB-125).
+            const bool matches = !aItem.empty() && !entry.empty() && SimRecord(entry) == aItem && (aId.empty() || SimItemId(entry) == aId);
+            return json{{"slot", slot}, {"item", SimRecord(entry)}, {"item_id", entry.empty() ? std::string() : SimItemId(entry)},
+                        {"empty", entry.empty()}, {"matches", matches}};
         };
         ops.removeAdded = [](const std::string& aItem) {
             std::scoped_lock _(sim.mutex);
@@ -1957,7 +1986,25 @@ int wmain(int argc, wchar_t** argv)
                                              throw xfb::MethodError("bad_params", "simulated: '" + request.item + "' goes in the " + slot + " slot");
                                          }
                                          bool added = false;
-                                         if (std::find(sim.inventory.begin(), sim.inventory.end(), request.item) == sim.inventory.end())
+                                         // The copy to equip (RB-125): the exact one asked for by id, else the first copy of the record.
+                                         std::string chosen;
+                                         bool exact = false;
+                                         for (const auto& entry : sim.inventory)
+                                         {
+                                             if (!request.id.empty() && SimItemId(entry) == request.id && SimRecord(entry) == request.item)
+                                             {
+                                                 chosen = entry;
+                                                 exact = true;
+                                                 break;
+                                             }
+                                         }
+                                         if (chosen.empty())
+                                         {
+                                             const auto first = std::find_if(sim.inventory.begin(), sim.inventory.end(),
+                                                                             [&](const std::string& aEntry) { return SimRecord(aEntry) == request.item; });
+                                             chosen = first == sim.inventory.end() ? std::string() : *first;
+                                         }
+                                         if (chosen.empty())
                                          {
                                              if (!request.addIfMissing)
                                              {
@@ -1965,18 +2012,26 @@ int wmain(int argc, wchar_t** argv)
                                              }
                                              sim.inventory.push_back(request.item);
                                              sim.added.push_back(request.item);
+                                             chosen = request.item;
                                              added = true;
                                          }
-                                         const auto previous = sim.worn.count(slot) ? sim.worn[slot] : std::string();
-                                         const bool already = previous == request.item;
+                                         const auto wornEntry = sim.worn.count(slot) ? sim.worn[slot] : std::string();
+                                         const auto previous = SimRecord(wornEntry);
+                                         const bool already = wornEntry == chosen;
                                          if (!already)
                                          {
                                              sim.pendingSlot = slot;
-                                             sim.pendingItem = request.item;
+                                             sim.pendingItem = chosen;
                                              sim.pendingTicks = 2;
                                          }
                                          sim.gameSaveLock = true;
-                                         json step{{"item", request.item}, {"slot", slot}, {"added", added}, {"already_equipped", already}, {"previous", previous}};
+                                         // RB-125: each simulated copy's identity, as XFInventory.Hash gives it (digits).
+                                         json step{{"item", request.item}, {"slot", slot}, {"added", added}, {"already_equipped", already}, {"previous", previous},
+                                                   {"previous_id", wornEntry.empty() ? std::string() : SimItemId(wornEntry)}, {"id", SimItemId(chosen)}};
+                                         if (!request.id.empty())
+                                         {
+                                             step["exact"] = exact;
+                                         }
                                          // As XFWardrobe.AreaNote: an active outfit (or a hidden area) decides what the area shows.
                                          const auto& area = sim.wardrobeAreas[slot];
                                          if (area.hidden || (sim.wardrobeSet > 0 && !area.item.empty()))
@@ -2005,7 +2060,8 @@ int wmain(int argc, wchar_t** argv)
                                              throw xfb::MethodError("not_in_gameplay", "simulated: the game is in '" + sim.phase + "'");
                                          }
                                          const auto slot = request.item.empty() ? request.slot : slotOf(request.item);
-                                         const auto previous = sim.worn.count(slot) ? sim.worn[slot] : std::string();
+                                         const auto wornEntry = sim.worn.count(slot) ? sim.worn[slot] : std::string();
+                                         const auto previous = SimRecord(wornEntry);
                                          if (!request.item.empty() && !previous.empty() && previous != request.item)
                                          {
                                              throw xfb::MethodError("bad_params", "simulated: the slot holds '" + previous + "'");
@@ -2016,7 +2072,8 @@ int wmain(int argc, wchar_t** argv)
                                              sim.pendingItem.clear();
                                              sim.pendingTicks = 2;
                                          }
-                                         return json{{"slot", slot}, {"previous", previous}, {"was_empty", previous.empty()}};
+                                         return json{{"slot", slot}, {"previous", previous}, {"previous_id", wornEntry.empty() ? std::string() : SimItemId(wornEntry)},
+                                                     {"was_empty", previous.empty()}};
                                      };
                                      auto out = w::InventoryUnequip(request, ops);
                                      out["simulated"] = true;
@@ -2098,7 +2155,12 @@ int wmain(int argc, wchar_t** argv)
                                          return json{{"requested", true}};
                                      };
                                      ops.relock = [] {
+                                         // As XFGame.Retake (RB-119): only a lock prepare released is taken back.
                                          std::scoped_lock _(sim.mutex);
+                                         if (!sim.relockAfterSave)
+                                         {
+                                             return;
+                                         }
                                          sim.gameSaveLock = true;
                                          sim.relockAfterSave = false;
                                          sim.unlockTicks = -1;
@@ -2322,6 +2384,20 @@ int wmain(int argc, wchar_t** argv)
                                  }));
 
     // What the simulated save and inventory state looks like (self-test only).
+    // RB-125: another copy of a record V has, as a differently rolled copy in the game (entry "<item>#<copy>").
+    dispatcher.Register({"selftest.give", xfb::Access::Read, xfb::RunOn::BridgeThread, "Gives V another copy of an item (self-test only).",
+                         [](const xfb::MethodContext& aContext) {
+                             const auto item = aContext.params.value("item", std::string());
+                             const auto copy = aContext.params.value("copy", 2);
+                             if (item.empty() || copy < 2 || copy > 9)
+                             {
+                                 throw xfb::MethodError("bad_params", "selftest.give takes item and copy (2-9)");
+                             }
+                             std::scoped_lock _(sim.mutex);
+                             const auto entry = item + "#" + std::to_string(copy);
+                             sim.inventory.push_back(entry);
+                             return json{{"entry", entry}, {"id", SimItemId(entry)}};
+                         }});
     dispatcher.Register({"selftest.state", xfb::Access::Read, xfb::RunOn::BridgeThread, "Simulated clothing, saves and lights (self-test only).",
                          [](const xfb::MethodContext&) {
                              std::scoped_lock _(sim.mutex);

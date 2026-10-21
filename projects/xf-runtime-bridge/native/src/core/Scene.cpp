@@ -47,7 +47,17 @@ ReadRequest ParseRead(const json& aParams)
         }
         for (const auto& point : *it)
         {
+            // RB-123 (0.8.1): CheckPoint reads a null as "not given", so a null entry is refused here before anything is
+            // dereferenced; CheckPoint refuses the rest (not three numbers, not finite, beyond 1e6 m).
+            if (point.is_null())
+            {
+                params::CheckFail("each of 'points' must be a world point [x, y, z] (three finite numbers), not null");
+            }
             const auto value = params::CheckPoint(json{{"point", point}}, "point");
+            if (!value)
+            {
+                params::CheckFail("each of 'points' must be a world point [x, y, z] (three finite numbers)");
+            }
             request.points.push_back(*value);
         }
     }

@@ -92,6 +92,27 @@ public abstract class XFInventory {
     return type;
   }
 
+  // V's copy of this record whose identity (XFInventory.Hash) is `hash`, or an invalid ItemID (RB-125: an undo names the
+  // exact copy that was worn, not the first one of the record V has).
+  public static func FindExact(player: ref<PlayerPuppet>, tdbid: TweakDBID, hash: String) -> ItemID {
+    let none: ItemID;
+    if StrLen(hash) == 0 {
+      return none;
+    }
+    let items: array<wref<gameItemData>>;
+    if !GameInstance.GetTransactionSystem(GetGameInstance()).GetItemList(player, items) {
+      return none;
+    }
+    let i = 0;
+    while i < ArraySize(items) {
+      if IsDefined(items[i]) && ItemID.GetTDBID(items[i].GetID()) == tdbid && Equals(XFInventory.Hash(items[i].GetID()), hash) {
+        return items[i].GetID();
+      }
+      i += 1;
+    }
+    return none;
+  }
+
   // V's first inventory item made from this record, or an invalid ItemID.
   public static func FindItem(player: ref<PlayerPuppet>, tdbid: TweakDBID) -> ItemID {
     let items: array<wref<gameItemData>>;
@@ -171,8 +192,10 @@ public abstract class XFInventory {
     return "";
   }
 
-  // Step 1 of inventory.equip: checks, adds the item if asked, queues the equip request.
-  public static func Equip(cid: String, item: String, area: String, addIfMissing: Bool) -> String {
+  // Step 1 of inventory.equip: checks, adds the item if asked, queues the equip request. hash: the exact copy to equip
+  // (an undo's `id`, RB-125); "" for any copy of the record. The answer names the earlier item's copy (previous_id) so
+  // the undo can put that same copy back, and says whether a requested copy was found (exact).
+  public static func Equip(cid: String, item: String, area: String, hash: String, addIfMissing: Bool) -> String {
     let refusal = XFInventory.Refusal();
     if StrLen(refusal) > 0 {
       return refusal;
@@ -187,7 +210,11 @@ public abstract class XFInventory {
       return XFJson.Fail("bad_params", "'" + item + "' goes in the " + XFInventory.AreaName(itemArea) + " slot, not " + area);
     }
     let system = GameInstance.GetTransactionSystem(GetGameInstance());
-    let id = XFInventory.FindItem(player, tdbid);
+    let id = XFInventory.FindExact(player, tdbid, hash);
+    let exact = ItemID.IsValid(id);
+    if !exact {
+      id = XFInventory.FindItem(player, tdbid);
+    }
     let added = false;
     if !ItemID.IsValid(id) {
       if !addIfMissing {
@@ -217,11 +244,13 @@ public abstract class XFInventory {
     }
     XFBridgeLog.Info(cid, "inventory.equip " + item + " in " + XFInventory.AreaName(itemArea) + " (added=" + XFJson.Flag(added) + ", before '" + XFInventory.ItemName(previous) + "'); undo: equip the earlier item, or unequip, and remove an added item");
     // 0.5.2: an active wardrobe outfit (or a hidden area) decides what the area shows, whatever is equipped there.
-    return "{\"ok\":true,\"item\":" + XFJson.Str(item) + ",\"slot\":" + XFJson.Str(XFInventory.AreaName(itemArea)) + ",\"added\":" + XFJson.Flag(added) + ",\"already_equipped\":" + XFJson.Flag(already) + ",\"previous\":" + XFJson.Str(XFInventory.ItemName(previous)) + XFWardrobe.AreaNote(player, itemArea) + "}";
+    let exactField = StrLen(hash) > 0 ? ",\"exact\":" + XFJson.Flag(exact) : "";
+    return "{\"ok\":true,\"item\":" + XFJson.Str(item) + ",\"slot\":" + XFJson.Str(XFInventory.AreaName(itemArea)) + ",\"added\":" + XFJson.Flag(added) + ",\"already_equipped\":" + XFJson.Flag(already) + ",\"previous\":" + XFJson.Str(XFInventory.ItemName(previous)) + ",\"previous_id\":" + XFJson.Str(XFInventory.Hash(previous)) + ",\"id\":" + XFJson.Str(XFInventory.Hash(id)) + exactField + XFWardrobe.AreaNote(player, itemArea) + "}";
   }
 
-  // What a slot holds now (the second step reads it a few frames after the request).
-  public static func Slot(cid: String, area: String, item: String) -> String {
+  // What a slot holds now (the second step reads it a few frames after the request). hash: the exact copy the equip step
+  // chose (0.8.1, RB-125), so another copy of the same record doesn't count as it; "" for any copy.
+  public static func Slot(cid: String, area: String, item: String, hash: String) -> String {
     let player = XFInventory.Player();
     if !IsDefined(player) {
       return XFJson.Fail("not_in_gameplay", "V isn't in the world");
@@ -236,8 +265,8 @@ public abstract class XFInventory {
     let now = XFInventory.Equipped(player, type);
     // Whether the slot holds the item asked about, compared by record ID here rather than by debug name in
     // the plugin (RB-63).
-    let matches = StrLen(item) > 0 && ItemID.IsValid(now) && ItemID.GetTDBID(now) == TDBID.Create(item);
-    return "{\"ok\":true,\"slot\":" + XFJson.Str(XFInventory.AreaName(type)) + ",\"item\":" + XFJson.Str(XFInventory.ItemName(now)) + ",\"empty\":" + XFJson.Flag(!ItemID.IsValid(now)) + ",\"matches\":" + XFJson.Flag(matches) + "}";
+    let matches = StrLen(item) > 0 && ItemID.IsValid(now) && ItemID.GetTDBID(now) == TDBID.Create(item) && (StrLen(hash) == 0 || Equals(XFInventory.Hash(now), hash));
+    return "{\"ok\":true,\"slot\":" + XFJson.Str(XFInventory.AreaName(type)) + ",\"item\":" + XFJson.Str(XFInventory.ItemName(now)) + ",\"item_id\":" + XFJson.Str(XFInventory.Hash(now)) + ",\"empty\":" + XFJson.Flag(!ItemID.IsValid(now)) + ",\"matches\":" + XFJson.Flag(matches) + "}";
   }
 
   // Step 1 of inventory.unequip: the slot by name, or the slot the item's record uses.
@@ -270,7 +299,7 @@ public abstract class XFInventory {
       EquipmentSystem.GetInstance(player).QueueRequest(request);
     }
     XFBridgeLog.Info(cid, "inventory.unequip " + XFInventory.AreaName(type) + " (held '" + XFInventory.ItemName(before) + "'); undo: equip it again");
-    return "{\"ok\":true,\"slot\":" + XFJson.Str(XFInventory.AreaName(type)) + ",\"previous\":" + XFJson.Str(XFInventory.ItemName(before)) + ",\"was_empty\":" + XFJson.Flag(!ItemID.IsValid(before)) + "}";
+    return "{\"ok\":true,\"slot\":" + XFJson.Str(XFInventory.AreaName(type)) + ",\"previous\":" + XFJson.Str(XFInventory.ItemName(before)) + ",\"previous_id\":" + XFJson.Str(XFInventory.Hash(before)) + ",\"was_empty\":" + XFJson.Flag(!ItemID.IsValid(before)) + "}";
   }
 
   // Removes an item from V's inventory, only the copy the bridge itself added this session (its own ItemID,
@@ -430,17 +459,23 @@ public abstract class XFGame {
     }
   }
 
-  // The plugin's last step of every game.save that released the lock, whatever happened (RB-52): takes the
-  // bridge's save lock back now (nothing to do when the save's completion already did) and cancels the
-  // pending relock, so a save finishing later doesn't ask for it twice.
+  // The plugin's last step of every game.save with override_lock, whatever happened (RB-52): takes the
+  // bridge's save lock back now when SavePrepare released it and nothing has taken it back yet (the save's
+  // completion, Relock, the kill switch), and cancels the pending relock, so a save finishing later doesn't
+  // ask for it twice. RB-119 (0.8.1): the plugin also calls this after a prepare whose answer it lost, so it
+  // acts only on the relock flag SavePrepare set; with the flag clear (nothing released, or already retaken)
+  // it changes nothing and never adds a lock the bridge didn't hold.
   public static func Retake(cid: String) -> String {
     let registry = XFBridgeRegistry.Get();
     if !IsDefined(registry) {
       return XFJson.Fail("game_not_ready", "no game session yet");
     }
-    registry.SetRelockAfterSave(false);
-    XFBridgeActions.EnsureSaveLock(cid);
-    return "{\"ok\":true,\"save_lock_held\":" + XFJson.Flag(registry.IsSaveLockHeld()) + "}";
+    let owed = registry.RelockAfterSave();
+    if owed {
+      registry.SetRelockAfterSave(false);
+      XFBridgeActions.EnsureSaveLock(cid);
+    }
+    return "{\"ok\":true,\"retaken\":" + XFJson.Flag(owed) + ",\"save_lock_held\":" + XFJson.Flag(registry.IsSaveLockHeld()) + "}";
   }
 
   public static func LoadRefusal() -> String {

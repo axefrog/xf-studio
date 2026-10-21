@@ -2592,8 +2592,21 @@ public abstract class XFCharacter {
       return "{\"ok\":true,\"kept\":false,\"changed\":false,\"closed_with\":\"back\",\"note\":\"nothing to confirm: no option changed on this screen, so it was closed with Back (nothing was discarded)\"}";
     }
     let keep = mode != 0;
-    if XFCharacter.Busy(cid, menu) {
-      return XFJson.Fail("busy", "the appearance screen is still applying the previous change");
+    // Only Confirm waits for the screen to be ready: it keeps the look, so a change still being applied must finish
+    // first. Back discards every change (CancelFinalizedStateUpdate), so it is the way out of a screen whose busy flag
+    // stays set because a completion never came (RB-126, 0.8.1): the flag is cleared and the screen closes.
+    let busyCleared = false;
+    if keep {
+      if XFCharacter.Busy(cid, menu) {
+        return XFJson.Fail("busy", "the appearance screen is still applying the previous change");
+      }
+    } else {
+      if NotEquals(menu.m_busySwitchingAppearance, BusySwitchingReason.AVAILABLE) {
+        menu.m_busySwitchingAppearance = BusySwitchingReason.AVAILABLE;
+        registry.NoteCreatorChangeDone();
+        busyCleared = true;
+        XFBridgeLog.Warn(cid, "cc.back: the appearance screen's busy flag was set (a change in flight or a completion that never came); cleared, since Back discards every change");
+      }
     }
     let closedWith = "back";
     if keep {
@@ -2605,7 +2618,7 @@ public abstract class XFCharacter {
       menu.ConfirmBackConfirmation();
       XFBridgeLog.Info(cid, "cc.back: every change on the appearance screen discarded");
     }
-    return "{\"ok\":true,\"kept\":" + XFJson.Flag(keep) + ",\"changed\":" + XFJson.Flag(!unchanged) + ",\"changes\":" + IntToString(changes) + ",\"closed_with\":" + XFJson.Str(closedWith) + "}";
+    return "{\"ok\":true,\"kept\":" + XFJson.Flag(keep) + ",\"changed\":" + XFJson.Flag(!unchanged) + ",\"changes\":" + IntToString(changes) + ",\"closed_with\":" + XFJson.Str(closedWith) + ",\"busy_cleared\":" + XFJson.Flag(busyCleared) + "}";
   }
 
   // Every option on the screen and its value, as one line ("" when the system has none), for cc.confirm's
@@ -2632,8 +2645,8 @@ public abstract class XFCharacter {
   // already shown, before this build's OnSliderChange wrap). With no change pending, such a flag is
   // stale once it has stayed set for 8 s with no completion event in between (every completion event
   // restarts that clock); a stale flag is cleared (set back to AVAILABLE, as the completion event
-  // would) and logged. A real change still in flight is never forced (RB-54): after 12 s it is logged
-  // once and the answer stays "busy" (cc.back still leaves).
+  // would) and logged. A real change still in flight is never forced for Confirm (RB-54): after 12 s it is logged
+  // once and the answer stays "busy". cc.back doesn't ask (RB-126): it discards, so it clears the flag and leaves.
   public static func Busy(cid: String, menu: wref<characterCreationBodyMorphMenu>) -> Bool {
     if Equals(menu.m_busySwitchingAppearance, BusySwitchingReason.AVAILABLE) {
       return false;

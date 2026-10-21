@@ -1798,6 +1798,7 @@ struct FakeWardrobe
     std::string pendingItem;
     bool never = false;
     bool debugNames = false;
+    std::vector<std::string> askedIds; // the copy each slot read asked for (RB-125)
     xfb::writes::InventoryOps Ops(const std::string& aItem, const std::string& aSlot, bool aAdd)
     {
         xfb::writes::InventoryOps ops;
@@ -1821,7 +1822,8 @@ struct FakeWardrobe
             pendingItem.clear();
             return json{{"slot", aSlot}, {"previous", previous}, {"was_empty", previous.empty()}};
         };
-        ops.slot = [this, aSlot](const std::string&, const std::string& aAsked) {
+        ops.slot = [this, aSlot](const std::string&, const std::string& aAsked, const std::string& aId) {
+            askedIds.push_back(aId);
             const auto item = worn.count(aSlot) ? worn[aSlot] : std::string();
             // The script compares record IDs; a debug name that differs from the record's name (debugNames)
             // must not matter (RB-63).
@@ -1955,6 +1957,11 @@ void InventoryAndSaveTests()
                 }
             };
             ops.prepare = [this, aOverride] {
+                if (throwAt == "prepare")
+                {
+                    // RB-119: the game thread released the lock, but the answer was lost (timeout after start).
+                    throw xfb::MethodError("timeout_after_start", "a game-thread step started but did not finish in time");
+                }
                 if (bridgeLock && !aOverride)
                 {
                     throw xfb::MethodError("bridge_save_lock", "the bridge keeps saving locked");
@@ -2044,6 +2051,25 @@ void InventoryAndSaveTests()
         fake.throwAt = "status";
         Check("a game-thread timeout while waiting for the answer takes the lock back (RB-52)",
               saveCode(fake, overrideLock) == "timeout_after_start" && fake.relocks == 1);
+    }
+    {
+        FakeSaves fake;
+        fake.throwAt = "prepare";
+        Check("RB-119: override_lock whose prepare answer is lost: the relock is already owned and runs (nothing saved)",
+              saveCode(fake, overrideLock) == "timeout_after_start" && fake.relocks == 1 && fake.saves == 0);
+    }
+    {
+        FakeSaves fake;
+        fake.throwAt = "prepare";
+        Check("RB-119: without override_lock prepare can't release, so a lost answer asks for no relock",
+              saveCode(fake, json::object()) == "timeout_after_start" && fake.relocks == 0);
+    }
+    {
+        FakeSaves fake;
+        fake.bridgeLock = false;
+        fake.locked = false;
+        Check("RB-119: override_lock when prepare released nothing: saved, the relock disarmed",
+              saveCode(fake, overrideLock) == "saved" && fake.relocks == 0);
     }
     {
         FakeSaves fake;
@@ -2578,7 +2604,7 @@ void WardrobeTests()
         return json{{"item", "Items.Helmet_01_basic_01"}, {"slot", "Head"}, {"added", true}, {"already_equipped", false}, {"previous", ""},
                     {"outfit", {{"set", 1}, {"area", "Head"}, {"shows", "hidden"}, {"outfit_item", ""}}}};
     };
-    inventory.slot = [](const std::string&, const std::string&) { return json{{"slot", "Head"}, {"item", "Items.Helmet_01_basic_01"}, {"matches", true}}; };
+    inventory.slot = [](const std::string&, const std::string&, const std::string&) { return json{{"slot", "Head"}, {"item", "Items.Helmet_01_basic_01"}, {"matches", true}}; };
     inventory.settle = [] {};
     const auto equipped = w::InventoryEquip(p::ParseInventoryEquip(json::parse(R"({"item":"Items.Helmet_01_basic_01","add_if_missing":true})")), inventory);
     Check("0.5.2 inventory.equip says when an active outfit hides the equipped item (sessions 4 and 5's helmet)",
@@ -3677,6 +3703,256 @@ void Bridge080Tests()
     }
 }
 
+// Bridge 0.8.1: the wave-4 review's native fixes (RB-122, RB-123, RB-125, RB-127; RB-119's checks are with the save's).
+void Bridge081Tests()
+{
+    namespace p = xfb::params;
+    namespace w = xfb::writes;
+
+    // RB-122: a write accepted before the player paused (or handed over) is refused on the game thread, right before it runs.
+    {
+        xfb::Config config;
+        config.allowWrites = true;
+        xfb::Session session;
+        std::string error;
+        wchar_t temp[MAX_PATH]{};
+        GetTempPathW(MAX_PATH, temp);
+        xfb::CreateSession(session, error, std::filesystem::path(temp) / L"xfb-unit-rb122-not-created");
+        xfb::GameThreadQueue queue;
+        queue.SetPumping(true);
+        xfb::Dispatcher dispatcher(config, session, queue);
+        std::atomic<int> single{0}, first{0}, second{0}, restored{0}, reads{0};
+        dispatcher.Register({"unit.write", xfb::Access::Write, xfb::RunOn::GameThread, "a one-step write", [&](const xfb::MethodContext&) {
+                                 ++single;
+                                 return json::object();
+                             }});
+        dispatcher.Register({"unit.read", xfb::Access::Read, xfb::RunOn::GameThread, "a read", [&](const xfb::MethodContext&) {
+                                 ++reads;
+                                 return json::object();
+                             }});
+        // A multi-step write as the handlers write them: each changing step through RunWrite, and on a refusal a step that
+        // puts things back inside a RestoreScope (never refused by the write gate).
+        dispatcher.Register({"unit.multi", xfb::Access::Write, xfb::RunOn::BridgeThread, "a two-step write", [&](const xfb::MethodContext&) {
+                                 dispatcher.RunWrite(1000ms, [&] { ++first; return json::object(); }, "unit.first");
+                                 try
+                                 {
+                                     dispatcher.RunWrite(1000ms, [&] { ++second; return json::object(); }, "unit.second");
+                                 }
+                                 catch (const xfb::MethodError&)
+                                 {
+                                     xfb::RestoreScope restoring;
+                                     dispatcher.RunWrite(1000ms, [&] { ++restored; return json::object(); }, "unit.restore");
+                                     throw;
+                                 }
+                                 return json::object();
+                             }});
+        // The game gate runs on the game thread right before each task: here it plays the player's switch flipping
+        // between the queueing and the run, on the gate call given.
+        std::atomic<int> gateCalls{0};
+        std::atomic<int> flipOn{-1};
+        std::function<void()> flip;
+        xfb::SetGameGate([&](const std::string&) {
+            if (++gateCalls == flipOn.load() && flip)
+            {
+                flip();
+            }
+        });
+        std::atomic<bool> stop{false};
+        std::thread pump([&] {
+            while (!stop.load())
+            {
+                queue.Drain(4);
+                std::this_thread::sleep_for(1ms);
+            }
+        });
+        const auto send = [&](const std::string& aMethod) {
+            const auto line = json{{"v", 1}, {"id", 1}, {"token", session.token}, {"method", aMethod}}.dump();
+            const auto reply = json::parse(dispatcher.Handle(line, 1).line);
+            return reply.value("ok", false) ? std::string("ok") : reply["error"].value("code", std::string("?"));
+        };
+        const auto arm = [&](int aCall, std::function<void()> aFlip) {
+            gateCalls = 0;
+            flip = std::move(aFlip);
+            flipOn = aCall;
+        };
+
+        arm(-1, {});
+        const auto plain = send("unit.write");
+        arm(1, [&] { dispatcher.SetWritesPaused(true); });
+        const auto paused = send("unit.write");
+        Check("RB-122: a one-step write paused between its queueing and its run is refused writes_paused and never runs",
+              plain == "ok" && paused == "writes_paused" && single.load() == 1, plain + " " + paused);
+        const auto read = send("unit.read");
+        Check("RB-122: reads still run while changes are paused", read == "ok" && reads.load() == 1, read);
+        dispatcher.SetWritesPaused(false);
+
+        arm(1, [&] { dispatcher.SetHandover(true); });
+        const auto handedFirst = send("unit.multi");
+        Check("RB-122: a multi-step write's first step is checked on the game thread too (handed_over, nothing ran)",
+              handedFirst == "handed_over" && first.load() == 0 && second.load() == 0 && restored.load() == 0, handedFirst);
+        dispatcher.SetHandover(false);
+
+        arm(2, [&] { dispatcher.SetWritesPaused(true); });
+        const auto pausedSecond = send("unit.multi");
+        Check("RB-122: every changing step is checked, however many came before; the put-back step (RestoreScope) still runs",
+              pausedSecond == "writes_paused" && first.load() == 1 && second.load() == 0 && restored.load() == 1, pausedSecond);
+        dispatcher.SetWritesPaused(false);
+
+        arm(-1, {});
+        const auto clean = send("unit.multi");
+        Check("RB-122: with nothing in between, every step runs", clean == "ok" && first.load() == 2 && second.load() == 1 && restored.load() == 1, clean);
+
+        // Real multi-step handlers (core/Writes.cpp) with their steps bound as the plugin binds them.
+        dispatcher.SetWritesPaused(false);
+        arm(-1, {});
+        {
+            // photo.pose.set: the category changes, photo mode settles for a few ticks, the player pauses, then the pose
+            // step is refused and the category is put back.
+            int category = 1;
+            int poseSelected = 0;
+            w::PoseSetOps ops;
+            ops.category = [&] {
+                return dispatcher.RunWrite(1000ms, [&] {
+                    const int before = category;
+                    category = 7;
+                    return json{{"changed", true}, {"before_known", true}, {"before_category", before}, {"before_pose", 0},
+                                {"category_value", 7}, {"category_text", "XF"}};
+                }, "unit.pose.category");
+            };
+            ops.settle = [&] { dispatcher.SetWritesPaused(true); };
+            ops.pose = [&] {
+                return dispatcher.RunWrite(1000ms, [&] { ++poseSelected; return json{{"changed", true}, {"pose_value", 3}}; }, "unit.pose.pose");
+            };
+            ops.restoreCategory = [&](int32_t aValue) {
+                dispatcher.RunWrite(1000ms, [&, aValue] { category = aValue; return json::object(); }, "unit.pose.restore");
+            };
+            const auto code = ParamsCode([&] { w::PoseSet(ops); });
+            Check("RB-122: photo.pose.set paused during its settle selects no pose and puts the category back",
+                  code == "writes_paused" && poseSelected == 0 && category == 1, code + " category=" + std::to_string(category));
+            dispatcher.SetWritesPaused(false);
+        }
+        {
+            // photo.light.set: the light is selected, photo mode loads it, the player pauses, then the value step is
+            // refused and the earlier selection comes back.
+            int selected = 0; // light 1
+            int values = 0;
+            w::LightOps ops;
+            ops.set = [&](int32_t aKey, float aValue) {
+                return dispatcher.RunWrite(1000ms, [&, aKey, aValue] {
+                    if (aKey == xfb::params::key::kLightSelect)
+                    {
+                        const int before = selected;
+                        selected = static_cast<int>(aValue);
+                        return json{{"before", before}, {"after", aValue}};
+                    }
+                    ++values;
+                    return json{{"before", 0.0}, {"after", aValue}};
+                }, "unit.light.set");
+            };
+            ops.settle = [&] { dispatcher.SetWritesPaused(true); };
+            const auto code = ParamsCode([&] { w::LightSet(xfb::params::ParseLight(json{{"light", 2}, {"brightness", 50}}), ops); });
+            Check("RB-122: photo.light.set paused after its selection sets no value and selects the earlier light again",
+                  code == "writes_paused" && values == 0 && selected == 0, code + " selected=" + std::to_string(selected));
+            dispatcher.SetWritesPaused(false);
+        }
+        stop.store(true);
+        pump.join();
+        xfb::SetGameGate({});
+    }
+
+    // RB-123: scene.read's points.
+    {
+        namespace scene = xfb::scene;
+        Check("RB-123: scene.read refuses a null point before reading it",
+              ParamsCode([] { scene::ParseRead(json{{"points", json::array({nullptr})}}); }) == "bad_params" &&
+                  ParamsCode([] { scene::ParseRead(json{{"points", json::array({json::array({1, 2, 3}), nullptr})}}); }) == "bad_params");
+        Check("RB-123: and points that aren't three finite numbers within 1e6 m",
+              ParamsCode([] { scene::ParseRead(json{{"points", json::array({json::array({1, 2})})}}); }) == "bad_params" &&
+                  ParamsCode([] { scene::ParseRead(json{{"points", json::array({json::array({1, 2, "x"})})}}); }) == "bad_params" &&
+                  ParamsCode([] { scene::ParseRead(json{{"points", json::array({json::array({1, 2, 2e6})})}}); }) == "bad_params");
+        const auto ok = scene::ParseRead(json{{"points", json::array({json::array({1, 2, 3})})}});
+        Check("RB-123: a good point is read", ok.points.size() == 1 && ok.points[0][2] == 3.0);
+    }
+
+    // RB-125: inventory undo names the exact copy.
+    {
+        Check("RB-125: inventory.equip's id is the decimal identity an undo gives",
+              ParamsCode([] { p::ParseInventoryEquip(json{{"item", "Items.Cap_01"}, {"id", "1234567890123"}}); }) == "ok" &&
+                  p::ParseInventoryEquip(json{{"item", "Items.Cap_01"}, {"id", "42"}}).id == "42" &&
+                  ParamsCode([] { p::ParseInventoryEquip(json{{"item", "Items.Cap_01"}, {"id", "12a"}}); }) == "bad_params" &&
+                  ParamsCode([] { p::ParseInventoryEquip(json{{"item", "Items.Cap_01"}, {"id", 42}}); }) == "bad_params" &&
+                  ParamsCode([] { p::ParseInventoryEquip(json{{"item", "Items.Cap_01"}, {"id", std::string(21, '1')}}); }) == "bad_params");
+        FakeWardrobe wardrobe;
+        wardrobe.worn["Head"] = "Items.Cap_01";
+        auto ops = wardrobe.Ops("Items.Helmet_01", "Head", false);
+        const auto equip = ops.equip;
+        ops.equip = [equip] {
+            auto step = equip();
+            step["previous_id"] = "987654321";
+            return step;
+        };
+        const auto out = w::InventoryEquip(p::ParseInventoryEquip(json{{"item", "Items.Helmet_01"}}), ops);
+        Check("RB-125: equip over another item: the undo equips that exact copy (its id)",
+              out["undo"] == json{{"method", "inventory.equip"}, {"params", {{"item", "Items.Cap_01"}, {"slot", "Head"}, {"id", "987654321"}}}}, out.dump());
+        const auto again = w::InventoryEquip(p::ParseInventoryEquip(out["undo"]["params"]), wardrobe.Ops("Items.Cap_01", "Head", false));
+        Check("RB-125: the undo's parameters parse and run", again["equipped"] == true, again.dump());
+
+        FakeWardrobe other;
+        other.worn["Head"] = "Items.Cap_01";
+        auto odd = other.Ops("Items.Helmet_01", "Head", false);
+        const auto oddEquip = odd.equip;
+        odd.equip = [oddEquip] {
+            auto step = oddEquip();
+            step["previous_id"] = "not digits";
+            step["exact"] = false;
+            return step;
+        };
+        const auto loose = w::InventoryEquip(p::ParseInventoryEquip(json{{"item", "Items.Helmet_01"}, {"id", "55"}}), odd);
+        Check("RB-125: an identity that isn't digits is left out; a copy that wasn't found says so",
+              !loose["undo"]["params"].contains("id") && loose["exact"] == false && loose.value("exact_note", std::string()).find("55") != std::string::npos,
+              loose.dump());
+
+        FakeWardrobe worn;
+        worn.worn["Head"] = "Items.Cap_01";
+        auto unequipOps = worn.Ops("Items.Cap_01", "Head", false);
+        const auto unequip = unequipOps.unequip;
+        unequipOps.unequip = [unequip] {
+            auto step = unequip();
+            step["previous_id"] = "31337";
+            return step;
+        };
+        const auto off = w::InventoryUnequip(p::ParseInventoryUnequip(json{{"slot", "Head"}}), unequipOps);
+        {
+            FakeWardrobe polled;
+            auto pollOps = polled.Ops("Items.Helmet_01", "Head", false);
+            const auto pollEquip = pollOps.equip;
+            pollOps.equip = [pollEquip] {
+                auto step = pollEquip();
+                step["id"] = "424242";
+                return step;
+            };
+            w::InventoryEquip(p::ParseInventoryEquip(json{{"item", "Items.Helmet_01"}}), pollOps);
+            Check("RB-125: the wait after an equip reads the slot for the exact copy the equip step chose",
+                  !polled.askedIds.empty() && std::all_of(polled.askedIds.begin(), polled.askedIds.end(), [](const std::string& aId) { return aId == "424242"; }));
+        }
+        Check("RB-125: unequip's undo equips the exact copy again",
+              off["undo"] == json{{"method", "inventory.equip"}, {"params", {{"item", "Items.Cap_01"}, {"slot", "Head"}, {"id", "31337"}}}}, off.dump());
+    }
+
+    // RB-127: a long teleport's undo carries far.
+    {
+        namespace pl = xfb::player;
+        const auto farUndo = pl::TeleportUndo({100, 200, 10}, 45.0, {100, 290, 10});
+        const auto nearUndo = pl::TeleportUndo({100, 200, 10}, 45.0, {100, 230, 10});
+        Check("RB-127: a teleport's undo beyond 50 m has far: true, a short one doesn't",
+              farUndo["params"].value("far", false) && !nearUndo["params"].contains("far") && farUndo["params"]["ground"] == "exact" &&
+                  farUndo["params"]["yaw"] == 45.0 && farUndo["method"] == "player.teleport",
+              farUndo.dump() + " " + nearUndo.dump());
+        Check("RB-127: the undo parses as a teleport the bridge accepts", ParamsCode([&] { pl::ParseTeleport(farUndo["params"]); }) == "ok" &&
+                                                                              pl::ParseTeleport(farUndo["params"]).farOk);
+    }
+}
+
 int RunUnitTests()
 {
     SanitizeTests();
@@ -3708,6 +3984,7 @@ int RunUnitTests()
     Bridge070Tests();
     Bridge080Tests();
     Bridge070ReviewTests();
+    Bridge081Tests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;
 }

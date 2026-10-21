@@ -517,8 +517,9 @@ void Sim060::Register()
     m_dispatcher.Register(marked("player.teleport", Access::WritePlayer, RunOn::BridgeThread, "Teleports V (simulated).", [self, busyNow](const MethodContext& aContext) {
         const auto request = player::ParseTeleport(aContext.params);
         pacer.Take();
-        return RunGameTask(
-            self->m_queue, std::chrono::milliseconds(1000),
+        // As the plugin: a changing step passes the write gate on the game thread (RB-122).
+        return self->m_dispatcher.RunWrite(
+            std::chrono::milliseconds(1000),
             [self, request, busyNow] {
                 std::scoped_lock _(self->m_state->mutex);
                 auto& s = *self->m_state;
@@ -562,7 +563,7 @@ void Sim060::Register()
                 }
                 return json{{"before", {{"position", Arr(before)}, {"yaw", yawBefore}}}, {"target", Arr(to)}, {"yaw", s.yaw}, {"snapped", snapped}, {"now", Arr(s.position)},
                             {"off_m", 0.0}, {"held", true},
-                            {"undo", {{"method", "player.teleport"}, {"params", {{"position", Arr(before)}, {"yaw", yawBefore}, {"ground", "exact"}}}}},
+                            {"undo", player::TeleportUndo(before, yawBefore, s.position)},
                             {"undo_note", "teleports V back to where she stood, facing the same way (loading the save undoes it too)"}};
             },
             "player.teleport");

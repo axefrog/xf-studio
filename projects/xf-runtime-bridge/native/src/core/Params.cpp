@@ -348,7 +348,7 @@ std::vector<std::string> ClothingSlots()
 
 InventoryEquipRequest ParseInventoryEquip(const json& aParams)
 {
-    RequireOnly(aParams, {"item", "slot", "add_if_missing"});
+    RequireOnly(aParams, {"item", "slot", "add_if_missing", "id"});
     InventoryEquipRequest request;
     request.item = ItemName(aParams);
     if (request.item.empty())
@@ -357,6 +357,7 @@ InventoryEquipRequest ParseInventoryEquip(const json& aParams)
     }
     request.slot = Slot(aParams);
     request.addIfMissing = Boolean(aParams, "add_if_missing").value_or(false);
+    request.id = ItemIdentity(aParams);
     return request;
 }
 

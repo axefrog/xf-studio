@@ -54,6 +54,16 @@ TeleportRequest ParseTeleport(const json& aParams)
     return request;
 }
 
+json TeleportUndo(const Vec3& aBefore, double aYaw, const Vec3& aNow)
+{
+    json params{{"position", {aBefore[0], aBefore[1], aBefore[2]}}, {"yaw", aYaw}, {"ground", "exact"}};
+    if (std::hypot(aNow[0] - aBefore[0], aNow[1] - aBefore[1], aNow[2] - aBefore[2]) > kMaxTeleportM)
+    {
+        params["far"] = true;
+    }
+    return json{{"method", "player.teleport"}, {"params", params}};
+}
+
 std::pair<Vec3, std::optional<double>> Destination(const TeleportRequest& aRequest, const Vec3& aFrom, double aYaw)
 {
     Vec3 to = aFrom;

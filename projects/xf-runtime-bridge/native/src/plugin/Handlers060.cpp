@@ -57,6 +57,13 @@ Dispatcher& TheDispatcher()
     return state.bridge->GetDispatcher();
 }
 
+// RB-122 (0.8.1): a game-thread step that changes the game, checked against the kill switch, the pause and a handover on the
+// game thread right before it runs (Dispatcher::RunWrite); reads and the stops use Game.
+json GameWrite(const std::function<json()>& aTask, const std::string& aLabel)
+{
+    return TheDispatcher().RunWrite(GameTimeout(), aTask, aLabel);
+}
+
 // --- scene.read ---------------------------------------------------------------------------------
 
 json SceneRead(const MethodContext& aContext)
@@ -237,7 +244,7 @@ json PlayerTeleport(const MethodContext& aContext)
     const double yawBefore = where.value("yaw", 0.0);
     const auto [to, yaw] = player::Destination(request, from, yawBefore);
     TheDispatcher().RequireWritesOpen();
-    const auto done = Game(
+    const auto done = GameWrite(
         [cid, to = to, yaw = yaw, request] {
             float x = static_cast<float>(to[0]), y = static_cast<float>(to[1]), z = static_cast<float>(to[2]);
             float wanted = static_cast<float>(yaw.value_or(0.0));
@@ -258,7 +265,7 @@ json PlayerTeleport(const MethodContext& aContext)
     return json{{"before", done.value("before", json())}, {"target", done.at("target")}, {"yaw", done.value("yaw", yawBefore)},
                 {"snapped", done.value("snapped", false)}, {"now", after.at("position")}, {"off_m", std::round(off * 1000.0) / 1000.0},
                 {"held", off < 0.3},
-                {"undo", {{"method", "player.teleport"}, {"params", {{"position", where.at("position")}, {"yaw", yawBefore}, {"ground", "exact"}}}}},
+                {"undo", player::TeleportUndo(from, yawBefore, now)},
                 {"undo_note", "teleports V back to where she stood, facing the same way (loading the save undoes it too)"}};
 }
 
@@ -281,7 +288,7 @@ json PlayerLook(const MethodContext& aContext)
         // Instant: V's yaw by a teleport in place (her yaw is the first-person camera's), then the pitch by a very short look-at.
         Get().teleports.Take();
         const auto position = state.at("position");
-        Game(
+        GameWrite(
             [cid, position, yaw = target.yaw] {
                 float x = position[0].get<float>(), y = position[1].get<float>(), z = position[2].get<float>();
                 float wanted = static_cast<float>(yaw);
@@ -294,7 +301,7 @@ json PlayerLook(const MethodContext& aContext)
         writes::WaitTicks(Get().queue, 1, GameTimeout());
     }
     // Aim at the wanted point from where the camera is after any turn (the camera moves with V's head slightly).
-    Game(
+    GameWrite(
         [cid, point = target.point, duration = request.duration] {
             float x = static_cast<float>(point[0]), y = static_cast<float>(point[1]), z = static_cast<float>(point[2]);
             float d = static_cast<float>(duration);
@@ -402,7 +409,7 @@ json PhotoCameraPreset(const MethodContext& aContext)
     {
         TheDispatcher().RequireWritesOpen();
         NotePresetOriginals(preset, before.value("flats", json::object()), request.values);
-        Game(
+        GameWrite(
             [cid, preset, values = request.values] {
                 for (const auto& [name, value] : values)
                 {
@@ -425,7 +432,7 @@ json PhotoCameraPreset(const MethodContext& aContext)
     if (choose >= 0)
     {
         TheDispatcher().RequireWritesOpen();
-        selected = Game(
+        selected = GameWrite(
             [cid, choose] {
                 int32_t key = params::key::kCameraPreset;
                 float none = 0.0f;

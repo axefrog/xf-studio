@@ -367,12 +367,14 @@ MessageRequest ParseMessage(const json& aParams);
 std::vector<std::string> ClothingSlots();
 
 // inventory.equip: {item: a TweakDB item record (Items.Helmet_01_basic_01), slot (one of ClothingSlots,
-// checked against the item's own), add_if_missing (default false: an item V doesn't have is refused)}.
+// checked against the item's own), add_if_missing (default false: an item V doesn't have is refused), id (0.8.1, RB-125:
+// the exact copy to equip, as an undo names it: the decimal identity the game's answer gave; any copy without it)}.
 struct InventoryEquipRequest
 {
     std::string item;
     std::string slot;
     bool addIfMissing = false;
+    std::string id;
 };
 InventoryEquipRequest ParseInventoryEquip(const json& aParams);
 

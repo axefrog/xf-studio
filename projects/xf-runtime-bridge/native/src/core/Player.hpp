@@ -36,6 +36,10 @@ struct TeleportRequest
 TeleportRequest ParseTeleport(const json& aParams);
 // The destination and facing from V's position and yaw (degrees; she faces (-sin, cos)).
 std::pair<Vec3, std::optional<double>> Destination(const TeleportRequest& aRequest, const Vec3& aFrom, double aYaw);
+// A teleport's undo (0.8.1, RB-127): back to where V stood (aBefore), facing the same way, ground exact; with far: true
+// when that spot is more than kMaxTeleportM from where she is now (aNow), since the replay would otherwise be refused
+// too_far like any long teleport.
+json TeleportUndo(const Vec3& aBefore, double aYaw, const Vec3& aNow);
 
 // player.look: {yaw, pitch} (degrees; relative: true adds them to the current view) or {at [x, y, z]}; mode "instant" or
 // "smooth"; duration_s (smooth, 0.05-5, default 1).

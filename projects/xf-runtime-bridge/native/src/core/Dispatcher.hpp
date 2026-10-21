@@ -117,8 +117,16 @@ public:
 
     void Register(MethodSpec aSpec);
 
-    // Never throws: an unexpected failure is logged and answered with code "failed".
-    DispatchResult Handle(const std::string& aLine, uint32_t aClientPid) noexcept;
+    // Never throws: an unexpected failure is logged and answered with code "failed". aControlRoute (0.8.1, RB-121): the
+    // request came on the control pipe, which answers only IsControlRouteMethod's methods (refused not_on_control_route).
+    DispatchResult Handle(const std::string& aLine, uint32_t aClientPid, bool aControlRoute = false) noexcept;
+
+    // RB-122 (0.8.1): one game-thread step that changes the game, on this dispatcher's queue: like RunGameTask, and the step
+    // also passes RequireWritesOpen on the game thread right before it runs, so a kill, a pause or a handover that came
+    // after the request was accepted refuses it. Every changing step of a multi-step write goes through here; reads use
+    // RunGameTask, and steps inside a RestoreScope (putting something back) skip the write gate.
+    nlohmann::json RunWrite(std::chrono::milliseconds aTimeout, const std::function<nlohmann::json()>& aTask,
+                            const std::string& aLabel) const;
 
     // Kill switch: every later request is refused with "killed" until the bridge is re-armed from the
     // game (Bridge::Rearm) or the game restarts.
@@ -136,7 +144,8 @@ public:
 
     // For multi-step writes, before each step that changes the game (RB-53): throws MethodError killed
     // or writes_paused when the kill switch or the panel's pause came after the request was accepted.
-    // 0.6: also handed_over while the session is handed over to the player.
+    // 0.6: also handed_over while the session is handed over to the player. RunWrite makes the same check on the game
+    // thread right before the step runs (0.8.1, RB-122).
     void RequireWritesOpen() const;
 
     // 0.6: a method whose write class depends on its parameters (behave.start, player.action) checks it here: throws
@@ -159,7 +168,7 @@ public:
     uint64_t RequestCount() const;
 
 private:
-    DispatchResult HandleUnchecked(const std::string& aLine, uint32_t aClientPid);
+    DispatchResult HandleUnchecked(const std::string& aLine, uint32_t aClientPid, bool aControlRoute);
     bool TakeRateToken();
     std::string NextCid();
 
@@ -187,7 +196,8 @@ private:
 // example selecting a photo-mode light, then setting it a few frames later). Throws MethodError
 // with the same codes a game-thread method would answer (timeout, busy, game_not_running, ...).
 // aGated = false only for a step that decides for itself what to do while the game's scripts can't be called
-// (game.status answers "loading" from the plugin's side then).
+// (game.status answers "loading" from the plugin's side then). For reads and steps that put things back; a step that
+// changes the game goes through Dispatcher::RunWrite (0.8.1, RB-122).
 nlohmann::json RunGameTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout,
                            const std::function<nlohmann::json()>& aTask, const std::string& aLabel, bool aGated = true);
 
@@ -199,6 +209,23 @@ nlohmann::json RunGameTask(GameThreadQueue& aQueue, std::chrono::milliseconds aT
 using GameGate = std::function<void(const std::string& aWhat)>;
 void SetGameGate(GameGate aGate);
 void RequireGameGate(const std::string& aWhat);
+
+// RB-122 (0.8.1): while one is open on a thread, the steps that thread queues through Dispatcher::RunWrite put something
+// back (a relock, a withdrawn request, the menu's selection after a failure, a category restored), so they run whatever the
+// write gate says: refusing them would leave the game half changed.
+class RestoreScope
+{
+public:
+    RestoreScope();
+    ~RestoreScope();
+    RestoreScope(const RestoreScope&) = delete;
+    RestoreScope& operator=(const RestoreScope&) = delete;
+    static bool Active();
+};
+
+// RB-121 (0.8.1): the methods the control pipe answers: bridge.kill, behave.stop, player.stop, bridge.handover and the steps
+// a handover takes (game.status, photo.hud.hide, showroom.clear, ui.message).
+bool IsControlRouteMethod(const std::string& aMethod);
 
 // Accepts client-provided correlation ids only if they are short and plain.
 bool IsValidCid(const std::string& aCid);

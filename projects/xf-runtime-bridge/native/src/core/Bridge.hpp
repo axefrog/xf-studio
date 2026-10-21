@@ -68,6 +68,10 @@ private:
     GameThreadQueue& m_queue;
     Dispatcher m_dispatcher;
     PipeServer m_server;
+    // RB-121 (0.8.1): a second pipe, <pipe>-control, served on its own thread, answering only the emergency controls and a
+    // handover's steps (IsControlRouteMethod), so a stop or a handover is read at once while the main pipe still serves a
+    // long request (a five-second look). session.json names it (control_pipe).
+    PipeServer m_control;
 
     std::thread m_watcher;
     std::mutex m_watchMutex;

@@ -49,8 +49,23 @@ bool Bridge::Start(std::string& aError)
     {
         return false;
     }
+    // RB-121: the control pipe. Without it (a start failure) the bridge still works; the tools then send the emergency
+    // controls on the main pipe.
+    std::string controlError;
+    const auto controlName = m_session.pipeName + L"-control";
+    const bool control = m_control.Start(
+        controlName, m_config.idleDisconnectSeconds,
+        [this](const std::string& aLine, uint32_t aPid) {
+            auto result = m_dispatcher.Handle(aLine, aPid, true);
+            return PipeReply{std::move(result.line), result.rejected};
+        },
+        controlError);
+    if (!control)
+    {
+        log::Warn("bridge.control_pipe_failed", "what=" + controlError);
+    }
 
-    const json discovery{{"protocol", kProtocolVersion},
+    json discovery{{"protocol", kProtocolVersion},
                          {"sid", m_session.sessionId},
                          {"pid", m_session.processId},
                          {"pipe", win32::Narrow(m_session.pipeName)},
@@ -59,11 +74,16 @@ bool Bridge::Start(std::string& aError)
                          {"plugin_version", XFB_VERSION_STRING},
                          {"allow_writes", m_config.allowWrites},
                          {"write_classes", WriteClassList(m_config)}};
+    if (control)
+    {
+        discovery["control_pipe"] = win32::Narrow(controlName);
+    }
     std::string writeError;
     if (!win32::WriteFileAtomic(m_session.SessionFile(),
                                 discovery.dump(2, ' ', false, json::error_handler_t::replace), writeError))
     {
         m_server.Stop();
+        m_control.Stop();
         aError = "could not write session.json: " + writeError;
         return false;
     }
@@ -117,6 +137,10 @@ void Bridge::StopListener(const std::string& aReason)
         log::Info("bridge.stopping", "reason=" + aReason);
         m_server.Stop();
     }
+    if (m_control.IsRunning())
+    {
+        m_control.Stop();
+    }
 }
 
 void Bridge::Kill(const std::string& aReason)
@@ -127,6 +151,7 @@ void Bridge::Kill(const std::string& aReason)
     // thread starts only once RestoreReady() is true.
     m_queue.Close();
     m_server.DropClient();
+    m_control.DropClient();
     RemoveSessionFile();
     m_watchWake.notify_all(); // the watcher stops the listener off this thread
 }
@@ -137,7 +162,7 @@ std::string Bridge::RearmRefusal() const
     {
         return "the bridge wasn't stopped by the kill switch, so there is nothing to reconnect";
     }
-    if (m_server.IsRunning())
+    if (m_server.IsRunning() || m_control.IsRunning())
     {
         return "the bridge is still closing its connection; try again in a moment";
     }
@@ -217,6 +242,7 @@ json Bridge::Status() const
                 {"killed", m_dispatcher.IsKilled()},
                 {"kill_reason", m_dispatcher.KillReason()},
                 {"has_client", m_server.HasClient()},
+                {"control_pipe", m_control.IsRunning()},
                 {"connections", m_server.ConnectionsAccepted()},
                 {"requests", m_dispatcher.RequestCount()},
                 {"allow_writes", m_config.allowWrites},
@@ -244,7 +270,7 @@ void Bridge::Watch()
             Kill("kill_file");
             lock.lock();
         }
-        if (m_dispatcher.IsKilled() && m_server.IsRunning())
+        if (m_dispatcher.IsKilled() && (m_server.IsRunning() || m_control.IsRunning()))
         {
             lock.unlock();
             StopListener("kill_switch");

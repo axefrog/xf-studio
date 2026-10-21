@@ -26,6 +26,18 @@ json Game(const std::function<json()>& aTask, const std::string& aLabel)
     return RunGameTask(Get().queue, GameTimeout(), aTask, aLabel);
 }
 
+// RB-122 (0.8.1): a game-thread step that changes the game, checked against the kill switch, the pause and a handover on the
+// game thread right before it runs (Dispatcher::RunWrite).
+json GameWrite(const std::function<json()>& aTask, const std::string& aLabel)
+{
+    auto& state = Get();
+    if (!state.bridge)
+    {
+        throw MethodError("killed", "the bridge isn't running");
+    }
+    return state.bridge->GetDispatcher().RunWrite(GameTimeout(), aTask, aLabel);
+}
+
 void RequireOpen()
 {
     if (auto& state = Get(); state.bridge)
@@ -81,7 +93,7 @@ json CyberwareEquip(const MethodContext& aContext)
     RequireOpen();
     h::CyberwareEquipOps ops;
     ops.equip = [cid, request] {
-        return Game(
+        return GameWrite(
             [cid, request] {
                 RED4ext::CString item(request.item.c_str());
                 RED4ext::CString hash(request.id.c_str());
@@ -96,7 +108,7 @@ json CyberwareEquip(const MethodContext& aContext)
     };
     ops.removeAdded = [cid](const std::string& aItem) {
         RequireOpen();
-        return Game(
+        return GameWrite(
             [cid, aItem] {
                 RED4ext::CString item(aItem.c_str());
                 return ScriptCall("XFInventory", "RemoveAdded", {"String"}, {&item}, cid);
@@ -112,7 +124,7 @@ json CyberwareUnequip(const MethodContext& aContext)
     const auto request = h::ParseCyberwareUnequip(aContext.params);
     const auto cid = aContext.cid;
     RequireOpen();
-    const auto step = Game(
+    const auto step = GameWrite(
         [cid, request] {
             RED4ext::CString area(request.area.c_str());
             RED4ext::CString item(request.item.c_str());
@@ -129,7 +141,7 @@ json CyberwareUnequip(const MethodContext& aContext)
     if (request.removeAdded && out["emptied"].get<bool>())
     {
         RequireOpen();
-        const auto removal = Game(
+        const auto removal = GameWrite(
             [cid, request] {
                 RED4ext::CString item(request.item.c_str());
                 return ScriptCall("XFInventory", "RemoveAdded", {"String"}, {&item}, cid);
