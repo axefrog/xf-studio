@@ -59,6 +59,8 @@ experiments/038-profiles-spikes/
   tools/s1-latency.ts      S1 timing gates (Bun window, or --browser)
   tools/look-fixture.ts    The look fixture through the real core, and its build cost
   tools/s3-kill.ts         S3 crash harness and round trip
+  tools/s3-migration.ts    S3 sweep on the production migration (chunk 1d-i): hosts and pages really killed
+  harness/s3-migration-host.ts, harness/s3-migration-page.ts  its host and workspace processes
   tests/s1-rules.test.ts   The acknowledgement rules, lost acknowledgements, coalescing, conflicts, outbox failure
 ```
 
@@ -219,6 +221,31 @@ Results after the second review's fixes (22 October 2026): S1 on both hosts **PA
 - **Dependency lookups have deadlines.** A lookup of a required document this page doesn't hold is an attempt like a send: its own `AbortSignal`, the `ATTEMPT_MS` deadline, abandoned on Try again, and its late answer ignored.
 - **A reload brings a waiting V its save.** The first read of an immutable document that brings its content is announced like its arrival by a lookup or a put, and `CharacterService.load` also brings every V shown without its save up to it. A V whose save isn't here records nothing from its context (it would otherwise record the stand-in default V over its source) and refuses changes until the save arrives.
 - **The specification test** now leaves some immutable documents unread when the page opens and adds reloads (owners reading the library again); the owner check covers both. It also skips the own-write check for an abandoned attempt's answer. A sweep of 800 local and 400 desktop seeds passes in 56 s at 0.4 GB.
+
+## The migration in production (phase 1, chunk 1d-i)
+
+Product code: the library transaction and its route `/api/profiles/migrate` (`src/app/profiles/host/profiles-migrate.ts`), the workspace side (`src/app/profiles/profiles-migration.ts`, started by `startProfilesMigration` in `src/app/browser/profiles-migration-device.ts`), the snapshot, comparison and session data (`src/app/profiles/profiles-migration-data.ts`, `src/app/profiles/profile-session.ts`). The Studio runs it in the background two seconds after start, in the window holding the workspace; nothing reads its result until chunk 1d-ii moves the Studio onto the profile services.
+
+- **The record is the host's own.** `migration` joins the host-only kinds, so no page command can write or forge a record.
+- **The pre-migration copy** (`LibraryBackups.beforeMigration("profiles-1")`) is taken inside the transaction, before the library's first `profiles-1` run changes anything, and discarded if that run rolls back. Later runs (another workspace, a re-upgrade) take none.
+- **Recovery drafts** become collections by the same rules as the draft (an earlier draft of the same collection forks as "(earlier draft)"). They stay in the library and don't join the profile.
+- **The loose look** (a workspace with no collection yet) becomes a collection of one, "My looks", whose IDs derive from the workspace's identity, so a re-upgrade finds it again.
+- **A V's decoded save** is kept even when the V no longer comes from it (the workspace still had it loaded).
+- **Comparisons** use the part registry's canonical parts (`PartRegistry.canonicalParts`), so released rows in an older schema compare equal to drafts.
+
+Fixtures (`projects/xf-studio/authoring/tests/fixtures/profiles-migration-fixtures.ts`): a library written by 0.1.0-alpha.2's own statements (a look, a part preset, a set, the workspace's collection at revision 1), and a workspace shaped like a real one: one V from a save with creator choices and a clothing setting, one collection of four looks with Undo histories and a removed look, three recovery drafts (an earlier draft of the same collection, another collection, an empty one), two views with the person's own lighting setup, the idle and a held pose, a live dock arrangement with a closed and a parked panel, and two saved layouts (the inactive one with a size class and a working state).
+
+Results (22 October 2026), each under `tools/memory_guard.py --limit 4`:
+
+| Run | Result |
+|---|---|
+| CI harness (`tests/profiles-migration-harness.test.ts`, one process: a kill is the transaction rolling back, or the answer or the page's next steps never happening) | **PASS** 23 of 23 in about 3 s, peak 0.4 GB: both variants with 10 kill points each, the two-host baseline with idempotent re-runs, and the downgrade round trip |
+| Sweep (`tools/s3-migration.ts`, processes killed with `SIGKILL`), 5 rounds | **PASS** in 68 s, peak 1.3 GB: 100 kills (10 points × 5 rounds × 2 variants), each recovered after 1 restart to the unkilled outcome; re-runs byte-identical; released tables byte-identical; `integrity_check` ok; one pre-migration copy per library |
+| Gates | Identical drafts: 1 profile ("My profile": 1 V, 1 collection), 1 character, 1 decoded save, 2 own defaults, both workspaces' scenes on their own look. Divergent drafts (the second browser renamed the look it shows): the draft forks "(from this browser)", both scenes resolve to their own content through the ID map, whichever host commits first. Downgrade and re-upgrade: the edited working copy unchanged, plus forks "(saved in an older version)" and "(from this browser)" in the one profile, 1 V; a second round trip adds only its record. |
+
+A mutation check: mapping the scene's look without the ID map fails 9 of the CI harness's 23 tests.
+
+Reproduce: `bun test tests/profiles-migration.test.ts tests/profiles-migration-harness.test.ts` (authoring), and `bun tools/s3-migration.ts <scratch> [rounds]` here.
 
 ## Acknowledgement and rebasing rules (S1, answering Sol's Medium point)
 
