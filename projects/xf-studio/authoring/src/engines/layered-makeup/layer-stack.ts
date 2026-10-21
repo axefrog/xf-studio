@@ -34,7 +34,7 @@ export function editLayers(value: Recipe, activeId: string | undefined, command:
     if (!command.newId) throw Error("A new layer needs its ID from the host.");
     layer.id = command.newId;
     if (layers.some(existing => existing.id === layer.id)) throw Error("That layer ID is already in use.");
-    layer.name = command.kind === "duplicate" ? `${layer.name.slice(0, 73)} (copy)` : `Layer ${layers.length + 1}`;
+    layer.name = command.kind === "duplicate" ? `${layer.name.slice(0, 73)} (copy)` : newLayerName(layers);
     if (command.kind === "add") layer.enabled = true;
     layers.splice(command.kind === "duplicate" ? index + 1 : layers.length, 0, layer);
     activeId = layer.id;
@@ -50,6 +50,17 @@ export function editLayers(value: Recipe, activeId: string | undefined, command:
     layers[index] = { ...region.newLayer(), id: layers[index].id, name: layers[index].name };
   }
   return { recipe: parseRecipe(recipe, region.models), active: Math.max(0, layers.findIndex(l => l.id === activeId)) };
+}
+
+/**
+ * A new layer's default name: "Layer N" for the next count, skipping a number another layer already carries, so adding after a removal
+ * never names two layers alike (CORE-125; presets do the same, `newPresetName`).
+ */
+export function newLayerName(layers: readonly { name: string }[]): string {
+  const taken = new Set(layers.map(layer => layer.name));
+  let n = layers.length + 1;
+  while (taken.has(`Layer ${n}`)) n++;
+  return `Layer ${n}`;
 }
 
 export function layerCapability(recipe: Recipe, action: LayerAction): Capability {
