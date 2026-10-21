@@ -407,6 +407,14 @@ Nola Dreamer's hair Sofie, per its title, one of the creator's "Physics enabled"
 
 [Dark Future](https://www.nexusmods.com/cyberpunk2077/mods/16300) (DarkFortuneTeller, per the GitHub source its Nexus page links) and [Vehicle Navigation System](https://www.nexusmods.com/cyberpunk2077/mods/28241) (Scream81, per its script header). Their HUD meters and navigation panel showed how a mod adds its own widgets to the game's HUD layer, checks for ones it left there earlier, and scales them to the screen, the approach the XF Runtime Bridge's in-game panel follows. Studied only.
 
+### Inventory HUD Night City UI
+
+[Inventory HUD Night City UI](https://www.nexusmods.com/cyberpunk2077/mods/35277), by Charlotte (charlotte27k, per its own copyright notice). Its notes that the menu layer is laid out in screen pixels while the game scales each page root itself pointed us at measuring how the HUD layer's root maps onto the screen, instead of assuming it, which is how the XF Runtime Bridge's ink panel now finds the visible screen. Studied only; its terms forbid reuse, and none is made.
+
+### Ascral - HUD Editor and Painter
+
+[Ascral - HUD Editor and Painter](https://www.nexusmods.com/cyberpunk2077/mods/35236) (its author is still being confirmed). It measures the HUD's widgets against their rectangles on screen through the game's own layout, which showed that the HUD layer's units can be checked in game rather than guessed. Studied only.
+
 ### Sheng Noods Ramenshop
 
 [Sheng Noods Ramenshop](https://www.nexusmods.com/cyberpunk2077/mods/25294) (its author is still being confirmed; its Nexus page thanks Hepero for its map-icon script). Its map pin showed how a mod registers a runtime map pin and gives it its own icon and tooltip by wrapping each pin controller's icon update, the technique behind the bridge's XF map pins, which draw their badge in ink instead of an icon file. Studied only.
