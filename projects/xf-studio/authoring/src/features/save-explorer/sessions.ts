@@ -15,7 +15,7 @@ export type SaveExplorerInstanceAction = SaveExplorerAction & { readonly instanc
 type SessionArguments = ConstructorParameters<typeof SaveExplorerActions>;
 
 export class SaveExplorerSessions {
-  private readonly sessions = new Map<string, { actions: SaveExplorerActions; unsubscribe: () => void }>();
+  private readonly sessions = new Map<string, { actions: SaveExplorerActions; unsubscribe: () => void; lifetime: AbortController }>();
   private readonly listeners = new Set<() => void>();
   private readonly made: SessionArguments;
 
@@ -23,30 +23,37 @@ export class SaveExplorerSessions {
   constructor(device: SaveExplorerDevice | null, yieldToHost?: SessionArguments[1], options?: SessionArguments[2]) {
     this.made = [device, yieldToHost, options];
   }
+  /** A session for `signal`'s lifetime: its folder subscription and its running work end when the signal aborts. */
+  private make(signal?: AbortSignal): SaveExplorerActions {
+    const [device, yieldToHost, options] = this.made;
+    return new SaveExplorerActions(device, yieldToHost, { ...options, ...(signal ? { signal } : {}) });
+  }
 
   /** What an instance with no session yet reads as (it is never acted on): an untouched session. */
   private blankSession: SaveExplorerActions | null = null;
   /** The instance's session for reading: its own, or an untouched one (reads never make a session). */
   private peek(instance: string): SaveExplorerActions {
-    return this.sessions.get(instance)?.actions ?? (this.blankSession ??= new SaveExplorerActions(...this.made));
+    // The blank session never acts and follows nothing: its lifetime has already ended.
+    return this.sessions.get(instance)?.actions ?? (this.blankSession ??= this.make(AbortSignal.abort()));
   }
   /** The instance's session, made the first time it acts. */
   session(instance: string): SaveExplorerActions {
     let held = this.sessions.get(instance);
     if (!held) {
-      const actions = new SaveExplorerActions(...this.made);
-      held = { actions, unsubscribe: actions.subscribe(() => this.changed()) };
+      const lifetime = new AbortController(), actions = this.make(lifetime.signal);
+      held = { actions, unsubscribe: actions.subscribe(() => this.changed()), lifetime };
       this.sessions.set(instance, held);
     }
     return held.actions;
   }
-  /** The panel instance closed: its session goes (an open save with it; a read still running publishes nowhere). */
+  /** The panel instance closed: its session ends (an open save with it; its folder subscription goes, and work still running publishes nothing). */
   release(instance: string): void {
     const held = this.sessions.get(instance);
     if (!held) return;
     held.unsubscribe();
     this.sessions.delete(instance);
     void held.actions.dispatch({ kind: "saves.close" });
+    held.lifetime.abort();
     this.changed();
   }
   /** The instances with a session (tests and diagnostics). */

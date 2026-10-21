@@ -110,6 +110,30 @@ describe("explorer service", () => {
     expect(facade.snapshot(one).open.phase).toBe("none");
   });
 
+  test("a released session ends: its folder subscription goes, and a listing still running publishes nothing", async () => {
+    const followers = new Set<() => void>();
+    let answer!: (value: { available: boolean; saves: SaveListing[] }) => void, lists = 0;
+    const sessions = new SaveExplorerSessions(device({
+      list: () => { lists++; return new Promise(resolve => { answer = resolve; }); },
+      locationChanged: listener => { followers.add(listener); return () => { followers.delete(listener); }; } }), now);
+    const one = "save-explorer.explorer--aaaa";
+    let changes = 0;
+    sessions.subscribe(() => changes++);
+    // Reads never make a session, so nothing follows the folder yet.
+    sessions.snapshot(one);
+    expect(followers.size).toBe(0);
+    const listing = sessions.dispatch({ kind: "saves.refresh", instance: one });
+    expect(followers.size).toBe(1);
+    sessions.release(one);
+    expect(followers.size).toBe(0);
+    expect(sessions.instances()).toEqual([]);
+    const before = changes;
+    answer({ available: true, saves: [] });
+    expect(await listing).toEqual({ ok: true });
+    expect(changes).toBe(before);
+    expect(lists).toBe(1);
+  });
+
   test("lists, opens a listed save and fills in the tree's status, then closes", async () => {
     // One session (one panel instance's); the module's facade over several is below.
     const service = new SaveExplorerActions(device(), now), facade = service;
