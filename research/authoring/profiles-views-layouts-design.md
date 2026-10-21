@@ -202,6 +202,15 @@ flowchart TB
   - The 30-day expiry is a window command, `collection.expire`, never a host write.
   - A host background job, one minute after start and then daily, purges tombstones after 30 days and receipts after 7 days. It purges an unreferenced decoded save after a 30-day grace.
 - **Checkpoints.** `wal_autocheckpoint` is 16,384 pages, with `journal_size_limit` at 64 MB, so the background flush does the checkpointing.
+- **Recovery, after the 1c-ii reviews.**
+  - **Recovery gate.** While a document still has a restored entry the library hasn't answered, new edits on it are refused. `own` only sets the baseline; successors keep the replayed command's revision.
+  - **Owners stay current.** Any answer that changes what a document shows is announced to every owner, including the first read of an immutable document that brings its content. Owners opened during recovery stay consistent.
+  - **Required content.** Immutable content a pending command needs is kept with it. The host checks `requires` inside the transaction and answers `missing`, which triggers a re-put. If no copy exists anywhere, the restoring notice offers **Import save…** or **Discard those changes**. Re-importing the V's own save is a plain upload that changes nothing else.
+  - **A V without its save** records nothing and refuses changes until the save arrives.
+  - **Send attempts** and required-document lookups have a 15 s deadline. Each is cancellable and resent under the same ID, and late answers are ignored. Commands on a document are sent strictly in order. Receipt answers carry the value the command committed.
+  - **The restoring notice** (`t-recovering`): "Restoring changes from your last session…". After 5 s it offers Try again, plus Use restored only where it is provably safe, otherwise Export. No timer ever unlocks edits.
+  - **Limits.** The outbox refuses a command over 64 writes before recording it, so a collection is created with at most 63 looks. A look listed by a live collection is never purged. Snapshots and Save version refuse an incomplete collection. Keep mine on a collection reads its looks from the library first, then restores them or refuses, in one command.
+  - **Accepted limit.** After a crash that loses pending host writes, a false conflict can still occur. It is shown to the person and never written over.
 
 **Built in phase 1c-i.** The outbox, as built and tested:
 
