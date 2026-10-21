@@ -29,7 +29,7 @@ Studio code is split into subsystems with one owner each, under `projects/xf-stu
 |---|---|---|
 | Clock and randomness | `platform/core/clock.ts`, `random.ts` | Time and seedable randomness, injected into services so tests control them |
 | Tasks | `platform/core/tasks.ts` | Work the user can supersede: the newest request wins, the older one is aborted through its `AbortSignal`, and the task publishes its state |
-| Persistence | `platform/persistence/` | The typed, versioned document store in `library.sqlite` (served at `/api/documents`), library durability and automatic backups |
+| Persistence | `platform/persistence/` | One owner per library file (`LibraryDatabase`: the connection, migrations, transactions; composed with every store by `src/library-files.ts` for both hosts), the typed, versioned document store in `library.sqlite` (served at `/api/documents`), library durability, automatic backups, and the workspace draft's file (`workspace.json`, served at `/api/workspace` on both hosts) |
 | History | `platform/core/history-transaction.ts`, `document-history.ts` | Undo and redo for documents |
 | View graph | `platform/core/view-graph.ts` ([design](../research/authoring/view-graph-design.md)) | Views, cameras, lights, overlays and module contributions, shared or linked between views |
 | Experiment flags | a per-library document in the document store (kind `experiment-flags`, id `preferences`) | Which optional experiments are on; a verification workspace keeps its own |

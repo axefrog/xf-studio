@@ -7,8 +7,9 @@
     if (!add) throw Error("Add preset control unavailable.");
     add.click();
   }
-  await new Promise(resolve => setTimeout(resolve, 500));
-  const raw = localStorage.getItem("xfas.workspace.verification.v1");
+  // The workspace lives in the host's file: flush it there, then read it back.
+  await window.xfDesktopWorkspaceFlush();
+  const raw = (await (await fetch("/api/workspace?verify=1", { cache: "no-store" })).json()).workspace;
   const snapshot = window.xfStudioPresentation.library.summary().draft;
   return { native: true, count: snapshot.presets.length, selected: snapshot.selected,
     bytes: new TextEncoder().encode(raw).length, hostFlush: typeof window.xfDesktopWorkspaceFlush };

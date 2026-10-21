@@ -21,7 +21,10 @@ import { cachedBunProbe, cachedWolvenKitProbe, desktopBuildIssue, desktopPlateCa
 import { eyePlateReadiness } from "../src/eye-plate-cache";
 import { EYE_PLATE_RECIPE } from "../src/eye-plate-recipe";
 import { DesktopUpdateService, type NativeUpdater, type UpdateTrust } from "./update-service";
-import { DesktopWorkspaceStore, desktopWorkspaceRequest, desktopWorkspaceStartFresh } from "./workspace-store";
+// The workspace draft's file, as on localhost (src/workspace-host.ts).
+import { openWorkspaceFile } from "../src/workspace-host";
+import { workspaceRequest } from "../src/platform/persistence/workspace-file";
+import { WORKSPACE_ENDPOINT, WORKSPACE_START_FRESH_ENDPOINT } from "../src/platform/api/workspace-file";
 // A composition root: the part registry and document model are built once and injected (CORE-29).
 import { STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
 import { DesktopWorkActivity } from "./work-activity";
@@ -136,7 +139,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const posePreferencesRequest = createPosePreferencesHandler(posePreferences);
   const verificationPosePreferencesRequest = createPosePreferencesHandler(new PosePreferencesStore(verificationSettingsDirectory(dataRoot),
     { seed: () => posePreferences.load().preferences }));
-  const workspaceStore = new DesktopWorkspaceStore(dataRoot, STUDIO_DOCUMENTS);
+  // Fixed, host-owned workspace files (workspace.json, verification-workspace.json) survive the changing loopback port.
+  const workspaceFile = openWorkspaceFile(dataRoot, STUDIO_DOCUMENTS);
   let closeAck: ((nonce: string, status: "saved" | "failed") => boolean) | undefined;
   // Renderer progress for the host's blank-window watchdog and close handling.
   const renderer = { pageServed: false, bootstrapped: false, smoke: null as string | null };
@@ -366,13 +370,13 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
           { headers: { "Cache-Control": "no-store" } }); }
         catch { return new Response("Update operation is unavailable", { status: 409 }); }
       }
-      if (url.pathname === "/api/desktop/workspace/start-fresh") {
-        const response = desktopWorkspaceStartFresh(routedRequest, workspaceStore, url.searchParams.has("verify"));
+      if (url.pathname === WORKSPACE_START_FRESH_ENDPOINT) {
+        const response = await workspaceRequest(routedRequest, workspaceFile, url);
         if (response.ok) report("The user started fresh; an unreadable workspace was set aside.");
         return response;
       }
-      if (url.pathname === "/api/desktop/workspace") {
-        const response = await desktopWorkspaceRequest(routedRequest, workspaceStore, url.searchParams.has("verify"));
+      if (url.pathname === WORKSPACE_ENDPOINT) {
+        const response = await workspaceRequest(routedRequest, workspaceFile, url);
         // Only a successfully loaded workspace makes the close handshake wait for the page.
         if (request.method === "GET" && !renderer.bootstrapped) {
           if (response.ok) { renderer.bootstrapped = true; report("Renderer bootstrap loaded the workspace."); }

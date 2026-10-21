@@ -10,7 +10,8 @@ import { afterAll, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { DesktopWorkspaceStore, desktopWorkspaceStartFresh } from "../desktop/workspace-store";
+import { openWorkspaceFile } from "../src/workspace-host";
+import { workspaceRequest } from "../src/platform/persistence/workspace-file";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { EYE_MAKEUP, eyeMakeupPartCodec } from "../src/features/eye-makeup";
 import { isNewerData, NEWER_LOOK_MESSAGE, type PartCodec } from "../src/platform/api";
@@ -129,33 +130,35 @@ test("a newer look in the current draft opens locked; a newer loose editor still
   expect(repaired.newer).toBeUndefined();
 });
 
-test("desktop saves a workspace with a locked look and keeps it exactly; newer data it cannot keep is never replaced", () => {
-  const dir = resolve(root, "desktop"), store = new DesktopWorkspaceStore(dir, STUDIO_DOCUMENTS), file = resolve(dir, store.fileName(false));
-  store.save(false, JSON.stringify(stored()));
+test("the host's workspace file saves a workspace with a locked look and keeps it exactly; newer data it cannot keep is never replaced", async () => {
+  const dir = resolve(root, "desktop"), store = openWorkspaceFile(dir, STUDIO_DOCUMENTS), file = resolve(dir, store.fileName(false));
+  await store.save(false, JSON.stringify(stored()));
   const value = stored(); value.collections.memory[value.collections.selected][EYE].partSchema = NEWER_PART;
   const text = JSON.stringify(value);
   writeFileSync(file, text);
-  expect(store.load(false)).toBe(text);
+  expect(store.load(false).text).toBe(text);
   // The renderer opens it with that look locked and writes it back: the store takes it and keeps the look exactly.
   const loaded = loadWorkspace(storage(value), false, STUDIO_DOCUMENTS);
-  store.save(false, JSON.stringify(serializeWorkspace(loaded.state, STUDIO_DOCUMENTS)));
+  await store.save(false, JSON.stringify(serializeWorkspace(loaded.state, STUDIO_DOCUMENTS)));
   const saved = JSON.parse(readFileSync(file, "utf8")), id = value.collections.selected;
   expect(storedLook(saved.collections, id)).toEqual(storedLook(value.collections, id));
-  // A workspace whose newer data cannot be kept per look (a newer loose editor) is never replaced.
+  // A workspace whose newer data cannot be kept per look (a newer loose editor) is never replaced, over HTTP either.
   const loose = stored(); delete loose.collections;
   loose.look = { parts: { [EYE]: { schema: NEWER_PART, body: {} } }, memory: {} };
   writeFileSync(file, JSON.stringify(loose));
   const fresh = JSON.stringify(serializeWorkspace(restore(smallWorkspaceV1()).state, STUDIO_DOCUMENTS));
   expect(() => store.load(false)).toThrow();
-  expect(() => store.save(false, fresh)).toThrow();
+  await expect(store.save(false, fresh)).rejects.toThrow();
+  const origin = "http://127.0.0.1:4317", headers = { Origin: origin, "Content-Type": "application/json" };
+  expect((await workspaceRequest(new Request(`${origin}/api/workspace`), store)).status).toBe(409);
+  expect((await workspaceRequest(new Request(`${origin}/api/workspace`, { method: "POST", headers, body: JSON.stringify({ workspace: fresh }) }), store)).status).toBe(422);
   expect(readFileSync(file, "utf8")).toBe(JSON.stringify(loose));
   // Start fresh sets that unreadable workspace aside (never deleted).
-  const response = desktopWorkspaceStartFresh(new Request("http://127.0.0.1/", { method: "POST" }), store, false);
-  return response.json().then(body => {
-    expect(body.keptAs).toBeString();
-    expect(existsSync(resolve(dir, body.keptAs))).toBe(true);
-    expect(readdirSync(dir)).not.toContain(store.fileName(false));
-  });
+  const response = await workspaceRequest(new Request(`${origin}/api/workspace/start-fresh`, { method: "POST", headers, body: "{}" }), store);
+  const body = await response.json() as { keptAs: string };
+  expect(body.keptAs).toBeString();
+  expect(existsSync(resolve(dir, body.keptAs))).toBe(true);
+  expect(readdirSync(dir)).not.toContain(store.fileName(false));
 });
 
 test("Undo histories and workspace looks are written in the oldest part schema that holds them", () => {

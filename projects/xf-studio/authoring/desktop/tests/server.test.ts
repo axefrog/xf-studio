@@ -139,7 +139,7 @@ test("injected updater cannot apply until authenticated workspace acknowledgemen
     await action("check"); await action("download");
     const retry = action("applyAndRestart");
     await Bun.sleep(10);
-    expect((await post("/api/desktop/workspace", { workspace: JSON.stringify(serializeWorkspace(freshWorkspace(), STUDIO_DOCUMENTS)) },
+    expect((await post("/api/workspace", { workspace: JSON.stringify(serializeWorkspace(freshWorkspace(), STUDIO_DOCUMENTS)) },
       true)).status).toBe(204);
     expect((await post("/api/desktop/workspace/close-ack",
       { schema: "xfs/desktop-close-ack-1", nonce: requested[1], status: "saved" })).status).toBe(409);
@@ -148,7 +148,7 @@ test("injected updater cannot apply until authenticated workspace acknowledgemen
     await action("check"); await action("download");
     const savedRetry = action("applyAndRestart");
     await Bun.sleep(10);
-    const saved = await fetch(base + "/api/desktop/workspace", { method: "POST",
+    const saved = await fetch(base + "/api/workspace", { method: "POST",
       headers: { ...headers, "X-XFS-Update-Flush": requested[2] },
       body: JSON.stringify({ workspace: JSON.stringify(serializeWorkspace(freshWorkspace(), STUDIO_DOCUMENTS)) }) });
     expect(saved.status).toBe(204);
@@ -160,7 +160,7 @@ test("injected updater cannot apply until authenticated workspace acknowledgemen
     const quitting: { response?: { allow: boolean } } = {};
     trial.beforeQuit(quitting);
     expect(quitting.response).toBeUndefined();
-    expect((await post("/api/desktop/workspace", { workspace: JSON.stringify(serializeWorkspace(freshWorkspace(), STUDIO_DOCUMENTS)) })).status).toBe(204);
+    expect((await post("/api/workspace", { workspace: JSON.stringify(serializeWorkspace(freshWorkspace(), STUDIO_DOCUMENTS)) })).status).toBe(204);
     const stale: { response?: { allow: boolean } } = {};
     trial.beforeQuit(stale);
     expect(stale.response).toEqual({ allow: false });
@@ -209,7 +209,7 @@ test("desktop workspace survives a changed loopback port without mixing verifica
   workspace.collections.selected = collectionFixture.presets[1].id;
   workspace.recipe = structuredClone(collectionFixture.presets[1].recipe);
   workspace.preview.eyeShape = 12;
-  const endpoint = firstOrigin + "/api/desktop/workspace?verify=1";
+  const endpoint = firstOrigin + "/api/workspace?verify=1";
   const headers = { Cookie: firstCookie, Origin: firstOrigin, "Content-Type": "application/json" };
   try {
     expect((await fetch(endpoint, { method: "POST", headers: { Origin: firstOrigin, "Content-Type": "application/json" },
@@ -218,7 +218,7 @@ test("desktop workspace survives a changed loopback port without mixing verifica
       body: JSON.stringify({ workspace: JSON.stringify(serializeWorkspace(workspace, STUDIO_DOCUMENTS)) }) })).status).toBe(403);
     expect((await fetch(endpoint, { method: "POST", headers,
       body: JSON.stringify({ workspace: JSON.stringify(serializeWorkspace(workspace, STUDIO_DOCUMENTS)) }) })).status).toBe(204);
-    expect(await (await fetch(firstOrigin + "/api/desktop/workspace", { headers: { Cookie: firstCookie } })).json())
+    expect(await (await fetch(firstOrigin + "/api/workspace", { headers: { Cookie: firstCookie } })).json())
       .toMatchObject({ workspace: null });
     expect((await fetch(endpoint, { method: "POST", headers,
       body: JSON.stringify({ workspace: "invalid" }) })).status).toBe(422);
@@ -228,7 +228,7 @@ test("desktop workspace survives a changed loopback port without mixing verifica
   try {
     const secondOrigin = `http://127.0.0.1:${second.port}`;
     const cookie = (await fetch(second.url)).headers.get("set-cookie")!.split(";")[0];
-    const response = await fetch(secondOrigin + "/api/desktop/workspace?verify=1", { headers: { Cookie: cookie } });
+    const response = await fetch(secondOrigin + "/api/workspace?verify=1", { headers: { Cookie: cookie } });
     expect(response.status).toBe(200);
     const value = await response.json();
     const restored = loadWorkspace({ getItem: key => key === "xfas.workspace.verification.v1" ? value.workspace : null }, true, STUDIO_DOCUMENTS).state;
@@ -248,7 +248,7 @@ test("an unreadable desktop workspace is preserved and cannot be silently replac
   try {
     const origin = `http://127.0.0.1:${desktop.port}`;
     const cookie = (await fetch(desktop.url)).headers.get("set-cookie")!.split(";")[0];
-    const endpoint = origin + "/api/desktop/workspace?verify=1";
+    const endpoint = origin + "/api/workspace?verify=1";
     expect((await fetch(endpoint, { headers: { Cookie: cookie } })).status).toBe(409);
     expect((await fetch(endpoint, { method: "POST", headers: { Cookie: cookie, Origin: origin,
       "Content-Type": "application/json" }, body: JSON.stringify({ workspace: JSON.stringify(serializeWorkspace(freshWorkspace(), STUDIO_DOCUMENTS)) }) })).status)

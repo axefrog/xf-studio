@@ -3,28 +3,31 @@ import { fitWorkspace, WORKSPACE_STORAGE_BUDGET, type WorkspacePlan } from "./wo
 import type { WorkspaceState } from "./workspace-state";
 
 /**
- * Browser autosave state for the presentation.
+ * Autosave state for the presentation.
  * - `saved`: the latest draft is stored.
  * - `nearly-full`: stored, but only by dropping older Undo steps or recovery copies.
- * - `full`: browser storage refused the draft; recent changes are not autosaved.
  * - `repaired`: stored, after damaged recovery entries were dropped at restore.
  * - `protected`: the stored workspace could not be read, so it is never overwritten.
- * - `unavailable`: browser storage cannot be used at all.
+ * - `unavailable`: the draft couldn't be stored (the host refused or couldn't be reached); the next change tries again.
  */
 export type WorkspaceSaveStatus = {
-  kind: "idle" | "saved" | "nearly-full" | "full" | "repaired" | "protected" | "unavailable";
+  kind: "idle" | "saved" | "nearly-full" | "repaired" | "protected" | "unavailable";
   message: string;
 };
-export type WorkspacePersistencePort = { setItem(key: string, value: string): void };
+/**
+ * Where the draft goes: the host's workspace file (browser-workspace-device.ts `openHostWorkspace`), whose write may finish
+ * later and rejects when it fails, or any synchronous store (tests).
+ */
+export type WorkspacePersistencePort = { setItem(key: string, value: string): unknown };
 
 export const SAVE_MESSAGES = {
   saved: "Workspace saved",
   nearlyFull: "Draft autosaved, but workspace storage is nearly full, so older Undo steps were not kept. Save to library to keep a revision.",
-  full: "Workspace storage is full, so recent changes are not being autosaved. Save to library or export your collection to keep them.",
   unavailable: "Autosave is unavailable. Save to library or export a recipe to keep your work.",
+  failed: "Your latest changes couldn't be autosaved; XF Studio tries again with your next change. Save to library or export your collection to keep them.",
 } as const;
 
-/** One explicit debounce/flush policy for the isolated workspace key. */
+/** One explicit debounce/flush policy for the isolated workspace key, writing the least-trimmed form that fits the budget. */
 export class WorkspacePersistence {
   private active = false;
   private timer?: ReturnType<typeof setTimeout>;
@@ -35,6 +38,8 @@ export class WorkspacePersistence {
   private lastSize = 0;
   /** The plan the last write fitted: the next budget search starts there (CORE-41). */
   private lastPlan?: WorkspacePlan;
+  /** Counts writes, so only the newest one's outcome is published. */
+  private sequence = 0;
   constructor(private options: { storage: WorkspacePersistencePort; key: string; writable: boolean;
     restoreError?: string; restoreWarning?: string; capture(): WorkspaceState; delayMs?: number; budget?: number;
     /** The document model the stored form is written with (injected by the composition root). */
@@ -61,30 +66,25 @@ export class WorkspacePersistence {
     let state: WorkspaceState;
     try { state = this.options.capture(); }
     catch { this.publish({ kind: "unavailable", message: SAVE_MESSAGES.unavailable }); return; }
-    // Write the least-trimmed form that fits the budget (`fitWorkspace`). If the browser still refuses
-    // it (other keys share the quota), fit a smaller budget before reporting that autosave stopped.
-    let quota = false, budget = this.options.budget ?? WORKSPACE_STORAGE_BUDGET;
-    for (let attempt = 0; attempt < 12; attempt++) {
-      const fitted = fitWorkspace(state, this.options.model, budget, this.lastPlan);
-      // Unchanged content is not rewritten, so status or view refreshes cannot cause writes.
-      if (fitted.encoded === this.written) return;
-      try {
-        this.options.storage.setItem(this.options.key, fitted.encoded);
-      } catch (error) {
-        if (!isQuotaError(error)) { this.publish({ kind: "unavailable", message: SAVE_MESSAGES.unavailable }); return; }
-        quota = true;
-        if (fitted.minimal) break;
-        budget = Math.min(budget, Math.floor(fitted.size * 0.75));
-        continue;
-      }
-      this.written = fitted.encoded; this.lastSize = fitted.size; this.lastPlan = fitted.plan;
-      this.publish(fitted.trimmed || fitted.overBudget
-        ? { kind: "nearly-full", message: SAVE_MESSAGES.nearlyFull }
-        : this.options.restoreWarning ? { kind: "repaired", message: `Draft autosaved. ${this.options.restoreWarning}` }
-        : { kind: "saved", message: SAVE_MESSAGES.saved });
-      return;
-    }
-    if (quota) this.publish({ kind: "full", message: SAVE_MESSAGES.full });
+    const fitted = fitWorkspace(state, this.options.model, this.options.budget ?? WORKSPACE_STORAGE_BUDGET, this.lastPlan);
+    // Unchanged content is not rewritten, so status or view refreshes cannot cause writes.
+    if (fitted.encoded === this.written) return;
+    const done: WorkspaceSaveStatus = fitted.trimmed || fitted.overBudget
+      ? { kind: "nearly-full", message: SAVE_MESSAGES.nearlyFull }
+      : this.options.restoreWarning ? { kind: "repaired", message: `Draft autosaved. ${this.options.restoreWarning}` }
+      : { kind: "saved", message: SAVE_MESSAGES.saved };
+    let result: unknown;
+    try { result = this.options.storage.setItem(this.options.key, fitted.encoded); }
+    catch { this.publish({ kind: "unavailable", message: SAVE_MESSAGES.unavailable }); return; }
+    this.written = fitted.encoded; this.lastSize = fitted.size; this.lastPlan = fitted.plan;
+    if (!(result instanceof Promise)) { this.publish(done); return; }
+    // A host write: its outcome arrives later, and only the newest write's counts. A failed one is written again next time.
+    const sequence = ++this.sequence;
+    result.then(() => { if (sequence === this.sequence) this.publish(done); }, () => {
+      if (sequence !== this.sequence) return;
+      if (this.written === fitted.encoded) this.written = undefined;
+      this.publish({ kind: "unavailable", message: SAVE_MESSAGES.failed });
+    });
   }
   /** Publish only real changes, so a listener that reacts to status cannot loop. */
   private publish(status: WorkspaceSaveStatus) {
@@ -92,9 +92,4 @@ export class WorkspacePersistence {
     this.status = status;
     for (const listener of this.listeners) listener(this.snapshot());
   }
-}
-
-function isQuotaError(error: unknown) {
-  const e = error as { name?: string; code?: number } | undefined;
-  return e?.name === "QuotaExceededError" || e?.name === "NS_ERROR_DOM_QUOTA_REACHED" || e?.code === 22 || e?.code === 1014;
 }

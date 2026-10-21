@@ -3,7 +3,7 @@
   window.__trialOriginalFetch = window.fetch.bind(window);
   window.fetch = (input, options) => {
     const url = typeof input === "string" ? input : input.url;
-    if (url === "/api/desktop/workspace?verify=1" && options?.method === "POST")
+    if (url === "/api/workspace?verify=1" && options?.method === "POST")
       return Promise.resolve(new Response("trial write failure", { status: 503 }));
     return window.__trialOriginalFetch(input, options);
   };
