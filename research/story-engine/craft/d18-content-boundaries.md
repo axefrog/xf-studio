@@ -607,6 +607,10 @@ Fields met in this dossier that are not on the [map](map.md), with a source and 
 | *Consent in Gaming* (publisher page) | Lens: includes a lines and veils worksheet | The page does not describe the contents |
 | The Mary Sue, 5 July 2018 | Lens: a disabled writer objected to the director's framing | The byline is ambiguous (two names appear); the page attributes the E3 remark to a studio director. I name neither |
 | TheGamer interview | Lens: the quest director is Mateusz Tomaszkiewicz | Confirmed; the interviewer is not shown on the page |
+| Hartmann, Toz and Brandon (2010) | This dossier: "Marina Brandon" | The authors' institution lists only the initials E. Toz and M. Brandon |
+| The Register, on AI Dungeon | This dossier: titled "AI Dungeon" | The real headline is about half of an AI text generator's sessions being sexual, some involving minors; its use as evidence for the minors floor stands |
+| TIME, review of the game | This dossier: "Review of Cyberpunk 2077" | The real headline is "'Cyberpunk 2077' Is a Mess On Every Level" |
+| Williams, Martins, Consalvo and Ivory | This dossier's link | A university course copy; the credit links the DOI |
 
 ## Credit candidates
 
