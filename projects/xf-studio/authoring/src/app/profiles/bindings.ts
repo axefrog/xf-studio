@@ -20,16 +20,12 @@
  */
 import { refusal, type Capability } from "../../platform/api/capability";
 import type { ViewId } from "../../platform/api/view-graph";
-import { type SubjectKind, type SubjectRef, sameSubject } from "../../platform/api/subjects";
+import { type PanelContext, type SubjectRef, sameSubject } from "../../platform/api/subjects";
 import { CHARACTER_KIND } from "../../platform/api/characters";
 import type { LookRef } from "../../library/collection-documents";
 import type { PanelBinding, TabId } from "./profile-session";
 
-/** What a panel type shows and edits, and what it can resolve from (§3.1). */
-export type PanelContext =
-  | { readonly kind: "profile" }
-  | { readonly kind: "view" | "scene" | "look"; readonly scenes?: readonly string[] }
-  | { readonly kind: "subject"; readonly subjects: readonly SubjectKind[]; readonly scenes?: readonly string[] };
+export type { PanelContext } from "../../platform/api/subjects";
 /** A partial context: the chain a resolution reached. */
 export type Target = { readonly view?: ViewId; readonly scene?: string; readonly sceneGen?: number; readonly subject?: SubjectRef;
   readonly look?: LookRef };

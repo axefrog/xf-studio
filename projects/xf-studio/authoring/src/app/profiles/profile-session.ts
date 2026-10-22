@@ -1,6 +1,12 @@
 /**
- * Profile sessions as workspace data (profiles design §1.1, §4.1): what a workspace holds per profile, and the profiles migration's mark
- * (§8 step 1). Plain typed data and its validation; no tab UI yet (phase 2) and no owner yet (`ProfileSessions`, phase 2).
+ * Profile sessions as workspace data (profiles design §1.1, §4.1, §5): what a workspace holds per profile, and the profiles migration's
+ * mark (§8 step 1). Plain typed data and its validation; the window's `ProfileSessionState` holds one session and stores it back, and
+ * `ProfileSessions` (its operations and the tab UI) comes with phase 2.
+ *
+ * - **Reading validates everything a later phase relies on:** tab IDs are unique; panel instance IDs have the instance grammar and are
+ *   unique across the session (a duplicate is dropped: IDs are never reused); a binding is `follow-focus` or pinned to exactly one view,
+ *   scene, subject or look (an unreadable one is dropped, so the instance follows its type's default); scenes' subject and look references
+ *   are well formed and `gen` is a non-negative integer; focus is the focus service's (positive, unique view numbers no higher than `seq`).
  *
  * - **A session** (`xfs/profile-session-1`) holds the profile's layout tabs, its view graph (each view in one tab; each character scene
  *   naming the subject and the look it shows), focus, the closed-tab fragments (the last 5) and a sequence number.
@@ -14,6 +20,7 @@ import type { DockLayout } from "../ui-preferences";
 import type { SubjectRef } from "../../platform/api/subjects";
 import type { LookRef } from "../../library/collection-documents";
 import type { KeptView, StoredNode, ViewGraphData, ViewRecord } from "../../platform/api/view-graph";
+import { focusDataOf } from "../../platform/core/focus";
 
 export const PROFILE_SESSION_SCHEMA = "xfs/profile-session-1";
 export const WORKSPACE_PROFILES_SCHEMA = "xfs/workspace-profiles-1";
@@ -67,24 +74,70 @@ export function migrationMarkOf(value: unknown): MigrationMark | undefined {
   return value.state === "done" || value.state === "started" ? { id: PROFILES_MIGRATION, token: value.token, state: value.state } : undefined;
 }
 
-const tabOf = (value: unknown): LayoutTab | null => {
-  if (!object(value) || typeof value.id !== "string" || typeof value.name !== "string" || !Array.isArray(value.panels)) return null;
+const text = (value: unknown): value is string => typeof value === "string" && value.length > 0;
+/** A subject reference as stored (undefined: not one). */
+const subjectOf = (value: unknown): SubjectRef | undefined => object(value) && text(value.kind) && text(value.id) ? { kind: value.kind, id: value.id } : undefined;
+/** A look reference as stored (undefined: not one). */
+const lookOf = (value: unknown): LookRef | undefined => object(value) && text(value.collection) && text(value.look) ? { collection: value.collection, look: value.look } : undefined;
+
+/**
+ * A panel binding as stored (§3.2), validated: `follow-focus`, or `pinned` to exactly one view, scene, subject or look. Undefined: none, or
+ * one this build can't read; the instance then follows its type's default.
+ */
+export function panelBindingOf(value: unknown): PanelBinding | undefined {
+  if (!object(value)) return undefined;
+  if (value.policy === "follow-focus") return { policy: "follow-focus" };
+  if (value.policy !== "pinned" || !object(value.target)) return undefined;
+  const target = value.target, keys = ["view", "scene", "subject", "look"].filter(key => key in target);
+  if (keys.length !== 1) return undefined;
+  if (keys[0] === "view") return text(target.view) ? { policy: "pinned", target: { view: target.view } } : undefined;
+  if (keys[0] === "scene") return text(target.scene) ? { policy: "pinned", target: { scene: target.scene } } : undefined;
+  if (keys[0] === "subject") { const subject = subjectOf(target.subject); return subject ? { policy: "pinned", target: { subject } } : undefined; }
+  const look = lookOf(target.look);
+  return look ? { policy: "pinned", target: { look } } : undefined;
+}
+/**
+ * A stored panel instance (§1.1), validated: its ID (`<type>--<base36>`) and type, its binding read by `panelBindingOf` (left out when
+ * unreadable); unknown fields are kept. Null: not an instance.
+ */
+function panelInstanceOf(value: unknown): PanelInstance | null {
+  if (!object(value) || !text(value.id) || !PANEL_INSTANCE_ID.test(value.id) || !text(value.type)) return null;
+  const { binding: stored, ...rest } = value, binding = panelBindingOf(stored);
+  return { ...rest, ...(binding ? { binding } : {}) } as unknown as PanelInstance;
+}
+/** A stored tab, validated; its instances are read one by one, and an instance ID another tab of the session took is dropped (IDs are never reused). */
+const tabOf = (value: unknown, taken: Set<string>): LayoutTab | null => {
+  if (!object(value) || !text(value.id) || typeof value.name !== "string" || !Array.isArray(value.panels)) return null;
   if (value.dock !== null && !object(value.dock)) return null;
-  const panels = value.panels.filter((panel): panel is PanelInstance => object(panel) && typeof panel.id === "string" && typeof panel.type === "string");
+  const panels = value.panels.flatMap(item => {
+    const panel = panelInstanceOf(item);
+    if (!panel || taken.has(panel.id)) return [];
+    taken.add(panel.id);
+    return [panel];
+  });
   return { ...value, panels } as unknown as LayoutTab;
+};
+/** A stored scene's subject, look and `gen`, validated (an unreadable reference is left out; `gen` is a non-negative safe integer). */
+const sceneOf = (value: unknown): unknown => {
+  if (!object(value)) return value;
+  const { subject: storedSubject, look: storedLook, gen, ...rest } = value, subject = subjectOf(storedSubject), look = lookOf(storedLook);
+  return { ...rest, ...(subject ? { subject } : {}), ...(look ? { look } : {}), gen: Number.isSafeInteger(gen) && (gen as number) >= 0 ? gen : 0 };
 };
 /** A stored session, validated (null when it isn't one); unknown fields are kept. */
 export function profileSessionOf(value: unknown): ProfileSessionData | null {
   if (!object(value) || value.schema !== PROFILE_SESSION_SCHEMA || !Array.isArray(value.tabs) || !object(value.views) || !object(value.focus)) return null;
   const views = value.views as Record<string, unknown>;
   if (!Array.isArray(views.views) || !Array.isArray(views.scenes)) return null;
-  const tabs = value.tabs.map(tabOf);
+  const taken = new Set<string>(), tabs = value.tabs.map(tab => tabOf(tab, taken));
   if (tabs.some(tab => !tab)) return null;
   const ids = new Set(tabs.map(tab => tab!.id));
+  if (ids.size !== tabs.length) return null;
   // Every view is in one of the session's tabs (structural references are always valid, §1.4).
   if ((views.views as unknown[]).some(view => !object(view) || typeof view.tab !== "string" || !ids.has(view.tab))) return null;
-  return { ...value, tabs, closed: Array.isArray(value.closed) ? value.closed.slice(-CLOSED_TAB_LIMIT) : [],
-    seq: Number.isSafeInteger(value.seq) ? value.seq : 0 } as unknown as ProfileSessionData;
+  // Focus as the focus service reads it (platform/core/focus.ts): the sequence is never below a view's number.
+  const { seq, ...focus } = focusDataOf(value.focus, value.seq), { views: _views, panel: _panel, editing: _editing, ...unknown } = value.focus;
+  return { ...value, tabs, views: { ...views, scenes: (views.scenes as unknown[]).map(sceneOf) }, focus: { ...unknown, ...focus },
+    closed: Array.isArray(value.closed) ? value.closed.slice(-CLOSED_TAB_LIMIT) : [], seq } as unknown as ProfileSessionData;
 }
 /** The workspace's `profiles`, validated: sessions that don't read are left out (a session is rebuilt from the library's result). */
 export function workspaceProfilesOf(value: unknown): WorkspaceProfiles | undefined {

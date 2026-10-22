@@ -83,7 +83,7 @@ export function sceneCommands(state: ProfileSessionState, services: Pick<Profile
  * binding and palette command acts on, and the captures gestures and menus hold. `contexts`: each panel type's context (§3.1, §5).
  */
 export function createTargetResolver(deps: { state: ProfileSessionState; graph: ViewGraph; history: Pick<HistoryService, "acting">;
-  services: Pick<ProfileServices, "characters" | "collections" | "looks">; contexts?: (type: string) => PanelContext; collection?: () => string | undefined }): TargetResolver {
+  services: Pick<ProfileServices, "characters" | "collections" | "looks">; contexts: (type: string) => PanelContext; collection?: () => string | undefined }): TargetResolver {
   const { state, graph, services } = deps;
   return new TargetResolver({
     session: {
@@ -101,7 +101,8 @@ export function createTargetResolver(deps: { state: ProfileSessionState; graph: 
       subject: ref => ref.kind === CHARACTER_KIND ? !!services.characters.document(ref.id) : false,
       look: ref => services.collections.look(ref)?.state === "live",
     },
-    context: type => deps.contexts?.(type) ?? { kind: "view" },
+    // A 3D view's own panel instance (type `view`, pinned to its view) shows that view; every other type declares its context.
+    context: type => type === "view" ? { kind: "view" } : deps.contexts(type),
     revisions: target => ({
       ...(target.subject?.kind === CHARACTER_KIND ? { [`${CHARACTER_DOCUMENT}/${target.subject.id}`]: services.characters.character(target.subject.id)?.revision ?? 0 } : {}),
       ...(target.look ? { [documentKey(lookDocument(target.look))]: services.looks.generation(target.look) } : {}),

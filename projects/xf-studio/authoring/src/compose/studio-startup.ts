@@ -53,6 +53,7 @@ import { createTrustedStudioBootstrap } from "../app/trusted-studio-bootstrap";
 // The composition root: the one browser module that imports the composition list (CORE-29).
 import { STUDIO_COMPOSITION } from "./studio-registry";
 import { STUDIO_VIEW_COMPOSITION } from "./view-panels";
+import { STUDIO_CATALOGUE } from "./views";
 import { STUDIO_FACE_POSES, STUDIO_LAYERED_SURFACES, STUDIO_RENDERERS } from "./renderers";
 import { combineFacePoses, FacialPreview } from "../animation/facial-preview";
 import { headQuiet, prefetchWhenQuiet } from "../animation/facial-prefetch";
@@ -279,7 +280,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     subscribe: (listener: () => void) => sessionState.subscribe(listener) };
   // The scenes' `gen` (what a view action that edits a scene names) and the input layer's resolution over the session.
   core.app.attach({ scenes: sceneCommands(sessionState, services) });
-  const targets = createTargetResolver({ state: sessionState, graph: views, history: historyService, services,
+  const targets = createTargetResolver({ state: sessionState, graph: views, history: historyService, services, contexts: type => STUDIO_CATALOGUE.context(type),
     collection: () => bootstrap?.collection.service.draftIdentity()?.collectionId });
   const headHost = byId("device-head"), uvHost = byId("device-uv");
   const viewportDevice = createBrowserViewportDevice({ region, headHost, uvHost, queryContext: hit => core.app.contextQuery(hit, targets.named()), renderers: STUDIO_RENDERERS, optionalRenderers: experiments, referenceTextures: browserReferenceTextures(verification),

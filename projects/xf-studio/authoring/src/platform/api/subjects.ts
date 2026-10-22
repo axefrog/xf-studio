@@ -34,3 +34,12 @@ export interface SubjectRegistryPort {
   /** Whether `ref` names a registered kind with an ID that kind makes. */
   valid(ref: SubjectRef): boolean;
 }
+
+/**
+ * What a panel type shows and edits, and what it can resolve its target from (profiles design §3.1, §5): `profile` (no binding: it works
+ * on the profile), a `view`, a `scene`, a `subject` of the given kinds, or a `look`; `scenes` narrows the scene kinds it can follow.
+ */
+export type PanelContext =
+  | { readonly kind: "profile" }
+  | { readonly kind: "view" | "scene" | "look"; readonly scenes?: readonly string[] }
+  | { readonly kind: "subject"; readonly subjects: readonly SubjectKind[]; readonly scenes?: readonly string[] };
