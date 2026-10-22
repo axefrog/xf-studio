@@ -298,6 +298,14 @@ function scopeContains(env: PredicateEnv, scope: NonNullable<Selector['scope']>,
 }
 
 /**
+ * The slot a slot key is a window of: `weather` for `weather@w0`, a plain path as it is. A selector names a
+ * slot path, and a change to one window of a simulated temporal slot is a change to that slot (SPEC-NOTES 57).
+ */
+function baseSlotOf(slotKey: string): string {
+  return slotKey.replace(/@w-?\d+$/, '');
+}
+
+/**
  * Whether a selector matches a node, and (for a slot) the slot path. `slotPath` is null when the
  * selector is tested against a node only (for example a `has-edge` target). Checks, in order: kind,
  * slot, scope, `where`.
@@ -310,7 +318,7 @@ export function selectorMatches(env: PredicateEnv, sel: Selector, node: Id, slot
   if (slotPath !== null && sel.slot !== '*') {
     if (sel.slot.endsWith('[*]')) {
       if (!slotPath.startsWith(sel.slot.slice(0, -3) + '[')) return false;
-    } else if (sel.slot !== slotPath) return false;
+    } else if (sel.slot !== slotPath && sel.slot !== baseSlotOf(slotPath)) return false;
   }
   if (sel.scope && !scopeContains(env, sel.scope, node)) return false;
   return evalAll(env, sel.where, node);

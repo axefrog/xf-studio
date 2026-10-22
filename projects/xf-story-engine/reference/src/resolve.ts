@@ -268,10 +268,25 @@ export class Resolver {
    */
   makeEnv(ctx: OpCtx, t: GameTime, restrict?: { node: Id; order: number }, binding?: Binding, own?: OwnValue): PredicateEnv {
     const store = this.k.store;
+    /**
+     * Whether a read of (n, p) at `t` is a read of the slot the change carried a value for. A read names the
+     * slot by its path; a pin on window `k` of a simulated temporal slot carries `path@w<k>`, and a read of
+     * `path` at `t` is a read of window `floor(t / window)`, so it is the changed slot when that is `k`
+     * (SPEC-NOTES 57). A read that names the window itself matches the key exactly.
+     */
+    const readsOwn = (n: Id, p: SlotPath): boolean => {
+      if (!own || n !== own.node) return false;
+      if (p === own.slot) return true;
+      const changed = splitWindow(own.slot);
+      if (changed.window === undefined || p !== changed.path) return false;
+      const h = store.header(n);
+      const window = h ? this.schema.slotInfo(h.kind, changed.path)?.def.temporal?.window : undefined;
+      return window !== undefined && Math.floor(t / window) === changed.window;
+    };
     const env: PredicateEnv = {
       schema: this.schema,
       t,
-      read: (n, p) => (own && n === own.node && p === own.slot ? { value: own.value, status: 'ok' } : this.resolveWithin(ctx, n, p, t)),
+      read: (n, p) => (own && readsOwn(n, p) ? { value: own.value, status: 'ok' } : this.resolveWithin(ctx, n, p, t)),
       kindOf: (n) => store.header(n)?.kind,
       ownerOf: (n) => this.ownerOf(n),
       child: (n, seg) => this.childOf(ctx, n, seg, t),
