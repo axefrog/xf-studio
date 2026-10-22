@@ -103,7 +103,7 @@ By Nguyen Anh Quynh and contributors. [Website](https://www.capstone-engine.org)
 
 ### ChoiceScript random test and Rachel E. Towers
 
-Rachel E. Towers, ["How to Get the Most out of Automated Testing, Part 2"](https://choiceofgames.com/2018/01/how-to-get-the-most-out-of-automated-testing-part-2) (Choice of Games blog, 2018). It explains how ChoiceScript's random test plays many seeded runs and reports coverage, and what it cannot do: it cannot judge a loop and it cannot prove that a line is unreachable. It taught us what a large automated survey of a story can and cannot tell an author.
+Rachel E. Towers, ["How to Get the Most out of Automated Testing, Part 2"](https://choiceofgames.com/2018/01/how-to-get-the-most-out-of-automated-testing-part-2) (Choice of Games blog, 2018). It explains how ChoiceScript's random test plays many seeded runs and reports coverage, and what it cannot do: it cannot judge a loop and it cannot prove that a line is unreachable. It taught us what a large automated survey of a story can and cannot tell an author. The companion page, [Testing ChoiceScript games automatically](https://www.choiceofgames.com/make-your-own-games/testing-choicescript-games-automatically), shows how a line's hit count divided by the number of runs gives its rough chance of being reached, and how an exhaustive tool lists the lines it could not reach. That guided how we plan to read coverage figures when balancing.
 
 ### CSS Easing Functions
 
@@ -310,6 +310,10 @@ Daria Batrova, Mikhail Alekseyev and Danil Belousov of Allcorrect, [How to Local
 ### Minecraft Wiki: Pack format
 
 By the Minecraft Wiki's community contributors. [Pack format](https://minecraft.wiki/w/Pack_format). It shows how packs declare the range of game versions they support and use minor numbers for non-breaking changes. It informed how we think about declaring what a content pack was checked against.
+
+### Know Your Meme: Another Settlement Needs Our Help
+
+By the Know Your Meme community contributors. [Another Settlement Needs Our Help](https://knowyourmeme.com/memes/another-settlement-needs-our-help). It records how players mocked the endlessly repeating generated settlement quests in Fallout 4, in a forum thread within a week of the game's release. It showed us how quickly players notice and name a repetitive generated pattern.
 
 ## Mods and creators whose work we studied
 
@@ -2423,6 +2427,98 @@ Hakan Inan, Kartikeya Upasani, Jianfeng Chi, Rashi Rungta, Krithika Iyer, Yuning
 ### Hua and Raley (2020)
 
 Minh Hua and Rita Raley, [“Playing With Unicorns: AI Dungeon and Citizen NLP”](https://dhq.digitalhumanities.org/vol/14/4/000533/000533.html) (*Digital Humanities Quarterly* 14(4), 2020). Players of AI Dungeon used its revert, alter and remember commands to hold a story together by hand. It informed how we think about the repairs a player makes to model-written continuity.
+
+### Chhun, Colombo, Clavel and Suchanek (2022)
+
+Cyril Chhun, Pierre Colombo, Chloé Clavel and Fabian M. Suchanek, [“Of Human Criteria and Automatic Metrics: A Benchmark of the Evaluation of Story Generation”](https://arxiv.org/abs/2208.11646) (COLING 2022). They rate generated stories on six human criteria and test 72 automatic metrics against those ratings. Many metrics agreed only weakly with people. It informed our plan to judge story quality with human ratings, not automatic scores alone.
+
+### Grimm and colleagues (2020)
+
+Volker Grimm and eighteen co-authors, [“The ODD Protocol for Describing Agent-Based and Other Simulation Models: A Second Update to Improve Clarity, Replication, and Structural Realism”](https://www.jasss.org/23/2/7.html) (*Journal of Artificial Societies and Social Simulation* 23(2), 7, 2020). It sets out a standard way to describe a simulation, including the patterns used to judge it, so that a reader could rebuild it. It informed how we plan to document our simulation for validation.
+
+### Grimm and colleagues (2005)
+
+Volker Grimm, Eloy Revilla, Uta Berger, Florian Jeltsch, Wolf M. Mooij, Steven F. Railsback, Hans-Hermann Thulke, Jacob Weiner, Thorsten Wiegand and Donald L. DeAngelis, [“Pattern-oriented modeling of agent-based complex systems: lessons from ecology”](https://pubs.usgs.gov/publication/70161783) (*Science* 310(5750):987-991, 2005). They found that bottom-up models lacked a general framework for design, testing and analysis, and proposed pattern-oriented modelling. We read the abstract only. It informed how we think about testing a simulation against observed patterns.
+
+### Axtell, Axelrod, Epstein and Cohen (1996)
+
+Axtell, Axelrod, Epstein and Cohen (first names not shown on the pages we read), [“Aligning simulation models: a case study and results”](https://doi.org/10.1007/BF01299065) (*Computational and Mathematical Organization Theory* 1(2):123-141, 1996). They introduce "docking": checking whether two simulation models can produce the same results, here by making a richer model reproduce a simpler one. It informed how we plan to check a faster implementation against a reference one.
+
+### Windrum, Fagiolo and Moneta (2007)
+
+Paul Windrum, Giorgio Fagiolo and Alessio Moneta, [“Empirical Validation of Agent-Based Models: Alternatives and Prospects”](https://www.jasss.org/10/2/8.html) (*Journal of Artificial Societies and Social Simulation* 10(2), 8, 2007). They set out the problems of validating agent-based models against real data and compare three approaches. It informed our caution that the choice of validation method matters.
+
+### Sargent (2013)
+
+Robert G. Sargent, [“Verification and validation of simulation models”](https://doi.org/10.1057/jos.2012.20) (*Journal of Simulation* 7(1):12-24, 2013). It separates conceptual model validity, model verification, operational validity and data validity, and recommends a way to document the results. We read the abstract only. It informed how we divide checks on the simulation into separate kinds.
+
+### Claessen and Hughes (2000)
+
+Koen Lindström Claessen and John Hughes, [“QuickCheck: a lightweight tool for random testing of Haskell programs”](https://research.chalmers.se/publication/237427) (ICFP 2000). Properties are written as functions and tested against random input, with custom generators for the data. It informed how we plan to test the rules a simulation must always keep.
+
+### MacIver and Donaldson (2020)
+
+David R. MacIver and Alastair F. Donaldson, [“Test-Case Reduction via Test-Case Generation: Insights from the Hypothesis Reducer”](https://drops.dagstuhl.de/entities/document/10.4230/LIPIcs.ECOOP.2020.13) (ECOOP 2020). They shrink a failing test by reducing the random choices made when it was generated, so every smaller case remains valid. It informed how we plan to shrink a failing simulated run.
+
+### Segura, Fraser, Sánchez and Ruiz-Cortés (2016)
+
+Sergio Segura, Gordon Fraser, Ana B. Sánchez and Antonio Ruiz-Cortés, [“A Survey on Metamorphic Testing”](https://doi.org/10.1109/TSE.2016.2532875) (*IEEE Transactions on Software Engineering* 42(9):805-824, 2016). Where no single correct output is known, you can still check how the output should change when the input is transformed. We read the abstract only. It informed how we plan to test behaviour that has no fixed right answer.
+
+### Hamstra and colleagues (2014)
+
+Stanley J. Hamstra, Ryan Brydges, Rose Hatala, Benjamin Zendejas and David A. Cook, [“Reconsidering fidelity in simulation-based training”](https://mayoclinic.elsevierpure.com/en/publications/reconsidering-fidelity-in-simulation-based-training) (*Academic Medicine* 89(3):387-392, 2014). They argue that how closely a simulator looks like the real thing is a poor guide to how well it teaches, and that matching the real task matters more. We read the abstract only. It informed what we ask a test session to reproduce.
+
+### Rudolph, Raemer and Simon (2014)
+
+Jenny W. Rudolph, Daniel Raemer and Robert Simon, [“Establishing a safe container for learning in simulation: the role of the presimulation briefing”](https://psnet.ahrq.gov/issue/establishing-safe-container-learning-simulation-role-presimulation-briefing) (*Simulation in Healthcare* 9(6):339-349, 2014). A good briefing sets expectations, agrees a "fiction contract" with participants and covers the practical details. We read a summary and the abstract only. It informed how we plan to brief people before a test session.
+
+### Kramer, Guillory and Hancock (2014)
+
+Adam D. I. Kramer, Jamie E. Guillory and Jeffrey T. Hancock, [“Experimental evidence of massive-scale emotional contagion through social networks”](https://pmc.ncbi.nlm.nih.gov/articles/PMC4066473/) (*PNAS* 111(24):8788-8790, 2014), and the journal's [editorial expression of concern](https://pmc.ncbi.nlm.nih.gov/articles/PMC4115552/) signed by its editor-in-chief, Inder M. Verma. An experiment that changed what 689,003 people saw drew a published concern about informed consent and the chance to opt out. It informed how we plan to treat any test where people see altered content.
+
+### Dittrich and Kenneally (2012)
+
+David Dittrich and Erin Kenneally, [“The Menlo Report: Ethical Principles Guiding Information and Communication Technology Research”](https://www.caida.org/publications/papers/2012/menlo_report/menlo_report.pdf) (US Department of Homeland Security, 2012). It adapts the Belmont principles to research on information and communication technology and adds respect for law and the public interest. It informed how we plan to handle consent and the balance of risk and benefit in testing.
+
+### The Belmont Report (1979)
+
+National Commission for the Protection of Human Subjects of Biomedical and Behavioral Research, [“The Belmont Report: Ethical Principles and Guidelines for the Protection of Human Subjects of Research”](https://www.hhs.gov/ohrp/sites/default/files/the-belmont-report-508c_FINAL.pdf) (1979). It names three principles, respect for persons, beneficence and justice. It informed the basis of our consent and risk planning for tests with people.
+
+### Seif El-Nasr and Kleinman (2020)
+
+Magy Seif El-Nasr and Erica Kleinman, [“Data-Driven Game Development: Ethical Considerations”](https://arxiv.org/abs/2006.10808) (Foundations of Digital Games, 2020). Biased or incomplete data, and opaque models, put trust in data-driven game design at risk. We read the abstract only. It informed how we plan to handle player data from testing.
+
+### Hingston (2009)
+
+Philip Hingston, [“A Turing test for computer game bots”](https://ro.ecu.edu.au/ecuworks/594) (*IEEE Transactions on Computational Intelligence and AI in Games* 1(3):169-186, 2009). Judges try to tell human players from game bots, in a contest called the BotPrize. It informed our plan for blind panels that judge whether content was authored or generated.
+
+### Vanden Abeele and colleagues (2020)
+
+Vero Vanden Abeele, Katta Spiel, Lennart Nacke, Daniel Johnson and Kathrin Gerling, [“Development and validation of the player experience inventory”](https://doi.org/10.1016/j.ijhcs.2019.102370) (*International Journal of Human-Computer Studies* 135:102370, 2020). A player-experience scale with two levels, functional and psychosocial, built with 64 experts and validated across five studies with 529 participants. It informed how we plan to choose questions for player ratings.
+
+### Lakens (2017)
+
+Daniël Lakens, [“Equivalence Tests: A Practical Primer for t Tests, Correlations, and Meta-Analyses”](https://pmc.ncbi.nlm.nih.gov/articles/PMC5502906) (*Social Psychological and Personality Science* 8(4), 2017). A result that is not statistically significant does not show that an effect is absent. Equivalence tests set bounds from the smallest effect that matters. It informed how we plan to report results that show no difference.
+
+### Hayes and Krippendorff (2007)
+
+Andrew F. Hayes and Klaus Krippendorff, [“Answering the call for a standard reliability measure for coding data”](https://doi.org/10.1080/19312450709336664) (*Communication Methods and Measures* 1(1):77-89, 2007). It recommends Krippendorff's alpha as a standard measure of agreement between people who code or rate the same material. We read the abstract only. It informed how we plan to measure agreement between panel raters.
+
+### Nisbett and Wilson (1977)
+
+Richard E. Nisbett and Timothy DeCamp Wilson, [“Telling more than we can know: verbal reports on mental processes”](https://deepblue.lib.umich.edu/items/c810051d-bb3a-48c7-86ae-da8ef48caa77) (*Psychological Review* 84(3):231-259, 1977). People often cannot report why they acted, and their explanations may come from general theories rather than direct access. It informed how we plan to weigh testers' explanations against what they did.
+
+### Davis and Hillestad (1993)
+
+Paul K. Davis and Richard Hillestad, [“Families of Models that Cross Levels of Resolution: Issues for Design, Calibration and Management”](https://doi.org/10.1109/WSC.1993.718351) (Winter Simulation Conference, 1993). They review work on variable-resolution modelling, in which models of different resolution are linked, and find the problem central, difficult and under-invested. We read the abstract only. It informed how we think about comparing simulations run at different levels of detail. It is credited for its own work; our level-of-detail model is separate.
+
+### Rahmandad and Sterman (2008)
+
+Hazhir Rahmandad and John Sterman, [“Heterogeneity and Network Structure in the Dynamics of Diffusion: Comparing Agent-Based and Differential Equation Models”](https://ideas.repec.org/a/inm/ormnsc/v54y2008i5p998-1014.html) (*Management Science* 54(5):998-1014, 2008). Detailed and aggregate models of the same spread gave different average results. In some conditions the gap was small next to random variation, parameter uncertainty and where the model draws its boundary. We read the abstract only. It informed how we think about judging differences between a detailed and a coarser model.
+
+### Brom, Šerý and Poch (2007)
+
+Cyril Brom, Ondřej Šerý and Tomáš Poch, [“Simulation Level of Detail for Virtual Humans”](https://artemis.ms.mff.cuni.cz/main/papers/IVE_IVA07.pdf) (*Intelligent Virtual Agents*, IVA 2007, LNAI 4722:1-14). It reduces the simulation quality of unwatched parts of a virtual world and describes a prototype for a large virtual-storytelling game. We read the abstract and listings only. It is credited for its own work; our level-of-detail model is separate.
 
 ## Reference imagery
 

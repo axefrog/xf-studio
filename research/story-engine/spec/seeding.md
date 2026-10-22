@@ -4,6 +4,7 @@
 - **The review.** v0.2 went through one review, by GPT-6 Astra; [§16](#16-review-record) records what changed.
 - **Dossiers folded in.**
   - v0.1 folded in [dossier 8](../craft/d08-scale-threads-time.md#9-requirements-for-the-seed-language-p4) (scale, threads and time).
+  - v0.16 folds in [dossier 23](../craft/d23-evaluation-testing.md) (evaluation and testing): fixtures for every lint group, and the property tests (§14.1).
   - v0.15 folds in [dossier 22](../craft/d22-language-models.md) (language models): a model call as a text-valued draw, a write-once render ledger, two invariants, the phrasing-author mode, checks and fallbacks (§2.23).
   - v0.14 folds in [dossier 21](../craft/d21-words-dialogue.md) (words): subtext, voice cards, V's options, told stories, humour, variety in frames, channel budgets, the author-fill contract (§2.22).
   - v0.13 folds in [dossier 20](../craft/d20-staging-legibility.md) (staging in the world): stage blocks, a ladder of rungs, focal cards, audiences, "why?" answers, kits (§2.21).
@@ -2477,7 +2478,28 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 | SF-53 | **Floors.** A role that could bind a minor in a target position; a pack person with no `ageClass`; a pack person not marked fictional | L-95, L-111 and L-109 errors. At casting, a minor is never bound to a barred role |
 | SF-54 | **Author-fill seam.** An authored-only explicit scene with its fade, in a pack; the same seed without the pack | With the pack and a permitting ceiling, the scene plays; otherwise the fade. Both leave the same facts, and the seed's later beats run identically |
 | SF-55 | **Retract.** V retracts during a tagged beat | The implied form plays or the beat ends; a neutral `retracted` entry; no reoffer; no model event; the class added to `softExclusions` |
+| SF-56 | **Rights lints** (L-114 to L-117). A pack with game text inline; a cloned voice without consent; a `generated` unit marked human-authored; a tagged pack naming a flagged real entity | L-114, L-115, L-116 errors; L-117 to review. Each has a passing twin |
+| SF-57 | **Stage lint** (L-118). A stage with one implied event and one sign kind; its corrected twin | The first fails; the twin passes |
+| SF-58 | **Words lints** (L-119 to L-130). One tripping seed and one passing seed per check | Each check fires on its trip and not on its twin |
+| SF-59 | **Model lints** (L-131 to L-137), with a stub renderer and a tape | Each check fires on its trip and not on its twin. Structural hashes equal with no model, a stub and a different stub (S2-I-15) |
 | SF-26 | **Constructed trace.** A trace with no found cause, `latitude` allowing `trace-cause`. S3's stub contributes a cause: an event at a stall. The trace is displayed; save; load | The `display` entry records `constructed`. The cause's fields are pinned `committed` at display, and resolve identically after the load |
+
+### 14.1 Property tests
+
+The fixtures are examples. With the layer-2 implementation, the reference model also checks these properties ([dossier 23](../craft/d23-evaluation-testing.md) §12, S23-S2-01 to S23-S2-16):
+- **Lint coverage:** a report of every lint with its positive and negative fixtures, so a lint that never fires is noticed.
+- **Crash-point sweeps:** save and load between every pair of adjacent steps of R1, and of one seed per profile.
+- **Generated seeds:** a seed-document generator and a library of awkward sample states. Compile and lint never crash, and text round-trips.
+- **Lint soundness:** the share of lint-clean seeds that end stuck, per release.
+- **Claim order:** S2-I-10 over random casting orders.
+- **No silent loss:** S2-I-5 under random faults.
+- **Settings and return:** settings-matrix invariance, and return invariance across real-world gaps (S2-I-12).
+- **Words:** S2-I-15 with stub renderers, and S2-I-16 over random sessions.
+- **Fitting:** fitting gives the same report with sowing on and off.
+- **The arbiter:** stream properties for caps, aspects, expiries and tempo off.
+- **Intersections:** order independence.
+- **Profiles:** one acceptance story per profile.
+- **Reports:** deterministic fit reports and surveys.
 
 ## 15. Compromises and open items
 
@@ -2510,6 +2532,7 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 19. **Dossier 20.** v0.13 adopts its 16 S2 requirements (§2.21). Its P8 requirements (a rung realiser, out-of-sight spawning, props, marks, workspots, tells, barks, joining a scene mid-phase, interference, scene display reports, scanner entries) go to P8 and the runtime requirements; its P10 requirements (the explain and inspect tools) to P10.
 20. **Dossier 21.** v0.14 adopts its 16 S2 requirements (§2.22). Its S7 requirements (assembling and choosing text) go to S7, and its lexicons, voice cards and phrase tables to S4. Measuring the game's own text per channel, to replace the provisional budgets, is a research-queue brief (its §12.4), under D-24.
 21. **Dossier 22.** v0.15 adopts its 13 S2 requirements (§2.23). Its S7 requirements (the model adapter) go to S7 and its P7 requirements (local inference, budgets in the companion) to P7. Open: whether a player may let their own local model fill authored-source classes. The first cut excludes it; D-23 concerns the project's own tools, so this is a later decision.
+22. **Dossier 23.** v0.16 adds its fixtures and property tests (§14, §14.1). Its evaluation plan (four tiers: offline, transcript panels, 14 merged in-game sessions, early testers, all through one consented session ledger, with control arms and a per-feature off switch) is P9's; its tools are P10's.
 
 ## 16. Review record
 

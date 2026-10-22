@@ -1,6 +1,7 @@
 # S0. Kernel specification
 
-**Status:** v4.4, 23 October 2026.
+**Status:** v4.5, 23 October 2026.
+- v4.5 adds the `coarseFine` declaration on processes and the property-test plan, from [dossier 23](../craft/d23-evaluation-testing.md) (V4-24 and V4-25 in §20).
 - v4.4 adds an age class on people, typed and sensitive content settings, and lines that refuse events, from [dossier 18](../craft/d18-content-boundaries.md) (V4-21 to V4-23 in §20).
 - v4.3 adds implicit edge types (specified; implementation deferred) and states the `aggregate` hook's contract, from [dossier 15](../craft/d15-people-networks-order.md) (V4-18 to V4-20 in §20).
 - v4.2 adds city settings and clarifies arithmetic and summaries for simulated events, from [dossier 14](../craft/d14-city-events.md) (V4-14 to V4-17 in §20).
@@ -721,6 +722,7 @@ Simulation processes are S1's. The kernel defines when they run and what they ma
 - **Partition independence (I-15).** Given the same timestamped external operations and the same demand history, a process's history doesn't depend on how ticks fell.
 - **Catch-up.** After an absence, tiers 0–2 run every missed boundary in order, each within the hard limits.
 - **Fine tiers (3–5)** run only where demand reaches them (§10.6). They never catch up: when V arrives, their state is generated from the coarse state, consistent with the pins.
+- **Coarse against fine** (v4.5). A process registration MAY declare `coarseFine`: `exact`, `count`, or `distribution` with a tolerance. This is the agreement it owes between its coarse state and fine state generated from it. The test harness picks the test from it; resolution ignores it.
 
 ## 10. Context frames and relevance
 
@@ -1098,6 +1100,25 @@ Downstream consumers (S1, S3) apply their own, higher thresholds for anything co
 | C-c | The vendor's work frame, weight 0.6, root, `wants: { kind: core:person, where: [@role = customer] }` | A customer arrives (an event with a `customer` participant) | 0.6 × 1.0 × 0.5 = 0.30 | ≥ θ_react, and below C-b(1) |
 | C-d | V: a frame `protects`, weight 1, root, `{ scope: { nodes: [friend] }, where: [@effect = harm] }` | An event with effect `harm` on the friend | 1 × 1.0 × 1.0 = 1.0 | The greatest of all |
 
+### 16.3 Property, soak and docking tests
+
+The fixtures above are examples. The next version of the reference model also checks the invariants as **properties**, over generated operation scripts drawn from logged named streams, shrinking failures to the smallest script ([dossier 23](../craft/d23-evaluation-testing.md) §12, S23-S0-01 to S23-S0-17):
+- I-1 to I-16 as properties;
+- random tick partitions and random save and load points;
+- regeneration under random forgetting;
+- summary and item agreement across scopes;
+- a library of metamorphic relations: unrelated nodes, renamed ids, permuted independent operations, scaled weights;
+- hard limits with fault injection;
+- damaged, truncated and foreign loads;
+- session independence;
+- never-dropped beliefs at every memory setting.
+
+**Further work:**
+- **Digests.** Second and third digest scripts cover the v4 operations, fine tiers and `explain`.
+- **A soak run:** 100 game-years on 20 seeds, under the memory guard.
+- **A cross-implementation runner** compares the reference model and the native core hash by hash.
+- **A relevance gold set:** 50 to 100 hand-written "who should care" cases. It is the evidence that would trigger revisiting C-03.
+
 ## 17. Compromises and open items
 
 These are recorded in the foundation's [ledger](../foundation.md#9-the-reference-model-and-the-compromise-ledger).
@@ -1218,6 +1239,8 @@ v4 adds what the seeding layer and sifting need. None of the additions changes a
 | V4-21 | `SettingsSet.content` typed and marked sensitive | §14.2 | Content ceilings ([dossier 18](../craft/d18-content-boundaries.md) S18-S0-01; S2 §2.19) | With V4-12 |
 | V4-22 | `age-class` on `core:person`; missing counts as minor in floor checks | §2.6 | The minors floor (S18-S0-02) | To implement (schema and derive) |
 | V4-23 | Lines refuse events before minting | §9.2 | Lines (S18-S0-03) | To implement with S1's first process |
+| V4-24 | `coarseFine` on process registrations | §9.4 | Simulation validation ([dossier 23](../craft/d23-evaluation-testing.md) S23-S0-07) | Optional; ignored by resolution |
+| V4-25 | The property, soak and docking test plan | §16.3 | S23-S0-01 to S23-S0-17 | With the next reference-model version |
 
 **Dossier 11's other kernel requirements:**
 - **S1 policies:**
