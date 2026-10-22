@@ -1,3 +1,14 @@
+// Adapted from fdlibm's e_log.c (netlib.org/fdlibm), whose notice is preserved as its licence requires:
+//
+// ====================================================
+// Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+//
+// Developed at SunSoft, a Sun Microsystems, Inc. business.
+// Permission to use, copy, modify, and distribute this
+// software is freely granted, provided that this notice
+// is preserved.
+// ====================================================
+//
 // A literal port of fdlibm's e_log.c (netlib), spec 1.3.
 //
 // Same constants, same operation order, using only binary64 arithmetic plus reads and writes of the
