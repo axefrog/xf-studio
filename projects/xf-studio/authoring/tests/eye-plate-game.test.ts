@@ -2,13 +2,13 @@
 // XFS_TEST_GAME_ROOT (Cyberpunk 2077 folder) and XFS_TEST_WOLVENKIT (WolvenKit.CLI.exe) are set.
 // Without them it is reported as skipped, never as a pass.
 import { expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { ensureEyePlate } from "../src/legacy/eye-makeup/plate/host/eye-plate-service";
 import { EYE_PLATE_MASCULINE_RECIPE } from "../src/legacy/eye-makeup/plate/eye-plate-recipe";
 import { createWolvenKitEyePlateTools } from "../src/legacy/eye-makeup/plate/host/eye-plate-wolvenkit";
 import { oracleTest } from "./optional-oracles";
+import { tempDir } from "./temp-dir";
 
 const game = process.env.XFS_TEST_GAME_ROOT, wolvenkit = process.env.XFS_TEST_WOLVENKIT;
 const available = !!game && !!wolvenkit && existsSync(join(game, "archive", "pc", "content")) && existsSync(wolvenkit);
@@ -19,7 +19,7 @@ const REFERENCE = { mesh: "58081caf393e7d9e0223e2e646e6ad9bd7107a4ac307edf08fe78
   morph: "b8b7c055f6e3dd0f9a38bce2862581be13709d16d347bb55d3adb36a4c550131" };
 
 gameTest("the built-in eye plate derives from the installed game with exact native bytes", async () => {
-  const cacheRoot = mkdtempSync(join(tmpdir(), "xfs-eye-plate-game-"));
+  const cacheRoot = tempDir("xfs-eye-plate-game-");
   try {
     const tools = createWolvenKitEyePlateTools(wolvenkit!);
     const derived = await ensureEyePlate({ gameRoot: game!, cacheRoot, tools });
@@ -41,7 +41,7 @@ const MASCULINE_REFERENCE = { mesh: "7e8975c2d2a5f429560096d8f5b78406e391e503224
   morph: "4397f3aa4899cce4042bc3335b6c9e4f2b3c0de3710346789bf23f48b1c7c449" };
 
 gameTest("the masculine eye plate derives from the installed male head with exact native bytes and the head's native seams", async () => {
-  const cacheRoot = mkdtempSync(join(tmpdir(), "xfs-eye-plate-game-pma-"));
+  const cacheRoot = tempDir("xfs-eye-plate-game-pma-");
   try {
     const derived = await ensureEyePlate({ gameRoot: game!, cacheRoot, tools: createWolvenKitEyePlateTools(wolvenkit!), recipe: EYE_PLATE_MASCULINE_RECIPE });
     const { verification, files, source } = derived.manifest;

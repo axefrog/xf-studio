@@ -3,8 +3,7 @@
 // tools/build_showroom_package.ts, recorded in the pipeline guide.
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { cpSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { CREATOR_HEAD_SLOT, CREATOR_RIG_FEMALE } from "../src/preview/creator-lighting";
 import {
@@ -14,6 +13,7 @@ import {
 import { showroomCollection } from "../src/showroom/host/build";
 import { verifyShowroomArchive } from "../src/showroom/host/verify";
 import type { GeneratedFile, VerifierTools } from "../src/platform/api";
+import { tempDir } from "./temp-dir";
 
 const near = (a: number, b: number, e = 1e-6) => Math.abs(a - b) <= e;
 
@@ -99,7 +99,7 @@ function listFiles(root: string): GeneratedFile[] {
 
 /** A staged showroom tree whose "CR2W" members are their JSON, and tools that unbundle by copying and serialize by renaming. */
 function fixture(tamper?: (json: Record<string, any>) => void) {
-  const root = mkdtempSync(join(tmpdir(), "xfs-showroom-")), depot = "axefrog/appearance_studio/collections/4426018f6966620881cdcb78569544ab";
+  const root = tempDir("xfs-showroom-"), depot = "axefrog/appearance_studio/collections/4426018f6966620881cdcb78569544ab";
   const staged = join(root, "staged"), eye = join(root, "eye");
   const pieces = ["xfs_p0170d3e01f014a519c3e000000000005", "xfs_p0170d3e01f014a519c3e000000000006"];
   const plateJson = { Data: { RootChunk: { appearances: pieces.map((name, i) => ({ HandleId: String(i + 1), Data: { name: { $value: name } } })) } } };

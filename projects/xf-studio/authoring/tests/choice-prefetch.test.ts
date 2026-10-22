@@ -2,8 +2,7 @@
 // (choice-manifest.ts), batched exports (game-asset-export.ts `exportAll`), the prepared files' budget (prepared-files.ts), the fetcher's
 // foreground and background lanes and the graph's read recording. Fakes stand in for WolvenKit; no game file is read.
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type ArchiveFile, buildMountPlan, DepotIndex } from "../src/game/archive-precedence";
 import { readArchiveXlConfig } from "../src/game/archivexl-config";
@@ -20,10 +19,11 @@ import { ChoicePreviewStore } from "../src/character/host/choice-preview-host";
 import { WolvenKitFetcher } from "../src/game/host/resolver-host";
 import { ResourceGraph, stoppableGraph } from "../src/game/resource-graph";
 import { app, cr2w, fixtureInstallation, mesh, meshComponent } from "./resolver-fixtures";
+import { tempDir } from "./temp-dir";
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
-const temporary = () => { const root = mkdtempSync(join(tmpdir(), "xfs-prefetch-")); roots.push(root); return root; };
+const temporary = () => { const root = tempDir("xfs-prefetch-"); roots.push(root); return root; };
 /** A scheduler on the host's clock that never waits for quiet (the prefetcher's tests drive time themselves). */
 const testJobs = () => createJobScheduler({ clock: hostClock(), quietMs: 0 });
 /** The prepared files of one host's layout, as one partition, within `budget`. */

@@ -5,8 +5,7 @@
  * and plain error codes.
  */
 import { afterAll, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { PackageHostService, runProductBuild, builderError, type BuilderRun, type HostPrerequisite, type PackageHostAdapter } from "../src/platform/export/product-host";
 import { runProductCommand } from "../src/platform/export/product-builder";
@@ -16,9 +15,10 @@ import { packagePlateRecord, type EyePlateManifest } from "../src/legacy/eye-mak
 import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/legacy/eye-makeup/export/host/plate-uv-footprint-io";
 import { localCheckWorker } from "../src/host/package-server";
 import { eyeEntry, fakeTools, fakeVerifierTools, FOOTPRINT, LIPS, LIPS_ENTRY, writePlate } from "./fixtures/product-fixture";
+import { tempDir } from "./temp-dir";
 
 const fixture = JSON.parse(readFileSync(join(import.meta.dir, "../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
-const root = realpathSync.native(mkdtempSync(join(tmpdir(), "xfs-product-host-")));
+const root = realpathSync.native(tempDir("xfs-product-host-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 const arg = (args: readonly string[], name: string) => args[args.indexOf(name) + 1];
 

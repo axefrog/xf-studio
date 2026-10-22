@@ -11,8 +11,7 @@
  * What a person sees at every step (the look, its selection, Undo, Redo and the History timeline, and every refusal) must be the same.
  */
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { script, session, type SessionDriver } from "./fixtures/look-history-parity";
 import { restore } from "./fixtures/workspace-observable";
@@ -20,13 +19,14 @@ import { damagedWorkspaceV1, largeWorkspaceV1, looseWorkspaceV1, smallWorkspaceV
 import { HarnessHost, HarnessWorkspace, migrateUntilDone } from "./fixtures/profiles-migration-harness";
 import { openTestLibrary } from "./fixtures/library-file";
 import { profileStudio } from "./fixtures/profile-studio";
+import { tempDir } from "./temp-dir";
 
 const fixtures = { small: smallWorkspaceV1, loose: looseWorkspaceV1, large: largeWorkspaceV1, damaged: damagedWorkspaceV1,
   preferences: () => withPreferences(smallWorkspaceV1()) };
 
 /** The workspace migrated into a new library file: the file, and the look its session's scene shows. */
 async function migrated(stored: unknown) {
-  const dir = mkdtempSync(join(tmpdir(), "xfs-profiles-parity-")), path = join(dir, "library.sqlite");
+  const dir = tempDir("xfs-profiles-parity-"), path = join(dir, "library.sqlite");
   const host = new HarnessHost(path), workspace = new HarnessWorkspace(restore(stored).state, "parity-workspace");
   await migrateUntilDone(workspace, host);
   host.close();

@@ -1,12 +1,12 @@
 /** The desktop workspace's outbox keys (profiles design §2.2): one file per document beside the workspace, fenced by the workspace lease. */
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { DesktopOutboxStore, desktopOutboxRequest } from "../outbox-store";
+import { tempDir } from "../../tests/temp-dir";
 
 test("keys are stored one file each, read back by key, removed with null, and a refused write changes nothing", async () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-outbox-"));
+  const root = tempDir("xfs-outbox-");
   try {
     const store = new DesktopOutboxStore(root);
     const post = (body: unknown, fence?: () => Response | null) => desktopOutboxRequest(new Request("http://127.0.0.1/api/desktop/workspace/outbox", {

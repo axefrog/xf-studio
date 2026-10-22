@@ -1,10 +1,10 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { moduleSpecifiers, rewriteSpecifiers } from "../tools/source-layout";
 import { imports } from "./fixtures/import-scan";
 import { sourceFiles, sourceText } from "./fixtures/source-files";
+import { tempDir } from "./temp-dir";
 
 const values = (text: string) => moduleSpecifiers(text).map(span => span.value);
 
@@ -53,7 +53,7 @@ test("the tool sees the same relative imports as the boundary scan in every sour
   expect(differences).toEqual([]);
 });
 
-const scratch = mkdtempSync(join(tmpdir(), "xfs-source-layout-"));
+const scratch = tempDir("xfs-source-layout-");
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
 test("--imports-only rewrites only the imports a move broke, and a second run changes nothing", () => {

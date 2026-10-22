@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { defaultLocalSettings } from "../src/setup/local-settings";
@@ -8,14 +8,15 @@ import { compareWithDeployment } from "../src/installation/vortex-deployment";
 import { isLocalDrivePath } from "../src/platform/api/path-containment";
 import { inspectVortexSetup, isLocalFolder, readVortexManifests, readVortexStateFolder } from "../src/installation/host/vortex-host";
 import { readVortexGameState, resolveVortexInstallPath, stateFromPairs } from "../src/installation/vortex-state";
+import { tempDir } from "./temp-dir";
 
 const fixtures = join(import.meta.dir, "fixtures", "vortex");
 const withFolder = (run: (base: string) => void) => {
-  const base = mkdtempSync(join(tmpdir(), "xfs-vortex-test-"));
+  const base = tempDir("xfs-vortex-test-");
   try { run(base); } finally { rmSync(base, { recursive: true, force: true }); }
 };
 const withFolderAsync = async (run: (base: string) => Promise<void>) => {
-  const base = mkdtempSync(join(tmpdir(), "xfs-vortex-test-"));
+  const base = tempDir("xfs-vortex-test-");
   try { await run(base); } finally { rmSync(base, { recursive: true, force: true }); }
 };
 const put = (path: string, content = "fixture", timeMs?: number) => {

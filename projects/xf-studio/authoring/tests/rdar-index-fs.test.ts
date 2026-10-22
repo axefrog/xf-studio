@@ -1,10 +1,10 @@
 import { afterAll, expect, test } from "bun:test";
-import { readdirSync, readFileSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { depotHash } from "../src/game/depot-path";
 import { archiveSourceContains, readRdarIndexCount, readRdarIndexHashes, sortedHashesContain } from "../src/game/host/rdar-index-fs";
 import { readArchiveIndex } from "../src/game/host/resolver-host";
+import { tempDir } from "./temp-dir";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
@@ -23,7 +23,7 @@ function rdar(paths: string[]): Uint8Array {
 }
 
 test("the game's own archive indexes say whether a resource exists, without reading payloads", () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-rdar-")); roots.push(root);
+  const root = tempDir("xfs-rdar-"); roots.push(root);
   writeFileSync(join(root, "basegame_1.archive"), rdar(["base\\a.mesh", "base\\b.mesh"]));
   writeFileSync(join(root, "basegame_2.archive"), rdar(["base\\c.morphtarget"]));
   writeFileSync(join(root, "notes.txt"), "ignored");
@@ -35,13 +35,13 @@ test("the game's own archive indexes say whether a resource exists, without read
   expect([...archiveSourceContains(root, wanted)].sort()).toEqual([wanted[0], wanted[1]].sort());
   expect([...archiveSourceContains(join(root, "basegame_2.archive"), wanted)]).toEqual([wanted[1]]);
   // A source with no readable index is an error, never "not present".
-  const broken = mkdtempSync(join(tmpdir(), "xfs-rdar-broken-")); roots.push(broken);
+  const broken = tempDir("xfs-rdar-broken-"); roots.push(broken);
   writeFileSync(join(broken, "basegame_1.archive"), "not an archive");
   expect(() => archiveSourceContains(broken, wanted)).toThrow("No readable archive index");
 });
 
 test("the resolver's index cache holds only complete indexes; a short one is deleted and read again (PREV-47)", () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-rdar-cache-")); roots.push(root);
+  const root = tempDir("xfs-rdar-cache-"); roots.push(root);
   const archive = join(root, "mod.archive"), cache = join(root, "cache");
   writeFileSync(archive, rdar(["base\\a.mesh", "base\\b.mesh", "base\\c.mesh"]));
   expect(readRdarIndexCount(archive)).toBe(3);

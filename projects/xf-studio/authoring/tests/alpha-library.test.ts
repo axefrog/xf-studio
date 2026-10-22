@@ -7,8 +7,7 @@
  */
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { STUDIO_PARTS } from "../src/compose/studio-registry";
 import { openTestLibrary, type TestLibrary } from "./fixtures/library-file";
@@ -17,9 +16,10 @@ import { COLLECTION_1, COLLECTION_2, type LookCollection } from "../src/platform
 import { alpha2Unreadable } from "./fixtures/alpha-0.1.0-alpha.2/schemas";
 import { COLLECTION_FIXTURES, readFixture } from "./fixtures/capture-plan-golden";
 import { recipeOf } from "./fixtures/looks";
+import { tempDir } from "./temp-dir";
 
 function library() {
-  const dir = mkdtempSync(join(tmpdir(), "xfs-alpha-library-")), path = join(dir, "library.sqlite");
+  const dir = tempDir("xfs-alpha-library-"), path = join(dir, "library.sqlite");
   const file = openTestLibrary(path);
   return { path, file, store: file.collections, cleanup: () => { file.close();  try { rmSync(dir, { recursive: true, force: true }); } catch { /* WAL files may still be closing. */ } } };
 }

@@ -1,6 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { PreviewCoreHost, type PreviewCoreState } from "../src/preview/host/preview-core-host";
 import { createPreviewCoreHandler } from "../src/preview/host/preview-core-server";
@@ -9,10 +8,11 @@ import type { WolvenKitSetupState } from "../src/setup/wolvenkit-setup";
 import { USER_FACING_JARGON } from "../src/app/alpha-availability";
 import { EYE_PLATE_RECIPE } from "../src/legacy/eye-makeup/plate/eye-plate-recipe";
 import { createGameAssetExporter } from "../src/game/host/game-asset-export";
+import { tempDir } from "./temp-dir";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
-const temporary = () => { const root = mkdtempSync(join(tmpdir(), "xfs-preview-host-")); roots.push(root); return root; };
+const temporary = () => { const root = tempDir("xfs-preview-host-"); roots.push(root); return root; };
 function setup() {
   const root = temporary();
   const game = join(root, "game"), cli = join(root, "WolvenKit.CLI.exe");

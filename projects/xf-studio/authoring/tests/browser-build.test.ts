@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { browserBundleNames, retainBrowserChunks } from "../browser-build";
+import { tempDir } from "./temp-dir";
 
 test("every public page script under /build/ is produced by the shared browser build", () => {
   const publicDir = resolve(import.meta.dir, "..", "public");
@@ -17,7 +18,7 @@ test("browser bundle names are unique after flattening", () => {
 });
 
 test("lazy chunks survive one successful rebuild; unrelated files are never pruned", () => {
-  const dir = mkdtempSync(resolve(tmpdir(), "xfs-chunks-")), put = (name: string) => writeFileSync(resolve(dir, name), name);
+  const dir = tempDir("xfs-chunks-"), put = (name: string) => writeFileSync(resolve(dir, name), name);
   try {
     put("chunk-old.js"); put("worker.js"); retainBrowserChunks(dir, ["chunk-old.js"]);
     put("chunk-next.js"); retainBrowserChunks(dir, ["chunk-next.js"]);

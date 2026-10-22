@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync, statSync, utimesSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync, statSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 import { writeChoiceManifest } from "../src/character/host/choice-manifest";
+import { tempDir } from "./temp-dir";
 
 test("an unchanged choice manifest is not rewritten, so what was derived from its stamp stays valid", () => {
-  const dir = mkdtempSync(join(tmpdir(), "xfs-manifest-"));
+  const dir = tempDir("xfs-manifest-");
   try {
     const manifest = { schema: "probe" } as unknown as Parameters<typeof writeChoiceManifest>[2];
     writeChoiceManifest(dir, "k", manifest);

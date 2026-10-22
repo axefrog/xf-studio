@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import {
   canonicalJson, EYE_PLATE_RECIPE, eyePlateCacheKey, eyePlateCacheName, idListSha256, parseEyePlateRecipe, selectedFaceIds,
@@ -15,9 +14,10 @@ import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/le
 import { depotPathRegex } from "../src/legacy/eye-makeup/plate/host/eye-plate-wolvenkit";
 import { keptJsonDirectory, readKeptJson } from "../src/host/derived-cache";
 import { FIXTURE_DIFFS, fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe } from "./eye-plate-fixture";
+import { tempDir } from "./temp-dir";
 
 const withDirectory = async (run: (dir: string) => Promise<void> | void) => {
-  const dir = mkdtempSync(join(tmpdir(), "xfs-eye-plate-"));
+  const dir = tempDir("xfs-eye-plate-");
   try { await run(dir); } finally { rmSync(dir, { recursive: true, force: true }); }
 };
 const clone = <T>(value: T): T => structuredClone(value);

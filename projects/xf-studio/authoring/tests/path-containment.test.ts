@@ -4,11 +4,11 @@
  */
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { HOST_REAL_PATHS } from "../src/platform/export/host-real-paths";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { canonicalPath as canonicalWith, containmentKey, isBelow, isBelowReal as belowReal, isWithin, isWithinReal as withinReal, overlaps } from "../src/platform/api/path-containment";
+import { tempDir } from "./temp-dir";
 
 const W = "win32" as const, P = "posix" as const;
 // The host's own reads (PIPE-136: existence by lstat, so a link whose target is gone is seen).
@@ -114,7 +114,7 @@ test("overlaps: either inside the other, or the same", () => {
 });
 
 const folders: string[] = [];
-const scratch = () => { const dir = mkdtempSync(join(tmpdir(), "xfs-contain-")); folders.push(dir); return dir; };
+const scratch = () => { const dir = tempDir("xfs-contain-"); folders.push(dir); return dir; };
 const cleanup = () => { for (const dir of folders.splice(0)) rmSync(dir, { recursive: true, force: true }); };
 /** A directory link: a junction on Windows (no privilege needed), a symbolic link elsewhere. */
 const link = (target: string, path: string) => symlinkSync(target, path, process.platform === "win32" ? "junction" : "dir");

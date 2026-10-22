@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { defaultLocalSettings } from "../src/setup/local-settings";
 import { discoverSources } from "../src/game/host/source-discovery";
+import { tempDir } from "./temp-dir";
 
 const fixture = (run: (base: string) => void) => {
-  const base = mkdtempSync(join(tmpdir(), "xfs-source-test-"));
+  const base = tempDir("xfs-source-test-");
   try { run(base); } finally { rmSync(base, { recursive: true, force: true }); }
 };
 const put = (path: string, content = "fixture") => {

@@ -3,8 +3,7 @@
  * preview/export parity through the one evaluator, byte-identical unmottled layers and the raster budget.
  */
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { curve, type Layer } from "../src/engines/layered-makeup/recipe";
 import * as recipe from "../src/engines/layered-makeup/recipe";
@@ -16,6 +15,7 @@ import { coverage, createRasterJob, EYE_MIRROR, EYE_SKIN, initialRecipe, raster,
 import { maskAlphaKey } from "../src/engines/layered-makeup/makeup-dependencies";
 import { parseRecipe } from "../src/engines/layered-makeup/recipe";
 import { EYE_MAKEUP_REGION } from "../src/features/eye-makeup/region";
+import { tempDir } from "./temp-dir";
 
 const sha = (bytes: Uint8Array | Uint8ClampedArray) => new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
 const alpha = (rgba: Uint8ClampedArray) => Uint8Array.from({ length: rgba.length / 4 }, (_, i) => rgba[i * 4 + 3]);
@@ -95,7 +95,7 @@ test("CORE-110: every raster entry point requires the region's skin scale, and t
   // @ts-expect-error the skin scale is required
   expect(() => recipe.raster(mottled(powder(), l => { l.enabled = false; }), 64, EYE_MIRROR)).not.toThrow();
   // The benchmark tool over a recipe with a mottled layer (it threw before, passing only the mirror).
-  const dir = mkdtempSync(join(tmpdir(), "xfs-mottle-tool-")), file = join(dir, "recipe.json");
+  const dir = tempDir("xfs-mottle-tool-"), file = join(dir, "recipe.json");
   try {
     const small = mottled(mottlePreset("mascara", 3), l => { l.symmetry = false; l.feather = .002; });
     writeFileSync(file, JSON.stringify(recipeFile({ uv: "gltf-uv0-top-left", layers: [small] })));

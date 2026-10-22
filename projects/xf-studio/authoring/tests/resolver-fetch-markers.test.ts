@@ -1,11 +1,11 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { refFromPath } from "../src/game/depot-path";
 import { COMMAND_LINE_LIMIT, commandLineArgumentLength, MAX_PATTERN_CHARS, NOT_WRITTEN_RUNS, reportResources, ResolverFetcher, trimBuffers, uncookPatterns, withoutArchiveFileName,
   WolvenKitFetcher } from "../src/game/host/resolver-host";
 import { cr2w } from "./resolver-fixtures";
+import { tempDir } from "./temp-dir";
 
 /**
  * The resolver's WolvenKit fetcher (prepare speed review, `88b5379`): a resource WolvenKit writes nothing for becomes lasting after
@@ -14,7 +14,7 @@ import { cr2w } from "./resolver-fixtures";
  */
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
-const temporary = () => { const root = mkdtempSync(join(tmpdir(), "xfs-fetch-")); roots.push(root); return root; };
+const temporary = () => { const root = tempDir("xfs-fetch-"); roots.push(root); return root; };
 const put = (path: string, content: string) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, content); };
 type Archive = Parameters<WolvenKitFetcher["fetch"]>[0];
 function archiveAt(root: string, name = "mod.archive"): Archive {

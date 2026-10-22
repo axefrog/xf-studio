@@ -1,14 +1,14 @@
 // The prepared files' one owner (prepared-files.ts): one budget across partitions, what it never evicts, one check at a time, and Clear
 // running alone once committed work finished (CORE-108). Synthetic files only.
 import { afterAll, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { filesSource, keptSource, markUsed, PreparedFiles } from "../src/host/prepared-files";
 import { hostClock } from "../src/platform/core/clock";
 import { createJobScheduler } from "../src/platform/core/jobs";
+import { tempDir } from "./temp-dir";
 
-const root = mkdtempSync(join(tmpdir(), "xfs-prepared-files-"));
+const root = tempDir("xfs-prepared-files-");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 let serial = 0;
 const folder = () => { const path = join(root, `f${++serial}`); mkdirSync(path, { recursive: true }); return path; };

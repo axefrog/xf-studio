@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { checkFrameworkVersions, compareVersions, EYE_ARTISTRY_REQUIREMENTS, FRAMEWORKS, frameworkModNames,
   normaliseVersion } from "../src/installation/framework-versions";
@@ -8,6 +7,7 @@ import { createWindowsDetectionHost } from "../src/installation/host/install-det
 import { evaluateLocalReadiness } from "../src/setup/host/local-settings-readiness";
 import { defaultLocalSettings, parseLocalSettings } from "../src/setup/local-settings";
 import { fixedFileVersion, readPeFileVersion } from "../src/formats/pe-version";
+import { tempDir } from "./temp-dir";
 
 /** A minimal PE image: DOS header, one `.rsrc` section and a VS_VERSIONINFO with the given version. */
 function fakePe(version: [number, number, number, number]): Uint8Array {
@@ -51,7 +51,7 @@ test("versions normalise to major.minor.patch and compare numerically", () => {
 });
 
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), "xfs-frameworks-"));
+  const root = tempDir("xfs-frameworks-");
   const game = join(root, "game"), mo2 = join(root, "mo2");
   put(join(game, "bin", "x64", "Cyberpunk2077.exe"), "fixture");
   put(join(game, "red4ext", "RED4ext.dll"), fakePe([1, 30, 0, 0]));
@@ -112,7 +112,7 @@ test("each route reports what the game would load, with plain guidance and no pr
 });
 
 test("the version check reads the same way whichever store installed the game", () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-stores-"));
+  const root = tempDir("xfs-stores-");
   try {
     // Folder shapes the stores use by default (Steam library, GOG, Epic without a space) plus a unicode library.
     const shapes = [join(root, "SteamLibrary", "steamapps", "common", "Cyberpunk 2077"), join(root, "GOG Games", "Cyberpunk 2077"),

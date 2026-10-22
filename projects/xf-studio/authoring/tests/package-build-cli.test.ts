@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { withGlitterKnob } from "./glitter-knob-fixture";
+import { tempDir } from "./temp-dir";
 
 const hq = resolve(import.meta.dir, "../../../..");
 const script = resolve(import.meta.dir, "../tools/build_collection_package.ts");
@@ -24,7 +25,7 @@ test("package preflight accepts a Studio collection without writing a package", 
 });
 
 test("package preflight reports partial export and keeps the source collection unchanged", () => {
-  const dir = mkdtempSync(resolve(tmpdir(), "xfs-package-check-"));
+  const dir = tempDir("xfs-package-check-");
   try {
     const collection = JSON.parse(readFileSync(fixture, "utf8"));
     collection.presets[0].recipe.layers[0].finish = "glitter";
@@ -42,7 +43,7 @@ test("package preflight reports partial export and keeps the source collection u
 });
 
 test("package preflight refuses a collection with no exportable content", () => {
-  const dir = mkdtempSync(resolve(tmpdir(), "xfs-package-empty-"));
+  const dir = tempDir("xfs-package-empty-");
   try {
     const collection = JSON.parse(readFileSync(fixture, "utf8"));
     for (const preset of collection.presets) for (const layer of preset.recipe.layers)
@@ -64,7 +65,7 @@ test("package output cannot target a game/mod directory outside project dist", (
 });
 
 test("PIPE-70: the CLI honours diagnostic knobs only with an explicit --diagnostics", () => {
-  const dir = mkdtempSync(resolve(tmpdir(), "xfs-package-diagnostics-"));
+  const dir = tempDir("xfs-package-diagnostics-");
   try {
     const file = resolve(dir, "knob.json");
     writeFileSync(file, JSON.stringify(withGlitterKnob(JSON.parse(readFileSync(fixture, "utf8")))));

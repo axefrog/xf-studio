@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { readArchiveXlConfig, settleDepotAdditions, type XlDocument } from "../src/game/archivexl-config";
 import {
@@ -12,11 +11,12 @@ import { parseEyePlateRecipe } from "../src/legacy/eye-makeup/plate/eye-plate-re
 import { EyePlateError, ensureEyePlate, eyePlateHeadOverride, packagePlateRecord, type EyePlateTools } from "../src/legacy/eye-makeup/plate/host/eye-plate-service";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe } from "./eye-plate-fixture";
 import { cr2w, fixtureInstallation } from "./resolver-fixtures";
+import { tempDir } from "./temp-dir";
 
 const MESH = "base\\fixture\\head.mesh", MORPH = "base\\fixture\\head.morphtarget";
 const paths = { meshDepotPath: MESH, morphDepotPath: MORPH };
 const withDirectory = async (run: (dir: string) => Promise<void> | void) => {
-  const dir = mkdtempSync(join(tmpdir(), "xfs-plate-head-"));
+  const dir = tempDir("xfs-plate-head-");
   try { await run(dir); } finally { rmSync(dir, { recursive: true, force: true }); }
 };
 const plan = (archives: Parameters<typeof fixtureInstallation>[0], xl: XlDocument[] = []) => {

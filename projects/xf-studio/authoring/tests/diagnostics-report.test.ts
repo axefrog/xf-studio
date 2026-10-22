@@ -1,8 +1,7 @@
 // The diagnostics cleanup (code-health DIAG-01..04, 06..09, 12): what a saved report may hold, redaction of names the shared
 // patterns can't see the end of, a log that never throws, a V's resolution that survives its size, and the page's forwards.
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { inflateRawSync } from "node:zlib";
 import { personalDataIn } from "../src/app/private-data";
@@ -18,8 +17,9 @@ import { hashingSettled, involvedMods, readOwnInstalls } from "../src/diagnostic
 import type { ReportManifest } from "../src/diagnostics/report";
 import { defaultLocalSettings, type LocalSettings } from "../src/setup/local-settings";
 import type { ResolvedCharacter } from "../src/character/character-resolver";
+import { tempDir } from "./temp-dir";
 
-const root = mkdtempSync(resolve(tmpdir(), "xfs-diagnostics-report-"));
+const root = tempDir("xfs-diagnostics-report-");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 /** Names assembled at run time, so this file itself holds no personal path for the repository check. */
 const WHO = ["j", "doe"].join(""), FULL = ["John", "Doe"].join(" "), ORG = ["Contoso", "Ltd"].join(" ");

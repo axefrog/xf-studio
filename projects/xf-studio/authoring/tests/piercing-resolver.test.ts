@@ -1,6 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildCatalogue, readCcoWithPresentation } from "../src/character/cc-catalogue";
 import { type CcoResource } from "../src/character/cco-model";
@@ -14,12 +13,13 @@ import type { ExportedGeometry, ExportedMask, ExportedTexture, GameAssetExporter
 import { encodePng } from "../src/formats/png";
 import { parseCharacterDetail } from "../src/character/render-detail";
 import { detailFixture, EARRING_MASK, P, PIERCING, piercingRequest, REQUEST_A } from "./character-detail-fixtures";
+import { tempDir } from "./temp-dir";
 
 // Piercings through the generic resolver, from an asset-free synthetic installation (character-detail-fixtures.ts): the creator's
 // piercing slot and groups select the parts, their chunk masks select the chunks, and a jewellery framework that replaces a style's
 // `.app` at its vanilla path resolves by archive precedence alone. No private save, game file or real mod name is used.
 
-const root = mkdtempSync(join(tmpdir(), "xfs-piercings-"));
+const root = tempDir("xfs-piercings-");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 const png = (value: number) => encodePng({ width: 4, height: 4, data: new Uint8Array(64).fill(value) }, { alpha: true });
 function exporter(): GameAssetExporter {

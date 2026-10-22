@@ -1,10 +1,10 @@
 import { afterEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { MountedArchive } from "../src/game/archive-precedence";
 import { WolvenKitFetcher } from "../src/game/host/resolver-host";
 import { WolvenKitRunError } from "../src/host/wolvenkit-cli";
+import { tempDir } from "./temp-dir";
 
 /**
  * PREV-29: the grading-LUT host and the character-detail host each open the installation, so two
@@ -17,7 +17,7 @@ import { WolvenKitRunError } from "../src/host/wolvenkit-cli";
  */
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
-const temporary = () => { const root = mkdtempSync(join(tmpdir(), "xfs-fetcher-")); roots.push(root); return root; };
+const temporary = () => { const root = tempDir("xfs-fetcher-"); roots.push(root); return root; };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 type FakeOptions = { noJson?: Set<string>; convertExit?: number; fail?: (args: string[]) => WolvenKitRunError | null; cli?: string };

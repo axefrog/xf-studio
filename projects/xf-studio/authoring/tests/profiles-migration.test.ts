@@ -3,8 +3,7 @@
  * the route and its fence, and the M4/M5 rules for Vs and profiles. The crash harness is `profiles-migration-harness.test.ts`.
  */
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
 import { PROFILES_MIGRATION_ENABLED, profilesMigrationTransport, startProfilesMigration } from "../src/app/browser/profiles-migration-device";
 import { checkMigrationRequest, createProfilesMigrationHandler } from "../src/app/profiles/host/profiles-migrate";
@@ -22,8 +21,9 @@ import { alpha2Library, alpha2SaveNamed, COLLECTION, documentRows, fixtureSave, 
 import { HarnessHost, HarnessWorkspace, migrateUntilDone } from "./fixtures/profiles-migration-harness";
 import { restore } from "./fixtures/workspace-observable";
 import { looseWorkspaceV1 } from "./fixtures/workspace-v1-fixtures";
+import { tempDir } from "./temp-dir";
 
-const scratch = mkdtempSync(join(tmpdir(), "xfs-profiles-migration-"));
+const scratch = tempDir("xfs-profiles-migration-");
 afterAll(() => { try { rmSync(scratch, { recursive: true, force: true }); } catch { /* A file a failed test left open; the system cleans its temp folder. */ } });
 let n = 0;
 function library(backups = false) {

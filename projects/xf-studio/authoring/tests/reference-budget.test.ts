@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { filesSource, PreparedFiles, PREPARED_BUDGET_BYTES, referenceCap } from "../src/host/prepared-files";
 import { hostClock } from "../src/platform/core/clock";
 import { createJobScheduler } from "../src/platform/core/jobs";
+import { tempDir } from "./temp-dir";
 
 test("the reference share stays within the configured total and below the character's (HAIR-03)", () => {
   for (const total of [1024, 512 * 1024 ** 2, PREPARED_BUDGET_BYTES]) {
@@ -17,7 +17,7 @@ test("the reference share stays within the configured total and below the charac
 });
 
 test("a capped partition keeps within its cap and never evicts another's files; the rest share what the caps leave", async () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-reference-budget-"));
+  const root = tempDir("xfs-reference-budget-");
   try {
     const file = (folder: string, name: string, bytes: number, ageMs: number) => {
       mkdirSync(folder, { recursive: true });

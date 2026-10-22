@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 // Test-only use of the compiler: it writes the fixture's supplied chains, which the
 // independent verifier must then reproduce from its own arithmetic.
@@ -18,6 +17,7 @@ import { derivePlateDocuments } from "../src/legacy/eye-makeup/plate/eye-plate-c
 import { liftPlate } from "../src/legacy/eye-makeup/export/plate-lift";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "./eye-plate-fixture";
 import { coverageReference, plateWindow, storedBc4, texelUv, WINDOW_H, WINDOW_W } from "./window-fixture";
+import { tempDir } from "./temp-dir";
 
 const verifierDir = resolve(import.meta.dir, "../src/features/eye-makeup/verify");
 
@@ -104,7 +104,7 @@ type Fixture = { build: string; dds: Map<string, Uint8Array>; plate: { mesh: str
 
 /** `plate` is the single-chunk plate input (default: the fixture cut); the package holds its lifted form. */
 function makeBuild(mutate?: Mutation, input: typeof PLATE = PLATE): Fixture {
-  const build = mkdtempSync(resolve(tmpdir(), "xfs-verifier-"));
+  const build = tempDir("xfs-verifier-");
   const p = structuredClone(plan);
   const blob = { boneNames: [cname("root")], boneRigMatrices: [{ a: 1 }], boundingBox: { Min: 0, Max: 1 } };
   const plateRoot = input.mesh.Data.RootChunk, lifted = liftPlate(input.mesh, input.morph, p.plate.liftsMm);
@@ -468,7 +468,7 @@ const numpy = (() => {
 const numpyCase = oracleTest(numpy, "the NumPy statistics oracle needs Python with NumPy (set XFS_PYTHON).");
 
 numpyCase("error statistics match NumPy's mean and default linear percentile", () => {
-  const dir = mkdtempSync(resolve(tmpdir(), "xfs-stats-"));
+  const dir = tempDir("xfs-stats-");
   try {
     const sizes = [1, 2, 7, 8, 20, 129, 1000, 54321];
     let s = 9;

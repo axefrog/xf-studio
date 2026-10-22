@@ -4,11 +4,11 @@
  */
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { routeStamps } from "../src/game/host/route-fingerprint";
 import { planRuntimeDiagnostic } from "../src/installation/host/runtime-diagnostic-stage";
+import { tempDir } from "./temp-dir";
 
 /** An instance whose ini keeps its profiles, mods and overwrite in folders of their own names. */
 function movedInstance(root: string) {
@@ -21,7 +21,7 @@ function movedInstance(root: string) {
 }
 
 test("the route fingerprint follows a profile's mod list and the overwrite folder where the ini puts them", () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-mo2-folders-"));
+  const root = tempDir("xfs-mo2-folders-");
   try {
     const game = join(root, "game");
     mkdirSync(join(game, "archive", "pc", "mod"), { recursive: true });
@@ -39,7 +39,7 @@ test("the route fingerprint follows a profile's mod list and the overwrite folde
 });
 
 test("the diagnostic plan reads the source profile and mods from the folders the ini names", () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-mo2-folders-"));
+  const root = tempDir("xfs-mo2-folders-");
   try {
     const game = join(root, "game"), store = join(root, "candidates"), payload = join(store, "build_1", "archive", "pc", "mod");
     mkdirSync(join(game, "bin", "x64"), { recursive: true }); mkdirSync(join(game, "archive", "pc", "mod"), { recursive: true });

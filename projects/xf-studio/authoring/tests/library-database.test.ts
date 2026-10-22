@@ -9,8 +9,7 @@
  */
 import { afterEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { STUDIO_PARTS } from "../src/compose/studio-registry";
 import { libraryStores, openLibraryFiles } from "../src/library/host/library-files";
@@ -25,9 +24,10 @@ import { alpha2Unreadable } from "./fixtures/alpha-0.1.0-alpha.2/schemas";
 import { COLLECTION_FIXTURES, readFixture } from "./fixtures/capture-plan-golden";
 import { initialRecipe } from "./fixtures/eye-region";
 import { openTestLibrary } from "./fixtures/library-file";
+import { tempDir } from "./temp-dir";
 
 const folders: string[] = [];
-function folder(): string { const dir = mkdtempSync(join(tmpdir(), "xfs-library-db-")); folders.push(dir); return dir; }
+function folder(): string { const dir = tempDir("xfs-library-db-"); folders.push(dir); return dir; }
 afterEach(() => { for (const dir of folders.splice(0)) try { rmSync(dir, { recursive: true, force: true }); } catch { /* WAL files may still be closing */ } });
 
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
