@@ -254,7 +254,7 @@ flowchart TB
 
 - **Flush.** `DocumentOwners.flush(signal)` resolves once the outbox is empty, or reports what is pending, in conflict or failed.
 - **Desktop close** (`desktop/workspace-close.ts`) acknowledges `saved` only after the workspace capture and an empty flush. Otherwise the "close anyway?" prompt names what is unsaved, and says whether the outbox holds it.
-- **Localhost** (development only) relies on the synchronous outbox. That holds for a renderer crash, because `localStorage` lives in the browser process. A kill of the whole browser or WebView process tree may lose writes still inside the browser's storage commit delay. This is unmeasured; phase 1's harness kills the process tree once to measure it (on desktop too), and the library already holds most such writes within about 10 ms.
+- **Localhost** (development only) relies on the synchronous outbox. That holds for a renderer crash, because `localStorage` lives in the browser process. A kill of the whole browser process tree loses writes still inside the browser's storage commit delay. Phase 1 measured this window at about 5 s for the first change, then about a minute (§9.2, phase 1 gates). While the host is up, the library holds each edit within milliseconds of its deferred store, so only edits made while the host is down depend on `localStorage` alone.
 - **One writer per workspace (proposed default).**
   - A second window opens read-only: "This workspace is open in another window." It offers **Use it here**. Read-only windows refuse every dispatch with `unavailable` and write nothing.
 - **Takeover happens only after release.**
@@ -383,7 +383,6 @@ Key bindings and palette commands resolve targets in the input layer, then dispa
 - **Session data** (§4.1). Reading a session validates tab IDs, instance IDs (duplicates are dropped), bindings, scene references and generations, and focus.
 - **Boundary test.** It lists no family that still defaults a target. It also forbids reading focus below the input layer, naming `sceneGen` without `scene`, and naming the live feature in the root. The `liveSurface` row of §7 is built as `preview/browser/scene-surfaces.ts`.
 - **Deferred.**
-  - `character.undo` and `character.redo` duplicate `history.undo` scoped to the character, and will be retired.
   - The History panel's list of other recent scopes waits for a UI decision (phase 3).
   - `layout.set` gives way to phase 2's `tabs.*`.
   - Shell menus other than context menus get captures in phase 3.
@@ -645,7 +644,7 @@ No schema migration: every record is a `documents` row, and `user_version` stays
 **Built in phase 1d-ii (the switch-over).** The Studio now runs on the profile services.
 
 - **One collection owner.** The old `CollectionService` folded into `CollectionOwner` and `LookSessions`. The session is the source of the V and the look shown, and the V comes from its `CharacterService` owner.
-- **Edits are recorded as they are made.** A look edit is written to the outbox synchronously, and only the store to the library waits (250 ms). Another window's version met during that delay becomes a conflict, never a silent replacement. Whenever the outbox stops (release, lease loss, a superseded answer), it first stores what was waiting, then sends nothing more.
+- **Edits are recorded as they are made.** A look edit enters the outbox in memory at once, so reads, checks and conflicts see it. Writing it to recovery storage and sending it to the library wait up to 250 ms. A renderer crash inside that window can lose that last fraction of a second, which is within the data-durability rule. Another window's version met during that delay becomes a conflict, never a silent replacement. Whenever the outbox stops (release, lease loss, a superseded answer), it first stores what was waiting, then sends nothing more.
 - **Conflicts.** A conflict on a look or a collection shows the `ConflictNotice` (`t-conflict`) in the Presets panel, with typed resolution requests. Save version, Check and Build wait until it is resolved.
 - **Collections.** Removing the last preset keeps the collection, across a restart. A new collection created with its profile membership stays within the 64-write limit. Restore puts a look back where it stood.
 - **History.** Each look has its own history scope, and the look shown is the editing context until something else is edited; there is no unqualified look scope and no fallback. Ctrl+Z in a 3D view undoes the look that view shows (§3.7). The V's own scope replaced the history carry between heads.
@@ -678,6 +677,14 @@ The whole proposal is pre-beta. The spikes have run, and the estimate below is t
 | 5 | **Several Vs and profiles in the UI** | Add and remove subjects, the full profile flyout, profile management, several looks rastered at once | Switching profile edits nothing; two Vs wearing one look update together; raster and residency memory within budget | 6–8 |
 | 6 | **Polish lane** | Tab duplication, persistent reopen history, orphan listing, tombstone, receipt and decoded-save cleanup | Cleanup purges only what the retention rules allow; duplication shares nothing implicitly | 4–5 |
 | — | **Pre-beta total** | Phases 0–6 | | **60–73** (55–68 still to do) |
+
+**Phase 1 gates, as built (1f).** Every gate passes or has a recorded measurement. The table is `experiments/038-profiles-spikes/phase1-gates.md` (merged with phase 1).
+- **In CI.** The lease harness and the S1 and S3 harnesses run in CI, with reduced counts; full runs stay available locally. `bun run check` typechecks the experiment.
+- **Multi-subject test.** It runs the whole scale on the real services: 3 Vs of both bodies, 3 looks, 5 views, 2 tabs and three pinned Character panels. It found one bug: a view now keeps the tab it was stored in, so resolution never leaves the shown tab.
+- **Latency gate, revised.** An edit enters the outbox in memory at once. Its write to recovery storage and its store to the library are deferred by up to 250 ms by design (1d-ii), so a renderer crash can lose at most that last 250 ms. The gate is therefore p95 from store request to acknowledgement ≤ 250 ms. On the data drive (D:), p95 is 2–3 ms in most runs, with a max of 52 ms when a background flush coincides. Edit to acknowledgement (p95 about 256 ms) is the expected deferred store, not a gate.
+- **History chunks are not split** (§2.2). The write volume is about 167 KB a command: about 300 MB an hour at one command every 2 s. Revisit if a look's document grows well past the 16-layer, 80-step fixture, if several looks autosave at once (phase 5), or if a request on D: passes 100 ms.
+- **Process-tree kill** (§2.3). Chrome commits `localStorage` about 5 s after the first change, then about once a minute; a whole-tree kill lost 1–35 s of browser-only writes. While the host is up, the library acknowledges each edit within milliseconds, so a tree kill loses only the last deferred store (about 250 ms) of a continuous edit. On desktop, every outbox key is also written to the host's outbox files at once. WebView2 itself isn't measured.
+- **Undo.** `character.undo` and `character.redo` are retired: the Character panel uses `history.*` with `character:<id>`. A V's Undo waits while no context shows it (during a reload), and keeps its steps. A scope nothing names falls back to a general line. View and lighting changes never take the editing context.
 
 - **Order:** 1, 4a, 2, 3, 4b, 5, 6. Phase 2's tab-switch gate waits for 4a.
 - **Where to look first if it runs over:** phase 1's lease and fencing, the one unspiked persistence piece.
