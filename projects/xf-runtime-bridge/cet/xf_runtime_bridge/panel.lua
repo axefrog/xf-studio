@@ -243,6 +243,59 @@ function panel.carrySoft(old, new, soft)
   return out
 end
 
+-- The review of 0.8.4: Dear ImGui's Undo and Redo put text back that the soft breaks were dropped with (select across a
+-- wrapped line, delete, Ctrl+Z: the line break returns without its soft mark, and Send would submit a newline where the
+-- player wrote a space). So the box remembers its last states (text and soft breaks): a text seen before gets its soft
+-- breaks back, and text put back that sat at the same place in a remembered state gets that state's soft breaks there.
+-- Only a line break the player typed (Enter this frame) is never taken for a soft one. Positions are byte indexes.
+local HISTORY = 64
+
+local function copySet(set)
+  local out = {}
+  for k in pairs(set or {}) do out[k] = true end
+  return out
+end
+
+function panel.rememberSoft(state, text, soft)
+  state.commentHistory = state.commentHistory or {}
+  local history = state.commentHistory
+  local last = history[#history]
+  if last and last.text == text then
+    last.soft = copySet(soft)
+    return
+  end
+  history[#history + 1] = { text = text, soft = copySet(soft) }
+  if #history > HISTORY then table.remove(history, 1) end
+end
+
+function panel.trackSoft(state, old, new, typedNewline)
+  if old == new then return state.commentSoft or {} end
+  local soft = panel.carrySoft(old, new, state.commentSoft)
+  if typedNewline then return soft end
+  local history = state.commentHistory or {}
+  for i = #history, 1, -1 do
+    if history[i].text == new then return copySet(history[i].soft) end
+  end
+  local ol, nl = #old, #new
+  local limit = math.min(ol, nl)
+  local a = 0
+  while a < limit and string.byte(old, a + 1) == string.byte(new, a + 1) do a = a + 1 end
+  local b = 0
+  while b < limit - a and string.byte(old, ol - b) == string.byte(new, nl - b) do b = b + 1 end
+  local inserted = string.sub(new, a + 1, nl - b)
+  if not string.find(inserted, "\n", 1, true) then return soft end
+  for i = #history, 1, -1 do
+    local h = history[i]
+    if string.sub(h.text, a + 1, a + #inserted) == inserted then
+      for pos in pairs(h.soft) do
+        if pos > a and pos <= a + #inserted then soft[pos] = true end
+      end
+      break
+    end
+  end
+  return soft
+end
+
 -- The text with its soft breaks as spaces again (what is sent).
 function panel.unwrap(text, soft)
   if not soft or next(soft) == nil then return text end
@@ -404,13 +457,15 @@ local function drawComment(state, queue, theme, which)
     ImGui.GetFontSize() * 4, flags)
   local editing = ImGui.IsItemActive()
   if type(text) == "string" and not reloading then
-    state.commentSoft = panel.carrySoft(before, text, state.commentSoft)
+    local typedNewline = ImGuiKey ~= nil and (ImGui.IsKeyPressed(ImGuiKey.Enter, true) or ImGui.IsKeyPressed(ImGuiKey.KeypadEnter, true))
+    state.commentSoft = panel.trackSoft(state, before, text, typedNewline)
     state.comment = text
     if not nativeWrap and text ~= before then
       -- Wrap to the box's width, less its padding and a scrollbar's room.
       local wrapped, soft = panel.wrap(text, state.commentSoft, function(line) return (ImGui.CalcTextSize(line)) end,
         width - ImGui.GetFontSize() * 2)
       state.commentSoft = soft
+      panel.rememberSoft(state, wrapped, soft)
       if wrapped ~= text then
         if editing then
           state.commentReload = wrapped

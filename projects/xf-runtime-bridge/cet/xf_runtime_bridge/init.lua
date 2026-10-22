@@ -330,6 +330,7 @@ local function runAction(action)
       state.messageOk = true
       state.comment = ""
       state.commentSoft = {}
+      state.commentHistory = nil
       state.commentReload = nil
       state.commentGen = (state.commentGen or 0) + 1 -- a fresh box: ImGui keeps an active box's own text
     else

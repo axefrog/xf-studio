@@ -4,6 +4,7 @@
 #include <RED4ext/Version.hpp>
 
 #include "core/BuildInfo.hpp"
+#include "core/Win32.hpp"
 
 #include <fstream>
 #include <sstream>
@@ -179,18 +180,7 @@ std::filesystem::path GameRoot()
 killkey::Conflicts ReadKillKeyConflicts(const killkey::Chord& aChord)
 {
     const auto root = GameRoot();
-    std::vector<std::pair<std::string, std::string>> files;
-    files.emplace_back("r6/config/inputUserMappings.xml", ReadSmall(root / L"r6" / L"config" / L"inputUserMappings.xml"));
-    // Input Loader's files, which the game merges into its bindings (another mod's keys).
-    std::error_code ec;
-    int count = 0;
-    for (std::filesystem::directory_iterator it(root / L"r6" / L"input", ec), end; !ec && it != end && count < 64; it.increment(ec), ++count)
-    {
-        if (it->path().extension() == L".xml")
-        {
-            files.emplace_back("r6/input/" + it->path().filename().string(), ReadSmall(it->path()));
-        }
-    }
+    const auto files = killkey::InputMappingFiles(root);
     return killkey::FindConflicts(aChord, files, ReadSmall(root / L"bin" / L"x64" / L"plugins" / L"cyber_engine_tweaks" / L"bindings.json"));
 }
 
@@ -248,16 +238,22 @@ nlohmann::json SetKillKey(const std::string& aText, const std::string& aSource)
     state.killKeyChanged.store(true);
     // Saved into config.ini's [ui] kill_key, so it lasts across launches (under MO2 the file is the mod's own copy).
     const auto path = state.pluginDir / L"config.ini";
+    // The review of 0.8.4: only after a whole, successful read; the old file copied to config.ini.bak, the new one written to
+    // a temporary file beside it and moved over it, then read back (core win32::ReplaceSettingsFile). Any failure keeps the
+    // old config.ini as it was.
     std::string saveError;
     {
-        const auto before = ReadSmall(path);
-        const auto after = killkey::WithKillKey(before, killkey::Spelling(chord));
-        std::ofstream out(path, std::ios::binary | std::ios::trunc);
-        out << after;
-        out.flush();
-        if (!out.good())
+        std::string before;
+        std::string ioWhy;
+        bool missing = false;
+        if (!win32::ReadFileExact(path, before, missing, ioWhy))
         {
-            saveError = "config.ini couldn't be written, so the key lasts only until the game closes";
+            saveError = missing ? "config.ini isn't there, so the key lasts only until the game closes"
+                                : "config.ini couldn't be read (" + ioWhy + "), so it was left as it is and the key lasts only until the game closes";
+        }
+        else if (!win32::ReplaceSettingsFile(path, killkey::WithKillKey(before, killkey::Spelling(chord)), state.pluginDir / L"config.ini.bak", ioWhy))
+        {
+            saveError = "config.ini wasn't changed: " + ioWhy + "; the key lasts only until the game closes";
         }
     }
     log::Warn("bridge.kill_key_changed", "key=" + killkey::Spelling(chord) + " from=" + aSource + " saved=" + (saveError.empty() ? "true" : "false") +

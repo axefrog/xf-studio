@@ -285,11 +285,13 @@ bool WriteFileAtomic(const std::filesystem::path& aPath, std::string_view aConte
     DWORD written = 0;
     const auto ok = WriteFile(file, aContent.data(), static_cast<DWORD>(aContent.size()), &written, nullptr) &&
                     written == aContent.size();
-    FlushFileBuffers(file);
+    // 0.8.4 (the review): a failed flush counts as a failed write, so the original is never replaced by a file not on disk.
+    const auto flushed = ok && FlushFileBuffers(file);
+    const auto error = GetLastError();
     CloseHandle(file);
-    if (!ok)
+    if (!ok || !flushed)
     {
-        aError = "WriteFile: " + LastErrorText(GetLastError());
+        aError = std::string(ok ? "FlushFileBuffers: " : "WriteFile: ") + LastErrorText(error);
         DeleteFileW(temp.c_str());
         return false;
     }
@@ -297,6 +299,62 @@ bool WriteFileAtomic(const std::filesystem::path& aPath, std::string_view aConte
     {
         aError = "MoveFileEx: " + LastErrorText(GetLastError());
         DeleteFileW(temp.c_str());
+        return false;
+    }
+    return true;
+}
+
+bool ReadFileExact(const std::filesystem::path& aPath, std::string& aOut, bool& aMissing, std::string& aError, uint64_t aMaxBytes)
+{
+    aOut.clear();
+    aMissing = false;
+    const auto file = CreateFileW(aPath.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE)
+    {
+        const auto error = GetLastError();
+        aMissing = error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND;
+        aError = "CreateFile: " + LastErrorText(error);
+        return false;
+    }
+    LARGE_INTEGER size{};
+    if (!GetFileSizeEx(file, &size) || size.QuadPart < 0 || static_cast<uint64_t>(size.QuadPart) > aMaxBytes)
+    {
+        aError = "the file is too large or its size can't be read";
+        CloseHandle(file);
+        return false;
+    }
+    aOut.resize(static_cast<size_t>(size.QuadPart));
+    DWORD read = 0;
+    const bool ok = aOut.empty() || (ReadFile(file, aOut.data(), static_cast<DWORD>(aOut.size()), &read, nullptr) && read == aOut.size());
+    const auto error = GetLastError();
+    CloseHandle(file);
+    if (!ok)
+    {
+        aError = "ReadFile: " + LastErrorText(error);
+        aOut.clear();
+        return false;
+    }
+    return true;
+}
+
+bool ReplaceSettingsFile(const std::filesystem::path& aPath, std::string_view aContent, const std::filesystem::path& aBackup, std::string& aError)
+{
+    if (!CopyFileW(aPath.c_str(), aBackup.c_str(), FALSE))
+    {
+        aError = "the backup copy couldn't be made (CopyFile: " + LastErrorText(GetLastError()) + "), so nothing was changed";
+        return false;
+    }
+    std::string why;
+    if (!WriteFileAtomic(aPath, aContent, why))
+    {
+        aError = "the new file couldn't be put in place (" + why + "), so the old one stays";
+        return false;
+    }
+    std::string back;
+    bool missing = false;
+    if (!ReadFileExact(aPath, back, missing, why) || back != aContent)
+    {
+        aError = "the file reads back differently after the replace; the old one is kept beside it as " + Narrow(aBackup.filename().wstring());
         return false;
     }
     return true;

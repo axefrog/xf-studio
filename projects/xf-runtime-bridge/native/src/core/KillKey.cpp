@@ -1,5 +1,6 @@
 #include "core/KillKey.hpp"
 #include "core/LayoutGuard.hpp"
+#include "core/Win32.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -251,6 +252,8 @@ std::string WithKillKey(const std::string& aIni, const std::string& aValue)
     bool inUi = false;
     bool hasUi = false;
     size_t uiEnd = 0; // the index after [ui]'s last non-blank line
+    // The review of 0.8.4: the reader applies the last kill_key it meets (in any [ui] section), so that is the one replaced.
+    size_t lastKill = lines.size();
     for (size_t i = 0; i < lines.size(); ++i)
     {
         const auto t = trimmed(lines[i]);
@@ -276,9 +279,13 @@ std::string WithKillKey(const std::string& aIni, const std::string& aValue)
         }
         if (Squash(t.substr(0, eq)) == "kill_key")
         {
-            lines[i] = setting;
-            return join(lines);
+            lastKill = i;
         }
+    }
+    if (lastKill < lines.size())
+    {
+        lines[lastKill] = setting;
+        return join(lines);
     }
     if (hasUi)
     {
@@ -410,6 +417,38 @@ int Generic(int aVk)
 }
 } // namespace
 
+std::vector<std::pair<std::string, std::string>> InputMappingFiles(const std::filesystem::path& aGameRoot)
+{
+    std::vector<std::pair<std::string, std::string>> files;
+    const auto add = [&files](const std::string& aName, const std::filesystem::path& aPath) {
+        std::string text;
+        std::string why;
+        bool missing = false;
+        if (win32::ReadFileExact(aPath, text, missing, why))
+        {
+            files.emplace_back(aName, std::move(text));
+        }
+    };
+    add("r6/config/inputUserMappings.xml", aGameRoot / L"r6" / L"config" / L"inputUserMappings.xml");
+    const auto input = aGameRoot / L"r6" / L"input";
+    std::error_code ec;
+    int entries = 0;
+    for (std::filesystem::recursive_directory_iterator it(input, std::filesystem::directory_options::skip_permission_denied, ec), end;
+         !ec && it != end && entries < 2000 && files.size() < 257; it.increment(ec), ++entries)
+    {
+        if (it.depth() >= 8)
+        {
+            it.disable_recursion_pending();
+        }
+        std::error_code fileEc;
+        if (it->is_regular_file(fileEc) && it->path().extension() == L".xml")
+        {
+            add("r6/input/" + win32::Narrow(std::filesystem::relative(it->path(), input, fileEc).generic_wstring()), it->path());
+        }
+    }
+    return files;
+}
+
 Conflicts FindConflicts(const Chord& aChord, const std::vector<std::pair<std::string, std::string>>& aMappingFiles, const std::string& aCetBindingsJson)
 {
     Conflicts out;
@@ -427,7 +466,7 @@ Conflicts FindConflicts(const Chord& aChord, const std::vector<std::pair<std::st
         if (const auto found = byKey.find(keyName); !keyName.empty() && found != byKey.end())
         {
             out.warnings.push_back("The game binds " + keyLabel + " (" + Joined(found->second, 3) + " in " + file +
-                                   "), so pressing it also does that.");
+                                   "), so pressing it also does that. To avoid it, press Change... and pick another key.");
         }
         const auto modifier = [&](bool aUsed, const char* aLabel, std::initializer_list<const char*> aNames) {
             if (!aUsed)
@@ -494,7 +533,7 @@ Conflicts FindConflicts(const Chord& aChord, const std::vector<std::pair<std::st
                 return;
             }
             out.warnings.push_back("Cyber Engine Tweaks' hotkey " + aMod.substr(0, 48) + " / " + aId.substr(0, 48) + " uses " +
-                                   (keys == ours ? std::string("the same keys") : std::string("part of these keys")) + ", so it reacts too.");
+                                   (keys == ours ? std::string("the same keys") : std::string("part of these keys")) + ", so it reacts too. To avoid it, press Change... and pick another key, or rebind that hotkey in CET's Bindings.");
         };
         for (const auto& [mod, value] : bindings.items())
         {

@@ -34,6 +34,7 @@
 #include "core/GameThreadQueue.hpp"
 #include "core/InkUi.hpp"
 #include "core/KillKey.hpp"
+#include "core/Win32.hpp"
 #include "core/LivePose.hpp"
 #include "core/Log.hpp"
 #include "core/Messages.hpp"
@@ -4579,6 +4580,52 @@ void Bridge083Tests()
                       homeConflicts.notes.empty() && defaultConflicts.warnings.empty() && defaultConflicts.notes.size() == 1 &&
                       defaultConflicts.notes[0].find("Dodge_Button") != std::string::npos && defaultConflicts.notes[0].find("Sprint_Button") != std::string::npos,
                   defaultConflicts.notes.empty() ? std::string() : defaultConflicts.notes[0]);
+            // The review of 0.8.4: the effective (last) kill_key is the one replaced, across repeated [ui] sections.
+            const std::string twice = "[ui]\nkill_key = End\n\n[log]\nlevel = info\n\n[ui]\nkill_key = Home\n";
+            const auto rewritten = kk::WithKillKey(twice, "Ctrl+F12");
+            Check("0.8.4 (review) kill key: the last kill_key (the one the reader applies) is replaced, so the saved key survives a relaunch",
+                  rewritten == "[ui]\nkill_key = End\n\n[log]\nlevel = info\n\n[ui]\nkill_key = Ctrl+F12\n" && xfb::ParseConfig(rewritten).killKey.vk == 0x7B &&
+                      xfb::ParseConfig(rewritten).killKey.ctrl,
+                  rewritten);
+            {
+                // The review of 0.8.4: the settings file is replaced only after a whole read, with a backup, and read back; nested
+                // Input Loader folders are walked.
+                wchar_t tempDir[MAX_PATH]{};
+                GetTempPathW(MAX_PATH, tempDir);
+                const auto dir = std::filesystem::path(tempDir) / (L"xfb-unit-killkey-" + std::to_wstring(GetCurrentProcessId()));
+                std::filesystem::remove_all(dir);
+                std::filesystem::create_directories(dir / L"r6" / L"config");
+                std::filesystem::create_directories(dir / L"r6" / L"input" / L"SomeMod" / L"deeper");
+                std::ofstream(dir / L"r6" / L"config" / L"inputUserMappings.xml", std::ios::binary) << "<bindings></bindings>";
+                std::ofstream(dir / L"r6" / L"input" / L"SomeMod" / L"deeper" / L"keys.xml", std::ios::binary)
+                    << "<bindings><mapping name=\"SomeMod_Toggle\" type=\"Button\"><button id=\"IK_Home\" /></mapping></bindings>";
+                std::ofstream(dir / L"r6" / L"input" / L"notes.txt", std::ios::binary) << "IK_Home";
+                kk::Chord nestedHome;
+                std::string nestedWhy;
+                kk::Parse("Home", nestedHome, nestedWhy);
+                const auto mappingFiles = kk::InputMappingFiles(dir);
+                const auto nested = kk::FindConflicts(nestedHome, mappingFiles, "");
+                Check("0.8.4 (review) kill key conflicts: Input Loader's nested folders are read (r6/input/SomeMod/deeper/keys.xml), other mappingFiles not",
+                      mappingFiles.size() == 2 && nested.warnings.size() == 1 && nested.warnings[0].find("r6/input/SomeMod/deeper/keys.xml") != std::string::npos &&
+                          nested.warnings[0].find("SomeMod_Toggle") != std::string::npos && nested.warnings[0].find("Change...") != std::string::npos,
+                      nested.warnings.empty() ? std::to_string(mappingFiles.size()) : nested.warnings[0]);
+                const auto iniPath = dir / L"config.iniPath";
+                const auto bak = dir / L"config.iniPath.bak";
+                std::string text, ioWhy;
+                bool missing = false;
+                const bool readMissing = !xfb::win32::ReadFileExact(iniPath, text, missing, ioWhy) && missing;
+                const bool refusedWithoutOriginal = !xfb::win32::ReplaceSettingsFile(iniPath, "[ui]\nkill_key = F12\n", bak, ioWhy) && !std::filesystem::exists(iniPath);
+                std::ofstream(iniPath, std::ios::binary) << "[ui]\nkill_key = End\nhud_panel = true\n";
+                const bool swapped = xfb::win32::ReplaceSettingsFile(iniPath, "[ui]\nkill_key = F12\nhud_panel = true\n", bak, ioWhy);
+                std::string now, old;
+                xfb::win32::ReadFileExact(iniPath, now, missing, ioWhy);
+                xfb::win32::ReadFileExact(bak, old, missing, ioWhy);
+                Check("0.8.4 (review) config.iniPath: a missing file reads as missing; nothing is written without an original; a replace keeps a backup and reads back",
+                      readMissing && refusedWithoutOriginal && swapped && now == "[ui]\nkill_key = F12\nhud_panel = true\n" &&
+                          old == "[ui]\nkill_key = End\nhud_panel = true\n" && !std::filesystem::exists(dir / L"config.iniPath.tmp"),
+                      ioWhy);
+                std::filesystem::remove_all(dir);
+            }
             // 0.8.4 (the UI review's fix 4): the XF box stands where the ink panel does, on any screen.
             const auto closeTo = [](std::pair<float, float> aGot, float aX, float aY) { return std::abs(aGot.first - aX) < 0.5f && std::abs(aGot.second - aY) < 0.5f; };
             const auto wide = xfb::overlay::PanelOrigin("top_left", 40, 360, 3840, 1600, 360, 200);
@@ -4594,7 +4641,7 @@ void Bridge083Tests()
             Check("0.8.4 kill key conflicts: CET hotkeys with the same keys or a part including the key warn (left Ctrl counts as Ctrl); the bridge's own and other keys don't",
                   cetConflicts.warnings.size() == 3 && joinedCet.find("ModA / shot") != std::string::npos && joinedCet.find("ModB / both") != std::string::npos &&
                       joinedCet.find("Old / key") != std::string::npos && joinedCet.find("xf_runtime_bridge") == std::string::npos &&
-                      joinedCet.find("other") == std::string::npos && kk::FindConflicts(ctrlF12, {}, "not json").warnings.empty(),
+                      joinedCet.find("ModB / other") == std::string::npos && kk::FindConflicts(ctrlF12, {}, "not json").warnings.empty(),
                   joinedCet);
         }
         const auto parsed = xfb::ParseConfig("[ui]\nkill_key = Ctrl + End\n");

@@ -33,6 +33,17 @@ std::filesystem::path RuntimeDirectory();
 // Writes a file via a temporary sibling and an atomic replace.
 bool WriteFileAtomic(const std::filesystem::path& aPath, std::string_view aContent, std::string& aError);
 
+// 0.8.4 (the review: the kill key's save truncated config.ini first, and a read failure became empty content): the whole file,
+// or false with aMissing true when it doesn't exist and false on any other failure (the caller must then write nothing).
+bool ReadFileExact(const std::filesystem::path& aPath, std::string& aOut, bool& aMissing, std::string& aError, uint64_t aMaxBytes = 4u * 1024 * 1024);
+
+// 0.8.4: replaces an existing settings file safely: the old file copied to aBackup first (refused if that fails), the new
+// content written and flushed to a temporary sibling, moved over the original (MOVEFILE_REPLACE_EXISTING |
+// MOVEFILE_WRITE_THROUGH), then read back and compared. On any failure before the move the original is untouched; a
+// read-back that differs is reported (the backup still holds the old file). Works the same through MO2's virtual file
+// system, which hooks these calls [hypothesis: checked in game by session 12's K5].
+bool ReplaceSettingsFile(const std::filesystem::path& aPath, std::string_view aContent, const std::filesystem::path& aBackup, std::string& aError);
+
 // 0.8.3: a file's SHA-256 as lowercase hex (BCrypt), read in 1 MB pieces; files over aMaxBytes are refused.
 // aCancelled (0.8.3, the review) is asked before each megabyte; answering true stops the hash ("cancelled"), and it may
 // also throw, which is passed on after the handles are closed.

@@ -10,6 +10,7 @@
 //
 // Game-independent: the plugin polls it, the self-test checks the parsing and the press detection.
 
+#include <filesystem>
 #include <functional>
 #include <string>
 #include <vector>
@@ -46,7 +47,8 @@ bool GameBinds(int aVk);
 // 0.8.4: how config.ini spells a chord ("Ctrl+Shift+End", "off"); Parse reads it back to the same chord.
 std::string Spelling(const Chord& aChord);
 
-// 0.8.4: config.ini's text with [ui] kill_key set to aValue: the existing line replaced in place (everything else kept, the
+// 0.8.4: config.ini's text with [ui] kill_key set to aValue: the effective line (the last one in any [ui] section, which the
+// reader applies; the review of 0.8.4) replaced in place (everything else kept, the
 // file's line endings too), or added at the end of [ui], or a [ui] section added at the end when there is none.
 std::string WithKillKey(const std::string& aIni, const std::string& aValue);
 
@@ -60,6 +62,11 @@ struct Conflicts
     std::vector<std::string> warnings;
     std::vector<std::string> notes;
 };
+// The game's input-mapping files under a game folder, each (its path relative to the folder, its text): the game's own
+// r6/config/inputUserMappings.xml, then Input Loader's r6/input, walked recursively as Input Loader reads it (the review of
+// 0.8.4: r6/input/SomeMod/keys.xml), bounded to 8 levels, 2000 entries and 256 files of at most 4 MB. Unreadable files are
+// skipped. Only reads.
+std::vector<std::pair<std::string, std::string>> InputMappingFiles(const std::filesystem::path& aGameRoot);
 Conflicts FindConflicts(const Chord& aChord, const std::vector<std::pair<std::string, std::string>>& aMappingFiles, const std::string& aCetBindingsJson);
 inline constexpr const char* kUnseenNote =
     "Other mods that read the keyboard directly can't be seen from here; if the key does something else in your game, choose another.";
