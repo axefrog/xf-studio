@@ -608,16 +608,6 @@ Fields met in this dossier that are not on the [map](map.md), with a source and 
 | The Mary Sue, 5 July 2018 | Lens: a disabled writer objected to the director's framing | The byline is ambiguous (two names appear); the page attributes the E3 remark to a studio director. I name neither |
 | TheGamer interview | Lens: the quest director is Mateusz Tomaszkiewicz | Confirmed; the interviewer is not shown on the page |
 
-## Corrections after credit verification
-
-| Source | What this dossier said | What the source shows |
-|---|---|---|
-| Hartmann, Toz and Brandon (2010) | "Marina Brandon" | The authors' institution lists only the initials E. Toz and M. Brandon |
-| The Register, on AI Dungeon | Titled "AI Dungeon" | The real headline is about half of an AI text generator's sessions being sexual, some involving minors; the dossier's use of it as evidence for the minors floor stands |
-| TIME, review of the game | "Review of Cyberpunk 2077" | The real headline is "'Cyberpunk 2077' Is a Mess On Every Level" |
-| Williams, Martins, Consalvo and Ivory | The linked copy | A university course copy; the credit links the DOI |
-| Map row ETH-05 (lens claim) | Evidence points away from violence | The APA's 2020 resolution reports a reliable association with aggressive outcomes, not violence. The map row is corrected |
-
 ## Credit candidates
 
 Each third-party work that taught us something used in the principles above. "Page" means a web page read through a summarising fetch tool. "Part" means I read the sections named. "Summary" means I saw only a search-engine summary or a secondary account. Creator names are as the pages show them. Only rows marked ready are fit to go into the credits file; the others need a primary page opened. Statutes, regulations and the publisher's fan-content terms informed the floors but are not credits.
