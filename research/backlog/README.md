@@ -20,9 +20,9 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
   3. 1c-i: generic outbox, idempotent transactions, characters on the outbox, conflict UI (done: model-based specification test, about 480k random steps; four Sol rounds); 1c-ii: collection and look working copies, snapshots, Save version, tombstones, checkpoint tuning, workspace-aware receipts (done; four Sol rounds, spec test about 485k steps);
   4. 1d-i: the `profiles-1` migration and its crash harness (done; three Sol rounds); 1d-ii: the running Studio switched onto the new services, with parity gates (done; three Sol rounds, the last Medium fixed after them and checked in phase 1's final review);
   5. 1e: IDs, focus, history, data contracts, de-singletoning (done; three Sol rounds);
-  6. 1f: gate runs, `character.undo` retired, captures for the UI review (running).
+  6. 1f: gate runs, `character.undo` retired, captures for the UI review (done; two Sol rounds, UI copy review).
 
-  It merges once the open High findings are 3 or fewer (bridge 0.8.1). *21 Oct*
+  Phase 1 is complete at `244755bb` (full suite 3,474 pass, 0 fail). It merges after bridge 0.8.3 lands, which closes RB-119..121; that merge's UI review passed with conditions on 22 Oct. *21 Oct*
 - **Polish batch 1** (`claude/polish-1`): thumbnail drag direction, repeated layer names, collection tie order, the flaky mottle test, Build wording, the masculine-plate warning. *21 Oct*
 
 ### Beta blockers
