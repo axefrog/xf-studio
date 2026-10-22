@@ -1,6 +1,8 @@
 # S2. Seed language and seeding layer specification
 
-**Status:** v0.1, 23 October 2026, not yet reviewed. v0.1 folds in [dossier 8](../craft/d08-scale-threads-time.md#9-requirements-for-the-seed-language-p4) (scale, threads and time): scale by turns, clocks, projections, scale forms, closure and outcomes. This is the specification stage of [P4](../p4-seeding-layer.md) (work package [WP-10](../plan.md#82-work-packages)). It is exact enough to implement layer 2 in the reference model from this page plus the kernel specification [S0](kernel.md).
+**Status:** v0.2, 23 October 2026. It went through one review, by GPT-6 Astra; [§16](#16-review-record) records what changed. v0.1 folded in [dossier 8](../craft/d08-scale-threads-time.md#9-requirements-for-the-seed-language-p4) (scale, threads and time).
+
+This is the specification stage of [P4](../p4-seeding-layer.md) (work package [WP-10](../plan.md#82-work-packages)). It is exact enough to implement layer 2 in the reference model from this page plus the kernel specification [S0](kernel.md) and the reference model's [notes](../../../projects/xf-story-engine/reference/SPEC-NOTES.md).
 
 Where this page and P4 differ, this page wins. P4 explains why; this page says exactly what.
 
@@ -14,7 +16,7 @@ Layer 2 is the only way content enters the simulation ([D-02](../decisions.md)).
 - compiles **seed documents** into kernel material (§3);
 - **casts** roles (§5);
 - runs each seed's **lifecycle** and its beats (§6, §7);
-- makes **offers**, and runs the **arbiter**, through which everything that reaches V passes (§8);
+- makes **offers**, and runs the **arbiter**, through which everything that V perceives passes (§8);
 - detects and settles **intersections** between seeds (§9);
 - keeps the seed **record** and the **exposure ledger** (§10);
 - provides the **lint** and the **fit report** (§11).
@@ -25,9 +27,9 @@ Authored packs (layer 4), the procedural engine (layer 3) and other plugins (`st
 
 | Topic | Specification |
 |---|---|
-| Choosing what to sow, fitting open parts, the director, pacing state | S3 |
-| Pack format, player settings, the lint's text lexicon | S4 |
-| Attention aspects, vanilla UI states, the play clock's source, capability reads, channels | S5 |
+| Choosing what to sow, fitting open parts, the director, pacing, attention, promotion | S3 |
+| Pack format, player settings, the lint's text lexicon, closed vocabularies | S4 |
+| Attention aspects, vanilla UI states, the play clock's source, capability reads, channels, display confirmations | S5 |
 | Rendering text and choosing channel content | S7 |
 
 ### 0.2 What changed from P4
@@ -36,11 +38,11 @@ Authored packs (layer 4), the procedural engine (layer 3) and other plugins (`st
    - casts are `core:cast` edges;
    - seed facts are `core:seed-fact` nodes;
    - commitments are `committed` pins;
-   - offers and responses are canon events.
+   - displayed offers and V's responses are canon events.
 
-   Beats, fragments and content choices are layer-2 state, persisted in `SeedState` (§12). They are not kernel nodes.
-2. **Fixed parts don't all compile the same way.** A fixed role constraint becomes a casting `must` (§5). A fixed requirement on world state becomes a `constrain` contribution (§3.2). P4's "fixed means a pin" was too coarse.
-3. **Content choices** (alternates, variants, modes, channels) are drawn by layer 2 with the kernel's draw arithmetic (§3.4), not as kernel slots.
+   Beats, fragments, content choices and deliveries are layer-2 state, persisted in the seed's record (§12). They are not kernel nodes.
+2. **Fixed parts don't all compile the same way.** A fixed role constraint becomes a casting `must` (§5). A fixed requirement on world state becomes a `constrain` contribution (§3.2).
+3. **Content choices** (alternates, variants, modes) are drawn by layer 2 with the kernel's draw arithmetic (§3.4), not as kernel slots.
 
 ### 0.3 The first implementation
 
@@ -48,36 +50,30 @@ The first implementation is in the TypeScript reference model, beside the kernel
 
 | Deferred | The first implementation instead |
 |---|---|
-| The text-honesty lexicon (§11.1, L-20 to L-22) | A small provisional lexicon in a fixture pack; the checks are warnings |
-| Capability predicates over V's state (§2.6, `cap`) | A registry stub that answers `maybe` unless a fixture sets it |
-| Scale forms rendered differently | The form is chosen and recorded; rendering is S7's |
-| The fit report's replay under two director policies (§11.2) | One policy: the director off |
-| The director's scoring and phase hooks (§8.3) | The built-in fallback score |
+| Profiles other than the relationship ladder (§2.10) | The ladder only ([Appendix A](#appendix-a-the-relationship-ladder-profile)) |
+| The text-honesty lexicon (§11.1, L-20, L-21) | A small provisional lexicon in a fixture pack; the checks are warnings |
+| Capability predicates over V's state (`cap`, §2.6) | A registry stub answering `maybe` unless a fixture sets it |
+| Rendering scale forms differently | The form is chosen and recorded; rendering is S7's |
+| The fit report under director policies (§11.2) | The director off |
+| The director's form, phase, scoring and joint hooks (§2.13, §8.3) | The built-in fallbacks |
 | Migration with a beat map (§12.3) | `continue` and `withdraw` only |
+| Stand-ins beyond the constructible subset (§5.4) | The subset only; anything else fails the lint |
 
 ### 0.4 What S2 needs from the kernel (S0 v4)
 
-These are additions, not changes to anything the reference model implements:
-
+These are additions. None changes anything the reference model already implements:
 1. **Fact kinds.**
    - `core:game-fact`: one mirrored `int` slot, `value`. Each game fact is the mirrored node `H("game", "fact:" + name)`.
    - `core:seed-fact`: one `assigned` `int` slot, `value`.
 2. **`core:seed`**, with the `actor` facet and no slots the kernel reads.
 3. **`core:cast`**, an edge type from `core:seed` to any kind, with `data: ['role']`, not perceivable.
 4. **Event kinds** `offer`, `response` and `seed-outcome` in the core event vocabulary.
-5. **A `rung` slot** on `core:person` and `core:group`. It is an `assigned` enum, ordered `seen`, `recurring`, `featured`, `central`. Its reading:
-   - the highest active value pin;
-   - else the lowest value an active region pin allows;
-   - else `seen`.
-
-   S3 promotes with `committed` value pins. An authored region pin is a floor those can't go below, by ordinary arbitration.
+5. **Relevance reaches layer 2.** Relevance emissions on frames whose actor is a `core:seed` are delivered to layer 2, as they are to S1 and S3 (S0 §10.5), in the same order.
 
 Kernel rules that already cover the rest:
-- live seeds and their frames are retention roots (§7.3);
-- seed states are persisted (§14.1);
-- seeds are demand roots (§10.4).
-
-DS-66 (derive functions take the query time) is S1's need, not S2's.
+- seeds are demand roots (§10.4);
+- `SeedRecord`s with their `nodes` and `actor` are retention roots (§7.3);
+- `SeedState` ops persist them (§14.2, the reference model's `SeedRecord`).
 
 ## 1. Packs, templates and instances
 
@@ -96,14 +92,18 @@ A **seed instance** is a minted `core:seed` node. Its `Id` follows S0 §1.1:
 | The procedural engine | `director` | The id of S3's sowing decision | `"seed:" + templateId + ":" + localName` |
 | Another plugin | Its root, `H("root", worldSeed, "plugin:" + pluginId)` | The id of its `story.seed@1` request | As the plugin names it |
 
-An instance records its template's `(pack, id, version)`. A procedural or plugin seed whose document is not in a pack carries its full document in its first `SeedState` op (§12).
+An instance keeps its **expanded document**: the template after profile expansion and the variant merge (§3.1). It keeps this in its state (§12.1). It runs on that document until it ends, whatever later pack versions say (§12.3). Content references (`ContentRef`) still resolve against the active pack, so wording can be corrected under a live instance; structure can't.
 
-### 1.3 When authored seeds are sown
+### 1.3 Sowing authored templates
 
-An authored template is sown when its pack is active and its `sow` predicate (§2.1) first becomes `yes`. The default `sow` is `yes`: sown when the pack activates. A repeatable template is sown again when its `sow` predicate is yes and all of the following hold:
+Each active pack has one **sowing watcher**: a frame on the pack root, with one `reactsTo` interest per fact its templates' `sow` predicates read (§4.1). When a relevance event reaches it, layer 2 evaluates each affected template's `sow`.
+
+A template is sown when its `sow` predicate is `yes`. The default `sow` is `yes`: the template is sown when the pack activates. A repeatable template is sown again when its `sow` is `yes` and all of the following hold:
 - its previous instance is terminal;
 - `repeat.gap` has passed since that instance ended;
-- fewer than `repeat.max` instances exist. Sowing is idempotent: the instance `Id` is fixed by the rules above, so sowing twice finds the existing instance.
+- fewer than `repeat.max` instances exist.
+
+Sowing is idempotent. The instance `Id` is fixed by §1.2, so sowing twice finds the existing instance.
 
 ## 2. The seed document
 
@@ -118,19 +118,18 @@ interface Seed {
   growsFrom?: GrowsFrom;               // §2.13; procedural seeds
   effect?: ToneTag;                    // the one dominant effect; required for vignettes (L-31)
   purpose: { tags: PurposeTag[]; sentence: string };
-  context: Pred;                       // required; where and when this seed makes sense (§2.6)
+  context: Pred;                       // required: where and when this seed makes sense (§2.6)
   intent: Intent;                      // §2.3
   sow?: Pred;                          // authored templates: when to sow (default yes)
-  repeat?: { max: number | 'unbounded'; gap: Duration } ;   // repeatable templates only
+  repeat?: { max: number | 'unbounded'; gap: Duration };   // repeatable templates only
   roles: Record<RoleKey, Role>;        // §2.4
-  facts?: Record<FactKey, SeedFactDecl>;          // §2.5
+  facts?: Record<FactKey, SeedFactDecl>;           // §2.5
   world?: WorldRequirement[];          // §2.5
-  effects?: EffectDecl[];              // §2.5
   depends?: Dependency[];              // §2.5
   windows: Window[];                   // §2.7; at least one
   beats: Record<BeatKey, Beat>;        // §2.8
-  start: BeatKey[];                    // beats available first
-  end: Pred;                           // the end state, also in intent; §6
+  start: BeatKey[];                    // the beats available first
+  end: Pred;                           // the end state (§6)
   unattended: UnattendedPlan;          // §2.9; required for any seed with an offer
   promises?: Promise[];                // §2.8
   clocks?: Record<ClockKey, Clock>;    // §2.14
@@ -141,8 +140,8 @@ interface Seed {
   variation?: Variation;               // §2.11
   latitude?: Latitude;                 // §2.11
   adapt?: AdaptationPoint[];           // §2.11
-  timing?: TimingRequest;              // §2.12; defaults for this seed's requests
-  migrate?: Migration;                 // §12.3
+  timing?: TimingRequest;              // §2.12: defaults for this seed's requests
+  migrate?: Migration[];               // §12.3
 }
 
 type Duration = { clock: 'game' | 'play'; s: number };
@@ -164,67 +163,72 @@ type Part<T> =
 ```
 
 - **A missing optional `Part` is open.**
-- **`ifRejected`** applies when a fixed part loses arbitration (§3.5). Its default is `withdraw` for anchor roles and world requirements, and `degrade` elsewhere. `refit` is allowed only if `latitude` permits re-fitting the part.
+- **`ifRejected`** applies when a fixed part is rejected (§3.5). The default is `withdraw` for anchor roles and world requirements, and `degrade` elsewhere. `refit` is allowed only if `latitude` permits re-fitting the part.
 - **`note`** is the intent note shown in the fit report.
 
 ### 2.3 Intent
 
 ```ts
 interface Intent {
-  end: Pred;                           // the same predicate as Seed.end
   prohibitions: Pred[];                // fitting must never make one yes; the lint checks static cases
   tone: Array<{ tag: ToneTag; role: 'supports' | 'opposes' | 'complicates' }>;
-  aesthetic?: Record<AestheticFeature, number>;   // −1..1, a few coarse weights for fitting
+  aesthetic?: Record<AestheticFeature, number>;    // −1..1: a few coarse weights for fitting
 }
 ```
 
-`PurposeTag`, `ToneTag` and `AestheticFeature` are closed vocabularies in S4. Until the composite seeds them, S4 ships a small starter set marked provisional.
+The end state is `Seed.end`; it isn't repeated here. `PurposeTag`, `ToneTag` and `AestheticFeature` are closed vocabularies in S4. Until the composite seeds them, S4 ships a small starter set marked provisional.
 
 ### 2.4 Roles
 
 ```ts
 interface Role {
   kind: KindId;                        // e.g. core:person, core:place, core:group
-  identity?: Part<Id | GameKey>;       // a specific node
+  identity?: Part<Id | GameKey>;       // a specific node: fixed, or preferred
   must?: Predicate[];                  // required: S0 §8.1 predicates on the candidate
   prefer?: Array<{ p: Predicate; strength: 1 | 2 | 3 }>;
   scope?: RoleScope;                   // where to look; default: the seed's place role's district, else the city
-  anchor?: boolean;                    // cast first, before the others
-  order?: number;                      // cast-order hint among non-anchors
+  anchor?: boolean;                    // preferred first in casting order (§5.1)
+  order?: number;                      // cast-order hint
   optional?: boolean;                  // may be shrunk away (§5.4)
   onUnfilled?: LadderStep[];           // §5.4; default ['wait', 'withdraw']
-  onLost?: 'withdraw' | 'standIn' | 'shrink';     // §5.5; default withdraw for anchors, else as onUnfilled's last step
-  claim?: { span: 'seed' | 'beat' | Duration; share?: 'none' | 'background' | 'any' };  // default seed, none
+  onLost?: 'withdraw' | 'standIn' | 'shrink';    // §5.5; default withdraw for anchors, else onUnfilled's last step
+  claim?: Claim;                       // §9.2; default { span: 'seed', share: 'none' }
   goal?: Goal;                         // effects this role pursues; opens a goal frame on the cast node (§5.3)
-  memberships?: Array<{ group: Id | RoleKey; role?: string }>;     // pull on the cast node; feeds cross-pressure
-  tie?: { to: RoleKey | 'v'; kind: 'companion' | 'rival' | 'mentor' | 'kin' | 'partner'; exits: BeatKey[] };
-  authored?: Array<BeliefDecl | EdgeDecl>;        // grievances, beliefs, debts per direction, each with a reason
-  repertoire?: FragmentRef[];          // casting prefers candidates whose repertoire holds one (§5.2)
-  textAttrs?: string[];                // attributes text may name; each must be guaranteed by `must` or identity (L-17)
-  rung?: 'recurring' | 'featured' | 'central';     // authored seeds: a promotion floor on the cast node (§3.2)
-  client?: { blocked: Pred; stands_to_lose: string };   // job-like seeds: the client's blocked goal
+  memberships?: Array<{ group: Id | RoleKey; role?: string }>;    // feeds cross-pressure
+  tie?: { to: RoleKey | 'v'; kind: 'companion' | 'rival' | 'mentor' | 'kin' | 'partner' };
+  authored?: Array<BeliefDecl | EdgeDecl>;       // grievances, beliefs, debts per direction, each with a reason
+  repertoire?: FragmentRef[];          // casting prefers candidates S1 lists as able to play these (§5.2)
+  textAttrs?: string[];                // attributes text may name; each guaranteed by `must` or identity (L-17)
+  rung?: 'recurring' | 'featured' | 'central';    // an authored promotion floor, passed to S3 (§3.2)
+  client?: { blocked: Pred; standsToLose: string };   // job-like seeds: the client's blocked goal
 }
 
 type RoleScope = { under: Id | RoleKey } | { nodes: Array<Id | RoleKey> } | { region: SpatialRegion } | 'city';
-type LadderStep = 'wait' | { wait: Duration } | { relax: number[] } | 'standIn' | 'shrink' | 'withdraw';
+type LadderStep = { wait: Duration | 'window' } | { relax: number } | 'standIn' | 'shrink' | 'withdraw';
+interface Claim { span: 'seed' | 'beats'; share: 'none' | 'background' | 'any' }
 ```
 
-- **A role's `must` and `prefer`** are kernel predicates (S0 §8.1). A predicate argument MAY name another role as `{ role: RoleKey }`. It resolves to that role's cast `Id`, so the role must be cast earlier (§5.1).
-- **`relax: [i, j]`** moves `must[i]`, then `must[j]`, to `prefer` with strength 1, one at a time, re-casting after each.
-- **A `place` role** uses the place dimensions of [knowledge/places.md](../../../knowledge/places.md) §12. Several of them (wealth, danger, gang presence, public) are derived, so a predicate on them is a registry derive, not a single game field.
+- **Predicates on other roles.** A role's `must` and `prefer` are kernel predicates (S0 §8.1). A predicate argument MAY name another role as `{ role: RoleKey }`. It resolves to that role's cast `Id`, so that role must be cast first (§5.1).
+- **Ladder steps.**
+  - `'wait'` is short for `{ wait: 'window' }`: wait until the seed closes.
+  - `{ relax: i }` demotes `must[i]` to a preference of strength 1.
+- **Place roles.** A `place` role uses the place dimensions of [knowledge/places.md](../../../knowledge/places.md) §12. Several of them (wealth, danger, gang presence, public) are derived, so a predicate on them is a registry derive, not a single game field.
+- **Ties.** A relationship's exits are beats in the seed (Appendix A).
 
 ### 2.5 Facts, world requirements, effects and dependencies
 
 ```ts
 interface SeedFactDecl {
-  route?: { consumers: Array<BeatKey | RewardKey> };   // a route variable; at least one consumer (L-05)
+  route?: { consumers: Array<BeatKey | RewardKey> };   // a route variable: at least one consumer (L-05)
   initial?: number;                    // default 0
+  authoredOnly?: boolean;              // only authored content may write it (boundaries; Appendix A)
 }
 
 interface WorldRequirement {
   target: { role: RoleKey; slot: SlotPath } | { selector: Selector };   // selectors may name roles
   form: Part<Form>;                    // S0 §4.3 forms; fixed → constrain, prefer → weight
-  valid?: { from: 'commit' | BeatKey; to?: 'end' | BeatKey };           // default commit to end
+  from?: 'sown' | 'commit' | BeatKey;  // when it starts; default commit (sown if it names no role)
+  to?: 'end' | BeatKey;                // when it ends; default end
 }
 
 type EffectDecl = (
@@ -237,19 +241,28 @@ type EffectDecl = (
 interface Dependency { on: RoleKey | { fact: string }; hold: 'keep' | 'substitute' | 'notice' }
 ```
 
-- **Seed facts** are `core:seed-fact` nodes minted `H("mint", seedId, seedId, "fact:" + key)`. With no pin, a seed fact reads its `initial` value. Writing one is a `committed` pin with the seed as cause.
-- **Game facts** are written only through the `story.write-vanilla` capability, under the bridge's write class for persisted vanilla state ([requirements H3](../runtime-requirements.md)). A seed without that capability that declares a game write fails the lint (L-12).
-- **Rewards** reference a policy table. A literal amount is not allowed.
-- **Persistence classes.** History is additive, so the class says how long an effect lasts, not whether it happened:
+**Seed facts** are `core:seed-fact` nodes minted `H("mint", seedId, seedId, "fact:" + key)`. Layer 2 is their only writer.
 
-  | Class | Meaning | Kernel form |
-  |---|---|---|
-  | `lasting` | Relationships, reputation, standing, anything a later seed may cite | `committed` pin with no end |
-  | `resettable` | The incidental: a stall closed for the day, a guard moved | `committed` pin valid until `at + reset` **[tunable 7 game days]**, after which it lapses and the slot resolves normally again |
-  | `cosmetic` | A mark on a wall, a changed sign | Only the canon event; no pin |
+**Writing a seed fact.** The fact's value is whatever its single current pin says. Because `committed` pins on one enduring slot compete by `Id`, not by age (S0 §5.2, note 5), layer 2 keeps at most one current pin per fact:
+1. Compute the new value: the `set` value, or the current value plus `add`.
+2. If the fact has a current pin, withdraw it (`PinWithdrawn`). The withdrawn pin stays as history.
+3. Add a new `committed` value pin, with the seed as cause, and record it as the fact's current pin in the seed's state.
 
-  The default is `lasting` for game-fact writes, rewards and effects on ties or standing. Everything else defaults to `resettable`.
-- **Cadence limits** are `repeat` (§2.1) and per-fragment `repeat` (§2.8).
+**Reading a seed fact.** With no current pin, a seed fact reads its `initial` value.
+
+**Game facts** are written only through the `story.write-vanilla` capability, under the bridge's write class for persisted vanilla state ([requirements H3](../runtime-requirements.md)). A seed without that capability that declares a game write fails the lint (L-12).
+
+**Rewards** reference a policy table. A literal amount is not allowed.
+
+**Persistence classes.** History is additive. The class says how long an effect lasts, not whether it happened:
+
+| Class | Meaning | How |
+|---|---|---|
+| `lasting` | Relationships, reputation, standing, anything a later seed may cite | The pin stays until a later write replaces it |
+| `resettable` | The incidental: a stall closed for the day, a guard moved | The write also schedules a game-time **wake-up** at `at + reset` **[tunable 7 game days]**. At that wake-up, if the pin is still current, layer 2 withdraws it, and the fact reads its `initial` again |
+| `cosmetic` | A mark on a wall, a changed sign | Only the canon event; no pin |
+
+The default is `lasting` for game-fact writes, rewards, and effects on ties or standing. Everything else defaults to `resettable`. Resettable game-fact writes are not allowed (L-12).
 
 ### 2.6 Predicates
 
@@ -262,18 +275,22 @@ type Pred =
   | { seedFact: FactKey; op: Cmp; value: number }            // this seed's fact
   | { decided: string }                                      // a game fact's guard (below)
   | { role: RoleKey; p: Predicate }                          // an S0 §8.1 predicate on the cast node
-  | { cast: RoleKey }                                        // the role is cast (tentatively or committed)
+  | { cast: RoleKey }                                        // the role is cast, tentatively or committed
   | { seed: TemplateId | Id; state: SeedStateName[] }        // another seed's lifecycle state
   | { beat: BeatKey; state: BeatState[] }                    // a beat of this seed
+  | { response: BeatKey; is: ResponseKind[] }                // how V answered an offer beat (§7.4)
   | { hour: [number, number] }                               // game clock hour, half-open, wrapping
   | { since: { state: SeedStateName } | { beat: BeatKey }; atLeast: Duration }
+  | { count: EventPattern; since?: { beat: BeatKey } | { state: SeedStateName }; op: Cmp; value: number }
   | { clock: ClockKey; op: Cmp; value: number }              // filled segments of this seed's clock (§2.14)
   | { exposed: ExposurePattern }                             // §10.2
   | { cap: CapabilityRef }                                   // a capability read over V's state (S5)
-  | { fn: FnRef; args: unknown[] }                           // a registry predicate returning yes, no or maybe
+  | { setting: SettingKey; is: string[] }                    // a player setting (S4)
+  | { fn: FnRef; args: unknown[]; reads: FactRead[] }        // a registry predicate; `reads` lists its dependencies
   | 'yes' | 'no';
 
 type Cmp = 'eq' | 'ne' | 'lt' | 'le' | 'gt' | 'ge';
+type EventPattern = { kind?: string; participant?: RoleKey | Id | 'v'; role?: string; place?: RoleKey | Id; effect?: Effect; witnessedByV?: boolean };
 ```
 
 **Evaluation** uses Kleene's strong three-valued logic:
@@ -282,16 +299,19 @@ type Cmp = 'eq' | 'ne' | 'lt' | 'le' | 'gt' | 'ge';
 - `not` swaps `yes` and `no` and keeps `maybe`.
 
 **Atoms:**
-- **`fact`** is `maybe` if the fact has no game reading, or if its guard is not `yes`. Otherwise it compares the reading.
-- **Guards.** The facts table ([main-story-facts.json](../main-story-facts.json)) MAY give a fact a `decidedBy` predicate: typically the completion fact of the quest that sets it. Until `decidedBy` is `yes`, every read of that fact is `maybe`. `{ decided: f }` is `f`'s `decidedBy`, or `yes` if it has none. This makes "not dead" mean "decided, and not dead".
+- **`fact`** is `maybe` if the fact has no game reading in effect, or if its guard is not `yes`. Otherwise it compares the reading.
+- **Guards.** The facts table ([main-story-facts.json](../main-story-facts.json)) MAY give a fact a `decidedBy` predicate, typically the completion fact of the quest that sets it. Until `decidedBy` is `yes`, every read of that fact is `maybe`. `{ decided: f }` is `f`'s `decidedBy`, or `yes` if it has none. This makes "not dead" mean "decided, and not dead".
 - **`role`** is `maybe` if the role isn't cast, or if the kernel's resolution returns anything but `ok`.
-- **`hour`, `since`, `seed`, `beat`, `seedFact` and `clock`** are never `maybe`.
+- **`seed`** with a template id is `yes` if **any** instance of that template is in one of the states. With an instance `Id`, it reads that instance.
+- **`since`** is `no` if the state or beat was never entered.
+- **`count`** counts the events matching the pattern that layer 2 has **consumed** (§2.14) at or after the `since` point, or since sowing.
+- **`hour`, `since`, `seed`, `beat`, `response`, `seedFact`, `count`, `clock` and `setting`** are never `maybe`.
 - **`exposed`** is `yes` or `no` (§10.2).
 - **`cap` and `fn`** return what the registry function returns.
 
-Evaluation reads the kernel at the current revision and game time. It is read-only and emits nothing (S0 I-13).
+Evaluation reads the kernel at a given revision and game time (§4). It is read-only and emits nothing (S0 I-13).
 
-**`maybe` never fires anything.** Every transition in this specification fires on `yes` only. A condition that should fire on "not known to be false" is written `not(... = no)` explicitly. The lint flags it (L-25) so it's deliberate.
+**Effects fire on `yes` only.** Every transition that changes the world or reaches V requires `yes` (S2-I-8). A **cancellation** may act on `maybe`: withdrawing a pending request, or returning to `waiting`. Cancelling sends nothing to V and changes nothing in the world.
 
 ### 2.7 Windows
 
@@ -301,22 +321,23 @@ interface Window {
   opens: Pred;
   closes?: Pred;                       // default 'no'
   lead?: 'early' | 'preferred' | 'late';          // where in the open span to aim; S3 reads it
-  urgency?: Array<{ when: Pred; level: number }>; // 0..1; the highest level whose `when` is yes
+  urgency?: Array<{ when: Pred; level: number }>; // 0..1: the highest level whose `when` is yes
   holdsWhileRunning?: boolean;         // default false: closing also ends a running seed
   onClose: 'withdraw' | 'degrade' | 'coda' | 'memory';
-  closeContent?: BeatKey;              // required for coda and memory (L-09)
+  closeContent?: ContentRef;           // required for coda and memory (L-09)
 }
 ```
 
-**A window's state**, evaluated whenever the seed re-evaluates (§6.2):
+**A window's state:**
 
 | `closes` | `opens` | Window state |
 |---|---|---|
 | `yes` | any | `closed` |
-| `no` or `maybe` | `yes` | `open` if `closes` is `no`, else `pending` |
+| `no` | `yes` | `open` |
+| `maybe` | `yes` | `pending` |
 | `no` or `maybe` | `no` or `maybe` | `pending` |
 
-**Closing is latched.** Once a window is `closed`, it stays closed for that instance, whatever the facts do later. The latch is part of `SeedState`.
+**Closing is latched.** Once a window is `closed`, it stays closed for that instance, whatever the facts do later. The latch is part of the instance's state. §4.2 makes sure a transient closing value is seen.
 
 **Urgency** comes from V's position in the story, expressed in the `when` predicates. It never comes from a calendar. With no `urgency` list, it is 0.
 
@@ -325,34 +346,45 @@ interface Window {
 - **closed:** every window is `closed`;
 - **pending:** otherwise.
 
+**The release window.** When a seed's first release is prepared (§8.4), layer 2 records the lowest-index window that is `open` as its **release window**. From then on, only the release window's close affects the running seed (T3), and its `onClose` decides what happens. Before any release, the seed withers only when every window is closed (T2). Its close policy is then the one of the lowest-index window.
+
+**Close policies:**
+
+| Policy | Before release (T2) | After release (T3) |
+|---|---|---|
+| `withdraw` | Withered, silently | Withered, with the closing trace only |
+| `degrade` | As `withdraw` | The seed moves to `unattended`: the world settles it without V |
+| `coda` | Withered; `closeContent` is delivered | Withered; `closeContent` is delivered |
+| `memory` | As `coda`, delivered as a recollection (S7 chooses the channel) | As `coda` |
+
 ### 2.8 Fragments, beats and links
 
 **A fragment** is reusable content, in a pack, at any level:
 
 ```ts
 interface Fragment {
-  id: FragmentId; level: 'phrase' | 'exchange' | SeedLevel;   // an exchange is an action and its reaction
+  id: FragmentId; level: 'phrase' | 'exchange' | SeedLevel;    // an exchange is an action and its reaction
   needs?: Pred;                        // facts it presupposes; it may play only when yes
   leaves?: EffectDecl[];               // facts it establishes when it completes
   implies?: Pred;                      // glance fragments: exactly one implied situation (L-32)
   ask?: FragmentRef;                   // the handle: what V can ask or approach to learn more (§2.14)
-  roles: RoleKey[];                    // role slots it uses; the seed maps them (Beat.bind)
-  applies?: Pred;                      // the most specific applicable alternate wins (§7.2)
+  roles: RoleKey[];                    // role slots it uses; the beat maps them (Beat.bind)
+  applies?: Pred;                      // among alternates, the most specific applicable one wins (§7.2)
   tone?: ToneTag;
-  repeat?: 'never' | { times: number } | 'free';   // default free
+  repeat?: 'never' | { times: number } | 'free';   // default free; counted per save branch (§7.2)
   minGap?: { game?: number; offers?: number };
   salience: 'foreground' | 'background' | 'oddity';
-  forms: { standard: ContentRef; short?: ContentRef; full?: ContentRef };   // rendering length only; see SeedForms
+  forms: { standard: ContentRef; short?: ContentRef; full?: ContentRef };   // rendering length only
   channels: ChannelId[];               // best first; the last is the lowest acceptable
   render?: { phrasings: ContentRef[]; reuse: 'once' | 'cycle' | 'free' };
-  offer?: OfferSpec;                   // a player-facing fragment (§2.9)
+  offer?: OfferSpec;                   // a player-facing offer (§2.9)
   responses?: ResponseTemplate[];      // NPC responses to V's acts (§2.9)
 }
 ```
 
 A fragment reads only facts and its bound roles. It never reads another fragment's state.
 
-**A beat** places fragments in a seed's graph:
+**A beat** places a fragment in a seed's graph:
 
 ```ts
 interface Beat {
@@ -362,25 +394,25 @@ interface Beat {
   links?: Link[];                      // incoming links: what makes this beat available
   join?: 'all' | 'any';                // default all
   objective?: Objective;
-  decision?: { atStake: RoleKey; stances: Stance[] };            // kind decision
-  obstacle?: { affordances: Affordance[] };                      // kind obstacle; at least two
-  conclusion?: { clues: ClueRoute[] };                           // kind conclusion; at least three
+  decision?: { atStake: RoleKey; stances: Stance[] };           // kind decision
+  obstacle?: { affordances: Affordance[] };                     // kind obstacle; at least two
+  conclusion?: { clues: ClueRoute[] };                          // kind conclusion; at least three
   aftermath?: { delay: Duration; signpost: FragmentRef; cancelIf?: Pred };   // kind aftermath
-  failure?: Array<{ when: Pred; warnFirst?: Pred; leadsTo: BeatKey }>;
+  failure?: Array<{ when: Pred; warnFirst?: Pred; leadsTo: BeatKey }>;       // checked in order
   leaves?: EffectDecl[];               // added to the fragment's own
   role?: 'texture' | 'legwork' | 'second-approach';   // what a short form may drop (§2.13)
+  reoffer?: { when: Pred; max: number };              // offer beats: may be offered again (§7.4)
 }
 
 type Link =
-  | { because: BeatKey; on?: Pred }    // available after that beat is done and `on` is yes; `on` defaults to yes
-  | { obstructedBy: BeatKey }          // not available while that beat is running or available
+  | { because: BeatKey; on?: Pred }    // after that beat ends and `on` is yes (default yes)
+  | { obstructedBy: BeatKey }          // not while that beat is available or running
   | { then: BeatKey };                 // plain order; allowed only into texture beats (L-03)
 
 interface Objective { kind: 'task' | 'condition'; succeeds: Pred; fails?: Pred; warns?: Pred }
 interface Affordance { needs: Pred; cost: CostClass; exposure: ExposureClass; combat: boolean }
 interface ClueRoute { beats: BeatKey[] }
 type Stance = 'help' | 'bargain' | 'refuse' | 'oppose' | 'ignore';
-
 interface Promise { id: string; opens: BeatKey; paidBy: Pred; mayStayOpen?: boolean }
 ```
 
@@ -388,7 +420,7 @@ interface Promise { id: string; opens: BeatKey; paidBy: Pred; mayStayOpen?: bool
 - **Reconvergence** is explicit: a beat with several incoming links joins them by `join`. A variant is a condition (`on` or `needs`) on one graph, never a copy of it.
 - **Live paths are bounded.** At most `maxLive` beats of one seed are `available` or `running` at once **[tunable 4]**. The lint checks the static bound (L-04).
 - **Failure forms.** A `failure` caused by distance, time or neglect MUST have `warnFirst` (L-07), and every failure leads to a beat (`leadsTo`).
-- **Promises.** A seed can't reach `resolved` while a promise without `mayStayOpen` is open: its `opens` beat is done and `paidBy` is not `yes`. Such a seed waits; the lint flags promises that no beat can pay (L-08).
+- **Promises.** A promise is **open** when its `opens` beat is done and `paidBy` is not `yes`. A seed can't succeed (T12) while a promise without `mayStayOpen` is open. Forced closures retire open promises (§6.4). The lint flags promises no beat can pay (L-08).
 
 ### 2.9 Offers, choices, responses and the unattended plan
 
@@ -396,18 +428,14 @@ interface Promise { id: string; opens: BeatKey; paidBy: Pred; mayStayOpen?: bool
 interface OfferSpec {
   stakes: Array<{ bearer: RoleKey | 'client' | 'v'; what: StakeTag }>;
   actions: Array<{ id: string; stance: Stance; foresight: ContentRef; writes?: EffectDecl[] }>;
-  nullPath: { id: string; content?: ContentRef };       // the authored option of doing nothing
+  nullPath: { id: string; content?: ContentRef; writes?: EffectDecl[] };   // the authored option of doing nothing
   lapse: { after: Duration; then: 'unattended' | 'reoffer' | 'withdraw'; content?: ContentRef };
-  decline: Array<{ id: string; response: ContentRef }>;
+  decline: Array<{ id: string; response: ContentRef; writes?: EffectDecl[] }>;
   choice: 'flavour' | 'consequential' | 'unchoice';
   retractQuietly?: ContentRef;         // shown when V retracts with one input; default nothing
 }
 
-interface ResponseTemplate {
-  to: ActPattern;                      // V's observed act
-  because: ConcernRef;                 // required: the NPC concern the act touched
-  content: ContentRef;
-}
+interface ResponseTemplate { to: ActPattern; because: ConcernRef; content: ContentRef }
 
 interface UnattendedPlan {
   after: Duration;                     // how long the world takes to settle it without V
@@ -417,7 +445,7 @@ interface UnattendedPlan {
 ```
 
 - **A stake on `v`** (V's money, items, standing) is allowed only as a consequence of an action V accepts (L-15).
-- **A consequential choice:** each action's `writes` MUST include a distinct seed-fact value, and that fact MUST have a consumer (L-06).
+- **A consequential choice:** each action's `writes` MUST include a distinct value of one seed fact, and that fact MUST have a consumer (L-06).
 - **A decision beat's stances** need at least three, including `refuse` (L-14).
 - **Honesty.** The language has no construct that states V's feelings, motives or reasons. Callbacks name V's acts (`ActPattern`), never reasons. Response templates without `because` don't compile (L-19).
 
@@ -426,37 +454,22 @@ interface UnattendedPlan {
 A **profile** is a pack-provided partial seed with parameters. It is data:
 
 ```ts
-interface Profile { id: ProfileId; version: number; params: ParamSchema; body: Partial<Seed>; lint?: LintId[] }
+interface Profile { id: ProfileId; version: number; params: ParamSchema; expand: ExpansionRules; lint?: LintId[] }
 ```
 
-**Expansion** happens before compiling:
-1. Substitute parameters into `body`.
-2. Merge the seed over the expanded body, field by field. The seed's own values win, except where the body marks a part `fixed`: then the seed may not change it (L-02).
-3. Add the profile's own lint rules to this seed's checks.
+**Expansion** runs before compiling:
+1. Generate the seed parts from the parameters by the profile's expansion rules.
+2. Merge the seed's own fields over them, field by field. The seed's values win, except where the profile marks a part `fixed`: then the seed may not change it (L-02).
+3. Add the profile's own lint checks to the seed's.
 
-Profiles shipped with the first content pack:
-- **gig**;
-- **job and heist**;
-- **con**;
-- **four-beat**;
-- **relationship ladder**;
-- **front**: sustained pressure across sessions, at season or arc level. It has:
-  - a clock, and 3 to 5 portents as clock segments;
-  - an impending outcome that isn't world-ending;
-  - stakes questions;
-  - a **landmark** (the part V can see from afar);
-  - a local cost;
-  - a sign set;
-  - `projections` (§2.14);
-  - an end state over city facts.
+The **relationship ladder** is specified in full in [Appendix A](#appendix-a-the-relationship-ladder-profile). It is the first implementation's only profile.
 
-  Its lint is L-34.
-
-[P4 §3.8](../p4-seeding-layer.md#38-profiles-shapes-as-data) gives their shape. The ladder's own rules are lint checks (L-10, L-11, L-16, L-23):
-- at least three exits;
-- an `intimate` scene class that only a human-authored pack scene can fill;
-- pacing counted from V's acts;
-- boundaries only an authored event revises.
+Further profiles come from [P4 §3.8](../p4-seeding-layer.md#38-profiles-shapes-as-data) and [dossier 8](../craft/d08-scale-threads-time.md) (S8-P4-21). Each gets an appendix like A before it is implemented:
+- gig;
+- job and heist;
+- con;
+- four-beat;
+- front.
 
 ### 2.11 Variation, latitude and adaptation
 
@@ -476,36 +489,47 @@ interface Latitude {
 interface AdaptationPoint { part: PartPath; cost: 'cheap' | 'moderate' | 'costly' }
 ```
 
-- **A rare variant** is eligible only while its `rare` predicate is `yes`.
-- **`MaterialKind`** is a closed vocabulary in S4. Its starter set: `callback`, `hook`, `holocall-hook`, `bridge-beat`, `stand-in`, `new-named-character`, `location-swap`, `delay`.
-- **Skeleton features.** The compiler computes them through a registry function: `verb`, `stake`, `relationship`, `outcome`, `tone` and `channel`. They are read-only, for the arbiter, S3 and the tests.
-- **Variety provenance.** Every offer records which mode, variant and alternates produced it (§10.1).
+- **A rare variant** is eligible only while its `rare` predicate is `yes` at sowing.
+- **`MaterialKind`** is a closed vocabulary in S4. Its starter set:
+  - `callback`;
+  - `hook`;
+  - `holocall-hook`;
+  - `bridge-beat`;
+  - `stand-in`;
+  - `new-named-character`;
+  - `location-swap`;
+  - `delay`.
+- **Skeleton features.** The compiler computes `verb`, `stake`, `relationship`, `outcome`, `tone` and `channel` through a registry function. They are read-only, for the arbiter, S3 and the tests.
+- **Variety provenance.** Every delivery records which mode, variant and alternates produced it (§10.1).
 
 ### 2.12 Timing requests
 
 ```ts
 interface TimingRequest {
   kind: 'trace' | 'pin' | 'bark' | 'message' | 'call' | 'approach';
+  class: 0 | 1 | 2 | 3 | 4;            // how intrusive the channel is (dossier 7 §5.3)
   importance: 'low' | 'normal' | 'high';
   purpose: 'introduce' | 'escalate' | 'rest-cue' | 'callback' | 'close' | 'baton' | 'news';
-                                       // baton: a class-0 hint at the next thread during rest; news: a settled outcome (§6.4)
   tolerates: Partial<Record<AttentionAspect, 'allow' | 'forbid'>>;   // default forbid for combat, driving, dialogue
-  maxWait: Duration;                   // on the play clock
+  maxWait: Duration;
   category?: string;
   intensity?: number;                  // −1..1
   onExpire?: 'retry' | 'unattended' | 'withdraw';   // if it waits maxWait unreleased (§8.3)
-  atJoint?: boolean;                   // release only at a joint (§8.3); set for news
 }
 ```
 
-`AttentionAspect` is S5's vocabulary. A beat's request is the seed's `timing`, overridden by the fragment's channel ladder.
+- **`baton`** is a class-0 hint at the next thread during rest.
+- **`news`** is a settled outcome (§6.4). News requests are released only at a joint (§8.3).
+- **`AttentionAspect`** is S5's vocabulary.
+
+A beat's request takes the seed's `timing`; its class and channel come from the fragment's channel ladder (§8.1).
 
 **Defaults** for a seed without `timing`:
-- `kind: 'message'`;
+- `kind: 'message'`, `class: 2`;
 - `importance: 'normal'`;
 - `purpose: 'introduce'`;
 - `maxWait: { clock: 'play', s: 1800 }`;
-- `onExpire: 'retry'` for authored seeds and `'unattended'` for procedural ones.
+- `onExpire: 'retry'` for authored seeds, and `'unattended'` for procedural ones.
 
 **Play-clock durations across a load.** The play clock restarts at a load (§8.2). A play-clock duration that was running (`maxWait`, a lapse, a category timer) restarts from the load. Game-clock durations don't.
 
@@ -532,8 +556,13 @@ type GrowsFrom = { looseEnd: { seed: Id; entry: number } } | { promotion: Id } |
   - a parent whose highest turn sits below a child's highest turn is an error (L-33);
   - a `level` that disagrees with the highest turn is a warning.
 - **A thread is a view, not a type.** The language has no thread construct. Tools and S3 compute threads from `parent`, shared cast nodes or frames, and promises. A season is a seed whose children are arcs.
-- **Attention** (attended, simmering, dormant) is derived by S3 from the times of a seed's last beat and last cue. It is not a lifecycle state.
-- **`growsFrom`** records what a procedural seed grew out of: a loose end of an earlier seed (§6.4), a promotion, or a parent. A procedural arc needs at least two found ancestors in its `growsFrom` chain (L-37). An authored arc needs none.
+- **Attention** (attended, simmering, dormant) is derived by S3. It is not a lifecycle state.
+- **`growsFrom`** records what a procedural seed grew out of:
+  - a loose end of an earlier seed (§6.4), by the record entry's stable number;
+  - a promotion;
+  - or a parent.
+
+  A procedural arc needs at least two found ancestors in its `growsFrom` chain (L-37). An authored arc needs none.
 
 **Scale forms.** A seed MAY offer shorter and fuller versions of itself:
 
@@ -546,34 +575,40 @@ interface SeedForms {
 }
 ```
 
-- **What a short form drops.** It skips the beats whose `role` is in `drops`. It never drops a `decision`, `aftermath`, `conclusion` or `exit` beat; only those three roles can be named, so this holds by construction.
-- **A full form** adds its `adds` beats; they are `skipped` in other forms.
-- **The abstract form** resolves the seed through its unattended plan, with `notice` shown first. It is for a time budget that can't fit even the short form.
-- **The form is chosen at the seed's first release** and recorded. S3's form hook reads three things:
+- **A short form** marks as `skipped` the beats whose `role` is in `drops` (§7.1). A beat whose `kind` is `decision`, `aftermath`, `conclusion` or `exit` MUST NOT have a `role` (L-41), so a short form can't drop one.
+- **A full form** adds its `adds` beats. In other forms they are `skipped`.
+- **The abstract form** delivers `notice`, then moves the seed to `unattended`. It is for a time budget that can't fit even the short form.
+- **The form is chosen when the first release is prepared** (§8.4), and recorded. S3's form hook reads:
   - V's engagement flag;
-  - the player's declared time budget, which is optional, set by the player and never inferred;
+  - the player's declared time budget (optional, set by the player, never inferred);
   - the tempo.
 
   Without the hook, the form is `standard`.
 
-### 2.14 Clocks and projections
+### 2.14 Clocks, counts and projections
+
+**Consumed events.** Clocks and `count` atoms read only events layer 2 has **consumed**. When a relevance event reports a canon event that matches a clock's tick pattern or a `count` pattern, layer 2:
+1. commits every field the pattern used (participants, place, effect), with `committed` pins, so the match can never change on a reload (S0 §9.2);
+2. adds the event's `Id` and time to the seed's consumed set, once. An event that matches twice is still one entry.
+
+A role in a pattern means that role's committed cast **at the event's time**. Before the role commits, nothing matches it.
 
 **A clock** is a deadline the world keeps, whether or not V attends:
 
 ```ts
 interface Clock {
   segments: 4 | 6 | 8;                 // 4 a complex obstacle, 6 a more complicated one, 8 a daunting one
-  ticks: Array<{ event: { kind?: string; participant?: RoleKey | Id; place?: RoleKey | Id; effect?: Effect }; fills?: 1 | 2 | 3 }>;
+  ticks: Array<{ event: EventPattern; fills?: 1 | 2 | 3 }>;   // the first matching tick counts
   signs: FragmentRef[];                // what V can perceive as it fills: one per segment, or a set drawn from
-  onFull: BeatKey;                     // what happens when it fills
+  onFull: BeatKey;
 }
 ```
 
-- **A clock is a derived view.** Its value is the number of filled segments, computed as the sum of `fills` over canon events matching `ticks` since the seed was sown, capped at `segments`. Nothing ticks it. A reload recomputes it from the events.
-- **Each newly filled segment** makes its sign available as a background beat through the arbiter.
-- **Full.** When the clock is full, `onFull` becomes available.
-- **Windows MAY read a clock** through the `clock` atom (§2.6). That is how a window is "relative to a segment".
-- **A clock needs a perceivable source.** At least one sign, and at least one tick event kind that can be exposed (L-36).
+- **A clock's value** is the sum of `fills` over the consumed events matching its ticks, capped at `segments`. It is derived: nothing ticks it, and a reload recomputes it.
+- **Signs.** When the value first reaches segment `i`, the sign for `i` becomes a delivery with the stable id `H("sign", seedId, clockKey, i)`, released through the arbiter (§8). Its delivery state is persisted (§12.1), so it is delivered once.
+- **Full.** When the clock is full, `onFull` becomes available, once.
+- **Windows MAY read a clock** through the `clock` atom. That is how a window is "relative to a segment".
+- **A clock needs a perceivable source:** at least one sign, and at least one tick event kind that can be exposed (L-36).
 
 **Projections** are how a large seed shows at street scale:
 
@@ -581,66 +616,66 @@ interface Clock {
 interface Projection {
   at: { clock: ClockKey; from: number };          // active from this many filled segments
   band: 'distal' | 'proximal' | 'imminent';       // its strength by distance from the front's centre
-  form:
-    | { world: WorldRequirement }                 // e.g. a Field contribution on the districts' rent or danger
-    | { glance: FragmentRef }                     // a street sign, a notice, a changed shop
-    | { media: FragmentRef };                     // news, a broadcast, a feed post
+  form: { world: WorldRequirement } | { glance: FragmentRef } | { media: FragmentRef };
   channels?: ChannelId[];
 }
 ```
 
-- **World projections** compile like world requirements (§3.2), valid from the moment the clock reaches `from`.
-- **Glance and media projections** become background beats.
-- **Strength by distance.** The band chooses strength by travel time and social distance from the front's centre. S3 supplies the distance; without it, every projection uses `distal`.
+- **World projections** compile like world requirements (§3.2). They start when the clock reaches `from`.
+- **Glance and media projections** are deliveries through the arbiter, with stable ids `H("proj", seedId, index)`.
+- **Strength by distance.** The band sets strength by travel time and social distance from the front's centre. S3 supplies the distance; without it, every projection uses `distal`.
 - **Street forms are ordinary glance fragments.** A glance fragment with an `ask` handle MUST reach an offer or a why-trace within two steps (L-38).
 
 ## 3. Compiling
 
 ### 3.1 The steps
 
-Compiling an instance runs once, at sowing, and again after a pack update (§12.3):
+An instance is compiled once, at sowing:
 1. **Expand** the profile (§2.10).
-2. **Draw the mode, then the variant** (§3.4), and merge the variant's `parts`.
-3. **Lint** (§11.1). An error refuses the seed. The refusal is recorded, and the instance is never sown.
-4. **Mint** the seed node and its seed facts.
-5. **Open the seed's frames** (§3.3).
-6. **Add the pack-level contributions:** world requirements that name no role. Requirements that name a role are added at commit (§5.3).
+2. **Draw the mode, then the variant** (§3.4). Merge the variant's `parts`.
+3. **Lint** (§11.1). An error refuses the seed. The refusal is recorded in the pack's sowing record, and the instance is never sown.
+4. **Mint** the seed node.
+5. **Store** the expanded document in the instance's state (§12.1).
+6. **Open the seed's frames** (§3.3), with interests from the dependency collection (§4.1).
+7. **Install** the world requirements whose `from` is `sown`.
 
 ### 3.2 What compiles to what
 
-| Seed construct | Kernel material | Layer or reason | When |
-|---|---|---|---|
-| A fixed world requirement | `constrain` contribution, `Set` or `Const` form | The seed's layer (below) | At sowing, or at commit if it names a role |
-| A preferred world requirement, strength `k` | `weight` contribution, `strength = k` | The seed's layer | As above |
-| A role's identity, `must` and `prefer` | Casting query terms (§5) | — | At casting |
-| A committed cast | `core:cast` edge, seed → node, `data.role` | Cause: the release (§6.3) | At commit |
-| A role's `goal` | A goal frame on the cast node, parent the seed's role frame (§5.3) | — | At commit |
-| A role's `authored` beliefs and edges | Beliefs (source `inferred`, rule `seed`) and edges | Cause: the seed | At commit |
-| A role's `rung` floor | Region pin on the cast node's `rung` slot: the floor and above | `authored`, 400 | At commit |
-| A seed-fact write | Pin on `value`, reason `committed`, ended by its persistence class (§2.5) | 300 | When the writing beat or action completes |
-| A world projection | As a world requirement | The seed's layer | When its clock reaches `from` |
-| A game-fact write | A `story.write-vanilla` request to the game port (S5) | — | As above |
-| A `kernel` effect | A `core:event` with that effect, committed | — | As above |
-| An offer shown, and V's response | `core:event` of kind `offer`, then `response`, with V as witness | Canon (observed) | When shown, and when answered |
-| A window | `reactsTo` interests on the seed's window frame (§3.3) | — | At sowing |
+| Seed construct | Kernel material | Layer or reason | Starts | Ends |
+|---|---|---|---|---|
+| A fixed world requirement | `constrain` contribution, `Set` or `Const` form | The seed's layer (below) | Its `from` | Its `to`, or the seed's end |
+| A preferred world requirement, strength `k` | `weight` contribution, `strength = k` | The seed's layer | As above | As above |
+| A world projection | As a world requirement | The seed's layer | The clock reaching `from` | The seed's end |
+| A role's identity, `must` and `prefer` | Casting query terms (§5) | — | — | — |
+| A committed cast | `core:cast` edge, seed → node, `data.role` | Cause: the release | Commit | The seed's end (`EdgeEnded`) |
+| A role's `goal` | A goal frame on the cast node; its parent is the seed's role frame | — | Commit | The seed's end: `abandoned`, or `satisfied` if the seed resolved |
+| A role's `authored` beliefs and edges | Beliefs (source `inferred`, rule `seed`) and edges | Cause: the seed | Commit | Kept: they are history |
+| A role's `rung` floor | Layer-2 record entry that S3 reads; no kernel slot | — | Commit | Kept |
+| A seed-fact write | `committed` pin; the previous one withdrawn (§2.5) | 300 | The write | The next write, or the reset wake-up |
+| A game-fact write | A `story.write-vanilla` request to the game port (S5) | — | The write | — |
+| A `kernel` effect | A `core:event` with that effect, committed | — | The write | — |
+| A displayed offer, and V's response | `core:event` of kind `offer`, then `response`, with V as witness (observed) | Canon | The display confirmation (§8.5); V's answer | — |
+| Closing | `core:event` of kind `seed-outcome`, committed | Canon | Closing (§6.4) | — |
 
 **The seed's layer** comes from who sowed it:
 
 | Sown by | Contribution layer | Precedence |
 |---|---|---|
 | An authored pack | `authored` | 400 |
-| A plugin through `story.seed@1` | `authored`, if the plugin declares itself an authoring source; else `procedural` | 400 or 100 |
+| A plugin through `story.seed@1` | `authored` if the plugin declares itself an authoring source, else `procedural` | 400 or 100 |
 | The procedural engine | `procedural` | 100 |
 
-Commitments are `committed` pins (300) whoever sowed the seed. A procedural seed's wishes therefore yield to the simulation (200) until committed, and its commitments then hold against it.
+Commitments are `committed` pins (300), whoever sowed the seed. A procedural seed's wishes therefore yield to the simulation (200) until committed, and its commitments then hold against it.
+
+**Ending material.** Ending a contribution writes `ContributionEnded`. Ending an edge writes `EdgeEnded`. Closing a frame sets its status. After a load, only material that hasn't ended is in effect, because the kernel's replay already says so.
 
 ### 3.3 The seed's frames
 
-Each instance has two frames on its own node, opened at sowing:
-- **The window frame,** `level: 'goal'`, weight 1, with one `reactsTo` interest per fact node read by any window, `context` or `sow` predicate: `{ kind: core:game-fact | core:seed-fact, scope: { nodes: [fact] }, slot: 'value' }`. Role predicates add interests on the cast node once it's cast.
-- **One role frame per role,** `level: 'goal'`, weight 1, child of the window frame. It focuses on the cast node once cast.
+Each instance has two kinds of frame on its own node, opened at sowing:
+- **The watch frame,** `level: 'goal'`, weight 1. It carries the instance's dependency interests (§4.1).
+- **One role frame per role,** `level: 'goal'`, weight 1, child of the watch frame. It focuses on the cast node once the role is cast.
 
-Both are active while the seed is live, and are closed (`satisfied` or `abandoned`) when it ends. Through them the kernel tells the seed when the world moves towards it or away from it: there is no polling, except for time-based atoms (§6.2).
+The frames are active while the seed is live. They are closed when it ends (§6.1): `satisfied` if it resolved, `abandoned` otherwise.
 
 ### 3.4 Layer-2 draws
 
@@ -648,10 +683,7 @@ Layer 2 makes these choices with the kernel's draw arithmetic (S0 §1.3 and §5.
 - modes;
 - variants;
 - alternates;
-- channels;
 - casting among candidates (§5.2).
-
-The scale form is not drawn: it comes from S3's form hook, or is `standard` (§2.13).
 
 For a choice `c` among options `F`, with `s = seedId`:
 
@@ -665,100 +697,182 @@ choice    = argmax over o ∈ F of (score(o) + g(o)); exact ties to the lower H(
 - **`K`** is **[tunable 8]**.
 - **`fitWeight`** comes from S3's fitting hook. It is 0 with the director off.
 - **A fixed part** makes `F` its single value.
-- **`attempt`** starts at 0. It increments only when the same choice is legitimately re-made (a re-offer, a re-cast after relaxing).
+- **`attempt`** starts at 0. It increments only when the same choice is legitimately made again: a re-offer, or a re-cast after a ladder step.
 
-The draw is recorded in the seed's state, so a reload re-uses it rather than re-drawing.
+Each draw is recorded in the instance's state. A reload re-uses it rather than drawing again.
+
+**Not drawn:**
+- **The channel** is the first channel in the fragment's ladder that the game port reports available (S5). If none is available, the delivery waits.
+- **The scale form** comes from S3's form hook, or is `standard` (§2.13).
 
 ### 3.5 Watching fixed parts
 
-A fixed world requirement can lose arbitration to a higher layer without the kernel reporting a contradiction ([DS-67](../design-seeds.md)), because only rejected constraints at 600 or above set `contradiction`. So layer 2 watches its own:
-1. **When.** After adding a fixed requirement, and on every relevance delivered to the seed's frames, layer 2 calls `trace` (S0 §13) on each fixed requirement's target.
-2. **What counts as rejected.** A requirement whose constraint is marked rejected is **rejected**.
-3. **What follows.** The requirement's `ifRejected` applies:
-   - `withdraw`: the seed goes to `withdrawn` (§6);
-   - `degrade`: the requirement is ended, and the seed continues without it;
-   - `refit`: S3 is asked to re-fit the part within `latitude`. With the director off, `refit` acts as `degrade`.
-4. **Recording.** Every rejection writes a `fixed-rejected` record entry (§10.1), whatever the policy.
+A fixed world requirement can lose to a higher layer without the kernel reporting a contradiction, because only rejected constraints at precedence 600 or above set `contradiction` ([DS-67](../design-seeds.md)). So layer 2 watches its own. The check depends on the target:
+- **Targets that arbitrate** (sampled, assigned, or derived through a preimage): call `trace` (S0 §13) on the target, and see whether the requirement's constraint is marked rejected.
+- **Mirrored slots of mirrored nodes,** which resolve straight from game readings (S0 §5.1): resolve the slot, and test the value against the requirement's form directly.
 
-A fixed role identity is watched differently: through `onLost` (§5.5).
+**Selector targets** are expanded to the nodes they match, by a kernel query bounded by `watchMax` nodes **[tunable 64]**. A selector that matches more is a lint error (L-42). The expanded nodes get interests on the watch frame.
 
-## 4. Re-evaluation
+A requirement whose check fails is **rejected**. Its `ifRejected` applies:
+- `withdraw`: the seed goes to `withdrawn` (T1);
+- `degrade`: the requirement is ended, and the seed continues without it;
+- `refit`: S3 is asked to re-fit the part within `latitude`. With the director off, `refit` acts as `degrade`.
 
-A live seed **re-evaluates** when:
-- a relevance event reaches one of its frames;
-- a simulation window boundary passes and the seed has `hour` or `since` atoms;
-- an arbiter result for one of its requests arrives (§8);
+Every rejection writes a `fixed-rejected` record entry, whatever the policy.
+
+**When the check runs:**
+- right after the requirement is installed;
+- while preparing a release (§8.4);
+- on every relevance event for its target.
+
+A fixed role identity is watched through `onLost` instead (§5.5).
+
+## 4. Re-evaluation and wake-ups
+
+### 4.1 Dependency collection
+
+At sowing, layer 2 collects every kernel value the instance's predicates can read, and registers an interest for each on the watch frame. The predicates searched:
+- `context`;
+- windows;
+- `end`;
+- beats' `needs` and `on`;
+- objectives;
+- failures;
+- promises;
+- fixed world requirements;
+- clocks;
+- `count` patterns.
+
+| Atom | Interest |
+|---|---|
+| `fact f` | `{ kind: core:game-fact, scope: { nodes: [H("game", "fact:" + f)] }, slot: 'value' }`, plus the same for every fact in `f`'s `decidedBy` |
+| `decided f` | The facts in `f`'s `decidedBy` |
+| `seedFact` | None: layer 2 writes those itself and re-evaluates after each write |
+| `role r, p` | The cast node of `r`, slot `'*'`, added when `r` is cast |
+| Clock ticks and `count` patterns | `{ kind: core:event, where: [the pattern's kind] }`, with the pattern's place or participant scope where it names one |
+| `fn` | Each fact or node in its `reads` |
+| `seed` | None: layer 2 re-evaluates readers when any seed changes state, through a reverse index from template and instance ids to the instances whose predicates name them |
+
+Casting candidates are not watched individually. A `waiting` seed re-casts on its wake-up deadline (§4.3), and on any relevance event to its frames.
+
+### 4.2 Change order and latches
+
+Relevance arrives in the kernel's delivery order (S0 §10.5). Layer 2 processes each instance's relevance events in that order. Window `closes` predicates are evaluated **at the time of each delivered change**: the changed pin's `valid.from`, or the reading's time. Fact atoms resolve at that time (S0 §6.3).
+
+So a closing value latches even if a later change has already reverted it by the time the work item runs. The other predicates are evaluated once, at the current time, after the batch.
+
+### 4.3 Wake-ups
+
+Each live instance keeps a list of **wake-ups**: `(clock, time)` pairs, each for a reason. Game-time wake-ups are checked at every simulation window boundary (S0 §9.4). Play-time wake-ups are checked by the arbiter's step (§8.3).
+
+| Reason | Clock and time |
+|---|---|
+| An `hour` atom in a live predicate | The next hour boundary it names |
+| A `since` atom | When it would become `yes` |
+| A timed `wait` ladder step | Its deadline |
+| An unattended plan | `unattended` entry + `after` |
+| An offer's lapse | Display time + `lapse.after` |
+| An aftermath's delay | When it becomes available + `delay` |
+| A resettable pin | Its reset time (§2.5) |
+| A repeatable template's `gap` | When the gap runs out |
+| A `waiting` seed | The next boundary, at most every `recastEvery` game seconds **[tunable 600]** |
+
+Wake-ups are part of the instance's state (§12.1). After a load, game-time wake-ups already past fire at once, in time order. Play-time wake-ups restart from the load (§2.12).
+
+### 4.4 The re-evaluation step
+
+A live instance **re-evaluates** when:
+- a relevance event reaches its frames;
+- a wake-up fires;
+- the arbiter reports on one of its deliveries;
 - V responds to one of its offers;
-- another seed it reads (`seed` atoms) changes state.
+- a seed it reads changes state;
+- S7 reports content completed.
 
-Re-evaluation is a worklist item (S0 §10.7), processed in seed `Id` order. Re-evaluating:
-1. updates the window states and latches (§2.7);
+Re-evaluation is a worklist item (S0 §10.7), processed in instance `Id` order. Its work counts against the shared tick budget. One step:
+1. updates the window states and latches (§2.7, §4.2);
 2. watches fixed parts (§3.5);
-3. updates beat availability (§7.1);
-4. applies the lifecycle transitions (§6).
+3. updates beats (§7);
+4. applies lifecycle transitions (§6.2), up to `maxTransitions` per step **[tunable 8]**. If more would apply, the instance is queued again behind the others.
 
 ## 5. Casting
 
 ### 5.1 Order
 
-Roles are cast in this order:
-1. Anchor roles, by `order`, then by key.
-2. Roles that other roles' predicates name, before those roles. A cycle among role references is a lint error (L-13).
-3. The rest, fail-first: the role with the fewest candidates in the previous attempt goes first; ties by `order`, then key.
+Roles are cast in **topological order** of their role references. A cycle is a lint error (L-13). Among roles whose references are all cast, the next is chosen by these rules, in order:
+1. anchors first;
+2. then fail-first: fewest candidates in the previous attempt;
+3. then `order`;
+4. then key.
 
 ### 5.2 Casting one role
 
-1. **A role with a fixed identity** has one candidate: that node. It is cast if every `must` holds (`yes`); otherwise it is unfilled.
-2. **Otherwise** run the kernel query (S0 §8):
+1. **The effective requirements.** A role's effective `must` is its `must` minus the terms its ladder has relaxed (§5.4). Relaxed terms count as preferences of strength 1.
+2. **A role with a fixed identity** has one candidate: that node. It is cast if every effective `must` is `yes`; otherwise it is unfilled.
+3. **Otherwise,** run the kernel query (S0 §8) with:
    - `find`: the role's kind;
    - `scope`: the role's scope, with role references resolved;
-   - `must`: the role's `must` predicates;
-   - `prefer`: none;
+   - `must`: the effective `must`;
    - `limit: 'all'`.
-3. **Remove** candidates held by another live seed's cast under an exclusive claim that overlaps this one (§9.2), unless both claims share.
-4. **Choose** by the layer-2 draw (§3.4) over the remaining candidates:
-   - `w(o) = 1`;
-   - each `prefer` term that holds for `o` adds `strength · ln K`;
-   - each fragment in the role's `repertoire` that S1 lists in `o`'s repertoire adds `ln K`.
-5. **Results:**
+
+   A preferred identity is added to the candidates if it satisfies the effective `must`.
+4. **Claims.** Apply claim priority (§9.2) to candidates another live seed holds. A candidate stays if this seed would win the claim. It is removed if this seed would lose.
+5. **Choose** by the layer-2 draw (§3.4), with `w(o) = 1`. These add to a candidate's score:
+   - `strength · ln K` for a preferred identity;
+   - `strength · ln K` for each preference that holds;
+   - `ln K` for each `repertoire` fragment S1 lists for it.
+6. **Results:**
    - an empty set means the role is **unfilled**;
    - a query that returns `failed` means **unfilled**, with reason `too-broad`;
    - otherwise the choice is the role's **tentative cast**.
 
-**Casting is read-only.** Tentative casts live in layer-2 state only. They add nothing to the kernel, so the kernel's revision doesn't change. A trial cast needs no fork.
+**Casting is read-only.** Tentative casts live only in layer-2 state. They add nothing to the kernel, so the kernel's revision doesn't change.
 
 ### 5.3 Committing
 
-Roles commit at the seed's first **release** (§6.3). A role that no beat uses before then commits when the first beat that uses it starts.
+A seed commits its roles when its first release is prepared (§8.4). A role that no beat uses before then commits when the first beat that uses it is prepared.
 
 Committing a role:
-1. Adds the `core:cast` edge, valid from now until the seed ends.
-2. Adds the role's world requirements, scoped to the cast node.
-3. Opens the role's `goal` frame on the cast node, if it has one. Its parent is the seed's role frame, at edge weight 1. Opening it runs the kernel's cross-pressure check (S0 §10.8).
-4. Adds `authored` beliefs and edges.
+1. adds the `core:cast` edge;
+2. installs the world requirements that name the role and start at commit;
+3. opens the role's `goal` frame on the cast node, if it has one, with the seed's role frame as parent at edge weight 1. Opening it runs the kernel's cross-pressure check (S0 §10.8);
+4. adds the role's `authored` beliefs and edges.
 
 The cast edge makes the cast node a retention root (S0 §7.3), so a cast person is never forgotten while the seed is live.
 
 ### 5.4 When a role can't be filled
 
-The role's ladder `onUnfilled` runs in order. The default is `['wait', 'withdraw']`.
+The role's ladder `onUnfilled` runs from its saved **cursor**. The cursor starts at 0 and is persisted.
 
-| Step | Effect |
-|---|---|
-| `wait` | Stay `waiting`, and re-cast on each re-evaluation, until a window closes or `{ wait: d }` runs out |
-| `{ relax: [i, …] }` | Demote the named `must` terms to preferences one at a time, re-casting after each |
-| `standIn` | Mint a new node of the role's kind, `H("mint", seedId, seedId, "role:" + key)`, and add the role's `must` terms as fixed world requirements on it. Resolution generates the rest. Allowed only for roles without a fixed identity (L-18) |
-| `shrink` | Allowed only for `optional` roles. The role is dropped; beats that bind it are `skipped`. If that makes `end` unreachable (§7.4), the next step runs |
-| `withdraw` | The seed goes to `withdrawn` |
+| Step | Effect | Advance when |
+|---|---|---|
+| `{ wait: d }` or `'wait'` | Stay `waiting`. Re-cast on every re-evaluation | Its deadline passes (a wake-up), or, for `'window'`, never: the seed withers when it closes |
+| `{ relax: i }` | Demote `must[i]` to a preference and re-cast at once | The re-cast fails |
+| `standIn` | Prepare a **pending stand-in** (below) | The stand-in recipe is refused at commit |
+| `shrink` | Allowed only for `optional` roles. The role is dropped, and beats that bind it are `skipped` (§7.1) | — |
+| `withdraw` | The seed goes to `withdrawn` (T1) | — |
+
+**Persisted with the cursor:**
+- the set of relaxed terms;
+- the wait deadline.
+
+A ladder that runs off its end acts as `withdraw`.
+
+**Relaxing text guarantees.** A `relax` step MUST NOT demote a term that guarantees a `textAttrs` attribute (L-17 makes the guarantee; L-43 forbids relaxing it).
+
+**Stand-ins** are constructed only from the **constructible subset**: `must` terms with `op` `eq`, `in` or `range` on the stand-in's own non-ref, non-temporal slots. A stand-in role with any other `must` term fails the lint (L-18). Until commit, a pending stand-in is a description in layer-2 state: `{ role, kind, constraints }`. It counts as cast for availability. At commit, layer 2:
+1. mints the node `H("mint", seedId, seedId, "role:" + key)`;
+2. installs its constraints as fixed world requirements, at the seed's layer;
+3. casts it.
 
 ### 5.5 Re-checking at play time
 
-When a beat that binds a committed role starts, the role is re-checked against its `must` terms only. Preferences are not re-checked. If a `must` term is now `no`, the role is **lost**, and `onLost` applies:
+When a beat that binds a committed role is prepared (§8.4), or starts without a release, the role is re-checked against its effective `must`. A term that is `no` means the role is **lost**, and `onLost` applies:
 - `withdraw`;
-- `standIn`, as above, for this beat onwards;
-- `shrink`, if optional.
+- `standIn`, from this beat onwards;
+- `shrink`, if the role is optional.
 
-A `maybe` is not a loss; the beat waits.
+A `maybe` is not a loss; the beat waits. Re-checking runs one query and no ladder steps.
 
 ## 6. The lifecycle
 
@@ -768,238 +882,361 @@ A `maybe` is not a loss; the beat waits.
 |---|---|
 | `sown` | Compiled and live, not yet evaluated |
 | `waiting` | The seed is pending, or a non-optional role is unfilled |
-| `cast` | Open, with every non-optional role tentatively cast; its first request is with the arbiter |
-| `offered` | An offer has been released and is awaiting V's response |
+| `cast` | The seed is open, every non-optional role is tentatively cast, and its first request is with the arbiter |
+| `offered` | Its first offer is released and awaiting V's response |
 | `running` | Its beats are unfolding |
-| `unattended` | V declined, retracted or let the offer lapse; the unattended plan is settling |
-| `resolved` | Terminal: the end state was reached, with or without V |
-| `withered` | Terminal: every window closed before the seed resolved |
-| `withdrawn` | Terminal: withdrawn by its source, by a ladder, or by a rejected fixed part |
+| `unattended` | V declined, retracted or let the first offer lapse, or the release window degraded; the unattended plan is settling |
+| `resolved` | Terminal: it reached its end state, or the world settled it |
+| `withered` | Terminal: its windows closed |
+| `withdrawn` | Terminal: withdrawn by its source, a ladder, or a rejected fixed part |
 
-Terminal states are final. The seed's frames close, its cast edges end, and its world requirements end.
+**Terminal states are final.** On entering one:
+- the instance's frames close (§3.3);
+- its cast edges, contributions and NPC goal frames end (§3.2);
+- its pending requests are withdrawn;
+- §6.4 runs.
 
 ### 6.2 Transitions
 
-Each transition writes a `SeedState` op (§12) and a record entry. They are checked in this order at every re-evaluation, and the first that applies fires. Then evaluation repeats until none applies, at most 8 times per re-evaluation **[tunable]**.
+Each transition is recorded (§10.1). At each re-evaluation step, the first applicable row fires, in table order. Then the table is checked again, up to the step's limit (§4.4).
 
-| # | From | Condition (all `yes`) | To | Effects |
+| # | From | Condition | To | Effects |
 |---|---|---|---|---|
-| T1 | any live | Source withdrawal, a rejection with `withdraw`, a ladder that reached `withdraw`, a lapse with `then: 'withdraw'`, or an expiry with `onExpire: 'withdraw'` | `withdrawn` | End everything (§6.1) |
-| T2 | `sown`, `waiting`, `cast` | The seed is closed (§2.7) | `withered` | Play `closeContent` for coda or memory through the arbiter; close (§6.4) with status `abandoned` |
-| T3 | `running`, `offered` | Any window with `holdsWhileRunning: false` closed | `withered` | As T2. Running beats stop |
-| T4 | `sown`, `waiting` | The seed is open, `context` is yes, and every non-optional role has a tentative cast | `cast` | Submit the first request (§8) |
-| T5 | `sown` | Otherwise | `waiting` | — |
-| T6 | `cast` | The seed is no longer open, `context` is no longer yes, or a tentative cast was lost | `waiting` | Withdraw the pending request |
-| T7 | `cast` | The arbiter released the first request, and it was an offer | `offered` | Commit (§5.3); mint the `offer` event |
-| T8 | `cast` | The arbiter released the first request, and it was a beat with no offer | `running` | Commit; start the beat |
-| T9 | `offered` | V accepted (a `response` event) | `running` | Start the beats after the offer beat |
-| T10 | `offered` | V declined or retracted; or the lapse ran out with `then: 'unattended'` and the offer was exposed (§10.2) | `unattended` | Decline: its response content. Retract: `retractQuietly`, if any. Lapse: its content |
-| T11 | `offered` | The lapse ran out with `then: 'reoffer'`, or the lapse ran out and the offer was never exposed | `cast` | `attempt` + 1 for the offer's draws |
-| T11a | `cast` | The first request expired unreleased with `onExpire: 'unattended'` | `unattended` | — |
-| T12 | `running` | `end` is yes and no promise blocks (§2.8) | `resolved` | Close (§6.4), witnessed if V saw the last beat; status `resolved`, or `transformed` if a child seed `growsFrom` it |
-| T13 | `unattended` | The plan's `after` has passed since entry | `resolved` | Apply `outcome`; mint its events; close (§6.4), settled |
+| T1 | any live | Source withdrawal; a rejection with `withdraw`; a ladder that reached `withdraw`; a role lost with `withdraw`; a lapse with `then: 'withdraw'`; an expiry with `onExpire: 'withdraw'`; a pack removed or migration refused (§12.3) | `withdrawn` | §6.1 |
+| T2 | `sown`, `waiting`, `cast` | The seed is closed (§2.7) | `withered` | The lowest-index window's close policy (§2.7) |
+| T3 | `offered`, `running` | The release window is closed, and it doesn't hold while running | `withered`, or `unattended` for `degrade` | The release window's close policy |
+| T4 | `sown`, `waiting` | The seed is open, `context` is yes, and every non-optional role is cast, tentatively or pending stand-in | `cast` | Submit the first request (§8.1) |
+| T5 | `sown` | None of the above | `waiting` | — |
+| T6 | `cast` | The seed is no longer open, `context` is not yes, or a tentative cast was lost | `waiting` | Withdraw the pending request (a cancellation) |
+| T7 | `cast` | The first release was prepared and confirmed, for an offer | `offered` | Commit (§5.3) |
+| T8 | `cast` | The first release was prepared and confirmed, for a beat that isn't an offer | `running` | Commit; start the beat |
+| T9 | `offered` | V's response to the first offer is an action (§7.4) | `running` | Apply the action's writes; the offer beat is `done` |
+| T10 | `offered` | V's response to the first offer is a decline, a retract, the null path, or an exposed lapse with `then: 'unattended'` | `unattended` | Its content and writes (§7.4) |
+| T11 | `offered` | The first offer lapsed with `then: 'reoffer'`, or lapsed without ever being displayed | `cast` | `attempt` + 1 for the offer's draws |
+| T12 | `running` | `end` is yes, and no promise without `mayStayOpen` is open | `resolved` | Close as a success (§6.4) |
+| T13 | `unattended` | The plan's `after` has passed since entry | `resolved` | Apply `outcome`; mint its events; close as settled (§6.4) |
+| T14 | `cast` | The first request expired unreleased with `onExpire: 'unattended'` | `unattended` | — |
+| T15 | `running` | The seed is **stuck** (§7.5) | `withered` | Close as `abandoned`; record a `stuck` defect |
 
-**Deterministic ids.** An offer's event `Id` is `H("mint", seedId, seedId, "offer:" + beat + ":" + n)`, where `n` counts earlier offers from that beat in this instance. A reload therefore shows the same offer (PR-13).
+**Offer ids.** An offer's event `Id` is `H("mint", seedId, seedId, "offer:" + beat + ":" + n)`, where `n` counts earlier releases of that beat in this instance. A reload therefore shows the same offer (dossier 7's PR-13).
 
 **The world goes on.** A declined or ignored seed doesn't vanish: its client's blocked goal and the unattended plan settle without V ([dossier 9](../craft/d09-agency-consequence.md)).
 
 ### 6.3 Releases
 
-A **release** is the arbiter letting one of the seed's requests through (§8). The first release commits the seed. Before it, nothing about the seed has reached V or changed the world beyond its pack-level contributions.
+A **release** is the arbiter letting one delivery through after it has been prepared (§8.4). The first release commits the seed. Before it, nothing about the seed has reached V, and nothing has changed in the world beyond its sowing material.
 
 ### 6.4 Closing and outcomes
 
-Every move to `resolved` or `withered` **closes** the seed. A move to `withdrawn` closes it only if it was ever released.
+A seed **closes** on every move to `resolved` or `withered`, and on a move to `withdrawn` if it was ever released. Closing it:
 
-Closing a seed:
-1. **Mints one `seed-outcome` event.** It records:
-   - `closure`: `resolved`, `abandoned` or `transformed`;
-   - `witnessed`: true if V was exposed (§10.2) to the beat or plan that ended it;
-   - `looseEnds`: three lists:
+1. **Mints one `seed-outcome` event,** committed. Its kernel fields are only the seed and the time. The details go in a `closure` record entry keyed by the event's `Id`:
+   - **`status`:**
+     - `resolved`, after T12, or after T13 with `end` yes;
+     - `transformed`, if a child seed `growsFrom` it;
+     - `abandoned`, otherwise;
+   - **`witnessed`:** true if V was exposed (§10.2) to the beat or plan that ended it;
+   - **`looseEnds`:**
      - consequence facts no declared consumer has read;
      - cast nodes whose frames the seed changed;
-     - promises retired unpaid.
+     - promises retired unpaid, with each entry's stable number.
 
-   Witnessed and settled completions write the same record; only the flag differs.
-2. **Releases the closing trace.** If the seed has `closing`, it goes out as a class-0 request with purpose `close`. A seed at gig level or above needs one (L-35).
-3. **Sends news if V didn't witness it.** If the seed was released to V at any point and `witnessed` is false, its outcome is submitted as a `news` request with `atJoint: true`. V learns it at the next joint (§8.3), not mid-action.
+   Witnessed and settled completions write the same record. Only the flag differs.
+2. **Retires open promises** on forced closures (withered, withdrawn, or T13 with `end` not yes). They go into `looseEnds`; this is not a defect.
+3. **Queues closing deliveries.** These outlive the seed (§8.6):
+   - the closing trace, if the seed has `closing` and was released: class 0, purpose `close`. A seed at gig level or above needs one (L-35);
+   - the release window's `closeContent`, for coda and memory;
+   - a **news** delivery, if the seed was released at any point and `witnessed` is false.
 
 Loose ends are a record, not new seeds. S3 MAY grow new seeds from them, naming the entry in `growsFrom`.
 
 ## 7. Beats at run time
 
-### 7.1 Beat states and availability
+### 7.1 Beat states
 
-| State | Meaning |
-|---|---|
-| `locked` | Its incoming links aren't satisfied |
-| `available` | Its links are satisfied; it's waiting for the arbiter or V |
-| `running` | Started |
-| `done` | Completed |
-| `skipped` | A shrunk role, an unchosen branch, or a cancelled aftermath |
-| `failed` | Its objective failed; its `failure.leadsTo` beat becomes available |
+| State | Meaning | Final |
+|---|---|---|
+| `locked` | Its links aren't satisfied | no |
+| `available` | Its links are satisfied; it waits for preparation and release | no |
+| `running` | Started | no |
+| `deferred` | An offer beat answered "not now" or left to lapse, waiting to be offered again (§7.4) | no |
+| `done` | Completed | yes |
+| `failed` | Its objective failed | yes |
+| `skipped` | A shrunk role, a short form, an unchosen branch, or a cancelled aftermath | yes |
 
-**A beat becomes `available`** when all of the following hold:
-1. The seed is `running`, or the beat is in `start`.
-2. Its links are satisfied:
-   - each `because` link's beat is `done` and its `on` is yes, joined by `join`;
-   - no `obstructedBy` beat is `available` or `running`;
-   - for `then` links, the beat named is `done`.
-3. Its fragment's `needs` is yes.
-4. Fewer than `maxLive` beats are live.
+| From | To | When |
+|---|---|---|
+| `locked` | `available` | Its links are satisfied (below), its fragment's `needs` is yes, and fewer than `maxLive` beats are live |
+| `locked` | `skipped` | It binds a shrunk role; the form drops it; or no link can ever be satisfied (§7.5) |
+| `available` | `running` | Prepared and released (§8.4), or started directly (§7.3) |
+| `available` | `skipped` | An aftermath whose `cancelIf` is yes |
+| `running` | `done` | Its objective succeeded, or, without one, its content completed |
+| `running` | `failed` | A `failure` fired (§7.3) |
+| `running` | `deferred` | An offer answered with the null path, or lapsed with `then: 'reoffer'` (§7.4) |
+| `deferred` | `available` | Its `reoffer.when` is yes and it was offered fewer than `reoffer.max` times |
+| `deferred` | `done` | It was offered `reoffer.max` times; the last response stands |
 
-Ties among beats that could become available are broken by key.
+A final state never changes. A beat leaves `locked` at most once.
+
+**Links.** A link is satisfied when:
+- `because b, on p`: `b` is in a final state and `p` is yes. A `skipped` source passes through: the link is satisfied once `b` is skipped, whatever `p` says;
+- `obstructedBy b`: `b` is not `available` and not `running`;
+- `then b`: `b` is in a final state.
+
+`join: 'all'` needs every incoming link; `'any'` needs one. Beats in `start` need no links. Ties among beats becoming available at once are broken by key.
 
 ### 7.2 Choosing the fragment
 
-For `{ alternates: [...] }`:
-1. Keep the alternates whose `applies` is yes. Drop those excluded by `repeat`, or by a `minGap` not yet passed.
-2. Keep the most specific: those with the most atoms in `applies`.
-3. Choose among them by the layer-2 draw (§3.4) with key `"alt:" + beat`.
+Every fragment passes the same **eligibility** check, whether named directly or among alternates:
+- its `applies` is yes, if it has one;
+- its `repeat` allows another use;
+- its `minGap` has passed.
 
-If none remains, the beat waits. If the seed is `running` and a window closes meanwhile, T3 applies.
+**Uses** are counted per save branch, in the layer-2 global record (§12.1):
+- the count of earlier uses;
+- the game time and offer count at the last use.
+
+For `{ alternates: [...] }`:
+1. Keep the eligible alternates.
+2. Keep the most specific: those with the most atoms in `applies`.
+3. Choose among them by the layer-2 draw (§3.4), with the key `"alt:" + beat + ":" + n`.
+
+A directly named fragment that isn't eligible makes the beat wait.
 
 ### 7.3 Running a beat
 
-**Release first, where needed.** A beat with a player-facing fragment (an offer, a message, a call) is released through the arbiter. A background beat starts without one:
-- `salience: 'background'` with a class-0 channel;
-- or a beat with no channel.
+**Perceivable beats go through the arbiter.** A beat whose fragment presents anything to V (an offer, a message, a call, a sign, a bark) is prepared and released through the arbiter (§8). A beat with no channel, which only writes facts, mints off-screen events or changes the world, starts at once.
 
-**Running.** While it runs, its `objective` is tracked:
-- `succeeds` yes means `done`;
-- `fails` yes means `failed`;
-- `warns` yes plays its warning through the arbiter.
+**While a beat is running,** at each re-evaluation, in this order:
+1. **`failure` entries,** in order.
+   - An entry with `warnFirst` fires only after its warning was delivered and exposed. Its warning is delivered once, when `warnFirst` is first yes.
+   - The first entry whose `when` is yes fails the beat. Its `leadsTo` beat's links are then checked normally.
+2. **`objective.fails`:** if yes, the beat `failed`. A `failed` beat with no `failure` entry leads nowhere.
+3. **`objective.warns`:** if yes for the first time, its warning is delivered once.
+4. **`objective.succeeds`:** if yes, the beat is `done`.
 
-A beat without an objective is `done` when its content has played (S7 reports it) or, for background beats, at once.
+Failure wins over success when both hold in the same step. A beat without an objective is `done` when S7 reports its content completed. Without content, it is done at once.
 
-**On completion,** its `leaves` are written (§3.2).
+**On `done`,** the beat's `leaves` are written (§2.5).
 
-**Aftermath beats.** On becoming available, the beat waits `delay`. Then it releases its `signpost`, unless `cancelIf` is yes, in which case it is `skipped`.
+**Aftermath beats.** On becoming available, an aftermath waits `delay` (a wake-up). Then, unless `cancelIf` is yes, its `signpost` is delivered and the beat runs.
 
-### 7.4 Reachability
+### 7.4 Offers
 
-`end` is **unreachable** when no assignment of the remaining beats' outcomes can make it yes. The reference model tests this by trying each remaining beat as done, then as skipped, over the seed-fact writes each would make. Its search is bounded at 2¹² combinations **[tunable]**. If the bound is exceeded, the seed is treated as reachable.
+Every offer beat, first or later, follows the same **response lifecycle**:
 
-## 8. Requests and the arbiter
+| Response | Recorded as | Writes | The beat |
+|---|---|---|---|
+| An action | `response` event, `kind = action:<id>` | The action's `writes`, once | `done` |
+| A decline | `response` event, `kind = decline:<id>` | The decline's `writes`, and its response content is delivered | `done` |
+| The null path ("not now") | `response` event, `kind = null` | The null path's `writes` | `deferred`, if it has `reoffer` and offers remain; else `done` |
+| A retract (one input) | `response` event, `kind = retract` | None; `retractQuietly` is delivered | `done` |
+| A lapse, after the offer was exposed | No event; a `lapse` record entry | The lapse content is delivered | By `lapse.then`: `deferred` for `reoffer`, else `done` |
+| A lapse, never exposed | A `missed` record entry | None | Back to `available`, with `attempt` + 1 |
 
-### 8.1 Requests
+A response is recorded once. A second answer to the same offer `Id` is ignored. The `response` atom (§2.6) reads these kinds.
 
-A request is what a seed asks the arbiter to show V:
+**The first offer** also moves the seed (T9 to T11). For later offers, the graph decides what follows: links read the responses through `response` atoms. This is how ladders branch to their exits (Appendix A).
+
+### 7.5 Stuck seeds
+
+A `running` seed is **stuck** when all of the following hold:
+- no beat is `available`, `running` or `deferred`;
+- `end` is not yes;
+- no `locked` beat has a link that could still be satisfied. A `because` link can still be satisfied only if its source isn't final, or its `on` reads something that can change: a fact, a role, a time, or a count;
+- no clock can still fill, and no wake-up is pending.
+
+The check is conservative: anything that could still change counts as "could". A stuck seed withers (T15). The lint warns, from the graph alone, about beats that no path reaches (L-44).
+
+## 8. Deliveries and the arbiter
+
+### 8.1 Deliveries
+
+A **delivery** is anything layer 2 would present to V:
+- an offer;
+- a beat's content;
+- a warning;
+- a sign;
+- a projection;
+- a closing trace;
+- coda content;
+- news.
 
 ```ts
-interface Request {
-  offerOrBeat: Id;                     // the deterministic offer event Id, or H("beat", seedId, beat, n)
-  seed: Id; beat: BeatKey;
-  timing: TimingRequest;               // §2.12, resolved
-  windowClose?: true;                  // set while the seed's window is open: the deadline is its close
+interface Delivery {
+  id: Id;                              // stable: an offer Id, H("beat", seed, beat, n), or a sign or projection id
+  seed: Id; beat?: BeatKey;
+  timing: TimingRequest;               // resolved: class, channel and form filled in
+  windowClose?: true;                  // it expires when the release window closes
   authored: boolean;                   // the seed's layer is authored
-  pull: boolean;                       // V asked for it (e.g. V called the contact): spacing and caps don't apply
-  submitted: number;                   // play-clock seconds
+  pull: boolean;                       // V asked for it (e.g. V called the contact)
+  atJoint: boolean;                    // news
+  bindings: Record<RoleKey, Id>;       // the casts it was prepared with
+  state: 'queued' | 'released' | 'displayed' | 'answered' | 'expired' | 'withdrawn';
+  submitted: number;                   // play seconds
   provenance: { mode?: string; variant?: string; alternates: Record<BeatKey, FragmentId>; channel: ChannelId; form: string };
 }
 ```
 
-### 8.2 The play clock
+A delivery's class is its channel's class: `0` is ambient (a trace, a sign, a background bark); `1` a map pin or journal line; `2` a message; `3` a call; `4` an approach. These follow dossier 7 §5.3. S5 maps channels to classes.
+
+### 8.2 The play clock and session states
 
 The arbiter runs on the **play clock:**
 - seconds of unpaused play in the current session;
 - it stops in menus, pause, photo mode and loading;
-- it does not advance over sleep, waits or fast travel.
+- it doesn't advance over sleep, waits or fast travel.
 
 Its source is the game port (S5). It is session state and is not persisted. After a load it restarts at 0.
 
-**Session states.** The arbiter moves through four states. They are session state, not persisted:
+**Session states:**
 
 | State | Entered | What passes | Left |
 |---|---|---|---|
-| `settling` | At a load | `pull` requests only | After `settle` play seconds **[tunable 90]** |
-| `resituating` | After settling | One cue: the lowest-class request from the seed V was last attending, or, with none, one class-0 hook | When that cue is released, or after 120 play seconds **[tunable]** |
+| `settling` | At a load | `pull` deliveries only | After `settle` play seconds **[tunable 90]** |
+| `resituating` | After settling | One cue of class 2 or lower: from the seed V was last attending, or, with none, one class-0 hook. Class 0 deliveries also pass | When that cue is released, or after 120 play seconds **[tunable]** |
 | `normal` | After resituating | As §8.3 | — |
-| `away` | S5's away marker | Class 0 and 1 channels only | When the marker clears |
 
-The session opens by orienting, not by hooking. A session never opens with a class 3 or 4 push. The rest after a climax is S3's phase (§8.3, step 4).
+**Away** is an overlay, set and cleared by S5's away marker. While it is set, only classes 0 and 1 pass, whatever the state.
 
-**The session ledger.** The arbiter's release log and the seed records give a plain, local, per-session ledger: what was shown, what advanced, what closed, which rungs moved, and the phase at quit. P10's tools write it out; it is not part of the save.
+A session opens by orienting, not by hooking. It never opens with a class 3 or 4 push. The rest after a climax is S3's phase (§8.3, step 4).
+
+**The session ledger.** The arbiter's release log and the seed records give a plain, local, per-session ledger:
+- what was shown;
+- what advanced;
+- what closed;
+- which rungs moved;
+- the phase at quit.
+
+P10's tools write it out. It is not part of the save.
 
 ### 8.3 The release step
 
 The arbiter runs once a second of play:
 
-1. **Expire.** A request is expired when either:
-   - it has waited `maxWait`;
-   - or it had `windowClose` and its window has closed.
-
-   An expired request was never released, so V saw nothing. It goes back to its seed, which applies the request's `onExpire`:
+1. **Expire.** A queued delivery that was never released expires when it has waited `maxWait`, or when it has `windowClose` and the release window closed. V saw nothing. Its seed applies `onExpire`:
    - `retry` re-submits it with `attempt` + 1;
-   - `unattended` lets the world settle it without V (T11a);
+   - `unattended` lets the world settle it (T14);
    - `withdraw` withdraws the seed (T1).
+2. **Gates.** A delivery passes only if:
 
-   A released offer that gets no answer is not expired; its seed applies the offer's `lapse` (T10, T11).
-2. **Hard gates.** These are never relaxed, and a request passes only if:
-   1. no vanilla UI state is busy: dialogue, scene, menu, photo mode, loading, or a vanilla call or banner (S5);
-   2. none of its forbidden attention aspects is active;
-   3. the away marker isn't set, unless the channel is class 0 or 1;
-   4. for a push, not a `pull`:
-      - at least `spacing` play seconds have passed since the last release **[tunable 60]**;
-      - fewer than `cap` releases happened in the last `capWindow` **[tunable 2 per 600 s]**;
-   5. its category timer, if any, has run out **[tunable per category; default 300 s]**;
-   6. the session state allows it (§8.2);
-   7. for an `atJoint` request, V is at a **joint**: S3's phase hook reports arriving somewhere, resting, finishing a job or asking. Without the hook, a joint is the first 10 play seconds after V's combat state and vehicle state are both clear **[tunable]**.
-3. **Tempo.** The player's tempo setting (S4) scales `spacing` and `cap`:
+   | # | Gate | Class 0 | Pull | Others |
+   |---|---|---|---|---|
+   | 1 | No vanilla UI state is busy: dialogue, scene, menu, photo mode, loading, a vanilla call or banner (S5) | applies | applies | applies |
+   | 2 | None of its forbidden attention aspects is active | applies | applies | applies |
+   | 3 | The session state and the away overlay allow it (§8.2) | applies | applies | applies |
+   | 4 | `spacing` play seconds since the last release **[tunable 60]** | — | — | applies |
+   | 5 | Fewer than `cap` releases in the last `capWindow` **[tunable 2 per 600 s]** | — | — | applies |
+   | 6 | Its category timer has run out **[tunable per category; default 300 s]** | — | — | applies |
+   | 7 | For an `atJoint` delivery: a joint is **latched** (below) | applies | — | applies |
+
+   Class-0 deliveries don't count towards spacing or the cap. At most one class-0 delivery is released per `class0Gap` **[tunable 20 s]**.
+
+   **Joints.** A joint is latched when S3's phase hook reports one: arriving somewhere, resting, finishing a job, or asking. Without the hook, a joint is latched when V's combat and vehicle states are both clear. The latch stays set until an `atJoint` delivery is released, or V enters combat, a vehicle or dialogue.
+3. **Tempo.** The player's tempo setting (S4) scales spacing and the cap:
 
    | Tempo | Effect |
    |---|---|
    | `calm` | `spacing` × 2 and `cap` × ½ |
    | `steady` | As set |
    | `restless` | `spacing` × ½ and `cap` × 2 |
-   | `off` | Only `pull` requests and requests from authored seeds pass |
+   | `off` | Only `pull` deliveries, deliveries from authored seeds, and closing deliveries pass |
 
-   Tempo changes cadence only. It never changes a unit's strength, stakes or content. S3 applies the rest of the tempo bundle: thread-opening rate, clock speed, lead times and promotion thresholds. It does so with nested thresholds, so moving the dial never re-rolls the schedule ([dossier 8](../craft/d08-scale-threads-time.md) SES-07, S8-P4-19).
-4. **Phase.** S3's phase hook MAY filter the rest, for example keeping only rest cues during a rest phase. With no director, nothing is filtered.
+   Tempo changes cadence only. It never changes a unit's strength, stakes or content. S3 applies the rest of the tempo bundle (thread-opening rate, clock speed, lead times, promotion thresholds) with nested thresholds, so moving the dial never re-rolls the schedule ([dossier 8](../craft/d08-scale-threads-time.md) SES-07, S8-P4-19).
+4. **Phase.** S3's phase hook MAY filter what remains, for example keeping only rest cues during a rest phase. With no director, nothing is filtered.
 5. **Score.** S3's scoring hook scores what remains. The built-in fallback is:
-   - importance (high 3, normal 2, low 1);
+   - importance: high 3, normal 2, low 1;
    - plus the fraction of `maxWait` already waited;
-   - plus 1 for authored requests.
+   - plus 1 for authored deliveries.
 
-   Ties go to the lower `H("arb", worldSeed, offerOrBeat)`.
-6. **Release** at most one request, and start its timers. The release is logged with the request's provenance and explanation.
+   Ties go to the lower `H("arb", worldSeed, delivery.id)`.
+6. **Prepare and release** the best delivery (§8.4). If preparation fails, try the next, up to `prepareTries` per step **[tunable 3]**. Release at most one delivery per step, plus at most one class-0 delivery.
 
-**What the arbiter never does.** It holds, delays, expires and releases; it never creates or changes content. Every released push is **retractable by one input** (S5) for `retractWindow` seconds **[tunable 10]**. A retraction reaches the seed as T10's retract.
+**What the arbiter never does.** It holds, delays, expires and releases. It never creates or changes content.
 
-**Arbiter state** (queues, timers, the session state) is session state. After a load it is rebuilt from the live seeds' states: every seed in `cast`, and every `available` beat awaiting release, re-submits its request in seed `Id` order.
+**Retracting.** Every released push of class 2 or above can be **retracted by one input** (S5) for `retractWindow` seconds **[tunable 10]**. A retraction is a `retract` response (§7.4).
+
+### 8.4 Prepare, then confirm
+
+Releasing a delivery is two steps, so nothing invalid reaches V.
+
+**Prepare.** The seed:
+1. re-evaluates its windows. A delivery with `windowClose` needs the release window, or for a first release some window, to be `open`;
+2. re-checks the casts the delivery binds: tentative casts against their effective `must`, committed ones by §5.5;
+3. re-checks claims (§9.2);
+4. for a first release: records the release window and the form, then commits (§5.3);
+5. runs the fixed-part watch (§3.5) on everything installed in step 4.
+
+**Confirm.** If every step passed, the delivery is `released` and handed to the game port.
+
+**On failure,** the seed undoes step 4: it ends the edges and contributions it just added, and closes the frames it opened. All of these are history in the op log, but they were never in effect for V. The seed then applies the failure's policy:
+- a closed window: T2 or T3;
+- a lost cast: the role's ladder;
+- a rejected fixed part: its `ifRejected`.
+
+The delivery goes back to the seed, not to V.
+
+### 8.5 Display and exposure
+
+Release is not exposure.
+- **`displayed`.** A released delivery becomes `displayed` only when S5 confirms the player saw it: the message opened, the call answered, the bark played within earshot.
+- **The offer event.** Only then is an offer's `offer` event minted, with V as witness. This makes it canon and exposed (§10.2).
+- **Never displayed.** A released delivery that is never confirmed within `displayTimeout` play seconds **[tunable 120]** counts as missed (§7.4).
+
+Delivery state (`released`, `displayed`, `answered`) is persisted in the seed's state (§12.1). After a load:
+- **Displayed, unanswered offers** stay answerable with the same `Id`. The game port re-presents them where the channel keeps them, such as a message thread. It never re-presents them as new.
+- **Released, undisplayed deliveries** go back to `queued`.
+
+### 8.6 Closing deliveries
+
+The closing deliveries of §6.4 belong to a terminal seed, but they must still arrive. They are kept in the instance's state with stable ids:
+- `H("close", seedId, kind)`, for the closing trace and coda content;
+- `H("news", seedId)`, for news.
+
+The terminal instance stays in the seed table until they are displayed, or until `closeExpiry` game seconds have passed **[tunable 3 game days]**. While it waits, it is not a demand root and holds no retention roots (§12.1). After a load, its closing deliveries are queued again.
 
 ## 9. Intersections
 
 ### 9.1 Detection
 
-Two live seeds A and B **intersect** when any of the following holds. Detection runs on casting and on re-evaluation, through the seeds' own interests:
+Two live seeds A and B **intersect** when any of the following holds. Detection runs on casting and on re-evaluation:
 
 | Kind | Condition |
 |---|---|
-| `claim` | A and B cast the same node, tentatively or committed, with exclusive claims whose spans overlap and that don't both share |
+| `claim` | A and B cast the same node, tentatively or committed, with overlapping claims that don't share |
 | `effect` | An effect A declares writes a fact, or targets a node, that B reads in `needs`, a window, `context` or `depends` |
-| `pressure` | The kernel emits a `Dilemma` whose two frames include a role frame of A and a frame from another origin (B's role frame, or the cast node's own concern) |
+| `pressure` | The kernel emits a `Dilemma` whose two frames include a role goal frame of A and a frame from another origin |
+
+**Claims.**
+- **Spans.** A claim with span `seed` runs from the tentative cast until the seed ends. A claim with span `beats` runs only while a beat binding the role is `available` or `running`.
+- **Sharing.** Claims overlap when their spans overlap. They don't conflict if both share `any`, or both share `background` and neither seed has a `foreground` beat binding the role live at the same time.
 
 ### 9.2 Settling
 
 | Kind | Rule |
 |---|---|
-| `claim` | 1. An authored seed keeps the node; a procedural seed re-casts, excluding it. 2. Between two seeds of the same layer, the one that committed first keeps it; if neither has committed, the lower seed `Id` keeps it. 3. The other runs its role's ladder |
-| `effect` | Nothing is blocked. B's `depends` decides: `keep` asks S3 to hold the dependency (a procedural world requirement holding the fact or node as it is); `substitute` re-casts B's role; `notice` only records it |
+| `claim` | Claim priority, in order: (1) an authored seed beats a procedural one; (2) a committed cast beats a tentative one; (3) between equals, the earlier commit, then the lower seed `Id`. The loser treats the node as unavailable: a tentative loser re-casts; a committed loser treats the role as **lost** (§5.5). Nothing already shown is rewritten |
+| `effect` | Nothing is blocked. B's `depends` decides: `keep` asks S3 to hold the dependency; `substitute` re-casts B's role; `notice` only records it |
 | `pressure` | Never settled away. It is recorded and handed to S3 as story material ([DS-11](../design-seeds.md)) |
 
-Every intersection writes a record entry on both seeds (§10.1).
+**Recording.** Each intersection writes a record entry on both seeds the first time it is found. An unchanged intersection is not recorded again; a change of outcome is.
 
 ## 10. The record and the exposure ledger
 
 ### 10.1 The seed record
 
-Each instance keeps an append-only record. Each entry is `{ at: GameTime, play?: number, kind, data, cause }`. The kinds are:
+Each instance keeps an append-only record. An entry is `{ n, at: GameTime, play?: number, kind, data, cause }`. `n` is the entry's stable number, unique within the instance and never reused.
+
+The kinds:
 - `transition`;
 - `cast`;
 - `commit`;
+- `prepare-failed`;
 - `release`;
+- `display`;
 - `response`;
+- `lapse`;
+- `missed`;
 - `beat`;
 - `fixed-rejected`;
 - `unfilled`;
@@ -1007,32 +1244,35 @@ Each instance keeps an append-only record. Each entry is `{ at: GameTime, play?:
 - `intersection`;
 - `draw`;
 - `expired`;
-- `lint`.
+- `closure`;
+- `stuck`;
+- `rung`.
 
-The record is persisted in `SeedState` (§12). It is what the fit report and `because` citations read. The record is capped at `recordMax` entries per instance **[tunable 512]**. Past the cap, the oldest `draw` and `expired` entries are dropped first; the other kinds are kept.
+The record is capped at `recordMax` entries **[tunable 512]**. Past the cap, the oldest `draw`, `expired`, `missed` and `prepare-failed` entries are dropped first. The other kinds are kept. Dropping never renumbers: references by `n` (`growsFrom`, `looseEnds`) stay valid, and a reference to a dropped entry reads as "dropped".
 
 ### 10.2 The exposure ledger
 
 The exposure ledger answers "was V shown this?". It is derived, not stored. It holds:
-- every canon event with V among its witnesses: offers, responses, and events V observed;
-- every release of a beat whose content S7 reports as displayed.
+- every canon event with V among its witnesses: displayed offers, responses, and events V observed;
+- every delivery in state `displayed`.
 
 ```ts
-type ExposurePattern = { event?: { kind?: string; participant?: RoleKey | Id; effect?: Effect }; fragment?: FragmentId; seed?: TemplateId | Id; since?: Duration };
+type ExposurePattern = { event?: EventPattern; fragment?: FragmentId; seed?: TemplateId | Id; delivery?: Id; since?: Duration };
 ```
 
-`exposed(pattern)` is yes if any entry matches, and no otherwise. The ledger is rebuilt from the kernel's canon events and the seeds' records after a load.
+`exposed(pattern)` is yes if any entry matches, and no otherwise. After a load, the ledger is rebuilt from the kernel's canon events and the instances' delivery states.
 
 **Uses:**
-- an offer that lapsed without ever being displayed counts as missed, not declined: T10 doesn't apply, and the seed returns to `cast`;
+- a lapse counts as declined only if the offer was exposed (§7.4);
 - a hard step MAY require its portent to be exposed first, through `needs: { exposed: … }`;
+- a warned failure fires only after its warning is exposed (§7.3);
 - a callback may cite only exposed events (L-24).
 
 ## 11. Lint and the fit report
 
 ### 11.1 Lint
 
-The lint runs at compile time (§3.1) and on demand from authoring tools (S4, P10). An **error** refuses the seed; a **warning** is reported only.
+The lint runs at compile time (§3.1), and on demand from authoring tools (S4, P10). An **error** refuses the seed. A **warning** is reported only.
 
 | # | Check | Level |
 |---|---|---|
@@ -1041,29 +1281,28 @@ The lint runs at compile time (§3.1) and on demand from authoring tools (S4, P1
 | L-03 | A `then` link into a beat that isn't `texture`; or a seed with more than two beats whose links are all `then` | error |
 | L-04 | The static count of beats that can be live at once exceeds `maxLive` | warning |
 | L-05 | A route variable with no consumer | error |
-| L-06 | A consequential choice whose actions don't write distinct values of a consumed fact | error |
+| L-06 | A consequential choice whose actions don't write distinct values of one consumed fact | error |
 | L-07 | A failure caused by distance, time or neglect without `warnFirst` | error |
 | L-08 | A promise no beat's `leaves` can pay | warning |
 | L-09 | A window with `coda` or `memory` and no `closeContent` | error |
-| L-10 | A relationship ladder with fewer than three exits, or an exit with no content | error |
+| L-10 | A relationship ladder with fewer than three exits, or an exit with no content (Appendix A) | error |
 | L-11 | An `intimate` scene filled by anything other than a human-authored pack scene, or without a fade alternative | error |
-| L-12 | A game-fact write without the `story.write-vanilla` capability | error |
+| L-12 | A game-fact write without the `story.write-vanilla` capability, or marked `resettable` | error |
 | L-13 | A cycle among role references | error |
 | L-14 | A decision beat with fewer than three stances, or none that is `refuse` | warning |
 | L-15 | A stake on `v` not tied to an action V accepts | error |
 | L-16 | A gate on a partner fact (a relationship rung that tests V's romance state elsewhere) | error |
 | L-17 | Text naming a role attribute not guaranteed by the role's `must` or identity | error |
-| L-18 | `standIn` on a role with a fixed identity | error |
+| L-18 | `standIn` on a role with a fixed identity, or with a `must` term outside the constructible subset (§5.4) | error |
 | L-19 | A response template without `because` | error |
 | L-20 | Text that states V's feelings, motives or reasons (lexicon, S4) | warning |
 | L-21 | Second-person reproach or evaluation of V (lexicon, S4) | warning |
 | L-22 | Guilt, streak or countdown mechanics: a `fn` atom or effect in S4's forbidden list | error |
 | L-23 | A delayed consequence with no early cue: an aftermath without `signpost` | error |
 | L-24 | A callback citing an event kind that can't be exposed | warning |
-| L-25 | A condition written to fire on `maybe` (`not(… = no)`) | warning |
 | L-26 | A conclusion with fewer than three clue routes | error |
 | L-27 | An obstacle with fewer than two affordances, or none with `combat: false` | error |
-| L-28 | A construct the game port's capability report says is unavailable (a channel, a capability, a write class) | warning, in plain English |
+| L-28 | A construct the game port's capability report says is unavailable: a channel, a capability, a write class | warning, in plain English |
 | L-29 | A role that can't be cast in any of the sample states (run by the fit report) | warning |
 | L-30 | A beat that isn't `texture` and leaves no fact | error |
 | L-31 | A vignette with no `effect`, or a callback placed before the beat that carries the effect | warning |
@@ -1075,7 +1314,12 @@ The lint runs at compile time (§3.1) and on demand from authoring tools (S4, P1
 | L-37 | A procedural arc with fewer than two found ancestors in its `growsFrom` chain | error |
 | L-38 | A glance fragment with an `ask` that reaches no offer or why-trace within two steps | warning |
 | L-39 | An offer's brief that needs earlier events: an `exposed` atom in its `needs`, unless the callback is marked `across` | warning |
-| L-40 | A promise still open, and not `mayStayOpen`, when the seed closes | error at run time: recorded as a defect |
+| L-41 | A `decision`, `aftermath`, `conclusion` or `exit` beat with a `role` | error |
+| L-42 | A fixed world requirement whose selector can match more than `watchMax` nodes | error |
+| L-43 | A `relax` step on a term that guarantees a `textAttrs` attribute | error |
+| L-44 | A beat no path from `start` reaches | warning |
+
+L-25 and L-40 were removed in v0.2 (§16). Their numbers are not reused.
 
 ### 11.2 The fit report
 
@@ -1094,10 +1338,10 @@ interface FitReport {
   verdict: 'fits' | 'waits' | 'no-fit';
   why?: string[];                      // plain reasons for waits and no-fit
   windows: Record<string, 'open' | 'pending' | 'closed'>;
-  cast: Record<RoleKey, { node?: Id; candidates: number; reasons: string[]; unfilled?: string }>;
-  draws: Record<string, string>;       // mode, variant, alternates, channels, forms
+  cast: Record<RoleKey, { node?: Id; standIn?: boolean; candidates: number; reasons: string[]; unfilled?: string }>;
+  draws: Record<string, string>;       // mode, variant, alternates
   fixedRejected: string[];
-  timing: { firstRequest: TimingRequest; channel: ChannelId };
+  timing: { firstDelivery: TimingRequest; channel: ChannelId };
   exits: Array<{ beat: BeatKey; reachable: boolean; leadsTo: string }>;
   declinePreview: { response?: ContentRef; unattendedOutcome: EffectDecl[] };
   connectingMaterial: string[];        // what fitting would add (empty with the director off)
@@ -1108,74 +1352,102 @@ An author can pin any drawn or fitted choice back into the seed as fixed ([DS-43
 
 ## 12. Persistence
 
-### 12.1 The `SeedState` op
+### 12.1 The seed table
 
-S0 §14.2's `SeedState` carries complete data:
+Layer 2 persists through the kernel's `SeedRecord` (S0 §14.1; the reference model's `retention.ts`). At save time, the kernel writes a `SeedState` op for every record that changed since the parent save, carrying the whole record. A removed record is written as `null`.
+
+There is one record per instance, and one **layer-2 global** record with the id `H("root", worldSeed, "layer2")`.
 
 ```ts
-interface SeedStateOp {
-  seed: Id;
+// SeedRecord.state for an instance
+interface InstanceState {
   template: { pack?: string; id: TemplateId; version: number };
-  document?: Seed;                     // only for seeds not in a pack, in their first op
+  source: { by: 'pack' | 'director' | 'plugin'; layer: Layer };
+  document: Seed;                      // the expanded document (§1.2)
   state: SeedStateName; since: GameTime;
-  latches: Record<string, 'closed'>;   // closed windows
-  cast: Record<RoleKey, { node: Id; committed: boolean; attempt: number }>;
-  roleLadder: Record<RoleKey, number>; // the ladder step reached
-  beats: Record<BeatKey, { state: BeatState; since: GameTime; offers: number }>;
+  releaseWindow?: string; form?: string;
+  latches: string[];                   // closed windows
+  roles: Record<RoleKey, {
+    cast?: Id; standIn?: { kind: KindId; constraints: Predicate[] };
+    committed: boolean; attempt: number;
+    ladder: { cursor: number; relaxed: number[]; waitUntil?: GameTime };
+  }>;
+  facts: Record<FactKey, { pin?: Id }>;           // each seed fact's current pin (§2.5)
+  beats: Record<BeatKey, { state: BeatState; since: GameTime; releases: number; offers: number }>;
   draws: Record<string, { value: string; attempt: number }>;
-  unattendedSince?: GameTime;
-  record: RecordEntry[];               // §10.1, the entries since the previous SeedState op
+  consumed: Array<{ event: Id; at: GameTime }>;    // §2.14
+  deliveries: Delivery[];              // not yet final, including closing deliveries
+  wakeups: Array<{ clock: 'game'; at: GameTime; reason: string }>;
+  record: RecordEntry[];               // §10.1
+  nextEntry: number;
+}
+
+// SeedRecord.state for the layer-2 global record
+interface GlobalState {
+  fragmentUses: Record<FragmentId, { count: number; lastAt: GameTime; lastOffer: number }>;
+  offerCount: number;                  // offers displayed in this branch, for minGap.offers
+  sowing: Record<string, { instances: number; lastEnded?: GameTime; refused?: string }>;   // per pack and template
 }
 ```
 
-A `SeedState` op is written on every transition, every commit, every beat state change and every draw. Its `record` field carries only new entries; replay concatenates them.
+**`SeedRecord.nodes` and `actor`:**
 
-Kernel material the seed writes uses the kernel's own ops:
+| Instance | `nodes` | `actor` |
+|---|---|---|
+| Live | The seed node, its fact nodes, its cast nodes and its pending stand-in nodes | The seed node |
+| Terminal, waiting for closing deliveries | `[]` | Omitted |
+| Terminal, nothing pending | The record is kept for history with `nodes: []`; it may be compacted by S6 | Omitted |
+
+So a terminal seed's history stays queryable, and it is neither a demand root nor a retention root.
+
+**Kernel material.** What a seed writes to the kernel uses the kernel's own records:
 - edges;
 - pins;
 - canon events;
 - contributions it adds at run time;
 - frames.
 
-Contributions compiled from a pack's own templates at sowing are not persisted: they are reloaded with the pack (S0 §14.1).
+Contributions compiled at sowing from a pack template are rebuilt from the stored document on load, so they are not persisted separately.
 
 ### 12.2 Loading
 
 After the kernel replays a save (S0 §14.3), layer 2:
-1. rebuilds each live instance from its latest `SeedState`;
-2. recompiles pack templates;
-3. rebuilds the exposure ledger (§10.2);
-4. re-evaluates every live seed in `Id` order;
-5. rebuilds the arbiter queue (§8.3).
+1. rebuilds each instance from its record, re-installing the sowing contributions of live instances from their stored documents;
+2. rebuilds the reverse index (§4.1) and the exposure ledger (§10.2);
+3. resets delivery states as §8.5 says;
+4. fires game-time wake-ups already past, in time order;
+5. re-evaluates every live instance in `Id` order;
+6. rebuilds the arbiter's queue from every queued delivery, in instance `Id` order, then delivery `Id` order.
 
-Re-evaluation after a load is silent for the kernel. Its layer-2 transitions are real, and are written as new ops in the new epoch.
+Re-evaluation after a load is silent for the kernel. Its layer-2 transitions are real, and are written in the new epoch.
 
 ### 12.3 Pack updates
 
 ```ts
-interface Migration { from: number[]; policy: 'continue' | 'migrate' | 'withdraw'; beatMap?: Record<BeatKey, BeatKey> }
+interface Migration { from: number[]; policy: 'continue' | 'withdraw' | 'migrate'; beatMap?: Record<BeatKey, BeatKey> }
 ```
 
-When a live instance's template has a newer version in the active pack, the new template's `migrate` entry covering the old version applies.
-- **With no entry:**
-  - `continue`, if every beat key, role key and fact key in the instance's state still exists;
-  - otherwise `withdraw`.
-- **`migrate`** renames beats by `beatMap`. It is deferred in the first implementation (§0.3).
-- **A removed pack** withdraws its live instances (T1). Their committed pins and canon events stay, because history is never undone (S0 §6.6).
+A live instance runs on its stored document, so a newer template version changes nothing for it by default: `continue` means **continue the saved version's structure**.
+
+The new template's `migrate` entry covering the instance's version can say otherwise:
+- **`withdraw`** withdraws the instance (T1);
+- **`migrate`** moves it to the new structure by `beatMap`. It is deferred in the first implementation (§0.3).
+
+A **removed pack** withdraws its live instances (T1), because their content references can no longer resolve. Their committed pins and canon events stay: history is never undone (S0 §6.6).
 
 ## 13. Invariants
 
 | # | Invariant |
 |---|---|
-| S2-I-1 | **Determinism.** The same documents, world seed, kernel operations and V responses give identical casts, draws, transitions, offer `Id`s and records |
+| S2-I-1 | **Determinism.** The same inputs give identical casts, draws, transitions, delivery ids and records. The inputs are: the documents, the world seed, the kernel operations, V's responses, and the timestamped session inputs (play clock, attention aspects, UI states, display confirmations, settings) |
 | S2-I-2 | **One door.** Every change a seed makes to the world is a kernel contribution, pin, edge, frame, belief or event whose cause chain leads to the seed, or a game-port write under a declared capability |
-| S2-I-3 | **Read-only until commit.** Sowing adds only the seed node, its facts, its frames and pack-level contributions. Casting and re-evaluation before the first release add nothing else |
-| S2-I-4 | **Everything that reaches V is released by the arbiter** |
-| S2-I-5 | **Nothing is lost silently.** Every refusal, rejected fixed part, unfilled or lost role, expiry, withering and withdrawal has a record entry |
-| S2-I-6 | **Reload stability.** After loading a save, an offer shown before the save has the same `Id`, and the seed is in the same state |
+| S2-I-3 | **Nothing in effect until commit.** Sowing installs only the seed node, its fact nodes, its frames and its `sown` world requirements. Before the first confirmed release, nothing else the seed adds is ever in effect; anything a failed preparation added is ended at once (§8.4) |
+| S2-I-4 | **Everything V perceives from a seed is released by the arbiter** |
+| S2-I-5 | **Nothing is lost silently.** Every refusal, failed preparation, rejected fixed part, unfilled or lost role, expiry, miss, withering, withdrawal and stuck seed has a record entry |
+| S2-I-6 | **Reload stability.** After loading a save, every instance is in the state it was saved in. A displayed offer has the same `Id` and is never shown as new. A pending closing delivery still arrives |
 | S2-I-7 | **V is not owned.** No seed construct pins V's drives, states V's inner life, or spends V's resources without an accepted action |
-| S2-I-8 | **`maybe` fires nothing.** Every transition and availability condition requires `yes` |
-| S2-I-9 | **Terminal states are final,** and closed windows stay closed |
+| S2-I-8 | **Effects need yes.** No transition that changes the world or reaches V fires on `maybe`. Only cancellations may |
+| S2-I-9 | **Final states are final:** terminal seeds, final beats, latched windows, recorded responses |
 | S2-I-10 | **Authored before procedural** in every claim conflict |
 
 ## 14. Fixtures
@@ -1184,27 +1456,30 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 
 | # | Setup | Expected |
 |---|---|---|
-| SF-1 | **Kleene.** Evaluate `all`, `any` and `not` over every pair of `yes`, `no` and `maybe`; a `fact` atom with no reading; a fact with `decidedBy` false and a reading of 0 | The strong Kleene tables. Both atoms read `maybe`. `not(fact = 1)` with the guard false is `maybe` |
-| SF-2 | **Latch.** A window `closes: fact x = 1`. Read x = 1, then x = 0 | The window is `closed` after the first reading and stays closed. The seed withers (T2) once |
-| SF-3 | **Casting determinism.** A role over 50 candidate people, two `prefer` terms. Cast twice from the same state, then once after an unrelated pin elsewhere | All three casts are the same node. The kernel revision is unchanged by casting (S2-I-3) |
-| SF-4 | **Coupling.** As SF-3. Raise a `prefer` term's strength from 1 to 3 | The cast changes only if the new score makes a different candidate win, checked from the recorded draw |
-| SF-5 | **Claim.** An authored seed A and a procedural seed P both prefer the same fixer, exclusive, overlapping | A casts the fixer. P casts someone else, and both records have a `claim` intersection |
-| SF-6 | **Fixed part rejected.** An authored world requirement fixes a cast person's `place` to a bar. The game then reads the person elsewhere (500). `ifRejected: withdraw` | After the next re-evaluation, the trace shows the requirement rejected. The seed is `withdrawn`, with a `fixed-rejected` entry. No kernel contradiction |
-| SF-7 | **Scenario R1.** The [P4 §5](../p4-seeding-layer.md#5-reference-scenario-r1-in-this-language) seed. Facts: q112 not done; then q112 done and Takemura alive and allied; release; V declines at the first rung | `waiting` (window `maybe`); then `cast`; then `offered` with a deterministic offer `Id`; then the decline exit's content plays, and the seed goes `unattended`, then `resolved` with the unattended outcome |
-| SF-8 | **R1, closed by the point of no return.** As SF-7, but the point-of-no-return fact is set while `waiting` | `withered`. The coda is requested through the arbiter |
-| SF-9 | **Reload.** SF-7 up to `offered`. Save; load | The same state and the same offer `Id`. The offer is not released again. Its play-clock lapse restarts from the load. The arbiter settles for 90 s, then re-situates with one cue |
-| SF-10 | **Arbiter gates.** Five pushes submitted at play time 0, spacing 60, cap 2 per 600 | Releases at 0 and 60 (after settling, if after a load); the third waits until 600 |
+| SF-1 | **Kleene.** Evaluate `all`, `any` and `not` over every pair of `yes`, `no` and `maybe`. Then a `fact` atom with no reading, and a fact with `decidedBy` false and a reading of 0 | The strong Kleene tables. Both atoms read `maybe`. `not(fact = 1)` with the guard false is `maybe` |
+| SF-2 | **Latch.** A window `closes: fact x = 1`. Readings `x = 1` at time 10 and `x = 0` at time 11 arrive in one batch, before the seed's work item runs | The window is `closed` and stays closed. The seed withers (T2) once |
+| SF-3 | **Casting determinism.** A role over 50 candidate people, with two `prefer` terms. Cast twice from the same state, then once after an unrelated pin elsewhere | All three casts are the same node. The kernel revision is unchanged by casting |
+| SF-4 | **Coupling.** As SF-3; raise a `prefer` term's strength from 1 to 3 | The cast changes only if the new score makes a different candidate win, checked from the recorded draw |
+| SF-5 | **Claim, either order.** An authored seed A and a procedural seed P both want the same fixer, exclusive. Run once casting A first, and once casting P first and committing it | A casts the fixer both times. In the second run, P's role is lost and P re-casts or follows its ladder. Both records have one `claim` entry each |
+| SF-6 | **Fixed part rejected on a mirrored slot.** An authored world requirement fixes a cast person's mirrored `place` to a bar. The game then reads the person elsewhere | At the next re-evaluation, the direct check fails. The seed is `withdrawn`, with a `fixed-rejected` entry. No kernel contradiction |
+| SF-7 | **Scenario R1** ([Appendix A.3](#a3-reference-scenario-r1)). Facts: q112 not done; then q112 done, Takemura alive and allied | `waiting` (window `maybe`); then `cast`; release prepared and confirmed; display confirmed, so the offer event is minted with a deterministic `Id`; V declines at the first rung; the decline exit's content plays; `unattended`; then `resolved`, with closure status `abandoned` |
+| SF-8 | **R1, closed by the point of no return.** As SF-7, but the point-of-no-return fact is set while `waiting` | `withered`. Its coda is a closing delivery that survives a save and load and is delivered once |
+| SF-9 | **Reload with a displayed offer.** SF-7 up to the displayed offer. Save; load | The same state and offer `Id`. The offer is not presented as new. Its play-clock lapse restarts from the load. The arbiter settles for 90 s, then re-situates with one cue |
+| SF-10 | **Arbiter gates.** Five class-2 pushes submitted at play time 0 in `normal`, spacing 60, cap 2 per 600 | Releases at 0 and 60; the third waits until 600 |
 | SF-11 | **Tempo off.** A procedural push and an authored push, tempo `off` | Only the authored push is released |
 | SF-12 | **Lint.** Three seeds: all-`then` links over four beats; a route variable without a consumer; a ladder with two exits | L-03, L-05 and L-10 errors; none is sown |
-| SF-13 | **Pressure.** A Tyger Claw's family frame `protects` X. A seed casts the Claw in a role whose goal has `{ kill, X }` | One `pressure` intersection recorded on the seed. The seed is not blocked |
-| SF-14 | **Stand-in.** A role with `onUnfilled: ['standIn']` and no candidates | A minted node `H("mint", seed, seed, "role:<key>")`, identical across two runs, satisfying the role's `must` |
-| SF-15 | **Missed, not declined.** An offer released but never reported displayed lapses | The seed returns to `cast`, not `unattended` |
-| SF-16 | **Promise.** A seed whose end is yes while a promise is open | It stays `running` until `paidBy` is yes, then `resolved` |
+| SF-13 | **Pressure.** A Tyger Claw's family frame `protects` X. A seed casts the Claw in a role whose goal has `{ kill, X }` | One `pressure` intersection recorded on the seed, at commit. The seed is not blocked |
+| SF-14 | **Stand-in.** A role with `onUnfilled: ['standIn']`, `must: [age range 30..40]`, and no candidates | No kernel change before release. At commit, a minted node `H("mint", seed, seed, "role:<key>")`, identical across two runs, with age in 30..40 |
+| SF-15 | **Missed, not declined.** An offer released but never confirmed displayed, past `displayTimeout` | No `offer` event. By T11 the seed returns to `cast`, and the offer beat to `available`, with `attempt` + 1 |
+| SF-16 | **Promise.** A seed whose `end` is yes while a promise is open | It stays `running` until `paidBy` is yes, then `resolved` with status `resolved` |
 | SF-17 | **Scale lint.** An `arc` parent whose only turn is a `step`, with a child gig turning a `goal` | L-33 error; not sown |
-| SF-18 | **Clock.** A 4-segment clock ticked by `kind: collector-visit` events, `fills: 1`. Mint three such canon events; save; load; mint one more | Value 3 before the save and after the load, then 4. `onFull` becomes available once. No pin or op records the clock value |
-| SF-19 | **Resettable effect.** A `resettable` seed-fact write at game time t, `reset` 7 days | The pin is valid on [t, t + 7 days). Resolving at t + 7 days reads the fact's `initial` |
-| SF-20 | **Settled news.** A released gig is declined, and its unattended plan resolves while V is in combat | One `seed-outcome` with `witnessed: false`. A `news` request is held until V's combat and vehicle states are clear, then released once |
-| SF-21 | **Short form.** A gig with beats tagged `texture` and `legwork`, a decision and an aftermath, run with form `short` | The texture and legwork beats are `skipped`. The decision and aftermath play |
+| SF-18 | **Clock.** A 4-segment clock ticked by `kind: collector-visit` events, `fills: 1`. Mint three such canon events; save; load; mint one more | Value 3 before the save and after the load, then 4. Each matched field is pinned `committed`. Signs 1–3 are delivered once each, across the load. `onFull` becomes available once |
+| SF-19 | **Resettable fact.** A `resettable` seed-fact write at game time t, `reset` 7 days | At t + 7 days the wake-up withdraws the pin, and the fact reads its `initial` |
+| SF-20 | **Seed-fact rewrite.** Write `stage = 1`, then `stage = 2` | Reads 2. Exactly one current pin; the first is withdrawn and kept as history |
+| SF-21 | **Settled news across a load.** A released gig is declined; its unattended plan resolves while V is in combat; save; load | One `seed-outcome` with `witnessed: false`. The news delivery survives the load and is released once, at the first latched joint |
+| SF-22 | **Short form.** A gig with `texture` and `legwork` beats, a decision and an aftermath, run in form `short` | The texture and legwork beats are `skipped`, and the links through them pass. The decision and aftermath play |
+| SF-23 | **Prepare fails.** A seed in `cast` whose tentative cast is killed while its delivery is queued | Preparation fails; nothing reaches V; no cast edge is in effect; the role's ladder runs |
+| SF-24 | **Stuck.** A running seed whose only remaining beat links `because` a failed beat, on a seed fact nothing writes | `stuck` → `withered`, with a `stuck` record entry |
 
 ## 15. Compromises and open items
 
@@ -1212,16 +1487,140 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 |---|---|---|---|
 | C-S2-1 | Every choice uses the same mechanism as the kernel | Content choices use the kernel's draw arithmetic on layer-2 keys, not kernel slots, so `trace` doesn't cover them; the seed record does | A tool needs kernel `explain` on a content choice |
 | C-S2-2 | Casting considers the whole city | Casting queries one scope with `limit: 'all'`; a query over the hard limits leaves the role unfilled (`too-broad`) | Large-scope roles become common |
-| C-S2-3 | Reachability is exact | A bounded search; past the bound, assume reachable | A seed is wrongly kept alive |
+| C-S2-3 | An ending is unreachable when nothing could lead to it | A conservative stuck check (§7.5): anything that could still change counts as able to | A seed is kept alive long after it has no way forward |
+| C-S2-4 | Stand-ins satisfy any role | Only the constructible subset (§5.4) | Authors need stand-ins for richer roles |
 
 **Open items:**
-1. **Dossier 8.** v0.1 adopts 20 of its 22 P4 requirements. The other two belong to S3: tempo's nested schedule thresholds (S8-P4-19, beyond the arbiter's cadence) and attention as a derived view (part of S8-P4-08). Its thread budgets and push rates are S3's.
-2. **Dossier 6's kernel gaps.** Its eight gaps go into S0 v4 together with §0.4.
-3. **The facts table's guards.** It gains `decidedBy` for decision facts. That is data work under WP-12.
-4. **Vocabularies.** S4 fixes the closed vocabularies and the honesty lexicon.
-5. **Hooks.** S3 defines the fitting, phase and scoring hooks used in §3.4 and §8.3.
-6. **The arbiter's split.** P7 decides how much of the arbiter's gate logic runs in the game-side plugin, from the event feed's latency.
+1. **Dossier 8.** v0.1 adopted 20 of its 22 P4 requirements. Tempo's nested schedule thresholds and attention as a derived view are S3's, as are thread budgets and push rates.
+2. **Dossier 6's kernel gaps.** Its eight gaps go into S0 v4, together with §0.4.
+3. **The facts table's guards.** The table gains `decidedBy` for decision facts. That is data work under WP-12.
+4. **Vocabularies.** S4 fixes the closed vocabularies, the honesty lexicon and the forbidden-mechanics list.
+5. **Hooks.** S3 defines the fitting, form, phase, scoring and joint hooks used in §2.13, §3.4 and §8.3.
+6. **The arbiter's split.** P7 decides how much of the gate logic runs in the game-side plugin, from the event feed's latency.
+7. **Display confirmations.** S5 says, for each channel, what counts as `displayed`.
+8. **Profiles.** Appendices for gig, job and heist, con, four-beat and front.
 
 ## 16. Review record
 
-Not yet reviewed.
+### Round 1: GPT-6 Astra, extra-high effort, on v0.1
+
+The review found 25 issues: 8 blockers and 17 important. All were adopted, in substance. Its simplifications were adopted too:
+- only the ladder profile, in full;
+- a conservative stuck check in place of the reachability search;
+- promotion rungs left to S3, with no kernel slot;
+- closure details in layer-2 records;
+- one end predicate.
+
+| Finding | Change |
+|---|---|
+| B-01 Seed facts weren't mutable under S0's pin rules; enduring pins ignore `valid.to` | One current pin per fact, withdrawn on rewrite; resettable via a wake-up (§2.5) |
+| B-02 Persistence didn't match the kernel's `SeedRecord` | One whole-record state with document, deliveries and wake-ups; terminal records kept with no roots (§12.1) |
+| B-03 Many conditions and deadlines couldn't wake a seed | Dependency collection for every predicate, guards included; a sowing watcher; wake-ups (§1.3, §4) |
+| B-04 Offers after the first had no path | One response lifecycle for every offer beat (§7.4) |
+| B-05 Release was treated as exposure | Release, display and exposure separated; offer events minted on display (§8.5) |
+| B-06 The fixed-part watch assumed traces S0 doesn't give for mirrored slots | A direct check for mirrored targets; bounded selector expansion (§3.5) |
+| B-07 Stand-ins broke read-only casting | Pending stand-ins until commit; a constructible subset (§5.4) |
+| B-08 R1 needed invented profile semantics | Appendix A, the ladder profile in full, with R1 |
+| B-09 Candidate filtering reversed claim priority | Claim priority applied while filtering; spans and sharing defined (§5.2, §9) |
+| B-10 Validation came too late | Prepare, then confirm, with rollback (§8.4) |
+| B-11 Ladders lacked durable progression | A persisted cursor, relaxed set and wait deadline; topological order; text guarantees protected (§5.1, §5.4) |
+| B-12 Several windows disagreed with T3; `degrade` was undefined | The release window; a close-policy table (§2.7) |
+| B-13 Beat transitions were incomplete | A beat transition table; failure order; one-time warnings (§7.1, §7.3) |
+| B-14 Skips broke links; protected beats weren't protected; reachability was unsound | Skipped sources pass through; L-41; a stuck check (§7.1, §7.5) |
+| B-15 Unattended resolution bypassed completion | Closure status from `end`; forced closures retire promises; L-40 removed (§6.4) |
+| B-16 Closing deliveries were lost on reload | Persisted closing deliveries that outlive the seed (§8.6) |
+| B-17 Background content bypassed the arbiter | Everything perceivable goes through it; a light path for class 0 (§7.3, §8.3) |
+| B-18 Gates could stall or contradict session policy | A gate matrix; pulls skip timers; resituating capped at class 2; latched joints; away as an overlay (§8.2, §8.3) |
+| B-19 Selection ignored some author constraints | Preferred identities scored; channels by ladder order; shared eligibility, counted per branch (§3.4, §5.2, §7.2) |
+| B-20 Clocks read unpinned fields | Consumed events, with matched fields committed; once-only signs (§2.14) |
+| B-21 Kernel material had no full lifecycle | Start and end for every item; NPC goal frames closed (§3.2) |
+| B-22 `continue` could change a story's meaning | Instances run on their stored document (§1.2, §12.3) |
+| B-23 Batched changes could skip a latch | `closes` evaluated at each change's time, in delivery order (§4.2) |
+| B-24 Predicate gaps | L-25 and the `maybe` bypass removed; `since` and template reads defined; cancellations distinguished (§2.6) |
+| B-25 Unbounded work and records | Work on the shared budget, with requeueing; stable entry numbers; intersections recorded once (§4.4, §9.2, §10.1) |
+
+## Appendix A. The relationship ladder profile
+
+### A.1 Parameters
+
+```ts
+interface LadderParams {
+  with: RoleKey;                       // the other person; the role must have a fixed or preferred identity
+  rungs: string[];                     // at least 2: e.g. acquainted, confided, close, partner
+  offers: Record<string, { offer: FragmentRef; notNow: ContentRef }>;   // one per rung above the first
+  exits: { decline: ContentRef; stay: ContentRef; lapse: ContentRef };  // three distinct exits, each with content (L-10)
+  pacing: { acts: EventPattern[]; perRung: number };   // V's qualifying acts with the person before the next offer
+  lapseAfter: Duration;                // game time with no qualifying act before the lapse exit
+  absence?: { after: Duration; reunion: FragmentRef }; // on long absence: a reunion, not a reset
+  intimate?: { scene: FragmentRef; fade: FragmentRef; contentTag: string };   // top rung only
+  boundaries?: Array<{ fact: FactKey; set: number; by: BeatKey }>;   // persistent, authored-only
+  reoffers?: number;                   // how many times a rung may be offered again after "not now"; default 2
+}
+```
+
+### A.2 Expansion
+
+For `n = rungs.length`, and rung index `i` from 0:
+
+1. **Facts.**
+   - `rung`: a route variable, initial 0, `lasting`. Its consumers are the offer beats and the end.
+   - Each boundary fact: `authoredOnly`, `lasting`.
+2. **Offer beats** `offer-i`, for `i = 1 … n−1`:
+   - **Fragment.** `play: offers[rungs[i]].offer`, fixed. The fragment's `OfferSpec`:
+     - has an `accept` action writing `rung = i`;
+     - has a `stay` action writing `exit = 2` (stay as now);
+     - has a decline, `decline`, writing `exit = 1`, with `exits.decline` as its response;
+     - has a null path writing nothing, with `notNow` as its content;
+     - lapses with `then: 'reoffer'`.
+   - **Repeat offers:** `reoffer: { when: count(pacing.acts with the person, since offer-i) ≥ pacing.perRung, max: reoffers + 1 }`.
+   - **Links.**
+     - `offer-1` is in `start`.
+     - `offer-i`, for `i > 1`, has `because offer-(i−1), on: (rung = i−1) and count(pacing.acts with the person, since offer-(i−1)) ≥ pacing.perRung`.
+   - **Pacing** therefore counts V's acts with the person, never the clock.
+3. **Exit beats,** all of kind `exit`, each leaving `exit` set:
+   - `exit-decline`: `because` any offer beat, `on: response is decline:*`, `join: any`. Content `exits.decline`.
+   - `exit-stay`: `because` any offer beat, `on: response is action:stay`, `join: any`. Content `exits.stay`.
+   - `exit-lapse`: available when `since` the last `done` offer beat (or sowing) ≥ `lapseAfter`, and the count of qualifying acts in that span is 0. Content `exits.lapse`.
+
+   The three are mutually `obstructedBy`, so at most one plays.
+4. **Absence.** If `absence` is set: a texture beat `reunion`, available when V has had no qualifying act with the person for `absence.after`. It has `reoffer: { when: (same condition), max: unbounded }`, so it can recur. A reunion never lowers `rung`.
+5. **Intimacy.** If `intimate` is set: a beat `intimate`, `because offer-(n−1), on: rung = n−1`. It plays `{ alternates: [scene, fade] }`:
+   - `scene` applies when the player's content setting allows `contentTag`;
+   - `fade` applies otherwise.
+
+   Both are fixed and `authoredOnly`, with no choices inside them (L-11).
+6. **Boundaries.** Each boundary sets its fact from its authored beat `by`. Only authored beats may write it (`authoredOnly`). The engine never lowers or clears it.
+7. **The end:** `rung = n−1` and every top-rung beat is final, or any exit beat is `done`.
+8. **Turns:** `{ level: 'concern', what: rung changed }`.
+9. **The unattended plan:** after `lapseAfter`, set `exit = 3`. The world doesn't invent a resolution for a relationship.
+10. **Lint added:**
+    - L-10: at least three exits, each with content;
+    - L-11: intimacy;
+    - L-16: no gate on a partner fact. No predicate in the expansion may read another relationship's facts.
+
+### A.3 Reference scenario R1
+
+The parameters for the [P4 §5](../p4-seeding-layer.md#5-reference-scenario-r1-in-this-language) seed:
+- **`with`:** `takemura`, a role whose identity is fixed to the game's Takemura, with `anchor: true` and `onLost: withdraw`;
+- **`rungs`:** acquainted, confided, close, partner;
+- **`pacing`:** one shared activity per rung;
+- **`lapseAfter`:** 14 game days;
+- **`absence`:** after 7 game days, a reunion;
+- **`intimate`:** set, with tag `romance-intimate`.
+
+**The window:**
+- `opens: { all: [ { decided: q112_takemura_dead }, { fact: q112_takemura_dead, op: eq, value: 0 }, { fact: q112_done, op: eq, value: 1 }, { role: takemura, p: <allied with V> } ] }`;
+- `closes: fact q115_point_of_no_return eq 1`;
+- `onClose: coda`.
+
+**The place:** a `place` role, preferred (strength 2) quiet and in Japantown.
+
+**Closing:** `pack:quiet-hour-closing`.
+
+Expanding with §A.2 gives these beats:
+- `offer-1` to `offer-3`;
+- `exit-decline`, `exit-stay` and `exit-lapse`;
+- `reunion`;
+- `intimate`.
+
+SF-7 and SF-8 run on this expansion.
