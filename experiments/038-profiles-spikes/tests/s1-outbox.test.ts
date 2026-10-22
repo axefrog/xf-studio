@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 // The S1 kill harness on the production outbox (profiles design §2.2, chunk 1c): renderer and host killed at 20 points each, two windows
-// with kills of both, and a forced outbox-write failure, on the localhost routes and the real desktop server. About 2.5 minutes.
+// with kills of both, and a forced outbox-write failure, on the localhost routes and the real desktop server. About 2.5 minutes; CI sets
+// XFS_HARNESS_QUICK=1, which kills half as often (about half the time).
 test("the outbox kill harness passes on both hosts", async () => {
   const scratch = mkdtempSync(join(tmpdir(), "xfs-s1-outbox-"));
   try {

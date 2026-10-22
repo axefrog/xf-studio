@@ -4,7 +4,8 @@
  * exits 1 when a gate fails.
  *   bun tools/s1-outbox.ts <scratch-dir> [payload.json|""] [localhost,desktop] [renderer,host,two,failure] [repeat]
  * `repeat` runs the chosen scenarios that many times (the desktop host-kill regression for the 1c-i known limit runs it 10 times);
- * each run's results are keyed `<host>.<scenario>#<run>`.
+ * each run's results are keyed `<host>.<scenario>#<run>`. `XFS_HARNESS_QUICK=1` (CI) kills half as often: 10 points each for the
+ * renderer and the host, and 8 kills in the two-window run; the full run is the default.
  *
  * What stands in for what: the renderer is a Bun process running the page's real outbox, transport, storage adapter and (desktop) lease
  * adapter; the browser's or WebView's storage is a file it writes synchronously (it outlives the renderer, as the browser process's does).
@@ -22,6 +23,9 @@ const repeat = Math.max(1, Number(repeatArg ?? 1) || 1);
 if (!scratch) throw Error("Usage: bun tools/s1-outbox.ts <scratch-dir> [payload.json] [localhost,desktop] [renderer,host,two,failure]");
 const hosts = (hostsArg || "localhost,desktop").split(",") as ("localhost" | "desktop")[];
 const run = (name: string) => !onlyArg || onlyArg.split(",").includes(name);
+const quick = process.env.XFS_HARNESS_QUICK === "1";
+/** Every other item in a quick run. */
+const some = <T>(items: readonly T[]) => quick ? items.filter((_, index) => index % 2 === 0) : [...items];
 
 type Log = { key: string; seq: number; window: string };
 type Win = { name: string; mode: string; storage: string; launch?: string };
@@ -94,8 +98,8 @@ for (let round = 1; round <= repeat; round++) for (const mode of hosts) {
   // --- Renderer killed at 20 points ---------------------------------------------------------------------------------------
   if (run("renderer")) {
     const setup = fresh(mode, "renderer"), host = await startHost(mode, setup), win = main(setup, "W");
-    const points = ["after-record", "in-flight", "ack-received", "after-ack"].flatMap(point => [3, 8, 15, 23].map(n => `${point}:${n}`));
-    const timed = [150, 300, 450, 600];
+    const points = ["after-record", "in-flight", "ack-received", "after-ack"].flatMap(point => some([3, 8, 15, 23]).map(n => `${point}:${n}`));
+    const timed = some([150, 300, 450, 600]);
     const all: Log[] = []; let conflicts = 0, notReached = 0; const replayed: Record<string, number> = {}; const gaps: unknown[] = [];
     for (const spec of [...points, ...timed.map(ms => `timed:${ms}`)]) {
       const child = startWindow(setup, win, maxSeq(all) + 1, 80, { kill: spec.startsWith("timed") ? undefined : spec });
@@ -127,8 +131,8 @@ for (let round = 1; round <= repeat; round++) for (const mode of hosts) {
     // Localhost: inside the transaction and after the commit. Desktop: after the commit, and at timed moments (the desktop server takes
     // no in-transaction hook); a desktop host kill ends the app, so the page dies with it and starts again as a new launch.
     const specs = mode === "localhost"
-      ? ["before-commit", "after-commit"].flatMap(point => [2, 3, 5, 7, 11, 4, 6, 9, 13, 8].map(n => `${point}:${n}`))
-      : [...[2, 3, 5, 7, 11, 4, 6, 9, 13, 8].map(n => `after-commit:${n}`), ...[90, 140, 60, 200, 110, 170, 80, 130, 150, 100].map(ms => `timed:${ms}`)];
+      ? ["before-commit", "after-commit"].flatMap(point => some([2, 3, 5, 7, 11, 4, 6, 9, 13, 8]).map(n => `${point}:${n}`))
+      : [...some([2, 3, 5, 7, 11, 4, 6, 9, 13, 8]).map(n => `after-commit:${n}`), ...some([90, 140, 60, 200, 110, 170, 80, 130, 150, 100]).map(ms => `timed:${ms}`)];
     const logs: Log[] = []; let conflicts = 0; const replayed: Record<string, number> = {}; let kills = 0;
     const harvest = (child: Child) => { const parsed = parse(child.lines, "W"); logs.push(...parsed.logs); conflicts += parsed.conflicts;
       for (const [k, v] of Object.entries(parsed.replayed)) replayed[k] = (replayed[k] ?? 0) + v; };
@@ -170,7 +174,7 @@ for (let round = 1; round <= repeat; round++) for (const mode of hosts) {
       seqs[name] = Math.max(seqs[name]!, maxSeq(parsed.logs)) + 1;
     };
     launch("A"); launch("B");
-    const plan = ["A", "host", "B", "A", "host", "B", "host", "A", "B", "host", "A", "B", "host", "B", "A"];
+    const plan = ["A", "host", "B", "A", "host", "B", "host", "A", "B", "host", "A", "B", "host", "B", "A"].slice(0, quick ? 8 : 15);
     for (const target of plan) {
       await Bun.sleep(120 + (kills * 53) % 200);
       kills++;
