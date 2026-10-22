@@ -1,6 +1,6 @@
 # S0. Kernel specification
 
-**Status:** v3.1, final for the first implementation, 22 October 2026. v3.1 adopts the reference model's 57 accepted implementation notes ([§19](#19-decisions-adopted-from-the-reference-model)). This is the specification stage of the [foundation](../foundation.md): exactly how the dimensional model works, so the reference model can be built from this page alone. It is work package [WP-05](../plan.md#82-work-packages).
+**Status:** v4, 23 October 2026. v3.1 was final for the first implementation and adopted the reference model's 57 accepted implementation notes ([§19](#19-decisions-adopted-from-the-reference-model)). v4 adds what the seeding layer ([S2](seeding.md)) and the sifting research ([dossier 6](../craft/d06-sifting-tellability.md#74-gaps-with-a-route-that-leaves-s0-unchanged)) need. The additions are listed in [§20](#20-version-4-additions); none changes a result the reference model already produces. This is the specification stage of the [foundation](../foundation.md): exactly how the dimensional model works, so the reference model can be built from this page alone. It is work package [WP-05](../plan.md#82-work-packages).
 
 v3 takes in three independent review rounds. The [review record](#18-review-record) lists what changed and why. What the first implementation includes is settled in [§0.2](#02-the-first-implementation), and that scope is final ([D-19](../decisions.md)).
 
@@ -165,7 +165,7 @@ type ValueType =
 
 ```ts
 type Prior       = (dim: DimensionDef, F: Value[], params) => number[];          // positive weights over F
-type Derive      = (inputs: Value[], params) => Value;
+type Derive      = (inputs: Value[], params, t: GameTime) => Value;              // t: the query time (v4)
 type Preimage    = (output: Region, otherInputs: Value[], params) => Region;     // unary views only (§6.4)
 type Conditioned = (inputs: Value[], F: Value[], params) => number[];           // positive weights over F
 type FieldMap    = (fieldValue: number, F: Value[], params) => number[];        // positive weights over F
@@ -174,6 +174,8 @@ type Bound       = (inputBounds: Region[], params) => Region;                   
 ```
 
 A `Derive` MAY provide a `Bound`. Without one, its query verdict is `maybe`. Function versions are part of the compatibility record (§14.4).
+
+**Derives read the query time** (v4). A `Derive` receives the time `t` that resolution was asked about (§5). It lets a derived value depend on elapsed time, such as urgency growing towards a deadline, without a process ticking it ([DS-66](../design-seeds.md)). A derive that reads `t` is still deterministic, because `t` is part of the cache key (§5.5). A derive that ignores `t` behaves exactly as before.
 
 ### 2.2 Kinds
 
@@ -279,7 +281,15 @@ core:member-of   attrs: role (enum), strength (real), visibility (enum open|secr
                  data:  obligations (list of interest selectors); perceivable: true
 core:kin         attrs: relation (enum)
 core:located-in, core:knows
+
+# v4, for the seeding layer (S2 §0.4)
+core:game-fact   slots: value (int, mirrored). The fact named n is the mirrored node H("game", "fact:" + n)
+core:seed-fact   slots: value (int, assigned)
+core:seed        facets: actor. No slots the kernel reads
+core:cast        edge, from core:seed to any kind; data: role; not perceivable
 ```
+
+The core event vocabulary (§9.2) gains the kinds `offer`, `response` and `seed-outcome` (v4).
 
 ## 3. Nodes, slots and edges
 
@@ -627,6 +637,10 @@ Events are minted nodes of kind `core:event`:
 | `effects` | many node: `{ on: ref, effect: enum }`, with effects from §10.8 |
 | `witnesses` | many: ref |
 | `causes` | many: ref to events |
+| `outcome` | Optional enum: `done`, `failed`, `prevented` (v4) |
+| `served` | Optional data: the `Id` of the frame whose goal the act served (v4) |
+
+`outcome` and `served` are optional. An event without them means what it always meant. They let a reader tell an attempt from a success, and see which goal an act served ([dossier 6](../craft/d06-sifting-tellability.md) G-3).
 
 An event becomes **canon** when:
 - V observes it, which pins the observed fields `observed`;
@@ -742,8 +756,11 @@ type Change =
       participants: Array<{ who: Id; role: string }>; effects: Array<{ on: Id; effect: Effect }> }
   | { c: 'minted'; node: Id; kind: KindId }
   | { c: 'contribution'; contribution: Contribution; ended: boolean }
-  | { c: 'reading'; node: Id; slot: SlotPath; old?: Value; new: Value };   // a game reading that changed a value
+  | { c: 'reading'; node: Id; slot: SlotPath; old?: Value; new: Value }    // a game reading that changed a value
+  | { c: 'frame'; frame: Id; actor: Id; level: string; old: string; new: string };   // a frame status change (v4)
 ```
+
+A `frame` change is produced when a frame's `status` changes. Weight and parent changes produce none.
 
 Cache fills, regeneration and save replay produce no changes.
 
@@ -755,6 +772,7 @@ Cache fills, regeneration and save replay produce no changes.
 | Edge | Each endpoint, with `role` = `from` or `to` and `edge` = the edge's type |
 | Event | The event node itself, its `place` (with `role` = `place`), each participant's `who` (with `role` = the participant's role), and each effect's `on` (with `role` = `target` and `effect` = the effect) |
 | Minted node | The node |
+| Frame status (v4) | The frame's actor, with `role` = `actor`, and each node in the frame's focus, with `role` = `focus` |
 | Contribution | Each node its target selector names by scope. The reference model treats any other target as matching interests whose kind and scope overlap it, which may over-match |
 
 An interest selector `σ` matches change `x` if **one binding** satisfies all of the following:
@@ -778,7 +796,7 @@ An interest selector `σ` matches change `x` if **one binding** satisfies all of
 - **Emission.**
   1. Each receiving actor gets at most one emission per (change, frame, interest type): the one with the greatest `r`.
   2. It is emitted when `r ≥ θ_react` **[calibrate]**, as `Relevance { actor, frame, change, type, r }`.
-  3. Emissions go to S1 and S3, in order of actor (demand roots first), then frame `Id`.
+  3. Emissions go to S1 and S3, in order of actor (demand roots first), then frame `Id`. Emissions on frames whose actor is a `core:seed` go to layer 2 (S2) as well, in the same order (v4).
 
 ### 10.6 Demand and tiers
 
@@ -828,6 +846,8 @@ The per-tick work budget is **[tunable; P7 measures it]**. It is counted in allo
 1. For each effect target, scan the actor's other active or blocked frames from a **different origin** whose interests mention that target.
 2. Apply the conflict table.
 3. For each violation, emit `Dilemma { actor, frameA, frameB, target, effect, severity: pull(A) × pull(B) }`, at most once per (frameA, frameB, target, effect) until either frame changes.
+
+**Recipients** (v4, a clarification). Dilemmas go to S1, S3 and layer 2, in emission order, with relevance emissions. They are not persisted: a reader that needs one keeps what it needs.
 
 ## 11. Beliefs and perspectives
 
@@ -920,7 +940,7 @@ The trace is the complete account (I-8).
 - **Canon events:** their headers and pinned fields.
 - **Summaries,** with their `canon` sets.
 - **Frames:** those of demand roots and live seeds, and every ancestor frame they inherit from, whoever's it is.
-- **States:** seed states (S2), and process cursors and states (S1), including each process's outstanding output batches (§9.4).
+- **States:** seed states (S2), and process cursors and states (S1), including each process's outstanding output batches (§9.4). A seed state is a `SeedRecord { id, state, nodes, actor? }` whose `state` is the owning layer's plain data. Its `nodes` are retention roots, and its `actor`, if set, is a demand root. Any layer MAY keep its own records this way under an id it owns, such as S2's global record or S3's promoted sifting matches (v4, a clarification; [dossier 6](../craft/d06-sifting-tellability.md) G-8).
 - **Lineage:** the world seed, plus schema and function versions (§14.4).
 
 **Not persisted:**
@@ -1105,3 +1125,25 @@ The [reference model](../../../projects/xf-story-engine/README.md) is on `main`:
 | Persistence | A save's `meta` carries the world seed, time, evolution cursor, function versions, packs, demand roots and demand history. Ops are produced by a diff at save time. A read-only load changes nothing, packs included | 19, 20, 39, 55 |
 
 **The determinism digest** frozen in the reference model's tests (`d534e0dc…`, 1,067 entries, covering save, load, branching, outstanding batches, beliefs, summaries and group decisions) is the cross-implementation check that the native core must reproduce.
+
+## 20. Version 4 additions
+
+v4 adds what the seeding layer and sifting need. None of the additions changes a result the reference model produces today: the determinism digest stays valid. Each is marked "v4" where it appears.
+
+| # | Addition | Section | Needed by | Reference model |
+|---|---|---|---|---|
+| V4-1 | Derives receive the query time `t` | §2.1 | S1 urgency and deadlines ([DS-66](../design-seeds.md)) | To implement; existing derives ignore `t` |
+| V4-2 | `core:game-fact`, `core:seed-fact`, `core:seed`, the `core:cast` edge, and event kinds `offer`, `response`, `seed-outcome` | §2.6 | S2 §0.4 | To implement (schema only) |
+| V4-3 | Optional `outcome` and `served` on events | §9.2 | Sifting ([dossier 6](../craft/d06-sifting-tellability.md) G-3) | To implement (schema only) |
+| V4-4 | A `frame` change on frame status changes, with its bindings | §10.5 | Sifting (G-2); closure and reversals | To implement. It adds changes, so relevance can grow; the digest's fixtures produce no status changes, so it is unaffected |
+| V4-5 | Relevance on seed frames reaches layer 2 | §10.5 | S2 §4 | To implement (delivery only) |
+| V4-6 | Dilemma recipients stated | §10.8 | S2 §9, S3 (G-5) | A clarification |
+| V4-7 | Any layer may keep `SeedRecord`s under its own ids | §14.1 | S2 §12, S3's promoted matches (G-8) | Already true |
+
+**Dossier 6's other gaps take routes that leave the kernel unchanged:**
+- **G-1:** S1's telling and lying policies mint events.
+- **G-4:** new event kinds come from packs.
+- **G-6:** the sifter's pool copies the descriptors it needs.
+- **G-7:** S1 mints events where a root's focus reaches the fine tiers.
+
+These follow the dossier's recommendations, and are recorded in [§7.4 of dossier 6](../craft/d06-sifting-tellability.md#74-gaps-with-a-route-that-leaves-s0-unchanged).

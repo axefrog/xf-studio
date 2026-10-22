@@ -61,7 +61,7 @@ The first implementation is in the TypeScript reference model, beside the kernel
 
 ### 0.4 What S2 needs from the kernel (S0 v4)
 
-These are additions. None changes anything the reference model already implements:
+S0 v4 makes these additions ([S0 §20](kernel.md#20-version-4-additions)). None changes anything the reference model already implements:
 1. **Fact kinds.**
    - `core:game-fact`: one mirrored `int` slot, `value`. Each game fact is the mirrored node `H("game", "fact:" + name)`.
    - `core:seed-fact`: one `assigned` `int` slot, `value`.
@@ -1492,7 +1492,7 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 
 **Open items:**
 1. **Dossier 8.** v0.1 adopted 20 of its 22 P4 requirements. Tempo's nested schedule thresholds and attention as a derived view are S3's, as are thread budgets and push rates.
-2. **Dossier 6's kernel gaps.** Its eight gaps go into S0 v4, together with §0.4.
+2. **Dossier 6's kernel gaps.** Settled in S0 v4 ([§20](kernel.md#20-version-4-additions)): two kernel additions, two clarifications, and four routes outside the kernel.
 3. **The facts table's guards.** The table gains `decidedBy` for decision facts. That is data work under WP-12.
 4. **Vocabularies.** S4 fixes the closed vocabularies, the honesty lexicon and the forbidden-mechanics list.
 5. **Hooks.** S3 defines the fitting, form, phase, scoring and joint hooks used in §2.13, §3.4 and §8.3.
