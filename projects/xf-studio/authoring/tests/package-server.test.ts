@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { createPackageHandler, LOCAL_BUILD_REASONS, localBuildIssue, localEyePlate, localPackageAdapter, localPackageTools, localPlateRouteKey, packageRequestSettings, SETUP_UNREADABLE_MESSAGE,
+import { createPackageHandler, LOCAL_BUILD_ENV_REASONS, LOCAL_BUILD_REASONS, localBuildIssue, localEyePlate, localPackageAdapter, localPackageTools, localPlateRouteKey, packageRequestSettings, SETUP_UNREADABLE_MESSAGE,
   type PackageTools } from "../src/host/package-server";
 import type { BuilderRun, HostPrerequisite, PackageHostAdapter } from "../src/platform/export/product-host";
 import type { PackageCheckResult } from "../src/platform/api";
@@ -156,6 +156,27 @@ test("PIPE-134: Build's setup reasons are plain, with one next step, and never n
       expect(reason).toMatch(/Settings › (Game|Tools)|launcher|Restart XF Studio/);
       expect(reason).not.toMatch(USER_FACING_JARGON);
     }
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("PIPE-134: a path an environment variable supplied is named as such, since choosing or clearing the setting would not help", () => {
+  const directory = mkdtempSync(join(tmpdir(), "xfs-package-env-reasons-"));
+  try {
+    const wolvenkit = join(directory, "WolvenKit.CLI.exe"), game = join(directory, "game");
+    writeFileSync(wolvenkit, "");
+    const settings = { ...defaultLocalSettings(), wolvenKitCli: wolvenkit, gameRoot: game };
+    // The settings are fine, but the variables outrank them and name things that aren't there.
+    const bad = localPackageTools(settings, { XFS_PACKAGE_WOLVENKIT: join(directory, "gone.exe"), XFS_PACKAGE_GAMEPATH: game });
+    expect(bad.fromEnv).toEqual({ wolvenkit: true, gamepath: true });
+    expect(localBuildIssue(bad)).toBe(LOCAL_BUILD_ENV_REASONS.wolvenKitMissing);
+    expect(LOCAL_BUILD_ENV_REASONS.wolvenKitMissing).toContain("XFS_PACKAGE_WOLVENKIT");
+    expect(LOCAL_BUILD_ENV_REASONS.wolvenKitMissing).not.toMatch(/choose|Settings ›/i);
+    const badGame = localPackageTools(settings, { XFS_PACKAGE_WOLVENKIT: wolvenkit, XFS_PACKAGE_GAMEPATH: join(directory, "nowhere") });
+    expect(localBuildIssue(badGame)).toBe(LOCAL_BUILD_ENV_REASONS.gameMissing);
+    // Without the variables the person's own steps still apply.
+    expect(localPackageTools({ ...settings, wolvenKitCli: join(directory, "gone.exe") }, {}).fromEnv).toBeUndefined();
+    expect(localBuildIssue(localPackageTools({ ...settings, wolvenKitCli: join(directory, "gone.exe") }, {}))).toBe(LOCAL_BUILD_REASONS.wolvenKitMissing);
+    expect(localBuildIssue(localPackageTools(settings, {}))).toBe(LOCAL_BUILD_REASONS.gameMissing);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 

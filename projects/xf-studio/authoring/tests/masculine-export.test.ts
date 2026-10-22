@@ -286,6 +286,27 @@ test("PIPE-122: a damaged masculine plate leaves him out with a warning; her loo
   expect(stale.prerequisite).toBe(EYE_PLATE_MASCULINE_PREREQUISITE);
 }, 60_000);
 
+test("PIPE-122: a truncated masculine plate manifest is the same damage in Check and Build: stale, never a raw parse error, and her export still builds", async () => {
+  const checked = setup("ready"), built = setup("ready");
+  for (const target of [checked, built]) writeFileSync(target.his.manifestFile, '{"schema": "xfs/eye-plate-1", "files": {');
+  // Check leaves him out with the warning.
+  const result = await runProductCommand({ ...checked.options, check: true }) as PackageCheckResult;
+  expect(result.products[0].features[0]).toMatchObject({ audience: AUDIENCE_FEMININE, warnings: [MASCULINE_DAMAGED] });
+  expect(result.products[0].features[0].details.bodies).toEqual(["female"]);
+  // Build reads the same damage as a stale prerequisite, which the host answers by discarding his plate and preparing it afresh once.
+  const stale = await runProductCommand(built.options).then(() => null, error => error);
+  expect(stale).toBeInstanceOf(PrerequisiteStale);
+  expect(stale.prerequisite).toBe(EYE_PLATE_MASCULINE_PREREQUISITE);
+  // The host's second attempt finds him unavailable: her mod builds without him, and says so.
+  const options = { ...built.options, prerequisites: { ...built.options.prerequisites,
+    [EYE_PLATE_MASCULINE_PREREQUISITE]: masculineUnavailable("plate_source_unsupported") } };
+  const again = await runProductCommand(options) as PackageBuildResult;
+  const [feature] = again.products[0].features;
+  expect(feature.audience).toBe(AUDIENCE_FEMININE);
+  expect(feature.warnings).toEqual([{ text: masculineUnavailable("plate_source_unsupported").unavailable.message,
+    next: masculineUnavailable("plate_source_unsupported").unavailable.next }]);
+}, 60_000);
+
 test("the masculine plate prerequisite never stops a Build: a failure becomes the reason he is left out; cancelling still cancels", async () => {
   const dir = resolve(root, crypto.randomUUID()), game = join(dir, "game"), cacheRoot = join(dir, "cache");
   mkdirSync(join(game, "archive", "pc", "content"), { recursive: true });

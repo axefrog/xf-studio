@@ -32,6 +32,8 @@ const json = (value: unknown, status = 200) => Response.json(value, { status, he
  * `XFS_EYE_PLATE_HEAD=base-game` developer override).
  */
 export type PackageTools = { bun: string; plate: string; plateCache: string; wolvenkit: string; gamepath: string;
+  /** Which of these a developer's `XFS_PACKAGE_*` environment variable set, which outranks the person's own settings (for the right next step). */
+  fromEnv?: { wolvenkit?: true; gamepath?: true };
   route?: Pick<LocalSettings, "launchRoute" | "mo2Root" | "mo2ProfileId" | "manualModRoot">; headOverride?: "base-game" };
 /** Localhost private cache for the derived eye plate; `XFS_PACKAGE_PLATE_CACHE` relocates it for isolated runs. */
 export const localPlateCache = (env: Record<string, string | undefined> = process.env) =>
@@ -50,6 +52,8 @@ export function localPackageTools(settings: LocalSettings = defaultLocalSettings
     plateCache: localPlateCache(env),
     wolvenkit: configured.wolvenkit || "",
     gamepath: configured.gamepath || "",
+    ...(env.XFS_PACKAGE_WOLVENKIT || env.XFS_PACKAGE_GAMEPATH ? { fromEnv: {
+      ...(env.XFS_PACKAGE_WOLVENKIT ? { wolvenkit: true as const } : {}), ...(env.XFS_PACKAGE_GAMEPATH ? { gamepath: true as const } : {}) } } : {}),
     route: { launchRoute: settings.launchRoute, mo2Root: settings.mo2Root, mo2ProfileId: settings.mo2ProfileId,
       manualModRoot: settings.manualModRoot },
     headOverride: eyePlateHeadOverride(env, settings.eyePlateHead),
@@ -105,16 +109,28 @@ export const LOCAL_BUILD_REASONS = Object.freeze({
   /** Only a developer's runner override can name a runner that isn't there. */
   builderMissing: "XF Studio's build helper is missing. Restart XF Studio; if it keeps happening, reinstall XF Studio.",
 });
+/**
+ * The same reasons when a developer's environment variable supplied the path, which outranks Settings: choosing or clearing the setting
+ * wouldn't help, so these name the variable to correct or remove. Developer-only; a person's own setup never shows them.
+ */
+export const LOCAL_BUILD_ENV_REASONS = Object.freeze({
+  wolvenKitMissing: "The WolvenKit path comes from the XFS_PACKAGE_WOLVENKIT environment variable, which outranks Settings, and it names a file that isn't there. Correct or remove that variable, then restart XF Studio.",
+  gameMissing: "The game folder comes from the XFS_PACKAGE_GAMEPATH environment variable, which outranks Settings, and it names a folder that isn't there. Correct or remove that variable, then restart XF Studio.",
+  gameNotTheGame: "The game folder comes from the XFS_PACKAGE_GAMEPATH environment variable, which outranks Settings, and it isn't a Cyberpunk 2077 folder. Correct or remove that variable, then restart XF Studio.",
+});
 export function localBuildIssue(tools: PackageTools): string | null {
   const is = (path: string, kind: "file" | "directory") => {
     try { const stat = statSync(path); return kind === "file" ? stat.isFile() : stat.isDirectory(); } catch { return false; /* Missing. */ }
   };
   if (!tools.wolvenkit) return LOCAL_BUILD_REASONS.wolvenKitUnset;
-  if (!is(tools.wolvenkit, "file")) return LOCAL_BUILD_REASONS.wolvenKitMissing;
+  if (!is(tools.wolvenkit, "file")) return tools.fromEnv?.wolvenkit ? LOCAL_BUILD_ENV_REASONS.wolvenKitMissing : LOCAL_BUILD_REASONS.wolvenKitMissing;
   if (!tools.gamepath) return LOCAL_BUILD_REASONS.gameUnset;
-  if (!is(tools.gamepath, "directory")) return LOCAL_BUILD_REASONS.gameMissing;
-  if (!is(join(tools.gamepath, "bin", "x64", "Cyberpunk2077.exe"), "file")) return LOCAL_BUILD_REASONS.gameExecutableMissing;
-  if (!is(join(tools.gamepath, "archive", "pc"), "directory")) return LOCAL_BUILD_REASONS.gameArchivesMissing;
+  const gameFromEnv = tools.fromEnv?.gamepath === true;
+  if (!is(tools.gamepath, "directory")) return gameFromEnv ? LOCAL_BUILD_ENV_REASONS.gameMissing : LOCAL_BUILD_REASONS.gameMissing;
+  if (!is(join(tools.gamepath, "bin", "x64", "Cyberpunk2077.exe"), "file"))
+    return gameFromEnv ? LOCAL_BUILD_ENV_REASONS.gameNotTheGame : LOCAL_BUILD_REASONS.gameExecutableMissing;
+  if (!is(join(tools.gamepath, "archive", "pc"), "directory"))
+    return gameFromEnv ? LOCAL_BUILD_ENV_REASONS.gameNotTheGame : LOCAL_BUILD_REASONS.gameArchivesMissing;
   if (tools.bun.includes("/") || tools.bun.includes("\\")) { // A bare host PATH command is checked by spawn.
     let valid = false;
     try { valid = statSync(tools.bun).isFile(); } catch { /* Missing executable. */ }
