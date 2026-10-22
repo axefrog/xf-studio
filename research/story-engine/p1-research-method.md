@@ -132,7 +132,7 @@ A claim that is contested between sources is marked **contested**, with both sid
 | A. Lenses | §2.1–2.3: about 11 lens runs, three or four at a time, on small budgets; some on a second model family | Read-only research agents with web access | Candidate fields per lens |
 | B. Map | Merge and deduplicate. Tier each field: **core** (shapes a layer), **supporting** (shapes details), **peripheral** (noted, not researched) | This chat | `craft/map.md` |
 | **Checkpoint** | The maintainer reviews the map. Cheap to do and high leverage, since a missing field is the risk this method exists to prevent | Maintainer | Fields added or removed |
-| C. Dossiers | Core fields first, one agent per field or cluster; then supporting fields | Research agents | `craft/*.md`, credits |
+| C. Dossiers | Core fields first, one agent per field or cluster; then supporting fields. Motivation and drives is already known to be core: its dossier replaces the draft drive catalogue in the [foundation](foundation.md) | Research agents | `craft/*.md`, credits |
 | D. Composite v0 | Synthesis into the graph; tensions resolved or recorded | This chat, with one synthesis agent | `composite/` |
 | E. Break it | The adversarial pass, and the corpus test once P2's sample exists | Fresh agents; P2 | `composite/adversarial.md`, fixes |
 | **Checkpoint** | The maintainer reviews composite v0 | Maintainer | Go for P3 and P4 |
