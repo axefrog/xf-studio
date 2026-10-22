@@ -131,11 +131,11 @@ A claim that is contested between sources is marked **contested**, with both sid
 |---|---|---|---|
 | A. Lenses | §2.1–2.3: about 11 lens runs, three or four at a time, on small budgets; some on a second model family | Read-only research agents with web access | Candidate fields per lens |
 | B. Map | Merge and deduplicate. Tier each field: **core** (shapes a layer), **supporting** (shapes details), **peripheral** (noted, not researched) | This chat | `craft/map.md` |
-| **Checkpoint** | The maintainer reviews the map. Cheap to do and high leverage, since a missing field is the risk this method exists to prevent | Maintainer | Fields added or removed |
+| Review | This vertical's coordinator reviews the map and decides. The map's judgement calls are listed for the maintainer, who may overrule any of them, but nothing waits on that | Coordinator | Fields added or removed |
 | C. Dossiers | Core fields first, one agent per field or cluster; then supporting fields. Motivation and drives is already known to be core: its dossier replaces the draft drive catalogue in the [foundation](foundation.md) | Research agents | `craft/*.md`, credits |
 | D. Composite v0 | Synthesis into the graph; tensions resolved or recorded | This chat, with one synthesis agent | `composite/` |
 | E. Break it | The adversarial pass, and the corpus test once P2's sample exists | Fresh agents; P2 | `composite/adversarial.md`, fixes |
-| **Checkpoint** | The maintainer reviews composite v0 | Maintainer | Go for P3 and P4 |
+| Review | The coordinator reviews composite v0 and summarises it for the maintainer | Coordinator | Go for P3 and P4 |
 
 **Budget.** Phase A is about 11 small runs. Phase C is about 12–20 dossiers, depending on the map. Agents run a few at a time and inside this chat's memory share. The pace is set against the shared quota; nothing here is urgent.
 
@@ -148,6 +148,6 @@ A claim that is contested between sources is marked **contested**, with both sid
 
 ## 7. Done when
 
-- The map has reached saturation and the maintainer has reviewed it.
+- The map has reached saturation, or the coordinator has recorded why broad lenses stop.
 - Every core field has a dossier.
 - Composite v0 passes its five checks (§5), with the corpus test run on P2's first sample.
