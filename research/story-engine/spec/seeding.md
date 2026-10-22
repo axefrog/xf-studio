@@ -1,6 +1,6 @@
 # S2. Seed language and seeding layer specification
 
-**Status:** v1.0, 23 October 2026.
+**Status:** v1.1, 23 October 2026. v1.1 adds what layer 3's specification ([S3](procedural.md)) needs: sowing requests, source withdrawal, a read API, the core hooks typed, and corrections to the fit hook and hook inputs.
 - **Reviews.** Two reviews by GPT-6 Astra: of v0.1 (25 findings) and of v0.16 (23 findings), all adopted (§16).
 - **The core.** v1.0 defines the core: the subset the first implementation builds (§0.3). Everything else on this page is a **later capability**, which the first implementation rejects plainly rather than accepting with partial behaviour.
 - **The research.** Versions v0.1 to v0.16 folded in the requirements of dossiers 8 and 10 to 23. §15 traces each dossier's list; git history has the version steps.
@@ -73,7 +73,7 @@ The first implementation proves one complete path: **pack → cast → offer →
 |---|---|
 | Live language models and generated phrasing packs (§2.23) | An optional presentation layer with heavy validation; the renderer seam and frozen text records are enough now |
 | The memory machinery: forgetting, widening, recall curves (S0 V4-9 to V4-11) | Exact beliefs already support coherent speech; nuanced memory needs a measured policy |
-| The player-preference hooks: scoring, phase, form and joint (§8.3, §8.8) | World fitting stays available. Preference-based scheduling comes after option invariance is shown |
+| The hooks that use the player model: the score hook, the phase hook's deferral on evidence, and the form hook's use of engagement (§8.3, §8.8) | They wait until option invariance has been shown. The **fit** hook (world weights), the **hold** hook (pacing only, reading no model) and the **joint** hook (game state only) are in the core |
 | Staging: rungs, kits, approaches, interference (§2.21) | Needs the realiser and game-port contracts. The core uses one carrier with a report fallback |
 | Told-story assembly, humour blocks, subtext and voice-card analysis (§2.22) | Authoring patterns and audits, not runtime primitives. Told stories start as authored report templates |
 | City, norm, brokerage and reputation reads (§2.16, §2.17) | S1 produces them. The core reads them through registered reads |
@@ -155,6 +155,27 @@ A template is sown when its `sow` predicate is `yes`. The default `sow` is `yes`
 
 Sowing is idempotent. The instance `Id` is fixed by §1.2, so sowing twice finds the existing instance.
 
+**Sowing requests from layer 3.** `story.seed@1` takes:
+
+```ts
+interface SowRequest {
+  template: TemplateId; pack?: string;
+  overlay?: { roles?: Record<RoleKey, { identity: Id }>; growsFrom?: GrowsFrom; stakeScale?: 'person' | 'crew' | 'block' };
+  localName: string; decision: Id;
+}
+type SowResult = { ok: true; instance: Id; existing: boolean } | { ok: false; findings: Finding[] };
+```
+
+**How the overlay applies.**
+1. Layer 2 merges it over the expanded template, after profile expansion and the variant merge, and before the lint (§3.1).
+2. Each `roles[k].identity` replaces that role's identity with a fixed part. `growsFrom` and `stakeScale` replace the template's. Nothing else can be overlaid.
+3. An overlay that names a role the template lacks, or a node the role's kind doesn't accept, is refused.
+4. The lint runs on the merged document; an error refuses the request, with its findings.
+
+The instance's `source` records the `decision`.
+
+**Withdrawal by the source.** `story.withdraw@1 { seed, reason, decision }` is a source withdrawal (T1). It is accepted only for instances that layer 3 sowed. A released seed closes as §6.4 says. A request for an unknown or terminal seed is ignored, with a `source-withdraw-ignored` entry.
+
 **Maturity.** Every template declares a `maturity`:
 - `sketch`: an idea with placeholders;
 - `playable`: it runs, rough edges and all;
@@ -202,6 +223,7 @@ interface Seed {
   adapt?: AdaptationPoint[];           // §2.11
   timing?: TimingRequest;              // §2.12: defaults for this seed's requests
   migrate?: Migration[];               // §12.3
+  sowable?: unknown;                   // layer 3's declaration, checked by S3's load checks; S4 owns its final shape
 }
 
 type Duration = { clock: 'game' | 'play'; s: number };
@@ -1405,7 +1427,7 @@ choice    = argmax over o ∈ F of (score(o) + g(o)); exact ties to the lower H(
 
 - **`w(o)`** is the option's declared weight, or 1.
 - **`K`** is **[tunable 8]**.
-- **`fitWeight`** comes from S3's fitting hook. It is **clamped** to ±`fitCap` **[tunable ln 1.5]** before it enters the score, and the draw record keeps the raw and the clamped value. It is 0 with the director off, or with the player's `noticing` setting off (§8.8).
+- **`fitWeight`** comes from S3's fitting hook. It is **clamped** to ±`fitCap` **[tunable ln 1.5]** before it enters the score, and the draw record keeps the raw and the clamped value. It is 0 with layer 3 absent. It reads the world only, so `noticing` has no bearing on it (§8.8).
 - **A fixed part** makes `F` its single value.
 - **`attempt`** starts at 0. It increments only when the same choice is legitimately made again: a re-offer, or a re-cast after a ladder step.
 
@@ -1854,7 +1876,7 @@ The arbiter runs once a second of play:
 
    Class-0 deliveries don't count towards spacing or the cap. At most one class-0 delivery is released per `class0Gap` **[tunable 20 s]**.
 
-   **Joints.** A joint is latched when S3's phase hook reports one: arriving somewhere, resting, finishing a job, or asking. Without the hook, a joint is latched when V's combat and vehicle states are both clear. The latch stays set until an `atJoint` delivery is released, or V enters combat, a vehicle or dialogue.
+   **Joints.** S3's joint hook reports each joint **occurrence** (arriving somewhere, resting, finishing a job, or asking), and layer 2 owns the latch. Without the hook, a joint is latched when V's combat and vehicle states are both clear. The latch stays set until an `atJoint` delivery is released, or V enters combat, a vehicle or dialogue.
 3. **Tempo.** The player's tempo setting (S4) scales spacing and the cap:
 
    | Tempo | Effect |
@@ -1994,12 +2016,17 @@ The director (S3) keeps a model of V: beliefs held by the root actor `director` 
 
 | Exit | Bound |
 |---|---|
-| The fitting hook | **World fitting only:** it reads the world, never the player model. Its `fitWeight` is clamped to ±`fitCap` (§3.4) |
-| The scoring hook | A delta clamped to ±`scoreCap` (§8.3) |
-| The phase hook | Removes only (§8.3) |
-| The form hook | Reads explicit settings only, never the model (§2.13) |
-| The joint hook | Reads game state only |
+| The **fit** hook (core) | **World fitting only:** it reads the world, never the player model. Its `fitWeight` is clamped to ±`fitCap` (§3.4) |
+| The **score** hook (later) | A delta clamped to ±`scoreCap` (§8.3) |
+| The **hold** hook (core; the phase hook of §8.3 step 4) | Removes only. In the core it reads pacing, never the model. Layer 2 ignores a hold on a pull, class-0 or closing delivery |
+| The **form** hook (later) | Reads explicit settings only, never the model (§2.13) |
+| The **joint** hook (core) | Reads game state only. It reports occurrences; layer 2 owns the latch |
+| **onRelease** (core) | A notification to layer 3 of each release, for its thread view; it returns nothing |
 | V's inferred frames (S0 §10.4) | They focus attention; they pin nothing (S0 I-12) |
+
+Layer 2 enforces every bound, and treats a missing hook as "layer 3 absent". The signatures are in [S3 §1.4](procedural.md).
+
+**Exclusions aren't the model.** The sower reads the player's explicit `exclusions` and `softExclusions` as a hard filter on what it sows. That is a stated setting, not the model, and neither list ranks anything.
 
 **Offers are frozen at display.** These are fixed by the document and the recorded draws at the first release:
 - an offer's options and their order;
@@ -2014,7 +2041,10 @@ The director (S3) keeps a model of V: beliefs held by the root actor `director` 
 - the session state;
 - tempo;
 - `playTotal`;
-- the settings.
+- the settings;
+- `timing.intensity`, `maxWait` and `submitted`;
+- for a first release, `window: { lead, urgency }`, the release window's evaluated values (§2.7);
+- `jointLatched`, layer 2's own latch.
 
 Nothing about quitting, menus, saving, idle time, session length, time of day or how often the player returns ever reaches a hook.
 
@@ -2102,6 +2132,16 @@ The kinds:
 - **The diagnostic record** (the other entry kinds) is bounded at `recordMax` entries **[tunable 512]**, dropping the oldest first.
 
 Dropping never renumbers; a reference to a dropped entry reads as "dropped". P7 measures save size and save latency on a long-running arc before setting the bounds.
+
+### 10.1a The read API for layer 3
+
+Layer 2 exposes a read-only `Layer2View` (S3 §1.2) to layer 3 and to tools:
+- `instances()`, `instance(id)`, `sownBy(decision)`;
+- `global()`;
+- `exposedNode(node, atLeast)`;
+- `playTotal()`.
+
+Its views are projections of the instance state (§12.1) and the record. Each delivery appears once, with its highest grade and the `playTotal` at which it reached it; this survives in the receipts after a seed ends. Each loose end carries its stable `n`, a `kind` (`fact`, `cast`, `promise` or `turn`) and its node.
 
 ### 10.2 The exposure ledger
 
@@ -2330,7 +2370,8 @@ interface FitReport {
   timing: { firstDelivery: TimingRequest; channel: ChannelId };
   exits: Array<{ beat: BeatKey; reachable: boolean; leadsTo: string }>;
   declinePreview: { response?: ContentRef; unattendedOutcome: EffectDecl[] };
-  connectingMaterial: string[];        // what fitting would add (empty with the director off)
+  connectingMaterial: string[];        // what fitting would add (empty in the core)
+  fit?: FitReportFit;                  // S3 §4.5: the fit hook's weights and the lead aim; omitted with layer 3 absent
   argues: Array<{ premise: PremiseId; stance: string; carriers: BeatKey[] }>;   // the seed's rows of the argument profile
   plants: Array<{ promise: string; cause: 'found' | 'would-construct' | 'none'; earliestExposure?: BeatKey }>;
   turns: Array<{ who: RoleKey; kind: string; pressure: string }>;    // who could turn, and how much pressure it takes
@@ -2520,7 +2561,7 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 | SF-34 | **Option invariance.** Release the same offer under two different model states | Identical options, order, costs and wording; only timing may differ |
 | SF-35 | **Forbidden hook inputs.** Perturb session length, idle time, quit and save counts | Byte-identical hook outputs and records |
 | SF-36 | **Correction.** An attribution line plays; V uses the correcting reply | The NPC's belief about V revises through an observed telling; the line no longer applies |
-| SF-37 | **Model off.** `noticing: off` | `fitWeight` 0 and built-in scores: records byte-identical to a run with the director off, from the same state |
+| SF-37 | **Model off.** `noticing: off` | Score deltas 0 and no model-dependent exit. Fit weights unchanged |
 | SF-38 | **Grade progression.** A message offer is released, opened, then answered | Its grade goes from `presented` to `confirmed`; the `offer` event is minted only at `confirmed` |
 | SF-39 | **Ambient callback.** A callback citing an event V saw only at `ambient` | L-62 error |
 | SF-40 | **Soft callback.** A callback with `atLeast: presented` | It uses the hedged form |
@@ -2601,6 +2642,8 @@ The fixtures are examples. With the layer-2 implementation, the reference model 
 22. **Dossier 23.** v0.16 adds its fixtures and property tests (§14, §14.1). Its evaluation plan (four tiers: offline, transcript panels, 14 merged in-game sessions, early testers, all through one consented session ledger, with control arms and a per-feature off switch) is P9's; its tools are P10's.
 
 ## 16. Review record
+
+v1.1's additions come from drafting S3 (§13 there). They will be reviewed with S3.
 
 ### Round 2: GPT-6 Astra, extra-high effort, on v0.16
 

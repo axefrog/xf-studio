@@ -74,6 +74,7 @@ Work happens on the `claude/story-engine` branch in a worktree under `%USERPROFI
 | [P5. The procedural engine](p5-procedural-engine.md) | Layer 3's design: the director, sowing, fitting and sifting, with the bounded hooks S2 calls, traced to the dossiers |
 | [S0. Kernel specification](spec/kernel.md) | Exactly how the dimensional model works: data, algorithms, invariants, test vectors |
 | [S2. Seed language and seeding layer](spec/seeding.md) | Exactly how seeds are written, compiled, cast, run, offered and persisted; its lint, fit report, invariants and fixtures |
+| [S3. Procedural engine](spec/procedural.md) | Exactly how layer 3 fits, paces, sifts and sows, for the core; its invariants and fixtures |
 | [Quest corpus statistics](quest-corpus-statistics.md) | Node types, phase sizes, fact usage, branching, scenes per quest and graph shape of the game's authored quests, generated from the corpus database ([how it is built](../consumers/quest-corpus/scripts/README.md)) |
 | [Design seeds](design-seeds.md) | Fine-grained design points, each waiting for the plan that will absorb it |
 | [Runtime requirements](runtime-requirements.md) | The senses and verbs the system needs in game, and their status |

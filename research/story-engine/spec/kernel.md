@@ -1,6 +1,7 @@
 # S0. Kernel specification
 
-**Status:** v4.6, 23 October 2026.
+**Status:** v4.7, 23 October 2026.
+- v4.7 clarifies pattern frames for layer 3 (V4-31).
 - v4.6 adds staged batches, widens relevance routing to layer 2, tightens the production gate, fixes recall to once per encounter, and defers the memory machinery and implicit edges from the first version, after GPT-6 Astra's second review of S2 (V4-26 to V4-30 in §20).
 - v4.5 adds the `coarseFine` declaration on processes and the property-test plan, from [dossier 23](../craft/d23-evaluation-testing.md) (V4-24 and V4-25 in §20).
 - v4.4 adds an age class on people, typed and sensitive content settings, and lines that refuse events, from [dossier 18](../craft/d18-content-boundaries.md) (V4-21 to V4-23 in §20).
@@ -848,6 +849,11 @@ An interest selector `σ` matches change `x` if **one binding** satisfies all of
   2. It is emitted when `r ≥ θ_react` **[calibrate]**, as `Relevance { actor, frame, change, type, r }`.
   3. Emissions go to S1 and S3, in order of actor (demand roots first), then frame `Id`. Emissions on frames whose actor is one layer 2 has registered (every `core:seed`, and the pack roots that carry sowing watchers) go to layer 2 (S2) as well, in the same order (v4; widened in v4.6). Layer 2 also hears dilemmas (§10.8) whose frames belong to those actors.
 
+**For layer 3** (v4.7, a clarification):
+- a frame MAY carry many interests for one pattern;
+- a `Relevance` emission carries the change payload itself, not only its id;
+- a root actor's frames may be opened and closed as packs load and unload.
+
 ### 10.6 Demand and tiers
 
 A node's demand tier is the highest `focus.tier` among active or blocked frames focusing on it or its owner chain. A frame's claim weighs `pull × w_actor`, where `w_actor` is **[tunable 4.0]** for demand roots and 1 otherwise. Slots normally open when the node's demand tier reaches the slot's `tier`. Queries, seeds and preimages may open finer slots.
@@ -1270,6 +1276,7 @@ v4 adds what the seeding layer and sifting need. None of the additions changes a
 | V4-28 | The production gate applies to new occurrences and their dependents; observed history is kept | §9.2 | C-08 | To implement with S1's first process |
 | V4-29 | Recall once per (belief, encounter) | §11.2 | C-20 | With V4-11, deferred |
 | V4-30 | The memory machinery (V4-9 to V4-11) and implicit edges (V4-18) are deferred from the first version | §0.2 | Astra's core set | Deferred |
+| V4-31 | Pattern frames: many interests per frame, emissions carry the change, frames come and go with packs | §10.5 | S3's sifter | A clarification |
 
 **Dossier 11's other kernel requirements:**
 - **S1 policies:**
