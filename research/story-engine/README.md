@@ -15,11 +15,11 @@ When threads collide, the outcome is played out and recorded. Whatever doesn't m
 The work has two halves:
 
 1. **A method for building the design knowledge.** Find every discipline that bears on good interactive storytelling, including the ones a task-focused agent would miss. Gather what each one knows, and how it fails. Merge it all into one graph that a procedural system can be built from.
-2. **The system.** It has four parts:
-   - the world model and its simulation at levels of detail;
-   - the narrative layer: seeds, casting, sifting and escalation;
-   - a director that decides what surfaces and when;
-   - the layer that makes it all present in the running game, and feeds back what V perceives.
+2. **The system:** four layers above the game.
+   1. A **simulation layer** sunk into the running game. It mirrors what the game is doing, simulates the rest at levels of detail, makes content present, and records what V perceives.
+   2. A **seeding layer**, the only way content enters the simulation. It provides a seed language from vague to precise, casting, scheduling and intersections.
+   3. A **procedural engine** that sows content proactively. The player can tune how much it does, or switch it off.
+   4. **Human-authored content** written as data, precisely or vaguely. It plays through the seeding layer on its own, or feeds the procedural engine.
 
 The [first-level plan](plan.md) breaks this down.
 
@@ -45,6 +45,7 @@ Work happens on the `claude/story-engine` branch in a worktree under `%USERPROFI
 | Document | What it holds |
 |---|---|
 | [First-level plan](plan.md) | Quality bar, subsystems, workstreams, milestones and the second-level plans |
+| [P1. Research method](p1-research-method.md) | How the craft research finds every relevant discipline and merges it into the composite |
 | [Design seeds](design-seeds.md) | Fine-grained design points, each waiting for the plan that will absorb it |
 | [Runtime requirements](runtime-requirements.md) | The senses and verbs the system needs in game, and their status |
 
