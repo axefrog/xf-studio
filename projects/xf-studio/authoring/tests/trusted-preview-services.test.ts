@@ -191,3 +191,18 @@ test("the eye's own roughness is on by default, also for a workspace that stored
   start(off);
   expect(values.at(-1)).toBe(false);
 });
+
+test("a head that lacks the scene's eye shape shows its base shape and leaves the node's choice for the heads that have it (4a-iv)", async () => {
+  const { createStudioViewGraph } = await import("../src/preview/preview-view-graph");
+  const workspace = freshWorkspace();
+  workspace.preview.eyeShape = 5;
+  const graph = createStudioViewGraph(workspace.preview), shapes: number[] = [], noop = () => {};
+  const preview: PreviewPort = { cameraState: () => ({ position: [0, 0, 1], target: [0, 0, 0], fov: 30 }), front: () => false, setFov: () => false,
+    endFovGesture: noop, restoreCamera: noop, setSurfaceControls: noop, setWire: noop, setNormals: noop, setEyeOptics: noop, setHair: noop,
+    setEyeShape: index => shapes.push(index), setPiercings: noop, setDetail: noop,
+    eyeShapeOptions: () => ({ choices: [{ index: 0, label: "Base" }], eyesFollow: false, eyeSource: null }) };
+  const motion: MotionPort = { available: false, blink: { available: false }, setIdle: noop, setIdlePaused: noop, setIdleContributions: noop, setBlink: noop, animateBlink: noop };
+  createTrustedPreviewServices(workspace, { savedAppearance: { apply: () => applied }, preview, motion }, graph).finish().show();
+  expect(shapes).toEqual([0]);
+  expect(graph.state<{ eyeShape: number }>("main", "scene").eyeShape).toBe(5);
+});

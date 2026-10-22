@@ -49,6 +49,7 @@ function owner(bodies: Record<string, "female" | "male">, failBuild: number[] = 
   const gate = gates(), h = harness({ build: gate.build, failBuild }), people = characterOwner(bodies);
   const listeners = new Set<() => void>(), shown: (AttachedHead | undefined)[] = [], notices: string[] = [], pending: string[] = [];
   const prepared: { body: string; signal: AbortSignal }[] = [];
+  const contextListeners = new Set<(event: "lost" | "restored") => void>();
   let prepare: (body: string, signal: AbortSignal) => Promise<void> = async () => {};
   const heads = createBrowserSceneHeads({
     head: { ...h.ports },
@@ -58,10 +59,12 @@ function owner(bodies: Record<string, "female" | "male">, failBuild: number[] = 
     prepareCore: (body, _pending, signal) => { prepared.push({ body, signal }); return prepare(body, signal); },
     pending: message => pending.push(message), notice: text => notices.push(text),
     shown: head => shown.push(head), previews: null,
+    onContext: listener => { contextListeners.add(listener); return () => { contextListeners.delete(listener); }; },
   });
   return { h, gate, people, heads, shown, notices, pending, prepared, scene, listeners,
     setPrepare(next: typeof prepare) { prepare = next; },
-    changeScene() { for (const listener of listeners) listener(); } };
+    changeScene() { for (const listener of listeners) listener(); },
+    loseContext() { for (const listener of contextListeners) listener("lost"); } };
 }
 const settle = () => new Promise(resolve => setTimeout(resolve, 5));
 
@@ -124,6 +127,10 @@ test("a body switch builds the new head hidden, keeps the old one drawn until it
   o.people.steps.v1!.undo();
   await settle();
   expect(o.heads.shown()).toBe(male);
+  // A lost context drops the warm head first; the shown one stays.
+  o.loseContext();
+  expect(o.heads.snapshot().residents.map(item => `${item.key}:${item.state}`)).toEqual(["s1|v1|male:shown"]);
+  expect(o.h.log).toContain("scene:dispose:1");
   o.heads.dispose();
   expect(o.h.host.canvases).toBe(0);
   expect(o.h.attached.characterContext).toBeUndefined();
