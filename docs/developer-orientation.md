@@ -39,6 +39,7 @@ New Studio code takes time and randomness from the clock and random services rat
 ## Checks
 
 - **Studio:** from `projects/xf-studio/authoring/`, `bun run check` (type checks for the app, tools and experiment scripts), `bun test` and `bun run build`. Run the full suite under the memory guard (`python tools/memory_guard.py --limit 6 -- bun test`); a targeted test file is enough while developing. The boundary tests (`architecture-import-boundary`, `studio-ui-boundary`, `ui-component-ratchet`) keep the layers in the [architecture contract](../research/authoring/architecture-contract.md) honest.
+- **Temporary folders in tests:** create them with `tempDir(prefix)` from `tests/temp-dir.ts`, never with `mkdtempSync` directly. The folder is removed when the test or file that made it ends. The `bunfig.toml` preload (`tests/temp-dir-sweep.ts`) sweeps whatever is left at the end of the run, including folders made inside concurrent tests.
 - **Documentation:** `python tools/check_links.py` and `python tools/check_private_paths.py` before committing; CI runs both on every push.
 - **UI changes:** exercise them in an isolated `?verify=1` workspace and attach light and dark captures, as the [visual QA checklist](../research/authoring/ui-visual-qa-checklist.md) asks.
 
