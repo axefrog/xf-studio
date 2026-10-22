@@ -25,6 +25,13 @@ describe("MCP reference", () => {
     }
   });
 
+  test("a parameter taking one value or a list of them (anyOf) reads as both", () => {
+    const text = current();
+    expect(text).not.toContain("undefined");
+    const wait = text.slice(text.indexOf("### `game_wait`"));
+    expect(wait).toMatch(/\| `phase` \(required\) \| string or array of string \| `starting`, `main_menu`/);
+  });
+
   test("every refusal link has its glossary entry", () => {
     const text = current();
     const targets = new Set([...text.matchAll(/<a id="(refusal-[a-z0-9-]+)"><\/a>/g)].map((m) => m[1]));

@@ -195,7 +195,7 @@ No parameters.
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
-| `phase` (required) | undefined | any | The phase to wait for, or a list of phases (any one of them). |
+| `phase` (required) | string or array of string | `starting`, `main_menu`, `loading`, `gameplay`, `photo_mode`, `character_menu`, `menu`, `paused`, `shutting_down`; or 1 to 9 items; each `starting`, `main_menu`, `loading`, `gameplay`, `photo_mode`, `character_menu`, `menu`, `paused`, `shutting_down` | The phase to wait for, or a list of phases (any one of them). |
 | `timeout_ms` | integer | 0 to 600000 | How long to wait, in milliseconds (default 60000, at most 600000). |
 
 ### `game_options_read`

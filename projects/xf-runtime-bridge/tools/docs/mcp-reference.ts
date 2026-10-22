@@ -259,8 +259,9 @@ function prose(text: string): string {
 const code = (text: string | number) => "`" + String(text) + "`";
 
 function typeOf(schema: JsonSchema): string {
+  if (schema.anyOf) return schema.anyOf.map(typeOf).join(" or ");
   if (schema.type === "array") return schema.items ? `array of ${typeOf(schema.items)}` : "array";
-  return schema.type;
+  return schema.type ?? "any";
 }
 
 function range(min: number | undefined, max: number | undefined, unit = ""): string | null {
@@ -271,6 +272,12 @@ function range(min: number | undefined, max: number | undefined, unit = ""): str
 }
 
 function allowedOf(schema: JsonSchema): string {
+  // 0.8.2's anyOf (one value or a list of them): each branch's allowed values, the shared default once.
+  if (schema.anyOf) {
+    const branches = schema.anyOf.map((branch) => allowedOf({ ...branch, default: undefined })).filter(Boolean);
+    const joined = branches.length > 1 && branches.every((b) => b === branches[0]) ? branches[0]! : branches.join("; or ");
+    return schema.default !== undefined ? `${joined}; default ${code(JSON.stringify(schema.default))}` : joined;
+  }
   const parts: string[] = [];
   if (schema.type === "boolean") parts.push("`true`, `false`");
   if (schema.type === "object" && schema.properties) parts.push("the fields below");
