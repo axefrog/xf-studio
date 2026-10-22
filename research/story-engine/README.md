@@ -71,6 +71,7 @@ Work happens on the `claude/story-engine` branch in a worktree under `%USERPROFI
 | [P1. Research method](p1-research-method.md) | How the craft research finds every relevant discipline and merges it into the composite |
 | [P2. Game substrate research](p2-game-substrate.md) | What the engine must learn about the game itself, and how |
 | [P4. Seeding layer and seed language](p4-seeding-layer.md) | Layer 2's design: seeds as partly resolved quests, roles, windows, beats, offers, profiles, casting, the lifecycle and the arbiter, traced to the dossiers |
+| [P5. The procedural engine](p5-procedural-engine.md) | Layer 3's design: the director, sowing, fitting and sifting, with the bounded hooks S2 calls, traced to the dossiers |
 | [S0. Kernel specification](spec/kernel.md) | Exactly how the dimensional model works: data, algorithms, invariants, test vectors |
 | [S2. Seed language and seeding layer](spec/seeding.md) | Exactly how seeds are written, compiled, cast, run, offered and persisted; its lint, fit report, invariants and fixtures |
 | [Quest corpus statistics](quest-corpus-statistics.md) | Node types, phase sizes, fact usage, branching, scenes per quest and graph shape of the game's authored quests, generated from the corpus database ([how it is built](../consumers/quest-corpus/scripts/README.md)) |
