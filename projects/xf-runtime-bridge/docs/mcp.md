@@ -126,7 +126,7 @@ The bridge is built so that a mistake, a confused model or a crash can't damage 
 
 **Every change can be undone.** Each change answers with an `undo`: the exact command that puts back what it changed (or a plain note when there is nothing to put back). Each tool's undo is in the reference. The session's event stream (`session_log`) records every change with its undo, every refusal and every note.
 
-**The kill switch.** `bridge_kill`, the bridge's own kill key in the game (End by default, `[ui] kill_key` in `config.ini`; it works in play, photo mode, menus and loading screens while CET's overlay is closed), **Stop the bridge** in the XF Runtime Bridge window, a CET hotkey you bind, or a `KILL` file beside the bridge's session file. Each one stops the bridge at once and cancels anything still queued, then puts back what it left on: a frozen world, a hidden photo-mode menu, a held weather, V's cyberware and wardrobe, the effects it put on V, its showroom heads and pins. After that nothing reaches the game until you press **Reconnect** in the XF Runtime Bridge window or restart the game. The kill switch is always available, in every MCP configuration.
+**The kill switch.** `bridge_kill`, the bridge's own stop key in the game (Ctrl + Shift + End by default, `[ui] kill_key` in `config.ini`, changed on the XF Runtime Bridge window's Keys section; it works in play, photo mode, menus and loading screens while CET's overlay is closed), **Stop the bridge** in the XF Runtime Bridge window, a CET hotkey you bind, or a `KILL` file beside the bridge's session file. Each one stops the bridge at once and cancels anything still queued, then puts back what it left on: a frozen world, a hidden photo-mode menu, a held weather, V's cyberware and wardrobe, the effects it put on V, its showroom heads and pins. After that nothing reaches the game until you press **Reconnect** in the XF Runtime Bridge window or restart the game. The kill switch is always available, in every MCP configuration.
 
 **Pause and handover.** **Pause changes** in the XF Runtime Bridge window refuses every change until you resume. An AI client can also hand the game to you (`session_handover`): it stops its routines, gives V back and refuses changes until `session_resume`.
 
@@ -221,7 +221,7 @@ Every code, with its exact wording, is in the reference's [refusal codes](mcp-re
   - the creator opened from the street, options changed by label, backing out;
   - equipping items, loading saves, the showroom's heads;
   - questions answered from inside the game, one at a time, on one status surface at a time;
-  - the kill switch's restore, and the bridge's own kill key in play, photo mode and the pause menu;
+  - the kill switch's restore, and the bridge's own stop key in play, photo mode and the pause menu;
   - emergency controls from a second process while another waits on the main pipe;
   - world pins with the XF mark, and the staged showroom found without naming its build.
 

@@ -273,7 +273,7 @@ describe.skipIf(!existsSync(FENGARI))("0.8.4 the CET comment box wraps at words 
     local queued = {}
     local function queue(name, arg) queued[#queued + 1] = name end
     local function state(extra)
-      local s = { info = { plugin_version = "0.8.4", answer_keys = { "IK_F6", "IK_F7", "IK_F8", "IK_F11" },
+      local s = { info = { plugin_version = "0.8.5", answer_keys = { "IK_F6", "IK_F7", "IK_F8", "IK_F11" },
         bridge = { enabled = true, listening = true, killed = false, allow_writes = true },
         status = { connection = "Connected to XF Studio", connection_tone = "ok" },
         kill_key = { enabled = true, label = "Ctrl + Shift + End", default = "Ctrl + Shift + End", is_default = true, warnings = {}, notes = {} } },
@@ -323,8 +323,8 @@ describe.skipIf(!existsSync(FENGARI))("0.8.4 the CET comment box wraps at words 
       local capturing = state({ killKeyCapture = true, killKeyRefused = "F6 answers XF Studio's questions." })
       local b = table.concat(draw(capturing), "|")
       return tostring(string.find(a, "Saving stays locked", 1, true) ~= nil) .. "," .. tostring(string.find(a, "connection key", 1, true) == nil)
-        .. "," .. tostring(string.find(b, "Press a key", 1, true) ~= nil) .. "," .. tostring(string.find(b, "F6 answers", 1, true) ~= nil)
-        .. "," .. tostring(string.find(b, "Version 0.8.4", 1, true) ~= nil)`);
+        .. "," .. tostring(string.find(b, "Press the new key", 1, true) ~= nil) .. "," .. tostring(string.find(b, "F6 answers", 1, true) ~= nil)
+        .. "," .. tostring(string.find(b, "Version 0.8.5", 1, true) ~= nil)`);
     expect(out).toBe("true,true,true,true,true");
   });
 
