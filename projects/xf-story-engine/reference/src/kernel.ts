@@ -17,7 +17,7 @@ import { CONFLICT_TABLE, type Registry, coreRegistry } from './registry.ts';
 import { Resolver, type Trace } from './resolve.ts';
 import { Retention } from './retention.ts';
 import type { Schema } from './schema.ts';
-import { Schema as SchemaClass } from './schema.ts';
+import { Schema as SchemaClass, parseSlotPath } from './schema.ts';
 import type { SchemaDefs } from './schema-types.ts';
 import { Store } from './store.ts';
 import { Summaries } from './summary.ts';
@@ -241,6 +241,38 @@ export class Kernel {
       });
     }
     return nid;
+  }
+
+  // ---- open and close (spec 7.1, 7.2) ----
+
+  /**
+   * Materialise a slot as open. A many slot resolves its count first; its members come into being
+   * lazily, when first addressed.
+   */
+  open(node: Id, path: SlotPath, t: GameTime = this.now): void {
+    const h = this.store.header(node);
+    if (!h) throw new Error(`unknown node: ${node}`);
+    const parsed = parseSlotPath(path);
+    if (!parsed) throw new Error(`bad slot path: ${path}`);
+    const rk = this.schema.kind(h.kind);
+    const at = rk.index.get(parsed.key);
+    if (at === undefined) throw new Error(`${h.kind} has no slot "${parsed.key}"`);
+    const n = this.store.ensureNode(node, this.now);
+    if (rk.slots[at]!.card !== 'one' && parsed.index === undefined && !parsed.isCount) {
+      this.resolve(node, `${parsed.key}#count`, t);
+    }
+    if (!n.slots.has(path)) n.slots.set(path, { s: 'open' });
+  }
+
+  /** Drop the resolved caches of a node and of its unretained owned values and members. Pins, edges and headers stay. */
+  close(node: Id): void {
+    const drop = (id: Id, root: boolean): void => {
+      if (!root && this.retention.isRetained(id)) return;
+      this.store.dropNode(id);
+      for (const o of this.store.ownedOf(id)) drop(o, false);
+    };
+    drop(node, true);
+    this.resolver.clearCache();
   }
 
   // ---- reads ----
@@ -528,11 +560,12 @@ export class Kernel {
     const adv = this.evolution.advanceTo(opts.to ?? this.now, budget);
     const frameSteps = this.frames.runWorklist(budget);
     const dispatchSteps = this.dispatcher.run(budget);
+    this.beliefs.runTicks(budget);
     const materialised = this.summaries.runMaterialisation(budget);
     const forgotten = this.retention.runForgetting(budget);
     return {
       boundaries: adv.boundaries, runs: adv.runs, frameSteps, dispatchSteps, materialised, forgotten,
-      done: adv.done && this.frames.worklist.isEmpty && this.dispatcher.idle && this.summaries.pendingMaterialisation === 0 && this.retention.pendingForgetting === 0,
+      done: adv.done && this.frames.worklist.isEmpty && this.dispatcher.idle && this.beliefs.pendingTicks === 0 && this.summaries.pendingMaterialisation === 0 && this.retention.pendingForgetting === 0,
     };
   }
 

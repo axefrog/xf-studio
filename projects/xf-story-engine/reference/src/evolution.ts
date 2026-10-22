@@ -239,6 +239,7 @@ export class Evolution {
       report.runs++;
       cost += 1 + ctx.allowance.used;
     }
+    k.beliefs.onBoundary();
     return cost;
   }
 

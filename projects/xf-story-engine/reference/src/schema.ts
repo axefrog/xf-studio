@@ -298,6 +298,17 @@ export class Schema {
           if (!defs.kinds.some((k) => k.id === vt.kind)) problems.push(`${w}: ref to unknown kind ${vt.kind}`);
           if (!defs.kinds.some((k) => k.id === vt.candidates.find)) problems.push(`${w}: candidates find unknown kind ${vt.candidates.find}`);
           if (!(vt.candidates.max >= 1)) problems.push(`${w}: candidates max must be at least 1`);
+          // A candidate query may test only the candidates' non-ref, non-temporal slots (spec 2.3).
+          for (const p of vt.candidates.must) {
+            if (p.path === '' || p.path === '.' || p.path.startsWith('@') || p.op === 'has-edge' || p.op === 'lacks-edge') continue;
+            const first = p.path.replace(/:bucket$/, '').split('/')[0]!;
+            if (first === '^') continue;
+            const slotDef = this.kindDefs.has(vt.candidates.find) ? this.kind(vt.candidates.find).slots.find((sd) => sd.key === (parseSlotPath(first)?.key ?? first)) : undefined;
+            if (!slotDef) continue;
+            const sdim = this.dims.get(slotDef.dim);
+            if (sdim?.value.t === 'ref') problems.push(`${w}: a candidate query reads the ref slot "${first}"`);
+            if (slotDef.temporal) problems.push(`${w}: a candidate query reads the temporal slot "${first}"`);
+          }
           break;
         case 'node':
           if (!defs.kinds.some((k) => k.id === vt.kind)) problems.push(`${w}: node of unknown kind ${vt.kind}`);

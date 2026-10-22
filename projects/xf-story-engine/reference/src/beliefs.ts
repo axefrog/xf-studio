@@ -8,6 +8,7 @@
 import { H, id as hid, i as hi, s as hs } from './id.ts';
 import type { Kernel } from './kernel.ts';
 import type { DimId, Edge, GameTime, Id, Region, SlotPath, Value } from './types.ts';
+import { type Budget, Worklist } from './work.ts';
 import { valueKey } from './value.ts';
 
 export type BeliefSource =
@@ -97,6 +98,25 @@ export class Beliefs {
   private byBeliever = new Map<Id, Map<string, Belief>>();
   private history: Belief[] = [];
   policy: BeliefPolicy = STUB_POLICY;
+  private tickList = new Worklist<{ believer: Id }>();
+
+  /** A boundary passed: every believer is due its `onTick` (fading and the like are S1's, spec 11.2). */
+  onBoundary(): void {
+    if (!this.tickList.isEmpty) return;
+    for (const b of [...this.byBeliever.keys()].sort(cmpId)) this.tickList.push({ believer: b });
+  }
+
+  get pendingTicks(): number {
+    return this.tickList.length;
+  }
+
+  /** Call the policy's `onTick` for each believer due, one unit each, resumable. */
+  runTicks(budget: Budget): number {
+    return this.tickList.run(budget, (item) => {
+      this.policy.onTick(this.k, item.believer);
+      return { cost: 1, done: true };
+    });
+  }
 
   constructor(private readonly k: Kernel) {}
 

@@ -57,6 +57,48 @@ describe('F-14 retained member (spec 6.5)', () => {
   });
 });
 
+describe('open and close (spec 7.1, 7.2)', () => {
+  test('open materialises an open slot; a many slot resolves its count first; members come lazily', () => {
+    const k = coreKernel('open');
+    const p = k.root('p', 'core:person');
+    k.open(p, 'age');
+    expect(k.store.nodes.get(p)!.slots.get('age')).toEqual({ s: 'open' });
+    k.open(p, 'traits');
+    const count = k.store.nodes.get(p)!.slots.get('traits#count')!;
+    expect(count.s).toBe('resolved');
+    expect(k.store.nodes.get(p)!.slots.get('traits')).toEqual({ s: 'open' });
+    expect(k.store.ownedOf(p)).toEqual([]);
+    k.resolve(p, 'traits[0]');
+    expect(k.store.ownedOf(p).length === 1 || (count.s === 'resolved' && count.value === 0)).toBe(true);
+    expect(() => k.open(p, 'nope')).toThrow();
+    k.value(p, 'age');
+    k.open(p, 'age');
+    expect(k.store.nodes.get(p)!.slots.get('age')!.s).toBe('resolved');
+  });
+
+  test('close drops the caches of the node and its unretained owned values; pins, edges and headers stay', () => {
+    const k = coreKernel('close');
+    const p = k.root('p', 'core:person');
+    const name = k.address(p, 'name');
+    k.pin({ node: p, slot: 'age', value: 30, reason: 'authored', cause });
+    k.value(p, 'age');
+    k.value(name, 'given');
+    expect(k.store.nodes.has(p) && k.store.nodes.has(name)).toBe(true);
+    k.close(p);
+    expect(k.store.nodes.has(p)).toBe(false);
+    expect(k.store.nodes.has(name)).toBe(true); // the pin on p retains its owned values
+    expect(k.store.pinsOn(p, 'age')).toHaveLength(1);
+    expect(k.store.header(name)).toBeDefined();
+    expect(k.value(p, 'age')).toBe(30);
+    const q = k.root('q', 'core:person');
+    const qname = k.address(q, 'name');
+    k.value(qname, 'given');
+    k.value(q, 'age');
+    k.close(q);
+    expect(k.store.nodes.has(q) || k.store.nodes.has(qname)).toBe(false);
+  });
+});
+
 describe('roots, marks and forgetting (spec 7.3, I-3)', () => {
   test('pins in effect, live edges and observed pins retain; history does not', () => {
     const k = coreKernel('marks');

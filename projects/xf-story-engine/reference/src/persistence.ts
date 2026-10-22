@@ -278,6 +278,8 @@ export class Persistence {
         if (!observedTwin && !keep.has(p.id)) continue;
       }
       const w = k.store.withdrawn.get(p.id);
+      // A pin withdrawn before it was ever persisted is history, not state (SPEC-NOTES 19).
+      if (w && !base.pins.has(p.id)) continue;
       v.pins.set(p.id, w ? { pin: clone(p), withdrawn: { by: w.by, at: w.at } } : { pin: clone(p) });
     }
     return v;

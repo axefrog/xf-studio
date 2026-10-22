@@ -230,6 +230,21 @@ describe('schema loading (spec 2.3)', () => {
     rejects(withKind({ id: 'k:a', slots: [slot('z', 'd:i', { mode: 'derived' })] }), 'needs derive');
   });
 
+  test('rejects a candidate query that reads a ref slot or a temporal slot (spec 2.3)', () => {
+    const refDim = (must: Array<{ path: string; op: 'field-at-least'; arg: number }>) =>
+      D('d:rr', { t: 'ref', kind: 'k:leaf', candidates: { find: 'k:cand', scope: { nodes: [] }, must, max: 3 } });
+    const cand = (extra: KindDef['slots']): KindDef => ({ id: 'k:cand', slots: [slot('level', 'd:i'), ...extra] });
+    const ok = { dims: [...base.dims, refDim([{ path: 'level', op: 'field-at-least', arg: 1 }])], kinds: [...base.kinds, cand([])], edgeTypes: [] };
+    expect(() => Schema.load(ok, reg)).not.toThrow();
+    const temporal = { dims: [...base.dims, refDim([{ path: 'tmp', op: 'field-at-least', arg: 1 }])], kinds: [...base.kinds, cand([slot('tmp', 'd:i', { temporal: { window: 600 } })])], edgeTypes: [] };
+    rejects(temporal, 'temporal slot');
+    const viaRef = {
+      dims: [...base.dims, D('d:r2', { t: 'ref', kind: 'k:leaf', candidates: { find: 'k:leaf', scope: { nodes: [] }, must: [], max: 1 } }), refDim([{ path: 'other', op: 'field-at-least', arg: 1 }])],
+      kinds: [...base.kinds, cand([slot('other', 'd:r2')])], edgeTypes: [],
+    };
+    rejects(viaRef, 'ref slot');
+  });
+
   test('inheritance puts inherited slots first and lets a kind override a key', () => {
     const defs = withKind({ id: 'k:child', extends: ['k:leaf'], slots: [slot('x', 'd:i'), slot('y', 'd:e')] });
     const schema = Schema.load(defs, reg);

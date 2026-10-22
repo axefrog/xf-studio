@@ -147,6 +147,11 @@ export class Resolver {
 
   // ---- public API ----
 
+  /** Forget every cached result (closing a node, spec 7.2). */
+  clearCache(): void {
+    this.cache.clear();
+  }
+
   /** An outer resolution (spec 5). Hard limits turn into `failed` plus a defect. */
   resolve(node: Id, path: SlotPath, t: GameTime): ResolveResult {
     const ctx = newOpCtx(this.k.config.allowance);
@@ -236,6 +241,7 @@ export class Resolver {
 
   private mirrorIntoNode(node: Id, rawPath: string, res: Res, t: GameTime): void {
     const n = this.k.store.ensureNode(node, this.k.now);
+    n.touched = this.k.now;
     const entry: { s: 'resolved'; value?: Value; status: ResolveStatus; revision: number; at: GameTime } = {
       s: 'resolved', status: res.status, revision: this.k.revision, at: t,
     };

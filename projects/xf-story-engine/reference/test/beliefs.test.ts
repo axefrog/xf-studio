@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { H, s } from '../src/id.ts';
 import { type Belief, STUB_POLICY } from '../src/beliefs.ts';
+import type { Id } from '../src/types.ts';
 import { coreKernel, defsOf, dim, kind, slot } from './helpers.ts';
 
 const cause = H(s('test-cause'));
@@ -85,6 +86,24 @@ describe('F-9 hearsay (spec 11.2)', () => {
     k.beliefs.set({ believer: alice, subject: E, path: 'kind', value: 'sale', confidence: 1, evidence: [], source: { by: 'inferred', rule: { name: 'r', version: 1 }, from: [] }, formed: 1, refreshed: 1, memorable: false });
     expect(k.value(E, 'kind')).toBe('assault');
     expect(k.beliefs.aggregate([alice], E, 'kind')).toEqual({ value: 'assault', confidence: 1 });
+  });
+});
+
+describe('policy hooks (spec 11.2)', () => {
+  test('onTick is called for each believer after a boundary, as a budgeted worklist', () => {
+    const k = coreKernel('ticks');
+    const a = k.root('a', 'core:person');
+    const b = k.root('b', 'core:person');
+    for (const who of [a, b]) {
+      k.beliefs.set({ believer: who, subject: a, path: 'age', value: 30, confidence: 1, evidence: [], source: { by: 'inferred', rule: { name: 'r', version: 1 }, from: [] }, formed: 0, refreshed: 0, memorable: false });
+    }
+    const called: Id[] = [];
+    k.beliefs.policy = { ...STUB_POLICY, onTick: (_k, who) => { called.push(who); } };
+    k.tick({ to: 600 });
+    expect([...called].sort()).toEqual([a, b].sort());
+    k.tick({ to: 1200 });
+    expect(called).toHaveLength(4);
+    k.beliefs.policy = STUB_POLICY;
   });
 });
 
