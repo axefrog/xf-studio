@@ -663,7 +663,7 @@ export class StudioApplication {
   }
   /**
    * A read-only page refuses every dispatch (profiles design §2.3) except the recovery export: it writes nothing to the library or
-   * the lease's documents, only this page's own copy out to a file, and it is how a window that kept or lost the workspace gets
+   * the lease's documents, only this page's own copy out to a file, and it is how a page that kept or lost the workspace gets
    * its work out.
    */
   private readOnlyFile(kind: string) { return kind === "collection.exportWindowCopy"; }

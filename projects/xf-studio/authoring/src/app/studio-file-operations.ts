@@ -29,8 +29,8 @@ export type StudioFileAction =
   | { kind: "characterPreset.export" }
   | { kind: "collection.import" | "collection.export" | "collection.plan" | "package.check" | "package.build" }
   /**
-   * The recovery export: this window's own copy of the open collection, its changes the library doesn't have yet included, written as
-   * the portable collection file without saving or reading anything (the workspace notice's Export this window's copy).
+   * The recovery export: this page's own copy of the open collection, its changes the library doesn't have yet included, written as
+   * the portable collection file without saving or reading anything (the workspace notice's recovery export button).
    */
   | { kind: "collection.exportWindowCopy" }
   /** Bring back an earlier draft: `draft` (its collection ID, from the recent-drafts list) names one, else the previous one. */
