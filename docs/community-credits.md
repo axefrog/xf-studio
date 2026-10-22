@@ -590,7 +590,7 @@ By Tynan Sylvester. ["The Simulation Dream"](https://www.gamedeveloper.com/desig
 
 ### Michael Mateas and Andrew Stern
 
-[Façade](https://www.interactivestory.net/) (Procedural Arts, 2005) and their paper ["Façade: An Experiment in Building a Fully-Realized Interactive Drama"](https://faculty.cc.gatech.edu/~isbell/classes/reading/papers/MateasSternGDC03.pdf) (Game Developers Conference, 2003). A drama manager chooses the next beat, the smallest unit of dramatic action, from a pool of authored beats, each marked with preconditions and effects on the story state. We took from it the beat as a unit of authored content and the manager that sequences beats. Their paper ["Structuring Content in the Façade Interactive Drama Architecture"](https://ojs.aaai.org/index.php/AIIDE/article/view/18722) (AIIDE 2005) describes beats with preconditions, weights, priorities and effects on tension, and what authoring them cost. Mateas's ["A Preliminary Poetics for Interactive Drama and Games"](https://www.cs.uky.edu/~sgware/reading/papers/mateas2001preliminary.pdf) (2001) sets unity of action against episodic structure and treats agency as an effect that relates to the player's intent. That paper also counts the nested grains of Façade's content, from beats of 10 to 100 joint dialogue behaviours down to exchanges of one to five lines, and is candid that although thousands of beat sequences are possible, few of them play meaningfully differently. It taught us to count distinct outcomes, not combinations.
+[Façade](https://www.interactivestory.net/) (Procedural Arts, 2005) and their paper ["Façade: An Experiment in Building a Fully-Realized Interactive Drama"](https://faculty.cc.gatech.edu/~isbell/classes/reading/papers/MateasSternGDC03.pdf) (Game Developers Conference, 2003). A drama manager chooses the next beat, the smallest unit of dramatic action, from a pool of authored beats, each marked with preconditions and effects on the story state. We took from it the beat as a unit of authored content and the manager that sequences beats. Their paper ["Structuring Content in the Façade Interactive Drama Architecture"](https://ojs.aaai.org/index.php/AIIDE/article/view/18722) (AIIDE 2005) describes beats with preconditions, weights, priorities and effects on tension, and what authoring them cost. Mateas's ["A Preliminary Poetics for Interactive Drama and Games"](https://www.cs.uky.edu/~sgware/reading/papers/mateas2001preliminary.pdf) (2001) sets unity of action against episodic structure and treats agency as an effect that relates to the player's intent. That paper also counts the nested grains of Façade's content, from beats of 10 to 100 joint dialogue behaviours down to exchanges of one to five lines, and is candid that although thousands of beat sequences are possible, few of them play meaningfully differently. It taught us to count distinct outcomes, not combinations. The GDC paper also describes believable characters that run gaze, speech, movement and expression in parallel, and what that costs to author.
 
 ### Tarn and Zach Adams
 
@@ -718,7 +718,7 @@ Boris, [“Oatmeal Spice”](https://www.boristhebrave.com/2026/07/05/oatmeal-sp
 
 ### Piotr Tomsiński
 
-GameAnim's account of his GDC 2016 talk, [“Cinematic Dialogue in The Witcher 3”](https://www.gameanim.com/?p=10962). A generator assembles a first draft of a scene from the recorded voice-over, taking idles and gestures from pools of small animation units, and designers can re-run it for a different result. It informed how small reusable units can be recombined while a person can still re-roll.
+GameAnim's account of his GDC 2016 talk, [“Cinematic Dialogue in The Witcher 3”](https://www.gameanim.com/?p=10962). A generator assembles a first draft of a scene from the recorded voice-over, taking idles and gestures from pools of small animation units, and designers can re-run it for a different result. It informed how small reusable units can be recombined while a person can still re-roll. The talk also covers camera rules built into the generator, and keep-out areas that stop passing characters wandering into a scripted scene.
 
 ### Tommy Thompson
 
@@ -786,7 +786,7 @@ Michael de Plater, creative director of *Middle-earth: Shadow of Mordor* (2014),
 
 ### Don Carson
 
-Don Carson, ["Environmental Storytelling: Creating Immersive 3D Worlds Using Lessons Learned from the Theme Park Industry"](https://www.gamedeveloper.com/design/environmental-storytelling-creating-immersive-3d-worlds-using-lessons-learned-from-the-theme-park-industry) (Game Developer, 2000). Staged traces, such as a broken door or a blast mark, let visitors work out what happened, as long as the world keeps to its own rules. It informed how we think about showing events through their traces.
+Don Carson, ["Environmental Storytelling: Creating Immersive 3D Worlds Using Lessons Learned from the Theme Park Industry"](https://www.gamedeveloper.com/design/environmental-storytelling-creating-immersive-3d-worlds-using-lessons-learned-from-the-theme-park-industry) (Game Developer, 2000). Staged traces, such as a broken door or a blast mark, let visitors work out what happened, as long as the world keeps to its own rules. It informed how we think about showing events through their traces. The article also holds that a visitor should be able to tell where they are within about fifteen seconds, and that restraint with detail helps a scene read.
 
 ### Dustin Bailey
 
@@ -939,6 +939,30 @@ Brenda Brathwaite, [“Hot Coffee's Effects on the Mod Scene”](https://www.gam
 ### Santa Clara Principles coalition
 
 The coalition behind the [Santa Clara Principles on Transparency and Accountability in Content Moderation](https://santaclaraprinciples.org/) (version 2.0), including Access Now, ARTICLE 19 and the Electronic Frontier Foundation, among the organisations the page lists. They ask that people receive notice, a fair appeal and published numbers when content is moderated. It informed the notice-and-appeal bar we set for any moderation of shared packs.
+
+### Harvey Smith and Matthias Worch
+
+Harvey Smith and Matthias Worch, "What Happened Here? Environmental Storytelling" (Game Developers Conference, 2010), as reported by Andrea Pitzer in [Nieman Storyboard](https://niemanstoryboard.org/2011/01/14/harvey-smith-on-environmental-storytelling-and-embedding-narrative/) (2011). It separates push narrative, which is told to the player, from pull narrative, which the player works out from clues in the space and may miss. It informed how we treat staged scenes as something a player can pass by.
+
+### Jeff Orkin
+
+Jeff Orkin, ["Three States and a Plan: The A.I. of F.E.A.R."](https://pages.cs.wisc.edu/~dyer/cs540/handouts/gdc2006_orkin_jeff_fear.pdf) (Game Developers Conference, 2006; a course copy), written while he worked at Monolith Productions. Characters speak to each other so that the player can see their coordination is intentional, and a line can also explain why a character did not act. Orkin notes that the lines were hooked in by hand, and that speech can suggest behaviour the game does not perform. It informed how we think about words that make intent readable.
+
+### Tracey Mitchell and Beautiful Trouble
+
+Tracey Mitchell, ["Invisible theatre"](http://beautifultrouble.org/toolbox/tool/invisible-theatre), in the *Beautiful Trouble* toolbox. It gives practical advice for staging a scene for bystanders who do not know it is staged: make it believable, stay in character, never reveal it, and rehearse for hostile reactions. It informed how we think about scenes that passers-by meet unprepared.
+
+### Alan E. Beck
+
+Alan E. Beck, ["Listening to Radio Plays: Fictional Soundscapes"](https://econtact.ca/5_3/beck_listening.html) (*eContact!* 5.3). A radio scene often opens with a sound followed by a line that tells the listener where they are, and background sound needs variation to avoid becoming a flat drone. It informed how we think about establishing a scene quickly with sound.
+
+### Jakub Knapik and Kacper Niepokólczycki
+
+Jakub Knapik and Kacper Niepokólczycki of CD PROJEKT RED, interviewed by David Jagneaux for 80 Level in ["How Cyberpunk 2077's Night City Was Built Almost Entirely by Hand"](https://80.lv/articles/interview-how-cyberpunk-2077-s-night-city-was-built-almost-entirely-by-hand). Procedural tools fell short of the quality the team wanted, so artists placed the detail by hand. Some areas grew too busy to read, and the team later added guidance on grouping and leaving empty space, and built scripted scenes as full 360-degree spaces. It informed how we think about placing detail and leaving room around it.
+
+### John Mamais
+
+John Mamais of CD PROJEKT RED, speaking to GameSpot, as reported by Shubhankar Parijat for [GamingBolt](https://gamingbolt.com/cyberpunk-2077-developer-talks-about-the-games-interactive-and-fully-immersive-cutscenes) (2019). He describes the game's scene system as running inside normal gameplay, without a letterbox, with the player keeping some control. It informed how we think about scenes that happen around the player instead of taking over.
 
 ## Research papers
 
@@ -1658,7 +1682,7 @@ Matthew Fendt, Brent Harrison, Stephen Ware, Rogelio Cardona-Rivera and David Ro
 
 ### Miller (2017)
 
-Tim Miller, [“Explanation in Artificial Intelligence: Insights from the Social Sciences”](https://arxiv.org/abs/1706.07269) (arXiv, 2017). Explanations are contrastive, selected and social. It informed how we explain why something happened.
+Tim Miller, [“Explanation in Artificial Intelligence: Insights from the Social Sciences”](https://arxiv.org/abs/1706.07269) (arXiv, 2017). Explanations are contrastive, selected and social. It informed how we explain why something happened. People prefer intentional and unusual causes when choosing which one to give. That informed which cause an explanation leads with.
 
 ### Deci, Koestner and Ryan (1999)
 
@@ -2223,6 +2247,22 @@ Lisa Nakamura, [*Cybertypes: Race, Ethnicity, and Identity on the Internet*](htt
 ### Roh, Huang and Niu (2015)
 
 David S. Roh, Betsy Huang and Greta A. Niu (eds.), [*Techno-Orientalism: Imagining Asia in Speculative Fiction, History, and Media*](https://muse.jhu.edu/book/40896) (Rutgers University Press, 2015). Its essays trace how Asia is imagined in hypo- or hyper-technological terms, including in cyberpunk. It informed how we think about the genre's habit of casting Asian cultures as technology.
+
+### Scholl and Tremoulet (2000)
+
+Brian J. Scholl and Patrice D. Tremoulet, [“Perceptual causality and animacy”](https://perception.yale.edu/papers/00-Scholl-Tremoulet-TICS.pdf) (*Trends in Cognitive Sciences*, 2000). Impressions of causing and of being alive arise quickly and largely in perception. They depend on motion, and gaps in time or space break them. It informed how we judge whether a staged action will read as intended.
+
+### Lim, Dey and Avrahami (2009)
+
+Brian Y. Lim, Anind K. Dey and Daniel Avrahami, [“Why and why not explanations improve the intelligibility of context-aware intelligent systems”](https://www.cs.cmu.edu/~byl/publications/lim_chi09.pdf) (CHI, 2009). In a controlled study, explanations of why a system acted gave better understanding and trust than explanations of why it did not. It informed how we word explanations of what happened.
+
+### Bates (1994)
+
+Joseph Bates, [“The Role of Emotion in Believable Agents”](https://www.cs.cmu.edu/afs/cs.cmu.edu/project/oz/web/papers.html) (Carnegie Mellon technical report CMU-CS-94-136, 1994; also *Communications of the ACM*). A believable character's emotional state should be definite at every moment and shown through what it does. It informed how we think about showing a character's state through action.
+
+### Sado, Loo, Liew, Kerzel and Wermter (2020)
+
+Fatai Sado, Chu Kiong Loo, Wei Shiung Liew, Matthias Kerzel and Stefan Wermter, [“Explainable Goal-Driven Agents and Robots: A Comprehensive Review”](https://arxiv.org/abs/2004.09705) (arXiv, 2020). A survey of explainable agents, including earlier work on explaining the behaviour of game characters. It pointed us to that earlier work.
 
 ## Reference imagery
 

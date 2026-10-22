@@ -4,6 +4,7 @@
 - **The review.** v0.2 went through one review, by GPT-6 Astra; [§16](#16-review-record) records what changed.
 - **Dossiers folded in.**
   - v0.1 folded in [dossier 8](../craft/d08-scale-threads-time.md#9-requirements-for-the-seed-language-p4) (scale, threads and time).
+  - v0.13 folds in [dossier 20](../craft/d20-staging-legibility.md) (staging in the world): stage blocks, a ladder of rungs, focal cards, audiences, "why?" answers, kits (§2.21).
   - v0.12 folds in [dossier 19](../craft/d19-rights-platforms.md) (rights, licences and platforms): game content by reference, voices, origin, real-world names (§2.20); the minors floor extended to exploitation roles.
   - v0.11.1 clarifies author-fill seams: the engine composes and places authored-source content like any data, procedural seeds included; only its source material comes from people.
   - v0.11 folds in [dossier 18](../craft/d18-content-boundaries.md) (representation and content boundaries): content classes with one ceiling ladder each, author-fill seams ([D-23](../decisions.md)), the legal floors, and representation checks (§2.19).
@@ -1050,6 +1051,114 @@ Packs are free fan content, built on the publisher's modding terms ([dossier 19]
   A `generated` unit can't satisfy `authored: 'human'`, and can't fill an authored-source slot (L-116).
 - **Real-world names.** A pack declaring `realWorld: tagged` gets its units that mention a flagged real-world entity listed for review. Nothing is edited (L-117).
 
+### 2.21 Staging in the world
+
+How what the record holds becomes something V can read in the street ([dossier 20](../craft/d20-staging-legibility.md)).
+
+**A stage block.** Fragments and beats at glance, encounter and vignette level MAY carry a `stage` with three layers:
+- **`residue`:** what is always true once it happened: props, marks, damage;
+- **`routine`:** what people there do as a matter of course;
+- **`phases`:** a timed event, on the record's clock.
+
+The phase and clock are persisted. A seed above glance level may carry one stage per scene.
+
+**Every element cites the record.** Each `StageElement` has:
+- a kind from a closed list;
+- `cites { id, source }`, using the sources of §2.15.
+
+A constructed source is refused where it contradicts confirmed exposure or V's acts, and is committed once displayed. Stage elements have stable ids `H("stage", seedId, element)`. Durable marks use the carrier schema of §2.5, with a duration.
+
+**A ladder of rungs.** A scene is realised on one of five rungs, from fullest to thinnest:
+1. **performance:** the event, played out;
+2. **routine:** people doing what they do;
+3. **residue:** what it left behind;
+4. **report:** someone tells of it;
+5. **record:** only the record holds it.
+
+The rung falls as V's distance and attention fall, and rises without skipping. A rung always agrees with the rung below it and with the record. A seed declares its `lowestRung`, and, per rung, the world requirements it `needs`. The fit report names the rung chosen for each capability gap, in plain words (L-28). After a load, the scene is restaged at the rung its current phase needs.
+
+**Arriving from any side.** S4 supplies a place's approach keys: the walkable entries into it. Reads (`reads.from`) name the approaches they serve, or `all`. An approach within 30 m with no read within about 15 seconds' walk is warned.
+
+**Legible people.** A cast role that appears in street forms MAY carry a **focal card** of at most five attributes:
+- `goal`, `obstacle` and `alt`;
+- a `state` from a closed list;
+- a `habit`;
+- `tells`.
+
+It derives from the actor's frame where there is one, and is authored otherwise. People are read when they are blocked and try another way.
+
+**Barks** have kinds:
+- `colour`: free texture;
+- `claim`: it must cite the record;
+- `exchange`, `exposition`, and `inaction`.
+
+A bark stays up at least its reading time: words ÷ 4 per second, plus half a second.
+
+**For an audience, or none.** A scene declares how it plays in each case:
+- `glance`;
+- `stay`;
+- `ifIgnored`;
+- `ifWatched`;
+- `ifJoined`;
+- `dissolve`, with a `maxDuration`.
+
+`ifIgnored` and `ifJoined` reach the same record outcome, unless V's act is itself a fact. **`onInterfere`** answers each of V's acts (bump, block, talk, scan, steal, threaten, attack, follow, photograph) by continuing, reacting, folding the act into the record, or releasing the scene. V's act becomes a confirmed event.
+
+**Asking.** `ask` handles are typed:
+- `npc`;
+- `scan`;
+- `read`;
+- `phone`;
+- `news`.
+
+Each names the event it answers. L-38 extends: an `ask` must reach an offer or a why anchor within two steps.
+
+**Answering "why?"** The answer is pull only (on by default; a setting can turn it off), and contrastive:
+
+```ts
+interface WhyAnswer {
+  register: 'speaker' | 'settings';             // never mixed
+  speaker?: Id;
+  because: Array<{ event: Id; text: PhraseRef }>;   // at most two causes
+  rather?: { foil: 'baseline' | 'expectation' | 'alternative'; text: PhraseRef };
+  more: boolean;                                 // a deeper link exists
+  offStage?: AskRef;                             // the chain goes on unseen
+  depth: 'world' | 'lab';                        // lab adds the draw trace
+}
+```
+
+- **Selection.** Causes are chosen from the `causes` chain of the event asked about, at most four links back. They must meet the register's rule: the settings voice cites only exposed events; a speaker gives what that speaker believes, which may be wrong.
+- **The foil** is the baseline V confirmed, else the speaker's expectation, else the alternative the actor passed over.
+- **Ranking.** Causes are ranked by intention, abnormality against the foil, and necessity. A proximal accident is traced through to a distal intention.
+- **Phrasing** comes from S4's closed table, at most about 30 words, with no number but a witnessed count.
+- **The lab.** The kernel's draw-level `explain` is a generation account, and stays in the lab register.
+
+**Kits.** A `StageKit` is a pack type. It has:
+- slots with an anchor, facing and clearance;
+- required and optional elements;
+- the events it implies;
+- an `affords` set in the game's marking vocabulary;
+- a prop budget;
+- a sign set.
+
+A binder fits a kit to a place through S4. Free scatter is refused.
+
+**Props have biographies.** A `Prop` node's changes of owner are events. Its scan entry names the last two. Promotion to a plant follows the cap of §2.15.
+
+**Sound** is typed (ambience, a named cue) with a declared fallback. The engine owns no music. Every audio element has a visual or text twin.
+
+**The stage lint** (L-118):
+- at least two implied events, in order;
+- at least two sign kinds;
+- a premise cue for every phase;
+- a `reads` entry for every key read;
+- an explanation cue where a behaviour's apparent trait differs from its real cause;
+- no anonymous element in a seed with a premise;
+- no undeclared interaction;
+- a warning for two scenes within 25 m and 60 seconds with no link in the record.
+
+**Settings:** whether "Why?" is offered, bystander density, and the content ceilings of §2.19, applied to stage tags with their implied forms. Nothing is inferred from V.
+
 ## 3. Compiling
 
 ### 3.1 The steps
@@ -1966,6 +2075,7 @@ The lint runs at compile time (§3.1), and on demand from authoring tools (S4, P
 | L-115 | A synthetic voice imitating a real person without a recorded consent; or a `voice` that is none of a recorded line, a splice of recorded lines, or a pack asset | error |
 | L-116 | A `generated` unit marked `authored: 'human'`, or filling an authored-source slot | error |
 | L-117 | A unit in a `realWorld: tagged` pack mentioning a flagged real-world entity | warning, to review |
+| L-118 | The stage lint (§2.21): implied events, sign kinds, premise cues, reads on approaches, explanation cues, anonymous elements, undeclared interaction, unlinked nearby scenes, free scatter, audio without a twin | error, warning by check |
 | L-33 (extended) | A `turns[].what` reading anything of V's but beliefs held about V and V's recorded acts | error |
 
 L-25 and L-40 were removed in v0.2 (§16). Their numbers are not reused.
@@ -2229,6 +2339,7 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 16. **Dossier 17.** v0.10 adopts its S2 requirements (§2.18); its fixtures are renumbered SF-48 to SF-50. Its typed setting registries go to S4, its world-data requirements (leaf-keyed dimensions, derived indices, faction presence, price level, a slow district variable, standing rumours) to S1, and its P5 and P9 lists to S3 and P9. Calibrating the tone lexicon needs a read-only extraction of the game's own text, a research-queue request for when usage allows.
 17. **Dossier 18.** v0.11 adopts its S2 requirements (§2.19), with lints renumbered L-93 to L-113 and fixtures SF-51 to SF-55. One isn't adopted: "offers lapse by game time only" would undo the play-clock rule (§2.12), which keeps real-world absence from expiring offers. Its settings and pack declarations go to S4; its kernel requirements are S0 v4.4. Defaults decided by the coordinator: `harm.minor` defaults to 0, as in the base game; the four classes whose base-game default is unchecked start permissive, each with a check on the next in-game session card; and the hate floor covers only the system's own voices.
 18. **Dossier 19.** v0.12 adopts its six S2 requirements (§2.20, L-95, L-107, §12.3). Its pack-manifest requirements (licence, permissions, AI and origin, voice, price `free` only, a play grant for streaming) go to S4. D-24 settles its question on text and data mining. Its other open questions (whether the companion counts as a standalone product, the host tag for the engine, the starter pack's licence) wait for release planning.
+19. **Dossier 20.** v0.13 adopts its 16 S2 requirements (§2.21). Its P8 requirements (a rung realiser, out-of-sight spawning, props, marks, workspots, tells, barks, joining a scene mid-phase, interference, scene display reports, scanner entries) go to P8 and the runtime requirements; its P10 requirements (the explain and inspect tools) to P10.
 
 ## 16. Review record
 

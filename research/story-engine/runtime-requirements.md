@@ -83,6 +83,10 @@ Refreshed whenever the bridge reaches a milestone; last refreshed 22 October 202
 | V10 | **Vehicles:** spawn them, drive routes, run chases | M6 | **branch (in progress):** `vehicle.set` |
 | V11 | **World nudges:** time, weather, crowd and traffic density near a scene | M5 | **partial:** time and pause (`main`); weather (0.8); no density |
 | V12 | **Messages to the player and a debug overlay** that shows what the director is doing (lab only) | M4 | **partial:** `ui.message` and `ui.hud` (`main`); overlay state (0.8); notifications (DM) |
+| V13 | **Direct people the game protects** (vendors, police, quest-adjacent people) for a staged moment, or a clean way to stand them in: a clone in their look and place, with the original hidden for the scene ([dossier 20](craft/d20-staging-legibility.md) §12.2) | M5 | want: today staged scenes must use clones, capped at three within 30 m on the branch |
+| V14 | **Marks and ambient sound:** decals, stains, scorch and damage that persist for a set time and survive a reload; ambience and named sound cues at a place, with a fallback | M5 | want: no route known; a research request |
+| V15 | **Mortal and hostile stand-ins:** spawned people who can be hurt and killed, who turn hostile or hand back to ordinary AI in combat, and who keep the game's reaction presets. Friendly, immortal clones read as a bug when V shoots one | M4 | want: branch clones are friendly and immortal |
+| V16 | **Out-of-sight staging:** spawn people and props outside V's view and hearing; dissolve by walking away and despawning only when out of sight; join a scene mid-phase, posed, with no visible fast-forward | M5 | partial: `world.probe` gives line of sight and navmesh; the rest isn't designed |
 
 ## Persistence
 
