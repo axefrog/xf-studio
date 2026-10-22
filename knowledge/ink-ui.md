@@ -179,4 +179,4 @@ Code: `redscript/XFRuntimeBridgeInk.reds`, `redscript/XFRuntimeBridgePins.reds`,
 
 ## Related pages
 
-[Terminals, browser and arcade](terminals-and-arcade.md) · [Photo mode](photo-mode.md) ([panels inside its menu](photo-mode.md#15-panels-inside-photo-modes-menu)) · [Runtime access](runtime-access.md) · [Game crashes](game-crashes.md) · [In-game UI design](../research/runtime/in-game-ui-design.md) · [Mod ecosystem survey](../research/mod-ecosystem/README.md) · [Runtime bridge design](../research/runtime/runtime-bridge-design.md) · [ImGui overlay feasibility](../research/runtime/imgui-overlay-feasibility.md)
+[Terminals, browser and arcade](terminals-and-arcade.md) · [Photo mode](photo-mode.md) ([panels inside its menu](photo-mode.md#15-panels-inside-photo-modes-menu)) · [Runtime access](runtime-access.md) · [Game crashes](game-crashes.md) · [In-game UI design](../research/runtime/in-game-ui-design.md) · [Mod ecosystem survey](../research/mod-ecosystem/README.md) · [Runtime bridge design](../research/runtime/runtime-bridge-design.md) · [ImGui overlay feasibility](../research/runtime/imgui-overlay-feasibility.md) · [Channels to the player](player-channels.md)

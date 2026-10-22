@@ -237,4 +237,4 @@ A plausible path is E for shipped content, D for development, and A later for es
 
 ## Related pages
 
-[Runtime access](runtime-access.md) · [Photo mode and the creator from script](photo-mode.md) · [Mod loading](mod-loading.md) · [World and interactive ideas](../research/backlog/world-and-interactive-ideas.md) · [Feature-module platform](../research/authoring/feature-module-platform.md)
+[Runtime access](runtime-access.md) · [Photo mode and the creator from script](photo-mode.md) · [Mod loading](mod-loading.md) · [World and interactive ideas](../research/backlog/world-and-interactive-ideas.md) · [Feature-module platform](../research/authoring/feature-module-platform.md) · [Channels to the player](player-channels.md)
