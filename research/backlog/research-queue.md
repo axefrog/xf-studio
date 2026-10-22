@@ -41,8 +41,8 @@ A quick lookup inside your own scope doesn't need to come here. Anything bigger 
    | Mode | Research agents at once |
    |---|---|
    | Normal | up to 2 |
-   | Economical | 1, started only when nothing heavy is running elsewhere |
-   | Crawl | none, except a request that blocks work in flight |
+   | Economical | 1, with the next starting as soon as the last delivers. Economical means lean, never waiting. |
+   | Crawl | none, except a request that blocks work in flight. Crawl applies only when the maintainer asks, or nothing is left in reserve. |
 
    The work queue's rule that R&D runs only while the polish lane is moving still applies. Large requests are split into batches, and each batch's results are delivered before the next one starts, so later batches can be trimmed or dropped.
 3. **Runs it from the requester's brief** with a research agent. That's read-only, or a documentation worktree when the result is a page. If the question needs the asking chat's own context, it goes back to that chat. Questions only the running game can answer are batched onto the owning chat's next session card.
