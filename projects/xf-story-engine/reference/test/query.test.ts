@@ -136,7 +136,7 @@ describe('F-6 query (spec 8)', () => {
     expect(run([{ path: 'influence', op: 'range', arg: { r: 'ivl', ivls: [[0.5, 0.625]] } }])).toBe(3);
     expect(run([{ path: '', op: 'has-edge', arg: { edge: 'core:located-in', to: t.blocks[0]! } }])).toBe(4);
     expect(run([{ path: '', op: 'lacks-edge', arg: { edge: 'core:located-in', to: t.blocks[0]! } }])).toBe(12);
-    expect(run([{ path: '', op: 'has-edge', arg: { edge: 'core:located-in', to: { kind: 'fx:block' } } }])).toBe(16);
+    expect(run([{ path: '', op: 'has-edge', arg: { edge: 'core:located-in', to: { kind: 'fx:block', slot: '*' } } }])).toBe(16);
     expect(run([{ path: '@self', op: 'eq', arg: t.places[3]! }])).toBe(1);
     expect(run([{ path: 'police', op: 'field-at-least', arg: 0.5 }, { path: 'influence', op: 'field-at-least', arg: 0.7 }])).toBe(2);
   });

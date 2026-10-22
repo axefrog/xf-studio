@@ -4,6 +4,7 @@
 
 import { type Config, makeConfig } from './config.ts';
 import { H, b as hb, f as hf, i as hi, id as hid, isId, memberId, mirroredId, ownedId, rootId, s as hs, val as hval } from './id.ts';
+import { Events } from './events.ts';
 import { Queries } from './query.ts';
 import { type Registry, coreRegistry } from './registry.ts';
 import { Resolver, type Trace } from './resolve.ts';
@@ -94,6 +95,7 @@ export class Kernel {
   readonly resolver: Resolver;
   readonly queries: Queries;
   readonly summaries: Summaries;
+  readonly events: Events;
   readonly retention: Retention;
 
   private epochSource: () => Id;
@@ -110,6 +112,7 @@ export class Kernel {
     this.resolver = new Resolver(this);
     this.queries = new Queries(this);
     this.summaries = new Summaries(this);
+    this.events = new Events(this);
     this.retention = new Retention(this);
   }
 
