@@ -71,6 +71,7 @@ Work happens on the `claude/story-engine` branch in a worktree under `%USERPROFI
 | [P1. Research method](p1-research-method.md) | How the craft research finds every relevant discipline and merges it into the composite |
 | [P2. Game substrate research](p2-game-substrate.md) | What the engine must learn about the game itself, and how |
 | [S0. Kernel specification](spec/kernel.md) | Exactly how the dimensional model works: data, algorithms, invariants, test vectors |
+| [Quest corpus statistics](quest-corpus-statistics.md) | Node types, phase sizes, fact usage, branching, scenes per quest and graph shape of the game's authored quests, generated from the corpus database ([how it is built](../consumers/quest-corpus/scripts/README.md)) |
 | [Design seeds](design-seeds.md) | Fine-grained design points, each waiting for the plan that will absorb it |
 | [Runtime requirements](runtime-requirements.md) | The senses and verbs the system needs in game, and their status |
 
