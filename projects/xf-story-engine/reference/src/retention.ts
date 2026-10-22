@@ -10,7 +10,7 @@
 import type { Kernel } from './kernel.ts';
 import { splitWindowPath } from './kernel.ts';
 import { isId } from './id.ts';
-import type { Id, Pin, Region, Value } from './types.ts';
+import type { Edge, Id, Pin, Region, Value } from './types.ts';
 import { type Budget, Worklist } from './work.ts';
 
 export interface SeedRecord {
@@ -68,6 +68,32 @@ export class Retention {
 
   // ---- roots ----
 
+  /** Whether an edge is a root: not ended, or ended but referenced by a canon event. An event's own location edge is not. */
+  isRootEdge(e: Edge, canonEvents: Set<Id> = new Set(this.k.events.canonEvents())): boolean {
+    const k = this.k;
+    const live = e.valid.to === undefined || e.valid.to > k.now;
+    const fromHeader = k.store.header(e.from);
+    const ownEventEdge = e.cause === e.from && e.type === 'core:located-in' && fromHeader !== undefined &&
+      k.schema.hasFacet(fromHeader.kind, 'event') && !canonEvents.has(e.from);
+    const referenced = canonEvents.has(e.from) || canonEvents.has(e.to) || canonEvents.has(e.cause);
+    return (live && !ownEventEdge) || (!live && referenced);
+  }
+
+  /** The active and blocked frames of demand roots and live seeds, and every ancestor frame of those (spec 7.3, 14.1). */
+  rootFrameIds(): Set<Id> {
+    const k = this.k;
+    const rootActors = new Set<Id>(k.frames.demandRoots);
+    for (const s of this.seeds.values()) {
+      if (s.actor !== undefined) rootActors.add(s.actor);
+      rootActors.add(s.id);
+    }
+    const frameIds = new Set<Id>();
+    for (const f of k.frames.all()) {
+      if (rootActors.has(f.actor) && k.frames.eligible(f)) for (const a of k.frames.ancestorsOrSelf(f.id)) frameIds.add(a);
+    }
+    return frameIds;
+  }
+
   /** Whether a pin is in effect now (spec 6.1, 6.2, 6.3, SPEC-NOTES 5). */
   pinInEffectNow(p: Pin): boolean {
     const k = this.k;
@@ -107,11 +133,7 @@ export class Retention {
     }
     const canonEvents = new Set(k.events.canonEvents());
     for (const e of k.store.allEdges()) {
-      const live = e.valid.to === undefined || e.valid.to > k.now;
-      const ownEventEdge = e.cause === e.from && e.type === 'core:located-in' && k.store.header(e.from) !== undefined &&
-        k.schema.hasFacet(k.store.header(e.from)!.kind, 'event') && !canonEvents.has(e.from);
-      const referenced = canonEvents.has(e.from) || canonEvents.has(e.to) || canonEvents.has(e.cause);
-      if ((live && !ownEventEdge) || (!live && referenced)) push(e.from, e.to, e.cause);
+      if (this.isRootEdge(e, canonEvents)) push(e.from, e.to, e.cause);
     }
     for (const { belief: b } of k.beliefs.memorable()) {
       push(b.believer, b.subject, ...b.evidence);
@@ -124,17 +146,12 @@ export class Retention {
     push(...canonEvents, ...k.summaries.canonItemIds());
     for (const s of k.summaries.records()) if (s.canon.length > 0) push(s.summary);
     for (const s of this.seeds.values()) push(s.id, s.actor, ...s.nodes);
+    // Outstanding process batches: the Ids their operations name must stay addressable until they apply (SPEC-NOTES 33).
+    for (const st of k.evolution.states.values()) {
+      for (const b of st.outstanding) for (const m of JSON.stringify(b.ops).matchAll(/[0-9a-f]{32}/g)) push(m[0]);
+    }
     // Frames of demand roots and live seeds, with every ancestor.
-    const rootActors = new Set<Id>(k.frames.demandRoots);
-    for (const s of this.seeds.values()) {
-      if (s.actor !== undefined) rootActors.add(s.actor);
-      rootActors.add(s.id);
-    }
-    const frameIds = new Set<Id>();
-    for (const f of k.frames.all()) {
-      if (rootActors.has(f.actor) && k.frames.eligible(f)) for (const a of k.frames.ancestorsOrSelf(f.id)) frameIds.add(a);
-    }
-    for (const fid of frameIds) {
+    for (const fid of this.rootFrameIds()) {
       const f = k.frames.frame(fid)!;
       push(f.actor, f.origin, f.payload.place, f.cause, ...f.focus.nodes);
       for (const p of f.parents) push(p.frame);

@@ -10,6 +10,8 @@ import { Beliefs } from './beliefs.ts';
 import { Frames } from './frames.ts';
 import { Groups } from './groups.ts';
 import { Dispatcher } from './relevance.ts';
+import { Persistence } from './persistence.ts';
+import { Provenance } from './provenance.ts';
 import { Queries } from './query.ts';
 import { CONFLICT_TABLE, type Registry, coreRegistry } from './registry.ts';
 import { Resolver, type Trace } from './resolve.ts';
@@ -114,6 +116,8 @@ export class Kernel {
   readonly summaries: Summaries;
   readonly events: Events;
   readonly beliefs: Beliefs;
+  readonly provenance: Provenance;
+  readonly persistence: Persistence;
   readonly frames: Frames;
   readonly groups: Groups;
   readonly dispatcher: Dispatcher;
@@ -141,6 +145,8 @@ export class Kernel {
     this.summaries = new Summaries(this);
     this.events = new Events(this);
     this.beliefs = new Beliefs(this);
+    this.provenance = new Provenance(this);
+    this.persistence = new Persistence(this);
     this.frames = new Frames(this);
     this.groups = new Groups(this);
     this.dispatcher = new Dispatcher(this);
@@ -366,7 +372,7 @@ export class Kernel {
   // ---- writes: game readings (spec 6.3) ----
 
   /** A game reading of a mirrored slot of a mirrored node. Emits a `reading` change when the value changes. */
-  reading(node: Id, slot: SlotPath, value: Value, time: GameTime = this.now): Pin {
+  reading(node: Id, slot: SlotPath, value: Value, time: GameTime = this.now, silent = false): Pin {
     const h = this.store.header(node);
     if (!h) throw new Error(`reading of an unknown node: ${node}`);
     if (h.origin.by !== 'mirrored') throw new Error('only a mirrored node has readings');
@@ -383,7 +389,7 @@ export class Kernel {
     this.store.recomputeTimeline(node, slot);
     this.bump();
     const changed = !prev || JSON.stringify(prev.value) !== JSON.stringify(value);
-    if (changed) {
+    if (changed && !silent) {
       const ch: Change = { c: 'reading', node, slot, new: value };
       if (prev?.value !== undefined) ch.old = prev.value;
       this.emit(ch);

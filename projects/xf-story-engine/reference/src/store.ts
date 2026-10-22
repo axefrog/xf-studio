@@ -36,6 +36,24 @@ export class Store {
   private readonly edgesFromIdx = new Map<Id, Id[]>();
   private readonly edgesToIdx = new Map<Id, Id[]>();
 
+  /** Drop every record (a load replaces all branch-local state, spec 14.3). */
+  clear(): void {
+    this.headers.clear();
+    this.nodes.clear();
+    this.headersByKind.clear();
+    this.ownedBy.clear();
+    this.membersOf.clear();
+    this.pinsById.clear();
+    this.pinIndex.clear();
+    this.withdrawn.clear();
+    this.contribs.clear();
+    this.contribByNode.clear();
+    this.contribGeneral.length = 0;
+    this.edges.clear();
+    this.edgesFromIdx.clear();
+    this.edgesToIdx.clear();
+  }
+
   // ---- headers and nodes ----
 
   /** Add a header. Returns false (and changes nothing) if the Id is already known. */
