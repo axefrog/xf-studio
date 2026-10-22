@@ -88,7 +88,7 @@ export function createTargetResolver(deps: { state: ProfileSessionState; graph: 
   return new TargetResolver({
     session: {
       tab: () => state.tabId(),
-      views: () => graph.viewIds().map(id => ({ id, scene: graph.node(id, "scene").id })),
+      views: () => graph.viewIds().map(id => ({ id, scene: graph.node(id, "scene").id, tab: state.viewTab(id) })),
       scene: id => {
         const scene = state.knownScene(id), kind = graph.viewIds().map(view => graph.node(view, "scene")).find(node => node.id === id)?.kind;
         return scene && kind !== undefined ? { kind, ...scene } : undefined;

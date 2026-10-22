@@ -23,10 +23,10 @@ export type Capture = { readonly id: number; readonly instance?: string; readonl
   readonly released: () => boolean };
 
 export type TargetResolverDeps = {
-  /** The session: its tab, each view's scene, each scene's kind, subject, look and `gen`, and its panel instances. */
+  /** The session: its tab, each view's scene and tab (default: the session's), each scene's kind, subject, look and `gen`, and its panel instances. */
   readonly session: {
     tab(): TabId;
-    views(): readonly { readonly id: ViewId; readonly scene: string }[];
+    views(): readonly { readonly id: ViewId; readonly scene: string; readonly tab?: TabId }[];
     scene(id: string): { readonly kind: string; readonly subject?: SubjectRef; readonly look?: LookRef; readonly gen: number } | undefined;
     panel(instance: string): { readonly type: string; readonly binding?: PanelBinding } | undefined;
   };
@@ -58,7 +58,7 @@ export class TargetResolver {
     const { session, focus, exists } = this.deps, tab = session.tab();
     const views: Record<ViewId, { tab: TabId; scene: string }> = {}, scenes: BindingWorld["scenes"] = {};
     for (const view of session.views()) {
-      views[view.id] = { tab, scene: view.scene };
+      views[view.id] = { tab: view.tab ?? tab, scene: view.scene };
       const scene = session.scene(view.scene);
       if (scene) (scenes as Record<string, unknown>)[view.scene] = scene;
     }

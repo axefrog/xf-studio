@@ -59,6 +59,8 @@ export class ProfileSessionState {
   }
   /** The session's tab (phase 1 shows one: its first). */
   tabId(): string { return this.tab.id; }
+  /** The tab a view is in: the one the session stored it in, else the shown tab (a view opened in this window). */
+  viewTab(view: string): string { return this.data.views.views.find(item => item.id === view)?.tab ?? this.tab.id; }
   /** A panel instance of the tab: its type and binding. */
   panel(id: string): PanelInstance | undefined { return this.tab.panels.find(panel => panel.id === id); }
 
@@ -120,12 +122,12 @@ export class ProfileSessionState {
 
   /**
    * The workspace's `profiles` with this session as it is now: `graph` (the core's view graph), `dock` (the dock's arrangement, with panel
-   * IDs) and focus. Every view is in tab 1; each scene names what it shows.
+   * IDs) and focus. Each view stays in the tab it was stored in, and a view opened here is in the shown tab; each scene names what it shows.
    */
   stored(input: { graph: ViewGraphData; dock: DockLayout | undefined | null }, others?: WorkspaceProfiles): WorkspaceProfiles {
     const dock = input.dock ? rewriteDock(input.dock, panel => this.instanceOf(panel).id) : null;
     if (dock || input.dock === null) this.tab = { ...this.tab, dock };
-    const views: SessionView[] = input.graph.views.map(view => ({ ...(view as ViewRecord | KeptView), tab: this.tab.id }));
+    const views: SessionView[] = input.graph.views.map(view => ({ ...(view as ViewRecord | KeptView), tab: this.viewTab(view.id) }));
     const scenes: SessionScene[] = input.graph.scenes.map(scene => {
       const target = this.scene(scene.id);
       return { ...scene, ...(target.subject ? { subject: target.subject } : {}), ...(target.look ? { look: target.look } : {}), gen: target.gen };
