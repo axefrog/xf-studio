@@ -157,15 +157,17 @@ Each area gives the question, why the engine needs the answer, and the output. T
 
 ## 4. How it runs
 
-| Step | Work | Who | Budget |
-|---|---|---|---|
-| 1 | Area A desk research: scripts, the wiki, existing pages | A read-only research agent | Light |
-| 2 | Areas B, C and E desk research | One agent per area, or one for B and E together | Light |
-| 3 | Areas D, F and G desk research, coordinated with the world index plan and the bridge chat | Agents; questions for the bridge chat batched into one message | Light |
-| 4 | Area H extraction | One agent, memory-guarded on C | One disk-heavy job; asks this chat for a "go" first |
-| 5 | Confirming samples in game: facts on saves, a scanner entry, a channel check | A booked session through the bridge, prepared as a checklist | Batched with other session needs |
+Questions about the game and its systems go to the project's [research queue](../backlog/research-queue.md), which XF · Meta-coordinator runs on every chat's behalf and delivers into the knowledge base ([D-16](decisions.md)). This vertical sends each area below as a request in the queue's format, with what it serves, when it's needed, and what has been checked. It keeps only quick lookups inside its own scope.
 
-Agents follow the knowledge base's rules: cite precisely, grade every claim, keep pages asset-free, credit what taught us. They write their own pages only.
+| Step | Request | Priority for this vertical | Notes |
+|---|---|---|---|
+| 1 | Area A: the main story as state | First | Serves scenario R1 and every authored story window |
+| 2 | Areas B, C and E: gigs and fixers, population and groups, channels to the player | Second | Serves layer 1's mirror and realisation |
+| 3 | Areas D, F and G: places, game event hooks, saves and identity | Third | D is coordinated with the world index plan; F and G also feed the [runtime requirements](runtime-requirements.md) |
+| 4 | Area H: the quest corpus extraction | With step 2 | One disk-heavy, memory-guarded job; the decompositions wait for the composite's schema (P1 phase D) |
+| 5 | In-game confirmation of samples (facts on saves, a scanner entry, a channel check) | When a session is next prepared | Batched onto the runtime bridge's session card |
+
+This vertical turns the delivered knowledge into what its specifications cite. That includes the story-progression table used by fitting, and the event and channel lists in the runtime requirements.
 
 ## 5. Done when
 
