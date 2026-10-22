@@ -79,6 +79,9 @@ describe('I-1 determinism', () => {
 describe('I-2 active constraints hold; I-8 the trace is complete', () => {
   test('every resolved value satisfies every active constraint, and a rejected constraint at 600 or more makes it a contradiction', () => {
     const w = scriptWorld('I-2');
+    // Two observations that cannot both hold, so the contradiction rule is exercised whatever the script left behind.
+    w.k.pin({ node: w.agents[1]!, slot: 'kinda', value: 'e0', reason: 'observed', cause });
+    w.k.pin({ node: w.agents[1]!, slot: 'kinda', value: 'e1', reason: 'observed', cause });
     let checked = 0;
     let contradictions = 0;
     for (const n of w.agents) {

@@ -488,7 +488,7 @@ export class Persistence {
     const missing = rec.meta.versions.filter((v) => !have.has(v));
     let report: LoadReport = { saveKey, readOnly: false, epoch: k.epoch, missingPacks, replayed };
     k.now = rec.meta.time;
-    k.groups.resetClock(rec.meta.time);
+    k.groups.restoreAt(rec.meta.time);
     k.bump();
 
     // 3. Reconcile with the game: the mirrored state becomes `game` readings at the current time.

@@ -7,7 +7,7 @@
 // currently streams in. Marking follows every root's Id fields, origin chains and owned-value links.
 // Sweeping discards unmarked nodes' in-memory state; a swept node regenerates identically (I-3).
 
-import { idsIn } from './canon.ts';
+import { idsIn as idFields } from './canon.ts';
 import type { Kernel } from './kernel.ts';
 import { splitWindowPath } from './kernel.ts';
 import { isId } from './id.ts';
@@ -154,7 +154,7 @@ export class Retention {
     for (const s of this.seeds.values()) push(s.id, s.actor, ...s.nodes);
     // Outstanding process batches: the Ids their operations name must stay addressable until they apply (SPEC-NOTES 33).
     for (const st of k.evolution.states.values()) {
-      for (const b of st.outstanding) push(...idsIn(b.ops, expand));
+      for (const b of st.outstanding) push(...idFields(b.ops, expand));
     }
     // Frames of demand roots and live seeds, with every ancestor. The Id fields of a frame are its links, its
     // focus, its goal's targets and every Id its interests name (SPEC-NOTES 33).
@@ -162,7 +162,7 @@ export class Retention {
       const f = k.frames.frame(fid)!;
       push(f.actor, f.origin, f.payload.place, f.cause, ...f.focus.nodes);
       for (const p of f.parents) push(p.frame);
-      push(...idsIn(f.payload.goal, expand), ...idsIn(f.own, expand));
+      push(...idFields(f.payload.goal, expand), ...idFields(f.own, expand));
     }
     push(...this.streamed);
     return out;

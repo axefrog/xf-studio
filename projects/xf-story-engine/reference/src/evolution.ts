@@ -13,7 +13,7 @@ import type { EventSpec } from './events.ts';
 import type { SummarySpec } from './summary.ts';
 import { newOpCtx } from './resolve.ts';
 import type { Form, GameTime, Id, Query, QueryOutcome, Region, ResolveResult, Selector, SlotPath, Tier, Value } from './types.ts';
-import { type Budget, LimitExceeded } from './work.ts';
+import { LimitExceeded } from './work.ts';
 
 export type ProcessOp =
   | { op: 'pin'; node: Id; slot: SlotPath; value?: Value; region?: Region; valid?: { from?: GameTime; to?: GameTime } }
@@ -144,30 +144,27 @@ export class Evolution {
   // ---- advancing ----
 
   /**
-   * Process every boundary b * W_sim up to `t`, in order, from the persisted cursor (spec 9.4). A budget
-   * stops the advance between boundaries (the first boundary of a call is always taken); the engine time
-   * then rests at the last boundary processed.
+   * The next boundary, if it falls at or before `t`. The engine takes boundaries one at a time, in order,
+   * from the persisted cursor (spec 9.4), and does a boundary's consequences before the next (SPEC-NOTES 56).
    */
-  advanceTo(t: GameTime, budget?: Budget): AdvanceReport {
-    const W = this.k.config.wSim;
-    const report: AdvanceReport = { done: true, boundaries: 0, runs: 0, applied: 0 };
-    for (;;) {
-      const b = this.cursor + 1;
-      if (b * W > t) break;
-      if (report.boundaries > 0 && budget?.exhausted) {
-        report.done = false;
-        break;
-      }
-      const cost = this.processBoundary(b, report);
-      this.cursor = b;
-      report.boundaries++;
-      budget?.spend(cost);
-    }
-    if (report.done) {
-      this.k.now = Math.max(this.k.now, t);
-      this.k.groups.crossTo(this.k.now);
-    }
-    return report;
+  nextBoundary(t: GameTime): number | undefined {
+    const b = this.cursor + 1;
+    return b * this.k.config.wSim <= t ? b : undefined;
+  }
+
+  /** Process the next boundary: its operations apply and its crossings and belief hooks are queued. Returns the work units used. */
+  stepBoundary(report: AdvanceReport): number {
+    const b = this.cursor + 1;
+    const cost = this.processBoundary(b, report);
+    this.cursor = b;
+    report.boundaries++;
+    return cost;
+  }
+
+  /** Every boundary up to the target is done: the engine time moves to the target, and the validity crossings up to it are queued. */
+  finishAdvance(t: GameTime): void {
+    this.k.now = Math.max(this.k.now, t);
+    this.k.groups.crossTo(this.k.now);
   }
 
   private processBoundary(b: number, report: AdvanceReport): number {

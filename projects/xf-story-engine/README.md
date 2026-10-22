@@ -18,10 +18,17 @@ kernel rules around them can be tested.
   provenance, retention and the logical persistence record.
 - [`reference/SPEC-NOTES.md`](reference/SPEC-NOTES.md) lists every place the specification left a choice
   open and what the reference model chose, worst first.
-- The tests include the acceptance fixtures F-1 to F-15 and C-a to C-d, the invariants I-1 to I-15, and
-  a **determinism digest**: a fixed script of 1,000 mixed operations whose every result folds into one
-  hash (`test/digest.test.ts`). A second implementation that agrees on the primitive vectors and the
-  digest agrees on the kernel.
+- The tests include the acceptance fixtures F-1 to F-15 and C-a to C-d, the invariants I-1 to I-15,
+  regression tests for the findings of the independent review (`test/sr1.test.ts`, SR-01 to SR-13; the
+  digest test holds SR-14), and a **determinism digest**: a fixed script of 1,000 mixed operations whose
+  every result, and every saved record, folds into one hash (`test/digest.test.ts`). The script covers
+  arbitration, time, queries, relevance and dilemmas, processes, beliefs with telling and evidence,
+  summaries with canon items, a group's decisions and orders, and saves and replacement loads with
+  branches, snapshots and outstanding process batches. A second implementation that agrees on the
+  primitive vectors and the digest agrees on the kernel for what the script exercises; what it leaves out
+  (read-only loads, fine-tier processes, `explain`, region scopes, the policy hooks beyond the stub) is
+  listed in [`reference/SPEC-NOTES.md`](reference/SPEC-NOTES.md#cross-implementation-check) and left to
+  the fixtures and unit tests.
 
 The one runtime dependency is `@noble/hashes` (BLAKE3). Everything else is ours.
 

@@ -94,9 +94,18 @@ export class Groups {
     }
   }
 
-  /** A load restores the clock to the time of the save. */
-  resetClock(t: GameTime): void {
+  /**
+   * A load restores the clock to the time of the save and puts frames back as they were saved. A
+   * membership may have crossed its validity since the frames were last synced (a save can be made
+   * between a clock change and the next tick, and an expired membership is not saved), so every actor
+   * with a frame or a membership re-syncs in the frame worklist.
+   */
+  restoreAt(t: GameTime): void {
     this.crossedUntil = t;
+    const actors = new Set<Id>();
+    for (const f of this.k.frames.all()) actors.add(f.actor);
+    for (const e of this.k.store.allEdges()) if (e.type === 'core:member-of') actors.add(e.from);
+    for (const a of [...actors].sort(cmpId)) this.k.frames.worklist.push({ t: 'inherit', actor: a });
   }
 
   /** A frame changed: a group concern change re-syncs its members; a member frame change re-syncs itself. */

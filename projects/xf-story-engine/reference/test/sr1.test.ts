@@ -437,7 +437,13 @@ describe('SR-09 belief hooks run for every processed boundary', () => {
 
   test('SR-09: four boundaries in one tick call the hook as many times as four ticks do, in boundary order', () => {
     const one = believers('SR-09');
+    // Each boundary's hooks run before the next boundary starts: the engine time is the boundary's.
+    const clock: number[] = [];
+    const inner = one.k.beliefs.policy;
+    one.k.beliefs.policy = { ...inner, onTick: (kk, who, at) => { clock.push(kk.now - at); inner.onTick(kk, who, at); } };
     one.k.tick({ to: 1800 });
+    expect(clock).toEqual(Array(8).fill(0));
+    one.k.beliefs.policy = inner;
     expect(one.calls).toEqual([0, 600, 1200, 1800].flatMap((at) => one.ids.map((id): [Id, number] => [id, at])));
     const many = believers('SR-09');
     for (const to of [0, 600, 1200, 1800]) many.k.tick({ to });
@@ -566,6 +572,22 @@ describe('SR-11 membership inheritance follows membership validity', () => {
     expect(state(many)).toEqual(state(one));
   });
 
+  test('SR-11: the relevance a change gets does not depend on where ticks fall around an expiry', () => {
+    const run = (ticks: number[]) => {
+      const w = world('SR-11r', { to: 600 });
+      w.k.pin({ node: w.N, slot: 'age', value: 40, reason: 'authored', cause }); // made while M still inherits
+      for (const to of ticks) w.k.tick({ to });
+      return { w, out: w.k.dispatcher.drain().map((r) => [r.actor, r.frame, r.type, r.r]) };
+    };
+    const one = run([1200]);
+    const many = run([300, 600, 900, 1200]);
+    expect(many.out).toEqual(one.out);
+    expect(one.out.filter((r) => r[0] === one.w.M)).toHaveLength(1);
+    // The expiry itself was processed in either case.
+    expect(state(one.w)).toEqual(state(many.w));
+    expect(state(one.w).parents).toEqual([]);
+  });
+
   test('SR-11: an expiry that falls between boundaries is seen when the advance ends', () => {
     const w = world('SR-11d', { to: 650 });
     w.k.tick({ to: 700 });
@@ -627,5 +649,31 @@ describe('SR-13 summary places exclude the scope before the cut', () => {
     }
     const out = k.query({ find: 'core:event', scope: { under: city }, at: 500, must: [], limit: 'all' });
     expect(out.status === 'ok' && out.items.length).toBe(3);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------
+
+describe('SR-11 a load does not keep an inheritance that expired before the save', () => {
+  test('SR-11: a save made between a clock change and the next tick is re-synced when it loads', () => {
+    const k = coreKernel('SR-11-load');
+    const G = k.root('G', 'core:group');
+    const L = k.root('L', 'core:person');
+    const M = k.root('M', 'core:person');
+    k.frames.demandRoots.add(M);
+    k.addEdge({ type: 'core:member-of', from: L, to: G, attrs: { role: 'leader', strength: 1 }, cause });
+    k.addEdge({ type: 'core:member-of', from: M, to: G, attrs: { role: 'member', strength: 0.75 }, valid: { to: 600 }, cause });
+    const concern = k.groups.decide(L, G, { op: 'open', spec: { level: 'concern', origin: fid('G-honour'), payload: { drive: 'honour' }, weight: 0.9 } });
+    const drive = k.frames.open({ actor: M, level: 'drive', origin: fid('M-honour'), payload: { drive: 'honour' }, weight: 0.5, cause });
+    k.settle();
+    expect(k.frames.frame(drive.id)!.parents.map((p) => p.frame)).toEqual([concern.id]);
+    // The clock passes the expiry but nothing ticks before the save: the saved frame still shows the inherited parent.
+    k.now = 700;
+    k.persistence.save('A');
+    k.persistence.load('A');
+    k.settle();
+    expect(k.groups.memberships(M)).toHaveLength(0);
+    expect(k.frames.frame(drive.id)!.parents).toEqual([]);
+    expect(k.frames.pull(drive.id)).toBe(0.5);
   });
 });

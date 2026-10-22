@@ -4,6 +4,7 @@
 export { DEFAULT_CONFIG, makeConfig, type Config } from './config.ts';
 export { H, rand, toUnit, rootId, ownedId, memberId, mintedId, mirroredId, s as hs, i as hi, id as hid, f as hf, b as hb, val as hval } from './id.ts';
 export { ln } from './fdlibm-log.ts';
+export { canonicalBytes, canonicalEqual, canonicalKey, hrec } from './canon.ts';
 export { Kernel, splitWindowPath, type ContributionSpec, type EdgeSpec, type KernelOptions, type PinSpec, type TickReport } from './kernel.ts';
 export { Schema, SchemaError } from './schema.ts';
 export { coreRegistry, Registry, CONFLICT_TABLE, UNIFORM_PRIOR, INTEREST_TYPES, type InterestType } from './registry.ts';
@@ -22,4 +23,4 @@ export { Beliefs, STUB_POLICY, type Belief, type BeliefPolicy, type Known } from
 export { Retention, type SeedRecord } from './retention.ts';
 export { Persistence, PersistedView, type SaveRecord, type PersistOp, type GamePort, type LoadReport } from './persistence.ts';
 export { Store } from './store.ts';
-export { Budget, Worklist, Allowance, LimitExceeded, DefectLog } from './work.ts';
+export { Budget, Worklist, Allowance, LimitExceeded, NestedFailure, DefectLog } from './work.ts';

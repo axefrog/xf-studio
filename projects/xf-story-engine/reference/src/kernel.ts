@@ -6,7 +6,7 @@ import { hrec } from './canon.ts';
 import { type Config, makeConfig } from './config.ts';
 import { H, b as hb, f as hf, i as hi, id as hid, isId, memberId, mirroredId, ownedId, rootId, s as hs, val as hval } from './id.ts';
 import { Events } from './events.ts';
-import { Evolution, type Envelope, type SubmitResult } from './evolution.ts';
+import { Evolution, type AdvanceReport, type Envelope, type SubmitResult } from './evolution.ts';
 import { Beliefs } from './beliefs.ts';
 import { Frames } from './frames.ts';
 import { Groups } from './groups.ts';
@@ -560,23 +560,49 @@ export class Kernel {
   }
 
   /**
-   * Advance the world to `to` (default: the engine time) within a work budget. Order: boundaries (spec
-   * 9.4), the frame worklist, relevance dispatch, summary materialisation, forgetting. Each worklist runs
-   * in a fixed order, takes its first step always, and resumes where it stopped (spec 10.7).
+   * Advance the world to `to` (default: the engine time) within a work budget. Boundaries are taken one at
+   * a time, in order (spec 9.4), and after each one the frame worklist, relevance dispatch and the belief
+   * hooks finish before the next boundary starts, so what a boundary's crossings change is in place before
+   * pull and interests are consumed, and the sequence of work does not depend on where ticks fall
+   * (SPEC-NOTES 56). Then summary materialisation and forgetting. Each worklist runs in a fixed order,
+   * takes its first step always, and resumes where it stopped (spec 10.7). The first boundary of a call is
+   * always taken; a budget that runs out stops the advance between boundaries, and the engine time then
+   * rests at the last boundary processed.
    */
   tick(opts: { to?: GameTime; budget?: number } = {}): TickReport {
     // A read-only world does not move: ticking would apply, refuse and discard its outstanding batches (SPEC-NOTES 55).
     this.assertWritable();
     const budget = new Budget(opts.budget ?? this.config.tickBudget);
-    const adv = this.evolution.advanceTo(opts.to ?? this.now, budget);
-    const frameSteps = this.frames.runWorklist(budget);
-    const dispatchSteps = this.dispatcher.run(budget);
-    this.beliefs.runTicks(budget);
+    const to = opts.to ?? this.now;
+    const adv: AdvanceReport = { done: true, boundaries: 0, runs: 0, applied: 0 };
+    let frameSteps = 0;
+    let dispatchSteps = 0;
+    /** Do the work that waits (from writes, earlier ticks and the last boundary). True when none is left. */
+    const drainWork = (): boolean => {
+      frameSteps += this.frames.runWorklist(budget);
+      dispatchSteps += this.dispatcher.run(budget);
+      this.beliefs.runTicks(budget);
+      return this.frames.worklist.isEmpty && this.dispatcher.idle && this.beliefs.pendingTicks === 0;
+    };
+    let settled = drainWork();
+    while (settled && this.evolution.nextBoundary(to) !== undefined) {
+      if (adv.boundaries > 0 && budget.exhausted) {
+        adv.done = false;
+        break;
+      }
+      budget.spend(this.evolution.stepBoundary(adv));
+      settled = drainWork();
+    }
+    if (!settled) adv.done = false;
+    if (adv.done) {
+      this.evolution.finishAdvance(to);
+      settled = drainWork();
+    }
     const materialised = this.summaries.runMaterialisation(budget);
     const forgotten = this.retention.runForgetting(budget);
     return {
       boundaries: adv.boundaries, runs: adv.runs, frameSteps, dispatchSteps, materialised, forgotten,
-      done: adv.done && this.frames.worklist.isEmpty && this.dispatcher.idle && this.beliefs.pendingTicks === 0 && this.summaries.pendingMaterialisation === 0 && this.retention.pendingForgetting === 0,
+      done: adv.done && settled && this.summaries.pendingMaterialisation === 0 && this.retention.pendingForgetting === 0,
     };
   }
 
