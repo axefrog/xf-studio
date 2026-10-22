@@ -1030,7 +1030,11 @@ These report to review; none edits text. P9 runs dossier 18's representation aud
 
 Packs are free fan content, built on the publisher's modding terms ([dossier 19](../craft/d19-rights-platforms.md), [D-24](../decisions.md)):
 - **Game content by reference.** A reference to the game's own content is a `GameRef { kind, id }`. No text unit, asset or fragment holds game text or audio inline (L-114). A pack-build check lists units whose text matches a published overlap list, as advice.
-- **Voices.** A text unit's `voice` is a `GameRef` to an existing recorded line, or a pack asset id. The language has no operator that joins, re-times or synthesises speech (L-115). A cloned voice of a real person, the game's cast included, is a floor: the game's actors are heard only in their own recorded lines, whole. Pack recordings and synthetic voices carry the consent and provenance records S4 defines.
+- **Voices.** A text unit's `voice` is a `GameRef` to an existing recorded line, or a pack asset id. The language has no operator that joins, re-times or synthesises speech (L-115). A cloned voice of a real person, the game's cast included, is a floor: the game's actors are heard only in their own recorded lines, whole. Pack recordings and synthetic voices carry the consent and provenance records S4 defines. **The plan for voice:**
+  - new characters may be voiced, with pack recordings or synthetic voices that aren't clones of a real person;
+  - existing V lines may be repurposed, whole and by id, in new contexts where they fit.
+
+  Text stays the default everywhere else.
 - **Origin.** Each text unit declares `origin`:
   - `authored`: written by a person;
   - `assisted`: a person, with tools;

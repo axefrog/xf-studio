@@ -313,7 +313,7 @@ A lint is calibrated against the game's text. Under FAN-06 only the thresholds a
 6. **Which licence does the starter pack take?** A project decision. I would offer `CC-BY-4.0` first, because it raises no question about monetised streams (LIC-02) and is simple to credit.
 7. **Does shipping a language-model or voice adapter make the project a "provider" under the EU Act, with a marking duty?** The Official Journal text and the Commission's guidance were not read.
 8. **How does the base game itself treat bigotry in fiction?** A game-substrate question (P2), to ground FAN-07's reading.
-9. **Is reuse of an existing game line in a new scene within the publisher's terms?** The terms do not say; community practice does it. Not verified.
+9. **Is reuse of an existing game line in a new scene within the publisher's terms?** **Settled by the maintainer (23 October):** yes, as community practice. Voiced content will use new voices for new characters, and repurpose existing V lines, whole, where a context needs them (S2 §2.20).
 10. **Is the publisher's grant request automatic?** The page asks "kindly", and secondary accounts say it applies by creating. I do not know how it would be tested.
 
 ## 12. Testing agenda
