@@ -182,7 +182,11 @@ export class Evolution {
     due.sort((x, y) => (x.def?.tier ?? 0) - (y.def?.tier ?? 0) || (x.state.id < y.state.id ? -1 : x.state.id > y.state.id ? 1 : 0) || x.batch.k - y.batch.k);
     for (const d of due) {
       for (const op of d.batch.ops) {
-        this.applyProcessOp(op, d.state.id, T);
+        try {
+          this.applyProcessOp(op, d.state.id, T);
+        } catch (err) {
+          k.defects.record({ kind: 'op-refused', detail: `process ${d.state.id}: ${(err as Error).message}` });
+        }
         report.applied++;
         cost++;
       }
@@ -198,7 +202,11 @@ export class Evolution {
           this.lateOps++;
           k.defects.record({ kind: 'late-op', detail: `an operation stamped ${q.stamp} was applied at boundary ${T}` });
         }
-        this.applyExternal(q);
+        try {
+          this.applyExternal(q);
+        } catch (err) {
+          k.defects.record({ kind: 'op-refused', detail: `external operation: ${(err as Error).message}` });
+        }
         report.applied++;
         cost++;
       }

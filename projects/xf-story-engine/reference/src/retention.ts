@@ -219,11 +219,18 @@ export class Retention {
     if (h.origin.by === 'minted') {
       for (const c of store.contributionsOrigin(id)) store.removeContribution(c.id);
       for (const e of store.edgesFrom(id)) if (e.cause === id) store.removeEdge(e.id);
-      for (const o of store.ownedOf(id)) this.sweepNode(o);
-      store.removeHeader(id);
+      this.removeTree(id);
+      // Removing a node's records changes what resolves, so cached results go (no change is emitted).
+      this.k.bump();
     } else if ((h.origin.by === 'value' || h.origin.by === 'member') && !store.header(h.origin.owner)) {
       store.removeHeader(id);
     }
+  }
+
+  /** Remove a header and, under it, every owned value and member header. */
+  private removeTree(id: Id): void {
+    for (const o of this.k.store.ownedOf(id)) this.removeTree(o);
+    this.k.store.removeHeader(id);
   }
 
   /** Run the forgetting worklist under a budget: one node per step, resumable. Silent: no revision, no change. */

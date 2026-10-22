@@ -260,8 +260,33 @@ export class Kernel {
 
   // ---- writes: pins ----
 
+  /** The root node of V (spec 1.1). */
+  get vId(): Id {
+    return rootId(this.worldSeed, 'v');
+  }
+
+  /** Whether (node, slot) is part of V's drives: nothing pins or sets those (I-12). */
+  isVDrive(node: Id, slot: SlotPath = ''): boolean {
+    const v = this.vId;
+    if (node === v) return slot.startsWith('drives');
+    let cur: Id | undefined = node;
+    for (let n = 0; n < 8 && cur !== undefined; n++) {
+      const h = this.store.header(cur);
+      if (!h) return false;
+      if ((h.origin.by === 'member' || h.origin.by === 'value') && h.origin.slot === 'drives' && h.origin.owner === v) return true;
+      cur = h.origin.by === 'member' || h.origin.by === 'value' ? h.origin.owner : undefined;
+    }
+    return false;
+  }
+
+  private assertWritable(): void {
+    if (this.readOnly) throw new Error(`the save loaded read-only: ${this.readOnly.message}`);
+  }
+
   /** Add a pin (spec 6.1). Idempotent for the same Id. Emits a `pin` change unless silent. */
   pin(spec: PinSpec): Pin {
+    this.assertWritable();
+    if (this.isVDrive(spec.node, spec.slot)) throw new Error("V is never owned: nothing pins or sets V's drives (I-12)");
     const h = this.store.header(spec.node);
     if (!h) throw new Error(`pin on an unknown node: ${spec.node}`);
     const { path, window } = splitWindowPath(spec.slot);
@@ -388,6 +413,11 @@ export class Kernel {
   // ---- writes: contributions ----
 
   contribute(spec: ContributionSpec): Contribution {
+    this.assertWritable();
+    const named = spec.target.scope && 'nodes' in spec.target.scope ? spec.target.scope.nodes : [];
+    if (named.some((n) => this.isVDrive(n, spec.target.slot === '*' ? '' : spec.target.slot))) {
+      throw new Error("V is never owned: nothing pins or sets V's drives (I-12)");
+    }
     const strength = spec.strength ?? 1;
     if (!(strength > 0) || !Number.isFinite(strength)) throw new Error('a contribution strength is positive');
     const valid = spec.valid ?? {};
@@ -416,6 +446,7 @@ export class Kernel {
   // ---- writes: edges ----
 
   addEdge(spec: EdgeSpec): Edge {
+    this.assertWritable();
     const def = this.schema.edgeType(spec.type);
     const fh = this.store.header(spec.from);
     const th = this.store.header(spec.to);
