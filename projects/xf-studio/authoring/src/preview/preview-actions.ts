@@ -10,6 +10,7 @@ import { CONE_READINGS, CREATOR_EXPOSURE_RANGE, DEFAULT_CREATOR_LIGHTING, INTENS
   type CreatorCameraPage, type CreatorLightingOptions, type IntensityForm, type LightingPreset } from "./creator-lighting";
 import type { GradingLutSource } from "./grading-lut";
 import { refusal, type ReasonCode } from "../platform/api";
+import { NOT_DRAWN } from "../animation/motion-actions";
 import { addLight, aimLightAtHead, duplicateLight, moveLight, BUILT_IN_SETUP_IDS, builtInInfo, colourHex, createSetup, deleteSetup, differsFromBase, editShownSetup,
   findUserSetup, isBuiltInSetup, LIGHT_NUMBER_KEYS, LIGHT_RANGES, LIGHT_TYPES, lightingSource, lightPlacement, LIGHTING_LIMITS, parseColourHex,
   removeLight, renameLight, renameSetup, resetSetup, rigKindOf, SETUP_BACKDROPS, SETUP_DISPLAYS, SETUP_ENVIRONMENT_RANGE,
@@ -24,7 +25,7 @@ export type PreviewConfig = Pick<PreviewState,
  * Every camera and preview action names the view it acts on (profiles design §3.6), and one that edits the view's scene names the scene's
  * `gen` it was resolved at too (checked by the application); the input layer resolves both.
  */
-export type PreviewAction = PreviewActionBody & { view: ViewId; sceneGen?: number };
+export type PreviewAction = PreviewActionBody & { view: ViewId; scene?: string; sceneGen?: number };
 type PreviewActionBody =
   | { kind: "camera.front" }
   | { kind: "camera.body" }
@@ -127,6 +128,8 @@ const NO_LIGHTING = "Lighting controls are unavailable in this preview.";
 const SETUP_EDITS = new Set<PreviewAction["kind"]>(["preview.setExposure", "preview.setRoomLight", "preview.setBackdrop", "preview.setDisplayTransform",
   "preview.setLight", "preview.setLightColour", "preview.setLightShadows", "preview.setLightType", "preview.renameLight", "preview.aimLightAtHead",
   "preview.addLight", "preview.removeLight", "preview.moveLight", "preview.duplicateLight", "preview.setKeyAngle"]);
+/** Actions checked against what the drawn head offers: they name a view showing the drawn scene. */
+const DRAWN_CHECKS = new Set<PreviewAction["kind"]>(["preview.setEyeShape", "preview.setDetail", "preview.setHair"]);
 /** Actions that name one of the shown setup's lights. */
 const LIGHT_ACTIONS = new Set<PreviewAction["kind"]>(["preview.setLight", "preview.setLightColour", "preview.setLightShadows", "preview.setLightType",
   "preview.renameLight", "preview.aimLightAtHead", "preview.removeLight", "preview.moveLight", "preview.duplicateLight"]);
@@ -202,6 +205,10 @@ export class PreviewActions {
   }
   /** The view graph this device follows. */
   views(): ViewGraph { return this.graph; }
+  /** Whether `view` shows the scene this device draws (its own view's): what the drawn head offers applies there only. */
+  drawsScene(view: ViewId): boolean {
+    return this.graph.has(view) && this.graph.node(view, "scene").id === this.graph.node(this.shown, "scene").id;
+  }
   /** The view a read is about: the one it names, else the one this device draws (never "the focused one": nothing here reads focus). */
   private fields(view?: ViewId) { return previewFields(this.graph, view !== undefined && this.graph.has(view) ? view : this.shown); }
   eyeShapeOptions(): Readonly<EyeShapeOptions> {
@@ -232,7 +239,9 @@ export class PreviewActions {
     if (typeof action.view !== "string") return refusal("missing_target", "Open a 3D view to use this.");
     if (!this.graph.has(action.view)) return refusal("missing_target", "That view no longer exists.");
     // The device computes framing for the view it draws; other views get cameras of their own with more than one visible view (P4).
-    if (action.kind.startsWith("camera.") && action.view !== this.shown) return refusal("unavailable", "That view isn't shown.");
+    if (action.kind.startsWith("camera.") && action.view !== this.shown) return refusal("missing_target", NOT_DRAWN);
+    // What the drawn head offers (its eye shapes, which of its V's details are available) is checked only for a view showing its scene.
+    if (DRAWN_CHECKS.has(action.kind) && !this.drawsScene(action.view)) return refusal("missing_target", NOT_DRAWN);
     const state = this.fields(action.view);
     if ((action.kind === "camera.back" || action.kind === "camera.forward") && !this.graph.cameraTrail(action.view)[action.kind === "camera.back" ? "back" : "forward"])
       return refusal("invalid_value", action.kind === "camera.back" ? "The camera hasn't jumped anywhere yet." : "There is no later camera position to go forward to.");

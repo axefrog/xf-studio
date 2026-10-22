@@ -1,7 +1,7 @@
 /**
  * What a scene shows (profiles design §1.1, §3.6): `scene.setLook` and `scene.setSubject`, each naming the scene and the `gen` it was
  * resolved at, so a choice made from a stale menu never lands on a scene that shows something else meanwhile. The session holds what each
- * scene shows (`ProfileSessionState`); this checks and applies the two actions over it. Choosing a preset is `scene.setLook` (it replaced
+ * scene shows (`ProfileSessionState`); this applies the two actions over it, once the application has checked the scene and `gen` they name. Choosing a preset is `scene.setLook` (it replaced
  * `preset.select`); `look: null` shows no look.
  */
 import { refusal, type Capability } from "../../platform/api/capability";
@@ -25,8 +25,8 @@ export class SceneCommands {
   gen(scene: string): number | undefined { return this.scenes.scene(scene)?.gen; }
   capability(action: SceneAction): Capability {
     const scene = this.scenes.scene(action.scene);
+    // Its `gen` is checked where every named target is (the application's check, the same rule as a capture's).
     if (!scene) return refusal("missing_target", "That scene is gone.");
-    if (scene.gen !== action.sceneGen) return refusal("missing_target", "What this view shows changed. Try again.");
     if (action.kind === "scene.setLook") {
       const look = action.look;
       if (look !== null && (typeof look !== "object" || typeof look.collection !== "string" || typeof look.look !== "string"))

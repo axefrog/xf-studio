@@ -52,6 +52,16 @@ describe("actions name their targets (§3.6)", () => {
     expect(defaulting()).toEqual([]);
   });
 
+  test("a scene's gen is never named without the scene: dispatch checks both (a relinked view at the same gen is a replacement)", () => {
+    const genWithoutScene = STUDIO_REGISTRY.kinds().filter(kind => {
+      const payload = STUDIO_REGISTRY.descriptor(kind)!.payload;
+      return "sceneGen" in payload && payload.scene?.from !== "target";
+    });
+    expect(genWithoutScene).toEqual([]);
+    // Routing by the named view (device-backed camera and motion actions refuse a view not drawn) is checked kind by kind in
+    // tests/profiles-targets-dispatch.test.ts.
+  });
+
   test("every family is covered: each registered kind of a family names exactly its targets", () => {
     for (const family of FAMILIES)
       expect(STUDIO_REGISTRY.kinds().filter(kind => { const route = STUDIO_REGISTRY.route(kind); return route.ok && family.owns(kind, route.owner.owner); }).length)

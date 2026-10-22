@@ -120,6 +120,8 @@ export class LookEditor {
   show(ref: LookRef | undefined): boolean {
     if (ref && this.shown && sameLook(ref, this.shown.ref)) return true;
     if (!ref && !this.shown && this.empty) return true;
+    // An open gesture or control run settles on the look it began on, and is recorded with it, before another look is shown.
+    this.deps.document.replacing();
     this.commit();
     this.close();
     this.empty = !ref;
@@ -183,6 +185,7 @@ export class LookEditor {
     // Nothing of this window's waits outside the outbox (every change is recorded as it is made), so another window's version arrives
     // only over a look with no change pending here; a resolution (Use theirs, or Keep both, which made a copy of mine) is the person's.
     shown.content = content;
+    this.deps.document.replacing();
     this.display(content.state);
     this.deps.document.history.clear();
     this.deps.note?.(CHANGED_ELSEWHERE);

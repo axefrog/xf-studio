@@ -72,6 +72,7 @@ import { PROFILES_MIGRATION_ENABLED, startProfilesMigration } from "../app/brows
 import { workspaceKeys, type WorkspaceState } from "../app/workspace/workspace-state";
 import { WorkspacePersistence } from "../app/workspace/workspace-persistence";
 import { outboxView } from "../app/presentation-status";
+import type { TargetResolver } from "../app/profiles/targets";
 import { createProfileServices, createTargetResolver, drawnScene, historyScopeName, openProfileSession, sceneCharacter, sceneCommands } from "../app/profiles/profile-window";
 import { createStudioSubjects } from "./subjects";
 import { LookEditor, lookContent } from "../library/look-editor";
@@ -280,8 +281,10 @@ async function start(host: StudioHost, root: HTMLElement) {
     subscribe: (listener: () => void) => sessionState.subscribe(listener) };
   // The scenes' `gen` (what a view action that edits a scene names) and the input layer's resolution over the session.
   core.app.attach({ scenes: sceneCommands(sessionState, services) });
-  const targets = createTargetResolver({ state: sessionState, graph: views, history: historyService, services, contexts: type => STUDIO_CATALOGUE.context(type),
+  const targets: TargetResolver = createTargetResolver({ state: sessionState, graph: views, history: historyService, services, contexts: type => STUDIO_CATALOGUE.context(type),
     collection: () => bootstrap?.collection.service.draftIdentity()?.collectionId });
+  // Dispatch checks what an action names by the resolver's rule (the one its captures follow).
+  core.app.attach({ targetCheck: targets });
   const headHost = byId("device-head"), uvHost = byId("device-uv");
   const viewportDevice = createBrowserViewportDevice({ region, headHost, uvHost, queryContext: hit => core.app.contextQuery(hit, targets.named()), renderers: STUDIO_RENDERERS, optionalRenderers: experiments, referenceTextures: browserReferenceTextures(verification),
     onContext: event => event === "lost" ? diagnostics.contextLost("3D view") : diagnostics.contextRestored("3D view") });

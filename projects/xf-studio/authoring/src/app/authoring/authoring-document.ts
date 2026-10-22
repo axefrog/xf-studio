@@ -78,6 +78,7 @@ export class AuthoringDocument {
   private readonly resetStack: (previous: Recipe) => void;
   private restoring = false;
   private listeners = new Set<(change: DocumentChange) => void>();
+  private replacingListeners = new Set<() => void>();
   private effectListeners = new Set<(effect: DocumentEffect) => void>();
   private geometryRevision = 0;
   private changedLayerIndex: number | undefined;
@@ -157,6 +158,16 @@ export class AuthoringDocument {
     return others && { revision: this.otherRevision,
       parts: Object.fromEntries(others.features().map(feature => [feature, others.read(feature)])) };
   }
+  /**
+   * Calls `listener` before the document's content is replaced (another look shown, or the same look taken from elsewhere): an open
+   * gesture or control run settles on the content it began on, never on what replaces it.
+   */
+  onReplacing(listener: () => void): () => void { this.replacingListeners.add(listener); return () => { this.replacingListeners.delete(listener); }; }
+  /**
+   * The content is about to be replaced: whatever is open settles first. `restore` calls it; a caller that records the look before
+   * replacing it (the look editor) calls it before recording, so the settled run is recorded with the look it belongs to.
+   */
+  replacing() { for (const listener of [...this.replacingListeners]) listener(); }
   subscribe(listener: (change: DocumentChange) => void) {
     this.listeners.add(listener); return () => this.listeners.delete(listener);
   }
@@ -244,6 +255,7 @@ export class AuthoringDocument {
    * look's history scope when it is another look's: the previous look's scope closes and the shown one's opens with its steps.
    */
   restore(value: DocumentState, scope?: string) {
+    this.replacing();
     const recipe = parseRecipe(value.recipe), active = clamp(value.active, recipe.layers.length);
     const fieldSelection = parseFieldSelection(value.fieldSelection, recipe);
     const history = lookHistory(value.history, value.historyTrimmed === true, this.parts);

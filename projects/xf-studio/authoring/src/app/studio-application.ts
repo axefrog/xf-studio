@@ -123,6 +123,11 @@ type Services = { document: AuthoringDocument;
    * and `scene.setSubject`.
    */
   scenes?: Pick<SceneCommands, "gen" | "capability" | "dispatch">;
+  /**
+   * Whether the view, scene and `gen` an action names are still what they were resolved to (the target resolver's check, the same rule as
+   * its captures', profiles design §3.3). Without it (a core no session holds) an action naming a scene's `gen` can't be checked, and is refused.
+   */
+  targetCheck?: { check(named: { view?: string; scene?: string; sceneGen?: number }): StudioCapability };
   gestures: AuthoringGestures; controls: AuthoringControlEdits;
   collection?: CollectionService; files?: StudioFileOperations; preview?: PreviewActions; motion?: MotionActions;
   /** How a held expression's changes animate (platform/core/transition-settings.ts); the composition root attaches it at start. */
@@ -176,6 +181,8 @@ export class StudioApplication {
   /** `registry` is the composition's action registry, injected by the composition roots (CORE-29). */
   constructor(services: Services, registry: Registry<AnyOwner>) {
     this.services = services; this.routes = registry; this.handlers = this.bindHandlers();
+    // A gesture or control run belongs to the look it began on: it settles (commits) before the document shows other content.
+    services.document.onReplacing(() => this.settleEdits());
     this.asyncHandlers = this.bindAsyncHandlers();
     for (const owner of registry.owners())
       if (owner.owner === "feature" && !(owner.id in this.handlers)) {
@@ -604,10 +611,10 @@ export class StudioApplication {
    * tool naming the same action resolves the same way.
    */
   private resolveTool(view: string, tool: ViewToolContribution): ViewToolEntry {
-    // The action names this view, and the `gen` of the scene it shows now when it edits that scene: it never edits a replacement.
+    // The action names this view, and the scene it shows now with its `gen` when it edits that scene: it never edits a replacement.
     const scene = this.services.views!.node(view, "scene").id, gen = this.services.scenes?.gen(scene);
     const entry = (unnamed: StudioAction, extra: Partial<ViewToolEntry> = {}): ViewToolEntry => {
-      const action = this.withTargets(unnamed, { view, ...(gen === undefined ? {} : { sceneGen: gen }) });
+      const action = this.withTargets(unnamed, { view, scene, ...(gen === undefined ? {} : { sceneGen: gen }) });
       return { ...structuredClone(tool), shown: true, action, capability: this.capability(action), ...extra };
     };
     switch (tool.dispatches) {
@@ -689,12 +696,13 @@ export class StudioApplication {
       && !this.editsLook(look)) return refusal("missing_target", OTHER_LOOK);
     const views = this.services.views;
     if (typeof view === "string" && views && !views.has(view)) return refusal("missing_target", "That view no longer exists.");
-    if (typeof sceneGen === "number") {
-      const id = typeof scene === "string" ? scene : typeof view === "string" && views?.has(view) ? views.node(view, "scene").id : undefined;
-      const gen = id === undefined ? undefined : this.services.scenes?.gen(id);
-      if (gen !== sceneGen) return refusal("missing_target", "What this view shows changed. Try again.");
-    }
-    return undefined;
+    if (typeof scene !== "string" && typeof sceneGen !== "number") return undefined;
+    // The view still shows the scene the action names, at its `gen`: one rule with captures (`TargetResolver.check`).
+    const check = this.services.targetCheck;
+    if (!check) return refusal("missing_target", "What this view shows can't be checked here.");
+    const current = check.check({ ...(typeof view === "string" ? { view } : {}), ...(typeof scene === "string" ? { scene } : {}),
+      ...(typeof sceneGen === "number" ? { sceneGen } : {}) });
+    return current.available ? undefined : current;
   }
   /**
    * Why a V an action names can't be acted on here (undefined: it can): its context is the one a 3D view shows (phase 1 draws one view),
@@ -945,8 +953,12 @@ export class StudioApplication {
     try { return { ok: true, result: this.handler(route.owner.id).dispatch(action) }; }
     catch (error) { return { ok: false, ...failure(route.owner.owner === "system" ? route.owner.thrown : undefined, error) }; }
   }
-  /** A pointer gesture owns the Undo transaction while it runs; a form control cannot start inside it. */
-  controlBegin(id: string, layerId: string) {
+  /**
+   * A pointer gesture owns the Undo transaction while it runs; a form control cannot start inside it. `look` is the look the run captured
+   * when it began (profiles design §3.3): the editor must show it, and its edits name it.
+   */
+  controlBegin(id: string, layerId: string, look?: LookRef) {
+    if (!look || !this.editsLook(look)) return false;
     if (this.denied() || this.gesture || this.look || this.featureControl || this.unowned() || this.services.document.locked) return false;
     const begun = this.services.controls.begin(id, layerId); if (begun) this.notify(); return begun;
   }
@@ -989,7 +1001,8 @@ export class StudioApplication {
    * another control or a look transaction. Its edits pass the same capability gate as dispatch; `featureControlCancel` (Escape)
    * restores the start.
    */
-  featureControlBegin(feature: string, id: string): boolean {
+  featureControlBegin(feature: string, id: string, look?: LookRef): boolean {
+    if (!look || !this.editsLook(look)) return false;
     const open = this.featureControl;
     if (open?.feature === feature && open.id === id) return true;
     if (open) this.featureControlCommit(open.id);
@@ -1005,7 +1018,7 @@ export class StudioApplication {
     const allowed = this.capability(action as StudioAction);
     if (!allowed.available) return { ok: false, code: allowed.code ?? "unavailable", message: allowed.reason ?? "Action unavailable." };
     const owned = this.featureControl?.feature === feature && this.featureControl.id === id;
-    if (!owned && !this.featureControlBegin(feature, id)) return { ok: false, code: "busy", message: "Finish or cancel the current adjustment first (Esc)." };
+    if (!owned && !this.featureControlBegin(feature, id, (action as { look?: LookRef }).look)) return { ok: false, code: "busy", message: "Finish or cancel the current adjustment first (Esc)." };
     const control = this.featureControl!;
     const before = this.services.document.contentKey([feature]);
     // Inside the transaction the action records no step of its own (the transaction's checkpoint is the step).

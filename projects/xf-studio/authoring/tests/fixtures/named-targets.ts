@@ -15,7 +15,7 @@ import type { AuthoringDocument } from "../../src/app/authoring/authoring-docume
 import type { LookRef } from "../../src/library/collection-documents";
 import { TargetResolver } from "../../src/app/profiles/targets";
 import { SceneCommands } from "../../src/app/profiles/scene-commands";
-import type { Unnamed } from "../../src/app/action-targets";
+import { nameTargets, type Unnamed } from "../../src/app/action-targets";
 import type { PresentationSubject } from "../../src/app/action-consequences";
 import type { createTrustedAuthoringCore } from "../../src/app/trusted-authoring-core";
 
@@ -52,7 +52,7 @@ export function fixtureTargets(core: FixtureCore, options: { scene?: FixtureScen
     setSubject: () => { gen++; },
   }, { look: () => true, subject: () => true }) });
   if (core.history.focus.topView(core.views.viewIds()) === undefined) core.history.focus.focusView(MAIN_VIEW);
-  return new TargetResolver({
+  const resolver = new TargetResolver({
     session: {
       tab: () => "t-fixture",
       views: () => core.views.viewIds().map((id: ViewId) => ({ id, scene: core.views.node(id, "scene").id })),
@@ -65,17 +65,21 @@ export function fixtureTargets(core: FixtureCore, options: { scene?: FixtureScen
     context: () => ({ kind: "view" }),
     ...(options.collection ? { collection: options.collection } : {}),
   });
+  core.app.attach({ targetCheck: resolver });
+  return resolver;
 }
 
 type App = StudioApplication;
 type Action = Unnamed<StudioAction>;
 /** The application as the fixture's input layer drives it: its action entry points take actions whose targets it names. */
-export type NamedApplication = Omit<App, "dispatch" | "capability" | "contextCapability" | "controlEdit" | "featureControlEdit" | "consequences" |
+export type NamedApplication = Omit<App, "dispatch" | "capability" | "contextCapability" | "controlBegin" | "controlEdit" | "featureControlBegin" | "featureControlEdit" | "consequences" |
   "choicesFor" | "actionsFor" | "contextFor" | "contextQuery" | "boundActionCapability" | "dispatchContext" | "beginGesture" | "canBeginGesture"> & {
   dispatch(action: Action): ReturnType<App["dispatch"]>;
   capability(action: Action): ReturnType<App["capability"]>;
   contextCapability(target: Parameters<App["contextCapability"]>[0], action: Action): ReturnType<App["contextCapability"]>;
+  controlBegin(id: string, layerId: string): boolean;
   controlEdit(id: string, action: Unnamed<Parameters<App["controlEdit"]>[1]>): ReturnType<App["controlEdit"]>;
+  featureControlBegin(feature: string, id: string): boolean;
   featureControlEdit(feature: string, id: string, action: { kind: string }): ReturnType<App["featureControlEdit"]>;
   consequences(subject: PresentationSubject): ReturnType<App["consequences"]>;
   choicesFor(target: Parameters<App["choicesFor"]>[0], kind: StudioAction["kind"], field: string, base?: Record<string, unknown>): ReturnType<App["choicesFor"]>;
@@ -91,12 +95,23 @@ export type NamedApplication = Omit<App, "dispatch" | "capability" | "contextCap
 /** The application with its entry points naming the targets they leave out, as the presentation port does. */
 export function named(app: App, targets: TargetResolver): NamedApplication {
   const name = <A extends { kind: string }>(action: A): A => targets.complete(action, app.descriptor(action.kind));
+  // A control run captures what it acts on when it begins, as the port's runs do: its edits name that, never a later resolution.
+  const runs = new Map<string, ReturnType<TargetResolver["named"]>>();
+  const begin = (id: string) => { const named = targets.named(); runs.set(id, named); return named; };
+  const nameRun = <A extends { kind: string }>(id: string, action: A): A => nameTargets(action, app.descriptor(action.kind), runs.get(id) ?? targets.named());
+  const end = (id: string) => { runs.delete(id); };
   const overrides: Record<string, unknown> = {
     dispatch: (action: StudioAction) => app.dispatch(name(action)),
     capability: (action: StudioAction) => app.capability(name(action)),
     contextCapability: (target: Parameters<App["contextCapability"]>[0], action: StudioAction) => app.contextCapability(target, name(action)),
-    controlEdit: (id: string, action: Parameters<App["controlEdit"]>[1]) => app.controlEdit(id, name(action)),
-    featureControlEdit: (feature: string, id: string, action: { kind: string }) => app.featureControlEdit(feature, id, name(action)),
+    controlBegin: (id: string, layerId: string) => app.controlBegin(id, layerId, begin(id).look),
+    controlEdit: (id: string, action: Parameters<App["controlEdit"]>[1]) => app.controlEdit(id, nameRun(id, action)),
+    controlCommit: (id: string) => { end(id); app.controlCommit(id); },
+    controlCancel: (id: string) => { end(id); app.controlCancel(id); },
+    featureControlBegin: (feature: string, id: string) => app.featureControlBegin(feature, id, begin(id).look),
+    featureControlEdit: (feature: string, id: string, action: { kind: string }) => app.featureControlEdit(feature, id, nameRun(id, action)),
+    featureControlCommit: (id: string) => { end(id); app.featureControlCommit(id); },
+    featureControlCancel: (id: string) => { end(id); app.featureControlCancel(id); },
     consequences: (subject: Parameters<App["consequences"]>[0]) =>
       app.consequences("action" in subject ? { ...subject, action: name(subject.action) } : subject),
     choicesFor: (target: Parameters<App["choicesFor"]>[0], kind: StudioAction["kind"], field: string, base?: Record<string, unknown>) =>

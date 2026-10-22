@@ -118,14 +118,14 @@ Gesture proposals (sent inside a gesture session; the session owns the Undo step
 | `preview.moveLight` | viewport | workspace | none | light: string, index: integer, view: string |  |
 | `preview.duplicateLight` | viewport | workspace | none | light: string, view: string |  |
 | `preview.setKeyAngle` | viewport | workspace | none | degrees: number, view: string |  |
-| `preview.setEyeShape` | viewport | workspace | none | index: integer, view: string, sceneGen: integer |  |
+| `preview.setEyeShape` | viewport | workspace | none | index: integer, view: string, scene: string, sceneGen: integer |  |
 | `preview.setPiercings` | viewport | workspace | none | enabled: boolean, view: string |  |
 | `preview.setBody` | viewport | workspace | none | enabled: boolean, view: string |  |
-| `preview.setUncensored` | viewport | workspace | none | enabled: boolean, view: string, sceneGen: integer |  |
+| `preview.setUncensored` | viewport | workspace | none | enabled: boolean, view: string, scene: string, sceneGen: integer |  |
 | `preview.setSurfaceControls` | viewport | workspace | none | enabled: boolean, view: string |  |
 | `preview.setWire` | viewport | workspace | none | enabled: boolean, view: string |  |
-| `preview.setNormals` | viewport | workspace | none | enabled: boolean, view: string, sceneGen: integer |  |
-| `preview.setEyeOptics` | viewport | workspace | none | enabled: boolean, view: string, sceneGen: integer |  |
+| `preview.setNormals` | viewport | workspace | none | enabled: boolean, view: string, scene: string, sceneGen: integer |  |
+| `preview.setEyeOptics` | viewport | workspace | none | enabled: boolean, view: string, scene: string, sceneGen: integer |  |
 | `preview.setHair` | viewport | workspace | none | enabled: boolean, view: string |  |
 | `preview.setDetail` | viewport | workspace | none | detail: enum, enabled: boolean, view: string |  |
 | `preview.setSkinScatter` | viewport | workspace | none | enabled: boolean, view: string |  |
@@ -142,7 +142,7 @@ Gesture proposals (sent inside a gesture session; the session owns the Undo step
 | `motion.setContributions` | viewport | workspace | none | body: boolean, face: boolean, view: string |  |
 | `motion.setBlink` | viewport | workspace | none | value: number, view: string |  |
 | `motion.playBlink` | viewport | workspace | none | playing: boolean, view: string |  |
-| `motion.setPhysics` | viewport | workspace | none | enabled: boolean, view: string, sceneGen: integer |  |
+| `motion.setPhysics` | viewport | workspace | none | enabled: boolean, view: string, scene: string, sceneGen: integer |  |
 
 ## Transitions (`transitions`, system family)
 

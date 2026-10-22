@@ -1,4 +1,6 @@
-import type { ViewId } from "../platform/api/view-graph";
+import { MAIN_VIEW, type ViewId } from "../platform/api/view-graph";
+/** Why a view action naming a view whose scene isn't drawn is refused (phase 1 draws one view). */
+export const NOT_DRAWN = "That 3D view isn't drawn now, so this can't change it.";
 import type { PreviewState } from "../app/workspace/workspace-state";
 import { refusal, type Capability } from "../platform/api";
 import { BLINK_REPEAT_SECONDS, GAME_BLINK_MISSING, IDLE_FACE_MISSING, IDLE_MASCULINE } from "./game-blink-messages";
@@ -52,7 +54,7 @@ export type MotionState = Pick<PreviewState,
      */
     physics: boolean; physicsAvailable: boolean; physicsReason?: string; physicsParts: number };
 /** A motion action names the view whose scene it moves (profiles design §3.6); `motion.setPhysics` names the scene's `gen` too. */
-export type MotionAction = MotionActionBody & { view: ViewId; sceneGen?: number };
+export type MotionAction = MotionActionBody & { view: ViewId; scene?: string; sceneGen?: number };
 type MotionActionBody =
   | { kind: "motion.setIdle"; enabled: boolean }
   /** Which of the game's preview idles plays (the body source while the idle is on; "Still" is the idle off). */
@@ -85,7 +87,11 @@ export type MotionPort = {
 /** Why a pose can't be held, in plain words. */
 export const POSE_UNAVAILABLE = "Poses play on V's idle, which XF Studio couldn't read, so she holds still.";
 /** Where the motion service reads and edits the scene's motion settings (the view graph's scene node, through the preview service). */
-export type MotionScene = { physics(view?: ViewId): boolean; setPhysics(enabled: boolean, view: ViewId): void };
+/**
+ * Where the motion service reads and edits a scene's motion settings, and whether a view shows the scene this service's device drives
+ * (`draws`; without one, only the main view does): an action naming another view is refused, never applied to the drawn scene.
+ */
+export type MotionScene = { physics(view?: ViewId): boolean; setPhysics(enabled: boolean, view: ViewId): void; draws?(view: ViewId): boolean };
 
 /** Preview motion commands and persistence state without markup or Three objects. */
 export class MotionActions {
@@ -166,6 +172,10 @@ export class MotionActions {
     return this.port.blink.available ? undefined : this.port.blink.error || GAME_BLINK_MISSING;
   }
   capability(action: MotionAction): Capability {
+    // The idle, pause, contributions and blink are the drawn scene's device's (profiles design §3.6): they act only for a view showing it.
+    // Physics is a scene-node setting, edited on the named view's scene.
+    if (action.kind !== "motion.setPhysics" && !(this.scene?.draws ? this.scene.draws(action.view) : action.view === MAIN_VIEW))
+      return refusal("missing_target", typeof action.view === "string" ? NOT_DRAWN : "Open a 3D view to use this.");
     if (action.kind === "motion.setBlink" && (!Number.isFinite(action.value) || action.value < 0 || action.value > 1))
       return refusal("invalid_value", "Eyelid closure must be between 0 and 1.");
     if ((action.kind === "motion.setIdle" && action.enabled || action.kind === "motion.setPaused" ||

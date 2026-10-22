@@ -117,6 +117,15 @@ export class TargetResolver {
     if (capture.released()) return refusal("missing_target", "That menu was closed.");
     return captureCurrent(this.world(), capture.data, key => this.deps.revision?.(key));
   }
+  /**
+   * Whether what an action names is still what it was resolved to (§3.3): its view still shows its scene, at the `gen` it names. The
+   * same rule as a capture's (`captureCurrent`), so dispatch and captures can't disagree; owners call it through the application.
+   */
+  check(named: Pick<NamedTargets, "view" | "scene" | "sceneGen">): Capability {
+    const target: Target = { ...(named.view !== undefined ? { view: named.view } : {}), ...(named.scene !== undefined ? { scene: named.scene } : {}),
+      ...(named.sceneGen !== undefined ? { sceneGen: named.sceneGen } : {}) };
+    return captureCurrent(this.world(), { target, revisions: {} }, () => undefined);
+  }
   /** How many captures are held (released ones are gone). */
   held(): number { return this.captures.size; }
 }

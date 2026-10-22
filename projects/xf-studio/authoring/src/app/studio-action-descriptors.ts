@@ -37,8 +37,12 @@ const desc = (scope: ActionScope | readonly ActionScope[], effect: ActionDescrip
 
 /** A camera, preview, motion or view action: it names the view it acts on (profiles design §3.6), which the input layer resolves. */
 const inView: typeof desc = (...args) => { const d = desc(...args); return { ...d, payload: { ...d.payload, view: TARGET_SCHEMA.view } }; };
-/** A view action that edits the view's scene: it names the scene's `gen` it was resolved at too, so it never edits a replacement. */
-const onScene: typeof desc = (...args) => { const d = inView(...args); return { ...d, payload: { ...d.payload, sceneGen: TARGET_SCHEMA.sceneGen } }; };
+/**
+ * A view action that edits the view's scene: it names that scene and the `gen` it was resolved at too, so it never edits a replacement
+ * (another scene the view was relinked to, or the same scene showing another V or look).
+ */
+const onScene: typeof desc = (...args) => { const d = inView(...args);
+  return { ...d, payload: { ...d.payload, scene: TARGET_SCHEMA.scene, sceneGen: TARGET_SCHEMA.sceneGen } }; };
 
 /** Every public top-level action ID is covered at compile time; nested commands have named variants. */
 export const ACTION_DESCRIPTORS = {

@@ -145,9 +145,11 @@ export function captureCurrent(world: BindingWorld, capture: CaptureData, revisi
     const scene = world.scenes[target.scene];
     if (!scene) return refusal("missing_target", "That scene is gone.");
     if (target.sceneGen !== undefined && scene.gen !== target.sceneGen) {
-      if (!same(scene.subject, target.subject, sameSubject)) return refusal("missing_target", `This view now shows another ${subjectName(target.subject ?? scene.subject)}.`);
-      if (!same(scene.look, target.look, sameLook)) return refusal("missing_target", "This view now shows another look.");
-      return refusal("missing_target", "What this view shows changed.");
+      // What changed, said where the target names it (an action naming only the scene and its gen says the scene changed).
+      if ("subject" in target && !same(scene.subject, target.subject, sameSubject))
+        return refusal("missing_target", `This view now shows another ${subjectName(target.subject ?? scene.subject)}.`);
+      if ("look" in target && !same(scene.look, target.look, sameLook)) return refusal("missing_target", "This view now shows another look.");
+      return refusal("missing_target", "What this view shows changed. Try again.");
     }
   }
   if (target.subject && !world.subject(target.subject)) return refusal("missing_target", `That ${subjectName(target.subject)} was deleted.`);
