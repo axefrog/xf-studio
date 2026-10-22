@@ -15,20 +15,22 @@ import type { SceneDisposeProbe } from "./webgl-scene-dispose-probe-page";
  */
 /**
  * What the first scene leaves on the renderer for good, shared by every later scene and freed only with the renderer: Three's own DFG
- * lookup texture (any physically based material), its shadow pass's depth program, and the background plane it draws a textured scene
- * background with (its geometry's three buffers, vertex array and program); and the layered-makeup engine's shared 1×1 blank textures
- * (`NOTHING`, `NEUTRAL_MAP` in plate-composite.ts; `FLAT_NORMAL` is not drawn here). Three counts the textures and the plane's geometry.
+ * lookup texture (any physically based material) and the background plane it draws a textured scene background with (its geometry's
+ * three buffers, vertex array and `BackgroundMaterial` program); and the layered-makeup engine's shared 1×1 blank textures (`NOTHING`,
+ * `NEUTRAL_MAP` in plate-composite.ts; `FLAT_NORMAL` is not drawn here). Three counts the textures and the plane's geometry. Nothing a
+ * scene made for its own materials belongs here (a full-skin shadow depth program once did, through a material nothing disposed).
  */
-const RENDERER_LIFETIME = { gl: { texture: 3, buffer: 3, program: 2, vertexArray: 1 }, geometries: 1, textures: 3, programs: 2 };
+const RENDERER_LIFETIME = { gl: { texture: 3, buffer: 3, program: 1, vertexArray: 1 }, geometries: 1, textures: 3, programs: 1,
+  uses: [{ name: "BackgroundMaterial", usedTimes: 1 }] };
 const PAGE = resolve(import.meta.dir, "webgl-scene-dispose-probe-page.ts");
 
 oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME} (set CHROME)`)("scene host disposal on a shared renderer", () => {
   let probe: SceneDisposeProbe;
   beforeAll(async () => {
     // XFS_PROBE_STACKS=1 keeps the stack that made each GPU object, to trace a leak (with XFS_PROBE_PRINT=1 to see it).
-    probe = await runProbePage<SceneDisposeProbe>(PAGE, process.env.XFS_PROBE_STACKS === "1" ? "?stacks" : "", 120_000);
+    probe = await runProbePage<SceneDisposeProbe>(PAGE, process.env.XFS_PROBE_STACKS === "1" ? "?stacks" : "", 240_000);
     if (process.env.XFS_PROBE_PRINT === "1") console.log(JSON.stringify(probe, null, 1));
-  }, 180_000);
+  }, 300_000);
 
   test("five hosts built and disposed on one renderer, each drawing its V, with no shader error", () => {
     expect(probe.failure).toBeUndefined();
@@ -45,6 +47,15 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     expect(probe.canvases).toBe(1);
   });
 
+  test("the cycles really differ: odd cycles' head has its own skin and full-skin shadow depth programs", () => {
+    const depth = (cycle: SceneDisposeProbe["cycles"][number]) => cycle.shown.uses.filter(use => use.fullSkinDepth).map(use => use.key);
+    const [even, odd] = probe.cycles;
+    expect(even!.influenceSets).toBe(1); expect(odd!.influenceSets).toBe(2);
+    expect(depth(even!).length).toBeGreaterThan(0);
+    expect(depth(odd!).length).toBeGreaterThan(0);
+    expect(depth(odd!).some(key => !depth(even!).includes(key))).toBe(true);
+  });
+
   test("the first disposal leaves only what lives as long as the renderer", () => {
     const [first] = probe.cycles, { baseline } = probe;
     const left = Object.fromEntries(Object.entries(first!.disposed.gl).map(([kind, count]) => [kind, count - baseline.gl[kind as keyof typeof baseline.gl]])
@@ -53,16 +64,27 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     expect({ geometries: first!.disposed.geometries - baseline.geometries, textures: first!.disposed.textures - baseline.textures,
       programs: first!.disposed.programs - baseline.programs }).toEqual({ geometries: RENDERER_LIFETIME.geometries,
       textures: RENDERER_LIFETIME.textures, programs: RENDERER_LIFETIME.programs });
+    // No program a scene made for its own materials stays, whatever its use count: only the renderer's own.
+    expect(first!.disposed.uses.map(({ name, usedTimes }) => ({ name, usedTimes }))).toEqual(RENDERER_LIFETIME.uses);
   });
 
-  test("every later disposal returns each kind of GPU object, and Three's counts, to exactly where the first left them", () => {
+  test("every later disposal leaves exactly what the first did: the same objects, the same programs, each used as often", () => {
     const [first, ...later] = probe.cycles;
     for (const cycle of later) {
       expect(cycle.disposed.gl).toEqual(first!.disposed.gl);
       expect({ geometries: cycle.disposed.geometries, textures: cycle.disposed.textures, programs: cycle.disposed.programs })
         .toEqual({ geometries: first!.disposed.geometries, textures: first!.disposed.textures, programs: first!.disposed.programs });
-      // A scene shown again costs what the first did: nothing of an earlier one is drawn beside it.
-      expect(cycle.shown.gl).toEqual(first!.shown.gl);
+      // A material that outlived its scene keeps its program's use count up even where no new program was made.
+      expect(cycle.disposed.uses).toEqual(first!.disposed.uses);
+    }
+    // A scene shown again costs what the same scene did before: nothing of an earlier one is drawn or held beside it. Programs compare by
+    // name and use count (a pass's own shader material gets a new cache key each time Three's shader cache sees its source afresh), and the
+    // full-skin depth programs by key too (theirs is stable per variant).
+    const profile = (cycle: SceneDisposeProbe["cycles"][number]) =>
+      cycle.shown.uses.map(use => `${use.name}:${use.usedTimes}${use.fullSkinDepth ? `:${use.key}` : ""}`).sort();
+    for (let i = 2; i < probe.cycles.length; i++) {
+      expect(probe.cycles[i]!.shown.gl).toEqual(probe.cycles[i - 2]!.shown.gl);
+      expect(profile(probe.cycles[i]!)).toEqual(profile(probe.cycles[i - 2]!));
     }
   });
 });

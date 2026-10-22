@@ -151,7 +151,8 @@ export function extendSkin(
  */
 export function fullSkinDepthMaterial(mesh: THREE.SkinnedMesh, options: { strandAlpha?: boolean } = {}): THREE.MeshDepthMaterial {
   const cached = mesh.userData.xfsFullSkinDepth as THREE.MeshDepthMaterial | undefined;
-  if (cached) return cached;
+  // A cloned mesh carries a JSON copy of its user data (Object3D.copy), never the material itself.
+  if (cached?.isMaterial) return cached;
   const sets = skinSets(mesh.geometry);
   let sum = "mat4 fullSkin = mat4(0.0);\n";
   for (const { j, w } of sets) for (const c of ["x", "y", "z", "w"]) sum += `fullSkin += getBoneMatrix(${j}.${c}) * ${w}.${c};\n`;
@@ -170,4 +171,17 @@ export function fullSkinDepthMaterial(mesh: THREE.SkinnedMesh, options: { strand
   material.customProgramCacheKey = () => `full-skin-depth-${sets.length}-${options.strandAlpha ? "strand" : "solid"}`;
   mesh.userData.xfsFullSkinDepth = material;
   return material;
+}
+/**
+ * Free the full-skin depth material `fullSkinDepthMaterial` made for `mesh` (the mesh owns it: one per mesh). Whoever releases the mesh
+ * calls this with its geometry and skeleton; the program Three built for it is released with the material, so a renderer that outlives
+ * the mesh keeps nothing of it (experiments/043-scene-runtimes). Safe to call on any mesh, and more than once.
+ */
+export function releaseFullSkinDepth(mesh: THREE.Object3D): void {
+  const material = mesh.userData.xfsFullSkinDepth as THREE.MeshDepthMaterial | undefined;
+  if (!material) return;
+  if (mesh.customDepthMaterial === material) mesh.customDepthMaterial = undefined;
+  delete mesh.userData.xfsFullSkinDepth;
+  // A cloned mesh's user data is a JSON copy (Object3D.copy), never a material of its own.
+  if (material.isMaterial) material.dispose();
 }

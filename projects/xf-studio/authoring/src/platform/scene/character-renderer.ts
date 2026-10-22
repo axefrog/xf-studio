@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { copyMaterialShading, extendSkin, fullSkinDepthMaterial } from "../../materials/render/skin";
+import { copyMaterialShading, extendSkin, fullSkinDepthMaterial, releaseFullSkinDepth } from "../../materials/render/skin";
 import { EYE_AMBIENT_BOOST, EYE_AXIS_TURN, EYE_FLAT_ROUGHNESS, IRIS_MASK_ENCODING } from "../../materials/render/eye-material";
 import type { ProfileEncoding } from "../../materials/hair-colour-model";
 import { prepareTemplateGeometry, type AdapterContext, type ResolvedSkinSurface } from "../../materials/render/character-material-adapters";
@@ -573,7 +573,8 @@ export function createCharacterRenderer(input: {
     setCharacterDetails,
     prepareDetails,
     /** Release the V and every kept part (the scene is going away). */
-    dispose() { setCharacterDetails(null); pool.clear(); },
+    // The core head's depth material is this renderer's (made above); the head itself goes with its core.
+    dispose() { setCharacterDetails(null); pool.clear(); releaseFullSkinDepth(head); },
     /** How many parts are kept for later (developer evidence). */
     keptParts: () => pool.size,
     /** Release the parts kept for later (another V is being shown). */

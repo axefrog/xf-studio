@@ -8,7 +8,7 @@ import { CPU_READ_SIZE, hasReducedImage, materialAdapter, setReducedImage, textu
 import { CHARACTER_DETAIL_ASSETS, chunkOfMesh, DETAIL_SLOTS, parseCharacterDetail, RECORD_LIMITS, type CharacterDetail, type DetailSlot, type RenderComponent,
   type RenderResource, type RenderTexture, UNCOVERED_BODY, withdrawUncoveredBody } from "../render-detail";
 import { renderTemplate } from "../../materials/render-templates";
-import { restoreFirstWeights } from "../../materials/render/skin";
+import { releaseFullSkinDepth, restoreFirstWeights } from "../../materials/render/skin";
 import type { DetailLimit } from "../detail-limits";
 import { prepareEyeballGeometry, type EyeballHandle, type EyeShellHandle } from "../../materials/render/eye-material";
 import type { FaceDecalHandle } from "../../materials/render/face-decal-material";
@@ -127,6 +127,8 @@ export function releaseDetailObject(root: THREE.Object3D, keep?: ReadonlySet<THR
   root.traverse(object => {
     if (object instanceof THREE.Mesh && !keep?.has(object.geometry)) object.geometry.dispose();
     if (object instanceof THREE.SkinnedMesh) object.skeleton?.dispose();
+    // A shadow-casting part's full-skin depth material is the mesh's own (the character renderer makes it when the part is prepared).
+    releaseFullSkinDepth(object);
   });
 }
 /**

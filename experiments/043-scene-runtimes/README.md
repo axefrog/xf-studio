@@ -145,31 +145,45 @@ Each real-data run uses an isolated server and scratch caches, as S2 did: never 
 - **The core head goes with its host.** `coreDisposer` (`character/render/core-detail-loader.ts`) captures, at load, every geometry, material, texture and skeleton of the core's glTF scene, plus its record's textures. The host frees them in its release list. The failure path in the loader uses the same function.
 - The rig frees the head's skin material, and the skinned eye copy the game idle makes for gaze (its geometry and skeleton) (`platform/scene/head-rig.ts`).
 - **The makeup stack's geometry waits for its anchor.** It draws over the plate anchor's index and attributes, and the anchor is never drawn (PREV-97), so those buffers were uploaded through the stack's geometry. Three frees an attribute's buffer only when a geometry it drew is disposed. The stack used to strip the shared attributes before disposing, which left the anchor's buffers on the renderer for good. Now its geometry is disposed whole when the anchor's geometry is (`engines/layered-makeup/render/makeup-stack.ts`).
+- **Full-skin shadow depth materials have an owner** (after Sol's review). The character renderer makes one per shadow-casting skinned mesh (`fullSkinDepthMaterial`, `materials/render/skin.ts`), after the core disposer has captured the core's materials, and nothing disposed them. Each one kept its program's use count up, and a different variant kept a program of its own. The mesh owns its material: `releaseFullSkinDepth` frees it with the mesh. The detail loader's `releaseDetailObject` calls it for every released part, and the character renderer's `dispose` calls it for the core head. A JSON copy left in a cloned mesh's user data is never taken for the material.
 - The studio environment's prefilter also disposes the room's instanced boxes. Three's `RoomEnvironment.dispose()` frees the geometry and materials but not the instance-matrix buffer, so one buffer was left per prefilter and per context restore (`preview/render/studio-environment.ts`).
 
 **The counter and the gate.**
 
 - `tests/webgl-gl-objects.ts` wraps a WebGL 2 context's `create*`/`delete*` calls and counts live textures, buffers, framebuffers, renderbuffers, programs, shaders, vertex arrays, queries, samplers and syncs. With `stacks` it records the call stack that made each object, so a leak can be traced to its maker.
 - `tests/webgl-scene-dispose.test.ts` (page `tests/webgl-scene-dispose-probe-page.ts`) builds the real host five times on one renderer it doesn't own. Each cycle uses the synthetic head (`tests/webgl-synthetic-head.ts`, now shared with the scene-host probe) and the composition's renderers. It shows a synthetic V with two makeup layers, draws under the creator rig (shadows, scatter, grading) and a studio setup (the room environment), plays the idle, then disposes the host as it is.
-- The first disposal may leave only what lives as long as the renderer (the test's `RENDERER_LIFETIME`). Every later disposal must leave exactly what the first did. It runs as a release oracle, like the other WebGL probes (`XFS_REQUIRE_ORACLES=1`). Headless Chrome on a synthetic head peaked at 1.2 GB under the 3 GB guard, in about 60 s.
+- **The program check** (after Sol's review). Object counts alone miss a material that outlives its scene when an identical program means nothing new is made: the program stays, with a higher use count. So the probe also reads `renderer.info.programs`: each program's name, use count and a hash of its cache key. Odd cycles show a head with two skin influence sets, so their skin and full-skin depth programs differ from the even cycles' (the test checks that they do).
+- The first disposal may leave only what lives as long as the renderer (the test's `RENDERER_LIFETIME`), down to the one program and its use count. Every later disposal must leave exactly what the first did: the same objects, programs and use counts. A scene shown again must cost what the same variant cost before.
+- It runs as a release oracle, like the other WebGL probes (`XFS_REQUIRE_ORACLES=1`). Headless Chrome on a synthetic head peaked at 1.2 GB under the 3 GB guard. It ran in 60–120 s depending on the machine's load, so the page timeout is 240 s.
 
 **Counts after each disposal, minus the empty renderer's** (RTX 4070, ANGLE D3D11):
 
 | After cycle | Before (main) | After 4a-i |
 |---|---|---|
-| 1 | 10 textures, 23 buffers, 3 programs, 3 vertex arrays | 3 textures, 3 buffers, 2 programs, 1 vertex array |
-| 2 | 17, 43, 3, 5 | 3, 3, 2, 1 |
-| 5 | 38, 103, 3, 11 | 3, 3, 2, 1 |
+| 1 | 10 textures, 23 buffers, 3 programs, 3 vertex arrays | 3 textures, 3 buffers, 1 program, 1 vertex array |
+| 2 | 17, 43, 3, 5 | 3, 3, 1, 1 |
+| 5 | 38, 103, 3, 11 | 3, 3, 1, 1 |
 | Growth per cycle | +7 textures, +20 buffers, +2 vertex arrays (Three: +2 geometries, +7 textures) | none |
+
+**Programs left after each disposal, with the alternating heads**, measured after the first review fixes, before the depth-material fix:
+
+| After cycle (influence sets) | Before | After |
+|---|---|---|
+| 1 (1) | `BackgroundMaterial` ×1; full-skin depth ×1 | `BackgroundMaterial` ×1 |
+| 2 (2) | plus the second variant's full-skin depth ×1 | `BackgroundMaterial` ×1 |
+| 5 (1) | full-skin depth ×3 and ×2 | `BackgroundMaterial` ×1 |
 
 Before the fix, per cycle, the leaks traced to:
 
 - the core head's four textures and its geometries;
 - the skeletons' bone textures (two);
 - the plate anchor's six buffers held through the makeup stack;
-- the room environment's instance buffer.
+- the room environment's instance buffer;
+- the full-skin shadow depth materials and their programs.
 
-What stays after the first cycle is shared by every later scene and freed only with the renderer. Three owns most of it: its DFG lookup texture, its shadow pass's depth program, and the background plane it draws a textured scene background with (three buffers, one vertex array, one program). The layered-makeup engine owns the rest: its 1×1 blank textures, shared on purpose (`plate-composite.ts`).
+The first gate missed the last one: its program kept the same count of GL objects, and the gate wrongly listed it as Three's own shadow program.
+
+What stays after the first cycle is shared by every later scene and freed only with the renderer. Three owns most of it: its DFG lookup texture and the background plane it draws a textured scene background with (three buffers, one vertex array, one program). The layered-makeup engine owns the rest: its 1×1 blank textures, shared on purpose (`plate-composite.ts`).
 
 **Not covered yet.**
 

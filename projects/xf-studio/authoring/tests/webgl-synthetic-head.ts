@@ -47,8 +47,8 @@ export async function png(colour: string): Promise<Uint8Array> {
   return new Uint8Array(await (await canvas.convertToBlob({ type: "image/png" })).arrayBuffer());
 }
 
-/** A skinned mesh on one bone with the facial target the head carries. */
-function skinned(positions: number[], name: string): THREE.SkinnedMesh {
+/** A skinned mesh on one bone with the facial target the head carries; `sets` influence sets of four (the game's heads carry two). */
+function skinned(positions: number[], name: string, sets = 1): THREE.SkinnedMesh {
   const geometry = new THREE.BufferGeometry();
   const count = positions.length / 3;
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
@@ -56,6 +56,11 @@ function skinned(positions: number[], name: string): THREE.SkinnedMesh {
   geometry.setAttribute("uv", new THREE.Float32BufferAttribute(headUvs(count), 2));
   geometry.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(new Uint16Array(count * 4), 4));
   geometry.setAttribute("skinWeight", new THREE.Float32BufferAttribute(Array.from({ length: count }, () => [1, 0, 0, 0]).flat(), 4));
+  // Further sets as the core loader leaves them (`joints_n`/`weights_n`, all weight on the first set), read by skin.ts `skinSets`.
+  for (let n = 1; n < sets; n++) {
+    geometry.setAttribute(`joints_${n}`, new THREE.Uint16BufferAttribute(new Uint16Array(count * 4), 4));
+    geometry.setAttribute(`weights_${n}`, new THREE.Float32BufferAttribute(new Float32Array(count * 4), 4));
+  }
   geometry.setIndex(quadIndices(count));
   const morph = new THREE.Float32BufferAttribute(new Float32Array(count * 3), 3);
   morph.name = "h001_eyes";
@@ -66,12 +71,16 @@ function skinned(positions: number[], name: string): THREE.SkinnedMesh {
   return mesh;
 }
 
-/** The synthetic core head: head and plate share the head's quads (the plate is a head cut), and a rigid eye. */
-export function syntheticCore(): LoadedCoreDetail {
+/**
+ * The synthetic core head: head and plate share the head's quads (the plate is a head cut), and a rigid eye. `influenceSets` (default 1)
+ * gives the head and plate more skin influence sets, which changes their programs (the skin extension and the full-skin shadow depth).
+ */
+export function syntheticCore(options: { influenceSets?: number } = {}): LoadedCoreDetail {
   const root = new THREE.Group(), bone = new THREE.Bone();
   bone.name = "Head";
   root.add(bone);
-  const head = skinned(QUADS.flat(), "head"), plate = skinned(QUADS.flat(), "plate");
+  const sets = options.influenceSets ?? 1;
+  const head = skinned(QUADS.flat(), "head", sets), plate = skinned(QUADS.flat(), "plate", sets);
   for (const mesh of [head, plate]) { root.add(mesh); mesh.bind(new THREE.Skeleton([bone])); mesh.frustumCulled = false; }
   const eyes = new THREE.Mesh(new THREE.SphereGeometry(0.01, 8, 6), new THREE.MeshStandardMaterial());
   eyes.name = "eyes"; eyes.position.set(0.05, 1.62, -0.01);
