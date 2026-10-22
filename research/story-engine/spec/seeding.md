@@ -2806,9 +2806,7 @@ beats:
                            { because: offer-2, on: { response: offer-2, is: [action:stay] } },
                            { because: offer-3, on: { response: offer-3, is: [action:stay] } },
                            { obstructedBy: exit-decline }, { obstructedBy: exit-lapse } ] }
-  exit-lapse:   { kind: exit, play: pack:qh-exit-lapse, leaves: [ { fact: exit, set: 3 } ],
-                  needs: { all: [ { since: { beat: offer-1 }, atLeast: { clock: game, s: 1209600 } },
-                                  { count: { kind: shared-activity, participant: takemura }, since: { beat: offer-1 }, op: eq, value: 0 } ] },
+  exit-lapse:   { kind: exit, play: pack:qh-exit-lapse, leaves: [ { fact: exit, set: 3 } ],      # its fragment's needs: see below
                   links: [ { obstructedBy: exit-decline }, { obstructedBy: exit-stay } ] }
   intimate:     { play: { alternates: [ pack:qh-intimate-scene, pack:qh-intimate-fade ] },
                   links: [ { because: offer-3, on: { seedFact: rung, op: eq, value: 3 } } ] }
@@ -2816,6 +2814,13 @@ end: { any: [ { all: [ { seedFact: rung, op: eq, value: 3 }, { beat: intimate, s
               { seedFact: exit, op: gt, value: 0 } ] }
 unattended: { after: { clock: game, s: 1209600 }, outcome: [ { fact: exit, set: 3 } ] }
 closing: pack:quiet-hour-closing
+```
+
+**The lapse exit's fragment.** `pack:qh-exit-lapse` carries:
+
+```yaml
+needs: { all: [ { since: { beat: offer-1 }, atLeast: { clock: game, s: 1209600 } },
+                { count: { kind: shared-activity, participant: takemura }, since: { beat: offer-1 }, op: eq, value: 0 } ] }
 ```
 
 **Each offer fragment** `pack:qh-offer-<rung>` has the `OfferSpec`:
