@@ -1852,6 +1852,138 @@ Joshua Epstein, [“Modeling civil violence: an agent-based computational approa
 
 Y. Duan and A. Ganesh, [“The proportion of the population never hearing a rumour”](https://arxiv.org/abs/2002.06821) (*Queueing Systems*, 2021). It restates the classic result that, in the Maki-Thompson rumour model, about a fifth of a large population never hears the rumour, and extends the analysis. It informed the reach we expect a rumour to have in a district.
 
+### Centola, Willer and Macy (2005)
+
+Damon Centola, Robb Willer and Michael Macy, [“The emperor's dilemma: a computational model of self-enforcing norms”](https://ndg.asc.upenn.edu/wp-content/uploads/2016/04/Centola-et-al-2005-AJS.pdf) (*American Journal of Sociology*, 2005). In their model, a norm that most people privately oppose could not take hold in a fully connected network. It could emerge and spread where people see only their neighbours, and more believers or more long-range ties made that less likely, not more. It informed the conditions under which we let an unpopular local norm hold in a district.
+
+### Liben-Nowell and colleagues (2005)
+
+David Liben-Nowell, Jasmine Novak, Ravi Kumar, Prabhakar Raghavan and Andrew Tomkins, [“Geographic routing in social networks”](https://pmc.ncbi.nlm.nih.gov/articles/PMC1187977) (*Proceedings of the National Academy of Sciences*, 2005). In a large blogging community, the chance that two people were friends fell with the number of people living closer to them, not with raw distance. About a third of friendships had nothing to do with geography. It informed how we weight nearness when we generate who knows whom.
+
+### Jøsang and Ismail (2002)
+
+Audun Jøsang and Roslan Ismail, [“The Beta Reputation System”](https://mn.uio.no/ifi/english/people/aca/josang/publications/ji2002-bled.pdf) (Bled Electronic Commerce Conference, 2002). It builds a reputation from counts of good and bad feedback, gives less weight to feedback from poorly regarded raters, and lets old feedback fade at an adjustable rate. It informed how we keep a running reputation from counted evidence.
+
+### Leeson (2007)
+
+Peter T. Leeson, [“An-arrgh-chy: the law and economics of pirate organization”](https://www.mercatus.org/hayekprogram/research/journal-articles/arrgh-chy-law-and-economics-pirate-organization) (*Journal of Political Economy*, 2007). Pirate crews had no courts, yet they limited their captains through crew oversight and kept order under a constitution the crew agreed. It informed how we think about order inside a criminal outfit that cannot call on the law.
+
+### Blattman and colleagues (2024)
+
+Christopher Blattman, Gustavo Duncan, Benjamin Lessing and Santiago Tobón, [“Gang rule: understanding and countering criminal governance”](https://www.restud.com/gang-rule-understanding-and-countering-criminal-governance/) (*The Review of Economic Studies*, 2024). In Medellín, gangs on blocks closer to state security forces came to govern more over time, mostly where drug profits were highest. State presence and gang rule can therefore reinforce each other. It informed how we treat policing and local gang order as linked, not as opposites.
+
+### Magaloni, Franco-Vivanco and Melo (2020)
+
+Beatriz Magaloni, Edgar Franco-Vivanco and Vanessa Melo, [“Killing in the slums: social order, criminal governance, and police violence in Rio de Janeiro”](https://ideas.repec.org/a/cup/apsrev/v114y2020i2p552-572_17.html) (*American Political Science Review*, 2020). Criminal regimes differ in whether they confront or collude with the state, abuse or cooperate with residents, and hold territory alone or contested. Police crackdowns had different results under each. It informed the kinds of criminal order we vary between districts.
+
+### Lessing and Denyer Willis (2019)
+
+Benjamin Lessing and Graham Denyer Willis, [“Legitimacy in criminal governance: managing a drug empire from behind bars”](https://www.cambridge.org/core/services/aop-cambridge-core/content/view/S0003055418000928) (*American Political Science Review*, 2019). A Brazilian prison gang kept detailed records and punished mostly without violence, building a legitimacy that made mild sanctions effective. It informed how we make criminal sanctions procedural and usually mild.
+
+### Skarbek (2011)
+
+David Skarbek, [“Governance and prison gangs”](https://ideas.repec.org/a/cup/apsrev/v105y2011i04p702-716_00.html) (*American Political Science Review*, 2011). A prison gang with leverage over street dealers had a reason to provide institutions that enforce deals and settle disputes among those it taxed. It informed why a criminal outfit that takes a cut has a reason to keep order.
+
+### Calderón and colleagues (2015)
+
+Gabriela Calderón, Gustavo Robles, Alberto Díaz-Cayeros and Beatriz Magaloni, [“The beheading of criminal organizations and the dynamics of violence in Mexico”](https://doi.org/10.1177/0022002715587053) (*Journal of Conflict Resolution*, 2015). Arresting or killing cartel leaders raised both cartel-related violence and killings of the wider population. The cartel-related rise came mostly in the first six months, and the rise in general homicide lasted longer. It informed how we treat the removal of a boss as a source of lasting disorder.
+
+### Kirk and Papachristos (2011)
+
+David S. Kirk and Andrew V. Papachristos, [“The structural and cultural dynamics of neighborhood violence”](https://ojp.gov/ncjrs/virtual-library/abstracts/structural-and-cultural-dynamics-neighborhood-violence) (National Institute of Justice report, 2011), published in journal form as “Cultural mechanisms and the persistence of neighborhood violence” (*American Journal of Sociology*, 2011). Legal cynicism, a view that the law is illegitimate and unresponsive, affected violence in the short and long term and weakened a neighbourhood's collective efficacy. Tolerant attitudes to violence mattered little. It informed how we let distrust of the law persist in a district.
+
+### Edwards and Ogilvie (2008)
+
+Jeremy Edwards and Sheilagh Ogilvie, [“Contract enforcement, institutions and social capital: the Maghribi traders reappraised”](https://web.stanford.edu/~avner/Greif_Papers/2008_Edwards&Ogilvie_The_Maghribi_Traders_Reappraised_CESifo_2254.pdf) (CESifo working paper, 2008). They dispute Avner Greif's account of medieval Maghribi traders as a closed coalition enforcing contracts by reputation alone, noting that the traders also used formal courts and worked with outsiders. Greif's own paper is “Contract enforceability and economic institutions in early trade: the Maghribi traders' coalition” (*American Economic Review*, 1993). Together they taught us that a reputation mechanism can enforce agency without courts, and that the evidence for it is contested.
+
+### Gambetta (2009)
+
+Diego Gambetta, [*Codes of the Underworld: How Criminals Communicate*](https://press.princeton.edu/books/paperback/9780691152479/codes-of-the-underworld) (Princeton University Press, 2009). Criminals cannot advertise or rely on courts, so they lean on signals that are hard to fake, such as tattoos, nicknames and shared costly acts. It informed the kinds of trust signals we let characters in the underworld read.
+
+### Burt (2004)
+
+Ronald S. Burt, [“Structural holes and good ideas”](https://www.journals.uchicago.edu/doi/10.1086/421787) (*American Journal of Sociology*, 2004). In a large company, people whose ties span gaps between otherwise separate circles were more likely to voice ideas, and those ideas were more likely to be judged valuable. They were also better paid and promoted faster. It informed how we reward a go-between who holds ties across separate circles.
+
+### Kossinets and Watts (2006)
+
+Gueorgi Kossinets and Duncan J. Watts, [“Empirical analysis of an evolving social network”](https://doi.org/10.1126/science.1116869) (*Science*, 2006). In a year of university e-mail, new ties formed mostly through shared activities and affiliations, shared attributes and closing short cycles of existing ties. It informed how we choose which acquaintances form over time.
+
+### Hoff, Raftery and Handcock (2002)
+
+Peter D. Hoff, Adrian E. Raftery and Mark S. Handcock, [“Latent space approaches to social network analysis”](https://scholars.duke.edu/publication/1439538) (*Journal of the American Statistical Association*, 2002). The chance of a tie between two people can be modelled as a function of their positions in an unobserved social space. It informed how we generate ties from positions in a shared space.
+
+### Mueller and Axhausen (2011)
+
+Kirill Mueller and Kay W. Axhausen, [“Hierarchical IPF: generating a synthetic population for Switzerland”](https://ideas.repec.org/p/wiw/wiwrsa/ersa11p305.html) (European Regional Science Association conference paper, 2011). Plain iterative proportional fitting cannot match person and household totals at once. Their method fits both levels together. It informed how we plan to build a synthetic population that matches totals for people and for households.
+
+### Stiller and Dunbar (2007)
+
+James Stiller and Robin I. M. Dunbar, [“Perspective-taking and memory capacity predict social network size”](https://irep.ntu.ac.uk/id/eprint/13877) (*Social Networks*, 2007). The size of a person's innermost circle of close friends tracked their skill at reasoning about others' minds, while the size of the wider circle of frequent contacts tracked memory performance. It informed the sizes we allow for different layers of a person's acquaintances.
+
+### Sommerfeld and colleagues (2007)
+
+Ralf D. Sommerfeld, Hans-Jürgen Krambeck, Dirk Semmann and Manfred Milinski, [“Gossip as an alternative for direct observation in games of indirect reciprocity”](https://pmc.ncbi.nlm.nih.gov/articles/PMC2077274) (*Proceedings of the National Academy of Sciences*, 2007). In a lab game, players acted on gossip even when they could see the original behaviour, and they cooperated more after positive gossip than after negative. The authors warn that gossip can be used to manipulate reputations. It informed how strongly we let reported reputation drive behaviour.
+
+### Leimar and Hammerstein (2001)
+
+Olof Leimar and Peter Hammerstein, [“Evolution of cooperation through indirect reciprocity”](https://pmc.ncbi.nlm.nih.gov/articles/PMC1088665) (*Proceedings of the Royal Society B*, 2001). In their model, a strategy based on a partner's good standing usually did better than one based on a running image score. It informed how we judge a person's reputation.
+
+### Feinberg and colleagues (2012)
+
+Matthew Feinberg, Robb Willer, Jennifer Stellar and Dacher Keltner, [“The virtues of gossip: reputational information sharing as prosocial behavior”](https://sociology.stanford.edu/publications/virtues-gossip-reputational-information-sharing-prosocial-behavior) (*Journal of Personality and Social Psychology*, 2012). People who saw an antisocial act wanted to warn others, and warning them eased their distress. Such gossip also discouraged selfish behaviour. It informed why we let people pass on warnings about others.
+
+### Bohnet and Zeckhauser (2004)
+
+Iris Bohnet and Richard Zeckhauser, [“Trust, risk and betrayal”](https://irisbohnet.scholars.harvard.edu/publications/trust-risk-and-betrayal) (*Journal of Economic Behavior & Organization*, 2004). People wanted better odds before trusting a stranger than before taking an equal risk decided by chance. It informed how much more we weigh a betrayal by a person than a loss from bad luck.
+
+### Kuran (1989)
+
+Timur Kuran, [“Sparks and prairie fires: a theory of unanticipated political revolution”](https://link.springer.com/article/10.1007/BF00116762) (*Public Choice*, 1989). People who dislike a regime hide it while opposition looks weak, so a small rise in visible opposition can bring a secure-looking order down quickly. It informed how we model sudden collapse of an order that looked stable.
+
+### Williamson (1983)
+
+Oliver E. Williamson, [“Credible commitments: using hostages to support exchange”](https://ideas.repec.org/a/aea/aecrev/v73y1983i4p519-40.html) (*American Economic Review*, 1983). Parties who fear being cheated can trade more safely when one side holds something it would hurt to lose, a hostage, that is hard to reverse. It informed the guarantees we let characters hold over one another in deals.
+
+### Eisenhardt (1989)
+
+Kathleen M. Eisenhardt, [“Agency theory: an assessment and review”](https://doi.org/10.2307/258191) (*Academy of Management Review*, 1989). Her review of agency theory covers how information systems, uncertainty over outcomes, incentives and risk shape the control of a person acting for another. It informed how we model a principal's controls over an agent.
+
+### Fehr and Gächter (2002)
+
+Ernst Fehr and Simon Gächter, [“Altruistic punishment in humans”](https://www.nature.com/articles/415137a) (*Nature*, 2002). In experiments, cooperation flourished where people could punish defectors at a cost to themselves, and broke down where they could not. It informed why we let some characters enforce a norm at their own expense.
+
+### Axelrod (1986)
+
+Robert Axelrod, [“An evolutionary approach to norms”](https://ideas.repec.org/a/cup/apsrev/v80y1986i04p1095-1111_18.html) (*American Political Science Review*, 1986). His simulations showed the conditions under which norms evolve and stay stable, and that punishing people who fail to punish (a metanorm) can help. It informed how we let enforcement of a norm be itself enforced.
+
+### Fiske, Cuddy and Glick (2007)
+
+Susan T. Fiske, Amy J. C. Cuddy and Peter Glick, [“Universal dimensions of social cognition: warmth and competence”](https://collaborate.princeton.edu/en/publications/universal-dimensions-of-social-cognition-warmth-and-competence/) (*Trends in Cognitive Sciences*, 2007). People judge others on warmth, meaning friendly or hostile intent, and on competence, meaning the ability to act on it. Mixed judgements draw mixed feelings and behaviour. It informed the two dimensions we use to describe how one person is judged by another.
+
+### Wilson (1968)
+
+James Q. Wilson, [*Varieties of Police Behavior: The Management of Law and Order in Eight Communities*](https://www.degruyterbrill.com/document/doi/10.4159/9780674045200/html) (Harvard University Press, 1968). Departments policed in watchman, legalistic or service styles tied to local politics, and the lowest-ranking officer held wide discretion over the vaguest laws. It informed how we vary policing from district to district.
+
+### Tyler (2006)
+
+Tom R. Tyler, [*Why People Obey the Law*](https://www.degruyterbrill.com/document/doi/10.1515/9781400828609/html) (Princeton University Press, 2006 edition). People comply with the law mainly because they see it as legitimate, not because they fear punishment. It informed how much of compliance we tie to perceived legitimacy and how much to fear.
+
+### Kempa, Stenning and Wood (2004)
+
+Michael Kempa, Philip Stenning and Jennifer Wood, [“Policing communal spaces: a reconfiguration of the ‘mass private property’ hypothesis”](https://researchportalplus.anu.edu.au/en/publications/policing-communal-spaces-a-reconfiguration-of-the-mass-private-pr/) (*British Journal of Criminology*, 2004). They extend Clifford Shearing and Stenning's idea that privately owned spaces open to the public bring private security and private order, and argue that it is one case of a wider return of communal space. It informed how we give malls and other private spaces their own order.
+
+### Reuter (1983)
+
+Peter Reuter, [*Disorganized Crime: The Economics of the Visible Hand*](https://ci.nii.ac.jp/ncid/BA00256289?l=en) (MIT Press, 1983). He found the big illegal markets he studied were filled with small, marginal and short-lived firms, because suppressing competition was too costly. It informed how often we let small criminal outfits come and go.
+
+### Palmer (2019)
+
+Lindsay Palmer, [*The Fixers: Local News Workers and the Underground Labor of International Reporting*](https://blog.oup.com/2019/08/the-international-reporting-you-never-see/) (Oxford University Press, 2019). Fixers are local workers who help visiting reporters with language, terrain and hard-to-reach sources. Their work is often risky and goes uncredited. It informed how we write the go-between who arranges work for outsiders.
+
+### Papachristos, Hureau and Braga (2013)
+
+Andrew V. Papachristos, David M. Hureau and Anthony A. Braga, [“The corner and the crew: the influence of geography and social networks on gang violence”](https://doi.org/10.1177/0003122413486800) (*American Sociological Review*, 2013). In Chicago and Boston, gangs with adjacent turf and a history of conflict were likely to fight again, and reciprocity and status seeking added to it. It informed what we use to predict which rivals clash.
+
 ## Reference imagery
 
 ### Jewellery form and fit references

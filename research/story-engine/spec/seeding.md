@@ -4,6 +4,7 @@
 - **The review.** v0.2 went through one review, by GPT-6 Astra; [§16](#16-review-record) records what changed.
 - **Dossiers folded in.**
   - v0.1 folded in [dossier 8](../craft/d08-scale-threads-time.md#9-requirements-for-the-seed-language-p4) (scale, threads and time).
+  - v0.8 folds in [dossier 15](../craft/d15-people-networks-order.md) (people, networks, norms and order): social reads, casting through ties, betrayal and norm seeds, reputation through behaviour (§2.17).
   - v0.7 folds in [dossier 14](../craft/d14-city-events.md) (where and when things happen in the city): city reads, hot-state windows, and the limits on the director over city events (§2.16).
   - v0.6 folds in [dossier 13](../craft/d13-perception-curiosity.md) (perception, memory and curiosity): three exposure grades and the display contract, re-cued callbacks, `mustReach`, hooks and twists, counter-cues, channel modality.
   - v0.5 folds in [dossier 12](../craft/d12-player-model-trust.md) (the player model, trust and manipulation): the model's boundary (§8.8), bounded hooks, offers frozen at display, a "why this?" record, and the `believes` firewall.
@@ -331,6 +332,7 @@ type Pred =
   | { setting: SettingKey; is: string[] }                    // a player setting (S4)
   | { believes: { who: RoleKey; of: RoleKey | Id | 'v'; path: SlotPath; is?: Region; atLeast?: number } }   // an NPC's own belief
   | { city: CityRead; is: string[] }                         // the simulation's coarse state (§2.16)
+  | { social: SocialRead; is: string[] }                     // people, ties, reputation and order (§2.17)
   | { fn: FnRef; args: unknown[]; reads: FactRead[] }        // a registry predicate; `reads` lists its dependencies
   | 'yes' | 'no';
 
@@ -808,6 +810,56 @@ S1 exposes these as pins and process state. **No atom exposes a heat number.** A
 **One carrier schema.** City events that leave marks declare carriers and durations in the same schema as `cosmetic` effects (§2.5). A city trace and a seed trace are re-realised by the same rule after a load.
 
 **The return view for districts.** On first entering a district V knows after a long absence, the return view (§8.7) offers at most three changes there. They are drawn from the district's event ring and the beliefs held in it, and name events and acts, never feelings.
+
+### 2.17 People, order and reputation as material
+
+S1's people, ties, norms and order ([dossier 15](../craft/d15-people-networks-order.md)) reach seeds through coarse reads, never raw numbers:
+
+```ts
+type SocialRead =
+  | { label: { audience: RoleKey | Id; subject: RoleKey | Id | 'v'; axis: string } }   // a reputation band, from S0's aggregate
+  | { bridge: { who: RoleKey | Id } }               // how much a person brokers between groups
+  | { normGap: { norm: Id; scope: RoleKey | Id } }   // the gap between private and perceived support
+  | { contract: { id: Id } }                        // due, at-risk or broken
+  | { tied: { a: RoleKey | Id; b: RoleKey | Id; type: EdgeTypeId } }
+  | { divergence: { believer: RoleKey; subject: RoleKey | Id } };   // how far a belief is from the truth, banded
+```
+
+A `social` atom is `maybe` until S1 has a reading for it.
+
+**Casting through ties.** A role MAY require a relation to another role, through `must` predicates with `has-edge`:
+- an acquaintance of another role;
+- membership of the same focus (a crew, a workplace, a bar's regulars);
+- or brokerage between two named groups.
+
+With S0's implicit edge types, the query tests unopened ties exactly. Until they are implemented, casting first opens a bounded candidate set among the people sharing the named focus. The fit report lists the foci used, and for a fixer, the position that explains the fixer's offer ("why this fixer").
+
+**Stage types.** These are stage kinds in job-shaped profiles:
+- an offer between strangers includes a **signal** stage;
+- **collateral** and **mutual-secret** stages bind trust.
+
+Street cred stays a mirrored game fact.
+
+**Betrayal is a declared seed.** A seed that turns someone against an ally or employer declares its required causes:
+- a dilemma;
+- an offer or a threat;
+- a visible failure.
+
+It counts against S1's betrayal budget. It never targets a cast another live seed holds without that seed's consent (§9). No S1 process turns an ally against V; a group's grudge against V is a belief that may raise an offer (§2.16). Delay, fake compliance and quiet exit are the usual outcomes, so they are the defaults a turn seed's variants should cover.
+
+**Norms and public acts.** Windows may open on a norm's gap band, or on a change of regime. "Make it public" is a stage type: the same act done publicly can end a norm in one step, while done privately it changes nothing. Seeds may cast informer and witness roles. Every such offer has a decline path (§2.9) and honours the content floors (dossier 18).
+
+**Keep belief nesting readable.** The lint computes the depth of nested beliefs a seed's beats rely on ("the broker thinks the buyer thinks V is loyal") and warns above 4 (L-71). A beat that claims to turn on a divergence names it.
+
+**Reputation shows through behaviour.** A label reaches V through:
+- prices;
+- greetings;
+- access;
+- a witness's remark after several recorded acts.
+
+It never appears as a meter or a label on screen (L-59 applies).
+
+**Content dials.** Violence against residents, informing and sanction severity are player settings (S0 `SettingsSet.content`), read as lenses. A ladder caps its top rung from them. Dossier 18 sets the limits no setting can override.
 
 ## 3. Compiling
 
@@ -1666,6 +1718,7 @@ The lint runs at compile time (§3.1), and on demand from authoring tools (S4, P
 | L-68 | More than one surprise beat per gig | warning |
 | L-69 | Text over its channel's word budget, or a pulled thread whose first line doesn't carry the premise | warning |
 | L-70 | A beat in a gig or arc that declares neither `instability` nor `tension` | warning |
+| L-71 | Beats relying on beliefs nested more than 4 deep | warning |
 | L-33 (extended) | A `turns[].what` reading anything of V's but beliefs held about V and V's recorded acts | error |
 
 L-25 and L-40 were removed in v0.2 (§16). Their numbers are not reused.
@@ -1890,6 +1943,7 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 11. **Dossier 12.** v0.5 adopts all 14 of its S2 requirements (§8.8). Its P5 list (22 requirements: the model as a fold over canon offers, the eight replay checks, the noticed page) goes to S3.
 12. **Dossier 13.** v0.6 adopts all 15 of its S2 requirements. Its P5 list goes to S3; its P9 list (19 metrics) goes to P9. Its persistence rule stands: layer 2 keeps grades, channels, classes, cue ids, `playTotal` and `shownBeforeEffect`, and never raw test values, gaze, camera, speed, dwell or idle data.
 13. **Dossier 14.** v0.7 adopts its S2 requirements (§2.16). Its 27 S1 requirements define much of the simulation layer and wait for P3. Its sifter-input volume goes to S3, its metrics M14-01 to M14-24 to P9, and its district inspector to P10. Its in-game session card starts by measuring the game-time ratio, which every S1 time constant depends on.
+14. **Dossier 15.** v0.8 adopts its S2 requirements (§2.17). Its kernel requirements are S0 v4.3 (implicit edge types, deferred; the `aggregate` contract). Its S1 policies wait for P3; its metrics go to P9 and its inspectors to P10.
 
 ## 16. Review record
 

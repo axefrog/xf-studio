@@ -1,6 +1,7 @@
 # S0. Kernel specification
 
-**Status:** v4.2, 23 October 2026.
+**Status:** v4.3, 23 October 2026.
+- v4.3 adds implicit edge types (specified; implementation deferred) and states the `aggregate` hook's contract, from [dossier 15](../craft/d15-people-networks-order.md) (V4-18 to V4-20 in §20).
 - v4.2 adds city settings and clarifies arithmetic and summaries for simulated events, from [dossier 14](../craft/d14-city-events.md) (V4-14 to V4-17 in §20).
 - v4.1 added memory and forgetting from [dossier 11](../craft/d11-saves-memory-forgetting.md) (V4-8 to V4-13). v3.1 was final for the first implementation and adopted the reference model's 57 accepted implementation notes ([§19](#19-decisions-adopted-from-the-reference-model)). v4 adds what the seeding layer ([S2](seeding.md)) and the sifting research ([dossier 6](../craft/d06-sifting-tellability.md#74-gaps-with-a-route-that-leaves-s0-unchanged)) need. The additions are listed in [§20](#20-version-4-additions); none changes a result the reference model already produces. This is the specification stage of the [foundation](../foundation.md): exactly how the dimensional model works, so the reference model can be built from this page alone. It is work package [WP-05](../plan.md#82-work-packages).
 
@@ -70,6 +71,7 @@ Deferred items are named in the text where they apply, and are recorded as compr
 | Resumable resolution and resumable queries | Hard limits keep each resolution and query atomic and bounded (§10.7). Worklists remain resumable |
 | Frame suspension under budget | Queued work pauses; frame status and interests are unchanged (§10.4) |
 | Fine-grained cache dependency tracking | Cache keyed by revision and query time (§5.5) |
+| Implicit edge types (§2.5, v4.3) | Only materialised edges are tested. Casting through ties opens a bounded candidate set first (S2) |
 | Processes with different base periods | One shared simulation window. Processes run every n-th window (§9.4) |
 | Function-specific query bounds (`Bound`) | Optional; without one, the verdict is `maybe` (§2.1, §8.2) |
 | Reasoning about "opposite" effects in the conflict table | Explicit violation pairs only (§10.8) |
@@ -261,9 +263,19 @@ interface EdgeTypeDef {
   attrs: Record<string, DimId>;        // plain values of declared dimensions
   data?: string[];                     // names of structured data fields carried on the edge record
   perceivable?: boolean;               // the type can be seen; each edge's visibility decides (§11.4)
+  implicit?: { fn: FnRef; neighbours?: FnRef };   // v4.3: edges that exist as a pure function, below
   symmetric?: boolean;
 }
 ```
+
+**Implicit edge types** (v4.3; implementation deferred, §0.2). Most ties between ordinary people never need storing: they follow from where people live, work and gather.
+- **The function.** An implicit type names a registered pure, symmetric function of `(a, b, t)` that returns the edge's attributes, or none. An optional `neighbours` function enumerates the candidates for one endpoint.
+- **Queries.** The `has-edge` and `lacks-edge` predicates evaluate it exactly on candidates, and return `maybe` over unopened regions.
+- **Retention.** Implicit edges are not retention roots.
+- **Materialising.** When V sees a tie, hears of it, or a seed uses it, it is materialised as an ordinary edge, pinned under the `Id` `H("edge", type, min(a, b), max(a, b))`.
+- **Cost.** Evaluation counts against the shared allowance (§10.7).
+
+The city therefore never stores a social graph; it stores only the ties that have mattered ([dossier 15](../craft/d15-people-networks-order.md)).
 
 ### 2.6 The core schema
 
@@ -895,7 +907,7 @@ Beliefs are stored per believer and indexed by (subject, path, at). They never c
   - `onWitness(event, observer)`;
   - `onSocial(event, teller, listener)`;
   - `onTick(believer)`;
-  - `aggregate(audience, subject, path)`;
+  - `aggregate(audience: Id | Selector, subject: Id, path: SlotPath, t: GameTime) → { value?: Value | Region; mass: number; items: number }` (contract stated in v4.3). It is a pure read over the beliefs of the audience's carriers, not over every resident. It is deterministic and cacheable by revision and `t`, counts against the shared allowance, and never writes. `mass` counts each independent piece of evidence once, so a rumour retold by three tellers weighs as its origin;
   - `onRecall(believer, belief, encounter, cue)` (v4.1), below.
 
 **Forgetting beliefs** (v4.1). Forgetting is lazy, shaped like blurring, and never touches the record of events. It has three parts:
@@ -993,7 +1005,7 @@ Each save has a record `{ saveKey, parent, ops }`, where `parent` is the record 
 - `EventCanon`;
 - `SummarySet`;
 - `FrameState`, `SeedState`, `ProcessState`;
-- `SettingsSet { memoryScale, resetScale, noticing, exclusions, modelFloor, cityScale, classExclusions, at }` (v4.1; city settings v4.2): every player setting that changes what is offered or remembered, in force from `at`. `noticing`, `exclusions` and `modelFloor` are the director's model settings ([S2 §8.8](seeding.md#88-the-player-models-boundary)). The lineage root records the initial settings. Replays and the harness use the settings in force at each op. Settings that change only presentation are not recorded.
+- `SettingsSet { memoryScale, resetScale, noticing, exclusions, modelFloor, cityScale, classExclusions, content, at }` (v4.1; city settings v4.2; `content`, the content dials such as violence against residents, informing and sanction severity, v4.3): every player setting that changes what is offered or remembered, in force from `at`. `noticing`, `exclusions` and `modelFloor` are the director's model settings ([S2 §8.8](seeding.md#88-the-player-models-boundary)). The lineage root records the initial settings. Replays and the harness use the settings in force at each op. Settings that change only presentation are not recorded.
 
 Snapshots are written every **[tunable 10,000]** ops. Ops carry complete data.
 
@@ -1060,6 +1072,9 @@ Fully specified: outcomes that depend on hashes are checked as properties, not n
 | F-20 | **Lens invariance** (v4.1). Blur beliefs under a strict memory setting; raise the setting | Beliefs above the new floor read as before blurring wherever the sweep didn't widen them; no event, pin or exposure changed |
 | F-21 | **Cluster process** (v4.2). A self-exciting process with a persisted pending calendar of offspring and thinning, run for 12 windows as one tick and as 12 ticks | Identical calendars and fired lists |
 | F-22 | **Mid-cascade reload** (v4.2). The F-21 process saved mid-cascade and reloaded under a different epoch, play clock and wall clock | The same future |
+| F-23 | **Implicit edges** (v4.3). An implicit tie type over a block's residents | Symmetric. Identical answers after a reload and under a changed tick partition |
+| F-24 | **Aggregate** (v4.3). A chain of three tellers from one origin; a 30-game-day absence; then `k` contrary independent items | The chain weighs as the origin. The absence changes no label. The `k` items flip it |
+| F-25 | **Norm slot** (v4.3). A norm updated by a public act and by a private act, over 12 windows as one tick and as 12 ticks | Identical results; only the public act moves perceived support |
 
 ### 16.2 Calibration fixtures
 
@@ -1191,6 +1206,9 @@ v4 adds what the seeding layer and sifting need. None of the additions changes a
 | V4-15 | Summary clarifications: single-place scope, no empty summaries, re-minting, item ids | §9.3 | S14-S0-02 | A clarification; already true |
 | V4-16 | `cityScale` and `classExclusions` in `SettingsSet` | §14.2 | S14-S0-03 | To implement with V4-12 |
 | V4-17 | Fixtures F-21 and F-22 | §16.1 | S14-S0-04 | To add with S1's first process |
+| V4-18 | Implicit edge types | §2.5 | Casting through unopened ties ([dossier 15](../craft/d15-people-networks-order.md) S15-S0-01) | Deferred (§0.2) |
+| V4-19 | The `aggregate` hook's contract | §11.2 | Reputation (S15-S0-02) | A clarification |
+| V4-20 | Fixtures F-23 to F-25 | §16.1 | S15-S0-03 | F-23 with V4-18; F-24 and F-25 with S1's reputation and norm policies |
 
 **Dossier 11's other kernel requirements:**
 - **S1 policies:**
