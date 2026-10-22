@@ -446,11 +446,11 @@ Nola Dreamer's hair Sofie, per its title, one of the creator's "Physics enabled"
 
 ### ObiOneStenobi
 
-[Advanced Pose Mod](https://www.nexusmods.com/cyberpunk2077/mods/35013), by ObiOneStenobi (per the licence file in its package, MIT). Its pose-editor panel over photo mode showed how a mod keeps its own layer on top of photo mode's menu across sessions, takes the mouse from the camera while the pointer is over its panel, and measures where the interface sits on wider screens. Studied only; nothing is copied.
+[Advanced Pose Mod](https://www.nexusmods.com/cyberpunk2077/mods/35013), by ObiOneStenobi (per the licence file in its package, MIT). Its pose-editor panel over photo mode showed how a mod keeps its own layer on top of photo mode's menu across sessions, takes the mouse from the camera while the pointer is over its panel, and measures where the interface sits on wider screens. The XF Runtime Bridge's ink panel inside photo mode's menu takes no hover from the camera while a mouse button is held, as this mod's panel does. Studied only; nothing is copied.
 
 ### Photo Mode UI Improvements and Character Creator UI Improvements
 
-[Photo Mode UI Improvements](https://www.nexusmods.com/cyberpunk2077/mods/34353) and [Character Creator UI Improvements](https://www.nexusmods.com/cyberpunk2077/mods/34310) (their authors are still being confirmed). Their overlays inside the photo-mode menu and the character creator showed which controller callbacks, input contexts and root widgets a panel of ours can use, how it holds photo mode's own keys off while it has focus, how it measures the menu's width on an ultrawide screen, and which techniques crashed the game for them. Studied only.
+[Photo Mode UI Improvements](https://www.nexusmods.com/cyberpunk2077/mods/34353) and [Character Creator UI Improvements](https://www.nexusmods.com/cyberpunk2077/mods/34310) (their authors are still being confirmed). Their overlays inside the photo-mode menu and the character creator showed which controller callbacks, input contexts and root widgets a panel of ours can use, how it holds photo mode's own keys off while it has focus, how it measures the menu's width on an ultrawide screen, and which techniques crashed the game for them. The XF Runtime Bridge's ink panel inside photo mode's menu attaches under the menu's root and keeps the camera off the mouse over it in the same way, and measures the root's width with the same kind of probe. Studied only; nothing is copied.
 
 ### Photo-mode pose and tool mods
 
