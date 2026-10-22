@@ -14,7 +14,15 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 
 ### In flight
 - **Open High findings:** 1, CORE-03; feature merges run. The core review follows profiles phase 2. *22 Oct*
-- **Profiles phase 4a, scene runtimes** (the single primary focus, next): per-scene runtimes, prepared before switching, with progress, residency and leak-free disposal ([design §4.5](../authoring/profiles-views-layouts-design.md#45-scene-runtimes-and-switching-phase-4a)). It fixes the body-switch and first-draw bugs that the view-switch spike found. Phase 1 merged on 22 Oct (`35e3c5b6`): the lease, the outbox, the `profiles-1` migration, explicit targets with captures, the focus service and editing-context history. Each chunk went through Sol reviews; the design review was PASS WITH CONDITIONS, with UI-187..190 in the polish lane. *22 Oct*
+- **Profiles phase 4a, scene runtimes** (the single primary focus, `claude/profiles-4a`): per-scene runtimes, prepared before switching, with progress, residency and leak-free disposal ([design §4.5](../authoring/profiles-views-layouts-design.md#45-scene-runtimes-and-switching-phase-4a)). It fixes the body-switch and first-draw bugs that the view-switch spike found. Six chunks, one at a time:
+  1. 4a-i: disposal frees every GPU object (done);
+  2. 4a-ii: one renderer device, runtimes built hidden (done; the real-V parity run, G1, is pending);
+  3. 4a-iii: motion moves into the scene node (done);
+  4. 4a-iv: residency and the superseding subject change (built; in review);
+  5. 4a-v: prepare before switching, with progress;
+  6. 4a-vi: routing by the named view, and the gates.
+
+  Phase 1 merged on 22 Oct (`35e3c5b6`): the lease, the outbox, the `profiles-1` migration, explicit targets with captures, the focus service and editing-context history. Each chunk went through Sol reviews; the design review was PASS WITH CONDITIONS, with UI-187..190 in the polish lane. *22 Oct*
 
 ### Beta blockers
 - **Profiles, views and layouts: the whole proposal is pre-beta** (decided 21 Oct; [design](../authoring/profiles-views-layouts-design.md)). Order:
@@ -32,7 +40,7 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
   - first-run preparation;
   - Build's verifier and first plate cut (PIPE-130). *29 Sep*
 - **Finish verdicts in game:** Glitter and Shimmer reworked offline, waiting for in-game sessions ([finishes](glitter-material.md)). *29 Sep*
-- **Body switch shows the wrong V and drops the request** (found by spike S2, 21 Oct; [experiment 039](../../experiments/039-view-switch-spike/README.md) on `claude/spike-views`). Switching the default V's body leaves the pane empty for 0.2–1.2 s with no message, the superseded V is shown and stays, and the newer request is refused ("The creator options are still loading.") and lost. Fixed properly by profiles phase 4a. Before that, the request must never be dropped and the old V should stay shown with progress. *21 Oct*
+- **Body switch shows the wrong V and drops the request** (found by spike S2, 21 Oct; [experiment 039](../../experiments/039-view-switch-spike/README.md) on `claude/spike-views`). Switching the default V's body leaves the pane empty for 0.2–1.2 s with no message, the superseded V is shown and stays, and the newer request is refused ("The creator options are still loading.") and lost. Fixed in code by profiles 4a-iv: the old V stays drawn, the newest request wins, and nothing superseded is shown. It closes when 4a merges after its browser gates. *21 Oct*
 - **First draw of a lighting preset freezes for up to 94 s** on a fresh browser profile: 40 shader programs link in one blocking task. A preset change pays the same, and a desktop first run would hit it. Prepare (compile) programs ahead in small steps, with the previous view kept on screen ([performance](performance.md)). *21 Oct*
 - **Make the Save Explorer worth having** (21 Oct). Today it's an early-access curiosity that lets you look inside a save, read-only ([save editor design](../save/save-editor-design.md)). When this comes up, an agent studies it and reports back:
   - what players and modders would actually use it for;
