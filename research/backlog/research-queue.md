@@ -10,10 +10,15 @@ Send the meta-coordinator a message with this first line:
 
 `[XF] request · research: <the question> · reply needed: yes · blocking: yes/no`
 
-The body should say:
-- what decision or piece of work the answer serves;
-- when it's needed;
-- what you've already checked.
+**Send the full brief, the one you'd have given your own research agent.** That covers:
+- the question and why it matters;
+- scope and sources;
+- method rules (for example, how third-party code may be used);
+- the output you want and what counts as done;
+- what you've already checked;
+- when it's needed.
+
+A brief on `main` (as the Story Engine's [p2-game-substrate](../story-engine/p2-game-substrate.md) is) can be linked instead of pasted. The meta-coordinator is the go-between, not a rewriter: it runs the brief as written, after trimming what's already answered and merging overlaps with other chats' requests, and it asks the requesting chat before changing anything else.
 
 A quick lookup inside your own scope doesn't need to come here. Anything bigger does, so that answers end up in the knowledge base rather than in one chat's context.
 
@@ -32,7 +37,7 @@ A quick lookup inside your own scope doesn't need to come here. Anything bigger 
    4. exploratory questions.
 
    Pace follows the usage mode on the board, and the work queue's rule that R&D runs only while the polish lane is moving.
-3. **Runs it** with a research agent. That's read-only, or a documentation worktree when the result is a page. If the question needs the asking chat's own context, it goes back to that chat. Questions only the running game can answer are batched onto the owning chat's next session card.
+3. **Runs it from the requester's brief** with a research agent. That's read-only, or a documentation worktree when the result is a page. If the question needs the asking chat's own context, it goes back to that chat. Questions only the running game can answer are batched onto the owning chat's next session card.
 4. **Delivers:**
    - the knowledge page is updated (cited and evidence-graded), with credits for any source;
    - the result lands on `main`;
