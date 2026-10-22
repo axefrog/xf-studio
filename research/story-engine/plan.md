@@ -158,7 +158,7 @@ A specification must be complete enough that an agent with no memory of any disc
 |---|---|---|---|---|
 | Kernel: the dimensional model | [Foundation](foundation.md) v0; formal grounding (P3) | The foundation | S0 [kernel](spec/kernel.md) | Reference model, then native core |
 | Simulation layer: processes, tiers, mirroring the game | P2 | P3 | S1 simulation | |
-| Seeding layer and seed language | P1 | P4 | S2 seed language | |
+| Seeding layer and seed language | P1 | [P4](p4-seeding-layer.md) | S2 seed language | |
 | Procedural engine: sowing, fitting, director | P1 | P5 | S3 procedural engine | |
 | Authored content and player configuration | P1 | P6 | S4 content packs and settings | |
 | Runtime: companion process, game port, persistence | [Requirements](runtime-requirements.md), the bridge | P7 | S5 game port and companion protocol; S6 persistence format | |
@@ -185,10 +185,10 @@ Update a row in the same checkpoint as the work it describes.
 | 04 | P2, the game substrate research plan | [p2-game-substrate.md](p2-game-substrate.md) | | done: [P2](p2-game-substrate.md) v1 |
 | 05 | S0, the kernel specification v0: the foundation made exact | [spec/kernel.md](spec/kernel.md) | 04 (for the game-mirror parts) | done: [S0](spec/kernel.md) v3.1: three review rounds, then the reference model's decisions adopted; first-implementation scope final ([D-19](decisions.md)) |
 | 06 | P1 phase B, the discipline map, then the maintainer checkpoint | `craft/map.md` | 03 | done: [discipline map](craft/map.md): 182 fields, 23 dossiers; broad lenses stop; the coordinator decides, and the map lists its judgement calls for the maintainer to overrule if wanted |
-| 07 | P2 desk research:<br>- the main story's progression as facts;<br>- the gig system;<br>- population;<br>- channels;<br>- event hooks;<br>- saves | Knowledge pages and research notes | 04 | running: areas A, B, C, E, F, G and H done ([save identity](../../knowledge/save-identity.md) is G); D (places) running |
+| 07 | P2 desk research:<br>- the main story's progression as facts;<br>- the gig system;<br>- population;<br>- channels;<br>- event hooks;<br>- saves | Knowledge pages and research notes | 04 | done: areas A–H ([save identity](../../knowledge/save-identity.md) is G, [places](../../knowledge/places.md) is D, with 32 place dimensions); H's sample decompositions continue under 12 |
 | 08 | The reference model v0, implementing S0, with its test vectors. Code lives in `projects/xf-story-engine/reference/` and lands through XF · Meta-coordinator, which owns `main` with a code review | Code and tests | 05 | done: on `main` (`dceceef0`): 261 tests, three Sol rounds with nothing left open, CI on every change; its 57 notes adopted as S0 v3.1 ([§19](spec/kernel.md#19-decisions-adopted-from-the-reference-model)) |
 | 09 | P1 phase C, the dossiers, starting with motivation and drives | `craft/*.md` | 06 | running: dossiers 1–6 landed ([d01](craft/d01-motivation-drives.md), [d02](craft/d02-relationships.md), [d03](craft/d03-fitting-casting.md), [d04](craft/d04-quest-structure.md), [d05](craft/d05-units-variety.md), [d06](craft/d06-sifting-tellability.md)); 7 and 9 running. Crawl mode: one agent at a time |
-| 10 | P4, the seed language design, then S2. Scenario R1 is its first test | Design and spec | 05, 09 | later |
+| 10 | P4, the seed language design, then S2. Scenario R1 is its first test | Design and spec | 05, 09 | running: [P4](p4-seeding-layer.md) design v0 drafted from dossiers 2–5, 7 and 9; S2 next |
 | 11 | P3, the simulation layer beyond the kernel, then S1 | Design and spec | 05, 07 | later |
 | 12 | Quest corpus extraction (memory-guarded), then sample decompositions | `research/consumers/quest-corpus/`, decompositions | 07; the composite schema from 16 | later |
 | 13 | P5 and P6, then S3 and S4 | Designs and specs | 10 | later |

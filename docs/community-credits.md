@@ -21,7 +21,7 @@ Credit here acknowledges what we learned or used. It does not imply endorsement 
 
 ### CD PROJEKT RED
 
-Developer of Cyberpunk 2077. The game's own resources, shaders, rigs, animation and materials are the ground truth for nearly everything we study. Their article [A World Full of Substance](https://magazine.substance3d.com/cyberpunk-2077-a-world-full-of-substance/) explained the shared-surface and mask approach behind the game's materials, and their [modding support](https://www.cyberpunk.net/en/modding-support) and [technical support](https://support.cdprojektred.com/en/cyberpunk/pc) pages, which name the Steam, GOG and Epic Games Store editions, set the stores XF Studio looks for. The TweakDB sources that ship with the game's REDmod tools showed how photo mode's expressions, poses and lists are defined. The address library they ship with the game for native mods, which gives every engine function a stable ID, let us trace and name, without any signature scanning, the whole path from a material template through the shader cache to a GPU pipeline state. Game content is used only as a private local reference for the preview and experiments; none is redistributed. On quest design, Paweł Sasko's GDC 2023 talk, summarised by [Game Developer](https://www.gamedeveloper.com/marketing/10-key-takeaways-from-the-quest-design-of-cyberpunk-2077-and-the-witcher-3), taught us to bring early choices back later with visible consequences and to separate signal from noise. Philipp Weber's [interview with Game World Observer](https://gameworldobserver.com/2019/09/13/quests-witcher-cyberpunk-2077) (2019) describes Street Stories as small encounters with several ways through, in a studio that avoids sorting quests by type. [80.lv](https://80.lv/articles/cd-projekt-red-reveals-the-secret-key-to-impressive-side-quests) (2024) reported Sasko on pitching many ideas and the small share that are accepted.
+Developer of Cyberpunk 2077. The game's own resources, shaders, rigs, animation and materials are the ground truth for nearly everything we study. Their article [A World Full of Substance](https://magazine.substance3d.com/cyberpunk-2077-a-world-full-of-substance/) explained the shared-surface and mask approach behind the game's materials, and their [modding support](https://www.cyberpunk.net/en/modding-support) and [technical support](https://support.cdprojektred.com/en/cyberpunk/pc) pages, which name the Steam, GOG and Epic Games Store editions, set the stores XF Studio looks for. The TweakDB sources that ship with the game's REDmod tools showed how photo mode's expressions, poses and lists are defined. The address library they ship with the game for native mods, which gives every engine function a stable ID, let us trace and name, without any signature scanning, the whole path from a material template through the shader cache to a GPU pipeline state. Game content is used only as a private local reference for the preview and experiments; none is redistributed. On quest design, Paweł Sasko's GDC 2023 talk, summarised by [Game Developer](https://www.gamedeveloper.com/marketing/10-key-takeaways-from-the-quest-design-of-cyberpunk-2077-and-the-witcher-3), taught us to bring early choices back later with visible consequences and to separate signal from noise. Philipp Weber's [interview with Game World Observer](https://gameworldobserver.com/2019/09/13/quests-witcher-cyberpunk-2077) (2019) describes Street Stories as small encounters with several ways through, in a studio that avoids sorting quests by type. The same interview records that quests there cannot be failed in the classical sense, only given consequences, which informed how we treat outcomes. [80.lv](https://80.lv/articles/cd-projekt-red-reveals-the-secret-key-to-impressive-side-quests) (2024) reported Sasko on pitching many ideas and the small share that are accepted.
 
 ## Frameworks and core mods
 
@@ -550,11 +550,11 @@ By Kate Compton. ["So you want to build a generator…"](https://galaxykate0.tum
 
 ### Tynan Sylvester and Ludeon Studios
 
-By Tynan Sylvester. ["The Simulation Dream"](https://www.gamedeveloper.com/design/the-simulation-dream) (essay, 2013), and [RimWorld](https://rimworldgame.com/), developed by Ludeon Studios. The essay argues that a simulation adds value only as far as players can perceive and understand it, and RimWorld puts a storyteller in charge of when events arrive. We took from them that simulation nobody perceives is wasted, and that a director who paces events can shape a story.
+By Tynan Sylvester. ["The Simulation Dream"](https://www.gamedeveloper.com/design/the-simulation-dream) (essay, 2013), and [RimWorld](https://rimworldgame.com/), developed by Ludeon Studios. The essay argues that a simulation adds value only as far as players can perceive and understand it, and RimWorld puts a storyteller in charge of when events arrive. We took from them that simulation nobody perceives is wasted, and that a director who paces events can shape a story. The community-written RimWorld wiki pages on [Cassandra Classic](https://rimworldwiki.com/wiki/Cassandra) and the other storytellers show fixed On and Off cycles, guaranteed events and spacing, and a storyteller's cadence kept apart from the difficulty setting. They informed how we keep pacing separate from challenge.
 
 ### Valve and Michael Booth
 
-[Left 4 Dead](https://store.steampowered.com/app/500/Left_4_Dead/) (Valve, 2008) and Michael Booth's [The AI Systems of Left 4 Dead](https://cdn.fastly.steamstatic.com/apps/valve/2009/ai_systems_of_l4d_mike_booth.pdf) (Valve's slides from his AIIDE 2009 invited talk). The AI Director estimates how intense each player's moment is, removes major threats for a while when intensity runs too high, and otherwise supplies them. It is our model for pacing intensity around the people playing. Elan Ruskin's GDC 2012 talk on dynamic dialogue at Valve, as recapped by Emily Short on [her blog](https://emshort.blog/2012/03/16/gdc-2012-talk-on-dynamic-dialogue/), showed rule matching in which the most specific matching rule wins and general rules serve as fallbacks.
+[Left 4 Dead](https://store.steampowered.com/app/500/Left_4_Dead/) (Valve, 2008) and Michael Booth's [The AI Systems of Left 4 Dead](https://cdn.fastly.steamstatic.com/apps/valve/2009/ai_systems_of_l4d_mike_booth.pdf) (Valve's slides from his AIIDE 2009 invited talk). The AI Director estimates how intense each player's moment is, removes major threats for a while when intensity runs too high, and otherwise supplies them. It is our model for pacing intensity around the people playing. Elan Ruskin's GDC 2012 talk on dynamic dialogue at Valve, as recapped by Emily Short on [her blog](https://emshort.blog/2012/03/16/gdc-2012-talk-on-dynamic-dialogue/), showed rule matching in which the most specific matching rule wins and general rules serve as fallbacks. Booth's slides also give the intensity number that decays towards zero unless enemies are actively engaging the player, and the director's four phases of build up, sustain peak, peak fade and relax, each with its own timing. They informed how we think about pacing as a loop of pressure and rest.
 
 ### Michael Mateas and Andrew Stern
 
@@ -574,15 +574,15 @@ By Tynan Sylvester. ["The Simulation Dream"](https://www.gamedeveloper.com/desig
 
 ### John Harper
 
-[Blades in the Dark](https://bladesinthedark.com/) (Evil Hat Productions, 2017). Flashbacks let players settle their preparation at the moment it matters, for a cost, and faction clocks advance during downtime so the city changes without the crew. We took from it preparation that resolves late and a world that keeps moving on its own. Its plan types, engagement roll, heat and entanglements also taught us how a job's approach shapes its opening and what it leaves behind.
+[Blades in the Dark](https://bladesinthedark.com/) (Evil Hat Productions, 2017). Flashbacks let players settle their preparation at the moment it matters, for a cost, and faction clocks advance during downtime so the city changes without the crew. We took from it preparation that resolves late and a world that keeps moving on its own. Its plan types, engagement roll, heat and entanglements also taught us how a job's approach shapes its opening and what it leaves behind. Its [progress clocks](https://bladesinthedark.com/progress-clocks) come in several sizes and types, and Mike Shea's [Progress Clocks for Complex Situations in D&D](https://slyflourish.com/progress_clocks_in_dnd.html) shows the same device as a danger clock, with the advice not to hide it from the players.
 
 ### Justin Alexander (The Alexandrian)
 
-[Three Clue Rule](https://thealexandrian.net/wordpress/1118/roleplaying-games/three-clue-rule) (2008) and the nine-part series [Node-Based Scenario Design](https://thealexandrian.net/wordpress/8122/roleplaying-games/node-based-scenario-design-collectors-edition). The first says to give at least three clues for any conclusion the players must reach, because one may be missed, ignored or misread. The second builds a scenario from nodes that clues point to, so players can move through it in different orders. Together they taught us robust discovery, where no single missed clue stops the story. His [Scenario Structure Challenge #4: Heists](https://thealexandrian.net/wordpress/42867/roleplaying-games/scenario-structure-challenge-4-heists) (2019) breaks a heist scenario into five steps (identify the score, gather information, onsite surveillance, prep work and the operation), which gave us a reusable shape for job-style quests.
+[Three Clue Rule](https://thealexandrian.net/wordpress/1118/roleplaying-games/three-clue-rule) (2008) and the nine-part series [Node-Based Scenario Design](https://thealexandrian.net/wordpress/8122/roleplaying-games/node-based-scenario-design-collectors-edition). The first says to give at least three clues for any conclusion the players must reach, because one may be missed, ignored or misread. The second builds a scenario from nodes that clues point to, so players can move through it in different orders. Together they taught us robust discovery, where no single missed clue stops the story. His [Scenario Structure Challenge #4: Heists](https://thealexandrian.net/wordpress/42867/roleplaying-games/scenario-structure-challenge-4-heists) (2019) breaks a heist scenario into five steps (identify the score, gather information, onsite surveillance, prep work and the operation), which gave us a reusable shape for job-style quests. His [Don't Prep Plots](https://thealexandrian.net/?p=4147) argues for preparing situations rather than plots, and for deciding what the opposition does if the players never step in. It informed how we think about a world that acts without the player.
 
 ### Mike Shea (Sly Flourish)
 
-By Michael Shea, who writes as Sly Flourish. [Return of the Lazy Dungeon Master](https://shop.slyflourish.com/products/return-of-the-lazy-dungeon-master) (2018) and his post [Types of Secrets](https://slyflourish.com/types_of_secrets.html) (2021). Secrets and clues are short statements about the world or the story, kept apart from where they are found so they can be dropped in wherever they fit. It taught us to hold story information that is not tied to a place.
+By Michael Shea, who writes as Sly Flourish. [Return of the Lazy Dungeon Master](https://shop.slyflourish.com/products/return-of-the-lazy-dungeon-master) (2018) and his post [Types of Secrets](https://slyflourish.com/types_of_secrets.html) (2021). Secrets and clues are short statements about the world or the story, kept apart from where they are found so they can be dropped in wherever they fit. It taught us to hold story information that is not tied to a place. His [Quantum Ogres and the Eight Steps](https://slyflourish.com/quantum_ogres_and_the_eight_steps.html) taught us to prepare parts and assemble them to fit the choice a player makes.
 
 ### Keith Johnstone
 
@@ -602,7 +602,7 @@ The Radiant AI and Radiant Story systems of *The Elder Scrolls IV: Oblivion* (20
 
 ### Ubisoft Toronto
 
-Christopher Dragert and Jurie Horneman, as described in Daniel O'Connor's [Watch Dogs: Legion – The Tools That Built London](https://news.ubisoft.com/en-us/article/4po3S9Pwp1YcgBmGPmQxAh/watch-dogs-legion-the-tools-that-built-london) (Ubisoft News, 2021), and Brandon Hennessy's GDC 2023 talk on the game's narrative design, as reported by Justin Carter in [How Watch Dogs: Legion changed Ubisoft's narrative design](https://www.gamedeveloper.com/marketing/how-i-watch-dogs-legion-i-made-ubisoft-rethink-its-storytelling) (Game Developer, 2023). The game's Player Attention System takes requests that each carry a priority, a lifetime and an attention need, and offers the player the most pressing one when they are ready; its writers made up for unknown cast members with fixed, authored characters and treated one-off missions as isolated. We took from them how to queue offers to the player, and what writers cannot assume about who will play a part.
+Christopher Dragert and Jurie Horneman, as described in Daniel O'Connor's [Watch Dogs: Legion – The Tools That Built London](https://news.ubisoft.com/en-us/article/4po3S9Pwp1YcgBmGPmQxAh/watch-dogs-legion-the-tools-that-built-london) (Ubisoft News, 2021), and Brandon Hennessy's GDC 2023 talk on the game's narrative design, as reported by Justin Carter in [How Watch Dogs: Legion changed Ubisoft's narrative design](https://www.gamedeveloper.com/marketing/how-i-watch-dogs-legion-i-made-ubisoft-rethink-its-storytelling) (Game Developer, 2023). The game's Player Attention System takes requests that each carry a priority, a lifetime and an attention need, and offers the player the most pressing one when they are ready; its writers made up for unknown cast members with fixed, authored characters and treated one-off missions as isolated. We took from them how to queue offers to the player, and what writers cannot assume about who will play a part. Jurie Horneman's own post, [Watch Dogs: Legion and the Player Attention System](https://toronto.ubisoft.com/watch-dogs-legion-and-the-player-attention-system/) (Ubisoft Toronto), adds that one arbiter handles both missions and dialogue, that a request can carry a maximum wait and tolerated distractions, and what a system cannot know about a player's attention.
 
 ### Crusader Kings III and RimWorld modding wikis
 
@@ -626,7 +626,7 @@ Josh Sawyer of Obsidian Entertainment, in Kirk McKeand's [interview on branching
 
 ### David Bordwell
 
-By David Bordwell. [One last big job: how heist movies tell their stories](https://www.davidbordwell.net/blog/2017/10/12/one-last-big-job-how-heist-movies-tell-their-stories/) (essay, 2017). It lays out a five-stage heist plot of circumstances, recruitment, planning, execution and aftermath, and how suspense depends on what the audience knows. It gave us a stretchable shape for job-style quests.
+By David Bordwell. [One last big job: how heist movies tell their stories](https://www.davidbordwell.net/blog/2017/10/12/one-last-big-job-how-heist-movies-tell-their-stories/) (essay, 2017). It lays out a five-stage heist plot of circumstances, recruitment, planning, execution and aftermath, and how suspense depends on what the audience knows. It gave us a stretchable shape for job-style quests. His [Hitchcock, Lessing, and the bomb under the table](https://www.davidbordwell.net/blog/2013/11/29/hitchcock-lessing-and-the-bomb-under-the-table/) (2013) shows that the familiar split between suspense and surprise has an older and murkier history than its legend suggests.
 
 ### Brandon Sanderson
 
@@ -654,7 +654,7 @@ By General Gustave Perna. [Mission command requires sharp commander's intent](ht
 
 ### Telltale Games
 
-Sean Vanaman and Jake Rodkin of Telltale Games, speaking on an empathy and character-choice panel at GDC 2013, as reported by [Game Informer](https://www.gameinformer.com/b/news/archive/2013/03/28/telltale-why-fewer-people-saved-doug-in-the-walking-dead.aspx) (2013). Players saved the companion they had shared more moments with, about three in four of them, which the team read as attachment following the number of relationship moments rather than described traits. It informed how we think about what builds attachment to a character.
+Sean Vanaman and Jake Rodkin of Telltale Games, speaking on an empathy and character-choice panel at GDC 2013, as reported by [Game Informer](https://www.gameinformer.com/b/news/archive/2013/03/28/telltale-why-fewer-people-saved-doug-in-the-walking-dead.aspx) (2013). Players saved the companion they had shared more moments with, about three in four of them, which the team read as attachment following the number of relationship moments rather than described traits. It informed how we think about what builds attachment to a character. Telltale's Kevin Bruner, in [The Walking Dead and the art of providing no good choice](https://www.gamedeveloper.com/design/-i-the-walking-dead-i-and-the-art-of-providing-no-good-choice) (Game Developer, 2013), describes recording every choice in detail and finding the weight of a choice in equally compelling options. It informed how we think about choices with no good answer.
 
 ### Larian Studios
 
@@ -687,6 +687,58 @@ Boris, [“Oatmeal Spice”](https://www.boristhebrave.com/2026/07/05/oatmeal-sp
 ### Piotr Tomsiński
 
 GameAnim's account of his GDC 2016 talk, [“Cinematic Dialogue in The Witcher 3”](https://www.gameanim.com/?p=10962). A generator assembles a first draft of a scene from the recorded voice-over, taking idles and gestures from pools of small animation units, and designers can re-run it for a different result. It informed how small reusable units can be recombined while a person can still re-roll.
+
+### Tommy Thompson
+
+By Tommy Thompson. [“The Perfect Organism: The AI of Alien: Isolation”](https://www.gamedeveloper.com/design/the-perfect-organism-the-ai-of-alien-isolation) (Game Developer), on Creative Assembly's *Alien: Isolation* (2014). A director that knows where the player is hands the hunting creature only hints, so the creature has to find the player, and a menace gauge pulls it away when the pressure has lasted long enough. Thompson also reports Andy Bray of Creative Assembly, in a 2016 talk at nucl.ai, saying that the creature is never allowed to cheat and that a player cannot be scared senseless all the time. It informed how we keep a pacing director fair.
+
+### K Thor Jensen
+
+By K Thor Jensen. [“How Much Friction?”](https://www.gamedeveloper.com/design/how-much-friction-) (Game Developer, 2014). Tension gave way to annoyance when the mechanics stopped testing the player's growing mastery. It informed how we think about pressure that has to keep pace with the player.
+
+### Ben Serviss
+
+By Ben Serviss. [“The Discomfort Zone: The Hidden Potential of Valve's AI Director”](https://www.gamedeveloper.com/design/the-discomfort-zone-the-hidden-potential-of-valve-s-ai-director) (Game Developer, 2013). The line between productive discomfort and toying with players is fine, and giving players options is the safeguard. It informed how far we think a director's pressure should go.
+
+### Thomas Grip
+
+Thomas Grip of Frictional Games, [“Game Design Deep Dive: Amnesia's 'Sanity Meter'”](https://www.gamedeveloper.com/design/game-design-deep-dive-i-amnesia-i-s-sanity-meter-) (Game Developer, 2014). A hidden meter, shown to the player only as an image, discourages looking at monsters, and players still found ways to exploit it. It informed how we think about hidden state that steers play.
+
+### David Spira
+
+By David Spira. [“An Exploration of Escape Room Hint Systems”](https://roomescapeartist.com/2019/10/24/escape-room-hint-systems/) (Room Escape Artist, 2019). It looks at when a hint should arrive, who triggers it, and the risk of a hint landing just as the team solves the puzzle. It informed how we think about when to nudge a player.
+
+### Charles Turnitsa
+
+By Charles Turnitsa. [“Adjudication in Wargaming for Discovery”](https://csiac.dtic.mil/articles/adjudication-in-wargaming-for-discovery/3) (CSIAC Journal, 2016). It describes rigid, free, semi-rigid, open and matrix adjudication and what each costs. It informed how we think about who decides what happens next, and how.
+
+### theatrecrafts.com contributors
+
+[The Prompt Book](https://theatrecrafts.com/pages/home/topics/stage-management/the-prompt-book/) on theatrecrafts.com. The stage manager's book holds the cues, and each cue is called with a warning and then a go. It informed how we think about timed cues.
+
+### Tom Tango and FanGraphs
+
+Tom Tango created Leverage Index, explained in FanGraphs' [Sabermetrics Library](https://library.fangraphs.com/misc/li). It is a baseball measure of how much the next moment can swing the outcome. It informed how we think about scoring the weight of a moment.
+
+### Improwiki contributors
+
+The [Accept](https://improwiki.com/en/wiki/accept) page on improwiki. Accepting an offer is not the same as agreeing with it, and the page names soft refusal, ignoring and steamrolling as ways of failing to accept. It informed how a story can respond to what a player attempts.
+
+### Ben Robbins
+
+Ben Robbins's West Marches campaign style, as described by Alex LeFort in [“What Is A West Marches Campaign?”](https://www.czepeku.com/blog/what-is-a-west-marches-campaign). It is a campaign with no plot, a shared record of what happened and destinations that the players choose. It informed how we think about worlds that go on without a central plot.
+
+### Gareth Damian Martin
+
+Gareth Damian Martin of Jump Over the Age, developer of *Citizen Sleeper* (2022), as reported in [Rascal News](https://www.rascal.news/tracing-citizen-sleepers-circuitous-vector-from-tabletop-to-hit-video-game/). Clocks carried over from tabletop play make a game's variables visible to the player. It informed how we think about showing what is counting down.
+
+### Doug Church
+
+By Doug Church. [“Formal Abstract Design Tools”](https://www.gamedeveloper.com/design/formal-abstract-design-tools) (Game Developer, 1999). Among the tools it names is perceivable consequence: players must be able to see why something worked or failed. It informed how visible we make the results of a player's choices.
+
+### Sage LaTorra and Adam Koebel
+
+[Dungeon World](https://www.dungeonworldsrd.com/) by Sage LaTorra and Adam Koebel, through its SRD sections on [gamemastering](https://www.dungeonworldsrd.com/gamemastering/) and [fronts](https://www.dungeonworldsrd.com/gamemastering/fronts/). A game master answers with soft moves, which leave room to react, and hard moves, which do not; fronts carry portents and dooms and move while the players are elsewhere. It informed how we think about consequences that arrive in degrees.
 
 ## Research papers
 
@@ -1114,7 +1166,7 @@ Joshua McCoy, Mike Treanor, Ben Samuel, Noah Wardrip-Fruin and Michael Mateas, [
 
 ### Nelson et al. (2006)
 
-Mark Nelson, Michael Mateas, David Roberts and Charles Isbell, ["Declarative optimization-based drama management in interactive fiction"](https://doi.org/10.1109/mcg.2006.55) (*IEEE Computer Graphics and Applications*, 2006). An author's sense of a good story can be expressed as a weighted combination of features, though that is hard to specify. It informed how author preference can steer choices. The paper also reports that the online search it tried performed poorly on larger, more complex stories.
+Mark Nelson, Michael Mateas, David Roberts and Charles Isbell, ["Declarative optimization-based drama management in interactive fiction"](https://doi.org/10.1109/mcg.2006.55) (*IEEE Computer Graphics and Applications*, 2006). An author's sense of a good story can be expressed as a weighted combination of features, though that is hard to specify. It informed how author preference can steer choices. The paper also reports that the online search it tried performed poorly on larger, more complex stories. It also sets out five kinds of drama-manager action, each with a score for how manipulative it is, and a feature that rewards leaving the player choices.
 
 ### Tearse et al. (2014)
 
@@ -1126,7 +1178,7 @@ Robert Haralick and Gordon Elliott, ["Increasing tree search efficiency for cons
 
 ### Yu, Guzdial and Sturtevant (2021)
 
-Yu, Matthew Guzdial and Nathan Sturtevant, ["The Definition-Context-Purpose paradigm and other insights from industry professionals about the definition of a quest"](https://doi.org/10.1609/aiide.v17i1.18897) (*AIIDE*, 2021). Developers define a quest by its purpose and circumstances rather than by its parts. It informed how we describe what a quest is for.
+Yu, Matthew Guzdial and Nathan Sturtevant, ["The Definition-Context-Purpose paradigm and other insights from industry professionals about the definition of a quest"](https://doi.org/10.1609/aiide.v17i1.18897) (*AIIDE*, 2021). Developers define a quest by its purpose and circumstances rather than by its parts. It informed how we describe what a quest is for. Kristen Yu, Matthew Guzdial and Nathan Sturtevant's later [Evaluating the Effects of AI Directors for Quest Selection](https://arxiv.org/abs/2410.03733) (arXiv, 2024) reports a small human study of three quest-selection directors and notes that the best-known director has no comparative data. It informed how thin the evidence for directors is.
 
 ### Sullivan, Mateas and Wardrip-Fruin (2012)
 
@@ -1283,6 +1335,166 @@ David Wilmot and Frank Keller, [“Modelling suspense in short stories as uncert
 ### Deo, Chung and McCoy (2024)
 
 Sage Deo, Jonathan Chung and Joshua McCoy, [“Shepherd: an incremental story sifting-based drama manager”](https://ojs.aaai.org/index.php/AIIDE/article/view/31887) (AIIDE 2024). Incremental sifting can steer fully autonomous characters toward narratively interesting choices. It informed how sifting might feed back into a running simulation.
+
+### Fisher, Siler and Ware (2025)
+
+Mira Fisher, Molly Siler and Stephen G. Ware, [“Structure, Agency, and Improvisation in Human-Led Digital Interactive Narrative Exercises”](https://www.cs.uky.edu/~sgware/reading/papers/fisher2025structure.pdf) (*AIIDE*, 2025). In a study of a player paired with a human game master, perceived structure and perceived agency went together, and poor agency read as a failed partnership. It informed how we think about agency as shared work between player and storyteller.
+
+### Wardrip-Fruin et al. (2009)
+
+Noah Wardrip-Fruin, Michael Mateas, Steven Dow and Serdar Sali, [“Agency Reconsidered”](https://dl.digra.org/index.php/dl/article/view/369) (*DiGRA*, 2009). Agency arises where what the player wants to do is what the system supports. It is a matter of the player and the system's model together, and more realism can lower it. It informed how we think about matching a player's intent to what a story can answer.
+
+### Horvitz (1999)
+
+Eric Horvitz, [“Principles of Mixed-Initiative User Interfaces”](https://www.interruptions.net/literature/Horvitz-CHI99-p159-horvitz.pdf) (*CHI*, 1999). A system should act only when the expected value of acting beats doing nothing, offer a cheap way to open a dialogue, and weigh the cost of bothering the user. It informed when a director should step in.
+
+### Iqbal and Bailey (2008)
+
+Shamsi Iqbal and Brian Bailey, [“Effects of Intelligent Notification Management on Users and Their Tasks”](https://www.interruptions.net/literature/Iqbal-CHI08.pdf) (*CHI*, 2008). Deferring notifications to breakpoints lowered frustration, how fine a breakpoint must be depends on how relevant the message is, and detecting breakpoints is imperfect. It informed when to deliver an offer.
+
+### Trafton et al. (2003)
+
+J. Gregory Trafton, Erik Altmann, Derek Brock and Farilee Mintz, [“Preparing to resume an interrupted task: effects of prospective goal encoding and retrospective rehearsal”](https://interruptions.net/literature/Trafton-IJHCS03.pdf) (*International Journal of Human-Computer Studies*, 2003). An eight-second warning before an interruption helped people prepare and resume. It informed how much notice an offer should give.
+
+### Adamczyk and Bailey (2004)
+
+Piotr Adamczyk and Brian Bailey, [“If not now, when? The effects of interruption at different moments within task execution”](https://doi.org/10.1145/985692.985727) (*CHI*, 2004). Interruptions at different moments differ in their emotional effect. It informed our view that the moment of an offer matters as well as the offer.
+
+### McFarlane (2002)
+
+Daniel McFarlane, [“Comparison of Four Primary Methods for Coordinating the Interruption of People in Human-Computer Interaction”](https://www.interruptions.net/literature/McFarlane-HCI02_2.pdf) (*Human-Computer Interaction*, 2002). It compares immediate, negotiated, mediated and scheduled interruption, and finds an advantage for negotiation. It informed how an offer can be negotiated rather than imposed.
+
+### Mark, Gudith and Klocke (2008)
+
+Gloria Mark, Daniela Gudith and Ulrich Klocke, [“The Cost of Interrupted Work: More Speed and Stress”](https://www.interruptions.net/literature/Mark-CHI08.pdf) (*CHI*, 2008). People finish interrupted work faster at the price of stress, so an absence of complaints is weak evidence that an interruption did no harm. It informed how we judge whether pacing works.
+
+### Fischer, Greenhalgh and Benford (2011)
+
+Joel Fischer, Chris Greenhalgh and Steve Benford, [“Investigating Episodes of Mobile Phone Activity as Indicators of Opportune Moments to Deliver Notifications”](https://interruptions.net/literature/Fischer-MobileHCI11.pdf) (*MobileHCI*, 2011). Notifications were handled faster just after an episode of activity ended. It informed where in a player's activity an offer fits.
+
+### Mehrotra and Musolesi (2017)
+
+Abhinav Mehrotra and Mirco Musolesi, [“Intelligent Notification Systems: A Survey of the State of the Art and Research Challenges”](https://arxiv.org/abs/1711.10171) (arXiv, 2017). A survey of breakpoints, engagement and receptivity, with the size of the effects reported. It informed how large we expect timing effects to be.
+
+### Hsieh et al. (2020)
+
+Ching-Yu Hsieh, Yi-Shyuan Chiang, Hung-Yu Chiu and Yung-Ju Chang, [“Bridging the Virtual and Real Worlds: A Preliminary Study of Messaging Notifications in Virtual Reality”](https://doi.org/10.1145/3313831.3376228) (*CHI*, 2020). Higher engagement made notifications feel worse timed. It informed how we think about interrupting a player who is deeply absorbed.
+
+### Chen, Nelson and Mateas (2009)
+
+Sherol Chen, Mark Nelson and Michael Mateas, [“Evaluating the Authorial Leverage of Drama Management”](https://ojs.aaai.org/index.php/AIIDE/article/view/12377) (*AIIDE*, 2009). It gives three measures for asking whether a drama manager does better than a trigger script. It informed how we test whether a director earns its place.
+
+### Thue et al. (2007)
+
+David Thue, Vadim Bulitko, Marcia Spetch and Eric Wasylishen, [“Interactive Storytelling: A Player Modelling Approach”](https://ojs.aaai.org/index.php/AIIDE/article/view/18780) (*AIIDE*, 2007). Adapting a story to a learned play style helped some players in a study of 101 people. It informed how much we expect adaptation to help.
+
+### Lehne and Koelsch (2015)
+
+Moritz Lehne and Stefan Koelsch, [“Toward a general psychological model of tension and suspense”](https://www.frontiersin.org/articles/10.3389/fpsyg.2015.00079/full) (*Frontiers in Psychology*, 2015). Tension precedes events and rests on prediction under uncertainty; the effect of delay is left an open question. It informed how we think about building tension before an event.
+
+### de Berker et al. (2016)
+
+Archy de Berker and colleagues, [“Computations of uncertainty mediate acute stress responses in humans”](https://pmc.ncbi.nlm.nih.gov/articles/PMC4820542) (*Nature Communications*, 2016). Stress tracks uncertainty that cannot be reduced and peaks at even odds. It informed how we think about uncertainty as a source of pressure.
+
+### Vachiratamporn et al. (2013)
+
+Vanus Vachiratamporn, Paul Inventado, Roberto Legaspi, Koichi Moriyama and Masayuki Numao, [“An analysis of affective state transitions in survival horror game with the aid of player self-reports and physiological signals”](https://www.ai-gakkai.or.jp/jsai2013/webprogram/2013/paper-987.html) (JSAI, 2013). In these initial results, players already in a suspense state were more likely to become more fearful at a scare. It informed how we think about scares landing on built-up tension.
+
+### Berns et al. (2006)
+
+Gregory Berns, Jonathan Chappelow, Milos Cekic, Caroline Zink, Giuseppe Pagnoni and Megan Martin-Skurski, [“Neurobiological substrates of dread”](https://pubmed.ncbi.nlm.nih.gov/16675703/) (*Science*, 2006). Some people chose a worse outcome sooner rather than wait for it. It informed how we think about the cost of waiting.
+
+### Mobbs et al. (2007)
+
+Dean Mobbs and colleagues, [“When Fear Is Near: Threat Imminence Elicits Prefrontal-Periaqueductal Gray Shifts in Humans”](https://pmc.ncbi.nlm.nih.gov/articles/PMC2648508) (*Science*, 2007). Responses change as a threat gets closer, tracking dread. It informed how we think about a threat's approach.
+
+### Loewenstein (1987)
+
+George Loewenstein, [“Anticipation and the Valuation of Delayed Consumption”](https://ideas.repec.org/a/ecj/econjl/v97y1987i387p666-84.html) (*Economic Journal*, 1987). People savour good outcomes and want bad ones over with. It informed how we think about waiting for good and bad news.
+
+### Ely, Frankel and Kamenica (2015)
+
+Jeffrey Ely, Alexander Frankel and Emir Kamenica, [“Suspense and Surprise”](https://www.journals.uchicago.edu/doi/10.1086/677350) (*Journal of Political Economy*, 2015). Suspense is the spread of what the audience expects to believe next, and surprise is the size of the change in belief. It informed how we tell the two apart.
+
+### Cowan (2001)
+
+Nelson Cowan, [“The magical number 4 in short-term memory: a reconsideration of mental storage capacity”](https://pubmed.ncbi.nlm.nih.gov/11515286/) (*Behavioral and Brain Sciences*, 2001). It proposes a central limit of about four items in the focus of attention. It informed how many threads we expect a player to follow at once.
+
+### Ghibellini and Meier (2025)
+
+Romain Ghibellini and Beat Meier, [“Interruption, recall and resumption: a meta-analysis of the Zeigarnik and Ovsiankina effects”](https://doi.org/10.1057/s41599-025-05000-w) (*Humanities and Social Sciences Communications*, 2025). Unfinished tasks are not remembered better, but people tend to resume them. It informed how we think about unfinished story threads.
+
+### Cheong and Young (2015)
+
+Yun-Gyung Cheong and R. Michael Young, [“Suspenser: A Story Generation System for Suspense”](https://www.cs.uky.edu/~sgware/reading/papers/cheong2015suspenser.pdf) (*IEEE Transactions on Computational Intelligence and AI in Games*, 2015). It counts the routes that remain to a goal as an estimate of suspense. It informed how suspense might be measured.
+
+### Alston (2016)
+
+Adam Alston, [*Beyond Immersive Theatre: Aesthetics, Politics and Productive Participation*](https://research.gold.ac.uk/28079) (Palgrave Macmillan, 2016). A critical study of immersive theatre and the productive participation it asks of audiences. It informed how we think about what a participant is asked to do.
+
+### Mawhorter et al. (2014)
+
+Peter Mawhorter, Michael Mateas, Noah Wardrip-Fruin and Arnav Jhala, [“Towards a Theory of Choice Poetics”](https://cs.wellesley.edu/~pmwh/research/papers/towards-choice-poetics-fdg-2014.pdf) (*FDG*, 2014). It offers a vocabulary for false, blind, flavour and delayed-effect choices, and for why delayed effects feel important yet can frustrate. It informed how we describe the kinds of choice a player meets.
+
+### Cardona-Rivera et al. (2014)
+
+Rogelio Cardona-Rivera, Justus Robertson, Stephen Ware, Brent Harrison, David Roberts and R. Michael Young, [“Foreseeing Meaningful Choices”](https://ojs.aaai.org/index.php/AIIDE/article/view/12716) (*AIIDE*, 2014). Foreseeing that options differ in situation raises felt agency. It informed how clearly the results of options should be foreseeable.
+
+### Thue et al. (2011)
+
+David Thue, Vadim Bulitko, Marcia Spetch and Trevon Romanuik, [“A Computational Model of Perceived Agency in Video Games”](https://ojs.aaai.org/index.php/AIIDE/article/view/12437) (*AIIDE*, 2011). Perceived agency tracked the player's desire for outcomes, in one study with a significant sub-contrast. It informed how modestly we hold claims about agency.
+
+### Fendt et al. (2012)
+
+Matthew Fendt, Brent Harrison, Stephen Ware, Rogelio Cardona-Rivera and David Roberts, [“Achieving the Illusion of Agency”](https://www.cs.uky.edu/~sgware/reading/papers/fendt2012achieving.pdf) (2012). It measures how much felt agency immediate acknowledgement of a choice preserves, and where that stops working. It informed how quickly a choice should be acknowledged.
+
+### Miller (2017)
+
+Tim Miller, [“Explanation in Artificial Intelligence: Insights from the Social Sciences”](https://arxiv.org/abs/1706.07269) (arXiv, 2017). Explanations are contrastive, selected and social. It informed how we explain why something happened.
+
+### Deci, Koestner and Ryan (1999)
+
+Edward Deci, Richard Koestner and Richard Ryan, [“A meta-analytic review of experiments examining the effects of extrinsic rewards on intrinsic motivation”](https://doi.org/10.1037/0033-2909.125.6.627) (*Psychological Bulletin*, 1999). Contingent tangible rewards undermined free-choice motivation in the laboratory, while positive feedback enhanced it. It informed how we think about rewarding a player.
+
+### Ryan, Rigby and Przybylski (2006)
+
+Richard Ryan, C. Scott Rigby and Andrew Przybylski, [“The motivational pull of video games: a self-determination theory approach”](https://doi.org/10.1007/s11031-006-9051-8) (*Motivation and Emotion*, 2006). Autonomy and competence predicted enjoyment and later play. It informed how we weigh a player's sense of choice and skill.
+
+### Kim, Chen and Zhang (2016)
+
+Sara Kim, Rocky Peng Chen and Ke Zhang, [“Anthropomorphized helpers undermine autonomy and enjoyment in computer games”](https://ideas.repec.org/a/oup/jconrs/v43y2016i2p282-302..html) (*Journal of Consumer Research*, 2016). Unrequested humanlike help lowered autonomy and enjoyment. It informed how we think about help a player did not ask for.
+
+### Rains (2013)
+
+Stephen Rains, [“The nature of psychological reactance revisited: a meta-analytic review”](https://doi.org/10.1111/j.1468-2958.2012.01443.x) (*Human Communication Research*, 2013). Reactance after a threat to freedom is anger and negative thought. It informed how we think about a player who feels pushed.
+
+### Pailhès, Kumari and Kuhn (2021)
+
+Alice Pailhès, Shringi Kumari and Gustav Kuhn, [“The Magician's Choice: Providing illusory choice and sense of agency with the Equivoque forcing technique”](https://research.gold.ac.uk/29234) (2021). Illusory agency can survive repetition and prior preference. It informed how robust a sense of choice can be.
+
+### Johansson et al. (2005)
+
+Petter Johansson, Lars Hall, Sverker Sikström and Andreas Olsson, [“Failure to detect mismatches between intention and outcome in a simple decision task”](https://lup.lub.lu.se/record/220623) (*Science*, 2005). People missed mismatches between their choice and the outcome, and gave reasons for choices they had not made. It informed how reliable we think players' accounts of their own choices are.
+
+### Buehner and May (2002)
+
+Marc Buehner and Jon May, [“Knowledge mediates the timeframe of covariation assessment in human causal induction”](https://doi.org/10.1080/13546780244000060) (*Thinking & Reasoning*, 2002). Delay weakens causal judgement less when a delay is expected. It informed how delayed consequences can still be tied to their causes.
+
+### Carey and Russell
+
+Maggie Carey and Shona Russell (compilers), [“Re-authoring: some answers to commonly asked questions”](https://www.dulwichcentre.com.au/wp-content/uploads/2016/12/Re-authoring-Some-Answers-to-Commonly-Asked-Questions.pdf) (Dulwich Centre). A single exception to a dominant story is fragile until it is linked to others. It informed how we think about one-off events that change how a character is seen.
+
+### Ignatius of Loyola
+
+Ignatius of Loyola, [*The Spiritual Exercises*](https://ccel.org/ccel/ignatius/exercises.ix.html), in its opening Annotations (Christian Classics Ethereal Library). A guide stands neutral, asks about the person's responses and adapts to them. It informed how we think about a guide who adapts without steering.
+
+### Sarian (2018)
+
+Antranig Arek Sarian, [“No Going Back”: The Telltale Model as Thought Experiment](https://eludamos.org/index.php/eludamos/article/view/vol9no1-2) (*Eludamos: Journal for Computer Game Culture*, 2018). It reads why choices that do not seem to matter still work. It informed how we think about choices whose effects are mostly felt.
+
+### McLaren, Oades and Deery (2026)
+
+Patrick McLaren, Lindsay Oades and Ben Deery, [“How do dungeon masters and players contribute to the needs satisfaction (or frustration) in Dungeons & Dragons 5th Edition?”](https://doi.org/10.33063/ijrp.vi17.676) (*International Journal of Role-Playing*, issue 17, 2026). A large survey framed by self-determination theory, with agency as a theme. It informed how we think about what a game master gives players.
 
 ## Reference imagery
 
