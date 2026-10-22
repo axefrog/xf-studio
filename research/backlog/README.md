@@ -53,6 +53,14 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 - **Consistency leftovers:** UI-142's build steps, and repeated layer names (CORE-125) ([readiness](../../docs/release-readiness.md)). *29 Sep*
 
 ### Polish lane (before 1.0)
+- **Profiles phase 1 UI follow-ups** (from its design review; they don't block the merge):
+  - the workspace notice as a library component;
+  - "Save version" crowding the header crumbs at about 1,100 px;
+  - progress for Taking over, Waiting and Restoring, and a way back from Waiting;
+  - wording leftovers: the "Autosaved draft" chip, the "Draft" glossary entry, and three names for reopening a collection;
+  - "aren't protected" should say its consequence;
+  - save-toast and read-only-fade polish. *22 Oct*
+- **Tests leave temporary folders behind** (`xfs-part-2-library-*`, `xfs-locked-library-*`, `xfs-ui-data-*` and others pile up in the system temp folder). Every test removes what it creates. *22 Oct*
 - **Starter eye-makeup shapes** under the contributed-defaults convention ([small bugs](#small-bugs-and-friction)). *21 Oct*
 - **The rest of [Small bugs and friction](#small-bugs-and-friction):** Build Stop, two windows on one draft, collection tie order, the masculine plate warning, Build wording, receipt matching. *21 Oct*
 - **A check that pure engine code never reads the clock, randomness or timers** (`engines/layered-makeup/raster-processor.ts` does today). *21 Oct*
