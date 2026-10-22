@@ -415,6 +415,8 @@ export class CharacterContextActions {
   /** The save the saved-V service shows now (its content key), as this service last saw it: a change it didn't make is a new V. */
   private knownSave: string;
 
+  /** The V this context shows: its ID (its history scope's, `character:<id>`), which `character.*` actions name; `local` for a context no owner holds. */
+  character(): string { return this.home.id; }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
   /** The decoded save the V comes from (a V from a save), else null. */
   shownSave(): SavedV | null { return this.state.origin.kind === "save" ? this.state.save?.value ?? null : null; }

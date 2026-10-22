@@ -20,8 +20,11 @@ import { addLight, aimLightAtHead, duplicateLight, moveLight, BUILT_IN_SETUP_IDS
 export type PreviewConfig = Pick<PreviewState,
   "surface" | "wire" | "brows" | "lashes" | "hair" | "piercings" | "body" | "uncensored" | "physics" |
   "eyeShape" | "normals" | "eyeOwnRoughness" | "skinScatter" | "faceShadows" | "hairLook" | "exposure" | "lightAngle" | "lightingPreset" | "creatorLighting" | "studioLights" | "lightingSetups">;
-/** Every camera and preview action may name the view it acts on; without one it acts on the focused view (design §3.8). */
-export type PreviewAction = PreviewActionBody & { view?: ViewId };
+/**
+ * Every camera and preview action names the view it acts on (profiles design §3.6), and one that edits the view's scene names the scene's
+ * `gen` it was resolved at too (checked by the application); the input layer resolves both.
+ */
+export type PreviewAction = PreviewActionBody & { view: ViewId; sceneGen?: number };
 type PreviewActionBody =
   | { kind: "camera.front" }
   | { kind: "camera.body" }
@@ -199,12 +202,8 @@ export class PreviewActions {
   }
   /** The view graph this device follows. */
   views(): ViewGraph { return this.graph; }
-  /** The view an action acts on: the one it names, else the focused one (the shown one when that is gone). */
-  private target(view?: ViewId): ViewId {
-    const id = view ?? this.graph.focused();
-    return this.graph.has(id) ? id : this.shown;
-  }
-  private fields(view?: ViewId) { return previewFields(this.graph, this.target(view)); }
+  /** The view a read is about: the one it names, else the one this device draws (never "the focused one": nothing here reads focus). */
+  private fields(view?: ViewId) { return previewFields(this.graph, view !== undefined && this.graph.has(view) ? view : this.shown); }
   eyeShapeOptions(): Readonly<EyeShapeOptions> {
     return structuredClone(this.port.eyeShapeOptions?.() ?? { choices: [], eyesFollow: false, eyeSource: null });
   }
@@ -230,11 +229,12 @@ export class PreviewActions {
   }
   /** Capability with the reason code chosen at each refusal. */
   check(action: PreviewAction): PreviewCapability & { code?: ReasonCode } {
-    if (action.view !== undefined && !this.graph.has(action.view)) return refusal("missing_target", "That view no longer exists.");
+    if (typeof action.view !== "string") return refusal("missing_target", "Open a 3D view to use this.");
+    if (!this.graph.has(action.view)) return refusal("missing_target", "That view no longer exists.");
     // The device computes framing for the view it draws; other views get cameras of their own with more than one visible view (P4).
-    if (action.kind.startsWith("camera.") && this.target(action.view) !== this.shown) return refusal("unavailable", "That view isn't shown.");
+    if (action.kind.startsWith("camera.") && action.view !== this.shown) return refusal("unavailable", "That view isn't shown.");
     const state = this.fields(action.view);
-    if ((action.kind === "camera.back" || action.kind === "camera.forward") && !this.graph.cameraTrail(this.target(action.view))[action.kind === "camera.back" ? "back" : "forward"])
+    if ((action.kind === "camera.back" || action.kind === "camera.forward") && !this.graph.cameraTrail(action.view)[action.kind === "camera.back" ? "back" : "forward"])
       return refusal("invalid_value", action.kind === "camera.back" ? "The camera hasn't jumped anywhere yet." : "There is no later camera position to go forward to.");
     if (action.kind === "camera.setFov" && (!Number.isFinite(action.degrees) || action.degrees < 10 || action.degrees > 90))
       return refusal("invalid_value", "Field of view must be between 10° and 90°.");
@@ -283,7 +283,7 @@ export class PreviewActions {
   dispatch(action: PreviewAction): PreviewActionResult {
     const capability = this.capability(action);
     if (!capability.available) throw Error(capability.reason);
-    const view = this.target(action.view), state = this.fields(view);
+    const view = action.view, state = this.fields(view);
     const lights = (next: Partial<LightsState>, label: string, coalesce?: string) => this.graph.edit(view, "lights", { state: next }, { label, coalesce });
     const scene = (next: Partial<SceneState>, label: string) => this.graph.edit(view, "scene", { state: next }, { label });
     const display = (next: Partial<DisplayState>, label: string) => this.graph.edit(view, "display", { state: next }, { label });
@@ -352,8 +352,8 @@ export class PreviewActions {
   /** Restore a saved camera without recording a step or a trail entry (workspace restore). */
   restoreSavedCamera(camera: CameraState) { this.port.restoreCamera(camera); this.moved(this.shown); }
   /** Move the view's camera Back or Forward along its trail (design §3.6); false when there is nowhere to go. */
-  cameraStep(direction: "back" | "forward", view?: ViewId): boolean {
-    return this.graph.cameraStep(this.target(view), direction, { pose: this.port.cameraState() });
+  cameraStep(direction: "back" | "forward", view: ViewId): boolean {
+    return this.graph.cameraStep(this.graph.target(view), direction, { pose: this.port.cameraState() });
   }
   // ----- Lighting setups (lighting-setups.ts) -----
 
@@ -530,9 +530,9 @@ export class PreviewActions {
    * Turn a view's scene's dangle simulation on or off (`motion.setPhysics`, dispatched by the motion service): a scene-node edit, so every
    * view of the scene follows it, and Undo in View and lighting reverses it.
    */
-  setScenePhysics(enabled: boolean, view?: ViewId) {
+  setScenePhysics(enabled: boolean, view: ViewId) {
     this.dispatching = true;
-    try { this.graph.edit(this.target(view), "scene", { state: { physics: enabled } }, { label: enabled ? "Hair physics on" : "Hair physics off" }); }
+    try { this.graph.edit(this.graph.target(view), "scene", { state: { physics: enabled } }, { label: enabled ? "Hair physics on" : "Hair physics off" }); }
     finally { this.dispatching = false; }
     this.notify();
   }

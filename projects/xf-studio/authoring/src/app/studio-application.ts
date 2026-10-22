@@ -1,7 +1,8 @@
 import type { AuthoringDocument } from "./authoring/authoring-document";
 import type { AuthoringControlEdits } from "./authoring/authoring-control-edits";
 import { fromView3d, gestureSource, type AuthoringGestures, type GestureOrigin, type GestureSource } from "./authoring/authoring-gestures";
-import type { HistoryCommand as HistoryAction, HistorySnapshot, HistoryState } from "../platform/api/history";
+import type { HistoryCommand as HistoryAction, HistoryMove, HistorySnapshot, HistoryState } from "../platform/api/history";
+import { missingTarget as missingNamedTarget, nameTargets, NO_TARGET, type NamedTargets, type Naming, type Unnamed } from "./action-targets";
 import { nameIssue } from "../platform/api/validation-issues";
 import { consequenceOf, type Consequence, type ConsequenceSubject } from "./action-consequences";
 import { RECIPE_HISTORY_LIMIT } from "../legacy/eye-makeup/editor-actions";
@@ -18,6 +19,9 @@ import type { TransitionAction, TransitionSettings } from "../platform/core/tran
 import { type ViewId, viewTitles } from "../platform/api/view-graph";
 import type { ViewGraph } from "../platform/core/view-graph";
 import type { ViewAction, ViewActions } from "./view-actions";
+import type { SceneAction, SceneCommands } from "./profiles/scene-commands";
+import type { LookRef } from "../library/collection-documents";
+import { isLookScope as lookScoped, lookScope } from "../platform/core/history-service";
 import { plannedModules, type PlannedModule, type StudioModule, type ViewSummaryContribution, type ViewToolContribution, type ViewToolFilter } from "../platform/api";
 import type { Layer, Point, Recipe, WarpField } from "../engines/layered-makeup/recipe";
 import { RECIPE_ACTION_KINDS, type GestureEdit, type RecipeAction } from "../engines/layered-makeup/recipe-actions";
@@ -52,14 +56,15 @@ export const NOTHING_TO_UNDO = "Nothing to undo here yet.";
  */
 export type StudioOwnerActions = {
   history: HistoryAction;
-  "eye-makeup": EyeMakeupAction;
+  "eye-makeup": Naming<EyeMakeupAction, { look: LookRef }>;
   collection: CollectionStudioAction;
   preview: PreviewAction;
   motion: MotionAction;
   transitions: TransitionAction;
   quality: QualityAction;
-  savedV: SavedAppearanceAction;
-  characterContext: CharacterContextAction;
+  savedV: Naming<SavedAppearanceAction, { character: string }>;
+  scenes: SceneAction;
+  characterContext: Naming<CharacterContextAction, { character: string }>;
   views: ViewAction;
 };
 export type StudioOwnerId = keyof StudioOwnerActions;
@@ -111,11 +116,13 @@ type Services = { document: AuthoringDocument;
   eyeMakeup: EyeMakeupPort;
   /** Where new items' IDs come from for the other features' actions (default: random UUIDs). */
   newId?: () => string;
+  /** The session's history service: Undo and Redo act on the scope they name (the look's, a V's, or an experiment's document). */
+  history: HistoryService;
   /**
-   * The session's history service: global Undo and Redo go to its focused scope (the look's, or an experiment's document). Without
-   * one (fixtures) they go to the document's look history.
+   * The session's scenes (profiles design §1.1): each scene's `gen` (which a view action that edits the scene names) and `scene.setLook`
+   * and `scene.setSubject`.
    */
-  history?: HistoryService;
+  scenes?: Pick<SceneCommands, "gen" | "capability" | "dispatch">;
   gestures: AuthoringGestures; controls: AuthoringControlEdits;
   collection?: CollectionService; files?: StudioFileOperations; preview?: PreviewActions; motion?: MotionActions;
   /** How a held expression's changes animate (platform/core/transition-settings.ts); the composition root attaches it at start. */
@@ -149,7 +156,8 @@ export class StudioApplication {
   private collectionRevision = 0;
   private seenContent?: number;
   private previewUnavailable?: string;
-  private gesture?: { source: GestureSource; layer: Layer; points: Point[]; fields: Map<string, WarpField> };
+  /** The open gesture: its source, the look it edits (its capture, profiles design §3.3) and the layer and controls it started on. */
+  private gesture?: { source: GestureSource; scope: string; layer: Layer; points: Point[]; fields: Map<string, WarpField> };
   /** The action registry: owners, descriptors, Undo policy and routes. */
   private readonly routes: Registry<AnyOwner>;
   /** One handler per registered owner: the compiler requires every owner in the composition list. */
@@ -329,9 +337,18 @@ export class StudioApplication {
       limits.to = { ...limits.to, min: 0, max: Math.max(0, presets - 1) };
     return limits;
   }
-  /** Enumerated values and their live capability for a concrete target. */
+  /**
+   * An action with the targets `named` holds filled in where it leaves them out (profiles design §3.6): the input layer (the presentation
+   * port) resolves `named`; nothing here does.
+   */
+  private withTargets<A extends { kind: string }>(action: A, named: NamedTargets | undefined): A {
+    return named ? nameTargets(action, this.routes.descriptor(action.kind), named) : action;
+  }
+  /** A synchronous action's descriptor (shared and frozen), for an input layer naming its targets. */
+  descriptor(kind: string): Readonly<PlatformDescriptor> | undefined { return this.routes.descriptor(kind); }
+  /** Enumerated values and their live capability for a concrete target; `named`: the targets the input layer resolved. */
   choicesFor(target: StudioTarget, kind: StudioAction["kind"], field: string,
-    base: Record<string, unknown> = {}) {
+    base: Record<string, unknown> = {}, named?: NamedTargets) {
     const schema = this.routes.descriptor(kind)?.payload[field];
     if (!schema?.values) return [];
     const targetPayload = target.kind === "layer" ? { layerId: target.id, id: target.id } :
@@ -339,14 +356,17 @@ export class StudioApplication {
       target.kind === "field" ? { layerId: target.layerId, fieldId: target.id } :
       target.kind === "preset" ? { id: target.id } : {};
     return schema.values.map(value => {
-      const action = { kind, ...targetPayload, ...base, [field]: value } as StudioAction;
+      const action = this.withTargets({ kind, ...targetPayload, ...base, [field]: value } as StudioAction, named);
       return { value, action, capability: this.contextCapability(target, action) };
     });
   }
-  /** Bind an adapter's hit to this draft/geometry before offering existing commands. */
-  contextFor(hit: StudioContextHit): StudioBoundContext {
+  /**
+   * Bind an adapter's hit to this draft/geometry before offering existing commands. `named`: the targets the input layer resolved when the
+   * menu opened (the look, the collection), frozen with it: its commands name them, and are refused once they changed.
+   */
+  contextFor(hit: StudioContextHit, named: NamedTargets = {}): StudioBoundContext {
     const draft = this.services.collection?.draftIdentity();
-    return Object.freeze({ hit: Object.freeze(structuredClone(hit)), collectionId: draft?.collectionId,
+    return Object.freeze({ hit: Object.freeze(structuredClone(hit)), named: Object.freeze({ ...named }), collectionId: draft?.collectionId,
       selectedPresetId: draft?.selected,
       collectionRevision: this.collectionRevision,
       geometryRevision: this.services.document.geometryVersion.revision });
@@ -375,10 +395,12 @@ export class StudioApplication {
   /** Input candidates carry an applicable/disabled reason but no forged placeholder action. */
   contextOptionsFor(context: StudioBoundContext) {
     const bound = this.boundContextCapability(context), target = contextScope(context.hit), hit = context.hit;
-    return contextCandidates(context.hit, this.services.document.recipe).map(candidate => {
-      if ("action" in candidate) return { ...candidate, requiresInput: false as const,
-        capability: bound.available && target ? this.contextCapability(target, candidate.action) : bound,
-        undo: this.routes.undoPolicy(candidate.action) };
+    return contextCandidates(context.hit, this.services.document.recipe, context.named.collection).map(candidate => {
+      if ("action" in candidate) {
+        const action = this.withTargets(candidate.action as StudioAction, context.named);
+        return { ...candidate, action, requiresInput: false as const,
+          capability: bound.available && target ? this.contextCapability(target, action) : bound, undo: this.routes.undoPolicy(action) };
+      }
       let capability = bound;
       if (capability.available && (hit.kind === "point" || hit.kind === "tangent")) {
         if (candidate.id === "point.softness" &&
@@ -391,13 +413,14 @@ export class StudioApplication {
       return { ...candidate, capability, undo: undoPolicyOf(this.routes.descriptor(candidate.actionKind)!, variant) };
     });
   }
-  contextQuery(hit: StudioContextHit) {
-    const context = this.contextFor(hit);
+  contextQuery(hit: StudioContextHit, named: NamedTargets = {}) {
+    const context = this.contextFor(hit, named);
     return { context, targetCapability: this.boundContextCapability(context),
       options: this.contextOptionsFor(context) };
   }
-  /** Query a completed input action, then recheck the same binding at invocation. */
-  boundActionCapability(context: StudioBoundContext, action: StudioAction): StudioCapability {
+  /** Query a completed input action, then recheck the same binding at invocation (it names what the menu named when it opened). */
+  boundActionCapability(context: StudioBoundContext, unnamed: Unnamed<StudioAction>): StudioCapability {
+    const action = this.withTargets(unnamed as StudioAction, context.named);
     const bound = this.boundContextCapability(context);
     if (!bound.available) return bound;
     const target = contextScope(context.hit);
@@ -405,7 +428,7 @@ export class StudioApplication {
       reason: "No standalone edit command applies off the makeup." };
     const variant = "command" in action && action.command && typeof action.command === "object" &&
       "kind" in action.command ? action.command.kind : undefined;
-    const candidate = contextCandidates(context.hit, this.services.document.recipe).find(item =>
+    const candidate = contextCandidates(context.hit, this.services.document.recipe, context.named.collection).find(item =>
       "action" in item ? item.action.kind === action.kind &&
         ("command" in item.action && item.action.command && typeof item.action.command === "object" &&
           "kind" in item.action.command ? item.action.command.kind : undefined) === variant :
@@ -414,7 +437,8 @@ export class StudioApplication {
       reason: "This command is not offered for that hit target." };
     return this.contextCapability(target, action);
   }
-  dispatchContext(context: StudioBoundContext, action: StudioAction): StudioDispatchResult {
+  dispatchContext(context: StudioBoundContext, unnamed: Unnamed<StudioAction>): StudioDispatchResult {
+    const action = this.withTargets(unnamed as StudioAction, context.named);
     const allowed = this.boundActionCapability(context, action);
     return allowed.available ? this.dispatch(action) : { ok: false as const,
       code: allowed.code ?? "unavailable", message: allowed.reason ?? "Action unavailable." };
@@ -484,7 +508,7 @@ export class StudioApplication {
   /** What an action, file workflow or library request replaces, writes or discards, and how to recover. */
   consequences(subject: ConsequenceSubject): Consequence {
     const look = this.services.document.history;
-    const jump = "action" in subject && subject.action.kind === "history.jumpTo" ? look.plan(subject.action.entryId) : undefined;
+    const jump = "action" in subject && subject.action.kind === "history.jumpTo" ? this.historyScope(subject.action.scope)?.plan(subject.action.entryId) : undefined;
     // An action's own consequence: the generic rule from its descriptor, with its spec's override.
     const route = "action" in subject ? this.routes.route(subject.action.kind) : undefined;
     const own = route?.ok ? { effect: route.spec.descriptor.effect,
@@ -492,27 +516,21 @@ export class StudioApplication {
     return consequenceOf(subject, { draft: this.services.collection?.summary().draft, history: look.state(),
       undoLimit: RECIPE_HISTORY_LIMIT, removedLimit: REMOVED_PRESET_LIMIT, jump, ...(own ? { action: own } : {}) });
   }
-  /** What Undo and Redo would change next (labels are session-only; restored history reads "Earlier change"). */
-  history(): HistoryState { return this.focusedHistory()?.state() ?? { depth: 0, redoDepth: 0 }; }
   /**
-   * Where global Undo and Redo go: the editing context (profiles design §3.7), the scope of the last editing interaction (a look, a V
-   * or an experiment's document); none (undefined) before anything was edited. Without a history service (fixtures), the look's.
+   * What Undo and Redo would change next in a history scope (profiles design §3.7; labels are session-only, restored history reads
+   * "Earlier change"); with no scope (no editing context yet) or one that can't act now, nothing.
    */
-  /** The history a command steps: the scope it names (a focused panel's own), else the focused one. */
-  private commandHistory(action: HistoryAction): HistoryScope | undefined {
-    const named = action.kind !== "history.jumpTo" ? action.scope : undefined;
-    return named && this.services.history ? this.services.history.scope(named) : this.focusedHistory();
-  }
-  private focusedHistory(): HistoryScope | undefined {
-    return this.services.history ? this.services.history.focused() ?? undefined : this.services.document.history;
+  history(scope?: string): HistoryState { return this.historyScope(scope)?.state() ?? { depth: 0, redoDepth: 0 }; }
+  /** The scope a history command names, while it can act: an open scope, or a document its experiment offers. */
+  private historyScope(scope: string | undefined): HistoryScope | undefined {
+    return scope === undefined ? undefined : this.services.history.acting([scope]) ?? undefined;
   }
   /**
-   * Read-only timeline of the current preset's history (oldest first, redo-able steps after
-   * the current one) for a history list. Labels and times are session-only; steps restored
-   * from a saved workspace read "Earlier change". It exposes no recipes.
+   * Read-only timeline of a history scope (oldest first, redo-able steps after the current one) for a history list. Labels and times are
+   * session-only; steps restored from a saved workspace read "Earlier change". It exposes no recipes.
    */
-  historyTimeline(): HistorySnapshot {
-    return this.focusedHistory()?.timeline() ?? { startId: "start", steps: [], current: -1, redoCount: 0, trimmed: false };
+  historyTimeline(scope?: string): HistorySnapshot {
+    return this.historyScope(scope)?.timeline() ?? { startId: "start", steps: [], current: -1, redoCount: 0, trimmed: false };
   }
   /** Static finish and Glitter-model descriptors, including the compiler's export gate. */
   finishCatalogue() { return finishCatalogue(this.services.eyeMakeup.region.wording); }
@@ -572,14 +590,13 @@ export class StudioApplication {
    * action it dispatches and that action's capability. `filter` is the presentation's module visibility and research preference,
    * which the application is given, never reads. Every toolbar, view menu, palette entry and Display toggle renders this one list.
    */
-  viewTools(view: string | undefined, filter: ViewToolFilter): ViewToolEntry[] {
+  viewTools(view: ViewId, filter: ViewToolFilter): ViewToolEntry[] {
     const actions = this.services.viewActions, graph = this.services.views;
-    if (!actions || !graph) return [];
-    const id = view !== undefined && graph.has(view) ? view : graph.focused();
-    return actions.tools(id, filter).map(tool => this.resolveTool(id, tool));
+    if (!actions || !graph?.has(view)) return [];
+    return actions.tools(view, filter).map(tool => this.resolveTool(view, tool));
   }
   /** The shown modules' summaries for a view's scene kind (its crumb after the preset), in module order. */
-  viewSummaries(view: string | undefined, filter: Pick<ViewToolFilter, "modules">): ViewSummaryContribution[] {
+  viewSummaries(view: ViewId, filter: Pick<ViewToolFilter, "modules">): ViewSummaryContribution[] {
     return structuredClone(this.services.viewActions?.summaries(view, filter) ?? []);
   }
   /**
@@ -587,8 +604,12 @@ export class StudioApplication {
    * tool naming the same action resolves the same way.
    */
   private resolveTool(view: string, tool: ViewToolContribution): ViewToolEntry {
-    const entry = (action: StudioAction, extra: Partial<ViewToolEntry> = {}): ViewToolEntry =>
-      ({ ...structuredClone(tool), shown: true, action, capability: this.capability(action), ...extra });
+    // The action names this view, and the `gen` of the scene it shows now when it edits that scene: it never edits a replacement.
+    const scene = this.services.views!.node(view, "scene").id, gen = this.services.scenes?.gen(scene);
+    const entry = (unnamed: StudioAction, extra: Partial<ViewToolEntry> = {}): ViewToolEntry => {
+      const action = this.withTargets(unnamed, { view, ...(gen === undefined ? {} : { sceneGen: gen }) });
+      return { ...structuredClone(tool), shown: true, action, capability: this.capability(action), ...extra };
+    };
     switch (tool.dispatches) {
       // A toggle held in the view's tools node.
       case "view.setTool": {
@@ -645,15 +666,50 @@ export class StudioApplication {
     // Descriptor payload types and ranges gate every entry point, not only context menus.
     const payload = payloadIssue(route.spec.descriptor, action);
     if (payload && payload.code !== "limit") return payload;
-    // An action that names a view acts on that view only while it exists (view-graph-design.md §3.8).
-    const view = (action as { view?: unknown }).view;
-    if (view !== undefined && s.views && !s.views.has(view as string)) return refusal("missing_target", "That view no longer exists.");
+    // What the action names (profiles design §3.6): every target its descriptor needs, each still what it was when it was resolved.
+    const named = this.namedTargetIssue(route.spec.descriptor, action);
+    if (named) return named;
     // The owning module decides, with a structured code (CORE-15).
     const domain = coded(this.handler(route.owner.id).capability(action));
     // A range limit is generic; when the domain can say why in the user's terms
     // (for example "already at the front"), show that instead.
     if (!domain.available) return domain;
     return payload ?? domain;
+  }
+  /**
+   * The named targets an action carries (profiles design §3.6), checked where they arrive: a required one left out is refused, a view must
+   * exist, and a `sceneGen` must still be its scene's (the scene shows what it showed when the action was resolved).
+   */
+  private namedTargetIssue(descriptor: PlatformDescriptor, action: StudioAction): StudioCapability | undefined {
+    const absent = missingNamedTarget(descriptor, action);
+    if (absent) return refusal("missing_target", NO_TARGET[absent]);
+    const { view, scene, sceneGen, look } = action as { view?: unknown; scene?: unknown; sceneGen?: unknown; look?: unknown };
+    // A feature's action edits the look the editor shows (phase 1 edits one look at a time): another look is refused, never edited in its place.
+    if (look !== undefined && this.routes.route(action.kind).ok && (this.routes.route(action.kind) as { owner: { owner: string } }).owner.owner === "feature"
+      && !this.editsLook(look)) return refusal("missing_target", OTHER_LOOK);
+    const views = this.services.views;
+    if (typeof view === "string" && views && !views.has(view)) return refusal("missing_target", "That view no longer exists.");
+    if (typeof sceneGen === "number") {
+      const id = typeof scene === "string" ? scene : typeof view === "string" && views?.has(view) ? views.node(view, "scene").id : undefined;
+      const gen = id === undefined ? undefined : this.services.scenes?.gen(id);
+      if (gen !== sceneGen) return refusal("missing_target", "What this view shows changed. Try again.");
+    }
+    return undefined;
+  }
+  /**
+   * Why a V an action names can't be acted on here (undefined: it can): its context is the one a 3D view shows (phase 1 draws one view),
+   * so another V is refused, never acted on in its place.
+   */
+  private shownCharacter(character: string): StudioCapability | undefined {
+    const context = this.services.characterContext;
+    if (!context) return missing("The creator options are still loading.");
+    return context.character() === character ? undefined : missingTarget("That V isn't shown in a 3D view here. Show it to change it.");
+  }
+  /** Whether `look` names the look the editor document shows. */
+  private editsLook(look: unknown): boolean {
+    const ref = look as Partial<LookRef> | null;
+    return !!ref && typeof ref.collection === "string" && typeof ref.look === "string"
+      && lookScoped(this.services.document.scopeId) && lookScope(ref as LookRef) === this.services.document.scopeId;
   }
   private handler(owner: string) {
     return (this.handlers[owner as StudioOwnerId] ?? this.featureHandlers.get(owner)) as ActionHandler<StudioAction>;
@@ -748,15 +804,15 @@ export class StudioApplication {
     // Inside a look transaction the transaction records the one step.
     const recorded = (action: StudioAction) => !this.look && this.routes.undoPolicy(action) !== "none";
     return {
-      // Global Undo, Redo and jumps reach the focused history scope, which decides what is available.
+      // Undo, Redo and jumps act on the history scope they name, which decides what is available.
       history: {
-        capability: action => app.commandHistory(action)?.capability(withoutScope(action)) ?? refusal("unavailable", NOTHING_TO_UNDO),
+        capability: action => app.historyScope(action.scope)?.capability(moveOf(action)) ?? refusal("unavailable", NOTHING_TO_UNDO),
         // A document's move (through its experiment) has no result of its own; a look's says whether it moved.
         dispatch: action => {
-          const scope = app.commandHistory(action);
+          const scope = app.historyScope(action.scope);
           if (!scope) return undefined;
-          const moved = scope.command(withoutScope(action));
-          return isLookScope(scope.id) || !app.services.history ? moved : undefined;
+          const moved = scope.command(moveOf(action));
+          return isLookScope(scope.id) ? moved : undefined;
         },
       },
       "eye-makeup": {
@@ -788,8 +844,12 @@ export class StudioApplication {
         capability: action => app.services.quality?.capability(action) ?? missing("Preview quality is still loading."),
         dispatch: action => app.services.quality!.dispatch(action),
       },
+      scenes: {
+        capability: action => app.services.scenes?.capability(action) ?? missing("The scenes are still loading."),
+        dispatch: action => app.services.scenes!.dispatch(action),
+      },
       savedV: {
-        capability: action => app.services.savedV?.capability(action) ?? missing("Saved appearance preview is still loading."),
+        capability: action => app.shownCharacter(action.character) ?? app.services.savedV?.capability(action) ?? missing("Saved appearance preview is still loading."),
         dispatch: action => app.services.savedV!.dispatch(action),
       },
       views: {
@@ -800,7 +860,7 @@ export class StudioApplication {
       },
       // Before the 3D preview is ready there is no context yet: a creator change is refused as `not_ready` (CORE-64).
       characterContext: {
-        capability: action => app.services.characterContext?.capability(action) ?? missing("The creator options are still loading."),
+        capability: action => app.shownCharacter(action.character) ?? app.services.characterContext?.capability(action) ?? missing("The creator options are still loading."),
         dispatch: action => app.services.characterContext!.dispatch(action),
       },
     };
@@ -842,16 +902,17 @@ export class StudioApplication {
     const route = this.routes.routeAsync(kind);
     return route.ok && route.owner.id === family;
   }
-  /** Candidate actions use the hit target, never the currently selected row. */
-  actionsFor(target: StudioTarget): StudioActionInfo[] {
+  /** Candidate actions use the hit target, never the currently selected row; `named`: the targets the input layer resolved. */
+  actionsFor(target: StudioTarget, named?: NamedTargets): StudioActionInfo[] {
     const s = this.services, recipe = s.document.snapshot().recipe;
-    let actions: StudioAction[] = [];
+    let actions: Unnamed<StudioAction>[] = [];
     if (target.kind === "workspace") actions = [{ kind: "history.undo" }];
     if (target.kind === "collection") actions = [
       { kind: "preset.edit", command: { kind: "add" } }, { kind: "preset.edit", command: { kind: "restore" } },
       { kind: "collection.undoOpen" }];
     if (target.kind === "preset") actions = [
-      { kind: "preset.select", id: target.id }, { kind: "preset.edit", command: { kind: "copy", id: target.id } },
+      ...(named?.collection ? [{ kind: "scene.setLook" as const, look: { collection: named.collection, look: target.id } }] : []),
+      { kind: "preset.edit", command: { kind: "copy", id: target.id } },
       { kind: "preset.edit", command: { kind: "remove", id: target.id } }];
     if (target.kind === "layer") actions = [
       { kind: "layer.select", layerId: target.id },
@@ -870,8 +931,10 @@ export class StudioApplication {
       const view = target.view === undefined ? {} : { view: target.view };
       actions = [{ kind: "camera.front", ...view }, { kind: "camera.body", ...view }, { kind: "quality.rebuild" }];
     }
-    return actions.map(action => ({ action, capability: this.capability(action),
-      undo: this.routes.undoPolicy(action), async: false }));
+    return actions.map(unnamed => {
+      const action = this.withTargets(unnamed as StudioAction, named);
+      return { action, capability: this.capability(action), undo: this.routes.undoPolicy(action), async: false as const };
+    });
   }
   dispatch(action: StudioAction): StudioDispatchResult {
     const allowed = this.capability(action);
@@ -894,7 +957,7 @@ export class StudioApplication {
    * inside an open one leaves the recipe unchanged, and the control still commits or
    * cancels that transaction as usual.
    */
-  controlEdit(id: string, action: RecipeAction): StudioDispatchResult {
+  controlEdit(id: string, action: Naming<RecipeAction, { look: LookRef }>): StudioDispatchResult {
     if (this.gesture) return { ok: false, code: "busy", message: "Finish or cancel the current gesture first (Esc)." };
     // Form controls adjust recipe content through AuthoringControlEdits, which takes recipe actions only.
     if (!RECIPE_ACTION_KINDS.has(action.kind) || this.routes.descriptor(action.kind)?.effect !== "content")
@@ -1030,9 +1093,12 @@ export class StudioApplication {
     const owner = this.services.collection?.selectedPreset();
     return !!owner?.loaded && !owner.id;
   }
-  canBeginGesture(source: GestureOrigin, layerId: string): StudioCapability {
+  /** Whether a gesture can begin on `layerId` of `look` (the look it captures: the editor must show it). */
+  canBeginGesture(source: GestureOrigin, layerId: string, look?: LookRef): StudioCapability {
     const denied = this.denied();
     if (denied) return denied;
+    if (!look) return refusal("missing_target", NO_TARGET.look);
+    if (!this.editsLook(look)) return refusal("missing_target", OTHER_LOOK);
     if (this.unowned()) return { available: false, code: "missing_target", reason: NO_PRESET };
     if (this.services.document.locked) return refusal("unavailable", this.services.document.locked);
     if (fromView3d(source) && this.previewUnavailable)
@@ -1045,6 +1111,8 @@ export class StudioApplication {
     const session = this.gesture;
     if (!session || session.source.view !== gestureSource(source).view) return { available: false, code: "not_ready",
       reason: "Begin a gesture on the target layer first." };
+    // The capture: the editor still shows the look the gesture began on.
+    if (this.services.document.scopeId !== session.scope) return missingTarget("This view now shows another look.");
     if (!this.services.document.recipe.layers.includes(session.layer))
       return missingTarget("That gesture layer was replaced.");
     if (target.kind === "point" && (!session.points[target.index] ||
@@ -1055,15 +1123,15 @@ export class StudioApplication {
       session.fields.get(target.fieldId))) return missingTarget("That warp control was replaced.");
     return { available: true };
   }
-  beginGesture(source: GestureOrigin, layerId: string) {
-    if (!this.canBeginGesture(source, layerId).available) return false;
+  beginGesture(source: GestureOrigin, layerId: string, look?: LookRef) {
+    if (!this.canBeginGesture(source, layerId, look).available) return false;
     const layer = this.services.document.recipe.layers.find(item => item.id === layerId);
     if (!layer) return false;
     // Finish an open form transaction first, so its later Escape cannot revert this gesture.
     const control = this.services.controls.snapshot();
     if (control) this.services.controls.commit(control.id);
     if (!this.services.gestures.begin(source, layer)) return false;
-    this.gesture = { source: gestureSource(source), layer, points: [...layer.points],
+    this.gesture = { source: gestureSource(source), scope: this.services.document.scopeId, layer, points: [...layer.points],
       fields: new Map(layer.fields.map(field => [field.id, field])) }; this.notify(); return true;
   }
   applyGesture(source: GestureOrigin, proposal: StudioGestureProposal) {
@@ -1145,6 +1213,8 @@ function fieldIssue(value: unknown, schema: ValueSchema, field: string): StudioC
     return refused("limit", { code: "range", field, message: "The text length is outside the supported range." });
 }
 const NO_PRESET = "Add or select a preset first; layers belong to a preset.";
+/** A feature's action, gesture or menu naming a look the editor doesn't show (profiles design §3.6). */
+const OTHER_LOOK = "That look isn't the one being edited here. Show it to change it.";
 function missing(reason: string): StudioCapability { return { available: false, code: "not_ready", reason }; }
 function missingTarget(reason: string): StudioCapability { return { available: false, code: "missing_target", reason }; }
 function unknownCommand(): StudioCapability { return { available: false, code: "invalid_value", reason: "Unknown command." }; }
@@ -1154,8 +1224,7 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
   return (typeof value === "object" || typeof value === "function") && value !== null && typeof (value as { then?: unknown }).then === "function";
 }
 
-/** The command a scope carries out: the scope it named is already chosen. */
-function withoutScope(action: HistoryAction): HistoryAction {
-  if (action.kind === "history.jumpTo" || action.scope === undefined) return action;
-  return { kind: action.kind };
+/** The move a scope carries out: the scope it named is already chosen. */
+function moveOf(action: HistoryAction): HistoryMove {
+  return action.kind === "history.jumpTo" ? { kind: action.kind, entryId: action.entryId } : { kind: action.kind };
 }

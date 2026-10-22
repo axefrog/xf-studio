@@ -2,7 +2,7 @@ import { viewCatalogue } from "./views/contribution";
 import { allowsNativeTextMenu } from "./context-menu";
 import { checkForUpdatesNow, startupUpdateCheck } from "./update-check";
 import { comingSoon, liveFeatures, plannedShown } from "./coming-soon";
-import type { StudioAction } from "../app/studio-application";
+import type { PresentationAction } from "../app/studio-presentation";
 import type { StudioFileAction } from "../app/studio-file-operations";
 import { effectiveTheme, type ThemePreference } from "../app/ui-preferences";
 import { shortcutLabel } from "../app/input-bindings";
@@ -226,6 +226,17 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     if (control && main.contains(control)) { event.preventDefault(); event.stopPropagation(); }
   };
   for (const type of ["click", "dblclick", "pointerdown"]) main.addEventListener(type, refuseUnavailable, true);
+  // Where the person works (profiles design §3.3): the panel holding keyboard focus, and a pointer press or keyboard focus inside a 3D view
+  // makes that view the most recently focused. The application never reads it; actions name what it resolves to. Never an Undo step.
+  const reportFocus = (target: EventTarget | null, keyboard: boolean) => {
+    const node = target instanceof Node ? target : null;
+    const panel = node ? [...byId.keys()].find(id => byId.get(id)!.spec.element.contains(node)) : undefined;
+    const view = panel === undefined ? undefined : port.views.snapshot()?.views.find(entry => entry.panel === panel)?.id;
+    if (view !== undefined) port.focus.view(view);
+    if (keyboard) port.focus.panel(panel);
+  };
+  main.addEventListener("focusin", event => reportFocus(event.target, true));
+  main.addEventListener("pointerdown", event => reportFocus(event.target, false), true);
   root.replaceChildren(header.element, leaseNotice.element, main, status.element, setupCard.element, setupCard.consent, ...guidance.elements, feedback.toasts, feedback.live, feedback.assertive);
   root.classList.add("studio-ready");
   dock.render();
@@ -534,10 +545,10 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
       const state = libraryState(frame);
       setText(chip, state.label); chip.className = `chip ${state.tone}`; chip.title = state.detail;
       const undoCap = port.authoring.capability({ kind: "history.undo" }), redoCap = port.authoring.capability({ kind: "history.redo" });
-      const history = port.authoring.history();
-      // Name what each would change, and keep the shortcut visible even while unavailable.
-      applyCapability(undo, undoCap); undo.title = historyCommandTitle("undo", undoCap, history.undo?.label, keys.undo, frame.history.documentLabel);
-      applyCapability(redo, redoCap); redo.title = historyCommandTitle("redo", redoCap, history.redo?.label, keys.redo, frame.history.documentLabel);
+      const history = port.authoring.history(), context = frame.history.documentLabel ?? port.focus.editing()?.name;
+      // Name what each would change and in what (the editing context, profiles design §3.7), and keep the shortcut visible even while unavailable.
+      applyCapability(undo, undoCap); undo.title = historyCommandTitle("undo", undoCap, history.undo?.label, keys.undo, context);
+      applyCapability(redo, redoCap); redo.title = historyCommandTitle("redo", redoCap, history.redo?.label, keys.redo, context);
       setAttr(undo, "aria-label", historyCommandLabel("undo", undoCap, history.undo?.label));
       setAttr(redo, "aria-label", historyCommandLabel("redo", redoCap, history.redo?.label));
       const saveCap = port.authoring.requestCapability({ kind: "save" });
@@ -750,7 +761,7 @@ function panelMenuItems(rt: StudioRuntime, research: boolean): MenuItem[] {
   if (graph && (graph.views.length > 1 || upcoming.length)) items.push({ kind: "separator" }, { kind: "heading", label: "Views", detail: `${graph.views.length} 3D view${graph.views.length === 1 ? "" : "s"}` },
     ...graph.views.map(entry => { const panel = entry.panel;
       return { kind: "action" as const, label: entry.title ?? rt.views.meta[panel]?.title ?? entry.id, icon: "head" as const,
-        hint: `${entry.id === graph.focused ? "Focused · " : ""}${entry.sceneKind === "character" ? "Your V" : entry.sceneKind}${entry.shared.length ? ` · shares ${entry.shared.join(", ")}` : ""}`,
+        hint: `${entry.id === rt.port.focus.targets().view ? "Focused · " : ""}${entry.sceneKind === "character" ? "Your V" : entry.sceneKind}${entry.shared.length ? ` · shares ${entry.shared.join(", ")}` : ""}`,
         run: () => dock.reveal(panel) }; }), ...upcoming);
   return items;
 }
@@ -792,7 +803,7 @@ export function withPreviewSetup(rt: Pick<StudioRuntime, "port" | "feedback" | "
 /** The palette's commands: the platform's own, with each feature view's commands after the platform's Edit entries. */
 function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels: Map<PanelId, PanelController>, features: Command[], layouts: LayoutController): Command[] {
   const port = rt.port;
-  const act = (id: string, title: string, group: string, action: StudioAction, extra: Partial<Command> = {}): Command => ({
+  const act = (id: string, title: string, group: string, action: PresentationAction, extra: Partial<Command> = {}): Command => ({
     id, title, group, ...extra,
     capability: () => port.authoring.capability(action),
     run: () => { rt.dispatch(action); },

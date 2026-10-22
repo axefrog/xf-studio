@@ -1,3 +1,4 @@
+import type { StudioAction } from "./studio-application";
 import type { DesktopAppActions } from "../setup/desktop-app";
 import type { UpdateCheckActions } from "../setup/update-check-actions";
 import { CollectionApplication } from "../library/collection-application";
@@ -59,8 +60,11 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   outbox?: import("../platform/core/document-outbox").DocumentOutbox;
   /** A panel's instance in the tab shown (the profile session's). */
   panelInstance?: (panel: string) => string;
-  /** A focused panel's own history scope (the presentation's `panels.historyScope`): a 3D view's is the look its scene shows. */
-  panelHistoryScope?: (panel: string) => string | undefined;
+  /** The input layer's target resolution and the session's focus (profiles design §3.3, §3.6): what the presentation's actions name. */
+  targets?: import("./profiles/targets").TargetResolver;
+  focus?: Pick<import("../platform/core/focus").FocusService, "focusView" | "focusPanel">;
+  /** A history scope's name for people (the editing context Undo names). */
+  scopeName?: (scope: string) => string | undefined;
   onRecipeImported(): void;
   savedAppearance: {
     has(): boolean;
@@ -71,6 +75,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   };
 }) {
   const { core } = options;
+  const named = <A extends { kind: string }>(action: A): A => options.targets ? options.targets.complete(action, core.app.descriptor(action.kind)) : action;
   let collection: CollectionApplication;
   const files = new StudioFileOperations(options.fileDevice, {
     recipe: () => core.presentation.recipe(), selectedLayer: () => core.presentation.layer(),
@@ -89,7 +94,8 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     characterPreset: {
       unavailable: kind => core.app.characterPresetUnavailable(kind),
       load: value => {
-        const result = core.app.dispatch({ kind: "character.setSource", source: { kind: "preset", value } });
+        // The V the shown tab's focused view shows (the input layer names it, profiles design §3.6).
+        const result = core.app.dispatch(named({ kind: "character.setSource", source: { kind: "preset", value } }) as StudioAction);
         if (!result.ok) throw Error(result.message);
       },
       save: () => core.app.characterPresetFile(),
@@ -110,7 +116,8 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     localSetup: options.localSetup, installDetection: options.installDetection, modInstall: options.modInstall, previewSetup: options.previewSetup,
     desktopApp: options.desktopApp, updates: options.updates, links: options.links, about: options.about, diagnostics: options.diagnostics, modules: options.modules, experiments: options.experiments,
     workspace: options.lease, outbox: options.outbox, ...(options.panelInstance ? { panelInstance: options.panelInstance } : {}),
-    ...(options.panelHistoryScope ? { panelHistoryScope: options.panelHistoryScope } : {}) });
+    ...(options.targets ? { targets: options.targets } : {}), ...(options.focus ? { focus: options.focus } : {}),
+    ...(options.scopeName ? { scopeName: options.scopeName } : {}) });
   return {
     /** Trusted handles are retained by the composition root; never pass this object to a UI. */
     files, collection,

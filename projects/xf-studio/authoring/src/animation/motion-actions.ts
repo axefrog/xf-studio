@@ -51,8 +51,8 @@ export type MotionState = Pick<PreviewState,
      * Off by default until the in-game calibration (hair-physics-plan.md §3.6).
      */
     physics: boolean; physicsAvailable: boolean; physicsReason?: string; physicsParts: number };
-/** A motion action may name the view whose scene it moves (view-graph-design.md §3.8); without one, the focused view's. */
-export type MotionAction = MotionActionBody & { view?: ViewId };
+/** A motion action names the view whose scene it moves (profiles design §3.6); `motion.setPhysics` names the scene's `gen` too. */
+export type MotionAction = MotionActionBody & { view: ViewId; sceneGen?: number };
 type MotionActionBody =
   | { kind: "motion.setIdle"; enabled: boolean }
   /** Which of the game's preview idles plays (the body source while the idle is on; "Still" is the idle off). */
@@ -85,7 +85,7 @@ export type MotionPort = {
 /** Why a pose can't be held, in plain words. */
 export const POSE_UNAVAILABLE = "Poses play on V's idle, which XF Studio couldn't read, so she holds still.";
 /** Where the motion service reads and edits the scene's motion settings (the view graph's scene node, through the preview service). */
-export type MotionScene = { physics(view?: ViewId): boolean; setPhysics(enabled: boolean, view?: ViewId): void };
+export type MotionScene = { physics(view?: ViewId): boolean; setPhysics(enabled: boolean, view: ViewId): void };
 
 /** Preview motion commands and persistence state without markup or Three objects. */
 export class MotionActions {

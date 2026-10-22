@@ -40,8 +40,13 @@ export type PoseMotionPort = {
   bodyCapability(idle: boolean): Capability;
   setBody(idle: boolean): void;
 };
-/** The shown V as the composition root exposes it: her body, the tags of what she wears, her motion and the whole-body view. */
+/**
+ * The shown V as the composition root exposes it: the view her head draws, her body, the tags of what she wears, her motion and the
+ * whole-body view.
+ */
 export type PoseStage = {
+  /** The view the shown V's head draws (null: none yet): the one `pose.select`, `pose.clear` and `pose.frame` must name. */
+  view(): string | null;
   bodyGender(): PoseBodyGender | null;
   wornTags(): readonly string[];
   motion(): PoseMotionPort | null;
@@ -50,11 +55,12 @@ export type PoseStage = {
   subscribe(listener: () => void): () => void;
 };
 
+/** `pose.select`, `pose.clear` and `pose.frame` name the view whose V they pose or frame (profiles design §3.6). */
 export type PoseLibraryAction =
-  | { kind: "pose.select"; id: string }
-  | { kind: "pose.clear"; to: "still" | "idle" }
+  | { kind: "pose.select"; id: string; view: string }
+  | { kind: "pose.clear"; to: "still" | "idle"; view: string }
   | { kind: "pose.favourite"; id: string; on: boolean }
-  | { kind: "pose.frame" }
+  | { kind: "pose.frame"; view: string }
   | { kind: "pose.showFiltered"; shown: boolean }
   | { kind: "pose.openGroup"; group: string; open: boolean }
   | { kind: "pose.retry" };
@@ -84,10 +90,10 @@ export type PoseLibraryState = {
 
 /** The module's actions (routed through its own service, a recorded boundary exception): view state and preferences, no Undo. */
 export const POSE_LIBRARY_DESCRIPTORS = Object.freeze({
-  "pose.select": { scope: "viewport", effect: "view", async: true, undo: "none", payload: { id: "text" } },
-  "pose.clear": { scope: "viewport", effect: "view", async: false, undo: "none", payload: { to: "choice" } },
+  "pose.select": { scope: "viewport", effect: "view", async: true, undo: "none", payload: { id: "text", view: "view" } },
+  "pose.clear": { scope: "viewport", effect: "view", async: false, undo: "none", payload: { to: "choice", view: "view" } },
   "pose.favourite": { scope: "preferences", effect: "write", async: true, undo: "none", payload: { id: "text", on: "boolean" } },
-  "pose.frame": { scope: "viewport", effect: "view", async: false, undo: "none", payload: {} },
+  "pose.frame": { scope: "viewport", effect: "view", async: false, undo: "none", payload: { view: "view" } },
   "pose.showFiltered": { scope: "poses", effect: "view", async: false, undo: "none", payload: { shown: "boolean" } },
   "pose.openGroup": { scope: "preferences", effect: "write", async: true, undo: "none", payload: { group: "text", open: "boolean" } },
   "pose.retry": { scope: "host", effect: "read", async: true, undo: "none", payload: {} },
@@ -156,6 +162,9 @@ export class PoseLibraryActions {
 
   capability(action: PoseLibraryAction): Capability {
     if (!action || !(action.kind in POSE_LIBRARY_DESCRIPTORS)) return refusal("invalid_value", "Unknown pose action.");
+    // What poses or frames V names the view that shows her; another view (or none) is refused, never posed in its place.
+    if ((action.kind === "pose.select" || action.kind === "pose.clear" || action.kind === "pose.frame") && action.view !== this.stage.view())
+      return refusal("missing_target", typeof action.view === "string" && action.view ? "That view doesn't show the V these poses are for." : "Open a 3D view to use this.");
     switch (action.kind) {
       case "pose.select": {
         if (this.view.phase !== "ready") return refusal("not_ready", this.view.message || "The poses are still being read.");

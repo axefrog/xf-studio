@@ -91,7 +91,7 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
   const count = h("span", { class: "count" });
   const list = new ItemList<{ id: string; name: string; meta: string }>({
     label: "Presets in this collection", noun: "preset", maxLength: 120,
-    onSelect: id => rt.dispatch({ kind: "preset.select", id }),
+    onSelect: id => { const draft = port.library.summary().draft; if (draft) rt.dispatch({ kind: "scene.setLook", look: { collection: draft.id, look: id } }); },
     onMove: (id, to) => rt.dispatch({ kind: "preset.edit", command: { kind: "move", id, to } }),
     onRename: (id, name) => rt.dispatch({ kind: "preset.edit", command: { kind: "rename", id, name } }),
     onDelete: id => removePreset(id),

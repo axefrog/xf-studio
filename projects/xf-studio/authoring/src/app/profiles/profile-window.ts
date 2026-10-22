@@ -21,6 +21,15 @@ import { CollectionOwner, type CollectionVersionsPort } from "../../library/coll
 import { LookSessions } from "../../library/look-sessions";
 import type { LookRef } from "../../library/collection-documents";
 import { MAIN_VIEW } from "../../platform/api/view-graph";
+import { documentKey } from "../../platform/api/document-commands";
+import { CHARACTER_KIND } from "../../platform/api/characters";
+import type { FocusService } from "../../platform/core/focus";
+import type { ViewGraph } from "../../platform/core/view-graph";
+import { CHARACTER_DOCUMENT } from "../../character/character-document";
+import { LOOK_WORKING, lookRef as lookDocument } from "../../library/collection-documents";
+import type { PanelContext } from "./bindings";
+import { TargetResolver } from "./targets";
+import { SceneCommands } from "./scene-commands";
 import type { WorkspaceState } from "../workspace/workspace-state";
 import { ProfileService } from "./profile-service";
 import { ProfileSessionState } from "./profile-session-state";
@@ -52,15 +61,59 @@ export function createProfileServices(deps: { documents: DocumentStorePort; outb
  * first profile (its first V and its first collection's first look), stored nowhere (`stored` false).
  */
 export function openProfileSession(workspace: WorkspaceState, services: Pick<ProfileServices, "profiles" | "collections">,
-  random: () => number = Math.random): { state: ProfileSessionState; stored: boolean } {
+  focus: FocusService, random: () => number = Math.random): { state: ProfileSessionState; stored: boolean } {
   const sessions = workspace.profiles?.sessions ?? {}, first = Object.keys(sessions)[0];
-  if (workspace.migration?.state === "done" && first) return { state: new ProfileSessionState(first, sessions[first]!, random), stored: true };
+  if (workspace.migration?.state === "done" && first) return { state: new ProfileSessionState(first, sessions[first]!, random, focus), stored: true };
   const profile = services.profiles.list()[0];
   const character = profile?.subjects.find(subject => subject.kind === "character")?.id;
   const collection = profile?.collections.map(id => services.collections.collection(id)).find(view => view?.looks.length);
   const look: LookRef | undefined = collection ? { collection: collection.id, look: collection.looks[0]! } : undefined;
   const session = sessionOfWorkspace(workspace, { tab: FIRST_TAB_NAME, ...(character ? { character } : {}), ...(look ? { look } : {}) }, random);
-  return { state: new ProfileSessionState(profile?.id ?? "", session, random), stored: false };
+  return { state: new ProfileSessionState(profile?.id ?? "", session, random, focus), stored: false };
+}
+
+/** `scene.setLook` and `scene.setSubject` over the session's scenes, checking that a look or V still exists (profiles design §3.6). */
+export function sceneCommands(state: ProfileSessionState, services: Pick<ProfileServices, "characters" | "collections">): SceneCommands {
+  return new SceneCommands({ scene: id => state.knownScene(id), setLook: (scene, look) => state.setLook(scene, look), setSubject: (scene, subject) => state.setSubject(scene, subject) },
+    { look: ref => services.collections.look(ref)?.state === "live", subject: ref => ref.kind === CHARACTER_KIND && !!services.characters.document(ref.id) });
+}
+
+/**
+ * The window's input-layer resolution (app/profiles/targets.ts) over its session, view graph, focus and owners: what each panel, key
+ * binding and palette command acts on, and the captures gestures and menus hold. `contexts`: each panel type's context (§3.1, §5).
+ */
+export function createTargetResolver(deps: { state: ProfileSessionState; graph: ViewGraph; history: Pick<HistoryService, "acting">;
+  services: Pick<ProfileServices, "characters" | "collections" | "looks">; contexts?: (type: string) => PanelContext; collection?: () => string | undefined }): TargetResolver {
+  const { state, graph, services } = deps;
+  return new TargetResolver({
+    session: {
+      tab: () => state.tabId(),
+      views: () => graph.viewIds().map(id => ({ id, scene: graph.node(id, "scene").id })),
+      scene: id => {
+        const scene = state.knownScene(id), kind = graph.viewIds().map(view => graph.node(view, "scene")).find(node => node.id === id)?.kind;
+        return scene && kind !== undefined ? { kind, ...scene } : undefined;
+      },
+      panel: instance => state.panel(instance),
+    },
+    focus: state.focus,
+    acting: scopes => deps.history.acting(scopes)?.id,
+    exists: {
+      subject: ref => ref.kind === CHARACTER_KIND ? !!services.characters.document(ref.id) : false,
+      look: ref => services.collections.look(ref)?.state === "live",
+    },
+    context: type => deps.contexts?.(type) ?? { kind: "view" },
+    revisions: target => ({
+      ...(target.subject?.kind === CHARACTER_KIND ? { [`${CHARACTER_DOCUMENT}/${target.subject.id}`]: services.characters.character(target.subject.id)?.revision ?? 0 } : {}),
+      ...(target.look ? { [documentKey(lookDocument(target.look))]: services.looks.generation(target.look) } : {}),
+    }),
+    revision: key => {
+      const slash = key.indexOf("/"), kind = key.slice(0, slash), id = key.slice(slash + 1);
+      if (kind === CHARACTER_DOCUMENT) return services.characters.character(id)?.revision;
+      if (kind === LOOK_WORKING) { const at = id.indexOf("/"); return services.looks.generation({ collection: id.slice(0, at), look: id.slice(at + 1) }); }
+      return undefined;
+    },
+    ...(deps.collection ? { collection: deps.collection } : {}),
+  });
 }
 
 /** The main view's scene in a session's graph (the drawn view, phase 1). */
@@ -81,4 +134,17 @@ export async function sceneCharacter(state: ProfileSessionState, scene: string, 
   if (!made.ok) return null;
   state.setSubject(scene, characterRef(made.character));
   return made.character;
+}
+
+/**
+ * A history scope's name for people (profiles design §3.7: Undo names its editing context): a look's name, a V's label, an experiment
+ * document's label, or "View and lighting"; undefined for a scope nothing names.
+ */
+export function historyScopeName(scope: string, deps: { services: Pick<ProfileServices, "characters" | "collections">; history: Pick<HistoryService, "documents"> }): string | undefined {
+  const [kind, ...rest] = scope.split(":"), id = rest.join(":");
+  if (kind === "look") { const at = id.indexOf("/"); return deps.services.collections.look({ collection: id.slice(0, at), look: id.slice(at + 1) })?.name; }
+  if (kind === "character") { const v = deps.services.characters.character(id); return v ? `V · ${v.label}` : undefined; }
+  if (kind === "doc") return deps.history.documents.snapshot(id).documentLabel;
+  if (kind === "view") return "View and lighting";
+  return undefined;
 }

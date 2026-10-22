@@ -8,14 +8,16 @@
  * - **Tab 1's arrangement** is stored with panel instance IDs (`<type>--<base36>`, a view's panel pinned to its view); the dock works with
  *   panel IDs (`head` for the main view, `view.<id>` for another, a panel contribution's ID otherwise). With one instance of each panel in
  *   a tab (phase 1) the two convert both ways losslessly; a panel the person opens for the first time gets a new instance.
- * - **Focus**: each view's focus sequence (the focused view's is the highest) and the editing context (§3.7), stored as they are when the
- *   workspace is written.
+ * - **Focus** is the focus service's (platform/core/focus.ts), restored from the session when it opens and stored with it: each view's
+ *   focus number, the session's sequence, the focused panel and the editing context (§3.7). A focus change is a session change (it is
+ *   written), never an Undo step.
  */
 import type { DockLayout } from "../ui-preferences";
 import type { SubjectRef } from "../../platform/api/subjects";
 import type { LookRef } from "../../library/collection-documents";
 import { MAIN_VIEW, type ViewGraphData, type ViewRecord, type KeptView, type StoredNode } from "../../platform/api/view-graph";
 import { rewriteDock, viewOfPanel } from "./profiles-migration-data";
+import { FocusService, focusDataOf } from "../../platform/core/focus";
 import { type LayoutTab, type PanelInstance, type ProfileSessionData, type SessionScene, type SessionView, WORKSPACE_PROFILES_SCHEMA,
   type WorkspaceProfiles } from "./profile-session";
 
@@ -30,18 +32,19 @@ export class ProfileSessionState {
   private readonly targets = new Map<string, SceneTarget>();
   private readonly listeners = new Set<() => void>();
   private tab: LayoutTab;
-  private seq: number;
-  private focusViews: Record<string, number>;
-  private editing: string | undefined;
+  /** The session's focus (its one owner); restored from the stored session. */
+  readonly focus: FocusService;
 
-  constructor(readonly profile: string, private readonly data: ProfileSessionData, private readonly random: () => number = Math.random) {
+  /** `focus`: the window's focus service (the one the history service records the editing context into); default: one of its own. */
+  constructor(readonly profile: string, private readonly data: ProfileSessionData, private readonly random: () => number = Math.random,
+    focus: FocusService = new FocusService()) {
     for (const scene of data.views.scenes) this.targets.set(scene.id, { ...(scene.subject ? { subject: { ...scene.subject } } : {}),
       ...(scene.look ? { look: { ...scene.look } } : {}), gen: Number.isSafeInteger(scene.gen) ? scene.gen : 0 });
     // Phase 1 shows one tab: the session's first (its views are all in it).
     this.tab = data.tabs[0] ?? { id: `t-${base36(random)}`, name: "Layout 1", dock: null, panels: [] };
-    this.seq = data.seq;
-    this.focusViews = { ...data.focus.views };
-    this.editing = (data.focus as { editing?: unknown }).editing as string | undefined;
+    this.focus = focus;
+    focus.restore(focusDataOf(data.focus, data.seq));
+    focus.subscribe(() => this.changed());
   }
 
   subscribe(listener: () => void): () => void { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
@@ -54,8 +57,10 @@ export class ProfileSessionState {
       views: views.map(view => { const { tab: _tab, ...rest } = view as SessionView & Record<string, unknown>; return rest as unknown as ViewRecord | KeptView; }),
       scenes: scenes.map(scene => { const { subject: _s, look: _l, gen: _g, ...rest } = scene as SessionScene & Record<string, unknown>; return rest as StoredNode; }) };
   }
-  /** The editing context stored with the session (§3.7), if any. */
-  editingContext(): string | undefined { return this.editing; }
+  /** The session's tab (phase 1 shows one: its first). */
+  tabId(): string { return this.tab.id; }
+  /** A panel instance of the tab: its type and binding. */
+  panel(id: string): PanelInstance | undefined { return this.tab.panels.find(panel => panel.id === id); }
 
   /** What a scene shows. A scene the session hasn't seen yet (a view's scene forked meanwhile) shows what the main view's showed. */
   scene(id: string): SceneTarget {
@@ -69,6 +74,8 @@ export class ProfileSessionState {
     const first = [...this.targets.values()].find(target => target.subject || target.look);
     return { ...(first?.subject ? { subject: { ...first.subject } } : {}), ...(first?.look ? { look: { ...first.look } } : {}), gen: 0 };
   }
+  /** What a scene shows, when the session knows it (never made here). */
+  knownScene(id: string): SceneTarget | undefined { const known = this.targets.get(id); return known && { ...known }; }
   /** `scene.setLook`: the scene shows `look` (undefined: none); its `gen` rises. */
   setLook(scene: string, look: LookRef | undefined) {
     const current = this.scene(scene);
@@ -113,23 +120,19 @@ export class ProfileSessionState {
 
   /**
    * The workspace's `profiles` with this session as it is now: `graph` (the core's view graph), `dock` (the dock's arrangement, with panel
-   * IDs) and the editing context. Every view is in tab 1; each scene names what it shows.
+   * IDs) and focus. Every view is in tab 1; each scene names what it shows.
    */
-  stored(input: { graph: ViewGraphData; dock: DockLayout | undefined | null; editing: string | null }, others?: WorkspaceProfiles): WorkspaceProfiles {
+  stored(input: { graph: ViewGraphData; dock: DockLayout | undefined | null }, others?: WorkspaceProfiles): WorkspaceProfiles {
     const dock = input.dock ? rewriteDock(input.dock, panel => this.instanceOf(panel).id) : null;
     if (dock || input.dock === null) this.tab = { ...this.tab, dock };
-    if (input.editing) this.editing = input.editing;
-    // The focused view's sequence is the highest (a focus move raises it).
-    const focused = input.graph.focused, top = Math.max(0, ...Object.values(this.focusViews));
-    if (this.focusViews[focused] !== top || !(focused in this.focusViews)) this.focusViews = { ...this.focusViews, [focused]: (this.seq = Math.max(this.seq, top) + 1) };
     const views: SessionView[] = input.graph.views.map(view => ({ ...(view as ViewRecord | KeptView), tab: this.tab.id }));
     const scenes: SessionScene[] = input.graph.scenes.map(scene => {
       const target = this.scene(scene.id);
       return { ...scene, ...(target.subject ? { subject: target.subject } : {}), ...(target.look ? { look: target.look } : {}), gen: target.gen };
     });
-    const ids = new Set(input.graph.views.map(view => view.id));
-    const focus = { views: Object.fromEntries(Object.entries(this.focusViews).filter(([view]) => ids.has(view))), ...(this.editing ? { editing: this.editing } : {}) };
-    const session: ProfileSessionData = { ...this.data, tabs: [this.tab, ...this.data.tabs.slice(1)], views: { ...input.graph, views, scenes }, focus, seq: this.seq };
+    const ids = new Set(input.graph.views.map(view => view.id)), { seq, views: order, ...rest } = this.focus.snapshot();
+    const focus = { views: Object.fromEntries(Object.entries(order).filter(([view]) => ids.has(view))), ...rest };
+    const session: ProfileSessionData = { ...this.data, tabs: [this.tab, ...this.data.tabs.slice(1)], views: { ...input.graph, views, scenes }, focus, seq };
     return { schema: WORKSPACE_PROFILES_SCHEMA, sessions: { ...(others?.sessions ?? {}), [this.profile]: session } };
   }
 }

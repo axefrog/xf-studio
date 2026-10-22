@@ -89,7 +89,8 @@ export class StudioFileOperations {
   snapshot(): ReadonlyDeep<StudioFileState> {
     // The primitive summary carries busy/progress without cloning every preset's Undo history.
     const collection = this.collection?.summary(), progress = collection?.progress;
-    const recovery = this.collection?.actionCapability({ kind: "collection.undoOpen" }) ??
+    const shown = this.collection?.draftIdentity()?.collectionId ?? "";
+    const recovery = this.collection?.actionCapability({ kind: "collection.undoOpen", collection: shown }) ??
       { available: false, reason: "Collection is still loading." };
     return structuredClone({ busy: this.busy?.kind, collectionBusy: collection?.busy ?? false,
       last: this.last, package: this.package && { ...this.package,
@@ -132,7 +133,8 @@ export class StudioFileOperations {
           : "Character presets need the 3D view.";
         return reason ? { available: false, reason } : { available: true };
       }
-      case "collection.recover": return this.collection?.actionCapability({ kind: "collection.undoOpen", ...(action.draft !== undefined ? { draft: action.draft } : {}) }) ??
+      case "collection.recover": return this.collection?.actionCapability({ kind: "collection.undoOpen", collection: this.collection.draftIdentity()?.collectionId ?? "",
+        ...(action.draft !== undefined ? { draft: action.draft } : {}) }) ??
         { available: false, reason: "Collection is still loading." };
       case "package.build": {
         const base = this.collection?.capability(collectionRequest(action.kind)) ??

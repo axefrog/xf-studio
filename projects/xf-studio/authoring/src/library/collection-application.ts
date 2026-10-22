@@ -1,5 +1,6 @@
 import type { AuthoringDocument } from "../app/authoring/authoring-document";
 import type { CollectionAction } from "./collection-actions";
+import type { Unnamed } from "../app/action-targets";
 import { CollectionService, type CollectionOutcome, type CollectionRequest, type CollectionServiceDeps,
   type CollectionServiceState, type CollectionServiceSummary, type DraftPersistence } from "./collection-service";
 import type { ReadonlyDeep } from "../platform/api/read-only";
@@ -14,8 +15,9 @@ export type CollectionViewPort = {
   /** The shown collection against its last saved version: saved revision, dirty presets and structure (undefined while loading). */
   persistence(): DraftPersistence | undefined;
   subscribe(listener: () => void): () => void;
-  capability(action: CollectionAction): ReturnType<StudioApplication["capability"]>;
-  dispatch(action: CollectionAction): ReturnType<StudioApplication["dispatch"]>;
+  /** A collection action; its `collection` may be left for the port to name (the collection the Presets panel shows). */
+  capability(action: Unnamed<CollectionAction>): ReturnType<StudioApplication["capability"]>;
+  dispatch(action: Unnamed<CollectionAction>): ReturnType<StudioApplication["dispatch"]>;
   fileCapability(action: StudioFileAction): ReturnType<StudioFileOperations["capability"]>;
   fileExecute(action: StudioFileAction): Promise<StudioFileOutcome>;
   execute(request: CollectionRequest): Promise<CollectionOutcome>;
@@ -51,18 +53,20 @@ export class CollectionApplication implements CollectionViewPort {
   selectedPresetId() { return this.service.selectedPreset().id; }
   persistence() { return this.service.persistence(); }
   currentLayerCount() { return this.document.recipe.layers.length; }
-  capability(action: CollectionAction) { return this.app.capability(action); }
-  dispatch(action: CollectionAction) { return this.app.dispatch(action); }
+  capability(action: Unnamed<CollectionAction>) { return this.app.capability(action as CollectionAction); }
+  dispatch(action: Unnamed<CollectionAction>) { return this.app.dispatch(action as CollectionAction); }
   fileCapability(action: StudioFileAction) { return this.app.fileCapability(action); }
   fileExecute(action: StudioFileAction) { return this.app.executeFile(action); }
   execute(request: CollectionRequest) { return this.files.executeCollection(request); }
   initialize() { return this.execute({ kind: "initialize" }); }
+  /** The collection shown (the Presets panel's), which its own requests name; undefined while loading. */
+  private shown() { return this.service.draftIdentity()?.collectionId ?? ""; }
   importRecipe(recipe: Recipe, name: string) {
-    const outcome = this.dispatch({ kind: "collection.importRecipe", recipe, name });
+    const outcome = this.dispatch({ kind: "collection.importRecipe", collection: this.shown(), recipe, name });
     if (!outcome.ok) throw Error(outcome.message);
   }
   recover(draft?: string) {
-    const outcome = this.dispatch({ kind: "collection.undoOpen", ...(draft !== undefined ? { draft } : {}) });
+    const outcome = this.dispatch({ kind: "collection.undoOpen", collection: this.shown(), ...(draft !== undefined ? { draft } : {}) });
     if (!outcome.ok) throw Error(outcome.message);
   }
   dispose() { this.service.dispose(); }

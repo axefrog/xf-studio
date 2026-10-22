@@ -10,7 +10,13 @@ import { leaseSnapshot, type WorkspaceLease, type WorkspaceLeaseAction, type Wor
 import type { Layer, Recipe, WarpField } from "../engines/layered-makeup/recipe";
 import type { PreviewReadiness } from "../legacy/eye-makeup/preview/authoring-preview-coordinator";
 import type { ReadonlyDeep } from "../platform/api/read-only";
-import type { StudioApplication, StudioCapability, StudioDispatchResult, StudioTarget, ViewToolEntry } from "./studio-application";
+import type { StudioAction, StudioApplication, StudioCapability, StudioDispatchResult, StudioTarget, ViewToolEntry } from "./studio-application";
+import type { StudioBoundContext, StudioContextHit } from "./studio-context-targets";
+import type { NamedTargets, Unnamed } from "./action-targets";
+import type { TargetResolver } from "./profiles/targets";
+import type { FocusService } from "../platform/core/focus";
+import type { HistorySnapshot, HistoryState } from "../platform/api/history";
+import type { ConsequenceSubject } from "./action-consequences";
 import type { ModuleService, PlannedModule, StudioModule, ViewId, ViewSummaryContribution, ViewToolFilter } from "../platform/api";
 import type { EyeMakeupAction } from "../legacy/eye-makeup/eye-makeup-model";
 import type { RecipeAction } from "../engines/layered-makeup/recipe-actions";
@@ -69,10 +75,10 @@ export type FeatureFacade<A extends { kind: string } = { kind: string }> = Featu
    * from this, never from an `unavailable` refusal (UI-53).
    */
   locked(): string | undefined;
-  capability(action: A): StudioCapability;
+  capability(action: Unnamed<A>): StudioCapability;
   /** The action's capability on a concrete target (a layer, a point, a warp field): what that target's controls show. */
-  contextCapability(target: StudioTarget, action: A): StudioCapability;
-  dispatch(action: A): StudioDispatchResult;
+  contextCapability(target: StudioTarget, action: Unnamed<A>): StudioCapability;
+  dispatch(action: Unnamed<A>): StudioDispatchResult;
   limitsFor(target: StudioTarget, kind: A["kind"], variant?: string): Record<string, FieldLimit>;
   choicesFor(target: StudioTarget, kind: A["kind"], field: string, base?: Record<string, unknown>):
     ReturnType<StudioApplication["choicesFor"]>;
@@ -95,7 +101,7 @@ export type EyeMakeupView = {
 export type EyeMakeupFacade = FeatureFacade<EyeMakeupAction> & {
   view(): EyeMakeupView;
   controlBegin(id: string, layerId: string): boolean;
-  controlEdit(id: string, action: RecipeAction): StudioDispatchResult;
+  controlEdit(id: string, action: Unnamed<RecipeAction>): StudioDispatchResult;
   controlCommit(id: string): void;
   controlCancel(id: string): void;
   layerExport: StudioApplication["layerExport"];
@@ -127,20 +133,43 @@ export type FeatureLookup = {
   (id: string): (FeatureFacade & { view(): unknown }) | undefined;
 };
 
+/** An action as a presentation dispatches it: its named targets may be left for the port to name (profiles design §3.6). */
+export type PresentationAction = Unnamed<StudioAction>;
+/**
+ * The application's entry points as a presentation calls them (profiles design §3.6): an action may leave its named targets out, and the
+ * port, the input layer, names them before the application sees it, from what the shown tab's focused view resolves to (a menu's targets
+ * are frozen when it opens). Undo and the history reads act on the editing context.
+ */
+type PresentationAuthoring = Pick<StudioApplication,
+    "actionKinds" | "requestKinds" | "actionDescriptors" | "requestDescriptors" |
+    "gestureDescriptors" | "fileKinds" | "fileDescriptors" | "registry" | "descriptorsFor" | "targetCapability" |
+    "limitsFor" | "contextOptionsFor" |
+    "controlBegin" | "controlCommit" | "controlCancel" |
+    "requestCapability" | "execute" | "canBeginGesture" | "gestureCapability" |
+    "beginGesture" | "applyGesture" | "endGesture" | "previewState" | "finishCatalogue" | "layerExport" | "layerSurfaceEdge" |
+    "glitterModelCatalogue" | "characterPanel" | "characterView" | "characterChoices" | "characterSwatches" | "characterSearch" | "characterPrefetch" | "characterStopPrefetch" | "characterPreviews"> & {
+  snapshot(): ReadonlyDeep<ReturnType<StudioApplication["snapshot"]>>;
+  capability(action: Unnamed<StudioAction>): StudioCapability;
+  dispatch(action: Unnamed<StudioAction>): StudioDispatchResult;
+  contextCapability(target: StudioTarget, action: Unnamed<StudioAction>): StudioCapability;
+  choicesFor(target: StudioTarget, kind: StudioAction["kind"], field: string, base?: Record<string, unknown>): ReturnType<StudioApplication["choicesFor"]>;
+  actionsFor(target: StudioTarget): ReturnType<StudioApplication["actionsFor"]>;
+  contextFor(hit: StudioContextHit): StudioBoundContext;
+  contextQuery(hit: StudioContextHit): ReturnType<StudioApplication["contextQuery"]>;
+  boundActionCapability(context: StudioBoundContext, action: Unnamed<StudioAction>): StudioCapability;
+  dispatchContext(context: StudioBoundContext, action: Unnamed<StudioAction>): StudioDispatchResult;
+  controlEdit(id: string, action: Unnamed<RecipeAction>): StudioDispatchResult;
+  /** What an action, file workflow or request replaces, writes or discards (an action's targets named as for dispatch). */
+  consequences(subject: Unnamed<ConsequenceSubject>): ReturnType<StudioApplication["consequences"]>;
+  /** What Undo and Redo would change next in the editing context (§3.7); nothing before anything was edited. */
+  history(): HistoryState;
+  /** The editing context's steps, for the History panel. */
+  historyTimeline(): HistorySnapshot;
+};
 /** The complete current UI entry point. Construct it only in the trusted composition root. */
 export type StudioPresentationPort<Slot> = {
   readonly experiments?: ExperimentPort;
-  readonly authoring: Pick<StudioApplication,
-    "actionKinds" | "requestKinds" | "actionDescriptors" | "requestDescriptors" |
-    "gestureDescriptors" | "fileKinds" | "fileDescriptors" | "registry" | "descriptorsFor" | "targetCapability" | "contextCapability" |
-    "choicesFor" | "limitsFor" | "contextFor" | "contextOptionsFor" | "contextQuery" |
-    "boundActionCapability" | "dispatchContext" | "capability" | "actionsFor" | "dispatch" |
-    "controlBegin" | "controlEdit" | "controlCommit" | "controlCancel" |
-    "requestCapability" | "execute" | "canBeginGesture" | "gestureCapability" |
-    "beginGesture" | "applyGesture" | "endGesture" | "previewState" | "history" | "historyTimeline" | "consequences" | "finishCatalogue" | "layerExport" | "layerSurfaceEdge" |
-    "glitterModelCatalogue" | "characterPanel" | "characterView" | "characterChoices" | "characterSwatches" | "characterSearch" | "characterPrefetch" | "characterStopPrefetch" | "characterPreviews"> & {
-      snapshot(): ReadonlyDeep<ReturnType<StudioApplication["snapshot"]>>;
-    };
+  readonly authoring: PresentationAuthoring;
   readonly library: CollectionViewPort;
   readonly files: Pick<StudioFileOperations, "capability" | "execute" | "activity" | "cancel"> & {
     snapshot(): ReadonlyDeep<ReturnType<StudioFileOperations["snapshot"]>>;
@@ -164,6 +193,7 @@ export type StudioPresentationPort<Slot> = {
     modules(): readonly StudioModule[];
     /** Modules with an agreed design, not built yet: the Modules menu lists them as Planned. */
     plannedModules(): readonly PlannedModule[];
+    /** A view's tools (absent: the view the shown tab's focus resolves to). */
     tools(view: ViewId | undefined, filter: ViewToolFilter): readonly ViewToolEntry[];
     summaries(view: ViewId | undefined, filter: Pick<ViewToolFilter, "modules">): readonly ViewSummaryContribution[];
     /** Each view's derived title and its scene's subject, with the panel that shows it. */
@@ -251,10 +281,22 @@ export type StudioPresentationPort<Slot> = {
   readonly panels: {
     instance(panel: string): string;
     /**
-     * The history a panel's own Undo steps while focus is in it, when it has one: a 3D view's is the look its scene shows
-     * (`look:<collection>/<look>`). Header and History-panel Undo follow the editing context instead.
+     * The history scope Ctrl+Z acts on while focus is in a panel: a 3D view's is the look its scene shows (`look:<collection>/<look>`,
+     * decided, §3.7); any other panel's is the editing context. Header and History-panel Undo always act on the editing context.
      */
-    historyScope(panel: string): string | undefined;
+    historyScope(panel: string | undefined): string | undefined;
+  };
+  /**
+   * Focus and the editing context (profiles design §3.3, §3.7): the presentation reports where the person is (a pointer press or keyboard
+   * focus in a view, the panel holding keyboard focus); none of it is ever an Undo step. `editing` names the scope Undo acts on.
+   */
+  readonly focus: {
+    view(view: ViewId): void;
+    panel(panel: string | undefined): void;
+    /** The editing context Undo acts on, and its name ("Look 3", "V · ManualSave-12"); null before anything was edited. */
+    editing(): { readonly scope: string; readonly name: string } | null;
+    /** What the shown tab's most recently focused view shows (its view, scene, V and look), for a header naming its target. */
+    targets(): Readonly<NamedTargets>;
   };
   readonly documents: {
     capability(action: DocumentsAction): StudioCapability;
@@ -343,8 +385,14 @@ export function createStudioPresentation<Slot>(sources: {
   outbox?: DocumentOutbox;
   /** A panel's instance in the tab shown (the session's); without it (fixtures, tools) each panel is one instance, `<panel>--local`. */
   panelInstance?: (panel: string) => string;
-  /** A panel's own history scope (see `panels.historyScope`); without it (fixtures, tools) no panel has one. */
-  panelHistoryScope?: (panel: string) => string | undefined;
+  /**
+   * The input layer's target resolution (app/profiles/targets.ts) and the session's focus: what each action the presentation dispatches
+   * names. Without them (tools) actions are dispatched as given, and one that leaves a target out is refused.
+   */
+  targets?: TargetResolver;
+  focus?: Pick<FocusService, "focusView" | "focusPanel">;
+  /** A history scope's name for people ("Look 3"); without it the scope ID. */
+  scopeName?: (scope: string) => string | undefined;
 }): StudioPresentationPort<Slot> {
   const a = sources.authoring, l = sources.library, f = sources.files,
     v = sources.viewport, p = sources.preferences, r = sources.previewReadiness,
@@ -363,6 +411,12 @@ export function createStudioPresentation<Slot>(sources: {
   });
   // An experiment may explain why an action is unavailable while it is on ("Turn Hair Lab off for hair physics").
   const hint = (action: { kind: string }) => sources.experiments?.registrations().map(item => item.actionHints?.()[action.kind]).find(Boolean);
+  // The input layer (profiles design §3.6): what the shown tab's focused view resolves to, and the editing context, named in each action.
+  const resolver = sources.targets;
+  const named = (): NamedTargets => resolver?.named() ?? {};
+  const name = <A extends { kind: string }>(action: A | Unnamed<A>): A => resolver
+    ? resolver.complete(action as A, a.descriptor(action.kind)) : action as A;
+  const editingScope = () => resolver?.editing();
   const authoring: StudioPresentationPort<Slot>["authoring"] = {
     snapshot: () => a.snapshot(), actionKinds: () => a.actionKinds(),
     requestKinds: () => a.requestKinds(), actionDescriptors: () => a.actionDescriptors(),
@@ -370,27 +424,31 @@ export function createStudioPresentation<Slot>(sources: {
     fileKinds: () => a.fileKinds(), fileDescriptors: () => a.fileDescriptors(), registry: () => a.registry(),
     descriptorsFor: target => a.descriptorsFor(target),
     targetCapability: target => a.targetCapability(target),
-    contextCapability: (target, action) => a.contextCapability(target, action),
-    choicesFor: (target, kind, field, base) => a.choicesFor(target, kind, field, base),
+    contextCapability: (target, action) => a.contextCapability(target, name<StudioAction>(action)),
+    choicesFor: (target, kind, field, base) => a.choicesFor(target, kind, field, base, named()),
     limitsFor: (target, kind, variant) => a.limitsFor(target, kind, variant),
-    contextFor: hit => a.contextFor(hit),
+    contextFor: hit => a.contextFor(hit, named()),
     contextOptionsFor: context => a.contextOptionsFor(context),
-    contextQuery: hit => a.contextQuery(hit),
+    contextQuery: hit => a.contextQuery(hit, named()),
     boundActionCapability: (context, action) => a.boundActionCapability(context, action),
     dispatchContext: (context, action) => a.dispatchContext(context, action),
-    capability: action => { const result = a.capability(action), note = hint(action); return note ? { ...result, note } : result; }, actionsFor: target => a.actionsFor(target),
-    dispatch: action => a.dispatch(action),
+    capability: unnamed => { const action = name<StudioAction>(unnamed), result = a.capability(action), note = hint(action); return note ? { ...result, note } : result; },
+    actionsFor: target => a.actionsFor(target, named()),
+    dispatch: action => a.dispatch(name<StudioAction>(action)),
     controlBegin: (id, layerId) => a.controlBegin(id, layerId),
-    controlEdit: (id, action) => a.controlEdit(id, action),
+    controlEdit: (id, action) => a.controlEdit(id, name<RecipeAction>(action) as Parameters<StudioApplication["controlEdit"]>[1]),
     controlCommit: id => a.controlCommit(id), controlCancel: id => a.controlCancel(id),
     requestCapability: request => a.requestCapability(request), execute: request => a.execute(request),
-    canBeginGesture: (source, layerId) => a.canBeginGesture(source, layerId),
+    // A gesture captures the look the shown tab's focused view shows when it begins (profiles design §3.3).
+    canBeginGesture: (source, layerId) => a.canBeginGesture(source, layerId, named().look),
     gestureCapability: (source, target) => a.gestureCapability(source, target),
-    beginGesture: (source, layerId) => a.beginGesture(source, layerId),
+    beginGesture: (source, layerId) => a.beginGesture(source, layerId, named().look),
     applyGesture: (source, proposal) => a.applyGesture(source, proposal),
     endGesture: (source, cancel) => a.endGesture(source, cancel),
-    previewState: () => a.previewState(), history: () => a.history(),
-    historyTimeline: () => a.historyTimeline(), consequences: subject => a.consequences(subject), finishCatalogue: () => a.finishCatalogue(),
+    previewState: () => a.previewState(), history: () => a.history(editingScope()),
+    historyTimeline: () => a.historyTimeline(editingScope()),
+    consequences: subject => a.consequences("action" in subject ? { ...subject, action: name<StudioAction>(subject.action) } as ConsequenceSubject : subject as ConsequenceSubject),
+    finishCatalogue: () => a.finishCatalogue(),
     layerExport: layerId => a.layerExport(layerId),
     layerSurfaceEdge: layerId => a.layerSurfaceEdge(layerId),
     glitterModelCatalogue: () => a.glitterModelCatalogue(),
@@ -409,7 +467,7 @@ export function createStudioPresentation<Slot>(sources: {
     active: () => fallback().active, selected: () => fallback().selected,
     selectedField: () => { const d = fallback(), layer = d.recipe.layers[d.active];
       return layer?.fields.find(field => field.id === d.fieldSelection[layer.id]) ?? layer?.fields[0]; },
-    revision: () => -1, canUndo: () => a.capability({ kind: "history.undo" }).available,
+    revision: () => -1, canUndo: () => a.capability(name<StudioAction>({ kind: "history.undo" })).available,
   };
   // Feature facades: each feature's own kinds only; eye makeup adds its editor view, controls and catalogues.
   const infos: readonly FeatureInfo[] = Object.freeze(a.features().map(info => Object.freeze(info)));
@@ -419,20 +477,20 @@ export function createStudioPresentation<Slot>(sources: {
     return { ...info,
       kinds: () => a.actionKinds().filter(own),
       editable: () => a.featureEditable(info.id), locked: () => a.featureLocked(info.id),
-      capability: action => own(action.kind) ? a.capability(action as never) : foreign,
-      contextCapability: (target, action) => own(action.kind) ? a.contextCapability(target, action as never) : foreign,
-      dispatch: action => own(action.kind) ? a.dispatch(action as never) : { ok: false, code: foreign.code, message: foreign.reason },
+      capability: action => own(action.kind) ? a.capability(name(action) as never) : foreign,
+      contextCapability: (target, action) => own(action.kind) ? a.contextCapability(target, name(action) as never) : foreign,
+      dispatch: action => own(action.kind) ? a.dispatch(name(action) as never) : { ok: false, code: foreign.code, message: foreign.reason },
       limitsFor: (target, kind, variant) => own(kind) ? a.limitsFor(target, kind as never, variant) : {},
-      choicesFor: (target, kind, field, base) => own(kind) ? a.choicesFor(target, kind as never, field, base) : [],
+      choicesFor: (target, kind, field, base) => own(kind) ? a.choicesFor(target, kind as never, field, base, named()) : [],
     };
   };
   const facades = new Map<string, FeatureFacade>(infos.map(info => {
     const base = facade(info);
     if (info.id !== "eye-makeup") return [info.id, Object.freeze({ ...base, view: () => a.featureState(info.id),
-      controlBegin: (id: string) => a.featureControlBegin(info.id, id), controlEdit: (id: string, action: { kind: string }) => a.featureControlEdit(info.id, id, action),
+      controlBegin: (id: string) => a.featureControlBegin(info.id, id), controlEdit: (id: string, action: { kind: string }) => a.featureControlEdit(info.id, id, name(action)),
       controlCommit: (id: string) => a.featureControlCommit(id), controlCancel: (id: string) => a.featureControlCancel(id) }) as GenericFeatureFacade];
     const eye: EyeMakeupFacade = { ...(base as FeatureFacade<EyeMakeupAction>), view: () => editor,
-      controlBegin: (id, layerId) => a.controlBegin(id, layerId), controlEdit: (id, action) => a.controlEdit(id, action),
+      controlBegin: (id, layerId) => a.controlBegin(id, layerId), controlEdit: (id, action) => a.controlEdit(id, name<RecipeAction>(action) as Parameters<StudioApplication["controlEdit"]>[1]),
       controlCommit: id => a.controlCommit(id), controlCancel: id => a.controlCancel(id),
       layerExport: layerId => a.layerExport(layerId), layerSurfaceEdge: layerId => a.layerSurfaceEdge(layerId), finishCatalogue: () => a.finishCatalogue(),
       glitterModelCatalogue: () => a.glitterModelCatalogue(), mottleCatalogue: () => a.mottleCatalogue() };
@@ -444,7 +502,7 @@ export function createStudioPresentation<Slot>(sources: {
   const library: CollectionViewPort = {
     view: () => l.view(), summary: () => l.summary(), persistence: () => l.persistence(),
     subscribe: listener => l.subscribe(listener),
-    capability: action => l.capability(action), dispatch: action => l.dispatch(action),
+    capability: action => l.capability(name(action)), dispatch: action => l.dispatch(name(action)),
     fileCapability: action => l.fileCapability(action), fileExecute: action => l.fileExecute(action),
     execute: request => l.execute(request), currentLayerCount: () => l.currentLayerCount(),
   };
@@ -468,12 +526,14 @@ export function createStudioPresentation<Slot>(sources: {
     dispatch: action => p.dispatch(action),
   };
   const previewReadiness = Object.freeze({ snapshot: () => r.readiness() });
+  // A view the presentation leaves out is the one the shown tab's focus resolves to (the input layer's, never the application's).
+  const viewOf = (view: ViewId | undefined) => view ?? named().view;
   const views: StudioPresentationPort<Slot>["views"] = Object.freeze({
     snapshot: () => a.views(), modules: () => [...a.modules(), ...(sources.experiments?.registrations().map(item => item.module) ?? [])], plannedModules: () => a.plannedModules(),
-    tools: (view: ViewId | undefined, filter: ViewToolFilter) => a.viewTools(view, filter),
-    summaries: (view: ViewId | undefined, filter: Pick<ViewToolFilter, "modules">) => a.viewSummaries(view, filter),
+    tools: (view: ViewId | undefined, filter: ViewToolFilter) => { const id = viewOf(view); return id === undefined ? [] : a.viewTools(id, filter); },
+    summaries: (view: ViewId | undefined, filter: Pick<ViewToolFilter, "modules">) => { const id = viewOf(view); return id === undefined ? [] : a.viewSummaries(id, filter); },
     titles: () => a.viewTitles(),
-    setTool: (view: ViewId | undefined, tool: string, enabled: boolean) => a.dispatch({ kind: "view.setTool", ...(view === undefined ? {} : { view }), tool, enabled }),
+    setTool: (view: ViewId | undefined, tool: string, enabled: boolean) => a.dispatch(name<StudioAction>({ kind: "view.setTool", ...(view === undefined ? {} : { view }), tool, enabled })),
     withdraw: (tools: readonly string[]) => a.withdrawViewTools(tools),
     settings: (filter: Pick<ViewToolFilter, "research">) => a.viewSettings(filter),
   });
@@ -554,7 +614,13 @@ export function createStudioPresentation<Slot>(sources: {
     desktopApp: Object.freeze(leased(desktopApp)), updates: Object.freeze(leased(updates)),
     status: Object.freeze({ snapshot: () => s.snapshot() }), links, about, diagnostics: Object.freeze(diagnostics),
     panels: Object.freeze({ instance: (panel: string) => sources.panelInstance?.(panel) ?? `${panel}--local`,
-      historyScope: (panel: string) => sources.panelHistoryScope?.(panel) }),
+      historyScope: (panel: string | undefined) => resolver?.undoScope(panel === undefined ? undefined : sources.panelInstance?.(panel)) }),
+    focus: Object.freeze({
+      view: (view: ViewId) => sources.focus?.focusView(view),
+      panel: (panel: string | undefined) => sources.focus?.focusPanel(panel === undefined ? undefined : sources.panelInstance?.(panel) ?? panel),
+      editing: () => { const scope = editingScope(); return scope ? { scope, name: sources.scopeName?.(scope) ?? scope } : null; },
+      targets: () => named(),
+    }),
     documents: Object.freeze({
       capability: (action: DocumentsAction) => documentsCapability(sources.outbox, action),
       async dispatch(action: DocumentsAction) {

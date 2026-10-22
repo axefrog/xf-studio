@@ -77,7 +77,7 @@ function recordingPreviewPort(calls: string[]): PreviewPort {
 test("the application resolves each tool's state and action; view.setTool edits the view's tools node, and a hidden module's tool stays dispatchable", () => {
   const workspace = freshWorkspace();
   const { app, views } = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
-  const tools = app.viewTools(undefined, { modules: ["eye-makeup"], research: false });
+  const tools = app.viewTools(MAIN_VIEW, { modules: ["eye-makeup"], research: false });
   expect(tools.map(tool => [tool.id, tool.action.kind, tool.on])).toEqual([["camera.front", "camera.front", undefined], ["camera.body", "camera.body", undefined],
     ["eye-makeup.surface", "view.setTool", true], ["motion.idle", "motion.setIdle", false]]);
   // Idle hides where the head has no idle; the camera tools act on the view they belong to.
@@ -96,7 +96,7 @@ test("the application resolves each tool's state and action; view.setTool edits 
   app.dispatch({ kind: "preview.setExposure", value: 1.5 });
   expect(views.history()).toMatchObject({ undo: "Exposure", depth: 2 });
   // Even with eye makeup hidden (the presentation's filter), its action is still valid: visibility is presentation state.
-  expect(app.viewTools(undefined, { modules: [], research: true }).map(tool => tool.id)).not.toContain("eye-makeup.wire");
+  expect(app.viewTools(MAIN_VIEW, { modules: [], research: true }).map(tool => tool.id)).not.toContain("eye-makeup.wire");
   expect(app.capability({ kind: "view.setTool", tool: "eye-makeup.wire", enabled: true }).available).toBe(true);
   expect(app.capability({ kind: "view.setTool", tool: "camera.front", enabled: true })).toMatchObject({ available: false, code: "invalid_value" });
   expect(app.capability({ kind: "view.setTool", tool: "eye-makeup.wire", enabled: true, view: "gone" })).toMatchObject({ available: false, code: "missing_target" });

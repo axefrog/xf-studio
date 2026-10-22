@@ -1,5 +1,5 @@
 import type { PreviewSetupAction } from "../../preview/preview-setup";
-import type { StudioAction } from "../../app/studio-application";
+import type { PresentationAction } from "../../app/studio-presentation";
 import type { StudioFileAction } from "../../app/studio-file-operations";
 import type { StudioPanelId } from "../layout-defaults";
 import type { AnchorId } from "./anchors";
@@ -18,14 +18,14 @@ export type HelpContent = Readonly<{ title: string; body: string }>;
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 /** Layer actions whose `layerId` a tour fills in from the active layer when the button is pressed. */
-export type ActiveLayerAction = DistributiveOmit<Extract<StudioAction, { layerId: string }>, "layerId">;
+export type ActiveLayerAction = DistributiveOmit<Extract<PresentationAction, { layerId: string }>, "layerId">;
 
 /**
  * What a tour button may do ("Do it for me"). Each is an ordinary typed action dispatched through
  * the same validated port as a menu or button, so tours never bypass validation or Undo.
  */
 export type TourCommand =
-  | { kind: "studio"; action: StudioAction }
+  | { kind: "studio"; action: PresentationAction }
   | { kind: "studio.activeLayer"; action: ActiveLayerAction }
   | { kind: "file"; action: StudioFileAction }
   | { kind: "previewSetup"; action: PreviewSetupAction }

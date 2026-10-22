@@ -29,7 +29,7 @@ import { CC_PRESET_SCHEMA, type CcPreset, type CcPresetEntry, type CcPresetValue
 import { CREATOR_LIMITS, isCreatorName, isModName } from "./creator-names";
 import { depotHash, refFromHash } from "../game/depot-path";
 import type { Ambiguity } from "../game/resolution-evidence";
-import { actionTable, type ActionDescriptor, familyId, type SystemFamily, type ValueSchema } from "../platform/api";
+import { actionTable, type ActionDescriptor, familyId, type SystemFamily, TARGET_SCHEMA, type ValueSchema } from "../platform/api";
 import { CLOTHING_STATES, type ClothingState } from "./clothing-dressing";
 import { CLOTHING_AREAS, type ClothingArea } from "../saves/save-loadout";
 
@@ -507,9 +507,12 @@ export type CharacterContextAction =
 const input = (type: ValueSchema["type"], extra: Partial<ValueSchema> = {}): ValueSchema => ({ type, required: true, from: "input", ...extra });
 const optional = (type: ValueSchema["type"], extra: Partial<ValueSchema> = {}): ValueSchema => ({ type, required: false, from: "input", ...extra });
 type Scope = "viewport" | "file";
-/** Every creator change records a step in the character's own history, never in a look's (CORE-59): the look history policy is `none`. */
+/**
+ * Every creator change records a step in the character's own history, never in a look's (CORE-59): the look history policy is `none`.
+ * Every action names the V it acts on (`character`, profiles design §3.6); the context it reaches is that V's.
+ */
 const desc = (scope: Scope, effect: ActionDescriptor["effect"], payload: ActionDescriptor["payload"]): ActionDescriptor<Scope> =>
-  ({ scope: [scope], effect, undo: "none", payload });
+  ({ scope: [scope], effect, undo: "none", payload: { character: TARGET_SCHEMA.character, ...payload } });
 const target = { part: input("enum", { values: CCO_PARTS }), option: input("string", { minLength: 1, maxLength: CREATOR_LIMITS.name }) };
 export const CHARACTER_CONTEXT_DESCRIPTORS = {
   "character.setOption": desc("viewport", "workspace", { ...target, choice: input("string", { maxLength: CREATOR_LIMITS.name }), activates: optional("object") }),

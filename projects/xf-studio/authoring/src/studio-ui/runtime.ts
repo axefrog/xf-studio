@@ -1,7 +1,8 @@
 import { shortcutLabel } from "../app/input-bindings";
 import type { CollectionOutcome, CollectionRequest } from "../library/collection-service";
 import type { ValueSchema } from "../app/studio-action-descriptors";
-import type { StudioAction, StudioDispatchResult } from "../app/studio-application";
+import type { StudioDispatchResult } from "../app/studio-application";
+import type { PresentationAction } from "../app/studio-presentation";
 import type { StudioFileAction, StudioFileOutcome } from "../app/studio-file-operations";
 import type { EyeMakeupFacade, StudioPresentationPort } from "../app/studio-presentation";
 import type { DockView } from "./dock/dock-view";
@@ -130,7 +131,7 @@ export class StudioRuntime {
   /** Eye makeup's live editor view (cheap, cached and read-only). */
   get editor() { return this.eyeMakeup.view(); }
   /** Descriptor limits drive control ranges, so the view keeps no copy of domain constants. */
-  range(kind: StudioAction["kind"], field: string, variant?: string): { min: number; max: number } {
+  range(kind: PresentationAction["kind"], field: string, variant?: string): { min: number; max: number } {
     const descriptor = this.descriptors[kind] as { payload: Record<string, ValueSchema>; variants?: Record<string, { payload: Record<string, ValueSchema> }> };
     const schema = (variant ? descriptor.variants?.[variant]?.payload[field] : undefined) ?? descriptor.payload[field];
     return { min: schema?.min ?? 0, max: schema?.max ?? 1 };
@@ -138,7 +139,7 @@ export class StudioRuntime {
   /** The activity-log source an action kind reports under, from the view contributions. */
   sourceLabel(kind: string) { return activitySource(kind, this.views); }
   /** Validated dispatch. Failures surface their typed reason; nothing is retried silently. */
-  dispatch(action: StudioAction, options: DispatchFeedback = {}) {
+  dispatch(action: PresentationAction, options: DispatchFeedback = {}) {
     return this.report(action.kind, this.port.authoring.dispatch(action), options);
   }
   /**

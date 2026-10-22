@@ -4,8 +4,8 @@
  * looks are working copies in the library (`collection-owner.ts`, through the outbox), the look a scene shows is the scene's (`LookRef`),
  * and the shown look's edits are the look editor's (`look-editor.ts`).
  *
- * - **Presets** are the collection's looks: Add, Copy, Rename, Move, Remove and Restore are owner commands (one each), and choosing a
- *   preset shows it on the scene (`scene.setLook`).
+ * - **Presets** are the collection's looks: Add, Copy, Rename, Move, Remove and Restore are owner commands (one each). Choosing a preset
+ *   is `scene.setLook` (app/profiles/scene-commands.ts); the service follows the scene to the collection it shows.
  * - **Save version** (Ctrl+S) makes a named version older builds read (`/api/collection-versions`), from the host's own snapshot of the
  *   working copies after the collection's changes have reached the library. Save as new collection makes a new working copy (fresh IDs)
  *   and saves its first version.
@@ -405,7 +405,9 @@ export class CollectionService {
     if (this.busy) return refusal("busy", "A collection request is in progress.");
     const view = this.shown(), collection = this.collection();
     if (!view || !collection) return refusal("not_ready", LOADING);
-    if (view.conflict && action.kind !== "preset.select")
+    // The collection the action names is the one shown (phase 1 shows one): another is refused, never acted on in its place.
+    if (action.collection !== view.id) return refusal("missing_target", "That collection isn't the one open here.");
+    if (view.conflict)
       return refusal("stale", "This collection changed in another window too. Choose which version to keep first.");
     switch (action.kind) {
       case "collection.undoOpen":
@@ -427,7 +429,6 @@ export class CollectionService {
         return issue ? refuse(issue) : { available: true };
       }
       case "collection.rename": { const issue = nameIssue(action.name, 120); return issue ? refuse(issue) : { available: true }; }
-      case "preset.select": return view.looks.includes(action.id) ? { available: true } : refusal("missing_target", "Preset not found.");
       case "collection.importRecipe": return { available: true };
       default: return this.planCapability(action, collection);
     }
@@ -456,7 +457,6 @@ export class CollectionService {
       return answer;
     };
     switch (action.kind) {
-      case "preset.select": this.show({ collection: id, look: action.id }); break;
       case "collection.rename": done(owner.dispatch({ kind: "collection.rename", collection: id, base: view.revision, name: action.name.trim() })); break;
       case "collection.importRecipe": {
         const look = starterLook(this.newId(), "Imported preset", this.deps.model);

@@ -65,13 +65,15 @@ export function historyPanel(rt: StudioRuntime): PanelController {
     spec: { id: "history", ...PANEL_META["history"], element },
     update(frame: Frame) {
       const timeline = frame.history, draft = frame.library.draft;
-      const hasPreset = !!timeline.documentLabel || !draft || !!draft.selected;
-      setAttr(list, "aria-label", `Changes to ${timeline.documentLabel ?? "this preset"}, oldest first`);
+      // The editing context the panel shows (profiles design §3.7), by name.
+      const context = timeline.documentLabel ?? port.focus.editing()?.name;
+      const hasPreset = !!context || !draft || !!draft.selected;
+      setAttr(list, "aria-label", `Changes to ${context ?? "this preset"}, oldest first`);
       const undoCap = port.authoring.capability({ kind: "history.undo" }), redoCap = port.authoring.capability({ kind: "history.redo" });
       const labels = port.authoring.history();
       // The main-action pattern (UI-84), as the header's Undo and Redo: unavailable, each stays focusable and says why.
-      setUnavailable(undo, !undoCap.available, undoCap.reason); undo.title = historyCommandTitle("undo", undoCap, labels.undo?.label, keys.undo, timeline.documentLabel);
-      setUnavailable(redo, !redoCap.available, redoCap.reason); redo.title = historyCommandTitle("redo", redoCap, labels.redo?.label, keys.redo, timeline.documentLabel);
+      setUnavailable(undo, !undoCap.available, undoCap.reason); undo.title = historyCommandTitle("undo", undoCap, labels.undo?.label, keys.undo, context);
+      setUnavailable(redo, !redoCap.available, redoCap.reason); redo.title = historyCommandTitle("redo", redoCap, labels.redo?.label, keys.redo, context);
       setText(summary, hasPreset ? historySummary(timeline) : "No preset");
       // One capability stands for every row: jumps are refused for the same reason (busy, no preset).
       rows = hasPreset ? historyRows(timeline) : [];

@@ -30,9 +30,9 @@ export function packagePlanEdit(action: PackagePlanAction, newId = ""): PackageP
 export type PackageProductSummary = { id: string; isDefault: boolean; modName: string; nameSource: "plan" | "derived";
   features: { id: string; label: string }[] };
 
-export type CollectionAction =
+/** Every collection action names the collection it acts on (`collection`, profiles design §3.6): the one the Presets panel shows. */
+export type CollectionAction = { readonly collection: string } & (
   | { kind: "preset.edit"; command: PresetCommand }
-  | { kind: "preset.select"; id: string }
   | { kind: "collection.rename"; name: string }
   /** Show another collection again: `draft` names a recent draft (its collection ID), else the collection shown before (Undo open). */
   | { kind: "collection.undoOpen"; draft?: string }
@@ -46,7 +46,7 @@ export type CollectionAction =
   | { kind: "package.rename"; productId: string; modName: string }
   | { kind: "package.assign"; feature: string; productId: string }
   | { kind: "package.split"; feature: string; newId?: string }
-  | { kind: "package.merge"; productId: string; intoId: string };
+  | { kind: "package.merge"; productId: string; intoId: string });
 /** Collection actions a presentation may dispatch. */
 export type CollectionStudioAction = CollectionAction;
 

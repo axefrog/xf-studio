@@ -37,6 +37,8 @@ type Session = { ref: LookRef; handles: number; listeners: Set<(event: LookSessi
 
 export class LookSessions {
   private readonly sessions = new Map<string, Session>();
+  /** How often each look changed elsewhere (taken from another window, or a conflict resolved), by document key. */
+  private readonly generations = new Map<string, number>();
 
   constructor(private readonly owner: CollectionOwner, private readonly outbox: DocumentOutbox) {
     outbox.subscribe(event => {
@@ -44,6 +46,7 @@ export class LookSessions {
       const refs = event.kind === "external" || event.kind === "resolved" || event.kind === "recorded" ? event.refs : event.entry.writes;
       const kind: LookSessionEvent["kind"] = event.kind === "external" ? "elsewhere" : event.kind === "conflict" ? "conflict" : event.kind === "resolved" ? "resolved" : "changed";
       for (const ref of refs) {
+        if (kind === "elsewhere" || kind === "resolved") this.generations.set(documentKey(ref), (this.generations.get(documentKey(ref)) ?? 0) + 1);
         const session = this.sessions.get(documentKey(ref));
         if (!session) continue;
         for (const listener of [...session.listeners]) listener({ kind });
@@ -89,6 +92,11 @@ export class LookSessions {
       },
     };
   }
+  /**
+   * How often a look changed other than through this window's own edits (a change from another window, a conflict resolved): what a
+   * capture freezes for a look it edits (profiles design §3.3), so a gesture or menu never acts on what another window wrote meanwhile.
+   */
+  generation(ref: LookRef): number { return this.generations.get(documentKey(lookRef(ref))) ?? 0; }
   /** The looks with a session (tests and diagnostics): open ones, and closed ones whose changes hadn't reached the library yet. */
   held(): readonly LookRef[] { return [...this.sessions.values()].map(session => session.ref); }
 }

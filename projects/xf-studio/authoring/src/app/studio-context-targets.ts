@@ -1,4 +1,5 @@
 import type { StudioAction, StudioTarget } from "./studio-application";
+import type { NamedTargets, Unnamed } from "./action-targets";
 import type { Recipe } from "../engines/layered-makeup/recipe";
 
 /**
@@ -17,9 +18,13 @@ export type StudioContextHit =
   | { kind: "preset"; id: string }
   | { kind: "collection" };
 
-/** A query is tied to the collection/preset and, for geometry hits, its revision. */
+/**
+ * A query is tied to the collection/preset and, for geometry hits, its revision, and to the targets the input layer resolved when it
+ * opened (`named`, profiles design §3.3): every command it offers names them.
+ */
 export type StudioBoundContext = Readonly<{
   hit: Readonly<StudioContextHit>;
+  named: Readonly<NamedTargets>;
   collectionId?: string;
   selectedPresetId?: string;
   collectionRevision: number;
@@ -27,7 +32,7 @@ export type StudioBoundContext = Readonly<{
 }>;
 
 export type ContextCandidate =
-  | { id: string; action: StudioAction }
+  | { id: string; action: Unnamed<StudioAction> }
   | { id: string; actionKind: StudioAction["kind"]; variant?: string; requiresInput: true };
 
 export function contextScope(hit: StudioContextHit): StudioTarget | undefined {
@@ -44,9 +49,12 @@ export function geometryHit(hit: StudioContextHit) {
     hit.kind === "shape" || hit.kind === "layer";
 }
 
-/** Only existing commands are offered. Input candidates need a value before dispatch. */
-export function contextCandidates(hit: StudioContextHit, recipe: Recipe): ContextCandidate[] {
-  const ready = (id: string, action: StudioAction): ContextCandidate => ({ id, action });
+/**
+ * Only existing commands are offered. Input candidates need a value before dispatch. `collection`: the collection the menu's targets name,
+ * whose preset a preset hit shows (`scene.setLook`).
+ */
+export function contextCandidates(hit: StudioContextHit, recipe: Recipe, collection?: string): ContextCandidate[] {
+  const ready = (id: string, action: Unnamed<StudioAction>): ContextCandidate => ({ id, action });
   const input = (id: string, actionKind: StudioAction["kind"], variant?: string): ContextCandidate =>
     ({ id, actionKind, variant, requiresInput: true });
   if (hit.kind === "collection") return [
@@ -55,7 +63,7 @@ export function contextCandidates(hit: StudioContextHit, recipe: Recipe): Contex
     ready("collection.undoOpen", { kind: "collection.undoOpen" }),
     input("collection.rename", "collection.rename")];
   if (hit.kind === "preset") return [
-    ready("preset.select", { kind: "preset.select", id: hit.id }),
+    ...(collection ? [ready("preset.select", { kind: "scene.setLook", look: { collection, look: hit.id } })] : []),
     ready("preset.copy", { kind: "preset.edit", command: { kind: "copy", id: hit.id } }),
     ready("preset.remove", { kind: "preset.edit", command: { kind: "remove", id: hit.id } }),
     input("preset.rename", "preset.edit", "rename"),

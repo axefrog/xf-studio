@@ -39,6 +39,8 @@ const rowKey = (group: string, pose: string) => `${group}${SEP}${pose}`;
 const poseOf = (key: string) => key.slice(key.indexOf(SEP) + 1);
 export function posesPanel(ctx: Ctx): PanelController {
   const facade = ctx.facade;
+  // The view whose V the poses apply to: the one the shown tab's focus resolves to (profiles design §3.6); none: "" (refused, with why).
+  const view = () => ctx.targets().view ?? "";
   let query = "", treeKey = "", stateKey = "", lastTree: PoseTree | null = null;
   const tree = new TreeView({
     label: "Poses by category",
@@ -48,7 +50,7 @@ export function posesPanel(ctx: Ctx): PanelController {
     maxRows: 20, minRows: 4, sizeBar: { key: "poses:tree" },
     emptyText: "No poses match. Try other words, or clear the search.",
     onToggle: (group, open) => { void ctx.dispatch({ kind: "pose.openGroup", group, open }, { quiet: true }); },
-    onActivate: key => { void ctx.dispatch({ kind: "pose.select", id: poseOf(key) }); },
+    onActivate: key => { void ctx.dispatch({ kind: "pose.select", id: poseOf(key), view: view() }); },
     // F stars the focused pose (input-bindings.ts `rows.favourite`).
     onKey: (event, item) => {
       if (item.kind !== "row" || keyBinding("rows", event)?.id !== "rows.favourite") return false;
@@ -61,10 +63,10 @@ export function posesPanel(ctx: Ctx): PanelController {
   });
   const search = new SearchField({ label: "Search poses", placeholder: "Search poses, categories and packs", className: "poses-search",
     onFilter: value => { query = value; ctx.changed(); }, onArrowDown: () => tree.focus() });
-  const still = button({ label: "Stand still", icon: "pause", small: true, variant: "quiet", onClick: () => { void ctx.dispatch({ kind: "pose.clear", to: "still" }); } });
-  const idle = button({ label: "Idle", icon: "play", small: true, variant: "quiet", onClick: () => { void ctx.dispatch({ kind: "pose.clear", to: "idle" }); } });
+  const still = button({ label: "Stand still", icon: "pause", small: true, variant: "quiet", onClick: () => { void ctx.dispatch({ kind: "pose.clear", to: "still", view: view() }); } });
+  const idle = button({ label: "Idle", icon: "play", small: true, variant: "quiet", onClick: () => { void ctx.dispatch({ kind: "pose.clear", to: "idle", view: view() }); } });
   idle.title = "Play the idle chosen in Motion (the creator's close-up unless you chose another)";
-  const frame = button({ label: "Frame V", icon: "body", small: true, variant: "quiet", onClick: () => { void ctx.dispatch({ kind: "pose.frame" }, { quiet: true }); } });
+  const frame = button({ label: "Frame V", icon: "body", small: true, variant: "quiet", onClick: () => { void ctx.dispatch({ kind: "pose.frame", view: view() }, { quiet: true }); } });
   const outfitText = h("span", {});
   const outfitToggle = button({ label: "Show them", small: true, variant: "ghost", onClick: () => {
     void ctx.dispatch({ kind: "pose.showFiltered", shown: !facade.snapshot().showFiltered }, { quiet: true });
@@ -94,9 +96,9 @@ export function posesPanel(ctx: Ctx): PanelController {
     update() {
       const snapshot = facade.snapshot(), catalogue = snapshot.catalogue;
       // Stand still, the idle and Frame V say why when they can't act.
-      applyCapability(still, facade.capability({ kind: "pose.clear", to: "still" }));
-      applyCapability(idle, facade.capability({ kind: "pose.clear", to: "idle" }));
-      applyCapability(frame, facade.capability({ kind: "pose.frame" }));
+      applyCapability(still, facade.capability({ kind: "pose.clear", to: "still", view: view() }));
+      applyCapability(idle, facade.capability({ kind: "pose.clear", to: "idle", view: view() }));
+      applyCapability(frame, facade.capability({ kind: "pose.frame", view: view() }));
       const held = snapshot.current;
       // Stand still and Idle show which of them V is doing (pressed), and the tree marks the pose V holds (UI-127).
       const playable = snapshot.playable.available;

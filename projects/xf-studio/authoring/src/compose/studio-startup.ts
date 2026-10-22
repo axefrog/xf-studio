@@ -1,3 +1,4 @@
+import type { StudioAction } from "../app/studio-application";
 import { browserReferenceTextures } from "../character/browser/browser-reference-textures-device";
 import { OFF_EXPERIMENTS } from "../platform/core/experiments";
 import { createHistoryService, type HistoryService } from "../platform/core/history-service";
@@ -69,7 +70,7 @@ import { PROFILES_MIGRATION_ENABLED, startProfilesMigration } from "../app/brows
 import { workspaceKeys, type WorkspaceState } from "../app/workspace/workspace-state";
 import { WorkspacePersistence } from "../app/workspace/workspace-persistence";
 import { outboxView } from "../app/presentation-status";
-import { createProfileServices, drawnScene, openProfileSession, sceneCharacter } from "../app/profiles/profile-window";
+import { createProfileServices, createTargetResolver, drawnScene, historyScopeName, openProfileSession, sceneCharacter, sceneCommands } from "../app/profiles/profile-window";
 import { createStudioSubjects } from "./subjects";
 import { LookEditor, lookContent } from "../library/look-editor";
 import { lookRef, type LookRef } from "../library/collection-documents";
@@ -189,8 +190,9 @@ async function start(host: StudioHost, root: HTMLElement) {
       report: error => diagnostics.failure("library", "profiles_migration_failed", "Your work couldn't be moved into your profile yet; it will try again.", error, { level: "warn" }) });
   }
   await services.load();
-  // The session this window opens on (tab 1, the views and scenes, and what each scene shows).
-  const { state: sessionState, stored: sessionStored } = openProfileSession(workspace, services);
+  // The session this window opens on (tab 1, the views and scenes, and what each scene shows), with the window's focus: the history
+  // service records the editing context into it (profiles design §3.3, §3.7).
+  const { state: sessionState, stored: sessionStored } = openProfileSession(workspace, services, historyService.focus);
   // Tab 1's arrangement is the dock's; the workspace's own arrangement stays as it was (migration input only).
   const legacyLayout = workspace.uiPreferences.layout, tabDock = sessionState.dock();
   const { layout: _legacy, ...uiPreferences } = workspace.uiPreferences;
@@ -204,8 +206,8 @@ async function start(host: StudioHost, root: HTMLElement) {
   // folder and follows Settings › Saves (UI-109). Poses reach the shown V through the stage, which the head fills in once it is attached;
   // the whole-body view goes through the application like the toolbar's.
   const poseStage = new PoseStageHub({
-    capability: () => core.app.capability({ kind: "camera.body" }),
-    frame: () => { const done = core.app.dispatch({ kind: "camera.body" }); return done.ok ? { available: true } : { available: false, reason: done.message }; },
+    capability: view => core.app.capability({ kind: "camera.body", view }),
+    frame: view => { const done = core.app.dispatch({ kind: "camera.body", view }); return done.ok ? { available: true } : { available: false, reason: done.message }; },
   });
   const moduleServices = createModuleServices({ saves: createBrowserSaveExplorerDevice(document,
     { verification, locationChanged: savesLocationSignal(localSetup) }),
@@ -272,13 +274,14 @@ async function start(host: StudioHost, root: HTMLElement) {
   if (lease) core.app.attach({ access: lease });
   // The view graph the core owns (view-graph-design.md §3.3): the head restores and follows its main view.
   const views = core.views;
-  // Undo goes where it went when the session was last stored (the editing context, profiles design §3.7).
-  const editing = sessionState.editingContext();
-  if (editing) historyService.focus(editing);
   // The scene the drawn view shows (phase 1 draws one view: the main one) and the look it shows, which the collection service changes.
   const drawn = () => views.node(MAIN_VIEW, "scene").id;
   const shownScene = { look: () => sessionState.scene(drawn()).look, setLook: (ref: LookRef | undefined) => sessionState.setLook(drawn(), ref),
     subscribe: (listener: () => void) => sessionState.subscribe(listener) };
+  // The scenes' `gen` (what a view action that edits a scene names) and the input layer's resolution over the session.
+  core.app.attach({ scenes: sceneCommands(sessionState, services) });
+  const targets = createTargetResolver({ state: sessionState, graph: views, history: historyService, services,
+    collection: () => bootstrap?.collection.service.draftIdentity()?.collectionId });
   const headHost = byId("device-head"), uvHost = byId("device-uv");
   const viewportDevice = createBrowserViewportDevice({ region, headHost, uvHost, queryContext: hit => core.app.contextQuery(hit), renderers: STUDIO_RENDERERS, optionalRenderers: experiments, referenceTextures: browserReferenceTextures(verification),
     onContext: event => event === "lost" ? diagnostics.contextLost("3D view") : diagnostics.contextRestored("3D view") });
@@ -287,7 +290,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     history: workspace.history, ...(workspace.historyTrimmed ? { historyTrimmed: true } : {}), ...(workspace.liveFeatures ? { liveFeatures: workspace.liveFeatures } : {}) };
   // The session as it is now, stored with the migration's mark (a session made for this window from the library is stored nowhere).
   const profileMarks = (): Pick<WorkspaceState, "migration" | "profiles"> => ({ migration: workspace.migration,
-    profiles: sessionStored ? sessionState.stored({ graph: sessionViewGraph(views), dock: preferences.snapshot().layout ?? null, editing: historyService.editing() },
+    profiles: sessionStored ? sessionState.stored({ graph: sessionViewGraph(views), dock: preferences.snapshot().layout ?? null },
       workspace.profiles) : workspace.profiles });
   const session = createBrowserWorkspaceSession({
     workspace, restored, verification, storage, budget: host.storageBudget, model: STUDIO_COMPOSITION.documents,
@@ -315,9 +318,6 @@ async function start(host: StudioHost, root: HTMLElement) {
     store: () => documents.outbox.store(),
     restoring: ref => documents.outbox.recovering(lookRef(ref)), shown: () => lookShown?.(), note: text => adapterMessage("preview", text),
     report: error => diagnostics.failure("library", "look_write_failed", "Your latest look change couldn't be recorded yet; it will be tried again.", error, { level: "warn" }) });
-  // The editing context (§3.7) is stored with the session: a change of it is written like any other session change.
-  let editingNow = historyService.editing();
-  historyService.subscribe(() => { if (historyService.editing() !== editingNow) { editingNow = historyService.editing(); session.request(); } });
   host.onFlushRequest?.(() => { lookEditor.commit(); session.flush(); });
   window.addEventListener("pagehide", () => lookEditor.commit());
   document.addEventListener("visibilitychange", () => { if (document.hidden) lookEditor.commit(); });
@@ -368,10 +368,12 @@ async function start(host: StudioHost, root: HTMLElement) {
   core.app.subscribe(() => facial.changed());
   facial.start();
   previewDevice.coordinator.quality.subscribe(persist);
+  // The editors' own selections and gestures name the look the drawn view shows (the input layer's resolution, profiles design §3.6).
+  const named = <A extends { kind: string }>(action: A) => targets.complete(action, core.app.descriptor(action.kind)) as unknown as StudioAction;
   const fieldHooks = {
     selectedField: () => core.presentation.selectedField()?.id,
-    selectField: (id: string) => { const layer = core.presentation.layer(); if (layer) core.app.dispatch({ kind: "field.select", layerId: layer.id, fieldId: id }); },
-    select: (index: number) => { const layer = core.presentation.layer(); if (layer) core.app.dispatch({ kind: "point.select", layerId: layer.id, index }); },
+    selectField: (id: string) => { const layer = core.presentation.layer(); if (layer) core.app.dispatch(named({ kind: "field.select", layerId: layer.id, fieldId: id })); },
+    select: (index: number) => { const layer = core.presentation.layer(); if (layer) core.app.dispatch(named({ kind: "point.select", layerId: layer.id, index })); },
   };
   uvEditor = viewportDevice.mountUV(byId<HTMLCanvasElement>("device-uv-canvas"), undefined, {
     recipe: () => core.geometry.recipe(), layer: () => core.geometry.layer(),
@@ -379,7 +381,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     canvases: () => previewDevice.canvases,
     albedo: () => scene?.albedo.image as HTMLImageElement | undefined,
     surfaceEdge: () => core.app.surfaceEdge(core.presentation.layer()?.id),
-    begin: () => { const layer = core.presentation.layer(); if (layer) core.app.beginGesture("uv", layer.id); },
+    begin: () => { const layer = core.presentation.layer(); if (layer) core.app.beginGesture("uv", layer.id, targets.named().look); },
     apply: proposal => core.app.applyGesture("uv", proposal),
     cancel: () => core.app.endGesture("uv", true), finish: () => core.app.endGesture("uv"),
     persist: () => { persist(); viewportDevice.attachment.viewChanged(); },
@@ -419,7 +421,9 @@ async function start(host: StudioHost, root: HTMLElement) {
       // the shown V's scene applies it.
       load: bytes => {
         if (bytes.byteLength > 128 * 1024 * 1024) throw Error("Save is larger than the supported limit.");
-        const result = core.app.dispatch({ kind: "character.setSource", source: { kind: "save", value: readSavedV(bytes) } });
+        // The V the shown tab's focused view shows (the input layer names it, profiles design §3.6).
+        const result = core.app.dispatch(targets.complete({ kind: "character.setSource" as const, source: { kind: "save" as const, value: readSavedV(bytes) } },
+          core.app.descriptor("character.setSource")) as StudioAction);
         if (!result.ok) throw Error(result.message);
         return savedAppearance!.snapshot();
       },
@@ -428,13 +432,8 @@ async function start(host: StudioHost, root: HTMLElement) {
     },
     fileDevice, diagnostics, modules: moduleServices, experiments, lease, outbox: documents.outbox,
     panelInstance: panel => sessionState.instance(panel),
-    // A focused 3D view's own Undo steps the look its scene shows (Ctrl+Z in the 3D view always undoes the look); header and History-panel
-    // Undo follow the editing context. (The V panel handles its own Ctrl+Z: character.undo.)
-    panelHistoryScope: panel => {
-      const view = panel === "head" ? MAIN_VIEW : panel.startsWith("view.") ? panel.slice("view.".length) : undefined;
-      const look = view !== undefined && views.has(view) ? sessionState.scene(views.node(view, "scene").id).look : undefined;
-      return look ? lookScope(look) : undefined;
-    },
+    // The input layer: what each action names (profiles design §3.6), resolved from the session, focus and the owners.
+    targets, focus: historyService.focus, scopeName: scope => historyScopeName(scope, { services, history: historyService }),
   });
   // The editor shows the scene's look, and follows it when the scene shows another one.
   lookShown = () => { previewDevice.coordinator.resetStack(); drawUV(); };
@@ -550,7 +549,7 @@ async function start(host: StudioHost, root: HTMLElement) {
           editor: {
             layer: () => core.geometry.layer(), layers: () => core.geometry.recipe().layers,
             selected: () => core.presentation.selected, ...fieldHooks,
-            begin: () => { const layer = core.presentation.layer(); if (layer) core.app.beginGesture("surface", layer.id); },
+            begin: () => { const layer = core.presentation.layer(); if (layer) core.app.beginGesture("surface", layer.id, targets.named().look); },
             apply: proposal => core.app.applyGesture("surface", proposal),
             cancel: () => core.app.endGesture("surface", true), finish: () => core.app.endGesture("surface"),
             message: text => adapterMessage("surface", text),
@@ -565,7 +564,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       ({ scene, savedAppearance, preview: previewActions, motion: motionActions } = attached);
       facial.attachScene(scene.face);
       stopPrefetch = prefetchWhenQuiet(() => facial.prefetch(), headQuiet({ details: attached.characterDetails, scene }));
-      poseStage.attach({ motion: attached.motion, details: attached.characterDetails, context: attached.characterContext });
+      poseStage.attach({ view: MAIN_VIEW, motion: attached.motion, details: attached.characterDetails, context: attached.characterContext });
       status = { ...status, assets: { ...status.assets, loaded: true } };
       viewportDevice.headReady();
       session.setPreviewReady(); session.flush(); drawUV();
