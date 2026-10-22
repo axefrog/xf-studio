@@ -67,7 +67,11 @@ export function libraryState(frame: Frame) {
     return { tone: "info" as const, label: "Changed since last version",
       detail: `Changed since version ${draft.revision}: ${what}. Save version makes version ${draft.revision + 1}.` };
   }
-  // The last version's content isn't read back yet, so there is nothing to compare with: the library is still at work (c-chips' words).
+  // The last version couldn't be read back, so nothing can be compared: the chip names the version and makes no claim about changes. It is
+  // read again on the next library refresh (c-chips).
+  if (persistence?.baseline === "unavailable") return { tone: "neutral" as const, label: `Version ${draft.revision}`,
+    detail: `Your work saves itself as you go. Version ${draft.revision} couldn't be read back from your library to compare with, so XF Studio can't say what changed since; Save version keeps a new version.` };
+  // The last version's content is being read back to compare with: the library is at work (c-chips' words). Only while that read runs.
   return { tone: "info" as const, label: "Working…",
     detail: `Comparing your work with version ${draft.revision} in your library. Your work saves itself as you go.` };
 }

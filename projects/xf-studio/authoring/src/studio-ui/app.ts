@@ -38,7 +38,7 @@ import { SETTINGS_PANEL, type SettingsSection } from "./settings-sections";
 import { bindViewState, PreferenceViewState } from "./view-state";
 import { flushScrollMemories } from "./scroll-anchor";
 import { HeaderFit } from "./header-fit";
-import { MISSING_SAVE, RESTORING, RESTORING_LONG, UNPROTECTED } from "./notice-text";
+import { LIBRARY_CHIP_WIDEST, MISSING_SAVE, RESTORING, RESTORING_LONG, UNPROTECTED } from "./notice-text";
 import { WorkspaceNotice, type WorkspaceNoticeAction, type WorkspaceNoticeState } from "./components";
 
 /**
@@ -487,6 +487,8 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
       { label: "Modules", invoker: event.currentTarget as Element }) }, icon("category"), categoryText);
   const collection = h("span", { class: "crumb-collection" }), preset = h("span", { class: "crumb-preset" });
   const chip = h("span", { class: "chip" });
+  // The chip's room is kept at its widest word, so a save or an edit that changes it moves nothing in the header (header-fit.ts).
+  const chipSlot = h("span", { class: "chip-slot" }, chip);
   const keys = { undo: shortcutLabel("shell.undo"), redo: shortcutLabel("shell.redo"), save: shortcutLabel("shell.save"), palette: shortcutLabel("shell.palette") };
   const undo = button({ label: "Undo", icon: "undo", iconOnly: true, variant: "ghost", title: `Undo (${keys.undo})`, onClick: () => rt.dispatch({ kind: "history.undo" }) });
   const redo = button({ label: "Redo", icon: "redo", iconOnly: true, variant: "ghost", title: `Redo (${keys.redo})`, onClick: () => rt.dispatch({ kind: "history.redo" }) });
@@ -533,11 +535,11 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
     category,
     // The library chip sits after the crumbs, not inside them, so the names give way before it and it never runs over the verification
     // flag in a crowded header (DESK-06).
-    h("nav", { class: "crumbs", "aria-label": "Current document" }, collection, icon("chevronRight"), preset), chip,
+    h("nav", { class: "crumbs", "aria-label": "Current document" }, collection, icon("chevronRight"), preset), chipSlot,
     verify,
     h("div", { class: "header-actions" }, h("span", { class: "history-controls", role: "group", "aria-label": "Undo and Redo" }, undo, redo, historyButton), save, pkg, h("span", { class: "divider", "aria-hidden": "true" }), palette, helpButton, settingsButton, panelsButton, layoutsButton, themeButton));
   // The crumbs stay readable (UI-187): the header's other items give way first, in a fixed order, whenever the window or the words change.
-  const fit = new HeaderFit(element, [collection, preset]);
+  const fit = new HeaderFit(element, [collection, preset], { slot: chipSlot, element: chip, words: LIBRARY_CHIP_WIDEST });
   let fitKey = "";
   return {
     element,
@@ -567,7 +569,8 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
       layoutsButton.title = layout.title; layoutsButton.dataset.title = layout.title; setAttr(layoutsButton, "aria-label", layout.accessible);
       themeButton.replaceChildren(icon(theme.preference === "system" ? "monitor" : theme.preference === "dark" ? "moon" : "sun"));
       setAttr(themeButton, "aria-label", `View preferences (theme: ${theme.preference === "system" ? `system (${theme.system})` : theme.preference})`);
-      const key = JSON.stringify([categoryText.textContent, collection.textContent, preset.textContent, chip.textContent, verify.hidden, layout.name]);
+      // Not the chip's words: its room is reserved (above), so they change no stage.
+      const key = JSON.stringify([categoryText.textContent, collection.textContent, preset.textContent, verify.hidden, layout.name]);
       if (key !== fitKey) { fitKey = key; fit.refit(); }
     },
   };
@@ -582,14 +585,15 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
 export function workspaceNoticeState(frame: Frame): WorkspaceNoticeState | null {
   const lease = frame.status.lease;
   if (lease?.message) {
-    // A handover that couldn't save names two ways on, so it offers both: Try again, and Export collection to keep a copy (condition 1).
-    const actions: WorkspaceNoticeAction[] = [...(lease.canTakeOver ? ["takeOver" as const] : []), ...(lease.canRetry ? ["retryRelease" as const, "exportCollection" as const] : [])];
+    // A handover that couldn't save names two ways on, so it offers both: Try again, and the recovery export, which needs nothing from the
+    // library that couldn't take the changes (condition 1).
+    const actions: WorkspaceNoticeAction[] = [...(lease.canTakeOver ? ["takeOver" as const] : []), ...(lease.canRetry ? ["retryRelease" as const, "exportCopy" as const] : [])];
     return { message: lease.message, actions };
   }
   const outbox = frame.status.outbox, restoring = outbox?.recovering;
-  if (outbox?.unprotected) return { message: UNPROTECTED, actions: ["exportCollection", "protect"] };
+  if (outbox?.unprotected) return { message: UNPROTECTED, actions: ["exportCopy", "protect"] };
   if (restoring?.missing) return { message: MISSING_SAVE, actions: ["importSave", "discardWaiting"] };
-  if (restoring?.shown && restoring.long) return { message: RESTORING_LONG, actions: restoring.safe ? ["keepRestored", "retryRestore"] : ["exportCollection", "retryRestore"] };
+  if (restoring?.shown && restoring.long) return { message: RESTORING_LONG, actions: restoring.safe ? ["keepRestored", "retryRestore"] : ["exportCopy", "retryRestore"] };
   return null;
 }
 
@@ -607,7 +611,7 @@ export function workspaceNotice(rt: StudioRuntime) {
     void rt.port.documents.dispatch({ kind }).then(toastRefusal);
   const run: Record<WorkspaceNoticeAction, () => void> = {
     takeOver: () => workspace("workspace.takeOver"), retryRelease: () => workspace("workspace.retryRelease"),
-    exportCollection: () => void rt.file({ kind: "collection.export" }), protect: () => documents("documents.protect"),
+    exportCopy: () => void rt.file({ kind: "collection.exportWindowCopy" }), protect: () => documents("documents.protect"),
     keepRestored: () => documents("documents.keepRestored"), retryRestore: () => documents("documents.retryRecovery"),
     importSave: () => void rt.file({ kind: "savedV.import" }), discardWaiting: () => documents("documents.discardWaiting"),
   };

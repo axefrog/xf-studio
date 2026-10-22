@@ -318,9 +318,9 @@ const MOUNTS: Record<string, Mount> = {
       return notice.element;
     };
     const narrow = h("div", { style: "max-width:380px" },
-      make("Your latest changes couldn't be backed up on this computer. If XF Studio closes before your library has them, they could be lost.", ["exportCollection", "protect"]));
+      make("Your latest changes couldn't be backed up on this computer. If XF Studio closes before your library has them, they could be lost.", ["exportCopy", "protect"]));
     return stack({ gap: "normal" },
-      make("Your latest changes couldn't be saved, so this window kept the workspace. Try again, or export your collection to keep them.", ["retryRelease", "exportCollection"]),
+      make("Your latest changes couldn't be saved, so this window kept the workspace. Try again, or export this window's copy to keep them.", ["retryRelease", "exportCopy"]),
       make("Some restored changes need a game save that's no longer on this computer. Import it again, or discard them.", ["importSave", "discardWaiting"]),
       make("Taking over from the other window…", []), narrow);
   },

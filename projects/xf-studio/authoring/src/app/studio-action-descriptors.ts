@@ -298,6 +298,7 @@ export const FILE_DESCRIPTORS = {
   "collection.import": file(["file", "collection"], "import", "picker", { undo: "recovery" }),
   "collection.export": file("collection", "download", "download", { savesFirst: true }),
   "collection.plan": file("collection", "download", "download", { savesFirst: true }),
+  "collection.exportWindowCopy": file("collection", "download", "download"),
   "package.check": file("collection", "package", "none"),
   "package.build": file("collection", "package", "none"),
   "collection.recover": file("collection", "recover", "none", { undo: "recovery" }),

@@ -91,4 +91,7 @@ test("the library chip distinguishes unsaved, saved, newer-elsewhere and busy st
   // While the last version is read back there is nothing to compare with: the library is at work, in the chip's own words (UI-189).
   expect(libraryState(frame({ summaries: [], draft }, { baseline: "unknown", dirtyPresets: [] }))).toMatchObject({ label: "Working…", tone: "info",
     detail: "Comparing your work with version 3 in your library. Your work saves itself as you go." });
+  // A read that failed is no longer work in progress: a static, true chip that names the version and claims nothing about changes.
+  expect(libraryState(frame({ summaries: [], draft }, { baseline: "unavailable", dirtyPresets: [] }))).toMatchObject({ label: "Version 3", tone: "neutral" });
+  expect(libraryState(frame({ summaries: [], draft }, { baseline: "unavailable", dirtyPresets: [] })).detail).toContain("couldn't be read back");
 });

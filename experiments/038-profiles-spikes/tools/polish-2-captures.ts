@@ -145,6 +145,49 @@ async function header(page: Session) {
   }
 }
 
+/** Where the header's things sit: Save version's left edge, the category whole or icon-only, the stages given way, the chip's slot. */
+const headerPlaces = (page: Session) => page.evaluate(`(() => { const h = document.querySelector(".shell-header"), save = h.querySelector(".header-save");
+  const category = h.querySelector(".category"), name = category.querySelector("span");
+  return { saveLeft: Math.round(save.getBoundingClientRect().left * 10) / 10, saveWidth: Math.round(save.getBoundingClientRect().width), fit: h.dataset.fit ?? "",
+    category: { width: Math.round(category.getBoundingClientRect().width), name: name.textContent, iconOnly: (h.dataset.fit ?? "").split(" ").includes("category"),
+      clipped: name.getBoundingClientRect().width > 2 && name.scrollWidth > name.clientWidth + 1, accessible: category.title },
+    chip: h.querySelector(".chip").textContent, slot: Math.round(h.querySelector(".chip-slot").getBoundingClientRect().width),
+    collection: h.querySelector(".crumb-collection").getClientRects().length ? Math.round(h.querySelector(".crumb-collection").getBoundingClientRect().width) : 0,
+    preset: Math.round(h.querySelector(".crumb-preset").getBoundingClientRect().width) }; })()`) as Promise<Record<string, unknown>>;
+
+/**
+ * Round 2 (design fixes 1 and 2): at 1,100, 1,280 and 1,440 px, with and without the verification label, the header before an edit
+ * (Saved), after an edit (Changed since last version) and after Save version (Saved), with Save version's left edge in each.
+ */
+async function headerStates(page: Session) {
+  await setMode(page, "");
+  await realisticNames(page);
+  const chipIs = (word: string) => page.waitFor(`[...document.querySelectorAll(".shell-header .chip")].some(c => c.textContent.trim().startsWith(${JSON.stringify(word)}))`, 30_000).catch(() => {});
+  const save = async () => { if (!(await press(page, byLabel("Save version")))) throw Error("No Save version button."); await chipIs("Saved"); await page.wait(400); };
+  await save();
+  const places: Record<string, unknown> = {};
+  for (const width of [1100, 1280, 1440]) for (const flag of [true, false]) {
+    await page.viewport(width, 900); await page.wait(300);
+    if (!flag) await page.evaluate(`document.head.insertAdjacentHTML("beforeend", '<style id="no-flag">.verify-flag { display: none !important; }</style>')`);
+    // A resize fits the header again (the label above is hidden by a style here, not by the app).
+    await page.viewport(width - 1, 900); await page.wait(150); await page.viewport(width, 900); await page.wait(400);
+    const name = `${width}-${flag ? "flag" : "noflag"}`, row: Record<string, unknown> = {};
+    row.beforeEdit = await headerPlaces(page);
+    await capture(page, `header-${name}-1-before-edit`, String(width), [".shell-header"], `${width} px${flag ? " with the verification label" : ""}: before an edit (Saved)`, { pad: 0 });
+    await addLayer(page); await chipIs("Changed since"); await page.wait(400);
+    row.afterEdit = await headerPlaces(page);
+    await capture(page, `header-${name}-2-after-edit`, String(width), [".shell-header"], `${width} px${flag ? " with the verification label" : ""}: after an edit (Changed since last version)`, { pad: 0 });
+    await save();
+    row.afterSave = await headerPlaces(page);
+    await capture(page, `header-${name}-3-after-save`, String(width), [".shell-header"], `${width} px${flag ? " with the verification label" : ""}: after Save version (Saved)`, { pad: 0 });
+    const lefts = [row.beforeEdit, row.afterEdit, row.afterSave].map(item => (item as { saveLeft: number }).saveLeft);
+    row.saveVersionMoved = Math.max(...lefts) - Math.min(...lefts);
+    places[name] = row;
+    await page.evaluate(`document.getElementById("no-flag")?.remove()`);
+  }
+  texts["header-states"] = places;
+}
+
 async function run(width: "narrow" | "wide", size: number) {
   const proc = await server();
   const debugPort = port + 5000 + (width === "wide" ? 1 : 0);
@@ -152,6 +195,7 @@ async function run(width: "narrow" | "wide", size: number) {
     const page = await launch(`${origin}/?verify=1`, { width: size, height: 900, scheme: "light", init: INIT, debugPort });
     try {
       await studio(page);
+      if (want("header-states") && width === "wide") { await headerStates(page); await page.viewport(size, 900); await page.wait(300); }
       if (want("header")) {
         if (width === "wide") { await header(page); await page.viewport(size, 900); await page.wait(300); }
         else {

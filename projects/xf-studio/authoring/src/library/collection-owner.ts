@@ -491,6 +491,22 @@ export class CollectionOwner {
     return refusal("stale", "This collection keeps changing in another window. Try again in a moment.");
   }
   /**
+   * This window's own copy of a collection, as it shows it now: the library's acknowledged values with every change still waiting here on
+   * top (the documents' visible values), and nothing read or written. The recovery export (style guide t-read-only-window, t-recovering):
+   * it works when the library can't take this window's changes, which is exactly when a snapshot can't be made. `revisions` are the
+   * acknowledged revisions the copy builds on.
+   */
+  windowCopy(collection: string): CollectionSnapshot | Capability {
+    const doc = this.collection(collection);
+    if (!doc) return refusal("missing_target", "That collection doesn't exist any more.");
+    const looks = doc.looks.map(look => this.look({ collection, look }));
+    // Never a copy with a listed look left out (as a snapshot): a listed look this window doesn't hold live can't be exported as it shows.
+    if (looks.some(look => look?.state !== "live")) return refusal("invalid_value", INCOMPLETE);
+    const refs = this.refsOf(collection);
+    return { collection: stripView(doc), looks: looks.map(look => stripLook(look!)),
+      revisions: Object.fromEntries(refs.map(ref => [documentKey(ref), this.deps.outbox.document(ref)?.version ?? 0])) };
+  }
+  /**
    * Save version (Ctrl+S): flush, then the host writes a named version older builds read (the released tables) from its own snapshot of
    * the working copies, in one transaction; the collection then records which version it was saved as.
    */

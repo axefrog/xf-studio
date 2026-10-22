@@ -10,6 +10,7 @@ import { icon } from "../icons";
 import { openMenu, openValuePopover } from "../menu";
 import { mountLibrary } from "./library-demo";
 import { HEADER_STAGES, HeaderFit } from "../header-fit";
+import { LIBRARY_CHIP_WIDEST } from "../notice-text";
 
 const root = document.documentElement;
 const live = document.getElementById("guide-live")!;
@@ -62,7 +63,8 @@ function bindHeaderFit() {
   for (const host of document.querySelectorAll<HTMLElement>("[data-header-fit]")) {
     const header = host.querySelector<HTMLElement>(".shell-header")!, range = host.querySelector<HTMLInputElement>("input[type=range]")!;
     const readout = host.querySelector("output")!;
-    const fit = new HeaderFit(header, [header.querySelector<HTMLElement>(".crumb-collection")!, header.querySelector<HTMLElement>(".crumb-preset")!]);
+    const fit = new HeaderFit(header, [header.querySelector<HTMLElement>(".crumb-collection")!, header.querySelector<HTMLElement>(".crumb-preset")!],
+      { slot: header.querySelector<HTMLElement>(".chip-slot")!, element: header.querySelector<HTMLElement>(".chip-slot .chip")!, words: LIBRARY_CHIP_WIDEST });
     const apply = () => {
       header.style.width = `${range.value}px`;
       range.style.setProperty("--fill", `${(Number(range.value) - Number(range.min)) / (Number(range.max) - Number(range.min)) * 100}%`);

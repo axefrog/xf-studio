@@ -12,7 +12,7 @@ import { openConfirmPopover } from "../menu";
  * It never moves the dock for something transient: it opens only when the owner hands it a state, and an owner that is mid-gesture
  * asks it to wait (`deferOpen`): a closed notice stays closed until the gesture ends, an open one keeps showing.
  */
-export type WorkspaceNoticeAction = "takeOver" | "retryRelease" | "exportCollection" | "protect" | "keepRestored" | "retryRestore" | "importSave" | "discardWaiting";
+export type WorkspaceNoticeAction = "takeOver" | "retryRelease" | "exportCopy" | "protect" | "keepRestored" | "retryRestore" | "importSave" | "discardWaiting";
 export type WorkspaceNoticeState = {
   readonly message: string;
   /** The ways out, in the order they show. */
@@ -27,7 +27,9 @@ export type WorkspaceNoticeOptions = {
 export const WORKSPACE_NOTICE_ACTIONS: Record<WorkspaceNoticeAction, { label: string; title?: string }> = {
   takeOver: { label: "Use it here", title: "Edit in this window: the other window finishes saving and becomes read-only" },
   retryRelease: { label: "Try again", title: "Save your latest changes again, then hand the workspace over" },
-  exportCollection: { label: "Export collection", title: "Keep a copy of your collection as a file now" },
+  // The recovery export: this window's own copy, with the changes the library doesn't have yet. It needs nothing from the library, so it
+  // works in the states that offer it (a handover that couldn't save, a stuck restore, a failed backup), where saving first would fail.
+  exportCopy: { label: "Export this window's copy", title: "Save the collection as this window shows it to a file, with the changes your library doesn't have yet. Nothing is saved to your library." },
   protect: { label: "Try again", title: "Back up your latest changes on this computer again" },
   keepRestored: { label: "Use restored", title: "Keep working on the restored version" },
   retryRestore: { label: "Try again", title: "Send the restored changes again now" },
