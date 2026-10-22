@@ -241,28 +241,15 @@ The [four layers](plan.md#2-the-system-at-first-level) stay as ownership boundar
 | 4. Authored content | Contributions and pins, as data, in packs |
 | Tooling | Explanation is tracing provenance |
 
-## 8. Formal grounding
+## 8. Comparisons with outside work
 
-To be researched in P3, so the model stays honest. We implement a small toolkit, not a general prover.
+The model is the project's own. Some outside formalisms resemble parts of it. They are useful as comparisons when checking the design, and are not its sources:
+- **Structure:** category theory (objects and maps), ologs, and sheaves (local views that agree on overlaps).
+- **Computation:** lazy, memoised random choice and conditioning, as in probabilistic programming languages.
+- **Context and relevance:** goal hierarchies in agent architectures, top-down expectation in script theory, and incremental rule matching.
+- **Search:** constraint satisfaction, interval bounds and spatial indexing.
 
-- **Structure: applied category theory.**
-  - Dimensions are objects and maps are morphisms.
-  - Ologs are a way of writing down knowledge.
-  - Sheaves capture consistency between local resolutions ([DS-51](design-seeds.md)).
-- **Computation: probabilistic programming.**
-  - Open addresses are random variables and contributions are factors.
-  - Sampling is lazy and memoised by address, as in Church's stochastic memoisation.
-  - Canon is conditioning on observations.
-- **Context and relevance:**
-  - agent architectures: belief–desire–intention agents, goal-oriented action planning, hierarchical task networks;
-  - scripts and frames (Schank and Abelson) for top-down expectation;
-  - scope chains and persistent data structures for cheap parent-plus-increment frames;
-  - incremental rule matching (the Rete algorithm; incremental story sifting) for finding who cares about an event;
-  - motivation research: Maslow, Reiss's basic desires, self-determination theory, Schwartz's basic values; and needs models in games such as The Sims;
-  - groups: role theory and role conflict, cross-pressure from multiple memberships, social identity theory, and principal–agent theory for leaders, members and contractors;
-  - perspectives: attribution theory and the fundamental attribution error, theory of mind, rumour transmission, and reputation systems;
-  - Doran and Parberry's finding that game quests derive from NPC motivations.
-- **Search:** constraint satisfaction, interval bounds and hierarchical spatial indexing for queries.
+We implement a small toolkit, not a general framework.
 
 ## 9. The reference model and the compromise ledger
 

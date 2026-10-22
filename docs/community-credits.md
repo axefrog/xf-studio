@@ -516,10 +516,6 @@ These games, books, essays and talks informed the design of the planned Story En
 
 Emily Short, ["Beyond Branching: Quality-Based, Salience-Based, and Waypoint Narrative Structures"](https://emshort.blog/2016/04/12/beyond-branching-quality-based-and-salience-based-narrative-structures/) (2016), and [Fallen London](https://www.fallenlondon.com/), created by Alexis Kennedy and developed by Failbetter Games. Failbetter's quality-based narrative offers small pieces of story, called storylets, when the numbers that track a player's skills and progress (qualities) allow them, and Short's essay sets it beside other ways of choosing what happens next. It taught us to gate content by state rather than by branches.
 
-### Ben Sunshine-Hill
-
-By Ben Sunshine-Hill. ["Alibi Generation: Fooling All the Players All the Time"](https://www.gameaipro.com/GameAIPro/GameAIPro_Chapter37_Alibi_Generation_Fooling_All_the_Players_All_the_Time.pdf), chapter 37 of *Game AI Pro* (edited by Steve Rabin; CRC Press, 2013). Characters spawned around the player are given a backstory, goals and a state only when something makes that necessary, and the alibi must stay consistent with everything the player has already seen of them. It taught us how to invent detail on demand without contradicting what has been shown.
-
 ### Kate Compton
 
 By Kate Compton. ["So you want to build a generator…"](https://galaxykate0.tumblr.com/post/139774965871/so-you-want-to-build-a-generator) (blog post, 2016). Her 10,000 bowls of oatmeal problem points out that thousands of bowls can all differ mathematically while the person looking sees only oatmeal. It taught us to measure variety by what people can tell apart, not by how many combinations exist.
@@ -571,10 +567,6 @@ By Michael Shea, who writes as Sly Flourish. [Return of the Lazy Dungeon Master]
 ### Maxis
 
 [The Sims](https://en.wikipedia.org/wiki/The_Sims_%28video_game%29) (Maxis, 2000), designed by Will Wright. Each Sim has a small set of needs, such as hunger, comfort and social contact, which fall over time and which objects in the world can restore. It informed our draft catalogue of character drives.
-
-### Monolith Productions and Jeff Orkin
-
-F.E.A.R. (Monolith Productions, 2005) and Jeff Orkin's ["Three States and a Plan: The A.I. of F.E.A.R."](https://gdcvault.com/play/1013282/Three-States-and-a-Plan) (Game Developers Conference, 2006). Characters choose a goal, plan the actions that meet it with a search, and re-plan when the world changes. It grounds our reading of goal-oriented action planning.
 
 ### Bethesda Game Studios
 
@@ -714,7 +706,7 @@ Their paper [Distance Transforms of Sampled Functions](https://cs.brown.edu/peop
 
 ### James Ryan (2018) and Ryan and Mateas (2017)
 
-James Ryan, [*Curating Simulated Storyworlds*](https://escholarship.org/uc/item/1340j5h2) (PhD thesis, University of California, Santa Cruz, 2018), and James Ryan and Michael Mateas, ["Simulating Character Knowledge Phenomena in Talk of the Town"](http://www.gameaipro.com/GameAIPro3/GameAIPro3_Chapter37_Simulating_Character_Knowledge_Phenomena_in_Talk_of_the_Town.pdf) (*Game AI Pro 3*, 2017). The thesis introduced story sifting, finding story-shaped patterns in a simulation's record of events, and argues that simulated worlds need curation to yield stories. Talk of the Town simulates a town whose characters each hold their own, fallible knowledge of what has happened.
+James Ryan, [*Curating Simulated Storyworlds*](https://escholarship.org/uc/item/1340j5h2) (PhD thesis, University of California, Santa Cruz, 2018), and James Ryan and Michael Mateas, ["Simulating Character Knowledge Phenomena in Talk of the Town"](http://www.gameaipro.com/GameAIPro3/GameAIPro3_Chapter37_Simulating_Character_Knowledge_Phenomena_in_Talk_of_the_Town.pdf) (*Game AI Pro 3*, 2017). The thesis introduced story sifting, finding story-shaped patterns in a simulation's record of events, and argues that simulated worlds need curation to yield stories.
 
 ### Kreminski et al. (2019, 2021)
 
@@ -732,37 +724,13 @@ Jason Grinblat and C. Brian Bucklew, ["Subverting historical cause & effect: gen
 
 James R. Meehan, [*The Metanovel: Writing Stories by Computer*](https://apps.dtic.mil/sti/pdfs/ADA031625.pdf) (Yale University, 1976), the work behind the Tale-Spin story-writing program. Ryan's thesis cites Tale-Spin as a notable failure of the pure-simulation approach. We keep it in mind as the classic warning that simulating characters does not by itself give a story.
 
-### Doran and Parberry (2011)
-
-Jonathon Doran and Ian Parberry, ["A prototype quest generator based on a structural analysis of quests from four MMORPGs"](https://doi.org/10.1145/2000919.2000920) (Procedural Content Generation in Games workshop, 2011). They analysed over 750 quests and found nine underlying motivations of the characters who give them. It taught us that quests can derive from NPC motivations instead of being placed at random.
-
 ### Lehnert (1981)
 
 Wendy Lehnert, ["Plot units and narrative summarization"](https://doi.org/10.1207/s15516709cog0504_1) (*Cognitive Science*, 1981). It describes a story as a graph of plot units whose overlaps encode the plot. It taught us to treat narrative as a graph of affect states.
 
-### Schank and Abelson (1977)
-
-Roger C. Schank and Robert P. Abelson, [*Scripts, Plans, Goals and Understanding*](https://www.routledge.com/Scripts-Plans-Goals-and-Understanding-An-Inquiry-Into-Human-Knowledge-Structures/Schank-Abelson/p/book/9780898591385) (Lawrence Erlbaum, 1977). Its scripts, stored chains of events for common situations, and its account of plans and goals show how expectation shapes understanding from the top down.
-
-### Forgy (1982)
-
-Charles Forgy, ["Rete: A fast algorithm for the many pattern/many object pattern match problem"](https://doi.org/10.1016/0004-3702(82)90020-0) (*Artificial Intelligence*, 1982). Rete matches many rules against changing facts by remembering partial matches instead of starting again each time. It taught us incremental matching of many rules against a changing set of facts.
-
-### Goodman et al. (2008)
-
-Noah D. Goodman and co-authors, ["Church: a language for generative models"](https://proceedings.mlr.press/r6/goodman08a.html) (Uncertainty in Artificial Intelligence, 2008). Its stochastic memoisation makes a random choice once and then remembers it, so a value drawn on demand stays the same whenever it is asked for again. It taught us lazy, consistent sampling.
-
 ### Fisher, Hammer, Byrd and Might (2016)
 
 Dakota Fisher, Matthew A. Hammer, William Byrd and Matthew Might, ["miniAdapton: A Minimal Implementation of Incremental Computation in Scheme"](https://arxiv.org/abs/1609.05337) (Scheme Workshop, 2016). It shows how memoised computations can track what they read so that a change invalidates only what depends on it. It is the model for the Story Engine's optional fine-grained cache invalidation.
-
-### Spivak and Kent (2012)
-
-David I. Spivak and Robert E. Kent, ["Ologs: a categorical framework for knowledge representation"](https://doi.org/10.1371/journal.pone.0024274) (*PLoS ONE*, 2012). An olog is a model of knowledge built on category theory that, like a database schema, can hold data but is meant to be easy to author and reconfigure. It informed how we think about holding design knowledge as a graph of typed relationships.
-
-### Rao and Georgeff (1995)
-
-Anand S. Rao and Michael P. Georgeff, ["BDI agents: from theory to practice"](https://apice.unibo.it/xwiki/bin/view/Publication/BdiIcmas95) (International Conference on Multi-Agent Systems, 1995). The belief, desire and intention model describes an agent by what it believes, what it wants and what it has committed to do. It grounds how we describe a character's state of mind.
 
 ### Maslow (1943)
 
@@ -779,26 +747,6 @@ Richard Ryan and Edward Deci, ["Self-determination theory and the facilitation o
 ### Schwartz (1992, 2012)
 
 Shalom Schwartz, ["Universals in the Content and Structure of Values: Theoretical Advances and Empirical Tests in 20 Countries"](https://doi.org/10.1016/S0065-2601(08)60281-6) (*Advances in Experimental Social Psychology*, 1992), and ["An Overview of the Schwartz Theory of Basic Values"](https://doi.org/10.9707/2307-0919.1116) (*Online Readings in Psychology and Culture*, 2012). The theory sets out a small set of basic values recognised across cultures and how they relate to one another. It is one of the sources behind our draft catalogue of character drives.
-
-### Heider (1958)
-
-Fritz Heider, [*The Psychology of Interpersonal Relations*](https://doi.org/10.1037/10628-000) (Wiley, 1958). It is the starting point of attribution theory, the study of how people explain what others do. It grounds how characters explain one another's actions.
-
-### Ross (1977)
-
-Lee Ross, ["The intuitive psychologist and his shortcomings: distortions in the attribution process"](https://doi.org/10.1016/S0065-2601(08)60357-3) (*Advances in Experimental Social Psychology*, volume 10, 1977), which named the fundamental attribution error: explaining other people's actions by their character rather than their circumstances. It tells us why characters' explanations of one another are sometimes wrong in predictable ways.
-
-### Goode (1960)
-
-William J. Goode, ["A theory of role strain"](https://doi.org/10.2307/2092933) (*American Sociological Review*, 1960). Role strain is the difficulty of meeting the demands of a role, or of several roles at once. It informed how we model what group memberships ask of a person.
-
-### Tajfel and Turner (1979)
-
-Henri Tajfel and John Turner, ["An integrative theory of intergroup conflict"](https://doi.org/10.1093/oso/9780199269464.003.0005) (in *The Social Psychology of Intergroup Relations*, edited by William Austin and Stephen Worchel, 1979; reprinted in *Organizational Identity*, Oxford University Press), the chapter that set out social identity theory. It treats part of a person's sense of who they are as drawn from the groups they belong to. It informed how we model group memberships.
-
-### Jensen and Meckling (1976)
-
-Michael Jensen and William Meckling, ["Theory of the firm: managerial behavior, agency costs and ownership structure"](https://doi.org/10.1016/0304-405X(76)90026-X) (*Journal of Financial Economics*, 1976). It describes the principal–agent relationship, in which one party acts for another whose interests may differ, and the costs of that gap. It informed how we model members whose interests differ from their group's.
 
 ## Reference imagery
 
