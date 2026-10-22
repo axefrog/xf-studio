@@ -9,6 +9,9 @@ test("replacement presentation can perform current cross-surface workflows witho
   // Without a session (fixtures) each panel is one instance; a panel that isn't a session's 3D view steps the editing context.
   expect(shell.panels.instance("save-explorer")).toBe("save-explorer--local");
   expect(shell.panels.historyScope("head")).toBe(shell.focus.editing()?.scope);
+  // A scope nothing names (here no names are given) has no name: Undo's tooltip never shows a scope's ID ("Changes to look:none/none").
+  expect(shell.focus.editing()?.scope).toBeString();
+  expect(shell.focus.editing()).not.toHaveProperty("name");
   // No desktop-app offer without a host that has one (the desktop app, fixtures): nothing about it is shown.
   expect(shell.desktopApp.offered()).toBe(false);
   expect(shell.desktopApp.capability({ kind: "desktopApp.refresh" }).available).toBe(false);

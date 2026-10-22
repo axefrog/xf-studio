@@ -299,8 +299,11 @@ export type StudioPresentationPort<Slot> = {
   readonly focus: {
     view(view: ViewId): void;
     panel(panel: string | undefined): void;
-    /** The editing context Undo acts on, and its name ("Look 3", "V · ManualSave-12"); null before anything was edited. */
-    editing(): { readonly scope: string; readonly name: string } | null;
+    /**
+     * The editing context Undo acts on, and its name ("Look 3", "V · ManualSave-12"; none for a scope nothing names, such as the empty
+     * document while no preset is shown); null before anything was edited.
+     */
+    editing(): { readonly scope: string; readonly name?: string } | null;
     /** What the shown tab's most recently focused view shows (its view, scene, V and look), for a header naming its target. */
     targets(): Readonly<NamedTargets>;
   };
@@ -636,7 +639,7 @@ export function createStudioPresentation<Slot>(sources: {
     focus: Object.freeze({
       view: (view: ViewId) => sources.focus?.focusView(view),
       panel: (panel: string | undefined) => sources.focus?.focusPanel(panel === undefined ? undefined : sources.panelInstance?.(panel) ?? panel),
-      editing: () => { const scope = editingScope(); return scope ? { scope, name: sources.scopeName?.(scope) ?? scope } : null; },
+      editing: () => { const scope = editingScope(), name = scope && sources.scopeName?.(scope); return scope ? { scope, ...(name ? { name } : {}) } : null; },
       targets: () => named(),
     }),
     documents: Object.freeze({
