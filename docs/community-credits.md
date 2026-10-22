@@ -900,6 +900,46 @@ Pan European Game Information, [“What do the labels mean”](https://www.pegi.
 
 The World Wide Web Consortium, [Understanding Success Criterion 2.3.1: Three Flashes or Below Threshold](https://www.w3.org/WAI/WCAG21/Understanding/three-flashes-or-below-threshold.html). It limits flashing content to protect people with photosensitive seizure disorders. It informed the flash limits we treat as a default for anything we generate.
 
+### Stefan L
+
+Stefan L, [“Cyberpunk 2077 Keanu Reeves joytoy sex mod taken down after CD Projekt Red objects”](https://www.thesixthaxis.com/2021/01/28/cyberpunk-2077-keanu-reeves-joytoy-sex-mod-taken-down-after-cd-projekt-red-objects/) (The Sixth Axis, 2021). It reports the publisher's rule that user content "can't be harmful towards others", applied to a real person's likeness in explicit scenes. It informed how we treat real people's likenesses and voices in anything a pack declares.
+
+### Hitmarker
+
+Hitmarker (no author named), [“CD Projekt RED issues DMCA takedown against paid Cyberpunk 2077 VR mod”](https://hitmarker.net/news/cd-projekt-red-issues-dmca-takedown-against-paid-cyberpunk-2077-vr-mod-1624038) (2026). It reports the publisher enforcing its ban on charging for fan content against independent software, and offering a free release with voluntary donations as the way back. It informed how we think about the line between sharing a mod and selling one.
+
+### Imogen Donovan
+
+Imogen Donovan, [“Video game voice actors denounce NSFW mods using AI deepfakes of their voices”](https://www.nme.com/news/video-game-voice-actors-denounce-nsfw-mods-ai-deepfakes-voices-3466276) (*NME*, 2023). Voice actors objected to cloned copies of their voices in explicit mods, even though the mod host's stated stance then was that AI-generated content was not against its rules. It informed why a pack that uses a recorded or cloned voice should say so and show where it came from.
+
+### Donovan Erskine
+
+Donovan Erskine, [“Cyberpunk 2077 used AI to replicate the voice of a deceased voice actor”](https://www.shacknews.com/article/137388/cyberpunk-2077-ai-voice-actor) (Shacknews, 2023). It reports that the studio recreated a late actor's voice with his sons' support, and that the localisation director said the team "didn't like this approach". It informed how we think about consent and the limits of family approval for voice work.
+
+### Joseph Kime
+
+Joseph Kime, [“Cyberpunk 2077 confirms using AI to replace dead voice actor”](https://www.ggrecon.com/articles/cyberpunk-2077-confirms-using-ai-to-replace-dead-voice-actor) (GGRecon, 2023). It reports the same case and notes that the actor could not consent himself, which it calls a grey area. It informed why we treat a cloned voice of someone who cannot agree as a hard case.
+
+### TJ Denzer
+
+TJ Denzer, [“Nexus Mods announces updated guidelines on generative AI tagging & moderation”](https://www.shacknews.com/article/150216/nexus-mods-gen-ai-tagging-moderation) (Shacknews, 2026). It describes the host's three AI tags, and that wrong tagging is moderated and deliberate abuse of the tags is punished at once. It informed how we plan pack declarations about AI-made content.
+
+### Sam Sepiol
+
+Sam Sepiol, [“Nexus Mods Plans to Add Age Verification for Adult Mods in UK and EU”](https://insider-gaming.com/nexus-mods-plans-to-add-age-verification-for-adult-mods-in-uk-and-eu/) (Insider Gaming, 2025). It reports that the host keeps adult content, verifies the age of users in the UK and EU, plans new content tags and detects child abuse material automatically. It informed how we think about content declarations and age gates around adult packs.
+
+### Jeremy Fuster
+
+Jeremy Fuster, [“SAG-AFTRA Video Game Deal Includes AI Consent Guardrails, Minimum Rates for Digital Replica Use”](https://www.thewrap.com/sag-aftra-video-game-deal-details/) (TheWrap, 2025). It reports that performers must give informed consent to each AI use of their voice or likeness, with higher minimum pay for real-time generation. It informed how seriously we treat consent for any voice adapter.
+
+### Brenda Brathwaite
+
+Brenda Brathwaite, [“Hot Coffee's Effects on the Mod Scene”](https://www.gamedeveloper.com/business/hot-coffee-s-effects-on-the-mod-scene) (Game Developer, 2006). After content already on a game's disc was blamed on mod makers, it describes a rating change and a chilling effect on harmless mods. It informed why the engine's release build ships no explicit material and why we keep the engine apart from what packs contain.
+
+### Santa Clara Principles coalition
+
+The coalition behind the [Santa Clara Principles on Transparency and Accountability in Content Moderation](https://santaclaraprinciples.org/) (version 2.0), including Access Now, ARTICLE 19 and the Electronic Frontier Foundation, among the organisations the page lists. They ask that people receive notice, a fair appeal and published numbers when content is moderated. It informed the notice-and-appeal bar we set for any moderation of shared packs.
+
 ## Research papers
 
 These papers informed our research. Unless an entry says otherwise, no algorithm from them was implemented.
@@ -2143,6 +2183,18 @@ American Psychological Association, [*Resolution on Violent Video Games*](https:
 ### Gebru and colleagues (2018)
 
 Timnit Gebru, Jamie Morgenstern, Briana Vecchione, Jennifer Wortman Vaughan, Hanna Wallach, Hal Daumé III and Kate Crawford, [“Datasheets for Datasets”](https://arxiv.org/abs/1803.09010). They propose documenting a dataset's purpose, makeup, collection and suitable uses. It informed how we plan to document curated name pools and similar data.
+
+### Mitchell and colleagues (2018)
+
+Margaret Mitchell, Simone Wu, Andrew Zaldivar, Parker Barnes, Lucy Vasserman, Ben Hutchinson, Elena Spitzer, Inioluwa Deborah Raji and Timnit Gebru, [“Model Cards for Model Reporting”](https://arxiv.org/abs/1810.03993). They propose short documents, released with a model, that state its intended use and how it was evaluated. It informed how we plan to describe any language model or voice model a user connects.
+
+### Raji and colleagues (2020)
+
+Inioluwa Deborah Raji, Andrew Smart, Rebecca N. White, Margaret Mitchell, Timnit Gebru, Ben Hutchinson, Jamila Smith-Loud, Daniel Theron and Parker Barnes, [“Closing the AI Accountability Gap: Defining an End-to-End Framework for Internal Algorithmic Auditing”](https://arxiv.org/abs/2001.00973). They propose internal audit documents at each stage of a system's life, judged against the organisation's own stated values. It informed how we plan to record checks on the engine's release.
+
+### Carlini and colleagues (2020)
+
+Nicholas Carlini, Florian Tramèr, Eric Wallace, Matthew Jagielski, Ariel Herbert-Voss, Katherine Lee, Adam Roberts, Tom Brown, Dawn Song, Ulfar Erlingsson, Alina Oprea and Colin Raffel, [“Extracting Training Data from Large Language Models”](https://arxiv.org/abs/2012.07805). They show that someone who can only query a language model can recover verbatim passages from its training data, and that larger models are more exposed. It informed why we do not assume that a model's output is free of other people's text.
 
 ### Kusner and colleagues (2017)
 

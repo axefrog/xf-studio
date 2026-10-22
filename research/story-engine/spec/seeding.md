@@ -4,6 +4,7 @@
 - **The review.** v0.2 went through one review, by GPT-6 Astra; [§16](#16-review-record) records what changed.
 - **Dossiers folded in.**
   - v0.1 folded in [dossier 8](../craft/d08-scale-threads-time.md#9-requirements-for-the-seed-language-p4) (scale, threads and time).
+  - v0.12 folds in [dossier 19](../craft/d19-rights-platforms.md) (rights, licences and platforms): game content by reference, voices, origin, real-world names (§2.20); the minors floor extended to exploitation roles.
   - v0.11.1 clarifies author-fill seams: the engine composes and places authored-source content like any data, procedural seeds included; only its source material comes from people.
   - v0.11 folds in [dossier 18](../craft/d18-content-boundaries.md) (representation and content boundaries): content classes with one ceiling ladder each, author-fill seams ([D-23](../decisions.md)), the legal floors, and representation checks (§2.19).
   - v0.10 folds in [dossier 17](../craft/d17-setting-tone.md) (setting and tone): the tone vocabulary and tone lint, stake scale, dread guards, withheld patron motives, outlets for media, setting reads (§2.18).
@@ -1025,6 +1026,19 @@ These report to review; none edits text. P9 runs dossier 18's representation aud
 
 **Accessibility.** An engine effect whose declared flash parameters exceed the general threshold is refused (L-112).
 
+### 2.20 Rights and origin
+
+Packs are free fan content, built on the publisher's modding terms ([dossier 19](../craft/d19-rights-platforms.md), [D-24](../decisions.md)):
+- **Game content by reference.** A reference to the game's own content is a `GameRef { kind, id }`. No text unit, asset or fragment holds game text or audio inline (L-114). A pack-build check lists units whose text matches a published overlap list, as advice.
+- **Voices.** A text unit's `voice` is a `GameRef` to an existing recorded line, or a pack asset id. The language has no operator that joins, re-times or synthesises speech (L-115). A cloned voice of a real person, the game's cast included, is a floor: the game's actors are heard only in their own recorded lines, whole. Pack recordings and synthetic voices carry the consent and provenance records S4 defines.
+- **Origin.** Each text unit declares `origin`:
+  - `authored`: written by a person;
+  - `assisted`: a person, with tools;
+  - `generated`: by a model.
+
+  A `generated` unit can't satisfy `authored: 'human'`, and can't fill an authored-source slot (L-116).
+- **Real-world names.** A pack declaring `realWorld: tagged` gets its units that mention a flagged real-world entity listed for review. Nothing is edited (L-117).
+
 ## 3. Compiling
 
 ### 3.1 The steps
@@ -1918,7 +1932,7 @@ The lint runs at compile time (§3.1), and on demand from authoring tools (S4, P
 | L-92 | A contrast glance with no resident witness treating it as ordinary | warning |
 | L-93 | A content tag naming an unregistered class; or, at `ready`, a declared envelope that doesn't cover the compiled tags | error |
 | L-94 | A fragment tagged at intensity 2 or 3 with no `implied` form, no `droppable` beat, and no `requires` on its seed | error |
-| L-95 | A role that can bind a minor (or a person with no `ageClass`) in a victim, target or hostile position, or in a beat with a `sex.*` tag | error |
+| L-95 | A role that can bind a minor (or a person with no `ageClass`) in a victim, target or hostile position, or in a beat with a `sex.*` tag or an `exploit.*` tag, or whose description has child-coded words in such a role | error |
 | L-96 | Retired in v0.11.1: procedural seeds may use any class within the player's ceilings | — |
 | L-97 | A text unit or asset in an authored-source class without `authored: 'human'` and a named author | error |
 | L-98 | An effect on V with a `sex.*` tag that isn't the effect of an accepted action | error |
@@ -1930,13 +1944,17 @@ The lint runs at compile time (§3.1), and on demand from authoring tools (S4, P
 | L-104 | Menace descriptors on culture-coded asset tags | warning |
 | L-105 | A violence template with a mental-illness precondition | error |
 | L-106 | A sanction ladder with no rung at intensity 1 or below, or one that picks its top rung without reading the ceiling | error |
-| L-107 | Age words beside sexual tags | warning |
+| L-107 | Age words beside `sex.*` or `exploit.*` tags | error |
 | L-108 | Class-signal words in an untagged fragment | warning |
 | L-109 | A pack person not marked `fictional` | error |
 | L-110 | Successive `harm.asked` offers from one patron rising in intensity with no stated frame | warning |
 | L-111 | A pack person with no `ageClass` | error |
 | L-112 | An engine effect whose declared flash parameters exceed the general threshold | error |
 | L-113 | A `coerced` person with no `coercer` role or means, or such a seed with no route for V to act or decline (error); erotic framing in an exploitation seed (warning) | error, warning |
+| L-114 | Game text or audio held inline in a pack, instead of a `GameRef` | error |
+| L-115 | A `voice` that isn't an existing recorded line or a pack asset; any join, re-timing or synthesis of speech | error |
+| L-116 | A `generated` unit marked `authored: 'human'`, or filling an authored-source slot | error |
+| L-117 | A unit in a `realWorld: tagged` pack mentioning a flagged real-world entity | warning, to review |
 | L-33 (extended) | A `turns[].what` reading anything of V's but beliefs held about V and V's recorded acts | error |
 
 L-25 and L-40 were removed in v0.2 (§16). Their numbers are not reused.
@@ -2082,7 +2100,8 @@ The new template's `migrate` entry covering the instance's version can say other
 
 **Content that vanishes under a live instance.** When a live instance's `ContentRef` no longer resolves:
 - with a tombstone that names a replacement, the replacement is used;
-- otherwise the fragment is unavailable. Its delivery is skipped with a `missing-content` record entry, and the stuck rule (§7.5) applies.
+- otherwise, if the unit has an `implied` form, that plays;
+- otherwise the fragment is unavailable. Its delivery is skipped with a neutral `missing-content` record entry, and the stuck rule (§7.5) applies. The seed never stalls on missing content.
 
 A pack compatibility `notice` (§12.2) is sent once per branch.
 
@@ -2198,6 +2217,7 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 15. **Dossier 16.** v0.9 adopts its S2 requirements; extension slots wait past the first public pack (§0.3). Its pack-format requirements go to S4 and its tool requirements, including a minimal first tool XF Studio could host, to P10.
 16. **Dossier 17.** v0.10 adopts its S2 requirements (§2.18); its fixtures are renumbered SF-48 to SF-50. Its typed setting registries go to S4, its world-data requirements (leaf-keyed dimensions, derived indices, faction presence, price level, a slow district variable, standing rumours) to S1, and its P5 and P9 lists to S3 and P9. Calibrating the tone lexicon needs a read-only extraction of the game's own text, a research-queue request for when usage allows.
 17. **Dossier 18.** v0.11 adopts its S2 requirements (§2.19), with lints renumbered L-93 to L-113 and fixtures SF-51 to SF-55. One isn't adopted: "offers lapse by game time only" would undo the play-clock rule (§2.12), which keeps real-world absence from expiring offers. Its settings and pack declarations go to S4; its kernel requirements are S0 v4.4. Defaults decided by the coordinator: `harm.minor` defaults to 0, as in the base game; the four classes whose base-game default is unchecked start permissive, each with a check on the next in-game session card; and the hate floor covers only the system's own voices.
+18. **Dossier 19.** v0.12 adopts its six S2 requirements (§2.20, L-95, L-107, §12.3). Its pack-manifest requirements (licence, permissions, AI and origin, voice, price `free` only, a play grant for streaming) go to S4. D-24 settles its question on text and data mining. Its other open questions (whether the companion counts as a standalone product, the host tag for the engine, the starter pack's licence) wait for release planning.
 
 ## 16. Review record
 
