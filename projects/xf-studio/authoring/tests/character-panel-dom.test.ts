@@ -174,17 +174,29 @@ describe("the Character panel's DOM", () => {
   });
 
   test("a conflict shows first in Your V with Keep mine, Use theirs and Keep both; a version from elsewhere says Undo starts there (t-conflict)", async () => {
-    let conflict: { message: string; keepBoth: boolean } | null = null;
+    let conflict: { message: string; keepBoth: boolean; subject: string } | null = null;
     const resolved: string[] = [];
     const h = await harness(undefined, { conflict: () => conflict, resolve: keep => { resolved.push(keep); conflict = null; return { available: true }; } });
     const notice = h.root.querySelector(".doc-conflict")!;
     expect(notice.hidden).toBe(true);
-    conflict = { message: "You changed this V here too. Which version should it keep?", keepBoth: true };
+    conflict = { message: "You changed this V here too. Which version should it keep?", keepBoth: true, subject: "this V" };
     h.context.documentChanged(); h.paint();
     expect(notice.hidden).toBe(false);
     expect(notice.textContent).toContain("Changed in another window. You changed this V here too.");
     const buttons = notice.querySelectorAll("button");
     expect(buttons.map(button => [button.textContent, button.hidden])).toEqual([["Keep mine", false], ["Use theirs", false], ["Keep both", false]]);
+    // Use theirs discards this window's changes, so it asks first, in place, naming the V (the popover places itself in a window).
+    const globals = globalThis as { window?: unknown }, had = globals.window;
+    globals.window = { innerWidth: 1200, innerHeight: 800, addEventListener() {} };
+    try {
+      buttons[1]!.click();
+      const popover = lightDocument.body.querySelector(".confirm-popover")!;
+      expect(popover.querySelector(".popover-message")!.textContent).toBe("Use the other window's version of this V? Your changes to it here are discarded.");
+      expect(resolved).toEqual([]);
+      popover.querySelectorAll("button")[0]!.click();
+      expect(lightDocument.body.querySelector(".confirm-popover")).toBeNull();
+    } finally { if (had === undefined) delete globals.window; else globals.window = had; }
+    // Keep both loses nothing: it acts at once.
     buttons[2]!.click();
     expect(resolved).toEqual(["both"]);
     expect(h.dispatched.at(-1) as object).toEqual({ kind: "character.resolveConflict", keep: "both" });
@@ -436,7 +448,7 @@ describe("one Undo rule in the Character panel (UI-81)", () => {
     expect(h.dispatched.length).toBe(count);
     // The panel's Undo button names what it covers; Clothing has no Undo of its own.
     const undo = h.root.querySelectorAll("button").find(button => (button.getAttribute("aria-label") ?? "").startsWith("Undo in the Character panel"))!;
-    expect(undo.title).toContain("Covers creator options and Clothing");
+    expect(undo.title).toContain("Steps this V's changes (creator options and Clothing). The header's Undo follows what you last edited.");
     h.paint();
     expect(undo.disabled).toBe(false);
     undo.click();

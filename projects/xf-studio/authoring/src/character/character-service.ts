@@ -200,7 +200,7 @@ export class CharacterService implements CharactersPort {
     const document: CharacterDocumentPort = {
       conflict: () => {
         const conflict = this.deps.outbox.document(docRef(id))?.conflict;
-        return conflict ? { message: CONFLICT_MESSAGE, keepBoth: conflict.writes.some(write => write.kind === CHARACTER_DOCUMENT && write.id === id) } : null;
+        return conflict ? { message: CONFLICT_MESSAGE, subject: "this V", keepBoth: conflict.writes.some(write => write.kind === CHARACTER_DOCUMENT && write.id === id) } : null;
       },
       resolve: keep => this.resolve(id, keep),
       restoring: () => this.blocked(id),

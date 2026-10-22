@@ -306,8 +306,9 @@ const MOUNTS: Record<string, Mount> = {
   },
   "lib-conflict-notice": () => {
     const preset = new ConflictNotice({ onResolve: () => {} }), collection = new ConflictNotice({ onResolve: () => {} });
-    preset.update({ message: "You changed the preset “Smoky” here too (its makeup). Which version should it keep?", keepBoth: true });
-    collection.update({ message: "You changed the collection “Night market set” here too (the order of its presets). Which version should it keep?", keepBoth: false });
+    preset.update({ message: "You changed the preset “Smoky” here too (its makeup). Which version should it keep?", keepBoth: true, subject: "the preset “Smoky”" });
+    collection.update({ message: "You changed the collection “Night market set” here too (the order of its presets). Which version should it keep?", keepBoth: false,
+      subject: "the collection “Night market set”" });
     return stack({ gap: "normal" }, preset.element, collection.element);
   },
   "lib-record-list": () => {

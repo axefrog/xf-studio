@@ -131,7 +131,9 @@ export type CharacterContextPorts = {
 /** The status line's note once another version replaced the V (the owner names where it came from: `replace`'s `note`). */
 const ELSEWHERE = "Changed elsewhere. Undo starts here.";
 /** A conflict on the character's document (profiles design §2.2), as the Character panel shows it. */
-export type CharacterConflict = { readonly message: string; readonly keepBoth: boolean };
+export type CharacterConflict = { readonly message: string; readonly keepBoth: boolean;
+  /** The V as Keep mine's and Use theirs's confirmations name it ("this V"). */
+  readonly subject: string };
 export type CharacterDocumentPort = {
   conflict(): CharacterConflict | null;
   /** Keep mine (over theirs), Use theirs, or Keep both (mine becomes a copy of the V). */

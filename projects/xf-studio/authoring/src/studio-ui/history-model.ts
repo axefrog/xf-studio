@@ -46,6 +46,17 @@ export function historySummary(timeline: HistorySnapshot) {
 }
 
 /**
+ * The History panel's visible summary, naming whose history it lists (the editing context, profiles design §3.7): "Smoky · 1 step",
+ * "V · Valerie · 3 steps · 1 undone", "Smoky · no changes yet"; the count alone when nothing names the context.
+ */
+export function historyHeading(context: string | undefined, timeline: HistorySnapshot): { name: string; count: string; text: string } {
+  const summary = historySummary(timeline);
+  if (!context) return { name: "", count: summary, text: summary };
+  const count = timeline.steps.length ? summary : summary.charAt(0).toLowerCase() + summary.slice(1);
+  return { name: context, count, text: `${context} · ${count}` };
+}
+
+/**
  * Tooltip and palette title for Undo or Redo, naming what it would change:
  * "Redo: Move point (Ctrl+Shift+Z)", or why it is unavailable with the shortcut still shown.
  */

@@ -23,7 +23,7 @@ export type WorkspaceLeaseOutcome = { ok: true } | { ok: false; code: string; me
 export const LEASE_MESSAGES = {
   readOnly: "This workspace is open in another window.",
   takingOver: "Taking over from the other window…",
-  waiting: "Waiting for the other window to finish saving. Close it to continue.",
+  waiting: "Waiting for the other window to finish saving. Close the other window to continue.",
   releasing: "Handing this workspace to another window…",
   starting: "Opening the workspace…",
   releaseFailed: "Your latest changes couldn't be saved, so this window kept the workspace. Try again, or export your collection to keep them.",

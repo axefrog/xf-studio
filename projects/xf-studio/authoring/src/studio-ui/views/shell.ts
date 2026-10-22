@@ -11,7 +11,7 @@ export const SHELL_VIEW = {
     { id: "presets", context: { kind: "look" }, title: "Presets", icon: "presets", order: 10, slot: "collection",
       description: "Named looks in the current collection; each is one choice in the game selector." },
     { id: "history", title: "History", icon: "history", order: 30, slot: "stack",
-      description: "Your recent changes to the current preset; click any step to go back to it." },
+      description: "Your recent changes to what you last edited, a preset or a V; click any step to go back to it." },
     { id: "library", context: { kind: "look" }, title: "Library", icon: "library", order: 40, slot: "collection", heavy: true,
       description: "Saved versions of your collection, recovery and files." },
     { id: "package", title: "Mod package", icon: "package", order: 50, slot: "collection", heavy: true,

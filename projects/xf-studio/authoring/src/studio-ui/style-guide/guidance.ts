@@ -71,7 +71,7 @@ export const GUIDANCE: Record<string, { combine?: string; adapt?: string; drives
     adapt: "Single column in every size.", drives: "previewState().savedV.result (applied) and status.assets.characterDetails (skin, face details, eyes, brows, lashes, hair, piercings and body of the shown V)." },
   "c-activity": { combine: "Receives every toast and quieter records (cancelled pickers, routine successes); the status bar shows the latest entry.",
     adapt: "Single column; the newest 80 entries are shown.", drives: "Presentation-only Feedback log (not persisted)." },
-  "c-history": { combine: "A tab beside Layers. The header's Undo, Redo and History buttons and Ctrl+Z / Ctrl+Shift+Z move the same current marker one step at a time; the palette names the step (“Redo: Move point”).",
+  "c-history": { combine: "A tab beside Layers. The header's Undo, Redo and History buttons and Ctrl+Z / Ctrl+Shift+Z move the same current marker one step at a time, in the same editing context the summary names; the palette names the step (“Redo: Move point”).",
     adapt: "Times hide below 230 px of panel width; labels truncate, never wrap. The current step scrolls into view after every change.",
     drives: "authoring.historyTimeline() (steps with stable ids, labels, times, current index, redo count, trimmed flag) and one history.jumpTo {entryId} action, refused while a gesture or slider adjustment is open." },
   "c-strip": { combine: "Sticks to the top of the inspector while its content scrolls.", adapt: "Name truncates; the position text stays.",

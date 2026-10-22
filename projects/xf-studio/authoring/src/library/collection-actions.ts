@@ -71,11 +71,12 @@ export type CollectionDraftSummary = {
     saved: "never" | "same" | "edited" | "unknown" }[];
   /**
    * Changes made here and in another window to this collection or its presets (style guide t-conflict), oldest first: what it is, what
-   * differs, and whether Keep both can keep this window's version as a copy (a preset can be copied; a collection's name or list can't).
+   * differs, and whether Keep both can keep this window's version as a copy (a preset can be copied; a collection's name or list can't);
+   * `subject` names it in Keep mine's and Use theirs's confirmations ("the preset ...", "the collection ...").
    */
   conflicts: CollectionConflict[];
 };
-export type CollectionConflict = { id: string; message: string; keepBoth: boolean };
+export type CollectionConflict = { id: string; message: string; keepBoth: boolean; subject: string };
 /** Why a collection with a conflict waiting can't be saved, checked, built or exported yet. */
 export const CONFLICT_FIRST = "This collection or one of its presets was changed in another window too. Choose which version to keep first, in the Presets panel.";
 export type ReadonlyDeep<T> = T extends (infer U)[] ? readonly ReadonlyDeep<U>[] :

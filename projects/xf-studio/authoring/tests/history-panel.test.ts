@@ -77,3 +77,38 @@ test("history.jumpTo is a catalogued workspace action and the History panel is r
   const factories = readFileSync(resolve(root, "src/studio-ui/views/panels.ts"), "utf8");
   expect(factories).toContain("history: historyPanel");
 });
+
+test("the History panel names whose history it lists in its visible summary (H6); with nothing named it says what comes next", async () => {
+  const { historyHeading } = await import("../src/studio-ui/history-model");
+  expect(historyHeading("Smoky", timeline({ steps: timeline().steps.slice(0, 1), current: 0, redoCount: 0 })))
+    .toEqual({ name: "Smoky", count: "1 step", text: "Smoky · 1 step" });
+  expect(historyHeading("V · Valerie", timeline()).text).toBe("V · Valerie · 3 steps · 1 undone");
+  expect(historyHeading("Smoky", timeline({ steps: [], current: -1, redoCount: 0 })).text).toBe("Smoky · no changes yet");
+  expect(historyHeading(undefined, timeline()).text).toBe("3 steps · 1 undone");
+  const { installLightDom, uninstallLightDom } = await import("./light-dom");
+  installLightDom();
+  try {
+    const { historyPanel } = await import("../src/studio-ui/panels/history");
+    let editing: string | undefined = "Smoky", label: string | undefined;
+    const port = { authoring: { capability: () => ({ available: true }), history: () => ({}) }, focus: { editing: () => editing ? { name: editing } : undefined } };
+    const rt = { port, anchors: { register() {} }, dispatch: () => true, feedback: { announce() {} } };
+    const panel = historyPanel(rt as never);
+    const element = panel.spec.element as unknown as import("./light-dom").LightElement;
+    const paint = (snapshot: HistorySnapshot, selected: string | null = "a") =>
+      panel.update({ history: { ...snapshot, ...(label ? { documentLabel: label } : {}) }, library: { draft: { selected } } } as never);
+    const summary = () => element.querySelector(".history-context")!;
+    paint(timeline({ steps: timeline().steps.slice(0, 1), current: 0, redoCount: 0 }));
+    expect(summary().textContent).toBe("Smoky · 1 step");
+    expect(summary().getAttribute("title")).toBe("Smoky · 1 step");
+    // After a Character edit the editing context is the V: the summary says so.
+    editing = undefined; label = "V · Valerie";
+    paint(timeline());
+    expect(summary().getAttribute("title")).toBe("V · Valerie · 3 steps · 1 undone");
+    // Nothing named and no preset selected: the empty state says what to do, in the one model (a preset or a V).
+    label = undefined;
+    paint(timeline({ steps: [], current: -1, redoCount: 0 }), null);
+    expect(summary().textContent).toBe("Nothing edited");
+    expect(element.querySelectorAll(".empty-title").filter(node => !node.parentNode || !(node.parentNode as { hidden?: boolean }).hidden).map(node => node.textContent))
+      .toEqual(["Select a preset or change your V"]);
+  } finally { uninstallLightDom(); }
+});

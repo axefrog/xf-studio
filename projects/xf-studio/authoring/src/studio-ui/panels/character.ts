@@ -8,7 +8,7 @@
  * Every change is a typed `character.*` action with its own Undo history (CORE-59); the rules live in the application service, so this
  * module only dispatches (the V's own makeup is a switch, `character.setOwnMakeup`: instant and undoable; CORE-71). One Undo rule covers the whole panel (UI-81): its
  * Undo and Redo, and Ctrl+Z / Ctrl+Y anywhere in it except a text box, step through the panel's changes (creator choices,
- * Clothing and the V's own makeup) in the order they were made; the header's Undo covers the makeup only and says so. Nothing here moves the layout on its own (UI-68):
+ * Clothing and the V's own makeup) in the order they were made; the header's Undo follows what was last edited (a preset or a V, HISTORY_SCOPE). Nothing here moves the layout on its own (UI-68):
  * one status line of fixed height carries what is on its way or failed, with Try again and Keep my changes inline, and a Details
  * disclosure for the plain lines about what couldn't be used; a row reserves its detail line when any of its options has one, and a
  * row whose choice the 3D view doesn't draw shows a fixed-size marker. Search runs on the host over every choice (UI-72); files come last.
@@ -241,7 +241,7 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
     filesSection);
 
   // One rule (UI-81): inside this panel the Undo keys step through the panel's own changes (creator choices and Clothing), whatever has
-  // focus (a switch, a list, a button), never the makeup's history. Only a text box keeps its own text Undo.
+  // focus (a switch, a list, a button), never a look's history. Only a text box keeps its own text Undo.
   element.addEventListener("keydown", event => {
     if (isTextInput(event.target) && (event.target as Element).tagName.toLowerCase() !== "select") return;
     const key = event.key.toLowerCase(), mod = event.ctrlKey || event.metaKey;
@@ -758,7 +758,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       const scope = ownScope(), none = { available: false, code: "unavailable", reason: "Your V appears once the 3D view is ready." } as const;
       applyCapability(undo, scope ? port.authoring.capability({ kind: "history.undo", scope }) : none);
       applyCapability(redo, scope ? port.authoring.capability({ kind: "history.redo", scope }) : none);
-      undo.title = context?.undo ? `Undo: ${context.undo} (${keys.undo} in this panel). Covers creator options and Clothing; the header's Undo covers your makeup.`
+      undo.title = context?.undo ? `Undo: ${context.undo} (${keys.undo} in this panel). Steps this V's changes (creator options and Clothing). The header's Undo follows what you last edited.`
         : "No change in this panel to undo.";
       redo.title = context?.redo ? `Redo: ${context.redo} (${keys.redo} in this panel)` : "No undone change in this panel to redo.";
       setAttr(undo, "aria-label", context?.undo ? `Undo in the Character panel: ${context.undo}` : "Undo in the Character panel");

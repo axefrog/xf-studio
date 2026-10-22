@@ -254,7 +254,7 @@ export class CollectionService {
     return this.deps.owner.conflicts().filter(entry => entry.writes.some(write => keys.has(documentKey(write))));
   }
   private conflictsOf(id: string): CollectionConflict[] {
-    return this.conflictEntries(id).map(entry => ({ id: entry.id, message: conflictMessage(entry),
+    return this.conflictEntries(id).map(entry => ({ id: entry.id, message: conflictMessage(entry), subject: conflictSubject(entry),
       keepBoth: entry.writes.some(write => write.kind === LOOK_WORKING && lookWorkingOf(write.value)?.state === "live") }));
   }
   /** The library's other working copies never saved as a version, newest first. */
@@ -876,15 +876,30 @@ function liveParts(look: Readonly<Look>, recipe: Recipe, model: DocumentModel, o
 export { PACKAGE_PLAN_KINDS };
 export type { KeptPackagePlan };
 
+/** Whether a conflict is about the collection (its name or list) rather than one preset. */
+const aboutCollection = (entry: OutboxEntry) => {
+  const look = entry.writes.some(write => write.kind === LOOK_WORKING), collection = entry.writes.some(write => write.kind === COLLECTION_WORKING);
+  return collection && (!look || entry.writes.length > 2);
+};
+/** What a conflict is about, as its notice and confirmations name it: "the preset “Smoky”", "the collection “Night market set”". */
+export function conflictSubject(entry: OutboxEntry): string {
+  const theirsOf = (write: { kind: string; id: string }) => entry.current?.[documentKey(write)]?.value;
+  if (aboutCollection(entry)) {
+    const collection = entry.writes.find(write => write.kind === COLLECTION_WORKING)!;
+    return `the collection “${collectionWorkingOf(collection.value)?.name ?? "Collection"}”`;
+  }
+  const look = entry.writes.find(write => write.kind === LOOK_WORKING);
+  const mine = lookWorkingOf(look?.value), theirs = look ? lookWorkingOf(theirsOf(look)) : null;
+  return `the preset “${mine?.name ?? theirs?.name ?? "Preset"}”`;
+}
 /** What a conflict is about and what differs, in a sentence ending with the question (style guide t-conflict). */
 export function conflictMessage(entry: OutboxEntry): string {
   const theirsOf = (write: { kind: string; id: string }) => entry.current?.[documentKey(write)]?.value;
   const look = entry.writes.find(write => write.kind === LOOK_WORKING), collection = entry.writes.find(write => write.kind === COLLECTION_WORKING);
   const differs: string[] = [];
-  let what: string;
-  if (collection && (!look || entry.writes.length > 2)) {
+  const what = conflictSubject(entry);
+  if (collection && aboutCollection(entry)) {
     const mine = collectionWorkingOf(collection.value), theirs = collectionWorkingOf(theirsOf(collection));
-    what = `the collection “${mine?.name ?? "Collection"}”`;
     if (mine && theirs) {
       if (mine.name !== theirs.name) differs.push("its name");
       const listed = (doc: typeof mine) => [...doc.looks].sort().join("\n");
@@ -893,7 +908,6 @@ export function conflictMessage(entry: OutboxEntry): string {
     } else if (!theirs) differs.push("the other window removed it");
   } else {
     const mine = lookWorkingOf(look?.value), theirs = look ? lookWorkingOf(theirsOf(look)) : null;
-    what = `the preset “${mine?.name ?? theirs?.name ?? "Preset"}”`;
     if (mine && theirs) {
       if (mine.name !== theirs.name) differs.push(`its name (“${theirs.name}” there)`);
       if (JSON.stringify(mine.parts) !== JSON.stringify(theirs.parts)) differs.push("its makeup");

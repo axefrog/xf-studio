@@ -134,10 +134,10 @@ export function shell() {
       avoid: "A menu with nothing to choose, sections that only inform, listing unbuilt categories, or turning preview-context toggles (brows, hair) into authoring entries." }),
     pattern({ id: "s-status", title: "Status bar", status: "implemented", wide: true,
       specimen: `<footer class="status-bar demo-status"><button type="button" class="status-item status-message" data-tone="success">Saved “Night market set” · version 4.</button><span class="grow"></span><span class="status-item muted">Gesture in progress · Esc cancels</span><span class="status-item ready-badge" data-phase="updating">3D view 2K · updating</span></footer>`,
-      what: "Draft autosave state, the latest activity or in-flight library message (click opens Activity), gesture/transaction hints and preview readiness.",
+      what: "Draft autosave state, restoring's first seconds (“Restoring changes from your last session…”, t-recovering: the line takes them so the workspace notice never opens for a moment), the latest activity or in-flight library message (click opens Activity), gesture/transaction hints and preview readiness.",
       when: "Always visible. It reports; it never hosts commands other than opening the activity log.",
       adapt: "Messages truncate with an ellipsis; the Activity panel keeps the full text.",
-      drives: `${code("status.snapshot().workspace")}, ${code("library.summary().progress")}, ${code("previewState().gesture/control")}, ${code("previewReadiness.snapshot()")}.`,
+      drives: `${code("status.snapshot().workspace")}, ${code("status.outbox.recovering")} (${code("shown")} and not ${code("long")}), ${code("library.summary().progress")}, ${code("previewState().gesture/control")}, ${code("previewReadiness.snapshot()")}.`,
       a11y: "Toasts and the activity log carry the same messages to assistive technology through live regions; the status bar itself is not a live region to avoid double announcements." }),
     pattern({ id: "s-palette", title: "Command palette", status: "implemented",
       specimen: `<div class="palette static-palette"><div class="palette-field">${i("search")}<span class="palette-input">save</span><kbd>Esc</kbd></div>

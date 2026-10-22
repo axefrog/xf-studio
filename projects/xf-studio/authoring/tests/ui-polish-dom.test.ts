@@ -662,42 +662,85 @@ describe("wording helpers", () => {
   });
 });
 
-describe("Restoring changes from the last session (style guide t-recovering)", () => {
-  test("says so after a second, offers Try again with Keep working only where safe (else Export collection), and Discard for a missing save", async () => {
-    const { workspaceNotice } = await import("../src/studio-ui/app");
+describe("The workspace notice (style guide t-recovering, t-unprotected): it never moves the dock for a transient state", () => {
+  // The confirm popover places itself in the window (the light DOM has none: give it one for these tests).
+  const globals = globalThis as { window?: unknown };
+  const had = globals.window;
+  beforeAll(() => { globals.window = { innerWidth: 1200, innerHeight: 800, addEventListener() {} }; });
+  afterAll(() => { if (had === undefined) delete globals.window; else globals.window = had; });
+  const harness = async () => {
+    const { workspaceNotice, restoringLine } = await import("../src/studio-ui/app");
     const sent: string[] = [];
     const rt = { port: { workspace: { dispatch: async () => ({ ok: true }) }, documents: { dispatch: async (action: { kind: string }) => { sent.push(action.kind); return { ok: true }; } } },
       file: (action: { kind: string }) => { sent.push(action.kind); }, feedback: { toast() {} } };
     const notice = workspaceNotice(rt as never);
     const root = notice.element as unknown as LightElement;
-    const frame = (recovering: { shown: boolean; long: boolean; safe: boolean; missing: number }) =>
-      ({ status: { outbox: { unprotected: 0, pending: 1, conflicts: 0, failing: false, recovering } } }) as never;
-    const visible = () => buttons(root).filter(button => !button.hidden).map(button => button.getAttribute("aria-label") ?? text(button));
+    const frame = (recovering: { shown: boolean; long: boolean; safe: boolean; missing: number }, extra: { unprotected?: number; gesture?: boolean } = {}) =>
+      ({ status: { outbox: { unprotected: extra.unprotected ?? 0, pending: 1, conflicts: 0, failing: false, recovering } },
+        preview: { gesture: extra.gesture ? { source: "uv" } : null, control: null } }) as never;
+    const visible = () => buttons(root).filter(button => !button.hidden).map(button => text(button));
+    const shown = (name: string) => buttons(root).find(button => !button.hidden && text(button) === name)!;
+    return { notice, root, frame, visible, shown, sent, restoringLine };
+  };
+
+  test("restoring's first seconds are the status bar's line, never the band; once it takes a while the band offers its labelled ways on", async () => {
+    const { notice, root, frame, visible, shown, sent, restoringLine } = await harness();
     notice.update(frame({ shown: false, long: false, safe: false, missing: 0 }));
     expect(root.hidden).toBe(true);
+    expect(restoringLine(frame({ shown: false, long: false, safe: false, missing: 0 }))).toBe("");
+    // Shown after a second: the status bar's fixed line says so, and the band stays closed (nothing under the header moves).
     notice.update(frame({ shown: true, long: false, safe: false, missing: 0 }));
-    expect(root.hidden).toBe(false);
-    expect(text(root.querySelector(".workspace-notice-text")!)).toBe("Restoring changes from your last session…");
-    expect(root.classList.contains("info")).toBe(true);
-    expect(visible()).toEqual([]);
+    expect(root.hidden).toBe(true);
+    expect(restoringLine(frame({ shown: true, long: false, safe: false, missing: 0 }))).toBe("Restoring changes from your last session…");
     notice.update(frame({ shown: true, long: true, safe: true, missing: 0 }));
+    expect(root.hidden).toBe(false);
+    expect(restoringLine(frame({ shown: true, long: true, safe: true, missing: 0 }))).toBe("");
     expect(text(root.querySelector(".workspace-notice-text")!)).toBe("Restoring changes from your last session is taking a while.");
-    expect(root.classList.contains("warning")).toBe(true);
     expect(visible()).toEqual(["Use restored", "Try again"]);
-    expect(buttons(root).find(button => button.getAttribute("aria-label") === "Use restored")!.getAttribute("title")).toBe("Keep working on the restored version");
-    const shown = (name: string) => buttons(root).find(button => !button.hidden && (button.getAttribute("aria-label") ?? text(button)) === name)!;
+    expect(shown("Use restored").getAttribute("title")).toBe("Keep working on the restored version");
+    // One rule at every width: every button is labelled, none an icon alone (B6, I2).
+    for (const button of buttons(root)) { expect(button.querySelector("svg")).toBeNull(); expect(button.classList.contains("icon-only")).toBe(false); }
     shown("Use restored").click();
     shown("Try again").click();
     notice.update(frame({ shown: true, long: true, safe: false, missing: 0 }));
     expect(visible()).toEqual(["Export collection", "Try again"]);
+    await settle();
+    expect(sent).toEqual(["documents.keepRestored", "documents.retryRecovery"]);
+  });
+
+  test("a missing save offers Import save… and Discard those changes, which asks first in place with focus on Cancel", async () => {
+    const { notice, root, frame, visible, shown, sent } = await harness();
     notice.update(frame({ shown: true, long: true, safe: false, missing: 1 }));
-    expect(text(root.querySelector(".workspace-notice-text")!)).toBe("Some restored changes need a save that's gone. Import it again, or discard them.");
+    expect(text(root.querySelector(".workspace-notice-text")!)).toBe("Some restored changes need a game save that's no longer on this computer. Import it again, or discard them.");
     expect(visible()).toEqual(["Import save…", "Discard those changes"]);
-    // Both keep their labels at every width (a destructive action never shrinks to an icon).
-    for (const name of ["Import save…", "Discard those changes", "Use restored"]) expect(buttons(root).find(button => button.getAttribute("aria-label") === name)!.classList.contains("keep-label")).toBe(true);
     shown("Import save…").click();
     shown("Discard those changes").click();
     await settle();
-    expect(sent).toEqual(["documents.keepRestored", "documents.retryRecovery", "savedV.import", "documents.discardWaiting"]);
+    // Nothing is discarded yet: the confirmation names what goes.
+    expect(sent).toEqual(["savedV.import"]);
+    const popover = lightDocument.body.querySelector(".confirm-popover")!;
+    expect(popover.getAttribute("role")).toBe("alertdialog");
+    expect(text(popover.querySelector(".popover-message")!)).toBe("Discard the restored changes that need that game save? What they changed goes back to the library's version, and they can't be got back.");
+    expect(text(lightDocument.activeElement!)).toBe("Cancel");
+    popover.dispatchEvent(lightEvent("submit"));
+    await settle();
+    expect(sent).toEqual(["savedV.import", "documents.discardWaiting"]);
+    expect(lightDocument.body.querySelector(".confirm-popover")).toBeNull();
+  });
+
+  test("the unprotected line waits until a gesture in progress ends, then stays until a record is written", async () => {
+    const { notice, root, frame, visible } = await harness();
+    const idle = { shown: false, long: false, safe: false, missing: 0 };
+    notice.update(frame(idle, { unprotected: 1, gesture: true }));
+    expect(root.hidden).toBe(true);
+    notice.update(frame(idle, { unprotected: 1 }));
+    expect(root.hidden).toBe(false);
+    expect(text(root.querySelector(".workspace-notice-text")!)).toBe("Your latest changes aren't protected on this computer.");
+    expect(visible()).toEqual(["Export collection", "Try again"]);
+    // Open, it stays through the next gesture (closing it then would move the dock too).
+    notice.update(frame(idle, { unprotected: 1, gesture: true }));
+    expect(root.hidden).toBe(false);
+    notice.update(frame(idle));
+    expect(root.hidden).toBe(true);
   });
 });

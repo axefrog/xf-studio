@@ -21,7 +21,7 @@ import { Feedback } from "./feedback";
 import { icon, isIconName } from "./icons";
 import { sizeClassFor } from "./layout-defaults";
 import { layoutController, type LayoutController } from "./layouts";
-import { closeMenus, openMenu, type Capability, type MenuItem } from "./menu";
+import { closeMenus, openConfirmPopover, openMenu, type Capability, type MenuItem } from "./menu";
 import { importCollection, libraryState, type PanelController } from "./panels/collection";
 import { HISTORY_SCOPE, historyCommandLabel, historyCommandTitle } from "./history-model";
 import { previewSetupCard } from "./preview-setup-card";
@@ -37,7 +37,7 @@ import { readinessText } from "./readiness-text";
 import { SETTINGS_PANEL, type SettingsSection } from "./settings-sections";
 import { bindViewState, PreferenceViewState } from "./view-state";
 import { flushScrollMemories } from "./scroll-anchor";
-import { MISSING_SAVE, RESTORING, RESTORING_LONG, UNPROTECTED } from "./notice-text";
+import { DISCARD_WAITING_CONFIRM, MISSING_SAVE, RESTORING, RESTORING_LONG, UNPROTECTED } from "./notice-text";
 
 /**
  * Mount the XF Studio presentation. It receives only the public presentation
@@ -564,57 +564,53 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
 }
 
 /**
- * A workspace open in another window (style guide t-read-only-window): one full-width line under the header in the warning tone, with
- * Use it here while it is offered. Every state has the same height, so a change of state moves nothing.
+ * The workspace notice: the full-width band under the header for a workspace state the person must act on or wait out (style guide
+ * t-read-only-window, t-unprotected, t-recovering): this window read-only, taking over, waiting, handing over or kept; changes not
+ * protected on this computer; restoring that is taking a while; restored changes waiting for a missing save. Nothing transient opens
+ * it (F5, transient UI never shifts layout): restoring's first seconds are said in the status bar's fixed line instead (`restoringLine`),
+ * the band opens only for those states and stays until the state is resolved, and a non-lease state never opens it in the middle of a
+ * gesture or slider adjustment (it waits until that ends). One layout at every width: the message, whole, then its labelled buttons,
+ * which go to the row under it where they don't fit beside it (narrower than 720 px, always), and wrap, never shrinking to icons.
  */
 export function workspaceNotice(rt: StudioRuntime) {
   const text = h("span", { class: "workspace-notice-text" });
-  const act = (kind: "workspace.takeOver" | "workspace.retryRelease") => () => {
-    void rt.port.workspace.dispatch({ kind }).then(outcome => {
-      if (!outcome.ok) rt.feedback.toast("warning", "Workspace", outcome.message, [], { code: outcome.code });
-    });
+  const toastRefusal = (outcome: { ok: boolean; message?: string; code?: string }) => {
+    if (!outcome.ok) rt.feedback.toast("warning", "Workspace", outcome.message ?? "", [], { code: outcome.code });
   };
+  const act = (kind: "workspace.takeOver" | "workspace.retryRelease") => () => { void rt.port.workspace.dispatch({ kind }).then(toastRefusal); };
   const takeOver = button({ label: "Use it here", small: true, onClick: act("workspace.takeOver") });
   const retry = button({ label: "Try again", small: true, onClick: act("workspace.retryRelease") });
-  // Changes not protected on this computer (t-unprotected): the same line, while this window holds its workspace.
-  const exportCollection = button({ label: "Export collection", icon: "export", small: true, title: "Export collection", onClick: () => void rt.file({ kind: "collection.export" }) });
-  const protect = button({ label: "Try again", icon: "refresh", small: true, title: "Write the record of your changes again", onClick: () => {
-    void rt.port.documents.dispatch({ kind: "documents.protect" }).then(outcome => {
-      if (!outcome.ok) rt.feedback.toast("warning", "Workspace", outcome.message, [], { code: outcome.code });
-    });
+  // Changes not protected on this computer (t-unprotected): Export collection keeps a copy now, Try again writes the record again.
+  const exportCollection = button({ label: "Export collection", small: true, title: "Keep a copy of your collection as a file now", onClick: () => void rt.file({ kind: "collection.export" }) });
+  const protect = button({ label: "Try again", small: true, title: "Write the record of your changes again", onClick: () => {
+    void rt.port.documents.dispatch({ kind: "documents.protect" }).then(toastRefusal);
   } });
-  // Restoring changes from the last session (t-recovering): Keep working where that is safe, else Export collection; Try again; and
-  // Discard those changes for changes waiting for a save that is gone.
+  // Restoring changes from the last session (t-recovering): Use restored where that is safe, else Export collection; Try again; and,
+  // for changes waiting for a save that is gone, Import save… or Discard those changes (which asks first: they can't be got back).
   const documents = (kind: "documents.retryRecovery" | "documents.keepRestored" | "documents.discardWaiting") => () => {
-    void rt.port.documents.dispatch({ kind }).then(outcome => {
-      if (!outcome.ok) rt.feedback.toast("warning", "Workspace", outcome.message, [], { code: outcome.code });
-    });
+    void rt.port.documents.dispatch({ kind }).then(toastRefusal);
   };
-  const keepRestored = button({ label: "Use restored", icon: "check", small: true, title: "Keep working on the restored version", className: "keep-label",
-    onClick: documents("documents.keepRestored") });
-  const retryRestore = button({ label: "Try again", icon: "refresh", small: true, title: "Try again", onClick: documents("documents.retryRecovery") });
-  // The missing save: import it again with the usual save import, which is taken while restoring, or discard the changes waiting for it.
-  const importSave = button({ label: "Import save…", icon: "import", small: true, title: "Import the save again", className: "keep-label",
-    onClick: () => void rt.file({ kind: "savedV.import" }) });
-  const discardWaiting = button({ label: "Discard those changes", icon: "trash", small: true, title: "Discard those changes", className: "keep-label",
-    onClick: documents("documents.discardWaiting") });
-  for (const [control, name] of [[keepRestored, "Use restored"], [retryRestore, "Try again"], [importSave, "Import save…"], [discardWaiting, "Discard those changes"]] as const)
-    control.setAttribute("aria-label", name);
-  exportCollection.setAttribute("aria-label", "Export collection");
-  protect.setAttribute("aria-label", "Try again");
-  const element = h("div", { class: "state-line warning workspace-notice", role: "status", hidden: true }, text, takeOver, retry, keepRestored, exportCollection,
-    importSave, discardWaiting, protect, retryRestore);
+  const keepRestored = button({ label: "Use restored", small: true, title: "Keep working on the restored version", onClick: documents("documents.keepRestored") });
+  const retryRestore = button({ label: "Try again", small: true, title: "Send the restored changes again now", onClick: documents("documents.retryRecovery") });
+  const importSave = button({ label: "Import save…", small: true, title: "Import the game save again", onClick: () => void rt.file({ kind: "savedV.import" }) });
+  const discardWaiting = button({ label: "Discard those changes", small: true, title: "Discard the restored changes that need that game save (asks first)",
+    onClick: () => openConfirmPopover(discardWaiting, { ...DISCARD_WAITING_CONFIRM, danger: true, onConfirm: documents("documents.discardWaiting") }) });
+  const actions = h("div", { class: "workspace-notice-actions" }, takeOver, retry, keepRestored, exportCollection, importSave, discardWaiting, protect, retryRestore);
+  const element = h("div", { class: "state-line warning workspace-notice", role: "status", hidden: true }, text, actions);
   return {
     element,
     update(frame: Frame) {
       const lease = frame.status.lease, leaseShown = !!lease?.message;
       const unprotected = !leaseShown && !!frame.status.outbox?.unprotected;
       const restoring = frame.status.outbox?.recovering, missing = !leaseShown && !unprotected && !!restoring?.missing;
-      const recovering = !leaseShown && !unprotected && !missing && !!restoring?.shown, long = recovering && !!restoring?.long;
-      const message = leaseShown ? lease!.message : unprotected ? UNPROTECTED : missing ? MISSING_SAVE : long ? RESTORING_LONG : recovering ? RESTORING : "";
-      element.hidden = !message;
+      const long = !leaseShown && !unprotected && !missing && !!restoring?.shown && !!restoring?.long;
+      const wanted = leaseShown || unprotected || missing || long;
+      // A state that comes up mid-gesture waits for the gesture to end, so the panels never move under the pointer; the lease's states
+      // change what this window can do, so they show at once.
+      if (element.hidden && wanted && !leaseShown && (frame.preview.gesture || frame.preview.control)) return;
+      const message = leaseShown ? lease!.message : unprotected ? UNPROTECTED : missing ? MISSING_SAVE : long ? RESTORING_LONG : "";
+      element.hidden = !wanted;
       setText(text, message);
-      text.title = message;
       takeOver.hidden = !lease?.canTakeOver;
       retry.hidden = !lease?.canRetry;
       protect.hidden = !unprotected;
@@ -622,23 +618,30 @@ export function workspaceNotice(rt: StudioRuntime) {
       keepRestored.hidden = !(long && restoring?.safe);
       retryRestore.hidden = !long;
       discardWaiting.hidden = importSave.hidden = !missing;
-      // Narrow, these show only their icons (t-unprotected, t-recovering): their names stay their accessible names.
-      element.classList.toggle("unprotected", unprotected);
-      element.classList.toggle("recovering", recovering || missing);
-      // Restoring starts in the neutral tone; once it takes a while, or a save is missing, it is a warning (t-recovering).
-      element.classList.toggle("info", recovering && !long);
-      element.classList.toggle("warning", !(recovering && !long));
+      actions.hidden = [...actions.children].every(child => (child as HTMLElement).hidden);
     },
   };
+}
+
+/**
+ * Restoring's first seconds (t-recovering): while restored changes wait and it isn't yet taking a while, the status bar's fixed line
+ * says so, in place of the band, so nothing moves when it comes and goes. Empty otherwise.
+ */
+export function restoringLine(frame: Frame): string {
+  const lease = frame.status.lease, outbox = frame.status.outbox, restoring = outbox?.recovering;
+  if (lease?.message || outbox?.unprotected || restoring?.missing || !restoring?.shown || restoring.long) return "";
+  return RESTORING;
 }
 
 /** Panels whose controls only read or open things (Help, Activity): a read-only window keeps them all (t-read-only-window). */
 const READ_SAFE_PANELS = new Set<string>(["help", "activity"]);
 function statusBar(rt: StudioRuntime) {
+  // Restoring's first seconds (t-recovering) take this fixed line, not the workspace notice: nothing moves when they come and go.
+  const restoring = h("span", { class: "status-item", "data-tone": "restoring", role: "status", hidden: true });
   const workspace = h("span", { class: "status-item" }), activity = h("button", { class: "status-item status-message", type: "button",
     title: "Open the activity log" }), ready = h("span", { class: "status-item ready-badge" }), gesture = h("span", { class: "status-item muted" });
   activity.addEventListener("click", () => rt.dock.reveal("activity"));
-  const element = h("footer", { class: "status-bar", "aria-label": "Status" }, workspace, activity, h("span", { class: "grow" }), gesture, ready);
+  const element = h("footer", { class: "status-bar", "aria-label": "Status" }, restoring, workspace, activity, h("span", { class: "grow" }), gesture, ready);
   return {
     element,
     update(frame: Frame) {
@@ -651,6 +654,9 @@ function statusBar(rt: StudioRuntime) {
       workspace.hidden = !problem;
       setText(workspace, problem ? `▲ ${save.message}` : "");
       workspace.title = problem ? save.message : "";
+      const restoringText = restoringLine(frame);
+      restoring.hidden = !restoringText;
+      setText(restoring, restoringText);
       const library = frame.library;
       const last = rt.feedback.log.at(-1);
       const message = library.busy && library.progress?.phase === "working" ? library.progress.message : last?.message ?? "Ready";

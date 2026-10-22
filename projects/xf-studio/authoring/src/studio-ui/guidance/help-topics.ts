@@ -22,7 +22,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     body: `Each layer has a colour, an opacity and a finish. ${FINISH_EXPORT_TOKEN}`,
     tours: ["onboarding", WHATS_NEW_TOUR_ID] },
   { id: "undo", title: "Undo, Redo and History", keywords: "undo redo history back step mistake",
-    body: "Every change can be undone. [[key:shell.undo]] undoes, and [[key:shell.redo]] redoes. The **History** panel lists your recent changes to the current preset; click any step to go back to it." },
+    body: "Every change can be undone. [[key:shell.undo]] undoes, and [[key:shell.redo]] redoes. Undo follows what you last edited: a preset or a V. View and lighting changes have their own Undo. The **History** panel names what you last edited and lists your recent changes to it; click any step to go back to it." },
   { id: "library", title: "Saving and your library", keywords: "save library version autosave draft export import backup share file",
     body: "Your work saves itself to your local library as you go. **Save version** ([[key:shell.save]]) keeps a version of your collection there, beside its earlier versions, that you can go back to.\n\nOpening or importing another collection never replaces the one you had open: it stays in your library, and **Undo open** shows it again. Collections never saved as a version are listed under **Recent drafts** in the Library panel, where **Recover** shows one.\n\nTo back up or share looks, export the collection as a file from the Library panel, and import it again on any computer.",
     tours: ["onboarding", WHATS_NEW_TOUR_ID] },
