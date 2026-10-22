@@ -550,7 +550,7 @@ By Kate Compton. ["So you want to build a generator…"](https://galaxykate0.tum
 
 ### Tynan Sylvester and Ludeon Studios
 
-By Tynan Sylvester. ["The Simulation Dream"](https://www.gamedeveloper.com/design/the-simulation-dream) (essay, 2013), and [RimWorld](https://rimworldgame.com/), developed by Ludeon Studios. The essay argues that a simulation adds value only as far as players can perceive and understand it, and RimWorld puts a storyteller in charge of when events arrive. We took from them that simulation nobody perceives is wasted, and that a director who paces events can shape a story. The community-written RimWorld wiki pages on [Cassandra Classic](https://rimworldwiki.com/wiki/Cassandra) and the other storytellers show fixed On and Off cycles, guaranteed events and spacing, and a storyteller's cadence kept apart from the difficulty setting. They informed how we keep pacing separate from challenge.
+By Tynan Sylvester. ["The Simulation Dream"](https://www.gamedeveloper.com/design/the-simulation-dream) (essay, 2013), and [RimWorld](https://rimworldgame.com/), developed by Ludeon Studios. The essay argues that a simulation adds value only as far as players can perceive and understand it, and RimWorld puts a storyteller in charge of when events arrive. We took from them that simulation nobody perceives is wasted, and that a director who paces events can shape a story. The community-written RimWorld wiki pages on [Cassandra Classic](https://rimworldwiki.com/wiki/Cassandra) and the other storytellers show fixed On and Off cycles, guaranteed events and spacing, and a storyteller's cadence kept apart from the difficulty setting. They informed how we keep pacing separate from challenge. The wiki's [Thoughts](https://rimworldwiki.com/wiki/Thoughts) page lists mood memories that expire after a fixed number of days, a plain example of timed forgetting in a shipped game.
 
 ### Valve and Michael Booth
 
@@ -768,6 +768,14 @@ The collaborative [Game Accessibility Guidelines](https://gameaccessibilityguide
 
 K. M. Weiland, [“How to Write a Flat Character Arc, Pt. 1: The First Act”](https://www.helpingwritersbecomeauthors.com/flat-character-arc/) (Helping Writers Become Authors, 2014). In a flat arc, the hero already holds the truth, keeps it under pressure and changes the world around them. It taught us to treat a character who stays the same as a full result, not an absence of change.
 
+### Mimimi Games and Shadow Gambit
+
+Moritz Wagner, head of design at Mimimi Games, quoted in Bryant Francis's [Game Developer article](https://www.gamedeveloper.com/design/how-shadow-gambit-the-cursed-crew-was-able-to-make-save-scumming-a-central-mechanic) (2023) on *Shadow Gambit: The Cursed Crew*. The studio gave time rewinding an in-world reason and built saving and loading into the game's design. Wagner says many players still see reloading as cheating and feel cheap doing it. It informed our view that the engine should treat a reload as ordinary play and find the weight of a choice elsewhere.
+
+### Andy Tockman
+
+Andy Tockman, [“Correlated randomness in Slay the Spire 2”](https://tck.mn/blog/correlated-randomness-sts2/) (blog post, 2026). Giving each random generator its own seed is not enough when the generator's output is nearly linear in the seed, because the streams then predict one another. He suggests nonlinear or counter-based generators. It informed how we key our random draws.
+
 ## Research papers
 
 These papers informed our research. Unless an entry says otherwise, no algorithm from them was implemented.
@@ -902,7 +910,7 @@ Their paper [Distance Transforms of Sampled Functions](https://cs.brown.edu/peop
 
 ### James Ryan (2018) and Ryan and Mateas (2017)
 
-James Ryan, [*Curating Simulated Storyworlds*](https://escholarship.org/uc/item/1340j5h2) (PhD thesis, University of California, Santa Cruz, 2018), and James Ryan and Michael Mateas, ["Simulating Character Knowledge Phenomena in Talk of the Town"](http://www.gameaipro.com/GameAIPro3/GameAIPro3_Chapter37_Simulating_Character_Knowledge_Phenomena_in_Talk_of_the_Town.pdf) (*Game AI Pro 3*, 2017). The thesis introduced story sifting, finding story-shaped patterns in a simulation's record of events, and argues that simulated worlds need curation to yield stories.
+James Ryan, [*Curating Simulated Storyworlds*](https://escholarship.org/uc/item/1340j5h2) (PhD thesis, University of California, Santa Cruz, 2018), and James Ryan and Michael Mateas, ["Simulating Character Knowledge Phenomena in Talk of the Town"](http://www.gameaipro.com/GameAIPro3/GameAIPro3_Chapter37_Simulating_Character_Knowledge_Phenomena_in_Talk_of_the_Town.pdf) (*Game AI Pro 3*, 2017). The thesis introduced story sifting, finding story-shaped patterns in a simulation's record of events, and argues that simulated worlds need curation to yield stories. James Ryan, Adam Summerville, Michael Mateas and Noah Wardrip-Fruin, [“Toward Characters Who Observe, Tell, Misremember, and Lie”](https://ojs.aaai.org/index.php/AIIDE/article/view/12825) (AIIDE, 2015), holds beliefs fact by fact, with evidence that decays and forgetting that depends on the kind of fact and how salient it is. It informed how we let characters forget.
 
 ### Kreminski et al. (2019, 2021)
 
@@ -1382,7 +1390,7 @@ Shamsi Iqbal and Brian Bailey, [“Effects of Intelligent Notification Managemen
 
 ### Trafton et al. (2003)
 
-J. Gregory Trafton, Erik Altmann, Derek Brock and Farilee Mintz, [“Preparing to resume an interrupted task: effects of prospective goal encoding and retrospective rehearsal”](https://interruptions.net/literature/Trafton-IJHCS03.pdf) (*International Journal of Human-Computer Studies*, 2003). An eight-second warning before an interruption helped people prepare and resume. It informed how much notice an offer should give.
+J. Gregory Trafton, Erik Altmann, Derek Brock and Farilee Mintz, [“Preparing to resume an interrupted task: effects of prospective goal encoding and retrospective rehearsal”](https://interruptions.net/literature/Trafton-IJHCS03.pdf) (*International Journal of Human-Computer Studies*, 2003). An eight-second warning before an interruption helped people prepare and resume. It informed how much notice an offer should give. It also showed that cues in the setting can revive a goal that had faded, which informed how a returning player is reminded.
 
 ### Adamczyk and Bailey (2004)
 
@@ -1575,6 +1583,54 @@ Miguel Sicart, [“Against Procedurality”](https://gamestudies.org/1103/articl
 ### Formosa, Ryan and Staines (2016)
 
 Paul Formosa, Malcolm Ryan and Dan Staines, [“Papers, Please and the systemic approach to engaging ethical expertise in videogames”](https://researchers.mq.edu.au/en/publications/papers-please-and-the-systemic-approach-to-engaging-ethical-exper/) (*Ethics and Information Technology* 18(3), 2016). A game's systems can engage a player's moral judgement in ways scripted scenes do not. It informed how we think about carrying moral weight through costs and systems.
+
+### Schacter (1999)
+
+Daniel Schacter, [“The seven sins of memory: insights from psychology and cognitive neuroscience”](https://sites.harvard.edu/schacter-memory/files/2022/09/schacter1999.pdf) (*American Psychologist*, 1999). Memory fails in seven named ways, such as fading, blocking and misattribution, and retrieving a name is a common place to be blocked. It informed which kinds of mistake a character may make about the past.
+
+### Farmer, Kelly and Jones-Rincon (2024, 2025)
+
+George Farmer and Danielle Kelly, [“‘Save-scumming’ in role-playing games: a call for further psychological exploration”](https://bps.org.uk/news/save-scumming-role-playing-games-call-further-psychological-exploration) (British Psychological Society, 2024), and George Farmer, Danielle Kelly and Amanda Jones-Rincon, [“Save-scumming: a novel exploration of video game play”](https://dl.digra.org/index.php/dl/article/view/2509) (DiGRA, 2025). Players reload for several reasons, such as protecting a character or shaping the story, and the research is thin. It informed how we treat reloading without judging it.
+
+### Park et al. (2023)
+
+Joon Sung Park, Joseph O’Brien, Carrie Cai, Meredith Ringel Morris, Percy Liang and Michael Bernstein, [“Generative agents: interactive simulacra of human behavior”](https://arxiv.org/abs/2304.03442) (arXiv, 2023). Simulated characters scored each memory by recency, importance and how closely it matched the situation, and reflected when recent importance added up. It informed how we rate a memory's importance when it forms.
+
+### Anderson and Schooler (1991)
+
+John Anderson and Lael Schooler, [“Reflections of the environment in memory”](https://www.psychologicalscience.org/journals/psychological-science/j.1467-9280.1991.tb00174.x/) (*Psychological Science*, 1991). How likely something is to be needed again follows how often, how recently and how regularly it came up, and memory follows the same pattern. It informed the shape of our forgetting curve.
+
+### Wixted and Ebbesen (1991)
+
+John Wixted and Ebbe Ebbesen, [“On the form of forgetting”](https://www.psychologicalscience.org/journals/psychological-science/j.1467-9280.1991.tb00175.x/) (*Psychological Science*, 1991). In three experiments a power function fitted forgetting better than five other forms. It informed the shape of our forgetting curve.
+
+### Rubin and Wenzel (1996)
+
+David Rubin and A. E. Wenzel, [“One hundred years of forgetting: a quantitative description of retention”](https://cenl.ucsd.edu/Jclub/Rubin_Wenzel_1996.pdf) (*Psychological Review*, 1996). Four different curves fitted 210 sets of retention data about equally well, so the exact form of forgetting is not settled. It informed our decision to keep the curve open to testing.
+
+### Murre and Dros (2015)
+
+Jaap Murre and Joeri Dros, [“Replication and analysis of Ebbinghaus’ forgetting curve”](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0120644) (*PLOS ONE*, 2015). A one-person replication of the classic curve found forgetting steep early on, with a likely small rise at 24 hours. It informed how we picture early forgetting.
+
+### Talarico and Rubin (2003)
+
+Jennifer Talarico and David Rubin, [“Confidence, not consistency, characterizes flashbulb memories”](https://scholars.duke.edu/publication/651206) (*Psychological Science*, 2003). Vivid memories of a major event kept their confidence while their details drifted as fast as in ordinary memories. It informed keeping a character's confidence apart from how much they can recall.
+
+### Roediger and Karpicke (2006)
+
+Henry Roediger and Jeffrey Karpicke, [“Test-enhanced learning: taking memory tests improves long-term retention”](https://profiles.wustl.edu/en/publications/test-enhanced-learning-taking-memory-tests-improves-long-term-ret/) (*Psychological Science*, 2006). Recalling a passage protected it better than studying it again. It informed how telling a story and being asked about it keep a memory alive.
+
+### Candia et al. (2019)
+
+Cristian Candia, C. Jara-Figueroa, Carlos Rodriguez-Sickert, Albert-László Barabási and César Hidalgo, [“The universal decay of collective memory and attention”](https://research.ceu.edu/en/publications/the-universal-decay-of-collective-memory-and-attention/) (*Nature Human Behaviour*, 2019). Attention to cultural products fades in two stages that match a spoken and a recorded channel. We took only that two-channel shape, not its timescales, for how a city's memory of an event fades.
+
+### Cuc, Koppel and Hirst (2007)
+
+Alexandru Cuc, Jonathan Koppel and William Hirst, [“Silence is not golden: a case for socially shared retrieval-induced forgetting”](https://www.psychologicalscience.org/journals/psychological-science/j.1467-9280.2007.01967.x/) (*Psychological Science*, 2007). A listener who hears someone recall selectively forgets related things the speaker leaves out. It informed how retelling can make others forget as well as remember.
+
+### Bergman and Roediger (1999)
+
+Erik Bergman and Henry Roediger, [“Can Bartlett’s repeated reproduction experiments be replicated?”](https://profiles.wustl.edu/en/publications/can-bartletts-repeated-reproduction-experiments-be-replicated/) (*Memory & Cognition*, 1999). People retelling a story forgot more and distorted more as the delay grew, which replicated Bartlett’s classic result. It informed the ways a retold account can drift.
 
 ## Reference imagery
 

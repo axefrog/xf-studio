@@ -4,6 +4,7 @@
 - **The review.** v0.2 went through one review, by GPT-6 Astra; [§16](#16-review-record) records what changed.
 - **Dossiers folded in.**
   - v0.1 folded in [dossier 8](../craft/d08-scale-threads-time.md#9-requirements-for-the-seed-language-p4) (scale, threads and time).
+  - v0.4 folds in [dossier 11](../craft/d11-saves-memory-forgetting.md) (saves, memory and forgetting): session and wall-clock independence, the return view and recaps, durable cosmetic marks, recall in responses.
   - v0.3 folds in [dossier 10](../craft/d10-change-theme-payoff.md) (character change, theme and payoff): premises and costs, NPC turns, typed plants and traces, and NPC attribution lines ([D-22](../decisions.md)).
 
 This is the specification stage of [P4](../p4-seeding-layer.md) (work package [WP-10](../plan.md#82-work-packages)). It is exact enough to implement layer 2 in the reference model from this page plus the kernel specification [S0](kernel.md) and the reference model's [notes](../../../projects/xf-story-engine/reference/SPEC-NOTES.md).
@@ -259,7 +260,11 @@ type EffectDecl = (
   | { game: { fact: string; set?: number; add?: number }; capability: 'story.write-vanilla' }
   | { reward: { table: RewardTableRef; tier: string; byRoute?: FactKey } }
   | { kernel: { on: RoleKey; effect: Effect } }                        // S0 §10.8 effects, as events
-) & { persist?: 'lasting' | 'resettable' | 'cosmetic' };
+) & {
+  persist?: 'lasting' | 'resettable' | 'cosmetic';
+  carrier?: { kind: 'place' | 'media' | 'person'; at: RoleKey | Id; durability: Duration | 'permanent' };  // required for cosmetic
+  remember?: 'natural' | 'always';     // for effects that create beliefs; `always` keeps a memorable belief at gist
+};
 
 interface Dependency { on: RoleKey | { fact: string }; hold: 'keep' | 'substitute' | 'notice' }
 ```
@@ -283,13 +288,21 @@ interface Dependency { on: RoleKey | { fact: string }; hold: 'keep' | 'substitut
 |---|---|---|
 | `lasting` | Relationships, reputation, standing, anything a later seed may cite | The pin stays until a later write replaces it |
 | `resettable` | The incidental: a stall closed for the day, a guard moved | The write also schedules a game-time **wake-up** at `at + reset` **[tunable 7 game days]**. At that wake-up, if the pin is still current, layer 2 withdraws it, and the fact reads its `initial` again |
-| `cosmetic` | A mark on a wall, a changed sign | Only the canon event; no pin |
+| `cosmetic` | A mark on a wall, a changed sign | The canon event, and a **carrier**: the place, media feed or person that shows it, and how long it lasts. No pin |
 
 The default is `lasting` for game-fact writes, rewards, and effects on ties or standing. Everything else defaults to `resettable`. These must be `lasting`, and marking one `resettable` is an error (L-12):
 - game-fact writes;
 - writes made by a `turning` event: beliefs, importance, membership.
 
 **Canon characters.** A role whose identity is fixed to a game character keeps the facts the game records about it. A turn or effect on such a role that would change one of those facts must be `authoredOnly` (L-50). Turns the engine adds on such a role are confined to beliefs about V and ties with V.
+
+**Cosmetic marks survive loads.** A `cosmetic` effect without a carrier is an error (L-55). While its durability lasts, the mark is **re-derived** from its canon event, and shown again whenever the carrier's district or feed is active. A reload therefore never wipes a mark V saw.
+
+**Memory and the player's settings.**
+- **`remember: 'always'`** forces a memorable belief, which can blur to gist but is never dropped. It conflicts with `resettable` (L-55).
+- **The reset scale.** The player's `resetScale` (S0 `SettingsSet`) multiplies the `reset` of `resettable` effects.
+- **Promises and debts** ignore the memory scale.
+- **Repair routes.** An effect that can drop a `lasting` tie below an authored floor needs a route back: a retraction, a reconciliation, or an apology the ladder accepts. Otherwise the lint warns (L-54).
 
 ### 2.6 Predicates
 
@@ -476,7 +489,10 @@ interface OfferSpec {
   retractQuietly?: ContentRef;         // shown when V retracts with one input; default nothing
 }
 
-interface ResponseTemplate { to: ActPattern; because: ConcernRef; content: ContentRef; needs?: Pred; attribution?: boolean; reply?: ContentRef }
+interface ResponseTemplate {
+  to: ActPattern; because: ConcernRef; content: ContentRef; needs?: Pred; attribution?: boolean; reply?: ContentRef;
+  recalls?: { believer: RoleKey; pattern: EventPattern; variants: { exact?: ContentRef; half?: ContentRef; gone?: ContentRef } };
+}
 
 interface UnattendedPlan {
   after: Duration;                     // how long the world takes to settle it without V
@@ -497,6 +513,12 @@ interface Cost {
 }
 ```
 
+- **Recall in responses.** A template with `recalls` asks the NPC's memory, through S0's `onRecall` at this encounter:
+  - `exact` selects the `exact` variant;
+  - `region` and `gist` select `half`;
+  - `gone` selects the `gone` variant, which may be silence.
+
+  The `believes` atom stays yes, no or maybe; recall is a separate result, and the same encounter gives the same answer after a reload.
 - **Costs.** Each action MAY declare what it costs and whom. The offer's `stakes` stay as the overview. Theme lives in what options cost (§2.3). A consequential offer whose actions all cost the same, or nothing, gets a warning (L-45). A cost paid `later` and shown by `trace` needs an aftermath beat that reads the action's write (L-46). No cost class feeds a visible number.
 - **Honesty.** The language has no construct in which the narrator or the system states V's feelings, motives or reasons. Callbacks name V's acts (`ActPattern`), never reasons. Response templates without `because` don't compile (L-19).
 - **Attribution lines ([D-22](../decisions.md)).** An NPC may voice its own belief about V's motive, in a response template marked `attribution: true`. The template must:
@@ -577,7 +599,7 @@ interface TimingRequest {
   kind: 'trace' | 'pin' | 'bark' | 'message' | 'call' | 'approach';
   class: 0 | 1 | 2 | 3 | 4;            // how intrusive the channel is (dossier 7 §5.3)
   importance: 'low' | 'normal' | 'high';
-  purpose: 'introduce' | 'escalate' | 'rest-cue' | 'callback' | 'close' | 'baton' | 'news';
+  purpose: 'introduce' | 'escalate' | 'rest-cue' | 'callback' | 'close' | 'baton' | 'news' | 'recap' | 'notice';
   tolerates: Partial<Record<AttentionAspect, 'allow' | 'forbid'>>;   // default forbid for combat, driving, dialogue
   maxWait: Duration;
   category?: string;
@@ -588,6 +610,8 @@ interface TimingRequest {
 
 - **`baton`** is a class-0 hint at the next thread during rest.
 - **`news`** is a settled outcome (§6.4). News requests are released only at a joint (§8.3).
+- **`recap`** is the return view (§8.7).
+- **`notice`** is a one-time plain notice: a foreign save or a compatibility change (§12.2).
 - **`AttentionAspect`** is S5's vocabulary.
 
 A beat's request takes the seed's `timing`; its class and channel come from the fragment's channel ladder (§8.1).
@@ -1202,7 +1226,8 @@ Its source is the game port (S5). It is session state and is not persisted. Afte
 | State | Entered | What passes | Left |
 |---|---|---|---|
 | `settling` | At a load | `pull` deliveries only | After `settle` play seconds **[tunable 90]** |
-| `resituating` | After settling | One cue of class 2 or lower: from the seed V was last attending, or, with none, one class-0 hook. Class 0 deliveries also pass | When that cue is released, or after 120 play seconds **[tunable]** |
+| `returning` | After settling, only when the save's age is 30 minutes or more (§8.7) | The return view's deliveries, class 1 or lower; class 0 deliveries | When the view's deliveries are released, or after 120 play seconds |
+| `resituating` | After settling or returning | One cue of class 2 or lower: from the seed V was last attending, or, with none, one class-0 hook. Class 0 deliveries also pass | When that cue is released, or after 120 play seconds **[tunable]** |
 | `normal` | After resituating | As §8.3 | — |
 
 **Away** is an overlay, set and cleared by S5's away marker. While it is set, only classes 0 and 1 pass, whatever the state.
@@ -1303,6 +1328,35 @@ The closing deliveries of §6.4 belong to a terminal seed, but they must still a
 
 The terminal instance stays in the seed table until they are displayed, or until `closeExpiry` game seconds have passed **[tunable 3 game days]**. While it waits, it is not a demand root and holds no retention roots (§12.1). After a load, its closing deliveries are queued again.
 
+### 8.7 The return view
+
+**The save's age** is the wall-clock gap between the save's own timestamp and the load, read once from the save's metadata by the game port (S5). It is a session input. It is never stored in the record, and no predicate or wake-up reads it (S2-I-12). Nothing in the world advances while the game is closed.
+
+**What the view shows,** by the save's age:
+
+| Save age | Resume line | Waiting on you | Story so far |
+|---|---|---|---|
+| Under 30 minutes | — | — | Pull only |
+| 30 minutes to 2 days | One line, to the seed V was last attending | — | Pull only |
+| 2 to 14 days | Yes | Up to 3 open commitments, class 1, once | Pull only |
+| Over 14 days | Yes | Yes | One dismissible offer, then pull |
+
+The bucket bounds are **[tunable]**.
+
+**How the deliveries are made.** They are `recap` deliveries, and pass in the `returning` state (§8.2). They are assembled from:
+- the exposure ledger;
+- `closure` entries;
+- loose ends;
+- V's recorded acts.
+
+Each item cites a record entry, names an act, never a feeling, and gives the detail that tells it apart from similar ones. **Only exposed material appears:** the view never tells V something V wasn't shown, apart from the settled news §6.4 already queues. What it shows is recorded as displayed. It is offered once per load.
+
+**Open offers.** Displayed, unanswered offers appear under "waiting on you" with their own `Id`. They stay answerable (S2-I-6) and are not pushed again. Their play-clock lapse restarts at the load; it never runs during a real-world absence.
+
+**"Story so far"** is a pull entry that is always available, whatever the save's age.
+
+**Staleness** uses `playTotal`: cumulative play seconds in this branch, stamped on record entries (§10.1). The session-relative play clock can't measure play across sessions.
+
 ## 9. Intersections
 
 ### 9.1 Detection
@@ -1333,7 +1387,7 @@ Two live seeds A and B **intersect** when any of the following holds. Detection 
 
 ### 10.1 The seed record
 
-Each instance keeps an append-only record. An entry is `{ n, at: GameTime, play?: number, kind, data, cause }`. `n` is the entry's stable number, unique within the instance and never reused.
+Each instance keeps an append-only record. An entry is `{ n, at: GameTime, playTotal: number, kind, data, cause }`, where `playTotal` is cumulative play seconds in this branch (§8.7). `n` is the entry's stable number, unique within the instance and never reused.
 
 The kinds:
 - `transition`;
@@ -1435,6 +1489,8 @@ The lint runs at compile time (§3.1), and on demand from authoring tools (S4, P
 | L-51 | A `turning` kind in a pack with no declared consumer | error |
 | L-52 | An attribution line without a `believes` need on that NPC, a `because` naming an observed act of V's, or a reply for V (§2.9) | error |
 | L-53 | A premise sentence rendered more than once in a seed, or in a system voice (lexicon, S4) | warning |
+| L-54 | An effect that can drop a `lasting` tie below an authored floor with no route back | warning |
+| L-55 | A `cosmetic` effect without a carrier; or `remember: 'always'` with `resettable` | error |
 | L-33 (extended) | A `turns[].what` reading anything of V's but beliefs held about V and V's recorded acts | error |
 
 L-25 and L-40 were removed in v0.2 (§16). Their numbers are not reused.
@@ -1507,6 +1563,8 @@ interface InstanceState {
 interface GlobalState {
   fragmentUses: Record<FragmentId, { count: number; lastAt: GameTime; lastOffer: number }>;
   offerCount: number;                  // offers displayed in this branch, for minGap.offers
+  playTotal: number;                   // cumulative play seconds in this branch, updated at each save
+  notices: Id[];                       // one-time notices already shown in this branch (§12.2)
   sowing: Record<string, { instances: number; lastEnded?: GameTime; refused?: string }>;   // per pack and template
 }
 ```
@@ -1538,7 +1596,14 @@ After the kernel replays a save (S0 §14.3), layer 2:
 3. resets delivery states as §8.5 says;
 4. fires game-time wake-ups already past, in time order;
 5. re-evaluates every live instance in `Id` order;
-6. rebuilds the arbiter's queue from every queued delivery, in instance `Id` order, then delivery `Id` order.
+6. rebuilds the arbiter's queue from every queued delivery, in instance `Id` order, then delivery `Id` order;
+7. builds the return view (§8.7) from the save's age.
+
+**The load class.** The game port classifies each load by its save key: known, behind, foreign, unkeyed or damaged ([save identity](../../../knowledge/save-identity.md)). It passes the class, with the save's age, as a timestamped session input. Layer 2 uses the class for two things:
+- **Notices.** A foreign or damaged save, or a pack compatibility change (§12.3), gets one plain `notice` delivery. Its id is `H("notice", kind, branch)`, recorded in the global record so each shows once per branch.
+- **The return view.**
+
+No predicate or policy reads the class.
 
 Re-evaluation after a load is silent for the kernel. Its layer-2 transitions are real, and are written in the new epoch.
 
@@ -1570,6 +1635,8 @@ A **removed pack** withdraws its live instances (T1), because their content refe
 | S2-I-8 | **Effects need yes.** No transition that changes the world or reaches V fires on `maybe`. Only cancellations may |
 | S2-I-9 | **Final states are final:** terminal seeds, final beats, latched windows, recorded responses |
 | S2-I-10 | **Authored before procedural** in every claim conflict |
+| S2-I-11 | **Session independence.** No layer-2 draw, `Id`, wake-up order or tie-break reads the session epoch, a load count or the wall clock (S0 I-16). The only discriminator besides causes is `attempt` |
+| S2-I-12 | **No wall clock.** Wake-ups run on game or play time only, and no predicate reads the wall clock. Real-world absence advances nothing; the save's age is read only by the return view |
 
 ## 14. Fixtures
 
@@ -1602,6 +1669,11 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 | SF-23 | **Prepare fails.** A seed in `cast` whose tentative cast is killed while its delivery is queued | Preparation fails; nothing reaches V; no cast edge is in effect; the role's ladder runs |
 | SF-24 | **Stuck.** A running seed whose only remaining beat links `because` a failed beat, on a seed fact nothing writes | `stuck` → `withered`, with a `stuck` record entry |
 | SF-25 | **Attribution.** Three response templates marked `attribution`: one valid; one without a `believes` need; one without a reply for V | The first compiles. The other two fail L-52. At run time, the valid one plays only while the NPC's belief about V is yes |
+| SF-27 | **Session perturbation.** Run SF-7 twice, with different epochs, play-clock offsets and wall clocks | Byte-identical records |
+| SF-28 | **Recap from exposure only.** A save 20 days old, with one exposed closure and one closure V never saw | The view cites the exposed closure only (plus any settled news already queued) |
+| SF-29 | **Cosmetic mark survives.** A `cosmetic` effect with a place carrier and durability of 5 game days is displayed; save; load | The mark is re-derived and shown when the place's district is active, until it expires |
+| SF-30 | **Settings are lenses.** Change `memoryScale` after several exposures | Every exposure, pin and closure is unchanged |
+| SF-31 | **Returning or not.** Load a save 3 days old, then quick-reload it | The first load enters `returning`; the quick reload doesn't |
 | SF-26 | **Constructed trace.** A trace with no found cause, `latitude` allowing `trace-cause`. S3's stub contributes a cause: an event at a stall. The trace is displayed; save; load | The `display` entry records `constructed`. The cause's fields are pinned `committed` at display, and resolve identically after the load |
 
 ## 15. Compromises and open items
@@ -1623,6 +1695,7 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 7. **Display confirmations.** S5 says, for each channel, what counts as `displayed`.
 8. **Profiles.** Appendices for gig, job and heist, con, four-beat, front, testing arc and slide.
 9. **Dossier 10.** v0.3 adopts all 23 of its S2 requirements. Its P5 list goes to S3: the change engine, premise audits, the plant planner, and canon-character limits (S10-P5-23).
+10. **Dossier 11.** v0.4 adopts its S2 requirements except a reserved draw-key salt, which nothing needs yet. Its kernel requirements are in S0 v4.1 (§20 there). Its P5 list goes to S3. Its testing agenda (T11-01 to T11-21) feeds P9 and the first in-game session card.
 
 ## 16. Review record
 

@@ -1,6 +1,6 @@
 # S0. Kernel specification
 
-**Status:** v4, 23 October 2026. v3.1 was final for the first implementation and adopted the reference model's 57 accepted implementation notes ([§19](#19-decisions-adopted-from-the-reference-model)). v4 adds what the seeding layer ([S2](seeding.md)) and the sifting research ([dossier 6](../craft/d06-sifting-tellability.md#74-gaps-with-a-route-that-leaves-s0-unchanged)) need. The additions are listed in [§20](#20-version-4-additions); none changes a result the reference model already produces. This is the specification stage of the [foundation](../foundation.md): exactly how the dimensional model works, so the reference model can be built from this page alone. It is work package [WP-05](../plan.md#82-work-packages).
+**Status:** v4.1, 23 October 2026. v4.1 adds memory and forgetting from [dossier 11](../craft/d11-saves-memory-forgetting.md) (V4-8 to V4-13 in §20). v3.1 was final for the first implementation and adopted the reference model's 57 accepted implementation notes ([§19](#19-decisions-adopted-from-the-reference-model)). v4 adds what the seeding layer ([S2](seeding.md)) and the sifting research ([dossier 6](../craft/d06-sifting-tellability.md#74-gaps-with-a-route-that-leaves-s0-unchanged)) need. The additions are listed in [§20](#20-version-4-additions); none changes a result the reference model already produces. This is the specification stage of the [foundation](../foundation.md): exactly how the dimensional model works, so the reference model can be built from this page alone. It is work package [WP-05](../plan.md#82-work-packages).
 
 v3 takes in three independent review rounds. The [review record](#18-review-record) lists what changed and why. What the first implementation includes is settled in [§0.2](#02-the-first-implementation), and that scope is final ([D-19](../decisions.md)).
 
@@ -170,6 +170,8 @@ type Preimage    = (output: Region, otherInputs: Value[], params) => Region;    
 type Conditioned = (inputs: Value[], F: Value[], params) => number[];           // positive weights over F
 type FieldMap    = (fieldValue: number, F: Value[], params) => number[];        // positive weights over F
 type Buckets     = (value: Value, params) => string[];
+type Widen       = (value: Value, level: number, params) => Region;              // v4.1: blurs a remembered value;
+                                                                                 // the region always contains the value
 type Bound       = (inputBounds: Region[], params) => Region;                   // conservative, for queries
 ```
 
@@ -862,6 +864,9 @@ interface Belief {
   evidence: Id[];                      // originating events: the independent support
   source: { by: 'observed'; event: Id } | { by: 'told'; teller: Id; event: Id } | { by: 'inferred'; rule: FnRef; from: Id[] };
   formed: GameTime; refreshed: GameTime; memorable: boolean;
+  uses?: number;                       // v4.1: corroborations, recalls and retellings (default 0)
+  salience?: 0 | 1 | 2 | 3;            // v4.1: rated at formation by onWitness (default 0)
+  widened?: number;                    // v4.1: how far the value has blurred (0 = exact)
 }
 ```
 
@@ -876,7 +881,21 @@ Beliefs are stored per believer and indexed by (subject, path, at). They never c
   - `onWitness(event, observer)`;
   - `onSocial(event, teller, listener)`;
   - `onTick(believer)`;
-  - `aggregate(audience, subject, path)`.
+  - `aggregate(audience, subject, path)`;
+  - `onRecall(believer, belief, encounter, cue)` (v4.1), below.
+
+**Forgetting beliefs** (v4.1). Forgetting is lazy, shaped like blurring, and never touches the record of events. It has three parts:
+- **Accessibility** is a registered pure function of a belief's fields and the query time, evaluated when read. The first policy follows [dossier 11](../craft/d11-saves-memory-forgetting.md):
+
+  ```
+  accessibility(b, t) = ln(2 · max(1, uses)) − ½ · ln(max(1, t − refreshed)) + importance(salience) + cue
+  ```
+
+  It uses only `ln` and arithmetic (§1.3). No process ticks it.
+- **Recall.** `onRecall` returns the form of a belief at an encounter: `exact`, `region`, `gist` or `gone`. A `region` comes from the slot class's `Widen`. The draw is `rand("recall", believer, belief.id, encounter)`, where `encounter` is the stable `Id` of the contact event S1 mints, so the same question gets the same answer after a reload. A recall increments `uses`. The forms nest: a believer who can recall a belief exactly can also recall it as a region or as gist.
+- **The sweep** runs once per `W_forget` game seconds **[tunable 86,400]**, as the forgetting worklist (§10.7). It touches only beliefs that are not memorable, and only those whose accessibility has fallen below the **floor**: the accessibility at the most generous memory setting. A belief below the floor is widened one level by `BeliefSet`, or dropped by `BeliefDropped` once it is gist. A setting raised later can therefore restore anything blurred under a stricter one, because the sweep never went below what the most generous setting would keep.
+
+Events, pins and canon are never forgotten by this. Beliefs are views of them.
 
   The first policy follows [foundation §5.4](../foundation.md#54-perspectives-everyone-has-their-own-model).
 
@@ -959,7 +978,8 @@ Each save has a record `{ saveKey, parent, ops }`, where `parent` is the record 
 - `BeliefSet`, `BeliefDropped`;
 - `EventCanon`;
 - `SummarySet`;
-- `FrameState`, `SeedState`, `ProcessState`.
+- `FrameState`, `SeedState`, `ProcessState`;
+- `SettingsSet { memoryScale, resetScale, at }` (v4.1): the player's memory and reset settings, in force from `at`. The lineage root records the initial settings. Replays and the harness use the settings in force at each op. Presentation settings are not recorded.
 
 Snapshots are written every **[tunable 10,000]** ops. Ops carry complete data.
 
@@ -994,6 +1014,7 @@ The lineage root records the schema and function versions. Loading under newer v
 | I-13 | **Silence.** Resolution, regeneration and replay produce no changes and no relevance |
 | I-14 | **Acyclic frames** |
 | I-15 | **Partition independence,** given the same timestamped external operations and the same demand history |
+| I-16 | **Session independence** (v4.1). No draw key, `Id`, ordering or tie-break reads the session `epoch`, the play clock, the wall clock or a load count. The epoch only refuses stale operations (§14.3). "Epoch" means only the session's |
 
 ## 16. Fixtures
 
@@ -1018,6 +1039,11 @@ Fully specified: outcomes that depend on hashes are checked as properties, not n
 | F-13 | **Partition.** Process "tally", tier 0, period 1 window: in window k it pins `counter@w<k> = counter@w<k−1> + floor(rand("proc", seed, "tally", k) × 10)`, with `counter@w<−1> = 0`. Run 12 windows as one tick, and again as 12 ticks | Identical counter histories |
 | F-14 | **Retained member.** A crowd count of 12; member 9 is focused by V's frame (no pin). An authored constraint sets the count to 6 | The count is 10 or more (the structural constraint, 700, rejects 6), and member 9 stays addressable |
 | F-15 | **Cycle guard.** A kind whose slot reads itself through an invalid schema the loader missed (tested by bypassing the loader) | Resolution returns `cycle` and records a defect |
+| F-16 | **Session independence** (v4.1). Run F-12's sequence twice, with different epochs and play and wall clocks | Identical records and resolved values |
+| F-17 | **Jump versus tick** (v4.1). Beliefs and a forgetting sweep over 30 game days, run as one jump and as 30 daily ticks | Identical beliefs |
+| F-18 | **Widening keeps the truth** (v4.1). A belief `age = 34`, widened level by level to gist | Every region contains 34 |
+| F-19 | **Nested recall** (v4.1). The same belief recalled at one encounter at several accessibility levels | `exact` implies `region` implies `gist` |
+| F-20 | **Lens invariance** (v4.1). Blur beliefs under a strict memory setting; raise the setting | Beliefs above the new floor read as before blurring wherever the sweep didn't widen them; no event, pin or exposure changed |
 
 ### 16.2 Calibration fixtures
 
@@ -1139,6 +1165,22 @@ v4 adds what the seeding layer and sifting need. None of the additions changes a
 | V4-5 | Relevance on seed frames reaches layer 2 | §10.5 | S2 §4 | To implement (delivery only) |
 | V4-6 | Dilemma recipients stated | §10.8 | S2 §9, S3 (G-5) | A clarification |
 | V4-7 | Any layer may keep `SeedRecord`s under its own ids | §14.1 | S2 §12, S3's promoted matches (G-8) | Already true |
+| V4-8 | Invariant I-16, session independence | §15 | Reload stability ([dossier 11](../craft/d11-saves-memory-forgetting.md) S11-S0-01) | Fixture F-16 to add |
+| V4-9 | Belief fields `uses`, `salience`, `widened` | §11.1 | Memory (S11-S0-03) | Optional fields, default 0 |
+| V4-10 | The `Widen` registry signature | §2.1 | Blurring (S11-S0-05) | To implement |
+| V4-11 | Lazy accessibility, `onRecall` and the forgetting sweep with its floor | §11.2 | S11-S0-04, 09, 10 | To implement; the sweep is a defined worklist |
+| V4-12 | The `SettingsSet` op | §14.2 | Settings as lenses (S11-S0-06) | To implement |
+| V4-13 | Fixtures F-16 to F-20 | §16.1 | S11-S0-11 | To add |
+
+**Dossier 11's other kernel requirements:**
+- **S1 policies:**
+  - how telling transforms a story (S11-S0-07);
+  - coalescing many similar beliefs, and the cap per believer (S11-S0-09, the part beyond the floor);
+  - the memory policy list (S11-S0-12).
+- **S6 and P7:** the commit window on saving (S11-S0-08).
+- **S2:** the load class, as a session input (S11-S0-02).
+
+**Recorded compromise:** accessibility's closed form assumes evenly spaced use. Storing each use's time would be more exact. Revisit when recall feels wrong in the transcript panels (dossier 11's testing agenda).
 
 **Dossier 6's other gaps take routes that leave the kernel unchanged:**
 - **G-1:** S1's telling and lying policies mint events.
