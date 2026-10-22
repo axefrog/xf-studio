@@ -4,6 +4,7 @@
 - **The review.** v0.2 went through one review, by GPT-6 Astra; [§16](#16-review-record) records what changed.
 - **Dossiers folded in.**
   - v0.1 folded in [dossier 8](../craft/d08-scale-threads-time.md#9-requirements-for-the-seed-language-p4) (scale, threads and time).
+  - v0.6 folds in [dossier 13](../craft/d13-perception-curiosity.md) (perception, memory and curiosity): three exposure grades and the display contract, re-cued callbacks, `mustReach`, hooks and twists, counter-cues, channel modality.
   - v0.5 folds in [dossier 12](../craft/d12-player-model-trust.md) (the player model, trust and manipulation): the model's boundary (§8.8), bounded hooks, offers frozen at display, a "why this?" record, and the `believes` firewall.
   - v0.4 folds in [dossier 11](../craft/d11-saves-memory-forgetting.md) (saves, memory and forgetting): session and wall-clock independence, the return view and recaps, durable cosmetic marks, recall in responses.
   - v0.3 folds in [dossier 10](../craft/d10-change-theme-payoff.md) (character change, theme and payoff): premises and costs, NPC turns, typed plants and traces, and NPC attribution lines ([D-22](../decisions.md)).
@@ -450,6 +451,10 @@ interface Beat {
   failure?: Array<{ when: Pred; warnFirst?: Pred; leadsTo: BeatKey }>;       // checked in order
   leaves?: EffectDecl[];               // added to the fragment's own
   role?: 'texture' | 'legwork' | 'second-approach';   // what a short form may drop (§2.13)
+  unresolved?: 'instability' | 'tension';             // gigs and arcs: what this beat leaves open (L-70)
+  breaks?: PatternRef;                 // a twist names the expectation it breaks (§2.8)
+  hook?: { anchor: ExposurePattern[]; question: string; payoff: BeatKey };   // introduce beats of mystery-shaped seeds
+  mustReach?: boolean;                 // V needs this to take an option (L-63)
   reoffer?: { when: Pred; max: number };              // offer beats: may be offered again (§7.4)
 }
 
@@ -475,6 +480,14 @@ interface Promise {
 - **One sense of "beat".** A beat is a node in a seed's graph. Every beat that isn't `texture` leaves at least one fact, from its fragment or its own `leaves` (L-30): that recorded change is what makes it a beat. An action and its reaction, sometimes called a beat elsewhere, is a fragment of level `exchange`.
 - **Reconvergence** is explicit: a beat with several incoming links joins them by `join`. A variant is a condition (`on` or `needs`) on one graph, never a copy of it.
 - **Live paths are bounded.** At most `maxLive` beats of one seed are `available` or `running` at once **[tunable 4]**. The lint checks the static bound (L-04).
+- **What must reach V.** A beat, sign or fragment marked `mustReach` carries information V needs in order to take an option, or the first sign of a clock. It needs at least one route through a persistent channel that can reach `confirmed`, or at least two sign kinds on different channels. A route made only of transient or overheard channels is an error (L-63). The cheapest channels are also the least noticed, so this is where it matters ([dossier 13](../craft/d13-perception-curiosity.md)).
+- **Hooks and twists.** An `introduce` beat of a mystery-shaped seed carries a `hook`:
+  - an **anchor** in what V has been shown;
+  - a **question** that can be written in exposed terms;
+  - its **payoff** beat.
+
+  A twist beat names the expectation it `breaks`. The lint warns about a hook with no anchor, or a question that can't be written over exposed terms (L-67), and about more than one surprise beat per gig **[tunable]** (L-68).
+- **What is unresolved.** Each beat in a gig or arc declares whether it leaves an `instability` or a `tension` open (L-70, a warning).
 - **Failure forms.** A `failure` caused by distance, time or neglect MUST have `warnFirst` (L-07), and every failure leads to a beat (`leadsTo`).
 - **Promises.** A promise is **open** when its `opens` beat is done and `paidBy` is not `yes`. A seed can't succeed (T12) while a promise without `mayStayOpen` is open. Forced closures retire open promises (§6.4). The lint flags promises no beat can pay (L-08).
 
@@ -614,7 +627,15 @@ interface TimingRequest {
 - **`news`** is a settled outcome (§6.4). News requests are released only at a joint (§8.3).
 - **`recap`** is the return view (§8.7).
 - **`notice`** is a one-time plain notice: a foreign save or a compatibility change (§12.2).
-- **`AttentionAspect`** is S5's vocabulary.
+- **`AttentionAspect`** is S5's vocabulary. It includes `speaking`, `reading`, `driving` and `aiming`.
+- **Modality.** Each channel in S4's registry declares its modality:
+  - visual-spatial (a world trace, a pin);
+  - visual-verbal (a toast, a message);
+  - auditory-verbal (a bark, a call);
+  - auditory non-verbal (a sound cue).
+
+  The default `tolerates` for a request comes from dossier 13's table of noticing by activity and modality: a voiced line competes with a conversation, a world trace with driving. An author may override it.
+- **Text budgets.** Each channel has a maximum word count **[tunable: banner 12, toast preview 15]**. A pulled thread's first line carries the premise (L-69, a warning).
 
 A beat's request takes the seed's `timing`; its class and channel come from the fragment's channel ladder (§8.1).
 
@@ -721,7 +742,9 @@ interface Clock {
 ```
 
 - **A clock's value** is the sum of `fills` over the consumed events matching its ticks, capped at `segments`. It is derived: nothing ticks it, and a reload recomputes it.
-- **Signs.** When the value first reaches segment `i`, the sign for `i` becomes a delivery with the stable id `H("sign", seedId, clockKey, i)`, released through the arbiter (§8). Its delivery state is persisted (§12.1), so it is delivered once.
+- **Signs.** When the value first reaches segment `i`, the sign for `i` becomes a delivery with the stable id `H("sign", seedId, clockKey, i)`, released through the arbiter (§8). Its delivery state is persisted (§12.1).
+  - **The id is minted once.** But a sign that reaches only `ambient` MAY be re-issued at another placement until it is `presented`, up to `reissue` times **[tunable 2]**. Re-issues count within the plant cap (§2.15).
+  - **Variety.** A clock's signs include at least two kinds, such as a world trace and a media item.
 - **Full.** When the clock is full, `onFull` becomes available, once.
 - **Windows MAY read a clock** through the `clock` atom. That is how a window is "relative to a segment".
 - **A clock needs a perceivable source:** at least one sign, and at least one tick event kind that can be exposed (L-36).
@@ -751,7 +774,8 @@ A **trace** is a glance delivery that shows a cause in the world: a scorch mark,
   1. **`found`**: a recorded fact or consumed event;
   2. **`surfaced`**: an event that exists in the record but wasn't yet shown;
   3. **`constructed`**: a cause S3 contributes, only when nothing is found and `latitude` allows `trace-cause`.
-- **A constructed cause is a contribution.** It goes through ordinary arbitration, so it can't contradict pinned history.
+- **A constructed cause is a contribution.** It goes through ordinary arbitration, so it can't contradict pinned history. Before it commits, it is also checked against `confirmed` exposure and V's recorded acts. It is refused if it would contradict anything V has seen or done. The `display` entry records `shownBeforeEffect`: whether the trace was shown before the event it explains.
+- **Counter-cues.** A media or rumour fragment that distorts what happened (`divergence` above 0) declares a `counter`: a fragment about the same event in another channel, or an `ask` handle (L-65). A divergent claim may be repeated independently at most `maxRepeatsBeforeCounter` times **[tunable 3]** before its counter is offered. A correction fragment carries `because`: the replacement cause (L-66).
 - **Displaying it fixes the past.** When a trace with a `constructed` cause is displayed, layer 2 commits every field of the cause with `committed` pins, as for consumed events (§2.14). After V has seen it, it can't change on a reload or a re-resolution.
 - **Traces are borne by the world, not stated.** A plant is a situation V can find. A line that explains the cause adds no surprise and costs coherence ([dossier 10](../craft/d10-change-theme-payoff.md)).
 - **Plants are class 0.** They cost no push, but S3 caps them: about three live plants per attended thread, and one foreground plant per scene.
@@ -1143,7 +1167,7 @@ A directly named fragment that isn't eligible makes the beat wait.
 
 **While a beat is running,** at each re-evaluation, in this order:
 1. **`failure` entries,** in order.
-   - An entry with `warnFirst` fires only after its warning was delivered and exposed. Its warning is delivered once, when `warnFirst` is first yes.
+   - An entry with `warnFirst` fires only after its warning was `confirmed`, or `presented` twice on different channels (§10.2). Its warning is delivered when `warnFirst` is first yes, and re-delivered on another channel only as §8.5 allows.
    - The first entry whose `when` is yes fails the beat. Its `leadsTo` beat's links are then checked normally.
 2. **`objective.fails`:** if yes, the beat `failed`. A `failed` beat with no `failure` entry leads nowhere.
 3. **`objective.warns`:** if yes for the first time, its warning is delivered once.
@@ -1315,13 +1339,32 @@ The delivery goes back to the seed, not to V.
 ### 8.5 Display and exposure
 
 Release is not exposure.
-- **`displayed`.** A released delivery becomes `displayed` only when S5 confirms the player saw it: the message opened, the call answered, the bark played within earshot.
-- **The offer event.** Only then is an offer's `offer` event minted, with V as witness. This makes it canon and exposed (§10.2). It carries:
+
+**Exposure has three grades** ([dossier 13](../craft/d13-perception-curiosity.md#52-what-counts-as-displayed-channel-by-channel)):
+
+| Grade | Meaning |
+|---|---|
+| `ambient` | It was there, but nothing shows V could have taken it in |
+| `presented` | It was shown properly: uncovered, long enough to read or hear, with V able to look |
+| `confirmed` | V engaged with it: opened, answered, replied, turned to it, tracked it, or acted on it |
+
+**The display contract.** For each released delivery, S5 reports `DisplayReport { delivery, channel, grade, atPlay }`. It uses dossier 13's tests for each channel, held as a **data table** so P9 can recalibrate them without a code change. A channel S5 can't test reports `ambient` unless some input proves more. A delivery's grade is the highest it has reached. Raw values (distance, angle, speed, dwell) stay in the port and are never persisted.
+
+**`displayed`** (§8.1) means:
+- `confirmed`, for an offer;
+- `presented` or better, for a sign, projection, warning or closing delivery.
+
+- **The offer event.** Only once an offer is displayed is its `offer` event minted, with V as witness. This makes it canon and exposed (§10.2). It carries:
   - the delivery's skeleton `features` (verb, stake, relationship, outcome, tone, channel);
   - `class`, `purpose`, `pull`, `authored` and `deliveryId`.
 
   The `response` event carries its kind and the play seconds since display. The director's model is folded from these canon events alone (§8.8), so it doesn't depend on the capped seed record.
-- **Never displayed.** A released delivery that is never confirmed within `displayTimeout` play seconds **[tunable 120]** counts as missed (§7.4).
+- **Never displayed.** How long a delivery has depends on its channel:
+  - **Transient channels** (a toast, a bark, a trace in passing) are decided within the item's own life. One that earns only `ambient` is released again **once**, on a different channel, with `attempt` + 1. After that it counts as missed (§7.4).
+  - **Persistent channels** (a message thread, a journal line, a shard, a pin) wait `displayTimeoutPersistent` play seconds **[tunable 600]**.
+
+  An offer that lapses having been only `presented` counts as missed, not declined.
+- **The cue.** The display record keeps `cue { place, speaker, object }`: the ids present when the delivery was shown. Callbacks use it to re-cue memory (§10.2).
 
 Delivery state (`released`, `displayed`, `answered`) is persisted in the seed's state (§12.1). After a load:
 - **Displayed, unanswered offers** stay answerable with the same `Id`. The game port re-presents them where the channel keeps them, such as a message thread. It never re-presents them as new.
@@ -1484,21 +1527,39 @@ The record is capped at `recordMax` entries **[tunable 512]**. Past the cap, the
 
 ### 10.2 The exposure ledger
 
-The exposure ledger answers "was V shown this?". It is derived, not stored. It holds:
-- every canon event with V among its witnesses: displayed offers, responses, and events V observed;
-- every delivery in state `displayed`.
+The exposure ledger answers "was V shown this, and how surely?". It is derived, not stored. Each entry has a grade (§8.5):
+
+| Source | Grade |
+|---|---|
+| V's own acts, and events V took part in | `confirmed` |
+| Events V observed under the kernel's witness rule | `presented`, unless S5 reports higher |
+| Deliveries | Their highest reported grade |
 
 ```ts
-type ExposurePattern = { event?: EventPattern; fragment?: FragmentId; seed?: TemplateId | Id; delivery?: Id; since?: Duration };
+type ExposureGrade = 'ambient' | 'presented' | 'confirmed';
+type ExposurePattern = { event?: EventPattern; fragment?: FragmentId; seed?: TemplateId | Id; delivery?: Id; since?: Duration;
+                         atLeast?: ExposureGrade };   // default confirmed
 ```
 
-`exposed(pattern)` is yes if any entry matches, and no otherwise. After a load, the ledger is rebuilt from the kernel's canon events and the instances' delivery states.
+`exposed(pattern)` is yes if any entry matches at `atLeast` or above, and no otherwise. After a load, the ledger is rebuilt from the kernel's canon events and the instances' delivery states.
 
 **Uses:**
-- a lapse counts as declined only if the offer was exposed (§7.4);
+- a lapse counts as declined only if the offer was `confirmed` (§7.4);
 - a hard step MAY require its portent to be exposed first, through `needs: { exposed: … }`;
-- a warned failure fires only after its warning is exposed (§7.3);
+- a warned failure fires only after its warning is `confirmed`, or after two `presented` warnings on different channels (§7.3);
 - a callback may cite only exposed events (L-24).
+
+**Callbacks:**
+
+```ts
+interface Callback { cites: ExposurePattern; atLeast: ExposureGrade; recue?: ContentRef }
+```
+
+- **`confirmed`** (the default) lets a line state the event as shared knowledge.
+- **`presented`** allows only a **hedged** form from the S4 lexicon ("you may have seen…").
+- **`ambient`** grounds nothing. A callback or irony beat that cites a lower grade than it declares, or a soft form without its hedge, is an error (L-62).
+- **Re-cueing.** Memory is cue-driven, so a callback whose cited event is older than `recueAfter` play seconds **[tunable 600]**, or from an earlier session, fills its `recue` slot from the event's display cue: the place, speaker or object that was present. A callback without one is warned (L-64).
+- **Channels.** A line may name the channel ("the message I sent you") only for `confirmed` entries.
 
 ## 11. Lint and the fit report
 
@@ -1567,6 +1628,15 @@ The lint runs at compile time (§3.1), and on demand from authoring tools (S4, P
 | L-59 | A model-derived rate, percentage, score or badge on an offer or in fiction; or a timing purpose, category or `onExpire` keyed to return, retention, streaks or quitting | error |
 | L-60 | An attribution line whose belief isn't `observed` or `told`, or whose correcting reply writes no observed telling | error |
 | L-61 | A `setting` atom reading a model setting (`noticing`, exclusions, reset floor) | error |
+| L-62 | A callback or irony beat citing a lower exposure grade than it declares, or a `presented` callback without its hedge | error |
+| L-63 | A `mustReach` element whose routes are all transient or overheard | error |
+| L-64 | A callback with no `recue` slot whose cited event is older than `recueAfter` | warning |
+| L-65 | A divergent media or rumour fragment with no `counter` | error |
+| L-66 | A correction fragment with no `because` | error |
+| L-67 | A hook with no anchor, or a question that can't be written over exposed terms | warning |
+| L-68 | More than one surprise beat per gig | warning |
+| L-69 | Text over its channel's word budget, or a pulled thread whose first line doesn't carry the premise | warning |
+| L-70 | A beat in a gig or arc that declares neither `instability` nor `tension` | warning |
 | L-33 (extended) | A `turns[].what` reading anything of V's but beliefs held about V and V's recorded acts | error |
 
 L-25 and L-40 were removed in v0.2 (§16). Their numbers are not reused.
@@ -1758,6 +1828,14 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 | SF-35 | **Forbidden hook inputs.** Perturb session length, idle time, quit and save counts | Byte-identical hook outputs and records |
 | SF-36 | **Correction.** An attribution line plays; V uses the correcting reply | The NPC's belief about V revises through an observed telling; the line no longer applies |
 | SF-37 | **Model off.** `noticing: off` | `fitWeight` 0 and built-in scores: records byte-identical to a run with the director off, from the same state |
+| SF-38 | **Grade progression.** A message offer is released, opened, then answered | Its grade goes from `presented` to `confirmed`; the `offer` event is minted only at `confirmed` |
+| SF-39 | **Ambient callback.** A callback citing an event V saw only at `ambient` | L-62 error |
+| SF-40 | **Soft callback.** A callback with `atLeast: presented` | It uses the hedged form |
+| SF-41 | **Transient retry.** A toast that earns only `ambient` | Released once more, on another channel, with `attempt` + 1; then missed |
+| SF-42 | **`mustReach`.** A `mustReach` beat whose only route is an overheard bark | L-63 error |
+| SF-43 | **Re-cue.** A callback citing an event from an earlier session | Its `recue` slot is filled from the event's display cue |
+| SF-44 | **Late cause refused.** A constructed cause that would contradict a `confirmed` event | Refused; the trace waits or is skipped |
+| SF-45 | **Sign re-issue.** A sign that stays `ambient` | Re-issued at most `reissue` times, within the plant cap |
 | SF-26 | **Constructed trace.** A trace with no found cause, `latitude` allowing `trace-cause`. S3's stub contributes a cause: an event at a stall. The trace is displayed; save; load | The `display` entry records `constructed`. The cause's fields are pinned `committed` at display, and resolve identically after the load |
 
 ## 15. Compromises and open items
@@ -1776,11 +1854,12 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 4. **Vocabularies.** S4 fixes the closed vocabularies, the honesty lexicon and the forbidden-mechanics list.
 5. **Hooks.** S3 defines the fitting, form, phase, scoring and joint hooks used in §2.13, §3.4 and §8.3.
 6. **The arbiter's split.** P7 decides how much of the gate logic runs in the game-side plugin, from the event feed's latency.
-7. **Display confirmations.** S5 says, for each channel, what counts as `displayed`.
+7. **Display confirmations.** Settled: three grades, and dossier 13's per-channel tests as a calibratable table (§8.5). S5 implements the tests; P9 calibrates them.
 8. **Profiles.** Appendices for gig, job and heist, con, four-beat, front, testing arc and slide.
 9. **Dossier 10.** v0.3 adopts all 23 of its S2 requirements. Its P5 list goes to S3: the change engine, premise audits, the plant planner, and canon-character limits (S10-P5-23).
 10. **Dossier 11.** v0.4 adopts its S2 requirements except a reserved draw-key salt, which nothing needs yet. Its kernel requirements are in S0 v4.1 (§20 there). Its P5 list goes to S3. Its testing agenda (T11-01 to T11-21) feeds P9 and the first in-game session card.
 11. **Dossier 12.** v0.5 adopts all 14 of its S2 requirements (§8.8). Its P5 list (22 requirements: the model as a fold over canon offers, the eight replay checks, the noticed page) goes to S3.
+12. **Dossier 13.** v0.6 adopts all 15 of its S2 requirements. Its P5 list goes to S3; its P9 list (19 metrics) goes to P9. Its persistence rule stands: layer 2 keeps grades, channels, classes, cue ids, `playTotal` and `shownBeforeEffect`, and never raw test values, gaze, camera, speed, dwell or idle data.
 
 ## 16. Review record
 

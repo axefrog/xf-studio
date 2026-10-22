@@ -1444,9 +1444,9 @@ Gregory Berns, Jonathan Chappelow, Milos Cekic, Caroline Zink, Giuseppe Pagnoni 
 
 Dean Mobbs and colleagues, [“When Fear Is Near: Threat Imminence Elicits Prefrontal-Periaqueductal Gray Shifts in Humans”](https://pmc.ncbi.nlm.nih.gov/articles/PMC2648508) (*Science*, 2007). Responses change as a threat gets closer, tracking dread. It informed how we think about a threat's approach.
 
-### Loewenstein (1987)
+### Loewenstein (1987, 1994)
 
-George Loewenstein, [“Anticipation and the Valuation of Delayed Consumption”](https://ideas.repec.org/a/ecj/econjl/v97y1987i387p666-84.html) (*Economic Journal*, 1987). People savour good outcomes and want bad ones over with. It informed how we think about waiting for good and bad news.
+George Loewenstein, [“Anticipation and the Valuation of Delayed Consumption”](https://ideas.repec.org/a/ecj/econjl/v97y1987i387p666-84.html) (*Economic Journal*, 1987). People savour good outcomes and want bad ones over with. It informed how we think about waiting for good and bad news. His [“The psychology of curiosity: A review and reinterpretation”](https://stafforini.com/works/loewenstein-1994-psychology-curiosity-review/) (*Psychological Bulletin*, 1994) describes curiosity as the felt lack that comes from noticing a gap in what one knows. It informed how we think about teasing a player without giving the answer away.
 
 ### Ely, Frankel and Kamenica (2015)
 
@@ -1715,6 +1715,54 @@ Andrew Weaver and Nicky Lewis, [“Mirrored morality: An exploration of moral ch
 ### Tarulli and Caplinger (2013)
 
 Laurel Tarulli and Victoria Caplinger, [“In the Eye of the Beholder: Readers' Advisory from a Cataloging Perspective”](https://journals.ala.org/index.php/rusq/article/view/2892/2959) (*RUSQ*, 2013). It describes how libraries match readers to books by appeal factors and by Nancy Pearl's four doorways (story, character, setting, language), not by category. It informed matching offers on their features, not on genre.
+
+### Conway, Cowan and Bunting (2001)
+
+Andrew Conway, Nelson Cowan and Michael Bunting, [“The cocktail party phenomenon revisited: The importance of working memory capacity”](https://memory.psych.missouri.edu/assets/doc/articles/2001/conway-et-al-pbr-2001.pdf) (*Psychonomic Bulletin & Review*, 2001). About a third of listeners notice their own name in a message they were told to ignore, and they are more often the ones with less working-memory capacity. It informed how reliably a player will notice something aimed at them while attending to something else.
+
+### Kidd, Piantadosi and Aslin (2012)
+
+Celeste Kidd, Steven Piantadosi and Richard Aslin, [“The Goldilocks Effect: Human Infants Allocate Attention to Visual Sequences That Are Neither Too Simple Nor Too Complex”](https://pmc.ncbi.nlm.nih.gov/articles/PMC3359326) (*PLoS ONE*, 2012). Infants looked away least from events of middling complexity, and most from the very predictable and the very surprising. The effect was small and its link to learning was not tested. It informed how we think about pitching a new cue between boring and baffling.
+
+### Strayer, Drews and Johnston (2003)
+
+David Strayer, Frank Drews and William Johnston, [“Cell phone-induced failures of visual attention during simulated driving”](https://pubmed.ncbi.nlm.nih.gov/12710835/) (*Journal of Experimental Psychology: Applied*, 2003). A phone conversation slowed drivers' reactions to a braking car and weakened their memory for roadside signs. It informed why a player who is busy may not take in something in plain view.
+
+### Drew, Võ and Wolfe (2013)
+
+Trafton Drew, Melissa Võ and Jeremy Wolfe, [“The invisible gorilla strikes again: Sustained inattentional blindness in expert observers”](https://pmc.ncbi.nlm.nih.gov/articles/PMC3964612/) (*Psychological Science*, 2013). Twenty of 24 radiologists missed a gorilla added to a lung scan, and eye tracking showed that most of those who missed it had looked straight at it. It informed why we do not treat "on screen" as "seen".
+
+### Alaybek and colleagues (2022)
+
+Balca Alaybek, Reeshad Dalal and six co-authors, [“All's well that ends (and peaks) well? A meta-analysis of the peak-end rule and duration neglect”](https://ideas.repec.org/a/eee/jobhdp/v170y2022ics0749597822000334.html) (*Organizational Behavior and Human Decision Processes*, 2022). Looking back, people rate an experience by its most intense moment and its end, and its length counts for almost nothing. It informed how we weigh a session's high point and ending over its running time.
+
+### Brysbaert (2019)
+
+Marc Brysbaert, [“How many words do we read per minute? A review and meta-analysis of reading rate”](https://doi.org/10.1016/j.jml.2019.104047) (*Journal of Memory and Language*, 2019). Adults read about 238 words a minute for silent non-fiction and 260 for fiction, lower than the 300 often quoted. It informed how much text we budget for a player to read.
+
+### Rankin and colleagues (2009)
+
+Catharine Rankin and thirteen co-authors, [“Habituation revisited: An updated and revised description of the behavioral characteristics of habituation”](https://pmc.ncbi.nlm.nih.gov/articles/PMC2754195/) (*Neurobiology of Learning and Memory*, 2009). A fading response is specific to the repeated stimulus, returns after a rest, can be restored by a different stimulus, and fades faster the next time. It informed how we think about a cue that loses its force with repetition.
+
+### Cepeda and colleagues (2006, 2008)
+
+Nicholas Cepeda, Harold Pashler, Edward Vul, John Wixted and Doug Rohrer, [“Distributed practice in verbal recall tasks: A review and quantitative synthesis”](https://pubmed.ncbi.nlm.nih.gov/16719566/) (*Psychological Bulletin*, 2006), and Cepeda, Vul, Rohrer, Wixted and Pashler, [“Spacing Effects in Learning: A Temporal Ridgeline of Optimal Retention”](https://www.evullab.org/pdf/CepedaVulRohrerWixtedPashler-PS-2008.pdf) (*Psychological Science*, 2008). The best gap between two exposures grows with the delay before the test. It informed why we space the hints of a coming payoff rather than bunching them.
+
+### Fazio, Brashier, Payne and Marsh (2015)
+
+Lisa Fazio, Nadia Brashier, B. Keith Payne and Elizabeth Marsh, [“Knowledge does not protect against illusory truth”](https://scholars.duke.edu/publication/1090926) (*Journal of Experimental Psychology: General*, 2015). Repeated statements are judged truer, even by people who know better. It informed how repetition can make a false claim in a story feel believed.
+
+### Lewandowsky and colleagues (2012)
+
+Stephan Lewandowsky, Ullrich Ecker, Colleen Seifert, Norbert Schwarz and John Cook, [“Misinformation and its correction: Continued influence and successful debiasing”](https://research.monash.edu/en/publications/misinformation-and-its-correction-continued-influence-and-success/) (*Psychological Science in the Public Interest*, 2012). A correction rarely removes a claim someone has believed, and works better when it offers a replacement account. It informed how we handle a character's mistaken belief once the truth comes out.
+
+### Leavitt and Christenfeld (2011)
+
+Jonathan Leavitt and Nicholas Christenfeld, [“Story spoilers don't spoil stories”](https://www.psychologicalscience.org/news/releases/spoiler-alert-stories-are-not-spoiled-byspoilers.html) (*Psychological Science*, 2011). In short stories, readers preferred versions with a spoiler paragraph in front. Later studies found the opposite or no effect, so we treat it as weak evidence. It informed how far announcing a threat can weaken its pull.
+
+### Sperber and colleagues (2010)
+
+Dan Sperber, Fabrice Clément, Christophe Heintz, Olivier Mascaro, Hugo Mercier, Gloria Origgi and Deirdre Wilson, [“Epistemic vigilance”](https://research.ceu.edu/en/publications/epistemic-vigilance/) (*Mind & Language*, 2010). People are on guard against being misinformed and weigh a source by cues to its competence and good faith. It informed why a visible track record makes a source more believable.
 
 ## Reference imagery
 
