@@ -1035,7 +1035,7 @@ Packs are free fan content, built on the publisher's modding terms ([dossier 19]
   - a **splice**: an ordered list of cuts `{ line: GameRef; from: number; to: number }` from existing recordings, joined;
   - a pack asset id.
 
-  **The floor is cloning, not editing.** A synthetic voice that imitates a real person, the game's cast included, is barred unless that person consented, and the consent is recorded (L-115). Cutting and splicing the actors' own recordings is allowed. Pack recordings and synthetic voices carry the consent and provenance records S4 defines.
+  **The floor is cloning, not editing.** A synthetic voice that imitates a real person, the game's cast included, is barred unless that person consented, and the consent is recorded (L-115). Cutting and splicing the actors' own recordings is allowed. **Why the line falls here:** cloning a real voice with a service such as ElevenLabs threatens the actor's livelihood. Splicing repurposes work the actor was already paid for, in free fan content. Pack recordings and synthetic voices carry the consent and provenance records S4 defines.
 
   **The plan for voice:**
   - new characters may be voiced, with pack recordings or synthetic voices that aren't clones of a real person;
