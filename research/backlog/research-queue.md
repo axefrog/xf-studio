@@ -36,7 +36,15 @@ A quick lookup inside your own scope doesn't need to come here. Anything bigger 
    3. the standing tracks;
    4. exploratory questions.
 
-   Pace follows the usage mode on the board, and the work queue's rule that R&D runs only while the polish lane is moving.
+   **The queue is also the throttle.** Requests trickle in one at a time, not all in parallel. How many run at once follows the usage mode on the board:
+
+   | Mode | Research agents at once |
+   |---|---|
+   | Normal | up to 2 |
+   | Economical | 1, started only when nothing heavy is running elsewhere |
+   | Crawl | none, except a request that blocks work in flight |
+
+   The work queue's rule that R&D runs only while the polish lane is moving still applies. Large requests are split into batches, and each batch's results are delivered before the next one starts, so later batches can be trimmed or dropped.
 3. **Runs it from the requester's brief** with a research agent. That's read-only, or a documentation worktree when the result is a page. If the question needs the asking chat's own context, it goes back to that chat. Questions only the running game can answer are batched onto the owning chat's next session card.
 4. **Delivers:**
    - the knowledge page is updated (cited and evidence-graded), with credits for any source;
