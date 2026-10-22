@@ -34,7 +34,7 @@ Disciplines are discovered through separate framings. Each runs in its own agent
 | L4 **Components** | What is a story made of? | Character, place, conflict, stakes, information, time, tone, theme, structure; each points at fields |
 | L5 **Scale** | What is specific to each size, from a glance to a campaign? | Street theatre and flash encounters; the short story; the episode; the serial; the novel; the long campaign |
 | L6 **Setting** | What does cyberpunk, and Night City in particular, demand? | The genre's literature and themes; the source tabletop game's GM advice, random tables and news-hook "screamsheets"; the run structure of Shadowrun (job, legwork, run, double-cross), which is the gig's archetype |
-| L7 **Systems** | What models of the world give causes their shape? | Social simulation; agent-based modelling; criminology (routine activity theory: crime happens where a motivated offender, a suitable target and no capable guardian meet); rumour and information spread; social networks; urban sociology; informal economies |
+| L7 **Systems** | What models of the world give causes their shape? | Social simulation; agent-based modelling; criminology (routine activity theory: crime happens where a motivated offender, a suitable target and no capable guardian meet); rumour and information spread; social networks; urban sociology; informal economies; field representations and applied category theory for knowledge (ologs, sheaves) |
 | L8 **Computational narrative** | What has research built? | Narrative planning; story sifting; drama management; storylets and quality-based narrative; story grammars; plot units; computational models of suspense; structural analyses of game quests (Doran and Parberry's study of NPC motivations in MMORPG quests) |
 | L9 **Production** | How do studios actually make quests? | Quest design talks and post-mortems (CD PROJEKT RED, Bethesda, Obsidian, Larian); writer–designer pipelines; quest pattern catalogues; QA of branching content |
 | L10 **Ethics and representation** | What could do harm or alienate? | Stereotypes, violence, sexual content, consent, real-world sensitivities, the rating, cruelty that emerges procedurally |
@@ -101,7 +101,7 @@ A claim that is contested between sources is marked **contested**, with both sid
 
 ## 5. The composite
 
-**Form.** One typed graph, stored as plain data in `composite/` with stable IDs, plus a readable page that explains it. A small script renders views once it grows past what a page can hold.
+**Form.** One typed graph, stored as plain data in `composite/` with stable IDs, plus a readable page that explains it. Ologs ([DS-51](design-seeds.md)) are a candidate formalism for it. A small script renders views once it grows past what a page can hold.
 
 **Node types:**
 - **Principles** from the dossiers;
