@@ -12,7 +12,8 @@
  * Results land in `window.probe` as plain data.
  */
 import * as THREE from "three";
-import { createSceneHost } from "../src/platform/scene/scene-host";
+import { createSceneRuntime } from "../src/platform/scene/scene-host";
+import { createRendererDevice } from "../src/platform/scene/renderer-device";
 import type { LoadedCoreDetail } from "../src/character/render/core-detail-loader";
 import type { MotionLoader } from "../src/platform/scene/head-rig";
 import { GlbWriter } from "../src/formats/glb";
@@ -116,7 +117,9 @@ try {
   element.style.cssText = "width:120px;height:160px";
   document.body.append(element);
   const loadMotion: MotionLoader = async () => ({ idle: undefined, idleError: "No idle in the probe.", blink: undefined, blinkError: "No blink in the probe." });
-  const host = await createSceneHost(element, { renderers: [], loadCore: async () => syntheticCore(), loadMotion, loadLut: async () => ({ lut: null, source: null as never }) });
+  const device = createRendererDevice(element);
+  const host = await createSceneRuntime(device, { renderers: [], loadCore: async () => syntheticCore(), loadMotion, loadLut: async () => ({ lut: null, source: null as never }) });
+  device.show(host.slot);
   const gl = host.renderer.getContext();
   const info = gl.getExtension("WEBGL_debug_renderer_info");
   probe.renderer = info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : "unknown";
@@ -206,6 +209,7 @@ try {
   await show(null);
   probe.memory.none = memory();
   host.dispose();
+  device.dispose();
   probe.ok = probe.errors.length === 0;
 } catch (error) {
   probe.failure = (error as Error).stack ?? String(error);

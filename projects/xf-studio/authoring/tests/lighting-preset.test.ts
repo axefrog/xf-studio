@@ -166,7 +166,7 @@ test("the Three stage shows a setup's lights, room, backdrop and display, and th
   scene.background = background;
   const renders: string[] = [];
   const renderer = { render: (_s: THREE.Scene, c: THREE.Camera) => renders.push(c.type), setRenderTarget: () => {}, getRenderTarget: () => null,
-    getDrawingBufferSize: (v: THREE.Vector2) => v.set(8, 8), toneMappingExposure: 1 } as unknown as THREE.WebGLRenderer;
+    getDrawingBufferSize: (v: THREE.Vector2) => v.set(8, 8), toneMappingExposure: 1, setClearColor: () => {} } as unknown as THREE.WebGLRenderer;
   let loads = 0, resolveLut!: () => void;
   const stage = createLightingSetupStage({ scene, renderer, createEnvironment: room("pmrem", texture),
     loadLut: () => { loads++; return new Promise(resolve => { resolveLut = () => resolve({ lut: null, source: { kind: "neutral", depotPath: null, archive: null,
@@ -174,7 +174,9 @@ test("the Three stage shows a setup's lights, room, backdrop and display, and th
   const lights = () => stage.rig.group.children.filter(child => (child as THREE.Light).isLight) as (THREE.DirectionalLight | THREE.SpotLight)[];
   // Soft studio by default: key, fill and rim, the room, the stage backdrop, ACES at 1.2.
   expect(lights().map(light => light.name)).toEqual(["xfs-light-key", "xfs-light-fill", "xfs-light-rim"]);
-  expect([scene.environment, scene.background, scene.environmentIntensity, renderer.toneMappingExposure]).toEqual([texture, background, 1, 1.2]);
+  // The exposure is the stage's own renderer state, put on the (possibly shared) renderer only when it draws (renderer-state.ts).
+  expect([scene.environment, scene.background, scene.environmentIntensity, stage.rendererState().toneMappingExposure]).toEqual([texture, background, 1, 1.2]);
+  expect(renderer.toneMappingExposure).toBe(1);
   expect(stage.status().preset).toBe("studio");
   let changes = 0; stage.subscribe(() => changes++);
   stage.setSource(GAME);
@@ -299,7 +301,7 @@ test("without a renderable half-float buffer the creator preset renders into an 
 
 test("the creator preset re-asks the host on activation and swaps the grade only when the host's cube changed (PREV-40)", async () => {
   const scene = new THREE.Scene();
-  const renderer = { render: () => {}, setRenderTarget: () => {}, getRenderTarget: () => null,
+  const renderer = { render: () => {}, setRenderTarget: () => {}, setClearColor: () => {}, getRenderTarget: () => null,
     getDrawingBufferSize: (v: THREE.Vector2) => v.set(8, 8) } as unknown as THREE.WebGLRenderer;
   const source = (kind: "neutral" | "installed", note: string) => ({ kind, depotPath: null, archive: kind === "installed" ? "lut-a.archive" : null, group: null,
     provider: null, alternatives: [], rule: null, size: null, note, skipped: [] });
@@ -334,7 +336,7 @@ test("the creator preset re-asks the host on activation and swaps the grade only
 
 test("a changed cube with the same source description still notifies, so the viewport draws the new grade (PREV-48)", async () => {
   const scene = new THREE.Scene();
-  const renderer = { render: () => {}, setRenderTarget: () => {}, getRenderTarget: () => null,
+  const renderer = { render: () => {}, setRenderTarget: () => {}, setClearColor: () => {}, getRenderTarget: () => null,
     getDrawingBufferSize: (v: THREE.Vector2) => v.set(8, 8) } as unknown as THREE.WebGLRenderer;
   const source = { kind: "installed" as const, depotPath: null, archive: "lut-a.archive", group: null, provider: null, alternatives: [], rule: null,
     size: null, note: "Colour grading: your LUT mod.", skipped: [] };
@@ -382,14 +384,16 @@ test("shadow maps survive a quality notice that keeps their size, and are drawn 
   const caster = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());
   caster.castShadow = true; scene.add(caster);
   const shadowMap = { enabled: false, type: 0, autoUpdate: true, needsUpdate: false };
-  const renderer = { render: () => {}, setRenderTarget: () => {}, getRenderTarget: () => null, shadowMap,
+  const renderer = { render: () => {}, setRenderTarget: () => {}, setClearColor: () => {}, getRenderTarget: () => null, shadowMap,
     getDrawingBufferSize: (v: THREE.Vector2) => v.set(8, 8) } as unknown as THREE.WebGLRenderer;
   let restored = 0;
   const stage = createLightingSetupStage({ scene, renderer, loadLut: () => new Promise(() => {}),
     createEnvironment: (r, s) => ({ ...room()(r, s), restore: () => { restored++; } }) });
-  expect([shadowMap.enabled, shadowMap.autoUpdate]).toEqual([true, false]);
+  // Nothing is set on the renderer until the stage draws: then its own shadow switches (renderer-state.ts).
+  expect([shadowMap.enabled, shadowMap.autoUpdate]).toEqual([false, true]);
   const camera = new THREE.PerspectiveCamera(), drawn = () => { const was = shadowMap.needsUpdate; shadowMap.needsUpdate = false; return was; };
   stage.render(camera);
+  expect([shadowMap.enabled, shadowMap.autoUpdate]).toEqual([true, false]);
   expect(drawn()).toBe(true);
   stage.setShadowQuality(1024);
   const key = stage.rig.objects[0]!, map = { dispose: () => { throw Error("disposed"); } } as unknown as THREE.WebGLRenderTarget;
@@ -438,7 +442,7 @@ test("contact-only creator lights keep hair out of their stand-in shadow maps; s
   // The low rear rims the game shadows only by the character contact march printed the hair behind the ear across the cheek, jaw and
   // neck through their stand-in maps.
   const scene = new THREE.Scene(), shadowMap = { enabled: false, type: 0, autoUpdate: true, needsUpdate: false };
-  const renderer = { render: () => {}, setRenderTarget: () => {}, getRenderTarget: () => null, shadowMap,
+  const renderer = { render: () => {}, setRenderTarget: () => {}, setClearColor: () => {}, getRenderTarget: () => null, shadowMap,
     getDrawingBufferSize: (v: THREE.Vector2) => v.set(8, 8) } as unknown as THREE.WebGLRenderer;
   const stage = createLightingSetupStage({ scene, renderer, loadLut: () => new Promise(() => {}), createEnvironment: room() });
   stage.setSource(GAME);

@@ -14,6 +14,7 @@ import type { ScatterQuality } from "../../platform/scene/skin-scatter-kernel";
 import { createStudioEnvironment, type StudioEnvironment } from "./studio-environment";
 import { DEFAULT_STUDIO_STAGE } from "../studio-lighting";
 import { resolveLightingSource, studioStageSetup, type LightingSetup, type LightingSource, type SetupLight } from "../lighting-setups";
+import { applyRendererState, SCENE_RENDERER_STATE, type RendererState } from "../../platform/scene/renderer-state";
 
 /** What the lighting device reports (read-only; the presentation turns it into plain text). `preset` is the shown setup's display. */
 export type LightingStageStatus = {
@@ -148,6 +149,10 @@ export type LightListRig = ReturnType<typeof createLightListRig>;
  * Every setup lights the V's skin with the game's screen-space scatter (platform/scene/skin-scatter.ts) whenever the display's target is
  * half float; the skin light's wrap stands in for it otherwise, and while it is switched off (a verification switch for A/B evidence).
  * Its kernel's sample count follows the preview quality (`scatterQualityFor`).
+ *
+ * The renderer may be shared with other scenes (the renderer device's, profiles phase 4a-ii), so the stage never leaves its own state on
+ * it: its exposure, shadow switches and the rest are its renderer-state record (platform/scene/renderer-state.ts), applied at the start
+ * of every draw and of every compile ahead, and the shadow maps' pending redraw is its own flag, set on every draw.
  */
 export function createLightingSetupStage(options: {
   scene: THREE.Scene;
@@ -167,11 +172,13 @@ export function createLightingSetupStage(options: {
   const contact = createContactShadows(renderer, contactShadowUniforms);
   let contactOn = true;
   scene.add(rig.group);
-  // Shadow maps render only for lights that cast; soft PCF with a per-light radius. They are drawn again only when what casts or
-  // lights them changed (`shadowState`), not for a camera move: a static V orbited keeps its maps.
+  // Shadow maps render only for lights that cast; soft PCF with a per-light radius (the record's shadow switches). They are drawn again
+  // only when what casts or lights them changed (`shadowState`), not for a camera move: a static V orbited keeps its maps.
   installShadowFilter();
   installLinearFalloff();
-  if (renderer.shadowMap) { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap; renderer.shadowMap.autoUpdate = false; }
+  /** This scene's renderer-global state, applied before it draws or compiles; `apply` keeps its studio exposure. */
+  const state: RendererState = { ...SCENE_RENDERER_STATE, shadowMap: { ...SCENE_RENDERER_STATE.shadowMap } };
+  const applyState = (shadowNeedsUpdate?: boolean) => applyRendererState(renderer, state, shadowNeedsUpdate);
   let shadowKey = "";
   let source: LightingSource = { kind: "setup", setup: studioStageSetup(DEFAULT_STUDIO_STAGE) };
   let sex: BodySex = "female";
@@ -221,7 +228,7 @@ export function createLightingSetupStage(options: {
     scene.environmentIntensity = shown.environment;
     for (const probe of environment.lights) { probe.visible = lit; (probe as THREE.LightProbe).intensity = shown.environment; }
     scene.background = shown.backdrop === "black" ? black : studioBackground;
-    if (game()) display.setExposure(shown.exposure); else renderer.toneMappingExposure = shown.exposure;
+    if (game()) display.setExposure(shown.exposure); else state.toneMappingExposure = shown.exposure;
     if (game() && !wasGame) requestLut();
     else if (!game() && wasGame) stopRecheck();
     if (announce || game() !== wasGame) notify();
@@ -260,15 +267,22 @@ export function createLightingSetupStage(options: {
     get shadowsEnabled() { return shadowsEnabled; },
     /** Camera state for a creator page, for the preview's camera port. */
     camera: (page: CreatorCameraPage) => creatorCamera(sex, page),
+    /** This scene's renderer-global state (a copy; evidence and tests). */
+    rendererState: (): RendererState => structuredClone(state),
+    /** Put this scene's renderer-global state on the renderer (a scene's draw opens with it; `render` and `prepare` apply it too). */
+    applyRendererState() { applyState(); },
     /** Draw one frame through the shown setup's display transform. */
     render(camera: THREE.Camera) {
       // Everything the V shows receives the lights' shadows (makeup and decals included, so they darken with the skin under them);
       // which meshes cast is the character renderer's choice (skin, body and clothing).
       if (shadowsEnabled && shown.lights.some(light => light.shadows)) scene.traverseVisible(object => { if ((object as THREE.Mesh).isMesh) object.receiveShadow = true; });
+      // The maps are this scene's lights': they are drawn again when this scene's fingerprint changed, whatever another scene left.
+      let redraw: boolean | undefined;
       if (renderer.shadowMap) {
         const key = shadowState(scene);
-        if (key !== shadowKey) { renderer.shadowMap.needsUpdate = true; shadowKey = key; }
+        redraw = key !== shadowKey; shadowKey = key;
       }
+      applyState(redraw);
       // Contact shadows' caster depth first: the forward skin, its scatter input and the plate all read it (PREV-148).
       if (contactOn) contact.prepare(scene, camera); else contact.off();
       // The scatter decides first, so the forward skin lights with the same irradiance it blurs (the wrap off while it runs).
@@ -288,6 +302,8 @@ export function createLightingSetupStage(options: {
       const pending: Promise<unknown>[] = [], materials = new Set<THREE.Material>();
       const meshes: THREE.Mesh[] = [];
       object.traverse(child => { if ((child as THREE.Mesh).isMesh) meshes.push(child as THREE.Mesh); });
+      // Compiled with this scene's state: Three keys a program on the tone mapping, output colour space and shadow switches.
+      applyState();
       const previous = renderer.getRenderTarget();
       /** Compile `mesh` as drawn with `material` (a pass's own material swapped in for the compile only). */
       const compileAs = (mesh: THREE.Mesh, material: THREE.Material) => {

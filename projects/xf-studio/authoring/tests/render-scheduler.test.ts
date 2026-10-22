@@ -192,8 +192,10 @@ test("the idle reports every change other than playback: enable, pause, seek, co
  *   above and the browser check.
  */
 /** The scene host (platform/scene/scene-host.ts) and its character renderer (platform/scene/character-renderer.ts), as source. */
-const sceneSource = (file: "scene-host" | "character-renderer") =>
+const sceneSource = (file: "scene-host" | "character-renderer" | "renderer-device") =>
   require("node:fs").readFileSync(require("node:path").resolve(import.meta.dir, "..", "src", "platform", "scene", `${file}.ts`), "utf8") as string;
+/** The renderer device (platform/scene/renderer-device.ts): the canvas, the context and the loop the shown runtime draws through. */
+const deviceSource = () => sceneSource("renderer-device");
 
 test("every scene method that changes what is drawn is wrapped to request a frame; readers are not", () => {
   const source = sceneSource("scene-host"), character = sceneSource("character-renderer");
@@ -222,7 +224,9 @@ test("every scene method that changes what is drawn is wrapped to request a fram
   expect(wrapped).toContain("setPiercings");
   // The frame loop is the scheduler's, not an always-on animation loop.
   expect(source).not.toContain("setAnimationLoop");
-  expect(source).toContain("bindRenderTriggers(invalidate, { controls, element: renderer.domElement, lighting })");
+  // The runtime's own controls and lighting request its frames; the canvas's input is the renderer device's, which draws the shown runtime.
+  expect(source).toContain("bindRenderTriggers(invalidate, { controls, lighting })");
+  expect(deviceSource()).toContain("bindRenderTriggers(invalidate, { element: canvas })");
   // The idle and the blink request frames through their composition (tests/game-blink-composition.test.ts).
   expect(source).toContain("releases.push(rigMotion.connect(invalidate));");
 });
@@ -240,22 +244,27 @@ test("the authored plate's light, skin and composite change only inside calls th
   const normals = source.slice(source.indexOf("    setNormals: (v: boolean) => {"), source.indexOf("    setExposure:"));
   expect(normals).toContain("features?.setNormals(v);");
   expect(source).toContain("setWire: (v: boolean) => features?.setWireframe(v),");
-  const frame = source.slice(source.indexOf("    frame(dt) {"), source.indexOf("  const invalidate = () => scheduler.invalidate();"));
+  const frame = source.slice(source.indexOf("  function draw(dt: number) {"), source.indexOf("  let slot: DeviceSlot | undefined;"));
   expect(frame.indexOf("features?.beforeDraw();")).toBeGreaterThan(-1);
   expect(frame.indexOf("features?.beforeDraw();")).toBeLessThan(frame.indexOf("lighting.render(camera);"));
+  // The renderer is shared: a draw opens with this scene's own renderer-global state (renderer-state.ts).
+  expect(frame.indexOf("lighting.applyRendererState();")).toBeGreaterThan(-1);
+  expect(frame.indexOf("lighting.applyRendererState();")).toBeLessThan(frame.indexOf("features?.beforeDraw();"));
   // A restored context (a canvas trigger, so a frame follows) prefilters the environment again and lets each feature redraw its targets (PREV-58).
   expect(CANVAS_TRIGGERS).toContain("webglcontextrestored");
   expect(source).toContain("lighting.restore(); features?.contextRestored();");
   // …and bakes the shown V's layered parts again from their stacks (PREV-62).
-  expect(source.slice(source.indexOf("const restored = () => {"), source.indexOf("renderer.domElement.addEventListener(\"webglcontextrestored\", restored)")))
-    .toContain("character.contextRestored();");
+  expect(source.slice(source.indexOf("const contextRestored = () => {"), source.indexOf("function frameIdle()"))).toContain("character.contextRestored();");
+  // The device hears the context come back and tells every runtime on it.
+  expect(source).toContain("const drawn = device.add({ draw, animating: () => rigMotion.animating() || settle.settling, attach, detach, resized, contextRestored });");
+  expect(deviceSource()).toContain(`canvas.addEventListener("webglcontextrestored", restored);`);
+  expect(deviceSource()).toContain("for (const entry of [...entries]) entry.scene.contextRestored();");
   const restore = character.slice(character.indexOf("  function contextRestored() {"), character.indexOf("  return {", character.indexOf("  function contextRestored() {")));
   expect(restore).toContain("layeredContextRestored(renderer);");
   expect(restore).toContain("handle.contextRestored()");
   // The re-bake's limits reach the panel and the core eye follows whether a layered eye design baked again (PREV-74).
   expect(restore).toContain("publishBakeLimits([...skinLimits(), ...bakeLayered()]);");
   expect(restore).toContain("applyEyes();");
-  expect(source).toContain(`renderer.domElement.addEventListener("webglcontextrestored", restored);`);
   // A slot shown later publishes its bakes' limits too (PREV-74).
   const visibility = character.slice(character.indexOf("function refreshDetailVisibility() {"), character.indexOf("const bakeLimitListeners"));
   expect(visibility).toContain("publishBakeLimits([...skinLimits(), ...bakeLayered()]);");

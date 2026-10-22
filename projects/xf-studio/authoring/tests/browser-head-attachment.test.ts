@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { attachBrowserHead, type HeadAttachmentPorts, type HeadServices, type LayeredSurfaceWiring } from "../src/preview/browser/browser-head-attachment";
 import { createBrowserViewportDevice } from "../src/preview/browser/browser-viewport-device";
-import type { createSceneHost } from "../src/platform/scene/scene-host";
+import type { createSceneRuntime } from "../src/platform/scene/scene-host";
 import type { createSurfaceEditor } from "../src/legacy/eye-makeup/browser/surface-editor";
 import { freshWorkspace, EYE_REGION } from "./fixtures/eye-region";
 import { CharacterContextActions, initialBodyGender } from "../src/character/character-context-actions";
@@ -43,7 +43,7 @@ function fakeScene(host: { canvases: number }, log: string[], body: "female" | "
   };
   // Every other scene method is a no-op; `then` stays undefined so the scene isn't mistaken for a promise.
   const scene = new Proxy(known, { get: (target, key) => key in target ? target[key as string] : key === "then" ? undefined : noop });
-  return { scene: scene as unknown as Awaited<ReturnType<typeof createSceneHost>>, controls };
+  return { scene: scene as unknown as Awaited<ReturnType<typeof createSceneRuntime>>, controls };
 }
 
 function harness(plan: { failLoad?: number[]; failPresent?: number[] }) {
@@ -63,7 +63,8 @@ function harness(plan: { failLoad?: number[]; failPresent?: number[] }) {
       const made = fakeScene(host, log, options.body);
       scenes.push(made);
       return made.scene;
-    }) as unknown as typeof createSceneHost,
+    }) as unknown as typeof createSceneRuntime,
+    deviceFactory: (() => ({ show: noop })) as never,
     surfaceFactory: (() => ({ resize: noop, cancelInput: noop, inputCapture: () => false, hitAt: () => undefined,
       setEnabled: noop, dispose: () => log.push("surface:dispose") })) as unknown as typeof createSurfaceEditor,
     window: { addEventListener: noop },

@@ -43,12 +43,9 @@ import type { LocalSetupActions } from "../setup/local-setup-actions";
 import type { DesktopAppActions } from "../setup/desktop-app";
 import { emptyPresentationStatus, PresentationStatusSource, type AdapterMessage } from "../app/presentation-status";
 import type { Layer } from "../engines/layered-makeup/recipe";
-import type { SavedAppearanceActions } from "../character/saved-appearance-actions";
 import type { StudioPresentationPort } from "../app/studio-presentation";
 import { mountStudio } from "../studio-ui/app";
 import { createTrustedAuthoringCore } from "../app/trusted-authoring-core";
-import type { MotionActions } from "../animation/motion-actions";
-import type { PreviewActions } from "../preview/preview-actions";
 import { createTrustedStudioBootstrap } from "../app/trusted-studio-bootstrap";
 // The composition root: the one browser module that imports the composition list (CORE-29).
 import { STUDIO_COMPOSITION } from "./studio-registry";
@@ -225,10 +222,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   // Whether the person chose Not now on the 3D preview card; a workspace preference too, so it stays declined.
   let declined = workspace.previewSetup?.declined === true;
   let previewDevice: ReturnType<typeof createBrowserPreviewDevice>;
-  let savedAppearance: SavedAppearanceActions | undefined;
-  let previewActions: PreviewActions | undefined;
-  let motionActions: MotionActions | undefined;
-  /** The loaded head and its connections, released together. */
+  /** The loaded head and its connections (its saved-V, preview and motion services), released together. */
   let head: AttachedHead | undefined;
   /** Stops waiting for the page to be quiet before the installed expressions are read ahead (facial-prefetch.ts). */
   let stopPrefetch: (() => void) | undefined;
@@ -305,7 +299,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       savedV: () => workspace.savedV,
       collections: () => workspace.collections,
       quality: () => previewDevice?.coordinator.quality.snapshot().size ?? workspace.preview.textureSize,
-      preview: () => previewActions?.snapshot(), motion: () => motionActions?.snapshot(), views: () => workspace.views,
+      preview: () => head?.preview.snapshot(), motion: () => head?.motion.snapshot(), views: () => workspace.views,
       uiPreferences: () => { const { layout: _live, ...rest } = preferences.snapshot(); return { ...rest, ...(legacyLayout ? { layout: legacyLayout } : {}) }; },
       previewSetup: () => ({ autostart, ...(declined ? { declined: true as const } : {}) }),
       transitions: () => transitions.stored(),
@@ -364,7 +358,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   setBuilds = () => presets.builtMods();
   core.app.attach({ facial, presets, transitions });
   facial.follow(() => combineFacePoses(STUDIO_FACE_POSES.map(poser => poser.pose(core.app.featureState(poser.feature)?.part))),
-    () => motionActions?.snapshot());
+    () => head?.motion.snapshot());
   // Changes ease by the expression's transition setting; an edit inside an open form control (a slider drag) follows at once.
   facial.animate({ setting: () => transitions.get("expression"), continuous: () => !!core.app.featureControlSnapshot() });
   transitions.subscribe(persist);
@@ -428,8 +422,8 @@ async function start(host: StudioHost, root: HTMLElement) {
       } },
     onRecipeImported: persist,
     savedAppearance: {
-      has: () => savedAppearance?.hasSavedV() ?? false,
-      read: () => savedAppearance?.snapshot().savedV,
+      has: () => head?.savedAppearance.hasSavedV() ?? false,
+      read: () => head?.savedAppearance.snapshot().savedV,
       // A save file becomes where the V comes from (`character.setSource`, which `savedV.load` stays an alias of until phase 1 ends);
       // the shown V's scene applies it.
       // The V the request named when it was asked (profiles design §3.3).
@@ -437,9 +431,9 @@ async function start(host: StudioHost, root: HTMLElement) {
         if (bytes.byteLength > 128 * 1024 * 1024) throw Error("Save is larger than the supported limit.");
         const result = core.app.dispatch({ kind: "character.setSource", character, source: { kind: "save", value: readSavedV(bytes) } });
         if (!result.ok) throw Error(result.message);
-        return savedAppearance!.snapshot();
+        return head!.savedAppearance.snapshot();
       },
-      ready: () => !!scene,
+      ready: () => !!head,
       unavailableReason: () => { const head = viewportDevice.attachment.snapshot().head; return head.error ?? head.message; },
     },
     fileDevice, diagnostics, modules: moduleServices, experiments, lease, outbox: documents.outbox,
@@ -564,7 +558,7 @@ async function start(host: StudioHost, root: HTMLElement) {
         persist, changed: () => statusSource.changed(),
       });
       head = attached;
-      ({ scene, savedAppearance, preview: previewActions, motion: motionActions } = attached);
+      scene = attached.scene;
       facial.attachScene(scene.face);
       stopPrefetch = prefetchWhenQuiet(() => facial.prefetch(), headQuiet({ details: attached.characterDetails, scene }));
       poseStage.attach({ view: MAIN_VIEW, motion: attached.motion, details: attached.characterDetails, context: attached.characterContext });
@@ -591,7 +585,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     facial.attachScene(undefined);
     poseStage.attach(null);
     attached?.dispose();
-    scene = undefined; savedAppearance = undefined; previewActions = undefined; motionActions = undefined;
+    scene = undefined;
   }
 }
 

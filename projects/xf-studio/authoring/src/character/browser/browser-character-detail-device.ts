@@ -4,11 +4,11 @@ import type { CharacterWarmStart } from "./character-warm-start";
 import { parseCharacterRequest } from "../character-detail-request";
 import { DetailVersionSkewError, type DetailLimit, type SlotLimits } from "../detail-limits";
 import { CHARACTER_DETAIL_SCHEMA, RenderDetailVersionError, type DetailSlot } from "../render-detail";
-import type { SceneHost } from "../../platform/scene/scene-host";
+import type { SceneRuntime } from "../../platform/scene/scene-host";
 import { markCharacter } from "../character-timing";
 
 /** The scene host's character side: its detail loader and the swap into the scene (feature-module platform §5). */
-type Scene = Pick<SceneHost, "setCharacterDetails" | "details"> & Partial<Pick<SceneHost, "onBakeLimits" | "releaseKeptParts" | "prepareDetails">>;
+type Scene = Pick<SceneRuntime, "setCharacterDetails" | "details"> & Partial<Pick<SceneRuntime, "onBakeLimits" | "releaseKeptParts" | "prepareDetails">>;
 
 /**
  * Browser device for the character-detail service: the host transport (same endpoint on both hosts)

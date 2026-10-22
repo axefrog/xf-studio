@@ -57,9 +57,9 @@ function supersedeList(parts: readonly SupersededPart[]): readonly SupersededPar
 /**
  * Create every composed renderer, in list order, each with the next free run of draw-order slots it asked for. A renderer that fails
  * to create releases what it had made through its port and the renderers made before it, and the error reaches the host (whose load
- * then fails and releases everything, as any failed load does).
+ * then fails and releases everything, as any failed load does). `signal` is checked before each renderer: an abort releases those made.
  */
-export function createFeatureRenderers(context: FeatureRendererContext, factories: readonly FeatureRendererFactory[]) {
+export function createFeatureRenderers(context: FeatureRendererContext, factories: readonly FeatureRendererFactory[], signal?: AbortSignal) {
   const entries: Entry[] = [];
   const { head } = context;
   const report = context.report ?? ((feature, method, error) => console.error(`The ${feature} renderer's ${method} failed.`, error));
@@ -204,7 +204,7 @@ export function createFeatureRenderers(context: FeatureRendererContext, factorie
       return entry;
   }
   try {
-    for (const factory of factories) add(factory);
+    for (const factory of factories) { signal?.throwIfAborted(); add(factory); }
   } catch (error) { dispose(); throw error; }
   return {
     /** Optional contributions have a token; withdrawal restores resolved parts synchronously. */

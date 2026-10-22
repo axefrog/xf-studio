@@ -13,7 +13,7 @@ import {
   type Anchor,
   type UV,
 } from "./surface-map";
-import type { SceneHost } from "../../../platform/scene/scene-host";
+import type { SceneRuntime } from "../../../platform/scene/scene-host";
 import { tangentFrame, tangentWorld, tangentRayUV, type TangentFrame } from "./surface-tangent";
 import { createSurfaceOcclusion } from "./surface-occlusion";
 import type { StudioGestureProposal } from "../../../app/studio-application";
@@ -56,7 +56,7 @@ type Hooks = {
 const HANDLE_TARGET: Record<Handle["kind"], PointerTarget> = { point: "point", tangent: "tangent", origin: "warp-origin", field: "warp-vector" };
 
 /** What the on-head editor uses of the loaded head: the scene host's view and input, and the layered-makeup surface it edits. */
-export type SurfaceViewer = Pick<SceneHost, "renderer" | "scene" | "camera" | "head" | "eyes" | "controls"
+export type SurfaceViewer = Pick<SceneRuntime, "renderer" | "scene" | "camera" | "head" | "eyes" | "controls"
   | "cameraInput" | "onFrame" | "requestRender"> & { plate: THREE.SkinnedMesh };
 
 /** Face controls operate on the same recipe as the UV editor. No baked geometry edits. */

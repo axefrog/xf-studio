@@ -47,8 +47,11 @@ test("a monitor move or page zoom reports the new capped ratio and re-arms for t
   expect(seen).toEqual([1.5, 2]);
 });
 
-test("the scene applies the capped ratio at start and watches for changes, releasing the watch with the scene", () => {
-  const source = require("node:fs").readFileSync(require("node:path").resolve(import.meta.dir, "..", "src", "platform", "scene", "scene-host.ts"), "utf8") as string;
+test("the renderer device applies the capped ratio at start and watches for changes, releasing the watch with the device", () => {
+  const source = require("node:fs").readFileSync(require("node:path").resolve(import.meta.dir, "..", "src", "platform", "scene", "renderer-device.ts"), "utf8") as string;
   expect(source).toContain("renderer.setPixelRatio(viewportPixelRatio(devicePixelRatio))");
   expect(source).toContain("releases.push(watchDevicePixelRatio(window, pixelRatio => { renderer.setPixelRatio(pixelRatio); resize(); invalidate(); }))");
+  // A scene runtime never sizes the renderer: the device is the one owner of its size and pixel ratio.
+  const runtime = require("node:fs").readFileSync(require("node:path").resolve(import.meta.dir, "..", "src", "platform", "scene", "scene-host.ts"), "utf8") as string;
+  expect(runtime).not.toMatch(/renderer\.set(PixelRatio|Size)\(/);
 });

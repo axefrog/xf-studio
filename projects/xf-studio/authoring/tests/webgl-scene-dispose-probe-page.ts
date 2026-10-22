@@ -1,6 +1,6 @@
 /**
- * Browser page for tests/webgl-scene-dispose.test.ts (profiles phase 4a-i, experiments/043-scene-runtimes): the real scene host on a
- * renderer it doesn't own, built and disposed five times over one WebGL 2 context. Each cycle builds the host on the synthetic head
+ * Browser page for tests/webgl-scene-dispose.test.ts (profiles phase 4a-i, experiments/043-scene-runtimes): the real scene runtime on the
+ * window's renderer device (phase 4a-ii), built, shown and disposed five times over the device's one WebGL 2 context. Each cycle builds the host on the synthetic head
  * (tests/webgl-synthetic-head.ts) with the composition's feature renderers, shows a synthetic V through the host's detail loader, draws
  * eye makeup layers, lights the V with the game's creator rig (shadow maps, the grading pass) and a studio setup (the room's environment),
  * plays the idle, and then disposes the host as it is (no V or layers cleared first). Odd cycles use a head with two influence sets, so
@@ -8,7 +8,8 @@
  * wrapping its `create*`/`delete*` calls (tests/webgl-gl-objects.ts), beside `renderer.info`. Results land in `window.probe` as plain data.
  */
 import * as THREE from "three";
-import { createSceneHost } from "../src/platform/scene/scene-host";
+import { createSceneRuntime } from "../src/platform/scene/scene-host";
+import { createRendererDevice } from "../src/platform/scene/renderer-device";
 import type { MotionLoader } from "../src/platform/scene/head-rig";
 import { STUDIO_RENDERERS } from "../src/compose/renderers";
 import { EYE_MAKEUP_RENDERER } from "../src/features/eye-makeup/render";
@@ -29,7 +30,7 @@ export type SceneDisposeProbe = {
   cycles: { influenceSets: number; shown: Counts; disposed: Counts; framesDrawn: number; drawn: string[];
     /** With `?stacks`: each GPU object the cycle made that is still alive after its disposal, with the stack that made it. */
     left?: { kind: string; stack?: string }[] }[];
-  /** The canvas still in the page after the last host went (the renderer's own; the host never moves or removes it). */
+  /** The canvas still in the page after the last runtime went (the device's own; a runtime never moves or removes it). */
   canvases: number;
 };
 const probe: SceneDisposeProbe = { ok: false, errors: [], renderer: "", baseline: null as never, cycles: [], canvases: -1 };
@@ -39,16 +40,16 @@ try {
   const element = document.createElement("div");
   element.style.cssText = "width:96px;height:96px";
   document.body.append(element);
-  // The context the host is given, made as the host makes its own (opaque, no multisampling or depth: the passes draw into targets).
+  // The device's context, made as the device makes its own (opaque, no multisampling or depth: the passes draw into targets), so its
+  // calls are counted before Three makes anything on it.
   const canvas = document.createElement("canvas");
   const gl = canvas.getContext("webgl2", { alpha: false, antialias: false, depth: false, stencil: false, preserveDrawingBuffer: true })!;
   const stacks = new URLSearchParams(location.search).has("stacks");
   const counter = countGlObjects(gl, { stacks });
-  const renderer = new THREE.WebGLRenderer({ canvas, context: gl, antialias: false, depth: false, preserveDrawingBuffer: true });
+  const device = createRendererDevice(element, { context: gl }), renderer = device.renderer;
   renderer.debug.onShaderError = (context, program, vertex, fragment) => {
     probe.errors.push(`${context.getProgramInfoLog(program) ?? ""} ${context.getShaderInfoLog(vertex) ?? ""} ${context.getShaderInfoLog(fragment) ?? ""}`.trim() || "shader error");
   };
-  element.append(canvas);
   const info = gl.getExtension("WEBGL_debug_renderer_info");
   probe.renderer = info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : "unknown";
   // Each program by its cache key (hashed, FNV-1a) with its use count: a material that outlives its scene keeps its program's count up, even
@@ -73,8 +74,9 @@ try {
     // Odd cycles show a head with two influence sets: its skin and shadow depth programs differ, so a program kept by a material that
     // outlived its scene would show as an extra program, not only as a higher use count.
     const influenceSets = cycle % 2 ? 2 : 1;
-    const host = await createSceneHost(element, { renderer, renderers: STUDIO_RENDERERS, loadCore: async () => syntheticCore({ influenceSets }), loadMotion,
+    const host = await createSceneRuntime(device, { renderers: STUDIO_RENDERERS, loadCore: async () => syntheticCore({ influenceSets }), loadMotion,
       loadLut: async () => ({ lut: null, source: null as never }) });
+    device.show(host.slot);
     const settle = async () => { for (let i = 0; i < 200 && host.frameTiming().running; i++) await sleep(10); await sleep(50); };
     const draw = async () => { host.requestRender(); await settle(); };
     await draw();

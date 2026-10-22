@@ -12,7 +12,8 @@
  * Results land in `window.probe` as plain data.
  */
 import * as THREE from "three";
-import { createSceneHost } from "../src/platform/scene/scene-host";
+import { createSceneRuntime } from "../src/platform/scene/scene-host";
+import { createRendererDevice } from "../src/platform/scene/renderer-device";
 import type { MotionLoader } from "../src/platform/scene/head-rig";
 import type { CharacterDetail } from "../src/character/render-detail";
 import { STUDIO_RENDERERS } from "../src/compose/renderers";
@@ -37,14 +38,14 @@ export type SceneHostProbe = {
   faulty: { reports: string[]; evidence: unknown; framesDrawn: number };
   context: { events: string[]; framesAfter: number; compositeDrawsBefore: number; compositeDrawsAfter: number; plateDrawn: unknown };
   bands: unknown;
-  disposed: { canvases: number; features: number };
+  disposed: { canvases: number; features: number; kept: number; hidden: boolean };
 };
 const probe: SceneHostProbe = { ok: false, errors: [], renderer: "", features: [],
   frames: {} as SceneHostProbe["frames"], memory: {} as SceneHostProbe["memory"], limits: { a: null, b: null },
   character: { a: null, b: null, none: null }, skin: { mode: null, plateSkinLight: null, drawn: null, defaultAfter: null },
   faulty: { reports: [], evidence: null, framesDrawn: -1 },
   context: { events: [], framesAfter: -1, compositeDrawsBefore: -1, compositeDrawsAfter: -1, plateDrawn: null },
-  bands: null, disposed: { canvases: -1, features: -1 } };
+  bands: null, disposed: { canvases: -1, features: -1, kept: -1, hidden: false } };
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -79,9 +80,12 @@ try {
   const idle = syntheticIdle();
   const loadMotion: MotionLoader = async () => ({ idle, idleError: "", blink: undefined, blinkError: "No blink in the probe." });
   const contextEvents: string[] = [];
-  const host = await createSceneHost(element, { renderers: [...STUDIO_RENDERERS, cheekFeature(counter), faultyFeature], loadCore: async () => syntheticCore(),
-    loadMotion, loadLut: async () => ({ lut: null, source: null as never }), onContext: event => { contextEvents.push(event); },
+  // The window's renderer device and one scene runtime on it, shown (as the viewport device does).
+  const device = createRendererDevice(element, { onContext: event => { contextEvents.push(event); } });
+  const host = await createSceneRuntime(device, { renderers: [...STUDIO_RENDERERS, cheekFeature(counter), faultyFeature], loadCore: async () => syntheticCore(),
+    loadMotion, loadLut: async () => ({ lut: null, source: null as never }),
     onRendererError: (feature, method, error) => { probe.faulty.reports.push(`${feature}.${method}: ${(error as Error).message}`); } });
+  device.show(host.slot);
   const gl = host.renderer.getContext();
   const info = gl.getExtension("WEBGL_debug_renderer_info");
   probe.renderer = info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : "unknown";
@@ -217,9 +221,11 @@ try {
   probe.skin.drawn = host.characterDetailsEvidence().components.map(item => item.slot);
   makeup.layers.setCanvases([], []);
   await show(null);
-  // 3. Teardown: the canvas and every renderer go with the host.
+  // 3. Teardown: every renderer goes with the runtime, which leaves the device's canvas (hidden); the canvas goes with the device.
   host.dispose();
-  probe.disposed = { canvases: element.querySelectorAll("canvas").length, features: host.features().length };
+  const kept = element.querySelectorAll("canvas").length, hidden = device.canvas.style.display === "none";
+  device.dispose();
+  probe.disposed = { canvases: element.querySelectorAll("canvas").length, features: host.features().length, kept, hidden };
   probe.ok = probe.errors.length === 0;
 } catch (error) {
   probe.failure = (error as Error).stack ?? String(error);

@@ -55,14 +55,23 @@ async function resourceBytes(resource: RenderResource, fetcher: CoreDetailFetch,
   return bytes;
 }
 
-export async function loadCoreDetail(renderer: THREE.WebGLRenderer, fetcher: CoreDetailFetch = fetch, body: CoreBody = "female"): Promise<LoadedCoreDetail> {
+/**
+ * Load a body's core head. `signal` is checked between steps (the record, the geometry's bytes, its parse, the textures): an abort rejects
+ * with its reason, and what was made is disposed. A step already running (a parse, a decode) finishes first.
+ */
+export async function loadCoreDetail(renderer: THREE.WebGLRenderer, fetcher: CoreDetailFetch = fetch, body: CoreBody = "female",
+  signal?: AbortSignal): Promise<LoadedCoreDetail> {
+  signal?.throwIfAborted();
   const record = await readCoreDetail(fetcher, body);
+  signal?.throwIfAborted();
   const textures: Partial<Record<CoreTextureSlot, THREE.Texture>> = {};
   let gltf: GLTF | undefined;
   try {
     const data = await resourceBytes(record.geometry, fetcher, body);
+    signal?.throwIfAborted();
     const weights = restoreFirstWeights(data);
     gltf = await new GLTFLoader().parseAsync(data, "/assets/");
+    signal?.throwIfAborted();
     const meshes: THREE.Mesh[] = [];
     gltf.scene.traverse(object => { if (object instanceof THREE.Mesh) meshes.push(object); });
     const named = (name: string) => meshes.find(mesh => mesh.name === name);
@@ -93,10 +102,13 @@ export async function loadCoreDetail(renderer: THREE.WebGLRenderer, fetcher: Cor
         textures[slot] = texture;
       } finally { URL.revokeObjectURL(url); }
     }));
+    signal?.throwIfAborted();
     return { record, body, gltf, meshes, head, surfaces: surfaces as Map<string, THREE.SkinnedMesh>, eyes, textures: textures as Record<CoreTextureSlot, THREE.Texture> };
   } catch (error) {
     if (gltf) coreDisposer({ gltf, textures: textures as LoadedCoreDetail["textures"] })();
     else for (const texture of Object.values(textures)) texture?.dispose();
+    // An abort is no failure of the files: its reason passes through as it is.
+    if (signal?.aborted) throw signal.reason;
     // Anything that fails once the files arrived intact (model parse, missing parts, textures) is a damaged preview.
     throw error instanceof HeadLoadError ? error : new HeadLoadError("preview_damaged", (error as Error)?.message ?? "The 3D view could not be read.", { cause: error });
   }

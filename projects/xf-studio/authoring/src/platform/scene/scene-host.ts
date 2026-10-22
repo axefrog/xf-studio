@@ -6,18 +6,15 @@ import type { PoseSample } from "../../animation/pose-sample";
 import { poseClip } from "../../animation/render/pose-clip";
 import type { PosePlacement } from "../../animation/pose-sample";
 import { coreSceneEvidence, idleEvidence } from "../../character/render/scene-evidence";
-import { bindRenderTriggers, createRenderScheduler, invalidating } from "../../preview/render/render-scheduler";
+import { bindRenderTriggers, invalidating } from "../../preview/render/render-scheduler";
 import { retainedViewportAspect, visibleViewportSize } from "../../preview/viewport-size";
 import { coreDisposer, loadCoreDetail, type LoadedCoreDetail } from "../../character/render/core-detail-loader";
 import type { CoreBody } from "../../character/render-detail";
-import { HeadLoadError } from "../../preview/head-load-error";
 import { createViewportBackdrop } from "../../preview/render/viewport-backdrop";
-import { attachHeadCameraInput } from "../../preview/render/head-camera-input";
+import { attachHeadCameraInput, type HeadCameraInput, type TargetResolver } from "../../preview/render/head-camera-input";
 import type { StageTheme } from "../../preview/stage-backdrop";
 import { createLightingSetupStage, type GradingLutLoader } from "../../preview/render/lighting-setup-stage";
 import { loadGradingLut } from "../../preview/render/browser-grading-lut-device";
-import { viewportPixelRatio, watchDevicePixelRatio } from "../../preview/render/device-pixel-ratio";
-import { linearTargetSupported } from "../../preview/render/linear-display";
 import type { LightingSource } from "../../preview/lighting-setups";
 import type { FeatureRenderer, FeatureRendererFactory } from "../api/scene";
 import { createFeatureRenderers, type FeatureRenderers } from "./feature-renderers";
@@ -29,17 +26,22 @@ import { afterTask, createCharacterRenderer } from "./character-renderer";
 import { createCameraSettle } from "./camera-settle";
 import { createMouthApertureSampler, headBones } from "./mouth-aperture-sampler";
 import { createOrbitLimits, SceneOrbitControls } from "./orbit-limits";
+import type { DeviceSlot, RendererDevice } from "./renderer-device";
 
 /**
- * The scene host (feature-module platform §5): the platform's 3D viewport. It owns the WebGL renderer, the camera and its controls,
- * the studio lights and the lighting presets with their display, the stage, render on demand, resizing and the device pixel ratio,
- * context restores and disposal; the head rig (head-rig.ts: the core head, its surfaces, facial shapes and motion) and the character
- * renderer (character-renderer.ts: the V the character context resolved) are the platform's character context. Features draw their
- * own parts through `FeatureRenderer`s it creates from the composition's list, each given only its `SceneHostPort`
- * (platform/api/scene.ts); the host names no feature.
+ * The scene host (feature-module platform §5): one scene runtime, the platform's 3D scene of one subject, drawn by the window's renderer
+ * device (renderer-device.ts, profiles phase 4a-ii). It owns the scene, its camera and controls, the studio lights and the lighting
+ * setups with their display, the stage, its renderer-global state (renderer-state.ts, applied by the lighting stage on every draw), the
+ * head rig (head-rig.ts: the core head, its surfaces, facial shapes and motion) and the character renderer (character-renderer.ts: the V the
+ * character context resolved), which are the platform's character context. Features draw their own parts through `FeatureRenderer`s it
+ * creates from the composition's list, each given only its `SceneHostPort` (platform/api/scene.ts); the runtime names no feature.
  *
- * A failure at any point after the renderer exists releases what was made so far (WebGL context, canvas, stage, renderers and
- * observers), so a retry starts clean; `dispose()` releases the same when the head is unloaded (PREV-20).
+ * The device owns the canvas, the WebGL context, the render loop, the pane's size and the pixel ratio. A runtime is built hidden: it draws
+ * nothing until the device shows it, and its camera takes input from the canvas only while shown. Building takes an `AbortSignal` that is
+ * checked between steps (the stage, the core head, the rig and its motion, each feature renderer): an abort, like any failure part-way,
+ * releases everything made so far and rejects with the signal's reason. `dispose()` releases the same for a built runtime, on a renderer
+ * that lives on: everything it made is freed without relying on the context being lost (PREV-20, experiments/043-scene-runtimes), and it
+ * never disposes the device.
  */
 
 export type SceneHostOptions = {
@@ -48,32 +50,29 @@ export type SceneHostOptions = {
   renderers?: readonly FeatureRendererFactory[];
   optionalRenderers?: Pick<ExperimentPort, "registrations" | "subscribe">;
   referenceTextures?: import("../api/scene").SceneHostPort["referenceTextures"];
-  /** Whose core head to load: the feminine V's (default) or the masculine V's; a V of the other body needs a new scene host. */
+  /** Whose core head to load: the feminine V's (default) or the masculine V's; a V of the other body needs another runtime. */
   body?: CoreBody;
   /** The core head record (default: the host's derived preview, core-detail-loader.ts). Probe pages inject a synthetic head. */
-  loadCore?: (renderer: THREE.WebGLRenderer, body: CoreBody) => Promise<LoadedCoreDetail>;
+  loadCore?: (renderer: THREE.WebGLRenderer, body: CoreBody, signal?: AbortSignal) => Promise<LoadedCoreDetail>;
   /** The rig's motion (default: the game idle and blink assets, head-rig.ts). */
   loadMotion?: MotionLoader;
   /** The creator preset's grading LUT (default: the host's). */
   loadLut?: GradingLutLoader;
-  /** Told when the WebGL context is lost and when it comes back (the diagnostics log records both; docs/diagnostics.md). */
-  onContext?: (event: "lost" | "restored") => void;
   /** Told when a feature renderer's method throws (default: the console); the host and the other features draw on (PREV-94). */
   onRendererError?: (feature: string, method: string, error: unknown) => void;
-  /**
-   * Draw with this renderer (one WebGL context the caller owns: a probe's, and from profiles phase 4a-ii the renderer device's) instead of
-   * opening a context of its own. The host never disposes it or moves its canvas, so `dispose()` must free everything the host made on it
-   * without relying on the context being lost (experiments/043-scene-runtimes).
-   */
-  renderer?: THREE.WebGLRenderer;
+  /** Stops the build between steps (a newer request, or the runtime is no longer wanted): what was made is released. */
+  signal?: AbortSignal;
 };
+/** What a runtime uses of the renderer device. */
+export type SceneDevice = Pick<RendererDevice, "renderer" | "measure" | "resize" | "add" | "stats">;
 /** A stored orbit, in neutral head space (workspace-state.ts `CameraState` has the same shape). */
 export type SceneCameraState = { position: number[]; target: number[]; fov: number };
-export type SceneHost = Awaited<ReturnType<typeof createSceneHost>>;
+export type SceneRuntime = Awaited<ReturnType<typeof createSceneRuntime>>;
 
-export async function createSceneHost(host: HTMLElement, options: SceneHostOptions = {}) {
+/** Build a scene runtime on `device`, hidden (the device shows it). */
+export async function createSceneRuntime(device: SceneDevice, options: SceneHostOptions = {}) {
   const releases: (() => void)[] = [];
-  try { return await assembleHost(host, options, releases); }
+  try { return await assembleRuntime(device, options, releases); }
   catch (error) { releaseAll(releases); throw error; }
 }
 
@@ -84,57 +83,48 @@ function releaseAll(releases: (() => void)[]) {
   }
 }
 
-async function assembleHost(host: HTMLElement, options: SceneHostOptions, releases: (() => void)[]) {
-  // Opaque canvas: the stage is drawn in the scene (viewport-backdrop.ts), and the drawing buffer
-  // has no alpha channel, so fragments that write alpha below one (alpha-to-coverage hair, decals)
-  // cannot reveal the page behind the canvas. Three always requests an alpha channel for its own
-  // context (its `alpha: false` only clears alpha to one), so the context is created here.
-  // Both lighting presets draw through a multisampled scene-linear target (linear-display.ts), so the canvas itself
-  // needs neither multisampling nor depth. Without a renderable half-float buffer the studio stage draws straight to
-  // the canvas, which then gets both back.
-  const open = (direct: boolean) => {
-    const canvas = document.createElement("canvas");
-    return { canvas, direct, context: canvas.getContext("webgl2", {
-      alpha: false, antialias: direct, depth: direct, stencil: false, preserveDrawingBuffer: true }) };
-  };
-  let renderer: THREE.WebGLRenderer;
-  if (options.renderer) renderer = options.renderer;
-  else {
-    let opened = open(false);
-    if (opened.context && !linearTargetSupported(opened.context)) {
-      opened.context.getExtension("WEBGL_lose_context")?.loseContext();
-      opened = open(true);
-    }
-    const { canvas, context } = opened;
-    if (!context) throw new HeadLoadError("webgl_unavailable", "WebGL 2 is unavailable");
-    try { renderer = new THREE.WebGLRenderer({ canvas, context, antialias: opened.direct, depth: opened.direct, preserveDrawingBuffer: true }); }
-    catch (error) { throw new HeadLoadError("webgl_unavailable", "WebGL 2 could not start", { cause: error }); }
-    host.prepend(renderer.domElement);
-    const own = renderer;
-    releases.push(() => { own.dispose(); own.forceContextLoss(); own.domElement.remove(); });
-  }
-  renderer.setPixelRatio(viewportPixelRatio(devicePixelRatio));
-  renderer.setClearColor(0x14181c, 1);
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.2;
+async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, releases: (() => void)[]) {
+  const { signal } = options, renderer = device.renderer;
+  signal?.throwIfAborted();
   const scene = new THREE.Scene(),
     camera = new THREE.PerspectiveCamera(30, 1, 0.005, 10);
   const backdrop = createViewportBackdrop(scene, options.stage ?? "dark");
   releases.push(() => backdrop.dispose());
-  const controls = new SceneOrbitControls(camera, renderer.domElement);
-  // The binding catalogue, not the controls' default mouse/touch mapping, decides every press.
-  const cameraInput = attachHeadCameraInput(renderer.domElement, controls);
-  releases.push(() => { cameraInput.dispose(); controls.dispose(); });
+  // The controls take the canvas only while this runtime is shown (`attach`), so camera input never reaches a hidden scene's camera.
+  const controls = new SceneOrbitControls(camera);
   controls.enableDamping = true;
+  // The binding catalogue, not the controls' default mouse/touch mapping, decides every press (head-camera-input.ts). The surface editor's
+  // target resolution is kept here, so the input made on each show resolves through it.
+  let input: HeadCameraInput | undefined, resolveTarget: TargetResolver | undefined, attached: HTMLCanvasElement | null = null;
+  const cameraInput = {
+    setTargetResolver(resolver: TargetResolver | undefined) { resolveTarget = resolver; input?.setTargetResolver(resolver); },
+  };
+  function attach(canvas: HTMLCanvasElement) {
+    attached = canvas;
+    controls.connect(canvas);
+    input = attachHeadCameraInput(canvas, controls);
+    input.setTargetResolver(resolveTarget);
+    // OrbitControls leaves an inline `cursor: auto`; the presentation owns viewport cursors (`[data-cursor]`).
+    canvas.style.cursor = "";
+  }
+  function detach() {
+    if (!attached) return;
+    input?.dispose(); input = undefined;
+    // Disconnecting resets the canvas's touch action and cursor; the next runtime shown connects its own.
+    controls.disconnect();
+    attached.style.cursor = "";
+    attached = null;
+  }
+  releases.push(detach);
   // The distance limits come from the scene once the head and the V exist (orbit-limits.ts); the jumps below reach the whole range.
-  // OrbitControls leaves an inline `cursor: auto`; the presentation owns viewport cursors (`[data-cursor]`).
-  renderer.domElement.style.cursor = "";
   const idleFrameOffset = new THREE.Vector3();
   let frontPending = false;
+  /** The pane's aspect for framing: the device's pane, or the camera's last while the pane has no size. */
+  const paneAspect = () => { const { width, height } = device.measure(); return retainedViewportAspect(width, height, camera.aspect); };
   function front() {
-    frontPending = !visibleViewportSize(host.clientWidth, host.clientHeight);
-    const requested = frontCameraDistance(camera.fov,
-      retainedViewportAspect(host.clientWidth, host.clientHeight, camera.aspect));
+    const { width, height } = device.measure();
+    frontPending = !visibleViewportSize(width, height);
+    const requested = frontCameraDistance(camera.fov, paneAspect());
     const distance = Math.min(CAMERA_DISTANCE_RANGE.max, requested);
     camera.position.set(0, 1.67, -distance);
     controls.target.set(0, 1.67, 0.005);
@@ -157,14 +147,14 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     frontPending = false;
     const box = posed();
     if (box) {
-      const frame = posedBodyFrame(camera.fov, retainedViewportAspect(host.clientWidth, host.clientHeight, camera.aspect), box);
+      const frame = posedBodyFrame(camera.fov, paneAspect(), box);
       const distance = Math.min(CAMERA_DISTANCE_RANGE.max, frame.distance);
       controls.target.set(frame.target[0], frame.target[1], frame.target[2] + .005);
       camera.position.set(frame.target[0], frame.target[1], frame.target[2] - distance);
       controls.update();
       return frame.distance > distance;
     }
-    const requested = bodyCameraDistance(camera.fov, retainedViewportAspect(host.clientWidth, host.clientHeight, camera.aspect));
+    const requested = bodyCameraDistance(camera.fov, paneAspect());
     const distance = Math.min(CAMERA_DISTANCE_RANGE.max, requested);
     camera.position.set(0, BODY_FRAME.targetHeight, -distance);
     controls.target.set(0, BODY_FRAME.targetHeight, 0.005);
@@ -173,13 +163,17 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     controls.update();
     return requested > distance;
   }
-  // The lighting setup shown: its lights, room, backdrop and display transform (lighting-setup-stage.ts; the backdrop is the stage's).
+  // The lighting setup shown: its lights, room, backdrop, display transform and this scene's renderer-global state (lighting-setup-stage.ts;
+  // the backdrop is the stage's).
   const lighting = createLightingSetupStage({ scene, renderer, loadLut: options.loadLut ?? (() => loadGradingLut()), studioBackground: scene.background });
   releases.push(() => lighting.dispose());
+  signal?.throwIfAborted();
   // The core head, plate, eyes and maps load through one typed render record (see core-detail-loader).
-  const core: LoadedCoreDetail = await (options.loadCore ?? ((renderer, body) => loadCoreDetail(renderer, fetch, body)))(renderer, options.body ?? "female");
-  // The core head's own geometry, materials and textures go with the host (not with the context, which may outlive it).
+  const core: LoadedCoreDetail = await (options.loadCore ?? ((renderer, body, signal) => loadCoreDetail(renderer, fetch, body, signal)))(
+    renderer, options.body ?? "female", signal);
+  // The core head's own geometry, materials and textures go with the runtime (not with the context, which outlives it).
   releases.push(coreDisposer(core));
+  signal?.throwIfAborted();
   // The creator light rig follows the body of the head it lights (the game's preview controller does the same).
   lighting.setBodySex(core.body);
   const coreDetail = { identity: core.record.identity, origin: core.record.origin, label: core.record.provenance.label };
@@ -187,8 +181,9 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   let features: FeatureRenderers | undefined;
   // The platform's character context: the head rig and the V drawn on it. Features' meshes attached with `morphs` and the V's drawn
   // details follow the facial shapes with the head's own surfaces.
-  const rig = await createHeadRig(scene, core, { releases, loadMotion: options.loadMotion,
+  const rig = await createHeadRig(scene, core, { releases, loadMotion: options.loadMotion, signal,
     deforming: () => [...features?.followers() ?? [], ...character.drawnMeshes()] });
+  signal?.throwIfAborted();
   const { head, eyes, surfaces, albedo, motion } = rig;
   const { idle, blink, rig: rigMotion } = motion;
   const character = createCharacterRenderer({ scene, renderer, rig, superseded: () => features?.superseded() ?? [] });
@@ -209,15 +204,10 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   releases.push(() => orbitLimits.dispose());
   // A restored context comes back with empty render targets: the studio stage prefilters its environment again, the feature
   // renderers redraw theirs (eye makeup's composite), and the shown V's layered parts are baked again from their stacks (PREV-62).
-  const restored = () => {
-    options.onContext?.("restored");
+  const contextRestored = () => {
     lighting.restore(); features?.contextRestored();
     character.contextRestored();
   };
-  const lost = () => options.onContext?.("lost");
-  renderer.domElement.addEventListener("webglcontextrestored", restored);
-  renderer.domElement.addEventListener("webglcontextlost", lost);
-  releases.push(() => { renderer.domElement.removeEventListener("webglcontextrestored", restored); renderer.domElement.removeEventListener("webglcontextlost", lost); });
   function frameIdle() {
     // A pose never moves the camera (decision Q3); the framing offset stays the one measured before it.
     if (idle?.enabled && idle.posing) return;
@@ -230,17 +220,14 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   const ray = new THREE.Raycaster();
   let fovGestureAnchor: THREE.Vector3 | undefined;
   let appliedWidth = 0, appliedHeight = 0;
-  const resize = () => {
-    const size = visibleViewportSize(host.clientWidth, host.clientHeight);
-    if (!size) return false;
-    if (size.width !== appliedWidth || size.height !== appliedHeight) {
-      renderer.setSize(size.width, size.height);
-      camera.aspect = size.width / size.height;
+  /** The device's pane, while this runtime is shown: the camera takes its aspect, and a Front view asked for while it had no size happens now. */
+  const resized = (width: number, height: number) => {
+    if (width !== appliedWidth || height !== appliedHeight) {
+      camera.aspect = width / height;
       camera.updateProjectionMatrix();
-      appliedWidth = size.width; appliedHeight = size.height;
+      appliedWidth = width; appliedHeight = height;
     }
     if (frontPending) front();
-    return true;
   };
   const frameListeners = new Set<(dt: number) => void>();
   /**
@@ -250,51 +237,45 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   const nextFrame = () => new Promise<void>(resolve => { requestAnimationFrame(() => afterTask(resolve)); });
   // Reused every frame: the head centre (and, while the body shows, the body's) the clip planes are measured from.
   const centre = new THREE.Vector3(), bodyCentre = new THREE.Vector3();
-  // Render on demand (UI-38): a frame is drawn when something visible changed, or while the idle or
-  // Play blink runs. The host's own mutators, the feature renderers' changes, the lighting device, the idle,
-  // the controls (every orbit and damping step), canvas input, frame listeners and resizes all request one.
-  const scheduler = createRenderScheduler({
-    clock: { request: callback => requestAnimationFrame(callback), cancel: handle => cancelAnimationFrame(handle), now: () => performance.now() },
-    animating: () => rigMotion.animating() || settle.settling,
-    frame(dt) {
-      rigMotion.advance(dt);
-      character.setMouthParting(mouth.sample());
-      if (controls.enabled) controls.update();
-      settle.step();
-      // At long orbits, move the near plane in front of a conservative head
-      // envelope so the thin makeup plate retains depth precision.
-      centre.set(0, 1.67, 0).add(idleFrameOffset);
-      let clip = previewClipPlanes(controls.getDistance(), camera.position.distanceTo(centre));
-      // With the body shown, the depth range covers it too (the head views are unchanged while it is hidden).
-      if (character.bodyShown()) {
-        const box = posed(), subject = box ? posedBodySubject(box) : null;
-        if (subject) bodyCentre.set(subject.centre[0], subject.centre[1], subject.centre[2]);
-        else bodyCentre.set(0, BODY_ENVELOPE.centreHeight, 0).add(idleFrameOffset);
-        clip = bodyClipPlanes(clip, controls.getDistance(), camera.position.distanceTo(bodyCentre), subject?.radius);
-      }
-      if (clip.near !== camera.near || clip.far !== camera.far) {
-        camera.near = clip.near; camera.far = clip.far; camera.updateProjectionMatrix();
-      }
-      if (frameListeners.size) {
-        scene.updateMatrixWorld(true);
-        for (const update of frameListeners) update(dt);
-      }
-      // Each feature renderer brings its own GPU state up to date (eye makeup: the plate's composite, only after a change).
-      features?.beforeDraw();
-      lighting.render(camera);
-    },
-  });
-  const invalidate = () => scheduler.invalidate();
-  releases.push(() => scheduler.dispose());
-  releases.push(bindRenderTriggers(invalidate, { controls, element: renderer.domElement, lighting }));
+  /** One drawn frame (the device calls it only while this runtime is shown). */
+  function draw(dt: number) {
+    // The renderer is shared: this scene's own renderer-global state comes first (renderer-state.ts).
+    lighting.applyRendererState();
+    rigMotion.advance(dt);
+    character.setMouthParting(mouth.sample());
+    if (controls.enabled) controls.update();
+    settle.step();
+    // At long orbits, move the near plane in front of a conservative head
+    // envelope so the thin makeup plate retains depth precision.
+    centre.set(0, 1.67, 0).add(idleFrameOffset);
+    let clip = previewClipPlanes(controls.getDistance(), camera.position.distanceTo(centre));
+    // With the body shown, the depth range covers it too (the head views are unchanged while it is hidden).
+    if (character.bodyShown()) {
+      const box = posed(), subject = box ? posedBodySubject(box) : null;
+      if (subject) bodyCentre.set(subject.centre[0], subject.centre[1], subject.centre[2]);
+      else bodyCentre.set(0, BODY_ENVELOPE.centreHeight, 0).add(idleFrameOffset);
+      clip = bodyClipPlanes(clip, controls.getDistance(), camera.position.distanceTo(bodyCentre), subject?.radius);
+    }
+    if (clip.near !== camera.near || clip.far !== camera.far) {
+      camera.near = clip.near; camera.far = clip.far; camera.updateProjectionMatrix();
+    }
+    if (frameListeners.size) {
+      scene.updateMatrixWorld(true);
+      for (const update of frameListeners) update(dt);
+    }
+    // Each feature renderer brings its own GPU state up to date (eye makeup: the plate's composite, only after a change).
+    features?.beforeDraw();
+    lighting.render(camera);
+  }
+  // Render on demand (UI-38): a frame is drawn when something visible changed, or while the idle or Play blink runs. The runtime's own
+  // mutators, the feature renderers' changes, the lighting device, the idle, the controls (every orbit and damping step), frame listeners
+  // and the device's resizes and canvas input all request one; a hidden runtime's requests wait until it is shown.
+  let slot: DeviceSlot | undefined;
+  const invalidate = () => slot?.requestFrame();
+  releases.push(bindRenderTriggers(invalidate, { controls, lighting }));
   // A new setup or a trial turn doesn't always notify the lighting device's listeners (only a changed display or body does).
   Object.assign(lighting, invalidating(lighting, ["setSource", "trialYaw", "trialCasters", "solo", "setScatter", "setScatterScale"], invalidate));
   releases.push(rigMotion.connect(invalidate));
-  const observer = new ResizeObserver(() => { resize(); invalidate(); });
-  observer.observe(host);
-  releases.push(() => observer.disconnect());
-  // A monitor move or page zoom changes the device pixel ratio without resizing the host (UI-46).
-  releases.push(watchDevicePixelRatio(window, pixelRatio => { renderer.setPixelRatio(pixelRatio); resize(); invalidate(); }));
   /** Run `callback` before each drawn frame (the viewport draws only when something changed); adding or removing one draws a frame. */
   const onFrame = (callback: (dt: number) => void) => {
     frameListeners.add(callback);
@@ -314,13 +295,16 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
       for (const program of prepared.programs()) { await nextFrame(); program.getUniforms(); program.getAttributes(); }
     },
     supersededChanged: () => { character.refreshVisibility(); invalidate(); },
-    ...(options.onRendererError ? { report: options.onRendererError } : {}) }, options.renderers ?? []);
+    ...(options.onRendererError ? { report: options.onRendererError } : {}) }, options.renderers ?? [], signal);
   releases.push(() => features?.dispose());
   if (options.optionalRenderers) releases.push(followOptionalRenderers(options.optionalRenderers, (factory, signal) => features!.register(factory, signal)));
   // A renderer that replaces resolved parts hides them from the start.
   if (features.superseded().length) character.refreshVisibility();
-  resize();
-  invalidate();
+  signal?.throwIfAborted();
+  // Built: the runtime takes its place on the device, hidden. The device draws it once it is shown, sizing its camera to the pane then.
+  const drawn = device.add({ draw, animating: () => rigMotion.animating() || settle.settling, attach, detach, resized, contextRestored });
+  slot = drawn;
+  releases.push(() => drawn.remove());
   const evidence = coreSceneEvidence({ coreDetail, meshes: rig.meshes, blink, blinkError: motion.blinkError,
     eyeShape: { choices: rig.eyeShapeChoices.length, eyesFollow: rig.eyesFollowShape, eyeMorphTargets: eyes.morphTargetInfluences?.length ?? 0 },
     profileEncoding: character.profileEncoding, idle, idleError: motion.idleError, faceError: motion.faceError ?? "" });
@@ -336,8 +320,13 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     body: core.body,
     scene,
     camera,
-    /** Releases the V's details, the feature renderers, the WebGL renderer, its canvas, the stage and observers; the host is unusable afterwards. */
+    /**
+     * Releases the V's details, the feature renderers, the core head, the rig, the stage and every listener: all it made on the renderer, which
+     * it never disposes (it leaves the device, hidden first if shown). The runtime is unusable afterwards.
+     */
     dispose: () => { character.dispose(); releaseAll(releases); },
+    /** Its place on the renderer device: the device shows it by this (`device.show(runtime.slot)`). */
+    slot: drawn,
     onFrame,
     /** Something the host can't see changed what it draws (for example the selected layer's handles): draw a frame. */
     requestRender: invalidate,
@@ -350,7 +339,8 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     eyes,
     albedo,
     evidence,
-    resize,
+    /** The pane moved or changed size: bring the canvas and, while this runtime is shown, its camera to it. */
+    resize: () => drawn.shown && device.resize(),
     front,
     /** Frame the whole body (the whole-body view); true when the lens is too narrow to fit it within the orbit's reach. */
     frameBody,
@@ -364,8 +354,12 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     featureEvidence: () => features?.evidence() ?? {},
     /** Each feature renderer's draw-order band, by feature (developer evidence). */
     featureBands: () => features?.bands() ?? {},
-    /** Frames drawn, requests and recent frame timings; `running: false` means the viewport is idle. `display`: how frames reach the canvas. */
-    frameTiming: () => ({ ...scheduler.stats(), display: lighting.display.info() }),
+    /**
+     * Frames drawn of this runtime, the device's requests and recent frame timings; `running: false` means nothing of it is being drawn (the
+     * device is idle, or this runtime is hidden). `display`: how frames reach the canvas.
+     */
+    frameTiming: () => { const stats = device.stats();
+      return { ...stats, frames: drawn.frames, running: drawn.shown && stats.running, display: lighting.display.info() }; },
     /** The mouth interior's light (developer evidence): the lip joints measured, the aperture now (metres) and the floor. */
     mouthEvidence: () => ({ lips: mouth.lips, parting: character.mouthParting() }),
     /** Developer comparisons: hold the mouth interior at a fixed parting and floor, or null to follow the face (character-renderer.ts). */

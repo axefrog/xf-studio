@@ -16,7 +16,7 @@ Dependencies point inward. Presentation calls typed application actions and read
 
 **Source layout.** Studio code under `projects/xf-studio/authoring/src/` is organised by subsystem ([source layout plan](../../docs/source-layout-plan.md), [feature-module platform layout](feature-module-platform.md#layout)):
 
-- `platform/api` is the only platform import a feature may use. `platform/core` holds platform services, `platform/persistence/` the durable stores, `platform/export/` the export host, and `platform/scene/` the scene host, which names no feature.
+- `platform/api` is the only platform import a feature may use. `platform/core` holds platform services, `platform/persistence/` the durable stores, `platform/export/` the export host, and `platform/scene/` the renderer device (one per window's 3D pane: its canvas, WebGL context, render loop and size) and the scene host, one scene runtime per scene drawn on it, which names no feature. A runtime owns what it makes on the shared renderer and frees it without the context being lost, and each draw applies its own renderer-global state (`renderer-state.ts`).
 - `engines/<name>/` holds shared pure engines (Three only in their `render/`). An engine holds no feature's data: a feature hands it configuration.
 - `features/<id>/` holds a feature's module. Its core imports only the platform API, engines and its own folder. Its `view/` acts only through the `FeatureViewContext` over its facade. Its `render/` reaches the scene only through the scene port.
 - `compose/` holds the composition lists and the browser roots; only the composition imports it. `studio-ui/` is the presentation shell.

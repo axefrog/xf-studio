@@ -1,6 +1,6 @@
 # Experiment 043: scene runtimes (profiles phase 4a)
 
-**Status:** gap map and chunk plan, approved 22 October 2026 with decisions D1–D4 at their defaults (§4). Chunk 4a-i is built (§7); 4a-ii waits for its review. This is the working record for [profiles design §4.5](../../research/authoring/profiles-views-layouts-design.md#45-scene-runtimes-and-switching-phase-4a) and its phase 4a row in §9.2. It builds on spike S2 ([experiment 039](../039-view-switch-spike/README.md), prototype on branch `claude/spike-views`).
+**Status:** gap map and chunk plan, approved 22 October 2026 with decisions D1–D4 at their defaults (§4). Chunks 4a-i (§7) and 4a-ii (§8) are built on `claude/profiles-4a`. This is the working record for [profiles design §4.5](../../research/authoring/profiles-views-layouts-design.md#45-scene-runtimes-and-switching-phase-4a) and its phase 4a row in §9.2. It builds on spike S2 ([experiment 039](../039-view-switch-spike/README.md), prototype on branch `claude/spike-views`).
 
 Source paths are relative to `projects/xf-studio/authoring/src/`, and line numbers are at `72369156` (phase 1 merged). Tests are in `projects/xf-studio/authoring/tests/`.
 
@@ -141,7 +141,7 @@ Each real-data run uses an isolated server and scratch caches, as S2 did: never 
 
 **What changed.**
 
-- `createSceneHost` takes an optional `renderer` (`platform/scene/scene-host.ts`). The host draws with it and never disposes it or moves its canvas. Without one, behaviour is unchanged.
+- The scene host can draw on a renderer it doesn't own, and never disposes it or moves its canvas. In 4a-ii that renderer became the renderer device's (§8).
 - **The core head goes with its host.** `coreDisposer` (`character/render/core-detail-loader.ts`) captures, at load, every geometry, material, texture and skeleton of the core's glTF scene, plus its record's textures. The host frees them in its release list. The failure path in the loader uses the same function.
 - The rig frees the head's skin material, and the skinned eye copy the game idle makes for gaze (its geometry and skeleton) (`platform/scene/head-rig.ts`).
 - **The makeup stack's geometry waits for its anchor.** It draws over the plate anchor's index and attributes, and the anchor is never drawn (PREV-97), so those buffers were uploaded through the stack's geometry. Three frees an attribute's buffer only when a geometry it drew is disposed. The stack used to strip the shared attributes before disposing, which left the anchor's buffers on the renderer for good. Now its geometry is disposed whole when the anchor's geometry is (`engines/layered-makeup/render/makeup-stack.ts`).
@@ -191,3 +191,66 @@ What stays after the first cycle is shared by every later scene and freed only w
 - **The real masculine and feminine cores:** these use the same code path, but their counts come from G1–G3.
 - **The game idle's gaze-eye copy:** the synthetic idle doesn't make one, so the probe doesn't exercise that release.
 - **A replaced skin underlay of a different vertex count:** that case still waits for renderer teardown (`applyUnderlay`). It doesn't arise today, because the plate's vertex count never changes.
+
+## 8. Chunk 4a-ii: one renderer device, runtimes built hidden (built)
+
+**What changed.**
+
+- **The renderer device** (`platform/scene/renderer-device.ts`), one per window's 3D pane. It owns the canvas and the one WebGL context and `WebGLRenderer` (the opaque, preserved, half-float-checked context the scene host used to open), the one render-on-demand scheduler, the pane's size (its `ResizeObserver`) and device pixel ratio, context loss and restore, and the canvas as the input element. Runtimes are added to it hidden (`device.add`, which gives each a `DeviceSlot`) and drawn only once shown (`device.show(slot)`). A hidden runtime's frame requests wait; showing one draws it. With nothing shown the canvas is hidden, so a released head leaves the pane as it did when its own canvas went. A probe may hand the device a context it made (`options.context`), so the context's calls are counted before Three makes anything.
+- **The scene host is a scene runtime** (`createSceneRuntime(device, options)` in `platform/scene/scene-host.ts`; type `SceneRuntime`). It keeps the scene, its camera and controls, the stage, the lighting, the core head, the rig, the character renderer and the feature renderers. It lost the canvas, the context, the scheduler, resizing, the pane observer and the pixel-ratio watch. Its own context path is gone: 4a-i's `renderer` option became the device. `frameTiming().frames` counts this runtime's drawn frames, and `running` is false while it is hidden. `dispose()` leaves the device (hidden first if shown) and never touches the renderer, its canvas or its context.
+- **Built hidden, with an `AbortSignal`** (`options.signal`), checked between steps:
+  - before anything is made, and after the lighting stage;
+  - inside `loadCoreDetail`, after the record, the geometry's bytes, its parse and the textures (an abort passes through as itself, not as a damaged preview), and again after the core;
+  - inside the rig's motion (`MotionLoader` takes the signal; `loadGameMotion` checks it after the idle source and after the blink, and never turns an abort into the idle's error), and again after the rig;
+  - before each feature renderer (`createFeatureRenderers`), and once the runtime is built.
+
+  A step already running (a glTF parse, a decode) finishes first. An abort releases what was made, as any failed build does. `PreviewPreparationActions.ensureBody` still takes no signal (4a-iv).
+- **Each draw sets its own renderer state** (`platform/scene/renderer-state.ts`). `RendererState` is the record of the renderer-global fields: tone mapping, exposure, clear colour and alpha, output colour space, and the shadow map's switch, type and auto-update. `applyRendererState` writes all of them and sets the canvas as the target. The lighting stage holds its scene's record and no longer writes the renderer when it is made or when a setup changes (the studio exposure used to go straight to `renderer.toneMappingExposure`). It applies the record at the start of every draw (the runtime's `draw` opens with `lighting.applyRendererState()`) and of every compile ahead (`prepare`), because Three keys programs on these fields. The shadow maps' redraw is the scene's own flag, set true or false on every draw from its fingerprint, never left over from another scene's frame.
+- **Camera input reaches only the shown runtime** (decision D3). Each runtime makes its controls without an element. When the device shows it, it connects them, with a fresh binding-catalogue input (`attachHeadCameraInput`); when hidden, it disconnects them. The surface editor's target resolver is kept across shows. A hidden runtime's disposal never touches the canvas's cursor or touch action.
+- **The viewport device holds the device** (`preview/browser/browser-viewport-device.ts`). It makes the device with the first head and builds each head on it with a signal: a newer load or a release aborts a build still running, and a head superseded on its last step is disposed, never shown. Then it shows the head. One head is drawn, and it is released before the next is built, as before. Tests stand in for the device through `deviceFactory`.
+- **The root keeps one head variable** (`compose/studio-startup.ts`): the saved-V, preview and motion services are read from `head`, so `savedAppearance`, `previewActions` and `motionActions` are gone. `scene` (a mirror of `head.scene` for the developer evidence), `attachHead`, `releaseHead` and `headWorkspace` go with the superseding subject change (4a-iv).
+- **Callers moved.** The probe pages (`webgl-scene-host`, `webgl-body`, `webgl-clothing`, `webgl-scene-dispose`), `tools/depth-study.ts` and `tools/glitter-head-study.ts` make a device and show one runtime on it. `bindRenderTriggers` takes any of controls, canvas and lighting: the device binds its canvas, and each runtime its controls and lighting.
+
+**Gates.**
+
+- **T1, the renderer-state contract** (`tests/renderer-state.test.ts`, a recording fake renderer). A record sets every field. Two lighting stages on one renderer draw A, then B, then A, each with its own exposure, tone mapping and clear colour, whatever was left on the renderer in between. Making a stage writes nothing to the renderer, and each scene's shadow redraw is its own. Both tests fail on the code before this chunk.
+- **T2, the device probe** (`tests/webgl-renderer-device.test.ts`, page `tests/webgl-renderer-device-probe-page.ts`, synthetic heads, one counted context):
+  - builds aborted before they start, in the core head, in the motion and among the feature renderers reject with `AbortError`, and leave the GL objects and Three's programs where they were;
+  - runtime B, built, given a V, its parts prepared ahead (programs compiled, maps uploaded) and its makeup composited while A is shown, draws no frame and leaves the canvas byte-identical;
+  - A, then B (another V under another exposure), then A draws A byte-identically, and only the shown runtime draws;
+  - a wheel on the canvas moves only the shown runtime's camera;
+  - two resident runtimes, disposed, leave the device's canvas (hidden), its context alive and the GPU objects where the first disposal left them, and the device draws the next runtime.
+- **4a-i's disposal gate on the shared device** (`tests/webgl-scene-dispose.test.ts`): the page builds its five runtimes on one renderer device with a counted context, showing each.
+- **The existing probes and tests** move to the device with unchanged assertions, apart from the scene host probe's teardown (the runtime leaves the device's canvas, hidden; the device takes it).
+
+**Results** (22 October 2026; RTX 4070, ANGLE D3D11, headless Chrome; every run under the 3 GB guard, peaks 0.5–1.4 GB):
+
+| Gate | Result |
+|---|---|
+| T1 renderer-state contract | 2 of 2 pass |
+| T2 aborted builds (before, core, motion, features) | each rejects with `AbortError`; GL objects and programs equal to the warm baseline after each |
+| T2 hidden build | B drew 0 frames while built, given a V, prepared and composited; A drew no extra frame (2 before, 2 after); canvas checksum unchanged (96 × 96 RGBA, `ef834a41` before and after) |
+| T2 A, B, A | A `ef834a41`, B `b0b55201`, A again `ef834a41`: byte-identical over 36,864 bytes. B drew 0 frames while hidden and A 0 while B was shown |
+| T2 A, B, A, negative check | with the old behaviour put back for one run (the stage writes its exposure to the renderer, the draw doesn't restore it), the A-B-A test fails; the other five pass |
+| T2 input | a wheel moved only the shown runtime's camera, with A shown and then with B shown |
+| T2 disposal of two resident runtimes | canvas kept (hidden), context alive, GL objects and programs equal to the warm baseline, the next runtime draws |
+| 4a-i disposal gate, now on the device | 4 of 4 pass. After every cycle, beyond the empty renderer: 3 textures, 3 buffers, 1 program, 1 vertex array (the renderer-lifetime objects of §7), with only `BackgroundMaterial` used once; 16–17 frames per cycle |
+| The other WebGL probes | scene host 7, body 6, clothing 7, studio lighting 4, display 12, eye 5, plate composite 8, contact shadow 3, skin scatter 8, choice preview 6: all pass |
+| Scene, view, preview, character, viewport, render, lighting, parity and boundary tests | 75 files, 749 pass, 0 fail |
+| `bun run check` | passes |
+
+G1 (scene parity on a real V) has not run.
+
+**G1, scene parity on a real V** (not run here; the coordinator schedules it). It compares this branch with `main` at the merge base, using `tools/scene-parity.ts` on an isolated server as S2 ran it: never port 4317 or 4331, never the maintainer's library or workspace.
+
+1. In a checkout of the base, and then in this worktree, start an isolated server on its own port with scratch caches (039's environment variables), under `memory_guard.py --limit 3`.
+2. On the base, run `bun tools/scene-parity.ts capture <evidence/screenshots/043-g1/base-1> <port>` twice (`base-1`, `base-2`: the first creator frame can differ between runs of one build). On this branch, run `capture <…/after> <port>`. Chrome runs under `--limit 4`.
+3. Run `bun tools/scene-parity.ts compare <…/after> <…/base-1> <…/base-2>`. Every frame (five looks, both lighting presets, 1K and 2K: 20 frames) must be identical to one base capture. The outputs are private renders; keep them in the ignored `evidence/screenshots` tree.
+
+**What 4a-iii and 4a-iv need from this.**
+
+- **The camera pose to and from the camera node** (the second half of D3) is not wired. With one runtime nothing is swapped, so an orbit still persists only through the live `cameraState()`. When a runtime is hidden for another (4a-iv), its pose must be written to the view's camera node (`PreviewActions` already has the unrecorded `cameraMoved` path), and a runtime shown again must take the node's pose. Writing on hide and reading on show avoids a graph edit for every orbit step.
+- **The surface editor binds once, to the drawn runtime,** and its listeners sit on the device's canvas. A swap must settle any open gesture and rebind it (§2.5), with the layered surfaces.
+- **Context restore** reaches every runtime on the device. 4a-iv's residency drops the warm ones first instead.
+- **Supersession.** The viewport device's controller is the seed of the per-scene want. 4a-iv replaces "release, then build" with "build hidden while the previous one stays shown", which the device already allows, and adds the signal to `ensureBody`.
+- **Motion** still lives in `MotionActions` and the workspace's `preview` block (4a-iii); nothing here moved it.

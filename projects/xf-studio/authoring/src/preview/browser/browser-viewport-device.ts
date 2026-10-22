@@ -1,5 +1,6 @@
 import type * as THREE from "three";
-import { createSceneHost, type SceneHost } from "../../platform/scene/scene-host";
+import { createSceneRuntime, type SceneDevice, type SceneRuntime } from "../../platform/scene/scene-host";
+import { createRendererDevice, type RendererDevice, type RendererDeviceOptions } from "../../platform/scene/renderer-device";
 import type { FeatureRendererFactory } from "../../platform/api/scene";
 import type { CoreBody } from "../../character/render-detail";
 import type { LayeredMakeupRegion } from "../../engines/layered-makeup/region";
@@ -9,7 +10,7 @@ import { modifiersOf, NO_MODIFIERS } from "../../app/input-bindings";
 import { ViewportAdapter } from "../../app/viewport-adapter";
 import { ViewportAttachment, type ViewportAttachmentPort, type ViewportHostKind } from "../../app/viewport-attachment";
 
-type Scene = SceneHost;
+type Scene = SceneRuntime;
 type UVEditor = ReturnType<typeof createUVEditor>;
 type SurfaceEditor = ReturnType<typeof createSurfaceEditor>;
 
@@ -24,8 +25,10 @@ export function createBrowserViewportDevice(options: {
   renderers?: readonly FeatureRendererFactory[];
   optionalRenderers?: import("../../platform/api/experiments").ExperimentPort;
   referenceTextures?: import("../../platform/api/scene").SceneHostPort["referenceTextures"];
-  sceneFactory?: typeof createSceneHost;
-  /** The head's WebGL context was lost or came back (the scene host reports it; the composition root logs it). */
+  sceneFactory?: typeof createSceneRuntime;
+  /** The head pane's renderer device (default: the browser's; tests pass a stand-in). Made when the first head loads. */
+  deviceFactory?: (host: HTMLElement, options: RendererDeviceOptions) => SceneDevice & Pick<RendererDevice, "show">;
+  /** The head's WebGL context was lost or came back (the renderer device reports it; the composition root logs it). */
   onContext?: (event: "lost" | "restored") => void;
   uvFactory?: typeof createUVEditor;
   surfaceFactory?: typeof createSurfaceEditor;
@@ -33,7 +36,11 @@ export function createBrowserViewportDevice(options: {
   window?: Pick<Window, "addEventListener"> & { document?: Pick<Document, "addEventListener" | "visibilityState"> };
 }) {
   const editors = new ViewportAdapter();
+  /** The head pane's one renderer device (profiles phase 4a-ii): made with the first head, kept for the window. */
+  let device: SceneDevice & Pick<RendererDevice, "show"> | undefined;
   let viewer: Scene | undefined;
+  /** The head being built: a newer load or a release stops it. */
+  let building: AbortController | undefined;
   let uvEditor: UVEditor | undefined;
   let surfaceEditor: SurfaceEditor | undefined;
   // Each registered viewport host's element and the editor slot its input and capture belong to.
@@ -74,6 +81,7 @@ export function createBrowserViewportDevice(options: {
     });
   }
   function releaseHead() {
+    building?.abort(); building = undefined;
     editors.detach("surface");
     surfaceEditor = undefined;
     const loaded = viewer;
@@ -90,11 +98,23 @@ export function createBrowserViewportDevice(options: {
       attachment.setReady("uv");
       return uvEditor;
     },
-    /** Load the head with a body's core (the feminine V's by default); the previous head is released first. */
+    /**
+     * Load the head with a body's core (the feminine V's by default); the previous head is released first. The head is built hidden on the
+     * pane's renderer device and shown once it is ready; a newer load (or a release) aborts a build still running.
+     */
     async loadHead(body: CoreBody = "female") {
       releaseHead();
-      viewer = await (options.sceneFactory ?? createSceneHost)(options.headHost, { body, renderers: options.renderers, optionalRenderers: options.optionalRenderers, referenceTextures: options.referenceTextures, onContext: options.onContext });
-      return viewer;
+      device ??= (options.deviceFactory ?? createRendererDevice)(options.headHost, { onContext: options.onContext });
+      const controller = building = new AbortController();
+      try {
+        const built = await (options.sceneFactory ?? createSceneRuntime)(device, { body, renderers: options.renderers, optionalRenderers: options.optionalRenderers,
+          referenceTextures: options.referenceTextures, signal: controller.signal });
+        // Superseded while its last step finished: it is never shown.
+        if (controller.signal.aborted) { built.dispose(); throw controller.signal.reason; }
+        viewer = built;
+        device.show(built.slot);
+        return built;
+      } finally { if (building === controller) building = undefined; }
     },
     /**
      * Releases this head (its surface editor, then the scene's renderer and canvas) if it is still
