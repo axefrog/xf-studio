@@ -37,18 +37,18 @@ Last verified 25 September 2026: authoring `bun test` passes 448 (including desk
 
 ## Runtime evidence and current stable releases
 
-The latest inspected RED4ext session is September 16 2026, 11:14-11:25 Brisbane time, game 2.31 / file version 3.0.80.51928. The snapshot is retained in `captures/20260923-085239-949631-foundation-existing-logs/`; capture date is not game-session date.
+The latest game sessions with recorded logs are the runtime bridge's sessions 10 and 11 on 22 October 2026: game 2.31, file version 3.0.80.51928, as the bridge reports it (`bridge_info`). The first framework survey's logs (16 September) are retained in `captures/20260923-085239-949631-foundation-existing-logs/`.
 
-**Installed frameworks (25 September, after reorganisation):** the ArchiveXL, TweakXL and Codeware entries used by both MO2 profiles were updated in place to 1.27.3, 1.11.4 and 1.20.5; the read-only [framework check](../research/authoring/framework-version-check.md) reads those versions from the DLL version resources, redscript 0.5.31 from MO2 metadata, and RED4ext 1.30.0 and CET 1.37.1 from the game folder. These are installed-file observations, not evidence of a new game launch. ArchiveXL 1.27.3 and Codeware 1.20.5 explicitly list game 2.31 in their tagged READMEs; TweakXL 1.11.4's tagged README still names game 2.3, so its 2.31 compatibility needs fresh runtime confirmation. The 1.28.0 ArchiveXL beta, 1.11.5 TweakXL release candidate and redscript 1.0 development line are not the stable test targets.
+**Installed frameworks (21 October 2026):** ArchiveXL, TweakXL and Codeware were updated in place in their MO2 mod folders to 1.27.5, 1.11.5 and 1.20.6; RED4ext 1.30.0, redscript 0.5.31 and CET 1.37.1 are unchanged, and the game is 2.31 (file version 3.0.80.51928). These are installed-file observations. The runtime bridge's sessions 10 and 11 (22 October) launched the game on this stack with the bridge loaded and Codeware-dependent features working (the ink panel, XF Finish Showroom's heads); they don't record each framework's loaded version. The read-only [framework check](../research/authoring/framework-version-check.md) reads the versions from the DLL version resources (ArchiveXL, TweakXL, Codeware), MO2 metadata (redscript) and the game folder (RED4ext, CET).
 
-| Framework | Last observed runtime version (16 September log) | Current stable release | Installed now |
-|---|---|---|---|
-| ArchiveXL | 1.26.3 | [1.27.3](https://github.com/psiberx/cp2077-archive-xl/releases/tag/v1.27.3) | 1.27.3, updated in place; verify actual load |
-| TweakXL | 1.11.3 | [1.11.4](https://github.com/psiberx/cp2077-tweak-xl/releases/tag/v1.11.4) | 1.11.4, updated in place; tagged README still names game 2.3 |
-| Codeware | 1.20.3 | [1.20.5](https://github.com/psiberx/cp2077-codeware/releases/tag/v1.20.5) | 1.20.5, updated in place; verify actual load |
-| RED4ext | 1.30.0 (runtime) | [1.30.0](https://github.com/wopss/RED4ext/releases/tag/v1.30.0) | Current at check time |
-| redscript | 0.5.31 (MO2 metadata; compilation success in latest runtime log) | [0.5.31](https://github.com/jac3km4/redscript/releases/tag/v0.5.31) | Current stable; do not deploy the 1.0.x development source branch |
-| CET | 1.37.1 (latest session header in appended log) | [1.37.1](https://github.com/maximegmd/CyberEngineTweaks/releases/tag/v1.37.1) | Current at check time |
+| Framework | Installed now | Notes |
+|---|---|---|
+| ArchiveXL | [1.27.5](https://github.com/psiberx/cp2077-archive-xl/releases/tag/v1.27.5) | Updated in place 21 October |
+| TweakXL | [1.11.5](https://github.com/psiberx/cp2077-tweak-xl/releases/tag/v1.11.5) | Updated in place 21 October |
+| Codeware | [1.20.6](https://github.com/psiberx/cp2077-codeware/releases/tag/v1.20.6) | Updated in place 21 October; the bridge's redscript lint still runs against Codeware's `v1.20.4` scripts |
+| RED4ext | [1.30.0](https://github.com/wopss/RED4ext/releases/tag/v1.30.0) | Unchanged (game folder) |
+| redscript | [0.5.31](https://github.com/jac3km4/redscript/releases/tag/v0.5.31) | Unchanged; do not deploy the 1.0.x development source branch |
+| CET | [1.37.1](https://github.com/maximegmd/CyberEngineTweaks/releases/tag/v1.37.1) | Unchanged (game folder) |
 
 Official GitHub API responses were reduced to release metadata in [framework release record](../inventory/framework-releases-2026-09-23.json) (like other `inventory/` outputs, a local-only ignored file). Frameworks are never installed or duplicated by Studio tooling; an earlier side-by-side diagnostic install was removed ([historical record](../research/authoring/framework-diagnostic-profile-2026-09-25.md)).
 

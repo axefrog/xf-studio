@@ -26,7 +26,7 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
-DEFAULT_PROFILES = ["XF Studio diagnostic 2026-09-25", "2025 (again)"]
+DEFAULT_PROFILES = ["XF Studio diagnostic", "2025 (again)"]
 TEXT_LIMIT = 4 * 1024 * 1024  # skip text files larger than this
 
 # Libraries psiberx publishes for CET mods; many mods bundle copies. Hooks found in these files are attributed
