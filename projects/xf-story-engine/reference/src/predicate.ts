@@ -11,6 +11,7 @@ import type {
 } from './types.ts';
 import { contains } from './region.ts';
 import { valueKey } from './value.ts';
+import { failIfFailed } from './work.ts';
 
 /** How a subject node relates to the change being matched (spec 10.5). */
 export interface Binding {
@@ -138,6 +139,7 @@ function follow(env: PredicateEnv, node: Id, rawPath: string): { target: Target;
     }
     if (isLast) {
       const r = env.read(cur, seg);
+      failIfFailed(r.status, `${seg} of ${cur}`);
       if (r.value === undefined || (r.status !== 'ok' && r.status !== 'contradiction')) return { target: { k: 'missing' }, bucket };
       return { target: { k: 'value', value: r.value }, bucket };
     }
@@ -290,6 +292,7 @@ function scopeContains(env: PredicateEnv, scope: NonNullable<Selector['scope']>,
   }
   if ('under' in scope) return isUnder(env, node, env.expandId ? env.expandId(scope.under) : scope.under);
   const r = env.read(node, 'position');
+  failIfFailed(r.status, `position of ${node}`);
   if (r.value === undefined) return false;
   return inSpatialRegion(r.value, scope.region);
 }

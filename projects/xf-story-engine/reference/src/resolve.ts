@@ -17,7 +17,7 @@ import type { Form } from './types.ts';
 import {
   domainRegion, encodeValue, enumerateRegion, gridStep, normalizeRegion, pointRegion, regionSize, valueKey, valuesEqual,
 } from './value.ts';
-import { Allowance, LimitExceeded } from './work.ts';
+import { Allowance, LimitExceeded, failIfFailed } from './work.ts';
 import type { ValueType } from './schema-types.ts';
 import type {
   Contribution, GameTime, Id, Layer, NodeHeader, Pin, Region, ResolveResult, ResolveStatus, SlotPath, Value,
@@ -133,11 +133,19 @@ interface CacheEntry {
   height: number;
 }
 
+/** The value a change carried for one slot of its subject: its new value, or the old one for a removal. */
+export interface OwnValue {
+  node: Id;
+  slot: SlotPath;
+  value: Value;
+}
+
 export type EffectiveMode = 'sampled' | 'assigned' | 'derived' | 'mirrored';
 
 export class Resolver {
   private cache = new Map<string, CacheEntry>();
   private cacheRevision = -1;
+  private cacheNow = Number.NaN;
 
   constructor(private readonly k: Kernel) {}
 
@@ -196,9 +204,12 @@ export class Resolver {
 
   /** Resolution inside another outer operation (a query, a matcher): shares its allowance. */
   resolveWithin(ctx: OpCtx, node: Id, rawPath: SlotPath, t: GameTime): Res {
-    if (this.cacheRevision !== this.k.revision) {
+    // A cached result is valid for the same revision and the same engine time: retention, and through it the
+    // structural constraints, depends on the time (SPEC-NOTES 53).
+    if (this.cacheRevision !== this.k.revision || this.cacheNow !== this.k.now) {
       this.cache.clear();
       this.cacheRevision = this.k.revision;
+      this.cacheNow = this.k.now;
     }
     const stackKey = `${node}|${rawPath}`;
     if (ctx.stack.has(stackKey)) {
@@ -251,13 +262,16 @@ export class Resolver {
 
   // ---- environment for predicates ----
 
-  /** A predicate environment bound to an operation. Pass `restrict` for resolution-mode reads (spec 2.3). */
-  makeEnv(ctx: OpCtx, t: GameTime, restrict?: { node: Id; order: number }, binding?: Binding): PredicateEnv {
+  /**
+   * A predicate environment bound to an operation. Pass `restrict` for resolution-mode reads (spec 2.3).
+   * Pass `own` when matching a change: reading that one slot gives the change's own value (spec 10.5).
+   */
+  makeEnv(ctx: OpCtx, t: GameTime, restrict?: { node: Id; order: number }, binding?: Binding, own?: OwnValue): PredicateEnv {
     const store = this.k.store;
     const env: PredicateEnv = {
       schema: this.schema,
       t,
-      read: (n, p) => this.resolveWithin(ctx, n, p, t),
+      read: (n, p) => (own && n === own.node && p === own.slot ? { value: own.value, status: 'ok' } : this.resolveWithin(ctx, n, p, t)),
       kindOf: (n) => store.header(n)?.kind,
       ownerOf: (n) => this.ownerOf(n),
       child: (n, seg) => this.childOf(ctx, n, seg, t),
@@ -285,6 +299,7 @@ export class Resolver {
     if (!info || !info.isNode) return undefined;
     if (info.index !== undefined) {
       const count = this.resolveWithin(ctx, node, `${info.def.key}#count`, t);
+      failIfFailed(count.status, `${info.def.key}#count of ${node}`);
       if (count.value === undefined || typeof count.value !== 'number' || info.index >= count.value) return undefined;
     }
     return this.k.address(node, seg);
@@ -606,6 +621,7 @@ export class Resolver {
     for (const p of form.inputs) {
       this.assertReadable(env, node, p);
       const r = this.readDep(ctx, node, p, t);
+      failIfFailed(r.status, `${p} of ${node}`);
       if (r.value === undefined) return undefined;
       inputs.push(r.value);
     }
@@ -871,6 +887,7 @@ export class Resolver {
           }
           this.assertReadable(env, node, form.base);
           const base = this.readDep(ctx, node, form.base, t);
+          failIfFailed(base.status, `${form.base} of ${node}`);
           if (!Array.isArray(base.value)) return null;
           let acc = form.combine === 'sum' ? 0 : -Infinity;
           for (const p of form.points) {

@@ -9,8 +9,8 @@
 import type { Kernel } from './kernel.ts';
 import { type Binding, namesNode, selectorMatches } from './predicate.ts';
 import { INTEREST_TYPES, type InterestType } from './registry.ts';
-import { newOpCtx } from './resolve.ts';
-import type { Change, Edge, Id, PendingChange, Selector } from './types.ts';
+import { type OwnValue, newOpCtx } from './resolve.ts';
+import type { Change, Edge, Id, PendingChange, Selector, Value } from './types.ts';
 import { type Budget, LimitExceeded } from './work.ts';
 
 export interface Relevance {
@@ -37,10 +37,27 @@ interface Active {
   bindings: Binding[];
   wild: Extract<Change, { c: 'contribution' }> | null;
   includeEdge?: Edge;
+  own?: OwnValue;
   best: Map<string, { rel: Relevance; ord: number }>;
 }
 
 const NO_SLOT = '\u0000none';
+
+const isValue = (x: unknown): x is Value => typeof x === 'string' || typeof x === 'number' || Array.isArray(x);
+
+/**
+ * What a change says about one slot of its subject, for matching (spec 10.5): "evaluated on new values
+ * (on old values for removals)". A pin or reading carries it; a withdrawn pin is a removal. A region, or
+ * a change that carries no value for a slot, leaves the world at the change's time to answer.
+ */
+export function ownValueOf(change: Change): OwnValue | undefined {
+  if (change.c === 'pin') {
+    const v = change.reason === 'withdrawn' ? change.old : change.new;
+    return isValue(v) ? { node: change.node, slot: change.slot, value: v } : undefined;
+  }
+  if (change.c === 'reading') return { node: change.node, slot: change.slot, value: change.new };
+  return undefined;
+}
 
 export function bindingsOf(change: Change): { bindings: Binding[]; wild: Extract<Change, { c: 'contribution' }> | null } {
   switch (change.c) {
@@ -102,6 +119,8 @@ export class Dispatcher {
     const { bindings, wild } = bindingsOf(pc.change);
     const a: Active = { pc, scan: this.k.frames.scanList(), pos: 0, bindings, wild, best: new Map() };
     if (pc.change.c === 'edge' && pc.change.ended) a.includeEdge = pc.change.edge;
+    const own = ownValueOf(pc.change);
+    if (own) a.own = own;
     return a;
   }
 
@@ -135,7 +154,7 @@ export class Dispatcher {
     let bestS = -1;
     try {
       for (const b of a.bindings) {
-        const env = k.resolver.makeEnv(ctx, a.pc.time, undefined, b);
+        const env = k.resolver.makeEnv(ctx, a.pc.time, undefined, b, a.own);
         if (a.includeEdge) env.includeEdge = a.includeEdge;
         if (selectorMatches(env, e.selector, b.node, b.slot ?? NO_SLOT)) {
           bestS = Math.max(bestS, this.specificity(e.selector, b.node, env));

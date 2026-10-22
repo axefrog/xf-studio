@@ -5,6 +5,7 @@
 // process produces is plain data (ProcessOp), held in its ProcessState with the boundary at which it
 // applies, so a save and a load never lose or re-run a batch (spec 14.1).
 
+import { canonicalKey, hrec } from './canon.ts';
 import { H, type HArg, id as hid, i as hi, rand, s as hs } from './id.ts';
 import type { Kernel } from './kernel.ts';
 import type { ContributionSpec, EdgeSpec, PinSpec } from './kernel.ts';
@@ -124,10 +125,10 @@ export class Evolution {
   /** Queue an external operation (a reading, an observation, a seed operation). Stale epochs are refused. */
   submit(env: Envelope): SubmitResult {
     if (env.epoch !== this.k.epoch) return { accepted: false, reason: 'the operation was created in an earlier epoch' };
-    const json = JSON.stringify(env.op);
+    const key = canonicalKey(env.op);
     let ord = 0;
-    for (const q of this.queue) if (q.stamp === env.stamp && JSON.stringify(q.op) === json) ord++;
-    const id = H(hs('xop'), hid(env.epoch), hi(env.stamp), hs(json), hi(ord));
+    for (const q of this.queue) if (q.stamp === env.stamp && canonicalKey(q.op) === key) ord++;
+    const id = H(hs('xop'), hid(env.epoch), hi(env.stamp), hrec(env.op), hi(ord));
     this.queue.push({ ...env, id });
     return { accepted: true, id };
   }
@@ -162,7 +163,10 @@ export class Evolution {
       report.boundaries++;
       budget?.spend(cost);
     }
-    if (report.done) this.k.now = Math.max(this.k.now, t);
+    if (report.done) {
+      this.k.now = Math.max(this.k.now, t);
+      this.k.groups.crossTo(this.k.now);
+    }
     return report;
   }
 
@@ -171,6 +175,7 @@ export class Evolution {
     const W = k.config.wSim;
     const T = b * W;
     k.now = T;
+    k.groups.crossTo(T);
     let cost = 1;
 
     // 1. Apply the outputs of every run whose span ends here, by tier then id.
@@ -239,7 +244,7 @@ export class Evolution {
       report.runs++;
       cost += 1 + ctx.allowance.used;
     }
-    k.beliefs.onBoundary();
+    k.beliefs.onBoundary(b, T);
     return cost;
   }
 

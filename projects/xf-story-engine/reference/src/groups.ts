@@ -29,8 +29,12 @@ const cmpId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 export class Groups {
   readonly decisionLog: DecisionRecord[] = [];
   private syncing = false;
+  /** The game time up to which membership validity crossings have been handled (SPEC-NOTES 56). */
+  private crossedUntil: GameTime;
 
-  constructor(private readonly k: Kernel) {}
+  constructor(private readonly k: Kernel) {
+    this.crossedUntil = k.now;
+  }
 
   // ---- membership ----
 
@@ -66,6 +70,33 @@ export class Groups {
     if (edge.type !== 'core:member-of') return;
     this.k.frames.worklist.push({ t: 'inherit', actor: edge.from });
     this.k.frames.worklist.push({ t: 'dilemma-actor', actor: edge.from });
+  }
+
+  /**
+   * The clock reached `t`. A membership edge whose validity starts or ends in (the last time handled, `t`]
+   * changes which group concerns its member inherits, so the member re-syncs and its goals are checked
+   * again, in the frame worklist, before pull and dispatch consume the result. The engine calls this at
+   * every boundary it processes and when an advance ends, so the crossings handled do not depend on how
+   * ticks fell (SPEC-NOTES 56).
+   */
+  crossTo(t: GameTime): void {
+    if (!(t > this.crossedUntil)) return;
+    const from = this.crossedUntil;
+    this.crossedUntil = t;
+    const crosses = (x: GameTime | undefined): boolean => x !== undefined && x > from && x <= t;
+    const members = new Set<Id>();
+    for (const e of this.k.store.allEdges()) {
+      if (e.type === 'core:member-of' && (crosses(e.valid.from) || crosses(e.valid.to))) members.add(e.from);
+    }
+    for (const m of [...members].sort(cmpId)) {
+      this.k.frames.worklist.push({ t: 'inherit', actor: m });
+      this.k.frames.worklist.push({ t: 'dilemma-actor', actor: m });
+    }
+  }
+
+  /** A load restores the clock to the time of the save. */
+  resetClock(t: GameTime): void {
+    this.crossedUntil = t;
   }
 
   /** A frame changed: a group concern change re-syncs its members; a member frame change re-syncs itself. */

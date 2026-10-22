@@ -58,7 +58,7 @@ describe('the determinism digest', () => {
     expect(k.revision).toBe(1344);
     expect(k.store.allPins()).toHaveLength(408);
     expect(k.store.allContributions()).toHaveLength(338);
-    expect(digest).toBe('00796d399c46bee565b64ca1f03323ae');
+    expect(digest).toBe('431d3e8a5309a7df066865689748123c');
   });
 
   test('a second run of the same script gives the same digest (no hidden state, no iteration-order dependence)', () => {

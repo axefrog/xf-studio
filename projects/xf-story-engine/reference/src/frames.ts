@@ -4,6 +4,7 @@
 // Frames form an acyclic graph (I-14). Status, weight and parent changes recompute descendants through
 // the frame worklist (spec 10.4); relevance dispatch waits until that worklist is empty.
 
+import { hrec } from './canon.ts';
 import { H, id as hid, i as hi, s as hs } from './id.ts';
 import type { Kernel } from './kernel.ts';
 import { namesNode } from './predicate.ts';
@@ -249,12 +250,13 @@ export class Frames {
 
   /** Open a frame. Refuses cycles and unauthorised group frames. */
   open(spec: FrameSpec): ContextFrame {
+    this.k.assertWritable();
     this.checkWritable(spec.actor, spec.level);
     const opened = this.k.now;
     const payload = spec.payload ?? {};
     const fid = spec.id ?? H(
-      hs('frame'), hid(spec.actor), hs(spec.level), hid(spec.origin), hi(opened), hid(spec.cause), hs(JSON.stringify(payload)),
-      hs(JSON.stringify((spec.parents ?? []).map((p) => [p.frame, p.weight]))),
+      hs('frame'), hid(spec.actor), hs(spec.level), hid(spec.origin), hi(opened), hid(spec.cause), hrec(payload),
+      hrec((spec.parents ?? []).map((p) => [p.frame, p.weight])),
     );
     const existing = this.frames.get(fid);
     if (existing) return existing;
@@ -272,7 +274,7 @@ export class Frames {
       status: spec.status ?? 'active', opened, cause: spec.cause,
     };
     this.insert(f);
-    this.touch(f.id, { dilemma: f.level === 'goal' || f.payload.goal !== undefined });
+    this.touch(f.id, { dilemma: true });
     return f;
   }
 
@@ -307,6 +309,7 @@ export class Frames {
   }
 
   private mutate(id: Id, change: (f: ContextFrame) => void, opts: { dilemma?: boolean } = {}): ContextFrame {
+    this.k.assertWritable();
     const f = this.frames.get(id);
     if (!f) throw new Error(`unknown frame: ${id}`);
     this.checkWritable(f.actor, f.level);
@@ -319,7 +322,7 @@ export class Frames {
     return this.mutate(id, (f) => {
       f.status = status;
       f.cause = cause;
-    });
+    }, { dilemma: true });
   }
 
   setWeight(id: Id, weight: number, cause: Id): ContextFrame {
@@ -346,6 +349,7 @@ export class Frames {
 
   /** Replace a frame's parent links. Refuses a link that would close a cycle. */
   setParents(id: Id, parents: FrameParent[], cause: Id): ContextFrame {
+    this.k.assertWritable();
     const f = this.frames.get(id);
     if (!f) throw new Error(`unknown frame: ${id}`);
     this.checkParents(id, f.actor, parents);
@@ -358,7 +362,7 @@ export class Frames {
         set.add(id);
       }
       fr.cause = cause;
-    });
+    }, { dilemma: true });
   }
 
   addParent(child: Id, parent: FrameParent, cause: Id): ContextFrame {
@@ -368,7 +372,12 @@ export class Frames {
     return this.setParents(child, [...rest, parent], cause);
   }
 
-  /** Bookkeeping common to every frame change: version, revision, worklist, demand log (spec 10.4). */
+  /**
+   * Bookkeeping common to every frame change: version, revision, worklist, demand log (spec 10.4).
+   * `dilemma` marks a change to the set of interests the frame's actor and its descendants' actors are
+   * bound by (a frame opens, enters or leaves the interest set, changes its interests or its parents), so
+   * each of those actors' goals is checked again (spec 10.8, SPEC-NOTES 42).
+   */
   private touch(id: Id, opts: { dilemma?: boolean } = {}): void {
     this.versions.set(id, this.version(id) + 1);
     this.k.bump();
@@ -384,7 +393,14 @@ export class Frames {
       for (const c of this.childrenOf(cur)) queue.push(c);
     }
     for (const f of order) this.worklist.push({ t: 'pull', frame: f });
-    if (opts.dilemma) this.worklist.push({ t: 'dilemma', frame: id });
+    if (opts.dilemma) {
+      const actors = new Set<Id>();
+      for (const d of order) {
+        const df = this.frames.get(d);
+        if (df) actors.add(df.actor);
+      }
+      for (const actor of actors) this.worklist.push({ t: 'dilemma-actor', actor });
+    }
     const fr = this.frames.get(id);
     if (fr) this.k.groups.onFrameChange(fr);
     this.updateDemandLog();

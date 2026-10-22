@@ -1,13 +1,29 @@
 // Work accounting (spec 10.7): the shared allowance of an atomic operation, the defect log, and the
 // budgeted, resumable worklists.
 
-import type { Id } from './types.ts';
+import type { Id, ResolveStatus } from './types.ts';
 
 /** Thrown inside an atomic operation when a hard limit is hit; the outer operation turns it into `failed`. */
 export class LimitExceeded extends Error {
   constructor(public readonly reason: string) {
     super(`work limit exceeded: ${reason}`);
   }
+}
+
+/**
+ * A nested resolution failed. The outer operation fails with it, never reading the failed slot as a
+ * missing value and carrying on with an incomplete answer (spec 8.4, SPEC-NOTES 54). An unavailable slot
+ * is still an ordinary missing value.
+ */
+export class NestedFailure extends LimitExceeded {
+  constructor(what: string) {
+    super(`a nested resolution failed: ${what}`);
+  }
+}
+
+/** Throw `NestedFailure` when a nested read came back `failed`. */
+export function failIfFailed(status: ResolveStatus, what: string): void {
+  if (status === 'failed') throw new NestedFailure(what);
 }
 
 /** One counter per outer operation (a resolution or a query). Nested work draws on the same counter. */

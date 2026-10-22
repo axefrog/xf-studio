@@ -49,6 +49,7 @@ export class Events {
    */
   mintEvent(spec: EventSpec): Id {
     const k = this.k;
+    k.assertWritable();
     const nid = H(hs('mint'), hid(spec.creator), hid(spec.cause), hs(spec.name));
     if (k.store.header(nid)) return nid;
     k.mintSilent(spec.creator, spec.cause, spec.name, 'core:event');
@@ -146,6 +147,7 @@ export class Events {
    */
   makeCanon(event: Id, reason: 'observed' | 'committed', cause: Id, fields: readonly EventField[] = EVENT_FIELDS): Id[] {
     const k = this.k;
+    k.assertWritable();
     const h = k.store.header(event);
     if (!h || !k.schema.isKind(h.kind, 'core:event')) throw new Error(`not an event: ${event}`);
     const pins: Id[] = [];

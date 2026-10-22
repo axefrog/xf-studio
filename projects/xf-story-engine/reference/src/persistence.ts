@@ -7,13 +7,14 @@
 // mirrored state is reconciled with the game, and a new epoch starts.
 
 import type { BeliefEntry } from './beliefs.ts';
+import { canonicalEqual } from './canon.ts';
 import type { EventCanonRecord } from './events.ts';
 import type { ProcessState } from './evolution.ts';
 import type { ContextFrame } from './frames.ts';
 import type { Kernel } from './kernel.ts';
 import type { SeedRecord } from './retention.ts';
 import type { SummaryRecord } from './summary.ts';
-import type { Contribution, Edge, GameTime, Id, NodeHeader, Pin, Tier, Value } from './types.ts';
+import type { Contribution, Edge, Form, GameTime, Id, NodeHeader, Pin, Tier, Value } from './types.ts';
 
 export type PersistOp =
   | { op: 'HeaderAdded'; header: NodeHeader }
@@ -98,9 +99,24 @@ export interface Pack {
   contributions: Array<Omit<Parameters<Kernel['contribute']>[0], 'source'> & { layer: Contribution['source']['layer'] }>;
 }
 
+/** The registry functions a form uses, nested forms included, written as `category:name@version` (spec 14.4). */
+export function formFunctions(form: Form, out: Set<string>): void {
+  switch (form.f) {
+    case 'field':
+      out.add(`fieldmap:${form.map.name}@${form.map.version}`);
+      break;
+    case 'derive':
+      out.add(`derive:${form.fn.name}@${form.fn.version}`);
+      break;
+    case 'rule':
+      formFunctions(form.then, out);
+      break;
+  }
+}
+
 const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x)) as T;
 const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
-const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+const same = (a: unknown, b: unknown): boolean => canonicalEqual(a, b);
 
 /** The persisted state as keyed maps, so diffing and replay are lookups. */
 export class PersistedView {
@@ -285,10 +301,26 @@ export class Persistence {
     return v;
   }
 
-  private meta(total: number, sinceSnapshot: number): SaveMeta {
+  /**
+   * Every function the save depends on (spec 14.4, SPEC-NOTES 39): those the schema names, the effect
+   * conflict table in force, and those used by the forms of the persisted contributions and of the
+   * operations in outstanding process batches, which load back into the world.
+   */
+  private functionVersions(state: PersistedView): string[] {
+    const k = this.k;
+    const out = new Set<string>(k.schema.functionVersions());
+    out.add(`conflict:${k.conflictTable.name}@${k.conflictTable.version}`);
+    for (const c of state.contributions.values()) formFunctions(c.form, out);
+    for (const st of state.processes.values()) {
+      for (const b of st.outstanding) for (const op of b.ops) if (op.op === 'contribute') formFunctions(op.form, out);
+    }
+    return [...out].sort();
+  }
+
+  private meta(total: number, sinceSnapshot: number, state: PersistedView): SaveMeta {
     const k = this.k;
     return {
-      worldSeed: k.worldSeed, time: k.now, cursor: k.evolution.cursor, versions: k.schema.functionVersions(),
+      worldSeed: k.worldSeed, time: k.now, cursor: k.evolution.cursor, versions: this.functionVersions(state),
       packs: [...this.installed.entries()].sort((a, b) => cmp(a[0], b[0])).map(([id, version]) => ({ id, version })),
       demandRoots: [...k.frames.demandRoots].sort(cmp), demand: k.frames.demandHistory(), sinceSnapshot, total,
     };
@@ -343,6 +375,7 @@ export class Persistence {
 
   /** Write a save record for the current state, as a child of the save last written or loaded (spec 14.2). */
   save(saveKey: string): SaveRecord {
+    this.k.assertWritable();
     if (this.chain.has(saveKey)) throw new Error(`save key already used: ${saveKey}`);
     const k = this.k;
     const cur = this.currentView();
@@ -352,7 +385,7 @@ export class Persistence {
     let since = (parent?.meta.sinceSnapshot ?? 0) + ops.length;
     const next = this.base.clone();
     for (const op of ops) next.apply(op);
-    const rec: SaveRecord = { saveKey, parent: this.baseKey, ops, meta: this.meta(total, since) };
+    const rec: SaveRecord = { saveKey, parent: this.baseKey, ops, meta: this.meta(total, since, next) };
     if (since >= k.config.snapshotEvery) {
       rec.snapshot = next.toData();
       since = 0;
@@ -455,6 +488,7 @@ export class Persistence {
     const missing = rec.meta.versions.filter((v) => !have.has(v));
     let report: LoadReport = { saveKey, readOnly: false, epoch: k.epoch, missingPacks, replayed };
     k.now = rec.meta.time;
+    k.groups.resetClock(rec.meta.time);
     k.bump();
 
     // 3. Reconcile with the game: the mirrored state becomes `game` readings at the current time.

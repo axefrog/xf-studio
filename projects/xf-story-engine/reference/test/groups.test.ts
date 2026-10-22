@@ -64,13 +64,17 @@ describe('F-8 cross-pressure (spec 10.8)', () => {
     w.k.updateEdge(edge.id, { data: { obligations: [] } });
     w.k.settle();
     expect(w.k.frames.drainDilemmas()).toHaveLength(0);
-    // A frame's interests change: the pair is checked again, and emitted once more.
+    // Either frame changes: the pair is checked again and emitted once more. A change of B's interests
+    // rechecks the actor's existing goals, so the unchanged order frame is checked too (SR-10).
     w.k.frames.setInterests(w.family.id, { protects: [{ slot: '*', scope: { nodes: [w.X] } }, { slot: '*', scope: { nodes: [w.L] } }] }, cause);
     w.k.settle();
-    expect(w.k.frames.drainDilemmas()).toHaveLength(0); // the order frame has not changed: B changed, but A was not rechecked
+    expect(w.k.frames.drainDilemmas()).toHaveLength(1);
     w.k.frames.setInterests(w.order.id, {}, cause);
     w.k.settle();
     expect(w.k.frames.drainDilemmas()).toHaveLength(1);
+    // And once the pair has been emitted for the frames as they now are, nothing changes it.
+    w.k.settle();
+    expect(w.k.frames.drainDilemmas()).toHaveLength(0);
   });
 
   test('frames of the same origin are never in dilemma with each other', () => {

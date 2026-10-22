@@ -30,7 +30,8 @@ describe('F-12 branching (spec 14.2, 14.3)', () => {
 
     k.persistence.load('A');
     expect(k.store.pin(p1.id)).toBeUndefined();
-    expect(k.store.header(n)).toBeUndefined();
+    // The frame in save A names n in an interest, so n is one of its Id fields and A holds n's header (spec 7.3, SR-01).
+    expect(k.store.header(n)).toBeDefined();
     const n2 = k.root('n', 'fx:t');
     expect(n2).toBe(n);
     const p2 = k.pin({ node: n, slot: 'x', value: 'b', reason: 'authored', cause });

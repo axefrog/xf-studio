@@ -90,7 +90,7 @@ describe('F-9 hearsay (spec 11.2)', () => {
 });
 
 describe('policy hooks (spec 11.2)', () => {
-  test('onTick is called for each believer after a boundary, as a budgeted worklist', () => {
+  test('onTick is called for each believer after every processed boundary, as a budgeted worklist', () => {
     const k = coreKernel('ticks');
     const a = k.root('a', 'core:person');
     const b = k.root('b', 'core:person');
@@ -99,10 +99,13 @@ describe('policy hooks (spec 11.2)', () => {
     }
     const called: Id[] = [];
     k.beliefs.policy = { ...STUB_POLICY, onTick: (_k, who) => { called.push(who); } };
+    // Boundaries 0 and 1 are both processed: each gives every believer its hook (SR-09), in boundary order.
     k.tick({ to: 600 });
-    expect([...called].sort()).toEqual([a, b].sort());
-    k.tick({ to: 1200 });
     expect(called).toHaveLength(4);
+    expect([...called.slice(0, 2)].sort()).toEqual([a, b].sort());
+    expect([...called.slice(2)].sort()).toEqual([a, b].sort());
+    k.tick({ to: 1200 });
+    expect(called).toHaveLength(6);
     k.beliefs.policy = STUB_POLICY;
   });
 });

@@ -7,10 +7,11 @@
 // currently streams in. Marking follows every root's Id fields, origin chains and owned-value links.
 // Sweeping discards unmarked nodes' in-memory state; a swept node regenerates identically (I-3).
 
+import { idsIn } from './canon.ts';
 import type { Kernel } from './kernel.ts';
 import { splitWindowPath } from './kernel.ts';
 import { isId } from './id.ts';
-import type { Edge, Id, Pin, Region, Value } from './types.ts';
+import type { Edge, GameTime, Id, Pin, Region, Value } from './types.ts';
 import { type Budget, Worklist } from './work.ts';
 
 export interface SeedRecord {
@@ -28,7 +29,7 @@ const cmpId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 export class Retention {
   readonly seeds = new Map<Id, SeedRecord>();
   readonly streamed = new Set<Id>();
-  private cache: { revision: number; marked: Set<Id>; maxMember: Map<string, number> } | null = null;
+  private cache: { revision: number; now: GameTime; marked: Set<Id>; maxMember: Map<string, number> } | null = null;
   private sweepList = new Worklist<{ id: Id }>();
 
   constructor(private readonly k: Kernel) {}
@@ -36,12 +37,14 @@ export class Retention {
   // ---- seeds and streaming ----
 
   setSeed(rec: SeedRecord): void {
+    this.k.assertWritable();
     this.seeds.set(rec.id, { ...rec, nodes: [...rec.nodes] });
     if (rec.actor !== undefined) this.k.frames.demandRoots.add(rec.actor);
     this.k.bump();
   }
 
   endSeed(id: Id): void {
+    this.k.assertWritable();
     const s = this.seeds.get(id);
     if (!s) return;
     this.seeds.delete(id);
@@ -50,11 +53,13 @@ export class Retention {
   }
 
   streamIn(ids: Id[]): void {
+    this.k.assertWritable();
     for (const i of ids) this.streamed.add(i);
     this.k.bump();
   }
 
   streamOut(ids: Id[]): void {
+    this.k.assertWritable();
     for (const i of ids) this.streamed.delete(i);
     this.k.bump();
   }
@@ -124,6 +129,7 @@ export class Retention {
     const push = (...ids: Array<Id | undefined>): void => {
       for (const i of ids) if (i !== undefined) out.push(i);
     };
+    const expand = (idStr: string): Id => k.expandId(idStr);
     for (const p of k.store.allPins()) {
       if (k.store.isWithdrawn(p.id)) continue;
       if (!(p.reason === 'observed' || p.reason === 'committed' || this.pinInEffectNow(p))) continue;
@@ -148,29 +154,27 @@ export class Retention {
     for (const s of this.seeds.values()) push(s.id, s.actor, ...s.nodes);
     // Outstanding process batches: the Ids their operations name must stay addressable until they apply (SPEC-NOTES 33).
     for (const st of k.evolution.states.values()) {
-      for (const b of st.outstanding) for (const m of JSON.stringify(b.ops).matchAll(/[0-9a-f]{32}/g)) push(m[0]);
+      for (const b of st.outstanding) push(...idsIn(b.ops, expand));
     }
-    // Frames of demand roots and live seeds, with every ancestor.
+    // Frames of demand roots and live seeds, with every ancestor. The Id fields of a frame are its links, its
+    // focus, its goal's targets and every Id its interests name (SPEC-NOTES 33).
     for (const fid of this.rootFrameIds()) {
       const f = k.frames.frame(fid)!;
       push(f.actor, f.origin, f.payload.place, f.cause, ...f.focus.nodes);
       for (const p of f.parents) push(p.frame);
-      for (const e of f.payload.goal?.effects ?? []) {
-        if (typeof e.on === 'string') push(e.on);
-        else if (e.on.scope && 'nodes' in e.on.scope) push(...e.on.scope.nodes);
-      }
+      push(...idsIn(f.payload.goal, expand), ...idsIn(f.own, expand));
     }
     push(...this.streamed);
     return out;
   }
 
-  /** The marked set: every root's closure over Id fields, origin chains and owned-value links (spec 7.3). Cached per revision. */
+  /** The marked set: every root's closure over Id fields, origin chains and owned-value links (spec 7.3). Cached per revision and engine time. */
   marked(): Set<Id> {
     return this.compute().marked;
   }
 
   private compute(): { marked: Set<Id>; maxMember: Map<string, number> } {
-    if (this.cache && this.cache.revision === this.k.revision) return this.cache;
+    if (this.cache && this.cache.revision === this.k.revision && this.cache.now === this.k.now) return this.cache;
     const store = this.k.store;
     const marked = new Set<Id>();
     const stack = [...this.rootIds()];
@@ -195,7 +199,7 @@ export class Retention {
         if (cur === undefined || h.origin.index > cur) maxMember.set(key, h.origin.index);
       }
     }
-    this.cache = { revision: this.k.revision, marked, maxMember };
+    this.cache = { revision: this.k.revision, now: this.k.now, marked, maxMember };
     return this.cache;
   }
 

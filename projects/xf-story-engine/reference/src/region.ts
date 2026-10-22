@@ -2,6 +2,7 @@
 // Intervals and boxes are closed and already snapped to the grid by the caller (value.ts does the
 // snapping), so intersecting two regions never leaves a gap that holds no grid point.
 
+import { canonicalEqual } from './canon.ts';
 import type { Region, Value } from './types.ts';
 
 export const ALL: Region = { r: 'all' };
@@ -128,5 +129,5 @@ export function subtract(a: Region, b: Region, step: number): Region {
 }
 
 export function regionsEqual(a: Region, b: Region): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
+  return canonicalEqual(a, b);
 }

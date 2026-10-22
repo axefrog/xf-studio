@@ -4,12 +4,13 @@
 // complete, ordered by an upper bound on the preference score and then by Id, and candidates are
 // checked exactly. A query that hits a hard limit returns `failed`, never a partial result.
 
+import { canonicalKey } from './canon.ts';
 import type { Kernel } from './kernel.ts';
 import { type PredicateEnv, evalAll, evalPredicate, inSpatialRegion } from './predicate.ts';
 import { type OpCtx, newOpCtx } from './resolve.ts';
 import type { CandidateQuery } from './schema-types.ts';
 import type { GameTime, Id, Query, QueryItem, QueryOutcome, QueryScope } from './types.ts';
-import { LimitExceeded } from './work.ts';
+import { LimitExceeded, failIfFailed } from './work.ts';
 
 interface Entry {
   id: Id;
@@ -19,8 +20,9 @@ interface Entry {
 const cmpId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 export class Queries {
-  private candCache = new Map<string, { ids: Id[]; cost: number }>();
+  private candCache = new Map<string, { ids: Id[]; cost: number; height: number }>();
   private candRevision = -1;
+  private candNow = Number.NaN;
 
   constructor(private readonly k: Kernel) {}
 
@@ -40,20 +42,28 @@ export class Queries {
 
   /** The candidate set of a ref (spec 2.4): the complete result, cut to the `max` lowest Ids. Throws LimitExceeded. */
   candidateSet(ctx: OpCtx, cq: CandidateQuery, t: GameTime): Id[] {
-    if (this.candRevision !== this.k.revision) {
+    if (this.candRevision !== this.k.revision || this.candNow !== this.k.now) {
       this.candCache.clear();
       this.candRevision = this.k.revision;
+      this.candNow = this.k.now;
     }
-    const key = `${JSON.stringify(cq)}|${t}`;
+    const key = `${canonicalKey(cq)}|${t}`;
     const hit = this.candCache.get(key);
     if (hit) {
+      // A replay charges what the computation cost and counts the depth it reached, as a cached resolution does (SPEC-NOTES 37).
+      if (ctx.depth + hit.height > this.k.config.maxDepth) throw new LimitExceeded(`dependency depth ${this.k.config.maxDepth}`);
       ctx.allowance.spend(hit.cost);
+      if (ctx.depth + hit.height > ctx.peak) ctx.peak = ctx.depth + hit.height;
       return hit.ids;
     }
     const before = ctx.allowance.used;
+    const savedPeak = ctx.peak;
+    ctx.peak = ctx.depth;
     const items = this.execute(ctx, { find: cq.find, scope: cq.scope, at: t, must: cq.must, limit: 'all' });
+    const height = ctx.peak - ctx.depth;
+    ctx.peak = Math.max(savedPeak, ctx.peak);
     const ids = items.map((i) => i.id).sort(cmpId).slice(0, cq.max);
-    this.candCache.set(key, { ids, cost: ctx.allowance.used - before });
+    this.candCache.set(key, { ids, cost: ctx.allowance.used - before, height });
     return ids;
   }
 
@@ -127,6 +137,7 @@ export class Queries {
           const info = this.k.schema.slotInfo(kind, 'position');
           if (!info) continue;
           const pos = env.read(id, 'position');
+          failIfFailed(pos.status, `position of ${id}`);
           if (pos.value !== undefined && inSpatialRegion(pos.value, scope.region)) push(id);
         }
       }

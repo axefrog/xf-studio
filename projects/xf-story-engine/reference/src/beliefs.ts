@@ -5,6 +5,7 @@
 // What a believer forms, tells, forgets and how an audience aggregates are S1's policies. The policy
 // below is a marked STUB with the simplest behaviour that keeps the kernel rules testable.
 
+import { canonicalEqual, hrec } from './canon.ts';
 import { H, id as hid, i as hi, s as hs } from './id.ts';
 import type { Kernel } from './kernel.ts';
 import type { DimId, Edge, GameTime, Id, Region, SlotPath, Value } from './types.ts';
@@ -51,7 +52,8 @@ export interface BeliefPolicy {
   onWitness(k: Kernel, event: Id, observer: Id): Array<Omit<Belief, 'id' | 'formed' | 'refreshed' | 'believer'>>;
   /** Overrides applied to a belief being told (confidence, memorability). Evidence is never overridden. */
   onSocial(k: Kernel, belief: Belief, teller: Id, listener: Id): Partial<Pick<Belief, 'confidence' | 'memorable'>>;
-  onTick(k: Kernel, believer: Id): void;
+  /** A boundary passed: `at` is the boundary's time (spec 11.2, SPEC-NOTES 50). */
+  onTick(k: Kernel, believer: Id, at: GameTime): void;
   aggregate(k: Kernel, audience: Id[], subject: Id, path: SlotPath): { value?: Value; confidence: number } | undefined;
   /** Whether a contradicting newcomer replaces the existing belief. */
   replaces(existing: Belief, incoming: Belief): boolean;
@@ -98,12 +100,15 @@ export class Beliefs {
   private byBeliever = new Map<Id, Map<string, Belief>>();
   private history: Belief[] = [];
   policy: BeliefPolicy = STUB_POLICY;
-  private tickList = new Worklist<{ believer: Id }>();
+  private tickList = new Worklist<{ believer: Id; boundary: number; at: GameTime }>();
 
-  /** A boundary passed: every believer is due its `onTick` (fading and the like are S1's, spec 11.2). */
-  onBoundary(): void {
-    if (!this.tickList.isEmpty) return;
-    for (const b of [...this.byBeliever.keys()].sort(cmpId)) this.tickList.push({ believer: b });
+  /**
+   * Boundary `boundary` (at game time `at`) was processed: every believer is due its `onTick` for it
+   * (fading and the like are S1's, spec 11.2). Every boundary queues its own work, so the hook runs once
+   * per believer per boundary, in boundary order, however the ticks fell (SPEC-NOTES 50).
+   */
+  onBoundary(boundary: number, at: GameTime): void {
+    for (const b of [...this.byBeliever.keys()].sort(cmpId)) this.tickList.push({ believer: b, boundary, at });
   }
 
   get pendingTicks(): number {
@@ -113,7 +118,7 @@ export class Beliefs {
   /** Call the policy's `onTick` for each believer due, one unit each, resumable. */
   runTicks(budget: Budget): number {
     return this.tickList.run(budget, (item) => {
-      this.policy.onTick(this.k, item.believer);
+      this.policy.onTick(this.k, item.believer, item.at);
       return { cost: 1, done: true };
     });
   }
@@ -147,7 +152,7 @@ export class Beliefs {
   private idFor(b: Omit<Belief, 'id'>): Id {
     return H(
       hs('belief'), hid(b.believer), hid(b.subject), hs(b.path), hs(b.at === undefined ? '' : String(b.at)), hi(b.formed),
-      hs(JSON.stringify(b.value ?? b.region ?? null)), hs(JSON.stringify(b.source)),
+      hrec(b.value ?? b.region ?? null), hrec(b.source),
     );
   }
 
@@ -157,6 +162,7 @@ export class Beliefs {
    * corroborates. A contradicting newcomer is S1's call (`replaces`); a memorable loser is kept as history.
    */
   set(incoming: Omit<Belief, 'id'> & { id?: Id }): SetOutcome {
+    this.k.assertWritable();
     const b: Belief = { ...incoming, id: incoming.id ?? this.idFor(incoming), evidence: [...incoming.evidence].sort(cmpId) };
     if (!(b.confidence > 0 && b.confidence <= 1)) throw new Error('belief confidence is in (0, 1]');
     if ((b.value === undefined) === (b.region === undefined)) throw new Error('a belief has exactly one of value and region');
@@ -168,7 +174,7 @@ export class Beliefs {
     if (!existing) {
       m.set(key, b);
       outcome = 'added';
-    } else if (JSON.stringify(existing.value ?? existing.region) === JSON.stringify(b.value ?? b.region)) {
+    } else if (canonicalEqual(existing.value ?? existing.region, b.value ?? b.region)) {
       const fresh = b.evidence.filter((e) => !existing.evidence.includes(e));
       existing.refreshed = Math.max(existing.refreshed, b.refreshed);
       if (fresh.length === 0) outcome = 'refreshed';
@@ -190,6 +196,7 @@ export class Beliefs {
   }
 
   drop(believer: Id, beliefId: Id): boolean {
+    this.k.assertWritable();
     const m = this.byBeliever.get(believer);
     if (!m) return false;
     for (const [key, b] of m) {
@@ -214,6 +221,8 @@ export class Beliefs {
   clear(): void {
     this.byBeliever.clear();
     this.history.length = 0;
+    // Work queued for believers of the discarded branch goes with it (spec 14.3).
+    this.tickList.clear();
   }
 
   /** An observer witnesses an event: the policy's beliefs are set (spec 11.2). */

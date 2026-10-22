@@ -2,6 +2,7 @@
 // the defect log, and exposes the writes. Subsystems take the kernel as a type-only dependency, so
 // there are no runtime import cycles.
 
+import { hrec } from './canon.ts';
 import { type Config, makeConfig } from './config.ts';
 import { H, b as hb, f as hf, i as hi, id as hid, isId, memberId, mirroredId, ownedId, rootId, s as hs, val as hval } from './id.ts';
 import { Events } from './events.ts';
@@ -126,7 +127,7 @@ export class Kernel {
 
   /** The effect conflict table in force (spec 10.8): a registry function owned by S1. */
   conflictTable: FnRef = CONFLICT_TABLE;
-  /** A load under newer versions that cannot satisfy a persisted record is read-only (spec 14.4). */
+  /** A load under newer versions that cannot satisfy a persisted record is read-only (spec 14.4, SPEC-NOTES 55). */
   readOnly: { message: string } | null = null;
 
   private epochSource: () => Id;
@@ -202,6 +203,7 @@ export class Kernel {
 
   /** A minted node: made by an event, a seed, a process or a summary. Emits a `minted` change the first time. */
   mint(creator: Id, cause: Id, name: string, kind: KindId): Id {
+    this.assertWritable();
     const nid = H(hs('mint'), hid(creator), hid(cause), hs(name));
     if (this.store.addHeader({ id: nid, kind, origin: { by: 'minted', creator, cause, name } })) {
       this.bump();
@@ -317,7 +319,8 @@ export class Kernel {
     return false;
   }
 
-  private assertWritable(): void {
+  /** Refuse a write while the save is read-only (spec 14.4). Every public write calls this first, before it changes anything. */
+  assertWritable(): void {
     if (this.readOnly) throw new Error(`the save loaded read-only: ${this.readOnly.message}`);
   }
 
@@ -350,7 +353,7 @@ export class Kernel {
     const pid = spec.id ?? H(
       hs('pin'), hid(spec.node), hs(spec.slot), hs(spec.reason), hi(from), hb(to !== undefined), hi(to ?? 0), hi(at), hid(spec.cause),
       hs(spec.evidence ?? ''),
-      spec.value !== undefined ? hval(encodeValue(info.vt, spec.value)) : hs(JSON.stringify(region)),
+      spec.value !== undefined ? hval(encodeValue(info.vt, spec.value)) : hrec(region),
     );
     const existing = this.store.pin(pid);
     if (existing) return existing;
@@ -388,6 +391,7 @@ export class Kernel {
    * that created them (`by` equals the pin's cause). Observations and game readings never are.
    */
   withdrawPin(pinId: Id, by: Id, at: GameTime = this.now): boolean {
+    this.assertWritable();
     const p = this.store.pin(pinId);
     if (!p) throw new Error(`unknown pin: ${pinId}`);
     if (p.reason === 'observed' || p.reason === 'game') throw new Error(`a ${p.reason} pin is never withdrawn`);
@@ -405,6 +409,7 @@ export class Kernel {
 
   /** A game reading of a mirrored slot of a mirrored node. Emits a `reading` change when the value changes. */
   reading(node: Id, slot: SlotPath, value: Value, time: GameTime = this.now, silent = false): Pin {
+    this.assertWritable();
     const h = this.store.header(node);
     if (!h) throw new Error(`reading of an unknown node: ${node}`);
     if (h.origin.by !== 'mirrored') throw new Error('only a mirrored node has readings');
@@ -460,8 +465,8 @@ export class Kernel {
     if (!(strength > 0) || !Number.isFinite(strength)) throw new Error('a contribution strength is positive');
     const valid = spec.valid ?? {};
     const cid = spec.id ?? H(
-      hs('contrib'), hs(spec.source.layer), hs(spec.source.origin), hs(JSON.stringify(spec.target)), hs(JSON.stringify(spec.form)),
-      hs(spec.mode), hf(strength), hs(JSON.stringify(valid)),
+      hs('contrib'), hs(spec.source.layer), hs(spec.source.origin), hrec(spec.target), hrec(spec.form),
+      hs(spec.mode), hf(strength), hrec(valid),
     );
     const existing = this.store.contribution(cid);
     if (existing) return existing;
@@ -473,6 +478,7 @@ export class Kernel {
   }
 
   endContribution(id: Id, at: GameTime = this.now, silent = false): void {
+    this.assertWritable();
     const c = this.store.contribution(id);
     if (!c) throw new Error(`unknown contribution: ${id}`);
     if (c.valid.to !== undefined && c.valid.to <= at) return;
@@ -501,7 +507,7 @@ export class Kernel {
     const from = spec.valid?.from ?? this.now;
     const valid: Edge['valid'] = spec.valid?.to === undefined ? { from } : { from, to: spec.valid.to };
     const eid = spec.id ?? H(
-      hs('edge'), hs(spec.type), hid(spec.from), hid(spec.to), hi(from), hid(spec.cause), hs(JSON.stringify(attrs)),
+      hs('edge'), hs(spec.type), hid(spec.from), hid(spec.to), hi(from), hid(spec.cause), hrec(attrs),
     );
     const existing = this.store.edges.get(eid);
     if (existing) return existing;
@@ -515,6 +521,7 @@ export class Kernel {
   }
 
   endEdge(id: Id, at: GameTime = this.now): void {
+    this.assertWritable();
     const e = this.store.edges.get(id);
     if (!e) throw new Error(`unknown edge: ${id}`);
     if (e.valid.to !== undefined && e.valid.to <= at) return;
@@ -526,6 +533,7 @@ export class Kernel {
 
   /** Change an edge's attributes or data in place (a membership's strength or obligations, spec 10.8). */
   updateEdge(id: Id, patch: { attrs?: Record<string, Value>; data?: Record<string, unknown> }): Edge {
+    this.assertWritable();
     const e = this.store.edges.get(id);
     if (!e) throw new Error(`unknown edge: ${id}`);
     const def = this.schema.edgeType(e.type);
@@ -547,6 +555,7 @@ export class Kernel {
 
   /** Queue an external operation under an epoch (spec 9.4, 14.3). Stale epochs are refused. */
   submit(env: Envelope): SubmitResult {
+    if (this.readOnly) return { accepted: false, reason: `the save loaded read-only: ${this.readOnly.message}` };
     return this.evolution.submit(env);
   }
 
@@ -556,6 +565,8 @@ export class Kernel {
    * in a fixed order, takes its first step always, and resumes where it stopped (spec 10.7).
    */
   tick(opts: { to?: GameTime; budget?: number } = {}): TickReport {
+    // A read-only world does not move: ticking would apply, refuse and discard its outstanding batches (SPEC-NOTES 55).
+    this.assertWritable();
     const budget = new Budget(opts.budget ?? this.config.tickBudget);
     const adv = this.evolution.advanceTo(opts.to ?? this.now, budget);
     const frameSteps = this.frames.runWorklist(budget);
