@@ -1030,9 +1030,16 @@ These report to review; none edits text. P9 runs dossier 18's representation aud
 
 Packs are free fan content, built on the publisher's modding terms ([dossier 19](../craft/d19-rights-platforms.md), [D-24](../decisions.md)):
 - **Game content by reference.** A reference to the game's own content is a `GameRef { kind, id }`. No text unit, asset or fragment holds game text or audio inline (L-114). A pack-build check lists units whose text matches a published overlap list, as advice.
-- **Voices.** A text unit's `voice` is a `GameRef` to an existing recorded line, or a pack asset id. The language has no operator that joins, re-times or synthesises speech (L-115). A cloned voice of a real person, the game's cast included, is a floor: the game's actors are heard only in their own recorded lines, whole. Pack recordings and synthetic voices carry the consent and provenance records S4 defines. **The plan for voice:**
+- **Voices.** A text unit's `voice` is one of:
+  - a `GameRef` to an existing recorded line;
+  - a **splice**: an ordered list of cuts `{ line: GameRef; from: number; to: number }` from existing recordings, joined;
+  - a pack asset id.
+
+  **The floor is cloning, not editing.** A synthetic voice that imitates a real person, the game's cast included, is barred unless that person consented, and the consent is recorded (L-115). Cutting and splicing the actors' own recordings is allowed. Pack recordings and synthetic voices carry the consent and provenance records S4 defines.
+
+  **The plan for voice:**
   - new characters may be voiced, with pack recordings or synthetic voices that aren't clones of a real person;
-  - existing V lines may be repurposed, whole and by id, in new contexts where they fit.
+  - existing V lines, and other existing recordings, may be repurposed in new contexts: whole, or cut and spliced where a line needs it.
 
   Text stays the default everywhere else.
 - **Origin.** Each text unit declares `origin`:
@@ -1956,7 +1963,7 @@ The lint runs at compile time (§3.1), and on demand from authoring tools (S4, P
 | L-112 | An engine effect whose declared flash parameters exceed the general threshold | error |
 | L-113 | A `coerced` person with no `coercer` role or means, or such a seed with no route for V to act or decline (error); erotic framing in an exploitation seed (warning) | error, warning |
 | L-114 | Game text or audio held inline in a pack, instead of a `GameRef` | error |
-| L-115 | A `voice` that isn't an existing recorded line or a pack asset; any join, re-timing or synthesis of speech | error |
+| L-115 | A synthetic voice imitating a real person without a recorded consent; or a `voice` that is none of a recorded line, a splice of recorded lines, or a pack asset | error |
 | L-116 | A `generated` unit marked `authored: 'human'`, or filling an authored-source slot | error |
 | L-117 | A unit in a `realWorld: tagged` pack mentioning a flagged real-world entity | warning, to review |
 | L-33 (extended) | A `turns[].what` reading anything of V's but beliefs held about V and V's recorded acts | error |
