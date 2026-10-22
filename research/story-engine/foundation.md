@@ -118,6 +118,51 @@ Groups have drives too (a gang's territory, revenue, prestige and vendettas). So
 
 Only the increment was computed.
 
+### 5.2 Groups and membership
+
+No actor's context stands alone. Every actor opts into higher contexts (a family, a crew, a gang, a company, a cause), and those groups' concerns become part of its own.
+
+- **Groups are actors.** A group has drives, concerns and goals like anyone else.
+  - Its **leadership** is the part that decides. The leaders' own contexts decide for the group, and they can bend it towards their personal ends.
+  - Its **members** carry out its intents.
+- **Membership is a relationship with properties:**
+  - **role:** leader, member, associate, contractor;
+  - **strength:** loyalty and commitment;
+  - **visibility:** open, secret, or deniable;
+  - **terms:** standing, or a contract that ends;
+  - **obligations and benefits;**
+  - **exit cost.**
+- **Groups join groups,** and the pattern is the same at every level. A gang that takes a deniable job from Arasaka to frame Militech is, for that operation, a contractor of Arasaka. The terms are temporary, the visibility is deniable, and the two sides' interests are not the same.
+- **Family is a group.** So is V's crew, and so is a fixer's roster.
+- **Context inherits from every membership.** An actor's context is not one chain but a small graph: its own drives, plus the concerns of each group it belongs to, each weighted by the membership's strength. Frames therefore have several parents, and their indexes inherit from all of them.
+- **Intent flows down; reports flow up.**
+  - A group's intent becomes a goal assigned to its members, weighted by loyalty and fear.
+  - What members see and do flows back up to the leadership.
+  - Where a member's interests and the group's diverge, there's room for shirking, skimming and betrayal, as principal–agent theory predicts.
+
+**Cross-pressure is where many stories come from.** A membership can demand something that another membership, or the actor's own values, forbids. Sociology calls this role conflict. It is also the oldest tragic shape there is: Antigone, bound to bury her brother against the law of her city.
+
+The engine needs nothing special to find it. Take "my gang wants me to kill my brother":
+1. **Detection is an index hit.** The gang's order arrives as a goal whose target sits in the member's family frame, under its protected and threatened sets.
+2. **The member's options play out by weights:**
+   - comply;
+   - refuse;
+   - fake it;
+   - warn the brother;
+   - betray the gang;
+   - run;
+   - bring in someone else.
+3. **Every outcome changes memberships:** expulsion, a vendetta, a family rift, a debt. That seeds the next threads, the butterfly effect the design wants.
+4. **V can be drawn in** in several ways:
+   - as the one hired to do the killing, who finds out who the target is;
+   - as the brother's protection;
+   - as the go-between;
+   - as a witness who now knows too much.
+
+   If V is involved, the outcome stays open until V acts, then it is pinned.
+
+V has memberships too, and they shape what is relevant to V and which hooks are offered.
+
 **What it means for story:**
 - **Hooks come from blocked contexts.** Wherever an actor's goal is blocked and V could be the means of unblocking it, there's a potential gig. A fixer's job is someone's blocked context, brokered. The frames' indexes find these matches as they happen.
 - **Drama comes from conflict.** Where contexts block or conflict with each other across actors, there's drama.
@@ -170,6 +215,7 @@ To be researched in P3, so the model stays honest. We implement a small toolkit,
   - scope chains and persistent data structures for cheap parent-plus-increment frames;
   - incremental rule matching (the Rete algorithm; incremental story sifting) for finding who cares about an event;
   - motivation research: Maslow, Reiss's basic desires, self-determination theory, Schwartz's basic values; and needs models in games such as The Sims;
+  - groups: role theory and role conflict, cross-pressure from multiple memberships, social identity theory, and principal–agent theory for leaders, members and contractors;
   - Doran and Parberry's finding that game quests derive from NPC motivations.
 - **Search:** constraint satisfaction, interval bounds and hierarchical spatial indexing for queries.
 
