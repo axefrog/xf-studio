@@ -125,6 +125,10 @@ By bryc. [cyrb53](https://github.com/bryc/code/blob/master/jshash/experimental/c
 
 By Blackboard Technologies Inc. and contributors. [Electrobun](https://github.com/blackboardsh/electrobun), [Hutch](https://github.com/blackboardsh/hutch). Electrobun's documentation shaped XF Studio's desktop packaging, update, shutdown and uninstall design, and it is the framework for our desktop packaging trial. Electrobun is MIT-licensed and its notice must accompany any distributed build, together with the notices of its bundled dependencies.
 
+### fdlibm
+
+[fdlibm](https://netlib.org/fdlibm/), the freely distributable maths library developed at SunSoft (Sun Microsystems). The Story Engine's reference model adapts its natural-logarithm routine, `e_log.c`, with its permission notice preserved, so that every implementation computes bit-identical results.
+
 ### glTF 2.0 Specification
 
 By the Khronos Group. [Specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html). XF Studio's native mesh reader writes the preview's GLB files to it, and its rule that an accessor holds at least one element is why the reader leaves a chunk without vertices or triangles to WolvenKit.
@@ -180,6 +184,10 @@ By Microsoft. The DirectX shader compiler and [DXIL reference](https://github.co
 ### NVIDIA Streamline
 
 By NVIDIA. [GitHub](https://github.com/NVIDIA-RTX/Streamline). Its DLSS Frame Generation programming guide explains the hudless and UI buffers frame generation uses and that presentation moves to another thread while it is on, which is why an overlay drawn into the game's final image may ghost or flicker and why the XF overlay host never hooks presentation below the engine. Its rules for third-party overlays and its documented way to reach the native object behind one of its proxies are how the overlay host now draws with DLSS frame generation on. Studied only.
+
+### noble-hashes
+
+[noble-hashes](https://github.com/paulmillr/noble-hashes) by Paul Miller (MIT licence). The Story Engine's reference model depends on its BLAKE3 implementation for the stable identifiers and keyed randomness its specification requires.
 
 ### PractRand (sfc32)
 
