@@ -10,7 +10,7 @@ import { MotionActions, RELEASED, type MotionPort } from "../src/animation/motio
 import { DEFAULT_MOTION, previewMotion, recoverSceneMotion, sceneMotionOf, type SceneMotion } from "../src/animation/scene-motion";
 import { graphMotionScene, createTrustedPreviewServices } from "../src/app/trusted-preview-services";
 import { WorkspaceComposer } from "../src/app/workspace/workspace-composer";
-import { parseWorkspace, serializeWorkspace, type WorkspaceState } from "../src/app/workspace/workspace-state";
+import { loadWorkspace, parseWorkspace, serializeWorkspace, workspaceKeys, type WorkspaceState } from "../src/app/workspace/workspace-state";
 import { ProfileSessionState } from "../src/app/profiles/profile-session-state";
 import { sessionOfWorkspace, workspaceProfiles } from "../src/app/profiles/profiles-migration-data";
 import { PROFILES_MIGRATION } from "../src/app/profiles/profile-session";
@@ -172,6 +172,34 @@ describe("persistence and migration", () => {
     const views = sessionViewGraph(legacy), base = JSON.parse(window.save());
     (views.scenes[1] as Record<string, unknown>).motion = { ...DEFAULT_MOTION, blink: 2 };
     expect(read(JSON.stringify({ ...base, views })).views?.views).toHaveLength(2);
+  });
+
+  test("the restore says, in the person's words, which 3D view settings it reset: one line per scene, through the workspace's restore notice", () => {
+    const window = open(upgradedWorkspace());
+    window.graph.addView(MAIN_VIEW, {}, { label: "New 3D view" });
+    const stored = JSON.parse(window.save()), scenes = stored.profiles.sessions["p-1"].views.scenes;
+    // Sol's reproduction, in the second scene: damaged switches beside a damaged closure; the main scene is untouched.
+    Object.assign(scenes[1], { physics: "yes", uncensored: 3, eyeOwnRoughness: "x", motion: { ...scenes[1].motion, blink: 2 } });
+    const warnings: string[] = [], state = parseWorkspace(structuredClone(stored), MODEL, warnings);
+    expect(warnings).toEqual(["Some 3D view settings couldn't be read and were reset: eye's own roughness, showing V uncensored, hair physics, blink."]);
+    for (const line of warnings) expect(line).not.toMatch(/physics"|eyeOwnRoughness|uncensored:|idle[A-Z]|blinkPlaying/);
+    // The unreadable values aren't kept: the session holds the recovered scene, and both views come through.
+    const session = state.profiles!.sessions["p-1"]!.views;
+    expect(session.scenes[1]).not.toHaveProperty("physics");
+    expect(session.scenes[1]!.motion).toMatchObject({ blink: 0 });
+    expect(open(state).graph.viewIds()).toHaveLength(2);
+    // A whole motion that isn't one names every motion setting; an undamaged workspace says nothing.
+    scenes[0].motion = "damaged";
+    const both: string[] = [];
+    parseWorkspace(structuredClone(stored), MODEL, both);
+    expect(both).toEqual(["Some 3D view settings couldn't be read and were reset: game idle, blink, pose.", warnings[0]]);
+    const clean: string[] = [];
+    parseWorkspace(JSON.parse(window.save()), MODEL, clean);
+    expect(clean).toEqual([]);
+    // The notice the workspace already shows for a repaired restore carries it (with any dropped draft before it).
+    const storage = { getItem: (key: string) => key === workspaceKeys(false).workspace ? JSON.stringify(stored) : null };
+    expect(loadWorkspace(storage, false, MODEL)).toMatchObject({ writable: true,
+      warning: `${both[0]} ${both[1]}` });
   });
 
   test("a save reads the playing idle's phase into the scene first, without recording, publishing or touching the legacy fields", () => {

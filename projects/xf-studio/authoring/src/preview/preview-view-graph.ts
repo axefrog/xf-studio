@@ -20,7 +20,7 @@ import { DEFAULT_CREATOR_LIGHTING, LIGHTING_PRESETS, readCreatorLighting, stored
 import { STUDIO_EXPOSURE_RANGE, STUDIO_KEY_ANGLE_RANGE, validStudioLights, type StudioLights } from "./studio-lighting";
 import { DEFAULT_SETUP_LIBRARY, legacyStudioStage, migrateLegacyLighting, parseSetupLibrary, rigKindOf, type SetupLibrary } from "./lighting-setups";
 import { CAMERA_DISTANCE_RANGE } from "./camera-framing";
-import { previewMotion, recoverSceneMotion, sceneMotionOf, type SceneMotion } from "../animation/scene-motion";
+import { MOTION_SETTING_NAMES, previewMotion, recoverSceneMotion, sceneMotionOf, type SceneMotion } from "../animation/scene-motion";
 
 /**
  * A character scene's state: the head's eye shape, the V's material studies and body mode (design §3.1), whether its dangles simulate
@@ -226,16 +226,29 @@ export function workspaceViewGraph(preview: PreviewState, stored: ViewGraphData 
   STUDIO_VIEW_GRAPH_RULES) ?? defaultViewGraph(preview);
 }
 
+/** A scene's optional switches as the person knows them (their controls' labels), for a plain note when one is reset. */
+const SWITCH_NAMES = Object.freeze({ eyeOwnRoughness: "eye's own roughness", uncensored: "showing V uncensored", physics: "hair physics" });
+/** The restore note for one scene whose settings couldn't be read and were reset (one line per scene; the person's names, never fields). */
+export const VIEW_SETTINGS_RESET = "Some 3D view settings couldn't be read and were reset";
+export const viewSettingsReset = (settings: readonly string[]) => `${VIEW_SETTINGS_RESET}: ${settings.join(", ")}.`;
 /**
  * A stored graph with each character scene's optional settings recovered field by field (a damaged motion field at its default, a damaged
- * optional switch left out): the scene codec refuses them on an edit, but on read one bad optional value must never cost its scene, and with
- * it the whole graph. A scene whose required settings are damaged is still refused.
+ * optional switch at its default by being left out): the scene codec refuses them on an edit, but on read one bad optional value must never
+ * cost its scene, and with it the whole graph. A scene whose required settings are damaged is still refused. An unreadable value can't be
+ * honoured, so it isn't kept; `reset` hears, per scene, the settings that were reset, by the person's names, so the restore can say so.
  */
-export function recoverScenes(stored: ViewGraphData): ViewGraphData {
+export function recoverScenes(stored: ViewGraphData, reset?: (settings: readonly string[]) => void): ViewGraphData {
   if (!Array.isArray(stored.scenes)) return stored;
   return { ...stored, scenes: stored.scenes.map(node => {
     if (!node || typeof node !== "object" || node.kind !== "character") return node;
-    const { motion, eyeOwnRoughness, uncensored, physics, ...rest } = node as typeof node & Partial<SceneState>, recovered = recoverSceneMotion(motion);
+    const { motion, eyeOwnRoughness, uncensored, physics, ...rest } = node as typeof node & Partial<SceneState>, names = new Set<string>();
+    const switches = { eyeOwnRoughness, uncensored, physics };
+    for (const [key, value] of Object.entries(switches)) if (value !== undefined && !bool(value)) names.add(SWITCH_NAMES[key as keyof typeof SWITCH_NAMES]);
+    const recovered = recoverSceneMotion(motion, setting => names.add(MOTION_SETTING_NAMES[setting]));
+    if (motion !== undefined && !recovered) for (const name of Object.values(MOTION_SETTING_NAMES)) names.add(name);
+    // A scene with nothing damaged is kept exactly as stored (the codec reads it as before).
+    if (!names.size) return node;
+    reset?.([...names]);
     return { ...rest, ...(bool(eyeOwnRoughness) ? { eyeOwnRoughness } : {}), ...(bool(uncensored) ? { uncensored } : {}),
       ...(bool(physics) ? { physics } : {}), ...(recovered ? { motion: recovered } : {}) };
   }) };

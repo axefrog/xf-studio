@@ -60,18 +60,26 @@ export function sceneMotionOf(value: unknown): SceneMotion | undefined {
     blinkPlaying: m.blinkPlaying, ...(m.idleClip === undefined ? {} : { idleClip: m.idleClip as string }), ...(pose ? { pose } : {}) });
 }
 
+/** The motion settings as the person knows them (the Motion controls' sections), for a plain note when one is reset. */
+export const MOTION_SETTING_NAMES = Object.freeze({ idle: "game idle", blink: "blink", pose: "pose" });
+type MotionSetting = keyof typeof MOTION_SETTING_NAMES;
+
 /**
  * A stored motion as a reader recovers it: each damaged field at its default (a damaged idle choice or pose left out), so one bad value never
  * costs the scene or the graph (undefined: not a motion at all, which a reader leaves out). Edits are refused by `sceneMotionOf` instead.
+ * `reset` hears each setting that had a damaged value and was reset (an absent idle choice or pose is not damage).
  */
-export function recoverSceneMotion(value: unknown): SceneMotion | undefined {
+export function recoverSceneMotion(value: unknown, reset?: (setting: MotionSetting) => void): SceneMotion | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const m = value as Record<string, unknown>, d = DEFAULT_MOTION;
+  const pick = <T>(setting: MotionSetting, ok: boolean, stored: unknown, fallback: T): T => { if (ok) return stored as T; reset?.(setting); return fallback; };
   const pose = storedPoseOf(m.pose);
-  return normalised({ idle: bool(m.idle) ? m.idle : d.idle, idleTime: finite(m.idleTime, 0, Number.MAX_SAFE_INTEGER) ? m.idleTime : d.idleTime,
-    idlePaused: bool(m.idlePaused) ? m.idlePaused : d.idlePaused, idleBody: bool(m.idleBody) ? m.idleBody : d.idleBody,
-    idleFace: bool(m.idleFace) ? m.idleFace : d.idleFace, blink: finite(m.blink, 0, 1) ? m.blink : d.blink,
-    blinkPlaying: bool(m.blinkPlaying) ? m.blinkPlaying : d.blinkPlaying, ...(validIdleClip(m.idleClip) ? { idleClip: m.idleClip } : {}),
+  if (m.pose !== undefined && !pose) reset?.("pose");
+  if (m.idleClip !== undefined && !validIdleClip(m.idleClip)) reset?.("idle");
+  return normalised({ idle: pick("idle", bool(m.idle), m.idle, d.idle), idleTime: pick("idle", finite(m.idleTime, 0, Number.MAX_SAFE_INTEGER), m.idleTime, d.idleTime),
+    idlePaused: pick("idle", bool(m.idlePaused), m.idlePaused, d.idlePaused), idleBody: pick("idle", bool(m.idleBody), m.idleBody, d.idleBody),
+    idleFace: pick("idle", bool(m.idleFace), m.idleFace, d.idleFace), blink: pick("blink", finite(m.blink, 0, 1), m.blink, d.blink),
+    blinkPlaying: pick("blink", bool(m.blinkPlaying), m.blinkPlaying, d.blinkPlaying), ...(validIdleClip(m.idleClip) ? { idleClip: m.idleClip } : {}),
     ...(pose ? { pose } : {}) });
 }
 

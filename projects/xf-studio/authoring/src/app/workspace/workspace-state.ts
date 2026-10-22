@@ -26,7 +26,8 @@ import { parseSetupLibrary, rigKindOf, type SetupLibrary } from "../../preview/l
 import type { ViewGraphData } from "../../platform/api/view-graph";
 import { parseTransitions, type StoredTransitions } from "../../platform/core/transition-settings";
 import { parseViewGraph } from "../../platform/core/view-graph";
-import { EYE_SHAPE_RANGE, HAIR_LOOK_RANGE, inRange, isDefaultViewGraph, recoverScenes, STUDIO_VIEW_GRAPH_RULES, validCameraPose } from "../../preview/preview-view-graph";
+import { EYE_SHAPE_RANGE, HAIR_LOOK_RANGE, inRange, isDefaultViewGraph, recoverScenes, STUDIO_VIEW_GRAPH_RULES, validCameraPose, viewSettingsReset,
+  VIEW_SETTINGS_RESET } from "../../preview/preview-view-graph";
 
 export type CameraState = { position: number[]; target: number[]; fov: number };
 export type LibraryState = { selected: string; name: string; current?: { id: string; revision: number } };
@@ -271,14 +272,20 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
     else state.preview.idlePaused = false;
     if (validCameraPose(p.camera)) state.preview.camera = structuredClone(p.camera);
   }
-  // A damaged graph, or the default one written anyway, falls back to the default graph over `preview`.
-  // A scene's damaged optional setting is recovered alone, never costing the graph (`recoverScenes`).
-  const views = v.views && typeof v.views === "object" ? parseViewGraph(recoverScenes(v.views as ViewGraphData), STUDIO_VIEW_GRAPH_RULES) : undefined;
-  if (views && !isDefaultViewGraph(views)) state.views = views;
   // The profiles migration's mark and sessions (profiles design §8): kept when they read, else left for the migration to make again.
+  // A scene's damaged optional setting is recovered alone, never costing the graph, and the restore says which settings were reset
+  // (`recoverScenes`): the session's scenes are what the Studio shows.
+  const report = (settings: readonly string[]) => warnings?.push(viewSettingsReset(settings));
   const mark = migrationMarkOf(v.migration), profiles = workspaceProfilesOf(v.profiles);
   if (mark) state.migration = mark;
-  if (profiles) state.profiles = profiles;
+  if (profiles) state.profiles = { ...profiles, sessions: Object.fromEntries(Object.entries(profiles.sessions).map(([id, session]) =>
+    [id, { ...session, views: recoverScenes(session.views as unknown as ViewGraphData, report) as unknown as typeof session.views }])) };
+  // The legacy graph: a damaged one, or the default one written anyway, falls back to the default graph over `preview`. It is what the
+  // Studio shows only until the migration has made a session, so only then does a reset setting in it get a note.
+  const shown = !Object.keys(state.profiles?.sessions ?? {}).length;
+  const views = v.views && typeof v.views === "object"
+    ? parseViewGraph(recoverScenes(v.views as ViewGraphData, shown ? report : undefined), STUDIO_VIEW_GRAPH_RULES) : undefined;
+  if (views && !isDefaultViewGraph(views)) state.views = views;
   if (v.previewSetup && typeof v.previewSetup === "object" && typeof v.previewSetup.autostart === "boolean")
     state.previewSetup = { autostart: v.previewSetup.autostart, ...(v.previewSetup.declined === true ? { declined: true as const } : {}) };
   if (v.library) {
@@ -466,7 +473,10 @@ export function loadWorkspace(storage: Pick<Storage, "getItem">, verification: b
   return { state, writable: !error, error };
 }
 
+/** The restore's one notice: the drafts and presets dropped (counted when several), then each 3D view's reset settings, once each. */
 function restoreWarning(warnings: RestoreWarnings) {
-  return warnings.length === 1 ? warnings[0] :
-    `${warnings.length} damaged recovery drafts or removed presets could not be restored and were dropped; your current draft was restored.`;
+  const views = [...new Set(warnings.filter(line => line.startsWith(VIEW_SETTINGS_RESET)))], drafts = warnings.filter(line => !line.startsWith(VIEW_SETTINGS_RESET));
+  const dropped = drafts.length === 1 ? drafts[0] : drafts.length ?
+    `${drafts.length} damaged recovery drafts or removed presets could not be restored and were dropped; your current draft was restored.` : undefined;
+  return [...(dropped ? [dropped] : []), ...views].join(" ");
 }
