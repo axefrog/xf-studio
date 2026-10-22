@@ -225,7 +225,7 @@ Under MO2, a hot-reloaded archive lands in MO2's overwrite folder, because the m
 - **A quest editor** is feasible as a writer of `.questphase`, `.journal`, sector and `.xl` files in WolvenKit's JSON form, using only the node types in §2.2; start from the §3 recipe [hypothesis].
 - **Live testing** through the bridge needs fact read, write and watch, journal entry state, and a remote device event by node ref (the Eviction Notice route: `CreateNodeRef` → `EntityID.FromHash(NodeRefToHash(…))` → `CreatePersistentID(id, n"controller")` → `PersistencySystem.QueuePSEvent`) [source] Eviction Notice `ENRentSystemBase.reds:551-555, 756-774`; bridge side [hypothesis].
 - **Keep quest logic restartable:** short phases started by facts can be retested after a hot reload without reloading the save [hypothesis].
-- **An XF phone presence** (session notices, a Studio contact) can be built journal-free in our own code, NightlyNow style [source, pattern].
+- **An XF phone presence** (session notices, a Studio contact) can be built journal-free in our own code, NightlyNow style [source, pattern]. Holocalls, the Kiroshi scanner, shards, notifications and the tracker are compared channel by channel in [channels to the player](player-channels.md); script cannot create quests (the shipped scripted-quest API is a set of stubs returning false in 2.31) [source].
 
 ## Open questions
 
@@ -238,4 +238,4 @@ Under MO2, a hot-reloaded archive lands in MO2's overwrite folder, because the m
 
 ## Related pages
 
-[Main story as game state](main-story-state.md) · [Open-world activities](open-world-activities.md) · [Terminals and arcade](terminals-and-arcade.md) · [World and streaming](world-and-streaming.md) · [Save files](save-files.md) · [Lip sync](lipsync.md) · [Player control](player-control.md) · [Runtime access](runtime-access.md) · [B1 deep dive](../research/mod-ecosystem/b1-story-systems.md) · [In-game possibilities](../research/backlog/in-game-possibilities.md)
+[Main story as game state](main-story-state.md) · [Open-world activities](open-world-activities.md) · [Terminals and arcade](terminals-and-arcade.md) · [World and streaming](world-and-streaming.md) · [Save files](save-files.md) · [Lip sync](lipsync.md) · [Player control](player-control.md) · [Runtime access](runtime-access.md) · [B1 deep dive](../research/mod-ecosystem/b1-story-systems.md) · [In-game possibilities](../research/backlog/in-game-possibilities.md) · [Channels to the player](player-channels.md)
