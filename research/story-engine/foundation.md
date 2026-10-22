@@ -163,11 +163,31 @@ The engine needs nothing special to find it. Take "my gang wants me to kill my b
 
 V has memberships too, and they shape what is relevant to V and which hooks are offered.
 
+### 5.3 V: observed, never owned
+
+The engine owns the city: its people, groups and setting. It does not own the player. The player and the engine share a frame of reference, the story CD PROJEKT RED laid down, which the player accepts by playing. Beyond that baseline, V's context belongs to the player. The engine only observes it and models it. This was decided on 22 October 2026: there is no setting where the player declares V's drives.
+
+- **The engine's model of V is a belief, not a pin.** It sits in the same structure as any person's beliefs about another ([DS-07](design-seeds.md)), with confidence attached. It is built from three sources:
+  - the canon story state, which is the shared baseline;
+  - what V actually did, which is pinned as observed;
+  - what the player engages with or ignores ([DS-09](design-seeds.md)).
+
+  It is never assigned.
+- **The engine never acts as V.** It doesn't choose for V, move V, or speak for V. The player's own choices are the only source of V's decisions.
+- **Content offers; it never presumes.**
+  - Hooks are situations and offers, not statements of how V feels.
+  - Where content gives V a voice, it offers choices that span the stances a V could plausibly take.
+  - Fitting uses the model of V only to decide what to offer and when, never to decide who V is.
+- **The model stays humble.**
+  - It prefers offers that hold up across the Vs it can't yet tell apart.
+  - It updates as soon as play contradicts it.
+  - The player never pays for a misreading.
+
 **What it means for story:**
 - **Hooks come from blocked contexts.** Wherever an actor's goal is blocked and V could be the means of unblocking it, there's a potential gig. A fixer's job is someone's blocked context, brokered. The frames' indexes find these matches as they happen.
 - **Drama comes from conflict.** Where contexts block or conflict with each other across actors, there's drama.
 - **Relevance to V decides what surfaces.** Callbacks are contexts V once had that are still near the present ([DS-10](design-seeds.md)).
-- **The player model is V's context graph,** inferred from what the player chooses and engages with ([DS-09](design-seeds.md)).
+- **The player model is the engine's belief about V's context,** inferred from the shared story baseline and from what the player chooses and engages with ([§5.3](#53-v-observed-never-owned), [DS-09](design-seeds.md)).
 
 ## 6. Story in the same space
 
