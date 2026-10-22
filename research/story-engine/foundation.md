@@ -42,7 +42,7 @@ The structure is the same at every scale, from the city down to the words on a b
 ## 4. Rules
 
 1. **Determinism.** An unpinned address resolves as a pure function of the world seed, the address and the contributions in effect. The same inputs always give the same world.
-2. **Consistency.** Finer resolution agrees with coarser resolution, and neighbours agree where they overlap (the sheaf condition). Pins are hard constraints.
+2. **Consistency within a perspective.** Finer resolution agrees with coarser resolution, and neighbours agree where they overlap (the sheaf condition). Pins are hard constraints. This holds within the world's own state and within each actor's beliefs; different perspectives may disagree with each other and with the world ([§5.4](#54-perspectives-everyone-has-their-own-model)).
 3. **Canon.** What V has observed is pinned. The base can always be regenerated, so only pins and contributions need storing.
 4. **Relevance drives resolution.** Nothing is resolved until something samples it. What gets resolved, and how finely, is what the actors' open context frames need, computed as increments over what each frame's parents already established, within a budget ([§5](#5-context-and-relevance)). Detail persists only while a context needs it or a pin holds it ([DS-15](design-seeds.md)).
 5. **Uniformity.** No kind of thing gets a separate model. People, places, events, beliefs, seeds and quests are all addresses in bundles.
@@ -167,7 +167,7 @@ V has memberships too, and they shape what is relevant to V and which hooks are 
 
 The engine owns the city: its people, groups and setting. It does not own the player. The player and the engine share a frame of reference, the story CD PROJEKT RED laid down, which the player accepts by playing. Beyond that baseline, V's context belongs to the player. The engine only observes it and models it. This was decided on 22 October 2026: there is no setting where the player declares V's drives.
 
-- **The engine's model of V is a belief, not a pin.** It sits in the same structure as any person's beliefs about another ([DS-07](design-seeds.md)), with confidence attached. It is built from three sources:
+- **The engine's model of V is a belief, not a pin.** It is one case of the general pattern in [§5.4](#54-perspectives-everyone-has-their-own-model), with confidence attached. It is built from three sources:
   - the canon story state, which is the shared baseline;
   - what V actually did, which is pinned as observed;
   - what the player engages with or ignores ([DS-09](design-seeds.md)).
@@ -182,6 +182,30 @@ The engine owns the city: its people, groups and setting. It does not own the pl
   - It prefers offers that hold up across the Vs it can't yet tell apart.
   - It updates as soon as play contradicts it.
   - The player never pays for a misreading.
+
+### 5.4 Perspectives: everyone has their own model
+
+The engine's belief about V is one case of a general pattern. Every actor keeps an internal model of the world, built only from what it has observed, been told or inferred, and that model can be wrong.
+
+**An example.** Alice works for Arasaka. A Militech employee, Bob, bumps into her on the street, spills coffee on her and hurries off without apologising. Alice now believes Bob is a jerk. In fact he may be having the worst day of his life, and he may be someone who would give Alice the shirt off his back.
+
+- **A belief is a pin in the believer, not in the subject.** "Bob is a jerk" is canon about Alice. Bob's actual character is whatever it is in the world, possibly still open. Both stand, and the gap between them is material.
+- **Beliefs form by attribution, with human biases:**
+  - people judge character from one moment and discount circumstance, which psychology calls the fundamental attribution error;
+  - first impressions stick;
+  - group membership colours judgement: Alice's view of a Militech employee inherits her company's rivalry ([§5.2](#52-groups-and-membership)).
+- **Beliefs travel.** They are told on, distorted as they go, and add up. Reputation is what many people believe about someone, so V's street cred is the city's beliefs about V.
+- **Beliefs are cheap.** A belief is a small record: who believes it, about whom, what they inferred, the evidence, and how confident they are. An interaction relevant enough to notice creates one. Unmemorable beliefs fade unless something pins them.
+- **Stories come from the gap:**
+  - misunderstandings and grudges;
+  - dramatic irony, where V or the player knows what an NPC doesn't;
+  - reveals and reconciliations.
+
+  If Bob later becomes relevant, his side of that day is resolved consistently with what Alice saw: he did bump into her and he did hurry off. Only why is still free.
+- **The layers keep perspectives too:**
+  - what V has been shown is pinned as observed;
+  - what the player concluded from it can only be inferred ([§5.3](#53-v-observed-never-owned));
+  - authors can give characters beliefs that differ from the truth, which is how mysteries are built.
 
 **What it means for story:**
 - **Hooks come from blocked contexts.** Wherever an actor's goal is blocked and V could be the means of unblocking it, there's a potential gig. A fixer's job is someone's blocked context, brokered. The frames' indexes find these matches as they happen.
@@ -236,6 +260,7 @@ To be researched in P3, so the model stays honest. We implement a small toolkit,
   - incremental rule matching (the Rete algorithm; incremental story sifting) for finding who cares about an event;
   - motivation research: Maslow, Reiss's basic desires, self-determination theory, Schwartz's basic values; and needs models in games such as The Sims;
   - groups: role theory and role conflict, cross-pressure from multiple memberships, social identity theory, and principal–agent theory for leaders, members and contractors;
+  - perspectives: attribution theory and the fundamental attribution error, theory of mind, rumour transmission, and reputation systems;
   - Doran and Parberry's finding that game quests derive from NPC motivations.
 - **Search:** constraint satisfaction, interval bounds and hierarchical spatial indexing for queries.
 
