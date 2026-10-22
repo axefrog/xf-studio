@@ -1,6 +1,6 @@
 # Runtime bridge test card
 
-**Status: session 12 ran on 0.8.4 on 22 October 2026 and passed every row it reached: save protection held through a kill inside a held save (the `test_save_delay` hook), the stop key chosen in the game worked in gameplay, photo mode and menus and survived a relaunch, the head pin sits at the crown, the comment box wraps, `game_wait` no longer holds the main pipe, and the light theme was captured. Its small findings (Keys-note copy, the XF box's text size, a `config.ini.bak` landing in MO2's overwrite folder) go to 0.8.5. Session 11 ran on 0.8.3 ([write-up](../../experiments/042-session-11/README.md)).**
+**Status: session 12 ran on 0.8.4 on 22 October 2026 and passed every row it reached: save protection held through a kill inside a held save (the `test_save_delay` hook), the stop key chosen in the game worked in gameplay, photo mode and menus and survived a relaunch, the head pin sits at the crown, the comment box wraps, `game_wait` no longer holds the main pipe, and the light theme was captured. Its small findings (the Keys note's copy, a `config.ini.bak` landing in MO2's overwrite folder) and the UI review of 0.8.4 are in 0.8.5, built offline for the [session-13 checks](#session-13-checks-bridge-085). Session 11 ran on 0.8.3 ([write-up](../../experiments/042-session-11/README.md)).**
 
 **Who does what.** The maintainer starts MO2 and the game, loads a save, keeps the game window in front, and opens the character creator when asked (a mirror, or F12 with Character Customization Anywhere). The coordinator drives everything else through the bridge (MCP tools or the command line) and takes the screenshots. Agents never launch the game or MO2; only the coordinator stages, and only the `XF Runtime Bridge` entry in the test profile.
 
@@ -8,7 +8,8 @@
 |---|---|---|
 | [Before the session](#before-the-session-coordinator) | offline | The coordinator restages the `XF Runtime Bridge` entry from a new build |
 | [Finish showroom checks](#finish-showroom-checks-bridge-050) | 30-35 min | Only with the 0.5.0 -writes build, Codeware and XF Finish Showroom staged, and an XF Eye Artistry build of the same collection and commit; a dim interior at night with 4 m clear in front of V |
-| [Session 12 checks](#session-12-checks-bridge-084) | about 20 min | Only with the 0.8.4 -writes build (`--allow-inventory`), Codeware, Equipment-EX and the two XF Finish Showroom mods (no restage of those); a public place with open space, then a street; two terminals for E and L; one relaunch of the game (K5) |
+| [Session 13 checks](#session-13-checks-bridge-085) | about 15 min | Only with the 0.8.5 -writes build (`--allow-inventory`), Codeware, Equipment-EX and the two XF Finish Showroom mods (no restage of those); a street in daylight; one relaunch of the game (T) |
+| [Session 12 checks](#session-12-checks-bridge-084) | ran 22 October on 0.8.4 | Only with the 0.8.4 -writes build (`--allow-inventory`), Codeware, Equipment-EX and the two XF Finish Showroom mods (no restage of those); a public place with open space, then a street; two terminals for E and L; one relaunch of the game (K5) |
 | [Session 11 checks](#session-11-checks-bridge-083) | ran 22 October on 0.8.3 | Only with the 0.8.3 -writes build (`--allow-inventory`), Codeware, Equipment-EX and the two XF Finish Showroom mods (no restage of those); the game launched to its main menu (I loads the save), then a street in daylight, a public place with open space and a long straight street; two terminals for E |
 | [Session 10 checks](#session-10-checks-bridge-082) | ran 22 October on 0.8.2 | Only with the 0.8.2 -writes build (`--allow-inventory`), Codeware, XF Finish Showroom and Equipment-EX; the game launched to its main menu (I loads the save), then V's apartment and a street; the HUD visible for S and B |
 | [Session 9 checks](#session-9-checks-bridge-08-part-a) | ran 21 October on 0.8.0 | Only with the 0.8.1 -writes build (`--allow-inventory`), Codeware, XF Finish Showroom and Equipment-EX; the game launched to its main menu (C loads the save), then V's apartment and a street; frame generation offered for group J |
@@ -117,6 +118,58 @@ Only with the 0.5.0 -writes build and XF Finish Showroom staged ([pipeline guide
 | K2 | C, M | `showroom_spawn {manifest: "<s2>", presets: ["Gloss A · as before"]}`, then M loads the save (or `game_load {latest: true, discard_unsaved: true}`); after the load, `showroom_state` | Nothing in the world after the load; `showroom_state` has no pieces | A head survives the load: record it (static entities should not persist) |
 
 Evidence: every answer's JSON (spawn plans, spill estimates, sweep frames), the captures (F3–F7 as a fidelity sheet, L1–L3 as a lineup sheet and per-preset strips, L4's burst manifest), the plugin log's `showroom` lines, the Codeware version, and the three archives' SHA-256.
+
+## Session 13 checks (bridge 0.8.5)
+
+Only with the 0.8.5 -writes build built with `--allow-inventory` ([build record](#build-record-bridge-085-branch-build-not-staged)); Codeware, Equipment-EX and the two XF Finish Showroom mods staged as for session 12. This session proves 0.8.5 ([design §3.13](runtime-bridge-design.md#313-bridge-085-session-12s-findings-and-the-ui-review-of-084)): the question sound, the Keys section (wrapping, the keycap, the reserved prompt line, plain-word notes, the saved line), the backup outside MO2's overwrite folder, the opaque window, the danger button and the CET line, with the captures the UI reviews still need. About 15 minutes in five groups, in this order. C is the coordinator, M the maintainer; tool names are the MCP names.
+
+**The four surfaces, by these names only:** the **ink panel**, the **XF box**, the **CET line** and the **XF Runtime Bridge window**, as in session 12.
+
+**How C asks and captures.** `ask "…" [A, B]` is `ui_message {level: "ask", text: "…", choices: ["A", "B"]}`, then `session_wait {message_id}`. **C takes every screenshot itself** with `capture_screenshot {route: "screen", clear_overlay: false}` (it sees CET's window too) and `capture_recrop` for 1:1 crops; for a window capture, M presses Ready once the state shows, then C captures. M is asked only for physical input and judgement. After every answer C reads `session_log {kinds: ["comment"]}` for in-game comments. Captures go to `local/reviews/ui-review-bridge-084/` as `s13-<row>-<what>-0.8.5`, with a 1:1 crop beside any downscale.
+
+**Restage first** (C, MO2 closed): in the **`XF Studio diagnostic`** profile, **replace** the `XF Runtime Bridge` entry's files with `xf-runtime-bridge-0.8.5-writes.zip` (manifest `"version": "0.8.5"`; its `config.ini` has `question_sound = true`). Delete session 12's stray `config.ini.bak` from MO2's overwrite folder (`overwrite/red4ext/plugins/XFRuntimeBridge/`), and note what else that folder holds for the bridge.
+
+**Z. The launch (1 min).**
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| Z1 | M, C | M launches the game from MO2 and loads the latest save (a street, daylight); C: `bridge_info` | `plugin_version` 0.8.5, `build_commit` the build record's; `kill_key.label` Ctrl + Shift + End; `question_sound` `ui_messenger_recieved` | A crash: as session 10's Z1 |
+
+**S. The question sound (2 min).** M has the game's sound on.
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| S1 | C, M | `ui_message {level: "info", text: "An info line: no sound with this one."}`; 4 s later `ask "Did a short sound play when this question appeared, and none with the line before it?" [This one only, Both, Neither]` | This one only; the plugin log has one `ui.question_sound id=<the ask's id> event=ui_messenger_recieved` and none for the info line | Neither: record the log (`ui.question_sound` or `ui.question_sound_failed`); the next build tries `ui_menu_tutorial_open` by `config.ini` alone (`question_sound = ui_menu_tutorial_open`, a relaunch) |
+| S2 | C, M | `ask "Is the sound right for a question: easy to notice, not annoying?" [Right, Too loud, Too quiet, Wrong kind]` | Right (M's judgement); exactly one more `ui.question_sound` line | Record M's answer and any comment |
+
+**K. The Keys section and the backup (5 min).** The street. M opens CET's overlay when asked; **M answers every question in this group by clicking**, never with F6 to F11 (a key pressed while Change... waits would be taken as the new stop key).
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| K1 | C, M | `ask "Open CET's overlay, then click Ready." [Ready]`; C captures the window (`s13-K1-keys-dark`), and a 1:1 crop where the window overlaps the ink panel | "Keys" a heading line of its own; under it "Stop key", the key in a framed keycap (not faded) and Change...; **no ink-panel text shows through the window** (N4, dark); Stop the bridge with danger text and a danger border on a clear fill | Captures |
+| K2 | C, M | `ask "Click Change... on the Stop key row, press nothing, then click Ready." [Ready]`; C captures (`s13-K2-capturing`); `ask "Press Esc, then click Done." [Done]` | The prompt "Press the new key, with Ctrl, Shift or Alt if you like. Esc cancels." on its own line under the row; **the row and everything below it in the same place as in K1** (the UI review's capturing state, after N1); Esc leaves the key | Captures |
+| K3 | C, M | `ask "Click Change..., then hold Ctrl and Alt and press Page Down. Then click Ready." [Ready]`; C captures (`s13-K3-changed`); `bridge_info`; then `ask "Does the saved line under the Keys row stay after you answer this?" [Stays, Gone]` and C captures again | Reset to Ctrl + Shift + End on the next row, **the window no wider than in K1**; the note in plain words ("Ctrl and Alt also dodge, crouch and steer vehicles on their own (and … more); holding them for the stop key only matters while V moves.", muted, no `_Button` names); the saved line "The stop key is now Ctrl + Alt + Page Down, saved for next time. The old config.ini is kept in %LOCALAPPDATA%\XFStudio\runtime-bridge\settings-backups." and it **stays** after the answer (session 12: answering cleared it); the plugin log has `bridge.kill_key_changed key=Ctrl+Alt+PageDown … saved=true backup=config.ini.<time>.bak temp=runtime` or `temp=beside` | Record `bridge_info.kill_key` and the log line |
+| K4 | C, M | `ask "Click Reset to Ctrl + Shift + End, close CET, then click Done." [Done]`; C lists `%LOCALAPPDATA%\XFStudio\runtime-bridge\settings-backups` and MO2's overwrite folder | `kill_key.is_default` true; two backups in the runtime folder (K3's and K4's), **nothing new in the overwrite folder** (no `config.ini.bak`, no `config.ini.tmp`); the mod's own `config.ini` has `kill_key = Ctrl+Shift+End` | Record both listings |
+
+**U. Hover and the ink panel's outstanding captures (4 min).** The street in daylight, the HUD showing.
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| U1 | C, M | `ask "Open CET's overlay. Rest the pointer on Hover me, without clicking. I capture in 5 seconds; then click it." [Hover me, Other]`; 5 s later C captures (`s13-U1-hover-dark`) | One dark hover on record: the hovered answer the Studio's primary hover, its label readable (the UI review's "dark hover") | Capture |
+| U2 | C | `ask "Close CET, then press F6." [Done]`; `ui_message {level: "ask", text: "<a question of about 300 characters>", choices: ["A long answer label here", "Another long answer", "Third", "Fourth answer"]}`; C captures the ink panel (`s13-U2-ink-long`, 1:1 crop); `ui_message {clear: true}` | C8: the question wraps at words, a label longer than the panel is cut at a word with "…", four answers with their keys, readable over the daylight street | Capture |
+| U3 | C | From `player_state`, a point p 15 m ahead of V and 8 m above her feet; `world_pin {position: p, label: "Bright sky check"}`; `player_look {at: p}` (the pin against the sky), C captures (`s13-U3-pin-sky`); `player_look {yaw: 75, relative: true}` (the pin at or past the screen's edge), C captures (`s13-U3-pin-edge`); C captures the minimap corner (`s13-U3-minimap`); `world_pin_clear`; the look's undo | C9: the pin's label readable over a bright sky; at the screen edge the mark clamped on screen; the 0.8.3 minimap badge | Captures |
+
+**T. Light theme, the CET line and 16:9 (4 min; one relaunch).** **Optional C7 first:** if time allows before the relaunch, `ask "In the game's Video settings, switch to 1920 × 1080 (16:9), then click Done." [Done, Skip]`; C captures the ink panel at its default, then with `ui_hud {anchor: "top_right"}` and `ui_hud {anchor: "bottom_left"}` (`ui_hud {reset: true}` after), the XF box in photo mode (`photo_open` … `photo_exit`) and a pin mark (`world_pin {at: "v", label: "16:9"}`, then `world_pin_clear`) (`s13-T0-169-*`); then `ask "Switch back to your usual resolution, then click Done." [Done]`.
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| T1 | M, C | `ask "Quit the game to the desktop now, then press nothing until I say."`; with the game closed C sets, in the mod's `config.ini`, `[overlay] theme = light` and `enabled = false` (so the CET line is the status surface); C says in chat: relaunch and load the latest save | — | — |
+| T2 | C, M | `ask "Open CET's overlay, then click Ready." [Ready]`; C captures the window in light (`s13-T2-window-light`, 1:1 crop over the ink panel); `ask "Close CET, then press F6." [Done]`; `ui_hud {show: false}` (with the XF box off too, the CET line becomes the status surface: `bridge_info.status_surface` cet_line); `ui_message {level: "info", text: "A second line under the status, to show the alignment."}`; C captures the CET line (`s13-T2-cetline-light`, 1:1 crop); `ui_hud {show: true}` | The light window opaque over the ink panel (N4, light); the CET line in light, **every line under the dot starting where the status words start** (fix 9) | Captures |
+| T3 | C | With the game closed after the session, C sets `theme = dark` and `enabled = true` again | — | — |
+
+**Friction log (throughout).** Every point of friction met in passing, with each surface by its name above.
+
+Evidence: every answer's JSON, C's own captures named above, `session_log {tail: 500}` at the end, and the plugin log copied **before** the relaunch (T1) and again at the end.
 
 ## Session 12 checks (bridge 0.8.4)
 
@@ -936,6 +989,10 @@ Expected evidence (under MO2, logs sit in `overwrite/`):
 | `r6/logs/redscript_rCURRENT.log` | Both `.reds` files from `red4ext/plugins/XFRuntimeBridge/Scripts`; `Compilation complete` | The plugin's script path under MO2 |
 
 Afterwards, record outcomes in the [design page](runtime-bridge-design.md) (unverified rows become [runtime] with the capture id), in [knowledge/runtime-access.md](../../knowledge/runtime-access.md), and the session 2 answers in [experiment 020](../../experiments/020-session-2/README.md).
+
+## Build record (bridge 0.8.5, branch build, not staged)
+
+Built from this commit by a clean build and `bun tools/package.ts`; the hashes follow in the next commit.
 
 ## Build record (bridge 0.8.4, branch build, not staged)
 
