@@ -12,6 +12,11 @@ Standard library only (Python 3.11 or later) plus WolvenKit CLI. Nothing here ru
 | `qc_lib.py` | Schema, path classification, and the extractors that fill the structure tables |
 | `quest_stats.py` | Writes `research/story-engine/quest-corpus-statistics.md` from the database |
 | `write_manifest.py` | Writes the tracked summary and the `areaH` entry of the loose corpus `MANIFEST.json` |
+| `places_archive.py` | Area D: reads resources straight from a game archive with the game's own Oodle DLL, and takes a census of every streaming sector's class table in seconds |
+| `places_index.py` | Area D: decodes the district polygons (`AreaShapeOutline`) from serialised sectors and answers "which district and venue holds this point?" |
+| `places_join.py` | Area D: the world community registry, regular community areas and AI spots from the always-loaded sectors; journal path hashes joined to the compiled pin resources |
+| `places_streamable.py` | Area D: reads the streamable community area nodes from the 965 sectors that hold them (disk-heavy, memory-guarded, resumable) |
+| `places_communities.py` | Area D: pins every community instance to a district and tallies the gang mix per district |
 
 ## Rebuild from scratch
 
@@ -48,6 +53,10 @@ python research/consumers/quest-corpus/scripts/write_manifest.py --db quest-corp
 - `ingest_log` records anything unusual (a file that could not be extracted or converted, a hash mismatch, a connection whose end is outside the graph). `meta` records the tool and the build.
 
 Example queries are in the statistics page's "How to query" section. To read a scene's JSON in Python: `qc_lib.read_json(db, resource_id)`.
+
+## Places (area D)
+
+The `places_*.py` scripts reproduce [the places page](../../../../knowledge/places.md): they read the Phantom Liberty copies of the world resources (the superset of the base game's) and need the same WolvenKit CLI 9.0.1 and a game folder. Order: `WolvenKit.CLI archive <ep1_1_nightcity.archive> -l` (the path list) -> `places_archive.py census` -> extract and serialise the sectors the census names (those with a `worldLocationAreaNotifier`; the four `always_loaded` sectors) -> `places_index.py areas` -> `places_join.py registry` and `pins` -> `places_streamable.py` -> `places_communities.py`. The tracked summary is [quest-corpus-d-manifest.json](../../../story-engine/quest-corpus-d-manifest.json). The checks used while developing them: the census equals the earlier header tallies for all 23,691 base sectors; the archive reader's extraction equals WolvenKit's byte for byte on a sector; the index reproduces the 205 areas and the per-district spot counts of the first prototype.
 
 ## Definitions the statistics rely on
 
