@@ -4,6 +4,7 @@
 - **The review.** v0.2 went through one review, by GPT-6 Astra; [§16](#16-review-record) records what changed.
 - **Dossiers folded in.**
   - v0.1 folded in [dossier 8](../craft/d08-scale-threads-time.md#9-requirements-for-the-seed-language-p4) (scale, threads and time).
+  - v0.9 folds in [dossier 16](../craft/d16-authoring-tools.md) (authoring formats and tools): maturity and placeholders, a text syntax for predicates, source maps, the finding contract, structure versions, and missing content at run time. R1 is now lint-clean.
   - v0.8 folds in [dossier 15](../craft/d15-people-networks-order.md) (people, networks, norms and order): social reads, casting through ties, betrayal and norm seeds, reputation through behaviour (§2.17).
   - v0.7 folds in [dossier 14](../craft/d14-city-events.md) (where and when things happen in the city): city reads, hot-state windows, and the limits on the director over city events (§2.16).
   - v0.6 folds in [dossier 13](../craft/d13-perception-curiosity.md) (perception, memory and curiosity): three exposure grades and the display contract, re-cued callbacks, `mustReach`, hooks and twists, counter-cues, channel modality.
@@ -67,6 +68,7 @@ The first implementation is in the TypeScript reference model, beside the kernel
 | The director's form, phase, scoring and joint hooks (§2.13, §8.3) | The built-in fallbacks |
 | Migration with a beat map (§12.3) | `continue` and `withdraw` only |
 | Stand-ins beyond the constructible subset (§5.4) | The subset only; anything else fails the lint |
+| Extension slots: other packs adding alternates to a beat (§2.8) | None; deferred past the first public pack |
 
 ### 0.4 What S2 needs from the kernel (S0 v4)
 
@@ -114,6 +116,13 @@ A template is sown when its `sow` predicate is `yes`. The default `sow` is `yes`
 
 Sowing is idempotent. The instance `Id` is fixed by §1.2, so sowing twice finds the existing instance.
 
+**Maturity.** Every template declares a `maturity`:
+- `sketch`: an idea with placeholders;
+- `playable`: it runs, rough edges and all;
+- `ready`: it is finished.
+
+A template below `ready` is **never sown into a player's game**, whatever its `sow` says. Only the lab and authoring tools may sow it. This lets an author save and test work in progress, while players only ever meet finished seeds ([dossier 16](../craft/d16-authoring-tools.md)).
+
 ## 2. The seed document
 
 ### 2.1 The top level
@@ -131,6 +140,7 @@ interface Seed {
   intent: Intent;                      // §2.3
   sow?: Pred;                          // authored templates: when to sow (default yes)
   repeat?: { max: number | 'unbounded'; gap: Duration };   // repeatable templates only
+  maturity: 'sketch' | 'playable' | 'ready';     // §1.3; only `ready` reaches a player's game
   roles: Record<RoleKey, Role>;        // §2.4
   facts?: Record<FactKey, SeedFactDecl>;           // §2.5
   world?: WorldRequirement[];          // §2.5
@@ -339,6 +349,30 @@ type Pred =
 type Cmp = 'eq' | 'ne' | 'lt' | 'le' | 'gt' | 'ge';
 type EventPattern = { kind?: string; participant?: RoleKey | Id | 'v'; role?: string; place?: RoleKey | Id; effect?: Effect; witnessedByV?: boolean; witnessedBy?: RoleKey };
 ```
+
+**The text form.** Authors write predicates as expressions. The text form prints to and parses from `Pred` one to one, and its meaning is exactly §2.6's. The grammar, informally:
+
+```
+pred   := pred 'or' pred | pred 'and' pred | 'not' pred | '(' pred ')' | atom | 'yes' | 'no'
+atom   := fact cmp int                      // q112_done == 1
+        | 'seedFact(' key ')' cmp int
+        | 'decided(' fact ')'
+        | role '.' path cmp value | 'cast(' role ')'
+        | 'seed(' id ')' 'in' '{' states '}' | 'beat(' key ')' 'in' '{' states '}'
+        | 'response(' key ')' 'is' kinds
+        | 'hour' 'in' '[' int ',' int ')'
+        | 'since(' ref ')' '>=' duration
+        | 'count(' pattern [',' ref] ')' cmp int | 'clock(' key ')' cmp int
+        | 'exposed(' pattern [',' grade] ')' | 'cap(' ref ')' | 'setting(' key ')' 'in' '{' values '}'
+        | 'believes(' role ',' subject ',' path [',' region] ')'
+        | 'city(' read ')' 'in' '{' bands '}' | 'social(' read ')' 'in' '{' bands '}'
+        | fn '(' args ')'
+cmp    := '==' | '!=' | '<' | '<=' | '>' | '>='
+```
+
+`and` binds tighter than `or`. `yes` and `no` are three-valued keywords, never booleans. Fixtures SF-1 and SF-7 also run through the text form (SF-46).
+
+**Explaining a predicate.** Layer 2 exposes a read-only explanation: for every node of a `Pred`, at a given kernel revision and game time, its value and, for a `maybe`, the missing reading or undecided guard behind it. It emits nothing (S0 I-13). Authoring tools use it to answer "why won't this window open?".
 
 **Evaluation** uses Kleene's strong three-valued logic:
 - `all` is `no` if any member is `no`, `yes` if every member is `yes`, otherwise `maybe`. An empty `all` is `yes`.
@@ -868,7 +902,7 @@ It never appears as a meter or a label on screen (L-59 applies).
 An instance is compiled once, at sowing:
 1. **Expand** the profile (§2.10).
 2. **Draw the mode, then the variant** (§3.4). Merge the variant's `parts`.
-3. **Lint** (§11.1). An error refuses the seed. The refusal is recorded in the pack's sowing record, and the instance is never sown.
+3. **Lint** (§11.1), at the template's maturity. An error refuses the seed. The refusal is recorded in the pack's sowing record, and the instance is never sown.
 4. **Mint** the seed node.
 5. **Store** the expanded document in the instance's state (§12.1).
 6. **Open the seed's frames** (§3.3), with interests from the dependency collection (§4.1).
@@ -1646,6 +1680,18 @@ interface Callback { cites: ExposurePattern; atLeast: ExposureGrade; recue?: Con
 
 ### 11.1 Lint
 
+**Findings are for authors.** Each lint check declares:
+- **`speed`:** `static`, checked from the document alone, or `sampled`, checked by running sample states;
+- **`blocksReady`:** whether it stops a template from being marked `ready`;
+- **its message:** a plain-English template from S4's lexicon;
+- **a `fix`:** a machine-readable fix, where one exists.
+
+Below `ready`, only checks that would break the engine refuse a seed in the lab. The rest are reported, and block only the step to `ready`. Profile checks (L-02, L-10, L-11, L-16) are worded against the profile's parameters, not its expansion.
+
+**Source maps.** Profile expansion (§2.10) and the variant merge (§3.1) record, for each generated part, the parameter or field it came from. Every finding points at what the author wrote. The map is built at tool time; the stored `document` is unchanged.
+
+**Placeholders.** A `ContentRef` of kind `todo` stands in for unwritten text. It is shown as a generated line from the fragment id and the cast, printed distinctly in every report and preview. It is allowed below `ready`, and is an error at `ready` (L-72).
+
 The lint runs at compile time (§3.1), and on demand from authoring tools (S4, P10). An **error** refuses the seed. A **warning** is reported only.
 
 | # | Check | Level |
@@ -1719,6 +1765,11 @@ The lint runs at compile time (§3.1), and on demand from authoring tools (S4, P
 | L-69 | Text over its channel's word budget, or a pulled thread whose first line doesn't carry the premise | warning |
 | L-70 | A beat in a gig or arc that declares neither `instability` nor `tension` | warning |
 | L-71 | Beats relying on beliefs nested more than 4 deep | warning |
+| L-72 | A `todo` placeholder in a template marked `ready` | error |
+| L-73 | A duplicate id inside a pack | error |
+| L-74 | A `ContentRef`, role or fragment that doesn't resolve, or that was retired without a tombstone | error |
+| L-75 | Two alternates of equal specificity that can both be eligible in a sample state | warning |
+| L-76 | A text unit whose placeholder names a role or attribute the role doesn't guarantee (L-17, extended to parsed text) | error |
 | L-33 (extended) | A `turns[].what` reading anything of V's but beliefs held about V and V's recorded acts | error |
 
 L-25 and L-40 were removed in v0.2 (§16). Their numbers are not reused.
@@ -1752,6 +1803,17 @@ interface FitReport {
   turns: Array<{ who: RoleKey; kind: string; pressure: string }>;    // who could turn, and how much pressure it takes
 }
 ```
+
+**For the author's loop,** the report also gives:
+- **`nearMiss`:** for each unfilled or thin role, how many candidates there would be if each `must` term were dropped, within the query budget;
+- **`diffFrom`:** what changed against a previous report with the same inputs;
+- **`pins`:** for each draw or cast, the author's source span and the `Part` to write to fix it;
+- **`cost`:** text units written, missing and placeholder, and alternates;
+- **`settings`:** the settings the sample ran under.
+
+**A settings matrix.** The report's input MAY take several settings vectors from S4's registry, and returns a row per sample and vector. The first implementation runs the director off, with content tags on and off.
+
+**Many worlds.** Because layer 2 is deterministic, a survey over many world seeds gives hit counts ("this seed fits in 41 of 200 worlds"). Every finding replays from one small file.
 
 An author can pin any drawn or fitted choice back into the seed as fixed ([DS-43](../design-seeds.md)). The report shows the `Part` to paste.
 
@@ -1847,6 +1909,18 @@ The new template's `migrate` entry covering the instance's version can say other
 - **`withdraw`** withdraws the instance (T1);
 - **`migrate`** moves it to the new structure by `beatMap`. It is deferred in the first implementation (§0.3).
 
+**Structure versions.** `structureHash` is the hash of the expanded document, excluding the contents of text units. `Seed.version` MUST rise exactly when the structure hash changes; the authoring tool enforces it. `Migration.from` names those versions. A text-only edit keeps the version, and reaches live instances as corrected wording.
+
+**Ids are permanent.** A retired id leaves a **tombstone**, optionally naming its replacement (L-74).
+
+**Content that vanishes under a live instance.** When a live instance's `ContentRef` no longer resolves:
+- with a tombstone that names a replacement, the replacement is used;
+- otherwise the fragment is unavailable. Its delivery is skipped with a `missing-content` record entry, and the stuck rule (§7.5) applies.
+
+A pack compatibility `notice` (§12.2) is sent once per branch.
+
+**A broken pack file** never takes down other packs. Its templates are refused, with plain findings; the rest load.
+
 A **removed pack** withdraws its live instances (T1), because their content references can no longer resolve. Their committed pins and canon events stay: history is never undone (S0 §6.6).
 
 ## 13. Invariants
@@ -1918,6 +1992,8 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 | SF-43 | **Re-cue.** A callback citing an event from an earlier session | Its `recue` slot is filled from the event's display cue |
 | SF-44 | **Late cause refused.** A constructed cause that would contradict a `confirmed` event | Refused; the trace waits or is skipped |
 | SF-45 | **Sign re-issue.** A sign that stays `ambient` | Re-issued at most `reissue` times, within the plant cap |
+| SF-46 | **R1 in text form.** Parse the R1 seed's text form, print it, parse it again | Identical `Pred` trees. The seed is lint-clean at `ready`, and fits on the SF-7 and SF-8 states |
+| SF-47 | **Maturity.** A `sketch` template with `sow: yes` in a player's game | Never sown. The lab sows it, and its placeholders appear in the fit report |
 | SF-26 | **Constructed trace.** A trace with no found cause, `latitude` allowing `trace-cause`. S3's stub contributes a cause: an event at a stall. The trace is displayed; save; load | The `display` entry records `constructed`. The cause's fields are pinned `committed` at display, and resolve identically after the load |
 
 ## 15. Compromises and open items
@@ -1944,6 +2020,7 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 12. **Dossier 13.** v0.6 adopts all 15 of its S2 requirements. Its P5 list goes to S3; its P9 list (19 metrics) goes to P9. Its persistence rule stands: layer 2 keeps grades, channels, classes, cue ids, `playTotal` and `shownBeforeEffect`, and never raw test values, gaze, camera, speed, dwell or idle data.
 13. **Dossier 14.** v0.7 adopts its S2 requirements (§2.16). Its 27 S1 requirements define much of the simulation layer and wait for P3. Its sifter-input volume goes to S3, its metrics M14-01 to M14-24 to P9, and its district inspector to P10. Its in-game session card starts by measuring the game-time ratio, which every S1 time constant depends on.
 14. **Dossier 15.** v0.8 adopts its S2 requirements (§2.17). Its kernel requirements are S0 v4.3 (implicit edge types, deferred; the `aggregate` contract). Its S1 policies wait for P3; its metrics go to P9 and its inspectors to P10.
+15. **Dossier 16.** v0.9 adopts its S2 requirements; extension slots wait past the first public pack (§0.3). Its pack-format requirements go to S4 and its tool requirements, including a minimal first tool XF Studio could host, to P10.
 
 ## 16. Review record
 
@@ -2063,6 +2140,12 @@ The parameters for the [P4 §5](../p4-seeding-layer.md#5-reference-scenario-r1-i
 **The place:** a `place` role, preferred (strength 2) quiet and in Japantown.
 
 **Closing:** `pack:quiet-hour-closing`.
+
+**Context:** `{ all: [ { fact: q115_point_of_no_return, op: eq, value: 0 }, { role: takemura, p: <in Night City> } ] }`: the seed makes sense only while the story hasn't passed the point of no return and Takemura is in the city.
+
+**The window's coda:** `closeContent: pack:quiet-hour-coda`, a short message from Takemura that names what passed between them, by V's acts.
+
+**Maturity:** `ready`. With these, R1 is lint-clean at `ready` (SF-46).
 
 Expanding with §A.2 gives these beats:
 - `offer-1` to `offer-3`;
