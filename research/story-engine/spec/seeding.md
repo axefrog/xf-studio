@@ -1,6 +1,10 @@
 # S2. Seed language and seeding layer specification
 
-**Status:** v0.2, 23 October 2026. It went through one review, by GPT-6 Astra; [§16](#16-review-record) records what changed. v0.1 folded in [dossier 8](../craft/d08-scale-threads-time.md#9-requirements-for-the-seed-language-p4) (scale, threads and time).
+**Status:** v0.3, 23 October 2026.
+- **The review.** v0.2 went through one review, by GPT-6 Astra; [§16](#16-review-record) records what changed.
+- **Dossiers folded in.**
+  - v0.1 folded in [dossier 8](../craft/d08-scale-threads-time.md#9-requirements-for-the-seed-language-p4) (scale, threads and time).
+  - v0.3 folds in [dossier 10](../craft/d10-change-theme-payoff.md) (character change, theme and payoff): premises and costs, NPC turns, typed plants and traces, and NPC attribution lines ([D-22](../decisions.md)).
 
 This is the specification stage of [P4](../p4-seeding-layer.md) (work package [WP-10](../plan.md#82-work-packages)). It is exact enough to implement layer 2 in the reference model from this page plus the kernel specification [S0](kernel.md) and the reference model's [notes](../../../projects/xf-story-engine/reference/SPEC-NOTES.md).
 
@@ -171,12 +175,29 @@ type Part<T> =
 ```ts
 interface Intent {
   prohibitions: Pred[];                // fitting must never make one yes; the lint checks static cases
-  tone: Array<{ tag: ToneTag; role: 'supports' | 'opposes' | 'complicates' }>;
+  tone: ToneTag[];
+  argues?: Array<{ premise: PremiseId; stance: 'supports' | 'opposes' | 'complicates'; carriers: BeatKey[] }>;
   aesthetic?: Record<AestheticFeature, number>;    // −1..1: a few coarse weights for fitting
 }
 ```
 
 The end state is `Seed.end`; it isn't repeated here. `PurposeTag`, `ToneTag` and `AestheticFeature` are closed vocabularies in S4. Until the composite seeds them, S4 ships a small starter set marked provisional.
+
+**Theme is separate from tone.** `tone` is the feel. **`argues`** is the seed's position on a **premise**, a question a pack asks of the city. The `carriers` are the beats whose offers, costs or consequences make the argument; an `argues` entry with no carrier is a label only (L-47).
+
+```ts
+interface Premise {                    // pack data (S4)
+  id: PremiseId;
+  sentence: string;                    // for authors and tools; never rendered to V in the system's voice (L-53)
+  signature: Pred;                     // over record features only, so a record can show or violate it
+  scope: 'district' | 'region' | 'season';
+  quota: { supports: [number, number]; opposes: [number, number]; complicates: [number, number] };  // share bounds
+  intended?: string[];                 // dissonance made on purpose
+}
+```
+
+- **The default is no premise.** Packs declare premises; sowing never invents one.
+- **Audits, not per-seed checks.** Whether a premise shows is an audit S3 runs over a scope's record. It takes about 10 to 40 offers in scope to show a pattern ([dossier 10](../craft/d10-change-theme-payoff.md)). One seed can't, so the lint checks only that carriers exist.
 
 ### 2.4 Roles
 
@@ -200,6 +221,8 @@ interface Role {
   repertoire?: FragmentRef[];          // casting prefers candidates S1 lists as able to play these (§5.2)
   textAttrs?: string[];                // attributes text may name; each guaranteed by `must` or identity (L-17)
   rung?: 'recurring' | 'featured' | 'central';    // an authored promotion floor, passed to S3 (§3.2)
+  stance?: { premise: PremiseId; toward: 'holds' | 'resists' | 'profits' | 'doubts' };   // usable in `prefer`
+  stability?: 1 | 2 | 3;               // how hard this NPC's views are to move; default from S1
   client?: { blocked: Pred; standsToLose: string };   // job-like seeds: the client's blocked goal
 }
 
@@ -262,7 +285,11 @@ interface Dependency { on: RoleKey | { fact: string }; hold: 'keep' | 'substitut
 | `resettable` | The incidental: a stall closed for the day, a guard moved | The write also schedules a game-time **wake-up** at `at + reset` **[tunable 7 game days]**. At that wake-up, if the pin is still current, layer 2 withdraws it, and the fact reads its `initial` again |
 | `cosmetic` | A mark on a wall, a changed sign | Only the canon event; no pin |
 
-The default is `lasting` for game-fact writes, rewards, and effects on ties or standing. Everything else defaults to `resettable`. Resettable game-fact writes are not allowed (L-12).
+The default is `lasting` for game-fact writes, rewards, and effects on ties or standing. Everything else defaults to `resettable`. These must be `lasting`, and marking one `resettable` is an error (L-12):
+- game-fact writes;
+- writes made by a `turning` event: beliefs, importance, membership.
+
+**Canon characters.** A role whose identity is fixed to a game character keeps the facts the game records about it. A turn or effect on such a role that would change one of those facts must be `authoredOnly` (L-50). Turns the engine adds on such a role are confined to beliefs about V and ties with V.
 
 ### 2.6 Predicates
 
@@ -286,6 +313,7 @@ type Pred =
   | { exposed: ExposurePattern }                             // §10.2
   | { cap: CapabilityRef }                                   // a capability read over V's state (S5)
   | { setting: SettingKey; is: string[] }                    // a player setting (S4)
+  | { believes: { who: RoleKey; of: RoleKey | Id | 'v'; path: SlotPath; is?: Region; atLeast?: number } }   // an NPC's own belief
   | { fn: FnRef; args: unknown[]; reads: FactRead[] }        // a registry predicate; `reads` lists its dependencies
   | 'yes' | 'no';
 
@@ -307,6 +335,12 @@ type EventPattern = { kind?: string; participant?: RoleKey | Id | 'v'; role?: st
 - **`count`** counts the events matching the pattern that layer 2 has **consumed** (§2.14) at or after the `since` point, or since sowing.
 - **`hour`, `since`, `seed`, `beat`, `response`, `seedFact`, `count`, `clock` and `setting`** are never `maybe`.
 - **`exposed`** is `yes` or `no` (§10.2).
+- **`believes`** reads the NPC's view through `knows` (S0 §11.4), never world truth:
+  - `maybe` if `knows` answers `unknown`;
+  - `yes` if the belief's value lies in `is` and its confidence is at least `atLeast` (default 0);
+  - `no` otherwise.
+
+  Beliefs held about V are allowed. **No atom reads a state of V.**
 - **`cap` and `fn`** return what the registry function returns.
 
 Evaluation reads the kernel at a given revision and game time (§4). It is read-only and emits nothing (S0 I-13).
@@ -397,7 +431,7 @@ interface Beat {
   decision?: { atStake: RoleKey; stances: Stance[] };           // kind decision
   obstacle?: { affordances: Affordance[] };                     // kind obstacle; at least two
   conclusion?: { clues: ClueRoute[] };                          // kind conclusion; at least three
-  aftermath?: { delay: Duration; signpost: FragmentRef; cancelIf?: Pred };   // kind aftermath
+  aftermath?: { delay: Duration; signposts: FragmentRef[]; cancelIf?: Pred };   // kind aftermath; at least one (L-23)
   failure?: Array<{ when: Pred; warnFirst?: Pred; leadsTo: BeatKey }>;       // checked in order
   leaves?: EffectDecl[];               // added to the fragment's own
   role?: 'texture' | 'legwork' | 'second-approach';   // what a short form may drop (§2.13)
@@ -413,7 +447,14 @@ interface Objective { kind: 'task' | 'condition'; succeeds: Pred; fails?: Pred; 
 interface Affordance { needs: Pred; cost: CostClass; exposure: ExposureClass; combat: boolean }
 interface ClueRoute { beats: BeatKey[] }
 type Stance = 'help' | 'bargain' | 'refuse' | 'oppose' | 'ignore';
-interface Promise { id: string; opens: BeatKey; paidBy: Pred; mayStayOpen?: boolean }
+interface Promise {
+  id: string; opens: BeatKey; paidBy: Pred; mayStayOpen?: boolean;
+  kind?: 'tone' | 'story' | 'character' | 'structure';
+  size?: 'small' | 'medium' | 'large';
+  weight?: 'portent' | 'plant';        // a plant is a promise whose `opens` beat is a trace
+  carrier?: 'object' | 'person' | 'place' | 'phrase';
+  retire?: ContentRef;                 // the closing trace if it is retired unpaid
+}
 ```
 
 - **One sense of "beat".** A beat is a node in a seed's graph. Every beat that isn't `texture` leaves at least one fact, from its fragment or its own `leaves` (L-30): that recorded change is what makes it a beat. An action and its reaction, sometimes called a beat elsewhere, is a fragment of level `exchange`.
@@ -427,7 +468,7 @@ interface Promise { id: string; opens: BeatKey; paidBy: Pred; mayStayOpen?: bool
 ```ts
 interface OfferSpec {
   stakes: Array<{ bearer: RoleKey | 'client' | 'v'; what: StakeTag }>;
-  actions: Array<{ id: string; stance: Stance; foresight: ContentRef; writes?: EffectDecl[] }>;
+  actions: Array<{ id: string; stance: Stance; foresight: ContentRef; writes?: EffectDecl[]; costs?: Cost[] }>;
   nullPath: { id: string; content?: ContentRef; writes?: EffectDecl[] };   // the authored option of doing nothing
   lapse: { after: Duration; then: 'unattended' | 'reoffer' | 'withdraw'; content?: ContentRef };
   decline: Array<{ id: string; response: ContentRef; writes?: EffectDecl[] }>;
@@ -435,7 +476,7 @@ interface OfferSpec {
   retractQuietly?: ContentRef;         // shown when V retracts with one input; default nothing
 }
 
-interface ResponseTemplate { to: ActPattern; because: ConcernRef; content: ContentRef }
+interface ResponseTemplate { to: ActPattern; because: ConcernRef; content: ContentRef; needs?: Pred; attribution?: boolean; reply?: ContentRef }
 
 interface UnattendedPlan {
   after: Duration;                     // how long the world takes to settle it without V
@@ -447,7 +488,24 @@ interface UnattendedPlan {
 - **A stake on `v`** (V's money, items, standing) is allowed only as a consequence of an action V accepts (L-15).
 - **A consequential choice:** each action's `writes` MUST include a distinct value of one seed fact, and that fact MUST have a consumer (L-06).
 - **A decision beat's stances** need at least three, including `refuse` (L-14).
-- **Honesty.** The language has no construct that states V's feelings, motives or reasons. Callbacks name V's acts (`ActPattern`), never reasons. Response templates without `because` don't compile (L-19).
+```ts
+interface Cost {
+  bearer: RoleKey | 'client' | 'v' | 'third';
+  what: StakeTag;
+  when: 'now' | 'later';
+  shown: 'trace' | 'named' | 'quiet';
+}
+```
+
+- **Costs.** Each action MAY declare what it costs and whom. The offer's `stakes` stay as the overview. Theme lives in what options cost (§2.3). A consequential offer whose actions all cost the same, or nothing, gets a warning (L-45). A cost paid `later` and shown by `trace` needs an aftermath beat that reads the action's write (L-46). No cost class feeds a visible number.
+- **Honesty.** The language has no construct in which the narrator or the system states V's feelings, motives or reasons. Callbacks name V's acts (`ActPattern`), never reasons. Response templates without `because` don't compile (L-19).
+- **Attribution lines ([D-22](../decisions.md)).** An NPC may voice its own belief about V's motive, in a response template marked `attribution: true`. The template must:
+  - have a `believes` atom in its `needs` for that NPC's belief about V, and the atom must be yes;
+  - have a `because` naming an observed act of V's;
+  - be phrased as the NPC's view;
+  - offer V a reply that can correct it.
+
+  An attribution line that fails any of these is an error (L-52). L-20 and L-21 don't apply to valid attribution lines.
 
 ### 2.10 Profiles
 
@@ -469,7 +527,16 @@ Further profiles come from [P4 §3.8](../p4-seeding-layer.md#38-profiles-shapes-
 - job and heist;
 - con;
 - four-beat;
-- front.
+- front;
+- **testing arc** (a flat arc, from dossier 10, S10-S2-19). It has:
+  - a baseline beat that exposes the NPC's creed;
+  - at least two pressure beats from independent causes;
+  - a test beat, which is a decision on the NPC's stance;
+  - an aftermath that reads other NPCs' turns;
+- **slide** (a negative change, S10-S2-19). It is a run of asks:
+  - each ask may grow by at most a third of the total change;
+  - each is a full offer with a decline path;
+  - each rise is tied to the asker's own frame.
 
 ### 2.11 Variation, latitude and adaptation
 
@@ -498,7 +565,8 @@ interface AdaptationPoint { part: PartPath; cost: 'cheap' | 'moderate' | 'costly
   - `stand-in`;
   - `new-named-character`;
   - `location-swap`;
-  - `delay`.
+  - `delay`;
+  - `trace-cause`: constructing a cause for a trace (§2.15). A constructed cause outside `latitude` fails L-32.
 - **Skeleton features.** The compiler computes `verb`, `stake`, `relationship`, `outcome`, `tone` and `channel` through a registry function. They are read-only, for the arbiter, S3 and the tests.
 - **Variety provenance.** Every delivery records which mode, variant and alternates produced it (§10.1).
 
@@ -546,11 +614,33 @@ A beat's request takes the seed's `timing`; its class and channel come from the 
 | `drive` or `standing` | A drive's weight, or a group's standing | season |
 
 ```ts
-interface Turn { level: 'situation' | 'step' | 'goal' | 'concern' | 'drive' | 'standing'; what: Pred }
+interface Turn {
+  level: 'situation' | 'step' | 'goal' | 'concern' | 'drive' | 'standing';
+  what: Pred;
+  who?: RoleKey;                       // an NPC whose turn this is
+  kind?: 'revision' | 'refusal' | 'exit' | 'tie' | 'standing';
+}
 type GrowsFrom = { looseEnd: { seed: Id; entry: number } } | { promotion: Id } | { parent: Id };
 ```
 
-- **`turns`** lists the recorded changes that complete the seed. Each `what` reads a recorded value: a frame status, a pin, a tie rung, a standing. It never reads V's inner state.
+- **`turns`** lists the recorded changes that complete the seed. Each `what` reads a recorded value:
+  - a frame status;
+  - a pin;
+  - a tie rung;
+  - a standing;
+  - an NPC's belief, including a belief about V;
+  - V's recorded acts.
+
+  It never reads V's inner state.
+- **NPC turns.** An NPC's change is belief revision under pressure, recorded as a **`turning`** event. `turning` is a core pack event kind (S4), minted by S1, with:
+  - `who`, `kind`, `from`, `to`;
+  - `causes`;
+  - `served`.
+
+  Each turning kind declares the content that reads it (L-51). Most NPCs stay flat and change others. **V has no arc in the engine:** V's change is only what V's acts leave in the record, and how the city's beliefs about V move (D-09).
+- **Staging a turn.** A beat that stages an NPC's turn, by reading a `turning` count, has two forms:
+  - a **witnessed** form, which applies when the earlier stance was exposed;
+  - a **told** form, which applies when it wasn't (L-48).
 - **The lint checks the scale:**
   - a seed above glance level with no `turns` is an error (L-33);
   - a parent whose highest turn sits below a child's highest turn is an error (L-33);
@@ -625,6 +715,20 @@ interface Projection {
 - **Glance and media projections** are deliveries through the arbiter, with stable ids `H("proj", seedId, index)`.
 - **Strength by distance.** The band sets strength by travel time and social distance from the front's centre. S3 supplies the distance; without it, every projection uses `distal`.
 - **Street forms are ordinary glance fragments.** A glance fragment with an `ask` handle MUST reach an offer or a why-trace within two steps (L-38).
+
+### 2.15 Traces and plants
+
+A **trace** is a glance delivery that shows a cause in the world: a scorch mark, a closed stall, a changed sign. A **plant** is a promise (§2.8) whose `opens` beat is a trace, so that a later event reads as caused.
+
+- **A trace cites a fact or a past event, never a pending one** (L-49). If the event it might foreshadow never fires, the plant is still honest; its `retire` content may close it.
+- **Where the cause comes from,** in order of preference. The source is recorded on the `display` entry (§10.1):
+  1. **`found`**: a recorded fact or consumed event;
+  2. **`surfaced`**: an event that exists in the record but wasn't yet shown;
+  3. **`constructed`**: a cause S3 contributes, only when nothing is found and `latitude` allows `trace-cause`.
+- **A constructed cause is a contribution.** It goes through ordinary arbitration, so it can't contradict pinned history.
+- **Displaying it fixes the past.** When a trace with a `constructed` cause is displayed, layer 2 commits every field of the cause with `committed` pins, as for consumed events (§2.14). After V has seen it, it can't change on a reload or a re-resolution.
+- **Traces are borne by the world, not stated.** A plant is a situation V can find. A line that explains the cause adds no surprise and costs coherence ([dossier 10](../craft/d10-change-theme-payoff.md)).
+- **Plants are class 0.** They cost no push, but S3 caps them: about three live plants per attended thread, and one foreground plant per scene.
 
 ## 3. Compiling
 
@@ -751,6 +855,7 @@ At sowing, layer 2 collects every kernel value the instance's predicates can rea
 | `role r, p` | The cast node of `r`, slot `'*'`, added when `r` is cast |
 | Clock ticks and `count` patterns | `{ kind: core:event, where: [the pattern's kind] }`, with the pattern's place or participant scope where it names one |
 | `fn` | Each fact or node in its `reads` |
+| `believes` | None: beliefs produce no kernel changes. A live instance with a `believes` atom re-evaluates at every simulation window boundary (§4.3) |
 | `seed` | None: layer 2 re-evaluates readers when any seed changes state, through a reverse index from template and instance ids to the instances whose predicates name them |
 
 Casting candidates are not watched individually. A `waiting` seed re-casts on its wake-up deadline (§4.3), and on any relevance event to its frames.
@@ -776,6 +881,7 @@ Each live instance keeps a list of **wake-ups**: `(clock, time)` pairs, each for
 | A resettable pin | Its reset time (§2.5) |
 | A repeatable template's `gap` | When the gap runs out |
 | A `waiting` seed | The next boundary, at most every `recastEvery` game seconds **[tunable 600]** |
+| A `believes` atom in a live predicate | The next simulation window boundary |
 
 Wake-ups are part of the instance's state (§12.1). After a load, game-time wake-ups already past fire at once, in time order. Play-time wake-ups restart from the load (§2.12).
 
@@ -939,7 +1045,9 @@ A seed **closes** on every move to `resolved` or `withered`, and on a move to `w
    - **`looseEnds`:**
      - consequence facts no declared consumer has read;
      - cast nodes whose frames the seed changed;
-     - promises retired unpaid, with each entry's stable number.
+     - promises retired unpaid, with each entry's stable number, and plants among them marked `unpaidPlant`;
+     - `unreadTurn`: turning events the seed caused that no consumer read;
+     - `changes`: every turning event the seed caused, each with a `witnessed` flag.
 
    Witnessed and settled completions write the same record. Only the flag differs.
 2. **Retires open promises** on forced closures (withered, withdrawn, or T13 with `end` not yes). They go into `looseEnds`; this is not a defect.
@@ -1019,7 +1127,7 @@ Failure wins over success when both hold in the same step. A beat without an obj
 
 **On `done`,** the beat's `leaves` are written (§2.5).
 
-**Aftermath beats.** On becoming available, an aftermath waits `delay` (a wake-up). Then, unless `cancelIf` is yes, its `signpost` is delivered and the beat runs.
+**Aftermath beats.** On becoming available, an aftermath waits `delay` (a wake-up). Then, unless `cancelIf` is yes, its `signposts` are delivered and the beat runs.
 
 ### 7.4 Offers
 
@@ -1233,7 +1341,7 @@ The kinds:
 - `commit`;
 - `prepare-failed`;
 - `release`;
-- `display`;
+- `display`: for traces, it also records the cause's source (`found`, `surfaced` or `constructed`) and the cause it cites (§2.15);
 - `response`;
 - `lapse`;
 - `missed`;
@@ -1298,7 +1406,7 @@ The lint runs at compile time (§3.1), and on demand from authoring tools (S4, P
 | L-20 | Text that states V's feelings, motives or reasons (lexicon, S4) | warning |
 | L-21 | Second-person reproach or evaluation of V (lexicon, S4) | warning |
 | L-22 | Guilt, streak or countdown mechanics: a `fn` atom or effect in S4's forbidden list | error |
-| L-23 | A delayed consequence with no early cue: an aftermath without `signpost` | error |
+| L-23 | A delayed consequence with no early cue: an aftermath with no `signposts` (error); at gig level or above, signposts of only one kind (warning) | error, warning |
 | L-24 | A callback citing an event kind that can't be exposed | warning |
 | L-26 | A conclusion with fewer than three clue routes | error |
 | L-27 | An obstacle with fewer than two affordances, or none with `combat: false` | error |
@@ -1318,6 +1426,16 @@ The lint runs at compile time (§3.1), and on demand from authoring tools (S4, P
 | L-42 | A fixed world requirement whose selector can match more than `watchMax` nodes | error |
 | L-43 | A `relax` step on a term that guarantees a `textAttrs` attribute | error |
 | L-44 | A beat no path from `start` reaches | warning |
+| L-45 | A consequential offer whose actions declare identical costs, or none | warning |
+| L-46 | A cost with `when: 'later'` and `shown: 'trace'` whose action's write no aftermath beat reads | error |
+| L-47 | An `argues` entry with no carrier | warning |
+| L-48 | A beat staging a turn (its `needs` reads a `turning` count) without both a witnessed and a told form | warning |
+| L-49 | A trace whose cause is a pending event | error |
+| L-50 | On a role with a fixed game identity: a turn or effect that changes a fact the game records, unless `authoredOnly` | error |
+| L-51 | A `turning` kind in a pack with no declared consumer | error |
+| L-52 | An attribution line without a `believes` need on that NPC, a `because` naming an observed act of V's, or a reply for V (§2.9) | error |
+| L-53 | A premise sentence rendered more than once in a seed, or in a system voice (lexicon, S4) | warning |
+| L-33 (extended) | A `turns[].what` reading anything of V's but beliefs held about V and V's recorded acts | error |
 
 L-25 and L-40 were removed in v0.2 (§16). Their numbers are not reused.
 
@@ -1345,6 +1463,9 @@ interface FitReport {
   exits: Array<{ beat: BeatKey; reachable: boolean; leadsTo: string }>;
   declinePreview: { response?: ContentRef; unattendedOutcome: EffectDecl[] };
   connectingMaterial: string[];        // what fitting would add (empty with the director off)
+  argues: Array<{ premise: PremiseId; stance: string; carriers: BeatKey[] }>;   // the seed's rows of the argument profile
+  plants: Array<{ promise: string; cause: 'found' | 'would-construct' | 'none'; earliestExposure?: BeatKey }>;
+  turns: Array<{ who: RoleKey; kind: string; pressure: string }>;    // who could turn, and how much pressure it takes
 }
 ```
 
@@ -1480,6 +1601,8 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 | SF-22 | **Short form.** A gig with `texture` and `legwork` beats, a decision and an aftermath, run in form `short` | The texture and legwork beats are `skipped`, and the links through them pass. The decision and aftermath play |
 | SF-23 | **Prepare fails.** A seed in `cast` whose tentative cast is killed while its delivery is queued | Preparation fails; nothing reaches V; no cast edge is in effect; the role's ladder runs |
 | SF-24 | **Stuck.** A running seed whose only remaining beat links `because` a failed beat, on a seed fact nothing writes | `stuck` → `withered`, with a `stuck` record entry |
+| SF-25 | **Attribution.** Three response templates marked `attribution`: one valid; one without a `believes` need; one without a reply for V | The first compiles. The other two fail L-52. At run time, the valid one plays only while the NPC's belief about V is yes |
+| SF-26 | **Constructed trace.** A trace with no found cause, `latitude` allowing `trace-cause`. S3's stub contributes a cause: an event at a stall. The trace is displayed; save; load | The `display` entry records `constructed`. The cause's fields are pinned `committed` at display, and resolve identically after the load |
 
 ## 15. Compromises and open items
 
@@ -1498,9 +1621,12 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 5. **Hooks.** S3 defines the fitting, form, phase, scoring and joint hooks used in §2.13, §3.4 and §8.3.
 6. **The arbiter's split.** P7 decides how much of the gate logic runs in the game-side plugin, from the event feed's latency.
 7. **Display confirmations.** S5 says, for each channel, what counts as `displayed`.
-8. **Profiles.** Appendices for gig, job and heist, con, four-beat and front.
+8. **Profiles.** Appendices for gig, job and heist, con, four-beat, front, testing arc and slide.
+9. **Dossier 10.** v0.3 adopts all 23 of its S2 requirements. Its P5 list goes to S3: the change engine, premise audits, the plant planner, and canon-character limits (S10-P5-23).
 
 ## 16. Review record
+
+v0.3's additions from dossier 10 have not been reviewed. They will be reviewed with the layer-2 implementation's code review, by the fixtures.
 
 ### Round 1: GPT-6 Astra, extra-high effort, on v0.1
 

@@ -764,6 +764,10 @@ Dustin Bailey of PCGamesN, reporting the *Guild Wars 2* game director Mike Zador
 
 The collaborative [Game Accessibility Guidelines](https://gameaccessibilityguidelines.com/include-an-option-to-adjust-the-game-speed/), in particular the guideline to include an option to adjust the game speed. Slowing the whole game eases tight timing and gives more time to follow the action, which helps players with motor or cognitive difficulties and older players. It informed how we think about a pace setting for the player.
 
+### K. M. Weiland
+
+K. M. Weiland, [“How to Write a Flat Character Arc, Pt. 1: The First Act”](https://www.helpingwritersbecomeauthors.com/flat-character-arc/) (Helping Writers Become Authors, 2014). In a flat arc, the hero already holds the truth, keeps it under pressure and changes the world around them. It taught us to treat a character who stays the same as a full result, not an absence of change.
+
 ## Research papers
 
 These papers informed our research. Unless an entry says otherwise, no algorithm from them was implemented.
@@ -1458,7 +1462,7 @@ Adam Alston, [*Beyond Immersive Theatre: Aesthetics, Politics and Productive Par
 
 ### Mawhorter et al. (2014)
 
-Peter Mawhorter, Michael Mateas, Noah Wardrip-Fruin and Arnav Jhala, [“Towards a Theory of Choice Poetics”](https://cs.wellesley.edu/~pmwh/research/papers/towards-choice-poetics-fdg-2014.pdf) (*FDG*, 2014). It offers a vocabulary for false, blind, flavour and delayed-effect choices, and for why delayed effects feel important yet can frustrate. It informed how we describe the kinds of choice a player meets.
+Peter Mawhorter, Michael Mateas, Noah Wardrip-Fruin and Arnav Jhala, [“Towards a Theory of Choice Poetics”](https://cs.wellesley.edu/~pmwh/research/papers/towards-choice-poetics-fdg-2014.pdf) (*FDG*, 2014). It offers a vocabulary for false, blind, flavour and delayed-effect choices, and for why delayed effects feel important yet can frustrate. It informed how we describe the kinds of choice a player meets. It also showed that false, blind and delayed choices can each carry a theme, and that flavour choices shape a player's sense of who their character is.
 
 ### Cardona-Rivera et al. (2014)
 
@@ -1531,6 +1535,46 @@ Rolf Zwaan, Mark Langston and Arthur Graesser, [“The construction of situation
 ### Fredrickson and Kahneman (1993)
 
 Barbara Fredrickson and Daniel Kahneman, [“Duration neglect in retrospective evaluations of affective episodes”](https://pubmed.ncbi.nlm.nih.gov/8355141/) (*Journal of Personality and Social Psychology* 65(1), 1993). People judged an episode by its most intense moment and its end, and gave its length little weight. It informed how we think about how a stretch of play ends.
+
+### Bae and Young (2014)
+
+Byung-Chull Bae and R. Michael Young, [“A Computational Model of Narrative Generation for Surprise Arousal”](https://www.cs.uky.edu/~sgware/reading/papers/bae2014surprise.pdf) (*IEEE Transactions on Computational Intelligence and AI in Games* 6(2), 2014). Curiosity and surprise differ by whether the reader notices that the causes of an event are missing. In their test with generated stories, an added hint sentence gave no extra surprise and lowered the coherence ratings. It informed how we plant traces of events that are yet to come.
+
+### Garrett, Lazzaro, Ariely and Sharot (2016)
+
+Neil Garrett, Stephanie C. Lazzaro, Dan Ariely and Tali Sharot, [“The brain adapts to dishonesty”](https://www.nature.com/articles/nn.4426) (*Nature Neuroscience* 19(12), 2016). Repeated self-serving dishonesty dulled the brain's emotional response, and the size of the dulling predicted bigger lies later. It informed how we model gradual change for the worse in characters.
+
+### Roberts, Walton and Viechtbauer (2006)
+
+Brent W. Roberts, Kate E. Walton and Wolfgang Viechtbauer, [“Patterns of mean-level change in personality traits across the life course: a meta-analysis of longitudinal studies”](https://doi.org/10.1037/0033-2909.132.1.1) (*Psychological Bulletin* 132(1), 2006). Personality traits change slowly and by small amounts. It informed the pace at which we let characters change.
+
+### Gentner, Rattermann and Forbus (1993)
+
+D. Gentner, M. J. Rattermann and K. D. Forbus, [“The roles of similarity in transfer: separating retrievability from inferential soundness”](https://doi.org/10.1006/cogp.1993.1013) (*Cognitive Psychology* 25(4), 1993). People are reminded of earlier cases by surface likeness, but judge how sound a comparison is by shared structure. It informed how we link scenes that echo each other.
+
+### Graesser, Singer and Trabasso (1994)
+
+Arthur C. Graesser, Murray Singer and Tom Trabasso, [“Constructing inferences during narrative text comprehension”](https://doi.org/10.1037/0033-295X.101.3.371) (*Psychological Review* 101(3), 1994). Readers search for an explanation of why events happen. It informed why we make the causes of events findable.
+
+### Roese and Vohs (2012)
+
+Neal J. Roese and Kathleen D. Vohs, [“Hindsight bias”](https://doi.org/10.1177/1745691612454303) (*Perspectives on Psychological Science* 7(5), 2012). Once people know an outcome, they remember having expected it. It informed why we do not take players' claims of foresight as proof that a planted trace worked.
+
+### Gerrig (1989)
+
+Richard J. Gerrig, [“Suspense in the absence of uncertainty”](https://researchconnect.stonybrook.edu/en/publications/suspense-in-the-absence-of-uncertainty/) (*Journal of Memory and Language* 28(6), 1989). Readers can feel suspense about an outcome they already know. It informed how we think about foreshadowing that gives the outcome away.
+
+### Jacobs, Werning, Jansz and Kneer (2021)
+
+Ruud S. Jacobs, Stefan Werning, Jeroen Jansz and Julia Kneer, [“Procedural arguments of persuasive games: an elaboration likelihood perspective”](https://research.utwente.nl/en/publications/procedural-arguments-of-persuasive-games-an-elaboration-likelihoo-4/) (*Journal of Media Psychology* 33(2), 2021). In an experiment with 241 participants, games whose rules argued more strongly persuaded more. It informed how we think about a game's rules carrying a message.
+
+### Sicart (2011)
+
+Miguel Sicart, [“Against Procedurality”](https://gamestudies.org/1103/articles/sicart_ap) (*Game Studies* 11(3), 2011). A critique of the idea that rules carry a game's meaning: rules frame play, and meaning also arises in the playing. It informed why we expect players to read a system's message in their own way.
+
+### Formosa, Ryan and Staines (2016)
+
+Paul Formosa, Malcolm Ryan and Dan Staines, [“Papers, Please and the systemic approach to engaging ethical expertise in videogames”](https://researchers.mq.edu.au/en/publications/papers-please-and-the-systemic-approach-to-engaging-ethical-exper/) (*Ethics and Information Technology* 18(3), 2016). A game's systems can engage a player's moral judgement in ways scripted scenes do not. It informed how we think about carrying moral weight through costs and systems.
 
 ## Reference imagery
 
