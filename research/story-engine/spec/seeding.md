@@ -4,6 +4,7 @@
 - **The review.** v0.2 went through one review, by GPT-6 Astra; [§16](#16-review-record) records what changed.
 - **Dossiers folded in.**
   - v0.1 folded in [dossier 8](../craft/d08-scale-threads-time.md#9-requirements-for-the-seed-language-p4) (scale, threads and time).
+  - v0.14 folds in [dossier 21](../craft/d21-words-dialogue.md) (words): subtext, voice cards, V's options, told stories, humour, variety in frames, channel budgets, the author-fill contract (§2.22).
   - v0.13 folds in [dossier 20](../craft/d20-staging-legibility.md) (staging in the world): stage blocks, a ladder of rungs, focal cards, audiences, "why?" answers, kits (§2.21).
   - v0.12 folds in [dossier 19](../craft/d19-rights-platforms.md) (rights, licences and platforms): game content by reference, voices, origin, real-world names (§2.20); the minors floor extended to exploitation roles.
   - v0.11.1 clarifies author-fill seams: the engine composes and places authored-source content like any data, procedural seeds included; only its source material comes from people.
@@ -1159,6 +1160,90 @@ A binder fits a kit to a place through S4. Free scatter is refused.
 
 **Settings:** whether "Why?" is offered, bystander density, and the content ceilings of §2.19, applied to stage tags with their implied forms. Nothing is inferred from V.
 
+### 2.22 Words
+
+What makes assembled text read as written ([dossier 21](../craft/d21-words-dialogue.md)).
+
+**Every line reads the record.**
+- A phrasing whose purpose isn't `colour` lists the facts, events, role attributes or registry items it reads, derived from its placeholders. One that reads nothing is an error (L-128).
+- **One unexplained specific per line** **[tunable]**, on top of L-81's per-scene check. Each specific has an `ask` handle within two steps (L-127).
+- **Redundancy.** A line whose content is all already shared between speaker and hearer, or all on show in the staged scene, is warned unless its purpose is `recap` or `confirm` (L-120).
+- **Quotes and causes are claims.** A quotation, or a causal clause ("because…"), cites a recorded event, or is a speaker's account marked `reconstructed`. L-58 extends to them in the system voice.
+
+**Subtext.** An `exchange` fragment may carry:
+- `says`: what is said;
+- `means`: the unstated aim, from a closed list.
+
+V must have been shown at least two facts from which `means` can be recovered (L-119). A `mustReach` fact may not sit only in a `means`. No `means` concerns V's inner state.
+
+**Voices.** Each speaker class has a **voice card** in S4. A role's phrasings must match its voice card (L-126). V has no voice card: the engine never speaks for V.
+
+**V's options.**
+- An option shows the recorded line's own words, resolved at run time.
+- Its **act label** comes from a closed list, never an emotion (L-129). Paraphrased labels that don't match the line are a known failure in shipped games.
+- It carries the `foresight` of §2.9.
+- System and narrator text never contains a second-person, present-tense clause about V.
+
+**Attribution lines** (D-22) use a fixed frame:
+1. a hedge from a closed list;
+2. the observed act (`ActPattern`);
+3. the belief, in the NPC's voice;
+4. a reply of kind `correct`.
+
+A second-person mental verb inside the template, or a leading question about V's feelings, is warned (L-122).
+
+**Recall.** A `recalls` variant of kind `half` or `gone` carries a hedge, or is silence (L-123).
+
+**Told stories.** A `told` fragment is a story an NPC tells. It is built from the teller's own record:
+- `teller` and `event`;
+- parts: `abstract`, `orient`, `action`, `evaluation`, `result`, `coda`, each in three forms;
+- `stance`: `polarise` or `integrate`;
+- `quotes`: at most two.
+
+How reportable an event is, is computed, not authored. Every event a teller tells must be one the teller witnessed or was told (L-130). The evaluation is the teller's own, so perspectives reach speech directly. A `standard` form needs an evaluation.
+
+**Humour.** A fragment marked comic carries a `humour` block:
+- `opposition`: what clashes;
+- `target`;
+- optionally, `mechanism` and `speakerClass`.
+
+A comic beat tagged `wry` or `absurd` without one is not scheduled as humour (a warning). A target who is the bearer of harm in the same beat is warned (L-121), unless they are the speaker.
+
+**Templates and variety.**
+- No phrasing is a flat string with a name placeholder, and no text is built by joining fragments (L-124). Grammar handles agreement and localisation.
+- Variety is counted in **frames**, and in the slots a reader actually tracks, not in strings. The selector rotates frames before fillers, with a recency memory per speaker and hearer.
+- The fit report shows, per text unit, its frames, tracked axes and estimated perceived variants. It warns below a floor of 3 frames for a unit with `reuse: 'free'` **[tunable]**. It also shows the extremes of a unit's output, not all of it.
+- An alternate that is never the most specific eligible one in any sample state is shadowed (L-125, generalising L-75).
+
+**Reading-time budgets per channel** (§2.12) are provisional until measured:
+
+| Channel | Budget |
+|---|---|
+| Phone message thread | Short turns; ask, terms and time |
+| Holocall | 8 lines; premise by line two |
+| Ambient conversation | 3 lines |
+| Bark | 1 to 2 lines |
+| Shard | 40 to 180 words, by document kind |
+| Scanner | A name plus 25 words |
+| Banner, toast | 12 and 15 words |
+
+**The author-fill contract** (D-23). A pack states, for each author-fill slot, what the engine composes around it and what a person must write:
+
+```ts
+interface AuthorFill {
+  slot: ContentRefId;
+  carries: EffectDecl[];               // the facts the text must establish (as its partner does)
+  mayName: RoleKey[];                  // roles and their guaranteed attributes
+  voice: VoiceCardRef;
+  length: { min: number; max: number };   // words, by form
+  ceiling: { class: ClassId; intensity: 1 | 2 | 3 };
+  partner: ContentRef;                 // the implied or fade form (L-100)
+  author?: { name: string };           // required for authored: 'human' (L-97)
+}
+```
+
+The fit report gives a slot-coverage line: which author-fill slots are filled, and by whom.
+
 ## 3. Compiling
 
 ### 3.1 The steps
@@ -2076,6 +2161,18 @@ The lint runs at compile time (§3.1), and on demand from authoring tools (S4, P
 | L-116 | A `generated` unit marked `authored: 'human'`, or filling an authored-source slot | error |
 | L-117 | A unit in a `realWorld: tagged` pack mentioning a flagged real-world entity | warning, to review |
 | L-118 | The stage lint (§2.21): implied events, sign kinds, premise cues, reads on approaches, explanation cues, anonymous elements, undeclared interaction, unlinked nearby scenes, free scatter, audio without a twin | error, warning by check |
+| L-119 | A `means` recoverable from fewer than two facts V was shown | warning |
+| L-120 | A redundant line: all its content is already shared or on show, outside `recap` and `confirm` | warning |
+| L-121 | A joke whose target is the bearer of harm in the same beat, unless they are the speaker | warning |
+| L-122 | A second-person mental verb in an attribution template, or a leading question about V's feelings | warning |
+| L-123 | A `half` or `gone` recall variant with no hedge that isn't silence | warning |
+| L-124 | A flat string with a name placeholder, or text joined by concatenation | warning |
+| L-125 | An alternate that is never the most specific eligible one in any sample state | warning |
+| L-126 | A phrasing tagged for a different voice class from the role's voice card | warning |
+| L-127 | More than one unexplained specific in a line, or a specific with no `ask` within two steps | warning |
+| L-128 | A non-colour phrasing that reads nothing from the record | error |
+| L-129 | An option label that names an emotion, or isn't from the closed list | error |
+| L-130 | A told story containing an event its teller neither witnessed nor was told | error |
 | L-33 (extended) | A `turns[].what` reading anything of V's but beliefs held about V and V's recorded acts | error |
 
 L-25 and L-40 were removed in v0.2 (§16). Their numbers are not reused.
@@ -2340,6 +2437,7 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 17. **Dossier 18.** v0.11 adopts its S2 requirements (§2.19), with lints renumbered L-93 to L-113 and fixtures SF-51 to SF-55. One isn't adopted: "offers lapse by game time only" would undo the play-clock rule (§2.12), which keeps real-world absence from expiring offers. Its settings and pack declarations go to S4; its kernel requirements are S0 v4.4. Defaults decided by the coordinator: `harm.minor` defaults to 0, as in the base game; the four classes whose base-game default is unchecked start permissive, each with a check on the next in-game session card; and the hate floor covers only the system's own voices.
 18. **Dossier 19.** v0.12 adopts its six S2 requirements (§2.20, L-95, L-107, §12.3). Its pack-manifest requirements (licence, permissions, AI and origin, voice, price `free` only, a play grant for streaming) go to S4. D-24 settles its question on text and data mining. Its other open questions (whether the companion counts as a standalone product, the host tag for the engine, the starter pack's licence) wait for release planning.
 19. **Dossier 20.** v0.13 adopts its 16 S2 requirements (§2.21). Its P8 requirements (a rung realiser, out-of-sight spawning, props, marks, workspots, tells, barks, joining a scene mid-phase, interference, scene display reports, scanner entries) go to P8 and the runtime requirements; its P10 requirements (the explain and inspect tools) to P10.
+20. **Dossier 21.** v0.14 adopts its 16 S2 requirements (§2.22). Its S7 requirements (assembling and choosing text) go to S7, and its lexicons, voice cards and phrase tables to S4. Measuring the game's own text per channel, to replace the provisional budgets, is a research-queue brief (its §12.4), under D-24.
 
 ## 16. Review record
 

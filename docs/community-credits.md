@@ -21,7 +21,7 @@ Credit here acknowledges what we learned or used. It does not imply endorsement 
 
 ### CD PROJEKT RED
 
-Developer of Cyberpunk 2077. The game's own resources, shaders, rigs, animation and materials are the ground truth for nearly everything we study. Their article [A World Full of Substance](https://magazine.substance3d.com/cyberpunk-2077-a-world-full-of-substance/) explained the shared-surface and mask approach behind the game's materials, and their [modding support](https://www.cyberpunk.net/en/modding-support) and [technical support](https://support.cdprojektred.com/en/cyberpunk/pc) pages, which name the Steam, GOG and Epic Games Store editions, set the stores XF Studio looks for. The TweakDB sources that ship with the game's REDmod tools showed how photo mode's expressions, poses and lists are defined. The address library they ship with the game for native mods, which gives every engine function a stable ID, let us trace and name, without any signature scanning, the whole path from a material template through the shader cache to a GPU pipeline state. Game content is used only as a private local reference for the preview and experiments; none is redistributed. On quest design, Paweł Sasko's GDC 2023 talk, summarised by [Game Developer](https://www.gamedeveloper.com/marketing/10-key-takeaways-from-the-quest-design-of-cyberpunk-2077-and-the-witcher-3), taught us to bring early choices back later with visible consequences and to separate signal from noise. Philipp Weber's [interview with Game World Observer](https://gameworldobserver.com/2019/09/13/quests-witcher-cyberpunk-2077) (2019) describes Street Stories as small encounters with several ways through, in a studio that avoids sorting quests by type. The same interview records that quests there cannot be failed in the classical sense, only given consequences, which informed how we treat outcomes. [80.lv](https://80.lv/articles/cd-projekt-red-reveals-the-secret-key-to-impressive-side-quests) (2024) reported Sasko on pitching many ideas and the small share that are accepted. Weber's interview also sets out the studio's staged route from half-page pitch to design document to rough playable with placeholder dialogue, which we compared against when thinking about how an author moves from a sketch to a finished piece. Sasko's [interview with GamePressure](https://www.gamepressure.com/editorials/interview-with-cd-projekt-reds-lead-quest-designer-pawel-sasko/zd661) (2023) names what the team would change, chiefly too many data shards and choices too subtle for players to notice, while Weber's interview adds that main and side quests are held to one standard and that heavy and light quests alternate. The [80 Level interview](https://80.lv/articles/interview-how-cyberpunk-2077-s-night-city-was-built-almost-entirely-by-hand/) by David Jagneaux with art directors Jakub Knapik and Kacper Niepokólczycki describes Night City's four layered visual eras, its use of contrast and its district themes under shared rules.
+Developer of Cyberpunk 2077. The game's own resources, shaders, rigs, animation and materials are the ground truth for nearly everything we study. Their article [A World Full of Substance](https://magazine.substance3d.com/cyberpunk-2077-a-world-full-of-substance/) explained the shared-surface and mask approach behind the game's materials, and their [modding support](https://www.cyberpunk.net/en/modding-support) and [technical support](https://support.cdprojektred.com/en/cyberpunk/pc) pages, which name the Steam, GOG and Epic Games Store editions, set the stores XF Studio looks for. The TweakDB sources that ship with the game's REDmod tools showed how photo mode's expressions, poses and lists are defined. The address library they ship with the game for native mods, which gives every engine function a stable ID, let us trace and name, without any signature scanning, the whole path from a material template through the shader cache to a GPU pipeline state. Game content is used only as a private local reference for the preview and experiments; none is redistributed. On quest design, Paweł Sasko's GDC 2023 talk, summarised by [Game Developer](https://www.gamedeveloper.com/marketing/10-key-takeaways-from-the-quest-design-of-cyberpunk-2077-and-the-witcher-3), taught us to bring early choices back later with visible consequences and to separate signal from noise. Philipp Weber's [interview with Game World Observer](https://gameworldobserver.com/2019/09/13/quests-witcher-cyberpunk-2077) (2019) describes Street Stories as small encounters with several ways through, in a studio that avoids sorting quests by type. The same interview records that quests there cannot be failed in the classical sense, only given consequences, which informed how we treat outcomes. [80.lv](https://80.lv/articles/cd-projekt-red-reveals-the-secret-key-to-impressive-side-quests) (2024) reported Sasko on pitching many ideas and the small share that are accepted. Weber's interview also sets out the studio's staged route from half-page pitch to design document to rough playable with placeholder dialogue, which we compared against when thinking about how an author moves from a sketch to a finished piece. Sasko's [interview with GamePressure](https://www.gamepressure.com/editorials/interview-with-cd-projekt-reds-lead-quest-designer-pawel-sasko/zd661) (2023) names what the team would change, chiefly too many data shards and choices too subtle for players to notice, while Weber's interview adds that main and side quests are held to one standard and that heavy and light quests alternate. The same GamePressure interview notes that text content such as shards can be written and added late, after voice recording is done. The [80 Level interview](https://80.lv/articles/interview-how-cyberpunk-2077-s-night-city-was-built-almost-entirely-by-hand/) by David Jagneaux with art directors Jakub Knapik and Kacper Niepokólczycki describes Night City's four layered visual eras, its use of contrast and its district themes under shared rules.
 
 ## Frameworks and core mods
 
@@ -145,6 +145,10 @@ By the Khronos Group. [Specification](https://registry.khronos.org/glTF/specs/2.
 
 By the USC Institute for Creative Technologies. [GitHub](https://github.com/ICT-VGL/ICT-FaceKit). Surveyed as an open (MIT) face model whose expression shapes follow the ARKit names split by side; it confirmed that convention for our blendshape mapping. Nothing from it is used.
 
+### ICU message formatting
+
+By Unicode, Inc. and the ICU contributors. [Formatting messages](https://unicode-org.github.io/icu/userguide/format_parse/messages/) (ICU User Guide). Its plural and select arguments let one whole message choose its wording by number or category. It warns against joining pieces into a sentence, because translators then cannot reorder them. It taught us to keep assembled lines as whole messages with placeholders.
+
 ### ink and Inky
 
 By inkle. [ink](https://www.inklestudios.com/ink/), [Inky](https://github.com/inkle/inky). ink is a text-first scripting language for branching stories, and Inky is its editor. Inky compiles as you type, lists errors, warnings and to-dos together, and replays your earlier choices after each edit. We compared them against the kind of authoring loop we want to offer. Nothing from them is used.
@@ -212,6 +216,10 @@ By the Pillow contributors. [GitHub](https://github.com/python-pillow/Pillow). U
 ### PKWARE ZIP specification
 
 By PKWARE. [APPNOTE.TXT](https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT). The ZIP file format specification that XF Studio's small report-file writer follows.
+
+### Project Fluent
+
+By Mozilla. [Project Fluent](https://projectfluent.org/). Fluent's asymmetric approach lets a translation add genders, cases and other grammar only where its own language needs them, and keeps each language's extra logic apart from the others. It informed how we think about translating generated text.
 
 ### red4ext-rs
 
@@ -290,6 +298,10 @@ Mila Grish, [Cyberpunk 2077 Gangs](https://eip.gg/cyberpunk-2077/guides/cyberpun
 ### Electrobun Windows installer notes
 
 By alxrepin ([aiusagebar pull request 16](https://github.com/alxrepin/aiusagebar/pull/16)) and djalmajr ([pinar pull request 32](https://github.com/djalmajr/pinar/pull/32)). Their pull requests recorded that Electrobun's Windows setup program only runs beside its hidden `.installer` folder, and aiusagebar showed wrapping it in an Inno Setup program so users download one file, the approach XF Studio's single-file setup takes.
+
+### Allcorrect localisation article
+
+Daria Batrova, Mikhail Alekseyev and Danil Belousov of Allcorrect, [How to Localize a Game with Procedurally Generated Text](https://allcorrectgames.com/insights/how-to-localize-a-game-with-procedurally-generated-text/) (2024). Gender, number, case and word order all break lines assembled from parts, and one source line should not serve two roles. It informed how we think about translating assembled text.
 
 ### Minecraft Wiki: Pack format
 
@@ -578,7 +590,7 @@ Emily Short, ["Beyond Branching: Quality-Based, Salience-Based, and Waypoint Nar
 
 ### Kate Compton
 
-By Kate Compton. ["So you want to build a generator…"](https://galaxykate0.tumblr.com/post/139774965871/so-you-want-to-build-a-generator) (blog post, 2016). Her 10,000 bowls of oatmeal problem points out that thousands of bowls can all differ mathematically while the person looking sees only oatmeal. It taught us to measure variety by what people can tell apart, not by how many combinations exist. Katherine Cross's [report of her GDC talk](https://www.gamedeveloper.com/design/practical-procedural-generation-for-everyone-) (Game Developer, 2017) adds that a smaller set of clearly different things beats many that cannot be told apart, and suggests asking whether players would write fan fiction about a generated thing.
+By Kate Compton. ["So you want to build a generator…"](https://galaxykate0.tumblr.com/post/139774965871/so-you-want-to-build-a-generator) (blog post, 2016). Her 10,000 bowls of oatmeal problem points out that thousands of bowls can all differ mathematically while the person looking sees only oatmeal. It taught us to measure variety by what people can tell apart, not by how many combinations exist. Katherine Cross's [report of her GDC talk](https://www.gamedeveloper.com/design/practical-procedural-generation-for-everyone-) (Game Developer, 2017) adds that a smaller set of clearly different things beats many that cannot be told apart, and suggests asking whether players would write fan fiction about a generated thing. She also created [Tracery](https://github.com/galaxykate/tracery), an open-source library that expands grammars of named rules into text. With Ben Kybartas and Michael Mateas she wrote [“Tracery: An Author-Focused Generative Text Tool”](https://doi.org/10.1007/978-3-319-27036-4_14) (ICIDS 2015), which names portability, modular design and additive authoring as its aims.
 
 ### Tynan Sylvester and Ludeon Studios
 
@@ -586,7 +598,7 @@ By Tynan Sylvester. ["The Simulation Dream"](https://www.gamedeveloper.com/desig
 
 ### Valve and Michael Booth
 
-[Left 4 Dead](https://store.steampowered.com/app/500/Left_4_Dead/) (Valve, 2008) and Michael Booth's [The AI Systems of Left 4 Dead](https://cdn.fastly.steamstatic.com/apps/valve/2009/ai_systems_of_l4d_mike_booth.pdf) (Valve's slides from his AIIDE 2009 invited talk). The AI Director estimates how intense each player's moment is, removes major threats for a while when intensity runs too high, and otherwise supplies them. It is our model for pacing intensity around the people playing. Elan Ruskin's GDC 2012 talk on dynamic dialogue at Valve, as recapped by Emily Short on [her blog](https://emshort.blog/2012/03/16/gdc-2012-talk-on-dynamic-dialogue/), showed rule matching in which the most specific matching rule wins and general rules serve as fallbacks. Booth's slides also give the intensity number that decays towards zero unless enemies are actively engaging the player, and the director's four phases of build up, sustain peak, peak fade and relax, each with its own timing. They informed how we think about pacing as a loop of pressure and rest.
+[Left 4 Dead](https://store.steampowered.com/app/500/Left_4_Dead/) (Valve, 2008) and Michael Booth's [The AI Systems of Left 4 Dead](https://cdn.fastly.steamstatic.com/apps/valve/2009/ai_systems_of_l4d_mike_booth.pdf) (Valve's slides from his AIIDE 2009 invited talk). The AI Director estimates how intense each player's moment is, removes major threats for a while when intensity runs too high, and otherwise supplies them. It is our model for pacing intensity around the people playing. Elan Ruskin's GDC 2012 talk on dynamic dialogue at Valve, as recapped by Emily Short on [her blog](https://emshort.blog/2012/03/16/gdc-2012-talk-on-dynamic-dialogue/), showed rule matching in which the most specific matching rule wins and general rules serve as fallbacks. Short adds that such a system does not plan: it gives the illusion of situational awareness rather than pursuing goals. Booth's slides also give the intensity number that decays towards zero unless enemies are actively engaging the player, and the director's four phases of build up, sustain peak, peak fade and relax, each with its own timing. They informed how we think about pacing as a loop of pressure and rest.
 
 ### Michael Mateas and Andrew Stern
 
@@ -964,6 +976,14 @@ Jakub Knapik and Kacper Niepokólczycki of CD PROJEKT RED, interviewed by David 
 
 John Mamais of CD PROJEKT RED, speaking to GameSpot, as reported by Shubhankar Parijat for [GamingBolt](https://gamingbolt.com/cyberpunk-2077-developer-talks-about-the-games-interactive-and-fully-immersive-cutscenes) (2019). He describes the game's scene system as running inside normal gameplay, without a letterbox, with the player keeping some control. It informed how we think about scenes that happen around the player instead of taking over.
 
+### Matt Timmermans
+
+Matt Timmermans, [“Creating Behaviours with Fuzzy Pattern Matching”](https://www.gamedeveloper.com/game-platforms/creating-behaviours-with-fuzzy-pattern-matching) (Game Developer, 2022). An action runs only when all its conditions hold, and the action with the most conditions is tried first. He shows how to break a tie by adding a condition, and stores dialogue as a memory list that conditions can check, including how often a line was said. It informed how we think about choosing a reply from what is known.
+
+### James Gunn
+
+James Gunn, [“The Protocols of Science Fiction”](https://christopher-mckitterick.com/Essays/protocol.htm) (essay). Gunn reports Samuel R. Delany's argument that each genre is a language with its own reading conventions. An experienced science-fiction reader treats an unexplained term as a clue to the world being built. It informed how we think about unexplained detail in a scene.
+
 ## Research papers
 
 These papers informed our research. Unless an entry says otherwise, no algorithm from them was implemented.
@@ -1110,7 +1130,7 @@ Max Kreminski and Noah Wardrip-Fruin, ["Sketching a Map of the Storylets Design 
 
 ### Grinblat and Bucklew (2017)
 
-Jason Grinblat and C. Brian Bucklew, ["Subverting historical cause & effect: generation of mythic biographies in Caves of Qud"](https://doi.org/10.1145/3102071.3110574) (Foundations of Digital Games, 2017). The game first decides that a historical event happens, then works out a cause from the states of the figures involved, instead of simulating the logic that would have produced it. It taught us to generate events first and justify their causes afterwards.
+Jason Grinblat and C. Brian Bucklew, ["Subverting historical cause & effect: generation of mythic biographies in Caves of Qud"](https://doi.org/10.1145/3102071.3110574) (Foundations of Digital Games, 2017). The game first decides that a historical event happens, then works out a cause from the states of the figures involved, instead of simulating the logic that would have produced it. It taught us to generate events first and justify their causes afterwards. The authors wrote the replacement grammar behind the event texts to match the voice of the game's handwritten text, which showed us that a state-driven grammar can carry a house voice.
 
 ### Meehan (1976)
 
@@ -2263,6 +2283,34 @@ Joseph Bates, [“The Role of Emotion in Believable Agents”](https://www.cs.cm
 ### Sado, Loo, Liew, Kerzel and Wermter (2020)
 
 Fatai Sado, Chu Kiong Loo, Wei Shiung Liew, Matthias Kerzel and Stefan Wermter, [“Explainable Goal-Driven Agents and Robots: A Comprehensive Review”](https://arxiv.org/abs/2004.09705) (arXiv, 2020). A survey of explainable agents, including earlier work on explaining the behaviour of game characters. It pointed us to that earlier work.
+
+### van Deemter, Krahmer and Theune (2005)
+
+Kees van Deemter, Emiel Krahmer and Mariët Theune, [“Real versus template-based natural language generation: a false opposition?”](https://aclanthology.org/J05-1002/) (*Computational Linguistics* 31(1), 2005). It argues that templates with conditions, slots that hold further templates and exceptions for idioms can do much of what a full generation pipeline does. It informed how we build generated lines from templates.
+
+### Labov (2004)
+
+William Labov, “Ordinary events”, in Carmen Fought (ed.), [*Sociolinguistic Variation: Critical Reflections*](https://global.oup.com/academic/product/sociolinguistic-variation-9780195170399) (Oxford University Press, 2004). It reads one spoken account of a personal experience closely, looking at what makes an event worth telling and how the telling builds credibility. It informed how we think about stories that characters tell.
+
+### Mairesse and Walker (2011)
+
+François Mairesse and Marilyn A. Walker, [“Controlling User Perceptions of Linguistic Style: Trainable Generation of Personality Traits”](https://aclanthology.org/J11-3002/) (*Computational Linguistics* 37(3), 2011). Their generator has adjustable style settings drawn from psychology, and judges were able to recognise the personality it was set to show. It informed how we think about giving each speaker a recognisable voice.
+
+### Binsted and Ritchie (1994)
+
+Kim Binsted and Graeme Ritchie, [“A symbolic description of punning riddles and its computer implementation”](https://arxiv.org/abs/cmp-lg/9406021) (arXiv, 1994). A program builds simple punning riddles from schemas, templates and a general lexicon not tailored to jokes, and informal judging rated them comparable to children's riddles. It informed how we think about generated jokes.
+
+### McGraw and Warren (2010)
+
+A. Peter McGraw and Caleb Warren, [“Benign Violations: Making Immoral Behavior Funny”](https://doi.org/10.1177/0956797610376073) (*Psychological Science* 21(8), 2010). Across five experiments, they found that humour arises when something seems wrong and acceptable at the same time. It informed how we think about when a joke can land.
+
+### Stivers and colleagues (2009)
+
+T. Stivers, N. J. Enfield, P. Brown, C. Englert, M. Hayashi, T. Heinemann, G. Hoymann, F. Rossano, J. P. de Ruiter, K. E. Yoon and S. C. Levinson, [“Universals and cultural variation in turn-taking in conversation”](https://doi.org/10.1073/pnas.0903616106) (*Proceedings of the National Academy of Sciences* 106(26), 2009). Across ten languages, speakers avoid talking over one another and keep the silence between turns short, with average gaps within about 250 milliseconds of the cross-language mean. It informed how we think about the length of pauses between lines.
+
+### Davis (2005)
+
+Wayne Davis, [“Implicature”](https://plato.stanford.edu/entries/implicature/) (Stanford Encyclopedia of Philosophy, first published 2005). It sets out H. P. Grice's cooperative principle and four maxims, and shows how flouting a maxim leads a listener to infer an unstated meaning. It informed how we think about subtext in dialogue.
 
 ## Reference imagery
 
