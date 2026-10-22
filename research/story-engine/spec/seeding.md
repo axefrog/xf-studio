@@ -4,6 +4,7 @@
 - **The review.** v0.2 went through one review, by GPT-6 Astra; [§16](#16-review-record) records what changed.
 - **Dossiers folded in.**
   - v0.1 folded in [dossier 8](../craft/d08-scale-threads-time.md#9-requirements-for-the-seed-language-p4) (scale, threads and time).
+  - v0.10 folds in [dossier 17](../craft/d17-setting-tone.md) (setting and tone): the tone vocabulary and tone lint, stake scale, dread guards, withheld patron motives, outlets for media, setting reads (§2.18).
   - v0.9 folds in [dossier 16](../craft/d16-authoring-tools.md) (authoring formats and tools): maturity and placeholders, a text syntax for predicates, source maps, the finding contract, structure versions, and missing content at run time. R1 is now lint-clean.
   - v0.8 folds in [dossier 15](../craft/d15-people-networks-order.md) (people, networks, norms and order): social reads, casting through ties, betrayal and norm seeds, reputation through behaviour (§2.17).
   - v0.7 folds in [dossier 14](../craft/d14-city-events.md) (where and when things happen in the city): city reads, hot-state windows, and the limits on the director over city events (§2.16).
@@ -135,6 +136,7 @@ interface Seed {
   parent?: { seed: TemplateId; purpose: string };
   growsFrom?: GrowsFrom;               // §2.13; procedural seeds
   effect?: ToneTag;                    // the one dominant effect; required for vignettes (L-31)
+  stakeScale?: 'person' | 'crew' | 'block' | 'district' | 'city';   // default block (§2.18)
   purpose: { tags: PurposeTag[]; sentence: string };
   context: Pred;                       // required: where and when this seed makes sense (§2.6)
   intent: Intent;                      // §2.3
@@ -191,6 +193,7 @@ type Part<T> =
 interface Intent {
   prohibitions: Pred[];                // fitting must never make one yes; the lint checks static cases
   tone: ToneTag[];
+  dreadIntensity?: 1 | 2 | 3;          // for the `dread` tone (§2.18)
   argues?: Array<{ premise: PremiseId; stance: 'supports' | 'opposes' | 'complicates'; carriers: BeatKey[] }>;
   aesthetic?: Record<AestheticFeature, number>;    // −1..1: a few coarse weights for fitting
 }
@@ -534,6 +537,7 @@ interface Promise {
 ```ts
 interface OfferSpec {
   stakes: Array<{ bearer: RoleKey | 'client' | 'v'; what: StakeTag }>;
+  withheld?: { what: string; discoverableBy: BeatKey };   // what the patron conceals, and one route to find out (L-86)
   actions: Array<{ id: string; stance: Stance; foresight: ContentRef; writes?: EffectDecl[]; costs?: Cost[] }>;
   nullPath: { id: string; content?: ContentRef; writes?: EffectDecl[] };   // the authored option of doing nothing
   lapse: { after: Duration; then: 'unattended' | 'reoffer' | 'withdraw'; content?: ContentRef };
@@ -829,7 +833,10 @@ type CityRead =
   | { tension: { a: RoleKey | Id; b: RoleKey | Id } } // a pair of groups' tension band
   | { regime: { scope: RoleKey | Id } }              // the live regimes in a scope (a crackdown, a turf war)
   | { reach: { district: RoleKey | Id; item: string } }   // whether an item or service reaches a district
-  | { protected: { node: RoleKey | Id } };           // whether a place or person is under protection
+  | { protected: { node: RoleKey | Id } }            // whether a place or person is under protection
+  | { presence: { leaf: RoleKey | Id; faction: Id } }   // a faction's presence in a leaf area (§2.18)
+  | { priceLevel: { district: RoleKey | Id } }
+  | { refuge: { leaf: RoleKey | Id } };              // whether V could lie low there
 ```
 
 S1 exposes these as pins and process state. **No atom exposes a heat number.** A `city` atom is `maybe` until S1 has a reading for its scope.
@@ -894,6 +901,49 @@ It counts against S1's betrayal budget. It never targets a cast another live see
 It never appears as a meter or a label on screen (L-59 applies).
 
 **Content dials.** Violence against residents, informing and sanction severity are player settings (S0 `SettingsSet.content`), read as lenses. A ladder caps its top rung from them. Dossier 18 sets the limits no setting can override.
+
+### 2.18 Setting and tone
+
+Content should read as Cyberpunk 2077's Night City, not generic cyberpunk ([dossier 17](../craft/d17-setting-tone.md)).
+
+**Setting data.** The game's records hold factions' classes and their attitudes to each other. They don't hold territory, trade, wealth, danger, influence or ownership. So S4's setting registries are mostly authored and keyed to **leaf areas**, and S1 derives what it can from the game's own traces. Every field carries its source: `authored`, `derived` (with its rule recorded) or `mirrored`. Seeds read the setting only as bands:
+- `presence`, `priceLevel` and `refuge` reads (§2.16);
+- prices checked against their band (L-88);
+- brands and products checked against the registry, unless marked `invented` (L-90).
+
+**Tone.** `ToneTag`'s provisional starter set is:
+- `grounded`, `fatalist`, `wry`, `tender`;
+- `kinetic`, `procedural`, `dread`, `absurd`.
+
+Each tag has a weight (heavy or light) and lexicon markers in S4.
+
+**Stake scale.** A seed declares its `stakeScale`, from a person up to the city. A procedural seed above `block` needs two found ancestors, or an authored flag. Naming entities above the declared scale is a warning (L-77).
+
+**Patrons withhold.** A fixer or client offer at gig level or above declares what the patron conceals (`withheld`), and one route by which V can find out (L-86).
+
+**Institutions have costs.** A faction or institution named in a front, gig or street form references its cost to the residents (L-85), extending L-34 beyond fronts.
+
+**Media name an outlet.** A media or rumour fragment names its `outlet`, whose kind must permit the channel (L-87). Its `divergence` comes from the outlet's profile.
+
+**Urgency needs a clock.** Text or an offer that claims a deadline needs a `clock` or a window behind it (L-89).
+
+**Dread** is anticipation under uncertainty:
+- **The threat's nature stays open.** A threat has a `nature` slot that stays unresolved until **contact**, and a `reveals` set of tokens. Text before contact that contains a `reveals` token is an error (L-84). Every trace in a dread kit must be consistent with every nature the kit lists; the fit report checks this.
+- **Intensity follows the setting.** A dread beat above the profile's `dreadMax`, or above the player's setting, plays its `implied` form instead (L-84).
+- **Wrongness** is a routine V has seen, broken. A `wrongness` trace may be released only after a confirmed baseline: at least two displays of the routine. It cites a past cause (L-91, extending L-49).
+- **Dread comes from systems and acts:** debt, ownership, being sorted. Authors write dread fragments; the engine only places and times them.
+
+**Contrast.** A `contrast` glance form pairs something strange with residents treating it as ordinary. One without a resident witness is warned (L-92).
+
+**The tone lint** checks vocabulary and structure, never whether anything lands:
+- tone polarity derived from a beat's effects against its declared tone (L-78);
+- slang outside its speaker class, era or register (L-79);
+- forbidden register items, such as real-world trademarks or meta words in a diegetic channel (L-80);
+- one specific detail per scene, up to a density cap (L-81);
+- text that names its own tone (L-82);
+- a `success` with no cost fact (L-83).
+
+Every tone finding lists what it did **not** check: wit, freshness, stereotype by meaning, whether dread works. The fit report carries a "not checked" line per seed. The lexicon is calibrated against the game's own text, to at most 5 % false positives **[tunable]**.
 
 ## 3. Compiling
 
@@ -1770,6 +1820,22 @@ The lint runs at compile time (§3.1), and on demand from authoring tools (S4, P
 | L-74 | A `ContentRef`, role or fragment that doesn't resolve, or that was retired without a tombstone | error |
 | L-75 | Two alternates of equal specificity that can both be eligible in a sample state | warning |
 | L-76 | A text unit whose placeholder names a role or attribute the role doesn't guarantee (L-17, extended to parsed text) | error |
+| L-77 | A procedural seed above `block` scale with fewer than two found ancestors and no authored flag (error); entities named above the declared stake scale (warning) | error, warning |
+| L-78 | A beat whose effects' polarity disagrees with its declared tone | warning |
+| L-79 | A lexicon term outside its speaker class, era or register | warning |
+| L-80 | A forbidden register item: a real-world trademark, or a meta word in a diegetic channel | error |
+| L-81 | A scene with no specific detail, or above the density cap | warning |
+| L-82 | Text naming its own tone | warning |
+| L-83 | A `success` outcome with no cost fact | warning |
+| L-84 | Text before contact containing a `reveals` token; or a dread beat above `dreadMax` | error |
+| L-85 | A faction or institution named in a front, gig or street form with no cost to residents | warning |
+| L-86 | A fixer or client offer at gig level or above with no `withheld` and route | warning |
+| L-87 | A media or rumour fragment with no outlet, or an outlet whose kind doesn't permit the channel | error |
+| L-88 | A price outside its band | warning |
+| L-89 | A deadline claimed in text or an offer with no clock or window | error |
+| L-90 | An unregistered brand or product in text, unless marked `invented` | warning |
+| L-91 | A wrongness trace without a confirmed baseline, or citing a pending cause | error |
+| L-92 | A contrast glance with no resident witness treating it as ordinary | warning |
 | L-33 (extended) | A `turns[].what` reading anything of V's but beliefs held about V and V's recorded acts | error |
 
 L-25 and L-40 were removed in v0.2 (§16). Their numbers are not reused.
@@ -1994,6 +2060,9 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 | SF-45 | **Sign re-issue.** A sign that stays `ambient` | Re-issued at most `reissue` times, within the plant cap |
 | SF-46 | **R1 in text form.** Parse the R1 seed's text form, print it, parse it again | Identical `Pred` trees. The seed is lint-clean at `ready`, and fits on the SF-7 and SF-8 states |
 | SF-47 | **Maturity.** A `sketch` template with `sow: yes` in a player's game | Never sown. The lab sows it, and its placeholders appear in the fit report |
+| SF-48 | **Tone lint block** ([dossier 17](../craft/d17-setting-tone.md) §12, renumbered). These seeds: (a) a procedural city-scale seed with one ancestor; (b) a `light` beat that kills a named NPC; (c) a faction's slang in another speaker's line; (d) a meta word in a banner; (e) a scene with no specific detail; (f) the word "ominously" | (a) L-77 error; (b) L-78; (c) L-79; (d) L-80 error; (e) L-81; (f) L-82. Each finding lists what it didn't check |
+| SF-49 | **Dread guards.** A `reveals` token in a trace before contact; a dread beat above the player's setting | L-84 error; the beat plays its `implied` form |
+| SF-50 | **Setting checks.** A corporation in a gig with no cost to residents; a deadline with no clock; a contrast glance with no resident witness; a wrongness trace after only one display of its routine | L-85, L-89 error, L-92, L-91 error |
 | SF-26 | **Constructed trace.** A trace with no found cause, `latitude` allowing `trace-cause`. S3's stub contributes a cause: an event at a stall. The trace is displayed; save; load | The `display` entry records `constructed`. The cause's fields are pinned `committed` at display, and resolve identically after the load |
 
 ## 15. Compromises and open items
@@ -2021,6 +2090,7 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 13. **Dossier 14.** v0.7 adopts its S2 requirements (§2.16). Its 27 S1 requirements define much of the simulation layer and wait for P3. Its sifter-input volume goes to S3, its metrics M14-01 to M14-24 to P9, and its district inspector to P10. Its in-game session card starts by measuring the game-time ratio, which every S1 time constant depends on.
 14. **Dossier 15.** v0.8 adopts its S2 requirements (§2.17). Its kernel requirements are S0 v4.3 (implicit edge types, deferred; the `aggregate` contract). Its S1 policies wait for P3; its metrics go to P9 and its inspectors to P10.
 15. **Dossier 16.** v0.9 adopts its S2 requirements; extension slots wait past the first public pack (§0.3). Its pack-format requirements go to S4 and its tool requirements, including a minimal first tool XF Studio could host, to P10.
+16. **Dossier 17.** v0.10 adopts its S2 requirements (§2.18); its fixtures are renumbered SF-48 to SF-50. Its typed setting registries go to S4, its world-data requirements (leaf-keyed dimensions, derived indices, faction presence, price level, a slow district variable, standing rumours) to S1, and its P5 and P9 lists to S3 and P9. Calibrating the tone lexicon needs a read-only extraction of the game's own text, a research-queue request for when usage allows.
 
 ## 16. Review record
 

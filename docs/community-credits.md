@@ -21,7 +21,7 @@ Credit here acknowledges what we learned or used. It does not imply endorsement 
 
 ### CD PROJEKT RED
 
-Developer of Cyberpunk 2077. The game's own resources, shaders, rigs, animation and materials are the ground truth for nearly everything we study. Their article [A World Full of Substance](https://magazine.substance3d.com/cyberpunk-2077-a-world-full-of-substance/) explained the shared-surface and mask approach behind the game's materials, and their [modding support](https://www.cyberpunk.net/en/modding-support) and [technical support](https://support.cdprojektred.com/en/cyberpunk/pc) pages, which name the Steam, GOG and Epic Games Store editions, set the stores XF Studio looks for. The TweakDB sources that ship with the game's REDmod tools showed how photo mode's expressions, poses and lists are defined. The address library they ship with the game for native mods, which gives every engine function a stable ID, let us trace and name, without any signature scanning, the whole path from a material template through the shader cache to a GPU pipeline state. Game content is used only as a private local reference for the preview and experiments; none is redistributed. On quest design, Paweł Sasko's GDC 2023 talk, summarised by [Game Developer](https://www.gamedeveloper.com/marketing/10-key-takeaways-from-the-quest-design-of-cyberpunk-2077-and-the-witcher-3), taught us to bring early choices back later with visible consequences and to separate signal from noise. Philipp Weber's [interview with Game World Observer](https://gameworldobserver.com/2019/09/13/quests-witcher-cyberpunk-2077) (2019) describes Street Stories as small encounters with several ways through, in a studio that avoids sorting quests by type. The same interview records that quests there cannot be failed in the classical sense, only given consequences, which informed how we treat outcomes. [80.lv](https://80.lv/articles/cd-projekt-red-reveals-the-secret-key-to-impressive-side-quests) (2024) reported Sasko on pitching many ideas and the small share that are accepted. Weber's interview also sets out the studio's staged route from half-page pitch to design document to rough playable with placeholder dialogue, which we compared against when thinking about how an author moves from a sketch to a finished piece.
+Developer of Cyberpunk 2077. The game's own resources, shaders, rigs, animation and materials are the ground truth for nearly everything we study. Their article [A World Full of Substance](https://magazine.substance3d.com/cyberpunk-2077-a-world-full-of-substance/) explained the shared-surface and mask approach behind the game's materials, and their [modding support](https://www.cyberpunk.net/en/modding-support) and [technical support](https://support.cdprojektred.com/en/cyberpunk/pc) pages, which name the Steam, GOG and Epic Games Store editions, set the stores XF Studio looks for. The TweakDB sources that ship with the game's REDmod tools showed how photo mode's expressions, poses and lists are defined. The address library they ship with the game for native mods, which gives every engine function a stable ID, let us trace and name, without any signature scanning, the whole path from a material template through the shader cache to a GPU pipeline state. Game content is used only as a private local reference for the preview and experiments; none is redistributed. On quest design, Paweł Sasko's GDC 2023 talk, summarised by [Game Developer](https://www.gamedeveloper.com/marketing/10-key-takeaways-from-the-quest-design-of-cyberpunk-2077-and-the-witcher-3), taught us to bring early choices back later with visible consequences and to separate signal from noise. Philipp Weber's [interview with Game World Observer](https://gameworldobserver.com/2019/09/13/quests-witcher-cyberpunk-2077) (2019) describes Street Stories as small encounters with several ways through, in a studio that avoids sorting quests by type. The same interview records that quests there cannot be failed in the classical sense, only given consequences, which informed how we treat outcomes. [80.lv](https://80.lv/articles/cd-projekt-red-reveals-the-secret-key-to-impressive-side-quests) (2024) reported Sasko on pitching many ideas and the small share that are accepted. Weber's interview also sets out the studio's staged route from half-page pitch to design document to rough playable with placeholder dialogue, which we compared against when thinking about how an author moves from a sketch to a finished piece. Sasko's [interview with GamePressure](https://www.gamepressure.com/editorials/interview-with-cd-projekt-reds-lead-quest-designer-pawel-sasko/zd661) (2023) names what the team would change, chiefly too many data shards and choices too subtle for players to notice, while Weber's interview adds that main and side quests are held to one standard and that heavy and light quests alternate. The [80 Level interview](https://80.lv/articles/interview-how-cyberpunk-2077-s-night-city-was-built-almost-entirely-by-hand/) by David Jagneaux with art directors Jakub Knapik and Kacper Niepokólczycki describes Night City's four layered visual eras, its use of contrast and its district themes under shared rules.
 
 ## Frameworks and core mods
 
@@ -678,7 +678,7 @@ The Daggerfall Unity project's [Quest System Status](https://www.dfworkshop.net/
 
 ### R. Talsorian Games
 
-[Cyberpunk RED Alert: Lifepath](https://rtalsoriangames.com/2020/10/16/cyberpunk-red-alert-lifepath/) (R. Talsorian Games, 2020), describing the Lifepath tables of the *Cyberpunk* tabletop game. A short run of rolls gives a character a background, relationships, enemies and life goals, with the relationships and enemies given causes. It is a compact example of how a character's history can produce relationships and wants.
+[Cyberpunk RED Alert: Lifepath](https://rtalsoriangames.com/2020/10/16/cyberpunk-red-alert-lifepath/) (R. Talsorian Games, 2020), describing the Lifepath tables of the *Cyberpunk* tabletop game. A short run of rolls gives a character a background, relationships, enemies and life goals, with the relationships and enemies given causes. It is a compact example of how a character's history can produce relationships and wants. Their [Screamsheet Generator](https://rtalsoriangames.com/2024/11/22/cyberpunk-red-alert-november-2024-dlc-screamsheet-generator/) (2024) shows the same game building in-world news sheets from headlines and happenings, chosen by roll or by hand.
 
 ### Gustave Perna
 
@@ -734,7 +734,7 @@ By Ben Serviss. [“The Discomfort Zone: The Hidden Potential of Valve's AI Dire
 
 ### Thomas Grip
 
-Thomas Grip of Frictional Games, [“Game Design Deep Dive: Amnesia's 'Sanity Meter'”](https://www.gamedeveloper.com/design/game-design-deep-dive-i-amnesia-i-s-sanity-meter-) (Game Developer, 2014). A hidden meter, shown to the player only as an image, discourages looking at monsters, and players still found ways to exploit it. It informed how we think about hidden state that steers play.
+Thomas Grip of Frictional Games, [“Game Design Deep Dive: Amnesia's 'Sanity Meter'”](https://www.gamedeveloper.com/design/game-design-deep-dive-i-amnesia-i-s-sanity-meter-) (Game Developer, 2014). A hidden meter, shown to the player only as an image, discourages looking at monsters, and players still found ways to exploit it. It informed how we think about hidden state that steers play. His remarks on what makes a horror game scary, reported by Reid McCarter in [The A.V. Club](https://avclub.com/amnesias-creative-director-on-what-makes-a-scary-video-1845392257) (2020), put the fear in imagination, uncertainty and monsters that stay unpredictable.
 
 ### David Spira
 
@@ -823,6 +823,30 @@ By Tom Leonard, lead programmer on the game. ["Postmortem: Thief: The Dark Proje
 ### Ubisoft La Forge and Ghostwriter
 
 Ben Swanson of Ubisoft La Forge, as reported by Bryant Francis in ["Here are more details on Ubisoft's Ghostwriter AI tool from GDC 2023"](https://www.gamedeveloper.com/marketing/here-are-more-details-on-ubisoft-s-narrative-ai-tools-from-gdc-2023) (Game Developer, 2023). Ghostwriter offers writers line options that they accept, edit or reject, and is not used for cinematics or lore. It showed us where writers accepted machine-made first drafts.
+
+### Bruce Sterling
+
+Bruce Sterling, the preface to [*Mirrorshades: The Cyberpunk Anthology*](http://www.rudyrucker.com/mirrorshades/HTML/) (1986). It describes cyberpunk as high technology meeting street culture, with ordinary people adapting technology to their own ends. It informed how we judge whether generated content reads as cyberpunk.
+
+### Lewis Shiner
+
+Lewis Shiner, ["Confessions of an Ex-Cyberpunk"](https://www.fictionliberationfront.net/cyberpunk.html) (*The New York Times*, 1991). He argues that by 1987 the movement's style had hardened into a template of stock elements, with technology as the point. It informed our wariness of content that has the right props and nothing behind them.
+
+### Justin Charity
+
+Justin Charity, ["'Cyberpunk 2077' Wears a Dystopian Costume Well, but Doesn't Do Much Else"](https://www.theringer.com/2020/12/31/video-games/cyberpunk-2077-dystopia-costume) (*The Ringer*, 2020). A review arguing that the game's dystopia is mostly costume. It gave us a test for any dystopia: what does the system do to ordinary people?
+
+### Mike Pondsmith and Vikki Blake
+
+Vikki Blake's [interview with Mike Pondsmith](https://www.nme.com/features/cyberpunk-2077-co-creator-mike-pondsmith-cyberpunk-is-a-warning-not-an-aspiration-2834984) (*NME*, 2020), creator of the *Cyberpunk* tabletop game. He calls the setting a warning, not an aspiration, and describes a gritty, grounded look and politics about fairness and not being exploited by the powerful. It informed what we take the setting's intent to be.
+
+### Patrick Kanouse
+
+Patrick Kanouse, ["The Dark Corners of Cyberpunk 2020's Night City"](https://blackgate.com/?p=441265) (Black Gate, 2020). A review of the Night City sourcebook for the tabletop game. Each district gets a map, notable people and contacts, security levels, plot hooks and a random encounter table, and the book ends with a generator for in-world news headlines. It showed how a district can be packed into a form a game master can use at once.
+
+### Vale
+
+[Vale](https://docs.vale.sh/), an open-source prose linter created by jdkato (his GitHub name) and maintained under the vale-cli organisation. It turns a written style guide into automatic checks for consistency and does not judge quality. It informed how we think about what an automatic check of tone can and cannot do.
 
 ## Research papers
 
@@ -2035,6 +2059,18 @@ Lindsay Palmer, [*The Fixers: Local News Workers and the Underground Labor of In
 ### Papachristos, Hureau and Braga (2013)
 
 Andrew V. Papachristos, David M. Hureau and Anthony A. Braga, [“The corner and the crew: the influence of geography and social networks on gang violence”](https://doi.org/10.1177/0003122413486800) (*American Sociological Review*, 2013). In Chicago and Boston, gangs with adjacent turf and a history of conflict were likely to fight again, and reciprocity and status seeking added to it. It informed what we use to predict which rivals clash.
+
+### Altman (1984)
+
+Rick Altman, ["A Semantic/Syntactic Approach to Film Genre"](https://www.umsl.edu/~gradyf/film/semanticsyntactic.htm) (*Cinema Journal* 23, 1984; the page is an excerpt). A genre is both its vocabulary of stock elements and the relations among them, and either alone explains little. It informed how we check that content fits a setting.
+
+### Lovecraft (1927)
+
+H. P. Lovecraft, ["Supernatural Horror in Literature"](https://en.wikisource.org/wiki/Supernatural_Horror_in_Literature) (*The Recluse*, 1927). He judges a weird tale by the sensation at its strongest moments, a dread of unknown outer forces. It informed how we describe dread as a register.
+
+### Grupe and Nitschke (2013)
+
+Dan W. Grupe and Jack B. Nitschke, ["Uncertainty and anticipation in anxiety: an integrated neurobiological and psychological perspective"](https://pmc.ncbi.nlm.nih.gov/articles/PMC4276319/) (*Nature Reviews Neuroscience* 14, 2013). A review arguing that anxiety is driven by uncertainty about future threats, so anticipation can matter more than reaction. It informed how we think about building dread from what the player does not yet know.
 
 ## Reference imagery
 
