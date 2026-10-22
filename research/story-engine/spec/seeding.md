@@ -4,6 +4,7 @@
 - **The review.** v0.2 went through one review, by GPT-6 Astra; [§16](#16-review-record) records what changed.
 - **Dossiers folded in.**
   - v0.1 folded in [dossier 8](../craft/d08-scale-threads-time.md#9-requirements-for-the-seed-language-p4) (scale, threads and time).
+  - v0.15 folds in [dossier 22](../craft/d22-language-models.md) (language models): a model call as a text-valued draw, a write-once render ledger, two invariants, the phrasing-author mode, checks and fallbacks (§2.23).
   - v0.14 folds in [dossier 21](../craft/d21-words-dialogue.md) (words): subtext, voice cards, V's options, told stories, humour, variety in frames, channel budgets, the author-fill contract (§2.22).
   - v0.13 folds in [dossier 20](../craft/d20-staging-legibility.md) (staging in the world): stage blocks, a ladder of rungs, focal cards, audiences, "why?" answers, kits (§2.21).
   - v0.12 folds in [dossier 19](../craft/d19-rights-platforms.md) (rights, licences and platforms): game content by reference, voices, origin, real-world names (§2.20); the minors floor extended to exploitation roles.
@@ -1244,6 +1245,65 @@ interface AuthorFill {
 
 The fit report gives a slot-coverage line: which author-fill slots are filled, and by whom.
 
+### 2.23 Language models
+
+A language model may render words. It never plans, decides an outcome, invents a fact, or reads or writes world state ([dossier 22](../craft/d22-language-models.md)). The engine works fully without one.
+
+**A model call is a draw whose value is text.** Its output is fixed at release and stored in a **render ledger**: write-once, in the instance's persisted state (§12.1). A reload reads the ledger and never regenerates. Two invariants hold:
+- **Words don't steer** (S2-I-15). No draw, id, transition, wake-up, predicate, hook input, tie-break or structural record field reads rendered text. None reads whether a model ran, or the model settings. The structural trace is identical with the model off, on, or returning any other strings that pass the checks; a stub tests this with no inference.
+- **Released words are immutable** (S2-I-16). The text of a released delivery is never replaced, whatever its origin. A text-only pack edit reaches only lines not yet released, which refines §12.3 for generated lines.
+
+**Two modes, in order of preference:**
+1. **Phrasing author (mode T).** At idle time, the model writes new phrasings with typed slot markers. They enter as stored data in a **generated pack** beside the saves, referenced by id and hash. A remote service then sees only pack text, never the playthrough. A missing item is treated like a missing pack (§12.3).
+2. **Per-delivery rendering (mode R).** The model renders one delivery from its brief, under the arbiter's deadline.
+
+**Which units may use a model.** A text unit opts in with `modelOk: 'phrasing' | 'delivery' | 'both'`. It also carries a `brief`:
+- required and allowed atoms;
+- slots, with grammatical metadata;
+- a forbidden list;
+- exemplars;
+- length by form;
+- tone.
+
+The pack's `aiUse` (`none`, `local`, or `allow`; default `local`) says whether its text may go to a model at all. A unit without `modelOk` never uses one.
+
+A `modelOk` unit needs a model-free `says` that leaves the same facts (L-131). These never use a model in the first cut (L-132):
+- authored-source classes, `authored: 'human'` units and author-fill slots (D-23);
+- offers, responses and attribution templates;
+- `mustReach` carriers;
+- humour frames and told-story evaluations;
+- the system, narrator and news voices;
+- fragments tagged at intensity 2 or 3.
+
+**The engine fills every value.** The model never types a name, count, time or quote. Before release, its output must pass:
+- grammar constraints;
+- a closed-world check: nothing beyond the brief's atoms;
+- coverage: every required atom is present;
+- a two-way entailment check against the facts;
+- a polarity check.
+
+A quote or causal clause needs a matching atom (L-135). After two failures, the line falls back to the template form, with no hand repair. The cause is recorded from a closed list:
+- `disabled`, `warming`;
+- `deadline`, `budget`;
+- `runner-unavailable`;
+- `gates`;
+- `class-excluded`;
+- `minor-cast`.
+
+A model render is refused when the cast binds anyone who isn't an adult (L-133). Escape rates on these briefs are unmeasured. P9 measures them.
+
+**Briefs.** A brief needs at least one required atom. Its exemplars can't be game text, and it can't read the director's model of V (L-134). Giving pack text to a model when the pack's `aiUse` is `none` is warned (L-137).
+
+**Origin.** A ledger entry and a generated-pack unit carry `origin: 'generated'` and a model reference (§2.20).
+
+**Settings.** The player chooses `off`, `local` or `service`, with a per-class allow list and switches per pack and per speaker. The `setting` atom can't read them (L-136).
+
+**The fit report** shows, for each model-eligible unit:
+- that the fallback is present;
+- the classes excluded;
+- the qualification outcome per model;
+- counts of rendered, fallback and rejected lines, by cause.
+
 ## 3. Compiling
 
 ### 3.1 The steps
@@ -1695,6 +1755,7 @@ interface Delivery {
   atJoint: boolean;                    // news
   bindings: Record<RoleKey, Id>;       // the casts it was prepared with
   state: 'queued' | 'released' | 'displayed' | 'answered' | 'expired' | 'withdrawn';
+  render?: RenderKey;                  // the render ledger entry holding its words (§2.23)
   submitted: number;                   // play seconds
   provenance: { mode?: string; variant?: string; alternates: Record<BeatKey, FragmentId>; channel: ChannelId; form: string;
                 why: Array<{ kind: 'schedule' | 'fit' | 'score' | 'phase'; beliefs: Id[]; delta: number }> };   // §8.8
@@ -2173,6 +2234,13 @@ The lint runs at compile time (§3.1), and on demand from authoring tools (S4, P
 | L-128 | A non-colour phrasing that reads nothing from the record | error |
 | L-129 | An option label that names an emotion, or isn't from the closed list | error |
 | L-130 | A told story containing an event its teller neither witnessed nor was told | error |
+| L-131 | A `modelOk` unit without a model-free `says` that leaves the same facts | error |
+| L-132 | `modelOk` on an excluded unit (§2.23): authored-source, author-fill, offers, responses, attribution, `mustReach`, humour, told evaluations, system voices, intensity 2 or 3 | error |
+| L-133 | A model render when the cast binds anyone who isn't an adult | error, at cast time |
+| L-134 | A brief with no required atom, an exemplar that is game text, or a brief reading the director's model of V | error |
+| L-135 | Rendered text with a quotation or causal clause and no matching atom | error |
+| L-136 | A `setting` atom reading a model setting | error |
+| L-137 | A brief giving pack text to a model when the pack's `aiUse` is `none` | warning |
 | L-33 (extended) | A `turns[].what` reading anything of V's but beliefs held about V and V's recorded acts | error |
 
 L-25 and L-40 were removed in v0.2 (§16). Their numbers are not reused.
@@ -2247,6 +2315,7 @@ interface InstanceState {
   draws: Record<string, { value: string; attempt: number }>;
   consumed: Array<{ event: Id; at: GameTime }>;    // §2.14
   deliveries: Delivery[];              // not yet final, including closing deliveries
+  renders: Record<RenderKey, { text: string; origin: 'generated' | 'template'; model?: string; at: GameTime }>;   // write-once (§2.23); compacted for terminal seeds
   wakeups: Array<{ clock: 'game'; at: GameTime; reason: string }>;
   record: RecordEntry[];               // §10.1
   nextEntry: number;
@@ -2345,6 +2414,8 @@ A **removed pack** withdraws its live instances (T1), because their content refe
 | S2-I-12 | **No wall clock.** Wake-ups run on game or play time only, and no predicate reads the wall clock. Real-world absence advances nothing; the save's age is read only by the return view |
 | S2-I-13 | **The model has no entrance.** No seed construct reads or writes the director's model of V; it reaches layer 2 only through the bounded hooks of §8.8 |
 | S2-I-14 | **Closed hook inputs.** Hooks receive only the inputs listed in §8.8 |
+| S2-I-15 | **Words don't steer.** Nothing structural reads rendered text, whether a model ran, or the model settings (§2.23) |
+| S2-I-16 | **Released words are immutable.** A released delivery's text is never replaced (§2.23) |
 
 ## 14. Fixtures
 
@@ -2438,6 +2509,7 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 18. **Dossier 19.** v0.12 adopts its six S2 requirements (§2.20, L-95, L-107, §12.3). Its pack-manifest requirements (licence, permissions, AI and origin, voice, price `free` only, a play grant for streaming) go to S4. D-24 settles its question on text and data mining. Its other open questions (whether the companion counts as a standalone product, the host tag for the engine, the starter pack's licence) wait for release planning.
 19. **Dossier 20.** v0.13 adopts its 16 S2 requirements (§2.21). Its P8 requirements (a rung realiser, out-of-sight spawning, props, marks, workspots, tells, barks, joining a scene mid-phase, interference, scene display reports, scanner entries) go to P8 and the runtime requirements; its P10 requirements (the explain and inspect tools) to P10.
 20. **Dossier 21.** v0.14 adopts its 16 S2 requirements (§2.22). Its S7 requirements (assembling and choosing text) go to S7, and its lexicons, voice cards and phrase tables to S4. Measuring the game's own text per channel, to replace the provisional budgets, is a research-queue brief (its §12.4), under D-24.
+21. **Dossier 22.** v0.15 adopts its 13 S2 requirements (§2.23). Its S7 requirements (the model adapter) go to S7 and its P7 requirements (local inference, budgets in the companion) to P7. Open: whether a player may let their own local model fill authored-source classes. The first cut excludes it; D-23 concerns the project's own tools, so this is a later decision.
 
 ## 16. Review record
 

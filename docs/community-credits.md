@@ -169,6 +169,10 @@ By Niels Lohmann and contributors. [GitHub](https://github.com/nlohmann/json). T
 
 By the Khronos Group. [Specification 1.3](https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.html). Its chapters on the S3TC, RGTC and BPTC block formats, with their BC7 partition and anchor tables, are what XF Studio's own texture decoder is written from. Published under CC BY 4.0.
 
+### llama.cpp
+
+By the llama.cpp project and contributors. [Grammar (GBNF) guide](https://github.com/ggml-org/llama.cpp/blob/master/grammars/README.md). It shows how a grammar can force a local model's output into a fixed form. It also covers converting a limited subset of JSON Schema to such grammars and warns about patterns that slow sampling. It informed our plan for constraining local model output. No code is used.
+
 ### LZ4
 
 By the LZ4 authors and contributors. [Block format specification](https://github.com/lz4/lz4/blob/dev/doc/lz4_Block_format.md). The specification let us write the independent decompression in XF Studio's save reader, and its length encoding bounds how far a block can expand, which the reader checks before it allocates anything.
@@ -435,6 +439,10 @@ By ArmanIII, per its script headers. [Nexus](https://www.nexusmods.com/cyberpunk
 ### Limerence
 
 [Limerence X AllieKat Winterkissed AXL Eyeshadows](https://www.nexusmods.com/cyberpunk2077/mods/18323) and [Limerence Liners](https://www.nexusmods.com/cyberpunk2077/mods/14780). Winterkissed is a collaboration with AllieKat per its title and description. Its eyeshadow mesh and morph target reuse the base game's eye-makeup geometry unchanged, which confirmed that working face-decal mods sit at the vanilla 0.40 mm offset above the head. Its glitter looks showed how a published glitter eyeshadow is built from the plain decal material (high-resolution metallic maps with embossed shape normals on the vanilla eye-makeup UVs), and led us to the eye plate's much lower texture density. The Liners replace the base game's eye-makeup masks in place, which showed how such replacers conflict per slot. Studied only; private local reference.
+
+### Mantella
+
+By art-from-the-machine. [GitHub](https://github.com/art-from-the-machine/Mantella). A mod that lets players speak to NPCs in Skyrim and Fallout 4 through speech-to-text, a language model and text-to-speech. Its README warns that the development version is prone to error. It showed us what a community pipeline of this kind looks like. Studied only; no code is used.
 
 ### MELUMINARY
 
@@ -870,7 +878,7 @@ The AbleGamers Foundation, [“Moderation In All Things”](https://accessible.g
 
 ### Katyanna Quach
 
-Katyanna Quach, [“Not only were half of an AI text adventure generator's sessions NSFW but some involved depictions of sex with children”](https://www.theregister.com/2021/04/30/ai_dungeon_filter_vulnerabilities/) (The Register, 2021). It reports on AI Dungeon, where a generator with no structural limit produced unacceptable content, a later filter blocked harmless text, and private adventures were exposed. It informed why we enforce our hard limits through structure and treat text filters as advisory.
+Katyanna Quach, [“Not only were half of an AI text adventure generator's sessions NSFW but some involved depictions of sex with children”](https://www.theregister.com/2021/04/30/ai_dungeon_filter_vulnerabilities/) (The Register, 2021). It reports on AI Dungeon, where a generator with no structural limit produced unacceptable content, a later filter blocked harmless text, and private adventures were exposed. It informed why we enforce our hard limits through structure and treat text filters as advisory. Her later [report in The Register](https://www.theregister.com/software/2021/10/08/ai-game-bans-players-for-nsfw-stories-it-generated-itself/1144834) on the game's filter and player bans showed what went wrong when output was filtered after launch.
 
 ### Bee Zelda
 
@@ -983,6 +991,18 @@ Matt Timmermans, [“Creating Behaviours with Fuzzy Pattern Matching”](https:/
 ### James Gunn
 
 James Gunn, [“The Protocols of Science Fiction”](https://christopher-mckitterick.com/Essays/protocol.htm) (essay). Gunn reports Samuel R. Delany's argument that each genre is a language with its own reading conventions. An experienced science-fiction reader treats an unexplained term as a clue to the world being built. It informed how we think about unexplained detail in a scene.
+
+### Convai
+
+Convai's Unity SDK documentation, [“How narrative design works”](https://docs.convai.com/api-docs/plugins-and-integrations/convai-unity-sdk/features/narrative-design/how-narrative-design-works). An author builds a graph of sections and triggers, and the game advances through it as signals arrive. We used it as a point of comparison: a commercial model-driven character product that keeps its story structure author-defined.
+
+### NVIDIA ACE
+
+NVIDIA's developer blog by Ike Nnoli, [“Deploy the First On-Device Small Language Model for Improved Game Character Roleplay”](https://developer.nvidia.com/blog/deploy-the-first-on-device-small-language-model-for-improved-game-character-roleplay), and the GeForce news article by Andrew Burnes, [“NVIDIA ACE Autonomous Game Characters Debut This Month In inZOI & NARAKA: BLADEPOINT MOBILE PC VERSION”](https://www.nvidia.com/en-gb/geforce/news/nvidia-ace-naraka-bladepoint-inzoi-launch-this-month/). They give NVIDIA's own figures for a small on-device model of about 2 GB of video memory, and describe an opt-in game feature that runs such a model on GeForce RTX graphics cards only. We treat these as vendor claims.
+
+### Steamworks content survey
+
+Valve's Steamworks documentation, [Content Survey](https://partner.steamgames.com/doc/gettingstarted/contentsurvey). It separates AI content made before release from content generated while the game runs. For the second kind, developers must describe their guardrails. It informed how we plan to describe live generation.
 
 ## Research papers
 
@@ -1810,7 +1830,7 @@ George Farmer and Danielle Kelly, [“‘Save-scumming’ in role-playing games:
 
 ### Park et al. (2023)
 
-Joon Sung Park, Joseph O’Brien, Carrie Cai, Meredith Ringel Morris, Percy Liang and Michael Bernstein, [“Generative agents: interactive simulacra of human behavior”](https://arxiv.org/abs/2304.03442) (arXiv, 2023). Simulated characters scored each memory by recency, importance and how closely it matched the situation, and reflected when recent importance added up. It informed how we rate a memory's importance when it forms.
+Joon Sung Park, Joseph O’Brien, Carrie Cai, Meredith Ringel Morris, Percy Liang and Michael Bernstein, [“Generative agents: interactive simulacra of human behavior”](https://arxiv.org/abs/2304.03442) (arXiv, 2023). Simulated characters scored each memory by recency, importance and how closely it matched the situation, and reflected when recent importance added up. It informed how we rate a memory's importance when it forms. The authors also reported where it failed: agents missed relevant memories, embellished what they knew and spoke more formally than people would, and a two-day run of twenty-five agents cost thousands of dollars in token credits.
 
 ### Anderson and Schooler (1991)
 
@@ -2311,6 +2331,98 @@ T. Stivers, N. J. Enfield, P. Brown, C. Englert, M. Hayashi, T. Heinemann, G. Ho
 ### Davis (2005)
 
 Wayne Davis, [“Implicature”](https://plato.stanford.edu/entries/implicature/) (Stanford Encyclopedia of Philosophy, first published 2005). It sets out H. P. Grice's cooperative principle and four maxims, and shows how flouting a maxim leads a listener to infer an unstated meaning. It informed how we think about subtext in dialogue.
+
+### Ma et al. (2026)
+
+Yingpeng Ma, Jianhao Yan, Bei Shi, Ka Hou Kam, Runnan Wang, Xuebo Liu, Yulong Chen, Yue Zhang and Derek F. Wong, [“Can LLM Agents Stick to the Script? A Benchmark for Long-Horizon Consistency in Interactive Narratives”](https://arxiv.org/abs/2608.08160) (ICML 2026). Their benchmark checks whether a model keeps a story's commitments over a long run. They found that fluent writing did not guarantee that it did. It informed why we check model output against the story's recorded state.
+
+### Li et al. (2026)
+
+Junjie Li, Xinrui Guo, Yuhao Wu, Roy Ka-Wei Lee, Hongzhi Li and Yutao Xie, [“Lost in Stories: Consistency Bugs in Long Story Generation by LLMs”](https://aclanthology.org/2026.findings-acl.410/) (*Findings of the Association for Computational Linguistics: ACL 2026*). They built a benchmark of contradictions in long model-written stories. Errors were most common in facts and timing, and tended to appear around the middle of a story. It informed where we look for inconsistencies in long generated text.
+
+### Chen et al. (2026)
+
+Yuqi Chen, Sixuan Li, Yunfeng Cai, Xueai Li, Ka Man Yan and Ying Li, [“When Stories Evolve: Benchmarking LLM Storytelling Across Agent Architectures in Open-Ended World Simulations”](https://arxiv.org/abs/2608.15654) (arXiv preprint, 2026). They measure sustained generation, consistency with established facts and meaningful development as separate things. Larger models mainly improved the first. It informed our choice to measure those capacities separately.
+
+### Tian et al. (2024)
+
+Yufei Tian, Tenghao Huang, Miri Liu, Derek Jiang, Alexander Spangher, Muhao Chen, Jonathan May and Nanyun Peng, [“Are Large Language Models Capable of Generating Human-Level Narratives?”](https://arxiv.org/abs/2407.13248) (EMNLP 2024). They compared model and human stories and found the model stories homogeneously positive and short of tension. It informed why we plan a check on the tone of generated text.
+
+### Padmakumar and He (2024)
+
+Vishakh Padmakumar and He He, [“Does Writing with Language Models Reduce Content Diversity?”](https://arxiv.org/abs/2309.05196) (ICLR 2024). In a controlled experiment, writing with a feedback-tuned model made different authors' essays more alike, and writing with a base model did not. It informed our caution about sameness in model-assisted writing.
+
+### Qraitem, Saenko and Plummer (2026)
+
+Maan Qraitem, Kate Saenko and Bryan A. Plummer, [“PersonaWeaver: Controllable Diversity Beyond Conventional Archetypes in Procedural Character Generation”](https://arxiv.org/abs/2609.26629) (arXiv preprint, 2026). Model-generated characters came out behaviourally alike, agreeing with positive norms and answering like an assistant. Specifying behaviour separately from world building widened the range. It informed why we do not leave a character's behaviour to the model.
+
+### Li et al. (2024)
+
+Kenneth Li, Tianle Liu, Naomi Bashkansky, David Bau, Fernanda Viégas, Hanspeter Pfister and Martin Wattenberg, [“Measuring and Controlling Instruction (In)Stability in Language Model Dialogs”](https://arxiv.org/abs/2402.10962) (COLM 2024). They found that chatbots drift from their instructions within about eight rounds of conversation. It informed our choice to make each rendering request a fresh call.
+
+### Laban et al. (2025)
+
+Philippe Laban, Hiroaki Hayashi, Yingbo Zhou and Jennifer Neville, [“LLMs Get Lost In Multi-Turn Conversation”](https://arxiv.org/abs/2505.06120) (arXiv preprint, 2025). Across the models they tested, multi-turn use did worse than single-turn use, mostly through unreliability. A model that took a wrong turn tended not to recover. It informed the same fresh-call choice.
+
+### Kasner and Dušek (2024)
+
+Zdeněk Kasner and Ondřej Dušek, [“Beyond Traditional Benchmarks: Analyzing Behaviors of Open LLMs on Data-to-Text Generation”](https://aclanthology.org/2024.acl-long.651/) (*Proceedings of ACL 2024*). Open models wrote fluent text from structured records, but more than 80% of outputs contained at least one semantic error. It informed why we check generated wording against the record it came from.
+
+### Wiseman, Shieber and Rush (2017)
+
+Sam Wiseman, Stuart M. Shieber and Alexander M. Rush, [“Challenges in Data-to-Document Generation”](https://arxiv.org/abs/1707.08052) (EMNLP 2017). Neural models wrote fluent text from data records, but even templated baselines beat them on some measures. It informed why we keep plain templates as a baseline.
+
+### Puduppully, Dong and Lapata (2018)
+
+Ratish Puduppully, Li Dong and Mirella Lapata, [“Data-to-Text Generation with Content Selection and Planning”](https://arxiv.org/abs/1809.00582) (arXiv preprint, 2018). They split text generation into two stages: first a plan of what to say and in what order, then the text. It informed our habit of fixing the content before the wording.
+
+### Atil et al. (2024)
+
+Berk Atil, Sarp Aykent, Alexa Chittams, Lisheng Fu, Rebecca J. Passonneau, Evan Radcliffe, Guru Rajan Rajagopal, Adam Sloan, Tomasz Tudrej, Ferhan Ture, Zhe Wu, Lixinyu Xu and Breck Baldwin, [“Non-Determinism of ‘Deterministic’ LLM Settings”](https://arxiv.org/abs/2408.04667) (arXiv preprint, 2024). Five models set to be deterministic still gave different output across runs. It informed why we do not assume a model call can be repeated exactly.
+
+### He and Thinking Machines Lab (2025)
+
+Horace He, with others at Thinking Machines Lab, [“Defeating Nondeterminism in LLM Inference”](https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/) (blog post, 2025). It traces run-to-run differences in served models to the batch size of each request. Batch-invariant kernels remove the differences at a cost in speed. It informed how we think about reproducibility with a model in the loop.
+
+### Willard and Louf (2023)
+
+Brandon T. Willard and Rémi Louf, [“Efficient Guided Generation for Large Language Models”](https://arxiv.org/abs/2307.09702) (arXiv preprint, 2023). They show how to guide generation with regular expressions and grammars so that the form of the output is guaranteed. It informed our plan to constrain the form of model output.
+
+### Tam et al. (2024)
+
+Zhi Rui Tam, Cheng-Kuang Wu, Yi-Lin Tsai, Chieh-Yen Lin, Hung-yi Lee and Yun-Nung Chen, [“Let Me Speak Freely? A Study on the Impact of Format Restrictions on Performance of Large Language Models”](https://arxiv.org/abs/2408.02442) (arXiv preprint, 2024). They report that format restrictions lowered models' reasoning accuracy, and stricter formats lowered it more. It informed why we measure constrained output instead of assuming it costs nothing.
+
+### Honovich et al. (2022)
+
+Or Honovich, Roee Aharoni, Jonathan Herzig, Hagai Taitelbaum, Doron Kukliansy, Vered Cohen, Thomas Scialom, Idan Szpektor, Avinatan Hassidim and Yossi Matias, [“TRUE: Re-evaluating Factual Consistency Evaluation”](https://arxiv.org/abs/2204.04991) (NAACL 2022). Across eleven datasets, checks based on entailment and on generating and answering questions did well, and their strengths differed. It informed how we plan to check generated text against its source.
+
+### Xie and Riedl (2024)
+
+Kaige Xie and Mark Riedl, [“Creating Suspenseful Stories: Iterative Planning with Large Language Models”](https://arxiv.org/abs/2402.17119) (EACL 2024). They found current models unreliable at suspense and offered a planning method built on theories of suspense. It informed why we do not expect tension to come from a model unaided.
+
+### Wang, Zhou and Ledo (2024)
+
+Yi Wang, Qian Zhou and David Ledo, [“StoryVerse: Towards Co-authoring Dynamic Plot with LLM-based Character Simulation via Narrative Planning”](https://arxiv.org/abs/2405.13042) (*Foundations of Digital Games* 2024). A writer's outline of abstract acts is turned by a model into character actions, shown as a proof of concept. We compared our design against it. Our planning stays outside the model.
+
+### Zhu et al. (2023)
+
+Andrew Zhu, Lara J. Martin, Andrew Head and Chris Callison-Burch, [“CALYPSO: LLMs as Dungeon Masters' Assistants”](https://arxiv.org/abs/2308.07540) (AIIDE 2023). Dungeon Masters said the model's text was good enough to present to players as it stood. They found its ideas rougher and in need of their own development. It informed our view that a person should stay in the loop.
+
+### Song, Zhu and Callison-Burch (2024)
+
+Jaewoo Song, Andrew Zhu and Chris Callison-Burch, [“You Have Thirteen Hours in Which to Solve the Labyrinth: Enhancing AI Game Masters with Function Calling”](https://arxiv.org/abs/2409.06949) (Wordplay Workshop at ACL 2024). Giving a model game master functions that control the game improved its narrative quality and the consistency of its state updates. It informed how we think about letting a model change state only through structured calls.
+
+### Gehman et al. (2020)
+
+Samuel Gehman, Suchin Gururangan, Maarten Sap, Yejin Choi and Noah A. Smith, [“RealToxicityPrompts: Evaluating Neural Toxic Degeneration in Language Models”](https://arxiv.org/abs/2009.11462) (*Findings of EMNLP 2020*). Models could produce toxic text from innocuous prompts, and no method they tested was failsafe. It informed why we treat output filtering as a backstop.
+
+### Inan et al. (2023)
+
+Hakan Inan, Kartikeya Upasani, Jianfeng Chi, Rashi Rungta, Krithika Iyer, Yuning Mao, Michael Tontchev, Qing Hu, Brian Fuller, Davide Testuggine and Madian Khabsa, [“Llama Guard: LLM-based Input-Output Safeguard for Human-AI Conversations”](https://arxiv.org/abs/2312.06674) (arXiv preprint, 2023). A model classifies prompts and responses against a taxonomy that can be adjusted for each use. It informed our plan for a backstop classifier on model output.
+
+### Hua and Raley (2020)
+
+Minh Hua and Rita Raley, [“Playing With Unicorns: AI Dungeon and Citizen NLP”](https://dhq.digitalhumanities.org/vol/14/4/000533/000533.html) (*Digital Humanities Quarterly* 14(4), 2020). Players of AI Dungeon used its revert, alter and remember commands to hold a story together by hand. It informed how we think about the repairs a player makes to model-written continuity.
 
 ## Reference imagery
 
