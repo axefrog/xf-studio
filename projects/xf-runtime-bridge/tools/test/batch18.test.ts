@@ -320,10 +320,13 @@ describe.skipIf(!existsSync(FENGARI))("0.8.4 the CET comment box wraps at words 
       stopped.info.bridge.killed = true
       stopped.info.writes_used = true
       local a = table.concat(draw(stopped), "|")
-      local capturing = state({ killKeyCapture = true, killKeyRefused = "F6 answers XF Studio's questions." })
+      local capturing = state({ killKeyCapture = true })
       local b = table.concat(draw(capturing), "|")
+      -- 0.8.6 (P2): a refusal takes the reserved line once the capture has ended (it can only arrive then).
+      local refused = state({ killKeyRefused = "F6 answers XF Studio's questions." })
+      local c = table.concat(draw(refused), "|")
       return tostring(string.find(a, "Saving stays locked", 1, true) ~= nil) .. "," .. tostring(string.find(a, "connection key", 1, true) == nil)
-        .. "," .. tostring(string.find(b, "Press the new key", 1, true) ~= nil) .. "," .. tostring(string.find(b, "F6 answers", 1, true) ~= nil)
+        .. "," .. tostring(string.find(b, "Press the new key", 1, true) ~= nil) .. "," .. tostring(string.find(c, "F6 answers", 1, true) ~= nil)
         .. "," .. tostring(string.find(b, "Version 0.8.6", 1, true) ~= nil)`);
     expect(out).toBe("true,true,true,true,true");
   });
