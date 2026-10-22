@@ -287,7 +287,8 @@ export type StudioPresentationPort<Slot> = {
     instance(panel: string): string;
     /**
      * The history scope Ctrl+Z acts on while focus is in a panel: a 3D view's is the look its scene shows (`look:<collection>/<look>`,
-     * decided, §3.7); any other panel's is the editing context. Header and History-panel Undo always act on the editing context.
+     * decided, §3.7); the Character panel's is its V's (`character:<id>`; undefined while it shows none); any other panel's is the editing
+     * context. Header and History-panel Undo always act on the editing context.
      */
     historyScope(panel: string | undefined): string | undefined;
   };

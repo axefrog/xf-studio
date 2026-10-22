@@ -316,7 +316,7 @@ describe("three characters of two bodies at once (profiles design §7)", () => {
     expect(w.history.scope(characterScope(ids[0]!))!.state().depth).toBe(1);
     expect(w.history.scope(characterScope(ids[2]!))!.state().depth).toBe(1);
     expect(b!.snapshot().undo).toBeNull();
-    a!.dispatch({ kind: "character.undo" });
+    w.history.acting([characterScope(ids[0]!)])!.command({ kind: "history.undo" });
     expect([a!.snapshot().set, b!.snapshot().set, c!.snapshot().set]).toEqual([0, 0, 1]);
     expect(a!.snapshot().redo).not.toBeNull();
     expect(c!.snapshot()).toMatchObject({ undo: c!.snapshot().undo, redo: null });
@@ -373,7 +373,7 @@ describe("three characters of two bodies at once (profiles design §7)", () => {
     context.dispatch({ kind: "character.setSource", source: { kind: "save", value: save } });
     expect(shown.at(-1)).toEqual(save);
     expect(w.characters.document(idA)!.source.kind).toBe("save");
-    context.dispatch({ kind: "character.undo" });
+    w.history.acting([characterScope(idA)])!.command({ kind: "history.undo" });
     expect(context.snapshot()).toMatchObject({ origin: { kind: "default" }, bodyGender: "male" });
     expect(w.characters.document(idA)).toMatchObject({ body: "male", source: { kind: "default" } });
     await w.characters.flush();

@@ -118,6 +118,8 @@ export interface HistoryTarget {
    * drops its steps, since they could never apply again, and nothing changes.
    */
   apply(values: Readonly<Record<string, unknown | undefined>>, cause: HistoryCause): boolean;
+  /** Why the target can't move now (a V whose last session's changes are still being restored), or undefined: Undo and Redo wait. */
+  unavailable?(): string | undefined;
   /**
    * A cheap token that changes whenever the content may have: while it is what the last Undo or Redo left, Redo stays valid
    * without comparing content. Without it, Redo validity compares the fingerprint every time.

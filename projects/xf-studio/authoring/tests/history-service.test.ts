@@ -226,3 +226,17 @@ test("the view graph publishes an Undo once its history has settled, so subscrib
   views.redo();
   expect(seen.at(-1)).toEqual({ origin: "history", history: { undo: "Exposure", depth: 1, redoDepth: 0 } });
 });
+
+test("a target that can't move now (a V still being restored) refuses Undo and Redo with its reason, keeps its steps and applies nothing", () => {
+  const history = createHistoryService(), plain = store({ v: 1 });
+  let held: string | undefined;
+  const scope = history.open("character:v", { ...plain.target, unavailable: () => held });
+  scope.checkpoint(["v"], label("Change")); plain.set("v", 2);
+  held = "Restoring changes from your last session…";
+  expect(scope.capability({ kind: "history.undo" })).toEqual({ available: false, code: "not_ready", reason: held });
+  expect(scope.command({ kind: "history.undo" })).toBe(false);
+  expect([plain.values.v, plain.applies(), scope.state().depth]).toEqual([2, 0, 1]);
+  held = undefined;
+  expect(scope.command({ kind: "history.undo" })).toBe(true);
+  expect(plain.values.v).toBe(1);
+});

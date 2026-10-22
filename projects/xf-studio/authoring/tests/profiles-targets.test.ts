@@ -213,14 +213,19 @@ describe("the input layer's resolver", () => {
     expect(nameTargets({ kind: "x" }, undefined, { view: "a" })).toEqual({ kind: "x" });
   });
 
-  test("Ctrl+Z in a 3D view steps the look its scene shows; elsewhere the editing context (none: nothing)", () => {
+  test("Ctrl+Z in a 3D view steps the look its scene shows; in a Character panel its V; elsewhere the editing context (none: nothing)", () => {
     const { targets, history } = resolver();
     expect(targets.undoScope("view--a")).toBe("look:k/l1");
+    // A Character panel's own Undo (the panel's button and keys) steps the V it shows, whatever was edited last.
+    expect(["character--v1", "character--v2", "character--v3"].map(panel => targets.undoScope(panel))).toEqual(["character:c-1", "character:c-2", "character:c-3"]);
+    // A panel pinned to a deleted V has nothing to undo: never another scope.
+    expect(resolver({ world: world({ subject: ref => ref.id !== "c-2" }), revisions: {} }).targets.undoScope("character--v2")).toBeUndefined();
     expect(targets.undoScope("presets--p")).toBeUndefined();
     let value = 0;
     history.open("look:k/l2", { read: () => value, apply: () => true }).checkpoint(["v"], { label: "A", actionKind: "a" });
     value = 1;
     expect([targets.editing(), targets.undoScope("presets--p"), targets.named().scope]).toEqual(["look:k/l2", "look:k/l2", "look:k/l2"]);
+    expect(targets.undoScope("character--v1")).toBe("character:c-1");
   });
 
   test("a capture freezes what its panel resolved until its signal aborts; the owner refuses it once stale, and a released one", () => {

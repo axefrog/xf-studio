@@ -38,6 +38,7 @@ export function characterHistory(home: CharacterHistoryHome): { scope: HistorySc
     const scope = home.service.open(characterScope(home.id), {
       read: key => made.target?.read(key),
       apply: (values, cause: HistoryCause) => made.target ? made.target.apply(values, cause) : false,
+      unavailable: () => made.target?.unavailable?.(),
       settled: () => made.target?.settled?.(),
     }, { limit: CHARACTER_HISTORY_LIMIT });
     binding = Object.assign(made, { scope });

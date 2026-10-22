@@ -138,9 +138,12 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
     variant: "quiet", title: `Show the character creator's default ${word} V (Undo shows your V again)`,
     onClick: () => dispatch({ kind: "character.useDefault", bodyGender }) });
   const useDefault = defaultButton("female", "feminine"), useDefaultMale = defaultButton("male", "masculine");
-  // The panel's one Undo and Redo (UI-81): creator choices and Clothing, in the order they were made.
-  const undo = button({ label: "Undo in the Character panel", icon: "undo", iconOnly: true, small: true, variant: "quiet", onClick: () => dispatch({ kind: "character.undo" }) });
-  const redo = button({ label: "Redo in the Character panel", icon: "redo", iconOnly: true, small: true, variant: "quiet", onClick: () => dispatch({ kind: "character.redo" }) });
+  // The panel's one Undo and Redo (UI-81): its V's history (`character:<id>`, creator choices and Clothing in the order they were made),
+  // stepped by history.undo and history.redo naming it (profiles design §3.7). With no V shown there is nothing to step.
+  const ownScope = () => port.panels.historyScope("character");
+  const step = (kind: "history.undo" | "history.redo") => { const scope = ownScope(); if (scope) dispatch({ kind, scope }); };
+  const undo = button({ label: "Undo in the Character panel", icon: "undo", iconOnly: true, small: true, variant: "quiet", onClick: () => step("history.undo") });
+  const redo = button({ label: "Redo in the Character panel", icon: "redo", iconOnly: true, small: true, variant: "quiet", onClick: () => step("history.redo") });
   // A switch, not a one-way action: the V's own makeup hides and shows again at once, and the panel's Undo steps it back.
   const ownMakeup = new Toggle({ label: "Show my V's own makeup", onChange: shown => dispatch({ kind: "character.setOwnMakeup", shown }),
     help: "Turn it off to see only the makeup you're making on your V. Your V's creator choices don't change, and the panel's Undo turns it back on." });
@@ -244,7 +247,7 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
     const key = event.key.toLowerCase(), mod = event.ctrlKey || event.metaKey;
     if (!mod || event.altKey || (key !== "z" && key !== "y")) return;
     event.preventDefault();
-    dispatch({ kind: key === "y" || event.shiftKey ? "character.redo" : "character.undo" });
+    step(key === "y" || event.shiftKey ? "history.redo" : "history.undo");
   });
 
   // ---- Rows ----
@@ -752,8 +755,9 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       applyCapability(useDefault, port.authoring.capability({ kind: "character.useDefault", bodyGender: "female" }));
       applyCapability(useDefaultMale, port.authoring.capability({ kind: "character.useDefault", bodyGender: "male" }));
       const keys = { undo: shortcutLabel("shell.undo"), redo: shortcutLabel("shell.redo") };
-      applyCapability(undo, port.authoring.capability({ kind: "character.undo" }));
-      applyCapability(redo, port.authoring.capability({ kind: "character.redo" }));
+      const scope = ownScope(), none = { available: false, code: "unavailable", reason: "Your V appears once the 3D view is ready." } as const;
+      applyCapability(undo, scope ? port.authoring.capability({ kind: "history.undo", scope }) : none);
+      applyCapability(redo, scope ? port.authoring.capability({ kind: "history.redo", scope }) : none);
       undo.title = context?.undo ? `Undo: ${context.undo} (${keys.undo} in this panel). Covers creator options and Clothing; the header's Undo covers your makeup.`
         : "No change in this panel to undo.";
       redo.title = context?.redo ? `Redo: ${context.redo} (${keys.redo} in this panel)` : "No undone change in this panel to redo.";

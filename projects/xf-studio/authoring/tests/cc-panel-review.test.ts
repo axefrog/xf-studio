@@ -21,6 +21,7 @@ import { loadMergedCco } from "../src/character/character-resolver";
 import { CREATOR_LIMITS, isCreatorName, isOptionId } from "../src/character/creator-names";
 import { appearance, creator, fixtureSource, switcher } from "./cc-fixtures";
 import { fixtureInstallation } from "./resolver-fixtures";
+import { vHistory } from "./fixtures/character-steps";
 
 const root = mkdtempSync(join(tmpdir(), "xfs-ccpanel-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -385,7 +386,7 @@ describe("CORE-71 and CORE-73: the quick action and gating", () => {
   test("the V's own makeup is a switch: hidden and shown at once in the view, undoable in the panel's Undo, never a creator change", async () => {
     const source = await fixtureSource(true);
     const { port: creatorPort } = await port(source, panel => ({ ...panel, sections: panel.sections.map(section => ({ ...section, makeup: section.id === "Scars" })) }));
-    const context = new CharacterContextActions({ creator: creatorPort, showSave: () => {} });
+    const steps = vHistory(), context = new CharacterContextActions({ creator: creatorPort, showSave: () => {}, history: steps.home });
     // Hiding needs the creator options (they say which rows are makeup); showing never waits.
     expect(context.capability({ kind: "character.setOwnMakeup", shown: false })).toMatchObject({ code: "not_ready" });
     expect(context.capability({ kind: "character.setOwnMakeup", shown: true })).toMatchObject({ available: false, code: "invalid_value" });
@@ -405,12 +406,12 @@ describe("CORE-71 and CORE-73: the quick action and gating", () => {
     // A real switch: shown again directly, and the panel's one Undo steps back through it in order with the creator choices.
     context.dispatch({ kind: "character.setOwnMakeup", shown: true });
     expect(context.hiddenOptions()).toEqual([]);
-    context.dispatch({ kind: "character.undo" });
+    steps.undo();
     expect(context.snapshot()).toMatchObject({ ownMakeup: false, undo: "Hide my V's own makeup", redo: "Show my V's own makeup" });
-    context.dispatch({ kind: "character.undo" });
+    steps.undo();
     expect(context.snapshot()).toMatchObject({ ownMakeup: true });
     expect(context.request().choices).toEqual([set("scars", "scar_01")]);
-    context.dispatch({ kind: "character.redo" });
+    steps.redo();
     expect(context.snapshot().ownMakeup).toBe(false);
     // Reset all resets creator changes only; the setting stays, and is restored with the workspace.
     context.dispatch({ kind: "character.resetAll" });

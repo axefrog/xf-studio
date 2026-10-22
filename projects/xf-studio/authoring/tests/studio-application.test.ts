@@ -11,6 +11,7 @@ import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-regi
 import { freshWorkspace } from "./fixtures/eye-region";
 
 import { namedCore } from "./fixtures/named-targets";
+import { vHistory } from "./fixtures/character-steps";
 function fixture() {
   const workspace = freshWorkspace();
   const core = namedCore(createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
@@ -70,7 +71,7 @@ test("unavailable 3D device leaves authoring and Undo available with explicit re
 });
 
 test("saved-V eye suggestion updates application state without applying the morph a second time", async () => {
-  const { app } = fixture(), calls: number[] = [];
+  const { app, core } = fixture(), calls: number[] = [];
   const preview = new PreviewActions(freshWorkspace().preview, {
     cameraState: () => ({ position: [0, 0, 1], target: [0, 0, 0], fov: 30 }),
     front: () => false, setFov: () => false, endFovGesture: () => {}, restoreCamera: () => {},
@@ -87,7 +88,7 @@ test("saved-V eye suggestion updates application state without applying the morp
   expect(snapshot.preview?.eyeShape).toBe(9);
   expect(calls).toEqual([]);
   // With the context attached, its actions route to it; its large reads are shared and frozen, its snapshot is a copy.
-  const context = new CharacterContextActions({ showSave: () => {}, creator: {
+  const steps = vHistory("local", core.history), context = new CharacterContextActions({ showSave: () => {}, history: steps.home, creator: {
     panel: async () => ({ phase: "ready", message: "", panel: { schema: "xfs/cc-panel-5", bodyGender: "female", identity: "t", language: null, mods: [], groups: [{ label: "Base game", kind: "game" }], modGroups: [], pools: [], notes: [""],
       options: [{ id: "head/eyes_color", part: "head", name: "eyes_color", label: "Eye Color", type: "appearance", grid: true, count: 2, off: null, defaultChoice: "a",
         mod: -1, link: null, dependsOn: [], coverage: ["rendered", 0], groups: 1, pool: -1 }], sections: [{ id: "Eyes", label: "Eyes", makeup: false, rows: [{ slot: "eyes_color", part: "head", options: [0] }] }],
@@ -101,7 +102,8 @@ test("saved-V eye suggestion updates application state without applying the morp
   expect(app.dispatch({ kind: "character.setOption", part: "head", option: "eyes_color", choice: "b" }).ok).toBe(true);
   expect(app.previewState().character).toMatchObject({ phase: "ready", set: 1, undo: "Change Eye Color" });
   expect(Object.isFrozen(app.characterPanel())).toBe(true);
-  expect(app.dispatch({ kind: "character.undo" }).ok).toBe(true);
+  // The Character panel's Undo is history.undo naming the V's scope (profiles design §3.7).
+  expect(app.dispatch({ kind: "history.undo", scope: steps.scope }).ok).toBe(true);
   expect(app.previewState().character).toMatchObject({ set: 0, redo: "Change Eye Color" });
   context.dispose();
 });

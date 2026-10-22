@@ -396,7 +396,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
       // and lighting history, not the look's.
       if (["lighting", "quality"].some(id => byId.get(id)?.spec.element.contains(document.activeElement))) { rt.dispatch({ kind: shortcut === "redo" ? "view.redo" : "view.undo" }); return; }
       // A focused panel's own history comes first: in the 3D view Ctrl+Z undoes the look it shows, even when a creator choice was changed
-      // last (the V panel steps its own with character.undo). Elsewhere Undo follows the editing context, as the header's and History's do.
+      // last (the Character panel steps its V's history itself). Elsewhere Undo follows the editing context, as the header's and History's do.
       const focusedPanel = [...byId.keys()].find(id => byId.get(id)!.spec.element.contains(document.activeElement));
       const scope = focusedPanel ? port.panels.historyScope(focusedPanel) : undefined;
       rt.dispatch({ kind: shortcut === "redo" ? "history.redo" : "history.undo", ...(scope ? { scope } : {}) });
@@ -814,6 +814,7 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     id, title, group, ...extra, capability: () => port.authoring.requestCapability(value), run: () => void rt.request(value) });
   const always = { capability: () => ({ available: true }) };
   const preview = port.authoring.previewState(), motion = preview.motion, history = port.authoring.history(), character = preview.character;
+  const characterScope = port.panels.historyScope("character");
   const views = port.views.snapshot() ?? { history: { depth: 0, redoDepth: 0 } as { undo?: string; redo?: string; depth: number; redoDepth: number } };
   // Research tools (UI-85) are offered only once the person turns them on.
   const research = (commands: Command[]) => view.research() ? commands : [];
@@ -852,10 +853,11 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     act("character.setOwnMakeup", character?.ownMakeup === false ? "Show my V's own makeup" : "Hide my V's own makeup", "Character",
       { kind: "character.setOwnMakeup", shown: character?.ownMakeup === false }, { icon: "eye", keywords: "makeup off on show hide creator options" }),
     act("character.resetAll", "Reset every creator change", "Character", { kind: "character.resetAll" }, { icon: "reset", keywords: "creator options undo back to my v" }),
-    act("character.undo", character?.undo ? `Undo in the Character panel: ${character.undo}` : "Undo in the Character panel", "Character", { kind: "character.undo" },
-      { icon: "undo", keywords: "character creator clothing undo" }),
-    act("character.redo", character?.redo ? `Redo in the Character panel: ${character.redo}` : "Redo in the Character panel", "Character", { kind: "character.redo" },
-      { icon: "redo", keywords: "character creator clothing redo" }),
+    // The Character panel's Undo and Redo: its V's history, named (profiles design §3.7); offered while the panel shows a V.
+    ...(characterScope ? [act("character.undo", character?.undo ? `Undo in the Character panel: ${character.undo}` : "Undo in the Character panel", "Character",
+      { kind: "history.undo", scope: characterScope }, { icon: "undo", keywords: "character creator clothing undo" }),
+    act("character.redo", character?.redo ? `Redo in the Character panel: ${character.redo}` : "Redo in the Character panel", "Character",
+      { kind: "history.redo", scope: characterScope }, { icon: "redo", keywords: "character creator clothing redo" })] : []),
     ...(character?.clothing?.states ?? []).map(state => act(`character.clothing.${state.value}`, `Clothes in the 3D view: ${state.label}`, "Character",
       { kind: "character.setClothing", state: state.value }, { icon: "body", keywords: "clothing clothes outfit underwear headwear" })),
     act("character.clearPreparedFiles", "Clear prepared game files", "Character", { kind: "character.clearPreparedFiles" }, { icon: "trash", keywords: "cache disk space prepared files" }),

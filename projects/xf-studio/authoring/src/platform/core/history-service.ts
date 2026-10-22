@@ -218,6 +218,8 @@ class Scope implements HistoryScope {
     return action.kind === "history.jumpTo" ? this.jumpTo(action.entryId) : action.kind === "history.undo" ? this.undo() : this.redo();
   }
   capability(action: HistoryMove): Capability {
+    const held = this.target.unavailable?.();
+    if (held) return refusal(held, "not_ready");
     if (this.options.capability) return this.options.capability(action);
     if (action.kind === "history.jumpTo") {
       const plan = this.plan(action.entryId);
@@ -246,6 +248,7 @@ class Scope implements HistoryScope {
   }
 
   private move(plan: HistoryJumpPlan): boolean {
+    if (this.target.unavailable?.()) return false;
     let moved: { parts: Record<string, unknown> } | undefined;
     if (plan.direction === "undo") {
       if (this.stack.depth < plan.count) return false;

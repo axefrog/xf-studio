@@ -10,9 +10,11 @@
  *   the parts every row of the makeup section brings (the host's projection marks the section; `hiddenOptions`), which are already
  *   prepared, so it applies at once and nothing is prepared again. It joins the panel's one Undo, survives a change of V and is stored
  *   with the workspace while hidden. Reset all leaves it alone.
- * - **One Undo for the Character panel** (UI-81): `character.undo` and `character.redo` step back and forward through every change
- *   made in the panel, creator choices and Clothing alike, in the order they were made (`order`); a new change of either kind clears
- *   what could be redone. `character.undoClothing` and `character.redoClothing` still step the Clothing setting's own steps alone.
+ * - **One Undo for the Character panel** (UI-81): the character's history scope (`character:<id>`, character-history.ts) holds every
+ *   change made in the panel, creator choices and Clothing alike, in the order they were made; `history.undo` and `history.redo` naming
+ *   that scope step through it (the panel's Undo and its keys), and a new change of either kind clears what could be redone. While the
+ *   V's last session's changes are still being restored the scope can't move. `character.undoClothing` and `character.redoClothing` still
+ *   step the Clothing setting's own steps alone.
  * - **A new V clears the choices made on the previous one**; `character.keepChanges` puts them back on the new V as one more step
  *   (offered until the next change).
  * - **Gating** (CORE-73): every action that changes choices needs the catalogue of the shown V's body (`not_ready` until then); a V
@@ -144,7 +146,7 @@ export type CharacterDocumentPort = {
 /** Actions that change the V (refused while a change from the last session is still being restored). */
 const CHANGES = new Set<CharacterContextAction["kind"]>(["character.setSource", "character.setOption", "character.setOptions", "character.setOwnMakeup",
   "character.reset", "character.resetAll", "character.useDefault", "character.loadSave", "character.loadPreset", "character.keepChanges",
-  "character.undo", "character.redo", "character.setClothing", "character.setClothingArea"]);
+  "character.setClothing", "character.setClothingArea"]);
 export type ContextOrigin = { readonly kind: "default" } | { readonly kind: "save" } | { readonly kind: "preset"; readonly name: string | null };
 type State = {
   readonly origin: ContextOrigin;
@@ -357,7 +359,8 @@ export class CharacterContextActions {
     this.home = ports.history ?? privateHistory();
     const history = characterHistory(this.home);
     this.scope = history.scope;
-    this.unbind = history.bind({ read: key => this.historyRead(key), apply: values => this.historyApply(values) });
+    this.unbind = history.bind({ read: key => this.historyRead(key), apply: values => this.historyApply(values),
+      unavailable: () => this.ports.document?.restoring?.() ?? undefined });
   }
   /**
    * What one panel instance of this character asks of the catalogue (its open rows, search, choices prepared ahead and previews), made
@@ -867,10 +870,6 @@ export class CharacterContextActions {
         if (action.keep === "both" && !conflict.keepBoth) return refusal("unavailable", "This V can't be copied right now.");
         return action.keep === "mine" || action.keep === "theirs" || action.keep === "both" ? { available: true } : refusal("invalid_value", "Choose which V to keep.");
       }
-      case "character.undo":
-        return this.scope.canUndo() ? { available: true } : refusal("invalid_value", "There is no character change to undo.");
-      case "character.redo":
-        return this.scope.canRedo() ? { available: true } : refusal("invalid_value", "There is no undone character change to redo.");
       case "character.setClothing":
         if (this.clothing.state === action.state) return refusal("invalid_value", `${CLOTHING_STATE_LABELS[action.state]} is already shown.`);
         return this.offeredStates().includes(action.state) ? { available: true }
@@ -1008,9 +1007,9 @@ export class CharacterContextActions {
           .finally(() => { this.publish(); this.refreshPrepared(); });
         break;
       }
-      // The panel's one Undo (UI-81): the newest change, creator choice or Clothing, in the character's history (`character:<id>`).
-      case "character.undo": case "character.undoClothing": this.scope.undo(); break;
-      case "character.redo": case "character.redoClothing": this.scope.redo(); break;
+      // The Clothing setting's own Undo is retired: these step the character's history (`character:<id>`) while a Clothing step is next.
+      case "character.undoClothing": this.scope.undo(); break;
+      case "character.redoClothing": this.scope.redo(); break;
       case "character.setClothing":
         this.clothingStep(`Clothing: ${CLOTHING_STATE_LABELS[action.state]}`, { state: action.state,
           custom: action.state === "custom" ? this.shownAreas() : this.clothing.custom }, action.kind);

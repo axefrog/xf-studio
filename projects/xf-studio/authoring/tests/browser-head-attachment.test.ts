@@ -5,13 +5,15 @@ import type { createSceneHost } from "../src/platform/scene/scene-host";
 import type { createSurfaceEditor } from "../src/legacy/eye-makeup/browser/surface-editor";
 import { freshWorkspace, EYE_REGION } from "./fixtures/eye-region";
 import { CharacterContextActions, initialBodyGender } from "../src/character/character-context-actions";
+import type { CharacterHistoryHome } from "../src/character/character-history";
+import { vHistory } from "./fixtures/character-steps";
 
 /** The creator catalogue host never answers here: a context stays loading. */
 const creator = { panel: () => new Promise<never>(() => {}), page: () => new Promise<never>(() => {}), view: () => new Promise<never>(() => {}),
   preset: () => new Promise<never>(() => {}), wait: async () => {} };
 /** The V a head shows, as its owner hands it over (`stored`: the V's stored form): its body, and its context made on the head's ports. */
-const characterPort = (stored?: unknown): HeadAttachmentPorts["character"] => ({ body: initialBodyGender(stored, undefined), previews: null,
-  context: ports => new CharacterContextActions({ ...ports, creator }, stored ? { stored } : {}), release: context => context.dispose() });
+const characterPort = (stored?: unknown, history?: CharacterHistoryHome): HeadAttachmentPorts["character"] => ({ body: initialBodyGender(stored, undefined), previews: null,
+  context: ports => new CharacterContextActions({ ...ports, creator, ...(history ? { history } : {}) }, stored ? { stored } : {}), release: context => context.dispose() });
 
 // PREV-20: everything wired to a loaded head is released together when a later step fails, so
 // "Try again" starts clean: no doubled theme bindings, service attachments, subscriptions,
@@ -193,7 +195,8 @@ test("every composed layered surface gets its preview connected and presented, t
 test("the head is the shown V's body's core: a masculine V's is prepared first, and a V that changes body loads the head again", async () => {
   const h = harness({});
   const prepared: string[] = [], reloads: unknown[] = [], notices: string[] = [];
-  h.ports.character = characterPort({ origin: "default", bodyGender: "male", choices: [] });
+  const steps = vHistory();
+  h.ports.character = characterPort({ origin: "default", bodyGender: "male", choices: [] }, steps.home);
   Object.assign(h.ports, { prepareCore: async (body: string) => { prepared.push(body); }, reload: () => reloads.push("reload"),
     notice: (text: string) => notices.push(text) });
   const head = await attachBrowserHead(h.ports);
@@ -206,7 +209,7 @@ test("the head is the shown V's body's core: a masculine V's is prepared first, 
   await new Promise(done => setTimeout(done, 5));
   expect(reloads).toEqual(["reload"]);
   // A head released before its reload ran asks nothing.
-  head.characterContext.dispatch({ kind: "character.undo" });
+  steps.undo();
   head.dispose();
   await new Promise(done => setTimeout(done, 5));
   expect(reloads.length).toBe(1);

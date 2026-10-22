@@ -11,6 +11,7 @@ import { foldedKeys, UIPreferenceActions } from "../src/app/ui-preferences";
 import { bindViewState, PreferenceViewState } from "../src/studio-ui/view-state";
 import { fixtureSource } from "./cc-fixtures";
 import { installLightDom, lightDocument, lightEvent, type LightElement, uninstallLightDom } from "./light-dom";
+import { vHistory } from "./fixtures/character-steps";
 
 beforeAll(() => installLightDom());
 afterAll(() => uninstallLightDom());
@@ -52,8 +53,10 @@ async function harness(stored?: unknown, document?: CharacterDocumentPort) {
     preparedFiles: async () => ({ bytes: 3 * 1024 ** 3 / 2 }),
     clearPrepared: async () => ({ freed: 3 * 1024 ** 3 / 2 }),
   };
-  const context = new CharacterContextActions({ creator: port, showSave: () => {}, ...(document ? { document } : {}) });
-  const dispatched: { kind: string }[] = [];
+  // The V's history (`character:v`): the panel's Undo and Redo name it (history.undo and history.redo, profiles design §3.7).
+  const steps = vHistory("v");
+  const context = new CharacterContextActions({ creator: port, showSave: () => {}, history: steps.home, ...(document ? { document } : {}) });
+  const dispatched: { kind: string; scope?: string }[] = [];
   // The workspace's preferences, as a reload would restore them (`stored`), behind the remembered view state.
   const preferences = new UIPreferenceActions(stored);
   bindViewState(new PreferenceViewState(preferences));
@@ -65,10 +68,17 @@ async function harness(stored?: unknown, document?: CharacterDocumentPort) {
         characterSwatches: (option: string) => context.swatches(option),
         characterPrefetch: (option: string, positions: number[], focus?: number | null) => context.prefetch(option, positions, focus ?? null),
         characterStopPrefetch: (option: string) => context.stopPrefetch(option),
-        capability: (action: { kind: string }) => action.kind.startsWith("character.") ? context.capability(action as never) : { available: true } },
+        capability: (action: { kind: string; scope?: string }) => action.kind.startsWith("character.") ? context.capability(action as never)
+          : action.kind === "history.undo" || action.kind === "history.redo" ? steps.capability(action.kind) : { available: true } },
       files: { capability: () => ({ available: true }) },
+      panels: { historyScope: (panel: string) => panel === "character" ? steps.scope : undefined },
     },
-    dispatch: (action: { kind: string }) => { dispatched.push(action); if (action.kind.startsWith("character.")) context.dispatch(action as never); return { ok: true }; },
+    dispatch: (action: { kind: string; scope?: string }) => {
+      dispatched.push(action);
+      if (action.kind.startsWith("character.")) context.dispatch(action as never);
+      else if (action.scope === steps.scope) { if (action.kind === "history.undo") steps.undo(); else if (action.kind === "history.redo") steps.redo(); }
+      return { ok: true };
+    },
     file: async () => {}, changed: () => {},
   };
   const { characterPanel } = await import("../src/studio-ui/panels/character");
@@ -413,10 +423,12 @@ describe("one Undo rule in the Character panel (UI-81)", () => {
     const eyebrows = h.root.querySelectorAll("input").find(input => input.getAttribute("role") === "switch")!;
     const undone = key(eyebrows, {});
     expect(undone.defaultPrevented).toBe(true);
-    expect(h.dispatched.at(-1)).toEqual({ kind: "character.undo" });
+    expect(h.dispatched.at(-1)).toEqual({ kind: "history.undo", scope: "character:v" });
+    expect(h.context.snapshot().set).toBe(0);
     const list = h.root.querySelector(".choice-list")!;
     key(list, { key: "y" });
-    expect(h.dispatched.at(-1)).toEqual({ kind: "character.redo" });
+    expect(h.dispatched.at(-1)).toEqual({ kind: "history.redo", scope: "character:v" });
+    expect(h.context.snapshot().set).toBe(1);
     // The search box keeps its own text Undo.
     const search = h.root.querySelector(".cc-search")!;
     const count = h.dispatched.length;
@@ -425,6 +437,10 @@ describe("one Undo rule in the Character panel (UI-81)", () => {
     // The panel's Undo button names what it covers; Clothing has no Undo of its own.
     const undo = h.root.querySelectorAll("button").find(button => (button.getAttribute("aria-label") ?? "").startsWith("Undo in the Character panel"))!;
     expect(undo.title).toContain("Covers creator options and Clothing");
+    h.paint();
+    expect(undo.disabled).toBe(false);
+    undo.click();
+    expect(h.dispatched.at(-1)).toEqual({ kind: "history.undo", scope: "character:v" });
     expect(h.root.querySelectorAll("button").some(button => button.getAttribute("aria-label") === "Undo clothing change")).toBe(false);
   });
 });

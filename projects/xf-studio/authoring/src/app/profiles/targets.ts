@@ -10,6 +10,7 @@ import type { SubjectRef } from "../../platform/api/subjects";
 import { CHARACTER_KIND } from "../../platform/api/characters";
 import type { FocusService } from "../../platform/core/focus";
 import { lookScope } from "../../platform/core/history-service";
+import { characterScope } from "../../character/character-history";
 import type { LookRef } from "../../library/collection-documents";
 import { nameTargets, type NamedTargets } from "../action-targets";
 import type { ActionDescriptor } from "../../platform/api/actions";
@@ -75,12 +76,18 @@ export class TargetResolver {
   /** The editing context Undo acts on now (§3.7): the newest that can act, if any. */
   editing(): string | undefined { return this.deps.acting(this.deps.focus.recent()); }
   /**
-   * The history scope Ctrl+Z acts on with focus in `instance`: a 3D view's is the look its scene shows (decided, §3.7); any other panel's
-   * is the editing context.
+   * The history scope Ctrl+Z acts on with focus in `instance`: a 3D view's is the look its scene shows (decided, §3.7); a V's panel's (the
+   * Character panel) is that V's (`character:<id>`), and none while it shows no V; any other panel's is the editing context.
    */
   undoScope(instance?: string): string | undefined {
     const panel = instance === undefined ? undefined : this.deps.session.panel(instance);
-    if (panel?.type === "view") { const resolved = this.resolve(instance); if (resolved.state === "resolved" && resolved.target.look) return lookScope(resolved.target.look); }
+    if (!panel) return this.editing();
+    const subjects = this.deps.context(panel.type).kind === "subject";
+    if (panel.type === "view" || subjects) {
+      const resolved = this.resolve(instance), target = resolved.state === "resolved" ? resolved.target : {};
+      if (subjects) return target.subject?.kind === CHARACTER_KIND ? characterScope(target.subject.id) : undefined;
+      if (target.look) return lookScope(target.look);
+    }
     return this.editing();
   }
   /** What a resolution names, by target field (`bindings.ts` `Target` to the actions' fields), with the editing context as `scope`. */
