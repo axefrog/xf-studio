@@ -178,3 +178,44 @@ export const PIN_PRECEDENCE: Record<PinReason, number> = {
 
 /** A constraint at or above this precedence, when rejected, makes the status `contradiction` (spec 5.2). */
 export const CONTRADICTION_PRECEDENCE = 600;
+
+// ---- queries (spec 8.1) ----
+
+export interface Query {
+  find: KindId;
+  scope: QueryScope;
+  at: GameTime;
+  must: Predicate[];
+  prefer?: Array<{ p: Predicate; weight: number }>;
+  limit: number | 'all';
+}
+
+export interface QueryItem {
+  id: Id;
+  score: number;
+}
+
+export type QueryOutcome =
+  | { status: 'ok'; items: QueryItem[] }
+  | { status: 'failed'; reason: string };
+
+// ---- changes (spec 10.5) ----
+
+export type Change =
+  | { c: 'pin'; node: Id; slot: SlotPath; old?: Value | Region; new: Value | Region; reason: string }
+  | { c: 'edge'; edge: Edge; ended: boolean }
+  | {
+      c: 'event'; event: Id; kind: string; place?: Id;
+      participants: Array<{ who: Id; role: string }>; effects: Array<{ on: Id; effect: Effect }>;
+    }
+  | { c: 'minted'; node: Id; kind: KindId }
+  | { c: 'contribution'; contribution: Contribution; ended: boolean }
+  | { c: 'reading'; node: Id; slot: SlotPath; old?: Value; new: Value };
+
+/** A change as queued: stamped with the time it was made, the revision it produced, and the epoch it was made in. */
+export interface PendingChange {
+  change: Change;
+  time: GameTime;
+  revision: number;
+  epoch: Id;
+}

@@ -1,0 +1,442 @@
+// The composed kernel facade (spec 0.1). It owns the revision counter, the epoch, the change queue and
+// the defect log, and exposes the writes. Subsystems take the kernel as a type-only dependency, so
+// there are no runtime import cycles.
+
+import { type Config, makeConfig } from './config.ts';
+import { H, b as hb, f as hf, i as hi, id as hid, isId, memberId, mirroredId, ownedId, rootId, s as hs, val as hval } from './id.ts';
+import { Queries } from './query.ts';
+import { type Registry, coreRegistry } from './registry.ts';
+import { Resolver, type Trace } from './resolve.ts';
+import { Retention } from './retention.ts';
+import type { Schema } from './schema.ts';
+import { Schema as SchemaClass } from './schema.ts';
+import type { SchemaDefs } from './schema-types.ts';
+import { Store } from './store.ts';
+import { Summaries } from './summary.ts';
+import type {
+  Change, Contribution, Edge, Form, GameTime, Id, KindId, Layer, Pin, PinReason, Query, QueryOutcome, Region,
+  ResolveResult, Selector, SlotPath, Value,
+} from './types.ts';
+import { PIN_PRECEDENCE, type PendingChange } from './types.ts';
+import { checkValue, encodeValue, normalizeRegion } from './value.ts';
+import { DefectLog } from './work.ts';
+
+export interface KernelOptions {
+  schema: Schema;
+  worldSeed: Id;
+  now?: GameTime;
+  /** A fresh epoch Id source. The default is a counter, which is deterministic for tests. */
+  epochSource?: () => Id;
+}
+
+export interface PinSpec {
+  node: Id;
+  /** "slot", "slot[i]", "slot#count", and "slot@w<k>" for a simulated temporal slot. */
+  slot: SlotPath;
+  value?: Value;
+  region?: Region;
+  reason: PinReason;
+  valid?: { from?: GameTime; to?: GameTime };
+  at?: GameTime;
+  cause: Id;
+  evidence?: Id;
+  /** Forces the Id (tests use it to order pins; a replay carries the recorded Id). */
+  id?: Id;
+  /** Write without emitting a change. */
+  silent?: boolean;
+}
+
+export interface ContributionSpec {
+  source: { layer: Layer; origin: Id | string };
+  target: Selector;
+  form: Form;
+  mode: 'constrain' | 'weight' | 'replace-prior';
+  strength?: number;
+  valid?: { from?: GameTime; to?: GameTime };
+  id?: Id;
+  silent?: boolean;
+}
+
+export interface EdgeSpec {
+  type: string;
+  from: Id;
+  to: Id;
+  attrs?: Record<string, Value>;
+  data?: Record<string, unknown>;
+  valid?: { from?: GameTime; to?: GameTime };
+  cause: Id;
+  id?: Id;
+  silent?: boolean;
+}
+
+export function splitWindowPath(raw: string): { path: SlotPath; window?: number } {
+  const m = /^(.*)@w(-?\d+)$/.exec(raw);
+  if (!m) return { path: raw };
+  return { path: m[1]!, window: Number(m[2]) };
+}
+
+export class Kernel {
+  readonly schema: Schema;
+  readonly config: Config;
+  readonly registry: Registry;
+  readonly worldSeed: Id;
+  readonly store = new Store();
+  readonly defects = new DefectLog();
+
+  /** The revision counter, incremented by every write (spec 5.5). */
+  revision = 0;
+  /** The engine time: the default `t` of a resolution. */
+  now: GameTime;
+  epoch: Id;
+  /** Semantic changes waiting for relevance dispatch (spec 10.5). */
+  pending: PendingChange[] = [];
+
+  readonly resolver: Resolver;
+  readonly queries: Queries;
+  readonly summaries: Summaries;
+  readonly retention: Retention;
+
+  private epochSource: () => Id;
+  private epochCount = 0;
+
+  constructor(opts: KernelOptions) {
+    this.schema = opts.schema;
+    this.config = opts.schema.config;
+    this.registry = opts.schema.registry;
+    this.worldSeed = opts.worldSeed;
+    this.now = opts.now ?? 0;
+    this.epochSource = opts.epochSource ?? (() => H(hs('epoch'), hid(this.worldSeed), hi(this.epochCount++)));
+    this.epoch = this.epochSource();
+    this.resolver = new Resolver(this);
+    this.queries = new Queries(this);
+    this.summaries = new Summaries(this);
+    this.retention = new Retention(this);
+  }
+
+  /** Load a schema from definitions and make a kernel over it. */
+  static create(opts: { defs: SchemaDefs; worldSeed: Id; registry?: Registry; config?: Partial<Config>; now?: GameTime; validate?: boolean }): Kernel {
+    const registry = opts.registry ?? coreRegistry();
+    const schema = SchemaClass.load(opts.defs, registry, makeConfig(opts.config), opts.validate === false ? { validate: false } : {});
+    const ko: KernelOptions = { schema, worldSeed: opts.worldSeed };
+    if (opts.now !== undefined) ko.now = opts.now;
+    return new Kernel(ko);
+  }
+
+  // ---- revision and changes ----
+
+  bump(): number {
+    return ++this.revision;
+  }
+
+  emit(change: Change): void {
+    this.pending.push({ change, time: this.now, revision: this.revision, epoch: this.epoch });
+  }
+
+  /** A fresh epoch (spec 14.3). */
+  newEpoch(): Id {
+    this.epoch = this.epochSource();
+    return this.epoch;
+  }
+
+  // ---- identity ----
+
+  expandId(idStr: string): Id {
+    if (idStr.startsWith('root:')) return rootId(this.worldSeed, idStr.slice(5));
+    return idStr;
+  }
+
+  /** A root node (spec 1.1): `city`, `director`, `v`. Silent. */
+  root(name: string, kind: KindId): Id {
+    const nid = rootId(this.worldSeed, name);
+    this.store.addHeader({ id: nid, kind, origin: { by: 'root', name } });
+    return nid;
+  }
+
+  /** A node the game owns (spec 1.1). Silent. */
+  mirrored(gameKey: string, kind: KindId): Id {
+    const nid = mirroredId(gameKey);
+    this.store.addHeader({ id: nid, kind, origin: { by: 'mirrored', gameKey } });
+    return nid;
+  }
+
+  /** A minted node: made by an event, a seed, a process or a summary. Emits a `minted` change the first time. */
+  mint(creator: Id, cause: Id, name: string, kind: KindId): Id {
+    const nid = H(hs('mint'), hid(creator), hid(cause), hs(name));
+    if (this.store.addHeader({ id: nid, kind, origin: { by: 'minted', creator, cause, name } })) {
+      this.bump();
+      this.emit({ c: 'minted', node: nid, kind });
+    }
+    return nid;
+  }
+
+  /** Mint without emitting a change (cache population, spec 9.3). Does not bump the revision. */
+  mintSilent(creator: Id, cause: Id, name: string, kind: KindId): Id {
+    const nid = H(hs('mint'), hid(creator), hid(cause), hs(name));
+    this.store.addHeader({ id: nid, kind, origin: { by: 'minted', creator, cause, name } });
+    return nid;
+  }
+
+  /**
+   * The node an address leads to ("name", "traits[2]"): an owned value or a member. Creates the header
+   * lazily and silently (no revision bump, no change). A member of a non-node slot has an Id for
+   * identity only (SPEC-NOTES 9).
+   */
+  address(owner: Id, path: SlotPath): Id {
+    const h = this.store.header(owner);
+    if (!h) throw new Error(`unknown node: ${owner}`);
+    const info = this.schema.slotInfo(h.kind, path);
+    if (!info || info.isCount) throw new Error(`cannot address "${path}" of ${h.kind}`);
+    if (info.index === undefined) {
+      if (!info.isNode) throw new Error(`"${path}" of ${h.kind} holds a value, not a node`);
+      const nid = ownedId(owner, info.def.key);
+      this.store.addHeader({ id: nid, kind: (info.vt as { kind: KindId }).kind, origin: { by: 'value', owner, slot: info.def.key } });
+      return nid;
+    }
+    const nid = memberId(owner, info.def.key, info.index);
+    if (info.isNode) {
+      this.store.addHeader({
+        id: nid, kind: (info.vt as { kind: KindId }).kind,
+        origin: { by: 'member', owner, slot: info.def.key, index: info.index },
+      });
+    }
+    return nid;
+  }
+
+  // ---- reads ----
+
+  /** Resolve a slot (spec 5). `t` defaults to the engine time. */
+  resolve(node: Id, path: SlotPath, t: GameTime = this.now): ResolveResult {
+    return this.resolver.resolve(node, path, t);
+  }
+
+  /** The value of a slot, or undefined unless it resolved ok or contradicted. */
+  value(node: Id, path: SlotPath, t: GameTime = this.now): Value | undefined {
+    const r = this.resolve(node, path, t);
+    return r.status === 'ok' || r.status === 'contradiction' ? r.value : undefined;
+  }
+
+  trace(node: Id, path: SlotPath, t: GameTime = this.now): Trace {
+    return this.resolver.trace(node, path, t);
+  }
+
+  query(q: Query): QueryOutcome {
+    return this.queries.run(q);
+  }
+
+  // ---- writes: pins ----
+
+  /** Add a pin (spec 6.1). Idempotent for the same Id. Emits a `pin` change unless silent. */
+  pin(spec: PinSpec): Pin {
+    const h = this.store.header(spec.node);
+    if (!h) throw new Error(`pin on an unknown node: ${spec.node}`);
+    const { path, window } = splitWindowPath(spec.slot);
+    const info = this.schema.slotInfo(h.kind, path);
+    if (!info || info.isNode) throw new Error(`cannot pin "${spec.slot}" of ${h.kind}`);
+    const temporal = !info.isCount && info.index === undefined ? info.def.temporal : undefined;
+    if (temporal && window === undefined) throw new Error(`a pin on the simulated temporal slot "${path}" names its window ("${path}@w<k>")`);
+    if (!temporal && window !== undefined) throw new Error(`"${path}" is not a simulated temporal slot`);
+    if ((spec.value === undefined) === (spec.region === undefined)) throw new Error('a pin has exactly one of value and region');
+    if (spec.value !== undefined) {
+      const bad = checkValue(info.vt, spec.value);
+      if (bad) throw new Error(`pin value for "${spec.slot}": ${bad}`);
+    }
+    const at = spec.at ?? this.now;
+    let from = spec.valid?.from ?? at;
+    let to = spec.valid?.to;
+    if (temporal && window !== undefined) {
+      from = spec.valid?.from ?? window * temporal.window;
+      to = spec.valid?.to ?? (window + 1) * temporal.window;
+    }
+    const valid: Pin['valid'] = to === undefined ? { from } : { from, to };
+    const region = spec.region === undefined ? undefined : this.safeNormalize(info.vt, spec.region);
+    const pid = spec.id ?? H(
+      hs('pin'), hid(spec.node), hs(spec.slot), hs(spec.reason), hi(from), hb(to !== undefined), hi(to ?? 0), hi(at), hid(spec.cause),
+      hs(spec.evidence ?? ''),
+      spec.value !== undefined ? hval(encodeValue(info.vt, spec.value)) : hs(JSON.stringify(region)),
+    );
+    const existing = this.store.pin(pid);
+    if (existing) return existing;
+    const pin: Pin = { id: pid, node: spec.node, slot: spec.slot, reason: spec.reason, valid, at, cause: spec.cause };
+    if (spec.value !== undefined) pin.value = spec.value;
+    if (region !== undefined) pin.region = region;
+    if (spec.evidence !== undefined) pin.evidence = spec.evidence;
+    const old = this.strongestPin(spec.node, spec.slot);
+    this.store.addPin(pin);
+    this.bump();
+    if (!spec.silent) {
+      const ch: Change = { c: 'pin', node: spec.node, slot: spec.slot, new: spec.value !== undefined ? spec.value : region!, reason: spec.reason };
+      const was = old ? (old.value !== undefined ? old.value : old.region) : undefined;
+      if (was !== undefined) ch.old = was;
+      this.emit(ch);
+    }
+    return pin;
+  }
+
+  private safeNormalize(vt: Parameters<typeof normalizeRegion>[0], r: Region): Region {
+    if (r.r === 'all' || r.r === 'set') return r;
+    if (vt.t === 'enum' || vt.t === 'enum-by' || vt.t === 'text' || vt.t === 'ref' || vt.t === 'node') return r;
+    return normalizeRegion(vt, r);
+  }
+
+  private strongestPin(node: Id, slot: string): Pin | undefined {
+    const live = this.store.livePinsOn(node, slot);
+    let best: Pin | undefined;
+    for (const p of live) if (!best || PIN_PRECEDENCE[p.reason] > PIN_PRECEDENCE[best.reason]) best = p;
+    return best;
+  }
+
+  /**
+   * Withdraw a pin (spec 6.6). Only authored and committed pins can be withdrawn, and only by the source
+   * that created them (`by` equals the pin's cause). Observations and game readings never are.
+   */
+  withdrawPin(pinId: Id, by: Id, at: GameTime = this.now): boolean {
+    const p = this.store.pin(pinId);
+    if (!p) throw new Error(`unknown pin: ${pinId}`);
+    if (p.reason === 'observed' || p.reason === 'game') throw new Error(`a ${p.reason} pin is never withdrawn`);
+    if (p.cause !== by) throw new Error('a pin is withdrawn only by the source that created it');
+    if (this.store.isWithdrawn(pinId)) return false;
+    this.store.withdrawn.set(pinId, { pin: pinId, by, at });
+    this.bump();
+    this.emit({
+      c: 'pin', node: p.node, slot: p.slot, old: p.value !== undefined ? p.value : p.region!, new: { r: 'all' }, reason: 'withdrawn',
+    });
+    return true;
+  }
+
+  // ---- writes: game readings (spec 6.3) ----
+
+  /** A game reading of a mirrored slot of a mirrored node. Emits a `reading` change when the value changes. */
+  reading(node: Id, slot: SlotPath, value: Value, time: GameTime = this.now): Pin {
+    const h = this.store.header(node);
+    if (!h) throw new Error(`reading of an unknown node: ${node}`);
+    if (h.origin.by !== 'mirrored') throw new Error('only a mirrored node has readings');
+    const info = this.schema.slotInfo(h.kind, slot);
+    if (!info || info.isNode || info.def.mode !== 'mirrored') throw new Error(`"${slot}" is not a mirrored slot`);
+    const bad = checkValue(info.vt, value);
+    if (bad) throw new Error(`reading for "${slot}": ${bad}`);
+    const prev = this.readingAt(node, slot, time);
+    const pid = H(hs('pin'), hid(node), hs(slot), hs('game'), hi(time), hval(encodeValue(info.vt, value)));
+    const existing = this.store.pin(pid);
+    if (existing) return existing;
+    const pin: Pin = { id: pid, node, slot, value, reason: 'game', valid: { from: time }, at: time, cause: node };
+    this.store.addPin(pin);
+    this.store.recomputeTimeline(node, slot);
+    this.bump();
+    const changed = !prev || JSON.stringify(prev.value) !== JSON.stringify(value);
+    if (changed) {
+      const ch: Change = { c: 'reading', node, slot, new: value };
+      if (prev?.value !== undefined) ch.old = prev.value;
+      this.emit(ch);
+    }
+    return pin;
+  }
+
+  /** The reading in effect at a time, or undefined. */
+  readingAt(node: Id, slot: SlotPath, t: GameTime): Pin | undefined {
+    const live = this.store.livePinsOn(node, slot).filter((p) => p.reason === 'game' && p.valid.from <= t && (p.valid.to === undefined || t < p.valid.to));
+    return live.sort((a, b) => (a.id < b.id ? -1 : 1))[live.length - 1];
+  }
+
+  /**
+   * V's observation of a mirrored value: an `observed` pin over the same interval as the reading it
+   * saw (spec 6.3). Returns undefined when there is no reading in effect at `t`.
+   */
+  observeReading(node: Id, slot: SlotPath, t: GameTime, cause: Id, evidence?: Id): Pin | undefined {
+    const r = this.readingAt(node, slot, t);
+    if (!r || r.value === undefined) return undefined;
+    const spec: PinSpec = { node, slot, value: r.value, reason: 'observed', valid: { from: r.valid.from }, at: this.now, cause };
+    if (r.valid.to !== undefined) spec.valid = { from: r.valid.from, to: r.valid.to };
+    if (evidence !== undefined) spec.evidence = evidence;
+    return this.pin(spec);
+  }
+
+  // ---- writes: contributions ----
+
+  contribute(spec: ContributionSpec): Contribution {
+    const strength = spec.strength ?? 1;
+    if (!(strength > 0) || !Number.isFinite(strength)) throw new Error('a contribution strength is positive');
+    const valid = spec.valid ?? {};
+    const cid = spec.id ?? H(
+      hs('contrib'), hs(spec.source.layer), hs(spec.source.origin), hs(JSON.stringify(spec.target)), hs(JSON.stringify(spec.form)),
+      hs(spec.mode), hf(strength), hs(JSON.stringify(valid)),
+    );
+    const existing = this.store.contribution(cid);
+    if (existing) return existing;
+    const c: Contribution = { id: cid, source: spec.source, target: spec.target, form: spec.form, mode: spec.mode, strength, valid };
+    this.store.addContribution(c);
+    this.bump();
+    if (!spec.silent) this.emit({ c: 'contribution', contribution: c, ended: false });
+    return c;
+  }
+
+  endContribution(id: Id, at: GameTime = this.now, silent = false): void {
+    const c = this.store.contribution(id);
+    if (!c) throw new Error(`unknown contribution: ${id}`);
+    if (c.valid.to !== undefined && c.valid.to <= at) return;
+    c.valid = { ...c.valid, to: at };
+    this.bump();
+    if (!silent) this.emit({ c: 'contribution', contribution: c, ended: true });
+  }
+
+  // ---- writes: edges ----
+
+  addEdge(spec: EdgeSpec): Edge {
+    const def = this.schema.edgeType(spec.type);
+    const fh = this.store.header(spec.from);
+    const th = this.store.header(spec.to);
+    if (!fh || !th) throw new Error('an edge joins two known nodes');
+    if (!def.from.some((k) => this.schema.isKind(fh.kind, k))) throw new Error(`${spec.type} cannot leave a ${fh.kind}`);
+    if (!def.to.some((k) => this.schema.isKind(th.kind, k))) throw new Error(`${spec.type} cannot reach a ${th.kind}`);
+    const attrs = spec.attrs ?? {};
+    for (const [k, v] of Object.entries(attrs)) {
+      const dimId = def.attrs[k];
+      if (!dimId) throw new Error(`${spec.type} has no attribute "${k}"`);
+      const bad = checkValue(this.schema.dim(dimId).value, v);
+      if (bad) throw new Error(`${spec.type} attribute "${k}": ${bad}`);
+    }
+    const from = spec.valid?.from ?? this.now;
+    const valid: Edge['valid'] = spec.valid?.to === undefined ? { from } : { from, to: spec.valid.to };
+    const eid = spec.id ?? H(
+      hs('edge'), hs(spec.type), hid(spec.from), hid(spec.to), hi(from), hid(spec.cause), hs(JSON.stringify(attrs)),
+    );
+    const existing = this.store.edges.get(eid);
+    if (existing) return existing;
+    const e: Edge = { id: eid, type: spec.type, from: spec.from, to: spec.to, attrs, valid, cause: spec.cause };
+    if (spec.data !== undefined) e.data = spec.data;
+    this.store.addEdge(e);
+    this.bump();
+    if (!spec.silent) this.emit({ c: 'edge', edge: e, ended: false });
+    return e;
+  }
+
+  endEdge(id: Id, at: GameTime = this.now): void {
+    const e = this.store.edges.get(id);
+    if (!e) throw new Error(`unknown edge: ${id}`);
+    if (e.valid.to !== undefined && e.valid.to <= at) return;
+    e.valid = { from: e.valid.from, to: at };
+    this.bump();
+    this.emit({ c: 'edge', edge: e, ended: true });
+  }
+
+  /** Change an edge's attributes or data in place (a membership's strength or obligations, spec 10.8). */
+  updateEdge(id: Id, patch: { attrs?: Record<string, Value>; data?: Record<string, unknown> }): Edge {
+    const e = this.store.edges.get(id);
+    if (!e) throw new Error(`unknown edge: ${id}`);
+    const def = this.schema.edgeType(e.type);
+    for (const [k, v] of Object.entries(patch.attrs ?? {})) {
+      const dimId = def.attrs[k];
+      if (!dimId) throw new Error(`${e.type} has no attribute "${k}"`);
+      const bad = checkValue(this.schema.dim(dimId).value, v);
+      if (bad) throw new Error(`${e.type} attribute "${k}": ${bad}`);
+    }
+    if (patch.attrs) e.attrs = { ...e.attrs, ...patch.attrs };
+    if (patch.data) e.data = { ...(e.data ?? {}), ...patch.data };
+    this.bump();
+    this.emit({ c: 'edge', edge: e, ended: false });
+    return e;
+  }
+
+  isId(x: unknown): x is Id {
+    return isId(x);
+  }
+}
