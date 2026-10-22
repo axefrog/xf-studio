@@ -180,6 +180,7 @@ export const REFUSALS: Readonly<Record<string, readonly string[]>> = {
   "cc.confirm": ["creator_leave_disabled", "not_in_character_menu", "busy"],
   "inventory.equip": [...INVENTORY, "timeout"],
   "inventory.list": ["unavailable", "game_not_ready"],
+  "test.save.delay": ["test_hooks_off"],
   "wardrobe.state": ["not_in_gameplay", "unavailable"],
   "wardrobe.equip": [...INVENTORY, "no_active_outfit", "outfit_managed_elsewhere", "script_outfit_api_changed", "timeout"],
   "inventory.unequip": [...INVENTORY, "not_added_by_bridge", "timeout"],

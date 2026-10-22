@@ -208,6 +208,15 @@ export const MAPPING: readonly { name: string; token: string; alpha?: number }[]
   { name: "XfLineStrong", token: "--line-strong" },
 ];
 
+/**
+ * 0.8.4 (the UI review's fix 1: the answer buttons' hover used --accent-edge, the fill's own yellow in dark and near-black
+ * under near-black text in light): colours the Studio sets on a component's rule rather than as a token, read from that
+ * rule's declaration (the same value in both themes unless it is a light-dark()).
+ */
+export const RULE_COLOURS: readonly { name: string; rule: string; property: string }[] = [
+  { name: "XfAccentHover", rule: ".btn.primary:hover", property: "background" },
+];
+
 /** ImGui style metrics from the spacing, size and radius tokens (at the Studio's own 1x; the host scales them). */
 export const METRICS: readonly { name: string; from: string; note: string }[] = [
   { name: "WindowPaddingX", from: "--sp-5", note: "panel padding" },
@@ -255,6 +264,16 @@ export function buildTheme(css: string): Theme {
     return [r, g, b, Math.round(a * alpha * 10000) / 10000];
   };
   const colors = MAPPING.map((m) => ({ name: m.name, token: m.token, dark: colour(m.token, "dark", m.alpha ?? 1), light: colour(m.token, "light", m.alpha ?? 1) }));
+  const rules = cssRules(css);
+  for (const r of RULE_COLOURS) {
+    const rule = rules.find((x) => !x.media && x.selector.split(",").some((part) => part.trim().startsWith(r.rule)));
+    const m = rule && new RegExp(`(?:^|;)\\s*${r.property}\\s*:\\s*([^;]+)`).exec(rule.body);
+    if (!m) throw new Error(`studio.css has no ${r.property} on ${r.rule}`);
+    const value = m[1]!.trim();
+    const ld = /^light-dark\(([\s\S]+)\)$/.exec(value);
+    const parts = ld ? splitTop(ld[1]!, ",") : [value, value];
+    colors.push({ name: r.name, token: `${r.rule} ${r.property}`, light: oklchToSrgb(parts[0]!.trim()), dark: oklchToSrgb(parts[1]!.trim()) });
+  }
   const metrics = METRICS.map((m) => {
     const t = tokens.get(m.from);
     if (!t) throw new Error(`studio.css has no token ${m.from}`);

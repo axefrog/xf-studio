@@ -638,7 +638,9 @@ export const SAVE_DETAILS_WAIT_MS = 3000; // writes::kSaveDetailsWaitMs (0.8: a 
 /** The pipe's round trip and the bridge thread's own work, on top of the server's worst case. */
 export const CLIENT_SLACK_MS = 2000;
 /** game.save: timeout_ms + the unlock wait + 5 steps (prepare, a status overshoot twice, save, relock). */
-export const saveClientTimeoutMs = (timeoutMs = 20000) => timeoutMs + SAVE_UNLOCK_WAIT_MS + 5 * SERVER_STEP_MS + CLIENT_SLACK_MS;
+/** 0.8.4: test.save.delay's longest hold (core/Writes.hpp kMaxSaveDelayMs); a save may carry one. */
+export const MAX_SAVE_DELAY_MS = 10000;
+export const saveClientTimeoutMs = (timeoutMs = 20000) => timeoutMs + SAVE_UNLOCK_WAIT_MS + MAX_SAVE_DELAY_MS + 5 * SERVER_STEP_MS + CLIENT_SLACK_MS;
 /** game.load: the list wait + the details wait + 4 steps (list, a status overshoot, the last details try, load). */
 export const loadClientTimeoutMs = () => SAVE_LIST_WAIT_MS + SAVE_DETAILS_WAIT_MS + 4 * SERVER_STEP_MS + CLIENT_SLACK_MS;
 
@@ -885,6 +887,10 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
           throw planError("wait_timeout", `The game didn't reach ${wanted.join(" or ")} within ${Math.round(timeout / 1000)} s; it is in ${last}.`);
         }
         if (signal?.aborted) throw planError("interrupted", "Stopped before the game reached the phase.");
+        // 0.8.4 (session 11's E finding: another process's game_status was refused bridge_busy for 8 s while this waited): the
+        // main pipe takes one client at a time, so the connection is let go between polls, as session_wait does, and the next
+        // poll opens it again.
+        api.release();
         // The pause ends at once when the signal aborts (an emergency control, RB-121; the session runner's Ctrl+C).
         await new Promise<void>((r) => {
           const timer = setTimeout(done, 500);
@@ -1468,6 +1474,17 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
     bridge: { method: "game.save", timeoutMs: (input) => saveClientTimeoutMs((input.timeout_ms as number | undefined) ?? 20000) },
   },
   {
+    // 0.8.4 (session 11's L1: a forced save took 0.33 s, too quick for the kill switch to land inside it).
+    name: "test.save.delay",
+    title: "Hold the next save (test hook)",
+    description:
+      "Test hook for the session checks, only in the -writes package for the dedicated test profile (config.ini's [bridge] allow_test_hooks; elsewhere refused test_hooks_off): the next game_save, once, waits ms milliseconds right after its prepare step (where it has checked the moment and, with override_lock, released the bridge's save lock), checking the kill switch every 50 ms, so a bridge_kill sent meanwhile lands inside the save and nothing is saved. ms 0 disarms. Changes nothing in the game. Needs the save permission.",
+    permission: "write-save",
+    input: obj({ ms: int("How long to hold the next save, in milliseconds (0 to 10000; 0 disarms).", 0, 10000) }, ["ms"]),
+    undo: "test.save.delay with the previous ms (the result's undo); the hold is used up by the next save anyway.",
+    bridge: { method: "test.save.delay" },
+  },
+  {
     name: "game.load",
     title: "Load a save",
     description:
@@ -1567,7 +1584,7 @@ export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
     name: "world.pin",
     title: "Place an XF map pin",
     description:
-      "Temporary test feature (bridge 0.5.3). Places a map pin with an XF badge and a label, shown on the world map (with the label in its tooltip), on the minimap and in the world through walls, the way the game shows its own markers: the game's own pin icon, with the XF badge above it and the label on the pin's name line. Give exactly one of position [x, y, z] (a world point in metres, as game_status and showroom_state report them), piece (a showroom head's index: the pin stands just above its eyes, 0.25 m by default; placed there, so turning the head leaves it and clearing the heads removes it) or at: \"v\" (above where V stands now). label names it (1-48 characters). variant picks the game's pin type whose map filter and icon it uses: custom (default; the one the minimap draws for any placed pin), interaction (in the world only), apartment, clothes or default. lift_m raises it (metres; default 0 at a position, 0.25 above a head's eyes, 0.45 above V). The answer's pins list which views have drawn each pin so far (drawn_by: world, minimap, world_map), and the plugin log names each one the first time. At most 8 pins. world.pin.clear, the kill switch and loading a save remove them.",
+      "Temporary test feature (bridge 0.5.3). Places a map pin with an XF badge and a label, shown on the world map (with the label in its tooltip), on the minimap and in the world through walls, the way the game shows its own markers: the game's own pin icon, with the XF badge above it and the label on the pin's name line. Give exactly one of position [x, y, z] (a world point in metres, as game_status and showroom_state report them), piece (a showroom head's index: the pin's point is at its crown, 0.12 m above its eyes by default, and the game draws its marker just above that point; placed there, so turning the head leaves it and clearing the heads removes it) or at: \"v\" (above where V stands now). label names it (1-48 characters). variant picks the game's pin type whose map filter and icon it uses: custom (default; the one the minimap draws for any placed pin), interaction (in the world only), apartment, clothes or default. lift_m raises it (metres; default 0 at a position, 0.12 above a head's eyes, 0.45 above V). ui_state's pins[].xf_mark gives where the XF mark is (px, its top-left corner in window pixels) and where the pin's own point is (point_px). The answer's pins list which views have drawn each pin so far (drawn_by: world, minimap, world_map), and the plugin log names each one the first time. At most 8 pins. world.pin.clear, the kill switch and loading a save remove them.",
     permission: "write-world",
     input: obj(
       {

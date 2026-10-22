@@ -57,7 +57,7 @@ describe("0.8 offline", () => {
   test("the MCP server says the tools' own version (package.json), not 0.3.0", () => {
     const pkg = JSON.parse(readFileSync(join(projectDir, "package.json"), "utf8"));
     expect(SERVER_VERSION).toBe(pkg.version);
-    expect(pkg.version).toBe("0.8.3");
+    expect(pkg.version).toBe("0.8.4");
   });
 
   test("every command lists its own refusal codes, and every listed code has plain words or is a tools code", () => {

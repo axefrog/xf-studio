@@ -105,6 +105,7 @@ export function variantConfig(base: string, variant: Variant, options: { allowIn
   if (/^allow_writes = true$/m.test(config)) throw new Error("native/config/config.ini must keep allow_writes = false");
   if (/^allow_creator_leave = true$/m.test(config)) throw new Error("native/config/config.ini must keep allow_creator_leave = false");
   if (!/^allow_live_pose = false$/m.test(config)) throw new Error("native/config/config.ini must keep allow_live_pose = false");
+  if (!/^allow_test_hooks = false$/m.test(config)) throw new Error("native/config/config.ini must keep allow_test_hooks = false");
   // 0.7: two sections now have an "enabled" key, so both checks name their section.
   if (!BRIDGE_ENABLED(false).test(config)) throw new Error("native/config/config.ini must keep enabled = false");
   if (!/^\[overlay\]\n(?:;.*\n)*enabled = false$/m.test(config)) throw new Error("native/config/config.ini must keep [overlay] enabled = false");
@@ -137,6 +138,9 @@ export function variantConfig(base: string, variant: Variant, options: { allowIn
     // writing the XF carrier clip's keys, in the test profile only, with the separate carrier test package.
     config = config.replace(/^allow_live_pose = false$/m, "allow_live_pose = true");
     if (!/^allow_live_pose = true$/m.test(config)) throw new Error("writes config did not allow the live-pose carrier");
+    // 0.8.4: the session checks' test hooks (test.save.delay, card row L1), in the test profile's package only.
+    config = config.replace(/^allow_test_hooks = false$/m, "allow_test_hooks = true");
+    if (!/^allow_test_hooks = true$/m.test(config)) throw new Error("writes config did not allow the test hooks");
     const warning = "; THIS COPY ALLOWS WRITES: stage it only in the dedicated XF test MO2 profile, never an everyday one.";
     config = config.replace(/^(\[bridge\])$/m, `${warning}\n$1`);
     if (!config.includes(warning)) throw new Error("writes config lost its warning");
@@ -169,6 +173,7 @@ export type Manifest = {
   inventory_writes: boolean;
   allow_creator_leave: boolean;
   allow_live_pose: boolean;
+  allow_test_hooks: boolean;
   photo_mode_presets: string | null;
   /** Steps and consequences for staging by hand (RB-65); empty for the default package, which carries no presets. */
   staging_notes: string[];
@@ -228,6 +233,7 @@ export function stageVariant(options: StageOptions): Manifest {
     inventory_writes: variant === "writes" && options.allowInventory === true,
     allow_creator_leave: variant === "writes",
     allow_live_pose: variant === "writes",
+    allow_test_hooks: variant === "writes",
     photo_mode_presets: variant !== "default" ? "photo_mode.std_preset_6..9 (XF full body, face, eyes, head and shoulders)" : null,
     staging_notes: variant !== "default" ? [...STAGING_NOTES] : [],
     cet_panel: variant !== "default",
