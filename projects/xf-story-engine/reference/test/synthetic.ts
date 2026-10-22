@@ -7,6 +7,7 @@ import { hrec } from '../src/canon.ts';
 import { H, f as hf, id as hid, i as hi, rand, s as hs } from '../src/id.ts';
 import type { Kernel } from '../src/kernel.ts';
 import type { ProcessDef } from '../src/evolution.ts';
+import type { ContextFrame } from '../src/frames.ts';
 import type { GamePort } from '../src/persistence.ts';
 import type { Id, Layer, PinReason, Predicate, SlotPath, Value } from '../src/types.ts';
 import { coreKernel, defsOf, dim, kind, slot } from './helpers.ts';
@@ -142,8 +143,9 @@ const hashOf = (x: unknown): string => H(hrec(x));
  * Besides the arbitration, time and relevance operations it saves and loads (replacement loads of older
  * saves make branches, with outstanding process batches, queued operations and a game port in play),
  * sets, observes and tells beliefs with evidence, mints summaries with canon items, and has a group leader
- * decide, order and be rechecked for dilemmas. Each save's whole record, each load's persisted state and
- * every belief, item and dilemma outcome go to the sink, not only resolved values.
+ * decide, order and be rechecked for dilemmas. Each save's whole record, each load's persisted state, every
+ * belief, item and dilemma outcome, the whole frame each group decision left, each order issued, and the
+ * frames and pulls after a crew step go to the sink, not only resolved values.
  */
 export function runScript(w: ScriptWorld, steps: number, rng: Rng, sink: Sink): void {
   const { k } = w;
@@ -411,17 +413,23 @@ export function runScript(w: ScriptWorld, steps: number, rng: Rng, sink: Sink): 
         k.addEdge({ type: 'core:member-of', from: member, to: g, attrs: { role: 'member', strength: (1 + rng.int(8)) / 8 }, valid: { from: k.now, ...until }, cause: causes[2]! });
         const target = rng.pick(pool);
         const which = rng.int(4);
+        // Every decision's resulting frame, and every order issued, is hashed whole (SR2-08): a decision that
+        // leaves no other trace in a record or an emission is still part of the digest.
+        const decided = (what: string, f: ContextFrame): ContextFrame => {
+          sink('decision', what, f.id, hashOf(f));
+          return f;
+        };
         if (which === 0) {
-          const f = k.groups.decide(leader, g, {
+          const f = decided('concern', k.groups.decide(leader, g, {
             op: 'open',
             spec: {
               level: 'concern', origin: H(hs('crew-concern'), hi(step)), payload: { drive: rng.pick(['honour', 'family', 'money']) }, weight: (1 + rng.int(8)) / 8,
               own: { protects: [{ slot: '*', scope: { nodes: [target] } }] },
             },
-          });
+          }));
           crewFrames.push(f.id);
         } else if (which === 1) {
-          const gf = k.groups.decide(leader, g, { op: 'open', spec: { level: 'goal', origin: H(hs('crew-goal'), hi(step)), payload: { goal: { effects: [] } }, weight: 1 } });
+          const gf = decided('goal', k.groups.decide(leader, g, { op: 'open', spec: { level: 'goal', origin: H(hs('crew-goal'), hi(step)), payload: { goal: { effects: [] } }, weight: 1 } }));
           crewFrames.push(gf.id);
           // Most orders land on a member who already protects the target, so the order is a dilemma.
           if (rng.int(3) !== 0) {
@@ -430,9 +438,10 @@ export function runScript(w: ScriptWorld, steps: number, rng: Rng, sink: Sink): 
               own: { protects: [{ slot: '*', scope: { nodes: [target] } }] }, cause: causes[2]!,
             });
           }
-          k.groups.issueOrder({
+          const order = k.groups.issueOrder({
             groupFrame: gf.id, member, goal: { effects: [{ on: target, effect: rng.pick(['kill', 'harm', 'help', 'take'] as const) }] }, pressure: (1 + rng.int(8)) / 8, cause: leader,
           });
+          sink('order', order.id, hashOf(order));
         } else if (which === 2) {
           k.frames.open({
             actor: member, level: 'drive', origin: H(hs('crew-drive'), hi(step)), payload: { drive: rng.pick(['honour', 'family', 'money']) }, weight: (1 + rng.int(8)) / 8, cause: causes[2]!,
@@ -442,14 +451,16 @@ export function runScript(w: ScriptWorld, steps: number, rng: Rng, sink: Sink): 
           if (mine.length > 0) {
             const f = rng.pick(mine);
             const how = rng.int(3);
-            if (how === 0) k.groups.decide(leader, g, { op: 'interests', frame: f, own: { protects: [{ slot: '*', scope: { nodes: [target] } }] } });
-            else if (how === 1) k.groups.decide(leader, g, { op: 'weight', frame: f, weight: (1 + rng.int(8)) / 8 });
-            else k.groups.decide(leader, g, { op: 'status', frame: f, status: rng.pick(['active', 'blocked', 'satisfied'] as const) });
+            if (how === 0) decided('interests', k.groups.decide(leader, g, { op: 'interests', frame: f, own: { protects: [{ slot: '*', scope: { nodes: [target] } }] } }));
+            else if (how === 1) decided('weight', k.groups.decide(leader, g, { op: 'weight', frame: f, weight: (1 + rng.int(8)) / 8 }));
+            else decided('status', k.groups.decide(leader, g, { op: 'status', frame: f, status: rng.pick(['active', 'blocked', 'satisfied'] as const) }));
           }
         }
         k.settle();
         drain();
-        sink('crew', String(k.groups.memberships(member).length), String(k.frames.all().length));
+        // The frames as the decisions and the inheritance left them, and every frame's pull.
+        const all = k.frames.all();
+        sink('crew', String(k.groups.memberships(member).length), String(all.length), hashOf(all), hashOf(all.map((f) => [f.id, k.frames.pull(f.id)])));
       }
     } else if (roll < 110) {
       // A seed (the state of S2) comes and goes; one with an actor makes that actor a demand root.

@@ -9,7 +9,9 @@ written (marked "decided by the coordinator"), and entry 5 was changed (marked "
 coordinator"). Entries 30 to 51 are **new** since those decisions: interpretations the later modules
 needed, each the most faithful reading found. Entries 52 to 57 are **new** since the independent review
 of the reference model (findings SR-01 to SR-14, fixed): readings that the fixes needed. Entries 31, 33,
-37, 39, 42 and 50 were amended by the same review and say so. Entry numbers are stable so messages and
+37, 39, 42 and 50 were amended by the same review and say so. A second review (SR2-01 to SR2-08, fixed)
+found that entries 54 to 57 claimed more than the code guaranteed; entries 33, 53, 54, 55, 56 and 57
+now state exactly what the code does, including what it leaves alone. Entry numbers are stable so messages and
 reviews can point at them; the sections below order them worst first, meaning the entries that change
 observable results come before presentation choices.
 
@@ -164,7 +166,10 @@ observable results come before presentation choices.
     revives them. (`reference/src/persistence.ts`)
 33. **Retention details. (new)** An event's own `core:located-in` edge (cause = the event, not canon) is
     not a root, or no event could ever be forgotten. The Ids named by the ops of an outstanding process
-    batch are roots, so the batch can apply after a load. A root frame's Id fields include every Id its
+    batch are roots, so the batch can apply after a load: every Id among the operation's values, `root:<name>`
+    strings expanded, and the Id keys of the `weights` of a `table` form wherever the form sits (nested in a
+    `rule` too), since a ref-valued slot's table is keyed by the Ids it weighs and those keys are the only
+    place a node may be named. Other record keys are not read. A root frame's Id fields include every Id its
     interests name (`scope.nodes`, `scope.under`, the arguments of `where` predicates and the targets of
     `has-edge` tests, with `root:<name>` expanded) as well as its links, focus and goal targets, so a node
     named only by an interest survives a save and a load. Sweeping drops the in-memory node of every
@@ -183,12 +188,21 @@ observable results come before presentation choices.
     start; ends are only set or shortened, never extended, so a retained pin keeps its recorded end after a
     reload. Reconciling with the game after a load writes its readings silently (they set the baseline);
     only later readings can change anything. (`reference/src/store.ts`, `reference/src/kernel.ts`, `reference/src/persistence.ts`)
-55. **A read-only world does not change. (new)** When a save loads read-only (spec 14.4) every public
-    write is refused with the plain message: pins, withdrawals, contributions, edges and their changes,
-    readings, minting, events and canon, beliefs, frames and decisions, seeds, packs, saves and `tick` (which
-    would apply, refuse and discard the outstanding process batches); `submit` answers "not accepted". Reads,
-    traces and queries keep working. The cursor, the outstanding batches and the queue stay exactly as
-    loaded, and loading another save lifts the restriction. (`Kernel.assertWritable`, `reference/src/kernel.ts`)
+55. **A read-only world does not change. (new)** When a save loads read-only (spec 14.4) the writes that
+    change a recorded fact are refused with the plain message, each before it touches any state:
+    pins and their withdrawal, readings, contributions and their ending, edges, their ending and their
+    update, minting (a node, an event, a summary), event canon and summary item canon, beliefs (set and
+    drop, so observing and telling too), frames (open, status, weight, interests, focus, parents, so group
+    decisions and orders too), seeds and streaming, content packs (empty or not: neither pack map changes),
+    saves and `tick` (which would apply, refuse and discard the outstanding process batches); `submit`
+    answers "not accepted". Reads, traces and queries keep working. The cursor, the outstanding batches and
+    the queue stay exactly as loaded, and loading another save lifts the restriction. **Not guarded**, because
+    they record no fact the save holds: registering a root or mirrored node header (`root`, `mirrored`),
+    cache population (`address`, `mintSilent`, `open`, `close`, and resolution itself), registering a process
+    definition, and direct access to the stores and sets the kernel exposes (`k.store`, `k.frames.demandRoots`).
+    (`Kernel.assertWritable`, which each guarded write calls first, in `reference/src/kernel.ts`,
+    `reference/src/frames.ts`, `reference/src/beliefs.ts`, `reference/src/events.ts`, `reference/src/summary.ts`,
+    `reference/src/retention.ts` and `reference/src/persistence.ts`)
 21. **`knows` and "witnessed", 11.4.** The spec does not say how the kernel knows an observer witnessed a
     subject at `t`. Reading: some event with `time == t` lists the observer in `witnesses` and the
     subject among its participants, effect targets, place, or is the event itself. (decided by the
@@ -246,27 +260,44 @@ observable results come before presentation choices.
     `reference/src/evolution.ts`)
 
 56. **Boundaries are processed one at a time, with their consequences. (new)** Amends 48 and 50. The tick
-    takes boundaries in order, and after each one the frame worklist, relevance dispatch and the belief
-    hooks finish before the next boundary starts (a budget that runs out stops there, and the next tick
-    resumes there), so the sequence of work is the same however ticks fall and what a boundary's
-    crossings change is in place before pull and interests are consumed. (a) *Belief hooks.* Every
-    processed boundary queues `onTick(believer, at)` for every believer, `at` being the boundary's time, in
-    believer Id order; none merges with another. (b) *Validity crossings.* A membership edge whose validity
-    starts or ends in (the last time handled, T] changes which group concerns its member inherits.
-    `Groups.crossTo(T)` runs at every processed boundary and when an advance ends, and queues the member's
-    re-sync and a recheck of its goals in the frame worklist; the sync reads the memberships in force at the
-    engine time when the worklist runs, which is the boundary's time. A load restores the clock to the
-    save's time and re-syncs every actor with a frame or a membership, since an expired membership is not
-    saved. A tick that ends between boundaries observes the crossings up to its end, so identical
-    transient emissions however ticks fall hold for ticks that end on boundaries (the engine's own
-    cadence); the frames after any partition are the same. (`reference/src/kernel.ts`, `reference/src/evolution.ts`,
-    `reference/src/groups.ts`, `reference/src/beliefs.ts`)
+    takes boundaries in order, and the work a boundary leaves runs in three phases, in this order, before
+    the next boundary starts: (1) the frame worklist (inheritance re-syncs, pull, dilemma checks) and
+    relevance dispatch, until both are empty; (2) the belief hooks; (3) the frame worklist and dispatch
+    again, for whatever the hooks wrote. A budget that runs out stops inside a phase and the next tick
+    resumes that phase, so whatever the budget, hooks never start while frame work or dispatch is pending,
+    and once a boundary's hooks have begun they all finish before any frame or dispatch work starts again:
+    what a hook sees, and what a later hook of the same boundary sees of an earlier hook's writes, does not
+    depend on the budget or on where ticks fall. Writes the caller makes between ticks are the caller's own
+    input and take their place in call order (their frame work and dispatch run first, unless hooks are
+    underway, in which case they wait for the hooks). The first boundary of a call is always taken; a budget
+    that runs out stops the advance between boundaries. (a) *Belief hooks.* Every processed boundary queues
+    `onTick(believer, at)` for every believer, `at` being the boundary's time, in believer Id order; none
+    merges with another. (b) *Validity crossings.* A membership edge whose validity starts or ends in (the
+    last time handled, T] changes which group concerns its member inherits. `Groups.crossTo(T)` runs at
+    every processed boundary and when an advance ends, and queues the member's re-sync and a recheck of its
+    goals in the frame worklist; the sync reads the memberships in force at the engine time when the
+    worklist runs, which for a boundary's own work is the boundary's time. (c) *Loading.* A load restores
+    the clock to the save's time and puts the frames back as saved; an expired membership is not saved, so
+    every actor with a frame or a membership re-syncs, and that work is run to its end at once, with the
+    clock at the **saved** time, before the game's time is adopted. The catch-up then crosses each later
+    validity change at its own boundary, as an uninterrupted advance would. A tick that ends between
+    boundaries observes the crossings up to its end, so identical transient emissions however ticks fall
+    hold for ticks that end on boundaries (the engine's own cadence); the frames after any partition are
+    the same. (`reference/src/kernel.ts` `tick`, `reference/src/evolution.ts`, `reference/src/groups.ts`,
+    `reference/src/beliefs.ts`, `reference/src/persistence.ts`)
 57. **Matching reads the change's own value. (new)** Spec 10.5 evaluates `where` predicates "on new values
     (on old values for ended edges and removals)". A `pin` or `reading` change carries the value of the
-    slot it changed, so reading that one slot of the binding's node, from a predicate, gives the change's
-    new value, or its old value for a withdrawn pin, at the change's time; every other slot, and every
-    change without a single value for a slot (a region, a contribution, an event, a minted node), is read
-    from the world at the change's time as before. An ended edge is still counted present. (`reference/src/relevance.ts`,
+    slot it changed, so a predicate's read of that one slot of the changed node gives the change's new
+    value, or its old value for a withdrawn pin, at the change's time; every other slot, and every change
+    without a single value for a slot (a region, a contribution, an event, a minted node), is read from the
+    world at the change's time as before. A pin on window `k` of a simulated temporal slot names its slot
+    `path@w<k>` (entry 34). A selector names the slot by its path, so an interest in `weather` matches a
+    change to `weather@w<k>` (as `'*'` does), and a read of `weather` is the changed slot only when its time
+    falls in window `k`, that is `floor(t / window) = k` for the read's time `t`, which for a queued change
+    is the time it was made; a read that names the window (`weather@w<k>`) is the changed slot by its key.
+    A read of any other window of the slot gets the world's value for that window, so a pin on a later
+    window, made earlier, does not change what the matcher reads now. An ended edge is still counted
+    present. (`reference/src/relevance.ts`, `reference/src/predicate.ts` `selectorMatches`,
     `reference/src/resolve.ts` `makeEnv`)
 
 ## Work, evolution and queries
@@ -282,12 +313,25 @@ observable results come before presentation choices.
     the same revision and `t`. Retention, and through it the structural constraints of 6.5, reads the engine
     time, which moves without a write (a temporal pin lapses, a live edge ends), so the resolver, candidate
     set, item descriptor and retention caches are valid only for the same revision and the same engine
-    time. (`reference/src/resolve.ts`, `reference/src/query.ts`, `reference/src/summary.ts`, `reference/src/retention.ts`)
+    time. The outstanding process batches are retention roots (entry 33), so a change to them changes the
+    revision like a write does: queuing a batch bumps it, once per process run (at boundary 0 the engine time
+    does not move either, so nothing else would invalidate the caches), and applying due batches bumps it once
+    per boundary that applied any. Loading bumps it as before. (`reference/src/resolve.ts`, `reference/src/query.ts`,
+    `reference/src/summary.ts`, `reference/src/retention.ts`, `reference/src/evolution.ts`)
 54. **A nested failure fails the outer operation. (new)** A nested resolution that returns `failed` (a
-    limit, a domain over `N_enum`, a bad weight) and is read by a predicate, a `derive` form, a field base,
-    a count that addresses a member, a summary field or a position scan fails the outer query or
-    resolution, with a defect, instead of reading as a missing value, so no query returns an incomplete
-    answer as complete (spec 8.4, 10.7). `unavailable` stays an ordinary missing value: the predicate does
+    limit, a domain over `N_enum`, a bad weight) fails the outer query or resolution that reads it, with a
+    defect, instead of reading as a missing value (spec 8.4, 10.7). Where the code does this, by throwing
+    `NestedFailure` from `failIfFailed`: the last segment of a predicate path, the `position` read of a region
+    scope or a query's spatial test, the inputs of a `derive` form, the base of a `field` form, the count
+    that a member address needs when a predicate or `child` follows the address, and the summary reads (the
+    descriptor's `from`, `length` and `scope`, an item's `kind`, and the `scope`, `count` and `position`
+    reads of the item scan). Where it propagates the status instead: a derived slot, an `enum-by` slot's
+    `by` and the member count of a resolution that addresses a member take the worse status of what they
+    read, and a `conditioned` prior whose input has no value makes the slot `failed`. The accessors that
+    are outer operations themselves read a failed slot as absent, as `Kernel.value` always has: belief
+    `knows` and `witnessed`, `eventsAtTime`, the field reads of `makeCanon` and `makeItemCanon` (a field that
+    did not resolve is left unpinned), and the background materialisation worklist (a failed count queues no
+    items). `unavailable` stays an ordinary missing value: the predicate does
     not hold. `cycle` keeps its own status and defect. (`reference/src/work.ts` `NestedFailure`,
     `reference/src/predicate.ts`, `reference/src/resolve.ts`, `reference/src/summary.ts`, `reference/src/query.ts`)
 41. **Refused and late operations. (new)** An operation the kernel refuses while applying a process batch
@@ -336,7 +380,9 @@ folds into one BLAKE3 chain:
 
 - every resolved value, trace score, query result, relevance emission and dilemma;
 - every belief outcome (set, observe, tell with its evidence, knows) and every summary item and canon item;
-- every group decision, order and the dilemmas that follow;
+- the whole frame each group decision left (11 decisions in the frozen run: concerns, goals, and changes
+  of interests, weight and status), each order issued (3), the frames and every frame's pull after each
+  crew step, and the dilemmas that follow;
 - the whole of every saved record (ops, snapshot, metadata, parent), the persisted state after every load, the
   outstanding process batches a load brings back, the refusal of an operation queued in an earlier epoch, and
   at the end every record of the chain, so branches count.
@@ -346,19 +392,28 @@ and 17 replacement loads of earlier saves, some with a game port. It also covers
 boundaries, seeds, sweeps and the two process kinds (a tier-0 mood process and a tier-1 maker of events,
 contributions and edges whose batches wait across ticks and loads). The test also checks that the digest
 moves when a save, a load, belief state, summary canon, outstanding batches or dilemma checking changes
-(SR-14), so these cannot drift unnoticed. It freezes primitive vectors for `H`, `toUnit`, `rand` and fdlibm `ln`.
+(SR-14), and when a group decision's weight, status or interests or an order's pressure changes directly
+(SR2-08), so these cannot drift unnoticed. It freezes primitive vectors for `H`, `toUnit`, `rand` and fdlibm `ln`.
 
-The golden digest is `c896b062fda81bacfbb6d84563a2c77d` over 1,053 entries, and the run ends at revision
-1,956 with 135 pins and 51 contributions. It replaces `00796d399c46bee565b64ca1f03323ae` (2,194 entries,
-revision 1,344, 408 pins, 338 contributions) of the first version of the script, whose results changed for
-two reasons: identities are hashed canonically (entry 52; with the old script alone the digest became
-`431d3e8a5309a7df066865689748123c` over the same 2,194 entries), and the script now covers persistence and
-the subsystems above.
+The golden digest is `d534e0dcef3f85d27cefa552217152ec` over 1,067 entries, and the run ends at revision
+2,069 with 135 pins and 51 contributions. It replaces `c896b062fda81bacfbb6d84563a2c77d` (1,053 entries,
+revision 1,956, the same 135 pins and 51 contributions), which hashed a group decision only through the
+emissions and counts that followed it: replacing the weight decision with weight zero left it unchanged
+(SR2-08). The script now hashes each decision's resulting frame and each order whole (14 more entries). The
+revision moved from 1,956 to 2,069 because queuing and applying a process batch now bump it (entry 53); the
+revision is not hashed, and the fixes of SR2-01 to SR2-07 changed no other result the script exercises. That
+digest in turn replaced `00796d399c46bee565b64ca1f03323ae` (2,194 entries, revision 1,344, 408 pins, 338
+contributions) of the first version of the script, whose results changed for two reasons: identities are
+hashed canonically (entry 52; with the old script alone the digest became `431d3e8a5309a7df066865689748123c`
+over the same 2,194 entries), and the script now covers persistence and the subsystems above.
 
 A native core that agrees on the vectors and the digest agrees on the kernel for what the script exercises.
 **Not covered by the digest**, and so to be checked by the fixtures, invariants and unit tests: read-only
 loads and missing functions; missing packs; processes in the fine tiers (3 to 5) and demand-driven running;
 `explain`; `open`, `close` and streaming; region and `roots` scopes in queries and spatial `position` reads;
 contribution ends (`ContributionEnded`) and `updateEdge`; external operations other than readings; the
-belief policy hooks `onSocial` and `aggregate` (the stub policy is in force); and every failure and refusal
-defect.
+belief policy hooks `onSocial` and `aggregate` (the stub policy is in force); ticks resumed under a small
+budget (the script's ticks use the default one); relevance matching of changes to windows of simulated
+temporal slots; a load whose game time is several boundaries ahead of the save; and every failure and
+refusal defect. The unit tests of `test/sr2.test.ts` cover the resumed ticks, the catch-up after a load and the
+temporal matching.

@@ -6,7 +6,8 @@
 // beliefs with telling and evidence, summaries with canon items, a group's decisions and orders, seeds,
 // edges, sweeps, and saves and replacement loads with branches, snapshots, outstanding process batches,
 // a pack and a game port). Every resolved value, trace score, query result, relevance emission, dilemma,
-// belief outcome and summary item, and the whole of every saved record, is folded into one BLAKE3 chain.
+// belief outcome and summary item, the whole frame each group decision left, each order issued, and the
+// whole of every saved record, is folded into one BLAKE3 chain.
 // A second implementation that agrees on the primitive vectors and the final digest agrees on all of it.
 //
 // To regenerate the golden values after an intended change to the kernel's behaviour, print them with
@@ -68,18 +69,18 @@ describe('the determinism digest', () => {
 
   test('1,000 mixed operations hash to the frozen digest', () => {
     const { digest, entries, k } = run();
-    expect(entries).toBe(1053);
+    expect(entries).toBe(1067);
     expect(k.revision).toBe(2069);
     expect(k.store.allPins()).toHaveLength(135);
     expect(k.store.allContributions()).toHaveLength(51);
-    expect(digest).toBe('c896b062fda81bacfbb6d84563a2c77d');
+    expect(digest).toBe('d534e0dcef3f85d27cefa552217152ec');
   });
 
   test('SR-14: the script covers what the digest claims: saves, branches, snapshots, loads with outstanding batches, beliefs, summaries, groups', () => {
     const { labels, maxBatchesAfterLoad, k } = run();
     const atLeast: Array<[string, number]> = [
       ['save', 10], ['load', 10], ['stale', 10], ['submit', 5], ['outstanding', 10], ['belief', 5], ['observe', 3], ['tell', 5], ['knows', 2],
-      ['canon-item', 3], ['item', 20], ['summary-query', 5], ['crew', 5], ['dilemma', 1], ['seed', 2], ['record', 10],
+      ['canon-item', 3], ['item', 20], ['summary-query', 5], ['crew', 5], ['decision', 8], ['order', 2], ['dilemma', 1], ['seed', 2], ['record', 10],
     ];
     for (const [label, n] of atLeast) expect(labels.get(label) ?? 0, label).toBeGreaterThanOrEqual(n);
     expect(maxBatchesAfterLoad).toBeGreaterThan(0);
@@ -106,7 +107,7 @@ describe('the determinism digest', () => {
 
   test('SR-14: the digest moves when a save, a load, the belief, summary or outstanding-batch state, or a group decision changes', () => {
     const base = run().digest;
-    expect(base).toBe('c896b062fda81bacfbb6d84563a2c77d');
+    expect(base).toBe('d534e0dcef3f85d27cefa552217152ec');
     // A save record that differs only in its lineage metadata.
     const save = Persistence.prototype.save;
     expect(digestWith(Persistence.prototype, 'save', function (this: Persistence, key: string) {

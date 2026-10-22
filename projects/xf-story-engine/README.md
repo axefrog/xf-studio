@@ -19,8 +19,8 @@ kernel rules around them can be tested.
 - [`reference/SPEC-NOTES.md`](reference/SPEC-NOTES.md) lists every place the specification left a choice
   open and what the reference model chose, worst first.
 - The tests include the acceptance fixtures F-1 to F-15 and C-a to C-d, the invariants I-1 to I-15,
-  regression tests for the findings of the independent review (`test/sr1.test.ts`, SR-01 to SR-13; the
-  digest test holds SR-14), and a **determinism digest**: a fixed script of 1,000 mixed operations whose
+  regression tests for the findings of the independent reviews (`test/sr1.test.ts`, SR-01 to SR-13, and
+  `test/sr2.test.ts`, SR2-01 to SR2-07; the digest test holds SR-14 and SR2-08), and a **determinism digest**: a fixed script of 1,000 mixed operations whose
   every result, and every saved record, folds into one hash (`test/digest.test.ts`). The script covers
   arbitration, time, queries, relevance and dilemmas, processes, beliefs with telling and evidence,
   summaries with canon items, a group's decisions and orders, and saves and replacement loads with
