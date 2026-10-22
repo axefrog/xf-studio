@@ -247,7 +247,7 @@ The prevention system is a `ScriptableSystem` named `PreventionSystem` (`core/sy
 - **The press-any-key stretch.** Between `OnGameAttached` and `OnPlayerAttach` the game waits on a screen that can last minutes. Do not emit `loaded` at `OnGameAttached`; emit `session.ready` at `OnPlayerAttach` and say so ([runtime access §5](runtime-access.md)).
 - **`OnGameAttached` is also a replacer swap and a new game.** `IsReplacer()` and `Session/Start`'s `IsRestored()` tell them apart. `IsRestored` is a [community] claim and unproven in game.
 - **`game_was_loaded` reads 1 for one second after the attach.** The press-any-key wait outlasts it, so a poll after `OnPlayerAttach` never sees it ([questions](#questions-only-the-game-can-answer), row 3).
-- **Save identity.** `GameSession.lua` finds a save's lineage by writing a "session key" fact before each save and reading it back after a load, and by matching the load menu's metadata ([save files](save-files.md)). That is area G's subject; the hooks above are what it would sit on.
+- **Save identity.** `GameSession.lua` joins a save to its own data file by a "session key" fact, renewed after each save, and by the load menu's metadata timestamp. How a save and its lineage can be identified, and the Story Engine's proposed key, are in [save identity and lineage](save-identity.md); the hooks above are what it sits on.
 - **Calling scripts while a save loads crashed the game** ([game crashes §2.3](game-crashes.md#23-calling-scripts-while-a-save-loads)). Everything above runs on the game's side; do not make the plugin call a script from a save event.
 
 ## 10. Hooks that cost: rates and what to do
