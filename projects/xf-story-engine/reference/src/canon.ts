@@ -115,8 +115,9 @@ export function idsIn(x: unknown, expand?: (s: string) => Id): Id[] {
   const out: Id[] = [];
   const walk = (v: unknown): void => {
     if (typeof v === 'string') {
-      if (isId(v)) out.push(v);
-      else if (expand && v.startsWith('root:')) out.push(expand(v));
+      const s: string = v;
+      if (isId(s)) out.push(s);
+      else if (expand && s.startsWith('root:')) out.push(expand(s));
     } else if (Array.isArray(v)) {
       for (const item of v) walk(item);
     } else if (typeof v === 'object' && v !== null) {
