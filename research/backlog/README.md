@@ -13,16 +13,8 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 - **New requests** go into a lane the day they arrive: bugs and polish on existing features into polish or blockers; new features into *after 1.0*.
 
 ### In flight
-- **Open High findings** (1 once bridge 0.8.3 lands, so feature merges resume): CORE-03. RB-119..121 are fixed in bridge 0.8.3 (`claude/bridge-merge`) and leave the ledger with it. The export and install fixes have landed. The core review follows profiles phase 2. *22 Oct*
-- **Profiles phase 1** (the single primary focus; `claude/profiles-p1`). The design is approved, with the four defaults confirmed. Chunks run one at a time:
-  1. 1a: lease, takeover and fencing (done: harness 34/34, three Sol rounds);
-  2. 1b: profile model and character service (done; its remaining sync races move to the outbox);
-  3. 1c-i: generic outbox, idempotent transactions, characters on the outbox, conflict UI (done: model-based specification test, about 480k random steps; four Sol rounds); 1c-ii: collection and look working copies, snapshots, Save version, tombstones, checkpoint tuning, workspace-aware receipts (done; four Sol rounds, spec test about 485k steps);
-  4. 1d-i: the `profiles-1` migration and its crash harness (done; three Sol rounds); 1d-ii: the running Studio switched onto the new services, with parity gates (done; three Sol rounds, the last Medium fixed after them and checked in phase 1's final review);
-  5. 1e: IDs, focus, history, data contracts, de-singletoning (done; three Sol rounds);
-  6. 1f: gate runs, `character.undo` retired, captures for the UI review (done; two Sol rounds, UI copy review).
-
-  Phase 1 is complete at `244755bb` (full suite 3,474 pass, 0 fail). Bridge 0.8.3 has landed, closing RB-119..121 (open High findings are back to 1), so it can merge. *22 Oct*
+- **Open High findings:** 1, CORE-03; feature merges run. The core review follows profiles phase 2. *22 Oct*
+- **Profiles phase 4a, scene runtimes** (the single primary focus, next): per-scene runtimes, prepared before switching, with progress, residency and leak-free disposal ([design §4.5](../authoring/profiles-views-layouts-design.md#45-scene-runtimes-and-switching-phase-4a)). It fixes the body-switch and first-draw bugs that the view-switch spike found. Phase 1 merged on 22 Oct (`35e3c5b6`): the lease, the outbox, the `profiles-1` migration, explicit targets with captures, the focus service and editing-context history. Each chunk went through Sol reviews; the design review was PASS WITH CONDITIONS, with UI-187..190 in the polish lane. *22 Oct*
 - **Polish batch 1** (`claude/polish-1`): thumbnail drag direction, repeated layer names, collection tie order, the flaky mottle test, Build wording, the masculine-plate warning. *21 Oct*
 
 ### Beta blockers
