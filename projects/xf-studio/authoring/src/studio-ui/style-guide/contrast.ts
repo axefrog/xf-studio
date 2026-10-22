@@ -22,28 +22,37 @@ function srgb([L, C, H]: Oklch) {
     -.0041960863 * l - .7034186147 * m + 1.707614701 * s].map(v => Math.min(1, Math.max(0, v)));
 }
 const luminance = (c: number[]) => .2126 * c[0] + .7152 * c[1] + .0722 * c[2];
-export function ratio(fg: Oklch, bg: Oklch) {
-  const a = luminance(srgb(fg)), b = luminance(srgb(bg));
+export function ratio(fg: Oklch, bg: Oklch, alpha = 1) {
+  const a = luminance(alpha < 1 ? over(fg, bg, alpha) : srgb(fg)), b = luminance(srgb(bg));
   return (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
 }
-export const CONTRAST_PAIRS: [string, string, number, string][] = [
+/** [foreground, background, minimum, use, opacity the foreground is drawn at (1 when left out)]. */
+export const CONTRAST_PAIRS: [string, string, number, string, number?][] = [
   ["--text", "--bg-panel", 4.5, "Body text"], ["--text-muted", "--bg-panel", 4.5, "Secondary text"],
   ["--text-faint", "--bg-panel", 4.5, "Tertiary text on panels"], ["--text-muted", "--bg-app", 4.5, "Secondary text on the app background"],
   ["--line-strong", "--bg-panel", 3, "Control boundaries"], ["--accent-text", "--bg-panel", 4.5, "Accent as text"],
   ["--signal", "--bg-panel", 3, "Selection and drop targets"], ["--danger", "--bg-panel", 4.5, "Errors"],
   ["--warning", "--bg-panel", 4.5, "Warnings, preview study"], ["--success", "--bg-panel", 4.5, "Success, exportable"],
   ["--focus", "--bg-panel", 3, "Focus ring"], ["--accent-ink", "--accent", 4.5, "Text on the primary button"],
+  // A read-only window's unavailable controls (t-read-only-window): faded to .7, so what they show stays readable.
+  ["--text", "--bg-panel", 4.5, "Read-only window's controls (faded to .7)", .7],
 ];
+/** `fg` drawn at `alpha` over `bg`, blended as the browser does (in sRGB), as one colour. */
+function over(fg: Oklch, bg: Oklch, alpha: number): number[] {
+  const encode = (v: number) => v <= .0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - .055, decode = (v: number) => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4;
+  const front = srgb(fg).map(encode), back = srgb(bg).map(encode);
+  return front.map((v, i) => decode(alpha * v + (1 - alpha) * back[i]!));
+}
 export function contrastTable(css: string) {
   const { light, dark } = tokens(css);
-  const cell = (map: Map<string, Oklch>, fg: string, bg: string, min: number) => {
+  const cell = (map: Map<string, Oklch>, fg: string, bg: string, min: number, alpha = 1) => {
     const a = map.get(fg), b = map.get(bg);
     if (!a || !b) return `<td>—</td>`;
-    const value = ratio(a, b);
+    const value = ratio(a, b, alpha);
     return `<td class="${value >= min ? "ok" : "fail"}">${value.toFixed(2)}:1</td>`;
   };
-  const rows = CONTRAST_PAIRS.map(([fg, bg, min, use]) =>
-    `<tr><td>${use}</td><td><code>${fg}</code> on <code>${bg}</code></td><td>${min}:1</td>${cell(light, fg, bg, min)}${cell(dark, fg, bg, min)}</tr>`).join("");
-  const failures = CONTRAST_PAIRS.filter(([fg, bg, min]) => [light, dark].some(map => { const a = map.get(fg), b = map.get(bg); return !a || !b || ratio(a, b) < min; }));
+  const rows = CONTRAST_PAIRS.map(([fg, bg, min, use, alpha]) =>
+    `<tr><td>${use}</td><td><code>${fg}</code>${alpha ? ` at ${alpha}` : ""} on <code>${bg}</code></td><td>${min}:1</td>${cell(light, fg, bg, min, alpha)}${cell(dark, fg, bg, min, alpha)}</tr>`).join("");
+  const failures = CONTRAST_PAIRS.filter(([fg, bg, min, , alpha]) => [light, dark].some(map => { const a = map.get(fg), b = map.get(bg); return !a || !b || ratio(a, b, alpha) < min; }));
   return { html: `<table class="ref-table contrast-table"><thead><tr><th>Use</th><th>Pair</th><th>Minimum</th><th>Light</th><th>Dark</th></tr></thead><tbody>${rows}</tbody></table>`, failures };
 }

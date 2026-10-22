@@ -50,3 +50,7 @@ test("the style guide is self-contained", () => {
   // Exactly one closing tag: the inline module's own.
   expect(guide.match(/<\/script/gi)?.length).toBe(1);
 });
+
+test("the guide links back to XF Studio (Help › Interface guide opens it)", () => {
+  expect(has('<a class="guide-back" href="./"')).toBe(true);
+});

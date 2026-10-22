@@ -1,5 +1,5 @@
 /** Live specimens for the style guide's Component library section: each is the production component, wired to sample state. */
-import { badge, blockSection, button, ConflictNotice, setButtonLabel, setButtonVariant, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
+import { badge, blockSection, button, ConflictNotice, WorkspaceNotice, type WorkspaceNoticeAction, setButtonLabel, setButtonVariant, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
   PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, Splitter, stack, TabStrip,
   Toggle, ColorField, applyCapability, openMenu, openValuePopover, openConfirmPopover, TreeView, favouriteToggle, FolderSetting, BipolarSlider, ScrubSlider, ChoiceList, choiceItem, attachSwatchCard, contrastMark, setContrastMark,
   sampleBackground, LightList, DirectionDial, SizeBar, previewTile, previewStage, ScrollMemory, VIEW_KEY, stageTag, RecordList, recordTime, modLine, type LightListItem, type TabItem, type TreeNodeData } from "../components";
@@ -306,22 +306,34 @@ const MOUNTS: Record<string, Mount> = {
   },
   "lib-conflict-notice": () => {
     const preset = new ConflictNotice({ onResolve: () => {} }), collection = new ConflictNotice({ onResolve: () => {} });
-    preset.update({ message: "You changed the preset “Smoky” here too (its makeup). Which version should it keep?", keepBoth: true, subject: "the preset “Smoky”" });
+    preset.update({ message: "You changed the preset “Smoky” here too (its name: “Smoky glow” there, its makeup). Which version should it keep?", keepBoth: true, subject: "the preset “Smoky”" });
     collection.update({ message: "You changed the collection “Night market set” here too (the order of its presets). Which version should it keep?", keepBoth: false,
       subject: "the collection “Night market set”" });
     return stack({ gap: "normal" }, preset.element, collection.element);
+  },
+  "lib-workspace-notice": () => {
+    const make = (message: string, actions: readonly WorkspaceNoticeAction[]) => {
+      const notice = new WorkspaceNotice({ onAction: () => {} });
+      notice.update({ message, actions });
+      return notice.element;
+    };
+    const narrow = h("div", { style: "max-width:380px" },
+      make("Your latest changes couldn't be backed up on this computer. If XF Studio closes before your library has them, they could be lost.", ["exportCollection", "protect"]));
+    return stack({ gap: "normal" },
+      make("Your latest changes couldn't be saved, so this window kept the workspace. Try again, or export your collection to keep them.", ["retryRelease", "exportCollection"]),
+      make("Some restored changes need a game save that's no longer on this computer. Import it again, or discard them.", ["importSave", "discardWaiting"]),
+      make("Taking over from the other window…", []), narrow);
   },
   "lib-record-list": () => {
     const saved = new RecordList({ label: "Saved collections" });
     const at = new Date(2026, 8, 29, 18, 2, 49);
     saved.update([
-      { id: "night", name: "Night market set", meta: ["4 presets", "version 5", recordTime(at)], badge: { text: "Open now", tone: "info" }, current: true,
-        action: Object.assign(button({ label: "Open", small: true, title: "This collection is already open.", onClick: () => {} }), { disabled: true }) },
+      { id: "night", name: "Night market set", meta: ["4 presets", "version 5", recordTime(at)], badge: { text: "Open now", tone: "info" }, current: true },
       { id: "day", name: "Day looks for the badlands convoy", meta: ["2 presets", "version 1", recordTime(at.getTime() - 86_400_000)],
         action: button({ label: "Open", small: true, onClick: () => {} }) }]);
     const drafts = new RecordList({ label: "Recent drafts" });
-    drafts.update([{ id: "d1", name: "Makeup collection", meta: ["Draft", "edited since version 2, not saved", "3 presets"],
-      action: button({ label: "Recover", icon: "undo", small: true, onClick: () => {} }) }]);
+    drafts.update([{ id: "d1", name: "Makeup collection", meta: ["Draft", "changed since version 2", "3 presets"],
+      action: button({ label: "Reopen", icon: "undo", small: true, onClick: () => {} }) }]);
     return stack({ gap: "normal" }, saved.element, drafts.element);
   },
   "lib-folder-setting": () => {

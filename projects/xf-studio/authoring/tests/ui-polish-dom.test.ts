@@ -735,12 +735,111 @@ describe("The workspace notice (style guide t-recovering, t-unprotected): it nev
     expect(root.hidden).toBe(true);
     notice.update(frame(idle, { unprotected: 1 }));
     expect(root.hidden).toBe(false);
-    expect(text(root.querySelector(".workspace-notice-text")!)).toBe("Your latest changes aren't protected on this computer.");
+    // It says what could happen, never "protected" (UI review item 11).
+    expect(text(root.querySelector(".workspace-notice-text")!)).toBe("Your latest changes couldn't be backed up on this computer. If XF Studio closes before your library has them, they could be lost.");
     expect(visible()).toEqual(["Export collection", "Try again"]);
     // Open, it stays through the next gesture (closing it then would move the dock too).
     notice.update(frame(idle, { unprotected: 1, gesture: true }));
     expect(root.hidden).toBe(false);
     notice.update(frame(idle));
     expect(root.hidden).toBe(true);
+  });
+});
+
+describe("Polish batch 2: the profiles phase 1 UI follow-ups", () => {
+  const globals = globalThis as { window?: unknown };
+  const had = globals.window;
+  beforeAll(() => { globals.window = { innerWidth: 1200, innerHeight: 800, addEventListener() {} }; });
+  afterAll(() => { if (had === undefined) delete globals.window; else globals.window = had; });
+  const idle = { shown: false, long: false, safe: false, missing: 0 };
+  const leaseFrame = (lease: Record<string, unknown>) => ({ status: { lease, outbox: { unprotected: 0, pending: 0, conflicts: 0, failing: false, recovering: idle } },
+    preview: { gesture: null, control: null } }) as never;
+
+  test("condition 1: the kept-the-workspace line offers both ways on it names, Try again and Export collection", async () => {
+    const { workspaceNotice, workspaceNoticeState } = await import("../src/studio-ui/app");
+    const sent: string[] = [];
+    const rt = { port: { workspace: { dispatch: async (action: { kind: string }) => { sent.push(action.kind); return { ok: true }; } }, documents: { dispatch: async () => ({ ok: true }) } },
+      file: (action: { kind: string }) => { sent.push(action.kind); }, feedback: { toast() {} } };
+    const kept = leaseFrame({ phase: "release-failed", writable: true, canTakeOver: false, canRetry: true, refusal: "",
+      message: "Your latest changes couldn't be saved, so this window kept the workspace. Try again, or export your collection to keep them." });
+    expect(workspaceNoticeState(kept)?.actions).toEqual(["retryRelease", "exportCollection"]);
+    const notice = workspaceNotice(rt as never);
+    notice.update(kept);
+    const root = notice.element as unknown as LightElement;
+    const shown = buttons(root).filter(button => !button.hidden);
+    expect(shown.map(button => text(button))).toEqual(["Try again", "Export collection"]);
+    for (const button of shown) button.click();
+    await settle();
+    expect(sent).toEqual(["workspace.retryRelease", "collection.export"]);
+    // A read-only window offers Use it here alone; a message alone (taking over) offers nothing and keeps no empty button row.
+    expect(workspaceNoticeState(leaseFrame({ phase: "read-only", writable: false, canTakeOver: true, canRetry: false, refusal: "x", message: "This workspace is open in another window." }))?.actions)
+      .toEqual(["takeOver"]);
+    notice.update(leaseFrame({ phase: "taking-over", writable: false, canTakeOver: false, canRetry: false, refusal: "x", message: "Taking over from the other window…" }));
+    expect(buttons(root).filter(button => !button.hidden)).toEqual([]);
+    expect((root.querySelector(".workspace-notice-actions") as LightElement).hidden).toBe(true);
+  });
+
+  test("condition 5: while the restoring line shows, the status bar's idle \"Ready\" gives way; real activity stays", async () => {
+    const { statusActivity } = await import("../src/studio-ui/app");
+    const frame = (recovering: typeof idle, library: Record<string, unknown> = {}) =>
+      ({ status: { outbox: { unprotected: 0, pending: 1, conflicts: 0, failing: false, recovering } }, library: { busy: false, ...library } }) as never;
+    const restoring = { shown: true, long: false, safe: false, missing: 0 };
+    expect(statusActivity(frame(idle), undefined)).toEqual({ text: "Ready", tone: "info", hidden: false });
+    expect(statusActivity(frame(restoring), undefined)).toMatchObject({ hidden: true });
+    expect(statusActivity(frame(restoring), { message: "Opened “Night market set”.", tone: "success" })).toEqual({ text: "Opened “Night market set”.", tone: "success", hidden: false });
+    expect(statusActivity(frame(restoring, { busy: true, progress: { phase: "working", message: "Saving…" } }), undefined)).toEqual({ text: "Saving…", tone: "progress", hidden: false });
+  });
+
+  test("UI-188: the workspace notice is the library's component: labelled ways out in the owner's order, Discard asks first", async () => {
+    const { WorkspaceNotice, WORKSPACE_NOTICE_ACTIONS } = await import("../src/studio-ui/components");
+    const chosen: string[] = [];
+    const notice = new WorkspaceNotice({ onAction: action => chosen.push(action) });
+    const root = notice.element as unknown as LightElement;
+    expect(root.hidden).toBe(true);
+    notice.update({ message: "Restored", actions: ["exportCollection", "retryRestore"] });
+    const visible = () => buttons(root).filter(button => !button.hidden).map(button => text(button));
+    expect(visible()).toEqual(["Export collection", "Try again"]);
+    notice.update({ message: "Restored", actions: ["retryRestore", "exportCollection"] });
+    expect(visible()).toEqual(["Try again", "Export collection"]);
+    // A gesture in progress: a closed notice waits; an open one changes in place.
+    notice.update(null);
+    notice.update({ message: "Unprotected", actions: ["exportCollection", "protect"] }, { deferOpen: true });
+    expect(root.hidden).toBe(true);
+    notice.update({ message: "Unprotected", actions: ["exportCollection", "protect"] });
+    notice.update({ message: "Missing", actions: ["importSave", "discardWaiting"] }, { deferOpen: true });
+    expect([root.hidden, visible()]).toEqual([false, ["Import save…", "Discard those changes"]]);
+    buttonNamed(root, "Discard those changes")!.click();
+    expect(chosen).toEqual([]);
+    lightDocument.body.querySelector(".confirm-popover")!.dispatchEvent(lightEvent("submit"));
+    expect(chosen).toEqual(["discardWaiting"]);
+    // The three Try agains say what each tries.
+    expect(new Set([WORKSPACE_NOTICE_ACTIONS.retryRelease.title, WORKSPACE_NOTICE_ACTIONS.protect.title, WORKSPACE_NOTICE_ACTIONS.retryRestore.title]).size).toBe(3);
+  });
+
+  test("UI-187: the header gives way in its fixed order until the names have room", async () => {
+    const { HEADER_STAGES, MIN_CHARACTERS, headerStages, nameFits, stagesThatFit } = await import("../src/studio-ui/header-fit");
+    expect(HEADER_STAGES).toEqual(["commands", "layout", "flag", "package", "brand", "save", "collection"]);
+    expect(MIN_CHARACTERS).toBe(12);
+    // The fewest stages that fit; all of them when none does.
+    expect(stagesThatFit(applied => applied >= 3)).toBe(3);
+    expect(stagesThatFit(() => true)).toBe(0);
+    expect(stagesThatFit(() => false)).toBe(HEADER_STAGES.length);
+    // Whole names first, with up to six stages given way (never the collection's name); else readable names, the collection's last to go.
+    expect(headerStages((applied, whole) => whole ? applied >= 5 : applied >= 2)).toBe(5);
+    expect(headerStages((applied, whole) => whole ? false : applied >= 2)).toBe(2);
+    expect(headerStages((applied, whole) => whole ? applied >= 7 : applied >= 7)).toBe(HEADER_STAGES.length);
+    // A name fits whole, or with at least the minimum shown; a short name never needs the minimum.
+    expect([nameFits(40, 40, 96), nameFits(96, 140, 96), nameFits(60, 140, 96), nameFits(50, 60, 96)]).toEqual([true, true, false, false]);
+  });
+
+  test("UI-189 and polish: one name for reopening, no faded Open on the open row, no edge case in the save toast", async () => {
+    const { RecordList } = await import("../src/studio-ui/components");
+    const list = new RecordList({ label: "Saved collections" });
+    list.update([{ id: "a", name: "Night market set", meta: ["4 presets"], badge: { text: "Open now", tone: "info" }, current: true }]);
+    expect((list.element as unknown as LightElement).querySelectorAll("button")).toEqual([]);
+    const { CONTEXT_LABELS } = await import("../src/studio-ui/target-menus");
+    expect(CONTEXT_LABELS["collection.undoOpen"]![0]).toBe("Reopen previous collection");
+    const { reopenPreviousAction } = await import("../src/studio-ui/panels/collection");
+    expect(reopenPreviousAction({ port: { library: { summary: () => ({ draft: { id: "c" } }) } } } as never).label).toBe("Reopen previous");
   });
 });

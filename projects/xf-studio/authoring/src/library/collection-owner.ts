@@ -68,7 +68,7 @@ export type CollectionOwnerDeps = {
 };
 
 const NOT_FLUSHED = "Your latest changes are still on their way to the library. Try Save version again in a moment.";
-const PURGED = "A look your version lists was deleted for good, so your version can't be kept as it is. Use theirs, or keep both.";
+const PURGED = "A look your version lists was deleted for good, so your version can't be kept as it is. Choose Use other window's or Keep both.";
 const CANCELLED = "Cancelled. Your changes are still being saved.";
 export const INCOMPLETE = "This collection lists a look that isn't there any more, so it can't be saved or exported as it is. Open it to see what's missing.";
 /** The most looks a collection is made with in one command (each look is a document; one host transaction writes at most 64). */

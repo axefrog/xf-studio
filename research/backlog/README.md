@@ -52,13 +52,7 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 
 ### Polish lane (before 1.0)
 - **In-game styling spec for the bridge surfaces** (the XF Runtime Bridge window, the XF box and the CET line). A coat of slickness, with CharLi's CET plugin as the reference: dense ImGui theming, type hierarchy through font scale, styled value bars, child panels and subtle pulses. It never comes ahead of function. The UI track writes the spec in the style guide for the in-game theme generator (`projects/xf-runtime-bridge/tools/overlay/theme.ts`), and XF · Runtime bridge builds it. CharLi is credited if we borrow ideas. The XF box's text size stays, since it matches other CET windows. *22 Oct*
-- **Profiles phase 1 UI follow-ups** (from its design review; they don't block the merge):
-  - the workspace notice as a library component;
-  - "Save version" crowding the header crumbs at about 1,100 px;
-  - progress for Taking over, Waiting and Restoring, and a way back from Waiting;
-  - wording leftovers: the "Autosaved draft" chip, the "Draft" glossary entry, and three names for reopening a collection;
-  - "aren't protected" should say its consequence;
-  - save-toast and read-only-fade polish. *22 Oct*
+- **Profiles phase 1 UI follow-ups** (from its design review): progress for Taking over, Waiting and Restoring, and a way back from Waiting (a Cancel that leaves the window read-only). Polish batch 2 (`claude/polish-2`) did the rest: the header keeps the names readable, the workspace notice is a library component, the wording leftovers, "couldn't be backed up", and the save-toast, open-row, "Use other window's", read-only-fade and Interface guide polish; its design review is pending. *22 Oct*
 - **Tests leave temporary folders behind** (`xfs-part-2-library-*`, `xfs-locked-library-*`, `xfs-ui-data-*` and others pile up in the system temp folder). Every test removes what it creates. *22 Oct*
 - **Starter eye-makeup shapes** under the contributed-defaults convention ([small bugs](#small-bugs-and-friction)). *21 Oct*
 - **The rest of [Small bugs and friction](#small-bugs-and-friction):** Build Stop, two windows on one draft, receipt matching. *21 Oct*

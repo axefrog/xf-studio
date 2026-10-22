@@ -40,7 +40,7 @@ export function consequenceOf(subject: ConsequenceSubject, state: State): Conseq
   const done = (value: Omit<Consequence, "confirm">): Consequence => ({ ...value, confirm: value.discards.some(item =>
     item.kind === "removed-preset") });
   const draft = state.draft;
-  // Opening or importing shows another collection; the one shown stays in the library as it is, and Undo open shows it again.
+  // Opening or importing shows another collection; the one shown stays in the library as it is, and Reopen previous shows it again.
   const replaceDraft = () => done({ replaces: "draft", recoverableBy: "collection.undoOpen", discards: [] });
   if ("request" in subject) {
     const request = subject.request;

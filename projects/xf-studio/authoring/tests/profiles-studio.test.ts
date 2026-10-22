@@ -175,6 +175,19 @@ describe("conflicts on presets and collections", () => {
     expect(a.collection.service.capability({ kind: "resolveConflict", conflict: "nope", keep: "mine" })).toMatchObject({ available: false, code: "missing_target" });
   });
 
+  test("a name changed in the other window is said after a colon, never in nested brackets (UI review condition 4)", async () => {
+    const a = await profileStudio({ looks: [{ name: "Smoky", recipe: initialRecipe() }] });
+    await a.collection.initialize(); await a.settle();
+    const ref = a.scene.look()!;
+    const b = await profileStudio({ library: a.library, show: ref });
+    dispatch(a, { kind: "layer.setOpacity", layerId: layerId(a), opacity: 0.23 });
+    dispatch(b, { kind: "preset.edit", command: { kind: "rename", id: ref.look, name: "Smoky glow" } });
+    await b.settle();
+    await a.outbox.check(); await a.outbox.settle();
+    const [conflict] = a.collection.summary().draft!.conflicts;
+    expect(conflict?.message).toBe("You changed the preset “Smoky” here too (its name: “Smoky glow” there, its makeup). Which version should it keep?");
+  });
+
   test("Keep mine writes this window's version; Use theirs shows the other's; Keep both keeps mine as a copy beside theirs", async () => {
     {
       const { a, ref } = await lookConflict();

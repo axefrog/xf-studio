@@ -34,7 +34,7 @@ export type PackageProductSummary = { id: string; isDefault: boolean; modName: s
 export type CollectionAction = { readonly collection: string } & (
   | { kind: "preset.edit"; command: PresetCommand }
   | { kind: "collection.rename"; name: string }
-  /** Show another collection again: `draft` names a recent draft (its collection ID), else the collection shown before (Undo open). */
+  /** Show another collection again: `draft` names a recent draft (its collection ID), else the collection shown before (Reopen previous). */
   | { kind: "collection.undoOpen"; draft?: string }
   | { kind: "collection.importRecipe"; recipe: Recipe; name: string }
   /**
@@ -60,7 +60,7 @@ export type CollectionDraftSummary = {
   presets: { id: string; name: string; revision: number; layers: number; locked?: true }[];
   /** Oldest first; `restore` brings back the last entry. */
   removed: { id: string; name: string; index: number }[];
-  /** The collection shown before an open or an import: Undo open shows it again. */
+  /** The collection shown before an open or an import: Reopen previous shows it again. */
   previous?: { id: string; name: string; revision?: number };
   /**
    * Recent drafts, newest first: the library's other working copies never saved as a version (release-readiness-audit.md item 13), each

@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { bindingReference, KEY_BINDINGS } from "../src/app/input-bindings";
 import { ACTION_DESCRIPTORS, FILE_DESCRIPTORS, PREVIEW_SETUP_DESCRIPTORS } from "../src/app/studio-action-descriptors";
-import { isProjectLink } from "../src/app/project-links";
+import { isProjectLink, LOCAL_PROJECT_PAGES, PROJECT_LINKS } from "../src/app/project-links";
 import { parseUIPreferences, UIPreferenceActions } from "../src/app/ui-preferences";
 import { AnchorRegistry, anchorCatalogue, anchorInfo, CONTROL_ANCHORS, isAnchorId, type AnchorId, type AnchorState } from "../src/studio-ui/guidance/anchors";
 import { keyTokens, parseHelp, plainText } from "../src/studio-ui/guidance/content";
@@ -342,6 +342,10 @@ test("help topics are data: valid key tokens, known tours, searchable; links are
   expect(searchTopics("zzzz nothing")).toEqual([]);
   expect(searchTours("new", TOURS).map(item => item.id)).toContain("whats-new-0.1.0-beta.1");
   for (const item of HELP_LINKS) expect(isProjectLink(item.link)).toBe(true);
+  // Help › More help names the interface guide plainly; localhost opens its own copy, the desktop app the published one (UI review polish).
+  expect(HELP_LINKS.find(item => item.link === "project-style-guide")?.label).toBe("Interface guide");
+  expect(LOCAL_PROJECT_PAGES["project-style-guide"]).toBe("style-guide.html");
+  expect(PROJECT_LINKS["project-style-guide"]).toBe("https://axefrog.github.io/xf-studio/style-guide.html");
   // Markdown-lite: bold, bullets and key tokens become structure, never markup.
   expect(parseHelp("Hi **there** [[key:shell.undo]]\n\n- one\n- two <b>")).toEqual([
     { kind: "p", inlines: [{ kind: "text", text: "Hi " }, { kind: "strong", text: "there" }, { kind: "text", text: " " }, { kind: "key", id: "shell.undo", label: "Ctrl+Z" }] },

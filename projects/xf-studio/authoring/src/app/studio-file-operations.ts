@@ -226,7 +226,7 @@ export class StudioFileOperations {
         case "collection.recover":
           this.sources.recoverCollection(action.draft);
           outcome = { ok: true, code: "recovered", message: action.draft !== undefined
-            ? "That draft is back. The one you had open is first under Recent drafts." : "Previous collection draft restored." }; break;
+            ? "Reopened that draft. The one you had open is first under Recent drafts." : "Reopened the previous collection." }; break;
         default: {
           let request: CollectionRequest;
           if (action.kind === "collection.import") {

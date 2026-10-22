@@ -12,7 +12,7 @@
  * - **Check, Build and export** read a coherent snapshot (the collection and its live looks in one read, once its changes have reached the
  *   library); export saves a version first, as before.
  * - **Opening and importing** never replace anything: opening a saved collection shows its working copy (made from the saved version the
- *   first time), importing makes a new working copy, and each joins the profile. Undo open (and Recover) shows the collection shown before.
+ *   first time), importing makes a new working copy, and each joins the profile. Reopen previous (and Reopen on a recent draft) shows the collection shown before.
  * - **Recent drafts** are the library's other working copies never saved as a version (an earlier draft brought into the library, an
  *   import not saved yet).
  */
@@ -42,7 +42,7 @@ export const EVERY_LOOK_NEWER_MESSAGE = "Every look in this collection was made 
 export const NO_EDITABLE_EYE_MAKEUP_MESSAGE = "The looks with eye makeup here were made with a newer version of XF Studio, so this " +
   "version can't put them in a mod. Update XF Studio to build them, or add eye makeup to another look.";
 const LOADING = "Collection is still loading.";
-/** How many collections Undo open steps back through. */
+/** How many collections Reopen previous steps back through. */
 export const PREVIOUS_LIMIT = 8;
 
 export type CollectionRequest =
@@ -155,7 +155,7 @@ export class CollectionService {
   private listSeq = 0;
   private running?: CollectionActivity;
   private parsed?: Parsed;
-  /** The looks shown before an open or import, newest last (Undo open). */
+  /** The looks shown before an open or import, newest last (Reopen previous). */
   private previous: LookRef[] = [];
   /** The look last shown in each collection, to come back to it. */
   private lastShown = new Map<string, string>();
@@ -383,8 +383,8 @@ export class CollectionService {
     if (request.kind === "resolveConflict") {
       const conflict = this.conflictsOf(collection.id).find(item => item.id === request.conflict);
       if (!conflict) return refusal("missing_target", "That was already resolved.");
-      if (!["mine", "theirs", "both"].includes(request.keep)) return refusal("invalid_value", "Choose Keep mine, Use theirs or Keep both.");
-      return request.keep === "both" && !conflict.keepBoth ? refusal("unavailable", "Only a preset can be kept as a copy; choose Keep mine or Use theirs.") : { available: true };
+      if (!["mine", "theirs", "both"].includes(request.keep)) return refusal("invalid_value", "Choose Keep mine, Use other window's or Keep both.");
+      return request.keep === "both" && !conflict.keepBoth ? refusal("unavailable", "Only a preset can be kept as a copy; choose Keep mine or Use other window's.") : { available: true };
     }
     // A conflict waits on this collection or a preset: the person chooses first (the Presets panel shows how).
     if (["save", "saveCopy", "exportCollection", "exportPlan", "package"].includes(request.kind) && this.conflictEntries(collection.id).length)
@@ -704,7 +704,7 @@ export class CollectionService {
             void this.loadBaseline(this.summaries);
           }
           result = { kind: "opened", collection: stored };
-          message = `Opened “${stored.collection.name}”. Undo open shows the collection you had open.`; break;
+          message = `Opened “${stored.collection.name}”. The collection you had open stays in your library.`; break;
         }
         case "resolveConflict": {
           // What waits in the editor joins this window's version first: Keep mine keeps it, Use theirs lets it go with the rest.
@@ -736,7 +736,7 @@ export class CollectionService {
             stored = await this.saveVersion(id);
           }
           result = { kind: "saved", collection: stored };
-          message = `Saved “${stored.collection.name}” · version ${stored.revision}. Changes made while saving stay in your collection.`; break;
+          message = `Saved “${stored.collection.name}” · version ${stored.revision}.`; break;
         }
         case "exportCollection": case "exportPlan": {
           const view = this.shown()!;
@@ -797,7 +797,7 @@ export class CollectionService {
           }
           if (refs[0]) this.deps.scene.setLook(refs[0]);
           result = { kind: "imported" };
-          message = "Imported the collection as a new collection. Undo import shows the collection you had open."; break;
+          message = "Imported the collection as a new collection. The collection you had open stays in your library."; break;
         }
       }
       this.setProgress({ phase: "success", code: result.kind, message, requestId });
@@ -909,7 +909,7 @@ export function conflictMessage(entry: OutboxEntry): string {
   } else {
     const mine = lookWorkingOf(look?.value), theirs = look ? lookWorkingOf(theirsOf(look)) : null;
     if (mine && theirs) {
-      if (mine.name !== theirs.name) differs.push(`its name (“${theirs.name}” there)`);
+      if (mine.name !== theirs.name) differs.push(`its name: “${theirs.name}” there`);
       if (JSON.stringify(mine.parts) !== JSON.stringify(theirs.parts)) differs.push("its makeup");
       if (mine.state !== theirs.state) differs.push(theirs.state === "removed" ? "the other window removed it" : "the other window restored it");
     } else if (!theirs) differs.push("the other window deleted it");

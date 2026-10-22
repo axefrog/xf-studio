@@ -88,5 +88,7 @@ test("the library chip distinguishes unsaved, saved, newer-elsewhere and busy st
   expect(dirty.detail).toContain("Changed since version 3");
   expect(dirty.detail).toContain("Save version makes version 4.");
   expect(dirty.detail).toContain("the collection's name or order and 2 presets");
-  expect(libraryState(frame({ summaries: [], draft }, { baseline: "unknown", dirtyPresets: [] })).label).toBe("Autosaved draft");
+  // While the last version is read back there is nothing to compare with: the library is at work, in the chip's own words (UI-189).
+  expect(libraryState(frame({ summaries: [], draft }, { baseline: "unknown", dirtyPresets: [] }))).toMatchObject({ label: "Working…", tone: "info",
+    detail: "Comparing your work with version 3 in your library. Your work saves itself as you go." });
 });

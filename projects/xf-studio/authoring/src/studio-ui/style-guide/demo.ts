@@ -9,6 +9,7 @@ import { Feedback } from "../feedback";
 import { icon } from "../icons";
 import { openMenu, openValuePopover } from "../menu";
 import { mountLibrary } from "./library-demo";
+import { HEADER_STAGES, HeaderFit } from "../header-fit";
 
 const root = document.documentElement;
 const live = document.getElementById("guide-live")!;
@@ -34,6 +35,7 @@ document.getElementById("compare-themes")!.addEventListener("change", event => {
     } else if (originals.has(specimen)) { specimen.classList.remove("compare"); specimen.innerHTML = originals.get(specimen)!; }
   }
   bindStaticControls();
+  bindHeaderFit();
   mountLibrary();
   announce(on ? "Specimens show light and dark side by side" : "Specimens follow the guide theme");
 });
@@ -52,7 +54,26 @@ function bindStaticControls() {
   };
 }
 bindStaticControls();
+bindHeaderFit();
 mountLibrary();
+
+/** The application header's specimen (s-header) fits as the Studio's does, at the width its slider sets. */
+function bindHeaderFit() {
+  for (const host of document.querySelectorAll<HTMLElement>("[data-header-fit]")) {
+    const header = host.querySelector<HTMLElement>(".shell-header")!, range = host.querySelector<HTMLInputElement>("input[type=range]")!;
+    const readout = host.querySelector("output")!;
+    const fit = new HeaderFit(header, [header.querySelector<HTMLElement>(".crumb-collection")!, header.querySelector<HTMLElement>(".crumb-preset")!]);
+    const apply = () => {
+      header.style.width = `${range.value}px`;
+      range.style.setProperty("--fill", `${(Number(range.value) - Number(range.min)) / (Number(range.max) - Number(range.min)) * 100}%`);
+      fit.refit();
+      const given = (header.dataset.fit ?? "").split(" ").filter(Boolean);
+      readout.textContent = `${Number(range.value).toLocaleString("en-GB")} px · ${given.length ? `${given.length} of ${HEADER_STAGES.length} given way` : "nothing given way"}`;
+    };
+    range.oninput = apply;
+    requestAnimationFrame(apply);
+  }
+}
 
 // ---- Snapping sandbox: the production resolver, a deliberately large dragged panel ----
 function sandbox() {
@@ -163,7 +184,7 @@ attach("c-toasts", "Show live toasts", () => {
 });
 attach("s-palette", "Open live palette", () => openPalette(() => [
   { id: "save", title: "Save version", group: "Library", icon: "save", shortcut: "Ctrl+S", capability: () => ({ available: true }), run: () => feedback.toast("success", "Library", "Saved (demo).") },
-  { id: "recover", title: "Show the previous collection", group: "Library", icon: "undo", capability: () => ({ available: false, reason: "No collection was open before this one." }), run: () => {} },
+  { id: "recover", title: "Reopen previous collection", group: "Library", icon: "undo", capability: () => ({ available: false, reason: "No collection was open before this one." }), run: () => {} },
   { id: "float", title: "Float Camera & light", group: "Layout", icon: "float", capability: () => ({ available: true }), run: () => {} },
   { id: "theme", title: "Theme: dark", group: "Appearance", icon: "moon", capability: () => ({ available: true }), run: () => setTheme("dark") },
 ]));

@@ -37,6 +37,7 @@ export { attachSwatchCard, ChoiceList, choiceItem, swatchCard, type ChoiceListOp
 export { FolderSetting, type FolderChoice, type FolderOutcome, type FolderSettingOptions, type FolderSettingState } from "./folder-setting";
 export { RecordList, recordTime, type RecordListOptions, type RecordRow } from "./record-list";
 export { ConflictNotice, type ConflictKeep, type ConflictNoticeOptions, type ConflictNoticeState } from "./conflict-notice";
+export { DISCARD_WAITING_CONFIRM, WorkspaceNotice, WORKSPACE_NOTICE_ACTIONS, type WorkspaceNoticeAction, type WorkspaceNoticeOptions, type WorkspaceNoticeState } from "./workspace-notice";
 // Feature-specific: mod packaging (the Mod package and Expression sets panels).
 export { modLine, type ModLineOptions } from "./mod-line";
 export { contrastMark, CONTRAST_WORDS, sampleBackground, setContrastMark, SwatchCard, type SwatchCardOptions, type SwatchSample } from "./swatch-card";

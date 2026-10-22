@@ -235,15 +235,15 @@ flowchart TB
 - **Acknowledgement (A3).** The answer, fresh or from a receipt, removes the entry. Its revisions become the window's baseline, and every `{ after }` successor is rebased onto them, **all in one synchronous outbox write**. The command ID goes into the next command's `forget`.
 - **Stale (A6).** A stale answer makes the entry a `conflict` holding the current revisions, and nothing retries.
   - Single-document successors fold into its "mine"; multi-document successors stay blocked.
-  - **Use theirs** rebases later entries onto the stale base, so they go stale in turn and are never sent over theirs.
-- **Conflict resolution.** The owning panel shows "Changed in another window", with **Keep mine** (an explicit command over the newer revisions), **Use theirs** and, for looks, **Keep both** (mine becomes a fork, "(this window)"; Use theirs on a look keeps mine as a fork too).
+  - **Use other window's** (keep "theirs") rebases later entries onto the stale base, so they go stale in turn and are never sent over theirs.
+- **Conflict resolution.** The owning panel shows "Changed in another window", with **Keep mine** (an explicit command over the newer revisions), **Use other window's** (keep "theirs"; never labelled "Use theirs", which suggests another person) and, for looks, **Keep both** (mine becomes a fork, "(this window)"; Use other window's on a look keeps mine as a fork too).
   - **Each resolution is one outbox write.** S1 caught a two-write Keep both losing "mine" when killed between the writes.
   - **Stored conflicts are shown again after a restart.**
 - **Replay at start** (or after a host restart) resends each queued entry under its own ID. Receipts and the equal-value fallback turn lost acknowledgements into the window's own writes. A real conflict follows A6. Nothing is merged or written silently over another writer.
 - **Storage and budget.**
   - Each document's entries live under their own key, `xfs.outbox.<workspace>.<kind>/<id>`, so a commit rewrites only its own document's entries.
   - The outbox counts against the workspace storage budget (`WORKSPACE_STORAGE_BUDGET`). One look under edit is up to 160K UTF-16 units, at most two entries per document, and two more for every dirty look while the host is unreachable.
-- **The outbox can fail to write** (quota, or a failed host-file write). Then the window shows a persistent warning, "Your latest changes aren't protected on this computer", with **Export collection** and **Retry**. It keeps sending to the library and lists unprotected changes in the close prompt. Edits are never blocked, and nothing claims to be safe that isn't. S1 verified this path.
+- **The outbox can fail to write** (quota, or a failed host-file write). Then the window shows a persistent warning that says what could happen, "Your latest changes couldn't be backed up on this computer. If XF Studio closes before your library has them, they could be lost." (style guide t-unprotected), with **Export collection** and **Try again**. It keeps sending to the library and lists unprotected changes in the close prompt. Edits are never blocked, and nothing claims to be safe that isn't. S1 verified this path.
 - **External changes (A7).**
   - *Detection:* held documents' revisions are checked against the library every 10 s while visible, on window focus and after a host restart, with one `revisions(refs)` read. The read hits SQLite directly, so writes by another host process or a tool are seen.
   - *What counts:* a check **skips every document that has an outbox entry**. For a clean document, only a revision above the baseline A3 set counts as external, so a receipt replay never looks external.
