@@ -65,6 +65,10 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
     - a Try again reason that says "recorded";
     - the Recent drafts help, the draft rows and the glossary's "Draft" disagree.
   - Package's tooltip should name the button once its label is hidden, and the workspace notice's buttons should come in one order in every state.
+  - "Export this window's copy" has a tooltip that says "Save … to a file", which collides with Save version. Use "Write … to a file … Nothing goes to your library."
+  - The style guide's chip reference and specimens should show "Version N".
+  - The desktop save-failure message still points to Export collection, the export that saves first. Point it at "Export this window's copy".
+  - Optional: in verification workspaces, move the verification label so it doesn't float in the chip's gap.
   - The V captures (UI-190) and a read-only capture showing the Character and Settings panels; check the Opacity slider there.
 
   *22 Oct*
