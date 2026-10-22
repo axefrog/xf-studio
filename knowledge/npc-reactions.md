@@ -163,7 +163,7 @@ Both reaction mods reuse only vanilla triggers, so what an NPC actually says is 
 ## 8. Design implications for XF Studio
 
 - **The assessment layer should read what is drawn**, not gameplay slots: wardrobe, hidden slots and EquipmentEx outfits. The Studio's clothing resolver already knows the drawn garments, their visual tags and what they hide ([worn clothing](clothing.md)), which gives coverage ("revealing") from data instead of a curated list.
-- **"Fancy" or "shabby" can come from data the game already has:** item quality and tags, the garment's resolved materials, the vehicle manufacturer and UI data. District wealth can be derived from the crowd itself: the share of `anim_Posh`/`anim_MidCorp`/`anim_Nightlife` against `anim_Lowlife`/`anim_Homeless`/`anim_Junkie` NPCs near V, which follows the game's own population data instead of a hand-written district table [hypothesis: needs a sample in game].
+- **"Fancy" or "shabby" can come from data the game already has:** item quality and tags, the garment's resolved materials, the vehicle manufacturer and UI data. District wealth can be derived from the crowd itself: the share of `anim_Posh`/`anim_MidCorp`/`anim_Nightlife` against `anim_Lowlife`/`anim_Homeless`/`anim_Junkie` NPCs near V, which follows the game's own population data instead of a hand-written district table [hypothesis: needs a sample in game]. The offline tallies are in [population and affiliations §3.5](population-and-affiliations.md#35-crowds-light-crowds-and-the-districts-look).
 - **The observer matters as much as V:** a posh NPC and a lowlife should read the same outfit differently; `anim_*` tags, affiliation and preset type are the inputs [source].
 - **Lines from data too:** an offline pass could tag all 14,003 distinct voiceset lines by what they could plausibly be about (looks, style, staring, weather, …) with evidence, so the in-game mod ships only a table of (voice, trigger, string id), never audio.
 
@@ -182,4 +182,4 @@ Not scheduled; for a later session once a prototype exists: walk into a Japantow
 
 ## Related pages
 
-[NPC direction](npc-direction.md) · [Facial expressions](facial-expressions.md) · [Worn clothing](clothing.md) · [Photo-mode poses](poses.md) · [Runtime access](runtime-access.md) · [World and streaming](world-and-streaming.md) · [Alive ideas](../research/backlog/alive-ideas.md)
+[NPC direction](npc-direction.md) · [Facial expressions](facial-expressions.md) · [Worn clothing](clothing.md) · [Photo-mode poses](poses.md) · [Runtime access](runtime-access.md) · [World and streaming](world-and-streaming.md) · [Alive ideas](../research/backlog/alive-ideas.md) · [Population and affiliations](population-and-affiliations.md)
