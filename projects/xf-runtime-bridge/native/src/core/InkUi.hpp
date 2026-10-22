@@ -218,12 +218,17 @@ inline constexpr size_t kMaxPins = 8;
 inline constexpr size_t kMaxLabelChars = 48;
 inline constexpr double kMaxCoordinate = 20000.0; // metres; Night City fits well inside
 inline constexpr double kMaxLift = 5.0;
-inline constexpr double kPieceLift = 0.25; // 0.8: a head pin's default height above its eyes
+// 0.8.4 (session 11's G4: over a head 2 m away the game's marker sat about a head's height above the crown, the XF mark
+// higher still): a head pin's default height above its eyes is now its crown, 0.12 m up [hypothesis: the anatomical eye-to-
+// vertex height]. 0.25 put the point about 0.13 m above the crown, and the game draws its marker above that point at a size
+// that grows near the camera (WorldMappinUIProfile.Quest and .Default: scaleByDistance true, worldOffset and screenOffset 0
+// [source] TweakDB 2.31), with the XF mark above the marker. Pins at V and at a position are unchanged.
+inline constexpr double kPieceLift = 0.12;
 
 // world.pin: exactly one of position [x, y, z] (a world point), piece (a showroom head's index: the pin stands above its
 // eyes and follows the head) or at "v" (above V); label (1-48 characters after cleaning); variant (the vanilla mappin
 // variant whose map filter and fallback icon it uses: custom, apartment, clothes, default, interaction); lift_m (metres above the point;
-// default 0 for a position, 0.25 above a head's eyes (0.8: kPieceLift, just above its crown) or 0.45 above V's head).
+// default 0 for a position, 0.12 above a head's eyes (0.8.4: kPieceLift, its crown) or 0.45 above V's head).
 struct PinRequest
 {
     enum class Target

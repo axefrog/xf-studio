@@ -2,7 +2,7 @@
 
 # XF Runtime Bridge MCP tool reference
 
-Every tool the XF Runtime Bridge MCP server publishes: 84 tools, 44 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
+Every tool the XF Runtime Bridge MCP server publishes: 85 tools, 45 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
 
 Tool names are the catalogue's command names with dots as underscores (`photo.camera.set` is `photo_camera_set`). Every tool's description, parameters and refusals are written for the person using the AI client as much as for the model. A successful answer is JSON text with the `result`, an `undo` when the tool changed something, and a correlation id (`cid`) that matches the bridge's logs; captures also return a small preview image. A refusal is an error result with a plain sentence, the code in brackets and the correlation id.
 
@@ -21,7 +21,7 @@ Tool names are the catalogue's command names with dots as underscores (`photo.ca
 - [Capture and the agent's view](#capture-and-the-agents-view) (6)
 - [Saves](#saves) (3)
 - [Overlay and in-game UI](#overlay-and-in-game-ui) (3)
-- [Other tools](#other-tools) (1)
+- [Other tools](#other-tools) (2)
 - [Refusal codes](#refusal-codes)
 
 ## Permission classes
@@ -36,7 +36,7 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 | `write-world` | Change the world | 5 | Yes | Changes the in-game time of day or stops time, and places XF map pins (a test feature). Undo by setting it back or removing the pins. | `allow_writes = true` and `world` in `allow_write_classes` (on by default once writes are allowed). |
 | `write-character` | Change V's appearance | 5 | Yes | Opens the appearance screen, changes its options and camera, and confirms or leaves it (opening and leaving only in the XF test profile). | `allow_writes = true` and `character` in `allow_write_classes` (on by default once writes are allowed); opening, confirming and leaving the appearance screen also need `allow_creator_leave = true`. |
 | `write-inventory` | Change V's clothing | 5 | Yes | Equips and unequips V's clothing, and can add a test item to V's inventory (and remove it again). Off in the bridge's settings until the maintainer allows it; undo by equipping the earlier item. | `allow_writes = true` and `inventory` listed by name. Off in every package unless the test build is made with `--allow-inventory`. |
-| `write-save` | Save and load the game | 3 | Yes | Makes a new manual save (never overwrites one) or loads a save, which discards everything since it. Saving is refused while the bridge's own changes are live unless explicitly overridden. | `allow_writes = true` and `save` listed by name (the test profile's build lists it). |
+| `write-save` | Save and load the game | 4 | Yes | Makes a new manual save (never overwrites one) or loads a save, which discards everything since it. Saving is refused while the bridge's own changes are live unless explicitly overridden. | `allow_writes = true` and `save` listed by name (the test profile's build lists it). |
 | `write-showroom` | Set up the finish showroom | 5 | Yes | Spawns XF Finish Showroom's mannequin heads and their light rigs in front of V, turns them and removes them again. Nothing is saved: clearing, the kill switch or loading a save removes them. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `showroom` listed by name (the test profile's build lists it). |
 | `write-player` | Move V | 6 | Yes | Moves and turns V (teleports with ground checks, glides along walkable paths), turns her view, crouches and stands, draws or holsters her weapon and opens menus. Reversible; the kill switch and loading a save undo it. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `player` listed by name (the test profile's build lists it). |
 | `act-player` | Act for V | 0 | Yes | Irreversible actions in the world for V: using devices, choosing dialogue, consuming items. Reserved: no command uses it yet. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `act` listed by name. Reserved: no tool uses it yet. |
@@ -718,7 +718,7 @@ Read V's state, move and turn her, turn her view, crouch, draw or holster, open 
 
 ### `player_state`
 
-**Read V's state.** V in the world: position, facing (yaw), the camera's place, direction, yaw and pitch, the player state machine (locomotion, high level, scene tier, vehicle, combat), whether she is in combat, a vehicle, a scene or a dialogue, why the bridge wouldn't move her now (busy), what she is looking at (with whether it is an interaction target), the effects the bridge put on her and the behaviours running.
+**Read V's state.** V in the world: position (her feet: the entity's origin on the ground; 0.8.4, session 11's L5), facing (yaw), the camera's place (camera.position: in first person her eyes, about 1.6 m above position), direction, yaw and pitch, the player state machine (locomotion, high level, scene tier, vehicle, combat), whether she is in combat, a vehicle, a scene or a dialogue, why the bridge wouldn't move her now (busy), what she is looking at (with whether it is an interaction target), the effects the bridge put on her and the behaviours running.
 
 - **Command:** `player.state`, the bridge method `player.state`
 - **Permission:** Look (`read`)
@@ -730,7 +730,7 @@ No parameters.
 
 ### `player_teleport`
 
-**Teleport V.** Moves V to a world point (position) or an offset from her (forward, right, up along her facing), and/or turns her (yaw absolute, turn relative), through the game's own teleport. By default the point snaps to walkable ground within 2 m and is refused where there is none (no_ground); ground exact skips the snap at your own risk. Either way a point more than 0.5 m away is refused where the world isn't loaded (not_streamed). At most 50 m unless far; at most two teleports a second. The answer reads her place back two ticks later (held). It checks V first and refuses with the reason (in_combat, in_vehicle, in_scene, player_busy while she jumps, slides, falls or lands, swims, sits in a workspot, takes someone down or carries a body, or a menu or photo mode is open; player_state's busy_state says which).
+**Teleport V.** Moves V to a world point (position) or an offset from her (forward, right, up along her facing), and/or turns her (yaw absolute, turn relative), through the game's own teleport. By default the point snaps to walkable ground within 2 m and is refused where there is none (no_ground); ground exact skips the snap at your own risk. Either way a point more than 0.5 m away is refused where the world isn't loaded (not_streamed). At most 50 m unless far; at most two teleports a second. The answer reads her place back two ticks later (held). Positions here (position, before, now and the undo's) are her feet, as player_state's position, never the camera's: an undo with ground exact puts her feet back exactly where they were. It checks V first and refuses with the reason (in_combat, in_vehicle, in_scene, player_busy while she jumps, slides, falls or lands, swims, sits in a workspot, takes someone down or carries a body, or a menu or photo mode is open; player_state's busy_state says which).
 
 - **Command:** `player.teleport`, the bridge method `player.teleport`
 - **Permission:** Move V (`write-player`)
@@ -976,7 +976,7 @@ Read the world's state, probe the ground and streaming around V, and set the clo
 
 ### `world_pin`
 
-**Place an XF map pin.** Temporary test feature (bridge 0.5.3). Places a map pin with an XF badge and a label, shown on the world map (with the label in its tooltip), on the minimap and in the world through walls, the way the game shows its own markers: the game's own pin icon, with the XF badge above it and the label on the pin's name line. Give exactly one of position [x, y, z] (a world point in metres, as game_status and showroom_state report them), piece (a showroom head's index: the pin stands just above its eyes, 0.25 m by default; placed there, so turning the head leaves it and clearing the heads removes it) or at: "v" (above where V stands now). label names it (1-48 characters). variant picks the game's pin type whose map filter and icon it uses: custom (default; the one the minimap draws for any placed pin), interaction (in the world only), apartment, clothes or default. lift_m raises it (metres; default 0 at a position, 0.25 above a head's eyes, 0.45 above V). The answer's pins list which views have drawn each pin so far (drawn_by: world, minimap, world_map), and the plugin log names each one the first time. At most 8 pins. world.pin.clear, the kill switch and loading a save remove them.
+**Place an XF map pin.** Temporary test feature (bridge 0.5.3). Places a map pin with an XF badge and a label, shown on the world map (with the label in its tooltip), on the minimap and in the world through walls, the way the game shows its own markers: the game's own pin icon, with the XF badge above it and the label on the pin's name line. Give exactly one of position [x, y, z] (a world point in metres, as game_status and showroom_state report them), piece (a showroom head's index: the pin's point is at its crown, 0.12 m above its eyes by default, and the game draws its marker just above that point; placed there, so turning the head leaves it and clearing the heads removes it) or at: "v" (above where V stands now). label names it (1-48 characters). variant picks the game's pin type whose map filter and icon it uses: custom (default; the one the minimap draws for any placed pin), interaction (in the world only), apartment, clothes or default. lift_m raises it (metres; default 0 at a position, 0.12 above a head's eyes, 0.45 above V). ui_state's pins[].xf_mark gives where the XF mark is (px, its top-left corner in window pixels) and where the pin's own point is (point_px). The answer's pins list which views have drawn each pin so far (drawn_by: world, minimap, world_map), and the plugin log names each one the first time. At most 8 pins. world.pin.clear, the kill switch and loading a save remove them.
 
 - **Command:** `world.pin`, the bridge method `world.pin`
 - **Permission:** Change the world (`write-world`)
@@ -1590,6 +1590,20 @@ No parameters.
 
 Tools not yet sorted into an area above.
 
+### `test_save_delay`
+
+**Hold the next save (test hook).** Test hook for the session checks, only in the -writes package for the dedicated test profile (config.ini's [bridge] allow_test_hooks; elsewhere refused test_hooks_off): the next game_save, once, waits ms milliseconds right after its prepare step (where it has checked the moment and, with override_lock, released the bridge's save lock), checking the kill switch every 50 ms, so a bridge_kill sent meanwhile lands inside the save and nothing is saved. ms 0 disarms. Changes nothing in the game. Needs the save permission.
+
+- **Command:** `test.save.delay`, the bridge method `test.save.delay`
+- **Permission:** Save and load the game (`write-save`)
+- **Changes the game:** Yes
+- **Undo:** test.save.delay with the previous ms (the result's undo); the hold is used up by the next save anyway.
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `ms` (required) | integer | 0 to 10000 | How long to hold the next save, in milliseconds (0 to 10000; 0 disarms). |
+
 ### `game_continue`
 
 **Press past the press-any-key screen.** Not available yet: refuses (no_safe_route). The bridge would press past the game's press-any-key screen after a load only through a route inside the game (the loading screen's own controller); the only route it has is a synthetic key press, which could reach another window or gameplay, so it never sends one. Ask the player to press a key; game_load says when the screen waits.
@@ -1685,6 +1699,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-spawn-refused"></a>`spawn_refused` | The game's entity spawner refused the showroom entity, so nothing was spawned. The plugin log has the details. |
 | <a id="refusal-stale-match"></a>`stale_match` | The appearance screen changed between reading the option and applying the value (another row is in use, or the value at that position has another name), so nothing was applied. Try again; it reads the option afresh. |
 | <a id="refusal-superseded"></a>`superseded` | An emergency control (bridge_kill or session_handover) came after this command and cancelled it: a command still waiting never ran, and a running one stopped at its next step. Check the game's state, then send it again if it is still wanted. |
+| <a id="refusal-test-hooks-off"></a>`test_hooks_off` | Test hooks are off in this build. Only the -writes package for the dedicated XF test profile has them ([bridge] allow_test_hooks in its config.ini). |
 | <a id="refusal-timeout"></a>`timeout` | The game was too busy to answer in time, and nothing was changed. Try again in a moment. |
 | <a id="refusal-timeout-after-start"></a>`timeout_after_start` | The game started this action but took too long to confirm it. It may still have happened: check the game (or the plugin log) before repeating it. |
 | <a id="refusal-too-far"></a>`too_far` | That place is more than 30 m from V, so nothing was spawned there. Move V closer or spawn nearer (distance_m). |

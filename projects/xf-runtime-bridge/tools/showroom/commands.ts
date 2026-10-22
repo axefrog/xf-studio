@@ -365,7 +365,23 @@ export async function runShowroomRotate(input: Json, context: CommandContext): P
   const frames: Json[] = [], images: NonNullable<CommandResult["images"]> = [];
   const undo = { method: "showroom.turn", params: { turns: [...startYaws].map(([index, yaw]) => ({ index, yaw: normalise(yaw) })) } };
   let failure: unknown = null;
+  // 0.8.4 (session 11's G2: photo mode's own menu stayed in every sweep frame): in photo mode the menu and cursor are hidden
+  // for the sweep's captures, as photo_hud_hide does, and put back as they were afterwards. Outside photo mode the game
+  // refuses (not_in_photo_mode) and there is no menu to hide.
+  // The review of 0.8.4: the menu and the cursor are put back independently, each from its own earlier state (the
+  // answer's was_hidden and was_cursor_hidden): one photo.hud.hide call moves the menu and, with cursor, the cursor too.
+  let hudBefore: { menu: boolean; cursor: boolean } | null = null;
   try {
+    if (sweep.capture === true) {
+      const hidden = await context.api.callBridge("photo.hud.hide", { hidden: true, cursor: true }, context.cid, undefined, context.signal);
+      if (hidden.ok) {
+        const result = (hidden.result as Json | null) ?? {};
+        hudBefore = { menu: result.was_hidden === true, cursor: result.was_cursor_hidden === true };
+        await sleep(500, context.signal);
+      } else if (hidden.error.code !== "not_in_photo_mode") {
+        throw Object.assign(new Error(hidden.error.message), { plain: hidden.error });
+      }
+    }
     for (let i = 0; i < steps; i++) {
       stopIfCancelled(context);
       const angle = steps === 1 ? from : from + ((to - from) * i) / (steps - 1);
@@ -392,6 +408,20 @@ export async function runShowroomRotate(input: Json, context: CommandContext): P
   } catch (error) {
     failure = error;
   }
+  // The menu and cursor back as they were (cleanup: no signal); a failure here is said, not thrown.
+  let hudError: string | null = null;
+  if (hudBefore) {
+    // First both to the cursor's earlier state, then (when it differed) the menu alone to its own.
+    const restore: Record<string, unknown>[] = [{ hidden: hudBefore.cursor, cursor: true }];
+    if (hudBefore.menu !== hudBefore.cursor) restore.push({ hidden: hudBefore.menu, cursor: false });
+    for (const params of restore) {
+      const shown = await context.api.callBridge("photo.hud.hide", params, context.cid).catch((error: unknown) => ({ ok: false as const, error: { code: "failed", message: (error as Error).message } }));
+      if (!shown.ok) {
+        hudError = `Photo mode's menu or cursor wasn't put back (${shown.error.code}: ${shown.error.message}); photo_hud_hide {hidden: ${hudBefore.menu}} puts the menu back.`;
+        break;
+      }
+    }
+  }
   // Turning the heads back is reported, never swallowed (RB-128): a refused return leaves them turned, so the answer (or
   // the sweep's own error) says so and keeps the exact undo.
   let returnError: { code: string; message: string } | null = null;
@@ -417,6 +447,7 @@ export async function runShowroomRotate(input: Json, context: CommandContext): P
     throw failure;
   }
   return { value: { swept: heads.map((h) => h.index), from_deg: from, to_deg: to, steps, frames, returned: sweep.return !== false && !returnError,
+    photo_menu_hidden_for_sweep: hudBefore !== null, ...(hudError ? { photo_menu_warning: hudError } : {}),
     ...(returnError ? { return_failed: returnError, warning: notReturned } : {}), undo }, images };
 }
 

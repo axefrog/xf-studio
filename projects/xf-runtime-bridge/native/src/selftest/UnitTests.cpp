@@ -18,6 +18,7 @@
 #include <limits>
 #include <map>
 #include <new>
+#include <utility>
 #include <vector>
 #include <thread>
 
@@ -33,6 +34,7 @@
 #include "core/GameThreadQueue.hpp"
 #include "core/InkUi.hpp"
 #include "core/KillKey.hpp"
+#include "core/Win32.hpp"
 #include "core/LivePose.hpp"
 #include "core/Log.hpp"
 #include "core/Messages.hpp"
@@ -1954,13 +1956,15 @@ void InventoryAndSaveTests()
         std::string throwAt;                      // "status", "save" or "guard2": that step throws
         bool killed = false;                      // the guard refuses from the start
         int guards = 0;
+        int32_t hold = 0;                         // 0.8.4: test.save.delay's one-shot hold
+        int killAtGuard = -1;                     // 0.8.4: the guard refuses from this call on (a kill during the hold)
         FakeClock clock;
         w::SaveOps Ops(bool aOverride)
         {
             w::SaveOps ops;
             ops.guard = [this] {
                 ++guards;
-                if (killed || (throwAt == "guard2" && guards == 2))
+                if (killed || (throwAt == "guard2" && guards == 2) || (killAtGuard > 0 && guards >= killAtGuard))
                 {
                     throw xfb::MethodError("killed", "the kill switch stopped the bridge part-way");
                 }
@@ -2006,6 +2010,7 @@ void InventoryAndSaveTests()
             ops.relock = [this] { ++relocks; };
             ops.sleep = [this](std::chrono::milliseconds aFor) { clock.Advance(aFor); };
             ops.now = clock.Now();
+            ops.hold = [this] { return std::exchange(hold, 0); };
             return ops;
         }
     };
@@ -2085,6 +2090,33 @@ void InventoryAndSaveTests()
         fake.throwAt = "guard2";
         Check("RB-53: the kill switch after the lock was released: no save asked, the lock back on (RB-52)",
               saveCode(fake, overrideLock) == "killed" && fake.saves == 0 && fake.relocks == 1);
+    }
+    {
+        // 0.8.4 (session 11's L1): the test hook holds the save after prepare; a kill during the hold stops it there.
+        FakeSaves fake;
+        fake.hold = 1000;
+        fake.killAtGuard = 5;
+        Check("0.8.4 test.save.delay: a kill during the hold after prepare: nothing saved, the released lock back on",
+              saveCode(fake, overrideLock) == "killed" && fake.saves == 0 && fake.relocks == 1 && fake.guards == 5 && fake.hold == 0);
+    }
+    {
+        FakeSaves fake;
+        fake.hold = 300;
+        const auto start = fake.clock.at;
+        const auto code = saveCode(fake, overrideLock);
+        Check("0.8.4 test.save.delay: without a kill the save goes on after the hold (the guard every 50 ms), and the hold is used once",
+              code == "saved" && fake.guards == 8 && fake.hold == 0 && fake.relocks == 1 && fake.clock.at - start >= std::chrono::milliseconds(300));
+        std::atomic<int32_t> slot{0};
+        Check("0.8.4 test.save.delay is refused test_hooks_off unless config.ini allows test hooks, and bounded",
+              ParamsCode([&] { w::TestSaveDelay(json{{"ms", 500}}, false, slot); }) == "test_hooks_off" && slot.load() == 0 &&
+                  ParamsCode([&] { w::TestSaveDelay(json{{"ms", 10001}}, true, slot); }) == "bad_params" &&
+                  ParamsCode([&] { w::TestSaveDelay(json::object(), true, slot); }) == "bad_params");
+        const auto armed = w::TestSaveDelay(json{{"ms", 500}}, true, slot);
+        Check("0.8.4 test.save.delay arms the slot and its undo puts the previous hold back",
+              slot.load() == 500 && armed.value("armed_ms", 0) == 500 && armed["undo"]["params"]["ms"] == 0);
+        Check("0.8.4 [bridge] allow_test_hooks: off by default, on when config.ini says so",
+              !xfb::Config{}.allowTestHooks && xfb::ParseConfig("[bridge]\nallow_test_hooks = true\n").allowTestHooks &&
+                  xfb::DescribeConfig(xfb::ParseConfig("[bridge]\nallow_test_hooks = true\n")).find("bridge.allow_test_hooks=true") != std::string::npos);
     }
     {
         FakeSaves fake;
@@ -2701,8 +2733,8 @@ void InkUiTests()
           atPoint.target == k::PinRequest::Target::Position && atPoint.label == "XF test pin" && atPoint.variant == "custom" &&
               atPoint.lift == 0.0 && atPoint.x == -1200.5);
     const auto onPiece = k::ParsePin(json{{"piece", 3}, {"label", "Gloss A"}, {"variant", "clothes"}});
-    Check("world.pin on a showroom head: 0.25 m above its eyes by default (0.8)", onPiece.target == k::PinRequest::Target::Piece && onPiece.piece == 3 &&
-                                                                           onPiece.lift == 0.25 && onPiece.variant == "clothes");
+    Check("world.pin on a showroom head: at its crown, 0.12 m above its eyes, by default (0.8.4)", onPiece.target == k::PinRequest::Target::Piece && onPiece.piece == 3 &&
+                                                                           onPiece.lift == 0.12 && onPiece.variant == "clothes");
     Check("world.pin above V", k::ParsePin(json{{"at", "v"}, {"label", "V"}, {"lift_m", 1.0}}).lift == 1.0);
     const std::string longLabel(80, 'x');
     Check("world.pin cuts a long label to 48 characters (0.8: the last one an ellipsis)",
@@ -4493,9 +4525,125 @@ void Bridge083Tests()
                   gameName.label == "Numpad *" && offOk && !off.enabled && !badOk && badWhy.find("modifier") != std::string::npos && !unknownOk &&
                   unknownWhy.find("isn't a key") != std::string::npos,
               ctrlEnd.label + " / " + badWhy + " / " + unknownWhy);
-        Check("0.8.3 kill key: the default is End, which the game's 2.31 bindings leave free (F9, Home and letters are bound)",
-              std::string(kk::kDefault) == "End" && xfb::Config{}.killKey.vk == 0x23 && xfb::Config{}.killKey.enabled && !kk::GameBinds(0x23) &&
+        Check("0.8.4 kill key: the default is Ctrl + Shift + End (End is free in the game's 2.31 bindings; F9, Home and letters are bound)",
+              std::string(kk::kDefault) == "Ctrl + Shift + End" && xfb::Config{}.killKey.vk == 0x23 && xfb::Config{}.killKey.ctrl &&
+                  xfb::Config{}.killKey.shift && !xfb::Config{}.killKey.alt && xfb::Config{}.killKey.enabled && !kk::GameBinds(0x23) &&
                   kk::GameBinds(0x78) && kk::GameBinds(0x24) && kk::GameBinds('W') && !kk::GameBinds(0x6A));
+        {
+            // 0.8.4: the window's Change... writes the chord's spelling into config.ini, which reads it back the same.
+            bool roundTrip = true;
+            for (const char* text : {"Ctrl + Shift + End", "End", "Alt + Page Up", "Ctrl + Numpad +", "Shift + Numpad *", "Scroll Lock", "F12", "off"})
+            {
+                kk::Chord first, second;
+                std::string parseWhy;
+                roundTrip = roundTrip && kk::Parse(text, first, parseWhy) && kk::Parse(kk::Spelling(first), second, parseWhy) && first.vk == second.vk &&
+                            first.ctrl == second.ctrl && first.shift == second.shift && first.alt == second.alt && first.enabled == second.enabled &&
+                            first.label == second.label;
+            }
+            Check("0.8.4 kill key: config.ini's spelling of every chord reads back as the same chord", roundTrip && kk::Spelling(xfb::Config{}.killKey) == "Ctrl+Shift+End");
+            const std::string ini = "; head\n[bridge]\nenabled = true\n\n[ui]\n; the key\nkill_key = End\nhud_panel = true\n\n[log]\nlevel = debug\n";
+            const auto replaced = kk::WithKillKey(ini, "Ctrl+F12");
+            const auto inserted = kk::WithKillKey("[ui]\nhud_panel = true\n\n[log]\nlevel = info\n", "Pause");
+            const auto added = kk::WithKillKey("[bridge]\nenabled = true", "off");
+            const auto crlf = kk::WithKillKey("[ui]\r\nkill_key = End\r\n", "Ctrl+Shift+End");
+            Check("0.8.4 kill key: config.ini's kill_key line is replaced in place, added to [ui], or [ui] is added; the rest and the line endings stay",
+                  replaced == "; head\n[bridge]\nenabled = true\n\n[ui]\n; the key\nkill_key = Ctrl+F12\nhud_panel = true\n\n[log]\nlevel = debug\n" &&
+                      inserted == "[ui]\nhud_panel = true\nkill_key = Pause\n\n[log]\nlevel = info\n" && added == "[bridge]\nenabled = true\n\n[ui]\nkill_key = off\n" &&
+                      crlf == "[ui]\r\nkill_key = Ctrl+Shift+End\r\n" && xfb::ParseConfig(replaced).killKey.ctrl && xfb::ParseConfig(replaced).killKey.vk == 0x7B,
+                  replaced + "|" + inserted + "|" + added);
+            const std::string xml = "<bindings>\n<mapping name=\"FastForward_Button\" type=\"Button\" >\n <button id=\"IK_Home\" />\n</mapping>\n"
+                                    "<mapping name=\"Dodge_Button\" type=\"Button\" >\n <button id=\"IK_Pad_B_CIRCLE\" />\n <button id=\"IK_LControl\" overridableUI=\"dodgeDash\" />\n</mapping>\n"
+                                    "<mapping name=\"Sprint_Button\" type=\"Button\" >\n <button id=\"IK_LShift\" />\n</mapping>\n</bindings>\n";
+            const std::vector<std::pair<std::string, std::string>> files{{"r6/config/inputUserMappings.xml", xml}};
+            kk::Chord home, chordDefault, ctrlF12;
+            std::string parseWhy;
+            kk::Parse("Home", home, parseWhy);
+            kk::Parse("Ctrl+F12", ctrlF12, parseWhy);
+            const auto homeConflicts = kk::FindConflicts(home, files, "");
+            const auto defaultConflicts = kk::FindConflicts(chordDefault, files, "");
+            // CET: 0x7B (F12) alone, Ctrl (0x11) + F12, another mod's End, and the bridge's own entry (skipped).
+            const std::string cet = "{\"ModA\": {\"shot\": " + std::to_string(0x007B000000000000ULL) + "}, \"ModB\": {\"both\": " +
+                                    std::to_string(0x0011007B00000000ULL) + ", \"other\": " + std::to_string(0x0023000000000000ULL) +
+                                    "}, \"xf_runtime_bridge\": {\"stop\": " + std::to_string(0x0011007B00000000ULL) + "}, \"Old.key\": " +
+                                    std::to_string(0x00A2007B00000000ULL) + "}";
+            const auto cetConflicts = kk::FindConflicts(ctrlF12, {}, cet);
+            const auto joinedCet = [&] {
+                std::string out;
+                for (const auto& w : cetConflicts.warnings)
+                {
+                    out += w + "|";
+                }
+                return out;
+            }();
+            Check("0.8.4 kill key conflicts: a key the game binds warns with its mapping; modifiers the game uses are a note; End alone is clear",
+                  homeConflicts.warnings.size() == 1 && homeConflicts.warnings[0].find("FastForward_Button") != std::string::npos &&
+                      homeConflicts.notes.empty() && defaultConflicts.warnings.empty() && defaultConflicts.notes.size() == 1 &&
+                      defaultConflicts.notes[0].find("Dodge_Button") != std::string::npos && defaultConflicts.notes[0].find("Sprint_Button") != std::string::npos,
+                  defaultConflicts.notes.empty() ? std::string() : defaultConflicts.notes[0]);
+            // The review of 0.8.4: the effective (last) kill_key is the one replaced, across repeated [ui] sections.
+            const std::string twice = "[ui]\nkill_key = End\n\n[log]\nlevel = info\n\n[ui]\nkill_key = Home\n";
+            const auto rewritten = kk::WithKillKey(twice, "Ctrl+F12");
+            Check("0.8.4 (review) kill key: the last kill_key (the one the reader applies) is replaced, so the saved key survives a relaunch",
+                  rewritten == "[ui]\nkill_key = End\n\n[log]\nlevel = info\n\n[ui]\nkill_key = Ctrl+F12\n" && xfb::ParseConfig(rewritten).killKey.vk == 0x7B &&
+                      xfb::ParseConfig(rewritten).killKey.ctrl,
+                  rewritten);
+            {
+                // The review of 0.8.4: the settings file is replaced only after a whole read, with a backup, and read back; nested
+                // Input Loader folders are walked.
+                wchar_t tempDir[MAX_PATH]{};
+                GetTempPathW(MAX_PATH, tempDir);
+                const auto dir = std::filesystem::path(tempDir) / (L"xfb-unit-killkey-" + std::to_wstring(GetCurrentProcessId()));
+                std::filesystem::remove_all(dir);
+                std::filesystem::create_directories(dir / L"r6" / L"config");
+                std::filesystem::create_directories(dir / L"r6" / L"input" / L"SomeMod" / L"deeper");
+                std::ofstream(dir / L"r6" / L"config" / L"inputUserMappings.xml", std::ios::binary) << "<bindings></bindings>";
+                std::ofstream(dir / L"r6" / L"input" / L"SomeMod" / L"deeper" / L"keys.xml", std::ios::binary)
+                    << "<bindings><mapping name=\"SomeMod_Toggle\" type=\"Button\"><button id=\"IK_Home\" /></mapping></bindings>";
+                std::ofstream(dir / L"r6" / L"input" / L"notes.txt", std::ios::binary) << "IK_Home";
+                kk::Chord nestedHome;
+                std::string nestedWhy;
+                kk::Parse("Home", nestedHome, nestedWhy);
+                const auto mappingFiles = kk::InputMappingFiles(dir);
+                const auto nested = kk::FindConflicts(nestedHome, mappingFiles, "");
+                Check("0.8.4 (review) kill key conflicts: Input Loader's nested folders are read (r6/input/SomeMod/deeper/keys.xml), other mappingFiles not",
+                      mappingFiles.size() == 2 && nested.warnings.size() == 1 && nested.warnings[0].find("r6/input/SomeMod/deeper/keys.xml") != std::string::npos &&
+                          nested.warnings[0].find("SomeMod_Toggle") != std::string::npos && nested.warnings[0].find("Change...") != std::string::npos,
+                      nested.warnings.empty() ? std::to_string(mappingFiles.size()) : nested.warnings[0]);
+                const auto iniPath = dir / L"config.iniPath";
+                const auto bak = dir / L"config.iniPath.bak";
+                std::string text, ioWhy;
+                bool missing = false;
+                const bool readMissing = !xfb::win32::ReadFileExact(iniPath, text, missing, ioWhy) && missing;
+                const bool refusedWithoutOriginal = !xfb::win32::ReplaceSettingsFile(iniPath, "[ui]\nkill_key = F12\n", bak, ioWhy) && !std::filesystem::exists(iniPath);
+                std::ofstream(iniPath, std::ios::binary) << "[ui]\nkill_key = End\nhud_panel = true\n";
+                const bool swapped = xfb::win32::ReplaceSettingsFile(iniPath, "[ui]\nkill_key = F12\nhud_panel = true\n", bak, ioWhy);
+                std::string now, old;
+                xfb::win32::ReadFileExact(iniPath, now, missing, ioWhy);
+                xfb::win32::ReadFileExact(bak, old, missing, ioWhy);
+                Check("0.8.4 (review) config.iniPath: a missing file reads as missing; nothing is written without an original; a replace keeps a backup and reads back",
+                      readMissing && refusedWithoutOriginal && swapped && now == "[ui]\nkill_key = F12\nhud_panel = true\n" &&
+                          old == "[ui]\nkill_key = End\nhud_panel = true\n" && !std::filesystem::exists(dir / L"config.iniPath.tmp"),
+                      ioWhy);
+                std::filesystem::remove_all(dir);
+            }
+            // 0.8.4 (the UI review's fix 4): the XF box stands where the ink panel does, on any screen.
+            const auto closeTo = [](std::pair<float, float> aGot, float aX, float aY) { return std::abs(aGot.first - aX) < 0.5f && std::abs(aGot.second - aY) < 0.5f; };
+            const auto wide = xfb::overlay::PanelOrigin("top_left", 40, 360, 3840, 1600, 360, 200);
+            const auto small = xfb::overlay::PanelOrigin("top_left", 40, 360, 1280, 720, 120, 80);
+            const auto right = xfb::overlay::PanelOrigin("top_right", 60, 60, 3840, 1600, 400, 200);
+            const auto bottom = xfb::overlay::PanelOrigin("bottom_left", 0, 0, 1920, 1080, 180, 100);
+            const auto unknown = xfb::overlay::PanelOrigin("nowhere", 40, 360, 3840, 1600, 360, 200);
+            const auto clamped = xfb::overlay::PanelOrigin("center", 9000, 0, 1920, 1080, 180, 100);
+            Check("0.8.4 the XF box's place follows the ink panel's anchor, offsets and floors, scaled with the screen, and stays on screen",
+                  closeTo(wide, 40, 360) && closeTo(small, 40.0f / 3, 120) && closeTo(right, 3840 - 860.0f * 1600 / 2160 - 400, 60) &&
+                      closeTo(bottom, 0.5f * 8, 1080 - 520.0f * 1080 / 2160 - 100) && closeTo(unknown, 40, 360) && closeTo(clamped, 1920 - 4 - 180, 490),
+                  std::to_string(right.first) + "," + std::to_string(bottom.first) + "," + std::to_string(bottom.second) + "," + std::to_string(clamped.first));
+            Check("0.8.4 kill key conflicts: CET hotkeys with the same keys or a part including the key warn (left Ctrl counts as Ctrl); the bridge's own and other keys don't",
+                  cetConflicts.warnings.size() == 3 && joinedCet.find("ModA / shot") != std::string::npos && joinedCet.find("ModB / both") != std::string::npos &&
+                      joinedCet.find("Old / key") != std::string::npos && joinedCet.find("xf_runtime_bridge") == std::string::npos &&
+                      joinedCet.find("ModB / other") == std::string::npos && kk::FindConflicts(ctrlF12, {}, "not json").warnings.empty(),
+                  joinedCet);
+        }
         const auto parsed = xfb::ParseConfig("[ui]\nkill_key = Ctrl + End\n");
         const auto warned = xfb::ParseConfig("[ui]\nkill_key = W\n");
         const auto refused = xfb::ParseConfig("[ui]\nkill_key = Space\n");

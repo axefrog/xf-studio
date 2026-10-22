@@ -6,6 +6,7 @@
 #include <thread>
 
 #include "core/Dispatcher.hpp"
+#include "core/Log.hpp"
 
 namespace xfb::writes
 {
@@ -1276,6 +1277,21 @@ json GameSave(const params::GameSaveRequest& aRequest, const SaveOps& aOps)
     {
         relock.Disarm();
     }
+    // 0.8.4, the test hook: the save held in its prepare step, the kill switch and pause checked every 50 ms (the guard throws,
+    // and the relock above takes a released lock back on the way out).
+    if (const int32_t holdMs = aOps.hold ? std::clamp(aOps.hold(), 0, kMaxSaveDelayMs) : 0; holdMs > 0)
+    {
+        log::Info("game.save.held", "ms=" + std::to_string(holdMs) + " (test.save.delay)");
+        const auto until = Now(aOps.now) + std::chrono::milliseconds(holdMs);
+        while (Now(aOps.now) < until)
+        {
+            if (aOps.guard)
+            {
+                aOps.guard();
+            }
+            aOps.sleep(std::chrono::milliseconds(50));
+        }
+    }
     // From here on, every way out of this function takes the released lock back.
     if (released)
     {
@@ -1699,6 +1715,29 @@ json StatusWhileLoading(const std::string& aPhase, const json& aLayer)
                              ? "the game is starting; the bridge calls into the game once its scripts attach and a player is in"
                              : "the game is loading; the bridge refuses game calls until the loaded session's player is in "
                                "(game.wait with phase gameplay)"}};
+}
+
+json TestSaveDelay(const json& aParams, bool aAllowed, std::atomic<int32_t>& aSlot)
+{
+    params::RequireOnly(aParams, {"ms"});
+    if (!aAllowed)
+    {
+        throw MethodError("test_hooks_off", "test hooks are off in this build's config.ini ([bridge] allow_test_hooks); only the -writes "
+                                            "package for the dedicated test profile turns them on");
+    }
+    const auto ms = params::CheckInteger(aParams, "ms", 0, kMaxSaveDelayMs);
+    if (!ms)
+    {
+        throw MethodError("bad_params", "'ms' is required: how long to hold the next save after its prepare step, 0 to " +
+                                            std::to_string(kMaxSaveDelayMs) + " ms (0 disarms)");
+    }
+    const auto previous = aSlot.exchange(static_cast<int32_t>(*ms));
+    log::Info("test.save.delay", "armed_ms=" + std::to_string(*ms) + " previous_ms=" + std::to_string(previous));
+    return json{{"armed_ms", *ms},
+                {"previous_ms", previous},
+                {"note", *ms > 0 ? "the next game.save waits this long after its prepare step (once), checking the kill switch every 50 ms"
+                                 : "no hold: the next game.save runs straight through"},
+                {"undo", json{{"method", "test.save.delay"}, {"params", json{{"ms", previous}}}}}};
 }
 
 } // namespace xfb::writes

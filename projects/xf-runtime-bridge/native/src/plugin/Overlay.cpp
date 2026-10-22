@@ -131,10 +131,8 @@ namespace
 {
 using Microsoft::WRL::ComPtr;
 
-// 0.8 (the UI review): the panel's top-left corner in back-buffer pixels, right of the CET label's widest extent (its wrap
-// is 640 px from x 12, unscaled).
-constexpr float kPanelX = 700.0f;
-constexpr float kPanelY = 12.0f;
+// 0.8.4 (the UI review's fix 4): the panel's place is the ink panel's (core PanelOrigin), no longer a fixed 700, 12.
+float gPanelHeight = 0.0f; // the panel's height last frame (render thread), for anchors measured from the bottom or centre
 using xfb::overlay::DeviceFacts;
 using xfb::overlay::OverlayHost;
 using xfb::overlay::PanelData;
@@ -695,12 +693,15 @@ void DrawPanel(double aSeconds)
         return;
     }
     const auto scale = static_cast<float>(gR.height) / 1080.0f * gHost->Scale();
-    ImGui::SetNextWindowPos(ImVec2(kPanelX, kPanelY), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(360.0f * scale, 0.0f), ImGuiCond_Always);
+    const float width = 360.0f * scale;
+    const auto [left, top] = xfb::overlay::PanelOrigin(gR.panel.anchor, gR.panel.x, gR.panel.y, static_cast<float>(gR.width), static_cast<float>(gR.height), width, gPanelHeight);
+    ImGui::SetNextWindowPos(ImVec2(left, top), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(width, 0.0f), ImGuiCond_Always);
     const auto flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
                        ImGuiWindowFlags_NoNav;
     if (ImGui::Begin("XF Runtime Bridge##xf_overlay_panel", nullptr, flags))
     {
+        gPanelHeight = ImGui::GetWindowSize().y; // its auto-fitted height (from last frame's content), for the next placement
         if (gR.display)
         {
             ImGui::PushFont(gR.display, gR.display->LegacySize);

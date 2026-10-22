@@ -570,7 +570,7 @@ export const PLAYER_COMMANDS: CommandDef[] = [
     name: "player.state",
     title: "Read V's state",
     description:
-      "V in the world: position, facing (yaw), the camera's place, direction, yaw and pitch, the player state machine (locomotion, high level, scene tier, vehicle, combat), whether she is in combat, a vehicle, a scene or a dialogue, why the bridge wouldn't move her now (busy), what she is looking at (with whether it is an interaction target), the effects the bridge put on her and the behaviours running.",
+      "V in the world: position (her feet: the entity's origin on the ground; 0.8.4, session 11's L5), facing (yaw), the camera's place (camera.position: in first person her eyes, about 1.6 m above position), direction, yaw and pitch, the player state machine (locomotion, high level, scene tier, vehicle, combat), whether she is in combat, a vehicle, a scene or a dialogue, why the bridge wouldn't move her now (busy), what she is looking at (with whether it is an interaction target), the effects the bridge put on her and the behaviours running.",
     permission: "read",
     input: obj({}),
     bridge: { method: "player.state" },
@@ -579,7 +579,7 @@ export const PLAYER_COMMANDS: CommandDef[] = [
     name: "player.teleport",
     title: "Teleport V",
     description:
-      `Moves V to a world point (position) or an offset from her (forward, right, up along her facing), and/or turns her (yaw absolute, turn relative), through the game's own teleport. By default the point snaps to walkable ground within 2 m and is refused where there is none (no_ground); ground exact skips the snap at your own risk. Either way a point more than 0.5 m away is refused where the world isn't loaded (not_streamed). At most 50 m unless far; at most two teleports a second. The answer reads her place back two ticks later (held). ${playerBusyNote}`,
+      `Moves V to a world point (position) or an offset from her (forward, right, up along her facing), and/or turns her (yaw absolute, turn relative), through the game's own teleport. By default the point snaps to walkable ground within 2 m and is refused where there is none (no_ground); ground exact skips the snap at your own risk. Either way a point more than 0.5 m away is refused where the world isn't loaded (not_streamed). At most 50 m unless far; at most two teleports a second. The answer reads her place back two ticks later (held). Positions here (position, before, now and the undo's) are her feet, as player_state's position, never the camera's: an undo with ground exact puts her feet back exactly where they were. ${playerBusyNote}`,
     permission: "write-player",
     input: obj({
       position: point3("The world point [x, y, z]."),

@@ -73,6 +73,10 @@ local state = {
   answeredAsk = nil, -- 0.8: the answered ask still showing: { id, text, label } (answered_ask)
   inkAsk = 0,        -- 0.8: the question the ink panel shows on screen now (the frame's inkask record), or 0
   comment = "",     -- 0.7: the commentary box's text
+  commentSoft = {}, -- 0.8.4: where the box wrapped a space into a line break (panel.wrap)
+  commentReload = nil, -- 0.8.4: rewrapped text for the box being edited, handed over in one read-only frame
+  killKeyCapture = false, -- 0.8.4: Change... is waiting for the new kill key
+  killKeyChanged = false, -- 0.8.4: the key was changed in this window (its notes then show)
   cetLabel = true, -- bridge 0.5.3: [ui] cet_label / ui.hud's cet_label (read from XFBridge_Hud's frame)
   surface = "cet_line", -- 0.8.2: the status surface the plugin chose (0.8.3: ink_panel, xf_box, cet_line, none)
   overlayOpen = false,
@@ -234,10 +238,11 @@ local function pollMessages()
   state.inkAsk = tonumber(inkAsk) or 0
   local ok, text = pcall(function() return Game.XFBridge_Messages() end)
   if not ok or type(text) ~= "string" or text == "" then
-    -- 0.8.2 (session 9: "Answer: F6 Done" stayed after the last answer): an empty board has no question either.
+    -- 0.8.2 (session 9: "Answer: F6 Done" stayed after the last answer): an empty board has no question either. 0.8.4 (the
+    -- UI review's fix 2): what was sent stays in the window's question slot until the next question takes its place, so
+    -- the buttons under it don't move.
     state.messages = {}
     state.pendingAsk = nil
-    state.answeredAsk = nil
     return
   end
   local decoded, answer = pcall(json.decode, text)
@@ -258,8 +263,8 @@ local function pollMessages()
   local answered = answer.answered_ask
   if type(answered) == "table" and type(answered.id) == "number" and type(answered.label) == "string" then
     state.answeredAsk = answered
-  else
-    state.answeredAsk = nil
+  elseif state.pendingAsk then
+    state.answeredAsk = nil -- 0.8.4: the new question takes the slot; until then the last "Sent: ..." stays
   end
 end
 
@@ -281,7 +286,8 @@ local function runAction(action)
       state.messageOk = true
       log("warn", cid, "panel: reconnect requested")
     else
-      state.message = "Couldn't reconnect: " .. tostring(answer and answer.reason or "the plugin didn't answer")
+      state.message = answer and answer.reason and ("The bridge couldn't start again: " .. tostring(answer.reason) .. ". Restart the game to start it.")
+        or "The bridge didn't answer. Restart the game to start it again."
       state.messageOk = false
       log("warn", cid, "panel: reconnect refused: " .. tostring(answer and answer.reason))
     end
@@ -299,7 +305,7 @@ local function runAction(action)
   elseif action.name == "mark" then
     -- 0.6: a marker in the session's event stream, for the coordinator to find (session.log); changes nothing.
     local ok, noted = callNative("XFBridge_Note", "ask", "The player marked this moment in the XF Runtime Bridge window")
-    state.message = (ok and noted) and "Marked: the session log has a marker at this moment." or "Couldn't add the marker."
+    state.message = (ok and noted) and "Marked: the session log has a marker at this moment." or "The bridge didn't answer. Restart the game to start it again."
     state.messageOk = ok and noted
     log("info", cid, "panel: marker noted=" .. tostring(ok and noted))
   elseif action.name == "answer" then
@@ -310,7 +316,8 @@ local function runAction(action)
       -- 0.8 (the UI review): the question's own slot says so ("Sent: ..."), from the answered ask; no extra line here.
       state.message = nil
     else
-      state.message = "Couldn't send the answer: " .. tostring(answer and answer.why or "the plugin didn't answer")
+      state.message = answer and answer.why and ("The answer didn't go through: " .. tostring(answer.why) .. ". Wait for the next question.")
+        or "The bridge didn't answer. Restart the game to start it again."
       state.messageOk = false
     end
     log("info", cid, "panel: answer id=" .. tostring(arg.id) .. " choice=" .. tostring(arg.choice) .. " ok=" .. tostring(answer and answer.ok))
@@ -322,12 +329,36 @@ local function runAction(action)
       state.message = "Comment sent to the session log."
       state.messageOk = true
       state.comment = ""
+      state.commentSoft = {}
+      state.commentHistory = nil
+      state.commentReload = nil
       state.commentGen = (state.commentGen or 0) + 1 -- a fresh box: ImGui keeps an active box's own text
     else
-      state.message = "Couldn't send the comment."
+      state.message = "The comment didn't go through. Try Send again; if it fails again, restart the game."
       state.messageOk = false
     end
     log("info", cid, "panel: comment sent=" .. tostring(ok and sent) .. " chars=" .. tostring(#text))
+  elseif action.name == "killkey" then
+    -- 0.8.4: the kill key chosen in this window (Change... or Reset), saved by the plugin to config.ini's [ui] kill_key.
+    local arg = action.argument or {}
+    local answer = decodeAnswer(callNative("XFBridge_KillKey", arg.action or "get", arg.key or ""))
+    if answer and answer.ok then
+      local label = answer.kill_key and answer.kill_key.label or tostring(arg.key)
+      state.killKeyChanged = true
+      state.killKeyRefused = nil
+      if answer.saved then
+        state.message = "The kill key is now " .. tostring(label) .. ", saved for next time."
+      else
+        state.message = "The kill key is now " .. tostring(label) .. " until the game closes: " .. tostring(answer.save_error)
+      end
+      state.messageOk = answer.saved == true
+    elseif answer and answer.why then
+      state.killKeyRefused = tostring(answer.why)
+    else
+      state.message = "The bridge didn't answer. Restart the game to start it again."
+      state.messageOk = false
+    end
+    log("warn", cid, "panel: kill key " .. tostring(arg.action) .. " " .. tostring(arg.key) .. " ok=" .. tostring(answer and answer.ok))
   elseif action.name == "kill" then
     local ok, killed = callNative("XFBridge_Kill", "cet-panel")
     state.message = (ok and killed) and "The bridge is stopped. Reconnect starts it again." or "The bridge wasn't running."
@@ -351,7 +382,8 @@ local function followPending()
     state.message = "Reconnected. XF tools connect again by themselves."
     state.messageOk = true
   else
-    state.message = "Couldn't reconnect: " .. tostring(type(outcome) == "table" and outcome.message or "no answer from the plugin")
+    state.message = (type(outcome) == "table" and outcome.message) and ("The bridge couldn't start again: " .. tostring(outcome.message) .. ". Restart the game to start it.")
+      or "The bridge didn't answer. Restart the game to start it again."
     state.messageOk = false
   end
 end
@@ -400,8 +432,8 @@ end)
 -- test builds' panel) or the game restarts. The ID, xf_bridge_kill, has never changed and must not: CET keys a binding by
 -- the mod's name and this ID. CET drops a mod's bindings at a launch where the mod isn't installed (its
 -- Developer.RemoveDeadBindings, on by default), so a launch of another profile without the bridge unbinds it (session 9).
--- 0.8.3: the bridge's own kill key ([ui] kill_key, End by default) works without CET or a binding; this hotkey is the optional
--- second route.
+-- 0.8.3: the bridge's own kill key ([ui] kill_key; 0.8.4: Ctrl + Shift + End by default, changed in the XF Runtime Bridge
+-- window) works without CET or a binding; this hotkey is the optional second route.
 registerHotkey("xf_bridge_kill", "Stop XF Runtime Bridge", function()
   local cid = nextCid()
   local ok, killed = callNative("XFBridge_Kill", "cet-hotkey")

@@ -136,7 +136,7 @@ export async function runSessionWait(input: Json, context: CommandContext): Prom
     }
     // 0.8.2 (session 9: a waiting session_wait held the pipe, so every other XF tool's call was refused bridge_busy): the
     // connection is let go between polls, and the next poll opens it again.
-    context.api.disconnect();
+    context.api.release();
     await sleep(interval, context.signal);
   }
   return { value: { timed_out: !context.signal?.aborted, aborted: context.signal?.aborted === true, waited_s: waited(), events: [], next: since } };

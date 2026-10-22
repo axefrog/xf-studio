@@ -104,7 +104,19 @@ struct PanelData
     std::vector<std::pair<std::string, std::string>> lines;
     std::string askHint;
     uint64_t tick = 0;
+    // 0.8.4 (the UI review's fix 4): the ink panel's place (ui.hud's anchor and offsets), which the XF box takes too, so the
+    // status stays where the player's eye already is when the HUD hides.
+    std::string anchor = "top_left";
+    double x = 40.0;
+    double y = 360.0;
 };
+
+// 0.8.4 (the UI review's fix 4: the XF box sat at a fixed 700, 12 back-buffer pixels, 18 % across at 3840 and 55 % at 1280):
+// the XF box's top-left corner in back-buffer pixels, by the ink panel's rule (redscript XFInkOverlay.Place, mirrored in
+// tools/overlay/ink-place.ts): the anchor's point of the screen, moved in by the offset (ui.hud's x and y, in the HUD root's
+// units: the screen's width / 3840 pixels each) but at least the anchor's floor (in the HUD's design units: the screen's
+// height / 2160 pixels each), less the same fractions of the box's size, kept whole on screen with an 8-unit margin.
+std::pair<float, float> PanelOrigin(const std::string& aAnchor, double aX, double aY, float aScreenW, float aScreenH, float aBoxW, float aBoxH);
 
 class OverlayHost
 {

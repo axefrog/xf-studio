@@ -121,6 +121,15 @@ struct State
 
     // 0.8.3: the bridge's own kill key's press detection (game thread only; Main.cpp PollKillKey).
     killkey::Watch killKeyWatch;
+    // 0.8.4: the kill key can be changed from the XF Runtime Bridge window (XFBridge_KillKey) while the game runs, so after
+    // load config.killKey is read and written only under this lock, with what else may react to it (core FindConflicts).
+    std::mutex killKeyMutex;
+    killkey::Conflicts killKeyConflicts;
+    std::atomic<bool> killKeyChanged{false}; // the press detection starts afresh (a release first) after a change
+    killkey::Chord KillKey();
+
+    // 0.8.4, test hook (test.save.delay; the -writes package only): the next game.save's hold after prepare, in ms; taken once.
+    std::atomic<int32_t> saveHoldMs{0};
 
     // 0.7: the XF ImGui overlay host (P0, draw-only; core/overlay/Host.hpp, plugin/Overlay.cpp), configured from [overlay].
     xfb::overlay::OverlayHost overlayHost;
@@ -141,4 +150,11 @@ nlohmann::json InfoJson();
 std::string HudFrame();
 // 0.8: the bridge's state as every panel's status line reads it (core/InkUi.hpp Summarize).
 inkui::BridgeView BridgeViewNow();
+// 0.8.4: what else may react to a kill key, from the game's input files and CET's hotkeys (read only).
+killkey::Conflicts ReadKillKeyConflicts(const killkey::Chord& aChord);
+// 0.8.4: bridge_info's kill_key: the key, its config.ini spelling, the default, and the warnings and notes about it.
+nlohmann::json KillKeyJson();
+// 0.8.4 (XFBridge_KillKey): sets the kill key from a chord's text (the window's Change..., or the default for Reset), saves it
+// to config.ini's [ui] kill_key, and answers {ok, kill_key, saved, save_error?, why?}. A refused text changes nothing.
+nlohmann::json SetKillKey(const std::string& aText, const std::string& aSource);
 } // namespace xfb::plugin

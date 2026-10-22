@@ -146,6 +146,7 @@ int wmain(int argc, wchar_t** argv)
     uint32_t idleSeconds = 120;
     bool cet = true;
     bool allowLivePose = false;
+    bool allowTestHooks = false;
     int rearmAfterMs = -1;
     bool codeware = true;
     std::wstring modDir; // 0.8.3: the folder showroom.staged reads as the game's archive/pc/mod (tests pass their own)
@@ -194,6 +195,10 @@ int wmain(int argc, wchar_t** argv)
         {
             allowLivePose = true;
         }
+        else if (arg == L"--allow-test-hooks")
+        {
+            allowTestHooks = true;
+        }
         else if (arg == L"--rearm-after-ms" && i + 1 < argc)
         {
             rearmAfterMs = std::clamp(std::stoi(argv[++i]), 0, 60000);
@@ -240,6 +245,7 @@ int wmain(int argc, wchar_t** argv)
         xfb::ParseConfig("[bridge]\nallow_write_classes = " + xfb::win32::Narrow(writeClasses) + "\n").writeClasses;
     config.allowCreatorLeave = allowCreatorLeave;
     config.allowLivePose = allowLivePose;
+    config.allowTestHooks = allowTestHooks;
     config.maxRequestsPerSecond = 20;
     config.requestTimeoutMs = 1000;
     config.idleDisconnectSeconds = idleSeconds;
@@ -440,6 +446,8 @@ int wmain(int argc, wchar_t** argv)
     // Bridge 0.6's simulated world (selftest/Sim060.cpp): scene.read, the handover, behaviours, player control, input.probe.
     static std::unique_ptr<xfb::selftest::Sim060> sim060;
     static xfb::writes::RestoreOnce restore;
+    // 0.8.4: test.save.delay's one-shot hold of the next simulated save.
+    static std::atomic<int32_t> simSaveHoldMs{0};
     // The script layer's readiness (RB-76), as the plugin keeps it: the simulated session is up from the start;
     // selftest.script_layer moves it, and the simulated load detaches, attaches and lets the player in. With
     // detach_before_next_task, the next game-thread task sees the detach first, as session 5's game.status did.
@@ -2189,10 +2197,14 @@ int wmain(int argc, wchar_t** argv)
                                          sim.unlockTicks = -1;
                                      };
                                      ops.sleep = [](std::chrono::milliseconds aFor) { std::this_thread::sleep_for(aFor); };
+                                     ops.hold = [] { return simSaveHoldMs.exchange(0); };
                                      auto out = w::GameSave(request, ops);
                                      out["simulated"] = true;
                                      return out;
                                  }));
+    // 0.8.4: the plugin's test hook, from the same core function ([bridge] allow_test_hooks as --allow-test-hooks).
+    dispatcher.Register({"test.save.delay", xfb::Access::WriteSave, xfb::RunOn::BridgeThread, "Test hook: holds the next save (simulated).",
+                         [&config](const xfb::MethodContext& aContext) { return w::TestSaveDelay(aContext.params, config.allowTestHooks, simSaveHoldMs); }});
     dispatcher.Register(simWrite("game.load", xfb::Access::WriteSave, xfb::RunOn::BridgeThread, "Load (simulated).",
                                  [&queue, &dispatcher](const xfb::MethodContext& aContext) {
                                      const auto request = p::ParseGameLoad(aContext.params);

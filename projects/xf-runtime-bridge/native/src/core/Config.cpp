@@ -156,6 +156,10 @@ Config ParseConfig(const std::string& aText)
         {
             ok = ParseBool(value, config.allowLivePose);
         }
+        else if (key == "bridge.allow_test_hooks")
+        {
+            ok = ParseBool(value, config.allowTestHooks);
+        }
         else if (key == "bridge.allow_write_classes")
         {
             // A comma-separated list; an unknown name is ignored with a warning, so a typo can
@@ -245,7 +249,7 @@ Config ParseConfig(const std::string& aText)
                 if (chord.enabled && killkey::GameBinds(chord.vk))
                 {
                     config.warnings.push_back("line " + std::to_string(lineNumber) + ": the kill key " + chord.label +
-                                              " is also one of the game's own keys, so pressing it does that too; End is free");
+                                              " is also one of the game's own keys, so pressing it does that too; the default, Ctrl + Shift + End, is free");
                 }
             }
             else
@@ -333,6 +337,7 @@ std::string DescribeConfig(const Config& aConfig)
     text += " bridge.allow_write_classes=" + (classes.empty() ? std::string("<none>") : classes);
     text += " bridge.allow_creator_leave=" + std::string(aConfig.allowCreatorLeave ? "true" : "false");
     text += " bridge.allow_live_pose=" + std::string(aConfig.allowLivePose ? "true" : "false");
+    text += " bridge.allow_test_hooks=" + std::string(aConfig.allowTestHooks ? "true" : "false");
     text += " bridge.request_timeout_ms=" + std::to_string(aConfig.requestTimeoutMs);
     text += " bridge.max_requests_per_second=" + std::to_string(aConfig.maxRequestsPerSecond);
     text += " bridge.idle_disconnect_seconds=" + std::to_string(aConfig.idleDisconnectSeconds);

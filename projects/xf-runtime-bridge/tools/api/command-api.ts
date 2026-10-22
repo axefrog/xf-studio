@@ -531,6 +531,14 @@ export class CommandApi {
     (this.idleTimer as { unref?: () => void }).unref?.();
   }
 
+  /**
+   * 0.8.4: lets the main pipe go while nothing of this API is in flight on it, so a long local wait (game.wait,
+   * session.wait) holds it only during each poll and another process's XF tools can call between polls.
+   */
+  release() {
+    if (this.inFlight === 0) this.disconnect();
+  }
+
   disconnect() {
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.idleTimer = null;

@@ -14,9 +14,12 @@
 --   * Mark this moment (0.6): a marker in the session's event stream (XFBridge_Note), for the coordinator's session.log; the
 --     coordinator also treats it as "ready".
 --   * Stop the bridge (the kill switch), on its own row in the danger colour (0.8, the UI review), while it listens, with the
---     bridge's own kill key beside it (0.8.3, [ui] kill_key: it works in the game without CET).
+--     bridge's own kill key beside it (0.8.3, [ui] kill_key: it works in the game without CET). 0.8.4 (the maintainer: make
+--     it configurable): Change... takes the next key pressed, with Ctrl, Shift or Alt held, and Reset to default puts
+--     Ctrl + Shift + End back (XFBridge_KillKey saves either to config.ini); what else may react to the key is said under it.
 --   * A commentary box (0.7; XFBridge_Comment): Send, or Ctrl+Enter (0.8, session 8's request; 0.8.2: read from the box's own
---     validation, since Ctrl+Enter ends the box's editing before anything after it can see the key).
+--     validation, since Ctrl+Enter ends the box's editing before anything after it can see the key). 0.8.4 (session 11: long
+--     text ran out of view sideways): the text wraps at words (see drawComment).
 -- Buttons only queue an action; init.lua carries it out in onUpdate, never while drawing.
 -- 0.7: the window takes the XF Studio theme (theme.lua, generated from the Studio's tokens): dark by default, light when
 -- the plugin's [overlay] theme says so; never switched automatically. init.lua themes its label through panel.pushTheme.
@@ -33,6 +36,8 @@ local WRAP_EM = 28
 local function coloured(colour, text)
   ImGui.TextColored(colour[1], colour[2], colour[3], colour[4], text)
 end
+
+local drawKillKey -- 0.8.4, defined with the kill-key controls below
 
 local function wrapped(text)
   ImGui.PushTextWrapPos(ImGui.GetFontSize() * WRAP_EM)
@@ -129,8 +134,39 @@ local function keyLabel(key)
   return (string.gsub(tostring(key), "^IK_", ""))
 end
 
+-- 0.8.4 (the UI review's fix 2: a question arriving or clearing moved the buttons under the pointer, so a click aimed at
+-- Pause or Mark could land on Stop the bridge or on an answer): every button ignores clicks for SETTLE_S after the content
+-- above it changed height. panel.body notes the question slot's height each frame (panel.noteLayout).
+local SETTLE_S = 0.4
+local settling = false
+
+function panel.noteLayout(state, height)
+  local now = ImGui.GetTime()
+  if state.layoutHeight ~= nil and math.abs(height - state.layoutHeight) > 0.5 then
+    state.layoutChangedAt = now
+  end
+  state.layoutHeight = height
+  settling = state.layoutChangedAt ~= nil and now - state.layoutChangedAt < SETTLE_S
+end
+
+-- A button that ignores a click while the layout settles.
+local function button(label)
+  local pressed = ImGui.Button(label)
+  return pressed and not settling
+end
+
+-- The style's horizontal frame padding and item spacing in pixels (the theme's metrics, as pushTheme scaled them).
+local function spacing(theme)
+  local m = theme and theme.metrics or {}
+  local k = ImGui.GetFontSize() / (m.FontSize or 13)
+  return (m.FramePaddingX or 8) * k, (m.ItemSpacingX or 8) * k
+end
+
 -- The question's slot (0.8, the UI review): the pending question with its answers as primary buttons, each naming its key;
--- once answered, the same slot says what was sent, at the buttons' height, so nothing below it moves.
+-- once answered, the same slot says what was sent, at the buttons' height, so nothing below it moves. 0.8.4 (the UI
+-- review's fixes 1-3): the hover is the Studio's primary hover (XfAccentHover; XfAccentEdge only as the border), the
+-- buttons wrap onto a new row at the window's text width instead of widening it, and "Sent: ..." stays until the next
+-- question takes its place.
 local function drawQuestion(state, queue, theme, which)
   local ask = state.pendingAsk
   local answered = state.answeredAsk
@@ -142,23 +178,257 @@ local function drawQuestion(state, queue, theme, which)
     local keys = state.info and state.info.answer_keys or {}
     if state.keysArmed == false then keys = {} end -- 0.8.2: no key answers it now; the buttons do
     local fill = panel.colour(theme, which, "XfAccent", AMBER)
+    local hover = panel.colour(theme, which, "XfAccentHover", fill)
     local edge = panel.colour(theme, which, "XfAccentEdge", fill)
     local ink = panel.colour(theme, which, "XfAccentInk", { 0.09, 0.09, 0.05, 1.0 })
     ImGui.PushStyleColor(ImGuiCol.Button, fill[1], fill[2], fill[3], fill[4])
-    ImGui.PushStyleColor(ImGuiCol.ButtonHovered, edge[1], edge[2], edge[3], edge[4])
+    ImGui.PushStyleColor(ImGuiCol.ButtonHovered, hover[1], hover[2], hover[3], hover[4])
     ImGui.PushStyleColor(ImGuiCol.ButtonActive, fill[1], fill[2], fill[3], fill[4])
     ImGui.PushStyleColor(ImGuiCol.Text, ink[1], ink[2], ink[3], ink[4])
+    ImGui.PushStyleColor(ImGuiCol.Border, edge[1], edge[2], edge[3], edge[4])
+    local bordered = ImGuiStyleVar and ImGuiStyleVar.FrameBorderSize ~= nil
+    if bordered then ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1) end
+    local pad, gap = spacing(theme)
+    local limit = ImGui.GetFontSize() * WRAP_EM
+    local used = 0
     for i, label in ipairs(ask.choices) do
-      if i > 1 then ImGui.SameLine() end
       local key = keys[i] and (" (" .. keyLabel(keys[i]) .. ")") or ""
-      if ImGui.Button(tostring(label) .. key .. "##xf_answer_" .. tostring(i)) then
+      local text = tostring(label) .. key
+      local width = (ImGui.CalcTextSize(text)) + pad * 2
+      if i > 1 and used + gap + width <= limit then
+        ImGui.SameLine()
+        used = used + gap + width
+      else
+        used = width
+      end
+      if button(text .. "##xf_answer_" .. tostring(i)) then
         queue("answer", { id = ask.id, choice = i - 1 })
       end
     end
-    ImGui.PopStyleColor(4)
+    if bordered then ImGui.PopStyleVar(1) end
+    ImGui.PopStyleColor(5)
   else
     ImGui.AlignTextToFramePadding()
     coloured(panel.colour(theme, which, "XfTextMuted", GREY), "Sent: " .. tostring(answered.label) .. ". Waiting for the next question.")
+  end
+end
+
+-- 0.8.4 (session 11: the comment box didn't wrap): word wrap for the comment box. CET 1.37.1's Dear ImGui (1.91.1) has no
+-- wrapping multi-line box (ImGuiInputTextFlags.WordWrap came in 1.92), and its Lua binding passes no callback, so the box
+-- wraps itself: a space where a line runs past the box becomes a line break ("soft"), and soft breaks turn back into
+-- spaces before rewrapping and before sending. A space and a line break are one character each, so the text keeps its
+-- length and the cursor its place. While the box is being edited Dear ImGui keeps its own copy and ignores ours, except in
+-- a read-only frame, where it reloads ours and keeps the cursor (imgui_widgets.cpp 1.91.1, InputTextEx): so a rewrap is shown
+-- through one read-only frame. A key pressed in exactly that frame is lost (rare: one frame per wrapped line).
+
+-- The soft breaks of the old text carried over to the new one: those before the edit stay, those after it move with it,
+-- those inside it go, and only positions still holding a line break count. Positions are byte indexes (1-based).
+function panel.carrySoft(old, new, soft)
+  local ol, nl = #old, #new
+  local limit = math.min(ol, nl)
+  local a = 0
+  while a < limit and string.byte(old, a + 1) == string.byte(new, a + 1) do a = a + 1 end
+  local b = 0
+  while b < limit - a and string.byte(old, ol - b) == string.byte(new, nl - b) do b = b + 1 end
+  local out = {}
+  for pos in pairs(soft or {}) do
+    local moved = nil
+    if pos <= a then
+      moved = pos
+    elseif pos > ol - b then
+      moved = pos + (nl - ol)
+    end
+    if moved and string.sub(new, moved, moved) == "\n" then out[moved] = true end
+  end
+  return out
+end
+
+-- The review of 0.8.4: Dear ImGui's Undo and Redo put text back that the soft breaks were dropped with (select across a
+-- wrapped line, delete, Ctrl+Z: the line break returns without its soft mark, and Send would submit a newline where the
+-- player wrote a space). So the box remembers its last states (text and soft breaks): a text seen before gets its soft
+-- breaks back, and text put back that sat at the same place in a remembered state gets that state's soft breaks there.
+-- Only a line break the player typed (Enter this frame) is never taken for a soft one. Positions are byte indexes.
+local HISTORY = 64
+
+local function copySet(set)
+  local out = {}
+  for k in pairs(set or {}) do out[k] = true end
+  return out
+end
+
+function panel.rememberSoft(state, text, soft)
+  state.commentHistory = state.commentHistory or {}
+  local history = state.commentHistory
+  local last = history[#history]
+  if last and last.text == text then
+    last.soft = copySet(soft)
+    return
+  end
+  history[#history + 1] = { text = text, soft = copySet(soft) }
+  if #history > HISTORY then table.remove(history, 1) end
+end
+
+function panel.trackSoft(state, old, new, typedNewline)
+  if old == new then return state.commentSoft or {} end
+  local soft = panel.carrySoft(old, new, state.commentSoft)
+  if typedNewline then return soft end
+  local history = state.commentHistory or {}
+  for i = #history, 1, -1 do
+    if history[i].text == new then return copySet(history[i].soft) end
+  end
+  local ol, nl = #old, #new
+  local limit = math.min(ol, nl)
+  local a = 0
+  while a < limit and string.byte(old, a + 1) == string.byte(new, a + 1) do a = a + 1 end
+  local b = 0
+  while b < limit - a and string.byte(old, ol - b) == string.byte(new, nl - b) do b = b + 1 end
+  local inserted = string.sub(new, a + 1, nl - b)
+  if not string.find(inserted, "\n", 1, true) then return soft end
+  for i = #history, 1, -1 do
+    local h = history[i]
+    if string.sub(h.text, a + 1, a + #inserted) == inserted then
+      for pos in pairs(h.soft) do
+        if pos > a and pos <= a + #inserted then soft[pos] = true end
+      end
+      break
+    end
+  end
+  return soft
+end
+
+-- The text with its soft breaks as spaces again (what is sent).
+function panel.unwrap(text, soft)
+  if not soft or next(soft) == nil then return text end
+  local parts = {}
+  for i = 1, #text do
+    local c = string.sub(text, i, i)
+    parts[i] = (soft[i] and c == "\n") and " " or c
+  end
+  return table.concat(parts)
+end
+
+-- Wraps the text at words to width (measure(s) answers a line's width), every soft break chosen afresh; hard breaks (the
+-- player's Enter) stay. Answers the wrapped text and its soft breaks.
+function panel.wrap(text, soft, measure, width)
+  local base = panel.unwrap(text, soft)
+  local out = {}
+  local n = #base
+  local lineStart = 1
+  local lastSpace = nil
+  local i = 1
+  while i <= n + 1 do
+    local c = i <= n and string.sub(base, i, i) or "\n"
+    if c == " " or c == "\n" then
+      if lastSpace and lastSpace >= lineStart and measure(string.sub(base, lineStart, i - 1)) > width then
+        out[lastSpace] = true
+        lineStart = lastSpace + 1
+      end
+      if c == "\n" then
+        lineStart = i + 1
+        lastSpace = nil
+      else
+        lastSpace = i
+      end
+    end
+    i = i + 1
+  end
+  if next(out) == nil then return base, out end
+  local parts = {}
+  for k = 1, n do
+    parts[k] = out[k] and "\n" or string.sub(base, k, k)
+  end
+  return table.concat(parts), out
+end
+
+-- 0.8.4: the keys Change... can take, by Dear ImGui's name, with config.ini's spelling (core/KillKey.cpp Parse).
+local CAPTURE_KEYS = {
+  { "End", "End" }, { "Home", "Home" }, { "Insert", "Insert" }, { "Delete", "Delete" }, { "PageUp", "PageUp" },
+  { "PageDown", "PageDown" }, { "Pause", "Pause" }, { "ScrollLock", "ScrollLock" },
+  { "KeypadMultiply", "NumpadMultiply" }, { "KeypadDivide", "NumpadDivide" }, { "KeypadSubtract", "NumpadMinus" },
+  { "KeypadAdd", "NumpadPlus" }, { "KeypadDecimal", "NumpadDecimal" },
+}
+for i = 1, 12 do table.insert(CAPTURE_KEYS, { "F" .. i, "F" .. i }) end
+for i = 0, 9 do
+  table.insert(CAPTURE_KEYS, { "Keypad" .. i, "Numpad" .. i })
+  table.insert(CAPTURE_KEYS, { tostring(i), tostring(i) })
+end
+for c = string.byte("A"), string.byte("Z") do table.insert(CAPTURE_KEYS, { string.char(c), string.char(c) }) end
+
+local function keyDown(name)
+  local index = ImGuiKey and ImGuiKey[name]
+  return index ~= nil and ImGui.IsKeyDown(index)
+end
+
+-- The chord being pressed now, as config.ini spells it ("Ctrl+Shift+End"), or nil; "cancel" for Esc.
+function panel.capturedChord()
+  if keyDown("Escape") and ImGui.IsKeyPressed(ImGuiKey.Escape, false) then return "cancel" end
+  for _, entry in ipairs(CAPTURE_KEYS) do
+    local index = ImGuiKey and ImGuiKey[entry[1]]
+    if index ~= nil and ImGui.IsKeyPressed(index, false) then
+      local text = ""
+      if keyDown("LeftCtrl") or keyDown("RightCtrl") then text = text .. "Ctrl+" end
+      if keyDown("LeftShift") or keyDown("RightShift") then text = text .. "Shift+" end
+      if keyDown("LeftAlt") or keyDown("RightAlt") then text = text .. "Alt+" end
+      return text .. entry[2]
+    end
+  end
+  return nil
+end
+
+-- 0.8.4: Change... and Reset to default under the kill switch, and what else may react to the key (bridge_info's kill_key:
+-- warnings from the game's bindings and CET's hotkeys; notes; after a change, what can't be seen from here).
+drawKillKey = function(state, queue, theme, which, killKey)
+  if not killKey then return end
+  ImGui.Separator()
+  -- One row, the same height while capturing: the label, the key as a keycap, then Change... (or the capture prompt).
+  ImGui.AlignTextToFramePadding()
+  ImGui.Text("Keys")
+  ImGui.SameLine()
+  coloured(panel.colour(theme, which, "XfTextMuted", GREY), "Stop key")
+  ImGui.SameLine()
+  ImGui.BeginDisabled(true)
+  ImGui.Button((killKey.enabled and tostring(killKey.label) or "Off") .. "##xf_killkey_cap")
+  ImGui.EndDisabled()
+  ImGui.SameLine()
+  if state.killKeyCapture then
+    coloured(panel.colour(theme, which, "XfAccentText", AMBER), "Press a key, with Ctrl, Shift or Alt if you like. Esc cancels.")
+    local chord = panel.capturedChord()
+    if chord == "cancel" then
+      state.killKeyCapture = false
+    elseif chord then
+      state.killKeyCapture = false
+      queue("killkey", { action = "set", key = chord })
+    end
+  else
+    if button("Change...##xf_killkey_change") then state.killKeyCapture = true end
+    if killKey.is_default == false then
+      ImGui.SameLine()
+      if button("Reset to " .. tostring(killKey.default) .. "##xf_killkey_reset") then
+        queue("killkey", { action = "reset" })
+      end
+    end
+  end
+  if state.killKeyRefused then
+    ImGui.PushTextWrapPos(ImGui.GetFontSize() * WRAP_EM)
+    ImGui.TextColored(RED[1], RED[2], RED[3], RED[4], tostring(state.killKeyRefused))
+    ImGui.PopTextWrapPos()
+  end
+  for _, warning in ipairs(type(killKey.warnings) == "table" and killKey.warnings or {}) do
+    ImGui.PushTextWrapPos(ImGui.GetFontSize() * WRAP_EM)
+    ImGui.TextColored(AMBER[1], AMBER[2], AMBER[3], AMBER[4], tostring(warning))
+    ImGui.PopTextWrapPos()
+  end
+  if state.killKeyChanged then
+    for _, note in ipairs(type(killKey.notes) == "table" and killKey.notes or {}) do
+      ImGui.PushTextWrapPos(ImGui.GetFontSize() * WRAP_EM)
+      ImGui.TextDisabled(tostring(note))
+      ImGui.PopTextWrapPos()
+    end
+    if type(killKey.unseen) == "string" then
+      ImGui.PushTextWrapPos(ImGui.GetFontSize() * WRAP_EM)
+      ImGui.TextDisabled(killKey.unseen)
+      ImGui.PopTextWrapPos()
+    end
   end
 end
 
@@ -171,19 +441,48 @@ local function drawComment(state, queue, theme, which)
   ImGui.Separator()
   ImGui.Text("Comment for XF Studio")
   local width = ImGui.GetFontSize() * WRAP_EM
+  local nativeWrap = ImGuiInputTextFlags and ImGuiInputTextFlags.WordWrap -- Dear ImGui 1.92+, if a later CET offers it
   local flags = (ImGuiInputTextFlags and ImGuiInputTextFlags.EnterReturnsTrue) or 0
-  local text, submitted = ImGui.InputTextMultiline("##xf_comment_" .. tostring(state.commentGen or 0), state.comment or "", 1000, width,
-    ImGui.GetFontSize() * 4, flags)
-  if type(text) == "string" then
-    state.comment = text
+  local reloading = state.commentReload ~= nil
+  if reloading then
+    -- The read-only frame that hands the rewrapped text to the box being edited (see above).
+    state.comment = state.commentReload
+    state.commentReload = nil
+    flags = flags + ((ImGuiInputTextFlags and ImGuiInputTextFlags.ReadOnly) or 0)
+  elseif nativeWrap then
+    flags = flags + nativeWrap
   end
-  local empty = not state.comment or not string.find(state.comment, "%S")
-  if submitted and not empty then
-    queue("comment", state.comment)
+  local before = state.comment or ""
+  local text, submitted = ImGui.InputTextMultiline("##xf_comment_" .. tostring(state.commentGen or 0), before, 1000, width,
+    ImGui.GetFontSize() * 4, flags)
+  local editing = ImGui.IsItemActive()
+  if type(text) == "string" and not reloading then
+    local typedNewline = ImGuiKey ~= nil and (ImGui.IsKeyPressed(ImGuiKey.Enter, true) or ImGui.IsKeyPressed(ImGuiKey.KeypadEnter, true))
+    state.commentSoft = panel.trackSoft(state, before, text, typedNewline)
+    state.comment = text
+    if not nativeWrap and text ~= before then
+      -- Wrap to the box's width, less its padding and a scrollbar's room.
+      local wrapped, soft = panel.wrap(text, state.commentSoft, function(line) return (ImGui.CalcTextSize(line)) end,
+        width - ImGui.GetFontSize() * 2)
+      state.commentSoft = soft
+      panel.rememberSoft(state, wrapped, soft)
+      if wrapped ~= text then
+        if editing then
+          state.commentReload = wrapped
+        else
+          state.comment = wrapped
+        end
+      end
+    end
+  end
+  local message = panel.unwrap(state.comment or "", state.commentSoft)
+  local empty = not string.find(message, "%S")
+  if submitted and not empty and not reloading then
+    queue("comment", message)
   end
   ImGui.BeginDisabled(empty)
-  if ImGui.Button("Send##xf_comment_send") and not empty then
-    queue("comment", state.comment)
+  if button("Send##xf_comment_send") and not empty then
+    queue("comment", message)
   end
   ImGui.EndDisabled()
   if ImGui.IsItemHovered() then
@@ -229,9 +528,11 @@ function panel.body(state, queue, theme, which)
     end
 
     local live = bridge and bridge.enabled and bridge.listening and not bridge.killed
+    local slotTop = ImGui.GetCursorPosY()
     if live then
       drawQuestion(state, queue, theme, which)
     end
+    panel.noteLayout(state, ImGui.GetCursorPosY() - slotTop)
 
     if bridge and bridge.enabled then
       if bridge.killed then
@@ -239,47 +540,59 @@ function panel.body(state, queue, theme, which)
         if state.pending == "rearm" or (info and info.rearm_pending) then
           wrapped("Reconnecting... The bridge first puts back what it changed (a frozen world, a hidden menu), then starts again.")
         else
-          wrapped("Reconnect starts the bridge again with a new connection key, without restarting the game. XF tools reconnect by themselves. If the bridge changed anything, saving stays locked until you load a save.")
-          if ImGui.Button("Reconnect") then
+          -- 0.8.4 (the UI review's fix 7): the button, and the one thing the player needs to know, only when it applies.
+          if button("Reconnect") then
             queue("rearm")
+          end
+          if info and info.writes_used then
+            wrapped("Saving stays locked until you load a save.")
           end
         end
       elseif bridge.listening then
         ImGui.Separator()
         if bridge.allow_writes then
           if bridge.writes_paused then
-            if ImGui.Button("Resume changes") then
+            if button("Resume changes") then
               queue("pause", false)
             end
           else
-            if ImGui.Button("Pause changes") then
+            if button("Pause changes") then
               queue("pause", true)
             end
           end
           ImGui.SameLine()
         end
-        if ImGui.Button("Mark this moment") then
+        if button("Mark this moment") then
           queue("mark")
         end
         -- 0.8 (the UI review): the kill switch on its own row, in the danger colour, away from the everyday buttons.
         ImGui.Spacing()
         ImGui.PushStyleColor(ImGuiCol.Text, RED[1], RED[2], RED[3], RED[4])
-        local stop = ImGui.Button("Stop the bridge")
+        local stop = button("Stop the bridge")
         ImGui.PopStyleColor(1)
         if stop then
           queue("kill")
         end
-        -- 0.8.3: the bridge's own kill key ([ui] kill_key), which works in the game without CET.
+        -- 0.8.3: the bridge's own kill key ([ui] kill_key), which works in the game without CET. 0.8.4 (the UI review's
+        -- fix 8): in the muted text colour (not the disabled one), with where it works as a tooltip.
         local killKey = info and type(info.kill_key) == "table" and info.kill_key or nil
         if killKey and killKey.enabled and type(killKey.label) == "string" then
           ImGui.SameLine()
-          ImGui.TextDisabled("or press " .. killKey.label .. " in the game")
+          coloured(panel.colour(theme, which, "XfTextMuted", GREY), "or press " .. killKey.label .. " in the game")
+          if ImGui.IsItemHovered() then
+            ImGui.SetTooltip("Works in play, photo mode, menus and loading screens while the CET overlay is closed.")
+          end
         end
       end
     end
 
     if live then
       drawComment(state, queue, theme, which)
+    end
+
+    -- 0.8.4 (the UI review): the Keys line, lower in the window, away from the Stop row.
+    if bridge and bridge.enabled and bridge.listening and not bridge.killed then
+      drawKillKey(state, queue, theme, which, info and type(info.kill_key) == "table" and info.kill_key or nil)
     end
 
     if state.message then
@@ -289,7 +602,7 @@ function panel.body(state, queue, theme, which)
 
     if info then
       ImGui.Separator()
-      ImGui.TextDisabled("XF Runtime Bridge " .. tostring(info.plugin_version))
+      ImGui.TextDisabled("Version " .. tostring(info.plugin_version)) -- 0.8.4 (the UI review's fix 10): the title already names it
     end
   end)
   ImGui.End()

@@ -45,6 +45,9 @@ public class XFPinEntry {
   public let markAt: Vector2;
   public let markPx: Vector2;
   public let markOnScreen: Bool;
+  // 0.8.4: the pin's own point projected into window pixels this tick (where the game's marker is anchored), so a screenshot
+  // shows how far above it the game draws its marker and the XF mark.
+  public let pointPx: Vector2;
 }
 
 public class XFPinRegistry extends ScriptableSystem {
@@ -167,7 +170,8 @@ public abstract class XFInkPins {
       + ",\"target\":" + XFJson.Str(entry.target) + ",\"piece\":" + IntToString(entry.piece) + ",\"bound\":" + XFJson.Str(entry.bound ? "object" : "position")
       + ",\"position\":[" + XFJson.Num(entry.position.X) + "," + XFJson.Num(entry.position.Y) + "," + XFJson.Num(entry.position.Z) + "],\"drawn_by\":[" + drawn + "]"
       + ",\"xf_mark\":{\"shown\":" + XFJson.Flag(entry.markShown) + ",\"at\":[" + XFJson.Num(entry.markAt.X) + "," + XFJson.Num(entry.markAt.Y)
-      + "],\"px\":[" + XFJson.Num(entry.markPx.X) + "," + XFJson.Num(entry.markPx.Y) + "],\"on_screen\":" + XFJson.Flag(entry.markShown && entry.markOnScreen) + "}}";
+      + "],\"px\":[" + XFJson.Num(entry.markPx.X) + "," + XFJson.Num(entry.markPx.Y) + "],\"point_px\":[" + XFJson.Num(entry.pointPx.X) + "," + XFJson.Num(entry.pointPx.Y)
+      + "],\"on_screen\":" + XFJson.Flag(entry.markShown && entry.markOnScreen) + "}}";
   }
 
   // 0.8.2: ui.state's pins, with the views that have drawn each by now.
@@ -227,7 +231,8 @@ public abstract class XFInkPins {
       if !IsDefined(entity) {
         return XFJson.Fail("not_spawned_yet", "piece " + IntToString(piece) + " isn't in the world yet; try again in a moment");
       }
-      // The head's eyes stand 1.69 m above its entity's origin (the showroom build's head joint plus 5 cm). 0.7 (session 7:
+      // The head's eyes stand 1.69 m above its entity's origin (the showroom build's head joint plus 5 cm); lift defaults to
+      // 0.12 m, the crown (0.8.4, session 11's G4: 0.25 drew the game's marker about a head's height above it). 0.7 (session 7:
       // the object-bound pin drew well above the head, as the game's default circle): the pin is placed at that point, not
       // bound to the entity, so its height is exactly the eyes plus lift; turning a head doesn't move it, and clearing the
       // heads removes it (RB-87).
@@ -472,6 +477,6 @@ public func SetData(const data: script_ref<WorldMapTooltipData>, menu: ref<World
   let entry = XFInkPins.Entry(Deref(data).mappin);
   if IsDefined(entry) {
     inkTextRef.SetText(this.m_titleText, entry.label);
-    inkTextRef.SetText(this.m_descText, "XF Runtime Bridge test pin (temporary). XF Studio placed it; the kill switch or loading a save removes it.");
+    inkTextRef.SetText(this.m_descText, "Test pin from XF Studio. Stopping the bridge or loading a save removes it."); // 0.8.4: the UI review's fix 7
   }
 }

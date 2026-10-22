@@ -782,7 +782,7 @@ PinRequest ParsePin(const json& aParams)
         }
         request.target = PinRequest::Target::Piece;
         request.piece = static_cast<int32_t>(piece.get<int64_t>());
-        request.lift = kPieceLift; // 0.8: just above the crown (session 8 G5 asked for "just above its eyes")
+        request.lift = kPieceLift; // 0.8.4: at the crown; the game draws its marker above the point (session 11's G4)
     }
     else
     {
