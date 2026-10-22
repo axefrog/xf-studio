@@ -2,7 +2,7 @@
  * The outbox harness's host process, on the production code (phase 1 chunk 1c): prints `port <n>` once it listens.
  *
  * - `localhost <library.sqlite> [commit-log]`: the real library owner and document store with the real `/api/documents` routes, as the
- *   dev server serves them.
+ *   dev server serves them. `XFS_FLUSH=production` keeps the library's flush timing (the latency run); otherwise it flushes within 50 ms.
  * - `desktop <data-root> [commit-log]`: the real desktop server (`createDesktopServer`: its library, routes, workspace lease and outbox
  *   files). Commands reach it through a local front that logs them; it prints `port <front> <desktop server> <session cookie>`.
  *
@@ -41,7 +41,9 @@ async function answered(request: Request, forward: (request: Request) => Promise
 
 if (mode === "localhost") {
   const life = new AbortController();
-  const db = openLibraryDatabase(path, { clock: hostClock(), signal: life.signal, timing: { quietMs: 20, maxMs: 50, retryMaxMs: 200 } });
+  // The kill harness flushes within 50 ms; the latency run (`XFS_FLUSH=production`) keeps the library's own timing.
+  const db = openLibraryDatabase(path, { clock: hostClock(), signal: life.signal,
+    ...(process.env.XFS_FLUSH === "production" ? {} : { timing: { quietMs: 20, maxMs: 50, retryMaxMs: 200 } }) });
   const store = new DocumentStore(db, { beforeCommit: () => killHere("before-commit") });
   store.purgeReceipts();
   const handle = createDocumentsHandler(store, "/api/documents");

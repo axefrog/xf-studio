@@ -39,8 +39,8 @@ export function spawn(script: string, args: string[], kill?: string, env: Record
 }
 
 /** Starts the host on `library` and points `portFile` at it. */
-export async function startHost(library: string, portFile: string, kill?: string, commitLog?: string, staticDir?: string): Promise<Child> {
-  const host = spawn("harness/host-server.ts", [library, commitLog ?? "", ...(staticDir ? [staticDir] : [])], kill);
+export async function startHost(library: string, portFile: string, kill?: string, commitLog?: string): Promise<Child> {
+  const host = spawn("harness/host-server.ts", [library, commitLog ?? ""], kill);
   const line = await host.wait(text => text.startsWith("port "));
   if (!line) throw Error("The host didn't start.");
   writeFileSync(portFile, line.slice(5));
