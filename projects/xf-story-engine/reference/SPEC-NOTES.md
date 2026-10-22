@@ -346,7 +346,7 @@ observable results come before presentation choices.
     (`reference/src/query.ts`)
 48. **Boundaries. (new)** Boundary indices start at 0; the run started at boundary `b` by a process of
     period `n` applies at boundary `b + n`. The cursor persists with the save. When a budget stops a
-    catch-up the engine time rests at the last boundary processed. (`reference/src/evolution.ts`)
+    catch-up the engine time rests at the last boundary processed. (`reference/src/evolution.ts`) New batches are published only after every process starting at that boundary has read the boundary snapshot, then the revision moves once (SR3-01; spec 9.4's shared snapshot).
 
 ## Guards, tooling and presentation
 
@@ -396,11 +396,11 @@ moves when a save, a load, belief state, summary canon, outstanding batches or d
 (SR2-08), so these cannot drift unnoticed. It freezes primitive vectors for `H`, `toUnit`, `rand` and fdlibm `ln`.
 
 The golden digest is `d534e0dcef3f85d27cefa552217152ec` over 1,067 entries, and the run ends at revision
-2,069 with 135 pins and 51 contributions. It replaces `c896b062fda81bacfbb6d84563a2c77d` (1,053 entries,
+2,057 with 135 pins and 51 contributions. It replaces `c896b062fda81bacfbb6d84563a2c77d` (1,053 entries,
 revision 1,956, the same 135 pins and 51 contributions), which hashed a group decision only through the
 emissions and counts that followed it: replacing the weight decision with weight zero left it unchanged
 (SR2-08). The script now hashes each decision's resulting frame and each order whole (14 more entries). The
-revision moved from 1,956 to 2,069 because queuing and applying a process batch now bump it (entry 53); the
+revision moved from 1,956 to 2,069 because queuing and applying a process batch now bump it (entry 53), and then to 2,057 once the batches started at one boundary are published together, after every starting process has read the snapshot (SR3-01; one bump per boundary instead of one per process); the
 revision is not hashed, and the fixes of SR2-01 to SR2-07 changed no other result the script exercises. That
 digest in turn replaced `00796d399c46bee565b64ca1f03323ae` (2,194 entries, revision 1,344, 408 pins, 338
 contributions) of the first version of the script, whose results changed for two reasons: identities are

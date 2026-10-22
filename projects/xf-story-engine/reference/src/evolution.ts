@@ -219,6 +219,7 @@ export class Evolution {
 
     // 3. Take the snapshot and start the processes whose window this is (coarse tiers first).
     const starting = [...this.processes.values()].sort((x, y) => x.tier - y.tier || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
+    const started: Array<{ id: string; batch: OutstandingBatch }> = [];
     for (const def of starting) {
       if (((b % def.period) + def.period) % def.period !== 0) continue;
       if (def.tier >= 3 && !k.frames.demandReachesAt(def.tier, T)) continue;
@@ -240,13 +241,19 @@ export class Evolution {
         if (!(e instanceof LimitExceeded)) throw e;
         k.defects.record({ kind: 'limit', detail: `process ${def.id}: ${e.message}` });
       }
-      this.stateOf(def.id).outstanding.push({ k: b, spanEnd: b + def.period, ops });
-      // A batch joining the outstanding ones adds roots to retention without any other write, and at boundary 0
-      // the engine time does not move either, so the revision moves: the retained set and every cache that
-      // depends on it (resolutions, candidate sets, item descriptors) are then recomputed (SPEC-NOTES 53).
-      k.bump();
+      // Held back until every starting process has read the boundary snapshot (spec 9.4: one shared snapshot,
+      // double buffered). Publishing a batch adds retention roots, which can move structural constraints.
+      started.push({ id: def.id, batch: { k: b, spanEnd: b + def.period, ops } });
       report.runs++;
       cost += 1 + ctx.allowance.used;
+    }
+    // Publish the new batches together. A batch joining the outstanding ones adds roots to retention without any
+    // other write, and at boundary 0 the engine time does not move either, so the revision moves: the retained set
+    // and every cache that depends on it (resolutions, candidate sets, item descriptors) are then recomputed
+    // (SPEC-NOTES 53).
+    if (started.length > 0) {
+      for (const st of started) this.stateOf(st.id).outstanding.push(st.batch);
+      k.bump();
     }
     k.beliefs.onBoundary(b, T);
     return cost;
