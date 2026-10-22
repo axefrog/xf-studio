@@ -1,0 +1,169 @@
+<!--page {
+  "title": "MCP server for Cyberpunk 2077 · XF Studio",
+  "description": "XF Runtime Bridge's MCP server lets an AI client look at Cyberpunk 2077 while you play, set up photo mode, take and judge screenshots and ask you questions in the game, behind two write gates with undo and a kill switch. Test builds only.",
+  "nav": "mcp"
+} -->
+<header class="page-head">
+  <div class="wrap">
+    <p class="eyebrow">MCP server · test builds</p>
+    <h1>Let an AI client work in the game beside you</h1>
+    <p class="lede">XF Runtime Bridge is XF’s own local connection into the running game. Its MCP server hands that connection to an AI client through the Model Context Protocol, so the client can see what the game is doing, set up photo mode, frame and light V, change creator options, take screenshots and check them, and ask you a question in the game, all within limits you set.</p>
+    <p class="notice"><strong>Test builds only.</strong> The bridge and its MCP server are built from source and run in a dedicated test profile for the project’s own in-game testing. They are not part of the XF Studio download. Many of the commands behind the tools have been used in the game; the MCP layer itself is proven offline, and the <a href="#status">status</a> below says which is which.</p>
+  </div>
+</header>
+
+<section class="section" id="what" aria-labelledby="what-title">
+  <div class="wrap">
+    <header class="section-head">
+      <p class="eyebrow"><span class="num">01</span>What it is</p>
+      <h2 id="what-title">One catalogue of game commands, offered as tools</h2>
+      <p class="lede">Every command the bridge understands is defined once, with plain-language text, typed parameters, a permission class and an undo note. The MCP server publishes that catalogue as tools, the same list the command-line client and scripted sessions use, and the tool reference is generated from it.</p>
+    </header>
+    <ul class="cards">
+      <li class="card">
+        <h3>Look</h3>
+        <p>The game’s phase, V’s state, photo mode’s menu, creator options, the world, the save list and the UI, read without changing anything.</p>
+      </li>
+      <li class="card">
+        <h3>Photo mode</h3>
+        <p>Open it with your own photo-mode key, frame V automatically from the game’s own camera projection, set the camera, three lights, expression and pose, and hide the menu for a clean shot.</p>
+      </li>
+      <li class="card">
+        <h3>The appearance screen</h3>
+        <p>Open the character creator from normal play, change an option by the label the game shows, and confirm or back out.</p>
+      </li>
+      <li class="card">
+        <h3>The agent’s own view</h3>
+        <p>Screenshots of the game window with named crops, bursts for flicker checks and contact sheets. A scene report says where each subject sits in the frame, whether anything blocks its face and which lights reach it, and a capture can refuse itself when those checks fail.</p>
+      </li>
+      <li class="card">
+        <h3>Questions in the game</h3>
+        <p>The client asks you something on screen; you answer with a key or a button without leaving the game, or type a comment, and the client picks it up.</p>
+      </li>
+      <li class="card">
+        <h3>Sessions</h3>
+        <p>An event log of every change and refusal, markers, handing the game to you and taking it back, and routines that run inside the game at frame rate, such as a turntable or a smooth look.</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<section class="section alt" id="why" aria-labelledby="why-title">
+  <div class="wrap">
+    <header class="section-head">
+      <p class="eyebrow"><span class="num">02</span>Why it matters</p>
+      <h2 id="why-title">Checks in the game with fewer steps</h2>
+      <p class="lede">Offline work can show that a mod file is well formed, but only the running game shows how it looks. The bridge lets an AI client prepare each shot, so the person at the game only plays, watches and answers.</p>
+    </header>
+    <ul class="principles">
+      <li><h3>Fewer manual steps</h3><p>The client opens photo mode, frames V, places lights, switches creator options and captures, instead of reading out instructions for each click.</p></li>
+      <li><h3>Repeatable shots</h3><p>Framing is measured, not eyeballed, and every change can be put back exactly, so a comparison can be taken again the same way.</p></li>
+      <li><h3>The client sees for itself</h3><p>The scene report and pre-capture checks catch a blocked face or an unlit subject before anyone has to spot it in a screenshot.</p></li>
+      <li><h3>Works with the game you have</h3><p>The bridge drives the vanilla game’s own systems through the common modding frameworks, and never installs, replaces or reorders anyone’s mods.</p></li>
+    </ul>
+  </div>
+</section>
+
+<section class="section" id="safety" aria-labelledby="safety-title">
+  <div class="wrap">
+    <header class="section-head">
+      <p class="eyebrow"><span class="num">03</span>Safety</p>
+      <h2 id="safety-title">Your game stays yours</h2>
+      <p class="lede">The bridge is built so that a mistake, a confused model or a crash can’t harm the game, its saves or the mod setup. The full safety model, with the evidence for each rule, is in the repository.</p>
+    </header>
+    <ul class="checklist done">
+      <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span><strong>Off unless switched on.</strong> The default build opens no connection. A diagnostic build can only look and show the player messages.</span></li>
+      <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span><strong>Two gates on every change.</strong> The MCP server can withhold whole classes of tools, and the bridge inside the game refuses every change its own settings don’t allow, class by class. Changes are allowed only in the dedicated test profile’s build; changing V’s clothing and cyberware stays off until it is explicitly allowed.</span></li>
+      <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span><strong>Every change can be undone.</strong> Each change answers with the exact command that puts it back, and the session log records it.</span></li>
+      <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span><strong>A kill switch.</strong> One command, a button in the game, a hotkey or a file stops the bridge at once and puts back what it left on. Nothing reaches the game again until the player reconnects from inside it.</span></li>
+      <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span><strong>Saves are protected.</strong> Nothing saves except an explicit save, which makes a new file and never overwrites one. While the bridge’s own changes are live, it refuses to save unless explicitly overridden, and loading a save must be confirmed.</span></li>
+      <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span><strong>One key, nothing else.</strong> The only input it ever sends is your own photo-mode key, only to the game window, and only while that window is already in front.</span></li>
+      <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span><strong>Local only.</strong> The connection accepts only your own Windows user on this machine, with a fresh key each game session; it is not reachable from the network or from web pages.</span></li>
+      <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span><strong>Your mod setup is never touched.</strong> A missing framework is named, with where to get it; nothing is installed, replaced, disabled or reordered.</span></li>
+    </ul>
+    <p class="section-note"><strong>What leaves your machine:</strong> XF itself sends nothing anywhere. Your AI client passes every tool result, screenshots included, to the model service it uses.</p>
+  </div>
+</section>
+
+<section class="section alt" id="example" aria-labelledby="example-title">
+  <div class="wrap">
+    <header class="section-head">
+      <p class="eyebrow"><span class="num">04</span>An example</p>
+      <h2 id="example-title">A portrait check, start to finish</h2>
+      <p class="lede">How an AI client runs a short check, one tool at a time. Each change comes back with its undo.</p>
+    </header>
+    <ol class="next-list">
+      <li><strong>Ask first</strong><p><code>ui_message</code> puts “Portrait check next. Ready?” on screen with two answers; <code>session_wait</code> returns “Ready” when the player presses its key.</p></li>
+      <li><strong>Open photo mode</strong><p><code>photo_open</code> presses the player’s own photo-mode key in the game window.</p></li>
+      <li><strong>Frame and light</strong><p><code>photo_frame</code> turns V to the camera and centres her face; <code>photo_light_set</code> places a light in front and to her left, aimed at her head.</p></li>
+      <li><strong>Check, then capture</strong><p><code>scene_report</code> confirms the face is in frame, unblocked and lit; <code>capture_screenshot</code> takes the shot with those checks attached, and refuses if they fail.</p></li>
+      <li><strong>Hand over and finish</strong><p><code>session_handover</code> gives V back so the player can judge the shot and type a comment; the session ends by loading the save it started from.</p></li>
+    </ol>
+    <div class="callout">
+      <h3>Adding it to Claude Code</h3>
+      <p>From a checkout of the repository, after <code>bun install</code> in <code>projects/xf-runtime-bridge</code>. <code>--read-only</code> starts with looking only; the guide has the setup for other MCP clients.</p>
+      <pre class="code"><code>claude mcp add xf-runtime-bridge -- bun PATH_TO_REPO/projects/xf-runtime-bridge/tools/mcp-server.ts --read-only</code></pre>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="status" aria-labelledby="status-title">
+  <div class="wrap">
+    <header class="section-head">
+      <p class="eyebrow"><span class="num">05</span>Status</p>
+      <h2 id="status-title">What is proven where</h2>
+      <p class="lede">The in-game test sessions so far drove the bridge through its command-line client, which runs exactly the same commands as the MCP server. The test card in the repository records each command’s result.</p>
+    </header>
+    <div class="status-grid">
+      <div class="status-col">
+        <h3><span class="tag ok">Seen in the game</span></h3>
+        <ul class="checklist done">
+          <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span><strong>Photo mode:</strong> opened by the player’s key, framing, lights placed about V, the clock, exposure and expressions.</span></li>
+          <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span><strong>The creator:</strong> opened from the street, options changed by label, and backed out of.</span></li>
+          <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span><strong>Sessions:</strong> loading saves, equipping items, the finish showroom’s heads, and questions answered from inside the game.</span></li>
+          <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span><strong>The kill switch</strong> putting back what the bridge left on.</span></li>
+        </ul>
+      </div>
+      <div class="status-col">
+        <h3><span class="tag open">Offline or open</span></h3>
+        <ul class="checklist open">
+          <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5"/></svg><span><strong>The MCP layer:</strong> tested end to end with the official MCP client against a simulated game; not yet the route of a whole in-game session.</span></li>
+          <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5"/></svg><span><strong>Newer commands</strong> stay offline-only until their in-game check passes, and a few research tools are known not to work yet.</span></li>
+          <li><svg class="icon mark" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5"/></svg><span><strong>Scope:</strong> Windows and game 2.31, one AI client at a time, and the game window in front to open photo mode.</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section alt" id="directions" aria-labelledby="directions-title" data-future>
+  <div class="wrap">
+    <header class="section-head">
+      <p class="eyebrow"><span class="num">06</span>Directions</p>
+      <h2 id="directions-title">Where it could go</h2>
+      <p class="lede">Directions under discussion, not commitments, and none has a date.</p>
+    </header>
+    <ul class="principles">
+      <li><h3>Inside the desktop app</h3><p>The same tools hosted by XF Studio behind an off-by-default switch, with a consent screen per permission class, so you can connect your own AI client.</p></li>
+      <li><h3>Studio tools</h3><p>The Studio’s own actions, such as editing a look or running Check and Build, offered through the same catalogue with the same undo and refusals as the interface.</p></li>
+    </ul>
+  </div>
+</section>
+
+<section class="section" id="docs" aria-labelledby="docs-title">
+  <div class="wrap split">
+    <div class="prose">
+      <p class="eyebrow"><span class="num">07</span>Documentation</p>
+      <h2 id="docs-title">Read more</h2>
+      <p>The guide covers installing the server, the safety model, answering from inside the game, a worked session, troubleshooting and current limits. The reference lists every tool with its parameters, permission class, undo and refusals, generated from the catalogue.</p>
+      <a class="btn primary" href="{{blob}}/projects/xf-runtime-bridge/docs/mcp.md">Read the MCP guide</a>
+    </div>
+    <ul class="doc-links" aria-label="MCP documentation">
+      <li><a class="doc-link" href="{{blob}}/projects/xf-runtime-bridge/docs/mcp-reference.md"><strong>Tool reference</strong><span>Every tool by area, generated from the command catalogue.</span><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5h6.5V10M12.5 3.5L4 12"/></svg></a></li>
+      <li><a class="doc-link" href="{{blob}}/projects/xf-runtime-bridge/README.md"><strong>XF Runtime Bridge</strong><span>The bridge’s layers, commands, configuration and build.</span><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5h6.5V10M12.5 3.5L4 12"/></svg></a></li>
+      <li><a class="doc-link" href="{{blob}}/research/runtime/runtime-bridge-design.md"><strong>Design and safety model</strong><span>How the bridge talks to the game, and the evidence for each safety rule.</span><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5h6.5V10M12.5 3.5L4 12"/></svg></a></li>
+      <li><a class="doc-link" href="{{blob}}/research/runtime/runtime-bridge-test-card.md"><strong>In-game test card</strong><span>Each command’s check in the game, and its result.</span><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5h6.5V10M12.5 3.5L4 12"/></svg></a></li>
+      <li><a class="doc-link" href="https://modelcontextprotocol.io/"><strong>Model Context Protocol</strong><span>The open standard the server speaks, and the clients that support it.</span><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5h6.5V10M12.5 3.5L4 12"/></svg></a></li>
+    </ul>
+  </div>
+</section>

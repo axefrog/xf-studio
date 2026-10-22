@@ -1,5 +1,6 @@
-# Repository hygiene: relative links and anchors in tracked Markdown must resolve, and no tracked
-# text file may contain personal paths or e-mail addresses (the repository is public).
+# Repository hygiene: relative links and anchors in tracked Markdown must resolve, no tracked
+# text file may contain personal paths or e-mail addresses (the repository is public), and generated
+# reference docs must match their sources.
 name: Docs links
 
 on:
@@ -26,3 +27,23 @@ jobs:
         run: python3 tools/check_private_paths.py --self-test
       - name: Check for personal paths and e-mail addresses
         run: python3 tools/check_private_paths.py
+
+  # The XF Runtime Bridge's MCP tool reference is generated from its command catalogue; fail when a catalogue change
+  # lands without regenerating it. The generator reads only the catalogue and source text, so no install is needed.
+  mcp-reference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: projects/xf-runtime-bridge
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+      - name: MCP tool reference matches the catalogue
+        run: bun tools/docs/mcp-reference.ts --check

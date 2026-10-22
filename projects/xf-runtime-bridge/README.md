@@ -147,6 +147,8 @@ A command added to the catalogue appears in every frontend; `tools/test/catalogu
 
 ## MCP server
 
+**Start with the [MCP guide](docs/mcp.md)** (what it is, installing it, the safety model, answering from inside the game, a worked session, troubleshooting, limits). Every tool, with its parameters, permission class, undo and refusals, is in the [MCP tool reference](docs/mcp-reference.md), generated from the catalogue by `bun tools/docs/mcp-reference.ts`: after a catalogue change, regenerate it (the Docs links workflow and `tools/test/mcp-reference.test.ts` fail while it is out of date).
+
 A stdio server built on the official MCP TypeScript SDK (1.30.1, MIT). Install once, then register it with the MCP client:
 
 ```powershell
@@ -200,6 +202,7 @@ bun tools/lint-redscript.ts --bundle <COPY> --codeware <Codeware repository>/scr
                                                        # 0.6: the Equipment-EX and TweakXL branches (0.6.1: the Equipment-EX branch needs Codeware too)
 bun tools/lint-lua.ts
 bun tools/overlay/theme.ts --check                     # 0.7: the overlay's theme tables match XF Studio's tokens (bun tools/overlay/theme.ts regenerates them)
+bun tools/docs/mcp-reference.ts --check                # docs/mcp-reference.md matches the catalogue (bun tools/docs/mcp-reference.ts regenerates it)
 bun tools/package.ts                                   # three zips in dist/ (see below)
 ```
 
