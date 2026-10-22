@@ -26,7 +26,7 @@ export function createBrowserViewportDevice(options: {
   optionalRenderers?: import("../../platform/api/experiments").ExperimentPort;
   referenceTextures?: import("../../platform/api/scene").SceneHostPort["referenceTextures"];
   sceneFactory?: typeof createSceneRuntime;
-  /** The head pane's renderer device (default: the browser's; tests pass a stand-in). Made when the first head loads. */
+  /** The head pane's renderer device (default: the browser's; tests pass a stand-in). Made when the first head is built. */
   deviceFactory?: (host: HTMLElement, options: RendererDeviceOptions) => SceneDevice & Pick<RendererDevice, "show">;
   /** The head's WebGL context was lost or came back (the renderer device reports it; the composition root logs it). */
   onContext?: (event: "lost" | "restored") => void;
@@ -38,9 +38,10 @@ export function createBrowserViewportDevice(options: {
   const editors = new ViewportAdapter();
   /** The head pane's one renderer device (profiles phase 4a-ii): made with the first head, kept for the window. */
   let device: SceneDevice & Pick<RendererDevice, "show"> | undefined;
+  /** The head shown on the device (several may be resident; the scene runtime owner decides which: preview/scene-residency.ts). */
   let viewer: Scene | undefined;
-  /** The head being built: a newer load or a release stops it. */
-  let building: AbortController | undefined;
+  /** Who else hears the context's loss and restore (the runtime owner drops warm runtimes on a loss). */
+  const contextListeners = new Set<(event: "lost" | "restored") => void>();
   let uvEditor: UVEditor | undefined;
   let surfaceEditor: SurfaceEditor | undefined;
   // Each registered viewport host's element and the editor slot its input and capture belong to.
@@ -80,13 +81,10 @@ export function createBrowserViewportDevice(options: {
       if (events.document?.visibilityState === "hidden") attachment.reportModifiers(NO_MODIFIERS);
     });
   }
-  function releaseHead() {
-    building?.abort(); building = undefined;
+  /** The on-head editor goes with the head it edits: an open gesture is settled (cancelled), and its listeners leave the canvas. */
+  function releaseEditor() {
     editors.detach("surface");
     surfaceEditor = undefined;
-    const loaded = viewer;
-    viewer = undefined;
-    loaded?.dispose();
   }
   return {
     attachment,
@@ -99,33 +97,40 @@ export function createBrowserViewportDevice(options: {
       return uvEditor;
     },
     /**
-     * Load the head with a body's core (the feminine V's by default); the previous head is released first. The head is built hidden on the
-     * pane's renderer device and shown once it is ready; a newer load (or a release) aborts a build still running.
+     * Build a head with a body's core (the feminine V's by default), hidden on the pane's renderer device, whatever is shown meanwhile.
+     * It rejects with `signal.reason` once the signal aborts (a newer subject or body change superseded it), having released what it made.
      */
-    async loadHead(body: CoreBody = "female") {
-      releaseHead();
-      device ??= (options.deviceFactory ?? createRendererDevice)(options.headHost, { onContext: options.onContext });
-      const controller = building = new AbortController();
-      try {
-        const built = await (options.sceneFactory ?? createSceneRuntime)(device, { body, renderers: options.renderers, optionalRenderers: options.optionalRenderers,
-          referenceTextures: options.referenceTextures, signal: controller.signal });
-        // Superseded while its last step finished: it is never shown.
-        if (controller.signal.aborted) { built.dispose(); throw controller.signal.reason; }
-        viewer = built;
-        device.show(built.slot);
-        return built;
-      } finally { if (building === controller) building = undefined; }
+    buildHead(body: CoreBody = "female", signal?: AbortSignal) {
+      device ??= (options.deviceFactory ?? createRendererDevice)(options.headHost, { onContext: event => {
+        options.onContext?.(event);
+        for (const listener of [...contextListeners]) listener(event);
+      } });
+      return (options.sceneFactory ?? createSceneRuntime)(device, { body, renderers: options.renderers, optionalRenderers: options.optionalRenderers,
+        referenceTextures: options.referenceTextures, signal });
     },
-    /**
-     * Releases this head (its surface editor, then the scene's renderer and canvas) if it is still
-     * the loaded one. A stale release, for a head a later load already replaced, does nothing (UI-36).
-     */
-    unloadHead(scene: Scene) {
-      if (scene === viewer) releaseHead();
+    /** Draw `scene` (built by `buildHead`): the head shown before stops being drawn, and its on-head editor goes (a gesture is settled). */
+    showHead(scene: Scene) {
+      if (viewer === scene) return;
+      releaseEditor();
+      viewer = scene;
+      device!.show(scene.slot);
     },
-    /** Mount the on-head editor over `surface` (the layered-makeup surface a feature renderer draws: eye makeup's plate). */
+    /** `scene` stops being the shown head (another is about to be shown, or it goes): its on-head editor goes, a gesture settled. */
+    hideHead(scene: Scene) {
+      if (viewer !== scene) return;
+      releaseEditor();
+      viewer = undefined;
+    },
+    /** Dispose a head (shown or not); the renderer device stays. A head shown now is hidden first. */
+    disposeHead(scene: Scene) {
+      if (viewer === scene) { releaseEditor(); viewer = undefined; }
+      scene.dispose();
+    },
+    /** Hear the head pane's context being lost and coming back. Returns the unsubscribe. */
+    onContext(listener: (event: "lost" | "restored") => void) { contextListeners.add(listener); return () => { contextListeners.delete(listener); }; },
+    /** Mount the on-head editor over `surface` (the layered-makeup surface a feature renderer draws: eye makeup's plate), on the shown head. */
     mountSurface(surface: THREE.SkinnedMesh, hooks: Omit<Parameters<typeof createSurfaceEditor>[1], "region">) {
-      if (!viewer) throw Error("The head scene must load before mounting surface controls.");
+      if (!viewer) throw Error("The head scene must be shown before mounting surface controls.");
       const { renderer, scene, camera, head, eyes, controls, cameraInput, onFrame, requestRender } = viewer;
       surfaceEditor = (options.surfaceFactory ?? createSurfaceEditor)({ renderer, scene, camera, head, eyes, controls, cameraInput, onFrame,
         requestRender, plate: surface }, { ...hooks, region: options.region, input: state => attachment.reportInput("head", state) });

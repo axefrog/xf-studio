@@ -13,7 +13,7 @@ import { BUILT_IN_SETUP_IDS, builtInSetup, colourHex, creatorSetup, hexToLinear,
   type SetupLibrary } from "../src/preview/lighting-setups";
 import { MAIN_VIEW } from "../src/platform/api/view-graph";
 import { PreviewActions, type LightingStatus, type PreviewPort } from "../src/preview/preview-actions";
-import { createStudioViewGraph, previewLights, storedViewGraph } from "../src/preview/preview-view-graph";
+import { createStudioViewGraph, previewLights, sessionViewGraph } from "../src/preview/preview-view-graph";
 import { ACTION_DESCRIPTORS } from "../src/app/studio-action-descriptors";
 import { DEFAULT_KEY_ANGLE, DEFAULT_STUDIO_STAGE, STUDIO_LIGHT_COLOURS, STUDIO_SETUP_IDS, STUDIO_SETUPS } from "../src/preview/studio-lighting";
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
@@ -393,7 +393,7 @@ test("workspaces saved before setups: the creator over an adjusted studio stage 
   const composer = new WorkspaceComposer(workspace, { editor: () => ({ recipe: workspace.recipe, active: 0, selected: 0, history: workspace.history,
     fieldSelection: {} }) as never, uvView: () => workspace.uvView, savedV: () => undefined, collections: () => undefined,
   quality: () => workspace.preview.textureSize, preview: () => new PreviewActions(workspace.preview, lightingPort().port, views).snapshot(), motion: () => undefined,
-  views: () => storedViewGraph(views) } as never);
+  views: () => undefined } as never);
   composer.setPreviewReady();
   const stored = serializeWorkspace(composer.capture(), STUDIO_DOCUMENTS);
   expect(stored.preview).toMatchObject({ lightingPreset: "creator", creatorLighting: before.lighting.creatorOverAdjusted.preview.creatorLighting,
@@ -423,7 +423,7 @@ test("own setups round-trip through the workspace, and the field goes when the l
   const capture = () => {
     const composer = new WorkspaceComposer(workspace, { editor: () => ({ recipe: workspace.recipe, active: 0, selected: 0, history: workspace.history,
       fieldSelection: {} }) as never, uvView: () => workspace.uvView, savedV: () => undefined, collections: () => undefined,
-    quality: () => workspace.preview.textureSize, preview: () => actions.snapshot(), motion: () => undefined, views: () => storedViewGraph(views) } as never);
+    quality: () => workspace.preview.textureSize, preview: () => actions.snapshot(), motion: () => undefined, views: () => undefined } as never);
     composer.setPreviewReady();
     return JSON.parse(JSON.stringify(serializeWorkspace(composer.capture(), STUDIO_DOCUMENTS)));
   };

@@ -107,10 +107,10 @@ export type MotionScene = {
   /** The drawn scene's motion settings (the default motion while its node holds none). */
   motion(): SceneMotion;
   /**
-   * Store the drawn scene's motion settings: the device already shows them, so nothing is applied again. `seed`: restore-time state.
+   * Store the drawn scene's motion settings: the device already shows them, so nothing is applied again.
    * `sample`: the device's live state read for a save in progress (the idle's phase): kept without publishing a change.
    */
-  setMotion(motion: SceneMotion, options?: { seed?: boolean; sample?: boolean }): void;
+  setMotion(motion: SceneMotion, options?: { sample?: boolean }): void;
   /** Whether a view's scene simulates its dangles, and turning it on or off (a recorded scene setting). */
   physics(view?: string): boolean;
   setPhysics(enabled: boolean, view: string): void;

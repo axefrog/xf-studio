@@ -164,6 +164,36 @@ test("before a masculine head loads, the page has his core prepared (with progre
   expect(await offline.ensureBody("male").catch(caught => caught.code)).toBe("body_unavailable");
 });
 
+test("a superseded masculine preparation stops: polling ends at once, the preparation this page started is cancelled, one it didn't start is left (D1)", async () => {
+  // Polling every 60 s: only the abort can end the wait.
+  const slow = { set: (run: () => void, ms: number) => setTimeout(run, ms * 60_000), clear: (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>) };
+  const preparing = state({ body: "male", phase: "preparing", canPrepare: false, canCancel: true, message: "Preparing his head…" });
+  const calls: string[] = [];
+  const replies = [state({ body: "male" }), preparing, preparing];
+  const actions = new PreviewPreparationActions(async (action, body) => { calls.push(`${action}:${body ?? "-"}`); return { ok: true, data: replies.shift() ?? preparing }; }, 1, slow);
+  const controller = new AbortController(), started = performance.now();
+  const waiting = actions.ensureBody("male", () => {}, controller.signal).catch(caught => caught);
+  await Bun.sleep(5);
+  controller.abort();
+  const error = await waiting;
+  expect(error).toMatchObject({ name: "AbortError" });
+  expect(performance.now() - started).toBeLessThan(1000);
+  await Bun.sleep(0);
+  expect(calls).toEqual(["refresh:male", "prepare:male", "cancel:male"]);
+  // Waiting for a preparation another window started: the page stops asking, and leaves that preparation alone.
+  const theirs: string[] = [];
+  const other = new PreviewPreparationActions(async (action, body) => { theirs.push(`${action}:${body ?? "-"}`); return { ok: true, data: preparing }; }, 1, slow);
+  const second = new AbortController();
+  const stopped = other.ensureBody("male", () => {}, second.signal).catch(caught => caught);
+  await Bun.sleep(5);
+  second.abort();
+  expect(await stopped).toMatchObject({ name: "AbortError" });
+  expect(theirs).toEqual(["refresh:male"]);
+  // Aborted before it starts: nothing is asked.
+  expect(await other.ensureBody("male", () => {}, AbortSignal.abort()).catch(caught => caught.name)).toBe("AbortError");
+  expect(theirs).toEqual(["refresh:male"]);
+});
+
 test("a head follows only its own body's V: another body's details and facial shape wait for that body's head", async () => {
   const { followCharacter } = await import("../src/character/character-follow");
   const asked: string[] = [], faces: unknown[] = [];

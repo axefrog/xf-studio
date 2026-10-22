@@ -260,31 +260,8 @@ export function createStudioViewGraph(preview: PreviewState, stored?: ViewGraphD
 }
 
 /**
- * Whether a graph is the default one-view graph: its structure is the default one and everything its main view holds is mirrored
- * into `preview`. A main view with a tool state the legacy fields can't hold (any tool but Surface controls and Plate wireframe)
- * is not the default, so the graph is stored and the state survives a save (CORE-97).
- */
-export function isDefaultViewGraph(data: ViewGraphData): boolean {
-  const [view, ...rest] = data.views;
-  if (rest.length || !view || view.kind !== "3d" || view.id !== MAIN_VIEW || view.title !== undefined || data.focused !== MAIN_VIEW ||
-    view.scene !== DEFAULT_NODES.scene || view.camera !== DEFAULT_NODES.camera || view.lights !== DEFAULT_NODES.lights ||
-    view.display !== DEFAULT_NODES.display || view.tools !== DEFAULT_NODES.tools) return false;
-  const mirrored = new Set<string>(Object.values(LEGACY_TOOL_FIELDS));
-  const on = data.tools.find(node => node.id === DEFAULT_NODES.tools)?.on as Record<string, unknown> | undefined;
-  return !!on && Object.keys(on).every(id => mirrored.has(id));
-}
-
-/**
- * What the workspace stores for a graph: nothing for the default graph (its state is the mirrored `preview`), else the graph, with each
- * lights node's calibration in its stored form (the untouched token), as `preview` has it, so every view keeps following a refit (PREV-135).
- */
-export function storedViewGraph(graph: ViewGraph): ViewGraphData | undefined {
-  const data = graph.data();
-  return isDefaultViewGraph(data) ? undefined : storedGraphData(data);
-}
-/**
  * A graph as a profile session stores it (profiles design §1.1): always whole (the session is its only home), each lights node's
- * calibration in its stored form, as `storedViewGraph` writes it.
+ * calibration in its stored form (the untouched token), as `preview` has it, so every view keeps following a refit (PREV-135).
  */
 export function sessionViewGraph(graph: ViewGraph): ViewGraphData { return storedGraphData(graph.data()); }
 function storedGraphData(data: ViewGraphData): ViewGraphData {

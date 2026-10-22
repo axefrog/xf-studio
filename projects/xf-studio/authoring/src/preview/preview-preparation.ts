@@ -148,35 +148,58 @@ export class PreviewPreparationActions {
    * taken as ready; another body's (the masculine V's) is prepared on first use, reporting progress through `pending`.
    * Rejects with a `HeadLoadError` (`body_unavailable`) when the host can't prepare it (a game version it doesn't support,
    * a failed or cancelled preparation, or lost contact), so the caller can show the feminine head instead.
+   *
+   * `signal`: the page no longer wants this body (a newer subject or body change superseded it; experiment 043 decision D1). Polling
+   * stops at once and the call rejects with the signal's reason; a preparation this call started is cancelled on the host, since nothing
+   * else asked for it (the next request for the body starts it again). A preparation someone else started is left running.
    */
-  async ensureBody(body: CoreBody, pending: (message: string, progress: number | null) => void = () => {}): Promise<void> {
+  async ensureBody(body: CoreBody, pending: (message: string, progress: number | null) => void = () => {}, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
     if (body === "female") return;
-    const wait = () => new Promise<void>(done => { (this.timers ?? { set: (run: () => void, ms: number) => setTimeout(run, ms) }).set(done, this.pollMs); });
+    const timers = this.timers ?? { set: (run: () => void, ms: number) => setTimeout(run, ms), clear: (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>) };
+    const wait = () => new Promise<void>(done => {
+      const handle = timers.set(finish, this.pollMs);
+      function finish() { signal?.removeEventListener("abort", early); done(); }
+      function early() { timers.clear(handle); finish(); }
+      signal?.addEventListener("abort", early, { once: true });
+    });
+    let asked = false;
     const read = async (action: "refresh" | "prepare") => {
       let reply: { ok: boolean; data: unknown };
       try { reply = await this.transport(action, body); }
-      catch (error) { throw new HeadLoadError("body_unavailable", "XF Studio couldn't reach its 3D view service.", { cause: error }); }
+      catch (error) { signal?.throwIfAborted(); throw new HeadLoadError("body_unavailable", "XF Studio couldn't reach its 3D view service.", { cause: error }); }
+      signal?.throwIfAborted();
       if (!isPreviewState(reply.data)) throw new HeadLoadError("body_unavailable", "The 3D view state is unavailable.");
       return reply.data;
     };
-    let state = await read("refresh"), asked = false;
-    for (let polls = 0; polls < 2000; polls++) {
-      if (state.phase === "ready") return;
-      if (state.phase === "preparing" || (!state.canPrepare && !asked && state.phase === "idle")) {
-        // Preparing this body, or waiting for another body's preparation to finish.
-        const progress = state.progress ? Math.min(1, Math.max(0, (state.progress.index + 0.5) / state.progress.total)) : null;
-        pending(state.message, progress);
-        await wait();
-        state = await read("refresh");
-        continue;
+    try {
+      let state = await read("refresh");
+      for (let polls = 0; polls < 2000; polls++) {
+        if (state.phase === "ready") return;
+        if (state.phase === "preparing" || (!state.canPrepare && !asked && state.phase === "idle")) {
+          // Preparing this body, or waiting for another body's preparation to finish.
+          const progress = state.progress ? Math.min(1, Math.max(0, (state.progress.index + 0.5) / state.progress.total)) : null;
+          pending(state.message, progress);
+          await wait();
+          signal?.throwIfAborted();
+          state = await read("refresh");
+          continue;
+        }
+        // A first ask prepares it; an earlier failure in this session is tried once more (as the card's Try again would).
+        if ((state.phase === "idle" || state.phase === "failed" || state.phase === "blocked") && state.canPrepare && !asked) {
+          asked = true; state = await read("prepare"); continue;
+        }
+        throw new HeadLoadError("body_unavailable", state.message);
       }
-      // A first ask prepares it; an earlier failure in this session is tried once more (as the card's Try again would).
-      if ((state.phase === "idle" || state.phase === "failed" || state.phase === "blocked") && state.canPrepare && !asked) {
-        asked = true; state = await read("prepare"); continue;
+      throw new HeadLoadError("body_unavailable", "Preparing the head took too long.");
+    } catch (error) {
+      // Superseded: the preparation this call asked for is work nothing wants any more (D1).
+      if (signal?.aborted) {
+        if (asked) void this.transport("cancel", body).catch(() => { /* The host may already have finished or stopped it. */ });
+        throw signal.reason;
       }
-      throw new HeadLoadError("body_unavailable", state.message);
+      throw error;
     }
-    throw new HeadLoadError("body_unavailable", "Preparing the head took too long.");
   }
 }
 

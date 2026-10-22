@@ -31,7 +31,7 @@ test("a toolbar-free browser viewport mounts once and rehosts live editors", asy
     headHost: head as unknown as HTMLElement, uvHost: uv as unknown as HTMLElement,
     queryContext: () => { throw Error("No hit expected"); },
     sceneFactory: (async () => { sceneLoads++; return viewer; }) as unknown as typeof createSceneRuntime,
-    // The head pane's renderer device: made with the first head, which it shows once built.
+    // The head pane's renderer device: made with the first head built, which it shows when asked.
     deviceFactory: (() => { devices++; return { show: (slot: unknown) => shown.push(slot) }; }) as never,
     uvFactory: ((_canvas, controls) => { uvControls = controls; return uvEditor; }) as typeof createUVEditor,
     surfaceFactory: (() => surfaceEditor) as typeof createSurfaceEditor,
@@ -53,7 +53,8 @@ test("a toolbar-free browser viewport mounts once and rehosts live editors", asy
     {} as Parameters<typeof createUVEditor>[2], uvView)).toBe(uvEditor);
   expect(uvControls).toBeUndefined();
   expect(attachment.snapshot().uv).toMatchObject({ phase: "ready", captured: true, view: uvView });
-  await device.loadHead();
+  // A head is built hidden, then shown on the pane's device.
+  device.showHead(await device.buildHead());
   expect(device.mountSurface({} as THREE.SkinnedMesh, {} as Parameters<typeof createSurfaceEditor>[1])).toBe(surfaceEditor);
   device.headReady();
   expect(attachment.snapshot().head).toMatchObject({ phase: "ready", view: camera });

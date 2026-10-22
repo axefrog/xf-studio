@@ -11,7 +11,7 @@ import { ACTION_DESCRIPTORS } from "../src/app/studio-action-descriptors";
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { createTrustedPreviewServices } from "../src/app/trusted-preview-services";
 import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
-import { createStudioViewGraph, storedViewGraph } from "../src/preview/preview-view-graph";
+import { createStudioViewGraph, sessionViewGraph } from "../src/preview/preview-view-graph";
 import { MAIN_VIEW } from "../src/platform/api/view-graph";
 import { storedWorkspace } from "./fixtures/looks";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
@@ -431,7 +431,7 @@ test("a chosen calibration equal to the token's reads back as chosen, and every 
   const fresh = freshWorkspace(), views = createStudioViewGraph(fresh.preview);
   const v2 = views.addView(MAIN_VIEW, { scene: true });
   views.edit(v2, "lights", { kind: "creator", state: { setup: "creator" } });
-  const stored = storedViewGraph(views)!;
+  const stored = sessionViewGraph(views);
   const node = stored.lights.find(entry => entry.id === views.node(v2, "lights").id)!;
   expect(node.creatorLighting).toEqual({ intensity: "isotropic", cone: "full", exposure: 0.46 });
   const read = parseWorkspace(JSON.parse(JSON.stringify(serializeWorkspace({ ...fresh, views: stored }, STUDIO_DOCUMENTS))), STUDIO_DOCUMENTS);

@@ -57,7 +57,11 @@ test("preview bootstrap restores saved V, scene, motion and camera in order with
   });
   expect(services.restoredSavedAppearance?.suggestedEyeShape).toBe(9);
   expect(calls.slice(0, 4)).toEqual(["save", "optics", "eye:4", "wire"]);
-  const { preview: actions, motion: motionActions } = services.finish();
+  const finished = services.finish();
+  // Built: nothing of the motion or camera yet. Shown: the motion, then the camera.
+  expect(calls).not.toContain("parts");
+  finished.show();
+  const { preview: actions, motion: motionActions } = finished;
   expect(calls.indexOf("surface")).toBeLessThan(calls.indexOf("parts"));
   expect(calls.indexOf("parts")).toBeLessThan(calls.indexOf("idle"));
   expect(calls.indexOf("idle")).toBeLessThan(calls.indexOf("seek"));

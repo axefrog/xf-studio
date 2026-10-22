@@ -358,8 +358,15 @@ export class PreviewActions {
   }
   /** Navigation the device did: the camera node keeps it, unrecorded. */
   private moved(view: ViewId) { this.graph.cameraMoved(view, { pose: this.port.cameraState() }); }
-  /** Restore a saved camera without recording a step or a trail entry (workspace restore). */
+  /** Restore a saved camera without recording a step or a trail entry (workspace restore, or this head shown again). */
   restoreSavedCamera(camera: CameraState) { this.port.restoreCamera(camera); this.moved(this.shown); }
+  /** The pose the drawn view's camera node holds (where the head shown before left it), if any. */
+  storedCamera(): CameraState | undefined { const camera = this.shownFields().camera; return camera ? structuredClone(camera) : undefined; }
+  /**
+   * Write the device's camera pose to the drawn view's camera node, unrecorded (another head takes the view: experiment 043 decision D3).
+   * An orbit writes nothing while it moves, so this is where the node learns it.
+   */
+  storeCamera() { this.moved(this.shown); }
   /** Move the view's camera Back or Forward along its trail (design §3.6); false when there is nowhere to go. */
   cameraStep(direction: "back" | "forward", view: ViewId): boolean {
     return this.graph.cameraStep(this.graph.target(view), direction, { pose: this.port.cameraState() });

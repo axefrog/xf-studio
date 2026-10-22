@@ -26,7 +26,7 @@ import { parseSetupLibrary, rigKindOf, type SetupLibrary } from "../../preview/l
 import type { ViewGraphData } from "../../platform/api/view-graph";
 import { parseTransitions, type StoredTransitions } from "../../platform/core/transition-settings";
 import { parseViewGraph } from "../../platform/core/view-graph";
-import { EYE_SHAPE_RANGE, HAIR_LOOK_RANGE, inRange, isDefaultViewGraph, recoverScenes, STUDIO_VIEW_GRAPH_RULES, validCameraPose, viewSettingsReset,
+import { EYE_SHAPE_RANGE, HAIR_LOOK_RANGE, inRange, recoverScenes, STUDIO_VIEW_GRAPH_RULES, validCameraPose, viewSettingsReset,
   VIEW_SETTINGS_RESET } from "../../preview/preview-view-graph";
 
 export type CameraState = { position: number[]; target: number[]; fov: number };
@@ -280,12 +280,12 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
   if (mark) state.migration = mark;
   if (profiles) state.profiles = { ...profiles, sessions: Object.fromEntries(Object.entries(profiles.sessions).map(([id, session]) =>
     [id, { ...session, views: recoverScenes(session.views as unknown as ViewGraphData, report) as unknown as typeof session.views }])) };
-  // The legacy graph: a damaged one, or the default one written anyway, falls back to the default graph over `preview`. It is what the
-  // Studio shows only until the migration has made a session, so only then does a reset setting in it get a note.
+  // The legacy graph (frozen since phase 1: written back as read): a damaged one is left out, and the default graph over `preview` stands in.
+  // It is what the Studio shows only until the migration has made a session, so only then does a reset setting in it get a note.
   const shown = !Object.keys(state.profiles?.sessions ?? {}).length;
   const views = v.views && typeof v.views === "object"
     ? parseViewGraph(recoverScenes(v.views as ViewGraphData, shown ? report : undefined), STUDIO_VIEW_GRAPH_RULES) : undefined;
-  if (views && !isDefaultViewGraph(views)) state.views = views;
+  if (views) state.views = views;
   if (v.previewSetup && typeof v.previewSetup === "object" && typeof v.previewSetup.autostart === "boolean")
     state.previewSetup = { autostart: v.previewSetup.autostart, ...(v.previewSetup.declined === true ? { declined: true as const } : {}) };
   if (v.library) {

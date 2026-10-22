@@ -95,7 +95,12 @@ export type { MotionScene } from "./scene-motion";
  * Preview motion commands without markup or Three objects. The settings (idle on or off, its phase, pause and contributions, the idle
  * played, the blink and the pose) are the drawn scene's, kept in its view-graph node through `scene` (scene-motion.ts): this service
  * reads them there, applies them to the device on `restore`, and stores each change back, recording no Undo step. What it keeps itself is
- * only what the device is doing now: an idle still loading, a pose still loading or playing.
+ * only what the device is doing now: an idle still loading, a pose still loading or playing, an idle that couldn't be played here.
+ *
+ * **The node keeps the person's choice** (experiment 043 §10). Several runtimes may share a scene (a feminine and a masculine head of one V,
+ * one shown and one warm), so one runtime's limits never overwrite another's: what a device can't honour (the idle on a masculine head, an
+ * idle or a blink not prepared on this computer) shows as status in `snapshot`, and nothing of it is written to the node. Only the
+ * person's own changes, and the playing idle's phase, are stored.
  */
 export class MotionActions {
   private listeners = new Set<() => void>();
@@ -108,10 +113,14 @@ export class MotionActions {
   /** Whether the scene plays a pose now (so leaving it must give the idle's own clips back). */
   private posePlaying = false;
   /**
-   * Set once the device is released (`release`): the scene's next runtime owns its motion from then on, so nothing this service still has
-   * under way (an idle load, a pose) may reach the device or the scene any more.
+   * Set while the device is released (`release`, until the next `restore`): another runtime owns the scene's motion then, so nothing this
+   * service had under way (an idle load, a pose) may reach the device or the scene. `epoch` counts releases, so work begun before one never
+   * lands after a later `restore` either.
    */
   private released = false;
+  private epoch = 0;
+  /** Idles whose clip couldn't be played on this device: the default plays instead, and the node keeps the choice. */
+  private readonly unplayable = new Set<string>();
   /** `scene`: where the settings live (the drawn view's scene node); without one, a private store at the default motion. */
   constructor(private port: MotionPort, private scene: MotionScene = localMotionScene()) {
     port.onFaceChange?.(() => this.notify());
@@ -124,8 +133,8 @@ export class MotionActions {
   /** The scene's stored motion settings. */
   private stored(): SceneMotion { return this.scene.motion(); }
   /** Store changed settings in the scene (normalised; the device already shows them). */
-  private store(changes: Partial<SceneMotion>, seed = false) {
-    if (!this.released) this.scene.setMotion(withMotion(this.stored(), changes), { seed });
+  private store(changes: Partial<SceneMotion>) {
+    if (!this.released) this.scene.setMotion(withMotion(this.stored(), changes));
   }
   /** The device's idle state now, as the scene stores it (its phase too, so a runtime built later starts where this one is). */
   private live(): Partial<SceneMotion> {
@@ -134,10 +143,10 @@ export class MotionActions {
     return { idle: idle.enabled, ...(Number.isFinite(idle.time) && idle.time >= 0 ? { idleTime: idle.time } : {}), idlePaused: idle.paused,
       idleBody: idle.bodyEnabled, idleFace: idle.faceEnabled };
   }
-  /** The idle shown: the scene's choice when it is prepared here, else the default. */
+  /** The idle shown: the scene's choice when it is prepared here (and could be played), else the default. */
   private get clip(): string {
     const chosen = this.stored().idleClip ?? DEFAULT_IDLE;
-    return this.known(chosen) ? chosen : this.defaultClip();
+    return this.known(chosen) && !this.unplayable.has(chosen) ? chosen : this.defaultClip();
   }
   /** A pose stored in the scene that this device doesn't hold yet: it waits for the Poses module to supply its sample. */
   private waiting(): { id: string; label: string } | null {
@@ -146,15 +155,21 @@ export class MotionActions {
   }
   /** The chosen idle's catalogue entry (undefined without a catalogue). */
   idleEntry(): IdleEntry | undefined { return this.idleEntries().find(entry => entry.id === this.clip); }
-  /** Play an idle: shown at once, loaded behind; a load that fails puts the previous one back and says why once. */
-  private select(id: string, rollbackTo: string | null, seed = false) {
-    this.store({ idleClip: id }, seed);
-    const load = this.port.selectIdle ? this.port.selectIdle(id) : Promise.resolve();
-    const pending = this.loading = load.then(() => { if (this.released) return; if (this.loading === pending) this.loading = null; this.notify(); }, error => {
-      // A load the released device still had under way: the scene's next runtime decides what plays now.
-      if (this.released) return;
+  /**
+   * Play an idle: shown at once, loaded behind. A load that fails says why once: the person's choice (`rollbackTo` given) puts the previous
+   * one back; the scene's own choice applied by `restore` (`rollbackTo` null) stays in the node, and this device plays the default.
+   */
+  private select(id: string, rollbackTo: string | null) {
+    this.unplayable.delete(id);
+    if (rollbackTo !== null) this.store({ idleClip: id });
+    const epoch = this.epoch, load = this.port.selectIdle ? this.port.selectIdle(id) : Promise.resolve();
+    const pending = this.loading = load.then(() => { if (epoch !== this.epoch) return; if (this.loading === pending) this.loading = null; this.notify(); }, error => {
+      // A load the released device still had under way: the runtime shown now decides what plays.
+      if (epoch !== this.epoch) return;
       if (this.loading === pending) this.loading = null;
-      if (rollbackTo !== null && this.clip === id) this.store({ idleClip: rollbackTo });
+      // (The device keeps playing what it played before the load.)
+      if (rollbackTo === null) this.unplayable.add(id);
+      else if (this.clip === id) this.store({ idleClip: rollbackTo });
       pageFailure("preview", "idle_clip_unavailable", "That idle couldn't be played from its prepared files, so the previous one stays.", error, { level: "warn" });
       this.notify();
     });
@@ -171,7 +186,8 @@ export class MotionActions {
       idlePaused: idle?.paused ?? stored.idlePaused,
       idleBody: idle?.bodyEnabled ?? stored.idleBody,
       idleFace: idle?.faceEnabled ?? stored.idleFace,
-      blink: stored.blink, blinkPlaying: stored.blinkPlaying,
+      // A device without the blink shows the eyes open and still; the node keeps the closure for one that has it.
+      blink: this.port.blink.available ? stored.blink : 0, blinkPlaying: this.port.blink.available && stored.blinkPlaying,
       blinkAvailable: this.port.blink.available, blinkError: this.blinkError(),
       idleClip: this.clip, idleLoading: !!this.loading,
       pose: this.pose ? { ...this.pose } : waiting ? { ...waiting, moves: false } : null, poseLoading: this.poseBusy || !!waiting,
@@ -233,44 +249,48 @@ export class MotionActions {
     return { available: true };
   }
   /**
-   * Apply the scene's motion to the device (a runtime built for the scene): composition before clock and camera; pause never passes through
-   * the reset path. What the device couldn't take (an idle or a blink not prepared here, an idle it doesn't have) is stored back as the
-   * scene now shows it, as restore-time state.
+   * Apply the scene's motion to the device: a runtime built for the scene, or shown again after `release`. Composition before clock and
+   * camera; pause never passes through the reset path. What the device can't take (the idle on a head that has none, an idle or a blink
+   * not prepared here) is left as the node says it: it shows as status, and nothing is written (the node keeps the person's choice).
    */
   restore() {
+    this.released = false;
     const initial = this.stored();
+    // A pose this device still holds from before it was released, which the scene no longer holds, goes first.
+    if (this.posePlaying && !initial.pose) this.leavePose();
     this.port.setIdleContributions(initial.idleBody, initial.idleFace);
     // The scene's idle first (its clip loads behind; the default plays until it arrives).
-    if (this.port.available && this.clip !== this.defaultClip()) this.select(this.clip, this.defaultClip(), true);
+    if (this.port.available && this.clip !== this.defaultClip()) this.select(this.clip, null);
     this.port.setIdle(initial.idle && this.port.available);
-    let blink: Partial<SceneMotion> = { blink: 0, blinkPlaying: false };
     if (this.port.idle?.enabled) {
       this.port.idle.seek(initial.idleTime);
       this.port.setIdlePaused(initial.idlePaused);
     } else if (this.port.blink.available) {
       this.port.setBlink(initial.blink);
       this.port.animateBlink(initial.blinkPlaying);
-      blink = {};
     }
-    this.store({ ...this.live(), idleClip: this.clip, ...blink }, true);
     this.notify();
   }
   /**
-   * The device is about to be released: the idle's phase now is stored in the scene, so the scene's next runtime starts there. From then on
-   * nothing this service still has under way (an idle load, its rollback, a pose) reaches the device or the scene, and it refuses actions.
+   * Another runtime takes the scene (this one is hidden, or goes): the playing idle's phase now is stored in the scene, so the next runtime
+   * starts there. Until the next `restore`, nothing this service had under way (an idle load, its rollback, a pose) reaches the device or
+   * the scene, and it refuses actions.
    */
   release() {
     if (this.released) return;
-    this.store(this.live());
-    this.released = true; this.loading = null; this.poseGeneration++; this.poseBusy = false;
+    this.sample(true);
+    this.released = true; this.epoch++; this.loading = null; this.poseGeneration++; this.poseBusy = false; this.pose = null;
   }
   /**
-   * The idle's phase now, read into the scene for a save in progress (the workspace session calls it before it captures): the clock moves
-   * without any change, so a reload starts the idle where it was. Records nothing and publishes no change.
+   * The playing idle's phase now, read into the scene: before a save (the workspace session calls it before it captures; records nothing
+   * and publishes no change), or with `keep` as an applied edit (`release`). The clock moves without any change, so a reload or the next
+   * runtime starts the idle where it was. A device whose idle isn't playing has no phase to give: the node keeps the one it has.
    */
-  sample() {
-    const idleTime = this.live().idleTime;
-    if (!this.released && idleTime !== undefined) this.scene.setMotion(withMotion(this.stored(), { idleTime }), { sample: true });
+  sample(keep = false) {
+    const idle = this.port.idle;
+    if (this.released || !idle?.enabled || !Number.isFinite(idle.time) || idle.time < 0) return;
+    if (keep) this.store({ idleTime: idle.time });
+    else this.scene.setMotion(withMotion(this.stored(), { idleTime: idle.time }), { sample: true });
   }
   /** Whether a pose can be held now (V's motion rig is prepared on this host), with the plain reason when not. */
   poseCapability(): Capability {
@@ -331,8 +351,10 @@ export class MotionActions {
       }
       case "motion.setPaused": this.port.setIdlePaused(action.paused); this.store(this.live()); break;
       case "motion.setContributions": this.port.setIdleContributions(action.body, action.face); this.store(this.live()); break;
-      case "motion.setBlink": this.port.setBlink(action.value); this.store({ blink: action.value, blinkPlaying: false }); break;
-      case "motion.playBlink": this.port.animateBlink(action.playing); this.store({ blinkPlaying: action.playing }); break;
+      // The blink is set only while the idle doesn't play here, so the change stores what the device shows: the idle off too, on a device
+      // that can't play the idle the node asks for (the person's own change, not a fallback).
+      case "motion.setBlink": this.port.setBlink(action.value); this.store({ idle: false, blink: action.value, blinkPlaying: false }); break;
+      case "motion.playBlink": this.port.animateBlink(action.playing); this.store({ idle: false, blinkPlaying: action.playing }); break;
       case "motion.setPhysics": this.scene.setPhysics(action.enabled, action.view); break;
     }
     this.notify();

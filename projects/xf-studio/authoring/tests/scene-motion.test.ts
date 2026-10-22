@@ -6,7 +6,7 @@
  * applies the node's motion, with the phase its previous head left.
  */
 import { describe, expect, test } from "bun:test";
-import { MotionActions, RELEASED, type MotionPort } from "../src/animation/motion-actions";
+import { IDLE_MASCULINE, MotionActions, RELEASED, type MotionPort } from "../src/animation/motion-actions";
 import { DEFAULT_MOTION, previewMotion, recoverSceneMotion, sceneMotionOf, type SceneMotion } from "../src/animation/scene-motion";
 import { graphMotionScene, createTrustedPreviewServices } from "../src/app/trusted-preview-services";
 import { WorkspaceComposer } from "../src/app/workspace/workspace-composer";
@@ -271,17 +271,19 @@ describe("history", () => {
 describe("a runtime applies its scene's motion", () => {
   const restored = (workspace: WorkspaceState, graph: ViewGraph, port: MotionPort) => createTrustedPreviewServices(workspace, {
     savedAppearance: { apply: () => ({ applied: [], appearanceReferences: 0 }) as never }, preview: previewPort(), motion: port }, graph).finish();
+  /** A head built for the scene and shown (its motion and camera applied). */
+  const shownHead = (workspace: WorkspaceState, graph: ViewGraph, port: MotionPort) => { const head = restored(workspace, graph, port); head.show(); return head; };
 
   test("a new head of the same scene restores the node's motion, from where the previous head left the idle, whatever the workspace snapshot says", () => {
     const workspace = freshWorkspace(), graph = createStudioViewGraph(workspace.preview);
-    const first = motionPort(), head = restored(workspace, graph, first);
+    const first = motionPort(), head = shownHead(workspace, graph, first);
     head.motion.dispatch({ kind: "motion.setIdle", view: MAIN_VIEW, enabled: true });
     first.idle.time = 7.25;
     // The head is released (a body change reloads it): the idle's phase goes back to the scene.
     head.motion.release(); head.preview.dispose();
     expect(sceneMotion(graph)).toMatchObject({ idle: true, idleTime: 7.25 });
     // The workspace the next head attaches with still says the idle is off: the scene's node decides.
-    const calls: string[] = [], next = restored(workspace, graph, motionPort(calls));
+    const calls: string[] = [], next = shownHead(workspace, graph, motionPort(calls));
     expect(calls).toEqual(["parts:true:true", "idle:true", "seek:7.25", "pause:false"]);
     expect(next.motion.snapshot()).toMatchObject({ idle: true, idleTime: 7.25 });
   });
@@ -330,14 +332,63 @@ describe("a runtime applies its scene's motion", () => {
     expect(sceneMotion(graph)).not.toHaveProperty("pose");
   });
 
-  test("what a device can't take is stored back as the scene shows it, as restore-time state that records nothing", () => {
+  test("a runtime that can't honour the node's motion leaves the node unchanged: it shows its own fallback as status (4a-iv)", () => {
     const workspace = freshWorkspace(), history = createHistoryService();
-    workspace.preview.blink = .6; workspace.preview.blinkPlaying = true; workspace.preview.idleClip = "relaxed";
+    Object.assign(workspace.preview, { idle: true, idleTime: 7.25, idleClip: "inventory" });
     const graph = createStudioViewGraph(workspace.preview, undefined, history, viewScope("p-1"));
-    expect(sceneMotion(graph)).toMatchObject({ blink: .6, blinkPlaying: true, idleClip: "relaxed" });
-    // No blink and no catalogue on this device: the closure opens and the default idle is the one shown.
-    restored(workspace, graph, { ...motionPort(), blink: { available: false } });
-    expect(sceneMotion(graph)).toEqual(DEFAULT_MOTION);
+    const chosen = sceneMotion(graph);
+    expect(chosen).toMatchObject({ idle: true, idleTime: 7.25, idleClip: "inventory" });
+    // A masculine head: no idle on this version. It holds still and says why; the node keeps the person's idle, clip and phase.
+    const calls: string[] = [];
+    const masculine = shownHead(workspace, graph, { ...motionPort(calls), available: false, error: IDLE_MASCULINE });
+    expect(masculine.motion.snapshot()).toMatchObject({ idle: false, available: false, error: IDLE_MASCULINE });
+    expect(calls).toContain("idle:false");
+    expect(sceneMotion(graph)).toEqual(chosen);
+    // Hidden for another head: its idle doesn't play, so it has no phase to give.
+    masculine.hide();
+    expect(sceneMotion(graph)).toEqual(chosen);
+    // The feminine head shown next plays the chosen idle from where it was.
+    const played: string[] = [], feminine = shownHead(workspace, graph, motionPort(played, ["closeup", "inventory"]));
+    expect(played).toEqual(["parts:true:true", "clip:inventory", "idle:true", "seek:7.25", "pause:false"]);
+    expect(feminine.motion.snapshot()).toMatchObject({ idle: true, idleClip: "inventory" });
+    // No blink and no catalogue on a device: it opens the closure and plays the close-up, and the node still holds the blink and the clip.
+    const still = freshWorkspace();
+    Object.assign(still.preview, { blink: .6, blinkPlaying: true, idleClip: "relaxed" });
+    const other = createStudioViewGraph(still.preview, undefined, history, viewScope("p-2"));
+    const before = sceneMotion(other);
+    const bare = shownHead(still, other, { ...motionPort(), blink: { available: false } });
+    expect(bare.motion.snapshot()).toMatchObject({ idleClip: "closeup", blinkAvailable: false });
+    expect(sceneMotion(other)).toEqual(before);
     expect(graph.history().depth).toBe(0);
+    expect(other.history().depth).toBe(0);
+  });
+
+  test("motion is released and restored across a swap: a warm head shown again plays from the phase the other head left, and nothing it had under way lands (4a-iv)", async () => {
+    const workspace = freshWorkspace(), graph = createStudioViewGraph(workspace.preview);
+    const loads: ((error: Error) => void)[] = [];
+    const aPort = { ...motionPort([], ["closeup", "inventory"]), selectIdle: () => new Promise<void>((_resolve, reject) => { loads.push(reject); }) };
+    const a = shownHead(workspace, graph, aPort);
+    a.motion.dispatch({ kind: "motion.setIdle", view: MAIN_VIEW, enabled: true });
+    a.motion.dispatch({ kind: "motion.setIdleClip", view: MAIN_VIEW, clip: "inventory" });
+    aPort.idle.time = 2;
+    // B takes the view: A's phase goes to the node, and A refuses actions while hidden.
+    a.hide();
+    expect(sceneMotion(graph)).toMatchObject({ idle: true, idleTime: 2, idleClip: "inventory" });
+    expect(a.motion.capability({ kind: "motion.setIdle", view: MAIN_VIEW, enabled: false })).toMatchObject({ available: false, reason: RELEASED });
+    const bPort = motionPort([], ["closeup", "inventory"]), b = shownHead(workspace, graph, bPort);
+    bPort.idle.time = 9.5;
+    b.hide();
+    // A again: it restores the node's motion, from B's phase. A's load from before it was hidden failing now changes nothing.
+    const calls: string[] = [];
+    const seek = aPort.idle.seek.bind(aPort.idle);
+    aPort.idle.seek = (time: number) => { calls.push(`seek:${time}`); seek(time); };
+    a.show();
+    expect(calls).toEqual(["seek:9.5"]);
+    expect(loads.length).toBe(2);
+    loads[0]!(Error("missing file"));
+    await Bun.sleep(0);
+    expect(sceneMotion(graph)).toMatchObject({ idle: true, idleTime: 9.5, idleClip: "inventory" });
+    expect(a.motion.snapshot()).toMatchObject({ idleClip: "inventory", idleLoading: true });
+    expect(a.motion.capability({ kind: "motion.setIdle", view: MAIN_VIEW, enabled: false })).toEqual({ available: true });
   });
 });

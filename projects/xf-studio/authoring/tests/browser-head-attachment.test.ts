@@ -1,175 +1,70 @@
 import { expect, test } from "bun:test";
-import { attachBrowserHead, type HeadAttachmentPorts, type HeadServices, type LayeredSurfaceWiring } from "../src/preview/browser/browser-head-attachment";
-import { createBrowserViewportDevice } from "../src/preview/browser/browser-viewport-device";
-import type { createSceneRuntime } from "../src/platform/scene/scene-host";
-import type { createSurfaceEditor } from "../src/legacy/eye-makeup/browser/surface-editor";
-import { freshWorkspace, EYE_REGION } from "./fixtures/eye-region";
-import { CharacterContextActions, initialBodyGender } from "../src/character/character-context-actions";
-import type { CharacterHistoryHome } from "../src/character/character-history";
-import { vHistory } from "./fixtures/character-steps";
+import { buildBrowserHead, type LayeredSurfaceWiring } from "../src/preview/browser/browser-head-attachment";
+import { MAIN_VIEW } from "../src/platform/api/view-graph";
+import type { CameraState } from "../src/app/workspace/workspace-state";
+import { contextOf, harness } from "./fixtures/fake-heads";
 
-/** The creator catalogue host never answers here: a context stays loading. */
-const creator = { panel: () => new Promise<never>(() => {}), page: () => new Promise<never>(() => {}), view: () => new Promise<never>(() => {}),
-  preset: () => new Promise<never>(() => {}), wait: async () => {} };
-/** The V a head shows, as its owner hands it over (`stored`: the V's stored form): its body, and its context made on the head's ports. */
-const characterPort = (stored?: unknown, history?: CharacterHistoryHome): HeadAttachmentPorts["character"] => ({ body: initialBodyGender(stored, undefined), previews: null,
-  context: ports => new CharacterContextActions({ ...ports, creator, ...(history ? { history } : {}) }, stored ? { stored } : {}), release: context => context.dispose() });
+// PREV-20: everything wired to a head is released together when a later step fails, so "Try again" starts clean: no doubled theme
+// bindings, service attachments, subscriptions, camera listeners, surface editors or leftover canvases.
 
-// PREV-20: everything wired to a loaded head is released together when a later step fails, so
-// "Try again" starts clean: no doubled theme bindings, service attachments, subscriptions,
-// camera listeners, surface editors or leftover canvases.
+const nothingAttached = { savedV: undefined, preview: undefined, motion: undefined, characterDetails: undefined };
 
-type Listener = () => void;
-const noop = () => {};
-
-/** A loaded scene: a canvas in the head host, a camera-controls event target, and a dispose that removes the canvas. */
-function fakeScene(host: { canvases: number }, log: string[], body: "female" | "male" = "female") {
-  host.canvases++;
-  const controls = new Set<Listener>();
-  const known: Record<string, unknown> = {
-    body,
-    evidence: { idle: { available: false, error: "No idle in this test." } },
-    hair: [], details: {}, piercingStyles: [], idle: undefined,
-    eyeShapeOptions: () => ({ choices: [{ index: 0, label: "Base" }] }),
-    cameraState: () => ({ position: [0, 1.67, -1], target: [0, 1.67, 0], fov: 30 }),
-    controls: {
-      addEventListener: (_type: string, listener: Listener) => controls.add(listener),
-      removeEventListener: (_type: string, listener: Listener) => controls.delete(listener),
-    },
-    dispose: () => { host.canvases--; log.push("scene:dispose"); },
-    lighting: { setPreset: noop, setCreatorOptions: noop, setBodySex: noop, subscribe: () => noop,
-      camera: () => ({ position: [0, 1.62, -1.2], target: [0, 1.62, 0], fov: 15 }),
-      status: () => ({ preset: "studio", sex: "female", defaultExposure: 1, lut: { phase: "idle", source: null } }) },
-  };
-  // Every other scene method is a no-op; `then` stays undefined so the scene isn't mistaken for a promise.
-  const scene = new Proxy(known, { get: (target, key) => key in target ? target[key as string] : key === "then" ? undefined : noop });
-  return { scene: scene as unknown as Awaited<ReturnType<typeof createSceneRuntime>>, controls };
-}
-
-function harness(plan: { failLoad?: number[]; failPresent?: number[] }) {
-  const log: string[] = [];
-  const host = { canvases: 0, clientWidth: 600, clientHeight: 400, contains: () => false };
-  const scenes: ReturnType<typeof fakeScene>[] = [];
-  const bodies: string[] = [];
-  let loads = 0, presents = 0, persisted = 0;
-  const viewport = createBrowserViewportDevice({ region: EYE_REGION,
-    headHost: host as unknown as HTMLElement, uvHost: { clientWidth: 1, clientHeight: 1, contains: () => false } as unknown as HTMLElement,
-    queryContext: () => { throw Error("No hit expected"); },
-    sceneFactory: (async (_host: unknown, options: { body?: "female" | "male" }) => {
-      loads++;
-      bodies.push(options.body ?? "female");
-      // A failed load releases what it made itself (createScene does), so it leaves no canvas.
-      if (plan.failLoad?.includes(loads)) throw Error("The head could not be read.");
-      const made = fakeScene(host, log, options.body);
-      scenes.push(made);
-      return made.scene;
-    }) as unknown as typeof createSceneRuntime,
-    deviceFactory: (() => ({ show: noop })) as never,
-    surfaceFactory: (() => ({ resize: noop, cancelInput: noop, inputCapture: () => false, hitAt: () => undefined,
-      setEnabled: noop, dispose: () => log.push("surface:dispose") })) as unknown as typeof createSurfaceEditor,
-    window: { addEventListener: noop },
-  });
-  const preferenceListeners = new Set<Listener>(), schemeListeners = new Set<Listener>();
-  const attached: HeadServices = {};
-  let connected: unknown;
-  type Surface = NonNullable<ReturnType<LayeredSurfaceWiring["surface"]>>;
-  const surfaces = new Map<unknown, Surface>();
-  const surfaceOf = (scene: unknown) => surfaces.get(scene) ?? surfaces.set(scene, { layers: {}, surface: {}, maxTextureSize: 4096 } as unknown as Surface).get(scene)!;
-  const ports: HeadAttachmentPorts = {
-    workspace: freshWorkspace(), viewport,
-    // The composition root wires the live feature's layered surface (its renderer's); here, one per scene.
-    layered: [{ feature: "eye-makeup", surface: surfaceOf, editor: {} as NonNullable<LayeredSurfaceWiring["editor"]>, preview: {
-      connectScene: scene => { connected = scene; return { accepted: true } as ReturnType<LayeredSurfaceWiring["preview"]["connectScene"]>; },
-      disconnectScene: scene => { if (connected === scene) connected = undefined; },
-      presentInitialLayers: () => { presents++; if (plan.failPresent?.includes(presents)) throw Error("A layer could not be shown."); },
-    } }],
-    preferences: { snapshot: () => ({ theme: "dark" }), subscribe: listener => { preferenceListeners.add(listener); return () => { preferenceListeners.delete(listener); }; } },
-    colourScheme: { matches: true, addEventListener: (_type, listener) => schemeListeners.add(listener), removeEventListener: (_type, listener) => schemeListeners.delete(listener) },
-    attach: services => Object.assign(attached, services),
-    persist: () => { persisted++; }, changed: noop,
-    character: characterPort(),
-  };
-  return { log, host, scenes, viewport, ports, attached, preferenceListeners, schemeListeners, bodies,
-    get connected() { return connected; }, surfaces, get persisted() { return persisted; }, get loads() { return loads; } };
-}
-
-test("a head step failing after the scene loaded releases every head connection, and Try again attaches once", async () => {
+test("a head step failing as the head is shown releases every connection it made, and showing again connects once", async () => {
   const h = harness({ failPresent: [1] });
-  await expect(attachBrowserHead(h.ports)).rejects.toThrow("A layer could not be shown.");
-  // Nothing of the failed attempt stays connected.
-  expect(h.host.canvases).toBe(0);
-  expect(h.log).toEqual(["surface:dispose", "scene:dispose"]);
+  const head = await buildBrowserHead(h.ports);
+  // Built hidden: nothing reaches the application or the canvas yet.
+  expect(h.attached).toEqual({});
+  expect(h.drawn).toEqual([]);
+  expect(() => head.show()).toThrow("A layer could not be shown.");
+  expect(head.shown).toBe(false);
+  expect(h.log).toEqual(["surface:cancel", "surface:dispose"]);
   expect(h.viewport.scene()).toBeUndefined();
   expect(h.viewport.surfaceEditor()).toBeUndefined();
   expect(h.connected).toBeUndefined();
-  expect(h.attached).toEqual({ savedV: undefined, preview: undefined, motion: undefined, characterDetails: undefined, characterContext: undefined });
-  expect(h.preferenceListeners.size).toBe(0);
-  expect(h.schemeListeners.size).toBe(0);
+  expect(h.attached).toEqual(nothingAttached);
   expect(h.scenes[0]!.controls.size).toBe(0);
-
-  // Try again: exactly one of everything.
-  const head = await attachBrowserHead(h.ports);
-  expect(h.loads).toBe(2);
   expect(h.host.canvases).toBe(1);
+
+  // Shown again: exactly one of everything.
+  head.show();
+  expect(head.shown).toBe(true);
   expect(h.viewport.scene()).toBe(head.scene);
   expect(h.connected).toBe(h.surfaces.get(head.scene));
-  expect(h.attached).toEqual({ savedV: head.savedAppearance, preview: head.preview, motion: head.motion, characterDetails: head.characterDetails,
-    characterContext: head.characterContext });
+  expect(h.attached).toEqual({ savedV: head.savedAppearance, preview: head.preview, motion: head.motion, characterDetails: head.characterDetails });
   expect(h.preferenceListeners.size).toBe(2); // The stage theme and the research tools preference (PREV-194).
   expect(h.schemeListeners.size).toBe(1);
-  expect(h.scenes[1]!.controls.size).toBe(1);
+  expect(h.scenes[0]!.controls.size).toBe(1);
   const before = h.persisted;
-  for (const listener of h.scenes[1]!.controls) listener();
+  for (const listener of h.scenes[0]!.controls) listener();
   expect(h.persisted).toBe(before + 1);
 
-  // Unloading (a later reload) releases the head the same way, once.
+  // Disposed (twice): hidden first, then everything goes, once.
   head.dispose(); head.dispose();
   expect(h.host.canvases).toBe(0);
-  expect(h.log).toEqual(["surface:dispose", "scene:dispose", "surface:dispose", "scene:dispose"]);
+  expect(h.log).toEqual(["surface:cancel", "surface:dispose", "surface:cancel", "surface:dispose", "scene:dispose:1"]);
   expect(h.preferenceListeners.size).toBe(0);
-  expect(h.attached).toEqual({ savedV: undefined, preview: undefined, motion: undefined, characterDetails: undefined, characterContext: undefined });
+  expect(h.attached).toEqual(nothingAttached);
 });
 
-test("a scene that fails to load attaches nothing, and the next load starts clean", async () => {
-  const h = harness({ failLoad: [1] });
-  await expect(attachBrowserHead(h.ports)).rejects.toThrow("The head could not be read.");
+test("a scene that fails to build attaches nothing, an aborted build rejects with the abort, and the next build starts clean", async () => {
+  const h = harness({ failBuild: [1] });
+  await expect(buildBrowserHead(h.ports)).rejects.toThrow("The head could not be read.");
   expect(h.host.canvases).toBe(0);
   expect(h.attached).toEqual({});
   expect(h.preferenceListeners.size).toBe(0);
-  const head = await attachBrowserHead(h.ports);
+  const controller = new AbortController();
+  controller.abort();
+  await expect(buildBrowserHead(h.ports, controller.signal)).rejects.toMatchObject({ name: "AbortError" });
+  const head = await buildBrowserHead(h.ports);
+  head.show();
   expect(h.host.canvases).toBe(1);
   expect(h.preferenceListeners.size).toBe(2);
   expect(h.viewport.scene()).toBe(head.scene);
-  // Loading again over a loaded head releases the old one first.
-  await h.viewport.loadHead();
-  expect(h.host.canvases).toBe(1);
-  expect(h.log).toEqual(["surface:dispose", "scene:dispose"]);
+  head.dispose();
 });
 
-test("releasing a head that a later load replaced leaves the current head loaded (UI-36)", async () => {
-  const h = harness({});
-  const first = await attachBrowserHead(h.ports);
-  // A later load replaces the first head (and releases its scene)…
-  const current = await h.viewport.loadHead();
-  expect(h.log).toEqual(["surface:dispose", "scene:dispose"]);
-  expect(h.host.canvases).toBe(1);
-  // …so the first head's release must not unload the head that is now current.
-  first.dispose();
-  expect(h.viewport.scene()).toBe(current);
-  expect(h.host.canvases).toBe(1);
-  expect(h.log).toEqual(["surface:dispose", "scene:dispose"]);
-  // The current head is still released by its own scene, once.
-  h.viewport.unloadHead(first.scene);
-  expect(h.viewport.scene()).toBe(current);
-  h.viewport.unloadHead(current);
-  h.viewport.unloadHead(current);
-  expect(h.viewport.scene()).toBeUndefined();
-  expect(h.host.canvases).toBe(0);
-  expect(h.log).toEqual(["surface:dispose", "scene:dispose", "scene:dispose"]);
-});
-
-test("every composed layered surface gets its preview connected and presented, the on-head editor mounts on one, and all are released (UI-76)", async () => {
-  const h = harness({});
+test("every composed layered surface is connected and presented while its head is shown, the on-head editor mounts on one, and all are let go on hide (UI-76)", async () => {
+  const h = harness();
   const events: string[] = [];
   const second: LayeredSurfaceWiring = { feature: "cheek-makeup",
     surface: scene => ({ layers: {}, surface: { name: `cheek:${h.scenes.length}` }, maxTextureSize: 4096, scene }) as never,
@@ -178,62 +73,74 @@ test("every composed layered surface gets its preview connected and presented, t
       disconnectScene: () => { events.push("cheek:disconnect"); },
       presentInitialLayers: () => { events.push("cheek:present"); },
     } };
-  const head = await attachBrowserHead({ ...h.ports, layered: [...h.ports.layered, second] });
+  const head = await buildBrowserHead({ ...h.ports, layered: [...h.ports.layered, second] });
+  expect(events).toEqual([]);
+  head.show();
   expect(h.connected).toBe(h.surfaces.get(head.scene));
   expect(events).toEqual(["cheek:connect", "cheek:present"]);
   expect(h.viewport.surfaceEditor()).toBeDefined();
-  head.dispose();
+  head.hide();
   expect(events).toEqual(["cheek:connect", "cheek:present", "cheek:disconnect"]);
   expect(h.connected).toBeUndefined();
-  // A surface whose renderer isn't composed, and two on-head editors, are refused and leave nothing connected.
-  await expect(attachBrowserHead({ ...h.ports, layered: [{ ...second, surface: () => undefined }] })).rejects.toThrow("The cheek-makeup renderer is not composed.");
-  await expect(attachBrowserHead({ ...h.ports, layered: [...h.ports.layered, { ...second, editor: {} as NonNullable<LayeredSurfaceWiring["editor"]> }] }))
+  expect(h.viewport.surfaceEditor()).toBeUndefined();
+  head.dispose();
+  // A surface whose renderer isn't composed, and two on-head editors, are refused and leave nothing behind.
+  await expect(buildBrowserHead({ ...h.ports, layered: [{ ...second, surface: () => undefined }] })).rejects.toThrow("The cheek-makeup renderer is not composed.");
+  await expect(buildBrowserHead({ ...h.ports, layered: [...h.ports.layered, { ...second, editor: {} as NonNullable<LayeredSurfaceWiring["editor"]> }] }))
     .rejects.toThrow("Only one layered surface can carry the on-head editor.");
   expect(h.host.canvases).toBe(0);
   expect(h.viewport.scene()).toBeUndefined();
 });
 
-test("the head is the shown V's body's core: a masculine V's is prepared first, and a V that changes body loads the head again", async () => {
-  const h = harness({});
-  const prepared: string[] = [], reloads: unknown[] = [], notices: string[] = [];
-  const steps = vHistory();
-  h.ports.character = characterPort({ origin: "default", bodyGender: "male", choices: [] }, steps.home);
-  Object.assign(h.ports, { prepareCore: async (body: string) => { prepared.push(body); }, reload: () => reloads.push("reload"),
-    notice: (text: string) => notices.push(text) });
-  const head = await attachBrowserHead(h.ports);
+test("the head is its V's body's core: a masculine V's is prepared first (with the build's signal), and one that can't be shows the feminine head", async () => {
+  const h = harness();
+  const prepared: string[] = [], notices: string[] = [];
+  const signals: AbortSignal[] = [];
+  const head = await buildBrowserHead({ ...h.ports, character: { body: "male", context: contextOf({ origin: "default", bodyGender: "male", choices: [] }) },
+    prepareCore: async (body, signal) => { prepared.push(body); signals.push(signal); }, notice: text => notices.push(text) });
   expect(prepared).toEqual(["male"]);
+  expect(signals).toHaveLength(1);
   expect(h.bodies).toEqual(["male"]);
-  expect(head.characterContext.shownBody()).toBe("male");
-  // The feminine default V: the head asks to load again (after the change finished); the V's history is its own (`character:<id>`).
-  head.characterContext.dispatch({ kind: "character.useDefault", bodyGender: "female" });
-  expect(reloads).toEqual([]);
-  await new Promise(done => setTimeout(done, 5));
-  expect(reloads).toEqual(["reload"]);
-  // A head released before its reload ran asks nothing.
-  steps.undo();
-  head.dispose();
-  await new Promise(done => setTimeout(done, 5));
-  expect(reloads.length).toBe(1);
+  expect(head.body).toBe("male");
   expect(notices).toEqual([]);
+  head.dispose();
 
-  // The masculine head can't be prepared: the feminine head shows with a plain notice, and no reload loop follows.
-  const failing = harness({});
-  const told: string[] = [], again: unknown[] = [];
-  failing.ports.character = characterPort({ origin: "default", bodyGender: "male", choices: [] });
-  Object.assign(failing.ports, { prepareCore: async () => { throw Error("A newer game patch."); }, reload: () => again.push("reload"),
-    notice: (text: string) => told.push(text) });
-  const fallback = await attachBrowserHead(failing.ports);
-  expect(failing.bodies).toEqual(["female"]);
-  expect(fallback.characterContext.shownBody()).toBe("male");
-  expect(told).toEqual(["The masculine V's head couldn't be prepared from your Cyberpunk 2077 files, so the feminine head is shown. A newer game patch."]);
-  await new Promise(done => setTimeout(done, 5));
-  expect(again).toEqual([]);
-  // Showing the feminine V needs no new head; the masculine one again tries his head.
-  fallback.characterContext.dispatch({ kind: "character.useDefault", bodyGender: "female" });
-  await new Promise(done => setTimeout(done, 5));
-  expect(again).toEqual([]);
-  fallback.characterContext.dispatch({ kind: "character.useDefault", bodyGender: "male" });
-  await new Promise(done => setTimeout(done, 5));
-  expect(again.length).toBe(1);
+  // The masculine head can't be prepared: the feminine head is built with a plain notice; the head is still the masculine V's.
+  const fallback = await buildBrowserHead({ ...h.ports, character: { body: "male", context: contextOf({ origin: "default", bodyGender: "male", choices: [] }) },
+    prepareCore: async () => { throw Error("A newer game patch."); }, notice: text => notices.push(text) });
+  expect(h.bodies).toEqual(["male", "female"]);
+  expect(fallback.body).toBe("male");
+  expect(notices).toEqual(["The masculine V's head couldn't be prepared from your Cyberpunk 2077 files, so the feminine head is shown. A newer game patch."]);
   fallback.dispose();
+
+  // A preparation stopped by the build's abort (a newer change superseded it) is no fallback: the build rejects with the abort.
+  const controller = new AbortController();
+  const stopped = buildBrowserHead({ ...h.ports, character: { body: "male", context: contextOf() },
+    prepareCore: (_body, signal) => new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason))) }, controller.signal);
+  controller.abort();
+  await expect(stopped).rejects.toMatchObject({ name: "AbortError" });
+  expect(h.bodies).toEqual(["male", "female"]);
+});
+
+test("the camera pose round-trips through hide and show: the hidden head writes it to the view's camera node, the head shown next reads it (D3)", async () => {
+  const h = harness();
+  const a = await buildBrowserHead(h.ports);
+  a.show();
+  // An orbit moves A's camera without writing the node.
+  h.scenes[0]!.orbit(37);
+  const node = () => h.graph.state<{ pose?: CameraState }>(MAIN_VIEW, "camera").pose;
+  expect(node()?.fov).not.toBe(37);
+  const b = await buildBrowserHead(h.ports);
+  a.hide();
+  expect(node()?.fov).toBe(37);
+  b.show();
+  expect(h.log).toContain("camera:2:37");
+  expect(h.scenes[1]!.scene.cameraState().fov).toBe(37);
+  // B orbits, then A is shown again: A takes B's pose.
+  h.scenes[1]!.orbit(52);
+  b.hide(); a.show();
+  expect(h.scenes[0]!.scene.cameraState().fov).toBe(52);
+  // Camera jumps and orbits record no View and lighting step.
+  expect(h.graph.history().depth).toBe(0);
+  a.dispose(); b.dispose();
 });
