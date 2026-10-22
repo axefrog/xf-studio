@@ -280,7 +280,7 @@ For a booked session on the [runtime bridge](../projects/xf-runtime-bridge/READM
 1. Which journal entries carry the hustle titles (`Reported Crime: <title>`) for the unnamed assault folders? Only titled ones were looked up.
 2. What is the exact scaling between the base reward in a TweakDB record and the money the player receives (level, difficulty, a stat modifier)? The records give `Additive` values and one stat id that was not resolved.
 3. Where is `q001_show_sts_tut` written, and what else opens the street-stories tutorial?
-4. How do `StreetCredTier.*` ids map to street-cred levels, and which gigs are in each region's top tier?
+4. How do `StreetCredTier.*` ids map to street-cred levels, and which gigs are in each region's top tier? The tier thresholds are read in [population and affiliations §5.3](population-and-affiliations.md#53-districts) (for example Watson 1, 4, 8, 15); which gigs sit in each tier is still untraced.
 5. Which stat or setting sets the phone group `fixer_briefs_and_debriefs`, and is `ncpd_dispatcher` another player option?
 6. What do the 100-series gigs (`kab_101`, `kab_102`, `kab_107`, `rey_101`, `ina_101`, `jpn_101`) add to the sets? Three are stubs of one file; `kab_101` and `kab_102` are complete gigs.
 7. What does the point of no return do to the street-stories phase? A branch waits for it and ends the phase; whether gigs, pins and retaliation stop is not shown.
@@ -290,4 +290,4 @@ For a booked session on the [runtime bridge](../projects/xf-runtime-bridge/READM
 
 ## Related pages
 
-[Quests and story](quests-and-story.md) · [Main story as game state](main-story-state.md) · [Terminals and arcade](terminals-and-arcade.md) (phone messages) · [NPC reactions](npc-reactions.md) · [NPC direction](npc-direction.md) · [World and streaming](world-and-streaming.md) · [Gig decompositions](../research/story-engine/gig-decompositions.md) · [P2 game-substrate plan](../research/story-engine/p2-game-substrate.md) · [Research queue](../research/backlog/research-queue.md)
+[Quests and story](quests-and-story.md) · [Main story as game state](main-story-state.md) · [Terminals and arcade](terminals-and-arcade.md) (phone messages) · [NPC reactions](npc-reactions.md) · [NPC direction](npc-direction.md) · [World and streaming](world-and-streaming.md) · [Gig decompositions](../research/story-engine/gig-decompositions.md) · [P2 game-substrate plan](../research/story-engine/p2-game-substrate.md) · [Research queue](../research/backlog/research-queue.md) · [Population and affiliations](population-and-affiliations.md)
