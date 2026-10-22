@@ -365,6 +365,30 @@ Key bindings and palette commands resolve targets in the input layer, then dispa
 - **`history-service.ts`'s unqualified `look` scope and its fallback are removed.** With no editing context, Undo is unavailable, with the reason "Nothing to undo here yet".
 - **External changes clear a scope** (§2.2).
 
+**Built in phase 1e.**
+
+- **Focus.** `FocusService` (`platform/core/focus.ts`) owns the view order, the focused panel and the editing context. The history service records into it, and the session stores and restores it. The view graph holds no focus. `HistoryService.acting(scopes)` picks the first scope that can act.
+- **Targets.**
+  - Every action family names its target (§3.6), and the action registry adds `look` to feature actions. `preset.select` became `scene.setLook`.
+  - Scene-editing view actions name `scene` together with `sceneGen`.
+  - The presentation port is the input layer: it fills targets the UI leaves out. `StudioApplication` validates every named target in one place and refuses a stale one with `missing_target`. Dispatch and captures share one currency check (`TargetResolver.check()` and `current()`).
+  - Base revisions travel in captures, not on every immediate action.
+  - View actions that act through the drawn head (camera, motion, and preview's eye shape, detail and hair) refuse any view that doesn't show the drawn scene, until phase 4a's runtimes.
+- **Resolution and captures.**
+  - Resolution is pure (`app/profiles/bindings.ts`), and panel contributions declare their `context` (§5).
+  - Context menus capture their targets when they open.
+  - Gestures and continuous controls capture their look when they begin, and refuse to continue once the editor shows another look. An open gesture or control run is settled before the document shows other content.
+  - File pickers name their target when they are asked.
+- **History.** The View and lighting scope is `view:<profile>`. Undo acts only on the scope it names; with no editing context it reads "Nothing to undo here yet". The Undo and Redo tooltips and the History list say "Changes to <name>".
+- **Session data** (§4.1). Reading a session validates tab IDs, instance IDs (duplicates are dropped), bindings, scene references and generations, and focus.
+- **Boundary test.** It lists no family that still defaults a target. It also forbids reading focus below the input layer, naming `sceneGen` without `scene`, and naming the live feature in the root. The `liveSurface` row of §7 is built as `preview/browser/scene-surfaces.ts`.
+- **Deferred.**
+  - `character.undo` and `character.redo` duplicate `history.undo` scoped to the character, and will be retired.
+  - The History panel's list of other recent scopes waits for a UI decision (phase 3).
+  - `layout.set` gives way to phase 2's `tabs.*`.
+  - Shell menus other than context menus get captures in phase 3.
+  - The root's editor hooks and save loaders are UI-boundary exception 17, until phase 4a.
+
 ## 4. Layouts
 
 ### 4.1 One owner for tabs, graph and focus
