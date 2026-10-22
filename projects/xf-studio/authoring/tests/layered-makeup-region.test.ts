@@ -84,6 +84,21 @@ test("a new or reset layer takes the region's contour, and the region's models d
   expect(editLayers(glossy, "g", { kind: "rename", id: "g", name: "Gloss" }, withOptics).recipe.layers[0].name).toBe("Gloss");
 });
 
+test("a new layer's name skips names in use, so adding after a removal never repeats one (CORE-125)", () => {
+  const region: Pick<LayeredMakeupRegion, "models" | "newLayer"> = { models: new LayerModelRegistry([CLASSIC_FLAKES]), newLayer: () => layer() };
+  let recipe: Recipe = { uv: "gltf-uv0-top-left", layers: [] };
+  for (const id of ["a", "b", "c"]) recipe = editLayers(recipe, undefined, { kind: "add", newId: id }, region).recipe;
+  expect(recipe.layers.map(l => l.name)).toEqual(["Layer 1", "Layer 2", "Layer 3"]);
+  recipe = editLayers(recipe, "a", { kind: "remove", id: "a" }, region).recipe;
+  recipe = editLayers(recipe, undefined, { kind: "add", newId: "d" }, region).recipe;
+  expect(recipe.layers.map(l => l.name)).toEqual(["Layer 2", "Layer 3", "Layer 4"]);
+  // A renamed layer frees its number; a name typed to match the next number is skipped too.
+  recipe = editLayers(recipe, "b", { kind: "rename", id: "b", name: "Wing" }, region).recipe;
+  recipe = editLayers(recipe, "c", { kind: "rename", id: "c", name: "Layer 5" }, region).recipe;
+  recipe = editLayers(recipe, undefined, { kind: "add", newId: "e" }, region).recipe;
+  expect(recipe.layers.map(l => l.name)).toEqual(["Wing", "Layer 5", "Layer 4", "Layer 6"]);
+});
+
 test("fine Glitter's cache key names the region's scope, so two regions never share a catalogue", () => {
   const settings = defaultStudioIrregularFlakes();
   const eye = studioIrregularOpticalKey(settings, 512, EYE_MAKEUP_REGION.fineGlitter);

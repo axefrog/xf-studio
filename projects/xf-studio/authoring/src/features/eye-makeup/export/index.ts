@@ -55,13 +55,24 @@ export const MASCULINE_NOT_PREPARED: ExportWarning = { text: "No masculine V pla
 /** His plate's texture window differs from hers: only a head mod can move the head's eye UVs (the 2.31 heads share them). */
 export const MASCULINE_WINDOW: ExportWarning = { next: "settings.game",
   text: "A head mod moves the masculine V's eye area, so these looks can't fit him; choose “The unmodified game head” for both heads to include him." };
+/**
+ * His plate's value is damaged (a cache entry or prerequisite that no longer reads): he is left out and she still builds, never a
+ * refusal (PIPE-122). Every plan reads it the same way, so Check and Build agree; a Build that finds his files damaged has the host
+ * prepare them afresh once (`buildInputs`).
+ */
+export const MASCULINE_DAMAGED: ExportWarning = {
+  text: "XF Studio's copy of the masculine V's eye area is damaged; build again to prepare it afresh and include him." };
+/** The plate input's refusals that mean its files are damaged, not that a tool failed. */
+const DAMAGED_PLATE_CODES = new Set(["package_input_missing", "package_plate_mismatch", "package_plate_invalid"]);
+const DAMAGED_PLATE = { unavailable: { code: "plate_damaged", message: MASCULINE_DAMAGED.text } };
 type MasculineDecision = { include: boolean; unchecked?: true; warning?: ExportWarning; plate?: PlateReachInput & { record?: PackagePlate } };
 function masculineDecision(value: unknown, feminine: (PlateReachInput & { record?: PackagePlate }) | null): MasculineDecision {
   const unavailable = unavailablePlate(value);
   if (unavailable) return { include: false, warning: { text: unavailable.message, ...(unavailable.next ? { next: unavailable.next } : {}) } };
   // Without a value, a Build (whose feminine plate carries its provenance) prepared none; a Check just doesn't know yet.
   if (value === undefined || value === null) return feminine?.record ? { include: false, warning: MASCULINE_NOT_PREPARED } : { include: true, unchecked: true };
-  const plate = planPlate(value)!;
+  let plate: PlateReachInput & { record?: PackagePlate };
+  try { plate = planPlate(value)!; } catch { return { include: false, warning: MASCULINE_DAMAGED }; }
   // One texture set serves both plates only when their windows agree (the male head uses the female head's UVs, 2.31).
   if (feminine && JSON.stringify(plate.footprint.window) !== JSON.stringify(feminine.footprint.window)) return { include: false, warning: MASCULINE_WINDOW };
   return { include: true, plate };
@@ -144,7 +155,7 @@ export const EYE_MAKEUP_EXPORTER: FeatureExporter<EyeMakeupPlan> = Object.freeze
       return typeof plate?.manifest === "string" ? manifestPlateReach(plate.manifest) : null;
     };
     const reach = reachOf(prerequisites[EYE_PLATE_PREREQUISITE]), his = prerequisites[EYE_PLATE_MASCULINE_PREREQUISITE];
-    const hisReach = unavailablePlate(his) ? his : reachOf(his);
+    const hisReach = unavailablePlate(his) ? his : (() => { try { return reachOf(his); } catch { return DAMAGED_PLATE; } })();
     return { ...reach ? { [EYE_PLATE_PREREQUISITE]: reach } : {}, ...hisReach ? { [EYE_PLATE_MASCULINE_PREREQUISITE]: hisReach } : {} };
   },
   protectedInputs(prerequisites) {
@@ -160,8 +171,16 @@ export const EYE_MAKEUP_EXPORTER: FeatureExporter<EyeMakeupPlan> = Object.freeze
     const plate = await plateBuildValue(plateBuilderInput(context.prerequisites[EYE_PLATE_PREREQUISITE]), context.tools, context.work);
     // His plate, when the host prepared one: its own files, provenance and footprint; else why there is none, as given.
     const given = context.prerequisites[EYE_PLATE_MASCULINE_PREREQUISITE];
-    const his = given === undefined || unavailablePlate(given) ? given
-      : await plateBuildValue(plateBuilderInput(given), context.tools, join(context.work, "pma"), MASCULINE_PLATE_STEMS);
+    let his: unknown = given;
+    if (given !== undefined && !unavailablePlate(given)) {
+      try { his = await plateBuildValue(plateBuilderInput(given), context.tools, join(context.work, "pma"), MASCULINE_PLATE_STEMS); }
+      catch (error) {
+        // His files missing or not matching their manifest: stale, so the host discards them and prepares him afresh once (PIPE-122).
+        if (error instanceof ExportRefusal && DAMAGED_PLATE_CODES.has(error.code))
+          throw new PrerequisiteStale(EYE_PLATE_MASCULINE_PREREQUISITE, `${error.message} The host prepares the masculine plate again.`);
+        throw error;
+      }
+    }
     return { prerequisites: { [EYE_PLATE_PREREQUISITE]: plate, ...his === undefined ? {} : { [EYE_PLATE_MASCULINE_PREREQUISITE]: his } } };
   },
   async build(outcome: Outcome, context) {
