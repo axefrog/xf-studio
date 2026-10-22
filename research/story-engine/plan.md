@@ -183,7 +183,7 @@ Update a row in the same checkpoint as the work it describes.
 | 02 | Credits for every work the design has drawn on so far | Entries in the [community credits](../../docs/community-credits.md) | | done: 38 entries (a Story and game design section, and additions to Research papers) |
 | 03 | P1 phase A, the lens runs:<br>1. L1 and L2 first;<br>2. then L3, L6, L7 and L8;<br>3. then L4, L5, L9, L10 and L11;<br>4. then second-model runs, until saturation | `craft/lenses/` (committed with the map) | | running: L1 and L2 done; the other lenses wait while the usage mode is economical |
 | 04 | P2, the game substrate research plan | [p2-game-substrate.md](p2-game-substrate.md) | | done: [P2](p2-game-substrate.md) v1 |
-| 05 | S0, the kernel specification v0: the foundation made exact | [spec/kernel.md](spec/kernel.md) | 04 (for the game-mirror parts) | done: [S0](spec/kernel.md) v1, revised after an independent review (its §18) |
+| 05 | S0, the kernel specification v0: the foundation made exact | [spec/kernel.md](spec/kernel.md) | 04 (for the game-mirror parts) | done: [S0](spec/kernel.md) v2 after two review rounds; one final round allowed ([D-17](decisions.md)) |
 | 06 | P1 phase B, the discipline map, then the maintainer checkpoint | `craft/map.md` | 03 | waiting on 03 |
 | 07 | P2 desk research:<br>- the main story's progression as facts;<br>- the gig system;<br>- population;<br>- channels;<br>- event hooks;<br>- saves | Knowledge pages and research notes | 04 | running: requested from the research queue, area A first ([P2 §4](p2-game-substrate.md#4-how-it-runs)) |
 | 08 | The reference model v0, implementing S0, with its test vectors. Code lives in `projects/xf-story-engine/reference/` and lands through XF · Meta-coordinator, which owns `main` with a code review | Code and tests | 05 | next, after S0 review |
@@ -196,3 +196,4 @@ Update a row in the same checkpoint as the work it describes.
 | 15 | P8, P9 and P10, then S7, S8 and S9 | Designs and specs | 11, 13 | later |
 | 16 | Composite v0, then the attempts to break it (P1 phases D and E) | `composite/` | 09, 12 | later |
 | 17 | The offline prototype (milestone M3) | Code, results | 08, 10, 11, 13 | later |
+| 18 | Early staging check: a handful of small encounters generated offline are staged host-side in one booked session, to confirm that they can be expressed in game and read well there, while the design is still cheap to change | Session results, friction log | 17's first output; the bridge's NPC branch proven | later |
