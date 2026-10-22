@@ -2,7 +2,7 @@
  * A character's Undo history in the history service (profiles design §3.7): one scope, `character:<id>`, holding its creator choices,
  * its Clothing setting and its own-makeup setting in the order they were made. Session-only. The scope outlives any one context of the
  * character (a head loaded again for another body makes a new context): the context showing the character now is bound to it, and
- * moves through its steps.
+ * moves through its steps. While none is bound, Undo and Redo wait with their reason and the steps are kept.
  *
  * Keys: `v` (where the V comes from and every choice set on it), `clothing` and `makeup`. Values are kept whole and by reference.
  */
@@ -13,6 +13,8 @@ export const CHARACTER_SCOPE_PREFIX = "character:";
 export const characterScope = (id: string) => `${CHARACTER_SCOPE_PREFIX}${id}`;
 /** Steps kept per character. */
 export const CHARACTER_HISTORY_LIMIT = 100;
+/** Why a character's Undo and Redo wait while no context shows it (its head is being loaded again). */
+export const CHARACTER_NOT_SHOWN = "This V is still loading. Try again in a moment.";
 /** The keys a character's steps change. */
 export type CharacterHistoryKey = "v" | "clothing" | "makeup";
 
@@ -38,7 +40,8 @@ export function characterHistory(home: CharacterHistoryHome): { scope: HistorySc
     const scope = home.service.open(characterScope(home.id), {
       read: key => made.target?.read(key),
       apply: (values, cause: HistoryCause) => made.target ? made.target.apply(values, cause) : false,
-      unavailable: () => made.target?.unavailable?.(),
+      // No context bound (between a head's reload and the next): Undo and Redo wait, and the steps are kept for it.
+      unavailable: () => made.target ? made.target.unavailable?.() : CHARACTER_NOT_SHOWN,
       settled: () => made.target?.settled?.(),
     }, { limit: CHARACTER_HISTORY_LIMIT });
     binding = Object.assign(made, { scope });

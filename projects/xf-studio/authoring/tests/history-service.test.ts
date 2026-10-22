@@ -14,6 +14,7 @@ import { ViewGraph } from "../src/platform/core/view-graph";
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { DEFAULT_CREATOR_LIGHTING } from "../src/preview/creator-lighting";
+import { CHARACTER_NOT_SHOWN, characterHistory } from "../src/character/character-history";
 import { freshWorkspace } from "./fixtures/eye-region";
 
 import { namedCore } from "./fixtures/named-targets";
@@ -239,4 +240,29 @@ test("a target that can't move now (a V still being restored) refuses Undo and R
   held = undefined;
   expect(scope.command({ kind: "history.undo" })).toBe(true);
   expect(plain.values.v).toBe(1);
+});
+
+test("a character's history with no context bound (its head loading again) refuses Undo and Redo with a reason and keeps every step", () => {
+  const history = createHistoryService(), home = { service: history, id: "v" };
+  const first = store({ v: 1 }), made = characterHistory(home);
+  const unbind = made.bind(first.target);
+  made.scope.checkpoint(["v"], label("Change")); first.set("v", 2);
+  made.scope.checkpoint(["v"], label("Again")); first.set("v", 3);
+  expect(made.scope.command({ kind: "history.undo" })).toBe(true);
+  expect([first.values.v, made.scope.state().depth, made.scope.state().redoDepth]).toEqual([2, 1, 1]);
+  // Detached: both moves wait with their reason, nothing applies and nothing is dropped.
+  unbind();
+  for (const kind of ["history.undo", "history.redo"] as const) {
+    expect(made.scope.capability({ kind })).toEqual({ available: false, code: "not_ready", reason: CHARACTER_NOT_SHOWN });
+    expect(made.scope.command({ kind })).toBe(false);
+  }
+  expect([made.scope.state().depth, made.scope.state().redoDepth, first.applies()]).toEqual([1, 1, 1]);
+  // The next context (the head loaded again) is bound to the same scope and gets the steps back.
+  const second = store({ v: 2 });
+  characterHistory(home).bind(second.target);
+  expect(made.scope.command({ kind: "history.redo" })).toBe(true);
+  expect(second.values.v).toBe(3);
+  expect(made.scope.command({ kind: "history.undo" })).toBe(true);
+  expect(made.scope.command({ kind: "history.undo" })).toBe(true);
+  expect([second.values.v, made.scope.state().depth]).toEqual([1, 0]);
 });
