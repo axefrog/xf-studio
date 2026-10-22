@@ -1,6 +1,6 @@
 # S0. Kernel specification
 
-**Status:** v3, final for the first implementation, 22 October 2026. This is the specification stage of the [foundation](../foundation.md): exactly how the dimensional model works, so the reference model can be built from this page alone. It is work package [WP-05](../plan.md#82-work-packages).
+**Status:** v3.1, final for the first implementation, 22 October 2026. v3.1 adopts the reference model's 57 accepted implementation notes ([§19](#19-decisions-adopted-from-the-reference-model)). This is the specification stage of the [foundation](../foundation.md): exactly how the dimensional model works, so the reference model can be built from this page alone. It is work package [WP-05](../plan.md#82-work-packages).
 
 v3 takes in three independent review rounds. The [review record](#18-review-record) lists what changed and why. What the first implementation includes is settled in [§0.2](#02-the-first-implementation), and that scope is final ([D-19](../decisions.md)).
 
@@ -1090,3 +1090,18 @@ Its "could be lighter" points were adopted: `Bound`s are optional, summary mater
 ### Final decision on the first implementation
 
 The review process is complete ([D-17](../decisions.md)). This vertical's coordinator has decided ([D-19](../decisions.md)) that the first implementation, the TypeScript reference model, implements this specification as v3 states it: everything except the items deferred in §0.2. Every deferred item returns only with a recorded contract that agrees with the reference model. Changes to this scope come only through a new decision.
+
+## 19. Decisions adopted from the reference model
+
+The [reference model](../../../projects/xf-story-engine/README.md) is on `main`: 261 tests, and three independent code-review rounds with no findings left open. Building it took 57 decisions where this specification was silent or ambiguous. All 57 were accepted. They are recorded, numbered, in [SPEC-NOTES.md](../../../projects/xf-story-engine/reference/SPEC-NOTES.md), which is **normative alongside this page**: a later implementation follows them exactly as it follows the text above. The ones that change results:
+
+| Area | Decision | Note |
+|---|---|---|
+| Pins and time | Pins on enduring slots apply at every `t`; `at` records only when the fact was learned. Pins on simulated temporal slots name their window (`slot@w<k>`). Readings and observations of mirrored slots use half-open intervals that are never extended, and equal timestamps are ordered by `Id` | 5, 34, 36 |
+| Values and hashing | Reals are held as grid points and hashed by grid index. Hash arguments are explicitly typed. Every hashed or compared record uses one canonical record encoding (sorted keys, a fixed number format) | 1–4, 52 |
+| Resolution | An `assigned` slot also takes a value when arbitration leaves exactly one. A `ref` pin or constraint names nodes outright, and candidates only fill unconstrained draws. A nested `failed` fails the outer resolution or query. Caches are valid for one revision **and** one engine time | 6, 38, 53, 54 |
+| Evolution | Boundaries are processed one at a time: frame work and dispatch, then belief hooks, then what they queued. New process batches are published together after every starting process has read the boundary snapshot. Outstanding batches persist and are roots | 33, 50, 53, 56 |
+| Matching | Each change is matched on its own values (old values for removals) at its own time, including temporal windows | 22, 57 |
+| Persistence | A save's `meta` carries the world seed, time, evolution cursor, function versions, packs, demand roots and demand history. Ops are produced by a diff at save time. A read-only load changes nothing, packs included | 19, 20, 39, 55 |
+
+**The determinism digest** frozen in the reference model's tests (`d534e0dc…`, 1,067 entries, covering save, load, branching, outstanding batches, beliefs, summaries and group decisions) is the cross-implementation check that the native core must reproduce.
