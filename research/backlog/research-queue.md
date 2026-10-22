@@ -50,7 +50,8 @@ Requests from the Story Engine stay spoiler-free here: neutral wording, no plot,
 
 | Question | Asked by | Serves | Priority | Status | Result |
 |---|---|---|---|---|---|
-| — | | | | | |
+| How the base game records main-story progress as state: the facts, quest phases and journal states that mark acts and turning points; tracked character states (alive, allied, romance); the point of no return and open endings. Delivered as a knowledge page plus a table of fact names and conditions (no assets). Brief: area A of [p2-game-substrate](../story-engine/p2-game-substrate.md). | XF · Story Engine (22 Oct) | Seed-language design (P4): evaluating authored story windows on any save | 4: exploratory, not urgent | Queued; runs when the usage mode allows. Already covered: the mechanics of facts, phases and the journal ([quests and story](../../knowledge/quests-and-story.md), [save files](../../knowledge/save-files.md)). Missing: the vanilla progress map itself. | — |
+| How mods put their own ink UI inside photo mode's menus: where to attach (rows, pages, whole panels), input and focus, layout, coexistence between several photo-mode mods, pitfalls; plus questions only the game can answer, for the bridge's session cards. Source: the downloaded mod-study set (ignored), studied for technique only, never adopting its code; source-only claims graded as such; mods credited. | XF · Runtime bridge (22 Oct) | The bridge's surface rule: XF photo-mode controls native inside photo mode, the overlay only as a fallback | 4: not urgent, before XF Core C1 | Queued; runs when the usage mode allows. Already covered: adding and driving menu rows (`AddMenuItem`, the three attribute layers, write ordering, Photo Mode Preferences' re-apply window) in [photo mode §11](../../knowledge/photo-mode.md) and [ink UI §3](../../knowledge/ink-ui.md). Missing: custom panels and pages, input and focus, layout, coexistence. | — |
 
 ## Answered from existing material
 
