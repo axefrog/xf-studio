@@ -203,7 +203,7 @@ Results after the review fixes (22 October 2026): S1 on both hosts **PASS** (8 s
 - **Recovery tells every owner (High).** An answer that changes what a document shows (a recovered copy giving way to the library's newer value, including when the baseline already held it) is announced as a change from elsewhere, so a V's context, a look's session, a profile or a collection opened during recovery replaces what it shows before the next edit; a hold that takes a newer value is announced too. While a V is being restored its context refuses changes with the reason (`not_ready`). The specification test now keeps an owner that holds every document from the moment the page opens, told only by the outbox's events, and checks after every step that it shows what the page shows; with the announcement removed it fails within a few seeds.
 - **Keep mine reads its looks (Medium).** Keep mine over a collection reads every look it lists or removes from the library first, missing ones included: a look purged there is written back from this page's copy in the same command (over revision 0); one nothing holds any more refuses the resolution with a plain reason before anything is written.
 - **Required content travels with the command (Medium).** An immutable document a stored command requires keeps its content in its own key's record while the command waits (`retained`), so cleanup plus a restart puts it again from there. With no copy anywhere, the command waits, `status().missing` says so, and importing the same save again sends it, or `discardWaiting` drops it. A coalesced edit's references replace the old value's when the owner names them, so changing the V's source releases the old save.
-- **Availability (style guide `t-recovering`).** Restoring that takes over a second says "Restoring changes from your last session…" in the line under the header; after 5 s it offers Try again and, only where the library hadn't taken the restored change when the page read the document, Keep working on the restored version (else Export collection); a missing save offers Discard those changes. No timer unlocks anything. Captures in light and dark, narrow and wide: `generated/recovering-ui/` (`bun tools/conflict-captures.ts <out> t-recovering`).
+- **Availability (style guide `t-recovering`).** Restoring that takes over a second says "Restoring changes from your last session…" (in the status bar's line since phase 1g, so nothing moves; the notice under the header opens at 5 s); after 5 s it offers Try again and, only where the library hadn't taken the restored change when the page read the document, Keep working on the restored version (else Export collection); a missing save offers Discard those changes. No timer unlocks anything. Captures in light and dark, narrow and wide: `generated/recovering-ui/` (`bun tools/conflict-captures.ts <out> t-recovering`).
 - **Found by the extended specification test:** the recovery notice's timer kept read-only probe outboxes alive (memory grew through a sweep until the guard stopped it at 3 GB); the timer is now set only by a page that can write, and the sweep peaks at 0.4 GB. It also found that two commands recovered after such a crash could both be sent on one document; the outbox now sends commands on a document strictly one after another. The test's own model was corrected for crashes with host writes pending (an app restart lands every pending host write; bases taken from a lost answer follow the resolution of that command; a snapshot only checks this launch's own writes; `own` speaks only for documents a command still writes; a recovered command whose receipt is gone may conflict, as documented).
 
 Results after the second review's fixes (22 October 2026): S1 on both hosts **PASS** (8 scenarios, 153 s; 0 missing, 0 false conflicts, 0 silent overwrites); desktop host-kill **PASS** 5 of 5 (5,134 mutations, 0 missing, 0 false conflicts); lease harness 34 of 34; specification test sweep of 800 local and 400 desktop seeds (484,800 steps) passes in 55 s at 0.3 GB, with 427 app crashes with host writes pending, 171 `own` adoptions, 32 allowed conflicts after such crashes and 54,536 edits refused while restoring; CI's run takes about 5 s.
@@ -348,6 +348,26 @@ Chrome commits a page's `localStorage` to disk 5 s after its first change. While
 ### The harnesses in CI
 
 The Authoring workflow's desktop (Windows) job runs this folder's `bun test tests` after the desktop tests, with `XFS_HARNESS_QUICK=1`: the lease harness, the S1 outbox kill harness with half its kills, the S3 sweep for one round, and the S1 rules. Its path filter includes this folder, and the full kill counts stay the default locally. The CI set takes about 2.5 minutes (152 s locally, peak 1.6 GB); the full S1 kill harness alone takes about 2.3 minutes. `bun run check` typechecks this folder's code.
+
+## UI review fixes (phase 1g)
+
+The design review's blocking items 1–6 (`claude/profiles-p1`, 22 October 2026):
+
+- Keep mine, Use theirs and Discard those changes ask first, in place.
+- The workspace notice opens only for states the person acts on. Restoring's first seconds go in the status bar's line, and the notice never opens mid-gesture.
+- Narrow buttons stay labelled.
+- The copy is rewritten, and the history copy matches the one model.
+- The History summary names its context.
+
+`tools/ui-review-2-captures.ts` takes the live captures and the layout-shift measurements. It runs an isolated `?verify=1` server with throwaway data, and reaches each state through the page's own transport and storage. Results go to `generated/ui-review-2/` (ignored, with an `index.md`).
+
+The top of the dock, measured live in a 640 px and a 1440 px window:
+
+| Moment | Before | After |
+|---|---|---|
+| Restoring shown at 1 s | moved 33 px | 0 px |
+| An unprotected change arriving mid-drag | moved 33 px during the drag | 0 px during the drag; the notice opens when the drag ends |
+| A state that needs action (restoring for 5 s, unprotected, missing save) | — | opens the notice: 33 px wide, 52.6 px narrow (message row, then the buttons' row) |
 
 ## Acknowledgement and rebasing rules (S1, answering Sol's Medium point)
 
