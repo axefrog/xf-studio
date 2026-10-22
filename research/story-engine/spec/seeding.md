@@ -4,6 +4,7 @@
 - **The review.** v0.2 went through one review, by GPT-6 Astra; [§16](#16-review-record) records what changed.
 - **Dossiers folded in.**
   - v0.1 folded in [dossier 8](../craft/d08-scale-threads-time.md#9-requirements-for-the-seed-language-p4) (scale, threads and time).
+  - v0.11 folds in [dossier 18](../craft/d18-content-boundaries.md) (representation and content boundaries): content classes with one ceiling ladder each, author-fill seams ([D-23](../decisions.md)), the legal floors, and representation checks (§2.19).
   - v0.10 folds in [dossier 17](../craft/d17-setting-tone.md) (setting and tone): the tone vocabulary and tone lint, stake scale, dread guards, withheld patron motives, outlets for media, setting reads (§2.18).
   - v0.9 folds in [dossier 16](../craft/d16-authoring-tools.md) (authoring formats and tools): maturity and placeholders, a text syntax for predicates, source maps, the finding contract, structure versions, and missing content at run time. R1 is now lint-clean.
   - v0.8 folds in [dossier 15](../craft/d15-people-networks-order.md) (people, networks, norms and order): social reads, casting through ties, betrayal and norm seeds, reputation through behaviour (§2.17).
@@ -137,6 +138,7 @@ interface Seed {
   growsFrom?: GrowsFrom;               // §2.13; procedural seeds
   effect?: ToneTag;                    // the one dominant effect; required for vignettes (L-31)
   stakeScale?: 'person' | 'crew' | 'block' | 'district' | 'city';   // default block (§2.18)
+  content?: { envelope: Record<ClassId, 1 | 2 | 3>; requires?: Array<{ class: ClassId; min: 1 | 2 | 3 }> };   // §2.19
   purpose: { tags: PurposeTag[]; sentence: string };
   context: Pred;                       // required: where and when this seed makes sense (§2.6)
   intent: Intent;                      // §2.3
@@ -469,6 +471,9 @@ interface Fragment {
   channels: ChannelId[];               // best first; the last is the lowest acceptable
   render?: { phrasings: ContentRef[]; reuse: 'once' | 'cycle' | 'free' };
   offer?: OfferSpec;                   // a player-facing offer (§2.9)
+  content?: Array<{ class: ClassId; intensity: 1 | 2 | 3 }>;   // content tags (§2.19)
+  implied?: FragmentRef;               // the non-explicit form, played above the player's ceiling (§2.19)
+  authored?: 'human';                  // required for authored-only classes (§2.19)
   responses?: ResponseTemplate[];      // NPC responses to V's acts (§2.9)
 }
 ```
@@ -496,6 +501,7 @@ interface Beat {
   breaks?: PatternRef;                 // a twist names the expectation it breaks (§2.8)
   hook?: { anchor: ExposurePattern[]; question: string; payoff: BeatKey };   // introduce beats of mystery-shaped seeds
   mustReach?: boolean;                 // V needs this to take an option (L-63)
+  droppable?: boolean;                 // may be dropped above the player's ceiling (§2.19)
   reoffer?: { when: Pred; max: number };              // offer beats: may be offered again (§7.4)
 }
 
@@ -944,6 +950,76 @@ Each tag has a weight (heavy or light) and lexicon markers in S4.
 - a `success` with no cost fact (L-83).
 
 Every tone finding lists what it did **not** check: wit, freshness, stereotype by meaning, whether dread works. The fit report carries a "not checked" line per seed. The lexicon is calibrated against the game's own text, to at most 5 % false positives **[tunable]**.
+
+### 2.19 Content classes, ceilings and floors
+
+The players are adults, and the genre is adult. Content is the player's choice, with defaults matching the base game, and only legal or platform floors are fixed ([dossier 18](../craft/d18-content-boundaries.md)).
+
+**Classes and tags.** S4 registers content classes:
+- violence by kind;
+- harm to bystanders;
+- dread;
+- drugs;
+- sex work, exploitation;
+- explicit sexual content;
+- and the rest.
+
+A fragment carries `content: Array<{ class; intensity: 1 | 2 | 3 }>`. A seed carries an `envelope` (the most intense tag per class), declared by the author and checked against the compiled tags (L-93). Untagged fragments carry nothing.
+
+**One ladder per class: ceilings, lines and veils.** The player's settings (`SettingsSet.content`) give each class a **ceiling**, from 0 to 3:
+- **0 is a line.** S1 never produces events of that class, and the kernel refuses them (S0 §20, V4-23).
+- **1 to 3 are veils of different depth.** Above the ceiling, a fragment plays its `implied` form, a droppable beat is dropped, or a seed that `requires` the class isn't sown. A fragment tagged at intensity 2 or 3 must have one of the three (L-94).
+- **Defaults.** The `as-the-game` preset is the default. A pack may lower a ceiling for its own seeds, never raise the player's.
+- **One gate, four checks.** The ceiling is checked at sowing, at fragment choice (§7.2), at release (§8.3) and at display (§8.5). The release step uses the settings in force at release. Each gating is recorded in `provenance.gated`, with no model input (§8.8).
+- **Reading the ceiling.** The `setting` atom reads `content.<class>` as an integer, never `maybe`.
+- **Skip.** The player's one-input **retract** (§8.3) plays the running beat's `implied` form or ends it, withdraws the offer quietly, and writes a neutral `retracted` entry: no reoffer of that seed, no effect, no input to the model. It adds the class and level to `softExclusions`. Leaving, skipping past or letting it lapse is a plain decline.
+- **Notices before, not during.** A warning shows only for classes the player flagged, and before the scene. Each delivery's descriptors are always available under "Details", in the settings voice. Warnings don't protect a player; the player's own controls do.
+
+**Author-fill seams** ([D-23](../decisions.md)). Some genre material is legal, but the engine's model-driven tools don't produce it, explicit sexual content above all. The engine still supports such a class fully: tags, ceilings, placement, timing, casting and consequences. Only the words are left to people:
+- **Authored-only classes.** S4 marks a class `authoredOnly`. A fragment in it needs `authored: 'human'` and a named author in the pack manifest (L-97). Procedural seeds can't use authored-only classes, or any fragment at intensity 3, unless the pack author lifts the cap for a seed they author (L-96).
+- **Every authored-only fragment has a non-explicit partner,** its `implied` form or `fade`, that leaves the same facts (L-100). A seed therefore runs identically whether or not a pack fills the slot, and the generated side always has a form it can produce.
+- **Unfilled slots are marked.** A seed may reference an author-fill slot with a `todo` content reference of kind `author-fill` (§11.1). Below `ready` it shows as a placeholder; at `ready`, the implied form plays until a pack fills it.
+
+**The explicit scene** (extending L-11 and Appendix A):
+- it is `authored: 'human'`;
+- it has a `fade` of the same level, which leaves the same facts;
+- it holds no choice inside it;
+- it binds only adults;
+- it is reached only through an accepted action on the ladder's top rung (L-99).
+
+No `mustReach` item, window, item, economy or relationship-status predicate may read an intimacy fact (L-101). An effect on V with a `sex.*` tag must come from an action V accepted (L-98). The engine generates none.
+
+**Adult themes in the genre** (sex work, braindances, bodies as commodities, exploitation) get the same design depth as violence: placement, consequence, representation and the terms of the people involved. A seed tagged `sex.work`, `sex.exploit`, `exploit.body` or `exploit.labour` binds each person's **terms** (free, constrained or coerced) from their membership or contract record. A `coerced` person needs a `coercer` role and the means of coercion, and the seed needs a route for V to act or decline (L-113). Erotic framing in an exploitation seed is warned.
+
+**The floors.** No setting, pack or author can override these:
+- **Minors.** Every person has an `ageClass`; a missing one counts as `minor` (S0 V4-22). A role that could bind a minor is barred from sexual tags and from victim, target or hostile positions (L-95). Casting removes non-adults from barred roles. A pack person needs an `ageClass` (L-111).
+- **Real people.** Pack persons are marked `fictional` (L-109).
+- **Hate content in the system's own voice.** Slurs and hateful framing are barred from the narrator, news, system and template voices (L-103, error). In authored dialogue they go to a review queue as a warning. NPCs may hold and voice bigoted views in the fiction: it is part of the genre.
+
+Each floor is enforced by structure (casting, roles, voices), not by text filters alone.
+
+**Representation.** Casting must not code menace or crime to protected attributes:
+- A role's `must`, `prefer` or score may not read a protected attribute unless the pack declares the correlation, with a reviewer and reason (L-102).
+- Culture-coded menace descriptors are warned (L-104).
+- Violence templates with a mental-illness precondition are refused (L-105).
+- Age words beside sexual tags are warned (L-107).
+- Class-signal words in untagged fragments are warned (L-108).
+
+These report to review; none edits text. P9 runs dossier 18's representation audit over many world seeds:
+- shares by role class;
+- associations;
+- swap tests;
+- proxies;
+- feedback loops;
+- support.
+
+**Sanction ladders** cap their top rung at the ceiling. Rungs above stay as reported facts at ceiling 1, and aren't produced at 0. A ladder needs a rung at intensity 1 or below (L-106).
+
+**Offers asked of V.** Successive `harm.asked` offers from one patron that rise in intensity need a stated frame (L-110). Every `harm.asked` and `betray.inform` offer has a decline that costs no more than accepting.
+
+**Echoes.** A death attributed to V's act produces an echo within 3 game days **[tunable]**, in the third person.
+
+**Accessibility.** An engine effect whose declared flash parameters exceed the general threshold is refused (L-112).
 
 ## 3. Compiling
 
@@ -1836,6 +1912,27 @@ The lint runs at compile time (§3.1), and on demand from authoring tools (S4, P
 | L-90 | An unregistered brand or product in text, unless marked `invented` | warning |
 | L-91 | A wrongness trace without a confirmed baseline, or citing a pending cause | error |
 | L-92 | A contrast glance with no resident witness treating it as ordinary | warning |
+| L-93 | A content tag naming an unregistered class; or, at `ready`, a declared envelope that doesn't cover the compiled tags | error |
+| L-94 | A fragment tagged at intensity 2 or 3 with no `implied` form, no `droppable` beat, and no `requires` on its seed | error |
+| L-95 | A role that can bind a minor (or a person with no `ageClass`) in a victim, target or hostile position, or in a beat with a `sex.*` tag | error |
+| L-96 | A procedural seed using a fragment at intensity 3 or in an authored-only class, without an author's lift | error |
+| L-97 | A fragment in an authored-only class without `authored: 'human'` and a named author | error |
+| L-98 | An effect on V with a `sex.*` tag that isn't the effect of an accepted action | error |
+| L-99 | An explicit scene that isn't human-authored, lacks a fade at its level, holds a choice, binds a non-adult, or is reached other than by an accepted top-rung action | error |
+| L-100 | An authored-only fragment and its `implied` or `fade` form leaving different facts | error |
+| L-101 | A `mustReach`, window, item, economy or relationship-status predicate reading an intimacy fact | error |
+| L-102 | A role's `must`, `prefer` or score reading a protected attribute without a declared, reviewed correlation | error |
+| L-103 | A slur-lexicon hit in the system, narrator, news or template voice (error); in authored dialogue (warning, to review) | error, warning |
+| L-104 | Menace descriptors on culture-coded asset tags | warning |
+| L-105 | A violence template with a mental-illness precondition | error |
+| L-106 | A sanction ladder with no rung at intensity 1 or below, or one that picks its top rung without reading the ceiling | error |
+| L-107 | Age words beside sexual tags | warning |
+| L-108 | Class-signal words in an untagged fragment | warning |
+| L-109 | A pack person not marked `fictional` | error |
+| L-110 | Successive `harm.asked` offers from one patron rising in intensity with no stated frame | warning |
+| L-111 | A pack person with no `ageClass` | error |
+| L-112 | An engine effect whose declared flash parameters exceed the general threshold | error |
+| L-113 | A `coerced` person with no `coercer` role or means, or such a seed with no route for V to act or decline (error); erotic framing in an exploitation seed (warning) | error, warning |
 | L-33 (extended) | A `turns[].what` reading anything of V's but beliefs held about V and V's recorded acts | error |
 
 L-25 and L-40 were removed in v0.2 (§16). Their numbers are not reused.
@@ -2063,6 +2160,11 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 | SF-48 | **Tone lint block** ([dossier 17](../craft/d17-setting-tone.md) §12, renumbered). These seeds: (a) a procedural city-scale seed with one ancestor; (b) a `light` beat that kills a named NPC; (c) a faction's slang in another speaker's line; (d) a meta word in a banner; (e) a scene with no specific detail; (f) the word "ominously" | (a) L-77 error; (b) L-78; (c) L-79; (d) L-80 error; (e) L-81; (f) L-82. Each finding lists what it didn't check |
 | SF-49 | **Dread guards.** A `reveals` token in a trace before contact; a dread beat above the player's setting | L-84 error; the beat plays its `implied` form |
 | SF-50 | **Setting checks.** A corporation in a gig with no cost to residents; a deadline with no clock; a contrast glance with no resident witness; a wrongness trace after only one display of its routine | L-85, L-89 error, L-92, L-91 error |
+| SF-51 | **Ceiling gate** (dossier 18, renumbered). A seed with a violence fragment at intensity 2 and an `implied` form; the player's ceiling 1; then the setting changed to 3 between prepare and release | At ceiling 1 the implied form plays; `provenance.gated` records it. After the change, release uses the new setting |
+| SF-52 | **Lines.** Ceiling 0 for a class, over a hundred simulated game-years | No event of that class is ever minted; the kernel refuses any that is offered |
+| SF-53 | **Floors.** A role that could bind a minor in a target position; a pack person with no `ageClass`; a pack person not marked fictional | L-95, L-111 and L-109 errors. At casting, a minor is never bound to a barred role |
+| SF-54 | **Author-fill seam.** An authored-only explicit scene with its fade, in a pack; the same seed without the pack | With the pack and a permitting ceiling, the scene plays; otherwise the fade. Both leave the same facts, and the seed's later beats run identically |
+| SF-55 | **Retract.** V retracts during a tagged beat | The implied form plays or the beat ends; a neutral `retracted` entry; no reoffer; no model event; the class added to `softExclusions` |
 | SF-26 | **Constructed trace.** A trace with no found cause, `latitude` allowing `trace-cause`. S3's stub contributes a cause: an event at a stall. The trace is displayed; save; load | The `display` entry records `constructed`. The cause's fields are pinned `committed` at display, and resolve identically after the load |
 
 ## 15. Compromises and open items
@@ -2091,6 +2193,7 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 14. **Dossier 15.** v0.8 adopts its S2 requirements (§2.17). Its kernel requirements are S0 v4.3 (implicit edge types, deferred; the `aggregate` contract). Its S1 policies wait for P3; its metrics go to P9 and its inspectors to P10.
 15. **Dossier 16.** v0.9 adopts its S2 requirements; extension slots wait past the first public pack (§0.3). Its pack-format requirements go to S4 and its tool requirements, including a minimal first tool XF Studio could host, to P10.
 16. **Dossier 17.** v0.10 adopts its S2 requirements (§2.18); its fixtures are renumbered SF-48 to SF-50. Its typed setting registries go to S4, its world-data requirements (leaf-keyed dimensions, derived indices, faction presence, price level, a slow district variable, standing rumours) to S1, and its P5 and P9 lists to S3 and P9. Calibrating the tone lexicon needs a read-only extraction of the game's own text, a research-queue request for when usage allows.
+17. **Dossier 18.** v0.11 adopts its S2 requirements (§2.19), with lints renumbered L-93 to L-113 and fixtures SF-51 to SF-55. One isn't adopted: "offers lapse by game time only" would undo the play-clock rule (§2.12), which keeps real-world absence from expiring offers. Its settings and pack declarations go to S4; its kernel requirements are S0 v4.4. Defaults decided by the coordinator: `harm.minor` defaults to 0, as in the base game; the four classes whose base-game default is unchecked start permissive, each with a check on the next in-game session card; and the hate floor covers only the system's own voices.
 
 ## 16. Review record
 

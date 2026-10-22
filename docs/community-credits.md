@@ -794,7 +794,7 @@ Dustin Bailey of PCGamesN, reporting the *Guild Wars 2* game director Mike Zador
 
 ### Game Accessibility Guidelines contributors
 
-The collaborative [Game Accessibility Guidelines](https://gameaccessibilityguidelines.com/include-an-option-to-adjust-the-game-speed/), in particular the guideline to include an option to adjust the game speed. Slowing the whole game eases tight timing and gives more time to follow the action, which helps players with motor or cognitive difficulties and older players. It informed how we think about a pace setting for the player.
+The collaborative [Game Accessibility Guidelines](https://gameaccessibilityguidelines.com/include-an-option-to-adjust-the-game-speed/), in particular the guideline to include an option to adjust the game speed. Slowing the whole game eases tight timing and gives more time to follow the action, which helps players with motor or cognitive difficulties and older players. It informed how we think about a pace setting for the player. Its guidelines to provide an option to disable blood and gore, and to avoid flickering images, also informed our content settings.
 
 ### K. M. Weiland
 
@@ -847,6 +847,58 @@ Patrick Kanouse, ["The Dark Corners of Cyberpunk 2020's Night City"](https://bla
 ### Vale
 
 [Vale](https://docs.vale.sh/), an open-source prose linter created by jdkato (his GitHub name) and maintained under the vale-cli organisation. It turns a written style guide into automatic checks for consistency and does not judge quality. It informed how we think about what an automatic check of tone can and cannot do.
+
+### EA and Motive (Dead Space)
+
+EA, with Christian Cimon of Motive and Morgan Baker of EA, [“Accessibility and Player Choice in Dead Space”](https://ea.com/able/news/accessibility-and-player-choice-in-dead-space). The remake ships two content features, both off by default: a short notice before a disturbing section, and a blur that hides the scene while its audio plays. They cover intense violence against people, strong psychological horror and self-harm. It showed us that a notice and a hide option are buildable and can stay out of the way until a player turns them on.
+
+### AbleGamers
+
+The AbleGamers Foundation, [“Moderation In All Things”](https://accessible.games/accessible-player-experiences/challenge-patterns/moderation-in-all-things/), a challenge pattern in its Accessible Player Experiences resource. It lets players filter or avoid strong emotional content, and gives shipped examples: a gore setting in Gears of War 4 that leaves cutscenes untouched, a profanity bleep in Sunset Overdrive and the opening warning screens of Doki Doki Literature Club!. It informed how we think about content controls, and why a control must reach every place the content can appear.
+
+### Katyanna Quach
+
+Katyanna Quach, [“Not only were half of an AI text adventure generator's sessions NSFW but some involved depictions of sex with children”](https://www.theregister.com/2021/04/30/ai_dungeon_filter_vulnerabilities/) (The Register, 2021). It reports on AI Dungeon, where a generator with no structural limit produced unacceptable content, a later filter blocked harmless text, and private adventures were exposed. It informed why we enforce our hard limits through structure and treat text filters as advisory.
+
+### Bee Zelda
+
+Bee Zelda, [“An Introduction to Lines and Veils”](https://blog.roll20.net/posts/guest-blog-an-introduction-to-lines-and-veils/) (Roll20 guest blog). Lines are topics that never appear, veils are topics handled by fading away from them, and a third column holds topics to ask about first. It offers this as a short alternative to a full session-zero talk, and as a living document. It informed how we think about per-topic limits that a player sets.
+
+### John Stavropoulos
+
+John Stavropoulos, [“X-Card”](https://docs.google.com/document/d/1SB0jsx34bWHZWbnNIVVuMjhDkrdFGo1_hSC2BWPlI3A/edit), a tabletop safety tool made for play with strangers. Any player can signal that material should be removed, with no explanation owed. Critics describe it as reactive rather than preventive. It informed why we want a one-input way to take something back, and why it should never need a reason.
+
+### Beau Jágr Sheldon (Thoughty)
+
+Beau Jágr Sheldon, publishing as Thoughty, [Script Change](https://thoughty.itch.io/script-change), a content, consent and safety toolbox built on pause, rewind and fast forward, with optional wrap meetings and frame-by-frame review. Its author says it suits collaborative video games as well as tabletop play. It informed how we think about pausing and skipping a scene as ordinary controls.
+
+### Patrick Austin
+
+Patrick Austin, [“‘Cyberpunk 2077’ Is a Mess On Every Level”](https://time.com/5922477/cyberpunk-2077-review/) (TIME, 2020). A reviewer who is Haitian-American reads the game's factions as stereotypically divided by race, and objects as much to where the only Black gang is placed, in the poorest part of the city, as to its presence. It informed why we check where generated characters are placed and not only who appears.
+
+### Mateusz Tomaszkiewicz
+
+Mateusz Tomaszkiewicz, CD PROJEKT RED's quest director, interviewed by TheGamer in [“Cyberpunk 2077 Devs Hired Consultants To Sensitively Depict Gang Members Of Various Cultures”](https://www.thegamer.com/cyberpunk-2077-consultants-gang-members-cultures/) (2020). He describes outside consultants for some gangs and broader internal discussion for others. It informed how we think about sensitivity review as one step among several.
+
+### Alison Bechdel
+
+Alison Bechdel, whose 1985 comic strip *The Rule* gave rise to the [Bechdel test](https://bechdeltest.com/about/), as the test's website records. It asks whether two named women talk to each other about something other than a man. It informed our view that simple presence counts are cheap to run but say nothing about how characters are written.
+
+### World Health Organization
+
+World Health Organization, [*Preventing suicide: a resource for media professionals*](https://www.who.int/publications/i/item/9789240076846) (update, 2023). It explains that how the media report on suicide can hinder or support prevention, and sets out practical do's and don'ts. It informed our care over how the engine presents self-harm.
+
+### ESRB
+
+The Entertainment Software Rating Board, [ratings guide](https://www.esrb.org/ratings-guide/). Its rating categories and content descriptors, such as violence, language and blood, are a vocabulary that players already know. It informed how we name content classes and describe them to the player.
+
+### PEGI
+
+Pan European Game Information, [“What do the labels mean”](https://www.pegi.info/what-do-the-labels-mean). Its age labels and content descriptors, including violence, fear, bad language, sex, drugs and discrimination, are another vocabulary that players already know. It informed how we name content classes and describe them to the player.
+
+### W3C Web Accessibility Initiative
+
+The World Wide Web Consortium, [Understanding Success Criterion 2.3.1: Three Flashes or Below Threshold](https://www.w3.org/WAI/WCAG21/Understanding/three-flashes-or-below-threshold.html). It limits flashing content to protect people with photosensitive seizure disorders. It informed the flash limits we treat as a default for anything we generate.
 
 ## Research papers
 
@@ -1786,7 +1838,7 @@ Arthur Raney, [“Expanding disposition theory: Reconsidering character liking, 
 
 ### Hartmann, Toz and Brandon (2010)
 
-Tilo Hartmann, Erik Toz and Marvin Brandon, [“Just a game? Unjustified virtual violence produces guilt in empathetic players”](https://research.vu.nl/en/publications/6d94c7ce-66fe-4c78-a0ac-7a94a4c37d14) (*Media Psychology*, 2010). Two experiments found guilt after unjustified virtual violence, stronger in more empathetic players. It informed why the engine offers a way back after a harmful act and never tells the player how they feel.
+Tilo Hartmann, E. Toz and M. Brandon, [“Just a game? Unjustified virtual violence produces guilt in empathetic players”](https://research.vu.nl/en/publications/6d94c7ce-66fe-4c78-a0ac-7a94a4c37d14) (*Media Psychology*, 2010). Two experiments found guilt after unjustified virtual violence, stronger in more empathetic players. It informed why the engine offers a way back after a harmful act and never tells the player how they feel.
 
 ### Weaver and Lewis (2012)
 
@@ -2071,6 +2123,54 @@ H. P. Lovecraft, ["Supernatural Horror in Literature"](https://en.wikisource.org
 ### Grupe and Nitschke (2013)
 
 Dan W. Grupe and Jack B. Nitschke, ["Uncertainty and anticipation in anxiety: an integrated neurobiological and psychological perspective"](https://pmc.ncbi.nlm.nih.gov/articles/PMC4276319/) (*Nature Reviews Neuroscience* 14, 2013). A review arguing that anxiety is driven by uncertainty about future threats, so anticipation can matter more than reaction. It informed how we think about building dread from what the player does not yet know.
+
+### Klein and Voorhees (2024)
+
+Sarah Klein and Gerald Voorhees, [“It's All Fun and Games 'Til Somebody Loses an I: Ethnomethods of Bleed”](https://escholarship.org/uc/item/1hg3g193) (*Analog Game Studies* 11(4), 2024). It studies a streamed tabletop game in which an assault on a player's character ended play, and argues that common safety tools such as the X-Card and lines and veils lean on explicit refusals. It informed why leaving or going quiet always counts as a plain decline for us, and why we never try to read distress from it.
+
+### Bridgland, Jones and Bellet (2023)
+
+Victoria M. E. Bridgland, Payton J. Jones and Benjamin W. Bellet, [a meta-analysis of trigger warnings, content warnings and content notes](https://www.psychologicalscience.org/news/2023-october-content-warnings-distress.html) (*Clinical Psychological Science*, 2023). Across twelve studies, warnings raised anxiety before viewing and did not reduce distress afterwards. It informed why our notices stay off until a player asks for them, and why the player's own limits matter more than warnings.
+
+### Horswill (2025)
+
+Ian Horswill, [“Controllable, Demographically-Guided Character Generation using Stochastic Logic Programming”](https://ceur-ws.org/Vol-4090/paper9.pdf) (EXAG-INT workshop, 2025). A generator for non-player characters can produce combinations that jar or offend, and can play into prejudice, for example by always making thieves characters with racialised names. It informed how we think about audits of generated casting and about curating name pools by hand.
+
+### American Psychological Association (2020)
+
+American Psychological Association, [*Resolution on Violent Video Games*](https://www.apa.org/about/policy/resolution-violent-video-games.pdf) (February 2020 revision). It reports a consistent association between violent game use and aggressive outcomes, and rejects attributing mass violence to games. It also urges ratings to describe the levels and characteristics of violence. It informed why we treat violence as a described, adjustable setting.
+
+### Gebru and colleagues (2018)
+
+Timnit Gebru, Jamie Morgenstern, Briana Vecchione, Jennifer Wortman Vaughan, Hanna Wallach, Hal Daumé III and Kate Crawford, [“Datasheets for Datasets”](https://arxiv.org/abs/1803.09010). They propose documenting a dataset's purpose, makeup, collection and suitable uses. It informed how we plan to document curated name pools and similar data.
+
+### Kusner and colleagues (2017)
+
+Matt J. Kusner, Joshua R. Loftus, Chris Russell and Ricardo Silva, [“Counterfactual Fairness”](https://arxiv.org/abs/1703.06856). A decision is fair to an individual if it would be the same in a world where that person belonged to a different group. It informed our swap tests, which recast generated casting with one attribute changed and compare the results.
+
+### Sap and colleagues (2019)
+
+Maarten Sap, Dallas Card, Saadia Gabriel, Yejin Choi and Noah A. Smith, [“The Risk of Racial Bias in Hate Speech Detection”](https://aclanthology.org/P19-1163/) (*ACL*, 2019). Markers of African American English track with toxicity labels in popular datasets, and models trained on them flag such text more often. It informed why text filters stay advisory for us and why we calibrate them on our own text.
+
+### Fiske, Cuddy, Glick and Xu (2002)
+
+Susan T. Fiske, Amy J. C. Cuddy, Peter Glick and Jun Xu, [“A model of (often mixed) stereotype content”](https://pubmed.ncbi.nlm.nih.gov/12051578/) (*Journal of Personality and Social Psychology* 82(6), 2002). Stereotypes vary on warmth and competence, tied to perceived status and competition, and draw pity, envy, admiration or contempt. It informed how we think about reading generated characters for dignity and not only for presence.
+
+### Williams, Martins, Consalvo and Ivory (2009)
+
+Dmitri Williams, Nicole Martins, Mia Consalvo and James D. Ivory, [“The virtual census: representations of gender, race and age in video games”](https://doi.org/10.1177/1461444809105354) (*New Media & Society* 11(5), 2009). A sales-weighted content analysis of 150 games found males and white characters over-represented compared with the population. It informed our census-style audit of who appears in generated roles.
+
+### Zagal (2009)
+
+José P. Zagal, [“Ethically Notable Videogames: Moral Dilemmas and Gameplay”](https://dl.digra.org/index.php/dl/article/view/362) (DiGRA, 2009). A game is ethically notable when it gives players chances to reason about ethics, for example by challenging their grasp of an ethical system. It informed how we think about dark themes as material that asks something of the player.
+
+### Nakamura (2002)
+
+Lisa Nakamura, [*Cybertypes: Race, Ethnicity, and Identity on the Internet*](https://www.routledge.com/Cybertypes-Race-Ethnicity-and-Identity-on-the-Internet/Nakamura/p/book/9780415938372) (Routledge, 2002). It argues that the internet is not race-neutral and that stereotypes are built into everyday online interaction. It informed our wariness of stereotype in the genre's imagery of technology.
+
+### Roh, Huang and Niu (2015)
+
+David S. Roh, Betsy Huang and Greta A. Niu (eds.), [*Techno-Orientalism: Imagining Asia in Speculative Fiction, History, and Media*](https://muse.jhu.edu/book/40896) (Rutgers University Press, 2015). Its essays trace how Asia is imagined in hypo- or hyper-technological terms, including in cyberpunk. It informed how we think about the genre's habit of casting Asian cultures as technology.
 
 ## Reference imagery
 

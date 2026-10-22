@@ -1,6 +1,7 @@
 # S0. Kernel specification
 
-**Status:** v4.3, 23 October 2026.
+**Status:** v4.4, 23 October 2026.
+- v4.4 adds an age class on people, typed and sensitive content settings, and lines that refuse events, from [dossier 18](../craft/d18-content-boundaries.md) (V4-21 to V4-23 in §20).
 - v4.3 adds implicit edge types (specified; implementation deferred) and states the `aggregate` hook's contract, from [dossier 15](../craft/d15-people-networks-order.md) (V4-18 to V4-20 in §20).
 - v4.2 adds city settings and clarifies arithmetic and summaries for simulated events, from [dossier 14](../craft/d14-city-events.md) (V4-14 to V4-17 in §20).
 - v4.1 added memory and forgetting from [dossier 11](../craft/d11-saves-memory-forgetting.md) (V4-8 to V4-13). v3.1 was final for the first implementation and adopted the reference model's 57 accepted implementation notes ([§19](#19-decisions-adopted-from-the-reference-model)). v4 adds what the seeding layer ([S2](seeding.md)) and the sifting research ([dossier 6](../craft/d06-sifting-tellability.md#74-gaps-with-a-route-that-leaves-s0-unchanged)) need. The additions are listed in [§20](#20-version-4-additions); none changes a result the reference model already produces. This is the specification stage of the [foundation](../foundation.md): exactly how the dimensional model works, so the reference model can be built from this page alone. It is work package [WP-05](../plan.md#82-work-packages).
@@ -291,7 +292,10 @@ core:person      facets: actor
                  slots: name (node core:name), age (int 16..90),
                         age-band (int, derived from age; preimage: the band's 10 ages),
                         traits (many node core:trait), drives (many node core:drive-state),
-                        position (vec 3; mirrored for mirrored people, otherwise assigned by simulation), place (ref core:place)
+                        position (vec 3; mirrored for mirrored people, otherwise assigned by simulation), place (ref core:place),
+                        age-class (enum adult | minor, v4.4: derived from age, adult at 18 and over, for generated people;
+                                   mirrored from the game's child flag for mirrored people; declared for pack people.
+                                   Floor checks treat a missing reading as minor)
 core:group       facets: actor, group   slots: name (node core:name), drives (many node core:drive-state)
 core:place       facets: place          slots: position (vec 3), district (ref core:place), public (enum)
 core:event       facets: event          (§9.2)
@@ -667,6 +671,8 @@ An event becomes **canon** when:
 - a seed commits it, which pins the committed fields `committed`;
 - a persisted effect depends on it, which pins the fields the effect needs `committed`.
 
+**Lines refuse events** (v4.4). An event whose kind falls in a content class the player has excluded (`SettingsSet.classExclusions`, or a content ceiling of 0) is refused before it is minted, with reason `excluded`. Nothing downstream is minted from it. Settings that change only presentation never refuse events.
+
 Only those fields are pinned. Causes, other participants and other details stay open until something needs them.
 
 ### 9.3 Summaries and their refinement
@@ -1005,7 +1011,7 @@ Each save has a record `{ saveKey, parent, ops }`, where `parent` is the record 
 - `EventCanon`;
 - `SummarySet`;
 - `FrameState`, `SeedState`, `ProcessState`;
-- `SettingsSet { memoryScale, resetScale, noticing, exclusions, modelFloor, cityScale, classExclusions, content, at }` (v4.1; city settings v4.2; `content`, the content dials such as violence against residents, informing and sanction severity, v4.3): every player setting that changes what is offered or remembered, in force from `at`. `noticing`, `exclusions` and `modelFloor` are the director's model settings ([S2 §8.8](seeding.md#88-the-player-models-boundary)). The lineage root records the initial settings. Replays and the harness use the settings in force at each op. Settings that change only presentation are not recorded.
+- `SettingsSet { memoryScale, resetScale, noticing, exclusions, modelFloor, cityScale, classExclusions, content, at }` (v4.1; city settings v4.2; `content` v4.3, typed in v4.4 as `{ preset, ceiling per class 0..3, notice per class, softExclusions }`, marked sensitive and dropped from exports and bug reports by default, like the director's beliefs about V): every player setting that changes what is offered or remembered, in force from `at`. `noticing`, `exclusions` and `modelFloor` are the director's model settings ([S2 §8.8](seeding.md#88-the-player-models-boundary)). The lineage root records the initial settings. Replays and the harness use the settings in force at each op. Settings that change only presentation are not recorded.
 
 Snapshots are written every **[tunable 10,000]** ops. Ops carry complete data.
 
@@ -1209,6 +1215,9 @@ v4 adds what the seeding layer and sifting need. None of the additions changes a
 | V4-18 | Implicit edge types | §2.5 | Casting through unopened ties ([dossier 15](../craft/d15-people-networks-order.md) S15-S0-01) | Deferred (§0.2) |
 | V4-19 | The `aggregate` hook's contract | §11.2 | Reputation (S15-S0-02) | A clarification |
 | V4-20 | Fixtures F-23 to F-25 | §16.1 | S15-S0-03 | F-23 with V4-18; F-24 and F-25 with S1's reputation and norm policies |
+| V4-21 | `SettingsSet.content` typed and marked sensitive | §14.2 | Content ceilings ([dossier 18](../craft/d18-content-boundaries.md) S18-S0-01; S2 §2.19) | With V4-12 |
+| V4-22 | `age-class` on `core:person`; missing counts as minor in floor checks | §2.6 | The minors floor (S18-S0-02) | To implement (schema and derive) |
+| V4-23 | Lines refuse events before minting | §9.2 | Lines (S18-S0-03) | To implement with S1's first process |
 
 **Dossier 11's other kernel requirements:**
 - **S1 policies:**
