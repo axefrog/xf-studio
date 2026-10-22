@@ -18,7 +18,8 @@ const made = new Set<string>();
 export function tempDir(prefix: string, parent: string = tmpdir()): string {
   const dir = mkdtempSync(join(parent, prefix));
   made.add(dir);
-  afterAll(() => remove(dir));
+  // Bun refuses a hook inside a concurrent test (it throws); that folder is left to the end-of-run sweep.
+  try { afterAll(() => remove(dir)); } catch { /* swept at the end of the run */ }
   return dir;
 }
 
