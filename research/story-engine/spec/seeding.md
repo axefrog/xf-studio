@@ -4,6 +4,7 @@
 - **The review.** v0.2 went through one review, by GPT-6 Astra; [§16](#16-review-record) records what changed.
 - **Dossiers folded in.**
   - v0.1 folded in [dossier 8](../craft/d08-scale-threads-time.md#9-requirements-for-the-seed-language-p4) (scale, threads and time).
+  - v0.7 folds in [dossier 14](../craft/d14-city-events.md) (where and when things happen in the city): city reads, hot-state windows, and the limits on the director over city events (§2.16).
   - v0.6 folds in [dossier 13](../craft/d13-perception-curiosity.md) (perception, memory and curiosity): three exposure grades and the display contract, re-cued callbacks, `mustReach`, hooks and twists, counter-cues, channel modality.
   - v0.5 folds in [dossier 12](../craft/d12-player-model-trust.md) (the player model, trust and manipulation): the model's boundary (§8.8), bounded hooks, offers frozen at display, a "why this?" record, and the `believes` firewall.
   - v0.4 folds in [dossier 11](../craft/d11-saves-memory-forgetting.md) (saves, memory and forgetting): session and wall-clock independence, the return view and recaps, durable cosmetic marks, recall in responses.
@@ -329,6 +330,7 @@ type Pred =
   | { cap: CapabilityRef }                                   // a capability read over V's state (S5)
   | { setting: SettingKey; is: string[] }                    // a player setting (S4)
   | { believes: { who: RoleKey; of: RoleKey | Id | 'v'; path: SlotPath; is?: Region; atLeast?: number } }   // an NPC's own belief
+  | { city: CityRead; is: string[] }                         // the simulation's coarse state (§2.16)
   | { fn: FnRef; args: unknown[]; reads: FactRead[] }        // a registry predicate; `reads` lists its dependencies
   | 'yes' | 'no';
 
@@ -779,6 +781,33 @@ A **trace** is a glance delivery that shows a cause in the world: a scorch mark,
 - **Displaying it fixes the past.** When a trace with a `constructed` cause is displayed, layer 2 commits every field of the cause with `committed` pins, as for consumed events (§2.14). After V has seen it, it can't change on a reload or a re-resolution.
 - **Traces are borne by the world, not stated.** A plant is a situation V can find. A line that explains the cause adds no surprise and costs coherence ([dossier 10](../craft/d10-change-theme-payoff.md)).
 - **Plants are class 0.** They cost no push, but S3 caps them: about three live plants per attended thread, and one foreground plant per scene.
+
+### 2.16 City events as material
+
+The simulation layer (S1) generates the city's own events: routines, incidents, hot spots and their aftershocks ([dossier 14](../craft/d14-city-events.md)). Seeds read that state coarsely, and never as raw numbers.
+
+```ts
+type CityRead =
+  | { band: { cell: RoleKey | Id } }                 // a cell's heat band: e.g. quiet, simmering, hot
+  | { heatRank: { district: RoleKey | Id } }         // a district's rank among districts
+  | { tension: { a: RoleKey | Id; b: RoleKey | Id } } // a pair of groups' tension band
+  | { regime: { scope: RoleKey | Id } }              // the live regimes in a scope (a crackdown, a turf war)
+  | { reach: { district: RoleKey | Id; item: string } }   // whether an item or service reaches a district
+  | { protected: { node: RoleKey | Id } };           // whether a place or person is under protection
+```
+
+S1 exposes these as pins and process state. **No atom exposes a heat number.** A `city` atom is `maybe` until S1 has a reading for its scope.
+
+**Hot state opens windows.** A window may open on a band and close on its fall, latched like any other window (§2.7). A world requirement may name a band or a regime. When a fitted seed is sited at a hot cell, the fit report cites the band that justified it. "Why now" is answered by a cause chain of at most four links, through the parents S1 records on each event.
+
+**What the city produces is not the director's to edit:**
+- **Occurrence.** The director (S3) chooses which events, pending or past, to realise, may delay realising them, and builds offers around them. It never removes an event that has happened.
+- **Grudges.** A group's belief about V may raise an offer through layer 2. No S1 process aims an act at V. Offers that put V at risk follow the choice rules of §2.9.
+- **The game's own incidents** (gigs, hustles, its combat events) are `game` facts for seeding, never sown. Fitting reads bands to site authored seeds near them.
+
+**One carrier schema.** City events that leave marks declare carriers and durations in the same schema as `cosmetic` effects (§2.5). A city trace and a seed trace are re-realised by the same rule after a load.
+
+**The return view for districts.** On first entering a district V knows after a long absence, the return view (§8.7) offers at most three changes there. They are drawn from the district's event ring and the beliefs held in it, and name events and acts, never feelings.
 
 ## 3. Compiling
 
@@ -1860,6 +1889,7 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 10. **Dossier 11.** v0.4 adopts its S2 requirements except a reserved draw-key salt, which nothing needs yet. Its kernel requirements are in S0 v4.1 (§20 there). Its P5 list goes to S3. Its testing agenda (T11-01 to T11-21) feeds P9 and the first in-game session card.
 11. **Dossier 12.** v0.5 adopts all 14 of its S2 requirements (§8.8). Its P5 list (22 requirements: the model as a fold over canon offers, the eight replay checks, the noticed page) goes to S3.
 12. **Dossier 13.** v0.6 adopts all 15 of its S2 requirements. Its P5 list goes to S3; its P9 list (19 metrics) goes to P9. Its persistence rule stands: layer 2 keeps grades, channels, classes, cue ids, `playTotal` and `shownBeforeEffect`, and never raw test values, gaze, camera, speed, dwell or idle data.
+13. **Dossier 14.** v0.7 adopts its S2 requirements (§2.16). Its 27 S1 requirements define much of the simulation layer and wait for P3. Its sifter-input volume goes to S3, its metrics M14-01 to M14-24 to P9, and its district inspector to P10. Its in-game session card starts by measuring the game-time ratio, which every S1 time constant depends on.
 
 ## 16. Review record
 

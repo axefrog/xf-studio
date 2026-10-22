@@ -249,7 +249,7 @@ By manavortex and the wiki's contributor community. [Wiki](https://wiki.redmoddi
 
 ### RPG Site
 
-[Cyberpunk 2077 endings guide](https://www.rpgsite.net/feature/10580-cyberpunk-2077-endings-every-ending-epilogue-plus-how-to-get-them) (RPG Site). It described, from play, which side quests and choices each of the base game's endings needs and where the point of no return falls. We used it only to check our reading of the quest files against what players report, and treated its claims as unverified.
+[Cyberpunk 2077 endings guide](https://www.rpgsite.net/feature/10580-cyberpunk-2077-endings-every-ending-epilogue-plus-how-to-get-them) (RPG Site). It described, from play, which side quests and choices each of the base game's endings needs and where the point of no return falls. We used it only to check our reading of the quest files against what players report, and treated its claims as unverified. Its [patch 1.2 report](https://www.rpgsite.net/news/10895-cyberpunk-2077-patch-12-update-changes-detailed) (Alex Donaldson, 2021) described the developers' change so that police take time to arrive after a crime and a recon drone appears to assess the scene. It informed our rule that a consequence must travel to the player from a cause that exists.
 
 ### PowerPyx NCPD scanner hustle guide
 
@@ -775,6 +775,10 @@ Moritz Wagner, head of design at Mimimi Games, quoted in Bryant Francis's [Game 
 ### Andy Tockman
 
 Andy Tockman, [“Correlated randomness in Slay the Spire 2”](https://tck.mn/blog/correlated-randomness-sts2/) (blog post, 2026). Giving each random generator its own seed is not enough when the generator's output is nearly linear in the seed, because the streams then predict one another. He suggests nonlinear or counter-based generators. It informed how we key our random draws.
+
+### Raph Koster
+
+Raph Koster, [“Did players destroy the UO ecology?”](https://www.raphkoster.com/?p=46439) (his site). He recalls that *Ultima Online*'s creature ecology was removed during beta, that its creature behaviour was switched off because it cost too much to run, and that the supply collapse in a closed economy came from players hoarding. It informed our rule that every stock in the city needs a source, a sink and a bounded cost.
 
 ## Research papers
 
@@ -1763,6 +1767,90 @@ Jonathan Leavitt and Nicholas Christenfeld, [“Story spoilers don't spoil stori
 ### Sperber and colleagues (2010)
 
 Dan Sperber, Fabrice Clément, Christophe Heintz, Olivier Mascaro, Hugo Mercier, Gloria Origgi and Deirdre Wilson, [“Epistemic vigilance”](https://research.ceu.edu/en/publications/epistemic-vigilance/) (*Mind & Language*, 2010). People are on guard against being misinformed and weigh a source by cues to its competence and good faith. It informed why a visible track record makes a source more believable.
+
+### Short and colleagues (2008)
+
+M. B. Short, M. R. D'Orsogna, V. B. Pasour, G. E. Tita, P. J. Brantingham, A. L. Bertozzi and L. B. Chayes, [“A statistical model of criminal behavior”](https://www.math.ucla.edu/~bertozzi/papers/M3AS-final.pdf) (*Mathematical Models and Methods in Applied Sciences*, 2008). A place's attractiveness to offenders is a fixed part plus a part that jumps at each offence, fades and spreads to neighbours. Hot spots then come in three regimes, and wandering ones appear when events are few. It informed how we let small counts, not movement rules, make hot spots wander.
+
+### Hawkes and Oakes (1974)
+
+Alan Hawkes and David Oakes, [“A cluster process representation of a self-exciting process”](https://doi.org/10.2307/3212693) (*Journal of Applied Probability*, 1974). A self-exciting process can be read as immigrants and their descendants. It informed how we generate city events with each event's parent recorded.
+
+### Mohler and colleagues (2011)
+
+Mohler, Short, Brantingham, Schoenberg and Tita, [“Self-exciting point process modeling of crime”](https://doi.org/10.1198/jasa.2011.ap09546) (*Journal of the American Statistical Association*, 2011). Burglary in Los Angeles fits a steady background plus a self-exciting part, and the authors note that gang violence clusters in a similar way. It informed how we separate a place's steady propensity from the aftershocks of recent events.
+
+### Weisburd (2015)
+
+David Weisburd, [“The law of crime concentration and the criminology of place”](https://doi.org/10.1111/1745-9125.12070) (*Criminology*, 2015). Across cities, about half of crime falls on a few percent of street segments. It informed how concentrated we make the city's incidents.
+
+### Weisburd, Bushway, Lum and Yang (2004)
+
+David Weisburd, Shawn Bushway, Cynthia Lum and Sue-Ming Yang, [“Trajectories of crime at places: a longitudinal study of street segments in the city of Seattle”](https://www.ojp.gov/ncjrs/virtual-library/abstracts/trajectories-crime-places-longitudinal-study-street-segments-city) (*Criminology*, 2004). Over fourteen years most street segments kept their rank. It informed why we build concentration as a stable property of each place.
+
+### Chalfin, Kaplan and Cuellar (2020)
+
+Aaron Chalfin, Jacob Kaplan and Maria Cuellar, [“Re-examining the law of crime concentration: between and within-city evidence”](https://crim.sas.upenn.edu/node/1935) (working paper). Concentration is real but weaker than reported, and partly a counting effect of how many crimes there are. It informed why we test our hot spots against a chance baseline.
+
+### Johnson and colleagues (2007)
+
+Johnson, Bernasco, Bowers, Elffers, Ratcliffe, Rengert and Townsley, [“Space-time patterns of risk: a cross national assessment of residential burglary victimization”](https://research-repository.griffith.edu.au/items/8ddc0a48-c032-5b7f-9ab6-071c62c881b1) (*Journal of Quantitative Criminology*, 2007). In ten areas in five countries, homes near a burgled home faced raised risk for at least two weeks, with the pattern differing by place. It informed the reach and duration we give an event's effect on nearby places.
+
+### Ratcliffe and Rengert (2008)
+
+Jerry Ratcliffe and George Rengert, [“Near-repeat patterns in Philadelphia shootings”](https://doi.org/10.1057/palgrave.sj.8350068) (*Security Journal*, 2008), and Ratcliffe's [near-repeat analysis page](https://www.jerryratcliffe.net/near-repeat-analysis). Shootings raise the risk of another within about two weeks and one block, and the pattern appears across many crime types. It informed how we model the echo of an event in space and time.
+
+### Guerette and Bowers (2009)
+
+Rob Guerette and Kate Bowers, [“Assessing the extent of crime displacement and diffusion of benefits: a review of situational crime prevention evaluations”](https://doi.org/10.1111/j.1745-9125.2009.00177.x) (*Criminology*, 2009). Across 102 evaluations, displacement was the exception and benefits spreading to nearby places was as common. It informed the odds we give for what happens next door when a place is cleared.
+
+### Braga and colleagues (2019)
+
+Anthony Braga, Brandon Turchan, Andrew Papachristos and David Hureau, [“Hot spots policing of small geographic areas effects on crime”](https://doi.org/10.1002/cl2.1046) (*Campbell Systematic Reviews*, 2019). Policing hot spots gives a small reduction in crime, with little displacement and some spread of benefit. It informed how large we let suppression effects be.
+
+### Green, Horel and Papachristos (2017)
+
+Ben Green, Thibaut Horel and Andrew Papachristos, [“Modeling contagion through social networks to explain and predict gunshot violence in Chicago, 2006 to 2014”](https://isps.yale.edu/research/publications/isps17-02) (*JAMA Internal Medicine*, 2017). Much gun violence follows the social ties between people, with a long lag between linked events. It informed why we let grievance travel along group and kin ties as well as along streets.
+
+### Park, Schoenberg, Bertozzi and Brantingham (2021)
+
+Junhyung Park, Frederic Paik Schoenberg, Andrea Bertozzi and P. Jeffrey Brantingham, [“Investigating clustering and violence interruption in gang-related violent crime data using spatial-temporal point processes with covariates”](https://ideas.repec.org/a/taf/jnlasa/v116y2021i536p1674-1687.html) (*Journal of the American Statistical Association*, 2021). Retaliation after gang violence can be measured, and an interruption programme was linked to 14 to 18 per cent less of it. It informed how we let retaliation between two groups be reduced but not removed.
+
+### Bernasco and Nieuwbeerta (2005)
+
+Wim Bernasco and Paul Nieuwbeerta, [“How do residential burglars select target areas? A new approach to the analysis of criminal location choice”](https://doi.org/10.1093/bjc/azh070) (*British Journal of Criminology*, 2005). Burglars in The Hague favoured areas near their homes. It informed why offenders in our city act close to their own ground.
+
+### Ensign and colleagues (2017)
+
+Danielle Ensign, Sorelle Friedler, Scott Neville, Carlos Scheidegger and Suresh Venkatasubramanian, [“Runaway feedback loops in predictive policing”](https://arxiv.org/abs/1706.09847) (2017). A system that learns from the crimes it finds can send police back to the same neighbourhoods whatever the true rate. It informed why we keep occurrence apart from report, and bound police attention.
+
+### Lum and Isaac (2016)
+
+Kristian Lum and William Isaac, [“To predict and serve?”](https://hrdag.org/publications/to-predict-and-serve/) (*Significance*, 2016). Predictive policing tools learn the patterns in police records, which are not the same as the patterns in crime. It informed the same separation of what happens from what is reported.
+
+### Sankin and Mattu (2023)
+
+Aaron Sankin and Surya Mattu, [“Predictive policing software terrible at predicting crimes”](https://themarkup.org/prediction-bias/2023/10/02/predictive-policing-software-terrible-at-predicting-crimes) (The Markup, with WIRED, 2023). Of 23,631 predictions made for one New Jersey police department, fewer than one in two hundred matched a later reported crime. It informed why we never present a hot spot as a forecast.
+
+### Song and colleagues (2010)
+
+Chaoming Song, Zehui Qu, Nicholas Blumm and Albert-László Barabási, [“Limits of predictability in human mobility”](https://pubmed.ncbi.nlm.nih.gov/20167789/) (*Science*, 2010). From phone records, an individual's movements are highly predictable in principle, and little affected by distance. It informed why we treat a person's missing a routine visit as an event worth recording.
+
+### Simini and colleagues (2012)
+
+Filippo Simini, Marta González, Amos Maritan and Albert-László Barabási, [“A universal model for mobility and migration patterns”](https://arxiv.org/abs/1111.0586) (*Nature*, 2012). Flows between places can be predicted from the populations alone, with no fitted parameters. It informed how we plan the coarse flow of people between districts.
+
+### Lloyd-Smith and colleagues (2005)
+
+J. O. Lloyd-Smith, S. J. Schreiber, P. E. Kopp and W. M. Getz, [“Superspreading and the effect of individual variation on disease emergence”](https://pubmed.ncbi.nlm.nih.gov/16292310/) (*Nature*, 2005). The number of people one case infects is highly skewed, so a few cases cause most onward spread. It informed why most of our events leave nothing behind and a few leave a cluster.
+
+### Epstein (2002)
+
+Joshua Epstein, [“Modeling civil violence: an agent-based computational approach”](https://pmc.ncbi.nlm.nih.gov/articles/PMC128592) (*Proceedings of the National Academy of Sciences*, 2002). Rebellion follows grievance weighed against perceived arrest risk, which falls as more people join, giving bursts and a tipping effect when policing is reduced. It informed how we model unrest as a district tipping process.
+
+### Duan and Ganesh (2021)
+
+Y. Duan and A. Ganesh, [“The proportion of the population never hearing a rumour”](https://arxiv.org/abs/2002.06821) (*Queueing Systems*, 2021). It restates the classic result that, in the Maki-Thompson rumour model, about a fifth of a large population never hears the rumour, and extends the analysis. It informed the reach we expect a rumour to have in a district.
 
 ## Reference imagery
 

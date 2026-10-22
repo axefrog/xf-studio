@@ -1,6 +1,8 @@
 # S0. Kernel specification
 
-**Status:** v4.1, 23 October 2026. v4.1 adds memory and forgetting from [dossier 11](../craft/d11-saves-memory-forgetting.md) (V4-8 to V4-13 in §20). v3.1 was final for the first implementation and adopted the reference model's 57 accepted implementation notes ([§19](#19-decisions-adopted-from-the-reference-model)). v4 adds what the seeding layer ([S2](seeding.md)) and the sifting research ([dossier 6](../craft/d06-sifting-tellability.md#74-gaps-with-a-route-that-leaves-s0-unchanged)) need. The additions are listed in [§20](#20-version-4-additions); none changes a result the reference model already produces. This is the specification stage of the [foundation](../foundation.md): exactly how the dimensional model works, so the reference model can be built from this page alone. It is work package [WP-05](../plan.md#82-work-packages).
+**Status:** v4.2, 23 October 2026.
+- v4.2 adds city settings and clarifies arithmetic and summaries for simulated events, from [dossier 14](../craft/d14-city-events.md) (V4-14 to V4-17 in §20).
+- v4.1 added memory and forgetting from [dossier 11](../craft/d11-saves-memory-forgetting.md) (V4-8 to V4-13). v3.1 was final for the first implementation and adopted the reference model's 57 accepted implementation notes ([§19](#19-decisions-adopted-from-the-reference-model)). v4 adds what the seeding layer ([S2](seeding.md)) and the sifting research ([dossier 6](../craft/d06-sifting-tellability.md#74-gaps-with-a-route-that-leaves-s0-unchanged)) need. The additions are listed in [§20](#20-version-4-additions); none changes a result the reference model already produces. This is the specification stage of the [foundation](../foundation.md): exactly how the dimensional model works, so the reference model can be built from this page alone. It is work package [WP-05](../plan.md#82-work-packages).
 
 v3 takes in three independent review rounds. The [review record](#18-review-record) lists what changed and why. What the first implementation includes is settled in [§0.2](#02-the-first-implementation), and that scope is final ([D-19](../decisions.md)).
 
@@ -112,6 +114,10 @@ Determinism across implementations (I-1) needs identical arithmetic:
 - **Sums run in canonical order:** contributions by `Id` ascending.
 - **Each weight factor is normalised** over the feasible set before its `ln` is taken: divided by its maximum over `F`. Scaling a factor uniformly is then invisible mathematically. In binary64, rounding can differ at the edges, so tests check the specified computation, not exact invariance (I-7).
 - **Outcome comparisons are exact.** Ties are broken as each rule states.
+
+**Scope** (v4.2, a clarification). These rules govern every arithmetic that decides a pin, event, count or contribution, including those a simulation process (S1) produces, not only weights and scores.
+- `ln` is the only transcendental function in a decision.
+- S1 MAY add exact table-based sampling and fixed-order loops, specified bit for bit. That is how a process gets exponential-like decay or a log-normal spread without `exp`.
 
 **What is exact.** The draw (§5.4) samples the specified distribution mathematically. The implementation reproduces the same finite-precision computation bit for bit; it does not promise mathematical exactness beyond that.
 
@@ -674,6 +680,14 @@ A summary is a minted node of kind `core:summary`:
 
 **Revisions.** A process may revise `count`, subject to the structural constraint (§6.5).
 
+**Clarifications** (v4.2):
+- **Scope and span.** A summary may be scoped to any single place, and cover one simulation window.
+- **Empty summaries.** A summary whose count is zero is not minted.
+- **Re-minting.** Re-minting a summary from its persisted descriptor under the same `Id` yields the same items (I-3). A process may therefore keep descriptors for a bounded horizon, instead of making every summary a retention root.
+- **Item ids.** An item's `Id` is a pure function of the summary's `Id` and the item's index.
+
+A city's incidents can therefore start as counts in per-window summaries. Fine detail is the lazy materialisation of their items, so the counts agree at every tier and across reloads ([dossier 14](../craft/d14-city-events.md)).
+
 ### 9.4 Evolution
 
 Simulation processes are S1's. The kernel defines when they run and what they may read.
@@ -979,7 +993,7 @@ Each save has a record `{ saveKey, parent, ops }`, where `parent` is the record 
 - `EventCanon`;
 - `SummarySet`;
 - `FrameState`, `SeedState`, `ProcessState`;
-- `SettingsSet { memoryScale, resetScale, noticing, exclusions, modelFloor, at }` (v4.1): every player setting that changes what is offered or remembered, in force from `at`. `noticing`, `exclusions` and `modelFloor` are the director's model settings ([S2 §8.8](seeding.md#88-the-player-models-boundary)). The lineage root records the initial settings. Replays and the harness use the settings in force at each op. Settings that change only presentation are not recorded.
+- `SettingsSet { memoryScale, resetScale, noticing, exclusions, modelFloor, cityScale, classExclusions, at }` (v4.1; city settings v4.2): every player setting that changes what is offered or remembered, in force from `at`. `noticing`, `exclusions` and `modelFloor` are the director's model settings ([S2 §8.8](seeding.md#88-the-player-models-boundary)). The lineage root records the initial settings. Replays and the harness use the settings in force at each op. Settings that change only presentation are not recorded.
 
 Snapshots are written every **[tunable 10,000]** ops. Ops carry complete data.
 
@@ -1044,6 +1058,8 @@ Fully specified: outcomes that depend on hashes are checked as properties, not n
 | F-18 | **Widening keeps the truth** (v4.1). A belief `age = 34`, widened level by level to gist | Every region contains 34 |
 | F-19 | **Nested recall** (v4.1). The same belief recalled at one encounter at several accessibility levels | `exact` implies `region` implies `gist` |
 | F-20 | **Lens invariance** (v4.1). Blur beliefs under a strict memory setting; raise the setting | Beliefs above the new floor read as before blurring wherever the sweep didn't widen them; no event, pin or exposure changed |
+| F-21 | **Cluster process** (v4.2). A self-exciting process with a persisted pending calendar of offspring and thinning, run for 12 windows as one tick and as 12 ticks | Identical calendars and fired lists |
+| F-22 | **Mid-cascade reload** (v4.2). The F-21 process saved mid-cascade and reloaded under a different epoch, play clock and wall clock | The same future |
 
 ### 16.2 Calibration fixtures
 
@@ -1171,6 +1187,10 @@ v4 adds what the seeding layer and sifting need. None of the additions changes a
 | V4-11 | Lazy accessibility, `onRecall` and the forgetting sweep with its floor | §11.2 | S11-S0-04, 09, 10 | To implement; the sweep is a defined worklist |
 | V4-12 | The `SettingsSet` op | §14.2 | Settings as lenses (S11-S0-06) | To implement |
 | V4-13 | Fixtures F-16 to F-20 | §16.1 | S11-S0-11 | To add |
+| V4-14 | Arithmetic scope covers process decisions; `ln` is the only transcendental | §1.3 | Simulated events ([dossier 14](../craft/d14-city-events.md) S14-S0-01) | A clarification |
+| V4-15 | Summary clarifications: single-place scope, no empty summaries, re-minting, item ids | §9.3 | S14-S0-02 | A clarification; already true |
+| V4-16 | `cityScale` and `classExclusions` in `SettingsSet` | §14.2 | S14-S0-03 | To implement with V4-12 |
+| V4-17 | Fixtures F-21 and F-22 | §16.1 | S14-S0-04 | To add with S1's first process |
 
 **Dossier 11's other kernel requirements:**
 - **S1 policies:**
