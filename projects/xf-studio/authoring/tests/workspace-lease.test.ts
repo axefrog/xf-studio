@@ -186,6 +186,9 @@ test("a read-only window refuses every dispatch with unavailable, keeps reads, a
   expect(shell.feature("eye-makeup").dispatch({ kind: "layer.edit", command: { kind: "add" } } as never)).toEqual(refused);
   expect(await shell.library.execute({ kind: "save" })).toMatchObject({ ok: false, code: "unavailable" });
   expect(await shell.files.execute({ kind: "recipe.export" } as never)).toMatchObject({ ok: false, code: "unavailable" });
+  // The one exception: the recovery export writes only this window's own copy to a file, so a read-only window can still get its work out.
+  expect(shell.files.capability({ kind: "collection.exportWindowCopy" }).code).not.toBe("unavailable");
+  expect(await shell.files.execute({ kind: "collection.exportWindowCopy" })).not.toMatchObject({ code: "unavailable" });
   expect(await shell.presets.execute({ kind: "partPreset.save", feature: "eye-makeup", name: "x" } as never)).toMatchObject({ ok: false, code: "unavailable" });
   expect(await shell.localSetup.dispatch({ kind: "setup.refresh" })).toMatchObject({ ok: false, code: "unavailable" });
   expect(await shell.modInstall.dispatch({ kind: "install.refresh" } as never)).toMatchObject({ ok: false, code: "unavailable" });
