@@ -41,8 +41,8 @@ export type HeadServices = { savedV?: SavedAppearanceActions; preview?: PreviewA
 
 /**
  * One layered-makeup surface on the loaded head and the devices that drive it (UI-76): the preview device that fills its layers, and
- * the on-head editor's hooks when this is the surface being edited. The composition root builds one per composed layered surface it
- * has a layer source for (the live feature's), from the composition's renderer list, so this module names no feature.
+ * the on-head editor's hooks when this is the surface being edited. A scene's surface setup (scene-surfaces.ts) builds one per registered
+ * surface its look editor edits, so neither it nor this module names a feature.
  */
 export type LayeredSurfaceWiring = {
   /** The feature whose renderer draws the surface (for messages). */

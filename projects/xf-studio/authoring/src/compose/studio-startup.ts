@@ -29,6 +29,7 @@ import { createBrowserModInstall } from "../installation/browser/browser-mod-ins
 import { builtModsOf, type BuiltMod } from "../installation/mod-install-actions";
 import { createBrowserPreviewDevice } from "../legacy/eye-makeup/browser/browser-preview-device";
 import { attachBrowserHead, type AttachedHead } from "../preview/browser/browser-head-attachment";
+import { sceneLayeredSurfaces } from "../preview/browser/scene-surfaces";
 import { CharacterWarmStart } from "../character/browser/character-warm-start";
 import { CreatorCatalogue } from "../character/creator-catalogue";
 import { createBrowserCreatorDevice } from "../character/browser/browser-cc-catalogue-device";
@@ -236,8 +237,6 @@ async function start(host: StudioHost, root: HTMLElement) {
   // Device facts published read-only to the view.
   let status = emptyPresentationStatus(verification);
   const region = STUDIO_COMPOSITION.region;
-  // The live feature's layered surface: the renderer the preview device fills and the on-head editor edits (UI-76; none named here).
-  const liveSurface = STUDIO_LAYERED_SURFACES.get(STUDIO_COMPOSITION.documents.live);
   const measurements = new GlitterMeasurements({
     layers: () => core.document.recipe.layers, size: () => previewDevice.coordinator.size, fineGlitter: region.fineGlitter });
   const statusSource = new PresentationStatusSource(() => {
@@ -375,6 +374,16 @@ async function start(host: StudioHost, root: HTMLElement) {
     selectField: (id: string) => { const layer = core.presentation.layer(); if (layer) core.app.dispatch(named({ kind: "field.select", layerId: layer.id, fieldId: id })); },
     select: (index: number) => { const layer = core.presentation.layer(); if (layer) core.app.dispatch(named({ kind: "point.select", layerId: layer.id, index })); },
   };
+  // Every composed layered surface is registered; the drawn scene connects the one its look editor edits (profiles design §7): the preview
+  // device fills its layers and the on-head editor edits it, naming the look the scene shows. The root names no feature.
+  const surfaces = sceneLayeredSurfaces(STUDIO_LAYERED_SURFACES, { feature: core.document.feature, preview: previewDevice, editor: {
+    layer: () => core.geometry.layer(), layers: () => core.geometry.recipe().layers,
+    selected: () => core.presentation.selected, ...fieldHooks,
+    begin: () => { const layer = core.presentation.layer(); if (layer) core.app.beginGesture("surface", layer.id, targets.named().look); },
+    apply: proposal => core.app.applyGesture("surface", proposal),
+    cancel: () => core.app.endGesture("surface", true), finish: () => core.app.endGesture("surface"),
+    message: text => adapterMessage("surface", text),
+  } });
   uvEditor = viewportDevice.mountUV(byId<HTMLCanvasElement>("device-uv-canvas"), undefined, {
     recipe: () => core.geometry.recipe(), layer: () => core.geometry.layer(),
     selected: () => core.presentation.selected, ...fieldHooks,
@@ -446,7 +455,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   if (verification) Object.assign(window, { xfStudioPresentation: port,
     // Developer evidence about the loaded head (read-only): what loaded, how the V's details landed, frame timing.
     xfStudioSceneEvidence: () => scene ? structuredClone({ core: scene.evidence, characterDetails: scene.characterDetailsEvidence(),
-      frames: scene.frameTiming(), plateBlend: (liveSurface && scene.feature(liveSurface)?.evidence?.()) ?? null,
+      frames: scene.frameTiming(), plateBlend: (surfaces.edited && scene.feature(surfaces.edited)?.evidence?.()) ?? null,
       features: scene.featureEvidence(), bands: scene.featureBands(), dangles: scene.dangleEvidence(), mouth: scene.mouthEvidence() }) : null,
     // Developer captures: hold the mouth interior's light at a fixed parting and floor (the earlier stand-in: 0.010, 0.3), null to follow the face.
     xfStudioPinMouthInterior: (pin: { parting: number; floor: number } | null) => { scene?.pinMouthInterior(pin); },
@@ -543,17 +552,8 @@ async function start(host: StudioHost, root: HTMLElement) {
         character: { body: shown.body, ...(save ? { save } : {}), context: ports => services.characters.context(character, ports),
           release: context => services.characters.detach(character, context) },
         notice: text => adapterMessage("preview", text), warmStart,
-        // The live feature's layered surface: the preview device fills its layers and the on-head editor edits it. Other composed layered
-        // surfaces have no layer source until the core edits more than one live feature.
-        layered: liveSurface ? [{ feature: liveSurface.feature, surface: loaded => loaded.feature(liveSurface), preview: previewDevice,
-          editor: {
-            layer: () => core.geometry.layer(), layers: () => core.geometry.recipe().layers,
-            selected: () => core.presentation.selected, ...fieldHooks,
-            begin: () => { const layer = core.presentation.layer(); if (layer) core.app.beginGesture("surface", layer.id, targets.named().look); },
-            apply: proposal => core.app.applyGesture("surface", proposal),
-            cancel: () => core.app.endGesture("surface", true), finish: () => core.app.endGesture("surface"),
-            message: text => adapterMessage("surface", text),
-          } }] : [],
+        // The drawn scene's layered surfaces: every composed one is registered, and the scene wires those its look editor edits.
+        layered: surfaces.wiring,
         // The stage backdrop follows the resolved UI theme through the renderer's typed input.
         colourScheme: matchMedia("(prefers-color-scheme: dark)"),
         quality: previewDevice.coordinator.quality,
