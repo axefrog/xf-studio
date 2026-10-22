@@ -5,8 +5,10 @@
 #include <bcrypt.h>
 #include <sddl.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cwchar>
 #include <exception>
 #include <vector>
 
@@ -337,24 +339,106 @@ bool ReadFileExact(const std::filesystem::path& aPath, std::string& aOut, bool& 
     return true;
 }
 
-bool ReplaceSettingsFile(const std::filesystem::path& aPath, std::string_view aContent, const std::filesystem::path& aBackup, std::string& aError)
+namespace
 {
-    if (!CopyFileW(aPath.c_str(), aBackup.c_str(), FALSE))
+// "20261022-081500-123": UTC, sortable, unique enough for a settings change made by hand.
+std::wstring BackupStamp()
+{
+    SYSTEMTIME t{};
+    GetSystemTime(&t);
+    wchar_t text[32];
+    std::swprintf(text, 32, L"%04u%02u%02u-%02u%02u%02u-%03u", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond, t.wMilliseconds);
+    return text;
+}
+
+// Keeps the newest aKeep "<name>.*.bak" files in aDir (their names sort by time).
+void PruneBackups(const std::filesystem::path& aDir, const std::wstring& aName, size_t aKeep)
+{
+    std::vector<std::filesystem::path> found;
+    std::error_code ec;
+    for (std::filesystem::directory_iterator it(aDir, ec), end; !ec && it != end; it.increment(ec))
     {
-        aError = "the backup copy couldn't be made (CopyFile: " + LastErrorText(GetLastError()) + "), so nothing was changed";
+        const auto file = it->path().filename().wstring();
+        if (file.size() > aName.size() + 5 && file.compare(0, aName.size() + 1, aName + L".") == 0 && file.ends_with(L".bak"))
+        {
+            found.push_back(it->path());
+        }
+    }
+    std::sort(found.begin(), found.end());
+    for (size_t i = 0; i + aKeep < found.size(); ++i)
+    {
+        DeleteFileW(found[i].c_str());
+    }
+}
+
+// The content written and flushed to aTemp (created afresh).
+bool WriteFlushed(const std::filesystem::path& aTemp, std::string_view aContent, std::string& aError)
+{
+    const auto file = CreateFileW(aTemp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE)
+    {
+        aError = "CreateFile: " + LastErrorText(GetLastError());
         return false;
     }
-    std::string why;
-    if (!WriteFileAtomic(aPath, aContent, why))
+    DWORD written = 0;
+    const auto ok = WriteFile(file, aContent.data(), static_cast<DWORD>(aContent.size()), &written, nullptr) && written == aContent.size();
+    const auto flushed = ok && FlushFileBuffers(file);
+    const auto error = GetLastError();
+    CloseHandle(file);
+    if (!ok || !flushed)
     {
-        aError = "the new file couldn't be put in place (" + why + "), so the old one stays";
+        aError = std::string(ok ? "FlushFileBuffers: " : "WriteFile: ") + LastErrorText(error);
+        DeleteFileW(aTemp.c_str());
         return false;
+    }
+    return true;
+}
+} // namespace
+
+bool ReplaceSettingsFile(const std::filesystem::path& aPath, std::string_view aContent, const std::filesystem::path& aWorkDir, size_t aKeepBackups,
+                         SettingsReplace& aDone, std::string& aError)
+{
+    aDone = {};
+    std::error_code ec;
+    std::filesystem::create_directories(aWorkDir, ec);
+    const auto name = aPath.filename().wstring();
+    const auto backup = aWorkDir / (name + L"." + BackupStamp() + L".bak");
+    if (ec || !CopyFileW(aPath.c_str(), backup.c_str(), FALSE))
+    {
+        aError = "the backup copy couldn't be made (" + (ec ? ec.message() : "CopyFile: " + LastErrorText(GetLastError())) + "), so nothing was changed";
+        return false;
+    }
+    aDone.backup = backup;
+    PruneBackups(aWorkDir, name, aKeepBackups);
+    std::string why;
+    const auto temp = aWorkDir / (name + L".tmp");
+    if (!WriteFlushed(temp, aContent, why))
+    {
+        aError = "the new file couldn't be written (" + why + "), so the old one stays";
+        return false;
+    }
+    if (!MoveFileExW(temp.c_str(), aPath.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+    {
+        const auto error = GetLastError();
+        DeleteFileW(temp.c_str());
+        if (error != ERROR_NOT_SAME_DEVICE)
+        {
+            aError = "the new file couldn't be put in place (MoveFileEx: " + LastErrorText(error) + "), so the old one stays";
+            return false;
+        }
+        // Another volume: a move would be a copy, so the temporary file goes beside the original (an atomic rename there).
+        aDone.tempBeside = true;
+        if (!WriteFileAtomic(aPath, aContent, why))
+        {
+            aError = "the new file couldn't be put in place (" + why + "), so the old one stays";
+            return false;
+        }
     }
     std::string back;
     bool missing = false;
     if (!ReadFileExact(aPath, back, missing, why) || back != aContent)
     {
-        aError = "the file reads back differently after the replace; the old one is kept beside it as " + Narrow(aBackup.filename().wstring());
+        aError = "the file reads back differently after the replace; the old one is kept as " + Narrow(backup.wstring());
         return false;
     }
     return true;

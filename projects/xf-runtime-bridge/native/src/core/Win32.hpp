@@ -37,12 +37,23 @@ bool WriteFileAtomic(const std::filesystem::path& aPath, std::string_view aConte
 // or false with aMissing true when it doesn't exist and false on any other failure (the caller must then write nothing).
 bool ReadFileExact(const std::filesystem::path& aPath, std::string& aOut, bool& aMissing, std::string& aError, uint64_t aMaxBytes = 4u * 1024 * 1024);
 
-// 0.8.4: replaces an existing settings file safely: the old file copied to aBackup first (refused if that fails), the new
-// content written and flushed to a temporary sibling, moved over the original (MOVEFILE_REPLACE_EXISTING |
-// MOVEFILE_WRITE_THROUGH), then read back and compared. On any failure before the move the original is untouched; a
-// read-back that differs is reported (the backup still holds the old file). Works the same through MO2's virtual file
-// system, which hooks these calls [hypothesis: checked in game by session 12's K5].
-bool ReplaceSettingsFile(const std::filesystem::path& aPath, std::string_view aContent, const std::filesystem::path& aBackup, std::string& aError);
+// 0.8.5 (session 12's K5: config.ini.bak landed in MO2's overwrite folder, which every profile shares, because MO2's virtual
+// file system puts new files under the game's folder there): replaces an existing settings file safely without leaving a new
+// file beside it. The old file is copied first into aWorkDir (the bridge's runtime folder, outside the game's folder) as
+// "<name>.<UTC time>.bak", refused if that fails, keeping the newest aKeepBackups such copies of that name. The new content
+// is written and flushed to "<name>.tmp" in aWorkDir and moved over the original (MOVEFILE_REPLACE_EXISTING |
+// MOVEFILE_WRITE_THROUGH), an atomic rename when both are on one volume. Across volumes Windows can only copy, which isn't
+// atomic, so then the temporary file is written beside the original instead and moved over it (under MO2 it passes through
+// the overwrite folder and the move takes it out again: session 12's K5 left no .tmp there); aDone.tempBeside says so.
+// Then the file is read back and compared. On any failure before the move the original is untouched; a read-back that
+// differs is reported (the backup still holds the old file).
+struct SettingsReplace
+{
+    std::filesystem::path backup; // the copy of the old file
+    bool tempBeside = false;      // the temporary file was written beside the original (another volume)
+};
+bool ReplaceSettingsFile(const std::filesystem::path& aPath, std::string_view aContent, const std::filesystem::path& aWorkDir, size_t aKeepBackups,
+                         SettingsReplace& aDone, std::string& aError);
 
 // 0.8.3: a file's SHA-256 as lowercase hex (BCrypt), read in 1 MB pieces; files over aMaxBytes are refused.
 // aCancelled (0.8.3, the review) is asked before each megabyte; answering true stops the hash ("cancelled"), and it may

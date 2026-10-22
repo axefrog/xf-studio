@@ -4575,11 +4575,55 @@ void Bridge083Tests()
                 }
                 return out;
             }();
-            Check("0.8.4 kill key conflicts: a key the game binds warns with its mapping; modifiers the game uses are a note; End alone is clear",
-                  homeConflicts.warnings.size() == 1 && homeConflicts.warnings[0].find("FastForward_Button") != std::string::npos &&
+            Check("0.8.4 kill key conflicts: a key the game binds warns; modifiers the game uses are a note; End alone is clear (0.8.5: in plain words)",
+                  homeConflicts.warnings.size() == 1 && homeConflicts.warnings[0].find("The game uses Home too (1 game action, in r6/config/inputUserMappings.xml)") != std::string::npos &&
                       homeConflicts.notes.empty() && defaultConflicts.warnings.empty() && defaultConflicts.notes.size() == 1 &&
-                      defaultConflicts.notes[0].find("Dodge_Button") != std::string::npos && defaultConflicts.notes[0].find("Sprint_Button") != std::string::npos,
-                  defaultConflicts.notes.empty() ? std::string() : defaultConflicts.notes[0]);
+                      defaultConflicts.notes[0] == "Ctrl and Shift also dodge and sprint on their own; holding them for the stop key only matters while V moves.",
+                  (homeConflicts.warnings.empty() ? std::string() : homeConflicts.warnings[0]) + "|" + (defaultConflicts.notes.empty() ? std::string() : defaultConflicts.notes[0]));
+            {
+                // 0.8.5 (session 12's K3): the game's 2.31 actions on Ctrl and Alt, as the note lists them, and one modifier alone.
+                const std::string game = "<bindings>\n"
+                                         "<mapping name=\"Crouch_Button\"><button id=\"IK_RControl\" /></mapping>\n"
+                                         "<mapping name=\"Dodge_Button\"><button id=\"IK_LControl\" /></mapping>\n"
+                                         "<mapping name=\"SwitchItem_Button\"><button id=\"IK_Alt\" /></mapping>\n"
+                                         "<mapping name=\"WeaponWheel_Button\"><button id=\"IK_Alt\" /></mapping>\n"
+                                         "<mapping name=\"LeftY_Axis_Vehicle\"><button id=\"IK_LControl\" /></mapping>\n"
+                                         "<mapping name=\"LeftY_Axis_Vehicle_RockFB\"><button id=\"IK_LControl\" /></mapping>\n"
+                                         "<mapping name=\"Vehicle_Shoot_Tertiary\"><button id=\"IK_LControl\" /></mapping>\n"
+                                         "<mapping name=\"tank_minigame_AEAMS\"><button id=\"IK_LControl\" /></mapping>\n"
+                                         "<mapping name=\"PageDown_Thing\"><button id=\"IK_PageDown\" /></mapping>\n</bindings>\n";
+                const std::vector<std::pair<std::string, std::string>> gameFiles{{"r6/config/inputUserMappings.xml", game}};
+                kk::Chord ctrlAltPgDn, ctrlOnlyEnd, altEnd;
+                std::string chordWhy;
+                kk::Parse("Ctrl+Alt+PageDown", ctrlAltPgDn, chordWhy);
+                kk::Parse("Ctrl+End", ctrlOnlyEnd, chordWhy);
+                kk::Parse("Alt+End", altEnd, chordWhy);
+                const auto both = kk::FindConflicts(ctrlAltPgDn, gameFiles, "");
+                const auto ctrlOnly = kk::FindConflicts(ctrlOnlyEnd, gameFiles, "");
+                const auto altOnly = kk::FindConflicts(
+                    altEnd, {{"x.xml", "<mapping name=\"Unknown_A\"><button id=\"IK_Alt\" /></mapping><mapping name=\"Unknown_B\"><button id=\"IK_LAlt\" /></mapping>"}}, "");
+                const auto all = [](const kk::Conflicts& aC) {
+                    std::string out;
+                    for (const auto& n : aC.notes)
+                    {
+                        out += n + "|";
+                    }
+                    for (const auto& w : aC.warnings)
+                    {
+                        out += w + "|";
+                    }
+                    return out;
+                };
+                Check("0.8.5 stop key notes name game actions in plain words (the most common first, the rest counted), never the game's mapping names",
+                      both.notes.size() == 1 &&
+                          both.notes[0] == "Ctrl and Alt also dodge, crouch and steer vehicles on their own (and 4 more); holding them for the stop key only matters while V moves." &&
+                          both.warnings.size() == 1 && both.warnings[0].find("The game uses Page Down too (1 game action,") == 0 && ctrlOnly.notes.size() == 1 &&
+                          ctrlOnly.notes[0] == "Ctrl also dodges, crouches and steers vehicles on its own (and 2 more); holding it for the stop key only matters while V moves." &&
+                          altOnly.notes.size() == 1 &&
+                          altOnly.notes[0] == "Alt is a game key on its own (2 game actions); holding it for the stop key only matters while V moves." &&
+                          all(both).find("_Button") == std::string::npos && all(both).find("_Axis") == std::string::npos && all(both).find("kill key") == std::string::npos,
+                      all(both) + all(ctrlOnly) + all(altOnly));
+            }
             // The review of 0.8.4: the effective (last) kill_key is the one replaced, across repeated [ui] sections.
             const std::string twice = "[ui]\nkill_key = End\n\n[log]\nlevel = info\n\n[ui]\nkill_key = Home\n";
             const auto rewritten = kk::WithKillKey(twice, "Ctrl+F12");
@@ -4607,23 +4651,47 @@ void Bridge083Tests()
                 const auto nested = kk::FindConflicts(nestedHome, mappingFiles, "");
                 Check("0.8.4 (review) kill key conflicts: Input Loader's nested folders are read (r6/input/SomeMod/deeper/keys.xml), other mappingFiles not",
                       mappingFiles.size() == 2 && nested.warnings.size() == 1 && nested.warnings[0].find("r6/input/SomeMod/deeper/keys.xml") != std::string::npos &&
-                          nested.warnings[0].find("SomeMod_Toggle") != std::string::npos && nested.warnings[0].find("Change...") != std::string::npos,
+                          nested.warnings[0].find("1 game action") != std::string::npos && nested.warnings[0].find("Change...") != std::string::npos,
                       nested.warnings.empty() ? std::to_string(mappingFiles.size()) : nested.warnings[0]);
                 const auto iniPath = dir / L"config.iniPath";
-                const auto bak = dir / L"config.iniPath.bak";
+                const auto work = dir / L"runtime" / L"settings-backups";
                 std::string text, ioWhy;
                 bool missing = false;
+                xfb::win32::SettingsReplace done;
                 const bool readMissing = !xfb::win32::ReadFileExact(iniPath, text, missing, ioWhy) && missing;
-                const bool refusedWithoutOriginal = !xfb::win32::ReplaceSettingsFile(iniPath, "[ui]\nkill_key = F12\n", bak, ioWhy) && !std::filesystem::exists(iniPath);
+                const bool refusedWithoutOriginal = !xfb::win32::ReplaceSettingsFile(iniPath, "[ui]\nkill_key = F12\n", work, 3, done, ioWhy) && !std::filesystem::exists(iniPath);
                 std::ofstream(iniPath, std::ios::binary) << "[ui]\nkill_key = End\nhud_panel = true\n";
-                const bool swapped = xfb::win32::ReplaceSettingsFile(iniPath, "[ui]\nkill_key = F12\nhud_panel = true\n", bak, ioWhy);
+                const bool swapped = xfb::win32::ReplaceSettingsFile(iniPath, "[ui]\nkill_key = F12\nhud_panel = true\n", work, 3, done, ioWhy);
                 std::string now, old;
                 xfb::win32::ReadFileExact(iniPath, now, missing, ioWhy);
-                xfb::win32::ReadFileExact(bak, old, missing, ioWhy);
-                Check("0.8.4 (review) config.iniPath: a missing file reads as missing; nothing is written without an original; a replace keeps a backup and reads back",
+                xfb::win32::ReadFileExact(done.backup, old, missing, ioWhy);
+                // 0.8.5 (session 12's K5): nothing new beside the file; the backups in the work folder, the newest 3 kept.
+                const auto filesIn = [](const std::filesystem::path& aDir, const std::wstring& aPrefix) {
+                    size_t n = 0;
+                    std::error_code ec;
+                    for (std::filesystem::directory_iterator it(aDir, ec), end; !ec && it != end; it.increment(ec))
+                    {
+                        const auto name = it->path().filename().wstring();
+                        std::error_code fileEc;
+                        n += it->is_regular_file(fileEc) && name.starts_with(aPrefix) ? 1 : 0;
+                    }
+                    return n;
+                };
+                const auto firstBackup = done.backup;
+                const bool firstBeside = done.tempBeside;
+                for (int k = 0; k < 4; ++k)
+                {
+                    Sleep(2); // distinct millisecond stamps
+                    xfb::win32::ReplaceSettingsFile(iniPath, "[ui]\nkill_key = F" + std::to_string(k + 1) + "\n", work, 3, done, ioWhy);
+                }
+                const auto backups = filesIn(work, L"config.iniPath.");
+                const auto beside = filesIn(dir, L"");
+                Check("0.8.4 (review) config.iniPath: a missing file reads as missing; nothing is written without an original; a replace keeps a backup and reads back "
+                      "(0.8.5: the backup and the temporary file in the work folder, never beside the file; the newest 3 backups kept)",
                       readMissing && refusedWithoutOriginal && swapped && now == "[ui]\nkill_key = F12\nhud_panel = true\n" &&
-                          old == "[ui]\nkill_key = End\nhud_panel = true\n" && !std::filesystem::exists(dir / L"config.iniPath.tmp"),
-                      ioWhy);
+                          old == "[ui]\nkill_key = End\nhud_panel = true\n" && firstBackup.parent_path() == work && !firstBeside && beside == 1 && backups == 3 &&
+                          !std::filesystem::exists(firstBackup) && !std::filesystem::exists(work / L"config.iniPath.tmp"),
+                      ioWhy + " backups=" + std::to_string(backups) + " beside=" + std::to_string(beside));
                 std::filesystem::remove_all(dir);
             }
             // 0.8.4 (the UI review's fix 4): the XF box stands where the ink panel does, on any screen.
@@ -4653,6 +4721,27 @@ void Bridge083Tests()
                   refused.killKey.vk == 0x23 && refused.warnings.size() == 1 && refused.warnings[0].find("End") != std::string::npos && !none.killKey.enabled &&
                   xfb::DescribeConfig(parsed).find("ui.kill_key=Ctrl+End") != std::string::npos,
               refused.warnings.empty() ? std::string() : refused.warnings[0]);
+        {
+            // 0.8.5: [ui] question_sound: on by default (the messenger's new-message sound), true, false or a sound event's name;
+            // anything else is a bad value and keeps the default. The chime: once per new question, never for 0 or an older id,
+            // and questions skipped while it was off stay quiet.
+            const auto quiet = xfb::ParseConfig("[ui]\nquestion_sound = false\n");
+            const auto named = xfb::ParseConfig("[ui]\nquestion_sound = ui_menu_tutorial_open\n");
+            const auto badSound = xfb::ParseConfig("[ui]\nquestion_sound = Ui Sound!\n");
+            xfb::QuestionChime chime;
+            const bool first = chime.Take(3);
+            const bool again = chime.Take(3);
+            const bool noQuestion = chime.Take(0);
+            const bool older = chime.Take(2);
+            chime.Skip(5);
+            const bool skipped = chime.Take(5);
+            const bool next = chime.Take(6);
+            Check("0.8.5 question_sound: on by default, off with false, a named event kept, a bad name refused; one sound per new question",
+                  xfb::Config{}.questionSound == "ui_messenger_recieved" && quiet.questionSound.empty() && named.questionSound == "ui_menu_tutorial_open" &&
+                      badSound.questionSound == "ui_messenger_recieved" && !badSound.warnings.empty() && xfb::DescribeConfig(quiet).find("ui.question_sound=off") != std::string::npos &&
+                      first && !again && !noQuestion && !older && !skipped && next,
+                  xfb::DescribeConfig(named));
+        }
         // Press detection: once per press, only with every modifier the chord names, never while disarmed (the window not in
         // front, CET's overlay open, the bridge stopped).
         std::map<int, bool> keys;

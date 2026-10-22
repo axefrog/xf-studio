@@ -79,6 +79,31 @@ nlohmann::json UiMessageUndo(const nlohmann::json& aPosted);
 // ui.ask.state {id}'s answer (RB-96, RB-103).
 nlohmann::json AskStateJson(uint64_t aId, const AskState& aState);
 
+// 0.8.5: the soft sound for a new question ([ui] question_sound, played by the plugin's Running tick). Take answers true once
+// for each new question: a pending ask newer than any it has answered for (message ids only grow). Info lines are never
+// asks, a question already sounded or answered stays quiet, and 0 means none is pending. Skip marks the questions up to
+// aPendingAskId as sounded without a sound (the switch off, the bridge stopped), so they don't sound late.
+class QuestionChime
+{
+public:
+    bool Take(uint64_t aPendingAskId)
+    {
+        if (aPendingAskId == 0 || aPendingAskId <= m_last)
+        {
+            return false;
+        }
+        m_last = aPendingAskId;
+        return true;
+    }
+    void Skip(uint64_t aPendingAskId)
+    {
+        m_last = aPendingAskId > m_last ? aPendingAskId : m_last;
+    }
+
+private:
+    uint64_t m_last = 0;
+};
+
 class MessageBoard
 {
 public:

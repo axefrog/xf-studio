@@ -75,8 +75,9 @@ local state = {
   comment = "",     -- 0.7: the commentary box's text
   commentSoft = {}, -- 0.8.4: where the box wrapped a space into a line break (panel.wrap)
   commentReload = nil, -- 0.8.4: rewrapped text for the box being edited, handed over in one read-only frame
-  killKeyCapture = false, -- 0.8.4: Change... is waiting for the new kill key
+  killKeyCapture = false, -- 0.8.4: Change... is waiting for the new stop key
   killKeyChanged = false, -- 0.8.4: the key was changed in this window (its notes then show)
+  killKeySaved = nil,     -- 0.8.5: what the last change did (saved, and where the old config.ini is kept), shown on the Keys line
   cetLabel = true, -- bridge 0.5.3: [ui] cet_label / ui.hud's cet_label (read from XFBridge_Hud's frame)
   surface = "cet_line", -- 0.8.2: the status surface the plugin chose (0.8.3: ink_panel, xf_box, cet_line, none)
   overlayOpen = false,
@@ -339,7 +340,10 @@ local function runAction(action)
     end
     log("info", cid, "panel: comment sent=" .. tostring(ok and sent) .. " chars=" .. tostring(#text))
   elseif action.name == "killkey" then
-    -- 0.8.4: the kill key chosen in this window (Change... or Reset), saved by the plugin to config.ini's [ui] kill_key.
+    -- 0.8.4: the stop key chosen in this window (Change... or Reset), saved by the plugin to config.ini's [ui] kill_key.
+    -- 0.8.5 (session 12's K3: answering a question cleared the general message line, so "saved" was never seen): the outcome
+    -- stays on the Keys line (killKeySaved), with where the old config.ini is kept (the bridge's runtime folder, not beside
+    -- config.ini, where MO2 put new files into its shared overwrite folder).
     local arg = action.argument or {}
     local answer = decodeAnswer(callNative("XFBridge_KillKey", arg.action or "get", arg.key or ""))
     if answer and answer.ok then
@@ -347,18 +351,18 @@ local function runAction(action)
       state.killKeyChanged = true
       state.killKeyRefused = nil
       if answer.saved then
-        state.message = "The kill key is now " .. tostring(label) .. ", saved for next time."
+        state.killKeySaved = "The stop key is now " .. tostring(label) .. ", saved for next time."
+          .. (type(answer.backup_folder) == "string" and (" The old config.ini is kept in " .. answer.backup_folder .. ".") or "")
       else
-        state.message = "The kill key is now " .. tostring(label) .. " until the game closes: " .. tostring(answer.save_error)
+        state.killKeySaved = "The stop key is now " .. tostring(label) .. " until the game closes: " .. tostring(answer.save_error)
       end
-      state.messageOk = answer.saved == true
     elseif answer and answer.why then
       state.killKeyRefused = tostring(answer.why)
     else
       state.message = "The bridge didn't answer. Restart the game to start it again."
       state.messageOk = false
     end
-    log("warn", cid, "panel: kill key " .. tostring(arg.action) .. " " .. tostring(arg.key) .. " ok=" .. tostring(answer and answer.ok))
+    log("warn", cid, "panel: stop key " .. tostring(arg.action) .. " " .. tostring(arg.key) .. " ok=" .. tostring(answer and answer.ok))
   elseif action.name == "kill" then
     local ok, killed = callNative("XFBridge_Kill", "cet-panel")
     state.message = (ok and killed) and "The bridge is stopped. Reconnect starts it again." or "The bridge wasn't running."
@@ -432,7 +436,7 @@ end)
 -- test builds' panel) or the game restarts. The ID, xf_bridge_kill, has never changed and must not: CET keys a binding by
 -- the mod's name and this ID. CET drops a mod's bindings at a launch where the mod isn't installed (its
 -- Developer.RemoveDeadBindings, on by default), so a launch of another profile without the bridge unbinds it (session 9).
--- 0.8.3: the bridge's own kill key ([ui] kill_key; 0.8.4: Ctrl + Shift + End by default, changed in the XF Runtime Bridge
+-- 0.8.3: the bridge's own stop key ([ui] kill_key; 0.8.4: Ctrl + Shift + End by default, changed in the XF Runtime Bridge
 -- window) works without CET or a binding; this hotkey is the optional second route.
 registerHotkey("xf_bridge_kill", "Stop XF Runtime Bridge", function()
   local cid = nextCid()
@@ -494,11 +498,16 @@ local function drawLabelBody(which)
   local muted = themeColour(which, "XfTextMuted", MUTED)
   local tone = themeColour(which, TONE_TOKENS[status.tone] or "TextDisabled", TONE_COLORS[status.tone] or TONE_COLORS.off)
   ImGui.PushTextWrapPos(MESSAGE_WRAP_PX)
+  -- 0.8.5 (the UI review's fix 9: the status words sat indented past the next line): a hanging indent, so every line under the
+  -- dot starts where the status words do.
+  local startX = ImGui.GetCursorPosX()
   ImGui.PushStyleColor(ImGuiCol.Text, tone[1], tone[2], tone[3], tone[4])
   ImGui.Bullet()
   ImGui.PopStyleColor(1)
   ImGui.SameLine()
+  local hang = ImGui.GetCursorPosX() - startX
   colouredWrapped(muted, status.label)
+  if hang > 0 then ImGui.Indent(hang) end
   local ask = state.pendingAsk
   local answered = state.answeredAsk
   local inkShows = (ask and state.inkAsk == ask.id) or (not ask and answered and state.inkAsk == answered.id)
@@ -520,6 +529,7 @@ local function drawLabelBody(which)
   if state.info and type(state.info.overlay) == "table" and state.info.overlay.off_for_frame_generation then
     colouredWrapped(muted, "XF overlay is off while frame generation is on.")
   end
+  if hang > 0 then ImGui.Unindent(hang) end
   ImGui.PopTextWrapPos()
 end
 
@@ -582,7 +592,7 @@ registerForEvent("onDraw", function()
 end)
 
 return {
-  version = "0.8.3",
+  version = "0.8.5",
   -- For other CET mods: GetMod("XF_Runtime_Bridge").info()
   info = function() return state.info end,
 }

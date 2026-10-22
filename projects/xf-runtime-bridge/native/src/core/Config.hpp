@@ -24,6 +24,10 @@ inline constexpr uint32_t kWriteShowroom = 32; // XF Finish Showroom props and l
 inline constexpr uint32_t kWritePlayer = 64;   // 0.6: reversible player changes (player.*, behaviours that move V); "player"
 inline constexpr uint32_t kActPlayer = 128;    // 0.6: irreversible actions in the world (devices, dialogue, consuming); "act"
 
+// 0.8.5: the game's own new-message sound (MessengerDialogViewController plays it through AudioSystem.Play when a message
+// arrives in an open conversation; 2.31 scripts).
+inline constexpr const char* kQuestionSoundDefault = "ui_messenger_recieved";
+
 struct Config
 {
     // [bridge]
@@ -49,6 +53,10 @@ struct Config
     std::vector<std::string> answerKeys{"IK_F6", "IK_F7", "IK_F8", "IK_F11"};
     // 0.8.3: the bridge's own kill key (core/KillKey.hpp; default End, "off" for none), read by the plugin itself without CET.
     killkey::Chord killKey;
+    // 0.8.5: a soft sound when a new question appears ([ui] question_sound: true, false, or the name of a game sound event),
+    // played once per question through the game's audio system (XFBridgeSound.Question). true is the messenger's own
+    // new-message sound; empty is off.
+    std::string questionSound = kQuestionSoundDefault;
 
     // [overlay] (0.7, the ImGui overlay host P0: research/runtime/imgui-overlay-feasibility.md §8): off by default; draw-only
     // (a diagnostic panel); refuses in HDR. theme: dark (default) or light, chosen by hand, never switched automatically.

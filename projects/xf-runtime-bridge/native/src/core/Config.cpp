@@ -1,6 +1,7 @@
 #include "core/Config.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <charconv>
 #include <fstream>
 #include <sstream>
@@ -248,7 +249,7 @@ Config ParseConfig(const std::string& aText)
                 config.killKey = chord;
                 if (chord.enabled && killkey::GameBinds(chord.vk))
                 {
-                    config.warnings.push_back("line " + std::to_string(lineNumber) + ": the kill key " + chord.label +
+                    config.warnings.push_back("line " + std::to_string(lineNumber) + ": the stop key " + chord.label +
                                               " is also one of the game's own keys, so pressing it does that too; the default, Ctrl + Shift + End, is free");
                 }
             }
@@ -256,6 +257,24 @@ Config ParseConfig(const std::string& aText)
             {
                 config.warnings.push_back("line " + std::to_string(lineNumber) + ": kill_key: " + why + "; the default (" + killkey::kDefault + ") stays");
                 ok = true; // the warning says it; no second "bad value" line
+            }
+        }
+        else if (key == "ui.question_sound")
+        {
+            // 0.8.5: true (the default sound), false, or a sound event's name (lower case letters, digits and _).
+            bool on = false;
+            if (ParseBool(value, on))
+            {
+                config.questionSound = on ? kQuestionSoundDefault : "";
+            }
+            else
+            {
+                ok = !value.empty() && value.size() <= 64 && std::isalpha(static_cast<unsigned char>(value[0])) &&
+                     std::all_of(value.begin(), value.end(), [](unsigned char c) { return std::islower(c) || std::isdigit(c) || c == '_'; });
+                if (ok)
+                {
+                    config.questionSound = value;
+                }
             }
         }
         else if (key == "overlay.enabled")
@@ -354,6 +373,7 @@ std::string DescribeConfig(const Config& aConfig)
     std::string killKey = aConfig.killKey.enabled ? aConfig.killKey.label : std::string("off");
     killKey.erase(std::remove(killKey.begin(), killKey.end(), ' '), killKey.end());
     text += " ui.kill_key=" + killKey;
+    text += " ui.question_sound=" + (aConfig.questionSound.empty() ? std::string("off") : aConfig.questionSound);
     text += " overlay.enabled=" + std::string(aConfig.overlayEnabled ? "true" : "false") + " overlay.theme=" + aConfig.overlayTheme +
             " overlay.scale_percent=" + std::to_string(aConfig.overlayScalePercent) + " overlay.diagnostics=" + (aConfig.overlayDiagnostics ? "true" : "false");
     text += " log.level=" + std::string(LevelName(aConfig.logLevel));

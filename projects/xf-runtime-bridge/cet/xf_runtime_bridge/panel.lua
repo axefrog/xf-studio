@@ -13,10 +13,12 @@
 --     only take access away: resuming gives back exactly what the bridge's config.ini allows.
 --   * Mark this moment (0.6): a marker in the session's event stream (XFBridge_Note), for the coordinator's session.log; the
 --     coordinator also treats it as "ready".
---   * Stop the bridge (the kill switch), on its own row in the danger colour (0.8, the UI review), while it listens, with the
---     bridge's own kill key beside it (0.8.3, [ui] kill_key: it works in the game without CET). 0.8.4 (the maintainer: make
---     it configurable): Change... takes the next key pressed, with Ctrl, Shift or Alt held, and Reset to default puts
---     Ctrl + Shift + End back (XFBridge_KillKey saves either to config.ini); what else may react to the key is said under it.
+--   * Stop the bridge (the kill switch), on its own row as a danger button (0.8, the UI review; 0.8.5: danger text and border on
+--     a clear fill, as the Studio's .btn.danger), while it listens, with the bridge's own stop key beside it (0.8.3, [ui]
+--     kill_key: it works in the game without CET). 0.8.4 (the maintainer: make it configurable): the Keys section's Stop key
+--     row, where Change... takes the next key pressed, with Ctrl, Shift or Alt held, and Reset puts Ctrl + Shift + End back
+--     (XFBridge_KillKey saves either to config.ini); what else may react to the key is said under it. The player-facing name
+--     is "stop key" everywhere (0.8.5, the UI review's N2); kill_key is only config.ini's field.
 --   * A commentary box (0.7; XFBridge_Comment): Send, or Ctrl+Enter (0.8, session 8's request; 0.8.2: read from the box's own
 --     validation, since Ctrl+Enter ends the box's editing before anything after it can see the key). 0.8.4 (session 11: long
 --     text ran out of view sideways): the text wraps at words (see drawComment).
@@ -162,6 +164,19 @@ local function spacing(theme)
   return (m.FramePaddingX or 8) * k, (m.ItemSpacingX or 8) * k
 end
 
+-- 0.8.5 (the UI review's N1): one wrap rule for rows of controls (the answer buttons, the Stop key row): an item goes on the
+-- row while the row still fits the window's text width (WRAP_EM), else it starts the next row, so a control appearing never
+-- widens the window. row = { used = 0 } per row; place(row, width) before drawing each item.
+local function place(row, width, gap)
+  local limit = ImGui.GetFontSize() * WRAP_EM
+  if row.used > 0 and row.used + gap + width <= limit then
+    ImGui.SameLine()
+    row.used = row.used + gap + width
+  else
+    row.used = width
+  end
+end
+
 -- The question's slot (0.8, the UI review): the pending question with its answers as primary buttons, each naming its key;
 -- once answered, the same slot says what was sent, at the buttons' height, so nothing below it moves. 0.8.4 (the UI
 -- review's fixes 1-3): the hover is the Studio's primary hover (XfAccentHover; XfAccentEdge only as the border), the
@@ -189,18 +204,11 @@ local function drawQuestion(state, queue, theme, which)
     local bordered = ImGuiStyleVar and ImGuiStyleVar.FrameBorderSize ~= nil
     if bordered then ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1) end
     local pad, gap = spacing(theme)
-    local limit = ImGui.GetFontSize() * WRAP_EM
-    local used = 0
+    local row = { used = 0 }
     for i, label in ipairs(ask.choices) do
       local key = keys[i] and (" (" .. keyLabel(keys[i]) .. ")") or ""
       local text = tostring(label) .. key
-      local width = (ImGui.CalcTextSize(text)) + pad * 2
-      if i > 1 and used + gap + width <= limit then
-        ImGui.SameLine()
-        used = used + gap + width
-      else
-        used = width
-      end
+      place(row, (ImGui.CalcTextSize(text)) + pad * 2, gap)
       if button(text .. "##xf_answer_" .. tostring(i)) then
         queue("answer", { id = ask.id, choice = i - 1 })
       end
@@ -375,23 +383,77 @@ function panel.capturedChord()
   return nil
 end
 
--- 0.8.4: Change... and Reset to default under the kill switch, and what else may react to the key (bridge_info's kill_key:
--- warnings from the game's bindings and CET's hotkeys; notes; after a change, what can't be seen from here).
+-- 0.8.4: Change... and Reset under the kill switch, and what else may react to the key (bridge_info's kill_key: warnings from
+-- the game's bindings and CET's hotkeys; notes; after a change, what can't be seen from here). 0.8.5 (the UI review's N1 and
+-- N3): "Keys" is a heading line, like "Comment for XF Studio", with the Stop key row under it (room for the answer keys
+-- later); the row wraps by the answer buttons' rule, so Reset appearing never widens the window; the key is a keycap (its
+-- text in the text colour inside a frame, not a disabled button); the capture prompt has its own line under the row, whose
+-- height is always kept, so nothing moves when it appears; the notes are in the muted text colour.
+local CAPTURE_PROMPT = "Press the new key, with Ctrl, Shift or Alt if you like. Esc cancels."
+
+-- The key as a keycap: a framed readout in the text colour. Drawn as a button whose fill, hover and press are all the sunken
+-- field colour, so it never looks pressable or unavailable; clicks on it do nothing.
+local function keycap(theme, which, label)
+  local fill = panel.colour(theme, which, "FrameBg", { 0.08, 0.09, 0.1, 1.0 })
+  local edge = panel.colour(theme, which, "XfLineStrong", GREY)
+  local ink = panel.colour(theme, which, "Text", { 0.92, 0.92, 0.92, 1.0 })
+  ImGui.PushStyleColor(ImGuiCol.Button, fill[1], fill[2], fill[3], fill[4])
+  ImGui.PushStyleColor(ImGuiCol.ButtonHovered, fill[1], fill[2], fill[3], fill[4])
+  ImGui.PushStyleColor(ImGuiCol.ButtonActive, fill[1], fill[2], fill[3], fill[4])
+  ImGui.PushStyleColor(ImGuiCol.Text, ink[1], ink[2], ink[3], ink[4])
+  ImGui.PushStyleColor(ImGuiCol.Border, edge[1], edge[2], edge[3], edge[4])
+  local bordered = ImGuiStyleVar and ImGuiStyleVar.FrameBorderSize ~= nil
+  if bordered then ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1) end
+  ImGui.Button(label .. "##xf_killkey_cap")
+  if bordered then ImGui.PopStyleVar(1) end
+  ImGui.PopStyleColor(5)
+end
+
+local function mutedWrapped(theme, which, text)
+  local muted = panel.colour(theme, which, "XfTextMuted", GREY)
+  ImGui.PushTextWrapPos(ImGui.GetFontSize() * WRAP_EM)
+  ImGui.TextColored(muted[1], muted[2], muted[3], muted[4], tostring(text))
+  ImGui.PopTextWrapPos()
+end
+
 drawKillKey = function(state, queue, theme, which, killKey)
   if not killKey then return end
   ImGui.Separator()
-  -- One row, the same height while capturing: the label, the key as a keycap, then Change... (or the capture prompt).
-  ImGui.AlignTextToFramePadding()
   ImGui.Text("Keys")
-  ImGui.SameLine()
+  local pad, gap = spacing(theme)
+  local row = { used = 0 }
+  local capLabel = killKey.enabled and tostring(killKey.label) or "Off"
+  ImGui.AlignTextToFramePadding()
+  place(row, (ImGui.CalcTextSize("Stop key")), gap)
   coloured(panel.colour(theme, which, "XfTextMuted", GREY), "Stop key")
-  ImGui.SameLine()
-  ImGui.BeginDisabled(true)
-  ImGui.Button((killKey.enabled and tostring(killKey.label) or "Off") .. "##xf_killkey_cap")
+  place(row, (ImGui.CalcTextSize(capLabel)) + pad * 2, gap)
+  keycap(theme, which, capLabel)
+  -- While a key is being taken, the row keeps its buttons (Change... disabled), so nothing in it moves either.
+  place(row, (ImGui.CalcTextSize("Change...")) + pad * 2, gap)
+  ImGui.BeginDisabled(state.killKeyCapture == true)
+  if button("Change...##xf_killkey_change") and not state.killKeyCapture then
+    state.killKeyCapture = true
+    state.killKeyRefused = nil
+  end
   ImGui.EndDisabled()
-  ImGui.SameLine()
+  if killKey.is_default == false then
+    local reset = "Reset to " .. tostring(killKey.default)
+    place(row, (ImGui.CalcTextSize(reset)) + pad * 2, gap)
+    ImGui.BeginDisabled(state.killKeyCapture == true)
+    if button(reset .. "##xf_killkey_reset") and not state.killKeyCapture then
+      queue("killkey", { action = "reset" })
+    end
+    ImGui.EndDisabled()
+  end
+  -- The capture prompt's own line, its height kept while it is empty.
+  local limit = ImGui.GetFontSize() * WRAP_EM
+  local _, promptHeight = ImGui.CalcTextSize(CAPTURE_PROMPT, false, limit)
+  if type(promptHeight) ~= "number" or promptHeight <= 0 then promptHeight = ImGui.GetFontSize() end
   if state.killKeyCapture then
-    coloured(panel.colour(theme, which, "XfAccentText", AMBER), "Press a key, with Ctrl, Shift or Alt if you like. Esc cancels.")
+    ImGui.PushTextWrapPos(limit)
+    local accent = panel.colour(theme, which, "XfAccentText", AMBER)
+    ImGui.TextColored(accent[1], accent[2], accent[3], accent[4], CAPTURE_PROMPT)
+    ImGui.PopTextWrapPos()
     local chord = panel.capturedChord()
     if chord == "cancel" then
       state.killKeyCapture = false
@@ -400,34 +462,28 @@ drawKillKey = function(state, queue, theme, which, killKey)
       queue("killkey", { action = "set", key = chord })
     end
   else
-    if button("Change...##xf_killkey_change") then state.killKeyCapture = true end
-    if killKey.is_default == false then
-      ImGui.SameLine()
-      if button("Reset to " .. tostring(killKey.default) .. "##xf_killkey_reset") then
-        queue("killkey", { action = "reset" })
-      end
-    end
+    ImGui.Dummy(1, promptHeight)
   end
   if state.killKeyRefused then
-    ImGui.PushTextWrapPos(ImGui.GetFontSize() * WRAP_EM)
+    ImGui.PushTextWrapPos(limit)
     ImGui.TextColored(RED[1], RED[2], RED[3], RED[4], tostring(state.killKeyRefused))
     ImGui.PopTextWrapPos()
   end
   for _, warning in ipairs(type(killKey.warnings) == "table" and killKey.warnings or {}) do
-    ImGui.PushTextWrapPos(ImGui.GetFontSize() * WRAP_EM)
+    ImGui.PushTextWrapPos(limit)
     ImGui.TextColored(AMBER[1], AMBER[2], AMBER[3], AMBER[4], tostring(warning))
     ImGui.PopTextWrapPos()
   end
   if state.killKeyChanged then
+    -- 0.8.5 (session 12's K3: answering a question took the general message line away): the outcome of a change stays here.
+    if state.killKeySaved then
+      mutedWrapped(theme, which, state.killKeySaved)
+    end
     for _, note in ipairs(type(killKey.notes) == "table" and killKey.notes or {}) do
-      ImGui.PushTextWrapPos(ImGui.GetFontSize() * WRAP_EM)
-      ImGui.TextDisabled(tostring(note))
-      ImGui.PopTextWrapPos()
+      mutedWrapped(theme, which, note)
     end
     if type(killKey.unseen) == "string" then
-      ImGui.PushTextWrapPos(ImGui.GetFontSize() * WRAP_EM)
-      ImGui.TextDisabled(killKey.unseen)
-      ImGui.PopTextWrapPos()
+      mutedWrapped(theme, which, killKey.unseen)
     end
   end
 end
@@ -500,6 +556,10 @@ function panel.draw(state, queue, theme)
     which = "light"
   end
   local colours, vars = panel.pushTheme(theme, which)
+  if ImGuiStyleVar and ImGuiStyleVar.Alpha ~= nil then
+    ImGui.PushStyleVar(ImGuiStyleVar.Alpha, 1.0)
+    vars = vars + 1
+  end
   local ok, err = pcall(panel.body, state, queue, theme, which)
   if vars > 0 then ImGui.PopStyleVar(vars) end
   if colours > 0 then ImGui.PopStyleColor(colours) end
@@ -512,6 +572,9 @@ function panel.body(state, queue, theme, which)
   GREEN = panel.colour(theme, which, "XfSuccess", DEFAULTS.GREEN)
   AMBER = panel.colour(theme, which, "XfWarning", DEFAULTS.AMBER)
   RED = panel.colour(theme, which, "XfDanger", DEFAULTS.RED)
+  -- 0.8.5 (the UI review's N4: the ink panel showed through in both themes): the window's background fully opaque, whatever the
+  -- theme's overlay token (alpha 0.97) or CET's global alpha.
+  ImGui.SetNextWindowBgAlpha(1.0)
   if not ImGui.Begin("XF Runtime Bridge", ImGuiWindowFlags.AlwaysAutoResize) then
     ImGui.End()
     return
@@ -565,15 +628,22 @@ function panel.body(state, queue, theme, which)
         if button("Mark this moment") then
           queue("mark")
         end
-        -- 0.8 (the UI review): the kill switch on its own row, in the danger colour, away from the everyday buttons.
+        -- 0.8 (the UI review): the kill switch on its own row, in the danger colour, away from the everyday buttons. 0.8.5 (the
+        -- UI review's fix 8): the Studio's danger button (.btn.danger): danger text and border on a clear fill; hover and press
+        -- keep the theme's.
         ImGui.Spacing()
+        ImGui.PushStyleColor(ImGuiCol.Button, 0, 0, 0, 0)
         ImGui.PushStyleColor(ImGuiCol.Text, RED[1], RED[2], RED[3], RED[4])
+        ImGui.PushStyleColor(ImGuiCol.Border, RED[1], RED[2], RED[3], RED[4])
+        local stopBordered = ImGuiStyleVar and ImGuiStyleVar.FrameBorderSize ~= nil
+        if stopBordered then ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1) end
         local stop = button("Stop the bridge")
-        ImGui.PopStyleColor(1)
+        if stopBordered then ImGui.PopStyleVar(1) end
+        ImGui.PopStyleColor(3)
         if stop then
           queue("kill")
         end
-        -- 0.8.3: the bridge's own kill key ([ui] kill_key), which works in the game without CET. 0.8.4 (the UI review's
+        -- 0.8.3: the bridge's own stop key ([ui] kill_key), which works in the game without CET. 0.8.4 (the UI review's
         -- fix 8): in the muted text colour (not the disabled one), with where it works as a tooltip.
         local killKey = info and type(info.kill_key) == "table" and info.kill_key or nil
         if killKey and killKey.enabled and type(killKey.label) == "string" then

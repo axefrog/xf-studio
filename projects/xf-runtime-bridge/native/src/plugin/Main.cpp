@@ -81,6 +81,36 @@ void PollKillKey(State& aState)
     }
 }
 
+// 0.8.5: a soft sound when a new question appears ([ui] question_sound), so a missed prompt is rarer: once per question, never for
+// info lines, through the game's own audio system (XFBridgeSound.Question, redscript). A question posted while no game session
+// is live (a loading screen) sounds once the scripts can be called; questions posted while the switch is off or the bridge is
+// stopped never do.
+void SoundNewQuestion(State& aState, bool aScriptsReady)
+{
+    PendingAsk ask;
+    const uint64_t id = aState.messages.Pending(ask) ? ask.id : 0;
+    const bool stopped = !aState.bridge || aState.bridge->GetDispatcher().IsKilled();
+    if (aState.config.questionSound.empty() || stopped)
+    {
+        aState.questionChime.Skip(id);
+        return;
+    }
+    if (!aScriptsReady || !aState.questionChime.Take(id))
+    {
+        return;
+    }
+    try
+    {
+        RED4ext::CString event(aState.config.questionSound.c_str());
+        ScriptCall("XFBridgeSound", "Question", {"String"}, {&event}, "question-sound");
+        log::Info("ui.question_sound", "id=" + std::to_string(id) + " event=" + aState.config.questionSound);
+    }
+    catch (const std::exception& e)
+    {
+        log::Warn("ui.question_sound_failed", "id=" + std::to_string(id) + " what=" + e.what());
+    }
+}
+
 // Reconnect after the kill switch (XFBridge_Rearm), on the game thread between queue drains. Waits (a few
 // seconds at most) until the old listener has stopped and the kill switch's restore has run, then gives
 // the bridge a new session (new token, pipe name and session id) and starts it again.
@@ -271,6 +301,7 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
         }
         HandleRearm(state);
         PollKillKey(state);
+        SoundNewQuestion(state, scriptsReady);
         // 0.8.2: the status surface for this tick (one at a time: core/InkUi.hpp ChooseStatusSurface). 0.8.3: none while no
         // game session is live (a loading screen, the press-any-key screen after a load).
         const auto surface = inkui::ChooseStatusSurface({state.InkVisible(), state.overlayHost.CanShowPanel(), scriptsReady});

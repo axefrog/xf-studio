@@ -84,6 +84,8 @@ struct State
     // ui.message: the coordinator's short messages under the in-game label, read by the CET layer
     // (XFBridge_Messages). Cleared by the kill switch; a killed bridge shows none.
     MessageBoard messages;
+    // 0.8.5: which questions have had their sound ([ui] question_sound); the Running tick's only (game thread).
+    QuestionChime questionChime;
 
     // Bridge 0.6: the session event stream (session.events; XFBridge_Note adds notes from the game), the behaviour runner
     // (behave.*, ticked on the game thread from the Running update) and player.teleport's pacer (2 a second).

@@ -3388,3 +3388,23 @@ public func XFBridgeLoad(index: Int32, modded: Bool) -> Void {
     this.LoadSaveInGame(index);
   }
 }
+
+// 0.8.5: a soft sound when a new question appears ([ui] question_sound), so a missed prompt is rarer. The plugin calls this
+// once per question from its Running tick, only while a game session is live. eventName is a game sound event: by default
+// ui_messenger_recieved, the sound MessengerDialogViewController plays through the same AudioSystem.Play when a message
+// arrives in an open conversation (the game's 2.31 scripts). Plays on the UI, not at a place in the world.
+public abstract class XFBridgeSound {
+  public static func Question(cid: String, eventName: String) -> String {
+    let game = GetGameInstance();
+    if !GameInstance.IsValid(game) {
+      return "{\"ok\":false,\"code\":\"game_unavailable\",\"message\":\"the game isn't running a session\"}";
+    }
+    let audio = GameInstance.GetAudioSystem(game);
+    if !IsDefined(audio) {
+      return "{\"ok\":false,\"code\":\"game_unavailable\",\"message\":\"the game's audio system isn't there\"}";
+    }
+    audio.Play(StringToName(eventName));
+    XFBridgeLog.Info(cid, "question sound: " + eventName);
+    return "{\"ok\":true}";
+  }
+}

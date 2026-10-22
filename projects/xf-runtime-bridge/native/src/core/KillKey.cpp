@@ -155,7 +155,7 @@ bool Parse(const std::string& aText, Chord& aOut, std::string& aError)
     });
     if (found == Keys().end())
     {
-        aError = "'" + keyName.substr(0, 24) + "' isn't a key the kill key can use (End, Home, Insert, Delete, PageUp, PageDown, Pause, "
+        aError = "'" + keyName.substr(0, 24) + "' isn't a key the stop key can use (End, Home, Insert, Delete, PageUp, PageDown, Pause, "
                                              "ScrollLock, F1-F12, A-Z, 0-9, Numpad0-9, Numpad*, Numpad/, Numpad-, Numpad+, Numpad.)";
         return false;
     }
@@ -390,6 +390,83 @@ std::string Joined(const std::vector<std::string>& aNames, size_t aMax)
     return out;
 }
 
+// 0.8.5 (session 12's K3: the note listed "Dodge_Button, LeftY_Axis_Vehicle, … and 8 more"): the game's common actions in plain
+// words, as a verb for many keys ("dodge") and for one ("dodges"), in the order a list names them. The mapping names are the
+// game's 2.31 r6/config/inputUserMappings.xml; any other action is only counted.
+struct PlainAction
+{
+    const char* mapping; // lower case
+    const char* plural;
+    const char* singular;
+};
+
+const std::vector<PlainAction>& PlainActions()
+{
+    static const std::vector<PlainAction> actions{
+        {"dodge_button", "dodge", "dodges"},
+        {"crouch_button", "crouch", "crouches"},
+        {"togglecrouch_button", "crouch", "crouches"},
+        {"sprint_button", "sprint", "sprints"},
+        {"togglesprint_button", "sprint", "sprints"},
+        {"lefty_axis_vehicle", "steer vehicles", "steers vehicles"},
+        {"lefty_axis_vehicle_rockfb", "steer vehicles", "steers vehicles"},
+        {"switchitem_button", "switch weapons", "switches weapons"},
+        {"weaponwheel_button", "open the weapon wheel", "opens the weapon wheel"},
+        {"vehicle_shoot_tertiary", "fire vehicle weapons", "fires vehicle weapons"},
+        {"vehicle_mountedweapons_switchweapons_button", "switch vehicle weapons", "switches vehicle weapons"},
+        {"activatefreecam", "move photo mode's camera", "moves photo mode's camera"},
+        {"cameramultspeed", "move photo mode's camera", "moves photo mode's camera"},
+        {"camerareducespeed", "move photo mode's camera", "moves photo mode's camera"},
+        {"braindanceswitchlayer_button", "switch braindance layers", "switches braindance layers"},
+    };
+    return actions;
+}
+
+// "dodge, crouch and steer vehicles" (aSingular: "dodges, ..."), at most aMax plain names, the most common first; the rest
+// (other plain names and actions without one) in aOthers.
+std::string PlainList(const std::vector<std::string>& aMappings, bool aSingular, size_t aMax, size_t& aOthers)
+{
+    std::vector<size_t> found;
+    aOthers = 0;
+    for (const auto& name : aMappings)
+    {
+        const auto lower = Lower(name);
+        const auto& actions = PlainActions();
+        const auto it = std::find_if(actions.begin(), actions.end(), [&](const PlainAction& a) { return lower == a.mapping; });
+        if (it == actions.end())
+        {
+            ++aOthers;
+            continue;
+        }
+        // One entry per plain name (sprint and toggle sprint read the same).
+        const std::string plural = it->plural;
+        const auto first = std::find_if(actions.begin(), actions.end(), [&](const PlainAction& a) { return plural == a.plural; });
+        const auto index = static_cast<size_t>(first - actions.begin());
+        if (std::find(found.begin(), found.end(), index) == found.end())
+        {
+            found.push_back(index);
+        }
+    }
+    std::sort(found.begin(), found.end());
+    if (found.size() > aMax)
+    {
+        aOthers += found.size() - aMax;
+        found.resize(aMax);
+    }
+    std::string out;
+    for (size_t i = 0; i < found.size(); ++i)
+    {
+        const auto& action = PlainActions()[found[i]];
+        out += (i == 0 ? "" : (i + 1 == found.size() ? " and " : ", ")) + std::string(aSingular ? action.singular : action.plural);
+    }
+    return out;
+}
+
+std::string Actions(size_t aCount)
+{
+    return std::to_string(aCount) + (aCount == 1 ? " game action" : " game actions");
+}
+
 void AddOnce(std::vector<std::string>& aList, const std::string& aItem)
 {
     if (std::find(aList.begin(), aList.end(), aItem) == aList.end())
@@ -465,7 +542,11 @@ Conflicts FindConflicts(const Chord& aChord, const std::vector<std::pair<std::st
         const auto byKey = MappingsByKey(xml);
         if (const auto found = byKey.find(keyName); !keyName.empty() && found != byKey.end())
         {
-            out.warnings.push_back("The game binds " + keyLabel + " (" + Joined(found->second, 3) + " in " + file +
+            // 0.8.5: the game's actions in plain words, the rest counted.
+            size_t others = 0;
+            const auto plain = PlainList(found->second, false, 3, others);
+            const auto what = plain.empty() ? Actions(others) : plain + (others > 0 ? " and " + std::to_string(others) + " more" : std::string());
+            out.warnings.push_back("The game uses " + keyLabel + " too (" + what + ", in " + file +
                                    "), so pressing it also does that. To avoid it, press Change... and pick another key.");
         }
         const auto modifier = [&](bool aUsed, const char* aLabel, std::initializer_list<const char*> aNames) {
@@ -491,9 +572,27 @@ Conflicts FindConflicts(const Chord& aChord, const std::vector<std::pair<std::st
     }
     if (!modifierNames.empty())
     {
-        out.notes.push_back(Joined(modifierNames, 3) + (modifierNames.size() > 1 ? " are game keys on their own (" : " is a game key on its own (") +
-                            Joined(modifierUses, 3) + "); holding " + (modifierNames.size() > 1 ? "them" : "it") +
-                            " for the kill key only matters while V moves.");
+        // 0.8.5 (session 12's K3): plain words, not the game's mapping names: "Ctrl and Alt also dodge, crouch and steer vehicles
+        // on their own (and 8 more game actions); ...". Without a known action, only the count.
+        const bool many = modifierNames.size() > 1;
+        size_t others = 0;
+        const auto plain = PlainList(modifierUses, !many, 3, others);
+        std::string keys; // "Ctrl", "Ctrl and Alt", "Ctrl, Shift and Alt"
+        for (size_t i = 0; i < modifierNames.size(); ++i)
+        {
+            keys += (i == 0 ? "" : (i + 1 == modifierNames.size() ? " and " : ", ")) + modifierNames[i];
+        }
+        std::string note;
+        if (plain.empty())
+        {
+            note = keys + (many ? " are game keys on their own (" : " is a game key on its own (") + Actions(others) + ")";
+        }
+        else
+        {
+            note = keys + " also " + plain + (many ? " on their own" : " on its own") +
+                   (others > 0 ? " (and " + std::to_string(others) + " more)" : std::string());
+        }
+        out.notes.push_back(note + "; holding " + (many ? "them" : "it") + " for the stop key only matters while V moves.");
     }
     // CET's hotkeys: {"mod": {"id": code}} (or the older {"mod.id": code}); a code packs up to four virtual keys, 16 bits each,
     // the first in the top bits (CET VKBindings::DecodeVKCodeBind).
