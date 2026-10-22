@@ -4,6 +4,7 @@
 - **The review.** v0.2 went through one review, by GPT-6 Astra; [§16](#16-review-record) records what changed.
 - **Dossiers folded in.**
   - v0.1 folded in [dossier 8](../craft/d08-scale-threads-time.md#9-requirements-for-the-seed-language-p4) (scale, threads and time).
+  - v0.11.1 clarifies author-fill seams: the engine composes and places authored-source content like any data, procedural seeds included; only its source material comes from people.
   - v0.11 folds in [dossier 18](../craft/d18-content-boundaries.md) (representation and content boundaries): content classes with one ceiling ladder each, author-fill seams ([D-23](../decisions.md)), the legal floors, and representation checks (§2.19).
   - v0.10 folds in [dossier 17](../craft/d17-setting-tone.md) (setting and tone): the tone vocabulary and tone lint, stake scale, dread guards, withheld patron motives, outlets for media, setting reads (§2.18).
   - v0.9 folds in [dossier 16](../craft/d16-authoring-tools.md) (authoring formats and tools): maturity and placeholders, a text syntax for predicates, source maps, the finding contract, structure versions, and missing content at run time. R1 is now lint-clean.
@@ -975,19 +976,22 @@ A fragment carries `content: Array<{ class; intensity: 1 | 2 | 3 }>`. A seed car
 - **Skip.** The player's one-input **retract** (§8.3) plays the running beat's `implied` form or ends it, withdraws the offer quietly, and writes a neutral `retracted` entry: no reoffer of that seed, no effect, no input to the model. It adds the class and level to `softExclusions`. Leaving, skipping past or letting it lapse is a plain decline.
 - **Notices before, not during.** A warning shows only for classes the player flagged, and before the scene. Each delivery's descriptors are always available under "Details", in the settings voice. Warnings don't protect a player; the player's own controls do.
 
-**Author-fill seams** ([D-23](../decisions.md)). Some genre material is legal, but the engine's model-driven tools don't produce it, explicit sexual content above all. The engine still supports such a class fully: tags, ceilings, placement, timing, casting and consequences. Only the words are left to people:
-- **Authored-only classes.** S4 marks a class `authoredOnly`. A fragment in it needs `authored: 'human'` and a named author in the pack manifest (L-97). Procedural seeds can't use authored-only classes, or any fragment at intensity 3, unless the pack author lifts the cap for a seed they author (L-96).
-- **Every authored-only fragment has a non-explicit partner,** its `implied` form or `fade`, that leaves the same facts (L-100). A seed therefore runs identically whether or not a pack fills the slot, and the generated side always has a form it can produce.
+**Author-fill seams** ([D-23](../decisions.md)). Explicit sexual content is part of the genre, and the engine handles it like any other content class. It sows, fits, casts, composes, places and times it, procedural seeds included, within the player's ceilings.
+
+**What humans supply is data.** The model-driven tools that write the project's own text and assets (the authoring assistant, and any language model in S7) don't produce it. So for such a class, the **source material** (text units, scenes, assets) comes from packs people write:
+- **Authored-source classes.** S4 marks a class `authoredSource`. A text unit or asset in it needs `authored: 'human'` and a named author in the pack manifest (L-97). No model-generated text or asset fills it. How the engine uses that material (selection, recombination, casting, timing) is unrestricted.
+- **Every such fragment has a non-explicit partner,** its `implied` form or `fade`, that leaves the same facts (L-100). A seed therefore runs identically whether or not a pack supplies the material, and model-written content always has a form it can produce.
 - **Unfilled slots are marked.** A seed may reference an author-fill slot with a `todo` content reference of kind `author-fill` (§11.1). Below `ready` it shows as a placeholder; at `ready`, the implied form plays until a pack fills it.
 
-**The explicit scene** (extending L-11 and Appendix A):
-- it is `authored: 'human'`;
-- it has a `fade` of the same level, which leaves the same facts;
-- it holds no choice inside it;
+**The explicit scene:**
+- its source material is `authored: 'human'`;
+- it has a `fade` at the same level, which leaves the same facts;
 - it binds only adults;
-- it is reached only through an accepted action on the ladder's top rung (L-99).
+- it is reached only through an action V accepted (L-99).
 
-No `mustReach` item, window, item, economy or relationship-status predicate may read an intimacy fact (L-101). An effect on V with a `sex.*` tag must come from an action V accepted (L-98). The engine generates none.
+On a relationship ladder, it also holds no choice inside it, and it is reached from the top rung (Appendix A, L-11).
+
+No `mustReach` item, window, item, economy or relationship-status predicate may read an intimacy fact (L-101). An effect on V with a `sex.*` tag must come from an action V accepted (L-98). The engine never presumes V's participation (D-09).
 
 **Adult themes in the genre** (sex work, braindances, bodies as commodities, exploitation) get the same design depth as violence: placement, consequence, representation and the terms of the people involved. A seed tagged `sex.work`, `sex.exploit`, `exploit.body` or `exploit.labour` binds each person's **terms** (free, constrained or coerced) from their membership or contract record. A `coerced` person needs a `coercer` role and the means of coercion, and the seed needs a route for V to act or decline (L-113). Erotic framing in an exploitation seed is warned.
 
@@ -1915,10 +1919,10 @@ The lint runs at compile time (§3.1), and on demand from authoring tools (S4, P
 | L-93 | A content tag naming an unregistered class; or, at `ready`, a declared envelope that doesn't cover the compiled tags | error |
 | L-94 | A fragment tagged at intensity 2 or 3 with no `implied` form, no `droppable` beat, and no `requires` on its seed | error |
 | L-95 | A role that can bind a minor (or a person with no `ageClass`) in a victim, target or hostile position, or in a beat with a `sex.*` tag | error |
-| L-96 | A procedural seed using a fragment at intensity 3 or in an authored-only class, without an author's lift | error |
-| L-97 | A fragment in an authored-only class without `authored: 'human'` and a named author | error |
+| L-96 | Retired in v0.11.1: procedural seeds may use any class within the player's ceilings | — |
+| L-97 | A text unit or asset in an authored-source class without `authored: 'human'` and a named author | error |
 | L-98 | An effect on V with a `sex.*` tag that isn't the effect of an accepted action | error |
-| L-99 | An explicit scene that isn't human-authored, lacks a fade at its level, holds a choice, binds a non-adult, or is reached other than by an accepted top-rung action | error |
+| L-99 | An explicit scene whose source material isn't human-authored, that lacks a fade at its level, binds a non-adult, or is reached other than by an action V accepted | error |
 | L-100 | An authored-only fragment and its `implied` or `fade` form leaving different facts | error |
 | L-101 | A `mustReach`, window, item, economy or relationship-status predicate reading an intimacy fact | error |
 | L-102 | A role's `must`, `prefer` or score reading a protected attribute without a declared, reviewed correlation | error |
@@ -2285,7 +2289,7 @@ For `n = rungs.length`, and rung index `i` from 0:
    - `scene` applies when the player's content setting allows `contentTag`;
    - `fade` applies otherwise.
 
-   Both are fixed and `authoredOnly`, with no choices inside them (L-11).
+   Both are fixed. The scene's source material is human-authored (an `authoredSource` class), and it holds no choices (L-11).
 6. **Boundaries.** Each boundary sets its fact from its authored beat `by`. Only authored beats may write it (`authoredOnly`). The engine never lowers or clears it.
 7. **The end:** `rung = n−1` and every top-rung beat is final, or any exit beat is `done`.
 8. **Turns:** `{ level: 'concern', what: rung changed }`.
