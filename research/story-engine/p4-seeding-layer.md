@@ -286,6 +286,8 @@ A sketch, not the schema. It is the authored romance side quest for a main-story
 ```yaml
 seed: xf.example:takemura-quiet-hour   # an illustrative pack id
 level: arc
+turns: [ { level: concern, what: tie(V, takemura).rung changed } ]   # S2 §2.13: an arc turns a concern
+closing: pack:quiet-hour-closing
 purpose: { tags: [bond, aftermath, loyalty], sentence: "Two people who survived the same betrayal find out what they are to each other." }
 intent:
   end_state: [ tie(V, takemura).kind in {friend, partner} or seed.exit in {decline, lapse} ]

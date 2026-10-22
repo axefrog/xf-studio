@@ -578,11 +578,11 @@ By Tynan Sylvester. ["The Simulation Dream"](https://www.gamedeveloper.com/desig
 
 ### Justin Alexander (The Alexandrian)
 
-[Three Clue Rule](https://thealexandrian.net/wordpress/1118/roleplaying-games/three-clue-rule) (2008) and the nine-part series [Node-Based Scenario Design](https://thealexandrian.net/wordpress/8122/roleplaying-games/node-based-scenario-design-collectors-edition). The first says to give at least three clues for any conclusion the players must reach, because one may be missed, ignored or misread. The second builds a scenario from nodes that clues point to, so players can move through it in different orders. Together they taught us robust discovery, where no single missed clue stops the story. His [Scenario Structure Challenge #4: Heists](https://thealexandrian.net/wordpress/42867/roleplaying-games/scenario-structure-challenge-4-heists) (2019) breaks a heist scenario into five steps (identify the score, gather information, onsite surveillance, prep work and the operation), which gave us a reusable shape for job-style quests. His [Don't Prep Plots](https://thealexandrian.net/?p=4147) argues for preparing situations rather than plots, and for deciding what the opposition does if the players never step in. It informed how we think about a world that acts without the player.
+[Three Clue Rule](https://thealexandrian.net/wordpress/1118/roleplaying-games/three-clue-rule) (2008) and the nine-part series [Node-Based Scenario Design](https://thealexandrian.net/wordpress/8122/roleplaying-games/node-based-scenario-design-collectors-edition). The first says to give at least three clues for any conclusion the players must reach, because one may be missed, ignored or misread. The second builds a scenario from nodes that clues point to, so players can move through it in different orders. Together they taught us robust discovery, where no single missed clue stops the story. His [Scenario Structure Challenge #4: Heists](https://thealexandrian.net/wordpress/42867/roleplaying-games/scenario-structure-challenge-4-heists) (2019) breaks a heist scenario into five steps (identify the score, gather information, onsite surveillance, prep work and the operation), which gave us a reusable shape for job-style quests. His [Don't Prep Plots](https://thealexandrian.net/?p=4147) argues for preparing situations rather than plots, and for deciding what the opposition does if the players never step in. It informed how we think about a world that acts without the player. His [Open Table Manifesto, Part 3](https://thealexandrian.net/wordpress/38669/roleplaying-games/open-table-manifesto-part-3-organizing-your-open-table) (2016) ends each session with the characters back at base, which suits a table with a calendar. His [GMing on a Time Limit](https://thealexandrian.net/wordpress/53333/roleplaying-games/random-gm-tip-gming-on-a-time-limit) (2026) advises pruning towards the conclusion, framing scenes late and settling what is left in broad strokes. They informed how we think about session endings and playing to a time budget.
 
 ### Mike Shea (Sly Flourish)
 
-By Michael Shea, who writes as Sly Flourish. [Return of the Lazy Dungeon Master](https://shop.slyflourish.com/products/return-of-the-lazy-dungeon-master) (2018) and his post [Types of Secrets](https://slyflourish.com/types_of_secrets.html) (2021). Secrets and clues are short statements about the world or the story, kept apart from where they are found so they can be dropped in wherever they fit. It taught us to hold story information that is not tied to a place. His [Quantum Ogres and the Eight Steps](https://slyflourish.com/quantum_ogres_and_the_eight_steps.html) taught us to prepare parts and assemble them to fit the choice a player makes.
+By Michael Shea, who writes as Sly Flourish. [Return of the Lazy Dungeon Master](https://shop.slyflourish.com/products/return-of-the-lazy-dungeon-master) (2018) and his post [Types of Secrets](https://slyflourish.com/types_of_secrets.html) (2021). Secrets and clues are short statements about the world or the story, kept apart from where they are found so they can be dropped in wherever they fit. It taught us to hold story information that is not tied to a place. His [Quantum Ogres and the Eight Steps](https://slyflourish.com/quantum_ogres_and_the_eight_steps.html) taught us to prepare parts and assemble them to fit the choice a player makes. His [Starting Strong](https://slyflourish.com/starting_strong.html) (2015) advises opening a session with a strong scene that pulls players straight in. It informed how we think about how a stretch of play begins.
 
 ### Keith Johnstone
 
@@ -726,7 +726,7 @@ The [Accept](https://improwiki.com/en/wiki/accept) page on improwiki. Accepting 
 
 ### Ben Robbins
 
-Ben Robbins's West Marches campaign style, as described by Alex LeFort in [“What Is A West Marches Campaign?”](https://www.czepeku.com/blog/what-is-a-west-marches-campaign). It is a campaign with no plot, a shared record of what happened and destinations that the players choose. It informed how we think about worlds that go on without a central plot.
+Ben Robbins's West Marches campaign style, as described by Alex LeFort in [“What Is A West Marches Campaign?”](https://www.czepeku.com/blog/what-is-a-west-marches-campaign). It is a campaign with no plot, a shared record of what happened and destinations that the players choose. It informed how we think about worlds that go on without a central plot. Robbins's own post, [“Grand Experiments: West Marches”](https://arsludi.lamemage.com/index.php/78/west-marches-grand-experiment/) (Ars Ludi, 2007), sums it up as an overarching environment with no overarching plot, and shows continuity coming from a consistent, detailed setting.
 
 ### Gareth Damian Martin
 
@@ -738,7 +738,31 @@ By Doug Church. [“Formal Abstract Design Tools”](https://www.gamedeveloper.c
 
 ### Sage LaTorra and Adam Koebel
 
-[Dungeon World](https://www.dungeonworldsrd.com/) by Sage LaTorra and Adam Koebel, through its SRD sections on [gamemastering](https://www.dungeonworldsrd.com/gamemastering/) and [fronts](https://www.dungeonworldsrd.com/gamemastering/fronts/). A game master answers with soft moves, which leave room to react, and hard moves, which do not; fronts carry portents and dooms and move while the players are elsewhere. It informed how we think about consequences that arrive in degrees.
+[Dungeon World](https://www.dungeonworldsrd.com/) by Sage LaTorra and Adam Koebel, through its SRD sections on [gamemastering](https://www.dungeonworldsrd.com/gamemastering/) and [fronts](https://www.dungeonworldsrd.com/gamemastering/fronts/). A game master answers with soft moves, which leave room to react, and hard moves, which do not; fronts carry portents and dooms and move while the players are elsewhere. It informed how we think about consequences that arrive in degrees. The [Fronts page](https://roll20.net/compendium/dw/Fronts) of the Roll20 compendium shows that its campaign front is slower and larger than its adventure fronts, with more portents and only a few fronts at a time. It informed how we think about story threads of different spans.
+
+### David Mamet
+
+David Mamet's 2005 memo to the writers of the television drama *The Unit*, as reproduced by David Chen on [SlashFilm](https://www.slashfilm.com/a-letter-from-david-mamet-to-the-writers-of-the-unit/) (2010). He asks of every scene who wants what, what happens if they do not get it, and why now. It gave us a plain test for whether a unit of story is doing any work.
+
+### Philippa Burne
+
+Philippa Burne of the University of Melbourne, ["Inside the story: the ABC of screenwriting as demonstrated by ABC's The Heights"](https://theconversation.com/inside-the-story-the-abc-of-screenwriting-as-demonstrated-by-abcs-the-heights-115854) (The Conversation, 2019). A, B and C stories differ in weight and tone, and the writers plan where they meet. It informed how we think about running several threads at once, at unequal weights.
+
+### Monolith Productions
+
+Michael de Plater, creative director of *Middle-earth: Shadow of Mordor* (2014), in a [GamesBeat interview](https://gamesbeat.com/shadow-of-mordors-nemesis-system-draws-from-burnout-football-and-an-architecture-book/) (2015), and Basilio Bazan III, ["Core System Analysis of Middle-Earth: Shadow of War"](https://www.gamedeveloper.com/design/core-system-analysis-of-middle-earth-shadow-of-war) (Game Developer, 2020). The Nemesis system gives detailed content at a few key moments and leaves players to imagine the story between them. An ordinary orc that kills the player is promoted to a captain with its own role, clan and traits. They informed how we think about promoting a minor character after a notable outcome, and about keeping the promoted few.
+
+### Don Carson
+
+Don Carson, ["Environmental Storytelling: Creating Immersive 3D Worlds Using Lessons Learned from the Theme Park Industry"](https://www.gamedeveloper.com/design/environmental-storytelling-creating-immersive-3d-worlds-using-lessons-learned-from-the-theme-park-industry) (Game Developer, 2000). Staged traces, such as a broken door or a blast mark, let visitors work out what happened, as long as the world keeps to its own rules. It informed how we think about showing events through their traces.
+
+### Dustin Bailey
+
+Dustin Bailey of PCGamesN, reporting the *Guild Wars 2* game director Mike Zadorojny, in ["Guild Wars 2 Season 1 'is always on our mind,' but it was built to 'fire and forget'"](https://www.pcgamesn.com/guild-wars-2/season-1) (2019). Later updates overwrote the first season's story, so it cannot be replayed and newcomers cannot play it. It informed how we think about keeping a story's record so that it can be reached later.
+
+### Game Accessibility Guidelines contributors
+
+The collaborative [Game Accessibility Guidelines](https://gameaccessibilityguidelines.com/include-an-option-to-adjust-the-game-speed/), in particular the guideline to include an option to adjust the game speed. Slowing the whole game eases tight timing and gives more time to follow the action, which helps players with motor or cognitive difficulties and older players. It informed how we think about a pace setting for the player.
 
 ## Research papers
 
@@ -1495,6 +1519,18 @@ Antranig Arek Sarian, [“No Going Back”: The Telltale Model as Thought Experi
 ### McLaren, Oades and Deery (2026)
 
 Patrick McLaren, Lindsay Oades and Ben Deery, [“How do dungeon masters and players contribute to the needs satisfaction (or frustration) in Dungeons & Dragons 5th Edition?”](https://doi.org/10.33063/ijrp.vi17.676) (*International Journal of Role-Playing*, issue 17, 2026). A large survey framed by self-determination theory, with agency as a theme. It informed how we think about what a game master gives players.
+
+### Schibler, Hahn and Green (2024)
+
+Katherine Schibler, Lindsay Hahn and Melanie C. Green, [“Investigating Responses to Narrative Cliffhangers Using Affective Disposition Theory”](https://researchconnect.buffalo.edu/en/publications/investigating-responses-to-narrative-cliffhangers-using-affective/) (*Media Psychology* 27(1), 2024). Readers of a cliffhanger ending wanted a next instalment more than readers of a resolved ending, and enjoyed the story no more. It informed why we do not use open endings to bring players back.
+
+### Zwaan, Langston and Graesser (1995)
+
+Rolf Zwaan, Mark Langston and Arthur Graesser, [“The construction of situation models in narrative comprehension: an event-indexing model”](https://www.psychologicalscience.org/journals/psychological-science/j.1467-9280.1995.tb00513.x/) (*Psychological Science* 6(5), 1995). Readers follow a story's time, place, characters, causes and goals, and update their picture when one of them shifts. It informed how we re-orient a player after a jump in time or place.
+
+### Fredrickson and Kahneman (1993)
+
+Barbara Fredrickson and Daniel Kahneman, [“Duration neglect in retrospective evaluations of affective episodes”](https://pubmed.ncbi.nlm.nih.gov/8355141/) (*Journal of Personality and Social Psychology* 65(1), 1993). People judged an episode by its most intense moment and its end, and gave its length little weight. It informed how we think about how a stretch of play ends.
 
 ## Reference imagery
 
