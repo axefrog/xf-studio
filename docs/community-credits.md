@@ -732,6 +732,10 @@ Charles Forgy, ["Rete: A fast algorithm for the many pattern/many object pattern
 
 Noah D. Goodman and co-authors, ["Church: a language for generative models"](https://proceedings.mlr.press/r6/goodman08a.html) (Uncertainty in Artificial Intelligence, 2008). Its stochastic memoisation makes a random choice once and then remembers it, so a value drawn on demand stays the same whenever it is asked for again. It taught us lazy, consistent sampling.
 
+### Fisher, Hammer, Byrd and Might (2016)
+
+Dakota Fisher, Matthew A. Hammer, William Byrd and Matthew Might, ["miniAdapton: A Minimal Implementation of Incremental Computation in Scheme"](https://arxiv.org/abs/1609.05337) (Scheme Workshop, 2016). It shows how memoised computations can track what they read so that a change invalidates only what depends on it. It is the model for the Story Engine's optional fine-grained cache invalidation.
+
 ### Spivak and Kent (2012)
 
 David I. Spivak and Robert E. Kent, ["Ologs: a categorical framework for knowledge representation"](https://doi.org/10.1371/journal.pone.0024274) (*PLoS ONE*, 2012). An olog is a model of knowledge built on category theory that, like a database schema, can hold data but is meant to be easy to author and reconfigure. It informed how we think about holding design knowledge as a graph of typed relationships.

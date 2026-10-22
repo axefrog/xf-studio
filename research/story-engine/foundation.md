@@ -276,9 +276,10 @@ To be researched in P3, so the model stays honest. We implement a small toolkit,
 | # | The model says | We do instead | Why | Revisit when |
 |---|---|---|---|---|
 | C-01 | Canon conditions the whole world's distribution on what V observed | Generate, then justify: construct causes consistent with the pins ([DS-29](design-seeds.md)) | Inference over the whole world is far too expensive | Constructed causes contradict each other or read as implausible |
-| C-02 | A believer's view is a full perspective over every dimension | Beliefs are sparse records formed by fixed attribution rules ([kernel §11](spec/kernel.md#11-beliefs-and-perspectives)) | Full per-actor perspectives cost too much | A story needs an NPC to reason about something no rule covers |
-| C-03 | Relevance follows from what matters to each actor | Fixed match weights per index type and key type ([kernel §10.4](spec/kernel.md#104-the-interest-registry-and-matching)) | Simple and cheap; tunable | Evaluation shows misplaced attention that tuning can't fix |
-| C-04 | Text is a dimension like any other | Text is sampled by grammar with bounded retries under constraints ([kernel §5.1](spec/kernel.md#51-algorithm)) | Inverse cumulative distribution over all strings is impractical | Constrained text generation fails or repeats noticeably |
+| C-02 | A believer's view is a full perspective over every dimension | Beliefs are sparse records; their forming, telling and fading are simulation policies ([kernel §11](spec/kernel.md#11-beliefs-and-perspectives)) | Full per-actor perspectives cost too much | A story needs an NPC to reason about something no rule covers |
+| C-03 | Relevance follows from what matters to each actor | Fixed match weights per interest type and key type, calibrated by fixtures ([kernel §10.5](spec/kernel.md#105-interest-routing-and-matching)) | Simple and cheap | Evaluation shows misplaced attention that tuning can't fix |
+| C-04 | Every dimension is sampled the same way | Domains larger than a set size need a declared hierarchical sampler, and text is composed from enumerable components ([kernel §5.4](spec/kernel.md#54-the-draw-gumbel-max-with-fixed-per-value-noise)) | Drawing over huge domains per sample is impractical | A dimension can't be expressed hierarchically |
+| C-05 | Pins propagate both ways through everything | Backward narrowing works only through derived views and member counts, and slot dependencies follow declaration order ([kernel §2.3](spec/kernel.md#23-dependencies-are-acyclic)) | Termination and simplicity | A later fact must constrain an earlier one in a way views can't express |
 
 ## 10. Worked example: one vendor
 

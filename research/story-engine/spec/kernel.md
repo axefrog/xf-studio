@@ -1,377 +1,480 @@
 # S0. Kernel specification
 
-**Status:** v0 draft for review (22 October 2026). This is the specification stage of the [foundation](../foundation.md): it states exactly how the dimensional model works, so that the reference model can be built from this page alone. It is work package [WP-05](../plan.md#82-work-packages).
+**Status:** v1, 22 October 2026. This is the specification stage of the [foundation](../foundation.md): it states exactly how the dimensional model works, so the reference model can be built from this page alone. It is work package [WP-05](../plan.md#82-work-packages). v1 takes in an independent review; the [review record](#18-review-record) lists what changed and why.
 
 **Normative words:**
 - **MUST** and **MUST NOT** are requirements.
 - **SHOULD** is a strong default that needs a recorded reason to break.
 - **MAY** is optional.
 
-A value marked **[tunable]** is a default that configuration can change. Anything this specification does that departs from the foundation is listed in §17 and in the foundation's [compromise ledger](../foundation.md#9-the-reference-model-and-the-compromise-ledger).
+A value marked **[tunable]** is a configurable default. A value marked **[calibrate]** is set by the calibration fixtures (§16) before the reference model is accepted.
 
-**Type definitions** are written in TypeScript notation. Their field names and meanings are normative. Physical layout is free, provided the test vectors (§16) pass.
+**Type definitions** are written in TypeScript notation. Field names and meanings are normative. Physical layout is free, provided the fixtures and invariants pass.
 
-## 0. Scope
+Departures from the foundation are listed in §17 and in the foundation's [compromise ledger](../foundation.md#9-the-reference-model-and-the-compromise-ledger).
 
-**Covered here:**
-- identity and hashing;
-- the schema of dimensions and kinds;
-- nodes, edges and resolution state;
-- contributions and how they combine;
-- sampling;
-- pins and their propagation;
-- open, close and forget;
+## 0. Scope and proportion
+
+**The kernel holds the mechanism:**
+- identity and arithmetic;
+- the schema;
+- nodes, edges and resolution;
+- constraints and contributions;
+- pins and time;
 - queries;
-- time and events;
-- actors, context frames and relevance;
-- beliefs;
-- groups;
+- events, summaries and evolution windows;
+- context frames and interest routing;
+- belief records;
+- membership edges;
 - provenance;
-- the logical persistence record;
-- invariants and test vectors.
+- the logical persistence record.
 
-**Not covered here:**
+**Behavioural policies are not kernel semantics.** Those are drive urgency models, attribution coefficients, rumour telling and distortion, reputation aggregation, and group decision-making. They belong to the simulation layer (S1), which plugs into hooks defined here.
+
+**Proportion.** This is a game mod. The kernel guards against what players would notice: contradictory story state, lost or corrupted saves, stalls, and a game left broken. It does not defend against hostile input.
+
+**Specified elsewhere:**
 
 | Topic | Specification |
 |---|---|
-| Simulation processes and their catalogue | S1 |
+| Simulation processes and policies | S1 |
 | The seed language | S2 |
 | Sowing, fitting and the director | S3 |
-| Content pack format and player settings | S4 |
-| The game port and the companion protocol | S5 |
-| The persistence byte format and save keys | S6 |
+| Content packs and settings | S4 |
+| The game port and companion protocol | S5 |
+| Persistence bytes and save keys | S6 |
 
-This specification defines the hooks those specifications plug into.
-
-## 1. Identity and hashing
+## 1. Identity, arithmetic and randomness
 
 ### 1.1 Identifiers
 
-An `Id` is 128 bits, written as 32 lowercase hexadecimal characters. Every node, edge, contribution, pin, belief, event and frame has one. An `Id` MUST NOT change once assigned.
-
-There are four ways an `Id` is formed:
+An `Id` is 128 bits, written as 32 lowercase hexadecimal characters. Nodes, edges, contributions, pins, beliefs, events and frames all have one. An `Id` MUST NOT change once assigned.
 
 | Origin | Formula | Used for |
 |---|---|---|
-| Root | `H("root", worldSeed, rootName)` | The fixed roots: `city`, `director`, `v` |
-| Generated | `H("gen", parentId, slotKey, index)` | A node that exists because a slot of its parent was opened |
-| Minted | `H("mint", creatorId, causeId, localName)` | A node created by an event, a seed or a process: a newly arrived person, a new crew |
-| Mirrored | `H("game", gameKey)` | Something the game owns. `gameKey` is the canonical string of the game's persistent identity, defined in S5 |
+| Root | `H("root", worldSeed, name)` | `city`, `director`, `v` |
+| Owned value | `H("val", ownerId, slotPath)` | The node a `node`-typed slot holds (§2.1): a person's name, a drive state |
+| Generated member | `H("gen", ownerId, slotKey, index)` | Member `index` of a `many` slot |
+| Minted | `H("mint", creatorId, causeId, localName)` | Nodes created by events, seeds, processes or summary refinement |
+| Mirrored | `H("game", gameKey)` | Things the game owns; S5 defines `gameKey` |
 
-A node's `Id` never depends on where it is now. Moving a node changes its edges, never its `Id` (invariant I-11).
+Moving a node changes its edges, never its `Id` (I-11).
 
-### 1.2 The hash `H`
+### 1.2 Hashing
 
-`H` is the first 128 bits of BLAKE3 over the canonical encoding of its arguments. Every implementation MUST use exactly this, so that the TypeScript reference model and the native core agree bit for bit (I-1).
+`H` is the first 128 bits of BLAKE3 over the canonical encoding of its arguments. Each argument is encoded as a one-byte tag followed by its bytes:
 
-**Canonical encoding.** Arguments are encoded in order, each as a one-byte type tag followed by its bytes:
-- `0x01` UTF-8 string: a u32 little-endian byte length, then the bytes;
-- `0x02` signed 64-bit integer, little-endian;
-- `0x03` `Id`: 16 raw bytes;
-- `0x04` IEEE 754 binary64, little-endian, with negative zero normalised to positive zero and NaN forbidden;
-- `0x05` boolean: one byte, 0 or 1.
+| Tag | Type | Encoding |
+|---|---|---|
+| `0x01` | UTF-8 string | u32 little-endian byte length, then the bytes |
+| `0x02` | i64 | Little-endian |
+| `0x03` | `Id` | 16 raw bytes |
+| `0x04` | binary64 | Little-endian. Negative zero becomes positive zero; NaN is forbidden |
+| `0x05` | bool | One byte |
+| `0x06` | `Value` | The value's canonical encoding (§2.1), then a 0x00 terminator |
 
-**Unit values.** `toUnit(h)` takes the first 53 bits of `h` as an unsigned integer and divides by 2^53, giving a number in [0, 1).
+`toUnit(h)` takes the first 53 bits of `h` as an unsigned integer and divides by 2^53, giving a number in [0, 1).
 
-### 1.3 The world seed
+### 1.3 Arithmetic
 
-Each save lineage has a 128-bit `worldSeed`. It is chosen once, when the engine first meets a playthrough, from a cryptographic random source, and is stored in the lineage's root record (S6). Every save descended from that playthrough shares it. A new game gets a new seed.
+Cross-implementation determinism (I-1) needs identical arithmetic, not only identical hashes:
+- **Allowed operations.** All weight and score arithmetic is IEEE 754 binary64 with round-to-nearest-even, using only `+ − × ÷` and `sqrt`.
+- **`ln` and `exp`** are the fdlibm algorithms (`e_log.c`, `e_exp.c`), ported to use only those operations. Platform `Math.log` and `f64::ln` MUST NOT be used for kernel decisions.
+- **Field falloff kernels are polynomials** (§4.3), so they need no transcendental functions.
+- **Sums run in canonical order:** contributions sorted by `Id` ascending.
+- **Comparisons** that decide outcomes are exact. Ties are broken by `Id`, or by value hash, as each rule states.
 
-## 2. Schema: dimensions and kinds
+### 1.4 Random streams
 
-The schema is data. Engine releases ship the core schema, and content packs MAY add to it (S4). Each schema item has a namespaced id, `<namespace>:<name>`, for example `core:person` or `xf.takemura-pack:hideout`.
+All randomness comes from hashing a key, never from a stateful generator:
+- `rand(key…) = toUnit(H("rng", key…))`;
+- a stream is `rand(key…, i)` for `i = 0, 1, 2, …`.
 
-### 2.1 Dimensions
+Every draw in this specification names its key.
+
+### 1.5 The world seed
+
+Each save lineage has a 128-bit `worldSeed`. It is chosen from a cryptographic random source when the engine first meets a playthrough, and stored in the lineage's root record (S6). Every save descended from that playthrough shares it.
+
+## 2. Schema
+
+The schema is data. Engine releases ship the core schema, and content packs MAY add to it (S4). Ids are namespaced: `<namespace>:<name>`.
+
+### 2.1 Dimensions and values
 
 ```ts
 interface DimensionDef {
   id: DimId;
   value: ValueType;
   structure: 'none' | 'order' | 'metric' | 'cyclic' | 'graph';
-  prior: FnRef;          // base distribution when nothing contributes (§5)
-  valueKind?: KindId;    // the kind a value opens into (no atoms, foundation §4 rule 7)
-  buckets?: FnRef;       // maps a value to interest-key buckets (§10.5)
+  prior: FnRef;            // base weights when nothing contributes (§5.3)
+  sampler?: FnRef;         // required when the domain is larger than N_enum (§5.4)
+  buckets?: FnRef;         // value → coarse interest keys (§10.5)
 }
 
 type ValueType =
-  | { t: 'enum'; values: string[] }                       // canonical order is the list order
+  | { t: 'enum'; values: string[] }                        // at most N_enum values, or a sampler
   | { t: 'int'; min: number; max: number }
-  | { t: 'real'; min: number; max: number; quantum: number }   // sampled on the quantum grid
+  | { t: 'real'; min: number; max: number; quantum: number } // values on the quantum grid
   | { t: 'cyclic'; period: number; quantum: number }
-  | { t: 'vec'; n: number; min: number; max: number; quantum: number }
-  | { t: 'ref'; kind: KindId }                            // a node of that kind (an edge, §3.3)
-  | { t: 'text'; grammar: FnRef };                        // generative text, such as names
+  | { t: 'ref'; kind: KindId; candidates: Selector; max: number }  // selects an existing node (§2.4)
+  | { t: 'node'; kind: KindId };                           // holds an owned value node (§2.4)
 ```
 
-`FnRef` is `{ name: string; version: number }`. It names a pure function in the engine's function registry: a prior, a grammar, a derivation, a falloff, a bucket map, an upward rule, or an attribution rule's predicate. Content packs reference registry functions with parameters. They MUST NOT supply code (content is data, [DS-38](../design-seeds.md)). New functions arrive with engine versions.
+**Canonical value encoding:**
+- enum: its index as i64;
+- int: i64;
+- real or cyclic: the quantum-grid index as i64;
+- ref: the `Id`;
+- node: the owned node's `Id`.
+
+**`N_enum`** is the largest domain that may be enumerated per draw: **[tunable 4096]**.
+
+**`FnRef`** is `{ name: string; version: number; params?: Value[] }`. It names a pure function in the engine's function registry: a prior, a sampler, a derivation, a falloff map, a bucket map, an effect table. Content packs reference registry functions with parameters and MUST NOT supply code. Function versions are part of the persisted compatibility record (§14.4).
 
 ### 2.2 Kinds
 
 ```ts
 interface KindDef {
   id: KindId;
-  extends?: KindId[];                  // slots are inherited; a redefined key overrides
-  slots: SlotDef[];
-  facets?: Array<'actor' | 'group' | 'place' | 'event'>;
-  tags?: string[];                     // static tags, used for interest keys
+  extends?: KindId[];                  // slots inherited; a redefined key overrides
+  slots: SlotDef[];                    // declaration order is the dependency order (§2.3)
+  facets?: Array<'actor' | 'group' | 'place' | 'event' | 'summary'>;
+  tags?: string[];
 }
 
 interface SlotDef {
-  key: string;                         // [a-z0-9-]+, unique within the kind after inheritance
+  key: string;                         // [a-z0-9-]+
   dim: DimId;
-  card: 'one' | { many: { count: DimId } };   // how many is itself sampled
+  card: 'one' | { many: { count: DimId } };    // the count is itself a slot: '<key>#count'
   mode: 'sampled' | 'derived' | 'mirrored';
-  derive?: FnRef;                      // required for 'derived': pure f(parent value, sibling values)
-  conditioned?: FnRef;                 // optional: prior for this slot given the parent's value (§6.2)
-  up?: FnRef;                          // optional: how a pin here narrows the parent's value (§6.3)
-  tier: Tier;                          // the coarsest level of detail at which this slot may open
+  derive?: { fn: FnRef; inputs: SlotPath[] };  // required when mode is 'derived'
+  conditioned?: { fn: FnRef; inputs: SlotPath[] };  // optional prior given earlier slots
+  temporal?: { window: number };       // absent = enduring; present = varies by time window (§6.3)
+  perceivable?: boolean;               // observers may know it on sight (§11.4) [default false]
+  tier: Tier;                          // scheduling band at which it normally opens (§10.6)
 }
 
 type Tier = 0 | 1 | 2 | 3 | 4 | 5;     // city, district, block, scene, individual, fine detail
 ```
 
-**`mirrored` slots** are owned by the game. They are read through the game port (S5) and enter the kernel as `game` pins (§6), never sampled. A slot MAY be `mirrored` for mirrored nodes and `sampled` for generated nodes of the same kind. The node's origin decides which applies.
+**`mirrored` slots** are owned by the game for mirrored nodes. They are read through the game port, never sampled. On generated or minted nodes, the same slot is `sampled`.
 
-### 2.3 Edge types
+### 2.3 Dependencies are acyclic
+
+A slot's `derive.inputs`, `conditioned.inputs` and the `when` predicates of rule contributions targeting it (§4.3) may reference only:
+- slots declared **earlier** in the same kind, after inheritance;
+- slots of the node's **owner chain** (the nodes it is an owned value or generated member of);
+- slots of nodes reached through `ref` slots declared earlier.
+
+Schema loading MUST reject a kind that breaks this rule. Resolution therefore always terminates (A-03).
+
+Backward reasoning, a later fact constraining an earlier one, is limited to derived views (§6.4) and to the count rule (§6.5). Everything else uses generate-then-justify ([C-01](../foundation.md#9-the-reference-model-and-the-compromise-ledger), and [C-05](#17-compromises-and-open-items) here).
+
+### 2.4 Owned values and references
+
+A **`node`** slot holds an **owned value node** whose `Id` is `H("val", ownerId, slotPath)`. This is "no atoms" made concrete: a name, a drive state, a set of membership terms are each a small node with slots of their own.
+- An owned value node exists, and can be opened, whenever its owner exists.
+- It is never shared.
+- It is retained exactly when its owner is.
+
+A **`ref`** slot **selects** an existing node. The candidates are those matching `candidates`, bounded by `max`, and are found by a query (§8) in the owner's scope. Selection is a sampling over that bounded candidate set (§5). A ref never creates a node. Creating one is minting (§1.1) or a `many` slot (§2.2).
+
+### 2.5 Edge types
 
 ```ts
 interface EdgeTypeDef {
-  id: EdgeTypeId;                      // e.g. core:located-in, core:member-of, core:kin, core:knows
+  id: EdgeTypeId;                      // core:located-in, core:member-of, core:kin, …
   from: KindId[]; to: KindId[];
-  attrs: Record<string, DimId>;        // edge attributes are dimensions too
-  inverse?: EdgeTypeId;
+  attrs: Record<string, DimId>;
+  perceivable?: boolean;               // e.g. an open membership worn on a uniform
   symmetric?: boolean;
 }
 ```
 
-## 3. Nodes, edges and resolution state
+### 2.6 The minimal core schema
 
-### 3.1 Nodes
+The reference model ships at least these kinds, which the fixtures use:
 
-```ts
-interface Node {
-  id: Id;
-  kind: KindId;
-  origin:
-    | { by: 'root'; name: string }
-    | { by: 'generated'; parent: Id; slot: string; index: number }
-    | { by: 'minted'; creator: Id; cause: Id; name: string }
-    | { by: 'mirrored'; gameKey: string };
-  slots: Map<SlotPath, SlotState>;     // only slots that have been opened
-  touched: GameTime;                   // last access, for forgetting (§7.3)
-}
-
-type SlotPath = string;                // "key" or "key[index]" for many-slots
-
-type SlotState =
-  | { s: 'open' }                                            // opened, not resolved
-  | { s: 'resolved'; value: Value; fingerprint: Id };        // computed, regenerable (a cache)
+```
+core:name     slots: origin (enum), given (enum, sampler by origin), family (enum, sampler by origin),
+                     display (derived from given, family)
+core:drive-state  slots: drive (enum of DriveIds), importance (real 0..1, q 1/64), urgency (real 0..1, q 1/64, temporal)
+core:trait    slots: trait (enum), strength (real 0..1, q 1/64)
+core:terms    slots: type (enum standing | contract), until (int game time; contract only)
+core:person   facets: actor
+              slots: name (node core:name), age (int 16..90), age-band (derived from age),
+                     traits (many: node core:trait), drives (many: node core:drive-state),
+                     position (vec 3, temporal, perceivable)
+core:group    facets: actor, group   slots: name (node core:name), drives (many: node core:drive-state)
+core:place    facets: place          slots: position (vec 3), district (ref core:district), public (enum)
+core:event    facets: event          (§9.2)
+core:summary  facets: summary        (§9.3)
+edges: core:member-of (attrs role, strength, visibility, terms, exit-cost), core:kin (attrs relation),
+       core:located-in, core:knows
 ```
 
-**Pins are not stored in the slot state.** They live in the pin store (§6), because pins persist and caches don't. A slot's effective state is its pins (if any) combined with its slot state.
+## 3. Nodes, slots and edges
+
+### 3.1 Nodes and headers
+
+```ts
+interface NodeHeader {                 // persisted for every retained node (§14)
+  id: Id; kind: KindId;
+  origin:
+    | { by: 'root'; name: string }
+    | { by: 'value'; owner: Id; slot: SlotPath }
+    | { by: 'member'; owner: Id; slot: string; index: number }
+    | { by: 'minted'; creator: Id; cause: Id; name: string }
+    | { by: 'mirrored'; gameKey: string };
+}
+
+interface Node extends NodeHeader {
+  slots: Map<SlotKey, SlotState>;      // materialised slots only
+  touched: GameTime;
+}
+
+type SlotPath = string;                // "key", "key[i]", "key#count"
+type SlotKey = string;                 // SlotPath, plus "@w<k>" for temporal slots (window k)
+
+type SlotState =
+  | { s: 'open' }
+  | { s: 'resolved'; value: Value; status: 'ok' | 'contradiction'; revision: number };
+```
 
 ### 3.2 Regions
 
-A `Region` is a subset of one dimension's values:
+A `Region` is a subset of a dimension's values:
+- `enum`: a bitset;
+- `int`, `real` and `cyclic`: sorted closed intervals on the grid (cyclic ones wrap);
+- `vec`: a list of boxes;
+- `ref` and `node`: an explicit `Id` set, or a selector.
 
-| Value type | Region form |
-|---|---|
-| `enum` | A bitset over the value list |
-| `int`, `real`, `cyclic` | A sorted list of closed intervals. Cyclic intervals wrap |
-| `vec` | An axis-aligned box list |
-| `ref` | An explicit set of `Id`s, or a selector (§4.2) |
-| `text` | A conjunction of named component constraints defined by the grammar, such as `given = "JimBob"` or `syllables in [2, 2]` |
-
-Every region form MUST support intersection, emptiness testing and membership testing.
+Every form supports intersection, emptiness and membership tests.
 
 ### 3.3 Edges
 
 ```ts
 interface Edge {
-  id: Id;
-  type: EdgeTypeId;
-  from: Id; to: Id;
+  id: Id; type: EdgeTypeId; from: Id; to: Id;
   attrs: Record<string, Value>;
-  valid: { from: GameTime; to?: GameTime };   // ended edges stay in the record as history
-  cause: Id;                                  // provenance (§13)
+  valid: { from: GameTime; to?: GameTime };   // ended edges stay as history
+  cause: Id;
 }
 ```
 
-A `ref` slot's value is an edge of the implicit type `slot:<kind>.<key>`, so every relationship is an edge. Edges are the relationship substrate of the foundation: a dimension is a family of edges of one kind.
+A `ref` slot's value is an edge of the implicit type `slot:<kind>.<key>`.
 
 ### 3.4 Addresses
 
-An `Address` is a starting node `Id` followed by a path of `SlotPath` steps, written `node/slot/slot[2]/…`. Resolving an address walks the path, opening slots as needed (§7.1). Many addresses can reach the same node. The `Id` is the identity; the address is one view of it ([DS-57](../design-seeds.md)).
+An address is a starting `Id` followed by `SlotPath` steps. It is one view of a node, never its identity.
 
-## 4. Contributions
+## 4. Constraints and contributions
 
 ### 4.1 The contribution record
 
 ```ts
 interface Contribution {
   id: Id;
-  source: { layer: Layer; origin: Id | string; precedence: number };
-  target: Selector;                    // which (node, slot) pairs it applies to (§4.2)
-  form: Form;                          // what it says (§4.3)
+  source: { layer: Layer; origin: Id | string };
+  target: Selector;
+  form: Form;
   mode: 'constrain' | 'weight' | 'replace-prior';
-  strength: number;                    // > 0, scales log-weights in 'weight' mode [default 1]
+  strength: number;                    // > 0; for 'weight' it multiplies log-factors [default 1]
   valid: { from?: GameTime; to?: GameTime };
-  perspective: 'world';                // beliefs use §11, not contributions (ledger C-02)
 }
 
 type Layer = 'observation' | 'game' | 'authored' | 'seeding' | 'simulation' | 'procedural';
 ```
 
-**Precedence**, used only to settle conflicts between hard constraints (§5.3). It MUST follow this order:
+**Precedence**, used by constraint arbitration (§5.2):
 
-| Source layer | Precedence |
+| Layer | Precedence |
 |---|---|
 | `observation` | 600 |
-| `game` | 500 |
-| `authored` (fixed) | 400 |
-| `seeding` (committed) | 300 |
+| `game` | 500 (and authoritative for the current window of mirrored slots, §6.3) |
+| `authored` | 400 |
+| `seeding` | 300 |
 | `simulation` | 200 |
 | `procedural` | 100 |
 
-Within a layer, ties are broken by higher `strength`, then by lower `Id`.
+Within a precedence level, the lower `Id` comes first.
 
 ### 4.2 Selectors
 
 ```ts
 interface Selector {
-  kind?: KindId;                       // matches this kind and its descendants
-  slot: SlotPath | '*';                // '*' for node-level predicates only (queries)
-  scope?:
-    | { under: Id }                    // nodes whose generation chain or located-in chain contains this Id
-    | { nodes: Id[] }
-    | { region: SpatialRegion };       // nodes whose position slot falls in a box or radius
-  where?: Predicate[];                 // further conditions, as in queries (§8.1)
+  kind?: KindId;
+  slot: SlotPath | '*';
+  scope?: { under: Id } | { nodes: Id[] } | { region: SpatialRegion };
+  where?: Predicate[];                 // as in §8.1
 }
 ```
 
-A selector MUST be testable on a single node, and MUST give a conservative answer (`no`, `maybe`, `yes`) on a region of unopened nodes (§8.2).
+A selector MUST be testable on one node, and MUST give a conservative verdict (`no`, `maybe` or `yes`) for an unopened region. Returning `maybe` is always allowed.
 
 ### 4.3 Forms
 
-| Form | Definition | What it yields at a node | Bounds over a region |
-|---|---|---|---|
-| `Const(v)` | A single value | A set {v}, or a weight of 1 on v | {v} |
-| `Set(region, allow)` | Allowed or forbidden values | A set | The region |
-| `Dist(weights)` | Explicit weights over enum, int or ref values | A weight function | Each weight's [min, max] is itself |
-| `Field(base, points, map)` | Control points over a base slot (usually `position`), each `{ at, value, radius, falloff }`. Falloff is `linear`, `smoothstep` or `gaussian`. Combined by `sum` or `max`, then mapped to target weights by `map` (an `FnRef`) | A weight function | [min, max] of the field over the region's extent, mapped |
-| `Rule(when, then)` | `when` is a predicate list on other slots of the same node or its ancestors; `then` is another form | The `then` form if `when` holds, else nothing | `then`'s bounds if `when` is `maybe` or `yes` |
-| `Derive(fn, inputs)` | A pure function of input slot paths | A single value (for `derived` slots) or a weight function | Computed from the inputs' bounds by `fn`'s bound function, which every derive function MUST provide |
+| Form | Yields at a node | Bounds over a region |
+|---|---|---|
+| `Const(v)` | The set {v}, or a factor of 1 on v and ε on the rest | {v} |
+| `Set(region, allow)` | A set | The region |
+| `Table(weights)` | Explicit positive factors over enum, int or ref values; absent values get factor 1 | Per-value [min, max] |
+| `Field(base, points, map)` | Control points `{ at, value, radius, falloff }` over a base slot (usually `position`). Falloff is a polynomial: `linear`, `smoothstep` or `bump` (`(1 − d²/r²)²`). Points combine by `sum` or `max`, then `map` turns the field value into factors over the target's values | The field's [min, max] over the region's extent, mapped |
+| `Rule(when, then)` | `then`'s factor if `when` holds, otherwise nothing | `when` is `yes`: `then`'s bounds. `when` is `maybe`: the union of `then`'s bounds and the no-contribution case. `when` is `no`: nothing |
+| `Derive(fn, inputs)` | One value, for `derived` slots | `fn`'s bound function over the inputs' bounds; every derive function MUST provide one |
 
-Every form implementation MUST provide `evaluate(node) → Factor` and `bounds(region) → FactorBounds`. A factor is either a set, which only `constrain` mode may use, or a strictly positive weight function over the target's values. A zero weight means "excluded" and is treated as a constrain.
+A factor is either a set, which only `constrain` mode uses, or a strictly positive weight function. ε is **[tunable 2⁻²⁰]**. A weight of zero is not allowed: exclusion is a set.
 
-## 5. Resolution (Sample)
+## 5. Resolution
 
-### 5.1 Algorithm
+`resolve(node, slotPath, t)` returns `{ value, status }`, where `t` is the game time asked about. For temporal slots, `t` selects window `k = floor(t / window)`. Every step is deterministic. **Resolution never emits relevance changes (I-13).**
 
-`resolve(node, slotPath)` returns a value as follows. Every step is deterministic.
+### 5.1 The order of steps
 
-1. **Pins.** If a value pin exists for `(node, slotPath)` (§6), return its value.
-2. **Derived slots.** If the slot is `derived`, return `derive(parent value, sibling values)`, resolving those inputs first.
-3. **Mirrored slots** on mirrored nodes: if no `game` pin is present, ask the game port to read it now (S5). If the read fails, the slot is `open` and the caller gets `unavailable`.
-4. **Gather.** Collect every contribution whose selector matches `(node, slotPath)`, that is valid at the current game time, and that has not been overruled at this node (§5.3).
-5. **Feasible set** `F` is the intersection of:
-   - the dimension's domain;
-   - every `constrain`-mode factor;
-   - every region pin on this slot (§6.1);
-   - the downward constraints from the parent's pinned value (§6.2);
-   - the upward constraints from this value's own pinned children (§6.3).
+1. **Derived slots** return `derive(inputs)`, after the inputs are resolved, then are checked against any pins on the slot (§6.4).
+2. **Mirrored slots** of mirrored nodes, in the current window: the game port's reading is the value. If the read fails, the slot is `open` and resolution returns `unavailable`.
+3. **Every other slot** goes through constraint arbitration (§5.2), then the prior and weights (§5.3), then the draw (§5.4).
 
-   If `F` is empty, resolve the conflict by §5.3, then continue.
-6. **Prior.** `P0` is the slot's `conditioned` prior given the parent's value, if the slot has one. Otherwise it is the dimension's `prior`. If any `replace-prior` contributions apply, the one with the highest precedence (then strength, then lowest `Id`) replaces `P0`.
-7. **Score.** For each `v` in `F`: `logw(v) = log P0(v) + Σ strength_c · log f_c(v)` over the `weight`-mode contributions `c`. The result is a log-linear model, or product of experts.
-8. **Draw.** Let `u = toUnit(H("u", worldSeed, node.id, slotPath))`.
-   1. Order `F` canonically: enum list order; numbers ascending on the quantum grid; refs by `Id` ascending; text by the grammar's canonical enumeration order.
-   2. Normalise the weights and return the value at which the cumulative weight first exceeds `u`. This is the inverse cumulative distribution.
-   3. Text slots use the grammar's sampler instead, with a pseudo-random stream seeded by `H("text", worldSeed, node.id, slotPath)`, under `F`'s text region (§17, C-04).
-9. **Cache** the result as `{ s: 'resolved', value, fingerprint }`. The fingerprint is `H` of the sorted `Id`s of every contribution and pin used, and of the parent's value. A cache entry is valid only while its fingerprint still matches.
+### 5.2 Constraint arbitration
 
-### 5.2 Stability
+**Collect the constraints that apply to (node, slot, window):**
+- value pins and region pins valid in the window (§6.1);
+- `constrain`-mode contributions whose selector matches and which are valid at `t`;
+- view filters from pinned derived views (§6.4);
+- the count bound (§6.5).
 
-Because `u` depends only on the seed, the node and the slot, a small change to the weights changes the result only when `u` lies in the mass that moved. This is invariant I-7. It is why one changed contribution reshuffles almost nothing.
+Each constraint carries its precedence. Pins take their reason's layer:
 
-### 5.3 Conflicts
+| Pin reason | Precedence |
+|---|---|
+| `observed` | 600 |
+| `game` | 500 |
+| `authored` | 400 |
+| `committed` | 300 |
 
-If the hard constraints leave `F` empty:
-1. Order the conflicting constraints by precedence, lowest first. A constraint takes part if removing it would make `F` non-empty, alone or together with the constraints removed before it.
-2. Drop the lowest-precedence constraints one at a time, re-intersecting after each, until `F` is non-empty.
-3. Mark each dropped contribution `overruled` at this node, and write a `Conflict` record: node, slot, dropped, kept, time.
-4. **Observation constraints are never dropped.** If two observation pins conflict:
-   - when the earlier one is a region pin and the later one a value pin inside it, the value pin stands, because it is a narrowing;
-   - otherwise both stand. The slot reports `contradiction`, which is a perception defect for inspection (P10), and resolution uses the later pin.
+**Arbitrate:**
+1. Sort the constraints by precedence descending, then by `Id` ascending.
+2. Start with `F` = the dimension's domain.
+3. For each constraint `c` in order:
+   - if `F ∩ c` is non-empty, set `F` to it; `c` is **active**;
+   - otherwise `c` is **rejected**: record a `Conflict { node, slot, window, rejected: c, activeSoFar, t }`.
+4. If any rejected constraint has precedence 600 (an observation), set `status = 'contradiction'`; otherwise `'ok'`.
 
-## 6. Pins and propagation
+The value is drawn from `F`, so it satisfies every active constraint (I-2).
+
+Most "contradictions" are temporal and disappear under §6.3. The rest are perception defects, shown by the inspection tools (P10).
+
+### 5.3 Prior and weights
+
+1. **The prior `P0`.** It is the slot's `conditioned` prior evaluated on its inputs, if defined, otherwise the dimension's `prior`. If `replace-prior` contributions apply, the first in precedence order replaces it.
+2. **The score.** For each `v ∈ F`:
+
+   ```
+   score(v) = ln P0(v) + Σ_c strength_c · ln f_c(v)
+   ```
+
+   The sum runs over the matching `weight` contributions, in `Id` order (§1.3). This is a log-linear combination, or product of experts.
+
+### 5.4 The draw: Gumbel-max with fixed per-value noise
+
+For each `v ∈ F`:
+
+```
+g(v)  = −ln(−ln(rand("g", worldSeed, node.id, slotPath, k, v)))   // k = window index, 0 for enduring slots
+v*    = argmax over v ∈ F of (score(v) + g(v))
+```
+
+Exact ties are broken by the lower `H("tie", worldSeed, node.id, slotPath, k, v)`.
+
+**Why this draw.** It samples exactly from the normalised distribution (the Gumbel-max trick). Because each value's noise is fixed, the outcome changes only when the winner changes. Scaling one value's weight changes the result only if that value was the winner, or becomes the winner. Scaling every value's weight equally changes nothing (I-7). It needs no canonical ordering.
+
+**Domains larger than `N_enum`** MUST use the dimension's `sampler`. A sampler is a registry function that draws hierarchically, each level over at most `N_enum` options and each level by this same rule with its own key suffix. An example is a name list split by first letter.
+
+A sampler that can't produce a value within its bound returns `failed`, and the slot stays `open`. Failure is explicit, never a silent default.
+
+**`ref` slots** draw over the bounded candidate set returned by their candidate query, with each candidate's `Id` as `v`.
+
+### 5.5 Caching
+
+- **What is cached.** A resolved value is stored with the kernel's **revision**: a counter incremented by every write (pin, contribution, edge, event, minted node, belief, frame change, game reading).
+- **When it is valid.** A cache entry is valid only at the revision it was computed at.
+- **Finer schemes.** The reference model uses only this coarse rule. A faster implementation MAY track finer dependencies (the slots, edges, contributions and function versions each resolution read), provided it never returns a value the coarse rule wouldn't. [miniAdapton](https://arxiv.org/abs/1609.05337) is a model for that.
+
+## 6. Pins, time and propagation
 
 ### 6.1 The pin record
 
 ```ts
 interface Pin {
-  id: Id;
-  node: Id; slot: SlotPath;
-  value?: Value;                       // a value pin fixes the slot
-  region?: Region;                     // a region pin narrows it (partial knowledge)
-  reason: 'observed' | 'game' | 'authored' | 'committed' | 'derived';
+  id: Id; node: Id; slot: SlotPath;
+  value?: Value; region?: Region;      // exactly one
+  reason: 'observed' | 'game' | 'authored' | 'committed';
+  valid: { from: GameTime; to?: GameTime };   // enduring slots: { from: at } with no end
   at: GameTime;
-  cause: Id;                           // the event, contribution or seed that pinned it
+  cause: Id;
+  evidence?: Id;                       // the originating event, for observations
 }
 ```
 
-Exactly one of `value` and `region` is set. Pins are hard constraints in the world perspective. Beliefs are never pins on the subject (§11).
+A pin is a hard constraint at its precedence (§5.2). It is history: it is never deleted except by its source's withdrawal or the loss of its save branch (§6.6).
 
-`pin(node, slot, valueOrRegion, reason, cause)`:
-1. resolves the slot's current feasible set;
-2. if the new value lies outside it, records a conflict (§5.3) unless the reason is `observed` or `game`, which always prevail over lower layers;
-3. stores the pin;
-4. invalidates the caches whose fingerprints include this slot.
+### 6.2 Enduring slots
 
-### 6.2 Downward propagation
+An enduring slot (no `temporal`) has one value for the node's whole life, such as a name or a birth year. A pin on it holds from `at` onwards, with no end.
 
-When a slot with a `valueKind` holds a pinned value `v`:
-- the value's **derived** child slots are computed from `v`;
-- its **sampled** child slots use their `conditioned` prior given `v`, if one is defined.
+### 6.3 Temporal slots
 
-Example: pinning a name pins its letter count by derivation, and conditions its likely origin. "How the person came by the name" stays open.
+A temporal slot, such as position, weather, mood or urgency, has one value per **window** `k`, and its pins cover only the windows they were made in:
+- **An observation pins the observed window only.** V seeing rain at `t` pins weather's window `floor(t / window)`. It doesn't stop the weather changing later. The observation stays in the record as history.
+- **The game is authoritative for the current window** of mirrored temporal slots. Its reading is used directly (§5.1, step 2). A past window's value comes from pins, if any, otherwise it is resolved like any sampled slot.
+- **Simulation and seeds** pin temporal slots over explicit intervals.
 
-### 6.3 Upward propagation
+### 6.4 Derived views and backward narrowing
 
-When a child slot of a value node is pinned, the child's `up` function maps the pin to a region on the parent slot. That region joins the parent's feasible set (§5.1, step 5).
+A derived slot `d` is a **view** of its inputs: `d = derive(inputs)`. A pin on `d` (value or region `R`) adds a **view filter** constraint to each input slot `s` of `d`:
 
-Example: pinning `name.given = "JimBob"` narrows `person.name` to the names whose given part is "JimBob". A later full-name pin MUST lie inside that region, or it is a conflict.
+```
+F_s ∩= { v : derive(…, v, …) ∈ R, with the other inputs at their resolved or pinned values }
+```
 
-### 6.4 Removing pins
+The filter takes the precedence of the pin on the view. It is computed by enumerating `F_s`, or through the derive function's bound function when `F_s` is larger than `N_enum`. Filters chain through views of views by recomputing until nothing changes. Views form a DAG over finite grid domains (§2.3), so this terminates.
 
-A pin is removed only in two cases:
-- the source that created it withdraws it, which is a recorded operation: an authored pack uninstalled, or a seed withdrawn by its owner;
-- its save branch is discarded.
+Example: pinning `age-band = 30s` narrows `age` to 30–39. Pinning `display = "JimBob McGready"` narrows `given` and `family` through `display`'s filter.
 
-Observations are never withdrawn.
+### 6.5 Retained members bound their counts
 
-## 7. Open, close and forget
+If member `i` of a `many` slot is retained (§7.3), the count slot gets the constraint `count ≥ i + 1` at the precedence of the strongest pin that retains it. A remembered person therefore never falls out of the collection they came from.
+
+### 6.6 Withdrawing pins
+
+A pin is removed only when the source that created it withdraws it, which is a recorded operation: an authored pack is uninstalled, or a seed is withdrawn by its owner. Observations are never withdrawn.
+
+## 7. Open, close, forget
 
 ### 7.1 Open
 
-`open(node, slotPath)` creates `{ s: 'open' }` for the slot. For a `many` slot, it first resolves the count (itself a slot, `<key>#count`). Children are generated lazily, when first addressed, with generated `Id`s (§1.1).
-
-A slot MAY be opened only when the node's **demand tier** (§10.6) is at least the slot's `tier`. A query (§8) or a seed (S2) may open below that tier within its own budget, and the open is attributed to it.
+`open(node, slotPath)` materialises `{ s: 'open' }`. For a `many` slot it resolves `<key>#count` first. Members and owned values come into being lazily, when first addressed.
 
 ### 7.2 Close
 
-`close(node, depth)` discards the `resolved` caches and the generated, unreferenced descendants below `depth` levels. Pins and their nodes are untouched.
+`close(node)` drops the node's `resolved` caches, and those of its unretained owned values and members. Pins, edges and headers stay.
 
-### 7.3 Forget
+### 7.3 Retention and forgetting
 
-Forgetting is mark and sweep, run at most once per evolve tick, within budget. The roots are:
-- every node that carries a pin, and its origin chain up to a root;
-- every node at either end of a persistent edge (§14);
-- every node referenced by a canon event, a live seed (S2) or a memorable belief;
-- every node in the focus of an active context frame (§10);
+Forgetting is mark and sweep. It runs only between ticks, within the work budget (§10.7).
+
+**The roots:**
+- every node carrying a pin, and its origin chain;
+- both ends of every edge with a persistent cause (§14.2);
+- the nodes referenced by a canon event's pinned fields;
+- the nodes in a live seed's bindings (S2);
+- the nodes in the focus of an active or blocked frame;
 - every mirrored node the game currently has streamed in.
 
-Everything else MAY be swept. A swept node MUST regenerate identically when next addressed, provided its contributions are unchanged (I-3).
+**Marking** follows origin chains (to owners and creators) and owned-value links (to and from owners).
+
+**Sweeping** discards every unmarked node's in-memory state. A swept node regenerates identically when next addressed, while its constraints and contributions are unchanged (I-3). Its retained header (§14.2) keeps it addressable.
 
 ## 8. Queries
 
@@ -379,90 +482,116 @@ Everything else MAY be swept. A swept node MUST regenerate identically when next
 
 ```ts
 interface Query {
-  find: KindId;                         // the kind of node wanted
-  scope: Selector['scope'] | { roots: Id[] };
-  must: Predicate[];                    // hard conditions
+  find: KindId;
+  scope: { under: Id } | { nodes: Id[] } | { region: SpatialRegion } | { roots: Id[] };
+  at: GameTime;                        // the window for temporal predicates
+  must: Predicate[];
   prefer?: Array<{ p: Predicate; weight: number }>;
-  limit: number;
-  budget: { opens: number; evals: number };
+  limit: number | 'all';
+  budget: Work;                        // §10.7
 }
 
 interface Predicate {
-  path: string;                         // slot path from the candidate node, may cross ref slots
+  path: string;                        // slot path from the candidate; may cross ref and node slots
   op: 'in' | 'not-in' | 'range' | 'eq' | 'field-at-least' | 'field-at-most' | 'has-edge' | 'lacks-edge';
   arg: Value | Region | { edge: EdgeTypeId; to?: Id | Selector };
 }
 ```
 
-### 8.2 Algorithm: branch and bound
+### 8.2 Bounds
 
-The search space is a tree of candidate regions:
-- a region is an unopened node (standing for its future descendants) or a spatial cell from the world index (S1);
-- its children are the region's slots or sub-cells.
+The verdict of a predicate over a region is derived from:
+- the region's pins;
+- the bounds of every contribution that could apply there (§4.3);
+- conservative treatment of uncertainty. A constraint that might be rejected by arbitration (§5.2) contributes no narrowing to the bounds. When in doubt, the verdict is `maybe`.
 
-1. **Seed.** Start the frontier with the scope's roots.
-2. **Classify.** Pop the frontier entry with the highest upper bound on preference score. For each `must` predicate, compute `bounds` over the region from its pins and from the `bounds()` of every applicable contribution. The predicate's verdict is `no`, `maybe` or `yes`.
-3. **Prune** any region where any predicate is `no`.
-4. **Descend.** A region that is `maybe` on some predicate is split into its children. Splitting computes the children's bounds without materialising them, through generated `Id`s and contribution bounds. A region that is `yes` on every predicate and is a single node of the wanted kind is a candidate.
-5. **Confirm.** Candidates are resolved for real (§5), which materialises them and counts against `budget.opens`, then re-checked exactly.
-6. **Score and return.** Score confirmed candidates by `prefer`. Return the top `limit`, each with an explanation trace (§13).
+### 8.3 Traversal: branch and bound
 
-**When the budget runs out,** return the best confirmed candidates so far, flagged `incomplete`.
+1. **The frontier.** It starts with the scope's roots. A frontier entry is either a **compound region** (an unopened node standing for its descendants, or a spatial cell from the world index) or a **candidate** (a single node of kind `find`).
+2. **Ordering.** Pop the entry with the highest upper bound on preference score. Ties go to the lower `Id`, or the lower cell key.
+3. **Pruning.** An entry with any `must` verdict of `no` is dropped.
+4. **Descent.** **Every compound region that is not pruned is descended,** whether its verdicts are `yes` or `maybe`. Descent pushes its children with their bounds, computed without materialising them.
+5. **Candidates.** **Every candidate that is not pruned is checked exactly,** whether its verdicts are `yes` or `maybe`. The candidate is resolved (§5) and each `must` predicate evaluated. A candidate that passes is scored: the sum of the `prefer` weights whose predicates hold.
+6. **Deduplication.** Candidates are deduplicated by `Id`, since one node can be reached through several regions.
+7. **Stopping.**
+   - With `limit = n`: stop when `n` candidates are confirmed and no frontier entry's upper bound exceeds the `n`-th score. This gives the complete top-`n`.
+   - With `limit = 'all'`: stop when the frontier is empty.
+8. **Results** are returned with explanation traces (§13).
+9. **Budget.** When the work budget runs out, return what is confirmed so far, flagged `incomplete`. A resumable query keeps its frontier for the next slice (§10.7).
 
-**Soundness.** Every `bounds()` MUST be conservative: it may say `maybe` when the truth is `no`, never `no` when the truth is `maybe` or `yes`. A complete search therefore never misses a qualifying node (I-6).
+**Soundness (I-6).** A complete run returns:
+- for `'all'`: every in-scope node satisfying all `must` predicates;
+- for `n`: a set of `n` such nodes, none of which scores below any qualifying node left out.
 
-## 9. Time, events and evolution
+## 9. Time, events, summaries and evolution
 
 ### 9.1 Time
 
-`GameTime` is a signed 64-bit count of game seconds since the lineage's epoch. S5 defines how it maps to the game's clock. Time is also a dimension (`core:time`, metric) for queries and contributions.
+`GameTime` is a signed 64-bit count of game seconds since the lineage's epoch. S5 maps it to the game's clock. Windows are integer divisions of it (§6.3).
 
 ### 9.2 Events
 
-Events are nodes of kind `core:event`:
+Events are minted nodes of kind `core:event`:
 
-| Slot | Meaning |
+| Slot | Contents |
 |---|---|
 | `time` | When it happened |
-| `place` | Ref to a place node |
-| `kind` | An enum from data, such as `collision`, `robbery` or `order-given` |
-| `participants` | Many: ref plus role |
+| `place` | Ref to a place |
+| `kind` | An enum from data |
+| `participants` | Many: an owned value node with `who` (ref) and `role` (enum) |
+| `effects` | Many: owned value nodes describing an effect: `{ on: ref, effect: enum }`, using the effect vocabulary of §10.8 |
 | `witnesses` | Many: ref |
-| `causes` | Many: refs to events or contributions |
-| `effects` | Many: refs to pins, edges, contributions and beliefs |
+| `causes` | Many: ref, to events or contributions |
 
-An event is **canon** when V observed it, a seed committed it, or one of its effects is persisted. A canon event is pinned in full and persisted (§14).
+**An event becomes canon** when:
+- V observes it, in which case the fields V observed are pinned `observed`; or
+- a seed commits it, in which case the committed fields are pinned `committed`; or
+- a persisted effect depends on it, in which case the fields the effect needs are pinned `committed`.
 
-**Summary events** cover detail nobody looked at: `{ kind, placeRegion, interval, count, distribution }` at a coarse tier ("about three robberies in Kabuki this week"). When a query or relevance needs one of them, individual events materialise from the summary as minted nodes with `Id = H("mint", summaryId, "item", index)`, and their values are drawn consistently with the summary.
+**Only those fields are pinned.** Causes, other participants and details stay open until something needs them (generate, then justify).
 
-### 9.3 Evolution
+### 9.3 Summaries and their refinement
 
-Simulation processes are specified in S1. The kernel requires:
-- **The definition.** Each process is a `ProcessDef { id, tier, period, inputs: Selector[], run }`. `run(ctx, from, to)` returns contributions, pins, events and edges, and MUST handle any interval `to − from` in bounded work: a closed form, or at most a fixed number of sub-steps. Long absences therefore cost no more than short ones.
-- **The order.** `evolve(now)` runs every due process, coarsest tier first. Tiers 0–1 always run. Finer tiers run only within regions whose demand tier (§10.6) reaches them.
-- **Determinism.** Process outputs are deterministic given the world seed, inputs and interval. Process randomness uses `H("proc", worldSeed, processId, from, to, key)`.
+A summary covers events nobody looked at individually, such as "about three robberies in Kabuki this week". It is a minted node of kind `core:summary`:
 
-## 10. Actors, context frames and relevance
+| Slot | Contents |
+|---|---|
+| `kind` | The kind of event summarised |
+| `interval` | A time interval |
+| `region` | A place region |
+| `count` | int |
+| `materialised` | A set of indices |
+| `canon` | A set of indices |
 
-### 10.1 Drives
+**Refinement is deterministic per index.** Item `i` of a summary `S`, for `0 ≤ i < count`:
+1. Its `Id` is `H("mint", S.id, "item", i)`.
+2. Its time is `interval.start + rand("item-t", S.id, i) × interval.length`, on the second grid.
+3. Its place is sampled within `region` by the place sampler, keyed by `("item-p", S.id, i)`.
+4. Its other slots resolve as ordinary sampled slots of a minted event.
 
-```ts
-interface DriveDef {
-  id: DriveId; family: string;          // the families in foundation §5.1
-  urgency: { model: 'rise'; rate: number } | { model: 'event' } | { model: 'constant' };
-  horizon: 'now' | 'soon' | 'life';
-  scope: 'self' | 'kin' | 'group' | 'city';
-  satisfiers: Selector[]; threats: Selector[];
-}
+**Querying a summary.** A query over a time or place region materialises exactly those items whose computed time and place fall inside it. Overlapping queries therefore always see the same items, and nothing is counted twice. `materialised` and `canon` are bookkeeping.
 
-interface DriveState { drive: DriveId; importance: number; urgency: number; updated: GameTime }  // 0..1 each
-```
+**The count.** It is fixed when the summary is created. If a process later revises it, the new count MUST be at least `max(canon) + 1` (§6.5).
 
-Actors (nodes whose kind has the `actor` facet) carry a `drives` slot. Its values are `DriveState`s, sampled like any slot from contributions: personality priors, group norms, history.
+### 9.4 Evolution in canonical windows
 
-`urgency` changes as follows:
-- by the `rise` model: `urgency = min(1, urgency + rate · Δt)`;
-- by events: a satisfier event resets it, and a threat event raises it.
+Simulation processes are S1's. The kernel requires:
+- **The definition.** Each process is `ProcessDef { id, tier, period, inputs: Selector[], run }`.
+- **Canonical windows.** A process's history is a function of whole windows `k = floor(t / period)`. `run(ctx, k)` computes window `k` from the state at that window's start. Its randomness is keyed by `("proc", worldSeed, processId, k, …)`. The result is independent of how ticks were scheduled (I-15).
+- **Catch-up.** The scheduler always completes whole windows in order. After an absence, the missed windows of tiers 0–2 run one by one, each in bounded work. A tier's period SHOULD keep a week's absence to a few hundred windows.
+- **Fine tiers don't catch up.** Tiers 3–5 run only where demand reaches them (§10.6). When V arrives, their state is generated from the coarse state, consistent with the pins.
+- **Order.** Within a window, processes run by tier, coarse first, then by `id`. Inputs are read from the state at the window's start, and outputs are applied at its end (double-buffered), so the order among same-tier processes doesn't change results.
+
+## 10. Context frames, interest routing and relevance
+
+### 10.1 Drives are data; their dynamics are policy
+
+Actors carry a `drives` slot of `core:drive-state` nodes:
+- `drive`: an id;
+- `importance`;
+- `urgency`: temporal.
+
+How urgency rises and falls is an S1 policy, written as simulation contributions and pins. The kernel only reads the values.
 
 ### 10.2 Frames
 
@@ -470,79 +599,117 @@ Actors (nodes whose kind has the `actor` facet) carry a `drives` slot. Its value
 interface ContextFrame {
   id: Id; actor: Id;
   level: 'drive' | 'concern' | 'goal' | 'step' | 'situation';
-  parents: Id[];                       // more than one when memberships contribute (§12.2)
-  payload: { drive?: DriveId; goal?: GoalSpec; target?: Id[]; place?: Id };
-  weight: number;                      // > 0
-  own: FrameIndexes;                   // only what this frame adds over its parents
-  focus: { nodes: Id[]; tier: Tier };  // what this frame needs detail on (§10.6)
-  status: 'active' | 'blocked' | 'satisfied' | 'abandoned';
+  parents: Array<{ frame: Id; weight: number }>;      // weighted, acyclic (§10.3)
+  origin: Id;                          // the originating concern or drive, for aggregation
+  payload: { drive?: DriveId; goal?: Goal; place?: Id };
+  weight: number;                      // this frame's own weight, 0..1
+  own: FrameInterests;                 // only what this frame adds over its parents
+  focus: { nodes: Id[]; tier: Tier };
+  status: 'active' | 'blocked' | 'satisfied' | 'abandoned' | 'suspended';
   opened: GameTime; cause: Id;
 }
 
-interface FrameIndexes { wants: Key[]; reactsTo: Key[]; blockedBy: Key[]; threatenedBy: Key[]; protects: Key[] }
+interface FrameInterests {
+  wants: Selector[]; reactsTo: Selector[]; blockedBy: Selector[];
+  threatenedBy: Selector[]; protects: Selector[];
+}
 
-type Key = string;  // 'node:<Id>' | 'kind:<KindId>' | 'tag:<tag>' | 'dim:<DimId>=<bucket>' | 'edge:<EdgeTypeId>:<Id>'
+interface Goal { effects: Array<{ on: Id | Selector; effect: Effect }> }   // §10.8
 ```
 
-A frame's **effective index** of each type is its own keys plus its parents' effective keys. Implementations MUST compute it by walking parents or by persistent sets with structural sharing. They MUST NOT copy whole parent sets per frame.
+### 10.3 Inheritance is acyclic
 
-### 10.3 Unfolding: top-down and incremental
+Frame parent links MUST form a DAG, and adding a link that would close a cycle is refused. In particular:
+- **Members inherit from groups.** A member's frames may take a group's concern frames as parents (§12.2).
+- **Leaders influence groups through decisions, not parent links.** A group's concerns are created and changed by S1's group-decision policy, which reads the leaders' frames and writes the group's concern frames as ordinary operations, attributed to the leaders.
 
-For an actor with demand (§10.6):
-1. **Drive frames.** Open a drive frame for each drive with `importance × urgency ≥ θ_drive` **[tunable 0.25]**. Its weight is `importance × urgency`, and its own keys come from the drive's satisfiers and threats.
-2. **Concern frames.** Under each drive frame, open concern frames for the actor's current concerns. Concerns come from the simulation (S1), from seeds (S2) and from memberships (§12). Each concern adds only the keys it introduces.
-3. **Goal, step and situation frames** open in the same way, each predicated on its parent. The situation frame records where the actor is and what they're doing.
-4. **Changes recompute increments only.** When a frame opens, closes or changes status, only that frame's own keys, and the registry entries for them (§10.4), change.
-
-### 10.4 The interest registry and matching
-
-The kernel keeps one registry `Map<Key, Set<FrameId>>` covering the **own** keys of every active frame.
-
-On every change, the kernel derives the change's keys:
-- the node's `Id`;
-- its kind and the kind's ancestors;
-- its tags;
-- the bucket keys of the changed slot values (`DimensionDef.buckets`);
-- for edges, `edge:<type>:<from>` and `edge:<type>:<to>`.
-
-Changes include a pin, a newly resolved slot, a new event, and an edge added or ended. The kernel looks up each key and visits the matched frames. Each matched frame's descendants inherit the match, so they are visited too, down the chain.
-
-**The relevance increment** of change `x` for frame `f` matched by index type `t`:
+**The pull** of a frame is the strongest path from any of its root frames, where a path's value is the product of the edge weights and frame weights along it:
 
 ```
-r = f.chainWeight × m(t) × strength(x)
-f.chainWeight = product of weights from the drive frame down to f
-m: wants 1.0, threatenedBy 1.0, protects 1.0, blockedBy 0.8, reactsTo 0.6   [tunable]
-strength(x) = 1 for direct node keys, 0.5 for kind or tag keys, 0.3 for bucket keys   [tunable]
+pull(f) = f.weight × max over parents p of (edgeWeight(p) × pull(p))      (pull of a root = its weight)
 ```
 
-When `r ≥ θ_react` **[tunable 0.3]**, the kernel emits `Relevance { actor, frame, change, type, r }` to:
-- the simulation (S1), for behaviour;
-- the procedural engine (S3), for sifting and hooks.
+Repeated influence from one `origin` counts once, through its strongest path. Distinct origins stay separate frames, so they are never summed.
 
-Nothing else is scored. Relevance is only ever this increment.
+### 10.4 Lifecycle
 
-### 10.5 Buckets
+- **Demand roots.** V, the director, and every live seed (S2) are demand roots. Their frames are opened by S1 (for V, from the game's story state and the director's beliefs) and by S2.
+- **Other actors' frames** open only when a demand root's frame, or a relevance event, focuses on them.
+- **Blocked frames stay in the registry,** so they hear about what could unblock them: their `blockedBy` interests.
+- **Satisfied and abandoned frames leave the registry.** They are kept only while a persisted record refers to them.
+- **Suspension (§10.7)** removes a frame from the registry and from demand, in a deterministic order: lowest pull first, then higher `Id`. Resumption is the reverse order when budget frees up.
+- **Status changes cascade.** When a parent's status, weight or parents change, the kernel recomputes its descendants' pull and eligibility in the same tick.
 
-`DimensionDef.buckets` maps a value to a small set of coarse keys, so frames can react to "rain", "night" or "Tyger Claw territory" without per-value keys. Bucket functions are registry functions with parameters.
+### 10.5 Interest routing and matching
 
-### 10.6 Demand tier and budget
+Matching runs in two stages:
+1. **Routing keys** make lookups cheap. Each interest selector compiles to one or more routing keys:
+   - `node:<Id>`;
+   - `kind:<KindId>`;
+   - `tag:<tag>`;
+   - `role:<role>:<Id>`;
+   - `dim:<DimId>=<bucket>`;
+   - `edge:<EdgeTypeId>:<Id>`.
 
-Each node has a demand tier. It is the highest `focus.tier` among active frames whose focus includes the node or one of its ancestors. A frame's pull is weighted by its chain weight times `w_actor`:
-- `w_actor` is **[tunable 4.0]** for V's frames;
-- it is 1.0 for everyone else.
+   The registry is `Map<RoutingKey, Set<(FrameId, interestType, selectorIndex)>>`.
+2. **Exact checks** decide matches. The candidate interests found through routing are tested exactly against the change.
 
-Per evolve tick, opens are capped at `B_open` **[tunable 2000]** and active frames at `F_max` **[tunable 5000]**. When a cap is reached, the lowest-pull frames are suspended first. They keep their state, but leave the registry and stop pulling demand.
+**Semantic changes** are the only things that emit (I-13): a pin added, an edge added or ended, a canon event, a minted node, a contribution added or ended, and a game reading that changed a mirrored value. Cache fills, regeneration and save replay never emit.
 
-### 10.7 V
+**A change's keys** are:
+- its node's `Id`, kind and kind ancestors, and tags;
+- the bucket keys of its changed values;
+- for events, the `Id` and `role:<role>:<Id>` of every participant, the targets of every effect, and the place;
+- for edges, both endpoints.
 
-V is the root node `v`, with the `actor` facet. Its rules:
-- **Nothing assigns V's drives, and nothing pins them** (I-12).
-- **V's frames come from two sources:**
-  1. `game`-sourced frames that mirror the canon story state. For example, the main quest's active objectives appear as goals with `cause` set to the game.
-  2. `inferred` frames built from the director's beliefs about V (§11.5).
-- Inferred frames carry their belief's confidence as part of their weight.
-- V's decisions enter the kernel only as `observed` events from the game port.
+**Emission.** A change matches a frame through an interest of type `t` when an exact check passes. Inherited interests are checked on the frame that declared them. Descendants receive the match through their pull, not through re-matching. The relevance of the match is:
+
+```
+r = pull(f) × m(t) × s(x)
+m: wants, threatenedBy, protects 1.0; blockedBy 0.8; reactsTo 0.6                 [calibrate]
+s: 1.0 for node or role keys, 0.5 for kind or tag keys, 0.3 for bucket keys          [calibrate]
+```
+
+At most one emission is made per (change, frame, interest type): the one with the greatest `r`. It is emitted when `r ≥ θ_react` **[calibrate]**, as `Relevance { actor, frame, change, type, r }`, to S1 and S3.
+
+### 10.6 Demand and tiers
+
+Each node has a demand tier: the highest `focus.tier` among active or blocked frames focusing on it or on its owner chain. A frame's claim is weighted by its pull times `w_actor`, which is **[tunable 4.0]** for demand roots and 1.0 for everyone else.
+
+A slot normally opens when the node's demand tier reaches the slot's `tier`. Tiers are scheduling bands, not an ontology or a maximum depth: a query, a seed or a view filter may open finer slots inside its own work budget.
+
+### 10.7 Work budget
+
+All kernel work is metered in work units, consumed from one budget per tick:
+- resolving a slot: 1 + |F|/64;
+- a query frontier step;
+- an exact check;
+- a relevance emission;
+- a frame recomputation;
+- a forgetting step.
+
+The budget per tick is **[tunable; P7 sets it from measurement]**.
+
+Query traversal, relevance dispatch, frame cascades and forgetting are **worklists**. When the budget runs out they stop where they are and resume next tick, in the same deterministic order. Work for demand roots, and for the player's direct actions, is taken from the worklists first.
+
+### 10.8 Goals, effects and cross-pressure
+
+**Goals declare their effects** on targets, from a small vocabulary: `harm`, `kill`, `help`, `protect`, `take`, `give`, `expose`, `conceal`, `move`, `meet`.
+
+**Interests imply requirements.** A `protects X` interest forbids `harm`, `kill`, `take` and `expose` on X. A `wants Y` interest requires the matching effect. The conflict table is a registry function [S1 refines it].
+
+**Cross-pressure is checked:**
+- when a goal frame opens;
+- when a membership edge is added or changed;
+- when an obligation changes;
+- whenever a frame's interests change.
+
+**The check:**
+1. **Candidates come from routing.** For each effect target, look up the actor's other active or blocked frames whose interests route on that target and that come from a **different origin**.
+2. **The exact check is the conflict table.** A pair conflicts when an effect of one frame violates a requirement of the other.
+3. **Emission.** Emit `Dilemma { actor, frameA, frameB, target, effect, severity: pull(A) × pull(B) }`, at most once per (frameA, frameB, target) until either frame changes.
+
+So an order to kill X conflicts with a frame that protects X, and an order to rescue X doesn't (A-19).
 
 ## 11. Beliefs and perspectives
 
@@ -551,194 +718,231 @@ V is the root node `v`, with the `actor` facet. Its rules:
 ```ts
 interface Belief {
   id: Id; believer: Id; subject: Id; path: SlotPath;
-  value?: Value; region?: Region;       // exactly one
-  confidence: number;                   // (0, 1]
-  source:
-    | { by: 'observed'; event: Id }
-    | { by: 'told'; teller: Id; event: Id }
-    | { by: 'inferred'; rule: FnRef; from: Id[] };
-  formed: GameTime; reinforced: GameTime; memorable: boolean;
+  value?: Value; region?: Region;      // exactly one
+  window?: number;                     // for temporal paths
+  confidence: number;                  // (0, 1]
+  evidence: Id[];                      // originating events: independent sources of support
+  source: { by: 'observed'; event: Id } | { by: 'told'; teller: Id; event: Id } | { by: 'inferred'; rule: FnRef; from: Id[] };
+  formed: GameTime; refreshed: GameTime; memorable: boolean;
 }
 ```
 
-Beliefs are stored per believer and indexed by `(subject, path)`. A believer MUST NOT hold two active beliefs on the same `(subject, path)` that contradict each other (I-9). A belief never constrains the subject's true state.
+Beliefs are stored per believer and indexed by (subject, path, window). They never constrain the subject's world state.
 
-### 11.2 Forming beliefs by attribution
+### 11.2 Kernel rules
 
-When an actor witnesses an event (it is in the event's `witnesses`), the kernel runs the **attribution rules** that match the event's kind and the roles involved. Each rule is data:
+- **Consistency within a perspective (I-9).** A believer holds at most one active belief per (subject, path, window). A new belief that contradicts the active one replaces it or is discarded, by S1's policy. The loser is kept as superseded history only if memorable.
+- **Independent evidence only.** Merging two compatible beliefs raises confidence only by evidence that is new. If `b'`'s `evidence` is a subset of `b`'s, nothing changes except `refreshed`. Telling passes the teller's `evidence` on unchanged, so a rumour heard twice from one origin never corroborates itself (A-21).
+- **Forming, telling, fading and reputation** are S1 policies. They use these hooks:
+  - `onWitness(event, observer)`;
+  - `onSocial(event, teller, listener)`;
+  - `onTick(believer)`;
+  - `aggregate(audience, subject, path)`.
 
-```ts
-interface AttributionRule {
-  id: string;
-  event: string; observerRole: string; subjectRole: string;
-  infers: { path: SlotPath; value?: Value; region?: Region };
-  confidence: number;
-  bias: { dispositional: number; groupPrime: number };
-}
-```
+  S1's first policy implements the attribution rules from [foundation §5.4](../foundation.md#54-perspectives-everyone-has-their-own-model): dispositional bias, group priming, telling with distortion, fading, and reputation as aggregated belief.
 
-The belief's confidence is:
+### 11.3 The director's beliefs about V
 
-```
-confidence = rule.confidence × (1 + bias.dispositional × (1 − circumstanceVisible))
-                             × (1 + bias.groupPrime × rivalry(observer, subject))
-             capped at 0.95
-```
+The root actor `director` holds beliefs about `v`, formed by S3's inference policy from observed V events and engagement. V's inferred frames are built from them (§10.4).
 
-- `circumstanceVisible` is 1 if the event carries a visible cause the observer witnessed, else 0.
-- `rivalry` is the strongest negative stance between the observer's groups and the subject's groups.
+Nothing pins or sets V's drives (I-12).
 
-This is how one bad moment becomes "Bob is a jerk" (the fundamental attribution error), and how corporate rivalry colours it.
+### 11.4 Knowing: the observer-relative interface
 
-### 11.3 Updating, telling and fading
+Attribution and other perspective-bound policies MUST read the world only through `knows(observer, subject, path, t)`, which returns, in order:
+1. the observer's active belief, if any;
+2. the subject's value of a `perceivable` slot, or a `perceivable` edge, if the observer witnessed the subject at `t`: a uniform, an open gang tattoo, the subject's appearance;
+3. `unknown`.
 
-**Updating.** A new belief `b'` on the same `(subject, path)` as an existing `b`:
-- **compatible** (equal values, or overlapping regions): merge. `confidence = 1 − (1 − c)(1 − c')`, take the intersection of the regions, and set `reinforced` to now.
-- **contradictory:** keep the one with the greater `confidence × recency`, where `recency = 0.5^(age / h)` and `h` is **[tunable 30 game days]**. If the loser is memorable, keep it as superseded history.
-
-**Telling.** On a social event between a teller and a listener:
-- each of the teller's beliefs whose subject is salient to the listener (an index match, §10.4) is passed on with probability `p_tell` **[tunable 0.5]**;
-- the passed belief's confidence is `c × trust(listener → teller)`;
-- with probability `p_distort` **[tunable 0.1]**, the value moves to a neighbouring value (enum neighbours by list order, numbers by one quantum step).
-
-**Fading.** A non-memorable belief's confidence decays by `exp(−Δt / τ)`, with `τ` **[tunable 7 game days]**, and the belief is dropped below 0.1. A belief is memorable if it was formed from an event whose salience is at least θ_salient **[tunable 0.6]**, or if it has been reinforced twice.
-
-### 11.4 Reputation
-
-`reputation(subject, audience, path)` aggregates the believers in an audience (a group or a place region) holding beliefs on `path` about the subject. It is the confidence-weighted mean of their values, with a count. It is computed lazily and cached, and the cache is invalidated by belief changes. V's street cred is V's reputation on the standing paths.
-
-### 11.5 The director's beliefs about V
-
-The root actor `director` holds beliefs whose subject is `v`. They are formed only by the inference process (S3), from observed V events and engagement, and they feed V's inferred frames (§10.7).
+It MUST NOT fall back to world truth. A secret affiliation therefore never colours a stranger's judgement (A-20). World-level simulation reads world truth directly, through ordinary resolution.
 
 ## 12. Groups and membership
 
-### 12.1 Groups
-
-Groups are actors whose kind has the `group` facet. A group has a `leadership` slot (many refs), drives, and concerns.
-
-**Membership** is an edge of type `core:member-of`, with these attributes:
-
-| Attribute | Values |
-|---|---|
-| `role` | `leader`, `member`, `associate`, `contractor`, or a family role |
-| `strength` | 0 to 1 |
-| `visibility` | `open`, `secret` (with `knownTo`, a set of actor `Id`s) or `deniable` |
-| `terms` | `standing`, or `contract`, with an end condition as a predicate list |
-| `obligations` | Selectors for what the member must do or avoid |
-| `benefits` | Selectors |
-| `exitCost` | 0 to 1 |
-
-Groups can be members of groups.
-
-### 12.2 Context inheritance
-
-For each membership with `strength ≥ θ_member` **[tunable 0.2]**, the group's active concern frames become extra parents of the member's matching frames:
-- they parent the member's drive frame of the same family, or the member's root frame if it has none;
-- the edge weight is `strength × group frame weight`.
-
-**Leadership.** The group's own frames have its leaders' frames as parents, weighted by each leader's authority, so leaders can bend the group to their own ends.
-
-### 12.3 Orders
-
-When a group delegates a goal, the kernel creates an `Assignment { group, member, goalFrame, pressure }` and opens a goal frame on the member whose parent is the group's goal frame. `pressure = strength × authority(leader) + fear(member → leader)`, and the member's goal frame weight is `pressure`.
-
-### 12.4 Cross-pressure
-
-Whenever a goal or step frame opens for actor `a`:
-1. For each key `k` among the new frame's `target` keys, look up `a`'s other active frames whose effective `protects` or `wants` contain `k` and whose root is different (another membership or the actor's own drive).
-2. For each such frame `g`, emit `Dilemma { actor: a, frame, conflicting: g, key: k, severity: chainWeight(frame) × chainWeight(g) }` to the procedural engine (S3).
-
-Example: the gang's order to kill X meets the family frame that protects X ([DS-61](../design-seeds.md)).
+- **Groups** are actors whose kind has the `group` facet.
+- **Membership** is an edge `core:member-of`. Its attributes are `role`, `strength`, `visibility` (`open`, `secret` or `deniable`), `terms` (an owned `core:terms` value: `standing`, or `contract` with an end predicate), `obligations` (interest selectors) and `exit-cost`.
+- **Inheritance (§10.3).** A member's frame of drive family `X` may take as a parent each active concern frame of each group it belongs to with `strength ≥ θ_member` **[tunable 0.2]**, at edge weight `strength`. A concern without a family attaches to the member's situation frame.
+- **Orders.** An order creates a goal frame on the member whose parent is the group's goal frame, at edge weight `pressure`. S1's group policy computes `pressure` from strength, the leader's authority and fear.
+- **Leadership** acts only through S1's decisions (§10.3), so frames stay acyclic.
 
 ## 13. Provenance and explanation
 
-Every pin, contribution, edge, belief, event, frame and conflict carries a `cause`.
+Every pin, contribution, edge, belief, event, frame, conflict and dilemma has a `cause`.
 
-`explain(node, slotPath)` MUST return, deterministically:
-- the pins that applied, with their causes;
-- the top `k` contributions by absolute effect `|strength · log f(v)|` at the resolved value, where `k` is **[tunable 8]**;
-- each feasible-set reduction, with its source;
-- conflicts and overruled contributions;
-- the draw `u`.
+`trace(node, slotPath, t)` returns the complete, deterministic record:
+- every constraint, active and rejected;
+- every applicable weight contribution, with `f(v*)`;
+- the prior;
+- the draw's noise for `v*` and for the runner-up.
 
-It is the basis of the agent-readable "why" views ([DS-26](../design-seeds.md)).
+`explain(…)` presents the trace's top `k` **[tunable 8]** weight contributions, ranked by **discriminating effect** at the winner:
+
+```
+effect(c) = strength_c × (ln f_c(v*) − ln f_c(v₂))      (v₂ = the runner-up)
+```
+
+A contribution that weights every value equally therefore ranks zero. The presentation is labelled a heuristic. The trace is the complete account (I-8).
 
 ## 14. Persistence: the logical record
 
-**Persisted:**
-- pins;
-- minted nodes (their origin);
-- edges caused by persisted events or committed seeds;
-- contributions from `seeding`, committed `procedural` sources and runtime `authored` decisions that packs can't reproduce;
-- memorable beliefs;
-- canon events;
-- the active frames of actors who are canon;
-- seed states (S2) and process states (S1);
-- the world seed and lineage information.
+### 14.1 What is persisted
+
+- **Node headers (§3.1)** for every retained node (§7.3), including generated members and owned values that durable state refers to.
+- **Pins, edges and conflicts** whose causes are persisted.
+- **Contributions** whose source can't reproduce them: seeds, committed procedural decisions, and runtime authored decisions. Pack contributions are reloaded; the record keeps each pack's id and version.
+- **Memorable beliefs.**
+- **Canon events:** their headers and only their pinned fields.
+- **Summaries.**
+- **Frames** of demand roots and live seeds.
+- **Seed states** (S2), and **process window cursors and states** (S1).
+- **Lineage:** the world seed, the schema and function versions (§14.4), and lineage information.
 
 **Not persisted:**
-- generated nodes' unpinned state and every cache;
-- mirrored state, which is re-read from the game;
-- pack contributions, which are reloaded (the record keeps each pack's id and version).
+- caches and unretained nodes;
+- the current values of mirrored slots, which are re-read from the game;
+- relevance events, which are transient.
 
-**Record structure.** Each save gets a record `{ saveKey, parent, ops }`:
-- `parent` is the record of the save this one was made from;
-- `ops` is an append-only log of operations since the parent: `PinAdded`, `PinRemoved`, `NodeMinted`, `EdgeAdded`, `EdgeEnded`, `BeliefSet`, `BeliefDropped`, `ContributionAdded`, `ContributionEnded`, `EventCanon`, `FrameState`, `SeedState`, `ProcessState`.
+V's observations of game state are persisted, because they are history.
 
-**Loading** a save replays ops from the nearest snapshot up its parent chain.
+### 14.2 Records and branching
 
-**Snapshots** are written when a record's op count since the last snapshot exceeds **[tunable 10,000]**.
+Each save has a record `{ saveKey, parent, epoch, ops }`. Its parts:
+- `parent` is the record of the save it was made from;
+- `epoch` is a fresh `Id` per load;
+- `ops` is an append-only log since the parent:
+  - `HeaderAdded`;
+  - `PinAdded`, `PinWithdrawn`;
+  - `EdgeAdded`, `EdgeEnded`;
+  - `ContributionAdded`, `ContributionEnded`;
+  - `BeliefSet`, `BeliefDropped`;
+  - `EventCanon`;
+  - `SummarySet`;
+  - `FrameState`, `SeedState`, `ProcessState`;
+  - `Conflict`.
 
-Ops carry complete data, so replay never recomputes anything except regenerable state. S6 defines the bytes and the save key.
+Snapshots are written every **[tunable 10,000]** ops. Ops carry complete data.
+
+### 14.3 Loading is replacement
+
+Loading save `B` runs in this order:
+1. **Discard all branch-local state:**
+   - caches;
+   - in-memory nodes;
+   - frames, the registry and worklists;
+   - pending relevance;
+   - every queued operation tagged with the previous `epoch`. Operations from that epoch that arrive later are refused.
+2. **Replay** `B`'s ops from its nearest snapshot, silently: no relevance emission (I-13).
+3. **Reconcile with the game:** read the mirrored state through the game port. Changed values become ordinary game readings for the current window.
+4. **Start a new epoch** and resume ticking.
+
+### 14.4 Compatibility
+
+The lineage root records the schema and registry function versions. Loading under different versions is allowed when every function a pin, persisted contribution or header depends on is still available at a compatible version. Otherwise the record loads read-only, and the engine says so in plain words (S6 details).
 
 ## 15. Invariants
 
-Each invariant is a test that the reference model and the native core MUST pass.
-
 | # | Invariant |
 |---|---|
-| I-1 | **Determinism.** The same world seed, schema, contributions, pins and operation sequence give identical resolved values at every address, in every implementation |
-| I-2 | **Pins hold.** Every resolved value satisfies every value pin and region pin on its slot |
-| I-3 | **Regeneration.** Forgetting a node and resolving it again gives identical values while its contributions are unchanged |
-| I-4 | **Nothing regenerable is persisted.** The persisted record contains no `resolved` cache values |
-| I-5 | **Propagation agrees.** Children's pins and their parent's resolution are mutually consistent (§6.2, §6.3) |
-| I-6 | **Queries are sound.** A complete search returns every node in scope that satisfies every `must` predicate |
-| I-7 | **Stability.** Scaling one weight contribution by (1 ± ε) changes at most the slots whose `u` falls in the moved mass, checked statistically |
-| I-8 | **Explanations are complete.** `explain` accounts for every constraint and every contribution with non-zero effect |
-| I-9 | **Perspectives are consistent.** No believer holds contradictory active beliefs on one `(subject, path)` |
-| I-10 | **Budgets hold.** An evolve tick never exceeds `B_open` opens or `F_max` active frames |
-| I-11 | **Identity is stable.** Moving a node never changes its `Id` or its pinned values |
-| I-12 | **V is never owned.** No operation creates a pin or sets a `DriveState` on V's drives; V's choices enter only as observed events |
+| I-1 | **Determinism.** The same world seed, schema, function versions, contributions, pins and operation sequence give identical resolved values everywhere, using the arithmetic of §1.3 |
+| I-2 | **Active constraints hold.** Every resolved value satisfies every constraint arbitration made active. Rejected constraints are recorded as conflicts, and a rejected observation sets the status to `contradiction` |
+| I-3 | **Regeneration.** Forgetting a node and resolving it again gives identical values while its constraints and contributions are unchanged |
+| I-4 | **Nothing regenerable is persisted.** The record contains no resolved cache values |
+| I-5 | **Views agree.** A pinned derived view and its inputs' resolved values are consistent (§6.4) |
+| I-6 | **Queries are sound and complete** (§8.3) |
+| I-7 | **Coupled draws.** Scaling the weight of one value `a` changes a slot's result only if `a` was or becomes the winner. Scaling every value's weight by one constant changes nothing |
+| I-8 | **The trace is complete:** every constraint and every non-uniform weight contribution appears in `trace` |
+| I-9 | **Perspectives are consistent.** At most one active belief per (believer, subject, path, window) |
+| I-10 | **Budgets hold.** A tick never exceeds its work budget. Interrupted worklists resume deterministically |
+| I-11 | **Identity is stable.** Moving a node never changes its `Id` or its pins |
+| I-12 | **V is never owned.** No operation pins or sets V's drives. V's choices enter only as observed events |
+| I-13 | **Silence.** Cache fills, regeneration and replay emit no relevance |
+| I-14 | **Acyclic frames.** The frame parent graph is always a DAG |
+| I-15 | **Partition independence.** A process's history is the same however ticks partition time |
 
-## 16. Test vectors
+## 16. Fixtures
 
-The reference model produces the expected outputs once, a reviewer checks them by hand against this specification, and they are then frozen in the reference model's test folder. Every later implementation must reproduce them exactly.
+Fixtures are fully specified here, so an implementer can check them without running anything else. Where an outcome depends on hash values, the fixture checks a property, not a number. After acceptance, the reference model adds a regression corpus of generated cases, including the vendor scenario ([foundation §10](../foundation.md#10-worked-example-one-vendor)).
 
-| # | Scenario | What it checks |
+| # | Setup | Expected |
 |---|---|---|
-| TV-1 | **The vendor** ([foundation §10](../foundation.md#10-worked-example-one-vendor)): open the market to stall 7; resolve the vendor's name and first concern; pin both as observed; forget; resolve again; then change the Tyger Claw influence field and resolve the concern | I-1, I-3. The pinned concern is unchanged. A newly resolved second concern reflects the change, and `explain` shows the influence field |
-| TV-2 | **An overheard first name:** a region pin on `name.given`, then resolution of `name` | I-2, I-5. The full name lies inside the region; a later conflicting full-name pin is reported as a conflict |
-| TV-3 | **Alice and Bob:** a `collision` event with no visible cause, witnessed by Alice. Then resolve Bob's true disposition | Alice's belief has the attribution confidence from §11.2. Bob's truth comes from his own contributions and may differ. I-9 holds |
-| TV-4 | **Gang and brother:** a `kin` edge between M and X, M a member of G; G assigns M the goal of killing X | Exactly one `Dilemma`, with the severity from §12.4 |
-| TV-5 | **Query:** in a synthetic district of 2,000 places, find places at night with gang influence ≥ 0.6 and police presence ≤ 0.2 | Branch and bound returns the same set as brute force (I-6) and opens far fewer nodes |
-| TV-6 | **Cross-implementation:** a fixed script of 1,000 mixed operations on a synthetic schema | The hash of every resolved value equals the frozen hash (I-1) |
-| TV-7 | **Branching saves:** save A; act; save B; load A; act differently; save C | B's and C's records share A's ops and diverge after them; loading B shows only B's pins |
-| TV-8 | **V:** V's observed actions only | V's frames are only `game` or `inferred`; I-12 holds |
+| F-1 | **Arbitration.** An enum slot over {a, b, c, d}. Constraints: an observation pin `{a, b}` (600); an authored set `{b, c}` (400); a seeding set `{c}` (300); a simulation set `{a, b, c, d}` (200) | Active: 600, 400, 200. Rejected: 300 (conflict recorded). `F` is {b}. The value is b, with status `ok` |
+| F-2 | **Contradiction.** As F-1, plus a second observation pin `{c}` with a higher `Id` | Active: the first observation, then the authored set. The second observation is rejected. Status `contradiction`; value b |
+| F-3 | **Temporal observation.** Weather is temporal with a 3,600 s window. V observes `rain` at t = 1,000. At t = 5,000 the game reports `clear` | Window 0 is pinned `rain`. Window 1 resolves to `clear` from the game. No conflict |
+| F-4 | **View filter.** `age` int 16..90; `age-band` derived as `floor(age / 10)`. An observation pins `age-band = 3` | `F_age` is 30..39, and resolved `age` lies in it. A later authored pin `age = 45` (400) is rejected with a conflict, because the view filter carries the observation's precedence (600) |
+| F-5 | **Coupling.** An enum slot with 100 values and equal priors. Resolve it, then scale value `a`'s weight by 1.01, where `a` is not the first result, and resolve again. Then scale every value by 2 | The result is unchanged unless `a` becomes the winner. Scaling every value leaves the result unchanged (I-7). Run across 1,000 node ids: the change rate equals the rate at which `a` wins, within sampling error |
+| F-6 | **Query: a region where every predicate is `yes`.** A three-level place tree (1 district, 4 blocks, 16 places) where the influence field is ≥ 0.6 everywhere and police ≤ 0.2 in 5 places | `limit = 'all'` returns exactly those 5. The `yes` region is descended, and no node is missed or duplicated |
+| F-7 | **Summary refinement.** A summary of 5 robberies over one day in a region of two blocks. Query block 1, then the whole region; make item 2 canon; revise the count to 2 | Block 1's items are a subset of the whole-region items, with the same `Id`s. The revision is refused because it is below canon index 2 + 1 = 3 |
+| F-8 | **Cross-pressure.** M is a member of G; M has a family frame protecting X. G orders M to kill X; separately, G orders M to rescue X | Kill: one `Dilemma`. Rescue: none |
+| F-9 | **Hearsay.** Alice observes event E and forms belief b. She tells Carl, and Carl tells Dana. Dana is later told the same thing by Alice | Dana's belief has `evidence = {E}`. The second telling only refreshes it; confidence doesn't rise from it |
+| F-10 | **Secret affiliation.** Bob is secretly a member of Militech (`visibility: secret`), and Alice's group is Arasaka. A collision is witnessed by Alice | `knows(Alice, Bob, member-of)` is `unknown`; no rivalry is applied. Repeat with an open membership on a perceivable edge: rivalry is applied |
+| F-11 | **Leadership.** L leads G and is a member of G | Frame inheritance stays acyclic. G's concerns change only through decision operations attributed to L |
+| F-12 | **Branching load.** Save A; pin p1; save B; load A; pin p2; save C; load B | Loaded B has p1 and not p2. Operations queued under C's epoch are refused after the load. Replay emits no relevance |
+| F-13 | **Partition.** A process with a period of 3,600 s, ticked across 7,200 s once as one tick and once as 120 ticks | The histories are identical |
+| F-14 | **Retained member.** A crowd slot has a count of 12; member 9 is pinned observed. A process revises the crowd to 6 | The count resolves to at least 10, and member 9 stays addressable |
+
+**Calibration fixtures (set the [calibrate] values):**
+- **C-a.** A pedestrian whose drive frame for comfort has `reactsTo rain`. The `rain` bucket change should produce a reaction.
+- **C-b.** A vendor's concern frame, `threatenedBy` Tyger Claw collectors. A collector entering the stall should react. A distant gang member in the district should not.
+- **C-c.** A customer approaching a vendor's `wants customers` frame should react at low priority.
+- **C-d.** V's frame protecting a friend, and an event harming that friend, should react strongly.
+
+The defaults for `m`, `s` and `θ_react` are chosen so that all four behave as stated, and are recorded with the fixtures.
 
 ## 17. Compromises and open items
 
-**Compromises.** These are recorded in the foundation's [ledger](../foundation.md#9-the-reference-model-and-the-compromise-ledger).
+These are recorded in the foundation's [ledger](../foundation.md#9-the-reference-model-and-the-compromise-ledger).
 
 | # | The model says | This specification does | Revisit when |
 |---|---|---|---|
-| C-02 | A believer's view is a full perspective over every dimension | Beliefs are sparse records formed by fixed attribution rules, not a resolved perspective with its own contributions | A story needs an NPC to reason about something no rule covers |
-| C-03 | Relevance follows from what matters to each actor | Fixed match weights per index type and key type (§10.4) | Evaluation shows misplaced attention that tuning can't fix |
-| C-04 | Text is a dimension like any other | Text is sampled by grammar with bounded retries under constraints, not by inverse cumulative distribution over all strings | Constrained text generation fails or repeats noticeably |
+| C-02 | A believer's view is a full perspective over every dimension | Beliefs are sparse records; their policies live in S1 | A story needs an NPC to reason about something the policies can't express |
+| C-03 | Relevance follows from what matters to each actor | Fixed match weights per interest type and key type, calibrated by fixtures (§10.5) | Evaluation shows misplaced attention that recalibration can't fix |
+| C-04 | Every dimension is sampled the same way | Domains larger than `N_enum` need a declared hierarchical sampler. Text is composed from enumerable components, not sampled as free strings | A dimension can't be expressed hierarchically |
+| C-05 | Pins propagate both ways through everything | Backward narrowing works only through derived views and member counts. Slot dependencies follow declaration order (§2.3). Other backward reasoning is generate-then-justify | A scenario needs a later fact to constrain an earlier one in a way views can't express |
 
-**Open items before v1:**
-1. Confirm that BLAKE3 gives byte-identical results in the TypeScript and Rust builds used. The reference model's first test does this.
-2. The text-region language: which grammar components can be constrained. Decide it with S4's name and text grammars.
-3. Whether summary events (§9.2) need explicit distributions per kind, or can derive from process outputs. Decide it with S1.
-4. Real numbers for `B_open`, `F_max` and the tick budget, from P7's measurements.
-5. The `GameTime` epoch and clock mapping, decided with S5.
+**Open items:**
+1. Measure BLAKE3 and the fdlibm ports in TypeScript and Rust for bit-identical results. This is the reference model's first test.
+2. P7 sets the work budget per tick from a measured simulated session.
+3. S5 fixes the `GameTime` epoch and clock mapping.
+4. S1's first policies: urgency, attribution, telling and fading, group decisions, and the effect conflict table.
+5. P7 measures save size in a representative simulated session before any budget is set (A-15).
+
+## 18. Review record
+
+### Round 1: GPT-6 Astra, extra-high reasoning effort, 22 October 2026
+
+The review covered the foundation and S0 v0, with a brief to weigh proportion and simplicity. Its 25 findings were each checked against the specification:
+- **adopted:** 22;
+- **adopted with a different solution:** 3;
+- **not adopted:** 0.
+
+Its over-engineering notes were adopted except one point, kept for a reason given in the table.
+
+The raw review is kept privately.
+
+| Finding | Disposition | Where |
+|---|---|---|
+| A-01 Observations froze mutable state | Adopted: temporal slots and windows; the game is authoritative for current mirrored values | §6.2, §6.3 |
+| A-02 Arbitration contradicted resolution | Adopted: one arbitration pass, highest precedence first; active versus rejected; contradiction status | §5.2 |
+| A-03 Propagation had no dependency model or termination | Adopted differently: declaration-order dependencies; backward narrowing only through derived views and counts | §2.3, §6.4, C-05 |
+| A-04 Leadership created inheritance cycles | Adopted: acyclic weighted parent links; leaders act through decisions; pull is the strongest path | §10.3 |
+| A-05 Query traversal missed nodes | Adopted: descend every unpruned region; check every candidate exactly; deduplicate; complete top-k | §8.3 |
+| A-06 Owned values, refs and structured values were guesses | Adopted: `node` slots for owned values; `ref` slots that select; a minimal core schema | §2.1, §2.4, §2.6 |
+| A-07 Some bounds weren't conservative | Adopted: Rule bounds under `maybe`; constraints that might be rejected don't narrow | §4.3, §8.2 |
+| A-08 Fingerprints missed dependencies | Adopted: a coarse global revision in the reference model; finer tracking is an optimisation that must agree | §5.5 |
+| A-09 Regeneration could become a story event | Adopted: only semantic changes emit; resolution, regeneration and replay are silent | §5, §10.5, I-13 |
+| A-10 Sampling undefined at scale | Adopted: `N_enum`, declared hierarchical samplers, bounded ref candidates, explicit failure; text composed from components | §5.4, §2.6, C-04 |
+| A-11 Summary refinement had no procedure | Adopted: per-index deterministic items; counts never below canon; only observed or committed fields pinned | §9.2, §9.3 |
+| A-12 Identity information not persisted | Adopted: headers for every retained node; retained members bound counts | §3.1, §6.5, §14.1 |
+| A-13 Load boundary unclear | Adopted: loading is replacement, silent replay, game reconciliation, epochs | §14.3 |
+| A-14 Caps didn't bound time | Adopted: one work budget in units; resumable worklists | §10.7 |
+| A-15 Persistence grew regardless of relevance | Adopted: retention-driven persistence; canon pins only the needed fields; measure before budgeting | §7.3, §9.2, §14.1 |
+| A-16 Evolution depended on time partitioning | Adopted: canonical windows, double-buffered order; fine tiers don't catch up | §9.4, I-15 |
+| A-17 Frame lifecycle incomplete | Adopted: demand roots, blocked frames stay registered, deterministic suspension, cascades | §10.4 |
+| A-18 Matching lost semantics; defaults suppressed reactions | Adopted: routing keys plus exact checks; participant and role keys; one emission per triple; calibration fixtures | §10.5, §16 |
+| A-19 Shared target isn't cross-pressure | Adopted: an effect vocabulary and conflict table; rechecked when memberships change | §10.8 |
+| A-20 Attribution leaked world truth | Adopted: the `knows` interface and perceivable slots and edges | §11.4 |
+| A-21 Hearsay manufactured confidence | Adopted: evidence identities; only independent evidence corroborates | §11.2 |
+| A-22 Stability claim overstated | Adopted differently: the inverse-CDF draw is replaced by Gumbel-max with fixed per-value noise, which has the coupling property exactly (I-7) | §5.4 |
+| A-23 Hashing alone isn't cross-language determinism | Adopted: binary64 rules, fdlibm `ln` and `exp`, polynomial falloffs, canonical sum order, hash-keyed streams, versioned functions | §1.3, §1.4, §14.4 |
+| A-24 Scenarios weren't test vectors | Adopted: fourteen hand-checkable fixtures and four calibration fixtures; the regression corpus comes later | §16 |
+| A-25 Explanation ranking misleading | Adopted differently: the complete trace is separate from the top-k presentation; ranking by discriminating effect at the winner | §13 |
+| Over-engineering notes | Adopted: behavioural policies moved to S1; first domains narrowed; no general frameworks; tiers are scheduling bands. Partly adopted: drive data stays in the kernel because frames need it | §0, §10.1, §10.6, §11.2 |
