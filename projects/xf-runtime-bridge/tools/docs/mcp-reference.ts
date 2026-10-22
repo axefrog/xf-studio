@@ -6,8 +6,8 @@
 //   bun tools/docs/mcp-reference.ts --check    exits 1 when the file differs from what the catalogue gives
 //                                              (the Docs links workflow and tools/test/mcp-reference.test.ts check it)
 //
-// Refusal codes per tool are the known codes the tool's own text names (its description, undo note and parameter
-// descriptions). A code is known when the tools' shared wording (tools/api/errors.ts) has it or a source raises it: the
+// Refusal codes per tool are the catalogue entry's own `refusals` (catalogue080.ts), joined by the known codes the tool's
+// own text names (its description, undo note and parameter descriptions). A code is known when the tools' shared wording (tools/api/errors.ts) has it or a source raises it: the
 // tools' planError calls, the plugin's MethodError and the redscript layer's XFJson.Fail. The refusals every tool can
 // give (no bridge, a closed write gate, a paused bridge) are listed once, at the top. Only the catalogue, errors.ts and
 // source text are read: no MCP SDK, no game and no bridge, so CI runs it without an install.
@@ -234,9 +234,12 @@ function commandText(command: CommandDef): string {
   return parts.join("\n");
 }
 
-/** The known refusal codes a command's own text names, in the order it names them. */
+/**
+ * A command's refusal codes: the entry's own `refusals` (declared, so listed even when no source text raises them yet),
+ * then the known codes its text names that the entry doesn't declare, in the order it names them.
+ */
 export function namedCodes(command: CommandDef, known: Set<string>): string[] {
-  const found: string[] = [];
+  const found: string[] = [...new Set(command.refusals ?? [])];
   for (const [token] of commandText(command).matchAll(CODE_TOKEN)) if (known.has(token) && !found.includes(token)) found.push(token);
   return found;
 }
@@ -314,7 +317,7 @@ function renderTool(command: CommandDef, known: Set<string>, wording: Record<str
   if (command.undo) lines.push(`- **Undo:** ${prose(command.undo)}`);
   else if (command.permission === "read") lines.push("- **Undo:** nothing to undo");
   const codes = namedCodes(command, known);
-  if (codes.length) lines.push(`- **Refusals it names:** ${codes.map((c) => refusalLink(c, wording)).join(", ")}`);
+  if (codes.length) lines.push(`- **Refusals:** ${codes.map((c) => refusalLink(c, wording)).join(", ")}`);
   lines.push("");
   const rows = parameterRows(command.input);
   if (!rows.length) {
@@ -369,7 +372,7 @@ export function renderReference(commands: readonly CommandDef[] = CATALOGUE, kno
     "",
     "## Refusals any tool can give",
     "",
-    "A refused tool changes nothing unless its message says otherwise (`timeout_after_start` is the one that may have happened), and its message is a plain sentence with one next step that a client can show as it is. The codes below can come from many tools, so each tool's own list (\"Refusals it names\") shows only the codes its description and parameters mention; it is not exhaustive.",
+    "A refused tool changes nothing unless its message says otherwise (`timeout_after_start` is the one that may have happened), and its message is a plain sentence with one next step that a client can show as it is. The codes below can come from many tools, so each tool's own list (\"Refusals\") shows the codes the catalogue declares for it and those its description and parameters mention; it is not exhaustive.",
     "",
     `- **Any tool:** ${TOOL_CODES.map((c) => refusalLink(c, wording)).join(", ")}.`,
     `- **Any tool that reaches the game** (everything except \`capture_screenshot\` and \`capture_recrop\`, which work on the game window without the bridge): ${GAME_CODES.map((c) => refusalLink(c, wording)).join(", ")}.`,

@@ -33,11 +33,21 @@ describe("MCP reference", () => {
     for (const link of links) expect(targets.has(link)).toBe(true);
   });
 
-  test("a tool lists only known codes its own text names", () => {
+  test("a tool lists its declared refusals and the known codes its own text names", () => {
     const known = knownCodes();
     const weather = CATALOGUE.find((c) => c.name === "world.weather.set")!;
     expect(namedCodes(weather, known)).toContain("quest_scene");
-    for (const command of CATALOGUE) for (const code of namedCodes(command, known)) expect(known.has(code)).toBe(true);
+    for (const command of CATALOGUE) {
+      const codes = namedCodes(command, known);
+      for (const code of command.refusals ?? []) expect(codes).toContain(code);
+      for (const code of codes) if (!(command.refusals ?? []).includes(code)) expect(known.has(code)).toBe(true);
+      expect(new Set(codes).size).toBe(codes.length);
+    }
+    // A declared code is listed even when the text doesn't name it, once, before the text's own.
+    const declared: CommandDef = { ...weather, refusals: ["declared_only", "quest_scene"] };
+    const codes = namedCodes(declared, known);
+    expect(codes.slice(0, 2)).toEqual(["declared_only", "quest_scene"]);
+    expect(codes.filter((c) => c === "quest_scene")).toHaveLength(1);
     // A parameter name that merely looks like a code is not one.
     expect(known.has("add_if_missing")).toBe(false);
   });

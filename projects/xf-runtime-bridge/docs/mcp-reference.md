@@ -2,7 +2,7 @@
 
 # XF Runtime Bridge MCP tool reference
 
-Every tool the XF Runtime Bridge MCP server publishes: 82 tools, 43 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
+Every tool the XF Runtime Bridge MCP server publishes: 84 tools, 44 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
 
 Tool names are the catalogue's command names with dots as underscores (`photo.camera.set` is `photo_camera_set`). Every tool's description, parameters and refusals are written for the person using the AI client as much as for the model. A successful answer is JSON text with the `result`, an `undo` when the tool changed something, and a correlation id (`cid`) that matches the bridge's logs; captures also return a small preview image. A refusal is an error result with a plain sentence, the code in brackets and the correlation id.
 
@@ -16,11 +16,12 @@ Tool names are the catalogue's command names with dots as underscores (`photo.ca
 - [Player](#player) (7)
 - [Behaviours](#behaviours) (6)
 - [World](#world) (7)
-- [Wardrobe, clothing and cyberware](#wardrobe-clothing-and-cyberware) (7)
+- [Wardrobe, clothing and cyberware](#wardrobe-clothing-and-cyberware) (8)
 - [XF Finish Showroom](#xf-finish-showroom) (5)
 - [Capture and the agent's view](#capture-and-the-agents-view) (6)
 - [Saves](#saves) (3)
 - [Overlay and in-game UI](#overlay-and-in-game-ui) (3)
+- [Other tools](#other-tools) (1)
 - [Refusal codes](#refusal-codes)
 
 ## Permission classes
@@ -29,13 +30,13 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 
 | Class | Label | Tools | Changes the game | What it covers | Game-side switch |
 |---|---|---|---|---|---|
-| `read` | Look | 31 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
-| `notify` | Show messages in the game | 3 | No: it shows or moves the bridge's own messages and panel | Shows short messages to the player under the bridge's status label in the game, and shows, hides or moves the bridge's own XF panel there. Changes nothing in the game; the messages fade by themselves. | Always allowed while the bridge is on, read-only builds included. |
+| `read` | Look | 32 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
+| `notify` | Show messages in the game | 3 | No: it shows or moves the bridge's own messages and panel | Shows short messages to the player in the game (the ink panel while the HUD shows, the XF box (the small box with the yellow heading) in photo mode and menus, the CET line (one line with a coloured dot at the far top left) when neither can draw; none on a loading screen), and shows, hides or moves the ink panel. Changes nothing in the game; the messages fade by themselves. | Always allowed while the bridge is on, read-only builds included. |
 | `write-photo` | Control photo mode | 15 | Yes | Opens and closes photo mode and changes its camera, lights, expression and on-screen menu. Nothing outlives photo mode. | `allow_writes = true` and `photo` in `allow_write_classes` (on by default once writes are allowed). |
 | `write-world` | Change the world | 5 | Yes | Changes the in-game time of day or stops time, and places XF map pins (a test feature). Undo by setting it back or removing the pins. | `allow_writes = true` and `world` in `allow_write_classes` (on by default once writes are allowed). |
 | `write-character` | Change V's appearance | 5 | Yes | Opens the appearance screen, changes its options and camera, and confirms or leaves it (opening and leaving only in the XF test profile). | `allow_writes = true` and `character` in `allow_write_classes` (on by default once writes are allowed); opening, confirming and leaving the appearance screen also need `allow_creator_leave = true`. |
 | `write-inventory` | Change V's clothing | 5 | Yes | Equips and unequips V's clothing, and can add a test item to V's inventory (and remove it again). Off in the bridge's settings until the maintainer allows it; undo by equipping the earlier item. | `allow_writes = true` and `inventory` listed by name. Off in every package unless the test build is made with `--allow-inventory`. |
-| `write-save` | Save and load the game | 2 | Yes | Makes a new manual save (never overwrites one) or loads a save, which discards everything since it. Saving is refused while the bridge's own changes are live unless explicitly overridden. | `allow_writes = true` and `save` listed by name (the test profile's build lists it). |
+| `write-save` | Save and load the game | 3 | Yes | Makes a new manual save (never overwrites one) or loads a save, which discards everything since it. Saving is refused while the bridge's own changes are live unless explicitly overridden. | `allow_writes = true` and `save` listed by name (the test profile's build lists it). |
 | `write-showroom` | Set up the finish showroom | 5 | Yes | Spawns XF Finish Showroom's mannequin heads and their light rigs in front of V, turns them and removes them again. Nothing is saved: clearing, the kill switch or loading a save removes them. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `showroom` listed by name (the test profile's build lists it). |
 | `write-player` | Move V | 6 | Yes | Moves and turns V (teleports with ground checks, glides along walkable paths), turns her view, crouches and stands, draws or holsters her weapon and opens menus. Reversible; the kill switch and loading a save undo it. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `player` listed by name (the test profile's build lists it). |
 | `act-player` | Act for V | 0 | Yes | Irreversible actions in the world for V: using devices, choosing dialogue, consuming items. Reserved: no command uses it yet. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `act` listed by name. Reserved: no tool uses it yet. |
@@ -43,7 +44,7 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 
 ## Refusals any tool can give
 
-A refused tool changes nothing unless its message says otherwise (`timeout_after_start` is the one that may have happened), and its message is a plain sentence with one next step that a client can show as it is. The codes below can come from many tools, so each tool's own list ("Refusals it names") shows only the codes its description and parameters mention; it is not exhaustive.
+A refused tool changes nothing unless its message says otherwise (`timeout_after_start` is the one that may have happened), and its message is a plain sentence with one next step that a client can show as it is. The codes below can come from many tools, so each tool's own list ("Refusals") shows the codes the catalogue declares for it and those its description and parameters mention; it is not exhaustive.
 
 - **Any tool:** [`bad_input`](#refusal-bad-input).
 - **Any tool that reaches the game** (everything except `capture_screenshot` and `capture_recrop`, which work on the game window without the bridge): [`no_bridge`](#refusal-no-bridge), [`bridge_busy`](#refusal-bridge-busy), [`session_running`](#refusal-session-running), [`wrong_server`](#refusal-wrong-server), [`access_denied`](#refusal-access-denied), [`connect_failed`](#refusal-connect-failed), [`disconnected`](#refusal-disconnected), [`client_timeout`](#refusal-client-timeout), [`game_not_running`](#refusal-game-not-running), [`game_loading`](#refusal-game-loading), [`game_not_ready`](#refusal-game-not-ready), [`timeout`](#refusal-timeout), [`timeout_after_start`](#refusal-timeout-after-start), [`busy`](#refusal-busy), [`rate_limited`](#refusal-rate-limited), [`killed`](#refusal-killed), [`script_calls_unavailable`](#refusal-script-calls-unavailable), [`script_layer_missing`](#refusal-script-layer-missing), [`unknown_method`](#refusal-unknown-method), [`rtti_missing`](#refusal-rtti-missing), [`rtti_signature`](#refusal-rtti-signature), [`call_failed`](#refusal-call-failed), [`failed`](#refusal-failed).
@@ -190,10 +191,11 @@ No parameters.
 - **Permission:** Look (`read`)
 - **Changes the game:** No
 - **Undo:** nothing to undo
+- **Refusals:** `wait_timeout`, `interrupted`
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
-| `phase` (required) | array of string | 1 to 9 items; each `starting`, `main_menu`, `loading`, `gameplay`, `photo_mode`, `character_menu`, `menu`, `paused`, `shutting_down` | Phases to wait for (any one of them). |
+| `phase` (required) | undefined | any | The phase to wait for, or a list of phases (any one of them). |
 | `timeout_ms` | integer | 0 to 600000 | How long to wait, in milliseconds (default 60000, at most 600000). |
 
 ### `game_options_read`
@@ -204,6 +206,7 @@ No parameters.
 - **Permission:** Look (`read`)
 - **Changes the game:** No
 - **Undo:** nothing to undo
+- **Refusals:** [`unavailable`](#refusal-unavailable), [`timeout`](#refusal-timeout)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -214,7 +217,7 @@ No parameters.
 
 ### `ui_message`
 
-**Show a message in the game.** Shows a message to the player under the bridge's status label in the top-left corner of the game and in the XF panel (so the player never has to leave the game): up to 600 characters, wrapped, for seconds seconds (default 8). At most four show at once; a new one pushes out the oldest, except the newest unanswered question, which stays pinned until it is answered or its seconds end. level colours it: info, ask (a question for the player), warn or done. An ask shows answer buttons: choices (1 to 4 labels), or Ready, Yes and No by default; the player answers with the key the XF panel shows next to each (F6, F7, F8, F11 by default) or the button in the XF window of the Cyber Engine Tweaks overlay, and the answer (with this message's id) goes into the session's event stream, where session_wait returns it. clear: true takes the lines down but leaves a question still waiting for its answer (clear_asks: true withdraws it too); withdraw takes one message down by its id (a question's undo). The kill switch clears them all.
+**Show a message in the game.** Shows a message to the player in the game, so the player never has to leave it: on the one status surface showing (0.8.2: the ink panel while the game shows its HUD, the XF box with the yellow heading in photo mode and menus, the CET line with a coloured dot at the far top left only when neither can draw; 0.8.3: none on a loading screen), and a question also in the XF Runtime Bridge window of the Cyber Engine Tweaks overlay. Up to 600 characters, wrapped, for seconds seconds (default 8); a longer text is cut at a word with an ellipsis. At most four show at once; a new one pushes out the oldest, except the newest unanswered question, which stays pinned until it is answered or its seconds end. level colours it: info, ask (a question for the player), warn or done. A question (level ask) shows only the answers choices gives (1 to 4 short labels, such as Fully visible and Partly cut off, or Yes and No); without choices it shows one Done button, for a step the player confirms. The player answers with the key shown next to each answer (F6, F7, F8, F11 by default) or the button in the XF Runtime Bridge window, and the answer (with this message's id) goes into the session's event stream, where session_wait returns it; the question stays with Answered: and the answer until the next message. Characters a surface can't draw show as one replacement mark there, and Cyber Engine Tweaks' label writes Polish and other Latin letters without their accents. One question at a time: a new question withdraws one still waiting (its session_wait ends with question_gone). Each answer in choices is a button label of at most 24 characters; put any detail in the question's text. clear: true takes the lines down and withdraws a question still waiting (keep_asks: true keeps it); withdraw takes one message down by its id (a question's undo). The kill switch clears them all.
 
 - **Command:** `ui.message`, the bridge method `ui.message`
 - **Permission:** Show messages in the game (`notify`)
@@ -226,9 +229,9 @@ No parameters.
 | `text` | string | 1 to 2000 characters | The message (at most 600 characters are shown). |
 | `seconds` | integer | 1 to 600 | How long it shows, 1 to 600 seconds. Default 8; give a question long enough for the player to answer. |
 | `level` | string | `info`, `ask`, `warn`, `done` | info (default), ask, warn or done. |
-| `choices` | array of string | 1 to 4 items; each 1 to 24 characters | With level ask: the answers offered, 1 to 4 short labels (default Ready, Yes, No). |
-| `clear` | boolean | `true`, `false` | Remove the lines first (alone: only that); a question still waiting for its answer stays. |
-| `clear_asks` | boolean | `true`, `false` | With clear: withdraw a waiting question too (a session_wait on it ends with question_gone). |
+| `choices` | array of string | 1 to 4 items; each 1 to 24 characters | With level ask: the answers offered, only these, 1 to 4 button labels of at most 24 characters each (default one Done button). |
+| `clear` | boolean | `true`, `false` | Remove the lines first (alone: only that), and withdraw a question still waiting for its answer (a session_wait on it ends with question_gone). |
+| `keep_asks` | boolean | `true`, `false` | With clear: keep a question still waiting for its answer (a capture's clear does). |
 | `withdraw` | integer | 1 to 1000000000 | Take down the message with this id (ui_message's id); a question withdrawn this way ends its session_wait with question_gone. |
 
 ### `input_probe`
@@ -244,12 +247,13 @@ No parameters.
 
 ### `session_wait`
 
-**Wait for the player's answer.** Waits until the player answers a question from the game or sends a comment (or another event kind you name), then returns it: kinds (default answer and comment; note catches notes from the game, such as Mark this moment, never a client's own), message_id (only the answer to that ui_message question counts, even one given before this call; other kinds still end the wait from now on; a question withdrawn, cleared or run out of time without an answer ends it with question_gone), after (the event sequence to wait after; default: now) and timeout_s (1 to 600, default 120). Answers come from the XF panel's answer keys or the buttons in the XF window of the Cyber Engine Tweaks overlay; comments from that window's comment box. Use it after ui_message with level ask instead of polling session_log. Changes nothing.
+**Wait for the player's answer.** Waits until the player answers a question from the game or sends a comment (or another event kind you name), then returns it: kinds (default answer and comment; note catches notes from the game, such as Mark this moment, never a client's own), message_id (only the answer to that ui_message question counts, even one given before this call; other kinds still end the wait from now on; a question withdrawn, cleared or run out of time without an answer ends it with question_gone), after (the event sequence to wait after; default: now) and timeout_s (1 to 600, default 120). Answers come from the answer keys or the buttons in the XF Runtime Bridge window of the Cyber Engine Tweaks overlay; comments from that window's comment box. Use it after ui_message with level ask instead of polling session_log. Changes nothing.
 
 - **Command:** `session.wait`, run by the tools (it may call the bridge several times)
 - **Permission:** Look (`read`)
 - **Changes the game:** No
 - **Undo:** nothing to undo
+- **Refusals:** `question_gone`
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -271,6 +275,7 @@ Open and leave photo mode, frame V, set the camera, lights, expression, pose and
 - **Permission:** Look (`read`)
 - **Changes the game:** No
 - **Undo:** nothing to undo
+- **Refusals:** [`game_not_ready`](#refusal-game-not-ready), [`unavailable`](#refusal-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -285,6 +290,7 @@ Open and leave photo mode, frame V, set the camera, lights, expression, pose and
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** photo.exit.
+- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay), `photo_not_allowed`, `key_unsupported`, `no_window`, `photo_open_timeout`, `interrupted`
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -300,6 +306,7 @@ Open and leave photo mode, frame V, set the camera, lights, expression, pose and
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** photo.exit.
+- **Refusals:** [`photo_key_needed`](#refusal-photo-key-needed), [`not_in_gameplay`](#refusal-not-in-gameplay), [`unsupported`](#refusal-unsupported), [`rtti_missing`](#refusal-rtti-missing), [`rtti_signature`](#refusal-rtti-signature), [`unavailable`](#refusal-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -313,6 +320,7 @@ Open and leave photo mode, frame V, set the camera, lights, expression, pose and
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** photo.open (photo-mode settings start fresh).
+- **Refusals:** [`unavailable`](#refusal-unavailable)
 
 No parameters.
 
@@ -324,6 +332,7 @@ No parameters.
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** the result's undo parameters restore each previous value; reset (or the open-defaults preset) restores how photo mode opened.
+- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable), [`write_mismatch`](#refusal-write-mismatch), [`timeout`](#refusal-timeout)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -358,6 +367,7 @@ No parameters.
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** the result's undo puts the camera back where it was, looking the same way; closing photo mode resets the camera anyway.
+- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable), [`write_mismatch`](#refusal-write-mismatch), [`timeout`](#refusal-timeout), [`too_far`](#refusal-too-far)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -377,6 +387,7 @@ No parameters.
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo writes the earlier values back and selects the earlier preset; restarting the game drops the changes too.
+- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable), [`write_mismatch`](#refusal-write-mismatch), [`timeout`](#refusal-timeout), `tweakxl_missing`
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -400,6 +411,7 @@ No parameters.
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** the result's undo parameters restore that light's previous values (including on/off), its earlier position and the menu's previous light selection.
+- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable), [`write_mismatch`](#refusal-write-mismatch), [`timeout`](#refusal-timeout)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -430,6 +442,7 @@ No parameters.
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** photo.hud.hide with hidden: false; leaving photo mode (or the kill switch) always shows the menu and cursor again.
+- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -444,6 +457,7 @@ No parameters.
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** the result's undo parameters restore the previous expression.
+- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable), [`write_mismatch`](#refusal-write-mismatch), [`timeout`](#refusal-timeout), [`no_effect`](#refusal-no-effect), [`unverified_index`](#refusal-unverified-index), [`face_table_unreadable`](#refusal-face-table-unreadable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -458,7 +472,7 @@ No parameters.
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** the result's undo selects the expression the photo-mode menu shows again (photo_expression_set); leaving photo mode also resets it.
-- **Refusals it names:** [`unverified_index`](#refusal-unverified-index), [`no_effect`](#refusal-no-effect)
+- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable), [`no_effect`](#refusal-no-effect), [`unverified_index`](#refusal-unverified-index), [`face_table_unreadable`](#refusal-face-table-unreadable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -475,6 +489,7 @@ No parameters.
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** the result's undo selects the earlier category and pose again; leaving photo mode also resets the pose.
+- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable), [`write_mismatch`](#refusal-write-mismatch), [`timeout`](#refusal-timeout), [`carrier_not_loaded`](#refusal-carrier-not-loaded)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -492,6 +507,7 @@ No parameters.
 - **Permission:** Look (`read`)
 - **Changes the game:** No
 - **Undo:** nothing to undo
+- **Refusals:** [`live_pose_unavailable`](#refusal-live-pose-unavailable), [`carrier_not_loaded`](#refusal-carrier-not-loaded), [`clip_not_found`](#refusal-clip-not-found), [`layout_unrecognised`](#refusal-layout-unrecognised), [`game_not_ready`](#refusal-game-not-ready)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -507,6 +523,7 @@ No parameters.
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** pose_live_apply with restore: true (the result's undo); the kill switch also puts the carrier's keys back, and leaving photo mode unloads the carrier.
+- **Refusals:** [`live_pose_disabled`](#refusal-live-pose-disabled), [`live_pose_unavailable`](#refusal-live-pose-unavailable), [`carrier_not_loaded`](#refusal-carrier-not-loaded), [`carrier_not_selected`](#refusal-carrier-not-selected), [`clip_not_found`](#refusal-clip-not-found), [`layout_unrecognised`](#refusal-layout-unrecognised)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -524,6 +541,7 @@ No parameters.
 - **Permission:** Look (`read`)
 - **Changes the game:** No
 - **Undo:** nothing to undo
+- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -538,6 +556,7 @@ No parameters.
 - **Permission:** Look (`read`)
 - **Changes the game:** No
 - **Undo:** nothing to undo
+- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -553,6 +572,7 @@ No parameters.
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** the result's undo puts the field of view, V's rotation and placement (and look-at, roll and camera preset) back as they were.
+- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), `framing_bound`, `no_projection`, `no_response`, `no_capture`, `not_found`, [`unavailable`](#refusal-unavailable), [`write_mismatch`](#refusal-write-mismatch)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -585,6 +605,7 @@ No parameters.
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo sets the rows back; closing photo mode drops them too.
+- **Refusals:** [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable), [`write_mismatch`](#refusal-write-mismatch)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -608,6 +629,7 @@ Read V's creator options, open the appearance screen from normal play, change op
 - **Permission:** Look (`read`)
 - **Changes the game:** No
 - **Undo:** nothing to undo
+- **Refusals:** [`game_not_ready`](#refusal-game-not-ready)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -625,6 +647,7 @@ Read V's creator options, open the appearance screen from normal play, change op
 - **Permission:** Change V's appearance (`write-character`)
 - **Changes the game:** Yes
 - **Undo:** cc.back (or Back in the appearance screen) discards every change made there and closes it.
+- **Refusals:** [`creator_leave_disabled`](#refusal-creator-leave-disabled), [`not_in_gameplay`](#refusal-not-in-gameplay), [`not_safe_now`](#refusal-not-safe-now), [`not_v`](#refusal-not-v), [`save_lock_not_held`](#refusal-save-lock-not-held), [`creator_open_timeout`](#refusal-creator-open-timeout), [`creator_open_uncertain`](#refusal-creator-open-uncertain), [`unavailable`](#refusal-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -640,7 +663,7 @@ Read V's creator options, open the appearance screen from normal play, change op
 - **Permission:** Change V's appearance (`write-character`)
 - **Changes the game:** Yes
 - **Undo:** cc.apply with the previous index (in the result's undo), or Back in the appearance screen, which discards every change made there.
-- **Refusals it names:** [`stale_match`](#refusal-stale-match)
+- **Refusals:** [`not_in_character_menu`](#refusal-not-in-character-menu), [`stale_match`](#refusal-stale-match), [`busy`](#refusal-busy)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -659,6 +682,7 @@ Read V's creator options, open the appearance screen from normal play, change op
 - **Permission:** Change V's appearance (`write-character`)
 - **Changes the game:** Yes
 - **Undo:** cc.page with page default (the camera's earlier part can't be read).
+- **Refusals:** [`not_in_character_menu`](#refusal-not-in-character-menu)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -672,17 +696,19 @@ Read V's creator options, open the appearance screen from normal play, change op
 - **Permission:** Change V's appearance (`write-character`)
 - **Changes the game:** Yes
 - **Undo:** Load the safety save (the look stays in the running game until then).
+- **Refusals:** [`creator_leave_disabled`](#refusal-creator-leave-disabled), [`not_in_character_menu`](#refusal-not-in-character-menu), [`busy`](#refusal-busy)
 
 No parameters.
 
 ### `cc_back`
 
-**Leave the appearance screen without keeping changes.** Presses Back on the open appearance screen and confirms it, discarding every change made there and closing the screen. Only in the XF test profile.
+**Leave the appearance screen without keeping changes.** Presses Back on the open appearance screen and confirms it, discarding every change made there and closing the screen. It works even while the screen still seems busy with a change (a completion that never came): Back discards that change too, and the answer says busy_cleared. Only in the XF test profile.
 
 - **Command:** `cc.back`, the bridge method `cc.back`
 - **Permission:** Change V's appearance (`write-character`)
 - **Changes the game:** Yes
 - **Undo:** Nothing to undo: the changes made on the screen were discarded.
+- **Refusals:** [`creator_leave_disabled`](#refusal-creator-leave-disabled), [`not_in_character_menu`](#refusal-not-in-character-menu)
 
 No parameters.
 
@@ -698,6 +724,7 @@ Read V's state, move and turn her, turn her view, crouch, draw or holster, open 
 - **Permission:** Look (`read`)
 - **Changes the game:** No
 - **Undo:** nothing to undo
+- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay)
 
 No parameters.
 
@@ -709,7 +736,7 @@ No parameters.
 - **Permission:** Move V (`write-player`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo teleports V back to where she stood, facing the same way; loading the save undoes it too.
-- **Refusals it names:** [`no_ground`](#refusal-no-ground), [`not_streamed`](#refusal-not-streamed), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`player_busy`](#refusal-player-busy)
+- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay), [`not_v`](#refusal-not-v), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`player_busy`](#refusal-player-busy), [`no_ground`](#refusal-no-ground), [`not_streamed`](#refusal-not-streamed), [`too_far`](#refusal-too-far)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -725,13 +752,13 @@ No parameters.
 
 ### `player_look`
 
-**Turn V's view.** Turns V's view to yaw and pitch (degrees; relative adds them to the current view) or towards a world point (at): instant (her facing by a teleport in place, the pitch by a very short look-at) or smooth over duration_s (the game's own look-at, which the player's mouse or stick breaks). Answers the angles reached and whether they are within 2 degrees. Normal play only. It checks V first and refuses with the reason (in_combat, in_vehicle, in_scene, player_busy while she jumps, slides, falls or lands, swims, sits in a workspot, takes someone down or carries a body, or a menu or photo mode is open; player_state's busy_state says which).
+**Turn V's view.** Turns V's view to yaw and pitch (degrees; relative adds them to the current view) or towards a world point (at): instant (her facing by a teleport in place, the pitch by a very short look-at) or smooth over duration_s (along the shortest arc, eased in and out, in short steps of the game's own look-at, so it takes duration_s; the player's mouse or stick ends it, took_over camera_drift). Answers the angles reached, whether they are within 2 degrees, took_s and whether player_stop stopped it. Normal play only. It checks V first and refuses with the reason (in_combat, in_vehicle, in_scene, player_busy while she jumps, slides, falls or lands, swims, sits in a workspot, takes someone down or carries a body, or a menu or photo mode is open; player_state's busy_state says which).
 
 - **Command:** `player.look`, the bridge method `player.look`
 - **Permission:** Move V (`write-player`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo turns the view back to the earlier angles.
-- **Refusals it names:** [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`player_busy`](#refusal-player-busy)
+- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay), [`not_v`](#refusal-not-v), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`player_busy`](#refusal-player-busy), [`unavailable`](#refusal-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -750,6 +777,7 @@ No parameters.
 - **Permission:** Move V (`write-player`)
 - **Changes the game:** Yes
 - **Undo:** Nothing to undo.
+- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay)
 
 No parameters.
 
@@ -772,6 +800,7 @@ No parameters.
 - **Permission:** Look (`read`)
 - **Changes the game:** No
 - **Undo:** nothing to undo
+- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay)
 
 No parameters.
 
@@ -783,7 +812,7 @@ No parameters.
 - **Permission:** Move V (`write-player`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo does the opposite (stand, weapon.holster, menu.close); player_stop and the kill switch lift a crouch too.
-- **Refusals it names:** [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`player_busy`](#refusal-player-busy)
+- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay), [`not_v`](#refusal-not-v), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`player_busy`](#refusal-player-busy), [`rate_limited`](#refusal-rate-limited)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -803,6 +832,7 @@ Routines that run inside the game at frame rate: a turntable, a smooth look, a g
 - **Permission:** Set up the finish showroom (`write-showroom`)
 - **Changes the game:** Yes
 - **Undo:** behave_stop with its id (the heads turn back); the kill switch and loading a save stop it too.
+- **Refusals:** [`behaviour_limit`](#refusal-behaviour-limit), `no_showroom`, [`no_such_piece`](#refusal-no-such-piece)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -822,6 +852,7 @@ Routines that run inside the game at frame rate: a turntable, a smooth look, a g
 - **Permission:** Move V (`write-player`)
 - **Changes the game:** Yes
 - **Undo:** behave_stop ends it; player_look back to the earlier angles (in player_state) turns the view back.
+- **Refusals:** [`behaviour_limit`](#refusal-behaviour-limit), [`not_in_gameplay`](#refusal-not-in-gameplay), [`not_v`](#refusal-not-v), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`player_busy`](#refusal-player-busy), [`user_took_over`](#refusal-user-took-over)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -844,7 +875,7 @@ Routines that run inside the game at frame rate: a turntable, a smooth look, a g
 - **Permission:** Move V (`write-player`)
 - **Changes the game:** Yes
 - **Undo:** behave_stop ends it; its stop event carries a player_teleport undo back to the start.
-- **Refusals it names:** [`user_took_over`](#refusal-user-took-over)
+- **Refusals:** [`behaviour_limit`](#refusal-behaviour-limit), [`not_in_gameplay`](#refusal-not-in-gameplay), [`not_v`](#refusal-not-v), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`player_busy`](#refusal-player-busy), [`user_took_over`](#refusal-user-took-over), [`no_path`](#refusal-no-path), [`no_ground`](#refusal-no-ground), [`not_streamed`](#refusal-not-streamed), [`too_far`](#refusal-too-far), [`bridge_effects_active`](#refusal-bridge-effects-active)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -864,6 +895,7 @@ Routines that run inside the game at frame rate: a turntable, a smooth look, a g
 - **Permission:** Control photo mode (`write-photo`)
 - **Changes the game:** Yes
 - **Undo:** behave_stop ends it; the stop event's undo puts V's placement back (a head stays where it was last put; showroom_spawn resets the lineup).
+- **Refusals:** [`behaviour_limit`](#refusal-behaviour-limit), [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`no_such_piece`](#refusal-no-such-piece), [`unavailable`](#refusal-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -887,6 +919,7 @@ Routines that run inside the game at frame rate: a turntable, a smooth look, a g
 - **Permission:** Stop the bridge (`control`)
 - **Changes the game:** Only the bridge's own work: it stops or pauses it
 - **Undo:** Start the behaviour again.
+- **Refusals:** [`no_such_behaviour`](#refusal-no-such-behaviour)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -917,6 +950,7 @@ Read the world's state, probe the ground and streaming around V, and set the clo
 - **Permission:** Change the world (`write-world`)
 - **Changes the game:** Yes
 - **Undo:** the result's undo: the world's clock with total_seconds (target world), or photo mode's time of day in hours and minutes (target photo), which changes nothing once photo mode has closed.
+- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay), [`not_in_photo_mode`](#refusal-not-in-photo-mode), [`unavailable`](#refusal-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -934,6 +968,7 @@ Read the world's state, probe the ground and streaming around V, and set the clo
 - **Permission:** Change the world (`write-world`)
 - **Changes the game:** Yes
 - **Undo:** world.pause with paused: false; the kill switch also unfreezes.
+- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay), [`game_not_ready`](#refusal-game-not-ready)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -941,12 +976,13 @@ Read the world's state, probe the ground and streaming around V, and set the clo
 
 ### `world_pin`
 
-**Place an XF map pin.** Temporary test feature (bridge 0.5.3). Places a map pin with an XF badge and a label, shown on the world map (with the label in its tooltip), on the minimap and in the world through walls, the way the game shows its own markers. Give exactly one of position [x, y, z] (a world point in metres, as game_status and showroom_state report them), piece (a showroom head's index: the pin stands above its eyes; 0.7: placed there, so turning the head leaves it and clearing the heads removes it) or at: "v" (above where V stands now). label names it (1-48 characters). variant picks the game's pin type whose map filter and fallback icon it uses: custom (default), apartment, clothes or default. lift_m raises it (metres; default 0 at a position, 0.45 above a head or V). At most 8 pins. world.pin.clear, the kill switch and loading a save remove them.
+**Place an XF map pin.** Temporary test feature (bridge 0.5.3). Places a map pin with an XF badge and a label, shown on the world map (with the label in its tooltip), on the minimap and in the world through walls, the way the game shows its own markers: the game's own pin icon, with the XF badge above it and the label on the pin's name line. Give exactly one of position [x, y, z] (a world point in metres, as game_status and showroom_state report them), piece (a showroom head's index: the pin stands just above its eyes, 0.25 m by default; placed there, so turning the head leaves it and clearing the heads removes it) or at: "v" (above where V stands now). label names it (1-48 characters). variant picks the game's pin type whose map filter and icon it uses: custom (default; the one the minimap draws for any placed pin), interaction (in the world only), apartment, clothes or default. lift_m raises it (metres; default 0 at a position, 0.25 above a head's eyes, 0.45 above V). The answer's pins list which views have drawn each pin so far (drawn_by: world, minimap, world_map), and the plugin log names each one the first time. At most 8 pins. world.pin.clear, the kill switch and loading a save remove them.
 
 - **Command:** `world.pin`, the bridge method `world.pin`
 - **Permission:** Change the world (`write-world`)
 - **Changes the game:** Yes
 - **Undo:** world.pin.clear with the result's id; the kill switch and loading a save also remove every XF pin.
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`not_ready`](#refusal-not-ready), `too_many_pins`, [`no_such_piece`](#refusal-no-such-piece), [`not_spawned_yet`](#refusal-not-spawned-yet), `pin_refused`
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -954,7 +990,7 @@ Read the world's state, probe the ground and streaming around V, and set the clo
 | `piece` | integer | 0 to 23 | A showroom head's index (0 to 23), from showroom_state. |
 | `at` | string | `v` | v: above where V stands now. |
 | `label` (required) | string | 1 to 400 characters | The pin's name, 1 to 48 characters (longer is cut). |
-| `variant` | string | `custom`, `apartment`, `clothes`, `default` | The game's pin type it borrows its map filter and fallback icon from. Default custom. |
+| `variant` | string | `custom`, `interaction`, `apartment`, `clothes`, `default` | The game's pin type it borrows its map filter and icon from. Default custom. |
 | `lift_m` | number | -5 to 5 | Metres above the point (-5 to 5). |
 
 ### `world_pin_clear`
@@ -965,6 +1001,7 @@ Read the world's state, probe the ground and streaming around V, and set the clo
 - **Permission:** Change the world (`write-world`)
 - **Changes the game:** Yes
 - **Undo:** world.pin places a pin again.
+- **Refusals:** `no_such_pin`
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -978,6 +1015,7 @@ Read the world's state, probe the ground and streaming around V, and set the clo
 - **Permission:** Look (`read`)
 - **Changes the game:** No
 - **Undo:** nothing to undo
+- **Refusals:** [`game_not_ready`](#refusal-game-not-ready)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -991,6 +1029,7 @@ Read the world's state, probe the ground and streaming around V, and set the clo
 - **Permission:** Look (`read`)
 - **Changes the game:** No
 - **Undo:** nothing to undo
+- **Refusals:** [`unavailable`](#refusal-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1011,7 +1050,7 @@ Read the world's state, probe the ground and streaming around V, and set the clo
 - **Permission:** Change the world (`write-world`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo sets the earlier weather and turns the game's cycle back on; the kill switch does the same.
-- **Refusals it names:** `quest_scene`
+- **Refusals:** [`codeware_missing`](#refusal-codeware-missing), [`quest_scene`](#refusal-quest-scene), [`not_in_gameplay`](#refusal-not-in-gameplay), [`call_failed`](#refusal-call-failed), [`unavailable`](#refusal-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1030,13 +1069,30 @@ Read and change what V wears and her cyberware, through the game's own equipment
 - **Command:** `inventory.equip`, the bridge method `inventory.equip`
 - **Permission:** Change V's clothing (`write-inventory`)
 - **Changes the game:** Yes
-- **Undo:** the result's undo equips the earlier item again, or empties the slot (removing an item the bridge added); loading a save also undoes it.
+- **Undo:** the result's undo equips the earlier item's exact copy again (its id), or empties the slot (removing an item the bridge added); loading a save also undoes it.
+- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay), [`not_safe_now`](#refusal-not-safe-now), [`not_v`](#refusal-not-v), [`not_in_inventory`](#refusal-not-in-inventory), [`call_failed`](#refusal-call-failed), [`timeout`](#refusal-timeout)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
 | `item` (required) | string | at most 128 characters; matches `^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)+$` | The item record, for example Items.Helmet_01_basic_01. |
 | `slot` | string | `Head`, `Face`, `OuterChest`, `InnerChest`, `Legs`, `Feet`, `Outfit` | The clothing slot, checked against the item's own (optional). |
 | `add_if_missing` | boolean | `true`, `false` | Add the item to V's inventory if V doesn't have it. Default false. |
+| `id` | string | at most 20 characters; matches `^[0-9]{1,20}$` | The exact copy to equip, as an undo names it (the decimal identity the game gave); without it, any copy of the record. When V no longer has that copy, another copy is equipped and the answer says exact: false. |
+
+### `inventory_list`
+
+**List the clothing V owns.** Observe only: the clothing items in V's own inventory, one entry per copy: its item record (inventory_equip's item), clothing slot (Head, Face, OuterChest, InnerChest, Legs, Feet, Outfit), id (that exact copy's identity, inventory_equip's id), its name in the game's language and whether V wears it now; count says how many there are in all, listed how many the answer carries. slot lists one slot only. Nothing is changed, and the inventory permission isn't needed. Items stored only in the wardrobe aren't listed (wardrobe_state shows those).
+
+- **Command:** `inventory.list`, the bridge method `inventory.list`
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** nothing to undo
+- **Refusals:** [`unavailable`](#refusal-unavailable), [`game_not_ready`](#refusal-game-not-ready)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `slot` | string | `Head`, `Face`, `OuterChest`, `InnerChest`, `Legs`, `Feet`, `Outfit` | Only this clothing slot. |
+| `limit` | integer | 1 to 200 | At most this many entries, 1 to 200. Default 100. |
 
 ### `wardrobe_state`
 
@@ -1046,6 +1102,7 @@ Read and change what V wears and her cyberware, through the game's own equipment
 - **Permission:** Look (`read`)
 - **Changes the game:** No
 - **Undo:** nothing to undo
+- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay), [`unavailable`](#refusal-unavailable)
 
 No parameters.
 
@@ -1057,7 +1114,7 @@ No parameters.
 - **Permission:** Change V's clothing (`write-inventory`)
 - **Changes the game:** Yes
 - **Undo:** the result's undo (wardrobe_equip with restore, or resume after suspend) puts the outfit and every area back exactly; the kill switch resumes a suspended outfit and restores the wardrobe as it was before the bridge's first change.
-- **Refusals it names:** [`outfit_managed_elsewhere`](#refusal-outfit-managed-elsewhere)
+- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay), [`not_safe_now`](#refusal-not-safe-now), [`not_v`](#refusal-not-v), [`not_in_inventory`](#refusal-not-in-inventory), [`call_failed`](#refusal-call-failed), [`no_active_outfit`](#refusal-no-active-outfit), [`outfit_managed_elsewhere`](#refusal-outfit-managed-elsewhere), [`script_outfit_api_changed`](#refusal-script-outfit-api-changed), [`timeout`](#refusal-timeout)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1090,6 +1147,7 @@ No parameters.
 - **Permission:** Change V's clothing (`write-inventory`)
 - **Changes the game:** Yes
 - **Undo:** the result's undo equips the earlier item again.
+- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay), [`not_safe_now`](#refusal-not-safe-now), [`not_v`](#refusal-not-v), [`not_in_inventory`](#refusal-not-in-inventory), [`call_failed`](#refusal-call-failed), [`not_added_by_bridge`](#refusal-not-added-by-bridge), [`timeout`](#refusal-timeout)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1099,12 +1157,13 @@ No parameters.
 
 ### `cyberware_state`
 
-**Read V's cyberware.** What each of V's cyberware areas holds (ArmsCW, HandsCW, EyesCW, FaceCW, FrontalCortexCW, SystemReplacementCW, NervousSystemCW, CardiovascularSystemCW, ImmuneSystemCW, IntegumentarySystemCW, MusculoskeletalSystemCW, LegsCW), slot by slot with each item's record and name; for the arms, the chain the character creator's holster state follows (the ArmsCW item's holstered item and its appearance, such as holstered_mantis, and the creator group that draws it), what the right-arm and weapon slots hold now (holstered or drawn), and whether a no-arm-cyberware effect is on; V's humanity. areas limits the list.
+**Read V's cyberware.** What each of V's cyberware areas holds (ArmsCW, HandsCW, EyesCW, FaceCW, FrontalCortexCW, SystemReplacementCW, NervousSystemCW, CardiovascularSystemCW, ImmuneSystemCW, IntegumentarySystemCW, MusculoskeletalSystemCW, LegsCW), slot by slot with each item's record and name; for the arms, the chain the character creator's holster state follows (the ArmsCW item's holstered item and its appearance, such as holstered_mantis, and the creator group that draws it), what the right-arm and weapon slots hold now, drawn (the arm cyberware is out, by the rule cyberware changes are refused by), and whether a no-arm-cyberware effect is on; V's humanity. areas limits the list.
 
 - **Command:** `cyberware.state`, the bridge method `cyberware.state`
 - **Permission:** Look (`read`)
 - **Changes the game:** No
 - **Undo:** nothing to undo
+- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay), [`unavailable`](#refusal-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1112,13 +1171,13 @@ No parameters.
 
 ### `cyberware_equip`
 
-**Equip a cyberware item.** Puts a cyberware item into its area's slot through the game's own equipment request, as a ripperdoc's screen does (the earlier item in that slot comes out first): item is its record (Items.StrongArms, Items.MantisBlades, Items.NanoWires, Items.ProjectileLauncher, ...), slot the slot (default the first empty one), add_if_missing adds it to V's inventory first and remembers it. Only in normal play, outside combat and scenes, and not while the arm cyberware is drawn (arms_drawn); the game's own equip requirements are checked before anything changes (not_equippable leaves nothing added). The answer reads the slot back and carries the undo (the exact earlier copy back, with a copy the bridge added removed, or the slot emptied and an added item removed); if the slot can't be read back, equipped is unknown and the undo is still given. V's look and stats change until the undo, the kill switch or a load; the save lock is held meanwhile and game_save refuses until it is undone. In the inventory class, off unless allowed.
+**Equip a cyberware item.** Puts a cyberware item into its area's slot through the game's own equipment request, as a ripperdoc's screen does (the earlier item in that slot comes out first): item is its record (Items.StrongArms, Items.MantisBlades, Items.NanoWires, Items.ProjectileLauncher, ...), slot the slot (default the first empty one), add_if_missing adds it to V's inventory first and remembers it. Only in normal play, outside combat and scenes; while the arm cyberware is drawn (after photo mode it stays drawn) the tools holster it first with the game's own request (holster_first: false refuses arms_drawn instead); the game's own equip requirements are checked before anything changes (not_equippable leaves nothing added). The answer reads the slot back and carries the undo (the exact earlier copy back, with a copy the bridge added removed, or the slot emptied and an added item removed); if the slot can't be read back, equipped is unknown and the undo is still given. V's look and stats change until the undo, the kill switch or a load; the save lock is held meanwhile and game_save refuses until it is undone. In the inventory class, off unless allowed.
 
-- **Command:** `cyberware.equip`, the bridge method `cyberware.equip`
+- **Command:** `cyberware.equip`, run by the tools (it may call the bridge several times)
 - **Permission:** Change V's clothing (`write-inventory`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo puts the earlier item back, or empties the slot and removes an item the bridge added; loading the save undoes it too.
-- **Refusals it names:** `arms_drawn`, `not_equippable`
+- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay), [`not_safe_now`](#refusal-not-safe-now), [`not_v`](#refusal-not-v), [`not_in_inventory`](#refusal-not-in-inventory), [`call_failed`](#refusal-call-failed), [`arms_drawn`](#refusal-arms-drawn), [`not_equippable`](#refusal-not-equippable), [`unavailable`](#refusal-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1127,16 +1186,17 @@ No parameters.
 | `add_if_missing` | boolean | `true`, `false` | Add the item to V's inventory first if V doesn't have it (removed again by the undo). |
 | `id` | string | matches `^[0-9]{1,24}$` | The exact copy to equip, as an undo names it (digits). |
 | `remove_added_item` | string | at most 128 characters; matches `^[A-Za-z0-9_]+\.[A-Za-z0-9_.]+$` | After the equip, remove the copy of this record the bridge added (a swap's undo gives it). |
+| `holster_first` | boolean | `true`, `false` | When V has her arm cyberware out, holster it first with the game's own request and then make the change (default true); false refuses arms_drawn instead. |
 
 ### `cyberware_unequip`
 
-**Empty a cyberware slot.** Takes a cyberware item out of its slot through the game's own unequip request: area (ArmsCW, ...) and slot (one of the area's unlocked slots), or item (its record; its own slot is found). remove_added also removes an item the bridge itself added this session. Normal play only, and not while the arm cyberware is drawn (arms_drawn). The answer reads the slot back and carries the undo (the item equipped again).
+**Empty a cyberware slot.** Takes a cyberware item out of its slot through the game's own unequip request: area (ArmsCW, ...) and slot (one of the area's unlocked slots), or item (its record; its own slot is found). remove_added also removes an item the bridge itself added this session. Normal play only; while the arm cyberware is drawn the tools holster it first (holster_first: false refuses arms_drawn instead). The answer reads the slot back and carries the undo (the item equipped again).
 
-- **Command:** `cyberware.unequip`, the bridge method `cyberware.unequip`
+- **Command:** `cyberware.unequip`, run by the tools (it may call the bridge several times)
 - **Permission:** Change V's clothing (`write-inventory`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo equips the item again; loading the save undoes it too.
-- **Refusals it names:** `arms_drawn`
+- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay), [`not_safe_now`](#refusal-not-safe-now), [`not_v`](#refusal-not-v), [`not_in_inventory`](#refusal-not-in-inventory), [`call_failed`](#refusal-call-failed), [`arms_drawn`](#refusal-arms-drawn), [`not_added_by_bridge`](#refusal-not-added-by-bridge)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1144,6 +1204,7 @@ No parameters.
 | `item` | string | at most 128 characters; matches `^[A-Za-z0-9_]+\.[A-Za-z0-9_.]+$` | The item's record (instead of area). |
 | `slot` | integer | 0 to 9 | The slot, 0 to 9 (default 0, or the item's slot). |
 | `remove_added` | boolean | `true`, `false` | Also remove the item from V's inventory when the bridge added it (with item). |
+| `holster_first` | boolean | `true`, `false` | When V has her arm cyberware out, holster it first with the game's own request and then make the change (default true); false refuses arms_drawn instead. |
 
 ## XF Finish Showroom
 
@@ -1157,10 +1218,11 @@ Spawn, light, turn and clear the showroom's mannequin heads for close-up finish 
 - **Permission:** Set up the finish showroom (`write-showroom`)
 - **Changes the game:** Yes
 - **Undo:** showroom.clear with what: pieces (or all); loading a save also removes them.
+- **Refusals:** [`codeware_missing`](#refusal-codeware-missing), [`showroom_missing`](#refusal-showroom-missing), `showroom_manifest_missing`, `showroom_manifest_bad`, `showroom_not_staged`, [`not_in_world`](#refusal-not-in-world), [`not_ready`](#refusal-not-ready), [`too_far`](#refusal-too-far), [`spawn_refused`](#refusal-spawn-refused), [`no_such_piece`](#refusal-no-such-piece)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
-| `manifest` | string | at most 1024 characters | The showroom build's folder, or its manifest.json. |
+| `manifest` | string | at most 1024 characters | The showroom build's folder, or its manifest.json. Default (0.8.3): the XF Finish Showroom builds the game itself has staged (its archive/pc/mod folder), each with the manifest it ships inside the mod or, for an older build, this machine's build with the same bytes; every one is used, so a preset is found in whichever holds it. The answer's showroom_found names them. |
 | `manifests` | array of string | 1 to 4 items; each at most 1024 characters | Several showroom builds' folders or manifests, to set out their presets together. |
 | `presets` | array of string | 1 to 24 items; each at most 120 characters | Which presets, by name, preset ID or appearance, in lineup order. Default: all of them (at most 24). |
 | `layout` | string | `arc`, `row` | arc (default): on a circle about the camera or V, each head facing it. row: a straight line across the view, all facing back along it. |
@@ -1180,10 +1242,11 @@ Spawn, light, turn and clear the showroom's mannequin heads for close-up finish 
 - **Permission:** Set up the finish showroom (`write-showroom`)
 - **Changes the game:** Yes
 - **Undo:** showroom.clear with what: lights.
+- **Refusals:** [`codeware_missing`](#refusal-codeware-missing), [`showroom_missing`](#refusal-showroom-missing), `showroom_manifest_missing`, `showroom_manifest_bad`, `showroom_not_staged`, [`not_in_world`](#refusal-not-in-world), [`not_ready`](#refusal-not-ready), [`too_far`](#refusal-too-far), `no_showroom`, [`no_such_piece`](#refusal-no-such-piece), [`spawn_refused`](#refusal-spawn-refused)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
-| `manifest` | string | at most 1024 characters | The showroom build's folder, or its manifest.json (its rig entity is used). Needed for every rig but none (0.7: none takes no manifest). |
+| `manifest` | string | at most 1024 characters | The showroom build's folder, or its manifest.json (its rig entity is used). Default (0.8.3): the staged builds, found as showroom_spawn finds them (the first one's rig). |
 | `rig` | string | `creator`, `creator_face`, `key`, `none` | creator (default), creator_face, key, or none (remove every rig and keep the heads, as showroom_clear with what: lights). |
 | `target` | string | `each`, `piece`, `v` | each (default): a rig per head; piece: the head given by piece; v: V herself. |
 | `piece` | integer | 0 to 23 | The head's index in the lineup (0 is the first), with target piece. |
@@ -1197,6 +1260,7 @@ Spawn, light, turn and clear the showroom's mannequin heads for close-up finish 
 - **Permission:** Set up the finish showroom (`write-showroom`)
 - **Changes the game:** Yes
 - **Undo:** showroom.rotate with yaw_deg 0 faces them as set out; a result's undo turns them back exactly.
+- **Refusals:** `no_showroom`, [`no_such_piece`](#refusal-no-such-piece), [`not_spawned_yet`](#refusal-not-spawned-yet), `capture_no_window`, `capture_minimized`, `capture_not_foreground`, `capture_blank`, `capture_failed`
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1249,7 +1313,7 @@ Screenshots from outside the game (they work without the bridge), re-crops, burs
 - **Permission:** Look (`read`)
 - **Changes the game:** No
 - **Undo:** nothing to undo
-- **Refusals it names:** [`expectation_failed`](#refusal-expectation-failed)
+- **Refusals:** `capture_no_window`, `capture_minimized`, `capture_not_foreground`, `capture_blank`, `capture_failed`, [`expectation_failed`](#refusal-expectation-failed)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1268,7 +1332,7 @@ Screenshots from outside the game (they work without the bridge), re-crops, burs
 | `max_height` | integer | 16 to 16384 | Largest height of the returned picture, in pixels. |
 | `scale` | number | 0.01 to 1 | Shrink the returned picture by this factor (0.01 to 1) instead of a size limit. |
 | `name` | string | at most 80 characters; matches `^[A-Za-z0-9._-]{1,80}$` | Short label for the files (letters, digits, '.', '_', '-'). |
-| `route` | string | `auto`, `printwindow`, `screen` | How to grab the window. auto (default) reads Windows' copy of the game window, then the screen if the game is in front; printwindow and screen force one route. |
+| `route` | string | `auto`, `printwindow`, `screen` | How to grab the window. auto (default) reads Windows' copy of the game window, then the screen if the game is in front; printwindow and screen force one route. The screen route reads only while the game is the front window (checked right before and after each grab), otherwise it refuses capture_not_foreground. |
 | `clear_overlay` | boolean | `true`, `false` | Keep the bridge's own overlay out of the picture: its message lines are cleared and its HUD panel and label hidden for the capture, then the panel comes back (default true; needs the game bridge). |
 | `expect` | object | the fields below | Checks judged before the capture from the scene report (subject in frame with a margin, not blocked, lit) and after it on the subject's region (mean luminance, clipped highlights, crushed shadows); on_fail says what a failure does. |
 | `expect.subject` | string | at most 80 characters | The subject: v, face, head or body (V), piece:&lt;index> (a showroom head) or an NPC's id. Default V, else the first showroom head. |
@@ -1289,6 +1353,7 @@ Screenshots from outside the game (they work without the bridge), re-crops, burs
 - **Permission:** Look (`read`)
 - **Changes the game:** No
 - **Undo:** nothing to undo
+- **Refusals:** [`bad_input`](#refusal-bad-input), `not_found`
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1317,6 +1382,7 @@ Screenshots from outside the game (they work without the bridge), re-crops, burs
 - **Permission:** Look (`read`)
 - **Changes the game:** No
 - **Undo:** nothing to undo
+- **Refusals:** `capture_no_window`, `capture_minimized`, `capture_not_foreground`, `capture_blank`, `capture_failed`
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1347,6 +1413,7 @@ Screenshots from outside the game (they work without the bridge), re-crops, burs
 - **Permission:** Look (`read`)
 - **Changes the game:** No
 - **Undo:** nothing to undo
+- **Refusals:** [`game_not_ready`](#refusal-game-not-ready), [`unavailable`](#refusal-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1365,6 +1432,7 @@ Screenshots from outside the game (they work without the bridge), re-crops, burs
 - **Permission:** Look (`read`)
 - **Changes the game:** No
 - **Undo:** nothing to undo
+- **Refusals:** [`game_not_ready`](#refusal-game-not-ready), [`unavailable`](#refusal-unavailable), `showroom_manifest_missing`, `showroom_manifest_bad`
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1387,6 +1455,7 @@ Screenshots from outside the game (they work without the bridge), re-crops, burs
 - **Permission:** Look (`read`)
 - **Changes the game:** No
 - **Undo:** nothing to undo
+- **Refusals:** [`bad_input`](#refusal-bad-input), `too_many`, `capture_no_window`, `capture_minimized`, `capture_not_foreground`, `capture_blank`, `capture_failed`
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1429,6 +1498,7 @@ List, make and load saves. Only `game_save` ever saves the game, and never over 
 - **Permission:** Save and load the game (`write-save`)
 - **Changes the game:** Yes
 - **Undo:** None: a save can't be unsaved. Delete it in the game's Load menu if it isn't wanted.
+- **Refusals:** [`bridge_save_lock`](#refusal-bridge-save-lock), [`bridge_effects_active`](#refusal-bridge-effects-active), [`saving_locked`](#refusal-saving-locked), [`no_free_slot`](#refusal-no-free-slot), [`save_failed`](#refusal-save-failed), [`save_uncertain`](#refusal-save-uncertain), [`not_in_gameplay`](#refusal-not-in-gameplay)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1438,27 +1508,30 @@ List, make and load saves. Only `game_save` ever saves the game, and never over 
 
 ### `game_load`
 
-**Load a save.** Loads the most recent save of this playthrough (latest: true, the game's quick load) or one save by its name in the game's list (for example ManualSave-12); an unknown name is refused with some of the names the game lists. Everything since that save is discarded, unsaved progress and the bridge's save lock with it, and the game doesn't ask first, so discard_unsaved: true is required. From normal play or the pause menu, not photo mode or the appearance screen. Wait with game_wait for phase gameplay afterwards. Needs the save permission.
+**Load a save.** Loads the most recent save of this playthrough (latest: true, the game's quick load) or one save by its name in the game's list (for example ManualSave-12); an unknown name is refused with some of the names the game lists. From normal play or the pause menu, and from the main menu (0.8: the menu's own paths, so the player only has to launch the game: latest is its Continue, a name its Load menu's, both through the modded-save path for a save made with mods). Everything since that save is discarded, unsaved progress and the bridge's save lock with it, and the game doesn't ask first, so discard_unsaved: true is required. Not from photo mode or the appearance screen. Then (0.8.2) it waits up to continue_wait_s (default 75) for the load to end and answers as soon as the game is in normal play or waits on its press-any-key screen (continued.reached press_any_key: ask the player to press a key; the bridge never sends one). continue_wait_s 0 only starts the load (then game_wait). Needs the save permission.
 
-- **Command:** `game.load`, the bridge method `game.load`
+- **Command:** `game.load`, run by the tools (it may call the bridge several times)
 - **Permission:** Save and load the game (`write-save`)
 - **Changes the game:** Yes
 - **Undo:** None: loading discards everything since that save.
+- **Refusals:** [`not_in_gameplay`](#refusal-not-in-gameplay), [`save_not_found`](#refusal-save-not-found), [`metadata_pending`](#refusal-metadata-pending), [`unavailable`](#refusal-unavailable), [`timeout`](#refusal-timeout)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
 | `latest` | boolean | `true`, `false` | true: load the most recent save of this playthrough. |
 | `name` | string | at most 64 characters; matches `^[A-Za-z0-9 ._-]{1,64}$` | A save's name as the game lists it (for example ManualSave-12). |
 | `discard_unsaved` (required) | boolean | `true`, `false` | Must be true: everything since that save, unsaved progress included, is discarded. |
+| `continue_wait_s` | integer | 0 to 85 | How long to wait for the load to end (gameplay, or the press-any-key screen), 0 to 85 seconds. Default 75; 0 only starts the load. |
 
 ### `game_saves`
 
-**List the saves.** The game's save list with each save's details as the Load menu shows them: its name, type (manual, auto, quick, point of no return), location, tracked quest, level, life path, time, play time, game version and whether it was made with mods, newest first (limit, default 20). The game sends the details a moment after the list; wait_ms (default 3000) waits for them. Loads nothing.
+**List the saves.** The game's save list with each save's details as the Load menu shows them: its name, type (manual, auto, quick, point of no return), location, tracked quest, level, life path, time, play time, game version and whether it was made with mods, newest first (limit, default 20), from normal play, the pause menu or the main menu. The details of the newest limit saves are asked for the way the Load menu asks (each save's screenshot request), and the game sends them a moment after the list; wait_ms (default 3000) waits for them. Loads nothing.
 
 - **Command:** `game.saves`, the bridge method `game.saves`
 - **Permission:** Look (`read`)
 - **Changes the game:** No
 - **Undo:** nothing to undo
+- **Refusals:** [`unavailable`](#refusal-unavailable), [`game_not_ready`](#refusal-game-not-ready)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1471,7 +1544,7 @@ Read the game's UI state and the XF overlay host, and place the bridge's own in-
 
 ### `ui_hud`
 
-**Show, hide or move the XF panel in the game.** Temporary test feature (bridge 0.5.3). The XF panel is drawn in the game's own HUD (ink, in the game's font and colours; it needs Codeware, not Cyber Engine Tweaks): the bridge's connection state and the messages ui.message shows. show hides or shows it; anchor (top_left, top_right, bottom_left, bottom_right, top_center, center_left, center_right) with x and y (distance from that corner, in units of 1/2160 of the screen's height) places it; scale sizes it (0.5 to 2.5). layer chooses where it draws: hud (default; hidden wherever the game hides its HUD: menus, photo mode, the appearance screen), notifications or top (research: which of these stay visible in photo mode is being checked). nameplates switches XF Finish Showroom's pedestal name labels; cet_label switches the Cyber Engine Tweaks status label. With no values it only reads the settings; reset: true goes back to the bridge's configured settings. Changes nothing in the game itself.
+**Show, hide or move the ink panel in the game.** Temporary test feature (bridge 0.5.3). The ink panel is drawn in the game's own HUD (ink, in the game's font and colours on the game's own dark plate; it needs Codeware, not Cyber Engine Tweaks): the bridge's connection state and the messages ui.message shows. show hides or shows it; anchor (top_left, top_center, top_right, center_left, center, center_right, bottom_left, bottom_center, bottom_right) with x and y (distance inwards from that corner or edge of the visible screen, in the HUD layer's units: its 3840-wide canvas spans the screen's width from the top-left corner, so on 21:9 the screen shows its top 1600 units, on 32:9 its top 1080; for center, x and y move it from the middle) places it, at least far enough in to keep clear of the game's own HUD blocks (0.8.3: the minimap and quest tracker at the top right, so top_right, center_right and bottom_right sit left of them; the status bars at the top left; the status and cyberware icons at the bottom left; subtitles and prompts at the bottom), and it is kept whole on screen; the default is top_left, 40, 360, under the status bars. scale sizes it (0.5 to 2.5). layer chooses where it draws: hud (default; hidden wherever the game hides its HUD: menus, photo mode, the appearance screen), notifications or top (research). nameplates switches XF Finish Showroom's pedestal name labels; cet_label switches the CET line (Cyber Engine Tweaks' one line with a coloured dot at the far top left, the fallback status surface). With no values it only reads the settings; reset: true goes back to the bridge's configured settings. Changes nothing in the game itself.
 
 - **Command:** `ui.hud`, the bridge method `ui.hud`
 - **Permission:** Show messages in the game (`notify`)
@@ -1481,23 +1554,24 @@ Read the game's UI state and the XF overlay host, and place the bridge's own in-
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
 | `show` | boolean | `true`, `false` | true shows the panel, false hides it. |
-| `anchor` | string | `top_left`, `top_right`, `bottom_left`, `bottom_right`, `top_center`, `center_left`, `center_right` | The screen corner or edge the panel sits against. Default top_right. |
-| `x` | number | -4000 to 4000 | Horizontal distance from the anchor's edge, in 1/2160 of the screen's height (-4000 to 4000). Default 72. |
-| `y` | number | -4000 to 4000 | Vertical distance from the anchor's edge, in the same units. Default 300. |
+| `anchor` | string | `top_left`, `top_center`, `top_right`, `center_left`, `center`, `center_right`, `bottom_left`, `bottom_center`, `bottom_right` | The visible screen's corner, edge or middle the panel sits against. Default top_left. |
+| `x` | number | -4000 to 4000 | Horizontal distance inwards from the anchor's edge (from the middle for center), in the HUD's design units, 3840 across a 16:9 screen (-4000 to 4000). Default 40. |
+| `y` | number | -4000 to 4000 | Vertical distance inwards from the anchor's edge (from the middle for center), in the same units. Default 360. |
 | `scale` | number | 0.5 to 2.5 | Size, 0.5 to 2.5. Default 1. |
 | `layer` | string | `hud`, `notifications`, `top` | Where the panel draws: hud (default), notifications or top (research). |
 | `nameplates` | boolean | `true`, `false` | Show each XF Finish Showroom head's preset name on its pedestal. |
-| `cet_label` | boolean | `true`, `false` | Show the Cyber Engine Tweaks status label and message lines (top-left). |
+| `cet_label` | boolean | `true`, `false` | Show the CET line (Cyber Engine Tweaks' status line with a coloured dot, far top left) and its message lines. |
 | `reset` | boolean | `true`, `false` | Go back to the configured settings (alone). |
 
 ### `ui_state`
 
-**Read what the game's UI shows.** What is on screen besides the world: the game's phase, a menu or popup, the appearance screen, photo mode and whether the bridge hid its menu or the cursor, the gameplay tier, the HUD's interaction prompt and dialogue choices, whether Cyber Engine Tweaks' overlay is open (its windows would be in a capture), the XF panel, the question waiting for the player's answer, and the XF overlay host's state. Changes nothing.
+**Read what the game's UI shows.** What is on screen besides the world: the game's phase, a menu or popup, the appearance screen, photo mode and whether the bridge hid its menu or the cursor, the gameplay tier, the HUD's interaction prompt and dialogue choices, whether Cyber Engine Tweaks' overlay is open (its windows would be in a capture), the ink panel, the status surface showing, the XF pins and what drew each, the question waiting for the player's answer, and the XF overlay host's state. Changes nothing.
 
 - **Command:** `ui.state`, the bridge method `ui.state`
 - **Permission:** Look (`read`)
 - **Changes the game:** No
 - **Undo:** nothing to undo
+- **Refusals:** [`game_not_ready`](#refusal-game-not-ready)
 
 No parameters.
 
@@ -1512,6 +1586,22 @@ No parameters.
 
 No parameters.
 
+## Other tools
+
+Tools not yet sorted into an area above.
+
+### `game_continue`
+
+**Press past the press-any-key screen.** Not available yet: refuses (no_safe_route). The bridge would press past the game's press-any-key screen after a load only through a route inside the game (the loading screen's own controller); the only route it has is a synthetic key press, which could reach another window or gameplay, so it never sends one. Ask the player to press a key; game_load says when the screen waits.
+
+- **Command:** `game.continue`, run by the tools (it may call the bridge several times)
+- **Permission:** Save and load the game (`write-save`)
+- **Changes the game:** Yes
+- **Undo:** None.
+- **Refusals:** `no_safe_route`
+
+No parameters.
+
 ## Refusal codes
 
 The shared plain wording each code is answered with (`tools/api/errors.ts`), whichever tool gives it. The bridge's own technical message, when there is one, follows as `detail`.
@@ -1519,6 +1609,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | Code | Message |
 |---|---|
 | <a id="refusal-access-denied"></a>`access_denied` | Windows refused access to the game bridge. Run the XF tools as the same Windows user as the game. |
+| <a id="refusal-arms-drawn"></a>`arms_drawn` | V has her arm cyberware out, and the game doesn't swap arm cyberware while it is drawn. Nothing was changed. Holster it first (player_action with weapon.holster), or leave holster_first on so the tools do it. |
 | <a id="refusal-bad-input"></a>`bad_input` | A value doesn't fit the tool's input schema (the message lists each problem), or two options that exclude each other were both given. Nothing was sent to the game. |
 | <a id="refusal-bad-params"></a>`bad_params` | Some of the values given aren't valid for this action. |
 | <a id="refusal-bad-request"></a>`bad_request` | The game bridge didn't understand the request. This is a bug in the tool that sent it. |
@@ -1553,6 +1644,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-layout-unrecognised"></a>`layout_unrecognised` | The clip's keys aren't laid out the way the bridge expects on this game version, so it stopped without writing anything. Keep the answer (its detail lists every mismatch) and stop the live-pose steps. |
 | <a id="refusal-live-pose-disabled"></a>`live_pose_disabled` | Writing the live-pose carrier is switched off in this bridge's config.ini (allow_live_pose; only the XF test profile's -writes build allows it). Nothing was changed. |
 | <a id="refusal-live-pose-unavailable"></a>`live_pose_unavailable` | The live-pose commands can't run on this game version (an engine address they need is missing from RED4ext's address library), so nothing was read or changed. |
+| <a id="refusal-metadata-pending"></a>`metadata_pending` | The game hadn't sent that save's details yet, so nothing was loaded. Try again in a moment. |
 | <a id="refusal-no-active-outfit"></a>`no_active_outfit` | V isn't wearing a wardrobe outfit, so what is equipped already shows. Nothing was changed. Use inventory_equip, or wardrobe_equip with set to put an outfit on first. |
 | <a id="refusal-no-bridge"></a>`no_bridge` | The game bridge isn't running. Start the game from the XF test profile (with XF Runtime Bridge enabled) and wait for the main menu; the bridge opens its connection when the game starts. When the connection disappears mid-session: The game bridge's connection is gone: the game has probably closed or crashed. Start it again from the XF test profile. |
 | <a id="refusal-no-effect"></a>`no_effect` | That would change nothing in the game, so it wasn't sent: V's photo-mode face animation runs on the stand-in (target puppet, the default), not on the head item. Leave target out. |
@@ -1562,6 +1654,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-no-such-behaviour"></a>`no_such_behaviour` | No behaviour with that id is running. behave_list shows the ones that are. |
 | <a id="refusal-no-such-piece"></a>`no_such_piece` | The showroom has no head with that index. showroom_state lists the heads it has. |
 | <a id="refusal-not-added-by-bridge"></a>`not_added_by_bridge` | That item wasn't added by the bridge this session, so it stays in V's inventory. Nothing was removed. |
+| <a id="refusal-not-equippable"></a>`not_equippable` | The game says V can't equip that cyberware (a requirement isn't met or its slot doesn't take it), so nothing was changed and nothing was added. cyberware_state shows what the slot holds now. |
 | <a id="refusal-not-in-character-menu"></a>`not_in_character_menu` | Character options can only be changed while the appearance screen (a mirror, or the ripperdoc's appearance menu) is open. Open it in the game first. |
 | <a id="refusal-not-in-gameplay"></a>`not_in_gameplay` | This needs V in the world (or, for the clock, the appearance screen or photo mode): load a save and close any other menus first. |
 | <a id="refusal-not-in-inventory"></a>`not_in_inventory` | V doesn't have that item. Nothing was changed. Ask again with add_if_missing to add one to V's inventory first. |
@@ -1575,6 +1668,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-outfit-managed-elsewhere"></a>`outfit_managed_elsewhere` | V's outfit is managed by a script mod's outfit system (such as EquipmentEx), which replaces the wardrobe's own requests, so this change would do nothing. Nothing was changed. wardrobe_equip with suspend: true takes that outfit off for now (the story's own request) so equipped clothing draws; resume: true puts it back. |
 | <a id="refusal-photo-key-needed"></a>`photo_key_needed` | The game offers no way to open the full photo mode from inside. Use photo_open, which presses the photo mode key in the game window, or ask the player to press it; game_wait with phase photo_mode notices when it opens. |
 | <a id="refusal-player-busy"></a>`player_busy` | V is busy (jumping, sliding, falling or landing, swimming, in a workspot, a takedown or grapple, carrying a body, in a menu, or photo mode is open), so the bridge won't move her now. Nothing was changed. Try again once she stands still in normal play; player_state's busy_state says which. |
+| <a id="refusal-quest-scene"></a>`quest_scene` | A story scene is playing, and the story may hold the weather itself, so the bridge didn't change it. Nothing was changed. Try again once the scene is over. |
 | <a id="refusal-rate-limited"></a>`rate_limited` | The game bridge was sent too many requests in a short time, and it was still refusing after the tools waited a few seconds. Nothing was changed by the refused request. Wait a moment and try again. |
 | <a id="refusal-rtti-missing"></a>`rtti_missing` | This game version doesn't have a function the bridge needs for this action, so nothing was changed. The game may have been updated: the bridge needs a rebuild for it. |
 | <a id="refusal-rtti-signature"></a>`rtti_signature` | A game function this action uses has changed shape in this game version, so the bridge refused to call it and nothing was changed. The bridge needs updating for this game version. |
@@ -1590,6 +1684,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-showroom-missing"></a>`showroom_missing` | The game doesn't have the XF Finish Showroom build these heads come from. Stage that showroom build in the test profile (the coordinator does this), restart the game, then try again. Nothing was spawned. |
 | <a id="refusal-spawn-refused"></a>`spawn_refused` | The game's entity spawner refused the showroom entity, so nothing was spawned. The plugin log has the details. |
 | <a id="refusal-stale-match"></a>`stale_match` | The appearance screen changed between reading the option and applying the value (another row is in use, or the value at that position has another name), so nothing was applied. Try again; it reads the option afresh. |
+| <a id="refusal-superseded"></a>`superseded` | An emergency control (bridge_kill or session_handover) came after this command and cancelled it: a command still waiting never ran, and a running one stopped at its next step. Check the game's state, then send it again if it is still wanted. |
 | <a id="refusal-timeout"></a>`timeout` | The game was too busy to answer in time, and nothing was changed. Try again in a moment. |
 | <a id="refusal-timeout-after-start"></a>`timeout_after_start` | The game started this action but took too long to confirm it. It may still have happened: check the game (or the plugin log) before repeating it. |
 | <a id="refusal-too-far"></a>`too_far` | That place is more than 30 m from V, so nothing was spawned there. Move V closer or spawn nearer (distance_m). |
@@ -1599,7 +1694,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-unknown-method"></a>`unknown_method` | The running game bridge doesn't know this action. It may be an older build: stage the current XF Runtime Bridge build. |
 | <a id="refusal-unsupported"></a>`unsupported` | This game doesn't offer a safe way to do that yet. |
 | <a id="refusal-unverified-index"></a>`unverified_index` | That face table index matches an expression only by its place in the list, which isn't reliable with an expression pack installed, so nothing was applied. Use an index photo_state found by name (table_index_verified), or pass force: true to apply it anyway. |
-| <a id="refusal-user-took-over"></a>`user_took_over` | The player moved V (their own movement, jump, crouch, sprint, dodge or camera input), so the glide stopped and gave V back. Nothing more was changed. Start it again once the player has let go. |
+| <a id="refusal-user-took-over"></a>`user_took_over` | The player took over (their own movement, jump, crouch, sprint, dodge, mouse or stick), so the glide or look stopped and gave V back. Nothing more was changed. Start it again once the player has let go. |
 | <a id="refusal-write-class-disabled"></a>`write_class_disabled` | This kind of change is switched off in the bridge's config.ini (allow_write_classes lists the kinds allowed: photo, world, character, inventory, save, showroom, player, act; inventory stays off until the maintainer allows it, and showroom, player and act are listed only by the XF test profile's build). Nothing was changed. |
 | <a id="refusal-write-mismatch"></a>`write_mismatch` | The game took a different value than the one asked for (its menu may have changed since photo_state was read), so the bridge put the earlier value back where it knew it. Read photo_state and try again. |
 | <a id="refusal-writes-disabled"></a>`writes_disabled` | Changing the game is switched off in this setup. It is allowed only in the dedicated test profile, where the bridge's config.ini has allow_writes = true. |
@@ -1608,4 +1703,4 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 
 Codes the tools above name that have no shared wording yet; the answer's own message (from the tools) or its `detail` (from the game) explains each in context:
 
-`arms_drawn`, `not_equippable`, `quest_scene`.
+`capture_blank`, `capture_failed`, `capture_minimized`, `capture_no_window`, `capture_not_foreground`, `framing_bound`, `interrupted`, `key_unsupported`, `no_capture`, `no_projection`, `no_response`, `no_safe_route`, `no_showroom`, `no_such_pin`, `no_window`, `not_found`, `photo_not_allowed`, `photo_open_timeout`, `pin_refused`, `question_gone`, `showroom_manifest_bad`, `showroom_manifest_missing`, `showroom_not_staged`, `too_many`, `too_many_pins`, `tweakxl_missing`, `wait_timeout`.
