@@ -7,8 +7,8 @@
 Everything the engine knows, or could know, is a **locality in a dimension**, and every locality can itself be opened into further dimensions.
 
 - **People.** An NPC is a locality of the people dimension. Opened, that NPC is a bundle of dimensions: behaviour program, dialogue, appearance, body, name, routine, concerns, beliefs. Each of those can be opened again.
-- **Constants.** A dimension with a single locality (a name that is already settled) is still a dimension; it has simply been reduced to one point.
-- **Level of detail** is how far the opening has gone.
+- **No atoms.** Even a settled name is a bundle. It has letters, a given and a family name, the cultures and genders it is used with, and the fact that it names a person rather than a place. "Atomic" only ever means "not opened yet".
+- **Level of detail** is how far the opening has gone. Opening stops wherever nothing needs more detail.
 
 The structure is the same at every scale, from the city down to the words on a bag. It is also the same for story as for the world.
 
@@ -45,6 +45,11 @@ The structure is the same at every scale, from the city down to the words on a b
 4. **Laziness.** Nothing is resolved until something samples it. Detail is spent where perception or a query needs it ([DS-15](design-seeds.md)).
 5. **Uniformity.** No kind of thing gets a separate model. People, places, events, beliefs, seeds and quests are all addresses in bundles.
 6. **Provenance.** Every pin and contribution records where it came from, so any locality can be explained by tracing them ([DS-26](design-seeds.md)).
+7. **No atoms, and pins propagate both ways.** Every locality can be opened, however settled it looks, so a pin fixes a locality only at the level where it was made.
+   - **Downwards:** pinning a locality constrains everything inside it. Some parts are determined by it (a name's letter count); others stay open (how the person came by the name).
+   - **Upwards:** pinning or narrowing a part narrows the whole without pinning it. Overhearing only a first name narrows the full name.
+
+   Partial knowledge therefore needs no special case.
 
 ## 5. Story in the same space
 
@@ -109,7 +114,7 @@ To be researched in P3, so the model stays honest. We implement a small toolkit,
    - **routine:** pinned by the game, which places the vendor at the stall's workspot.
    - **concerns:** open. Contributions: rent pressure from the economy field, Tyger Claw protection from the influence field, and a personal history.
    - **beliefs:** open.
-2. **V scans the vendor.** The scanner text samples the name and one concern, and both are pinned as observed.
+2. **V scans the vendor.** The scanner text samples the name and one concern, and both are pinned as observed. Had V only overheard someone call the vendor by a first name, the name would be narrowed, not pinned: the first name is fixed and the family name is still open, within whatever the first name implies ([§4](#4-rules), rule 7).
 3. **V walks away.** The bundle closes. The pins persist and the rest is forgotten.
 4. **V comes back a week later.**
    - The same vendor resolves with the same name and concern. The unpinned details regenerate identically, unless their contributions changed.
