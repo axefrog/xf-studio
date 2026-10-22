@@ -24,6 +24,13 @@ Refreshed whenever the bridge reaches a milestone; last refreshed 22 October 202
   - catalogue commands only, never raw pipe framing;
   - every safety rule stands: kill, handover and the save lock.
 - **Today, every bridge write takes a save lock** that blocks the game's own saves until a load. That suits test sessions but not a campaign (P4 below, [DS-39](design-seeds.md)).
+- **The command API is on `main`** (bridge 0.8.3) in `projects/xf-runtime-bridge/tools/`: the catalogue (`api/catalogue*.ts`, with schemas and refusals), `api/command-api.ts`, the pipe client and a generated reference (`docs/mcp.md`). The engine's adapter imports it in place, pinned to a bridge version, and the commands it uses are registered with the bridge chat ([D-18](decisions.md)). Command names survive the move to XF Core.
+- **Session traces for offline replay** are kept in `local/sessions/<date>-sessionN/`:
+  - `calls.log`, with every command and its full answer;
+  - the session log tail;
+  - the plugin log.
+
+  From session 12 they also hold a full event dump. They're private and never published.
 - **Reuse, don't duplicate.** NPC direction ([design](../runtime/npc-direction-design.md), on its branch) and the DM toolkit cover much of what we need. Its beat-card runtime is the precise end of the seed language ([DS-35](design-seeds.md)).
 
 **Status values:**
