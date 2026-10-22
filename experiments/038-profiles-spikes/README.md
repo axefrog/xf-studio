@@ -20,7 +20,7 @@ Environment: Windows 11, Bun 1.4.2 (SQLite 3.53.2), scratch library on the C: NV
 | Forced outbox-write failure shows the warning | **PASS** | The edit applies and is still sent, the window is `unprotected` and lists the document, and the warning clears on the next successful write (`tests/s1-rules.test.ts`). |
 | Sol's Medium point: lost acknowledgement, and edits coalesced during an in-flight command | **PASS** | A committed command whose answer is lost is acknowledged as the window's own write, by receipt (unit tests, and 20 replays in the kill runs) or, once the receipt is purged, by its identical value. Edits made while a command is in flight go into one successor entry, which is rebased onto the acknowledged revision (unit tests). |
 
-The look used is the largest a look gets: the large workspace fixture's selected look with 16 layers and a full 80-step Undo history (`HISTORY_LIMIT`), 159,875 UTF-16 units as the library would store it. The preset is 18,710 units and the look-level history 141,144. A 4-layer look is 116,208 units. The 2K reference recipe's input is local and not in the repository. Its cost on this path depends only on the document's size: its 2K raster runs in a worker and isn't on the commit path. So the largest realistic document stands in for it.
+The spike's numbers above came from its prototype window and host (the Bun window, and a browser bench page removed in phase 1f; both at `94504437` and before). The [phase 1 gates](#phase-1-gates-chunk-1f) repeat the timing on the production code. The look used is the largest a look gets: the large workspace fixture's selected look with 16 layers and a full 80-step Undo history (`HISTORY_LIMIT`), 159,875 UTF-16 units as the library would store it. The preset is 18,710 units and the look-level history 141,144. A 4-layer look is 116,208 units. The 2K reference recipe's input is local and not in the repository. Its cost on this path depends only on the document's size: its 2K raster runs in a worker and isn't on the commit path. So the largest realistic document stands in for it.
 
 ### S3: migration crash harness
 
@@ -53,10 +53,9 @@ experiments/038-profiles-spikes/
   harness/host-server.ts   Host process: real library owner over HTTP; self-kill at named points (XFS_KILL)
   harness/window-proc.ts   Renderer process: scripted edits with sequence numbers; self-kill at named points
   harness/migrator-proc.ts Workspace side of the migration (token, request, session, done); self-kill points
-  harness/edit-script.ts   Timed edit script (person and stress cadences), shared by Bun and the browser page
-  harness/bench-page.ts    The same in a real browser: localStorage outbox, fetch transport
   tools/s1-kill.ts         S1 kill harness (renderer, host, two windows)
-  tools/s1-latency.ts      S1 timing gates (Bun window, or --browser)
+  tools/s1-latency.ts      S1 timing gates on the production code, on a library in any folder (phase 1f)
+  tools/storage-tree-kill.ts  The browser's storage commit window under a process-tree kill (phase 1f)
   tools/look-fixture.ts    The look fixture through the real core, and its build cost
   tools/s3-kill.ts         S3 crash harness and round trip
   tools/s3-migration.ts    S3 sweep on the production migration (chunk 1d-i): hosts and pages really killed
@@ -69,7 +68,7 @@ The workspace lease harness has its own section below.
 - **Kills are real process terminations** (`TerminateProcess` through `process.kill(pid, "SIGKILL")`). Protocol-point kills are the process killing itself at a named point. Timed kills come from the parent. The host's in-transaction kills leave SQLite to roll back from the WAL on the next open.
 - **Presence check.** Every edit's value carries `seqs[<window>]`. The window prints `rec` after each synchronous outbox write and `ack` after each acknowledgement is recorded. At every restart and at the end, each logged sequence number must be in the library, in the document or a fork of it, or in that window's outbox.
 - **Silent overwrite check.** The host appends every committed write to a log with its revision and `seqs`. Across a document's revisions, no window's sequence number may go down. Only an explicit **Keep mine** may lower it, and the script never chooses it. The script's person always picks **Keep both** 10 ms after a conflict.
-- **What stood in for the renderer.** The kill harness's renderer is a Bun process with an outbox file written atomically by rename. That models a renderer crash, which `localStorage` survives in a browser. A kill of a whole browser or WebView process tree was not tested (see the design changes below).
+- **What stood in for the renderer.** The kill harness's renderer is a Bun process with an outbox file written atomically by rename. That models a renderer crash, which `localStorage` survives in a browser. A kill of a whole browser process tree is measured separately, in a real Chrome ([phase 1 gates](#phase-1-gates-chunk-1f)).
 - **S3 fixtures.** The library is written by 0.1.0-alpha.2's own statements: looks, part presets, a set, and the experiment 005 collection at revision 1. It is then opened by this build. The workspace is today's shape, normalized: the draft of that collection with a look added, `library.current` at revision 1, one V (save source, decoded save, body, voice, choices, clothing) and two saved layouts. The divergent variant renames a look. Outcomes are compared without generated IDs and without depending on which host went first.
 
 Reproduce, each run under `tools/memory_guard.py --limit 4` (all runs peaked below 1 GB):
@@ -77,7 +76,8 @@ Reproduce, each run under `tools/memory_guard.py --limit 4` (all runs peaked bel
 ```
 bun test tests
 bun tools/look-fixture.ts <scratch>/fixtures 16
-bun tools/s1-latency.ts <scratch> <scratch>/fixtures/look-16x80.json [--browser]
+bun tools/s1-latency.ts <library-dir> <outbox-dir> <scratch>/fixtures/look-16x80.json
+bun tools/storage-tree-kill.ts <scratch>/kill
 bun tools/s1-kill.ts <scratch>/s1 <scratch>/fixtures/look-16x80.json
 bun tools/s3-kill.ts <scratch>/s3
 ```
@@ -285,6 +285,69 @@ Parity evidence (22 October 2026):
 | `?verify=1` browser runs on an isolated server and data folder | Migrated at start; an edit and an added preset persisted; after a reload the preset list, the shown preset, the edited opacity and its Undo step returned. A second run: Save version made version 1 (chip Saved), an opacity edit turned the chip to Changed since last version, Ctrl+Z with focus in the 3D view undid it (chip Saved again), and a reload kept all of it with Undo available; no console or server errors. The 3D head was not prepared in that folder, so the V's rendering was not exercised there |
 | Harnesses after the switch-over | S1 outbox sweep (`tools/s1-outbox.ts`) every scenario ok, nothing missing, no false conflicts, `integrity_check` ok, about 96 s at peak 1.1 GB; S3 sweep (`tools/s3-migration.ts`, 2 rounds) ok in 33 s at peak 1.3 GB; the specification test, the lease and migration harnesses and the 17 scenarios with the three-character test pass |
 
+## Phase 1 gates (chunk 1f)
+
+The gate table is [phase1-gates.md](phase1-gates.md). What chunk 1f added:
+
+### Multi-subject service test
+
+`tests/profiles-multi-subject.test.ts` runs phase 1's scale on the real services together:
+
+- three Vs (two feminine, one masculine) and three looks in one profile, in a real library;
+- a session of 5 views in 2 tabs, read as the workspace stores it, with three Character panels pinned to the three Vs and a Presets panel following focus;
+- the window's resolver (`createTargetResolver`) over the core's view graph, the history service and the owners, and the drawn look in the look editor.
+
+It checks that each V's choices and each look's content reach only their own document, and that each Undo acts on its own scope: a Character panel's on its V, the 3D view's on its look, the header's on the editing context. Resolution never leaves the shown tab. Captures and named actions are refused with what changed: another look, a V changed elsewhere, a deleted V, a removed look. The session stores and reads back with its tabs, pins and focus.
+
+It found one defect: a session with two tabs lost its second tab. The resolver put every view in the shown tab, and storing the session moved every view there. A view now keeps the tab it was stored in (`ProfileSessionState.viewTab`); the test fails without the fix.
+
+### S1 latency on the data drive
+
+`tools/s1-latency.ts` runs on the production code: the page's `DocumentOutbox` and HTTP transport (its localStorage adapter on a file written synchronously) against the real localhost host (`harness/s1-host.ts`: the document store and its routes, WAL with the raised autocheckpoint, the library's own flush timing). The look is the 16-layer fixture with a full 80-step history (156,852 UTF-16 units, 88 % of it history). Each edit rewrites the whole row, as a real edit does. Each cadence runs twice: with the outbox stored at once (`now`, S1's gate) and as the look editor records (`soon`, stored within 250 ms). One run on C: (NVMe) and two on D: (the mechanical data drive), 22 October 2026, Windows 11, Bun 1.4.2, peak 0.5 GB:
+
+| Run | Commit, main thread p95 | Commit to acknowledgement p50 / p95 / max | Host round trip p95 / max |
+|---|---|---|---|
+| C:, `now`, person (120 edits) | 2.2 ms | 2.8 / 3.8 / 9.2 ms | 2.4 / 7.3 ms |
+| C:, `now`, stress (300 edits) | 2.2 ms | 3.0 / 5.6 / 7.5 ms | 3.3 / 5.2 ms |
+| C:, `soon`, person; stress | 0.10; 0.07 ms | 223 / 256 / 259 ms; 144 / 255 / 257 ms | 3.3 / 4.7 ms; 2.7 / 2.9 ms |
+| D:, `now`, person (two runs) | 2.3; 2.1 ms | 3.0 / 4.3 / 48.6 ms; 2.9 / 4.0 / 49.4 ms | 2.6 / 47 ms; 2.3 / 48 ms |
+| D:, `now`, stress (two runs) | 1.9; 1.9 ms | 2.8 / 5.5 / 34.6 ms; 2.7 / 3.4 / 25.9 ms | 2.9 / 33 ms; 2.1 / 25 ms |
+| D:, `soon`, person (two runs) | 0.11; 0.12 ms | 223 / 256 / 300 ms; 224 / 256 / 304 ms | 2.3 / 47 ms; 43 / 52 ms |
+| D:, `soon`, stress (two runs) | 0.06; 0.06 ms | 140 / 255 / 301 ms; 141 / 255 / 306 ms | 2.1 / 47 ms; 2.3 / 51 ms |
+
+- **Within budget.** Stored at once, commit to acknowledgement is p95 3.4–5.5 ms on D: (budget 250 ms), the same as on C:. The data drive adds only a tail: a host round trip that meets the flush's checkpoint takes up to about 50 ms (7 ms on C:). The raised autocheckpoint keeps checkpoints off the host's thread, and no round trip came near SQLite's own 67–184 ms checkpoint.
+- **The look editor's deferred storing sets its acknowledgement.** An edit recorded with `store: "soon"` is stored and sent within `STORE_SOON_MS` (250 ms), so its acknowledgement is that wait plus the round trip: p95 255–256 ms, max 306 ms on D:. That is by design (chunk 1d-ii: one storage write per 250 ms of a continuous edit), not a drive cost. Its main-thread cost per edit drops to about 0.1 ms.
+- **Main thread.** Stored at once, `commit` costs p95 1.9–2.3 ms here, most of it rewriting the stand-in outbox file (a browser's `setItem` measured 0.9 ms in the spike). That is within the 4 ms budget.
+- **Write volume.** The host process wrote about 167 KB per command on both drives (Windows' process I/O counters: WAL frames, checkpoints and the flush), 84 MB for about 500 commands. At the design's one command every 2 s that is about 300 MB an hour. A person editing without pause (the `soon` person run: 2.4 commands a second) writes about 1.4 GB an hour.
+
+**History chunks: not split** (§2.2's option). The data-drive run stays within budget by a wide margin, and the write volume is sustainable: under 1 MB/s is far below a mechanical drive's sequential rate, and a few hundred MB per hour of editing is well inside an SSD's endurance. Splitting would cut the volume several-fold, since history is 88 % of each write, but it adds a document kind, content addressing and retention for no measured need. Revisit if a look's document grows well past this fixture (more history steps or larger parts), if several looks autosave at once (phase 5), or if a round trip on the data drive passes 100 ms.
+
+### Process-tree kill: the browser's storage commit window
+
+`tools/storage-tree-kill.ts` runs a page in a real headless Chrome 152 (no window, so nothing takes focus). The page writes one `localStorage` key of about 100 KB every 50 ms and reports each write after `setItem` returns. The harness kills the whole browser tree by its PID (`taskkill /T /F`) after a varied time, starts Chrome again on the same profile, and reads which write survived. Two renderer kills are the control: Chrome's storage service is its own process and lives on, and the tree is killed 12 s later. 22 October 2026, about 4 minutes:
+
+| Killed after | Last write reported | Survived | Lost |
+|---|---|---|---|
+| 0.8 s | 20 | none of this launch's | 1.0 s of writes |
+| 2.6 s | 57 | none | 2.9 s |
+| 4.3 s | 91 | none | 4.6 s |
+| 6.1 s | 121 | 101 (5 s after the first write) | 1.0 s |
+| 9.2 s | 290 | 202 | 4.4 s |
+| 13.5 s | 477 | 302 | 8.8 s |
+| 40 s | 1,107 | 402 | 35.2 s |
+| 75 s | 1,907 | 1,601 | 15.3 s |
+| Renderer killed (two runs) | 1,667; 1,758 | 1,667; 1,758 | nothing |
+
+Chrome commits a page's `localStorage` to disk 5 s after its first change. While writes keep coming, it then commits about once a minute (its commit rate limit). A tree kill loses everything since the last commit: 1.0–35.2 s measured, and up to about a minute under steady editing. A renderer crash loses nothing.
+
+**What that means for the localhost guarantee.** The outbox is a second copy, not the only one. While the dev server is up, every edit reaches the library within milliseconds of being sent (above). A browser tree kill therefore loses only what the library hadn't acknowledged: with the look editor's deferred storing, about the last 250 ms of a continuous edit. Only edits made while the library can't be reached (the dev server stopped) are held by `localStorage` alone, and a tree kill then loses up to the commit window.
+
+**Desktop.** The desktop app's WebView2 is Chromium too, so its own storage has the same window. But every desktop outbox key is also written to the host's outbox files, written and synced at once, and a key counts as unprotected until that copy lands (the warning shows after 2 s). WebView2 can't be driven headlessly from the harness, so the desktop case is not measured.
+
+### The harnesses in CI
+
+The Authoring workflow's desktop (Windows) job runs this folder's `bun test tests` after the desktop tests, with `XFS_HARNESS_QUICK=1`: the lease harness, the S1 outbox kill harness with half its kills, the S3 sweep for one round, and the S1 rules. Its path filter includes this folder, and the full kill counts stay the default locally. `bun run check` typechecks this folder's code.
+
 ## Acknowledgement and rebasing rules (S1, answering Sol's Medium point)
 
 - **A1, freeze on send.** From its first send, an outbox entry's command ID, bases and values never change. Every resend, after a timeout, a host restart or a renderer restart, reuses the ID.
@@ -327,9 +390,9 @@ None of the gates fails, so the design's write unit (one document per look) and 
    - Count the outbox against `WORKSPACE_STORAGE_BUDGET`. A quota failure takes the warning path, which works.
 5. **§2.3, host thread.** Each committed look writes about 320 KB, roughly 80 pages, into the WAL. SQLite's default autocheckpoint (1,000 pages) therefore runs on the host thread about every 12 commits. [Library durability](../../research/authoring/library-durability.md#cost) measured that checkpoint at 67–184 ms on a D:-like drive. That is still inside 250 ms, but it would set the tail.
    - Phase 1 should set the owner's `wal_autocheckpoint` well above that (or to 0), and let the worker's flush, which already runs within 5 s, do the checkpointing.
-   - It should also repeat the latency run on the data drive. The spike rules kept these runs off D:.
-6. **§2.2, an option, not required.** About 88 % of each autosave is Undo history (141K of 160K units): around 580 MB of WAL writes in an hour of editing at one commit every 2 s. Splitting the look-level history's chunks into immutable, content-addressed documents would cut it several-fold. Do it only if the data-drive run or write volume calls for it.
-7. **§2.3, localhost.** "Relies on the synchronous outbox" is true for a renderer crash, because `localStorage` lives in the browser process. A kill of the whole browser or WebView process tree may lose writes made within its storage commit delay. Chromium is expected to write `localStorage` to disk with a delay; this is a hypothesis, not measured. The library has most of them within about 10 ms anyway. Phase 1's desktop harness should kill the WebView process tree once to measure that window.
+   - It should also repeat the latency run on the data drive. The spike rules kept these runs off D:. Both were done in phase 1: the autocheckpoint is raised to 16,384 pages, and the data-drive run is within budget ([phase 1 gates](#phase-1-gates-chunk-1f)).
+6. **§2.2, an option, not required.** About 88 % of each autosave is Undo history (141K of 160K units): around 580 MB of WAL writes in an hour of editing at one commit every 2 s. Splitting the look-level history's chunks into immutable, content-addressed documents would cut it several-fold. Do it only if the data-drive run or write volume calls for it. Phase 1 measured about 300 MB an hour at that rate (167 KB a command, WAL and checkpoints together) and decided not to split ([phase 1 gates](#phase-1-gates-chunk-1f)).
+7. **§2.3, localhost.** "Relies on the synchronous outbox" is true for a renderer crash: Chrome's storage service outlives the renderer. A kill of the whole browser process tree loses the writes made since Chrome last committed `localStorage`: phase 1 measured 5 s after the first change, then about once a minute ([phase 1 gates](#phase-1-gates-chunk-1f)). The library has every acknowledged edit anyway, within milliseconds while the host is up.
 8. **§8 step 2.1.** Use M2 and M3 in place of "Each working copy that already exists… is compared", as concrete rules: compare against forks too, fork the whole collection, the named-version rule, comparison through the part registry, and the named-version fork joining the profile.
 9. **§8 step 2.3.** Add M5's first rule (a profile that already holds this V and collection).
 10. **§8 and §2.1, one mechanism.** Name the migration record and command receipts as one mechanism: a command ID whose stored result answers a replay.

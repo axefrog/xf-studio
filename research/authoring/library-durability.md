@@ -60,6 +60,8 @@ Electrobun 2.0.2 gives the app `before-quit` (the flush runs through the desktop
 | D: (the dev checkout's data drive) | 17.0–23.0 s: 72–108 ms a save (p95 192–204 ms) | 0.08–0.2 s: 0.05 ms a save (one save 67–184 ms, SQLite's own checkpoint at 1,000 log pages) | 170–220 ms after one save, 0.7–0.9 s after 200 |
 | C: (`%TEMP%`, where `%LOCALAPPDATA%` lives) | 0.27–0.37 s: 1.2–1.4 ms a save | 13–14 ms: 0.05 ms a save | 7–10 ms |
 
+**Autosave on the data drive** (profiles phase 1f, [experiment 038](../../experiments/038-profiles-spikes/README.md#s1-latency-on-the-data-drive)): the largest look (157K UTF-16 units) committed through the outbox to the localhost host on D:, each edit rewriting the whole row, with the raised autocheckpoint and the production flush. A host round trip is p95 2–3 ms; one that meets the flush's checkpoint takes up to about 52 ms (7 ms on C:). The host writes about 167 KB per command, WAL frames and checkpoints together, about 300 MB an hour at one command every 2 s.
+
 The disk's flush cost varies a lot between drives; the installed app's 40–100 ms per save came from a drive like D:. The flush runs once, a few seconds after the saves stop, instead of inside every save, and on the checkpoint worker's thread (PIPE-137), so its 170–220 ms (0.7–0.9 s after 200 saves) on a drive like D: no longer holds up the host.
 
 ## Backups
