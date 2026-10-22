@@ -1,5 +1,7 @@
 # Profiles phase 1e: gap map
 
+**Status:** worked through in this pass; what was built, and what was left, is in the 1e report and in the docs it updated ([editor invariants](../../research/authoring/editor-invariants.md#targets-focus-and-captures), [UI architecture boundary](../../research/authoring/ui-architecture-boundary.md)). The map below is the record of the starting point.
+
 What the branch held at `87d62b1f` against each 1e item of the [profiles design](../../research/authoring/profiles-views-layouts-design.md) (§3, §4.1, §5, §7, the phase 1 row of §9.2), what is missing, and the order of work. Paths are relative to `projects/xf-studio/authoring/src/`; line numbers are as of `87d62b1f`.
 
 ## 1. Actions name their targets (§3.6)
