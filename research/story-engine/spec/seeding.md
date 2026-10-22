@@ -4,6 +4,7 @@
 - **The review.** v0.2 went through one review, by GPT-6 Astra; [§16](#16-review-record) records what changed.
 - **Dossiers folded in.**
   - v0.1 folded in [dossier 8](../craft/d08-scale-threads-time.md#9-requirements-for-the-seed-language-p4) (scale, threads and time).
+  - v0.5 folds in [dossier 12](../craft/d12-player-model-trust.md) (the player model, trust and manipulation): the model's boundary (§8.8), bounded hooks, offers frozen at display, a "why this?" record, and the `believes` firewall.
   - v0.4 folds in [dossier 11](../craft/d11-saves-memory-forgetting.md) (saves, memory and forgetting): session and wall-clock independence, the return view and recaps, durable cosmetic marks, recall in responses.
   - v0.3 folds in [dossier 10](../craft/d10-change-theme-payoff.md) (character change, theme and payoff): premises and costs, NPC turns, typed plants and traces, and NPC attribution lines ([D-22](../decisions.md)).
 
@@ -331,7 +332,7 @@ type Pred =
   | 'yes' | 'no';
 
 type Cmp = 'eq' | 'ne' | 'lt' | 'le' | 'gt' | 'ge';
-type EventPattern = { kind?: string; participant?: RoleKey | Id | 'v'; role?: string; place?: RoleKey | Id; effect?: Effect; witnessedByV?: boolean };
+type EventPattern = { kind?: string; participant?: RoleKey | Id | 'v'; role?: string; place?: RoleKey | Id; effect?: Effect; witnessedByV?: boolean; witnessedBy?: RoleKey };
 ```
 
 **Evaluation** uses Kleene's strong three-valued logic:
@@ -353,7 +354,8 @@ type EventPattern = { kind?: string; participant?: RoleKey | Id | 'v'; role?: st
   - `yes` if the belief's value lies in `is` and its confidence is at least `atLeast` (default 0);
   - `no` otherwise.
 
-  Beliefs held about V are allowed. **No atom reads a state of V.**
+  Beliefs held about V are allowed, but only an in-world NPC's. **`who` MUST be a role cast to an in-world actor**: never the root actors `director`, `city` or `v` (L-56). The director's model of V is unreachable from seeds (§8.8).
+- **No atom reads a state of V.** A "state of V" means V's inner state, V's preferences, or the director's model of V. `fact` and `cap` read only what the game records: skills, gear, money, level, quest state.
 - **`cap` and `fn`** return what the registry function returns.
 
 Evaluation reads the kernel at a given revision and game time (§4). It is read-only and emits nothing (S0 I-13).
@@ -823,7 +825,7 @@ choice    = argmax over o ∈ F of (score(o) + g(o)); exact ties to the lower H(
 
 - **`w(o)`** is the option's declared weight, or 1.
 - **`K`** is **[tunable 8]**.
-- **`fitWeight`** comes from S3's fitting hook. It is 0 with the director off.
+- **`fitWeight`** comes from S3's fitting hook. It is **clamped** to ±`fitCap` **[tunable ln 1.5]** before it enters the score, and the draw record keeps the raw and the clamped value. It is 0 with the director off, or with the player's `noticing` setting off (§8.8).
 - **A fixed part** makes `F` its single value.
 - **`attempt`** starts at 0. It increments only when the same choice is legitimately made again: a re-offer, or a re-cast after a ladder step.
 
@@ -1206,7 +1208,8 @@ interface Delivery {
   bindings: Record<RoleKey, Id>;       // the casts it was prepared with
   state: 'queued' | 'released' | 'displayed' | 'answered' | 'expired' | 'withdrawn';
   submitted: number;                   // play seconds
-  provenance: { mode?: string; variant?: string; alternates: Record<BeatKey, FragmentId>; channel: ChannelId; form: string };
+  provenance: { mode?: string; variant?: string; alternates: Record<BeatKey, FragmentId>; channel: ChannelId; form: string;
+                why: Array<{ kind: 'schedule' | 'fit' | 'score' | 'phase'; beliefs: Id[]; delta: number }> };   // §8.8
 }
 ```
 
@@ -1276,13 +1279,13 @@ The arbiter runs once a second of play:
    | `off` | Only `pull` deliveries, deliveries from authored seeds, and closing deliveries pass |
 
    Tempo changes cadence only. It never changes a unit's strength, stakes or content. S3 applies the rest of the tempo bundle (thread-opening rate, clock speed, lead times, promotion thresholds) with nested thresholds, so moving the dial never re-rolls the schedule ([dossier 8](../craft/d08-scale-threads-time.md) SES-07, S8-P4-19).
-4. **Phase.** S3's phase hook MAY filter what remains, for example keeping only rest cues during a rest phase. With no director, nothing is filtered.
-5. **Score.** S3's scoring hook scores what remains. The built-in fallback is:
+4. **Phase.** S3's phase hook MAY remove deliveries, for example keeping only rest cues during a rest phase. It can only remove; it never adds or reorders. With no director, nothing is removed.
+5. **Score.** The built-in score is:
    - importance: high 3, normal 2, low 1;
    - plus the fraction of `maxWait` already waited;
    - plus 1 for authored deliveries.
 
-   Ties go to the lower `H("arb", worldSeed, delivery.id)`.
+   S3's scoring hook MAY add a delta, clamped to ±`scoreCap` **[tunable 1]**. The release log records both. With the director off or `noticing` off, the delta is 0. Ties go to the lower `H("arb", worldSeed, delivery.id)`.
 6. **Prepare and release** the best delivery (§8.4). If preparation fails, try the next, up to `prepareTries` per step **[tunable 3]**. Release at most one delivery per step, plus at most one class-0 delivery.
 
 **What the arbiter never does.** It holds, delays, expires and releases. It never creates or changes content.
@@ -1313,7 +1316,11 @@ The delivery goes back to the seed, not to V.
 
 Release is not exposure.
 - **`displayed`.** A released delivery becomes `displayed` only when S5 confirms the player saw it: the message opened, the call answered, the bark played within earshot.
-- **The offer event.** Only then is an offer's `offer` event minted, with V as witness. This makes it canon and exposed (§10.2).
+- **The offer event.** Only then is an offer's `offer` event minted, with V as witness. This makes it canon and exposed (§10.2). It carries:
+  - the delivery's skeleton `features` (verb, stake, relationship, outcome, tone, channel);
+  - `class`, `purpose`, `pull`, `authored` and `deliveryId`.
+
+  The `response` event carries its kind and the play seconds since display. The director's model is folded from these canon events alone (§8.8), so it doesn't depend on the capped seed record.
 - **Never displayed.** A released delivery that is never confirmed within `displayTimeout` play seconds **[tunable 120]** counts as missed (§7.4).
 
 Delivery state (`released`, `displayed`, `answered`) is persisted in the seed's state (§12.1). After a load:
@@ -1356,6 +1363,69 @@ Each item cites a record entry, names an act, never a feeling, and gives the det
 **"Story so far"** is a pull entry that is always available, whatever the save's age.
 
 **Staleness** uses `playTotal`: cumulative play seconds in this branch, stamped on record entries (§10.1). The session-relative play clock can't measure play across sessions.
+
+### 8.8 The player model's boundary
+
+The director (S3) keeps a model of V: beliefs held by the root actor `director` about `v` (S0 §11.3). It is folded from canon `offer` and `response` events (§8.5). Layer 2 fences it in. The model may **weight offers**; it never changes events, content or what anyone in the world knows ([dossier 12](../craft/d12-player-model-trust.md)).
+
+**The model has no entrance into seeds.**
+- No predicate, effect, cost, offer field, response template, variant selector or registry function reads or writes it (S2-I-13).
+- Registry functions declare their read-set, and one that reads a `director → v` belief is rejected (L-57).
+- `believes` can't name the director (L-56).
+
+**Its only exits are these, each bounded:**
+
+| Exit | Bound |
+|---|---|
+| The fitting hook | `fitWeight` clamped to ±`fitCap` (§3.4) |
+| The scoring hook | A delta clamped to ±`scoreCap` (§8.3) |
+| The phase hook | Removes only (§8.3) |
+| The form hook | Chooses among a seed's declared forms (§2.13) |
+| The joint hook | Reads game state only |
+| V's inferred frames (S0 §10.4) | They focus attention; they pin nothing (S0 I-12) |
+
+**Offers are frozen at display.** These are fixed by the document and the recorded draws at the first release:
+- an offer's options and their order;
+- costs, stakes and the null path;
+- decline responses, defaults and wording.
+
+`OfferSpec` has no field for adaptive order or emphasis. From `displayed` until `answered` or `expired`, no model-derived value reaches any hook concerning that delivery. Re-presenting it after a load uses the recorded release.
+
+**Hook inputs are a closed list** (S2-I-14). A hook receives only:
+- the delivery record: features, class, purpose, authored, pull;
+- attention aspects;
+- the session state;
+- tempo;
+- `playTotal`;
+- the settings.
+
+Nothing about quitting, menus, saving, idle time, session length, time of day or how often the player returns ever reaches a hook.
+
+**The honest voice.**
+- The narrator and the system never say what the game has noticed, tracked or concluded about V. Only NPCs, within D-22, and the settings voice may.
+- A line that states a count ("third time this week") must read a `count` with `witnessedBy` set to the speaker (L-58).
+- No rate, percentage, score or badge derived from the model appears on an offer or in the fiction (L-59).
+
+**Why this?** Whenever a hook's output was non-zero, the delivery's `provenance.why` records it (§8.1). A pull entry renders it in the settings voice, from a closed table, citing only exposed events. A delivery whose cause includes a model belief is recorded as an **adaptation**, never as a consequence.
+
+**Player settings for the model.** The settings are recorded as S0 `SettingsSet` ops, because they change what is offered:
+- **`noticing`**: `off`, `acts` (the default) or `full`;
+- an **exclusion list**;
+- a **reset floor**: "start fresh" moves the floor, so the model folds only events after it.
+
+The `setting` atom can't read these (L-61), so a seed's meaning never depends on them.
+
+**Privacy.**
+- Layer 2 stores no gaze, camera, menu, idle or input data.
+- Exports and reports leave out `director → v` beliefs, and the belief lists inside why-records, by default.
+- A save without the model loads normally; the model starts empty.
+
+**Attribution lines must be correctable in fact** (extending D-22 and L-52).
+- The NPC's belief must come from `observed` or `told` evidence.
+- The template is chosen by the `believes` result alone, never by a hook.
+- V's correcting reply must carry an effect that writes an observed telling, so the NPC's belief really revises (L-60).
+
+**Timing purposes stay closed.** No purpose, category or `onExpire` may be keyed to return, retention, streaks or quitting. The lint checks pack-added purposes (L-59).
 
 ## 9. Intersections
 
@@ -1491,6 +1561,12 @@ The lint runs at compile time (§3.1), and on demand from authoring tools (S4, P
 | L-53 | A premise sentence rendered more than once in a seed, or in a system voice (lexicon, S4) | warning |
 | L-54 | An effect that can drop a `lasting` tie below an authored floor with no route back | warning |
 | L-55 | A `cosmetic` effect without a carrier; or `remember: 'always'` with `resettable` | error |
+| L-56 | A `believes` atom whose `who` can resolve to a root actor (`director`, `city`, `v`) | error |
+| L-57 | A registry function whose read-set includes a `director → v` belief | error |
+| L-58 | A line stating a count without a `count` atom `witnessedBy` the speaker | error |
+| L-59 | A model-derived rate, percentage, score or badge on an offer or in fiction; or a timing purpose, category or `onExpire` keyed to return, retention, streaks or quitting | error |
+| L-60 | An attribution line whose belief isn't `observed` or `told`, or whose correcting reply writes no observed telling | error |
+| L-61 | A `setting` atom reading a model setting (`noticing`, exclusions, reset floor) | error |
 | L-33 (extended) | A `turns[].what` reading anything of V's but beliefs held about V and V's recorded acts | error |
 
 L-25 and L-40 were removed in v0.2 (§16). Their numbers are not reused.
@@ -1637,6 +1713,8 @@ A **removed pack** withdraws its live instances (T1), because their content refe
 | S2-I-10 | **Authored before procedural** in every claim conflict |
 | S2-I-11 | **Session independence.** No layer-2 draw, `Id`, wake-up order or tie-break reads the session epoch, a load count or the wall clock (S0 I-16). The only discriminator besides causes is `attempt` |
 | S2-I-12 | **No wall clock.** Wake-ups run on game or play time only, and no predicate reads the wall clock. Real-world absence advances nothing; the save's age is read only by the return view |
+| S2-I-13 | **The model has no entrance.** No seed construct reads or writes the director's model of V; it reaches layer 2 only through the bounded hooks of §8.8 |
+| S2-I-14 | **Closed hook inputs.** Hooks receive only the inputs listed in §8.8 |
 
 ## 14. Fixtures
 
@@ -1674,6 +1752,12 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 | SF-29 | **Cosmetic mark survives.** A `cosmetic` effect with a place carrier and durability of 5 game days is displayed; save; load | The mark is re-derived and shown when the place's district is active, until it expires |
 | SF-30 | **Settings are lenses.** Change `memoryScale` after several exposures | Every exposure, pin and closure is unchanged |
 | SF-31 | **Returning or not.** Load a save 3 days old, then quick-reload it | The first load enters `returning`; the quick reload doesn't |
+| SF-32 | **`believes` firewall.** A seed whose `believes` atom names the director | L-56 error; not sown |
+| SF-33 | **Frozen at display.** Change the model between an offer's display and V's answer | Nothing about the offer changes, and no hook concerning it sees the change |
+| SF-34 | **Option invariance.** Release the same offer under two different model states | Identical options, order, costs and wording; only timing may differ |
+| SF-35 | **Forbidden hook inputs.** Perturb session length, idle time, quit and save counts | Byte-identical hook outputs and records |
+| SF-36 | **Correction.** An attribution line plays; V uses the correcting reply | The NPC's belief about V revises through an observed telling; the line no longer applies |
+| SF-37 | **Model off.** `noticing: off` | `fitWeight` 0 and built-in scores: records byte-identical to a run with the director off, from the same state |
 | SF-26 | **Constructed trace.** A trace with no found cause, `latitude` allowing `trace-cause`. S3's stub contributes a cause: an event at a stall. The trace is displayed; save; load | The `display` entry records `constructed`. The cause's fields are pinned `committed` at display, and resolve identically after the load |
 
 ## 15. Compromises and open items
@@ -1696,6 +1780,7 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 8. **Profiles.** Appendices for gig, job and heist, con, four-beat, front, testing arc and slide.
 9. **Dossier 10.** v0.3 adopts all 23 of its S2 requirements. Its P5 list goes to S3: the change engine, premise audits, the plant planner, and canon-character limits (S10-P5-23).
 10. **Dossier 11.** v0.4 adopts its S2 requirements except a reserved draw-key salt, which nothing needs yet. Its kernel requirements are in S0 v4.1 (§20 there). Its P5 list goes to S3. Its testing agenda (T11-01 to T11-21) feeds P9 and the first in-game session card.
+11. **Dossier 12.** v0.5 adopts all 14 of its S2 requirements (§8.8). Its P5 list (22 requirements: the model as a fold over canon offers, the eight replay checks, the noticed page) goes to S3.
 
 ## 16. Review record
 

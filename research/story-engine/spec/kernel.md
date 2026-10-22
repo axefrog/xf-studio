@@ -979,7 +979,7 @@ Each save has a record `{ saveKey, parent, ops }`, where `parent` is the record 
 - `EventCanon`;
 - `SummarySet`;
 - `FrameState`, `SeedState`, `ProcessState`;
-- `SettingsSet { memoryScale, resetScale, at }` (v4.1): the player's memory and reset settings, in force from `at`. The lineage root records the initial settings. Replays and the harness use the settings in force at each op. Presentation settings are not recorded.
+- `SettingsSet { memoryScale, resetScale, noticing, exclusions, modelFloor, at }` (v4.1): every player setting that changes what is offered or remembered, in force from `at`. `noticing`, `exclusions` and `modelFloor` are the director's model settings ([S2 §8.8](seeding.md#88-the-player-models-boundary)). The lineage root records the initial settings. Replays and the harness use the settings in force at each op. Settings that change only presentation are not recorded.
 
 Snapshots are written every **[tunable 10,000]** ops. Ops carry complete data.
 

@@ -1322,7 +1322,7 @@ Julian De Freitas, Zeliha Oğuz-Uğuralp and Ahmet Kaan-Uğuralp, [“Emotional 
 
 ### Zagal, Björk and Lewis (2013)
 
-José Zagal, Staffan Björk and Chris Lewis, [“Dark patterns in the design of games”](https://research.chalmers.se/en/publication/177148) (*Foundations of Digital Games*, 2013). It names design elements that serve the maker over the player, including appointment play and grinding as temporal dark patterns. It informed what relationship and quest pacing must avoid.
+José Zagal, Staffan Björk and Chris Lewis, [“Dark patterns in the design of games”](https://research.chalmers.se/en/publication/177148) (*Foundations of Digital Games*, 2013). It names design elements that serve the maker over the player, including appointment play and grinding as temporal dark patterns. It informed what relationship and quest pacing must avoid. Its definition (a pattern that works against players' interests and without their consent) also shaped our checks on how the director may use what it knows about the player.
 
 ### Kilduff, Elfenbein and Staw (2010)
 
@@ -1422,7 +1422,7 @@ Sherol Chen, Mark Nelson and Michael Mateas, [“Evaluating the Authorial Levera
 
 ### Thue et al. (2007)
 
-David Thue, Vadim Bulitko, Marcia Spetch and Eric Wasylishen, [“Interactive Storytelling: A Player Modelling Approach”](https://ojs.aaai.org/index.php/AIIDE/article/view/18780) (*AIIDE*, 2007). Adapting a story to a learned play style helped some players in a study of 101 people. It informed how much we expect adaptation to help.
+David Thue, Vadim Bulitko, Marcia Spetch and Eric Wasylishen, [“Interactive Storytelling: A Player Modelling Approach”](https://ojs.aaai.org/index.php/AIIDE/article/view/18780) (*AIIDE*, 2007). Adapting a story to a learned play style helped some players in a study of 90 university students, but the results across all players did not strongly support it. It informed how much we expect adaptation to help.
 
 ### Lehne and Koelsch (2015)
 
@@ -1631,6 +1631,90 @@ Alexandru Cuc, Jonathan Koppel and William Hirst, [“Silence is not golden: a c
 ### Bergman and Roediger (1999)
 
 Erik Bergman and Henry Roediger, [“Can Bartlett’s repeated reproduction experiments be replicated?”](https://profiles.wustl.edu/en/publications/can-bartletts-repeated-reproduction-experiments-be-replicated/) (*Memory & Cognition*, 1999). People retelling a story forgot more and distorted more as the delay grew, which replicated Bartlett’s classic result. It informed the ways a retold account can drift.
+
+### Zhu and Seif El-Nasr (2021)
+
+Jichen Zhu and Magy Seif El-Nasr, [“Open Player Modeling: Empowering Players through Data Transparency”](https://arxiv.org/abs/2110.05810) (arXiv, 2021). It sets out three levels of showing a player the model built from their play, and lists the costs: lost immersion, inaccuracy, gaming and privacy. It informed what the page of noticed behaviour shows and what it leaves out.
+
+### Denisova and Cairns (2015, 2019)
+
+Alena Denisova and Paul Cairns, [“Adaptation in Digital Games: The Effect of Challenge Adjustment on Player Performance and Experience”](https://www-users.york.ac.uk/~pc530/pubs/Denisova_CHIPLAY15.pdf) (*CHI PLAY*, 2015), and [“Player experience and deceptive expectations of difficulty adaptation in digital games”](https://eprints.whiterose.ac.uk/139704) (*Entertainment Computing*, 2019). Quiet adaptation raised immersion in a short study, and telling players a game adapts raised it whether or not it did. It informed our rule that adaptation must survive being revealed, and that a claim of personalisation is itself a lever.
+
+### Susser, Roessler and Nissenbaum (2019)
+
+Daniel Susser, Beate Roessler and Helen Nissenbaum, [“Technology, autonomy, and manipulation”](https://policyreview.info/articles/analysis/technology-autonomy-and-manipulation) (*Internet Policy Review*, 2019). They define online manipulation as covertly steering a person's decisions by exploiting their vulnerabilities. It informed where we draw the line between serving a player and steering them.
+
+### Mathur, Mayer and Kshirsagar (2021)
+
+Arunesh Mathur, Jonathan Mayer and Mihir Kshirsagar, [“What Makes a Dark Pattern... Dark? Design Attributes, Normative Considerations, and Measurement Methods”](https://arxiv.org/abs/2101.04843) (*CHI*, 2021). They argue that dark patterns share a small set of attributes and propose perspectives for judging them. It informed the checks we run on the director.
+
+### Melhart et al. (2023)
+
+David Melhart, Julian Togelius, Benedikte Mikkelsen, Christoffer Holmgård and Georgios Yannakakis, [“The Ethics of AI in Games”](https://arxiv.org/abs/2305.07392) (arXiv, 2023). It frames the ethics of sensing and adapting to a player's emotions, including the trade-off between privacy and safe spaces. It informed why the engine never infers feelings or health.
+
+### Dietvorst, Simmons and Massey (2015, 2018)
+
+Berkeley Dietvorst, Joseph Simmons and Cade Massey, [“Algorithm aversion: People erroneously avoid algorithms after seeing them err”](https://repository.upenn.edu/fnce_papers/58) (*Journal of Experimental Psychology: General*, 2015), and [“Overcoming algorithm aversion: People will use imperfect algorithms if they can (even slightly) modify them”](https://ideas.repec.org/a/inm/ormnsc/v64y2018i3p1155-1170.html) (*Management Science*, 2018). People lose faith in an algorithm after seeing it err, and a little control over its output restores their willingness to use it. It informed why every automatic choice comes with a control.
+
+### Eslami et al. (2015)
+
+Motahhare Eslami, Aimee Rickman, Kristen Vaccaro, Amirhossein Aleyasen, Andy Vuong, Karrie Karahalios, Kevin Hamilton and Christian Sandvig, [“'I always assumed that I wasn't really that close to [her]': Reasoning about invisible algorithms in the news feed”](https://www.ideals.illinois.edu/items/55412) (*CHI*, 2015). Most of 40 users did not know their feed was curated, reacted with surprise and anger on finding out, and later felt more in control. It informed why adaptation should be easy to discover.
+
+### Rader, Cotter and Cho (2018)
+
+Emilee Rader, Kelley Cotter and Janghee Cho, [“Explanations as Mechanisms for Supporting Algorithmic Transparency”](https://pure.psu.edu/en/publications/explanations-as-mechanisms-for-supporting-algorithmic-transparenc/) (*CHI Extended Abstracts*, 2018). Explanations raised awareness and helped people judge bias and control, but helped less with judging whether the output was correct. It informed how far a one-line reason can be expected to build trust.
+
+### Kulesza et al. (2013)
+
+Todd Kulesza, Simone Stumpf, Margaret Burnett, Sherry Yang, Irwin Kwan and Weng-Keen Wong, [“Too much, too little, or just right? Ways explanations impact end users' mental models”](https://openaccess.city.ac.uk/id/eprint/6344) (*VL/HCC*, 2013). Complete explanations helped people's mental models more than sound ones, but very unsound explanations cost trust. It informed our rule to say less than the model holds and to show the evidence for each line.
+
+### Ur et al. (2012)
+
+Blase Ur, Pedro Giovanni Leon, Lorrie Faith Cranor, Richard Shay and Yang Wang, [“Smart, Useful, Scary, Creepy: Perceptions of Online Behavioral Advertising”](https://fpf.org/wp-content/uploads/2021/05/Smart-Useful-Scary-Creepy.-Perceptions-of-Online-Behavioral-Advertising-.pdf) (*SOUPS*, 2012). In 48 interviews, people called targeting useful and invasive at once, and assumed more was collected than was. It informed how we treat personalisation as something that can unsettle people even when it helps.
+
+### White et al. (2008)
+
+Tiffany Barnett White, Debra Zahay, Helge Thorbjørnsen and Sharon Shavitt, [“Getting too personal: Reactance to highly personalized email solicitations”](https://link.springer.com/article/10.1007/s11002-007-9027-9) (*Marketing Letters*, 2008). Highly personalised offers that did not explain why they fitted drew resistance, less so where the service seemed useful. It informed why a personalised offer must be able to say why it was made.
+
+### Nguyen et al. (2014)
+
+Tien Nguyen, Pik-Mai Hui, F. Maxwell Harper, Loren Terveen and Joseph Konstan, [“Exploring the filter bubble: the effect of using recommender systems on content diversity”](https://experts.umn.edu/en/publications/exploring-the-filter-bubble-the-effect-of-using-recommender-syste/) (*WWW*, 2014). Recommenders slightly narrowed what people saw over time, and less so for people who took what was recommended. It informed our concern that the engine's own offers can narrow what a player is shown.
+
+### Chaney, Stewart and Engelhardt (2018)
+
+Allison Chaney, Brandon Stewart and Barbara Engelhardt, [“How Algorithmic Confounding in Recommendation Systems Increases Homogeneity and Decreases Utility”](https://arxiv.org/abs/1710.11214) (*RecSys*, 2018). Simulations showed that training on data the system itself influenced made behaviour more uniform without making it more useful. It informed counting responses against the offers actually shown, not against acceptances alone.
+
+### Kirchner-Krath et al. (2024)
+
+Jeanine Kirchner-Krath, Maximilian Altmeyer, Linda Schürmann, Bastian Kordyaka, Benedikt Morschheuser, Ana Carolina Tomé Klock, Lennart Nacke, Juho Hamari and Harald von Korflesch, [“Uncovering the theoretical basis of user types”](https://fis.uni-bamberg.de/handle/uniba/115001) (*International Journal of Human-Computer Studies*, 2024). A survey of 877 people found four popular player typologies overlap heavily and reduce to five continuous dimensions. It informed our choice to model observed rates, not player types.
+
+### Hamari and Tuunanen (2014)
+
+Juho Hamari and Janne Tuunanen, [“Player Types: A Meta-synthesis”](https://todigra.org/index.php/todigra/article/view/1697) (*Transactions of the Digital Games Research Association*, 2014). Earlier player typologies synthesise into seven dimensions. It informed how loosely we hold any categorisation of players.
+
+### Wachter and Mittelstadt (2019)
+
+Sandra Wachter and Brent Mittelstadt, [“A Right to Reasonable Inferences: Re-Thinking Data Protection Law in the Age of Big Data and AI”](https://ora.ox.ac.uk/objects/uuid:d53f7b6a-981c-4f87-91bc-743067d10167) (*Columbia Business Law Review*, 2019). They show that inferences about people are weakly protected and propose that they be justified in advance and open to challenge. It informed treating what the engine infers as data the player can see and delete.
+
+### Nair et al. (2023)
+
+Vivek Nair, Wenbo Guo, Justus Mattern, Rui Wang, James O'Brien, Louis Rosenberg and Dawn Song, [“Unique Identification of 50,000+ Virtual Reality Users from Head & Hand Motion Data”](https://usenix.org/conference/usenixsecurity23/presentation/nair-identification) (*USENIX Security*, 2023). About 94 per cent of users were identified from 100 seconds of motion. It informed treating play data as personal even when it stays on the machine.
+
+### Raney (2004)
+
+Arthur Raney, [“Expanding disposition theory: Reconsidering character liking, moral evaluations, and enjoyment”](https://researchconnect.buffalo.edu/en/publications/expanding-disposition-theory-reconsidering-character-liking-moral/) (*Communication Theory*, 2004). Liking for a character can form before any moral judgement, and viewers work to protect it. It informed how we read a player's stance toward a character from what they do.
+
+### Hartmann, Toz and Brandon (2010)
+
+Tilo Hartmann, Erik Toz and Marvin Brandon, [“Just a game? Unjustified virtual violence produces guilt in empathetic players”](https://research.vu.nl/en/publications/6d94c7ce-66fe-4c78-a0ac-7a94a4c37d14) (*Media Psychology*, 2010). Two experiments found guilt after unjustified virtual violence, stronger in more empathetic players. It informed why the engine offers a way back after a harmful act and never tells the player how they feel.
+
+### Weaver and Lewis (2012)
+
+Andrew Weaver and Nicky Lewis, [“Mirrored morality: An exploration of moral choice in video games”](https://journals.sagepub.com/doi/10.1089/cyber.2012.0235) (*Cyberpsychology, Behavior, and Social Networking*, 2012). In the first act of a commercial role-playing game, most of 75 players made moral choices that tracked a moral-foundations questionnaire. It informed how seriously we take a player's treatment of characters as people.
+
+### Tarulli and Caplinger (2013)
+
+Laurel Tarulli and Victoria Caplinger, [“In the Eye of the Beholder: Readers' Advisory from a Cataloging Perspective”](https://journals.ala.org/index.php/rusq/article/view/2892/2959) (*RUSQ*, 2013). It describes how libraries match readers to books by appeal factors and by Nancy Pearl's four doorways (story, character, setting, language), not by category. It informed matching offers on their features, not on genre.
 
 ## Reference imagery
 
