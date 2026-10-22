@@ -217,6 +217,8 @@ The remaining 23 records have under 30 character records each (Zetatech, Biotech
 
 Seven `DistrictPreventionData` presets give each a `heat1` to `heat5` set of unit pools (107 pool and 93 vehicle-pool records), a `recon` set, an input-lock time (7 s) and a `spawnOriginMaxDistance` (65 m; 80 for border guards). Police response is therefore a per-district-preset lookup [resource]; the units themselves are `Character.*` records with `NCPD` affiliation.
 
+**What the game reads while V stands somewhere.** The table lists the region records. The game's *current* district is the newest of the sub-district and venue areas V has entered, and those records hold the default crime multiplier 1.0 and a preset of their own; the region's `gangs` feeds only the world map's gang panel. The areas, their polygons and what each field is read for are in [places §3](places.md#3-districts-and-subdistricts).
+
 `StreetCredTier.*` (35 records) hold `streetCredRequirement` for the gig tiers of [open-world activities §3.3](open-world-activities.md#33-which-gigs-are-available-tiers-counters-and-street-cred): Watson 1 / 4 / 8 / 15, Westbrook 1 / 10 / 20 / 35, Heywood 1 / 8 / 16 / 30, City Center 1 / 9 / 18 / 32, Santo Domingo 1 / 20 / 35 / 50, Pacifica 1 / 12 / 30 / 42, Badlands 1 / 5 / 11 / 18, and vehicles 6 / 12 / 19 / 26 / 34 / 42 / 50 [resource].
 
 ## 6. Where the gangs are: placement by district
@@ -247,7 +249,7 @@ Three independent readings of "which gang lives where":
 - **Gang territory is a property of the sub-district**, and the dynamic events carry it. The district record is coarse: it lists one to two gangs for a whole region, and it lists Watson's as Maelstrom while the events say Tyger Claws hold Kabuki and Little China and Maelstrom hold Northside (the guide agrees). The record's `gangs` is the *region's* signature gang; what the engine reads it for is not shown [hypothesis: UI, prevention or scanner text].
 - **Voodoo Boys and Wraiths never appear in the dynamic events** although they have 213 and 164 character records and 173 and 400 world-census entries. Their entries sit in fixed communities; where, the folder tally does not say (open question 1).
 - **The ambient communities are overwhelmingly civilian** (a district's 250 to 1,400 entries hold single-digit to low-hundreds gang entries), so a gang member met on the street comes from a dynamic event, a chase, a combat event or a hustle, not from the pedestrian layer.
-- **Positions are the missing half.** These counts are by authoring folder. Pinning a community to a place needs its area node's transform or its spots' positions (`workspotsPersistentData` has all 97,359) and a district test; that join is not done here (open questions).
+- **Positions are the missing half, and [places §9](places.md#9-joining-the-population-to-places) supplies them.** These counts are by authoring folder. The join through each community's spots (the registry's `workspotsPersistentData`) and the district polygons gives the gang table by area in [places §9.3](places.md#93-gang-presence-by-area).
 
 ## 7. What a character record tells us
 
@@ -333,12 +335,12 @@ For a booked session on the [runtime bridge](../projects/xf-runtime-bridge/READM
 
 ## Open questions
 
-1. **Where each community is.** Pin each instance to a position and a district: the `Streamable` area nodes in the streaming sectors (3,476, plus 6,617 streamable nodes counted in [world and streaming](world-and-streaming.md)) and the spots' positions in the registry. Then the gang table of section 6 can be by area, not by authoring folder.
-2. **What the district `gangs` flat feeds.** The scanner, the prevention system, the minimap or nothing. Nothing in our data reads it.
+1. **Where each community is.** Answered in [places §9](places.md#9-joining-the-population-to-places): the registry's instances are pinned to a district through their spots. What remains is the quest-owned communities that the registry does not hold.
+2. **What the district `gangs` flat feeds.** Answered in [places §3.3](places.md#33-what-the-data-says-about-gangs-danger-and-the-numbers-on-the-regions): the world map's gang panel, and nothing else in the scripts.
 3. **How an entry's look is chosen** from the template's 15 to 60 appearances, and whether the community entry's `appearances` list overrides the record's.
 4. **Where crowd voices come from**, given that no tag is in the record or the template.
 5. **How `savable` and `priority` act on a save**, and what a loaded save restores of street NPCs (session row 10).
-6. **Phantom Liberty's registry** and its container-zone communities (604 templates read, the registry not).
+6. **Phantom Liberty's registry** and its container-zone communities. The registry is read in [places §9](places.md#9-joining-the-population-to-places) (10,289 instances against 8,540 in the base game; Dogtown's communities included); the container-zone templates are not joined.
 7. **The 4,033 + 1,378 quest-owned communities** outside `open_world`: where they place the named cast, and how many characters each quest adds.
 8. **The units of crowd `density`** and how it combines with the marking regions' lane lengths.
 9. **Which blob the game prefers** when both exist, and whether TweakXL records are read the same way as the blob's.
