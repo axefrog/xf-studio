@@ -6,15 +6,15 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { installLightDom, uninstallLightDom } from "./light-dom";
 import { activeLayout, applyLayoutAction, autoSwitchTarget, layoutCapability, layoutLibraryOf, MAX_LAYOUTS, parseLayoutLibrary, type LayoutAction,
-  type LayoutLibrary, type LayoutPreferences } from "../src/layout-library";
-import { parseDockLayout, parseUIPreferences, UIPreferenceActions, type DockLayout, type UIPreferences } from "../src/ui-preferences";
+  type LayoutLibrary, type LayoutPreferences } from "../src/app/layout-library";
+import { parseDockLayout, parseUIPreferences, UIPreferenceActions, type DockLayout, type UIPreferences } from "../src/app/ui-preferences";
 import { applyDrop, closePanel, locate, parkPanels, type DockState, type SizeClass } from "../src/studio-ui/dock/layout";
 import { defaultDockStateFor, restoreDockPreference, sameDockState, serializeDockState } from "../src/studio-ui/dock/persist";
 import { defaultDockState } from "../src/studio-ui/layout-defaults";
 import { STUDIO_CATALOGUE } from "../src/compose/views";
 import { STUDIO_MODULE_REGISTRATION } from "../src/compose/modules";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
-import { parseWorkspace, serializeWorkspace } from "../src/workspace-state";
+import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
 import { freshWorkspace } from "./fixtures/eye-region";
 import type { StudioModule } from "../src/platform/api";
 

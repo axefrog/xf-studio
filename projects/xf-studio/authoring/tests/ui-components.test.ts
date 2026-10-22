@@ -1091,10 +1091,10 @@ test("record list (C-30, UI-162): the name keeps its line with its badge, the me
   const { RecordList, recordTime } = await lib();
   const list = new RecordList({ label: "Saved collections" });
   const open = document.createElement("button");
-  list.update([{ id: "a", name: "My collection", meta: ["3 presets", "version 5", recordTime(new Date(2026, 8, 29, 18, 2, 49))], badge: { text: "This draft", tone: "info" }, current: true, action: open }]);
+  list.update([{ id: "a", name: "My collection", meta: ["3 presets", "version 5", recordTime(new Date(2026, 8, 29, 18, 2, 49))], badge: { text: "Open now", tone: "info" }, current: true, action: open }]);
   const row = (list.element as unknown as LightElement).querySelector(".record-row")!;
   expect([row.classList.contains("current"), row.querySelector(".record-name-line")!.textContent, row.querySelectorAll(".record-fact").length, row.querySelectorAll("button").length])
-    .toEqual([true, "My collectionThis draft", 3, 1]);
+    .toEqual([true, "My collectionOpen now", 3, 1]);
   // The time is the date and the minute, never the seconds.
   expect(row.querySelectorAll(".record-fact")[2]!.textContent).not.toContain(":49");
 });

@@ -52,6 +52,17 @@ public class XFWardrobeRestoreLater extends DelayCallback {
   public let snapshot: ref<XFWardrobeSnapshot>;
 
   public func Call() -> Void {
+    // RB-93 (0.7): the one delayed path the load/detach gate didn't cover. The delay system runs it half a second after the
+    // kill switch's restore; by then a save may be loading or V may be elsewhere, so it checks the script gate
+    // (XFBridge_Live) and normal play first and leaves everything as it is otherwise (a load discards the outfit change).
+    if !XFBridge_Live() {
+      return;
+    }
+    let phase = XFBridgeActions.Phase();
+    if NotEquals(phase, "gameplay") {
+      XFBridgeLog.Info("kill-restore", "wardrobe restore after the resume skipped: the game is in '" + phase + "', not normal play");
+      return;
+    }
     let player = XFInventory.Player();
     if !IsDefined(player) || !IsDefined(this.snapshot) {
       return;

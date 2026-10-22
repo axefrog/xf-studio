@@ -10,12 +10,12 @@
  */
 import { rmSync } from "node:fs";
 import { resolve } from "node:path";
-import { loadCreatorCatalogue } from "../src/cc-catalogue-host";
-import { readSwatch, swatchPlan } from "../src/cc-swatch";
-import { CreatorSwatches } from "../src/cc-swatch-host";
-import { CreatorIcons } from "../src/cc-icon-host";
-import { LocalSettingsStore } from "../src/local-settings-store";
-import { openInstallation, openNativeRoute } from "../src/resolver-host";
+import { loadCreatorCatalogue } from "../src/character/host/cc-catalogue-host";
+import { readSwatch, swatchPlan } from "../src/character/cc-swatch";
+import { CreatorSwatches } from "../src/character/host/cc-swatch-host";
+import { CreatorIcons } from "../src/character/host/cc-icon-host";
+import { LocalSettingsStore } from "../src/setup/host/local-settings-store";
+import { openInstallation, openNativeRoute } from "../src/game/host/resolver-host";
 
 const args = Bun.argv.slice(2);
 const option = (name: string) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] ?? null : null; };

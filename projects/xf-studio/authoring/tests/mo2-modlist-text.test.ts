@@ -1,8 +1,8 @@
 // modlist.txt is written back byte for byte (INSTALL-05): its encoding (UTF-8 with or without a BOM, or a single-byte ANSI code
 // page), every row's own line ending and trailing spaces are kept; a file that can't be read back exactly is never changed.
 import { expect, test } from "bun:test";
-import { decodeModlist, encodeModlist } from "../src/mo2-modlist-text";
-import { applyMo2Placement, planMo2Placement } from "../src/mo2-placement";
+import { decodeModlist, encodeModlist } from "../src/installation/mo2-modlist-text";
+import { applyMo2Placement, planMo2Placement } from "../src/installation/mo2-placement";
 
 const bytes = (...parts: (string | number[])[]) => new Uint8Array(Buffer.concat(parts.map(part => typeof part === "string" ? Buffer.from(part, "utf8") : Buffer.from(part))));
 const place = (text: string) => applyMo2Placement(text, planMo2Placement(text, "XF Eye Artistry"));

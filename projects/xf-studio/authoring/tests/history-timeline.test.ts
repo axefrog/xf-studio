@@ -1,20 +1,21 @@
 import { expect, test } from "bun:test";
 import { HISTORY_START_ID } from "../src/platform/api/history";
-import { collectionDraft, parseCollectionWorkspace, withLiveMemory } from "../src/collection-workspace";
+import { collectionDraft, parseCollectionWorkspace, withLiveMemory } from "../src/app/workspace/collection-workspace";
 import { memoryOf } from "./fixtures/looks";
-import { RECIPE_HISTORY_LIMIT, recipeHistory } from "../src/editor-actions";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { encodeWorkspaceForStorage, PERSISTED_BACKGROUND_HISTORY } from "../src/workspace-budget";
-import { parseWorkspace } from "../src/workspace-state";
+import { RECIPE_HISTORY_LIMIT, recipeHistory } from "../src/legacy/eye-makeup/editor-actions";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { encodeWorkspaceForStorage, PERSISTED_BACKGROUND_HISTORY } from "../src/app/workspace/workspace-budget";
+import { parseWorkspace } from "../src/app/workspace/workspace-state";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 
+import { namedCore } from "./fixtures/named-targets";
 // The History panel's read model and its single jump action (history.jumpTo).
 
 function fixture(history = freshWorkspace().history) {
   const workspace = { ...freshWorkspace(), history };
   let resets = 0;
-  const core = createTrustedAuthoringCore(workspace, { resetStack: () => { resets++; }, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  const core = namedCore(createTrustedAuthoringCore(workspace, { resetStack: () => { resets++; }, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
   return { ...core, resets: () => resets };
 }
 /** Three labelled edits: Colour, Opacity, Rename layer. Returns the look after each one. */
@@ -198,10 +199,10 @@ test("stored copies mark presets whose Undo history the budget shortened", () =>
 });
 
 test("the presentation port publishes the timeline without the live history", async () => {
-  const { createStudioPresentation } = await import("../src/studio-presentation");
+  const { createStudioPresentation } = await import("../src/app/studio-presentation");
   const core = fixture();
   threeEdits(core);
-  const port = createStudioPresentation({ authoring: core.app, library: {} as never, files: {} as never,
+  const port = createStudioPresentation({ authoring: core.application, targets: core.targets, library: {} as never, files: {} as never,
     viewport: {} as never, preferences: {} as never, previewReadiness: { readiness: () => ({}) as never, subscribe: () => () => {} } });
   const timeline = port.authoring.historyTimeline();
   expect(timeline.steps).toHaveLength(3);

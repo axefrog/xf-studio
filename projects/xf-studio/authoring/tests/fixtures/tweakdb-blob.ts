@@ -1,9 +1,9 @@
 /**
- * A synthetic compiled TweakDB blob for tests (no game data): the layout src/tweakdb-flats.ts reads (magic, versions, flats section with
+ * A synthetic compiled TweakDB blob for tests (no game data): the layout src/game/tweakdb-flats.ts reads (magic, versions, flats section with
  * one value table and one key table per type). Strings are written with a one-byte length, so each must be shorter than 64 bytes.
  */
-import { fnv1a64 } from "../../src/depot-path";
-import { TWEAKDB_MAGIC, tweakDbId } from "../../src/tweakdb-flats";
+import { fnv1a64 } from "../../src/game/depot-path";
+import { TWEAKDB_MAGIC, tweakDbId } from "../../src/game/tweakdb-flats";
 
 export type BlobFlat =
   | { type: "CName" | "String"; value: string }

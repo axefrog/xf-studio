@@ -34,6 +34,7 @@ Open [127.0.0.1:4317](http://127.0.0.1:4317/) while the server runs. The [editor
 |---|---|
 | [XF Studio](projects/xf-studio/README.md) | Broad Cyberpunk authoring vision, starting with eye-makeup creation for V. Further character and game areas are future work to define one feature at a time; [where it's going](docs/vision.md) describes the direction. |
 | [Photo Mode Tools](projects/xf-photo-mode-tools/README.md) | Independent peer project. Its clean implementation is still at the research stage. |
+| [XF Runtime Bridge](projects/xf-runtime-bridge/README.md) | XF's local connection into the running game, with an **MCP server** so an AI client can look at the game, set up photo mode, change creator options, take screenshots and ask the player questions in the game, under two write gates with undo and a kill switch ([MCP guide](projects/xf-runtime-bridge/docs/mcp.md), [tool reference](projects/xf-runtime-bridge/docs/mcp-reference.md)). Test builds only; used for the project's own in-game testing. |
 
 The repository also keeps an agent-facing [knowledge base](knowledge/README.md) of how the game's resources fit together, [focused experiments](experiments/), [source-grounded research](research/) and [validation notes](docs/validation.md) beside the projects. [Community credits](docs/community-credits.md) record what we learned from other creators and the boundaries on reuse. Contributors can start with the [developer orientation](docs/developer-orientation.md) and [working rules](AGENTS.md).
 

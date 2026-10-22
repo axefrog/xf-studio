@@ -21,10 +21,12 @@
 |---|---|---|---|
 | `Cyberpunk2077.exe+0x1e28769` | read at `0x0` | A native member function called with no context, inside `rtti::Function::InternalCallNative`. Met when a plugin called a redscript function with `RED4ext::ExecuteFunction(nullptr, …)` and that script called `TweakDBInterface.GetInt` (probe) or `TDBID.ToStringDEBUG`: script calls them as statics, but they are native members and receive the script's (null) context (§2.1). The same script function completed when CET called it. Seen three times (reports `…-20260926-181257-…`, `…-181813-…`, `…-182825-…`). | [runtime]; cause [runtime] disassembly + [source] |
 | `Cyberpunk2077.exe+0x28b9b75` | read at `0x48` (a null object's field) | A script call made **while a save was loading**: the XF bridge's `game.status` ran its redscript `XFBridgeActions.Status` on the main thread 0.1 s after the bridge's scriptable system logged `OnDetach` (the session being torn down for `game.load`), and the game crashed inside the script VM's native calls (the stack runs from `XFRuntimeBridge.dll` through `rtti::Function::InternalCall*` at `exe+0x146xxx`). Seen once (report `…-20260929-070312-…`, session 5, with a showroom head spawned) (§2.3). **Fixed** in the XF bridge 0.5.2; the same load no longer crashes (session 6). | [runtime]; cause [runtime] log order + stack, the fix [runtime], the exact native [unverified] |
+| `Cyberpunk2077.exe+0x60a893` | read at `0x14` | A script-level `String + String` whose right operand was a null reference: the script VM's operator handler (`exe+0x285ccc`, reached from `rtti::Function::InternalCallNative`) passed it to the engine's string concatenation (`exe+0x60a884`), which reads the operand's length at `+0x14`. Met when the XF bridge's `player.state` read `GetDisplayName` and `IsInteractionLookAtTarget` on the door V looked at (session 7, report `…-20260930-103754-…`) (§2.4) | [runtime]; the instructions [runtime] disassembly; which native left the null [hypothesis] |
 | `Cyberpunk2077.exe+0xe6abad` / `+0xe6abb0` | read at `0x0` / `0xFFFFFFFFFFFFFFFF` | The launch right after a crash, before the main menu (reports `…-171210-…`, `…-181531-…`). The next launch after that usually works. | [runtime]; cause [hypothesis] |
 | `Codeware.dll+0x36a59` | read at a heap address | A launch after a crash (report `…-182616-…`), in Codeware | [runtime]; cause unknown |
 | `Cyberpunk2077.exe+0x2a52f36`, code `0x80000003` | *Watchdog timeout! (120 seconds)* | The engine's watchdog: the main loop didn't report for 120 s (report `…-20260913-195258-…`) | [runtime]; trigger unknown |
 | `KERNELBASE.dll+0xc41ca`, code `0xE06D7363` | unknown | A C++ exception thrown and not caught, during a machine-wide memory exhaustion (report `…-20260926-165006-…`) | [runtime] |
+| `ntdll.dll+0x88f9` (inside the heap allocator; `rbx` a heap's base) | read at a small address (`0x38c`, `0x508`), or heap corruption `0xc0000374` | **A plugin DLL linked from a stale object file** (§2.5): the XF bridge 0.8.1's `Main.obj` allocated its `Bridge` at an older, smaller size than the constructor wrote, so every launch overran a heap block and the heap failed on the next thread to allocate: during RED4ext's plugin loading, or a moment after it, before the scripts compiled (reports `…-20261021-182300-…`, `…-182324-…`; 3 crashes in 3 launches, 0.8.0 fine) | [runtime] the reports; cause [offline] disassembly of the shipped objects |
 
 ### 2.1 Calling scripts from native code
 
@@ -49,6 +51,44 @@ Why (confidence: medium-high): a scriptable system's `OnDetach` is the session b
 **Rule for a native plugin: call into scripts only between the session's player attach and its detach, and check that on the game thread right before each call**, not when the request was queued (the detach can come while it waits). The XF bridge (0.5.2) has its redscript layer report `attach`, `player_attach` and `detach` (`XFBridge_ScriptLayer`, called first in `OnDetach`), closes the gate itself the moment `game.load` asks the game to load, refuses every script call with `game_loading` while closed, and answers `game.status` from the plugin's side (`phase: "loading"`); the kill switch's restore and a save relock wait for the gate ([design §3.3](../research/runtime/runtime-bridge-design.md#33-threading)).
 
 **The fix held in game** [runtime] (29 September 2026, session 6, bridge 0.5.2; [experiment 032 §5](../experiments/032-sessions-5-6/README.md#5-the-load-crash-and-its-fix)): the same `game.load {latest: true}`, again with a showroom head spawned, followed at once by `game.status` polls. Six polls during the load were answered by the plugin (`phase: "loading"`, the script layer's gate closed), `game.wait` reached gameplay after 5.6 s, the game didn't crash, and no spawned piece survived the load. Whether the head played any part in session 5's crash is moot for the bridge, since the gate refuses every script call until the loaded session's player attaches; the load without a head wasn't run.
+
+### 2.4 A String operator with a null operand (session 7)
+
+What happened [runtime] (30 September 2026, session 7, bridge 0.6.1; the plugin log and the crash report named above): `player_state` ran `XFPlayer.State` while V looked at her apartment's front door. The log's last line is the call (`script.call fn=XFRuntimeBridge.XFPlayer.State`), with no return; the same call a minute earlier, looking at nothing, returned. The crash: a read at `0x14` on the game thread at `exe+0x60a893`.
+
+What the instructions say (confidence: high) [runtime: `dumpbin /disasm` of the installed executable, read only; the address library's entries around each address]: `exe+0x60a884` (address-library hash `2778794402`, unnamed) is a short string concatenation: it reads both strings' lengths at `+0x14` (masked with `0x3FFFFFFF`), reserves, and appends both. Its right-hand string pointer (`r8`) was null. Its caller, `exe+0x285ccc` (hash `3531351405`), steps the script stack twice to evaluate two operands into temporaries and passes their value pointers on: the shape of the VM's native handler for `OperatorAdd(String, String)`. The stack scan shows it called from inside `rtti::Function::InternalCallNative` (`exe+0x14619c`).
+
+Why (confidence: medium) [hypothesis]: the VM leaves an operand's value pointer null when the expression that should produce it doesn't run, the known behaviour of a call on a null object inside an expression handed to a native. Which call left the null isn't settled: the two suspects were `GetDisplayName` and `IsInteractionLookAtTarget` on the door (both native; a door's display name comes from its device data, and `GetLookAtObject` answers objects of any type). The bridge's own concatenations take their operands from script functions, never from such calls directly.
+
+**Rule for the bridge (0.7, the world-object rule, `XFScene.Identity`):** on a world object of unknown type call only the natives every entity answers (`GetEntityID`, `GetClassName`, `GetWorldPosition`, `GetWorldForward`, `GetWorldYaw`), keep each answer in a local before building text, read a record's name only after a cast to the class that declares `GetRecordID` (`gamePuppetBase`, `VehicleObject`), and take what the HUD shows (the interaction prompt) from its blackboard. Session 8 looks at a door, a vending machine, an NPC and a car to check it.
+
+### 2.5 A stale object file in the plugin (bridge 0.8.1)
+
+What happened [runtime] (21 October 2026, session 9's first three launches, the XF bridge 0.8.1 with the same frameworks as
+0.8.0, which ran fine): the game died at its start three times. The first launch's RED4ext log ends at "Loading plugin
+from …XFRuntimeBridge.dll"; the other two at "RED4ext has been started", the bridge's own log at `bridge.enabled`, before its
+RTTI registration (about 0.16 s later in a good launch). Two crash reports came: an access violation at `ntdll.dll+0x88f9`,
+once on the main thread (inside COM and the network list manager) and once on a game worker thread, both inside the heap
+allocator (`rbx` a heap's base, `r8`/`r9` its free lists, `rax` a small address read from a damaged entry). The bridge's
+own threads were idle in their waits. An allocation failing on whatever thread comes next is what heap corruption looks
+like; the thread names the victim, not the culprit.
+
+Why (confidence: high) [offline: `dumpbin /disasm` of the build's object files, and the build's timestamps]: the 0.8.1 DLL
+linked a `Main.obj` compiled before `Bridge` gained a second `PipeServer` member (the control pipe). Its `StartBridge` asks
+`operator new` for **0x2F8** bytes (`mov ecx,2F8h`), while `Bridge::Bridge`, compiled fresh in `Bridge.obj`, initialises
+fields up to offset **0x424** (sizeof 0x428): every launch wrote 0x130 bytes past the block, over the next block's header.
+The object file was older than the header it depends on (`Main.obj` 17:32, `Bridge.hpp` 18:04, the DLL 18:14), and the
+plugin's MSBuild include record (`CL.read.1.tlog`) had no entry for `Main.cpp`, so the incremental build never rebuilt it.
+Run under AddressSanitizer, constructing the current `Bridge` in a 0x2F8-byte block stops at once with a heap-buffer-overflow
+in the constructor (`xfb_selftest --layout-repro`).
+
+**Rules for a native plugin:** package only from a clean build (`cmake --build … --clean-first`; the XF bridge's
+`tools/package.ts` refuses a build with any object file older than a source file); make the linker refuse objects compiled
+against different headers (the XF bridge stamps every translation unit with a hash of its headers through
+`#pragma detect_mismatch`, so a stale object fails with LNK2038); and create a long-lived object in the translation unit
+that defines its constructor (`Bridge::Create`). A crash at plugin load that a previous build didn't have, in `ntdll`'s heap,
+on an unrelated thread, points at memory written past an allocation, and a mixed-up build is the cheapest cause to rule
+out first.
 
 ## 3. Finding the crashing call in few restarts
 

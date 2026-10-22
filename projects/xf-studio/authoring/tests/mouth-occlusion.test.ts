@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import * as THREE from "three";
-import { materialAdapter } from "../src/character-material-adapters";
+import { materialAdapter } from "../src/materials/render/character-material-adapters";
 import { attachInteriorOcclusion, interiorDepths, interiorLight, interiorOcclusion, MOUTH_OCCLUSION, mouthInteriorUniforms, partingVisibility,
-  patchOcclusionShader } from "../src/mouth-occlusion";
+  patchOcclusionShader } from "../src/materials/render/mouth-occlusion";
 
 /** A square of head surface across the mouth, at depth `z`, facing −Z (the preview's V faces −Z). */
 const lipSheet = (z: number, half = 0.05) => ({ positions: new Float32Array([-half, 1.58, z, half, 1.58, z, half, 1.68, z, -half, 1.68, z]),

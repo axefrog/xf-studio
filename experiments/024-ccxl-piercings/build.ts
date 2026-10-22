@@ -11,18 +11,18 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { type CcoResource, readCco } from "../../projects/xf-studio/authoring/src/cco-model";
-import { loadCreatorCatalogue } from "../../projects/xf-studio/authoring/src/cc-catalogue-host";
-import { ccoPath } from "../../projects/xf-studio/authoring/src/character-resolver";
-import { depotHash, refFromPath } from "../../projects/xf-studio/authoring/src/depot-path";
-import { createInstalledHeadSource } from "../../projects/xf-studio/authoring/src/eye-plate-head-resolver";
-import { createWolvenKitEyePlateTools } from "../../projects/xf-studio/authoring/src/eye-plate-wolvenkit";
-import { installations } from "../../projects/xf-studio/authoring/src/installation-registry";
-import { LocalSettingsStore } from "../../projects/xf-studio/authoring/src/local-settings-store";
-import { createWolvenKitPackageTools } from "../../projects/xf-studio/authoring/src/package-build-wolvenkit";
+import { type CcoResource, readCco } from "../../projects/xf-studio/authoring/src/character/cco-model";
+import { loadCreatorCatalogue } from "../../projects/xf-studio/authoring/src/character/host/cc-catalogue-host";
+import { ccoPath } from "../../projects/xf-studio/authoring/src/character/character-resolver";
+import { depotHash, refFromPath } from "../../projects/xf-studio/authoring/src/game/depot-path";
+import { createInstalledHeadSource } from "../../projects/xf-studio/authoring/src/legacy/eye-makeup/plate/host/eye-plate-head-resolver";
+import { createWolvenKitEyePlateTools } from "../../projects/xf-studio/authoring/src/legacy/eye-makeup/plate/host/eye-plate-wolvenkit";
+import { installations } from "../../projects/xf-studio/authoring/src/game/host/installation-registry";
+import { LocalSettingsStore } from "../../projects/xf-studio/authoring/src/setup/host/local-settings-store";
+import { createWolvenKitPackageTools } from "../../projects/xf-studio/authoring/src/legacy/eye-makeup/export/host/package-build-wolvenkit";
 import { listGeneratedFiles, verifyProductArchive } from "../../projects/xf-studio/authoring/src/platform/export/product-verifier";
-import { createWolvenKitVerifierTools } from "../../projects/xf-studio/authoring/src/verifier-wolvenkit";
-import { wolvenKitIdentity } from "../../projects/xf-studio/authoring/src/wolvenkit-cli";
+import { createWolvenKitVerifierTools } from "../../projects/xf-studio/authoring/src/legacy/eye-makeup/export/host/verifier-wolvenkit";
+import { wolvenKitIdentity } from "../../projects/xf-studio/authoring/src/host/wolvenkit-cli";
 import {
   anchorRows, appDocument, BANKS, CUSTOMIZATION, customizationDocument, decodeChunk, DEPOT, HEAD, headWinding, MATERIALS, meshPath,
   MOD_NAME, MORPHS, morphPath, PIECES, pieceMeshDocument, pieceMorphDocument, pieceRenderBlob, plannedPaths, resourceJson, ROWS, rowDelta,

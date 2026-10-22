@@ -4,10 +4,10 @@ import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { clothingPorts, itemRecords, PRESET_PATHS, PRESET_RETRY_MS, presetOf, presetTable, resetPresetMemory, tweakIdOf } from "../src/clothing-host";
-import { depotHash, fnv1a64 } from "../src/depot-path";
-import type { ResourceGraph } from "../src/resource-graph";
-import { TWEAKDB_MAGIC, TweakDbBlob, tweakDbId } from "../src/tweakdb-flats";
+import { clothingPorts, itemRecords, PRESET_PATHS, PRESET_RETRY_MS, presetOf, presetTable, resetPresetMemory, tweakIdOf } from "../src/character/host/clothing-host";
+import { depotHash, fnv1a64 } from "../src/game/depot-path";
+import type { ResourceGraph } from "../src/game/resource-graph";
+import { TWEAKDB_MAGIC, TweakDbBlob, tweakDbId } from "../src/game/tweakdb-flats";
 
 const root = mkdtempSync(join(tmpdir(), "xfs-clothing-host-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));

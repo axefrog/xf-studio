@@ -26,11 +26,11 @@
 // No private save, game file or real mod name is used.
 import { handle, cn, rp, cr2w, cco, app, instance, mesh, meshComponent, mi, morphComponent, morphOption, morphtarget, tex, appearanceOption,
   switcherOption, fixtureInstallation, type FixtureArchive } from "./resolver-fixtures";
-import type { XlDocument } from "../src/archivexl-config";
-import { ccoPath } from "../src/character-resolver";
-import { CHARACTER_REQUEST_SCHEMA, type CharacterRequest } from "../src/character-detail-request";
-import { depotHash } from "../src/depot-path";
-import type { Installation } from "../src/resolver-host";
+import type { XlDocument } from "../src/game/archivexl-config";
+import { ccoPath } from "../src/character/character-resolver";
+import { CHARACTER_REQUEST_SCHEMA, type CharacterRequest } from "../src/character/character-detail-request";
+import { depotHash } from "../src/game/depot-path";
+import type { Installation } from "../src/game/host/resolver-host";
 
 export const P = {
   cco: ccoPath("female", false),

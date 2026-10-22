@@ -2,12 +2,12 @@
 // focusable and say why, a Build offers "Add to my mod manager" with a reviewed plan and "Show in folder", Settings offers what
 // XF Studio found and saves each choice at once (the saves folder too), and the failure card offers a report instead of a log path.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { InstallDetectionActions } from "../src/install-detection-actions";
-import { LocalSetupActions, type LocalSetupTransport } from "../src/local-setup-actions";
-import { ModInstallActions, type ModInstallPlan } from "../src/mod-install-actions";
-import { UpdateCheckActions, type UpdateCheckTransport } from "../src/update-check-actions";
-import { emptyUpdateCheckMemory, UpdateCheckService } from "../src/update-check";
-import { simulatedReleases } from "../src/update-check-github";
+import { InstallDetectionActions } from "../src/installation/install-detection-actions";
+import { LocalSetupActions, type LocalSetupTransport } from "../src/setup/local-setup-actions";
+import { ModInstallActions, type ModInstallPlan } from "../src/installation/mod-install-actions";
+import { UpdateCheckActions, type UpdateCheckTransport } from "../src/setup/update-check-actions";
+import { emptyUpdateCheckMemory, UpdateCheckService } from "../src/setup/update-check";
+import { simulatedReleases } from "../src/setup/host/update-check-github";
 import { installLightDom, lightDocument, lightEvent, type LightElement, uninstallLightDom } from "./light-dom";
 
 beforeAll(() => installLightDom());
@@ -92,7 +92,9 @@ type HarnessOptions = { plan?: ModInstallPlan; files?: Record<string, unknown>; 
   /** The host's update check (Settings › Updates); without it checking isn't available. */
   updates?: UpdateCheckTransport;
   /** The update service itself, when a test drives it before the panel opens (a check already running). */
-  updateActions?: UpdateCheckActions };
+  updateActions?: UpdateCheckActions;
+  /** A read-only window: the port refuses what the workspace lease refuses (everything but view preferences and diagnostics). */
+  readOnly?: string };
 async function packageHarness(options: HarnessOptions = {}) {
   const { packagePanel } = await import("../src/studio-ui/panels/collection");
   return panelHarness(options, rt => packagePanel(rt as never));
@@ -141,10 +143,16 @@ async function panelHarness<P extends { spec: { element: HTMLElement }; update(f
     modInstall: { snapshot: () => install.snapshot(), capability: (a: never) => install.capability(a), dispatch: (a: never) => install.dispatch(a) },
     diagnostics: { expected: (code?: string) => code === "package_build_unavailable", capability: () => ({ available: true }), snapshot: () => ({ mode: null }),
       dispatch: async () => ({ ok: true, message: "" }) },
-    preferences: { snapshot: () => ({ researchTools: false }) },
+    preferences: { snapshot: () => ({ researchTools: false }), capability: () => ({ available: true }) },
     updates: { snapshot: () => updates.snapshot(), capability: (a: never) => updates.capability(a), dispatch: (a: never) => updates.dispatch(a) },
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
   };
+  if (options.readOnly) {
+    const refused = () => ({ available: false, code: "unavailable", reason: options.readOnly });
+    for (const family of [port.files, port.library, port.previewSetup, port.localSetup, port.installDetection, port.modInstall, port.updates] as { capability: unknown }[])
+      family.capability = refused;
+    Object.assign(port.authoring, { capability: refused, requestCapability: refused });
+  }
   for (const service of [setup, detection, install, updates]) service.subscribe(() => { for (const listener of listeners) listener(); });
   const feedback = new Feedback();
   const dispatched: unknown[] = [];
@@ -328,6 +336,32 @@ describe("after Build: Add to my mod manager and Show in folder (UI-82)", () => 
     const refused = await packageHarness({ files: { last: { ok: false, kind: "package.build", code: "package_build_unavailable", message: "Choose your Cyberpunk 2077 folder.", at: 0 } } });
     expect(buttonNamed(refused.root.querySelector(".result-card")!, "Report this problem")).toBeUndefined();
     refused.panel.spec.element.remove();
+  });
+});
+
+describe("Settings in a read-only window (style guide t-read-only-window)", () => {
+  test("what the port still allows stays available; everything that would write settings shows as unavailable with the lease's reason", async () => {
+    const reason = "This workspace is open in another window. Choose Use it here to edit in this window.";
+    const h = await settingsHarness({ readOnly: reason });
+    const { markReadOnly } = await import("../src/studio-ui/read-only-sweep");
+    h.panel.spec.visibility?.(true);
+    await settle(); h.paint();
+    markReadOnly(h.root as never, reason);
+    const unavailable = (element: LightElement | null | undefined) => !!element && (element.getAttribute("aria-disabled") === "true" || element.disabled);
+    // Kept: the theme (a UI preference), Keyboard & mouse (it only opens a reference), diagnostics and Report a problem.
+    const appearance = h.root.querySelector("[data-capability=allowed]")!;
+    expect(appearance).toBeTruthy();
+    for (const name of ["Match system", "Light", "Dark", "Keyboard & mouse…", "Report a problem…"])
+      expect(unavailable(buttonNamed(h.root, name)), name).toBe(false);
+    const deep = h.root.querySelectorAll("input").find(input => input.closest("[data-capability=allowed]") && text(input.closest("[data-capability=allowed]")!).includes("Diagnostic mode"));
+    expect(unavailable(deep)).toBe(false);
+    // Refused: the game folder setup and Check for updates (local settings writes).
+    const game = h.root.querySelector("[data-settings-section=game]")!;
+    const gameControls = [...game.querySelectorAll("button"), ...game.querySelectorAll("input")];
+    expect(gameControls.length).toBeGreaterThan(5);
+    expect(gameControls.filter(control => !unavailable(control) && !control.matches(".help-tip")).map(control => text(control) || control.getAttribute("aria-label"))).toEqual([]);
+    expect(gameControls.filter(control => control.tagName === "button" && !control.matches(".help-tip")).every(control => control.getAttribute("data-reason") === reason)).toBe(true);
+    h.panel.spec.element.remove();
   });
 });
 
@@ -625,5 +659,88 @@ describe("wording helpers", () => {
     const { matchCommands } = await import("../src/studio-ui/commands");
     const list = [{ title: "Front view", group: "View" }, { title: "Calibrate", group: "Research" }, { title: "Quality 1K", group: "View" }];
     expect(matchCommands(list, "").map(command => command.title)).toEqual(["Front view", "Quality 1K", "Calibrate"]);
+  });
+});
+
+describe("The workspace notice (style guide t-recovering, t-unprotected): it never moves the dock for a transient state", () => {
+  // The confirm popover places itself in the window (the light DOM has none: give it one for these tests).
+  const globals = globalThis as { window?: unknown };
+  const had = globals.window;
+  beforeAll(() => { globals.window = { innerWidth: 1200, innerHeight: 800, addEventListener() {} }; });
+  afterAll(() => { if (had === undefined) delete globals.window; else globals.window = had; });
+  const harness = async () => {
+    const { workspaceNotice, restoringLine } = await import("../src/studio-ui/app");
+    const sent: string[] = [];
+    const rt = { port: { workspace: { dispatch: async () => ({ ok: true }) }, documents: { dispatch: async (action: { kind: string }) => { sent.push(action.kind); return { ok: true }; } } },
+      file: (action: { kind: string }) => { sent.push(action.kind); }, feedback: { toast() {} } };
+    const notice = workspaceNotice(rt as never);
+    const root = notice.element as unknown as LightElement;
+    const frame = (recovering: { shown: boolean; long: boolean; safe: boolean; missing: number }, extra: { unprotected?: number; gesture?: boolean } = {}) =>
+      ({ status: { outbox: { unprotected: extra.unprotected ?? 0, pending: 1, conflicts: 0, failing: false, recovering } },
+        preview: { gesture: extra.gesture ? { source: "uv" } : null, control: null } }) as never;
+    const visible = () => buttons(root).filter(button => !button.hidden).map(button => text(button));
+    const shown = (name: string) => buttons(root).find(button => !button.hidden && text(button) === name)!;
+    return { notice, root, frame, visible, shown, sent, restoringLine };
+  };
+
+  test("restoring's first seconds are the status bar's line, never the band; once it takes a while the band offers its labelled ways on", async () => {
+    const { notice, root, frame, visible, shown, sent, restoringLine } = await harness();
+    notice.update(frame({ shown: false, long: false, safe: false, missing: 0 }));
+    expect(root.hidden).toBe(true);
+    expect(restoringLine(frame({ shown: false, long: false, safe: false, missing: 0 }))).toBe("");
+    // Shown after a second: the status bar's fixed line says so, and the band stays closed (nothing under the header moves).
+    notice.update(frame({ shown: true, long: false, safe: false, missing: 0 }));
+    expect(root.hidden).toBe(true);
+    expect(restoringLine(frame({ shown: true, long: false, safe: false, missing: 0 }))).toBe("Restoring changes from your last session…");
+    notice.update(frame({ shown: true, long: true, safe: true, missing: 0 }));
+    expect(root.hidden).toBe(false);
+    expect(restoringLine(frame({ shown: true, long: true, safe: true, missing: 0 }))).toBe("");
+    expect(text(root.querySelector(".workspace-notice-text")!)).toBe("Restoring changes from your last session is taking a while.");
+    expect(visible()).toEqual(["Use restored", "Try again"]);
+    expect(shown("Use restored").getAttribute("title")).toBe("Keep working on the restored version");
+    // One rule at every width: every button is labelled, none an icon alone (B6, I2).
+    for (const button of buttons(root)) { expect(button.querySelector("svg")).toBeNull(); expect(button.classList.contains("icon-only")).toBe(false); }
+    shown("Use restored").click();
+    shown("Try again").click();
+    notice.update(frame({ shown: true, long: true, safe: false, missing: 0 }));
+    expect(visible()).toEqual(["Export collection", "Try again"]);
+    await settle();
+    expect(sent).toEqual(["documents.keepRestored", "documents.retryRecovery"]);
+  });
+
+  test("a missing save offers Import save… and Discard those changes, which asks first in place with focus on Cancel", async () => {
+    const { notice, root, frame, visible, shown, sent } = await harness();
+    notice.update(frame({ shown: true, long: true, safe: false, missing: 1 }));
+    expect(text(root.querySelector(".workspace-notice-text")!)).toBe("Some restored changes need a game save that's no longer on this computer. Import it again, or discard them.");
+    expect(visible()).toEqual(["Import save…", "Discard those changes"]);
+    shown("Import save…").click();
+    shown("Discard those changes").click();
+    await settle();
+    // Nothing is discarded yet: the confirmation names what goes.
+    expect(sent).toEqual(["savedV.import"]);
+    const popover = lightDocument.body.querySelector(".confirm-popover")!;
+    expect(popover.getAttribute("role")).toBe("alertdialog");
+    expect(text(popover.querySelector(".popover-message")!)).toBe("Discard the restored changes that need that game save? What they changed goes back to the library's version, and they can't be got back.");
+    expect(text(lightDocument.activeElement!)).toBe("Cancel");
+    popover.dispatchEvent(lightEvent("submit"));
+    await settle();
+    expect(sent).toEqual(["savedV.import", "documents.discardWaiting"]);
+    expect(lightDocument.body.querySelector(".confirm-popover")).toBeNull();
+  });
+
+  test("the unprotected line waits until a gesture in progress ends, then stays until a record is written", async () => {
+    const { notice, root, frame, visible } = await harness();
+    const idle = { shown: false, long: false, safe: false, missing: 0 };
+    notice.update(frame(idle, { unprotected: 1, gesture: true }));
+    expect(root.hidden).toBe(true);
+    notice.update(frame(idle, { unprotected: 1 }));
+    expect(root.hidden).toBe(false);
+    expect(text(root.querySelector(".workspace-notice-text")!)).toBe("Your latest changes aren't protected on this computer.");
+    expect(visible()).toEqual(["Export collection", "Try again"]);
+    // Open, it stays through the next gesture (closing it then would move the dock too).
+    notice.update(frame(idle, { unprotected: 1, gesture: true }));
+    expect(root.hidden).toBe(false);
+    notice.update(frame(idle));
+    expect(root.hidden).toBe(true);
   });
 });

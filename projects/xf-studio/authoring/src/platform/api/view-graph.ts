@@ -36,8 +36,8 @@ export const VIEW_GRAPH_1 = "xfs/view-graph-1";
 /** Where each slot's nodes are stored in `xfs/view-graph-1`. */
 export const SLOT_COLLECTIONS = { scene: "scenes", camera: "cameras", lights: "lights", display: "display", tools: "tools" } as const;
 /**
- * The stored graph: views and their nodes, each node as `{ id, kind?, ...state }`, and which view has focus. Written into the
- * workspace (`views`) only when it differs from the default one-view graph, so a workspace that never adds a view keeps its bytes.
+ * The stored graph: views and their nodes, each node as `{ id, kind?, ...state }`. A profile session holds it whole (`views`); the
+ * workspace's legacy `views` field is migration input, kept as it was.
  */
 export type ViewGraphData = {
   readonly schema: typeof VIEW_GRAPH_1;
@@ -45,6 +45,10 @@ export type ViewGraphData = {
   readonly views: readonly (ViewRecord | KeptView)[];
   readonly scenes: readonly StoredNode[]; readonly cameras: readonly StoredNode[]; readonly lights: readonly StoredNode[];
   readonly display: readonly StoredNode[]; readonly tools: readonly StoredNode[];
+  /**
+   * Not focus (that is the session's, platform/core/focus.ts): the field older builds require, kept as stored while it names a shown
+   * view, else the main view. Nothing reads it to decide a target.
+   */
   readonly focused: ViewId;
 };
 export type StoredNode = { readonly id: string; readonly kind?: string } & Readonly<Record<string, unknown>>;
@@ -63,7 +67,6 @@ export type ViewGraphRules = { readonly codecs: { readonly [S in ViewSlot]: Node
 
 /** A detached read of the graph for presentations: each view with its nodes, and which of them other views share. */
 export type ViewGraphSnapshot = {
-  readonly focused: ViewId;
   readonly views: readonly (ViewRecord & { readonly shared: readonly ViewSlot[]; readonly sceneKind: SceneKind; /** The dock panel that shows it. */ readonly panel: string })[];
 };
 
@@ -73,7 +76,7 @@ export type ViewGraphChange = {
   readonly nodes: readonly string[];
   /** Views that reference a changed node, or were added, removed or relinked. */
   readonly views: readonly ViewId[];
-  /** Views were added, removed or relinked, or the focus moved. */
+  /** Views were added, removed or relinked. */
   readonly structure: boolean;
   /**
    * `edit`: an action changed it; `history`: Undo, Redo or a camera Back/Forward; `seed`: state that records nothing and marks no

@@ -1,4 +1,4 @@
-import type { PayloadSchema } from "../../studio-action-descriptors";
+import type { PayloadSchema } from "../../app/studio-action-descriptors";
 import type { StudioPanelId } from "../layout-defaults";
 import { anchorInfo, type AnchorId, type AnchorState } from "./anchors";
 import type { AppCondition, GuidanceEvent, GuidanceFacts, HelpContent, Side, Tour, TourButton, TourCommand, TourNavigation } from "./types";

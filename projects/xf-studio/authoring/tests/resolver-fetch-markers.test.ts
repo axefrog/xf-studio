@@ -2,9 +2,9 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { refFromPath } from "../src/depot-path";
-import { COMMAND_LINE_LIMIT, commandLineArgumentLength, MAX_PATTERN_CHARS, NOT_WRITTEN_RUNS, uncookPatterns, withoutArchiveFileName,
-  WolvenKitFetcher } from "../src/resolver-host";
+import { refFromPath } from "../src/game/depot-path";
+import { COMMAND_LINE_LIMIT, commandLineArgumentLength, MAX_PATTERN_CHARS, NOT_WRITTEN_RUNS, reportResources, ResolverFetcher, trimBuffers, uncookPatterns, withoutArchiveFileName,
+  WolvenKitFetcher } from "../src/game/host/resolver-host";
 import { cr2w } from "./resolver-fixtures";
 
 /**
@@ -143,4 +143,41 @@ test("an extraction whose output folder is missing counts as transient, not last
   expect(await made.fetch(archive, refFromPath("mod\\x.mesh"), "mesh")).toBeNull();
   expect(made.transient(archive, refFromPath("mod\\x.mesh"))).toBe(true);
   expect(existsSync(join(cache, "json"))).toBe(false);
+});
+
+describe("a problem report's resources (DIAG-08)", () => {
+  test("each from the archive that wins it now: the native reader's answer, else WolvenKit's cached answer for that archive, never a launch", async () => {
+    const root = temporary(), winner = archiveAt(root, "winner.archive"), cache = join(root, "cache");
+    const wolvenKit = new WolvenKitFetcher("WolvenKit.CLI.exe", cache, () => true);
+    (wolvenKit as unknown as { fetch: unknown }).fetch = () => { throw Error("a report must never start WolvenKit"); };
+    const cachedFor: string[] = [];
+    (wolvenKit as unknown as { cachedAnswer: unknown }).cachedAnswer = (archive: Archive, ref: { hash: string }) => {
+      cachedFor.push(`${archive.name}:${ref.hash}`);
+      return ref.hash === refFromPath("mod\cached.mesh").hash ? { document: { from: "cache" }, extractedSha256: "", path: null, bytes: 1 } : null;
+    };
+    const native = refFromPath("mod\native.app");
+    const decoder = { identity: "fake-native", canAnswer: () => true, close() {},
+      decode: async (request: { archivePath: string; hash: string }) => request.hash === native.hash
+        ? { ok: true, document: { from: "native", archive: request.archivePath }, extractedSha256: "", root: "appearanceAppearanceResource", name: null, notes: [], defaulted: [] }
+        : { ok: false, kind: "not-verified", message: "not this one" } };
+    const fetcher = new ResolverFetcher(wolvenKit, { decoder: decoder as never }, cache);
+    const graph = { locate: (ref: { hash: string; path: string | null }) => ({ entry: ref, via: [],
+      lookup: { winner: ref.path?.includes("absent") ? null : winner } }) };
+    const answers = await reportResources({ graph, fetcher } as never,
+      [native, refFromPath("mod\cached.mesh"), refFromPath("mod\neither.mi"), refFromPath("mod\absent.mt")]);
+    expect(answers.get(native.hash)).toEqual({ archive: "winner.archive", provider: "Installed game", reader: "native",
+      document: { from: "native", archive: winner.id } });
+    expect(answers.get(refFromPath("mod\cached.mesh").hash)).toMatchObject({ archive: "winner.archive", reader: fetcher.tool, document: { from: "cache" } });
+    expect(answers.get(refFromPath("mod\neither.mi").hash)).toBeNull();
+    expect(answers.get(refFromPath("mod\absent.mt").hash)).toBeNull();
+    // The cache is asked only for the winning archive's answer, and only when the native reader had none.
+    expect(cachedFor).toEqual([`winner.archive:${refFromPath("mod\cached.mesh").hash}`, `winner.archive:${refFromPath("mod\neither.mi").hash}`]);
+  });
+});
+
+test("trimming a cached document keeps a __proto__ key as data, never as the copy's prototype", () => {
+  const trimmed = trimBuffers(JSON.parse('{"a":{"__proto__":{"Bytes":"AAAA","polluted":1}}}')) as { a: Record<string, unknown> };
+  expect(Object.getPrototypeOf(trimmed.a)).toBe(Object.prototype);
+  expect(Object.getOwnPropertyDescriptor(trimmed.a, "__proto__")!.value).toEqual({ Bytes: { $trimmedBase64Length: 4 }, polluted: 1 });
+  expect(trimmed.a.polluted).toBeUndefined();
 });

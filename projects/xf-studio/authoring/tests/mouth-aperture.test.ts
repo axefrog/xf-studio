@@ -4,10 +4,10 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import * as THREE from "three";
-import { FACE_REST_KEY, JOINT_REGION, lipParting, mouthAperture, mouthLipJoints, posedParting, type FaceRest } from "../src/mouth-aperture";
+import { FACE_REST_KEY, JOINT_REGION, lipParting, mouthAperture, mouthLipJoints, posedParting, type FaceRest } from "../src/animation/mouth-aperture";
 import { createMouthApertureSampler, headBones } from "../src/platform/scene/mouth-aperture-sampler";
-import { faceMotionScene } from "../src/game-blink";
-import { FACE_BAKE_VERSION, motionRest } from "../src/facial-host";
+import { faceMotionScene } from "../src/animation/render/game-blink";
+import { FACE_BAKE_VERSION, motionRest } from "../src/animation/host/facial-host";
 
 const { mouth, jaw, none } = JOINT_REGION;
 /**

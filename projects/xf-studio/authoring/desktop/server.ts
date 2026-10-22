@@ -1,61 +1,64 @@
-import { createReferenceCharacterRoutes } from "../src/reference-character-server";
+import { createReferenceCharacterRoutes } from "../src/character/host/reference-character-server";
 import { existsSync, mkdirSync, realpathSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { isBelow } from "../src/platform/api/path-containment";
 import { randomBytes } from "node:crypto";
-// The library files: one owner per file, its stores, durability, daily backups and routes (src/library-files.ts).
+// The library files: one owner per file, its stores, durability, daily backups and routes (src/library/host/library-files.ts).
 import { hostClock } from "../src/platform/core/clock";
-import { openLibraryFiles } from "../src/library-files";
-import { createLocalSettingsHandler } from "../src/local-settings-server";
-import { FOLDER_FIELDS, type FolderField } from "../src/local-setup-actions";
-import { createInstallDetectionHandler, hostFrameworkCheck, profileFrameworkMods } from "../src/install-detection-server";
+import { openLibraryFiles } from "../src/library/host/library-files";
+import { createLocalSettingsHandler } from "../src/setup/host/local-settings-server";
+import { FOLDER_FIELDS, type FolderField } from "../src/setup/local-setup-actions";
+import { createInstallDetectionHandler, hostFrameworkCheck, profileFrameworkMods } from "../src/installation/host/install-detection-server";
 import { createSavesHandler } from "../src/features/save-explorer/host/saves-server";
-import { savesFolderProbe, savesHostSources } from "../src/saves-host-sources";
+import { savesFolderProbe, savesHostSources } from "../src/saves/host/saves-host-sources";
 import { createModInstallHandler, installReceiptsRoot, ModInstallError, ModInstallHost, READ_ONLY_VERIFICATION, systemAnsiCodePage,
-  windowsRunningApps } from "../src/mod-install-host";
-import { verificationInstallReceipts, verificationSettingsDirectory } from "../src/host-state";
-import { LocalSettingsStore } from "../src/local-settings-store";
+  windowsRunningApps } from "../src/installation/host/mod-install-host";
+import { verificationInstallReceipts, verificationSettingsDirectory } from "../src/setup/host/host-state";
+import { LocalSettingsStore } from "../src/setup/host/local-settings-store";
 import { desktopCapabilities, type DesktopVersion } from "./host";
 import { desktopPackageProgress, desktopPackageRequest } from "./package";
 import { cachedBunProbe, cachedWolvenKitProbe, desktopBuildIssue, desktopPlateCache, PROBE_PENDING, probeBun, type WolvenKitProbe } from "./build";
-import { eyePlateReadiness } from "../src/eye-plate-cache";
-import { EYE_PLATE_RECIPE } from "../src/eye-plate-recipe";
+import { eyePlateReadiness } from "../src/legacy/eye-makeup/plate/host/eye-plate-cache";
+import { EYE_PLATE_RECIPE } from "../src/legacy/eye-makeup/plate/eye-plate-recipe";
 import { DesktopUpdateService, type NativeUpdater, type UpdateTrust } from "./update-service";
 import { DesktopWorkspaceStore, desktopWorkspaceRequest, desktopWorkspaceStartFresh } from "./workspace-store";
+import { DesktopOutboxStore, desktopOutboxRequest } from "./outbox-store";
+import { DESKTOP_WORKSPACE, DesktopWorkspaceLeases } from "./workspace-lease-host";
+import { INSTANCE_ROUTE, instanceActivateRequest } from "./single-instance";
 // A composition root: the part registry and document model are built once and injected (CORE-29).
 import { STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
 import { DesktopWorkActivity } from "./work-activity";
 import { DesktopUpdateApplyGuard } from "./update-apply-guard";
-import { PreviewCoreHost } from "../src/preview-core-host";
-import { includeHostCode } from "../src/host-code-identity";
-import { createPreviewCoreHandler } from "../src/preview-core-server";
-import type { GameAssetExporter } from "../src/game-asset-export";
-import { PREVIEW_CORE_ASSET_NAMES } from "../src/preview-core-recipe";
-import { CharacterDetailHost, characterRoute, installationFingerprint } from "../src/character-detail-host";
-import { installations } from "../src/installation-registry";
-import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "../src/character-detail-server";
-import { CHOICE_PREVIEW_ENDPOINT, createChoicePreviewHandler } from "../src/choice-preview-server";
-import { CREATOR_ENDPOINT, createCreatorHandler } from "../src/cc-catalogue-server";
-import { createFacialHandler, FACIAL_ENDPOINT, FacialHost, locateFacialSolver } from "../src/facial-host";
-import { createPoseHandler, POSES_ENDPOINT } from "../src/pose-catalogue-server";
+import { PreviewCoreHost } from "../src/preview/host/preview-core-host";
+import { includeHostCode } from "../src/host/host-code-identity";
+import { createPreviewCoreHandler } from "../src/preview/host/preview-core-server";
+import type { GameAssetExporter } from "../src/game/host/game-asset-export";
+import { PREVIEW_CORE_ASSET_NAMES } from "../src/preview/preview-core-recipe";
+import { CharacterDetailHost, characterRoute, installationFingerprint } from "../src/character/host/character-detail-host";
+import { installations } from "../src/game/host/installation-registry";
+import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "../src/character/host/character-detail-server";
+import { CHOICE_PREVIEW_ENDPOINT, createChoicePreviewHandler } from "../src/character/host/choice-preview-server";
+import { CREATOR_ENDPOINT, createCreatorHandler } from "../src/character/host/cc-catalogue-server";
+import { createFacialHandler, FACIAL_ENDPOINT, FacialHost, locateFacialSolver } from "../src/animation/host/facial-host";
+import { createPoseHandler, POSES_ENDPOINT } from "../src/animation/host/pose-catalogue-server";
 import { createPosePreferencesHandler, PosePreferencesStore } from "../src/features/poses/host/preferences-store";
-import { POSE_PREFERENCES_ENDPOINT, VERIFICATION_POSE_PREFERENCES_ENDPOINT } from "../src/pose-endpoint";
-import { PoseCatalogueHost } from "../src/pose-catalogue-host";
-import { IdleHost, idlePrepared } from "../src/idle-host";
-import { hostJobs } from "../src/host-jobs";
-import { PreparedFiles } from "../src/prepared-files";
-import { createIdleHandler, IDLES_ENDPOINT } from "../src/idle-server";
-import { createGradingLutHandler, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT, GradingLutHost, serveGradingLut } from "../src/grading-lut-host";
-import { WolvenKitSetupHost, wolvenKitReadinessIssue, type WolvenKitSetupOptions } from "../src/wolvenkit-setup-host";
-import { createWolvenKitSetupHandler } from "../src/wolvenkit-setup-server";
-import { wolvenKitLinkUrl, type WolvenKitLink } from "../src/wolvenkit-setup";
-import { isProjectLink, PROJECT_LINKS } from "../src/project-links";
-import { UPDATE_CHECK_FILE, updateCheckEndpoints } from "../src/update-check-host";
-import { textFileAt } from "../src/derived-cache";
-import { gitHubReleases } from "../src/update-check-github";
-import type { LocalSettings } from "../src/local-settings";
-import { hostDiagnosticsAt, hostFailure, setProcessDiagnostics } from "../src/diagnostics/host-log";
-import { createDiagnosticsHandler, DIAGNOSTICS_PREFIX, withRequestDiagnostics } from "../src/diagnostics/host-endpoint";
+import { POSE_PREFERENCES_ENDPOINT, VERIFICATION_POSE_PREFERENCES_ENDPOINT } from "../src/animation/pose-endpoint";
+import { PoseCatalogueHost } from "../src/animation/host/pose-catalogue-host";
+import { IdleHost, idlePrepared } from "../src/animation/host/idle-host";
+import { hostJobs } from "../src/host/host-jobs";
+import { PreparedFiles } from "../src/host/prepared-files";
+import { createIdleHandler, IDLES_ENDPOINT } from "../src/animation/host/idle-server";
+import { createGradingLutHandler, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT, GradingLutHost, serveGradingLut } from "../src/preview/host/grading-lut-host";
+import { WolvenKitSetupHost, wolvenKitReadinessIssue, type WolvenKitSetupOptions } from "../src/setup/host/wolvenkit-setup-host";
+import { createWolvenKitSetupHandler } from "../src/setup/host/wolvenkit-setup-server";
+import { wolvenKitLinkUrl, type WolvenKitLink } from "../src/setup/wolvenkit-setup";
+import { isProjectLink, PROJECT_LINKS } from "../src/app/project-links";
+import { UPDATE_CHECK_FILE, updateCheckEndpoints } from "../src/setup/host/update-check-host";
+import { textFileAt } from "../src/host/derived-cache";
+import { gitHubReleases } from "../src/setup/host/update-check-github";
+import type { LocalSettings } from "../src/setup/local-settings";
+import { hostDiagnosticsAt, hostFailure, setProcessDiagnostics } from "../src/diagnostics/host/host-log";
+import { createDiagnosticsHandler, DIAGNOSTICS_PREFIX, withRequestDiagnostics } from "../src/diagnostics/host/host-endpoint";
 
 /** The derived 3D preview cache lives beside the plate cache in the app's private data folder. */
 export const desktopPreviewCache = (dataRoot: string) => resolve(dataRoot, "preview-cache");
@@ -64,6 +67,11 @@ export const desktopToolsRoot = (dataRoot: string) => resolve(dataRoot, "tools")
 const OPEN_LINKS: readonly WolvenKitLink[] = ["wolvenkit-licence", "wolvenkit-release", "runtime-installer", "runtime-page"];
 
 export type DesktopHostOptions = {
+  /**
+   * This process's single-instance claim (`single-instance.ts`): a second launch asks it, with its token, to bring the window forward.
+   * The one route outside the page session.
+   */
+  instance?: { token: string; focus(): void };
   /** Test seams for WolvenKit setup (fixture release, fetch, .NET detection). */
   wolvenKit?: Partial<Omit<WolvenKitSetupOptions, "root" | "configured">>;
   /** Open an official page in the user's browser (Electrobun `Utils.openExternal`). */
@@ -139,6 +147,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const verificationPosePreferencesRequest = createPosePreferencesHandler(new PosePreferencesStore(verificationSettingsDirectory(dataRoot),
     { seed: () => posePreferences.load().preferences }));
   const workspaceStore = new DesktopWorkspaceStore(dataRoot, STUDIO_DOCUMENTS);
+  // The workspace's outbox keys, beside it (profiles design §2.2): one file per document, fenced by the same lease.
+  const outboxStore = new DesktopOutboxStore(dataRoot);
   let closeAck: ((nonce: string, status: "saved" | "failed") => boolean) | undefined;
   // Renderer progress for the host's blank-window watchdog and close handling.
   const renderer = { pageServed: false, bootstrapped: false, smoke: null as string | null };
@@ -151,6 +161,10 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const libraries = openLibraryFiles(dataRoot, { clock, parts: STUDIO_PARTS, isolated: false,
     log: message => diagnostics.log.info("library", "legacy_import", message) });
   setProcessDiagnostics(diagnostics);
+  // One writer per workspace (profiles design §2.3): the page holding the lease writes the workspace; its generations come from the
+  // library, so document writes are fenced by the same ones.
+  const leases = new DesktopWorkspaceLeases(verification => (verification ? libraries.verification : libraries.main).documents.nextLease(DESKTOP_WORKSPACE),
+    5000, message => diagnostics.log.info("workspace", "lease", message));
   // The resolver reads game files natively first, in a worker; the packaged app starts the built one.
   if (hostOptions.nativeDecodeWorker) {
     installations.useNativeWorker(hostOptions.nativeDecodeWorker);
@@ -277,6 +291,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     wolvenKit: () => { const state = wolvenKit.snapshot(); return { version: state.version, source: state.source, phase: state.phase }; },
     roots: () => [{ label: "<data>", path: dataRoot }, { label: "<build-tools>", path: toolsRoot }],
     resolverCache: resolve(desktopPreviewCache(dataRoot), "resolver"),
+    resources: (refs, progress) => characterDetails.reportResources(refs, progress),
     // XF Studio's own builds are named as such in a report (PIPE-116): the receipts folder below and the app's earlier one.
     installReceipts: () => [resolve(hostOptions.installReceipts ?? installReceiptsRoot(dataRoot)), installReceiptsRoot(dataRoot)],
     openExternal: hostOptions.openExternal,
@@ -307,6 +322,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       const url = new URL(request.url);
       const origin = `http://127.0.0.1:${server.port}`;
       if (url.origin !== origin) return new Response("Forbidden", { status: 403 });
+      // A second launch of the app hands over to this one (single-instance.ts); it has no page session, only the instance token.
+      if (url.pathname === INSTANCE_ROUTE) return instanceActivateRequest(request, hostOptions.instance?.token, () => hostOptions.instance?.focus());
       const firstVisit = url.pathname === "/" && url.searchParams.get("session") === token;
       const cookie = request.headers.get("Cookie") ?? "";
       if (!firstVisit && !cookie.split("; ").includes(`xfs_session=${token}`))
@@ -375,8 +392,20 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         if (response.ok) report("The user started fresh; an unreadable workspace was set aside.");
         return response;
       }
+      if (url.pathname === "/api/desktop/workspace/lease") return leases.request(routedRequest, url.searchParams.has("verify"));
+      if (url.pathname === "/api/desktop/workspace/outbox") {
+        const fence = () => leases.refuseWrite(request, url.searchParams.has("verify"));
+        const fenced = fence();
+        if (fenced) return fenced;
+        return desktopOutboxRequest(routedRequest, outboxStore, url.searchParams.has("verify"), fence);
+      }
       if (url.pathname === "/api/desktop/workspace") {
-        const response = await desktopWorkspaceRequest(routedRequest, workspaceStore, url.searchParams.has("verify"));
+        // A late write from a page that released the workspace (an older lease generation) is refused, never written: checked on arrival
+        // and again at the save itself, after the body has come in, with nothing awaited in between.
+        const fence = () => leases.refuseWrite(request, url.searchParams.has("verify"));
+        const fenced = fence();
+        if (fenced) return fenced;
+        const response = await desktopWorkspaceRequest(routedRequest, workspaceStore, url.searchParams.has("verify"), fence);
         // Only a successfully loaded workspace makes the close handshake wait for the page.
         if (request.method === "GET" && !renderer.bootstrapped) {
           if (response.ok) { renderer.bootstrapped = true; report("Renderer bootstrap loaded the workspace."); }
@@ -482,7 +511,10 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     characterDetails,
     /** WolvenKit setup (tests and shutdown). */
     wolvenKit,
+    /** The workspace leases (tests and the lease harness). */
+    leases,
     stop() {
+      leases.close();
       diagnostics.trace.flush();
       shutdown.abort();
       previewCore.cancel();

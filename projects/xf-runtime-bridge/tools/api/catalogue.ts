@@ -19,10 +19,11 @@
 // The game side enforces the real gate: every write is refused unless the bridge's config.ini
 // has allow_writes = true, which only the dedicated test profile sets.
 
+import { refuseContinue, waitForLoadEnd } from "./load-continue.ts";
 import { captureBurst, captureWindow, CaptureError, grabForAnalysis, recrop, type CaptureRecord } from "../capture/capture.ts";
 import { NAMED_REGIONS, type RegionSpec } from "../capture/regions.ts";
 import type { CommandApi, ImageRef } from "./command-api.ts";
-import { frame, FramingError, FRAMINGS, LENSES, type CameraApplied, type FramingAdapter, type FrameOptions, type SubjectReading } from "./framing.ts";
+import { defaultLens, frame, FramingError, FRAMINGS, LENSES, type CameraApplied, type FramingAdapter, type FrameOptions, type SubjectReading } from "./framing.ts";
 import { CAMERA_PRESETS, expandCamera } from "./presets.ts";
 import { KeySendError, readPhotoModeBinding, virtualKey, type FocusPolicy, type KeyRoute } from "../input/photo-key.ts";
 import { plainBridgeError } from "./errors.ts";
@@ -31,12 +32,17 @@ import { bool, int, num, obj, oneOf, str, type JsonSchema } from "./schema.ts";
 import { isMatch, matchLabel } from "./labels.ts";
 import { runShowroomLight, runShowroomRotate, runShowroomSpawn } from "../showroom/commands.ts";
 import { eyesOf, facingOf, toWorld, type Vec3 as ShowroomVec3 } from "../showroom/plan.ts";
-import { BEHAVE_COMMANDS, PLAYER_COMMANDS, PRESET_COMMAND, SCENE_COMMANDS, withOverlayCleared } from "./catalogue060.ts";
+import { BEHAVE_COMMANDS, PLAYER_COMMANDS, PRESET_COMMAND, SCENE_COMMANDS, stopIfCancelled, withOverlayCleared } from "./catalogue060.ts";
+import { COMMANDS_070 } from "./catalogue070.ts";
+import { applyCatalogue080 } from "./catalogue080.ts";
 import { frameStatsInCapture, judgeAfter, judgeBefore, pickSubject, runSceneReport, type Expectation } from "../scene/report.ts";
 import { decodePng } from "../capture/image.ts";
 import { readFileSync } from "node:fs";
 
 /** game.status refusals game.wait waits through: the engine not ticking for a moment while a save loads (0.5.2). */
+/** How far photo mode's camera may be from V's head before photo.frame brings it back with camera preset 1 (0.7). */
+export const RESEAT_CAMERA_M = 4;
+
 const WAIT_THROUGH = new Set(["timeout", "timeout_after_start", "busy", "game_not_running", "game_loading"]);
 
 /** Game phases game.status reports (XFBridgeActions.Phase in the redscript layer). */
@@ -49,7 +55,7 @@ export const PERMISSIONS: Record<Permission, { label: string; description: strin
   notify: {
     label: "Show messages in the game",
     description:
-      "Shows short messages to the player under the bridge's status label in the game, and shows, hides or moves the bridge's own XF panel there. Changes nothing in the game; the messages fade by themselves.",
+      "Shows short messages to the player in the game (the ink panel while the HUD shows, the XF box (the small box with the yellow heading) in photo mode and menus, the CET line (one line with a coloured dot at the far top left) when neither can draw; none on a loading screen), and shows, hides or moves the ink panel. Changes nothing in the game; the messages fade by themselves.",
   },
   "write-photo": {
     label: "Control photo mode",
@@ -106,9 +112,19 @@ export type CommandDef = {
   input: JsonSchema;
   /** How to undo a write, in plain words. */
   undo?: string;
-  /** timeoutMs: how long the tools wait for the bridge's answer, for a method that waits on the game (default: the client's 8 s). */
-  bridge?: { method: string; params?: (input: Record<string, unknown>) => Record<string, unknown>; timeoutMs?: (input: Record<string, unknown>) => number };
+  /**
+   * timeoutMs: how long the tools wait for the bridge's answer, for a method that waits on the game (default: the client's
+   * 8 s). result (0.8): the answer as the tools pass it on (catalogue080.ts: the wardrobe as V looks).
+   */
+  bridge?: {
+    method: string;
+    params?: (input: Record<string, unknown>) => Record<string, unknown>;
+    timeoutMs?: (input: Record<string, unknown>) => number;
+    result?: (value: unknown, input: Record<string, unknown>) => unknown;
+  };
   local?: (input: Record<string, unknown>, context: CommandContext) => Promise<CommandResult>;
+  /** 0.8: the command's own refusal codes (catalogue080.ts REFUSALS), for the MCP reference; the shared ones are listed there once. */
+  refusals?: readonly string[];
 };
 
 /** MCP (and the Claude API) allow only [A-Za-z0-9_-] in tool names: dots become underscores. */
@@ -206,8 +222,10 @@ async function runScreenshot(input: Record<string, unknown>, context: CommandCon
       throw planError("expectation_failed", `The pre-capture check didn't pass, so no screenshot was taken: ${failed.map((f) => f.detail).join("; ")}. Fix the framing or light, drop a check that can't run here, or pass on_fail: warn.`);
     }
   }
-  const grab = () =>
-    captureWindow({
+  // 0.8.2 (the review): the cancellation is checked right before the picture, on every path (clear_overlay false too).
+  const grab = () => {
+    stopIfCancelled(context, "the capture");
+    return captureWindow({
       target: context.api.captureTarget(),
       region: regionOf(input),
       view: viewOf(input),
@@ -215,6 +233,7 @@ async function runScreenshot(input: Record<string, unknown>, context: CommandCon
       name: input.name as string | undefined,
       outDir: context.captureRoot,
     });
+  };
   let record!: CaptureRecord;
   let overlay: Record<string, unknown> | null = null;
   try {
@@ -267,8 +286,9 @@ export function livePoseParams(input: Record<string, unknown>): Record<string, u
 }
 
 /** Sends one bridge method from inside a local command; a refusal becomes a plain error. */
-async function bridgeCall(context: CommandContext, method: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const response = await context.api.callBridge(method, params, context.cid);
+async function bridgeCall(context: CommandContext, method: string, params: Record<string, unknown>, cleanup = false): Promise<Record<string, unknown>> {
+  // A forward step isn't sent once the command is cancelled (RB-121); a step that puts things back (cleanup) always is.
+  const response = await context.api.callBridge(method, params, context.cid, undefined, cleanup ? undefined : context.signal);
   if (!response.ok) throw Object.assign(new Error(response.error.message), { plain: response.error });
   return response.result as Record<string, unknown>;
 }
@@ -280,16 +300,26 @@ const sleepMs = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * send; approved for the test profile), after the bridge says V is in the world and photo mode is
  * allowed, then waits for photo mode.
  */
+/**
+ * The key press changes the game like a photo write, so it follows the bridge's own write gate: allow_writes and the photo
+ * class in the plugin's config.ini, the in-game panel's pause, a handover to the player (0.6), and an emergency control
+ * that superseded this command (RB-121). Checked from game.status before anything else and again right before the key
+ * goes (RB-122).
+ */
+export function photoKeyGate(status: Record<string, unknown>, signal?: AbortSignal): void {
+  const refuse = (code: string) => {
+    throw Object.assign(new Error(code), { plain: plainBridgeError(code) });
+  };
+  const classes = Array.isArray(status.write_classes) ? (status.write_classes as string[]) : [];
+  if (status.allow_writes !== true || !classes.includes("photo")) refuse(status.allow_writes === true ? "write_class_disabled" : "writes_disabled");
+  if (status.writes_paused === true) refuse("writes_paused");
+  if (status.handed_over === true) refuse("handed_over");
+  if (signal?.aborted) refuse("superseded");
+}
+
 async function runPhotoOpen(input: Record<string, unknown>, context: CommandContext): Promise<CommandResult> {
   const status = await bridgeCall(context, "game.status", {});
-  // The key press changes the game like a photo write, so it follows the bridge's own write gate:
-  // allow_writes and the photo class in the plugin's config.ini.
-  const classes = Array.isArray(status.write_classes) ? (status.write_classes as string[]) : [];
-  if (status.allow_writes !== true || !classes.includes("photo")) throw Object.assign(new Error("writes"), { plain: plainBridgeError(status.allow_writes === true ? "write_class_disabled" : "writes_disabled") });
-  // The in-game panel can pause writes; the key press is a write too.
-  if (status.writes_paused === true) throw Object.assign(new Error("writes"), { plain: plainBridgeError("writes_paused") });
-  // 0.6: a session handed over to the player is the player's; the key is a change too.
-  if (status.handed_over === true) throw Object.assign(new Error("writes"), { plain: plainBridgeError("handed_over") });
+  photoKeyGate(status, context.signal);
   const phase = String(status.phase);
   if (phase === "photo_mode") return { value: { changed: false, note: "Photo mode was already open." } };
   if (phase !== "gameplay") throw planError("not_in_gameplay", `Photo mode opens only from normal play; the game is in ${phase}. Close menus first.`);
@@ -314,6 +344,8 @@ async function runPhotoOpen(input: Record<string, unknown>, context: CommandCont
   // play or stopped allowing photo mode meanwhile, the key isn't sent.
   const beforeSend = async () => {
     const now = await bridgeCall(context, "game.status", {});
+    // RB-122: the write gate again too: a pause, a handover or an emergency control while the window came forward stops it.
+    photoKeyGate(now, context.signal);
     if (String(now.phase) !== "gameplay" || now.photo_mode_can_open !== true) {
       throw planError("photo_not_allowed", `The game changed while its window came to the front (it is in ${String(now.phase)}), so the key wasn't sent. Try again from normal play.`);
     }
@@ -373,6 +405,7 @@ async function runFrame(input: Record<string, unknown>, context: CommandContext)
         await sleepMs(500);
       }
       try {
+        stopIfCancelled(context, "the frame's capture");
         return grabForAnalysis(context.api.captureTarget(), 960);
       } catch (error) {
         captureFailure(error);
@@ -407,7 +440,22 @@ async function runFrame(input: Record<string, unknown>, context: CommandContext)
   try {
     if (input.xf_preset && input.camera_preset !== undefined) throw planError("bad_input", "Give xf_preset or camera_preset, not both.");
     const target = (input.target as FrameOptions["target"]) ?? "face";
-    const preset = input.xf_preset ? FRAMINGS[target].xf_preset : (input.camera_preset as number | undefined);
+    let preset = input.xf_preset ? FRAMINGS[target].xf_preset : (input.camera_preset as number | undefined);
+    // 0.7 (session 7: framing_bound with V about 8 m from photo mode's drone camera, which needed a 3.55 degree field of
+    // view): a lens with a known starting pose assumes the camera near V, where photo mode puts it. When the drone camera
+    // was flown further off than RESEAT_CAMERA_M, photo mode's own camera preset 1 brings it back near V first (the
+    // undo selects the earlier preset), and the lens is kept.
+    let reseated: { from_m: number } | null = null;
+    const lensName = (input.lens as FrameOptions["lens"] | undefined) ?? defaultLens(target, preset !== undefined);
+    if (preset === undefined && input.reseat_camera !== false && lensName !== "keep") {
+      const first = (await bridgeCall(context, "photo.subject", {})) as unknown as SubjectReading;
+      const from = first?.camera?.position, head = first?.head;
+      const distance = from && head ? Math.hypot(from.x - head.x, from.y - head.y, from.z - head.z) : 0;
+      if (distance > RESEAT_CAMERA_M) {
+        reseated = { from_m: Math.round(distance * 100) / 100 };
+        preset = 1;
+      }
+    }
     if (preset !== undefined) {
       // A camera preset first (attribute 23): it puts the camera at a fixed offset from V, so the
       // framing loop only fine-tunes. XF presets 7-9 come from the test profile's TweakXL file.
@@ -438,7 +486,7 @@ async function runFrame(input: Record<string, unknown>, context: CommandContext)
       ...(input.face_camera !== undefined ? { face_camera: input.face_camera as boolean } : {}),
       ...(input.yaw_offset !== undefined ? { yaw_offset: input.yaw_offset as number } : {}),
       ...(input.lens !== undefined ? { lens: input.lens as FrameOptions["lens"] } : {}),
-      ...(preset !== undefined ? { camera_preset_selected: true } : {}),
+      ...(preset !== undefined && !reseated ? { camera_preset_selected: true } : {}),
       ...(input.method !== undefined ? { method: input.method as FrameOptions["method"] } : {}),
       ...(input.max_steps !== undefined ? { max_steps: input.max_steps as number } : {}),
       ...(input.tolerance !== undefined ? { tolerance: input.tolerance as number } : {}),
@@ -456,7 +504,10 @@ async function runFrame(input: Record<string, unknown>, context: CommandContext)
       };
     }
     if (rollBefore !== undefined && Math.abs(rollBefore) > 0.5) result.notes.unshift(`The camera preset rolled the camera ${Math.round(rollBefore)} degrees; it was levelled (keep_roll keeps it).`);
-    return { value: preset !== undefined ? { ...result, camera_preset: preset } : result };
+    // RB-117: the undo selects the earlier camera preset, but no setting puts a drone camera back where it was flown (photo
+    // mode has no camera position setter), so the note says so.
+    if (reseated) result.notes.unshift(`Photo mode's camera was ${reseated.from_m} m from V, too far for the ${lensName} lens, so camera preset 1 brought it back near V first (reseat_camera: false keeps it where it was). The undo selects the earlier camera preset but can't put the drone camera back where it was flown: photo mode has no setting for the camera's position.`);
+    return { value: preset !== undefined ? { ...result, camera_preset: preset, ...(reseated ? { reseated_camera: { ...reseated, position_restorable: false } } : {}) } : result };
   } catch (error) {
     // Every failure path puts back what this call changed (RB-68): the framing loop has already put back the
     // field of view and V's placement; the camera preset, roll and look-at set here go back now, in one call
@@ -473,7 +524,7 @@ async function runFrame(input: Record<string, unknown>, context: CommandContext)
     const undo = Object.keys(own).length ? { method: "photo.camera.set", params: { ...own, ...frameUndo } } : (framing?.restore?.undo ?? null);
     if (Object.keys(own).length) {
       try {
-        await bridgeCall(context, "photo.camera.set", undo!.params);
+        await bridgeCall(context, "photo.camera.set", undo!.params, true);
         restoreNote = ` The ${Object.keys(own).map((k) => k.replace("_", " ")).join(", ")} set before framing ${Object.keys(own).length === 1 ? "was" : "were"} put back too.`;
       } catch (restoreError) {
         restored = false;
@@ -490,7 +541,7 @@ async function runFrame(input: Record<string, unknown>, context: CommandContext)
     }
     throw error;
   } finally {
-    if (hudUndo) await bridgeCall(context, "photo.hud.hide", hudUndo).catch(() => undefined);
+    if (hudUndo) await bridgeCall(context, "photo.hud.hide", hudUndo, true).catch(() => undefined);
   }
 }
 
@@ -556,6 +607,18 @@ export function lightParams(input: Record<string, unknown>): Record<string, unkn
 }
 
 /** game.load: exactly one of latest and name, and discard_unsaved: true (RB-56). */
+/** game.load (0.8.2): the bridge's load, then the wait for its end, saying when the press-any-key screen waits (api/load-continue.ts). */
+async function runGameLoad(input: Record<string, unknown>, context: CommandContext): Promise<CommandResult> {
+  const { continue_wait_s: waitS, ...rest } = input;
+  const response = await context.api.callBridge("game.load", loadParams(rest), context.cid, loadClientTimeoutMs(), context.signal);
+  if (!response.ok) throw Object.assign(new Error(response.error.message), { plain: response.error });
+  const loaded = response.result as Record<string, unknown>;
+  const wait = ((waitS as number | undefined) ?? 75) * 1000;
+  if (wait <= 0) return { value: loaded };
+  const continued = await waitForLoadEnd(context, { waitMs: wait });
+  return { value: { ...loaded, continued, note: continued.reached === "gameplay" ? "the save loaded and gameplay started" : continued.note } };
+}
+
 function loadParams(input: Record<string, unknown>): Record<string, unknown> {
   if ((input.latest === true) === (input.name !== undefined)) throw planError("bad_input", "Give latest: true or a save's name (one of them).");
   if (input.latest === false) throw planError("bad_input", "latest takes true (the most recent save); give a name instead to load another.");
@@ -571,12 +634,13 @@ function loadParams(input: Record<string, unknown>): Record<string, unknown> {
 export const SERVER_STEP_MS = 2000 + 1000;
 export const SAVE_UNLOCK_WAIT_MS = 3000; // writes::kSaveUnlockWaitMs
 export const SAVE_LIST_WAIT_MS = 5000; // writes::kSaveListWaitMs
+export const SAVE_DETAILS_WAIT_MS = 3000; // writes::kSaveDetailsWaitMs (0.8: a load from the main menu waits for the save's details)
 /** The pipe's round trip and the bridge thread's own work, on top of the server's worst case. */
 export const CLIENT_SLACK_MS = 2000;
 /** game.save: timeout_ms + the unlock wait + 5 steps (prepare, a status overshoot twice, save, relock). */
 export const saveClientTimeoutMs = (timeoutMs = 20000) => timeoutMs + SAVE_UNLOCK_WAIT_MS + 5 * SERVER_STEP_MS + CLIENT_SLACK_MS;
-/** game.load: the list wait + 3 steps (list, a status overshoot, load). */
-export const loadClientTimeoutMs = () => SAVE_LIST_WAIT_MS + 3 * SERVER_STEP_MS + CLIENT_SLACK_MS;
+/** game.load: the list wait + the details wait + 4 steps (list, a status overshoot, the last details try, load). */
+export const loadClientTimeoutMs = () => SAVE_LIST_WAIT_MS + SAVE_DETAILS_WAIT_MS + 4 * SERVER_STEP_MS + CLIENT_SLACK_MS;
 
 /** cc.apply: exactly one of index, value and label (the schema can't say "one of", so the tools check it too). */
 function characterApplyParams(input: Record<string, unknown>): Record<string, unknown> {
@@ -654,7 +718,7 @@ async function runOptionsRead(input: Record<string, unknown>, context: CommandCo
 
 // --- the catalogue -------------------------------------------------------------------------------
 
-export const CATALOGUE: readonly CommandDef[] = [
+export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
   // Bridge
   {
     name: "bridge.ping",
@@ -693,7 +757,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     input: obj({
       ...regionInput,
       route: oneOf(
-        "How to grab the window. auto (default) reads Windows' copy of the game window, then the screen if the game is in front; printwindow and screen force one route.",
+        "How to grab the window. auto (default) reads Windows' copy of the game window, then the screen if the game is in front; printwindow and screen force one route. The screen route reads only while the game is the front window (checked right before and after each grab), otherwise it refuses capture_not_foreground.",
         ["auto", "printwindow", "screen"],
       ),
       clear_overlay: bool("Keep the bridge's own overlay out of the picture: its message lines are cleared and its HUD panel and label hidden for the capture, then the panel comes back (default true; needs the game bridge)."),
@@ -739,21 +803,34 @@ export const CATALOGUE: readonly CommandDef[] = [
       interval_ms: int("Target time between frames in milliseconds (0 = as fast as possible). Default 100.", 0, 10000),
       route: oneOf("How to grab the window (see capture_screenshot).", ["auto", "printwindow", "screen"]),
     }),
-    local: async (input, { api, captureRoot, signal }) => {
+    local: async (input, context) => {
+      const { api, captureRoot, signal } = context;
       try {
-        const record = await captureBurst({
-          target: api.captureTarget(),
-          region: regionOf(input),
-          view: viewOf(input),
-          route: (input.route as "auto" | "printwindow" | "screen" | undefined) ?? "auto",
-          name: (input.name as string | undefined) ?? "burst",
-          outDir: captureRoot,
-          frames: (input.frames as number | undefined) ?? 10,
-          intervalMs: (input.interval_ms as number | undefined) ?? 100,
-          signal,
-        });
+        const frames = (input.frames as number | undefined) ?? 10;
+        const intervalMs = (input.interval_ms as number | undefined) ?? 100;
+        // 0.8 (session 8's G4 found the sweep's frames showing the XF overlay; a burst had the same gap): the same hide as
+        // capture_screenshot's, held for the burst's length.
+        const shot = await withOverlayCleared(
+          context,
+          () => {
+            stopIfCancelled(context, "the burst");
+            return captureBurst({
+              target: api.captureTarget(),
+              region: regionOf(input),
+              view: viewOf(input),
+              route: (input.route as "auto" | "printwindow" | "screen" | undefined) ?? "auto",
+              name: (input.name as string | undefined) ?? "burst",
+              outDir: captureRoot,
+              frames,
+              intervalMs,
+              signal,
+            });
+          },
+          frames * (intervalMs + 60) + 2000,
+        );
+        const record = shot.value;
         return {
-          value: record,
+          value: { ...record, overlay: shot.overlay },
           images: [{ path: record.contact_sheet.path, width: record.contact_sheet.width, height: record.contact_sheet.height, mimeType: "image/png", role: "view" }],
         };
       } catch (error) {
@@ -783,24 +860,22 @@ export const CATALOGUE: readonly CommandDef[] = [
     permission: "read",
     input: obj(
       {
+        // 0.8.2 (session 9): one phase as text, or a list of them.
         phase: {
-          type: "array",
-          description: "Phases to wait for (any one of them).",
-          items: oneOf("A game phase.", PHASES),
-          minItems: 1,
-          maxItems: PHASES.length,
+          description: "The phase to wait for, or a list of phases (any one of them).",
+          anyOf: [oneOf("A game phase.", PHASES), { type: "array", description: "Phases (any one of them).", items: oneOf("A game phase.", PHASES), minItems: 1, maxItems: PHASES.length }],
         },
         timeout_ms: int("How long to wait, in milliseconds (default 60000, at most 600000).", 0, 600000),
       },
       ["phase"],
     ),
     local: async (input, { api, cid, signal }) => {
-      const wanted = input.phase as string[];
+      const wanted = typeof input.phase === "string" ? [input.phase] : (input.phase as string[]);
       const timeout = (input.timeout_ms as number | undefined) ?? 60000;
       const started = performance.now();
       let last = "unknown";
       for (;;) {
-        const status = await api.callBridge("game.status", {}, cid);
+        const status = await api.callBridge("game.status", {}, cid, undefined, signal);
         // While a save loads the engine may not tick for a moment: a step that timed out or found the queue busy is
         // the loading screen, not a failure (0.5.2), so the wait goes on.
         if (!status.ok && !WAIT_THROUGH.has(status.error.code)) throw Object.assign(new Error(status.error.message), { plain: status.error });
@@ -810,7 +885,16 @@ export const CATALOGUE: readonly CommandDef[] = [
           throw planError("wait_timeout", `The game didn't reach ${wanted.join(" or ")} within ${Math.round(timeout / 1000)} s; it is in ${last}.`);
         }
         if (signal?.aborted) throw planError("interrupted", "Stopped before the game reached the phase.");
-        await new Promise((r) => setTimeout(r, 500));
+        // The pause ends at once when the signal aborts (an emergency control, RB-121; the session runner's Ctrl+C).
+        await new Promise<void>((r) => {
+          const timer = setTimeout(done, 500);
+          function done() {
+            clearTimeout(timer);
+            signal?.removeEventListener("abort", done);
+            r();
+          }
+          signal?.addEventListener("abort", done, { once: true });
+        });
         if (signal?.aborted) throw planError("interrupted", "Stopped before the game reached the phase.");
       }
     },
@@ -1159,6 +1243,7 @@ export const CATALOGUE: readonly CommandDef[] = [
       xf_preset: bool("First select the framing's XF camera preset (6 full body, 7 face, 8 eyes, 9 head and shoulders; needs the test profile's preset file), then fine-tune."),
       camera_preset: int("First select this photo-mode camera preset (0-9), then fine-tune.", 0, 9),
       keep_roll: bool("Keep the camera preset's own roll. Default false: the camera is levelled (roll 0) after selecting a preset."),
+      reseat_camera: bool("0.7: when photo mode's camera is more than 4 m from V (a drone camera flown off) and the lens isn't keep, first select camera preset 1 to bring it back near V. Default true."),
       face_camera: bool("Turn V to face the camera first. Default true."),
       yaw_offset: num("Degrees V turns away from facing the camera (counter-clockwise seen from above), for light sweeps and profile checks: 90 shows V's right side, 180 the back of V's head. Photo Mode Ex keeps V's rotation within -180 to 180.", -180, 180),
       lens: oneOf(
@@ -1248,11 +1333,25 @@ export const CATALOGUE: readonly CommandDef[] = [
         item: str("The item record, for example Items.Helmet_01_basic_01.", { pattern: "^[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+$", maxLength: 128 }),
         slot: oneOf("The clothing slot, checked against the item's own (optional).", ["Head", "Face", "OuterChest", "InnerChest", "Legs", "Feet", "Outfit"]),
         add_if_missing: bool("Add the item to V's inventory if V doesn't have it. Default false."),
+        id: str("The exact copy to equip, as an undo names it (the decimal identity the game gave); without it, any copy of the record. When V no longer has that copy, another copy is equipped and the answer says exact: false.", { pattern: "^[0-9]{1,20}$", maxLength: 20 }),
       },
       ["item"],
     ),
-    undo: "the result's undo equips the earlier item again, or empties the slot (removing an item the bridge added); loading a save also undoes it.",
+    undo: "the result's undo equips the earlier item's exact copy again (its id), or empties the slot (removing an item the bridge added); loading a save also undoes it.",
     bridge: { method: "inventory.equip", timeoutMs: () => 15000 },
+  },
+  {
+    // 0.8.3 (session 10's L1 and L4: no way to name a jacket V owns).
+    name: "inventory.list",
+    title: "List the clothing V owns",
+    description:
+      "Observe only: the clothing items in V's own inventory, one entry per copy: its item record (inventory_equip's item), clothing slot (Head, Face, OuterChest, InnerChest, Legs, Feet, Outfit), id (that exact copy's identity, inventory_equip's id), its name in the game's language and whether V wears it now; count says how many there are in all, listed how many the answer carries. slot lists one slot only. Nothing is changed, and the inventory permission isn't needed. Items stored only in the wardrobe aren't listed (wardrobe_state shows those).",
+    permission: "read",
+    input: obj({
+      slot: oneOf("Only this clothing slot.", ["Head", "Face", "OuterChest", "InnerChest", "Legs", "Feet", "Outfit"]),
+      limit: int("At most this many entries, 1 to 200. Default 100.", 1, 200),
+    }),
+    bridge: { method: "inventory.list" },
   },
   {
     name: "wardrobe.state",
@@ -1346,7 +1445,7 @@ export const CATALOGUE: readonly CommandDef[] = [
   {
     name: "cc.back",
     title: "Leave the appearance screen without keeping changes",
-    description: "Presses Back on the open appearance screen and confirms it, discarding every change made there and closing the screen. Only in the XF test profile.",
+    description: "Presses Back on the open appearance screen and confirms it, discarding every change made there and closing the screen. It works even while the screen still seems busy with a change (a completion that never came): Back discards that change too, and the answer says busy_cleared. Only in the XF test profile.",
     permission: "write-character",
     input: obj(),
     undo: "Nothing to undo: the changes made on the screen were discarded.",
@@ -1372,18 +1471,29 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "game.load",
     title: "Load a save",
     description:
-      "Loads the most recent save of this playthrough (latest: true, the game's quick load) or one save by its name in the game's list (for example ManualSave-12); an unknown name is refused with some of the names the game lists. Everything since that save is discarded, unsaved progress and the bridge's save lock with it, and the game doesn't ask first, so discard_unsaved: true is required. From normal play or the pause menu, not photo mode or the appearance screen. Wait with game_wait for phase gameplay afterwards. Needs the save permission.",
+      "Loads the most recent save of this playthrough (latest: true, the game's quick load) or one save by its name in the game's list (for example ManualSave-12); an unknown name is refused with some of the names the game lists. From normal play or the pause menu, and from the main menu (0.8: the menu's own paths, so the player only has to launch the game: latest is its Continue, a name its Load menu's, both through the modded-save path for a save made with mods). Everything since that save is discarded, unsaved progress and the bridge's save lock with it, and the game doesn't ask first, so discard_unsaved: true is required. Not from photo mode or the appearance screen. Then (0.8.2) it waits up to continue_wait_s (default 75) for the load to end and answers as soon as the game is in normal play or waits on its press-any-key screen (continued.reached press_any_key: ask the player to press a key; the bridge never sends one). continue_wait_s 0 only starts the load (then game_wait). Needs the save permission.",
     permission: "write-save",
     input: obj(
       {
         latest: bool("true: load the most recent save of this playthrough."),
         name: str("A save's name as the game lists it (for example ManualSave-12).", { pattern: "^[A-Za-z0-9 ._-]{1,64}$", maxLength: 64 }),
         discard_unsaved: bool("Must be true: everything since that save, unsaved progress included, is discarded."),
+        continue_wait_s: int("How long to wait for the load to end (gameplay, or the press-any-key screen), 0 to 85 seconds. Default 75; 0 only starts the load.", 0, 85),
       },
       ["discard_unsaved"],
     ),
     undo: "None: loading discards everything since that save.",
-    bridge: { method: "game.load", params: loadParams, timeoutMs: () => loadClientTimeoutMs() },
+    local: runGameLoad,
+  },
+  {
+    name: "game.continue",
+    title: "Press past the press-any-key screen",
+    description:
+      "Not available yet: refuses (no_safe_route). The bridge would press past the game's press-any-key screen after a load only through a route inside the game (the loading screen's own controller); the only route it has is a synthetic key press, which could reach another window or gameplay, so it never sends one. Ask the player to press a key; game_load says when the screen waits.",
+    permission: "write-save",
+    input: obj({}),
+    undo: "None.",
+    local: async () => refuseContinue(),
   },
 
   // The player's view
@@ -1391,32 +1501,35 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "ui.message",
     title: "Show a message in the game",
     description:
-      "Shows a short message to the player under the bridge's status label in the top-left corner of the game (drawn by the bridge's Cyber Engine Tweaks layer, so the player never has to leave the game): one line of up to 200 characters, for seconds seconds (default 8). At most four show at once; a new one pushes out the oldest. level colours it: info, ask (something for the player to do), warn or done. clear: true removes them all. The kill switch clears them too.",
+      "Shows a message to the player in the game, so the player never has to leave it: on the one status surface showing (0.8.2: the ink panel while the game shows its HUD, the XF box with the yellow heading in photo mode and menus, the CET line with a coloured dot at the far top left only when neither can draw; 0.8.3: none on a loading screen), and a question also in the XF Runtime Bridge window of the Cyber Engine Tweaks overlay. Up to 600 characters, wrapped, for seconds seconds (default 8); a longer text is cut at a word with an ellipsis. At most four show at once; a new one pushes out the oldest, except the newest unanswered question, which stays pinned until it is answered or its seconds end. level colours it: info, ask (a question for the player), warn or done. A question (level ask) shows only the answers choices gives (1 to 4 short labels, such as Fully visible and Partly cut off, or Yes and No); without choices it shows one Done button, for a step the player confirms. The player answers with the key shown next to each answer (F6, F7, F8, F11 by default) or the button in the XF Runtime Bridge window, and the answer (with this message's id) goes into the session's event stream, where session_wait returns it; the question stays with Answered: and the answer until the next message. Characters a surface can't draw show as one replacement mark there, and Cyber Engine Tweaks' label writes Polish and other Latin letters without their accents. One question at a time: a new question withdraws one still waiting (its session_wait ends with question_gone). Each answer in choices is a button label of at most 24 characters; put any detail in the question's text. clear: true takes the lines down and withdraws a question still waiting (keep_asks: true keeps it); withdraw takes one message down by its id (a question's undo). The kill switch clears them all.",
     permission: "notify",
     input: obj({
-      text: str("The message: one short line (at most 200 characters are shown).", { minLength: 1, maxLength: 500 }),
-      seconds: int("How long it shows, 1 to 600 seconds. Default 8.", 1, 600),
+      text: str("The message (at most 600 characters are shown).", { minLength: 1, maxLength: 2000 }),
+      seconds: int("How long it shows, 1 to 600 seconds. Default 8; give a question long enough for the player to answer.", 1, 600),
       level: oneOf("info (default), ask, warn or done.", ["info", "ask", "warn", "done"]),
-      clear: bool("Remove every message first (alone: only that)."),
+      choices: { type: "array", description: "With level ask: the answers offered, only these, 1 to 4 button labels of at most 24 characters each (default one Done button).", items: str("An answer: a button label in the game, 1 to 24 characters (put the detail in the question's text).", { minLength: 1, maxLength: 24 }), minItems: 1, maxItems: 4 },
+      clear: bool("Remove the lines first (alone: only that), and withdraw a question still waiting for its answer (a session_wait on it ends with question_gone)."),
+      keep_asks: bool("With clear: keep a question still waiting for its answer (a capture's clear does)."),
+      withdraw: int("Take down the message with this id (ui_message's id); a question withdrawn this way ends its session_wait with question_gone.", 1, 1e9),
     }),
-    undo: "ui.message with clear: true; messages also fade by themselves.",
+    undo: "The result's undo withdraws the message by its id; messages also fade by themselves.",
     bridge: { method: "ui.message" },
   },
   {
     name: "ui.hud",
-    title: "Show, hide or move the XF panel in the game",
+    title: "Show, hide or move the ink panel in the game",
     description:
-      "Temporary test feature (bridge 0.5.3). The XF panel is drawn in the game's own HUD (ink, in the game's font and colours; it needs Codeware, not Cyber Engine Tweaks): the bridge's connection state and the messages ui.message shows. show hides or shows it; anchor (top_left, top_right, bottom_left, bottom_right, top_center, center_left, center_right) with x and y (distance from that corner, in units of 1/2160 of the screen's height) places it; scale sizes it (0.5 to 2.5). layer chooses where it draws: hud (default; hidden wherever the game hides its HUD: menus, photo mode, the appearance screen), notifications or top (research: which of these stay visible in photo mode is being checked). nameplates switches XF Finish Showroom's pedestal name labels; cet_label switches the Cyber Engine Tweaks status label. With no values it only reads the settings; reset: true goes back to the bridge's configured settings. Changes nothing in the game itself.",
+      "Temporary test feature (bridge 0.5.3). The ink panel is drawn in the game's own HUD (ink, in the game's font and colours on the game's own dark plate; it needs Codeware, not Cyber Engine Tweaks): the bridge's connection state and the messages ui.message shows. show hides or shows it; anchor (top_left, top_center, top_right, center_left, center, center_right, bottom_left, bottom_center, bottom_right) with x and y (distance inwards from that corner or edge of the visible screen, in the HUD layer's units: its 3840-wide canvas spans the screen's width from the top-left corner, so on 21:9 the screen shows its top 1600 units, on 32:9 its top 1080; for center, x and y move it from the middle) places it, at least far enough in to keep clear of the game's own HUD blocks (0.8.3: the minimap and quest tracker at the top right, so top_right, center_right and bottom_right sit left of them; the status bars at the top left; the status and cyberware icons at the bottom left; subtitles and prompts at the bottom), and it is kept whole on screen; the default is top_left, 40, 360, under the status bars. scale sizes it (0.5 to 2.5). layer chooses where it draws: hud (default; hidden wherever the game hides its HUD: menus, photo mode, the appearance screen), notifications or top (research). nameplates switches XF Finish Showroom's pedestal name labels; cet_label switches the CET line (Cyber Engine Tweaks' one line with a coloured dot at the far top left, the fallback status surface). With no values it only reads the settings; reset: true goes back to the bridge's configured settings. Changes nothing in the game itself.",
     permission: "notify",
     input: obj({
       show: bool("true shows the panel, false hides it."),
-      anchor: oneOf("The screen corner or edge the panel sits against. Default top_right.", ["top_left", "top_right", "bottom_left", "bottom_right", "top_center", "center_left", "center_right"]),
-      x: num("Horizontal distance from the anchor's edge, in 1/2160 of the screen's height (-4000 to 4000). Default 72.", -4000, 4000),
-      y: num("Vertical distance from the anchor's edge, in the same units. Default 300.", -4000, 4000),
+      anchor: oneOf("The visible screen's corner, edge or middle the panel sits against. Default top_left.", ["top_left", "top_center", "top_right", "center_left", "center", "center_right", "bottom_left", "bottom_center", "bottom_right"]),
+      x: num("Horizontal distance inwards from the anchor's edge (from the middle for center), in the HUD's design units, 3840 across a 16:9 screen (-4000 to 4000). Default 40.", -4000, 4000),
+      y: num("Vertical distance inwards from the anchor's edge (from the middle for center), in the same units. Default 360.", -4000, 4000),
       scale: num("Size, 0.5 to 2.5. Default 1.", 0.5, 2.5),
       layer: oneOf("Where the panel draws: hud (default), notifications or top (research).", ["hud", "notifications", "top"]),
       nameplates: bool("Show each XF Finish Showroom head's preset name on its pedestal."),
-      cet_label: bool("Show the Cyber Engine Tweaks status label and message lines (top-left)."),
+      cet_label: bool("Show the CET line (Cyber Engine Tweaks' status line with a coloured dot, far top left) and its message lines."),
       reset: bool("Go back to the configured settings (alone)."),
     }),
     undo: "the result's undo: ui.hud with the earlier settings.",
@@ -1454,7 +1567,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "world.pin",
     title: "Place an XF map pin",
     description:
-      "Temporary test feature (bridge 0.5.3). Places a map pin with an XF badge and a label, shown on the world map (with the label in its tooltip), on the minimap and in the world through walls, the way the game shows its own markers. Give exactly one of position [x, y, z] (a world point in metres, as game_status and showroom_state report them), piece (a showroom head's index: the pin stands above its eyes and follows it) or at: \"v\" (above where V stands now). label names it (1-48 characters). variant picks the game's pin type whose map filter and fallback icon it uses: custom (default), apartment, clothes or default. lift_m raises it (metres; default 0 at a position, 0.45 above a head or V). At most 8 pins. world.pin.clear, the kill switch and loading a save remove them.",
+      "Temporary test feature (bridge 0.5.3). Places a map pin with an XF badge and a label, shown on the world map (with the label in its tooltip), on the minimap and in the world through walls, the way the game shows its own markers: the game's own pin icon, with the XF badge above it and the label on the pin's name line. Give exactly one of position [x, y, z] (a world point in metres, as game_status and showroom_state report them), piece (a showroom head's index: the pin stands just above its eyes, 0.25 m by default; placed there, so turning the head leaves it and clearing the heads removes it) or at: \"v\" (above where V stands now). label names it (1-48 characters). variant picks the game's pin type whose map filter and icon it uses: custom (default; the one the minimap draws for any placed pin), interaction (in the world only), apartment, clothes or default. lift_m raises it (metres; default 0 at a position, 0.25 above a head's eyes, 0.45 above V). The answer's pins list which views have drawn each pin so far (drawn_by: world, minimap, world_map), and the plugin log names each one the first time. At most 8 pins. world.pin.clear, the kill switch and loading a save remove them.",
     permission: "write-world",
     input: obj(
       {
@@ -1462,7 +1575,7 @@ export const CATALOGUE: readonly CommandDef[] = [
         piece: int("A showroom head's index (0 to 23), from showroom_state.", 0, 23),
         at: oneOf("v: above where V stands now.", ["v"]),
         label: str("The pin's name, 1 to 48 characters (longer is cut).", { minLength: 1, maxLength: 400 }),
-        variant: oneOf("The game's pin type it borrows its map filter and fallback icon from. Default custom.", ["custom", "apartment", "clothes", "default"]),
+        variant: oneOf("The game's pin type it borrows its map filter and icon from. Default custom.", ["custom", "interaction", "apartment", "clothes", "default"]),
         lift_m: num("Metres above the point (-5 to 5).", -5, 5),
       },
       ["label"],
@@ -1488,7 +1601,7 @@ export const CATALOGUE: readonly CommandDef[] = [
       "Spawns XF Finish Showroom's mannequin heads, one per makeup preset of a showroom build (its folder or manifest.json from tools/build_showroom_package.ts), each on a black pedestal: in an arc about the camera (default; every head faces it) or a row across the view, spacing_m apart, each head's eyes distance_m from the camera (in photo mode) or V's eyes, as photo_frame's distance_m measures to V, and at height_m above V's ground (default: the camera's height with the camera as anchor, so the heads look straight into it; a head's natural height with V as anchor). Needs Codeware in the game and the showroom's archive staged. Nothing is saved: showroom.clear, the kill switch or loading a save removes them.",
     permission: "write-showroom",
     input: obj({
-      manifest: str("The showroom build's folder, or its manifest.json.", { maxLength: 1024 }),
+      manifest: str("The showroom build's folder, or its manifest.json. Default (0.8.3): the XF Finish Showroom builds the game itself has staged (its archive/pc/mod folder), each with the manifest it ships inside the mod or, for an older build, this machine's build with the same bytes; every one is used, so a preset is found in whichever holds it. The answer's showroom_found names them.", { maxLength: 1024 }),
       manifests: { type: "array", description: "Several showroom builds' folders or manifests, to set out their presets together.", items: str("A showroom build's folder or manifest.json.", { maxLength: 1024 }), minItems: 1, maxItems: 4 },
       presets: { type: "array", description: "Which presets, by name, preset ID or appearance, in lineup order. Default: all of them (at most 24).", items: str("A preset's name, ID or appearance.", { maxLength: 120 }), minItems: 1, maxItems: 24 },
       layout: oneOf("arc (default): on a circle about the camera or V, each head facing it. row: a straight line across the view, all facing back along it.", ["arc", "row"]),
@@ -1498,6 +1611,7 @@ export const CATALOGUE: readonly CommandDef[] = [
       lateral_m: num("Shift the whole lineup to the right as the camera or V sees it (negative: left), -5 to 5 m. With distance_m equal to photo_frame's distance_m (the camera to V's face), a head at lateral 0.6 stands beside her on the same arc and appears at her scale. Default 0.", -5, 5),
       anchor: oneOf("camera (default in photo mode) or v (default in normal play).", ["camera", "v"]),
       replace: bool("Remove the heads set out earlier first (default true)."),
+      avoid_walls: bool("0.7: check each head's eyes for free space and a clear sight line (world_probe) and move a blocked head back or sideways, saying so in moved_for_space. Default true."),
     }),
     undo: "showroom.clear with what: pieces (or all); loading a save also removes them.",
     local: runShowroomSpawn,
@@ -1510,13 +1624,12 @@ export const CATALOGUE: readonly CommandDef[] = [
     permission: "write-showroom",
     input: obj(
       {
-        manifest: str("The showroom build's folder, or its manifest.json (its rig entity is used).", { maxLength: 1024 }),
+        manifest: str("The showroom build's folder, or its manifest.json (its rig entity is used). Default (0.8.3): the staged builds, found as showroom_spawn finds them (the first one's rig).", { maxLength: 1024 }),
         rig: oneOf("creator (default), creator_face, key, or none (remove every rig and keep the heads, as showroom_clear with what: lights).", ["creator", "creator_face", "key", "none"]),
         target: oneOf("each (default): a rig per head; piece: the head given by piece; v: V herself.", ["each", "piece", "v"]),
         piece: int("The head's index in the lineup (0 is the first), with target piece.", 0, 23),
         replace: bool("Remove the rigs placed earlier first (default true)."),
       },
-      ["manifest"],
     ),
     undo: "showroom.clear with what: lights.",
     local: runShowroomLight,
@@ -1569,7 +1682,9 @@ export const CATALOGUE: readonly CommandDef[] = [
   // Behaviours in the plugin at tick rate, and player control phase 1 (0.6)
   ...BEHAVE_COMMANDS,
   ...PLAYER_COMMANDS,
-];
+  // Bridge 0.7 (research/runtime/bridge-hook-inventory.md).
+  ...COMMANDS_070,
+]);
 
 export function findCommand(name: string): CommandDef | undefined {
   return CATALOGUE.find((command) => command.name === name || toolName(command) === name);

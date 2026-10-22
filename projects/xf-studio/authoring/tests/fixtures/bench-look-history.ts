@@ -4,14 +4,14 @@
  *   bun tests/fixtures/bench-look-history.ts
  * Prints medians in milliseconds and sizes in UTF-16 code units.
  */
-import { CollectionActions } from "../../src/collection-actions";
-import { copyWorkspace } from "../../src/collection-workspace";
+import { LegacyDraftActions as CollectionActions, copyWorkspace } from "./legacy-draft";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
-import { createTrustedAuthoringCore } from "../../src/trusted-authoring-core";
-import { encodeWorkspaceAt } from "../../src/workspace-budget";
+import { createTrustedAuthoringCore } from "../../src/app/trusted-authoring-core";
+import { encodeWorkspaceAt } from "../../src/app/workspace/workspace-budget";
 import { restore } from "./workspace-observable";
 import { largeWorkspaceV1 } from "./workspace-v1-fixtures";
 
+import { namedCore } from "./named-targets";
 const median = (runs: number, work: () => void) => {
   const times: number[] = [];
   for (let i = 0; i < runs; i++) { const start = performance.now(); work(); times.push(performance.now() - start); }
@@ -32,8 +32,8 @@ results.draftCopy = median(15, () => copyWorkspace(state.collections!));
 results.draftUnits = JSON.stringify(state.collections).length;
 
 // Every preset with a full in-session history: select each once so the live editor's history is kept per look.
-const core = createTrustedAuthoringCore(state, { resetStack: () => {}, selectedCollection: () => "draft", newId: (() => { let n = 0; return () => `b${++n}`; })() },
-  STUDIO_COMPOSITION);
+const core = namedCore(createTrustedAuthoringCore(state, { resetStack: () => {}, selectedCollection: () => "draft", newId: (() => { let n = 0; return () => `b${++n}`; })() },
+  STUDIO_COMPOSITION));
 const actions = new CollectionActions(STUDIO_DOCUMENTS, state.collections!, () => core.document.export(),
   editor => core.document.restore({ ...editor, fieldSelection: editor.fieldSelection ?? {} }));
 const presets = actions.summary().presets.map(preset => preset.id);

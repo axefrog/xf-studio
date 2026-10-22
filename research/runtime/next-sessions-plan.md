@@ -39,7 +39,7 @@ This plan gathers every open in-game ask into sittings of 20–30 minutes, drive
 ## Before every sitting (C, offline)
 
 1. **Bridge:** the profile held **0.5.2 `-writes` with inventory** (`7b9c864`) in session 6; 0.5.3 is built, not staged ([build records](runtime-bridge-test-card.md#build-record-bridge-053-branch-build-not-staged)). Stage the newest build the test card lists and run its preflight first. Check that the plugin log shows `script_calls=on`. **Codeware** stays in the profile (the showroom spawns through it).
-2. **Profile `XF Studio diagnostic 2026-09-25`:**
+2. **Profile `XF Studio diagnostic`:**
    - **XF Eye Artistry** still holds session 2's collection (selector `xfs_c0200a5e…`, the pre-`hx_` component) until an `hx_` export replaces it for N2.
    - **XF Finish Showroom** holds the two showroom archives rebuilt at 0.5.2 (session 2's collection and the Glitter board); N14 replaces them with the rework's build.
    - **XF Piercings Probe:** enabled in the profile, with hashes matching the build record (checked 27 September; [staging](../../experiments/024-ccxl-piercings/README.md#staging)).
@@ -56,7 +56,7 @@ This plan gathers every open in-game ask into sittings of 20–30 minutes, drive
    - Re-run the [framework check](runtime-bridge-test-card.md#before-the-session-coordinator) if a sitting slips a day.
 3. **Game settings:** ask M to read the **SSS quality** in the graphics menu at the start. Ultra+ wrote it per quality tier while it was enabled, so the value may not be what was last chosen by hand. Record it with the upscaler, the ray-tracing mode and the Character Rendering Editor preset.
 4. **Evidence:**
-   - Run `python tools/capture_session.py --label <sitting>-pre` before and `--label <sitting>-post` after, with `--profile "XF Studio diagnostic 2026-09-25"`.
+   - Run `python tools/capture_session.py --label <sitting>-pre` before and `--label <sitting>-post` after, with `--profile "XF Studio diagnostic"`.
    - Put one runner `--out` folder per sitting under a private, ignored location. Captures are never committed; copy them to `experiments/<id>/generated/captures/` afterwards.
    - Every result keeps its bridge JSON, and the manifest records the build commit.
 5. **Scripts:**

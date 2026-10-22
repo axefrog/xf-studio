@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { attributeVortexFile, combineVortexManifests, compareWithDeployment, parseVortexManifest, portableRelPath,
-  vortexManifestModType, vortexManifestName, type VortexModIdentity } from "../src/vortex-deployment";
+  vortexManifestModType, vortexManifestName, type VortexModIdentity } from "../src/installation/vortex-deployment";
 
 const fixture = (name: string) => readFileSync(join(import.meta.dir, "fixtures", "vortex", name), "utf8");
 

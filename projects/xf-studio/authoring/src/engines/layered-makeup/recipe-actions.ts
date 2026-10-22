@@ -12,7 +12,7 @@ import { hasGameOptics } from "./finish-export";
 import { clamp, DEFAULT_SHIFT, MAX_FIELDS, parseRecipe, type GameOptics, type Layer, type Point, type Recipe, type WarpField } from "./recipe";
 import type { LayerModelRegistry } from "./layer-models";
 import { editSoftness, type SoftnessCommand } from "./softness-edit";
-import { refuse, type ValidationIssue } from "../../validation-issues";
+import { refuse, type ValidationIssue } from "../../platform/api/validation-issues";
 import { refusal, type ReasonCode } from "../../platform/api";
 import { DEFAULT_STREAK_ANGLE, DEFAULT_STREAK_LENGTH, mottlePreset, mottleSeed, MOTTLE_PRESET_IDS, nextMottleSeed, type Mottle,
   type MottlePresetId } from "./mottle";

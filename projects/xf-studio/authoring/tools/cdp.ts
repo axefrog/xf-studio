@@ -7,7 +7,7 @@ import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileS
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { Subprocess } from "bun";
-import { localSettingsDirectory } from "../src/local-settings-store";
+import { localSettingsDirectory } from "../src/setup/host/local-settings-store";
 
 const CHROME = process.env.CHROME ?? "C:/Program Files/Google/Chrome/Application/chrome.exe";
 const root = resolve(import.meta.dir, "..");

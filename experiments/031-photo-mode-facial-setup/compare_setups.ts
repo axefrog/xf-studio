@@ -11,7 +11,7 @@
 import { createHash } from "node:crypto";
 import { readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { depotHash } from "../../projects/xf-studio/authoring/src/depot-path";
+import { depotHash } from "../../projects/xf-studio/authoring/src/game/depot-path";
 import { NativeArchive } from "../../projects/xf-studio/authoring/src/native/archive-reader";
 import { loadGameOodle } from "../../projects/xf-studio/authoring/src/native/oodle";
 import { readResource } from "../../projects/xf-studio/authoring/src/native/resource-document";

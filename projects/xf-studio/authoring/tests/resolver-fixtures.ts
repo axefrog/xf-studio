@@ -1,8 +1,8 @@
 // Asset-free builders for WolvenKit-shaped CR2W JSON and a synthetic installation, used by resolver tests.
-import { type ArchiveFile, buildMountPlan, DepotIndex, type MountedArchive } from "../src/archive-precedence";
-import { readArchiveXlConfig, type XlDocument } from "../src/archivexl-config";
-import { depotHash, type DepotRef } from "../src/depot-path";
-import { type FetchedResource, type ResourceFetchPort, ResourceGraph } from "../src/resource-graph";
+import { type ArchiveFile, buildMountPlan, DepotIndex, type MountedArchive } from "../src/game/archive-precedence";
+import { readArchiveXlConfig, type XlDocument } from "../src/game/archivexl-config";
+import { depotHash, type DepotRef } from "../src/game/depot-path";
+import { type FetchedResource, type ResourceFetchPort, ResourceGraph } from "../src/game/resource-graph";
 
 export const cn = (value: string) => ({ $type: "CName", $storage: "string", $value: value });
 export const rp = (path: string | null, flags = "Default") =>

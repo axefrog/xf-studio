@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { WorkspaceComposer } from "../src/workspace-composer";
-import { loadWorkspace, parseWorkspace, workspaceKeys } from "../src/workspace-state";
+import { WorkspaceComposer } from "../src/app/workspace/workspace-composer";
+import { loadWorkspace, parseWorkspace, workspaceKeys } from "../src/app/workspace/workspace-state";
 import { defaultUIPreferences, effectiveTheme, parseDockLayout, parseUIPreferences,
-  recoverDockLayout, UIPreferenceActions, type DockLayout } from "../src/ui-preferences";
+  recoverDockLayout, UIPreferenceActions, type DockLayout } from "../src/app/ui-preferences";
 import { storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";

@@ -357,6 +357,15 @@ A plugin that needs "photo mode is ready" can hook after `Finalize`; none of the
 | NPC look-at and expression rows | NPC look-at mode 58 and body part 78 (V: 15 and 74), NPC expression 56, character selector 68 | [source] Photo Mode Pose Selector `init.lua:1-12` |
 | Keep V's look-at through pose changes | Re-apply the saved body part 3 frames and 0.05 s after a category, pose or character change | [source] Photo Mode Pose Selector `init.lua:2805-2828` |
 
+## 14. Arm cyberware, V's weapon slot and the camera's projection
+
+| Question | Answer | Grade |
+|---|---|---|
+| How does the stand-in wear arm cyberware? | From V's visual right-arm slot: the holstered item (such as the Mantis Blades' holstered appearance) goes on it as V shows it. An arm cyberware item it is handed as a weapon (for a weapon pose, or V's weapon in hand when photo mode opens) goes into its weapon slot and hides the holstered arms: the blades deployed | [source] 2.31 `photoModePlayerEntity.script` `SetupInventory` (the RightArm visual area), `PutOnFakeItem` (ArmsCW: `holsteredArmsShouldBeVisible = false`, `cyberwareArmsBeingSpawned`), `ReevaluateArmsVisibility` |
+| Are the blades deployed in the default pose? | It depends on how they were equipped. Session 8 (bridge 0.7: Mantis Blades equipped moments before, V on foot, the default pose): **deployed**. Session 9 (bridge 0.8.0, the same check, E2): **holstered**. 0.8 holsters V's arms before it changes arm cyberware (the change refused while they were drawn, design §3.8), so the likely difference is that V's weapon slot no longer holds the blades when photo mode opens, and the stand-in then shows them on its visual right-arm slot. Which route handed the stand-in the weapon in session 8 is still open; a pose from a non-weapon category remains the way to show the holstered arms (the render study's capture C6) | [runtime] sessions 8 and 9 (E2); the cause [hypothesis] |
+| What is left on V after photo mode? | After photo mode V's right weapon slot still held the Gorilla Arms and the right-arm slot's holstered item was off: the equipment system's drawn state (`EquipmentSystemPlayerData.UpdateArmSlot` swaps the two), so the game refuses arm cyberware changes until a holster. The bridge's cyberware commands now holster first (0.8) | [runtime] session 8 (E4, the plugin log's `cyberware.state` after `photo.exit`); [source] `equipmentSystem.script` `UpdateArmSlot`, `RetrofixHolsteredArms` |
+| Does `CameraSystem.ProjectPoint` follow the photo camera? | No: under the drone camera a head centred in the frame projected to (−5.2, −48.5) window heights, while `GetActiveCameraWorldTransform` did report the drone camera. Two calibration points on the camera's axis still agreed, because the drone looked straight at V and the gameplay camera sat on that axis; a point off the axis at the same angle separates them. The bridge (0.8) takes positions in photo mode from the active camera's pose and field of view alone | [runtime] sessions 7 and 8 (G3); [source] the calibration geometry, `tools/scene/camera.ts` |
+
 ## Open questions
 
 1. What does the native `TogglePhotoMode` handler call, and can a plugin call it safely? What does `gamePhotoModeEnableEvent` do, and who receives it? (Posted key presses don't reach the game: it reads Raw Input [runtime] session 5.) `SendInput` with focus does [runtime].
@@ -371,6 +380,7 @@ A plugin that needs "photo mode is ready" can hook after `Finalize`; none of the
 10. Does a teleported photo-mode camera survive a menu change (a camera row or preset), as teleported stand-ins survive until their own row changes (§11.3)?
 11. Which engine function takes a `rendSingleScreenShotData` request, can the bridge plugin call it on the main thread without IGPT's watchdog patch at ×1 or ×2, and does the shipping renderer honour `emmModes` other than `EMM_None` (§12)?
 12. What unit is the exposure attribute's raw value (a stop per unit?), and does widening `photo_mode.postFX.brightness_range` widen the row?
+13. Which route hands the stand-in the arm cyberware as a weapon in the default pose (§14), and does a non-weapon pose category show the holstered arms? Is `GetActiveCameraFOV` the photo camera's field of view, vertical or horizontal?
 
 ## Related pages
 

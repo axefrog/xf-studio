@@ -150,7 +150,7 @@ if (import.meta.main) {
   };
   const female = compile(paths.setup, paths.setupJson), male = existsSync(paths.maleSetup) || existsSync(paths.maleSetupJson) ? compile(paths.maleSetup, paths.maleSetupJson) : null;
   if (generate) {
-    const { locateFacialSolver } = await import("../src/facial-host");
+    const { locateFacialSolver } = await import("../src/animation/host/facial-host");
     const python = process.env.XFS_PYTHON || join(process.env.LOCALAPPDATA ?? "", "Python", "pythoncore-3.14-64", "python.exe");
     const location = locateFacialSolver({ env: { ...process.env, XFS_PYTHON: python, XFS_FACIAL_SOLVER_ORACLE: "1" }, repoRoot: primaryCheckout(),
       script: join(AUTHORING, "tools", "facial_solver_server.py") });

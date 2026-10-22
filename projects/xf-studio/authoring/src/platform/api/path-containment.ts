@@ -65,6 +65,18 @@ function pieces(path: string, flavour: PathFlavour): Pieces | null {
   return { root, segments, separator };
 }
 
+/**
+ * A path on a local drive, the only kind a path from a file anyone can write (a game folder's manifest) may make the host
+ * open (INSTALL-05). On Windows the separators are normalised first, so `/\host\share` is the network share it means, and
+ * only a drive-letter path (`C:\…`, `d:/…`) is local: never a share (`\\host\…`), a device or NT path (`\\?\…`, `\\.\…`,
+ * `\??\…`), or a path relative to the current drive or folder. Elsewhere an absolute path that isn't `//…` is local.
+ */
+export function isLocalDrivePath(path: string, flavour: PathFlavour = HOST): boolean {
+  if (typeof path !== "string" || !path || path.includes("\0")) return false;
+  if (flavour === "posix") return path.startsWith("/") && !path.startsWith("//");
+  return /^[A-Za-z]:\\/.test(path.replaceAll("/", "\\"));
+}
+
 const joined = (p: Pieces, count = p.segments.length) => p.root + p.segments.slice(0, count).join(p.separator);
 
 /**

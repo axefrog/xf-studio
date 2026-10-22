@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
-import { depotPath, expectedPaths, inventoryFromFiles, pathHash } from "../src/archive-inventory";
-import { archiveInventory } from "../src/archive-inventory-fs";
+import { depotPath, expectedPaths, inventoryFromFiles, pathHash } from "../src/legacy/eye-makeup/export/archive-inventory";
+import { archiveInventory } from "../src/legacy/eye-makeup/export/host/archive-inventory-fs";
 import { oracleTest } from "./optional-oracles";
 
 const study = resolve(import.meta.dir, "../../../../experiments/005-preset-collection");

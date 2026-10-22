@@ -10,7 +10,7 @@
 import { writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { verifyBuild, VerificationError } from "../src/features/eye-makeup/verify/verify-build";
-import { createWolvenKitVerifierTools } from "../src/verifier-wolvenkit";
+import { createWolvenKitVerifierTools } from "../src/legacy/eye-makeup/export/host/verifier-wolvenkit";
 
 const args = process.argv.slice(2);
 const option = (name: string) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };

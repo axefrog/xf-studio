@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { bindRenderTriggers, CANVAS_TRIGGERS, createRenderScheduler, invalidating } from "../src/render-scheduler";
-import { IdleAnimation } from "../src/idle-animation";
+import { bindRenderTriggers, CANVAS_TRIGGERS, createRenderScheduler, invalidating } from "../src/preview/render/render-scheduler";
+import { IdleAnimation } from "../src/animation/render/idle-animation";
 
 /** A manual frame clock: `step()` runs the pending animation frame, like one display refresh. */
 function manualClock() {

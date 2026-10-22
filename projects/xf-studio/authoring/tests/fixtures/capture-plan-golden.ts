@@ -5,7 +5,7 @@
  *   bun tests/fixtures/capture-plan-golden.ts
  */
 import { readFileSync, writeFileSync } from "node:fs";
-import { parseCollection, planCollection } from "../../src/preset-collection";
+import { parseCollection, planCollection } from "../../src/legacy/eye-makeup/export/preset-collection";
 import { digest } from "./workspace-observable";
 import { preparePackageCollection } from "./eye-exporter";
 

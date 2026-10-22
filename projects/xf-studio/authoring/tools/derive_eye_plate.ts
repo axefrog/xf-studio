@@ -7,9 +7,9 @@
 // Without --route the plate is cut from the base game's content archives. With --route the head the game is
 // expected to load for that route is resolved first (read-only towards the game and MO2), as Build does.
 import { isAbsolute, join, resolve } from "node:path";
-import { createInstalledHeadSource } from "../src/eye-plate-head-resolver";
-import { EyePlateError, ensureEyePlate } from "../src/eye-plate-service";
-import { createWolvenKitEyePlateTools } from "../src/eye-plate-wolvenkit";
+import { createInstalledHeadSource } from "../src/legacy/eye-makeup/plate/host/eye-plate-head-resolver";
+import { EyePlateError, ensureEyePlate } from "../src/legacy/eye-makeup/plate/host/eye-plate-service";
+import { createWolvenKitEyePlateTools } from "../src/legacy/eye-makeup/plate/host/eye-plate-wolvenkit";
 
 const args = new Map<string, string>();
 for (let index = 2; index < process.argv.length; index += 2) args.set(process.argv[index], process.argv[index + 1]);

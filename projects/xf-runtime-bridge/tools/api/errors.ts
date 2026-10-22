@@ -2,9 +2,11 @@
 // message says what happened and the one next step; the bridge's own technical message is kept
 // separately as `detail` for logs and bug reports.
 
-export type PlainError = { code: string; message: string; detail?: string };
+/** cause (0.8.1): for a superseded command, the code it stopped with. */
+export type PlainError = { code: string; message: string; detail?: string; cause?: string };
 
-const BRIDGE_MESSAGES: Record<string, string> = {
+/** The shared plain wording per refusal code (also published in docs/mcp-reference.md). */
+export const BRIDGE_MESSAGES: Readonly<Record<string, string>> = {
   bad_request: "The game bridge didn't understand the request. This is a bug in the tool that sent it.",
   bad_params: "Some of the values given aren't valid for this action.",
   bad_version: "The game bridge speaks a different protocol version. Update XF Runtime Bridge and the XF tools together.",
@@ -30,6 +32,8 @@ const BRIDGE_MESSAGES: Record<string, string> = {
   timeout_after_start:
     "The game started this action but took too long to confirm it. It may still have happened: check the game (or the plugin log) before repeating it.",
   busy: "The game has too many requests waiting. Wait a moment and try again.",
+  superseded:
+    "An emergency control (bridge_kill or session_handover) came after this command and cancelled it: a command still waiting never ran, and a running one stopped at its next step. Check the game's state, then send it again if it is still wanted.",
   too_large: "The request was too large for the game bridge.",
   rtti_missing:
     "This game version doesn't have a function the bridge needs for this action, so nothing was changed. The game may have been updated: the bridge needs a rebuild for it.",
@@ -102,7 +106,7 @@ const BRIDGE_MESSAGES: Record<string, string> = {
   outfit_managed_elsewhere:
     "V's outfit is managed by a script mod's outfit system (such as EquipmentEx), which replaces the wardrobe's own requests, so this change would do nothing. Nothing was changed. wardrobe_equip with suspend: true takes that outfit off for now (the story's own request) so equipped clothing draws; resume: true puts it back.",
   bridge_effects_active:
-    "The bridge still holds something on V that a save would keep (a glide's movement hold, a forced crouch, a running behaviour or an outfit it took off), so nothing was saved. player_stop lifts the effects and stops behaviours, and wardrobe_equip with resume: true puts a suspended outfit back; then save again.",
+    "The bridge still holds something that a save would keep (a glide's movement hold, a forced crouch, a running behaviour, an outfit it took off, a weather it holds, or cyberware it changed or added), so nothing was saved. player_stop lifts the effects and stops behaviours, wardrobe_equip with resume: true puts a suspended outfit back, and the undos of world_weather_set and cyberware_equip or cyberware_unequip put those back; then save again.",
   script_outfit_api_changed:
     "The installed Equipment-EX doesn't offer the outfit functions the bridge calls (a different version changed them), so the bridge won't drive its outfit; nothing was changed. wardrobe_equip with suspend: true still takes the outfit off (the story's own request); wardrobe_state names the version and what differs.",
   handed_over:
@@ -113,7 +117,16 @@ const BRIDGE_MESSAGES: Record<string, string> = {
   player_busy:
     "V is busy (jumping, sliding, falling or landing, swimming, in a workspot, a takedown or grapple, carrying a body, in a menu, or photo mode is open), so the bridge won't move her now. Nothing was changed. Try again once she stands still in normal play; player_state's busy_state says which.",
   user_took_over:
-    "The player moved V (their own movement, jump, crouch, sprint, dodge or camera input), so the glide stopped and gave V back. Nothing more was changed. Start it again once the player has let go.",
+    "The player took over (their own movement, jump, crouch, sprint, dodge, mouse or stick), so the glide or look stopped and gave V back. Nothing more was changed. Start it again once the player has let go.",
+  // 0.8 (the MCP documentation work): three codes that fell through to the unexplained message.
+  quest_scene:
+    "A story scene is playing, and the story may hold the weather itself, so the bridge didn't change it. Nothing was changed. Try again once the scene is over.",
+  arms_drawn:
+    "V has her arm cyberware out, and the game doesn't swap arm cyberware while it is drawn. Nothing was changed. Holster it first (player_action with weapon.holster), or leave holster_first on so the tools do it.",
+  not_equippable:
+    "The game says V can't equip that cyberware (a requirement isn't met or its slot doesn't take it), so nothing was changed and nothing was added. cyberware_state shows what the slot holds now.",
+  metadata_pending:
+    "The game hadn't sent that save's details yet, so nothing was loaded. Try again in a moment.",
   no_ground: "There is no walkable ground near that point, so V wasn't moved there. Pick a point on the floor (or pass ground: exact at your own risk).",
   not_streamed: "The world around that point isn't loaded yet, so V wasn't moved there (with ground: exact too). Move V closer first, then try again.",
   no_path: "The game found no walkable path to that point, so V didn't move. Pick a point on the same floor and within reach.",
@@ -127,11 +140,50 @@ const BRIDGE_MESSAGES: Record<string, string> = {
   client_timeout: "The game bridge didn't answer. The game may be frozen or loading; try again shortly.",
 };
 
+/**
+ * 0.8 (session 8's D3: "V is busy" didn't say what she was doing): the state the bridge names in its own message
+ * ("V can't be moved now (player_busy: locomotion:Jump)"), in plain words.
+ */
+export function busyState(detail: string | undefined): string | null {
+  const match = detail?.match(/player_busy: ([A-Za-z_]+(?::[A-Za-z_]+)?)/);
+  return match ? match[1]! : null;
+}
+
+const BUSY_WORDS: Record<string, string> = {
+  falling: "falling",
+  landing: "landing",
+  swimming: "swimming",
+  workspot: "in a workspot",
+  takedown: "in a takedown or grapple",
+  carrying_body: "carrying a body",
+  dead: "dead",
+  photo_mode: "in photo mode",
+  menu: "in a menu",
+  paused: "in the pause menu",
+  character_menu: "in the appearance screen",
+  loading: "loading",
+  "locomotion:Jump": "jumping",
+  "locomotion:DodgeAir": "dodging in the air",
+  "locomotion:SlideFall": "sliding into a fall",
+  "locomotion:Slide": "sliding",
+  "locomotion:Dodge": "dodging",
+  "locomotion:Sprint": "sprinting",
+  "locomotion:Vault": "vaulting",
+  "locomotion:Kereznikov": "in Kerenzikov time",
+  "locomotion:Workspot": "in a workspot",
+  "locomotion:CrouchSprint": "crouch-sprinting",
+  "locomotion:CrouchDodge": "dodging from a crouch",
+};
+
 export function plainBridgeError(code: string | undefined, detail?: string): PlainError {
   const known = code && BRIDGE_MESSAGES[code];
+  const state = code === "player_busy" ? busyState(detail) : null;
+  const message = state
+    ? `V is busy (${BUSY_WORDS[state] ?? state}; the game's state ${state}), so the bridge won't move her now. Nothing was changed. Try again once she stands still in normal play.`
+    : known || "The game bridge reported a problem it didn't explain.";
   return {
     code: code ?? "failed",
-    message: known || "The game bridge reported a problem it didn't explain.",
+    message,
     ...(detail ? { detail } : {}),
   };
 }

@@ -14,7 +14,7 @@ Everything here is **file-level evidence** [offline]: the scanner reads `meta.in
 python tools/mod_survey.py --mo2 PATH_TO_MO2 --out experiments/mod-ecosystem/generated
 ```
 
-It takes the MO2 folder from `--mo2` or `XFS_RESOLVER_MO2_ROOT`, and profiles from `--profile` (default: the XF diagnostic profile `XF Studio diagnostic 2026-09-25` and the main play profile `2025 (again)`). The output names installed mods and profiles, so it goes to the ignored `experiments/mod-ecosystem/generated/` folder: `survey.json` (one record per mod) and `hooks.json` (the aggregated hook points, conflicts and `@addMethod` name collisions). A full run takes well under a minute and stays under 0.1 GB.
+It takes the MO2 folder from `--mo2` or `XFS_RESOLVER_MO2_ROOT`, and profiles from `--profile` (default: the XF diagnostic profile `XF Studio diagnostic` and the main play profile `2025 (again)`). The output names installed mods and profiles, so it goes to the ignored `experiments/mod-ecosystem/generated/` folder: `survey.json` (one record per mod) and `hooks.json` (the aggregated hook points, conflicts and `@addMethod` name collisions). A full run takes well under a minute and stays under 0.1 GB.
 
 Per mod it records:
 

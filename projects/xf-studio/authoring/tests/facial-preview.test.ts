@@ -4,8 +4,8 @@
  * step, and every unavailable state says why in plain words.
  */
 import { expect, test } from "bun:test";
-import { prefetchWhenQuiet } from "../src/facial-prefetch";
-import { combineFacePoses, FacialPreview, FRAME_MS, SLOW_SOLVE_MS, type FacialDevicePort, type FacialMotion, type FacialSolved, type FacialTimer } from "../src/facial-preview";
+import { prefetchWhenQuiet } from "../src/animation/facial-prefetch";
+import { combineFacePoses, FacialPreview, FRAME_MS, SLOW_SOLVE_MS, type FacialDevicePort, type FacialMotion, type FacialSolved, type FacialTimer } from "../src/animation/facial-preview";
 import type { TransitionSetting } from "../src/platform/core/transition-settings";
 import { f32 } from "../src/engines/facial-rig/vector";
 import { FACIAL_STATE_SCHEMA, type FacialHostState, type FacialSolveRequest } from "../src/platform/api/facial";

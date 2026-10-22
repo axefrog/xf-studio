@@ -1,17 +1,17 @@
 import {expect,test} from "bun:test";
 import * as THREE from "three";
-import {recipeFile} from "../src/recipe-schema";
+import {recipeFile} from "../src/legacy/eye-makeup/recipe-schema";
 import {defaultDirectGlintFlakes,defaultClusteredGlintFlakes,defaultFineSpeckleFlakes} from "../src/engines/layered-makeup/direct-glint-settings";
 import {createRasterProcessor,type RasterResponse} from "../src/engines/layered-makeup/raster-processor";
-import {assessPreviewQuality} from "../src/preview-quality";
+import {assessPreviewQuality} from "../src/legacy/eye-makeup/preview/preview-quality";
 import { UnsupportedMaterialError } from "../src/engines/layered-makeup/preset-compiler";
-import { parseWorkspace } from "../src/workspace-state";
-import {parseCollection} from "../src/preset-collection";
+import { parseWorkspace } from "../src/app/workspace/workspace-state";
+import {parseCollection} from "../src/legacy/eye-makeup/export/preset-collection";
 import {openTestLibrary} from "./fixtures/library-file";
 import { storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { initialRecipe, raster, compileFlatPreset, freshWorkspace, EYE_RASTER_REGION } from "./fixtures/eye-region";
-import { readRecipe as parseRecipe } from "../src/recipe-schema";
+import { readRecipe as parseRecipe } from "../src/legacy/eye-makeup/recipe-schema";
 import { createMakeupStack } from "./fixtures/eye-region";
 
 test("direct-light model is explicit recipe-8 browser data and stays game-export gated",()=>{

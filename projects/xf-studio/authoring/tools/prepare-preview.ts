@@ -3,12 +3,12 @@
 // The localhost server serves the core preview files only from this cache.
 //   bun tools/prepare-preview.ts
 import { join, resolve } from "node:path";
-import { createWolvenKitGameAssetExporter } from "../src/game-asset-export-wolvenkit";
-import { packageToolPaths } from "../src/local-settings-readiness";
-import { LocalSettingsStore } from "../src/local-settings-store";
-import { localToolsRoot } from "../src/package-server";
-import { WolvenKitSetupHost } from "../src/wolvenkit-setup-host";
-import { ensurePreviewCore, PreviewCoreError } from "../src/preview-core-service";
+import { createWolvenKitGameAssetExporter } from "../src/game/host/game-asset-export-wolvenkit";
+import { packageToolPaths } from "../src/setup/host/local-settings-readiness";
+import { LocalSettingsStore } from "../src/setup/host/local-settings-store";
+import { localToolsRoot } from "../src/host/package-server";
+import { WolvenKitSetupHost } from "../src/setup/host/wolvenkit-setup-host";
+import { ensurePreviewCore, PreviewCoreError } from "../src/preview/host/preview-core-service";
 
 const cacheRoot = resolve(process.env.XFS_PREVIEW_CORE_CACHE || resolve(import.meta.dir, "..", "data", "preview-cache"));
 const settings = new LocalSettingsStore().load().settings;

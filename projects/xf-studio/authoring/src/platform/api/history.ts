@@ -13,11 +13,21 @@ export type HistoryLabel = {
   layerId?: string;
 };
 
-export type HistoryCommand = { kind: "history.undo" } | { kind: "history.redo" } | { kind: "history.jumpTo"; entryId: string };
+/**
+ * Undo, Redo and a jump. Undo and Redo may name the history scope they step (`scope`: `look:<collection>/<look>`, `character:<id>`),
+ * as a focused panel's own Undo does (the 3D view steps the look it shows); without one they step the focused scope, the editing context.
+ */
+/** A move through one history scope's steps, as the scope carries it out. */
+export type HistoryMove = { kind: "history.undo" } | { kind: "history.redo" } | { kind: "history.jumpTo"; entryId: string };
+/**
+ * Undo, Redo or a jump as an action: the move and the history scope it acts on (profiles design §3.6, §3.7). The input layer names the
+ * scope (the editing context, or a focused 3D view's look); nothing defaults it.
+ */
+export type HistoryCommand = HistoryMove & { scope: string };
 export type HistoryState = { undo?: HistoryLabel; redo?: HistoryLabel; depth: number; redoDepth: number };
 export type HistoryStep = HistoryLabel & { id: string; at?: number; state: "done" | "undone" };
 export type HistorySnapshot = { startId: string; steps: HistoryStep[]; current: number; redoCount: number; trimmed: boolean; documentLabel?: string };
-export type HistoryParticipant = { id: string; dispatch(action: HistoryCommand): boolean };
+export type HistoryParticipant = { id: string; dispatch(action: HistoryMove): boolean };
 /**
  * The Undo history of separately stored documents (an experiment's documents, scoped by ID such as `hair:<id>`), beside the
  * look history. Each document's history is linear and isolated; global Undo and Redo reach the selected one. A step keeps
@@ -108,6 +118,8 @@ export interface HistoryTarget {
    * drops its steps, since they could never apply again, and nothing changes.
    */
   apply(values: Readonly<Record<string, unknown | undefined>>, cause: HistoryCause): boolean;
+  /** Why the target can't move now (a V whose last session's changes are still being restored), or undefined: Undo and Redo wait. */
+  unavailable?(): string | undefined;
   /**
    * A cheap token that changes whenever the content may have: while it is what the last Undo or Redo left, Redo stays valid
    * without comparing content. Without it, Redo validity compares the fingerprint every time.

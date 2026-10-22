@@ -32,7 +32,7 @@ The Studio's idle is the creator idle (the [brow idle audit](../animation/brow-i
 
 1. Build V's frame in the game: origin at the head slot `h`, up = world Z, forward = `f` (flattened), right = `(f.y, −f.x, 0)`, exactly as the redscript builds its offsets.
 2. Express the camera in it: `d = camera − h`, giving `(d·right, d·up, d·forward)`; likewise its forward and up vectors.
-3. Place it in the Studio: the Studio's frame is Y up, V facing −Z, V's right = +X ([creator lighting §2](../../knowledge/creator-lighting.md#2-the-box-and-its-lights)), so Studio position = `H + (d·right, d·up, −d·forward)`, where `H` is the Studio's `Head` bone position (`src/platform/scene/head-rig.ts` finds it by name for the idle offset). The target is the position plus the mapped forward. The result is a `CameraState` `{position, target, fov}` (`src/workspace-state.ts`) for the existing `camera.restore` action (`src/preview-actions.ts`).
+3. Place it in the Studio: the Studio's frame is Y up, V facing −Z, V's right = +X ([creator lighting §2](../../knowledge/creator-lighting.md#2-the-box-and-its-lights)), so Studio position = `H + (d·right, d·up, −d·forward)`, where `H` is the Studio's `Head` bone position (`src/platform/scene/head-rig.ts` finds it by name for the idle offset). The target is the position plus the mapped forward. The result is a `CameraState` `{position, target, fov}` (`src/app/workspace/workspace-state.ts`) for the existing `camera.restore` action (`src/preview/preview-actions.ts`).
 4. **Field of view from the projection, not the number.** Whether `GetActiveCameraFOV()` is vertical or horizontal is not established, and the creator's FOV axis is open too ([creator lighting §3](../../knowledge/creator-lighting.md#3-camera)). The projected up and right points settle it per frame: with the target at depth `z` along the camera forward, 0.1 m along camera-up spans `p` pixels, so the focal length is `f_px = p·z/0.1` and the vertical FOV is `2·atan(H_px / (2·f_px))`. Comparing that with the reported number gives the axis once; after that, both are recorded.
 5. **Closed-loop check.** The Studio projects the same head-relative points with its reconstructed camera. The pixel distance to the game's `ProjectPoint` answers (after the screen-space detection `framing.ts` already performs) is the camera residual, measured before any image content is used.
 
@@ -71,7 +71,7 @@ Photo-mode roll (attribute 2) must be 0: the Studio camera has no roll [source] 
 The game's SDR output is `sRGB_encode(clamp(LUT(LogC3(k·x))))` with a linear tone-mapping mode, so the LUT carries the whole tone curve [source] `m_LUTGenerateLinear`; the Studio's creator preset draws the same transform with the LUT resolved by archive precedence ([creator lighting §5](../../knowledge/creator-lighting.md#5-tone-mapping-and-grading)). Consequences for measurement:
 
 - **Invert the grade before arithmetic that needs linear light** (differences, light fits). The LUT's neutral axis is monotonic for the vanilla, Nova and Preem LUTs [resource], so each 8-bit value maps back to scene-linear up to the clip; pixels at 0 or 255 in any channel are excluded.
-- **Exposure is one scalar.** Creator: fit `k` once on the forehead with the existing helper (`src/creator-calibration.ts` `fitExposure`) and freeze it; the repeat frame tests that the creator's exposure is fixed. Photo mode: world exposure adapts automatically, so every photo-mode metric is a ratio to a skin reference region or is normalised by an unlit background patch visible in both frames of a light pair.
+- **Exposure is one scalar.** Creator: fit `k` once on the forehead with the existing helper (`src/preview/creator-calibration.ts` `fitExposure`) and freeze it; the repeat frame tests that the creator's exposure is fixed. Photo mode: world exposure adapts automatically, so every photo-mode metric is a ratio to a skin reference region or is normalised by an unlit background patch visible in both frames of a light pair.
 - **Everything else is switched off or recorded.** Photo-mode keys the bridge can already write: grain (25) 0, chromatic aberration (13) 0, look-at (15) off, roll (2) 0 [source] `native/src/core/Params.cpp` `ParseCamera`. Depth of field (26) is never written, because Photo Mode Ex persists it into saves ([runtime bridge §3.2](../runtime/runtime-bridge-design.md#32-protocol-1)); the manifest reads it and the report flags a frame with it on. Exposure (10), contrast (11), highlights (24), vignette (12) and colour balance (84–93) are read from `photo.state` and must be at their defaults; writing them needs a small extension (P1). Game-wide post effects, HDR, ReShade, LUT Switcher and the Character Rendering Editor preset are in §3.3.
 
 **Capture settings to record with every parity frame** (learned in session 4, [experiment 029](../../experiments/029-session-4/README.md#1-setup)). Graphics mods can change the skin and the image without touching the game's menu. Session 4 ran with **Ultra+** enabled in the test profile, in RT mode with **quality Auto** (it moved between tiers to hold 45 fps). Ultra+ writes `SubsurfaceScatteringQuality` per tier and per-mode skin tuning (`SubsurfaceSpecularTint*`, `SkinAmbientIntensity_Factor`), and had **CAS sharpening** and **Object/NPC rim enhancement** on. Both of those change how a face reads against the Studio. So every capture set records:
@@ -90,14 +90,14 @@ The test profile now has Ultra+ disabled. Photo-mode frames taken under Ultra+ A
 
 ### 2.2 The Studio side
 
-- **A still render at the capture's exact size.** Proposed typed action `preview.renderStill { width, height, camera, passes }` (P2): renders off-screen into a target of the capture's pixel size through the same linear display (`src/linear-display.ts`), without depending on the viewport's layout size, and returns the images with the projection matrix and the camera used. The existing `scene-parity.ts` screenshots the viewport canvas through Chrome's DevTools protocol in an isolated `?verify=1` workspace, which is the right harness but the wrong size for a 3840×1600 capture. Per the [architecture contract](architecture-contract.md), rendering and read-back live in the renderer adapter (`src/platform/scene/character-renderer.ts` already reads render-target pixels) and the action is added to the catalogue with its boundary test.
+- **A still render at the capture's exact size.** Proposed typed action `preview.renderStill { width, height, camera, passes }` (P2): renders off-screen into a target of the capture's pixel size through the same linear display (`src/preview/render/linear-display.ts`), without depending on the viewport's layout size, and returns the images with the projection matrix and the camera used. The existing `scene-parity.ts` screenshots the viewport canvas through Chrome's DevTools protocol in an isolated `?verify=1` workspace, which is the right harness but the wrong size for a 3840×1600 capture. Per the [architecture contract](architecture-contract.md), rendering and read-back live in the renderer adapter (`src/platform/scene/character-renderer.ts` already reads render-target pixels) and the action is added to the catalogue with its boundary test.
 - **Passes:**
   - `beauty`: the normal render under the chosen preset, exposure and LUT;
   - `ids`: one flat label per pixel, no multisampling, alpha-tested cards at coverage 0.5 (label legend in §3.1);
   - `coverage`: the multisampled coverage of thin structures (lash tips, hair edges), for weighting;
   - `normal` and `depth`: view-space normals and linear depth, for the light fit and edge masks;
   - `albedo`: unlit surface colour, for the light fit.
-  The lip ownership displays in `src/render-fidelity-study.ts` are the prior art for override-material passes.
+  The lip ownership displays in `src/studies/render-fidelity-study.ts` are the prior art for override-material passes.
 
 ### 2.3 Registration
 
@@ -126,7 +126,7 @@ Labels come from the Studio's `ids` pass, then are warped into the game frame by
 
 ### 3.2 Measures
 
-All colour arithmetic decodes 8-bit sRGB to display-linear and converts to OKLab, as the calibration helper already does (`src/creator-calibration.ts`: `oklab`, `deltaE`, `hueDegrees`, `displayLuminance`, `patchMean`). Per region:
+All colour arithmetic decodes 8-bit sRGB to display-linear and converts to OKLab, as the calibration helper already does (`src/preview/creator-calibration.ts`: `oklab`, `deltaE`, `hueDegrees`, `displayLuminance`, `patchMean`). Per region:
 
 | Measure | Definition | Robust to | What it tests |
 |---|---|---|---|

@@ -2,8 +2,8 @@
 // is spread apart in OKLab with an adaptive gain, an already varied set is left alone, and the true colours stay available. Asset-free:
 // the sets are sample colours shaped like the reference installation's (a brow pack over natural hair tones; vanilla hair gradients).
 import { describe, expect, test } from "bun:test";
-import { displaySwatches, SwatchDisplayMemo } from "../src/cc-swatch-display";
-import { CONTRAST, contrastGain, enhanceSwatchSet, hexToOklab, oklabToHex, separationWeight } from "../src/swatch-contrast";
+import { displaySwatches, SwatchDisplayMemo } from "../src/character/cc-swatch-display";
+import { CONTRAST, contrastGain, enhanceSwatchSet, hexToOklab, oklabToHex, separationWeight } from "../src/character/swatch-contrast";
 
 const CLUSTERED = [["#030303"], ["#534f46"], ["#210402"], ["#2d1208"], ["#090402"], ["#494339"], ["#3f3628"], ["#2c2420"], ["#2b1c09"], ["#4d4038"],
   ["#2a2725"], ["#540000"], ["#2b211a"], ["#460e18"], ["#3d3735"], ["#3e2117"], ["#3e2117"], ["#13100e"], ["#6c6664"], ["#231610"]];

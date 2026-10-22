@@ -13,9 +13,9 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STUDIO_PARTS } from "../src/compose/studio-registry";
-import { libraryStores, openLibraryFiles } from "../src/library-files";
-import { LIBRARY_MIGRATIONS } from "../src/library-migrations";
-import { readRecipe, recipeFile } from "../src/recipe-schema";
+import { libraryStores, openLibraryFiles } from "../src/library/host/library-files";
+import { LIBRARY_MIGRATIONS } from "../src/library/host/library-migrations";
+import { readRecipe, recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
 import { hostClock } from "../src/platform/core/clock";
 import { LibraryBackups } from "../src/platform/persistence/backups";
 import { LibraryDatabase, LibraryTooNewError, RELEASED_LIBRARY_VERSION, type LibraryMigration } from "../src/platform/persistence/library-database";

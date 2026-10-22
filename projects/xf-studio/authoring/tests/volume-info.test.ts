@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createFolderStampMode, folderStampMode, type VolumeApi } from "../src/volume-info";
+import { createFolderStampMode, folderStampMode, type VolumeApi } from "../src/game/host/volume-info";
 
 /** A volume API over a table of volumes, counting its queries. */
 function fakeApi(volumes: Record<string, { type: number; fs: string | null }>, calls = { volumePath: 0, fileSystem: 0 }): VolumeApi {

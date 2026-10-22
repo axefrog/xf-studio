@@ -1,4 +1,7 @@
 {
+ "amended": {
+  "view": "Profiles phase 1e: focus left the view graph. A focus move is the session focus service's; it records nothing and the graph announces nothing."
+ },
  "capturedFrom": "2e0708a6",
  "documents": [
   {
@@ -8088,18 +8091,8 @@
    "what": "link camera"
   },
   {
-   "data": "880b1fa141b29f0e9908a48c525968d99a1876f6394ad0b83da8f8ae49890b84",
-   "events": [
-    {
-     "applied": false,
-     "nodes": [],
-     "origin": "edit",
-     "structure": true,
-     "views": [
-      "v2"
-     ]
-    }
-   ],
+   "data": "82974eaa2dbd76878aa97dbfc3a6b183d1dbfc8012544ad963622b270c89faa4",
+   "events": [],
    "history": {
     "depth": 9,
     "redoDepth": 0,
@@ -8130,15 +8123,6 @@
   {
    "data": "236dab87c440b12d9208aec6af172418238b3c94b5301165a56b22e1bd9ea12f",
    "events": [
-    {
-     "applied": false,
-     "nodes": [],
-     "origin": "edit",
-     "structure": true,
-     "views": [
-      "main"
-     ]
-    },
     {
      "applied": false,
      "nodes": [

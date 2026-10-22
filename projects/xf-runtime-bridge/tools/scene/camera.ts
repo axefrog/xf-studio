@@ -15,8 +15,11 @@ import { screenSpace, type ScreenPoint, type SubjectReading } from "../api/frami
 
 export type Vec3 = [number, number, number];
 export type CameraPose = { position: Vec3; forward: Vec3; right: Vec3; up: Vec3; fov: number; aspect: number };
-/** Projections of the calibration points: 1 m ahead of the camera (center), then 10 cm along camera up and right. */
-export type Calibration = { center: ScreenPoint; up: ScreenPoint; right: ScreenPoint; far?: ScreenPoint };
+/**
+ * Projections of the calibration points: 1 m ahead of the camera (center), then 10 cm along camera up and right; far 5 m
+ * ahead; 0.8: far_right 5 m ahead and 50 cm right (the same angle as right).
+ */
+export type Calibration = { center: ScreenPoint; up: ScreenPoint; right: ScreenPoint; far?: ScreenPoint; far_right?: ScreenPoint };
 export type CameraModel = CameraPose & {
   /** Window heights per unit of (lateral / depth): 1 / (2 tan(vfov / 2)) for a vertical field of view. */
   scale: number;
@@ -24,6 +27,14 @@ export type CameraModel = CameraPose & {
   fov_axis?: "vertical" | "horizontal" | "neither";
   /** Only when the game's horizontal and vertical scales differ by more than 5 %. */
   pixel_aspect?: number;
+  /**
+   * 0.7 (session 7): "inconsistent" when the game's projection disagrees with its own camera pose (two points on the
+   * camera's optical axis land apart), as photo mode's drone camera showed: the projection then isn't the active camera's
+   * and the model falls back to the field of view. 0.8 (session 8's G3): "not_used" in photo mode, where the game's
+   * projection follows the gameplay camera, never the drone camera the player sees through.
+   */
+  game_projection?: "consistent" | "inconsistent" | "not_used";
+  projection_note?: string;
 };
 export type Projected = { x: number; y: number; depth: number; in_frame: boolean; behind: boolean };
 
@@ -78,6 +89,8 @@ export function modelFromFov(pose: CameraPose): CameraModel {
  */
 export function calibrate(pose: CameraPose, calibration: Calibration | null | undefined): CameraModel {
   if (!calibration) return modelFromFov(pose);
+  const check = projectionConsistency(calibration, pose.aspect);
+  if (!check.consistent) return { ...modelFromFov(pose), game_projection: "inconsistent", projection_note: check.note };
   const reading = {
     camera: { aspect: pose.aspect },
     screen: { center: calibration.center, target: calibration.center, up: calibration.up, right: calibration.right },
@@ -93,7 +106,64 @@ export function calibrate(pose: CameraPose, calibration: Calibration | null | un
   const near = (a: number, b: number) => Math.abs(a - b) / b < 0.03;
   const axis = near(sy, vertical) ? "vertical" : near(sy, horizontal) ? "horizontal" : "neither";
   // Square pixels: both axes should agree (sx is kept as a check); the vertical one is what the frame's height is measured in.
-  return { ...pose, scale: sy, by: "game", fov_axis: axis, ...(sx > 0 && Math.abs(sx - sy) / sy > 0.05 ? { pixel_aspect: r4(sx / sy) } : {}) };
+  return { ...pose, scale: sy, by: "game", fov_axis: axis, game_projection: "consistent", ...(sx > 0 && Math.abs(sx - sy) / sy > 0.05 ? { pixel_aspect: r4(sx / sy) } : {}) };
+}
+
+/**
+ * Whether the game's projection belongs to the camera pose it reported (0.7, session 7's drone camera): the calibration's
+ * centre (1 m ahead of the camera) and far point (5 m ahead) lie on the optical axis, so the camera's own projection puts
+ * both on the same screen point. Apart by more than 0.02 window heights means ProjectPoint used another camera (the
+ * gameplay camera, or last frame's matrix). Without a far point nothing can be said, and the projection is trusted.
+ */
+export function projectionConsistency(calibration: Calibration, aspect: number): { consistent: boolean; apart?: number; note?: string } {
+  if (!calibration.far) return { consistent: true };
+  const reading = {
+    camera: { aspect },
+    screen: { center: calibration.center, target: calibration.center, up: calibration.up, right: calibration.right },
+  } as unknown as SubjectReading;
+  const space = screenSpace(reading);
+  const c = space.toFrame(calibration.center), f = space.toFrame(calibration.far);
+  const apart = Math.hypot(f.x - c.x, f.y - c.y);
+  if (!Number.isFinite(apart)) return { consistent: false, note: "the game's projection gave no usable numbers" };
+  if (apart > 0.02) {
+    return {
+      consistent: false,
+      apart: r4(apart),
+      note: `the game's projection puts two points straight ahead of the camera ${r4(apart)} window heights apart, so it isn't the active camera's (photo mode's drone camera did this in session 7); positions come from the camera's pose and field of view`,
+    };
+  }
+  // 0.8 (session 8's G3): two points off the axis at the same angle (10 cm right at 1 m, 50 cm right at 5 m) land together
+  // for the active camera only. On the axis alone a camera looking straight back along it (the gameplay camera at V while
+  // photo mode's drone looks at her) agreed by chance.
+  if (calibration.far_right) {
+    const r = space.toFrame(calibration.right), fr = space.toFrame(calibration.far_right);
+    const lateral = Math.hypot(fr.x - r.x, fr.y - r.y);
+    if (!Number.isFinite(lateral) || lateral > 0.02) {
+      return {
+        consistent: false,
+        apart: r4(Number.isFinite(lateral) ? lateral : -1),
+        note: `the game's projection puts two points at the same angle right of the camera ${Number.isFinite(lateral) ? r4(lateral) : "?"} window heights apart, so it isn't the active camera's; positions come from the camera's pose and field of view`,
+      };
+    }
+  }
+  return { consistent: true, apart: r4(apart) };
+}
+
+/**
+ * 0.8 (session 8's G3: a centred head read (-5.2, -48.5) under photo mode's drone camera): the camera model for a scene.read
+ * answer. In photo mode the game's ProjectPoint follows the gameplay camera, not the drone camera the player sees through
+ * (the active camera's pose is the drone's), so the model comes from the active camera's pose and field of view alone;
+ * elsewhere the game's projection calibrates it when it passes the consistency checks.
+ */
+export function modelForRead(pose: CameraPose, calibration: Calibration | null | undefined, mode: string | undefined): CameraModel {
+  if (mode === "photo" || mode === "photo_mode") {
+    return {
+      ...modelFromFov(pose),
+      game_projection: "not_used",
+      projection_note: "photo mode: the game's projection follows the gameplay camera, so positions come from the photo camera's pose and field of view",
+    };
+  }
+  return calibrate(pose, calibration);
 }
 
 /** A world point in frame units. depth is the distance along the view; points behind the camera are never in frame. */

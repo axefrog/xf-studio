@@ -279,7 +279,7 @@ std::optional<std::array<double, 3>> CheckPoint(const json& aParams, const char*
 
 MessageRequest ParseMessage(const json& aParams)
 {
-    RequireOnly(aParams, {"text", "seconds", "level", "clear"});
+    RequireOnly(aParams, {"text", "seconds", "level", "clear", "choices", "clear_asks", "keep_asks", "withdraw"});
     MessageRequest request;
     const auto it = aParams.find("text");
     if (it != aParams.end() && !it->is_null())
@@ -289,9 +289,9 @@ MessageRequest ParseMessage(const json& aParams)
             Bad("'text' must be text");
         }
         request.text = it->get<std::string>();
-        if (request.text.empty() || request.text.size() > 500)
+        if (request.text.empty() || request.text.size() > 2000)
         {
-            Bad("'text' must be 1 to 500 characters");
+            Bad("'text' must be 1 to 2000 characters (at most 600 are shown)");
         }
     }
     request.seconds = static_cast<int32_t>(Integer(aParams, "seconds", 1, MessageBoard::kMaxSeconds).value_or(8));
@@ -304,9 +304,50 @@ MessageRequest ParseMessage(const json& aParams)
         request.level = *level;
     }
     request.clear = Boolean(aParams, "clear").value_or(false);
-    if (request.text.empty() && !request.clear)
+    // 0.8.2: clear withdraws a waiting question too; keep_asks keeps it (a capture's clear). clear_asks (0.8.0's switch for
+    // the same withdrawal) is still accepted, and can only say true now.
+    request.keepAsks = Boolean(aParams, "keep_asks").value_or(false);
+    const auto clearAsks = Boolean(aParams, "clear_asks");
+    if ((request.keepAsks || clearAsks) && !request.clear)
     {
-        Bad("give text (the message) or clear: true");
+        Bad(request.keepAsks ? "keep_asks goes with clear: true" : "clear_asks goes with clear: true");
+    }
+    if (clearAsks && (!*clearAsks || request.keepAsks))
+    {
+        Bad("clear withdraws a waiting question by itself now; give keep_asks: true to keep it instead of clear_asks");
+    }
+    request.withdraw = static_cast<uint64_t>(Integer(aParams, "withdraw", 1, 1000000000).value_or(0));
+    // 0.7: an ask's answer buttons (the in-game panel's keys and the CET window's buttons).
+    if (const auto found = aParams.find("choices"); found != aParams.end() && !found->is_null())
+    {
+        if (!found->is_array() || found->empty() || found->size() > MessageBoard::kMaxChoices)
+        {
+            Bad("'choices' must be a list of 1 to 4 short labels");
+        }
+        for (const auto& choice : *found)
+        {
+            if (!choice.is_string() || CleanMessageText(choice.get<std::string>(), MessageBoard::kMaxChoiceChars).empty())
+            {
+                Bad("each of 'choices' must be a label of 1 to 24 characters");
+            }
+            // 0.8.2 (session 9's D2): a longer label used to be cut without a word; now it is refused and says why.
+            bool cut = false;
+            CleanMessageText(choice.get<std::string>(), MessageBoard::kMaxChoiceChars, &cut);
+            if (cut)
+            {
+                Bad("each answer in 'choices' is a button label in the game, at most 24 characters so it fits the panel; \"" +
+                    CleanMessageText(choice.get<std::string>(), 40) + "\" is longer. Shorten it and put the detail in the question's text");
+            }
+            request.choices.push_back(choice.get<std::string>());
+        }
+        if (request.level != "ask")
+        {
+            Bad("'choices' go with level ask (a question the player answers in the game)");
+        }
+    }
+    if (request.text.empty() && !request.clear && request.withdraw == 0)
+    {
+        Bad("give text (the message), clear: true or withdraw (a message's id)");
     }
     if (!request.text.empty() && CleanMessageText(request.text, MessageBoard::kMaxChars).empty())
     {
@@ -322,7 +363,7 @@ std::vector<std::string> ClothingSlots()
 
 InventoryEquipRequest ParseInventoryEquip(const json& aParams)
 {
-    RequireOnly(aParams, {"item", "slot", "add_if_missing"});
+    RequireOnly(aParams, {"item", "slot", "add_if_missing", "id"});
     InventoryEquipRequest request;
     request.item = ItemName(aParams);
     if (request.item.empty())
@@ -331,6 +372,7 @@ InventoryEquipRequest ParseInventoryEquip(const json& aParams)
     }
     request.slot = Slot(aParams);
     request.addIfMissing = Boolean(aParams, "add_if_missing").value_or(false);
+    request.id = ItemIdentity(aParams);
     return request;
 }
 
@@ -349,6 +391,15 @@ InventoryUnequipRequest ParseInventoryUnequip(const json& aParams)
     {
         Bad("'remove_added' needs item (only an item the bridge added can be removed)");
     }
+    return request;
+}
+
+InventoryListRequest ParseInventoryList(const json& aParams)
+{
+    RequireOnly(aParams, {"slot", "limit"});
+    InventoryListRequest request;
+    request.slot = Slot(aParams);
+    request.limit = static_cast<int32_t>(CheckInteger(aParams, "limit", 1, 200).value_or(100));
     return request;
 }
 

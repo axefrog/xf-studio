@@ -5,7 +5,7 @@ import type { EyeMakeupViewContext } from "../src/features/eye-makeup/view/actio
 import type { PanelController } from "../src/studio-ui/panels/collection";
 import type { StudioRuntime } from "../src/studio-ui/runtime";
 import type { FeatureViewFactory } from "../src/studio-ui/views/feature-view";
-import type { EyeMakeupFacade } from "../src/studio-presentation";
+import type { EyeMakeupFacade } from "../src/app/studio-presentation";
 import { importUses, imports, resolveFrom } from "./fixtures/import-scan";
 import { sourceFiles, sourceText } from "./fixtures/source-files";
 
@@ -26,27 +26,26 @@ const views = readdirSync(join(root, "features")).map(id => join(root, "features
  * else from the core must be `import type`. Exceptions are recorded in research/authoring/ui-architecture-boundary.md.
  */
 const CORE_VALUES = new Map<string, readonly string[]>([
-  ["context-menu", ["allowsNativeTextMenu"]],
   // The theme, the dock's recovery gate, and the remembered scroll anchor's validation (view-state.ts reads stored anchors through it).
-  ["ui-preferences", ["effectiveTheme", "parseScrollAnchor", "recoverDockLayout"]],
+  ["app/ui-preferences", ["effectiveTheme", "parseScrollAnchor", "recoverDockLayout"]],
   // Saved layouts' pure reads: the library as shown (the first layout when none is stored), names and the automatic size switch.
-  ["layout-library", ["activeLayout", "autoSwitchTarget", "layoutLibraryOf", "layoutNameProblem", "MAX_LAYOUT_NAME", "nextLayoutName"]],
-  ["mod-branding", ["EYE_MAKEUP_MOD", "MOD_NAME_HINT"]],
+  ["app/layout-library", ["activeLayout", "autoSwitchTarget", "layoutLibraryOf", "layoutNameProblem", "MAX_LAYOUT_NAME", "nextLayoutName"]],
+  ["legacy/eye-makeup/mod-branding", ["EYE_MAKEUP_MOD", "MOD_NAME_HINT"]],
   // The Character panel's hierarchy: the Studio's own section contributions and the pure tree derivation (character-panel-sections.ts).
-  ["character-panel-sections", ["allSections", "CHARACTER_CONTRIBUTIONS", "characterPanelTree"]],
+  ["character/character-panel-sections", ["allSections", "CHARACTER_CONTRIBUTIONS", "characterPanelTree"]],
   // A creator choice's maker group, the groups' shown order and the pooled "Other mods" heading (cc-panel.ts, pure over the projection).
-  ["cc-panel", ["choiceGroup", "compareGroups", "OTHER_MODS_GROUP", "OTHER_MODS_INDEX"]],
+  ["character/cc-panel", ["choiceGroup", "compareGroups", "OTHER_MODS_GROUP", "OTHER_MODS_INDEX"]],
   // How much of a conditional creator option the shown V draws, and the words for one drawn only in part (cc-render-coverage.ts, pure).
-  ["cc-render-coverage", ["PARTLY_SHOWN", "shownOutcome"]],
+  ["character/cc-render-coverage", ["PARTLY_SHOWN", "shownOutcome"]],
   // Swatch contrast enhancement's pure math (swatch-contrast.ts): the style guide draws its curve and a before/after specimen.
-  ["swatch-contrast", ["CONTRAST", "contrastGain", "enhanceSwatchSet", "separationWeight"]],
+  ["character/swatch-contrast", ["CONTRAST", "contrastGain", "enhanceSwatchSet", "separationWeight"]],
   // The easing catalogue's pure data and maths (platform/api/easing.ts): Adjust all › Intensity passes its position through the chosen
   // curve, and the Expression drawer's Transitions offer every curve with its name and hint.
   ["platform/api/easing", ["centredAmount", "EASING_IDS", "EASING_LABELS", "easingPreset"]],
   // Choice previews' pure colour matrix (choice-preview.ts): the preview tile builds its per-theme filter from the tokens with it.
-  ["choice-preview", ["previewColourMatrix"]],
+  ["character/choice-preview", ["previewColourMatrix"]],
   // The pure input binding catalogue: hint/cursor/label derivation and key matching.
-  ["input-bindings", ["bindingReference", "chordLabel", "chordsLabel", "cursorFor", "editingReference", "KEY_BINDINGS", "keyBinding",
+  ["app/input-bindings", ["bindingReference", "chordLabel", "chordsLabel", "cursorFor", "editingReference", "KEY_BINDINGS", "keyBinding",
     "keyBindingById", "modifierKey", "modifiersOf", "panelModifiersHeld", "pointerBinding", "shortcutLabel", "TARGET_LABELS", "targetTip", "viewportHints"]],
 ]);
 /**
@@ -63,7 +62,7 @@ const VIEW_TOOLKIT = new Map<string, readonly string[]>([
   ["studio-ui/views/feature-view", ["featureView", "moduleView"]],
   // Preset sets (part-preset-sets.ts): pure naming, membership and result-key rules, so a set's view names its mod as its export does and
   // tells a stale result the way the service does (PIPE-120).
-  ["part-preset-sets", ["defaultSetModName", "setExportKey", "setMembers", "setModName"]],
+  ["library/part-preset-sets", ["defaultSetModName", "setExportKey", "setMembers", "setModName"]],
 ]);
 /** Where a presentation module lives: the shell (all of studio-ui is its own) or a feature's view (only its folder). */
 type Scope = { own: readonly string[]; allow: ReadonlyMap<string, readonly string[]> };
@@ -99,22 +98,25 @@ test("the value-import scan sees every import form (UI-74)", () => {
   // Probe F: a value re-export of an engine from a view.
   expect(scan(`export { parseRecipe as __probeF } from "../../../engines/layered-makeup/recipe";`))
     .toEqual([`${module} imports parseRecipe from engines/layered-makeup/recipe`]);
-  expect(scan(`export * from "../../../studio-application";`)).toEqual([`${module} imports * from studio-application`]);
+  expect(scan(`export * from "../../../app/studio-application";`)).toEqual([`${module} imports * from app/studio-application`]);
   // Probe E: a dynamic import of a trusted service, and the CommonJS and Bun forms.
-  expect(scan(`const svc = await import("../../../collection-service");`)).toEqual([`${module} imports <dynamic> from collection-service`]);
-  expect(scan(`const svc = require("../../../collection-service");`)).toEqual([`${module} imports <require> from collection-service`]);
-  expect(scan(`const scene = import.meta.require("../../../scene");`)).toEqual([`${module} imports <require> from scene`]);
-  expect(scan(`import "../../../scene";`)).toEqual([`${module} imports <side effect> from scene`]);
+  expect(scan(`const svc = await import("../../../library/collection-service");`))
+    .toEqual([`${module} imports <dynamic> from library/collection-service`]);
+  expect(scan(`const svc = require("../../../library/collection-service");`)).toEqual([`${module} imports <require> from library/collection-service`]);
+  expect(scan(`const scene = import.meta.require("../../../platform/scene/scene-host");`))
+    .toEqual([`${module} imports <require> from platform/scene/scene-host`]);
+  expect(scan(`import "../../../platform/scene/scene-host";`)).toEqual([`${module} imports <side effect> from platform/scene/scene-host`]);
   expect(scan(`import * as recipe from "../../../engines/layered-makeup/recipe";`)).toEqual([`${module} imports * from engines/layered-makeup/recipe`]);
-  expect(scan(`import Default, { shortcutLabel } from "../../../input-bindings";`)).toEqual([`${module} imports default from input-bindings`]);
-  expect(scan(`import {\n  shortcutLabel,\n  collectionMenu,\n} from "../../../input-bindings";`)).toEqual([`${module} imports collectionMenu from input-bindings`]);
+  expect(scan(`import Default, { shortcutLabel } from "../../../app/input-bindings";`)).toEqual([`${module} imports default from app/input-bindings`]);
+  expect(scan(`import {\n  shortcutLabel,\n  collectionMenu,\n} from "../../../app/input-bindings";`))
+    .toEqual([`${module} imports collectionMenu from app/input-bindings`]);
   // The shell's runtime-taking modules are not the view's toolkit.
   expect(scan(`import { viewportMenu } from "../../../studio-ui/target-menus";`)).toEqual([`${module} imports viewportMenu from studio-ui/target-menus`]);
   expect(scan(`import { StudioRuntime } from "../../../studio-ui/runtime";`)).toEqual([`${module} imports StudioRuntime from studio-ui/runtime`]);
   // Types, re-exported types, inline type references and the view's own folder are free; so is the toolkit.
   expect(scan([`import type { Layer } from "../../../engines/layered-makeup/recipe";`, `export type { Recipe } from "../../../engines/layered-makeup/recipe";`,
-    `import { type Recipe, shortcutLabel } from "../../../input-bindings";`, `let t: typeof import("../../../scene");`,
-    `type T = import("../../../scene").Scene;`, `export { EYE_MAKEUP_VIEW } from "./contribution";`,
+    `import { type Recipe, shortcutLabel } from "../../../app/input-bindings";`, `let t: typeof import("../../../platform/scene/scene-host");`,
+    `type T = import("../../../platform/scene/scene-host").Scene;`, `export { EYE_MAKEUP_VIEW } from "./contribution";`,
     `import { h, setText } from "../../../studio-ui/dom";`, `import { featureView } from "../../../studio-ui/views/feature-view";`].join("\n"))).toEqual([]);
   // The specifier scan the architecture test shares sees the same forms.
   expect(imports(`const a = require("./a"); const b = import.meta.require("./b"); export { c } from "./c"; const r = requires("./x");`))
@@ -130,7 +132,8 @@ test("studio-ui and feature views import only types from the core plus documente
 });
 
 test("the presentation never imports the composition root, trusted services or live document modules", () => {
-  const banned = /^(studio-main|studio-startup|trusted-[a-z-]+|authoring-document|authoring-geometry|scene|collection-service|collection-application|studio-file-operations|browser-[a-z-]+|compose\/[a-z-]+)$/;
+  const banned = new RegExp(["^compose/", "^app/trusted-", "^app/authoring/authoring-(?:document|geometry)$", "^platform/scene/",
+    "^library/collection-(?:service|application)$", "^app/studio-file-operations$", "(?:^|/)browser/"].join("|"));
   for (const { file } of presentation()) {
     const module = moduleOf(file);
     // Every value form (static, re-export, dynamic, require); types alone carry no service.
@@ -141,14 +144,14 @@ test("the presentation never imports the composition root, trusted services or l
 });
 
 test("the one composition root hands the view only the public presentation port", () => {
-  const source = readFileSync(join(root, "studio-startup.ts"), "utf8");
+  const source = readFileSync(join(root, "compose", "studio-startup.ts"), "utf8");
   expect(source).toContain("bootstrap.mount(publicPort => { port = publicPort; mountStudio(publicPort, root, viewComposition); })");
   expect((source.match(/mountStudio\(/g) ?? []).length).toBe(1);
   const importers = files(root).filter(file => !file.startsWith(ui) && readFileSync(file, "utf8").includes("studio-ui/app"));
-  expect(importers.map(file => relative(root, file))).toEqual(["studio-startup.ts"]);
+  expect(importers.map(file => relative(root, file).replaceAll("\\", "/"))).toEqual(["compose/studio-startup.ts"]);
   // Host differences arrive as a typed host object, never as page globals or data attributes.
   for (const name of ["studio-startup.ts", "studio-main.ts"])
-    expect(readFileSync(join(root, name), "utf8")).not.toMatch(/\bdataset\b|xfDesktop|xfs-desktop/);
+    expect(readFileSync(join(root, "compose", name), "utf8")).not.toMatch(/\bdataset\b|xfDesktop|xfs-desktop/);
 });
 
 /**
@@ -213,7 +216,7 @@ export function typeProbes(ctx: EyeMakeupViewContext, facade: EyeMakeupFacade, f
   // @ts-expect-error nor a lookup of another feature's facade
   void ctx.feature;
   // @ts-expect-error the context's dispatch takes only eye makeup's own kinds
-  ctx.dispatch({ kind: "camera.front" });
+  ctx.dispatch({ kind: "camera.front", view: "main" });
   // @ts-expect-error the platform dispatch refuses a feature's kinds
   ctx.platform({ kind: "layer.edit", command: { kind: "add" } });
   const bound = ctx.platform.bind(ctx);

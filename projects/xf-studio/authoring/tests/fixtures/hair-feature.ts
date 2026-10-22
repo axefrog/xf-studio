@@ -4,12 +4,12 @@
  * through the same `FeatureModule` shape as eye makeup and is composed beside it only in tests.
  */
 import { LIVE_REGION, STUDIO_OWNERS } from "../../src/compose/studio-registry";
-import type { DocumentModel } from "../../src/collection-workspace";
+import type { DocumentModel } from "../../src/app/workspace/collection-workspace";
 import { featureActionTable, featureId, refusal, type ActionDescriptor, type EditorCodec, type FeatureModule,
   type PartCodec } from "../../src/platform/api";
 import { PartRegistry } from "../../src/platform/core/document";
 import { Registry } from "../../src/platform/core/registry";
-import type { StudioComposition } from "../../src/trusted-authoring-core";
+import type { StudioComposition } from "../../src/app/trusted-authoring-core";
 
 export type Hair = { colour: string; strands: number[] };
 export type HairEditor = { strand: number };

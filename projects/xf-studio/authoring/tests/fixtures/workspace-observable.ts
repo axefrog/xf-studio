@@ -5,14 +5,13 @@
  * captured with this extractor from the pre-migration code; the migrated code must match it.
  */
 import { createHash } from "node:crypto";
-import { CollectionActions } from "../../src/collection-actions";
-import type { EditorSnapshot } from "../../src/collection-session";
-import { encodeWorkspaceAt } from "../../src/workspace-budget";
-import { loadWorkspace, type WorkspaceState } from "../../src/workspace-state";
+import { LegacyDraftActions as CollectionActions, type EditorSnapshot } from "./legacy-draft";
+import { encodeWorkspaceAt } from "../../src/app/workspace/workspace-budget";
+import { loadWorkspace, type WorkspaceState } from "../../src/app/workspace/workspace-state";
 import { STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
 import { historyRecipes } from "./looks";
-import { DEFAULT_STUDIO_LIGHTS, sameStudioLights } from "../../src/studio-lighting";
-import { storedCreatorLighting } from "../../src/creator-lighting";
+import { DEFAULT_STUDIO_LIGHTS, sameStudioLights } from "../../src/preview/studio-lighting";
+import { storedCreatorLighting } from "../../src/preview/creator-lighting";
 
 /** Canonical JSON (object keys sorted): key order is not observable, so it is not compared. */
 export const canonical = (value: unknown) => JSON.stringify(value, (_key, item: unknown) => item && typeof item === "object" &&

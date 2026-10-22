@@ -13,7 +13,7 @@ import { libraryPanel, packagePanel, presetsPanel } from "../panels/collection";
 import { historyPanel } from "../panels/history";
 import { headPanel } from "../panels/viewports";
 import { settingsPanel } from "../panels/settings";
-import type { ThemePreference } from "../../ui-preferences";
+import type { ThemePreference } from "../../app/ui-preferences";
 import { helpPanel, type HelpGuidance } from "../guidance/help-panel";
 import type { StudioRuntime } from "../runtime";
 import type { ViewCatalogue } from "./contribution";

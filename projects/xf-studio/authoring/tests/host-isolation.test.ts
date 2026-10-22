@@ -6,10 +6,10 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync }
 import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { defaultLocalSettings } from "../src/local-settings";
-import { LocalSettingsStore } from "../src/local-settings-store";
-import { localHostState, machineInstallReceiptsRoot } from "../src/host-state";
-import { READ_ONLY_TEST_SERVER, READ_ONLY_VERIFICATION } from "../src/mod-install-host";
+import { defaultLocalSettings } from "../src/setup/local-settings";
+import { LocalSettingsStore } from "../src/setup/host/local-settings-store";
+import { localHostState, machineInstallReceiptsRoot } from "../src/setup/host/host-state";
+import { READ_ONLY_TEST_SERVER, READ_ONLY_VERIFICATION } from "../src/installation/host/mod-install-host";
 
 const LOCAL = "C:\\Users\\someone\\AppData\\Local";
 // Game folders the settings accept on this OS: a saved game folder must be absolute here, and a drive path is absolute only on Windows.

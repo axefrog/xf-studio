@@ -3,9 +3,9 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { classifyWolvenKitRun, isRuntimeMissing, runWolvenKit, runWolvenKitSync, WOLVENKIT_RUNTIME_MISSING_MESSAGE, wolvenKitIdentity,
-  wolvenKitIdentityKey, WolvenKitRunError } from "../src/wolvenkit-cli";
-import { createWolvenKitVerifierTools } from "../src/verifier-wolvenkit";
-import type { ProcessTreeResult } from "../src/process-tree";
+  wolvenKitIdentityKey, WolvenKitRunError } from "../src/host/wolvenkit-cli";
+import { createWolvenKitVerifierTools } from "../src/legacy/eye-makeup/export/host/verifier-wolvenkit";
+import type { ProcessTreeResult } from "../src/host/process-tree";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });

@@ -6,11 +6,11 @@ import { expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { buildMountPlan, DepotIndex, type ArchiveFile } from "../src/archive-precedence";
-import { depotHash } from "../src/depot-path";
-import { depotPathRegex } from "../src/eye-plate-wolvenkit";
-import { readArchiveIndex, trimBuffers, withoutArchiveFileName } from "../src/resolver-host";
-import { runWolvenKit, SUPPORTED_WOLVENKIT_VERSIONS, wolvenKitIdentity } from "../src/wolvenkit-cli";
+import { buildMountPlan, DepotIndex, type ArchiveFile } from "../src/game/archive-precedence";
+import { depotHash } from "../src/game/depot-path";
+import { depotPathRegex } from "../src/legacy/eye-makeup/plate/host/eye-plate-wolvenkit";
+import { readArchiveIndex, trimBuffers, withoutArchiveFileName } from "../src/game/host/resolver-host";
+import { runWolvenKit, SUPPORTED_WOLVENKIT_VERSIONS, wolvenKitIdentity } from "../src/host/wolvenkit-cli";
 import { oracleDescribe } from "./optional-oracles";
 
 const env = process.env;

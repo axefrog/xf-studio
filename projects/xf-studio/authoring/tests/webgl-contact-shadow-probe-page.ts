@@ -8,8 +8,8 @@
  */
 import * as THREE from "three";
 import { createContactShadows, setContactShadows } from "../src/platform/scene/contact-shadow";
-import { contactShadowUniforms } from "../src/skin-material";
-import { createSkinMaterial, skinParameters } from "../src/skin-material";
+import { contactShadowUniforms } from "../src/materials/render/skin-material";
+import { createSkinMaterial, skinParameters } from "../src/materials/render/skin-material";
 
 export type ContactProbe = {
   ok: boolean; errors: string[]; failure?: string; renderer: string;

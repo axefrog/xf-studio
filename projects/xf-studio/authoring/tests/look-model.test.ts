@@ -14,22 +14,21 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openTestLibrary } from "./fixtures/library-file";
-import { CollectionService, type CollectionTransport } from "../src/collection-service";
-import type { EditorSnapshot } from "../src/collection-session";
-import { collectionDraft, emptyMemory, parseCollectionWorkspace, readCollectionWorkspaceV1 } from "../src/collection-workspace";
+import { collectionDraft, parseCollectionWorkspace, readCollectionWorkspaceV1 } from "../src/app/workspace/collection-workspace";
+import { profileStudio } from "./fixtures/profile-studio";
 import { LIVE_FEATURE, STUDIO_COMPOSITION, STUDIO_DOCUMENTS, STUDIO_PARTS, STUDIO_REGISTRY } from "../src/compose/studio-registry";
 import { defaultClusteredGlintFlakes, defaultDirectGlintFlakes } from "../src/engines/layered-makeup/direct-glint-settings";
-import { packagePresetIdentities } from "../src/package-filter";
-import { EYE_MAKEUP_FEATURE, recipeFile } from "../src/recipe-schema";
+import { packagePresetIdentities } from "../src/legacy/eye-makeup/export/package-filter";
+import { EYE_MAKEUP_FEATURE, recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
 import { canonicalJson, COLLECTION_1, COLLECTION_2, NEWER_LOOK_MESSAGE, type FeatureActionSpec, type LookCollection } from "../src/platform/api";
 import { PartRegistry } from "../src/platform/core/document";
-import { eyeMakeupCollection, parseCollection, planCollection } from "../src/preset-collection";
+import { eyeMakeupCollection, parseCollection, planCollection } from "../src/legacy/eye-makeup/export/preset-collection";
 import { type Recipe } from "../src/engines/layered-makeup/recipe";
 import type { LayerChoices } from "../src/engines/layered-makeup/glitter-model";
 import type { EyeMakeupState } from "../src/compose/studio-registry";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { encodeWorkspaceAt } from "../src/workspace-budget";
-import { loadWorkspace, parseWorkspace, serializeWorkspace } from "../src/workspace-state";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { encodeWorkspaceAt } from "../src/app/workspace/workspace-budget";
+import { loadWorkspace, parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
 import { COLLECTION_FIXTURES, readFixture } from "./fixtures/capture-plan-golden";
 import { historiesAsRecipes, recipeOf, storedWorkspace } from "./fixtures/looks";
 import { digest, observeRoundTrips, restore } from "./fixtures/workspace-observable";
@@ -37,9 +36,10 @@ import { contentDigest, recipeSchemaFixtures, withoutRecipeSchemas } from "./fix
 import { damagedWorkspaceV1, fixedId, glitterRecipe, largeWorkspaceV1, looseWorkspaceV1, opticsRecipe, recipe3,
   smallWorkspaceV1 } from "./fixtures/workspace-v1-fixtures";
 import { compilePreset, initialRecipe, raster, applyRecipeAction, freshWorkspace } from "./fixtures/eye-region";
-import { readRecipe as parseRecipe } from "../src/recipe-schema";
+import { readRecipe as parseRecipe } from "../src/legacy/eye-makeup/recipe-schema";
 import { preparePackageCollection } from "./fixtures/eye-exporter";
 
+import { namedCore } from "./fixtures/named-targets";
 const golden = (name: string) => JSON.parse(readFileSync(new URL(`./golden/${name}`, import.meta.url), "utf8"));
 const EYE = "eye-makeup";
 
@@ -293,22 +293,18 @@ test("a look the legacy format cannot hold is saved as a collection-2 revision, 
 
 test("draft persistence compares canonically: a library revision read from collection-1 rows is clean until edited", async () => {
   const legacy = legacyLibrary();
-  const file = openTestLibrary(legacy.path), library = file.collections;
+  const file = openTestLibrary(legacy.path);
   try {
     const id = legacy.rows.list[1].id;
-    const transport: CollectionTransport = { list: async () => library.list(), get: async key => library.get(key),
-      save: async (collection, revision) => library.save({ collection, revision }), package: async () => { throw Error("unused"); } };
-    const stored = library.get(id);
-    let revision = 0;
-    // The editor shows the selected (first) look, as a restored workspace does.
-    let editor: EditorSnapshot = { recipe: structuredClone(recipeOf(stored.collection.presets[0])), ...emptyMemory() };
-    const service = new CollectionService(STUDIO_DOCUMENTS, collectionDraft(stored.collection, STUDIO_DOCUMENTS, stored.revision), { selected: "", name: "" },
-      () => editor, value => editor = value, transport, () => ({ recipe: editor.recipe, revision }));
-    await service.execute({ kind: "initialize" });
-    service.dispatch({ kind: "preset.select", id: service.summary().draft!.presets[1].id });
-    service.dispatch({ kind: "preset.select", id: service.summary().draft!.presets[0].id });
+    const studio = await profileStudio({ library: file, looks: [] });
+    await studio.collection.initialize();
+    // Opened from its collection-1 rows: its working copy is made from that version, which is its baseline.
+    expect(await studio.collection.execute({ kind: "open", id })).toMatchObject({ ok: true });
+    const service = studio.service;
+    studio.app.dispatch(studio.choose(service.summary().draft!.presets[1].id));
+    studio.app.dispatch(studio.choose(service.summary().draft!.presets[0].id));
     expect(service.persistence()).toMatchObject({ baseline: "known", dirty: false, dirtyPresets: [] });
-    editor.recipe.layers[0].opacity = 0.123; revision++;
+    studio.app.dispatch({ kind: "layer.setOpacity", layerId: studio.document.recipe.layers[0]!.id, opacity: 0.123 });
     expect(service.persistence()).toMatchObject({ dirty: true, dirtyPresets: [service.summary().draft!.presets[0].id] });
   } finally { file.close(); legacy.cleanup(); }
 });
@@ -317,13 +313,10 @@ test("draft persistence compares canonically: a library revision read from colle
 
 test("export writes collection-1 for eye-makeup looks, and both collection schemas import", async () => {
   const file = readFixture(COLLECTION_FIXTURES[1]);
-  let stored: { collection: LookCollection; revision: number } | undefined;
-  const transport: CollectionTransport = { list: async () => [], get: async () => { throw Error("none"); },
-    save: async (collection, revision) => (stored = { collection: structuredClone(collection), revision: (revision ?? 0) + 1 },
-      { ...stored, updatedAt: "now" }), package: async () => { throw Error("unused"); } };
-  let editor: EditorSnapshot = { recipe: parseRecipe(file.presets[0].recipe), ...emptyMemory() };
-  const service = new CollectionService(STUDIO_DOCUMENTS, collectionDraft(file, STUDIO_DOCUMENTS), { selected: "", name: "" }, () => editor, value => editor = value, transport);
+  const studio = await profileStudio({ looks: [] }), service = studio.service;
   await service.execute({ kind: "initialize" });
+  const text = JSON.stringify(file);
+  expect((await service.execute({ kind: "import", text, bytes: text.length })).ok).toBe(true);
   const exported = await service.execute({ kind: "exportCollection" });
   const json = exported.ok && exported.result.kind === "export" ? JSON.parse(exported.result.json) : undefined;
   expect(json.schema).toBe(COLLECTION_1);
@@ -336,7 +329,8 @@ test("export writes collection-1 for eye-makeup looks, and both collection schem
     expect((await service.execute({ kind: "import", text, bytes: text.length })).ok).toBe(true);
     expect(service.summary().draft?.presets.map(preset => preset.layers)).toEqual(file.presets.map((preset: { recipe: { layers: unknown[] } }) => preset.recipe.layers.length));
   }
-  expect(stored?.collection.schema).toBe(COLLECTION_2);
+  // Export saved a version first: the library holds it (read as collection-2 in memory).
+  expect(studio.library.collections.get(json.id).collection.schema).toBe(COLLECTION_2);
 });
 
 // ---- Eye makeup's pure capability and apply ----
@@ -389,7 +383,7 @@ test("apply is pure and matches the recipe service; the application dispatches t
   // Through the application: the same result, one Undo step, the memory written back under the preset.
   const workspace = freshWorkspace(recipe);
   workspace.glitterChoices = { "preset-a/pure-glit": structuredClone(remembered) };
-  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "preset-a" }, STUDIO_COMPOSITION);
+  const core = namedCore(createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "preset-a" }, STUDIO_COMPOSITION));
   expect(core.app.dispatch({ kind: "glitter.selectModel", layerId: "pure-glit", model: "irregular" }).ok).toBe(true);
   expect(core.document.recipe).toEqual(selected.part);
   expect(core.document.history.state().depth).toBe(1);
@@ -427,18 +421,14 @@ test("workspace-1 collection drafts read through the generic reader match the wo
 
 // ---- CORE-05: routine queries never copy the draft ----
 
-test("target checks and context binding read the collection's identity without copying the draft (CORE-05)", async () => {
-  const workspace = freshWorkspace();
-  workspace.collections = collectionDraft(readFixture(COLLECTION_FIXTURES[1]), STUDIO_DOCUMENTS);
-  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "x" }, STUDIO_COMPOSITION);
-  let editor: EditorSnapshot = { recipe: core.document.recipe, ...emptyMemory() };
-  const service = new CollectionService(STUDIO_DOCUMENTS, workspace.collections, { selected: "", name: "" }, () => editor, value => editor = value,
-    { list: async () => [], get: async () => { throw Error(); }, save: async () => { throw Error(); }, package: async () => { throw Error(); } });
-  core.app.attach({ collection: service });
-  let views = 0, snapshots = 0;
-  const view = service.view.bind(service), snapshot = service.snapshot.bind(service);
+test("target checks and context binding read the collection's identity without copying it (CORE-05)", async () => {
+  const studio = await profileStudio({ looks: [] }), service = studio.service, core = studio.core;
+  await service.execute({ kind: "initialize" });
+  const text = JSON.stringify(readFixture(COLLECTION_FIXTURES[1]));
+  expect((await service.execute({ kind: "import", text, bytes: text.length })).ok).toBe(true);
+  let views = 0;
+  const view = service.view.bind(service);
   service.view = () => { views++; return view(); };
-  service.snapshot = () => { snapshots++; return snapshot(); };
   const preset = service.summary().draft!.presets[1].id;
   expect(core.app.targetCapability({ kind: "preset", id: preset })).toEqual({ available: true });
   expect(core.app.targetCapability({ kind: "preset", id: "gone" })).toMatchObject({ code: "missing_target" });
@@ -447,11 +437,10 @@ test("target checks and context binding read the collection's identity without c
   expect(query.context.collectionId).toBe(service.summary().draft!.id);
   expect(core.app.requestCapability({ kind: "exportCollection" })).toEqual({ available: true });
   expect(core.app.requestCapability({ kind: "package", action: "check" })).toEqual({ available: true });
-  expect({ views, snapshots }).toEqual({ views: 0, snapshots: 0 });
-  // An empty draft is still refused with the same message.
-  service.dispatch({ kind: "preset.edit", command: { kind: "remove", id: service.summary().draft!.presets[0].id } });
+  expect(views).toBe(0);
+  // An empty collection is still refused with the same message.
   while (service.summary().draft!.presets.length)
-    service.dispatch({ kind: "preset.edit", command: { kind: "remove", id: service.summary().draft!.presets[0].id } });
+    service.dispatch({ kind: "preset.edit", collection: studio.shown()!, command: { kind: "remove", id: service.summary().draft!.presets[0].id } });
   expect(core.app.requestCapability({ kind: "exportCollection" })).toMatchObject({ available: false,
     reason: "Expected a named XF Studio collection with a stable UUID and at least one preset." });
 });

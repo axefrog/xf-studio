@@ -1,28 +1,24 @@
 import { expect, test } from "bun:test";
-import { CollectionService, type CollectionTransport } from "../src/collection-service";
-import { collectionDraft } from "../src/collection-workspace";
-import { cancelsGesture } from "../src/gesture-cancel";
+import { cancelsGesture } from "../src/legacy/eye-makeup/gesture-cancel";
 import { IRREGULAR_RANGE_MESSAGE } from "../src/engines/layered-makeup/recipe-actions";
-import { StudioFileOperations } from "../src/studio-file-operations";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
+import { StudioFileOperations } from "../src/app/studio-file-operations";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
+import { profileStudio } from "./fixtures/profile-studio";
+import type { CollectionVersionsPort } from "../src/library/collection-owner";
 
+import { namedCore } from "./fixtures/named-targets";
 export function coreFixture() {
   const workspace = freshWorkspace();
-  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  const core = namedCore(createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
   return { workspace, core, app: core.app, document: core.document };
 }
-const unusedTransport: CollectionTransport = { list: async () => [], get: async () => { throw Error("not used"); },
-  save: async () => { throw Error("not used"); }, package: async () => { throw Error("not used"); } };
-export function withCollection(transport: CollectionTransport = unusedTransport) {
-  const fixture = coreFixture(), { document, workspace, app } = fixture, presetId = crypto.randomUUID();
-  const collection = { schema: "xfas/collection-1" as const, id: crypto.randomUUID(), name: "Draft",
-    presets: [{ id: presetId, name: "One", revision: 1, recipe: document.export().recipe }] };
-  const service = new CollectionService(STUDIO_DOCUMENTS, collectionDraft(collection, STUDIO_DOCUMENTS), workspace.library, () => document.export(),
-    editor => document.restore({ ...editor, fieldSelection: editor.fieldSelection ?? {} }), transport);
-  app.attach({ collection: service });
-  return { ...fixture, service, presetId };
+/** The Studio's collection wiring over a library in memory: one collection ("Draft") of one preset ("One"), shown. */
+export async function withCollection(options: { versions?: (library: CollectionVersionsPort) => CollectionVersionsPort } = {}) {
+  const studio = await profileStudio({ name: "Draft", looks: [{ name: "One", recipe: freshWorkspace().recipe }], ...options });
+  await studio.collection.initialize();
+  return { ...studio, presetId: studio.scene.look()!.look };
 }
 
 test("gesture cancel keys ignore letter case but never plain z", () => {
@@ -50,8 +46,8 @@ test("a gesture commits an open form transaction, so a late Escape cannot revert
   expect(document.history.state().depth).toBe(2);
 });
 
-test("content edits are refused while a loaded collection has no selected preset", () => {
-  const { app, presetId, service } = withCollection();
+test("content edits are refused while a loaded collection has no selected preset", async () => {
+  const { app, presetId, service } = await withCollection();
   expect(app.capability({ kind: "layer.edit", command: { kind: "add" } }).available).toBe(true);
   expect(app.dispatch({ kind: "preset.edit", command: { kind: "remove", id: presetId } }).ok).toBe(true);
   expect(service.selectedPreset()).toEqual({ loaded: true, id: undefined });
@@ -148,8 +144,8 @@ test("limitsFor publishes static and state-dependent input limits for a concrete
     .toContain("point edge softness");
 });
 
-test("refusals carry structured validation issues instead of text to parse", () => {
-  const { app, document, presetId } = withCollection(), front = document.recipe.layers.at(-1)!.id;
+test("refusals carry structured validation issues instead of text to parse", async () => {
+  const { app, document, presetId } = await withCollection(), front = document.recipe.layers.at(-1)!.id;
   const back = document.recipe.layers[0].id;
   expect(app.capability({ kind: "layer.edit", command: { kind: "move", id: front, to: document.recipe.layers.length } }))
     .toMatchObject({ available: false, code: "limit", reason: "This layer is already at the front.", issue: { code: "range", field: "to" } });
@@ -169,19 +165,14 @@ test("refusals carry structured validation issues instead of text to parse", () 
 });
 
 test("save progress and list refreshes keep an open collection menu bound; content edits invalidate it", async () => {
-  const saved: { collection: unknown; revision: number }[] = [];
-  const transport: CollectionTransport = { list: async () => [], get: async () => { throw Error("not used"); },
-    save: async (collection, revision) => { const stored = { collection: structuredClone(collection), revision: (revision ?? 0) + 1 };
-      saved.push(stored); return stored as never; },
-    package: async () => { throw Error("not used"); } };
-  const { app, presetId, service } = withCollection(transport);
+  const { app, presetId, service, library } = await withCollection();
   const query = app.contextQuery({ kind: "preset", id: presetId });
   const copy = { kind: "preset.edit", command: { kind: "copy", id: presetId } } as const;
   expect(app.boundActionCapability(query.context, copy).available).toBe(true);
   const before = service.contentVersion();
   expect(await app.execute({ kind: "save" })).toMatchObject({ ok: true });
   expect(await app.execute({ kind: "refresh" })).toMatchObject({ ok: true });
-  expect(saved).toHaveLength(1);
+  expect(library.collections.list()).toHaveLength(1);
   expect(service.contentVersion()).toBe(before);
   expect(app.boundActionCapability(query.context, copy).available).toBe(true);
   expect(app.dispatch({ kind: "preset.edit", command: { kind: "rename", id: presetId, name: "Renamed" } }).ok).toBe(true);
@@ -189,16 +180,7 @@ test("save progress and list refreshes keep an open collection menu bound; conte
 });
 
 test("draft persistence compares the live draft with the library revision it was saved or opened from", async () => {
-  const library = new Map<string, { collection: import("../src/platform/api").LookCollection; revision: number }>();
-  const transport: CollectionTransport = {
-    list: async () => [...library.values()].map(item => ({ id: item.collection.id, name: item.collection.name, revision: item.revision,
-      presetCount: item.collection.presets.length, updated: "now" })) as never,
-    get: async id => structuredClone(library.get(id)!) as never,
-    save: async (collection, revision) => {
-      const stored = { collection: structuredClone(collection), revision: (revision ?? 0) + 1 };
-      library.set(collection.id, stored); return structuredClone(stored) as never; },
-    package: async () => { throw Error("not used"); } };
-  const { app, document, presetId, service } = withCollection(transport);
+  const studio = await withCollection(), { app, document, presetId, service } = studio;
   expect(service.persistence()).toMatchObject({ baseline: "none", dirty: true, dirtyPresets: [presetId], structureDirty: true });
   expect(await app.execute({ kind: "save" })).toMatchObject({ ok: true });
   expect(service.persistence()).toMatchObject({ baseline: "known", savedRevision: 1, dirty: false, dirtyPresets: [], structureDirty: false });
@@ -222,37 +204,19 @@ test("draft persistence compares the live draft with the library revision it was
   expect(service.persistence()?.dirty).toBe(false);
   expect(app.capability({ kind: "package.split", feature: "eye-makeup" })).toMatchObject({ available: false, code: "unavailable" });
 
-  // After a reload the restored draft knows only its revision until initialize loads that revision once.
-  const restored = coreFixture();
-  const reloaded = new CollectionService(STUDIO_DOCUMENTS, service.snapshot(), restored.workspace.library, () => restored.document.export(),
-    editor => restored.document.restore({ ...editor, fieldSelection: editor.fieldSelection ?? {} }), transport,
-    () => ({ recipe: restored.document.recipe, revision: restored.document.geometryVersion.revision }));
-  expect(reloaded.persistence()).toMatchObject({ baseline: "unknown", savedRevision: 1 });
-  expect(reloaded.persistence()?.dirty).toBeUndefined();
-  expect(await reloaded.execute({ kind: "initialize" })).toMatchObject({ ok: true });
-  expect(reloaded.persistence()).toMatchObject({ baseline: "known" });
-});
-
-test("an empty saved collection initializes with a known baseline", async () => {
-  const empty = { schema: "xfas/collection-1" as const, id: crypto.randomUUID(), name: "Makeup collection", presets: [] };
-  const fixture = coreFixture();
-  const service = new CollectionService(STUDIO_DOCUMENTS, undefined, fixture.workspace.library, () => fixture.document.export(),
-    editor => fixture.document.restore({ ...editor, fieldSelection: editor.fieldSelection ?? {} }), {
-      list: async () => [{ id: empty.id, name: empty.name, revision: 1 }] as never,
-      get: async () => ({ collection: structuredClone(empty), revision: 1 }) as never,
-      save: async () => { throw Error("not used"); }, package: async () => { throw Error("not used"); } },
-    () => ({ recipe: fixture.document.recipe, revision: fixture.document.geometryVersion.revision }));
-  expect(await service.execute({ kind: "initialize" })).toMatchObject({ ok: true });
-  expect(service.persistence()).toMatchObject({ baseline: "known", savedRevision: 1, dirty: true, structureDirty: true });
+  // After a restart the collection knows only which version it was saved as until initialize reads that version once.
+  await studio.settle();
+  const reloaded = await profileStudio({ library: studio.library, show: studio.scene.look() });
+  expect(reloaded.service.persistence()).toMatchObject({ baseline: "unknown", savedRevision: 1 });
+  expect(reloaded.service.persistence()?.dirty).toBeUndefined();
+  expect(await reloaded.collection.initialize()).toMatchObject({ ok: true });
+  expect(reloaded.service.persistence()).toMatchObject({ baseline: "known", dirty: false });
 });
 
 test("async work is one activity list linked to request IDs, and cancellation is honestly refused", async () => {
   let release!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
-  const transport: CollectionTransport = { list: async () => [], get: async () => { throw Error("not used"); },
-    save: async (collection, revision) => { await gate; return { collection: structuredClone(collection), revision: (revision ?? 0) + 1 } as never; },
-    package: async () => { throw Error("not used"); } };
-  const { service, document } = withCollection(transport);
+  const { service, document } = await withCollection({ versions: library => ({ save: async (id, signal) => { await gate; return library.save(id, signal); } }) });
   const files = new StudioFileOperations({ pick: async () => undefined, download: () => {}, bakeMask: async () => new Blob() }, {
     recipe: () => document.recipe, selectedLayer: () => document.recipe.layers[0], importRecipe: () => {},
     hasSavedV: () => false, savedV: () => undefined, loadSavedV: () => { throw Error("not used"); }, savedVReady: () => false,
@@ -261,22 +225,22 @@ test("async work is one activity list linked to request IDs, and cancellation is
   expect(files.activity()).toEqual([]);
   const saving = files.executeCollection({ kind: "save" });
   const [active] = files.activity();
-  expect(active).toMatchObject({ scope: "collection", kind: "save", cancellable: false, requestId: 1 });
-  expect(files.snapshot().progress).toMatchObject({ phase: "working", requestId: 1 });
-  expect(service.cancel(1)).toMatchObject({ accepted: false, reason: expect.stringContaining("cannot be cancelled") });
+  expect(active).toMatchObject({ scope: "collection", kind: "save", cancellable: false, requestId: 2 });
+  expect(files.snapshot().progress).toMatchObject({ phase: "working", requestId: 2 });
+  expect(service.cancel(2)).toMatchObject({ accepted: false, reason: expect.stringContaining("cannot be cancelled") });
   expect(files.cancel(active.id)).toMatchObject({ accepted: false, reason: expect.stringContaining("cannot be cancelled") });
   expect(files.cancel("file-99").reason).toContain("Nothing");
   const refused = await service.execute({ kind: "refresh" });
   expect(refused).toMatchObject({ ok: false, code: "unavailable" });
   expect((refused as { requestId?: number }).requestId).toBeUndefined();
   release();
-  expect(await saving).toMatchObject({ ok: true, requestId: 1 });
+  expect(await saving).toMatchObject({ ok: true, requestId: 2 });
   expect(files.activity()).toEqual([]);
-  expect(files.snapshot().progress).toMatchObject({ phase: "success", requestId: 1 });
+  expect(files.snapshot().progress).toMatchObject({ phase: "success", requestId: 2 });
 });
 
-test("consequences say what an action replaces, writes or discards and how to recover", () => {
-  const { app, document, presetId, service } = withCollection();
+test("consequences say what an action replaces, writes or discards and how to recover", async () => {
+  const { app, document, presetId } = await withCollection();
   const layerId = document.recipe.layers[0].id;
   expect(app.consequences({ action: { kind: "layer.select", layerId } })).toEqual({ discards: [], recoverableBy: "none", confirm: false });
   expect(app.consequences({ action: { kind: "layer.edit", command: { kind: "remove", id: layerId } } }))
@@ -290,19 +254,12 @@ test("consequences say what an action replaces, writes or discards and how to re
   expect(app.consequences({ action: { kind: "history.undo" } }).recoverableBy).toBe("none");
   expect(app.consequences({ action: { kind: "layer.setColor", layerId, color: "#000000" } }).discards)
     .toEqual([{ kind: "redo", label: "Opacity" }]);
-  // Fill the four-draft recovery queue; the next open would evict the oldest draft and needs confirmation.
-  const other = (name: string) => ({ schema: "xfas/collection-1" as const, id: crypto.randomUUID(), name,
-    presets: [{ id: crypto.randomUUID(), name: "P", revision: 1, recipe: document.export().recipe }] });
-  expect(app.consequences({ file: { kind: "collection.import" } })).toMatchObject({ replaces: "draft", confirm: false });
-  for (const name of ["A", "B", "C", "D"]) expect(app.dispatch({ kind: "collection.open", collection: other(name) }).ok).toBe(true);
-  const summary = service.summary().draft!;
-  expect(summary.recoveryCount).toBe(summary.recoveryLimit);
-  expect(app.consequences({ file: { kind: "collection.import" } })).toEqual({ replaces: "draft", recoverableBy: "collection.undoOpen",
-    discards: [{ kind: "recovery-draft", label: summary.oldestRecoverable!.name, id: summary.oldestRecoverable!.id }], confirm: true });
+  // Opening or importing shows another collection: the one shown stays in the library as it is, so nothing is discarded (Undo open).
+  expect(app.consequences({ file: { kind: "collection.import" } })).toEqual({ replaces: "draft", recoverableBy: "collection.undoOpen", discards: [], confirm: false });
 });
 
 test("the viewport snapshot carries UV selection visibility and view-change notifications", async () => {
-  const { ViewportAttachment } = await import("../src/viewport-attachment");
+  const { ViewportAttachment } = await import("../src/app/viewport-attachment");
   let selection: { point?: { index: number; visible: boolean } } | undefined = { point: { index: 2, visible: false } };
   const attachment = new ViewportAttachment<object>({ moveHost: () => {}, measure: () => ({ width: 10, height: 10 }), resize: () => {},
     cancelInput: () => {}, inputCapture: () => false, headView: () => undefined, uvView: () => undefined,
@@ -375,8 +332,8 @@ test("the contour point limit refuses insertion with a structured issue", () => 
 });
 
 test("camera and UV navigation commands are view-only and bounded", async () => {
-  const { navigateCamera } = await import("../src/camera-navigation");
-  const { CAMERA_DISTANCE_RANGE } = await import("../src/camera-framing");
+  const { navigateCamera } = await import("../src/preview/camera-navigation");
+  const { CAMERA_DISTANCE_RANGE } = await import("../src/preview/camera-framing");
   const state = { position: [0, 0, 1], target: [0, 0, 0], fov: 30 };
   const orbited = navigateCamera(state, { kind: "orbit", yaw: Math.PI / 2, pitch: 0 });
   expect(orbited.position[0]).toBeCloseTo(1, 9); expect(Math.hypot(...orbited.position)).toBeCloseTo(1, 9);
@@ -393,8 +350,8 @@ test("camera and UV navigation commands are view-only and bounded", async () => 
   expect(navigateCamera(state, { kind: "dolly", factor: -1 })).toEqual(state);
   const { app } = coreFixture();
   expect(app.actionKinds()).toContain("camera.navigate");
-  expect(app.capability({ kind: "camera.navigate", command: { kind: "orbit", yaw: .1, pitch: 0 } }).available).toBe(false);
-  const { ViewportAttachment } = await import("../src/viewport-attachment");
+  expect(app.capability({ kind: "camera.navigate", view: "main", command: { kind: "orbit", yaw: .1, pitch: 0 } }).available).toBe(false);
+  const { ViewportAttachment } = await import("../src/app/viewport-attachment");
   const moves: unknown[] = [];
   const attachment = new ViewportAttachment<object>({ moveHost: () => {}, measure: () => ({ width: 10, height: 10 }), resize: () => {},
     cancelInput: () => {}, inputCapture: () => false, headView: () => undefined, uvView: () => undefined, uvCommand: () => true,

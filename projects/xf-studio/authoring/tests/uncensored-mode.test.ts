@@ -2,14 +2,14 @@
 // default and stored per workspace, that asks the host for the body as the game draws it with nudity allowed. The plan's side is in
 // character-detail-plan.test.ts; this file covers the action, the workspace, the request and the creator rows' coverage.
 import { describe, expect, test } from "bun:test";
-import { CharacterContextActions, type CreatorPort } from "../src/character-context-actions";
-import { CHARACTER_REQUEST_SCHEMA, CharacterRequestVersionError, parseCharacterRequest, sameCharacter } from "../src/character-detail-request";
-import { censorshipOf } from "../src/character-detail-service";
-import { CC_PANEL_SCHEMA } from "../src/cc-panel";
-import { renderCoverage, UNDER_COVER, type CoverageInput } from "../src/cc-render-coverage";
+import { CharacterContextActions, type CreatorPort } from "../src/character/character-context-actions";
+import { CHARACTER_REQUEST_SCHEMA, CharacterRequestVersionError, parseCharacterRequest, sameCharacter } from "../src/character/character-detail-request";
+import { censorshipOf } from "../src/character/host/character-detail-service";
+import { CC_PANEL_SCHEMA } from "../src/character/cc-panel";
+import { renderCoverage, UNDER_COVER, type CoverageInput } from "../src/character/cc-render-coverage";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
-import { PreviewActions, type PreviewPort } from "../src/preview-actions";
-import { parseWorkspace, serializeWorkspace } from "../src/workspace-state";
+import { PreviewActions, type PreviewPort } from "../src/preview/preview-actions";
+import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
 import { freshWorkspace } from "./fixtures/eye-region";
 
 const port = (withBody = true) => ({ cameraState: () => ({ position: [0, 0, 1], target: [0, 0, 0], fov: 30 }), front: () => false, setFov: () => false,
@@ -25,7 +25,7 @@ describe("the uncensored setting (preview.setUncensored)", () => {
     expect(JSON.stringify(serializeWorkspace(workspace, STUDIO_DOCUMENTS))).not.toContain("uncensored");
     let told = 0;
     actions.subscribe(() => told++);
-    actions.dispatch({ kind: "preview.setUncensored", enabled: true });
+    actions.dispatch({ kind: "preview.setUncensored", view: "main", enabled: true });
     expect(actions.snapshot().uncensored).toBe(true);
     expect(told).toBe(1);
     // The workspace keeps the choice (as the composition root writes the snapshot back) and reads it again.
@@ -33,7 +33,7 @@ describe("the uncensored setting (preview.setUncensored)", () => {
     const restored = parseWorkspace(JSON.parse(JSON.stringify(serializeWorkspace(stored, STUDIO_DOCUMENTS))), STUDIO_DOCUMENTS);
     expect(restored.preview.uncensored).toBe(true);
     expect(new PreviewActions(restored.preview, port()).snapshot().uncensored).toBe(true);
-    actions.dispatch({ kind: "preview.setUncensored", enabled: false });
+    actions.dispatch({ kind: "preview.setUncensored", view: "main", enabled: false });
     expect(actions.snapshot().uncensored).toBe(false);
     // Anything but a boolean is dropped on restore (off).
     const garbled = parseWorkspace({ ...JSON.parse(JSON.stringify(serializeWorkspace(workspace, STUDIO_DOCUMENTS))),
@@ -43,10 +43,10 @@ describe("the uncensored setting (preview.setUncensored)", () => {
 
   test("refused on a head-only preview and for a value that isn't on or off", () => {
     const headOnly = new PreviewActions(freshWorkspace().preview, port(false));
-    expect(headOnly.check({ kind: "preview.setUncensored", enabled: true })).toMatchObject({ available: false, code: "unavailable" });
+    expect(headOnly.check({ kind: "preview.setUncensored", view: "main", enabled: true })).toMatchObject({ available: false, code: "unavailable" });
     const actions = new PreviewActions(freshWorkspace().preview, port());
-    expect(actions.check({ kind: "preview.setUncensored", enabled: "on" as never })).toMatchObject({ available: false, code: "invalid_value" });
-    expect(actions.check({ kind: "preview.setUncensored", enabled: true }).available).toBe(true);
+    expect(actions.check({ kind: "preview.setUncensored", view: "main", enabled: "on" as never })).toMatchObject({ available: false, code: "invalid_value" });
+    expect(actions.check({ kind: "preview.setUncensored", view: "main", enabled: true }).available).toBe(true);
   });
 });
 

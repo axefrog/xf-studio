@@ -1,4 +1,4 @@
-import type { PreviewTextureSize } from "../../preview-quality";
+import type { PreviewTextureSize } from "../../legacy/eye-makeup/preview/preview-quality";
 import { applyCapability, badge, button, setButtonLabel, ColorField, emptyState, note, section, Segmented, Slider, Toggle } from "../controls";
 import { h, setText } from "../dom";
 import { helpTip, setHelp } from "../help-tip";
@@ -9,11 +9,11 @@ import type { Frame, StudioRuntime } from "../runtime";
 import type { PanelController } from "./collection";
 import { PANEL_META } from "../panel-meta";
 import { readinessText } from "../readiness-text";
-import type { ConeReading, IntensityForm, LightingPreset } from "../../creator-lighting";
-import type { LightingStatus } from "../../preview-actions";
-import type { MotionState } from "../../motion-actions";
-import type { DetailLimit, DetailNotice } from "../../detail-limits";
-import type { LightType, SetupBackdrop, SetupDisplay } from "../../lighting-setups";
+import type { ConeReading, IntensityForm, LightingPreset } from "../../preview/creator-lighting";
+import type { LightingStatus } from "../../preview/preview-actions";
+import type { MotionState } from "../../animation/motion-actions";
+import type { DetailLimit, DetailNotice } from "../../character/detail-limits";
+import type { LightType, SetupBackdrop, SetupDisplay } from "../../preview/lighting-setups";
 
 /** What the field-of-view slider does, in plain words (UI-85): its help tip. The line under it is kept for limits and loading. */
 const FOV_HELP = "Changing the lens angle moves the camera, so your V's face stays the same size.";

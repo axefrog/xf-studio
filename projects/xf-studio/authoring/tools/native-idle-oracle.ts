@@ -12,12 +12,12 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import * as THREE from "three";
-import { idleCatalogue, rigAncestry, type RestJoint } from "../src/idle-body";
-import { parseIdleCatalogue, type IdleEntry } from "../src/idle-catalogue";
-import { idleSample, readIdles } from "../src/idle-host";
+import { idleCatalogue, rigAncestry, type RestJoint } from "../src/animation/idle-body";
+import { parseIdleCatalogue, type IdleEntry } from "../src/animation/idle-catalogue";
+import { idleSample, readIdles } from "../src/animation/host/idle-host";
 import { clipSampler } from "../src/native/anim-set";
-import type { Installation } from "../src/resolver-host";
-import { rotationToGltf, scaleToGltf, translationToGltf } from "../src/pose-clip";
+import type { Installation } from "../src/game/host/resolver-host";
+import { rotationToGltf, scaleToGltf, translationToGltf } from "../src/animation/render/pose-clip";
 
 
 type Glb = { json: { nodes: { name?: string; children?: number[]; translation?: number[]; rotation?: number[]; scale?: number[] }[];
@@ -169,7 +169,7 @@ if (import.meta.main) {
   const option = (name: string) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : undefined; };
   const game = option("game"), assets = option("assets");
   if (!game || !assets) { console.error("usage: bun tools/native-idle-oracle.ts --game <folder> --assets <folder> [--mo2 <root> --profile <id>] [--cache <dir>] [--report <file>]"); process.exit(2); }
-  const { installations } = await import("../src/installation-registry");
+  const { installations } = await import("../src/game/host/installation-registry");
   const cacheDir = resolve(option("cache") ?? resolve(import.meta.dir, "..", "data", "resolver-cache"));
   const started = performance.now();
   const installation = await installations.acquire({ gameRoot: resolve(game), wolvenKitCli: null, launchRoute: option("mo2") ? "mo2" : "direct",

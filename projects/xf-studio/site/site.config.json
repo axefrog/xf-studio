@@ -10,6 +10,7 @@
   "nav": [
     { "id": "overview", "label": "Overview", "href": "./" },
     { "id": "eye-makeup", "label": "Eye makeup", "href": "./#eye-makeup" },
+    { "id": "mcp", "label": "MCP server", "href": "mcp.html" },
     { "id": "status", "label": "Status", "href": "./#status" },
     { "id": "download", "label": "Download", "href": "./#download" },
     { "id": "roadmap", "label": "Directions", "href": "./#directions" },

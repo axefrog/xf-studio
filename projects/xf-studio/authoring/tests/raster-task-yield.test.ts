@@ -1,5 +1,5 @@
 import {expect,test} from "bun:test";
-import {createRasterTaskYield} from "../src/raster-task-yield";
+import {createRasterTaskYield} from "../src/legacy/eye-makeup/browser/raster-task-yield";
 import {createRasterProcessor,type RasterResponse} from "../src/engines/layered-makeup/raster-processor";
 import { initialRecipe, raster, EYE_RASTER_REGION } from "./fixtures/eye-region";
 

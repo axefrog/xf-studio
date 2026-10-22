@@ -7,10 +7,19 @@
 // the fallback icon. The label goes in the mappin data's debugCaption, which IMappin.GetDisplayName answers.
 //
 // The XF icon is drawn in ink, with no texture asset: wraps of the mappin controllers' UpdateIcon (the world map, the
-// in-world pin and the minimap) recognise our pins by their NewMappinID in this session's registry, fade the variant's
-// icon out and add a small badge (a cyan diamond with "XF", and the label under it) to the pin's root widget; a controller
-// reused for another mappin loses the badge again. The world map's tooltip names the pin. Every wrap calls the game first
-// and only adds; an unknown mappin costs one registry lookup.
+// in-world pin and the minimap) recognise our pins by their NewMappinID in this session's registry and add a small badge
+// (a cyan diamond with "XF", and the label under it) above the variant's own icon; a controller reused for another mappin
+// loses the badge again. The world map's tooltip names the pin. Every wrap calls the game first and only adds; an unknown
+// mappin costs one registry lookup.
+//
+// 0.8 (session 8's G5: no pin anywhere, in the world, on the minimap or on the map): the wraps faded the variant's icon out
+// and hid the in-world name line, so when the badge didn't draw nothing did. Now the game's own icon and name line always
+// stay (the name line shows the label), the badge only adds, and each view that draws a pin is recorded once (the plugin
+// log's "world.pin N drawn by <controller>" and world.pin's drawn_by), so the next session sees which views ran. The
+// mappin data follows Appearance Menu Mod's markers exactly (Mappins.QuestDynamicMappinDefinition, visible through walls,
+// active left unset), which draw in the world, on the minimap and on the map [runtime, AMM's users]; the default variant is
+// CustomPositionVariant, the one variant the minimap spawns a widget for on any runtime mappin (minimap.script
+// CreateMappinUIProfile, "Always").
 //
 // Cleared by world.pin.clear, the kill switch (the plugin calls XFInkPins.Clear(-1)) and loading a save: the registry is a
 // scriptable system of the session, and the mappins belong to the session's mappin system [the latter is session 7's
@@ -27,6 +36,15 @@ public class XFPinEntry {
   public let piece: Int32;
   public let position: Vector4;
   public let bound: Bool;
+  // 0.8: the views that have drawn this pin so far (controller class names), for world.pin's answer and the log.
+  public let drawnBy: array<String>;
+  // 0.8.3: the bridge's own mark in the world (XFRuntimeBridgeInk.reds PlacePinMark) as the overlay last placed it: shown
+  // this tick, its top-left corner in the overlay's units and in window pixels (the game's own layout), on screen or not.
+  public let markShown: Bool;
+  public let markPlacedNow: Bool;
+  public let markAt: Vector2;
+  public let markPx: Vector2;
+  public let markOnScreen: Bool;
 }
 
 public class XFPinRegistry extends ScriptableSystem {
@@ -113,7 +131,20 @@ public abstract class XFInkPins {
     if Equals(name, "default") {
       return gamedataMappinVariant.DefaultVariant;
     }
+    // 0.8: Appearance Menu Mod's trigger markers' variant (drawn in the world; not on the minimap).
+    if Equals(name, "interaction") {
+      return gamedataMappinVariant.DefaultInteractionVariant;
+    }
     return gamedataMappinVariant.CustomPositionVariant;
+  }
+
+  // 0.8: records the first time a view draws an XF pin (the plugin log and world.pin's drawn_by).
+  public static func NoteDrawn(entry: ref<XFPinEntry>, view: String) -> Void {
+    if !IsDefined(entry) || ArrayContains(entry.drawnBy, view) {
+      return;
+    }
+    ArrayPush(entry.drawnBy, view);
+    XFBridgeLog.Info("pins", "world.pin " + IntToString(entry.id) + " '" + entry.label + "' drawn by " + view);
   }
 
   public static func Entry(mappin: wref<IMappin>) -> ref<XFPinEntry> {
@@ -128,9 +159,24 @@ public abstract class XFInkPins {
   }
 
   public static func Json(entry: ref<XFPinEntry>) -> String {
+    let drawn = "";
+    for view in entry.drawnBy {
+      drawn += (StrLen(drawn) > 0 ? "," : "") + XFJson.Str(view);
+    }
     return "{\"id\":" + IntToString(entry.id) + ",\"label\":" + XFJson.Str(entry.label) + ",\"variant\":" + XFJson.Str(entry.variant)
       + ",\"target\":" + XFJson.Str(entry.target) + ",\"piece\":" + IntToString(entry.piece) + ",\"bound\":" + XFJson.Str(entry.bound ? "object" : "position")
-      + ",\"position\":[" + XFJson.Num(entry.position.X) + "," + XFJson.Num(entry.position.Y) + "," + XFJson.Num(entry.position.Z) + "]}";
+      + ",\"position\":[" + XFJson.Num(entry.position.X) + "," + XFJson.Num(entry.position.Y) + "," + XFJson.Num(entry.position.Z) + "],\"drawn_by\":[" + drawn + "]"
+      + ",\"xf_mark\":{\"shown\":" + XFJson.Flag(entry.markShown) + ",\"at\":[" + XFJson.Num(entry.markAt.X) + "," + XFJson.Num(entry.markAt.Y)
+      + "],\"px\":[" + XFJson.Num(entry.markPx.X) + "," + XFJson.Num(entry.markPx.Y) + "],\"on_screen\":" + XFJson.Flag(entry.markShown && entry.markOnScreen) + "}}";
+  }
+
+  // 0.8.2: ui.state's pins, with the views that have drawn each by now.
+  public static func Pins(cid: String) -> String {
+    let registry = XFPinRegistry.Get();
+    if !IsDefined(registry) {
+      return "{\"ok\":true,\"pins\":[]}";
+    }
+    return "{\"ok\":true,\"pins\":" + XFInkPins.List(registry) + "}";
   }
 
   public static func List(registry: ref<XFPinRegistry>) -> String {
@@ -159,9 +205,11 @@ public abstract class XFInkPins {
       return XFJson.Fail("too_many_pins", "the bridge already shows 8 XF pins; remove one with world.pin.clear");
     }
     let data: MappinData;
-    data.mappinType = t"Mappins.DefaultStaticMappin";
+    // 0.7 (session 7: the position pin didn't show in the world, and neither pin on the minimap): the quest system's
+    // dynamic mappin type, which draws in the world, on the map and on the minimap for a plain position, as Appearance
+    // Menu Mod's markers use it (Modules/util.lua SetMarkerAtPosition); DefaultStaticMappin showed on the world map only.
+    data.mappinType = t"Mappins.QuestDynamicMappinDefinition";
     data.variant = XFInkPins.Variant(variant);
-    data.active = true;
     data.visibleThroughWalls = true;
     data.debugCaption = label;
     let entry = new XFPinEntry();
@@ -179,17 +227,14 @@ public abstract class XFInkPins {
       if !IsDefined(entity) {
         return XFJson.Fail("not_spawned_yet", "piece " + IntToString(piece) + " isn't in the world yet; try again in a moment");
       }
-      // The head's eyes stand 1.69 m above its entity's origin (the showroom build's head joint plus 5 cm).
+      // The head's eyes stand 1.69 m above its entity's origin (the showroom build's head joint plus 5 cm). 0.7 (session 7:
+      // the object-bound pin drew well above the head, as the game's default circle): the pin is placed at that point, not
+      // bound to the entity, so its height is exactly the eyes plus lift; turning a head doesn't move it, and clearing the
+      // heads removes it (RB-87).
       let origin = entity.GetWorldPosition();
       entry.piece = piece;
       entry.position = new Vector4(origin.X, origin.Y, origin.Z + 1.69 + lift, 1.0);
-      let owner = entity as GameObject;
-      if IsDefined(owner) {
-        entry.mappin = mappins.RegisterMappinWithObject(data, owner, n"", new Vector3(0.0, 0.0, 1.69 + lift));
-        entry.bound = true;
-      } else {
-        entry.mappin = mappins.RegisterMappin(data, entry.position);
-      }
+      entry.mappin = mappins.RegisterMappin(data, entry.position);
     } else {
       if Equals(target, "v") {
         let at = player.GetWorldPosition();
@@ -254,7 +299,8 @@ public abstract class XFInkPins {
     return ArraySize(taken);
   }
 
-  // The XF badge: a cyan diamond with "XF" and the label under it, added once to a pin's root widget.
+  // The XF badge: a cyan diamond with "XF" and the label under it, added once to a pin's root widget, above the game's own
+  // icon (0.8: which stays).
   public static func Badge(root: wref<inkCompoundWidget>, label: String, showLabel: Bool) -> Void {
     if !IsDefined(root) {
       return;
@@ -264,7 +310,8 @@ public abstract class XFInkPins {
       badge = new inkCanvas();
       badge.SetName(n"xfs_pin_badge");
       badge.SetAnchor(inkEAnchor.Centered);
-      badge.SetAnchorPoint(new Vector2(0.5, 0.5));
+      badge.SetAnchorPoint(new Vector2(0.5, 1.0));
+      badge.SetTranslation(new Vector2(0.0, -28.0));
       badge.SetSize(new Vector2(48.0, 48.0));
       badge.SetInteractive(false);
       let frame = new inkRectangle();
@@ -303,6 +350,61 @@ public abstract class XFInkPins {
     badge.SetVisible(true);
   }
 
+  // ---- 0.8.3: the bridge's own mark in the world (XFRuntimeBridgeInk.reds PinMark), in a canvas of a fixed size ----------
+
+  public static func MarkWidth() -> Float {
+    return 360.0;
+  }
+
+  public static func MarkHeight() -> Float {
+    return 96.0;
+  }
+
+  // The diamond with "XF" at the top centre, the label under it; every part placed by a margin from the canvas's top-left.
+  public static func BuildMark(mark: ref<inkCanvas>) -> Void {
+    let w = XFInkPins.MarkWidth();
+    let frame = new inkRectangle();
+    frame.SetName(n"frame");
+    frame.SetAnchor(inkEAnchor.TopLeft);
+    frame.SetSize(new Vector2(34.0, 34.0));
+    frame.SetRenderTransformPivot(new Vector2(0.5, 0.5));
+    frame.SetRotation(45.0);
+    frame.SetMargin(new inkMargin(w * 0.5 - 17.0, 7.0, 0.0, 0.0));
+    XFInkStyle.Bind(frame, n"MainColors.Blue");
+    frame.Reparent(mark);
+    let inner = new inkRectangle();
+    inner.SetName(n"inner");
+    inner.SetAnchor(inkEAnchor.TopLeft);
+    inner.SetSize(new Vector2(27.0, 27.0));
+    inner.SetRenderTransformPivot(new Vector2(0.5, 0.5));
+    inner.SetRotation(45.0);
+    inner.SetMargin(new inkMargin(w * 0.5 - 13.5, 10.5, 0.0, 0.0));
+    inner.SetTintColor(new HDRColor(0.035, 0.035, 0.06, 1.0));
+    inner.Reparent(mark);
+    let tag = XFInkStyle.Text(n"mark", 18, n"Bold", n"MainColors.Blue", true);
+    tag.SetText("XF");
+    tag.SetAnchor(inkEAnchor.TopLeft);
+    tag.SetFitToContent(false);
+    tag.SetSize(new Vector2(w, 24.0));
+    tag.SetMargin(new inkMargin(0.0, 12.0, 0.0, 0.0));
+    tag.SetHorizontalAlignment(textHorizontalAlignment.Center);
+    tag.Reparent(mark);
+    let name = XFInkStyle.Text(n"label", 24, n"Semi-Bold", n"MainColors.Blue", true);
+    name.SetAnchor(inkEAnchor.TopLeft);
+    name.SetFitToContent(false);
+    name.SetSize(new Vector2(w, 34.0));
+    name.SetMargin(new inkMargin(0.0, 54.0, 0.0, 0.0));
+    name.SetHorizontalAlignment(textHorizontalAlignment.Center);
+    name.Reparent(mark);
+  }
+
+  public static func MarkLabel(mark: ref<inkCanvas>, label: String) -> Void {
+    let text = mark.GetWidgetByPathName(n"label") as inkText;
+    if IsDefined(text) {
+      text.SetText(label);
+    }
+  }
+
   public static func Unbadge(root: wref<inkCompoundWidget>) -> Bool {
     if !IsDefined(root) {
       return false;
@@ -316,19 +418,17 @@ public abstract class XFInkPins {
   }
 }
 
-// Shared by every mappin controller's wrap below: our pin gets the badge and a faded variant icon; any other mappin loses a
-// badge an earlier XF pin left on a reused controller.
+// Shared by every mappin controller's wrap below: our pin gets the badge (0.8: the game's icon stays as it is); any other
+// mappin loses a badge an earlier XF pin left on a reused controller.
 @addMethod(BaseMappinBaseController)
-protected final func XFBridgeDecorate(showLabel: Bool) -> Bool {
+protected final func XFBridgeDecorate(showLabel: Bool, view: String) -> Bool {
   let entry = XFInkPins.Entry(this.GetMappin());
   if IsDefined(entry) {
     XFInkPins.Badge(this.GetRootCompoundWidget(), entry.label, showLabel);
-    inkWidgetRef.SetOpacity(this.iconWidget, 0.0);
+    XFInkPins.NoteDrawn(entry, view);
     return true;
   }
-  if XFInkPins.Unbadge(this.GetRootCompoundWidget()) {
-    inkWidgetRef.SetOpacity(this.iconWidget, 1.0);
-  }
+  XFInkPins.Unbadge(this.GetRootCompoundWidget());
   return false;
 }
 
@@ -336,30 +436,33 @@ protected final func XFBridgeDecorate(showLabel: Bool) -> Bool {
 @wrapMethod(BaseWorldMapMappinController)
 protected func UpdateIcon() -> Void {
   wrappedMethod();
-  this.XFBridgeDecorate(true);
+  this.XFBridgeDecorate(true, "world_map");
 }
 
-// The pin in the world (and its screen-edge clamp).
+// The pin in the world (and its screen-edge clamp). 0.8: the game's name line stays and says the label (the badge's own
+// label is off here, so it isn't said twice).
 @wrapMethod(QuestMappinController)
 protected func UpdateIcon() -> Void {
   wrappedMethod();
-  if this.XFBridgeDecorate(true) && inkWidgetRef.IsValid(this.displayName) {
-    // The badge carries the label; the vanilla name line would repeat it.
-    inkWidgetRef.SetVisible(this.displayName, false);
+  let entry = XFInkPins.Entry(this.GetMappin());
+  if IsDefined(entry) && inkWidgetRef.IsValid(this.displayName) {
+    inkTextRef.SetText(this.displayName, entry.label);
+    inkWidgetRef.SetVisible(this.displayName, true);
   }
+  this.XFBridgeDecorate(!inkWidgetRef.IsValid(this.displayName), "world");
 }
 
 @wrapMethod(GameplayMappinController)
 private func UpdateIcon() -> Void {
   wrappedMethod();
-  this.XFBridgeDecorate(true);
+  this.XFBridgeDecorate(true, "world_gameplay");
 }
 
 // The minimap: the badge without its label.
 @wrapMethod(MinimapPOIMappinController)
 protected final func UpdateIcon() -> Void {
   wrappedMethod();
-  this.XFBridgeDecorate(false);
+  this.XFBridgeDecorate(false, "minimap");
 }
 
 // The world map's tooltip names an XF pin.

@@ -1,12 +1,13 @@
 import { expect, test } from "bun:test";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 
+import { namedCore } from "./fixtures/named-targets";
 // Layer-stack edits dispatch through the registered eye-makeup apply and its port (CORE-31); the
 // former AuthoringLayerActions service is gone.
 function core(resetStack: (previous: import("../src/engines/layered-makeup/recipe").Recipe) => void = () => {}) {
-  return createTrustedAuthoringCore(freshWorkspace(), { resetStack, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  return namedCore(createTrustedAuthoringCore(freshWorkspace(), { resetStack, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
 }
 
 test("layer transactions checkpoint once and reconcile the preview only for stack edits", () => {
@@ -64,8 +65,8 @@ test("rename, move and Undo preserve the selected point while a reset clamps it"
 
 test("a new layer's ID comes from the host's ID source, so the applied action replays exactly", () => {
   let next = 0;
-  const c = createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft",
-    newId: () => `layer-from-host-${++next}` }, STUDIO_COMPOSITION);
+  const c = namedCore(createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft",
+    newId: () => `layer-from-host-${++next}` }, STUDIO_COMPOSITION));
   c.app.dispatch({ kind: "layer.edit", command: { kind: "add" } });
   c.app.dispatch({ kind: "layer.edit", command: { kind: "duplicate", id: c.document.recipe.layers[0].id } });
   expect(c.document.recipe.layers.map(layer => layer.id)).toContain("layer-from-host-1");

@@ -1,10 +1,10 @@
 import { test, expect } from "bun:test";
-import { loadWorkspace, parseWorkspace, serializeWorkspace, workspaceKeys, type WorkspaceState } from "../src/workspace-state";
-import { readSavedV } from "../src/save-reader";
+import { loadWorkspace, parseWorkspace, serializeWorkspace, workspaceKeys, type WorkspaceState } from "../src/app/workspace/workspace-state";
+import { readSavedV } from "../src/saves/save-reader";
 import { historyRecipes, storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { freshWorkspace, initialRecipe, newLayerTemplate } from "./fixtures/eye-region";
-import { readRecipe as parseRecipe } from "../src/recipe-schema";
+import { readRecipe as parseRecipe } from "../src/legacy/eye-makeup/recipe-schema";
 
 test("an absent browser workspace starts with one editable four-point makeup area", () => {
   const keys = workspaceKeys(false);
@@ -155,7 +155,7 @@ test("the 3D preview's automatic start is a workspace preference that defaults o
 });
 
 test("the character context is stored in the preview state only once something was set; an untouched workspace keeps its bytes", async () => {
-  const { WorkspaceComposer } = await import("../src/workspace-composer");
+  const { WorkspaceComposer } = await import("../src/app/workspace/workspace-composer");
   const state = freshWorkspace();
   const bytes = JSON.stringify(serializeWorkspace(state, STUDIO_DOCUMENTS));
   expect(bytes).not.toContain("\"character\"");

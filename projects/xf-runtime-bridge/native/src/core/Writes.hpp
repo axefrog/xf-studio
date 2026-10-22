@@ -140,13 +140,15 @@ json LightSet(const params::LightRequest& aRequest, const LightOps& aOps);
 struct InventoryOps
 {
     // Game thread, step 1 of equip: checks, adds the item if asked, queues the equip request:
-    // {item, slot, added, already_equipped, previous}.
+    // {item, slot, added, already_equipped, previous, previous_id, id, exact (when an id was asked for)}. id is the copy
+    // being equipped, previous_id the earlier item's (0.8.1, RB-125), which the undo names.
     std::function<json()> equip;
-    // Game thread, step 1 of unequip: {slot, previous, was_empty}.
+    // Game thread, step 1 of unequip: {slot, previous, previous_id, was_empty}.
     std::function<json()> unequip;
-    // Game thread: what a slot holds now ({slot, item, empty, matches}); by slot name or by an item's own
-    // slot. matches: the slot holds aItem, compared by record ID in the script (RB-63).
-    std::function<json(const std::string& aSlot, const std::string& aItem)> slot;
+    // Game thread: what a slot holds now ({slot, item, item_id, empty, matches}); by slot name or by an item's own
+    // slot. matches: the slot holds aItem, compared by record ID in the script (RB-63), and with aId (0.8.1, RB-125)
+    // that exact copy: the equip step names the copy it equips (id), so the wait isn't satisfied by another copy.
+    std::function<json(const std::string& aSlot, const std::string& aItem, const std::string& aId)> slot;
     // Game thread: removes an item the bridge added this session ({removed}).
     std::function<json(const std::string& aItem)> removeAdded;
     // Waits a few game ticks (the equipment system handles requests on later frames).
@@ -155,11 +157,11 @@ struct InventoryOps
 inline constexpr int kInventoryPolls = 15;
 
 // inventory.equip: equip, then read the slot until it shows the item (kInventoryPolls settles). The result
-// says whether it did (equipped) and carries the undo: the earlier item back, or the slot emptied (and an
-// added item removed again).
+// says whether it did (equipped) and carries the undo: the earlier item back (its exact copy, by id, RB-125), or the slot
+// emptied (and an added item removed again).
 json InventoryEquip(const params::InventoryEquipRequest& aRequest, const InventoryOps& aOps);
 // inventory.unequip: unequip the slot (or the item's slot), read it until it's empty, then remove the item
-// if asked and the bridge added it. The undo equips the earlier item again (not after a removal).
+// if asked and the bridge added it. The undo equips the earlier item's exact copy again (not after a removal).
 json InventoryUnequip(const params::InventoryUnequipRequest& aRequest, const InventoryOps& aOps);
 
 // --- game.save / game.load --------------------------------------------------------------------------
@@ -188,6 +190,8 @@ struct SaveOps
     std::function<json()> save;
     // Takes the bridge's save lock again after it was released. Never throws: when the game thread can't
     // take it now (the kill switch closed the queue, a timeout), the plugin retakes it on the next tick.
+    // Also called after a prepare with override_lock whose answer was lost (RB-119), so it must be a no-op
+    // when nothing was released (XFGame.Retake only acts on the script's relock-after-save flag).
     std::function<void()> relock;
     std::function<void(std::chrono::milliseconds)> sleep;
     Clock now;
@@ -198,7 +202,8 @@ inline constexpr int32_t kSaveUnlockWaitMs = 3000;
 // answer (aRequest.timeoutMs). saved: {saved: true, ...}; failed: save_failed; no answer: save_uncertain.
 // The waits are steady-clock deadlines (RB-55). Once prepare has released the bridge's lock, every way
 // out takes it back (RB-52): success, a refusal, the kill switch or pause (guard), a game-thread timeout,
-// save() throwing, save_failed and save_uncertain.
+// save() throwing, save_failed and save_uncertain. With override_lock the relock is owned before prepare
+// runs, so a prepare that released the lock but whose answer was lost is covered too (RB-119).
 //
 // Worst case on the server, with T the longest game-thread step (request_timeout_ms to start plus the
 // queue's running grace, GameThreadQueue::kDefaultRunningGrace; 2000 + 1000 ms by default): prepare T, the unlock wait kSaveUnlockWaitMs plus one status step T, save T, the answer wait
@@ -217,6 +222,9 @@ struct LoadOps
     Clock now;
 };
 inline constexpr int32_t kSaveListWaitMs = 5000;
+// 0.8 (loading from the main menu): how long the load step is tried again while the game sends the save's details
+// (the script layer answers metadata_pending until they are in).
+inline constexpr int32_t kSaveDetailsWaitMs = 3000;
 
 // A save's position in the game's list: the exact name, else the one name equal ignoring case; -1 when
 // none, -2 when several match ignoring case.

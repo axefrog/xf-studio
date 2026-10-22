@@ -45,7 +45,7 @@ Sources (base game): the skeleton `h0_000_pwa_c__basehead_skeleton.rig` (SHA-256
 
 ## 2. Coverage walk
 
-**Method.** [`coverage_walk.ts`](coverage_walk.ts) projects every option of the host's cached creator catalogues (feminine 1,341 options, masculine 666, cached on 26 September on the reference installation with its CCXL mods) through the Studio's current coverage rules (`catalogueCoverage`, `src/cc-render-coverage.ts`). The cached catalogues predate the `targets` and `emitsNothing` fields, so the script derives them as `cc-catalogue.ts` does.
+**Method.** [`coverage_walk.ts`](coverage_walk.ts) projects every option of the host's cached creator catalogues (feminine 1,341 options, masculine 666, cached on 26 September on the reference installation with its CCXL mods) through the Studio's current coverage rules (`catalogueCoverage`, `src/character/cc-render-coverage.ts`). The cached catalogues predate the `targets` and `emitsNothing` fields, so the script derives them as `cc-catalogue.ts` does.
 
 **Results** [offline, the Studio's own rules]:
 
@@ -60,7 +60,7 @@ Sources (base game): the skeleton `h0_000_pwa_c__basehead_skeleton.rig` (SHA-256
 
 ## 3. The lip-aperture reading (PREV-147 step A)
 
-**Question.** Does the Studio's aperture reading (`src/mouth-aperture.ts`), which picks the lip joints from the facial setup's `JointRegions`, the jaw's ancestry and the rest heights instead of joint names, reproduce §1's by-name measurement?
+**Question.** Does the Studio's aperture reading (`src/animation/mouth-aperture.ts`), which picks the lip joints from the facial setup's `JointRegions`, the jaw's ancestry and the rest heights instead of joint names, reproduce §1's by-name measurement?
 
 **Method.** [`check_aperture.ts`](check_aperture.ts) solves `ui_closeup_shot` with the male player setup at 30 Hz with XF Studio's own solver and bake (the frames the host serves the page), and reads each frame's aperture with `mouthLipJoints` and `posedParting`. `--fixture` writes the rest, the regions and three frames (0, 2.4 and 14.4 s) for the unit test (`tests/mouth-aperture.test.ts`; game-derived, private, in the ignored `data/private-fixtures/`). Same sources and hashes as §1.
 

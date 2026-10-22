@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { AuthoringDocument } from "../src/authoring-document";
-import { AuthoringPreviewCoordinator, type CompleteRaster, type PreviewRenderPort } from "../src/authoring-preview-coordinator";
+import { AuthoringDocument } from "../src/app/authoring/authoring-document";
+import { AuthoringPreviewCoordinator, type CompleteRaster, type PreviewRenderPort } from "../src/legacy/eye-makeup/preview/authoring-preview-coordinator";
 import { freshWorkspace, editLayers } from "./fixtures/eye-region";
 
 function harness() {

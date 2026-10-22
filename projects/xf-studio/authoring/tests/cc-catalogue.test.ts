@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { buildCatalogue, CatalogueIndex, type CcCatalogue, readCcoWithPresentation, userFacing } from "../src/cc-catalogue";
-import type { CcoResource } from "../src/cco-model";
-import { catalogueCoverage, renderCoverage, shownOutcome, type CoverageInput } from "../src/cc-render-coverage";
-import * as coverageModule from "../src/cc-render-coverage";
-import { CC_PAGE_SIZE, choicePage, panelProjection, readCcPanel, readChoicePage } from "../src/cc-panel";
-import { loadMergedCco } from "../src/character-resolver";
+import { buildCatalogue, CatalogueIndex, type CcCatalogue, readCcoWithPresentation, userFacing } from "../src/character/cc-catalogue";
+import type { CcoResource } from "../src/character/cco-model";
+import { catalogueCoverage, renderCoverage, shownOutcome, type CoverageInput } from "../src/character/cc-render-coverage";
+import * as coverageModule from "../src/character/cc-render-coverage";
+import { CC_PAGE_SIZE, choicePage, panelProjection, readCcPanel, readChoicePage } from "../src/character/cc-panel";
+import { loadMergedCco } from "../src/character/character-resolver";
 import { appearance, BASE_CCO, creator, fixtureSource, MOD_CCO, MOD_NAME, PRESENTATION, switcher, TEXTS, vanillaCreator } from "./cc-fixtures";
-import { TextTable } from "../src/game-text";
+import { TextTable } from "../src/game/game-text";
 import { fixtureInstallation } from "./resolver-fixtures";
 
 describe("creator catalogue from the merged resource", () => {

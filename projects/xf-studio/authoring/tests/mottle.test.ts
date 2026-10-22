@@ -11,7 +11,7 @@ import * as recipe from "../src/engines/layered-makeup/recipe";
 import { matchingMottlePreset, mottlePreset, mottleSeed, mottleTile, nextMottleSeed, validMottle, MOTTLE_PRESET_IDS,
   type Mottle } from "../src/engines/layered-makeup/mottle";
 import { NewerDataError } from "../src/platform/api";
-import { parseRecipeFile, readRecipe, recipeFile } from "../src/recipe-schema";
+import { parseRecipeFile, readRecipe, recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
 import { coverage, createRasterJob, EYE_MIRROR, EYE_SKIN, initialRecipe, raster, rasterWindow } from "./fixtures/eye-region";
 import { maskAlphaKey } from "../src/engines/layered-makeup/makeup-dependencies";
 import { parseRecipe } from "../src/engines/layered-makeup/recipe";

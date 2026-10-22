@@ -2,19 +2,19 @@
 // link family or mod, and the pure modules keep file and process access in the host adapter (AGENTS.md: no per-mod adapters).
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { DETAIL_SLOTS } from "../src/render-detail";
-import { CHARACTER_CONTRIBUTIONS, sectionWords } from "../src/character-panel-sections";
+import { DETAIL_SLOTS } from "../src/character/render-detail";
+import { CHARACTER_CONTRIBUTIONS, sectionWords } from "../src/character/character-panel-sections";
 
-const MODULES = ["cc-catalogue", "cc-presentation", "cc-render-coverage", "cc-preset", "character-context", "game-text", "tweakdb-flats", "cc-panel",
-  "character-context-actions", "browser-cc-catalogue-device", "studio-ui/panels/character", "studio-ui/panels/character-choices", "cc-catalogue-host",
-  "cc-catalogue-service", "cc-catalogue-server", "creator-names", "character-follow",
+const MODULES = ["character/cc-catalogue", "character/cc-presentation", "character/cc-render-coverage", "character/cc-preset", "character/character-context", "game/game-text", "game/tweakdb-flats", "character/cc-panel",
+  "character/character-context-actions", "character/browser/browser-cc-catalogue-device", "studio-ui/panels/character", "studio-ui/panels/character-choices", "character/host/cc-catalogue-host",
+  "character/host/cc-catalogue-service", "character/host/cc-catalogue-server", "character/creator-names", "character/character-follow",
   // Swatches, icons, the TweakXL overlay and the panel's hierarchy (Next 1, 3 and 4 of the cc-controls backlog).
-  "cc-swatch", "cc-swatch-host", "cc-icons", "cc-icon-host", "tweakxl-overlay", "character-panel-sections",
+  "character/cc-swatch", "character/host/cc-swatch-host", "character/cc-icons", "character/host/cc-icon-host", "game/tweakxl-overlay", "character/character-panel-sections",
   // The composition root that wires the context to the preview (UI-71).
-  "browser-head-attachment"];
-const HOST = new Set(["cc-catalogue-host", "cc-catalogue-service", "cc-catalogue-server", "browser-cc-catalogue-device", "studio-ui/panels/character",
-  "cc-swatch-host", "cc-icon-host",
-  "studio-ui/panels/character-choices", "browser-head-attachment"]);
+  "preview/browser/browser-head-attachment"];
+const HOST = new Set(["character/host/cc-catalogue-host", "character/host/cc-catalogue-service", "character/host/cc-catalogue-server", "character/browser/browser-cc-catalogue-device", "studio-ui/panels/character",
+  "character/host/cc-swatch-host", "character/host/cc-icon-host",
+  "studio-ui/panels/character-choices", "preview/browser/browser-head-attachment"]);
 const PURE = MODULES.filter(name => !HOST.has(name));
 /**
  * The panel's hierarchy names the preview's own details (render-detail.ts `DETAIL_SLOTS`: "eyes", "piercings", …), which it matches to
@@ -22,7 +22,7 @@ const PURE = MODULES.filter(name => !HOST.has(name));
  * words of any row's identifiers, `sectionWords`). Some of those words are also vanilla option names ("nose", "jaw"), which is not
  * naming an option: no rule keys on an option's name, and a modded row built from the same words lands in the same place.
  */
-const PREVIEW_WORDS: Readonly<Record<string, ReadonlySet<string>>> = { "character-panel-sections": new Set([...DETAIL_SLOTS, ...sectionWords(),
+const PREVIEW_WORDS: Readonly<Record<string, ReadonlySet<string>>> = { "character/character-panel-sections": new Set([...DETAIL_SLOTS, ...sectionWords(),
   ...CHARACTER_CONTRIBUTIONS.map(contribution => contribution.id)]) };
 const source = (name: string) => readFileSync(new URL(`../src/${name}.ts`, import.meta.url), "utf8");
 /** Code without comments, so prose may explain the rules with examples. */

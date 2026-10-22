@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { compileFacialRig, composeLocalPose, createFacialPose, ENVELOPE_NAMES, FacialSetupError, type FacialTrace, solveFace, solveFaceFrames,
   WEIGHT_EPSILON } from "../src/engines/facial-rig/solver";
 import { bakeClips, bakedRest, bakeFrames, bindFromRigMatrix, clipFrame, clipTimes, eyeShapeSeats, introFrames } from "../src/engines/facial-rig/bake";
-import { inAppSolver } from "../src/facial-host";
+import { inAppSolver } from "../src/animation/host/facial-host";
 
 type Q = [number, number, number, number];
 const quat = (axis: [number, number, number], radians: number): Q => {

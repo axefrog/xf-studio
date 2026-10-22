@@ -3,16 +3,16 @@ import { mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { applyColourMatrix, type ChoicePreviewSource, compositeChannels, isPreviewKey, parsePreviewSource, PREVIEW_STYLES, previewCamera, previewColourMatrix,
-  previewKey, previewKeyInput, previewKindOf, previewSourceOf, type PreviewTokens, TURNTABLE, turntableYaw } from "../src/choice-preview";
-import { ChoicePreviewStore, manifestStamp } from "../src/choice-preview-host";
-import { filesSource, PreparedFiles } from "../src/prepared-files";
+  previewKey, previewKeyInput, previewKindOf, previewSourceOf, type PreviewTokens, TURNTABLE, turntableYaw } from "../src/character/choice-preview";
+import { ChoicePreviewStore, manifestStamp } from "../src/character/host/choice-preview-host";
+import { filesSource, PreparedFiles } from "../src/host/prepared-files";
 import { hostClock } from "../src/platform/core/clock";
 import { createJobScheduler } from "../src/platform/core/jobs";
-import { createBrowserChoicePreviewDevice, OBJECT_URLS } from "../src/browser-choice-preview-device";
-import { createChoicePreviewHandler } from "../src/choice-preview-server";
-import { ChoicePreviewService, type ChoicePreviewPort, type PreviewAsk, PreviewHostError, PREVIEW_NOTICES, PreviewSuperseded } from "../src/choice-preview-service";
-import type { RenderComponent } from "../src/render-detail";
-import { DEFAULT_CHARACTER } from "../src/character-detail-request";
+import { createBrowserChoicePreviewDevice, OBJECT_URLS } from "../src/character/browser/browser-choice-preview-device";
+import { createChoicePreviewHandler } from "../src/character/host/choice-preview-server";
+import { ChoicePreviewService, type ChoicePreviewPort, type PreviewAsk, PreviewHostError, PREVIEW_NOTICES, PreviewSuperseded } from "../src/character/choice-preview-service";
+import type { RenderComponent } from "../src/character/render-detail";
+import { DEFAULT_CHARACTER } from "../src/character/character-detail-request";
 
 /** Choice previews phase 1 (research/character-customization/choice-previews-design.md §10): keys, sources, theming, camera, store, endpoint, scheduling. */
 const hex = (n: number) => n.toString(16).padStart(64, "0");
@@ -596,8 +596,8 @@ describe("the browser preview device (PREV-156, PREV-158)", () => {
 
 describe("the boundary", () => {
   test("no preview module names an option, a mod, a resource or an archive: producers key on the detail slot and the template table", () => {
-    const modules = ["choice-preview.ts", "choice-preview-render.ts", "choice-preview-worker.ts", "choice-preview-service.ts", "choice-preview-host.ts",
-      "choice-preview-server.ts", "browser-choice-preview-device.ts", "studio-ui/components/choice-preview.ts"];
+    const modules = ["character/choice-preview.ts", "character/browser/choice-preview-render.ts", "character/browser/choice-preview-worker.ts", "character/choice-preview-service.ts", "character/host/choice-preview-host.ts",
+      "character/host/choice-preview-server.ts", "character/browser/browser-choice-preview-device.ts", "studio-ui/components/choice-preview.ts"];
     // Option and mod words, and any resource or archive named in a string literal.
     const named = /hairstyle|hair_color|\bhh_|\bccxl\b|\bprc\b|archivexl|["'`][^"'`]*\.(archive|mesh|xbm|mt|app|ent)["'`]/i;
     const found = modules.flatMap(module => readFileSync(join(import.meta.dir, "..", "src", module), "utf8").split("\n")

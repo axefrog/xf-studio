@@ -1,14 +1,14 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { BUILT_IN_CATALOGUE, DEFAULT_IDLE, IDLE_CATALOGUE_SCHEMA, parseIdleCatalogue, type IdleEntry } from "../src/idle-catalogue";
-import { IdleAnimation } from "../src/idle-animation";
-import { MotionActions, type MotionPort } from "../src/motion-actions";
-import { bodyStateFor, creatorPuppetFeet } from "../src/character-detail-plan";
-import { WorkspaceComposer } from "../src/workspace-composer";
-import { parseWorkspace, serializeWorkspace } from "../src/workspace-state";
+import { BUILT_IN_CATALOGUE, DEFAULT_IDLE, IDLE_CATALOGUE_SCHEMA, parseIdleCatalogue, type IdleEntry } from "../src/animation/idle-catalogue";
+import { IdleAnimation } from "../src/animation/render/idle-animation";
+import { MotionActions, type MotionPort } from "../src/animation/motion-actions";
+import { bodyStateFor, creatorPuppetFeet } from "../src/character/character-detail-plan";
+import { WorkspaceComposer } from "../src/app/workspace/workspace-composer";
+import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
-import type { CcoResource } from "../src/cco-model";
+import type { CcoResource } from "../src/character/cco-model";
 
 const entry = (id: string, extra: Partial<IdleEntry> = {}): IdleEntry => ({ id, label: id, clip: `ui_${id}`, body: `cc-idle-body-${id}.glb`, duration: 10,
   screen: "creator", state: id, flags: [], face: null, puppet: "creator", evidence: "[resource] test", ...extra });
@@ -41,14 +41,14 @@ test("choosing an idle shows it at once, loads it behind, and a failed load puts
   const motion = new MotionActions(freshWorkspace().preview, motionPort(idles, "ok", asked));
   expect(motion.snapshot()).toMatchObject({ idleClip: "closeup", idleLoading: false });
   expect(motion.snapshot().idles.map(item => item.id)).toEqual(["closeup", "fullbody", "inventory"]);
-  expect(motion.capability({ kind: "motion.setIdleClip", clip: "nope" })).toMatchObject({ available: false });
-  motion.dispatch({ kind: "motion.setIdleClip", clip: "inventory" });
+  expect(motion.capability({ kind: "motion.setIdleClip", view: "main", clip: "nope" })).toMatchObject({ available: false });
+  motion.dispatch({ kind: "motion.setIdleClip", view: "main", clip: "inventory" });
   expect(motion.snapshot()).toMatchObject({ idleClip: "inventory", idleLoading: true });
   await Bun.sleep(0);
   expect(motion.snapshot()).toMatchObject({ idleClip: "inventory", idleLoading: false });
   expect(asked).toEqual(["inventory"]);
   const failing = new MotionActions(freshWorkspace().preview, motionPort(idles, "fail"));
-  failing.dispatch({ kind: "motion.setIdleClip", clip: "fullbody" });
+  failing.dispatch({ kind: "motion.setIdleClip", view: "main", clip: "fullbody" });
   expect(failing.snapshot().idleClip).toBe("fullbody");
   await Bun.sleep(0);
   expect(failing.snapshot()).toMatchObject({ idleClip: "closeup", idleLoading: false });
@@ -64,7 +64,7 @@ test("the chosen idle is stored only when it isn't the default, and a stored one
     motion: () => motion.snapshot() });
   const composer = compose(); composer.setPreviewReady();
   expect("idleClip" in composer.capture().preview).toBe(false);
-  motion.dispatch({ kind: "motion.setIdleClip", clip: "inventory" });
+  motion.dispatch({ kind: "motion.setIdleClip", view: "main", clip: "inventory" });
   const stored = composer.capture();
   expect(stored.preview.idleClip).toBe("inventory");
   // Read back through the workspace reader and restored: the stored idle is asked for again.

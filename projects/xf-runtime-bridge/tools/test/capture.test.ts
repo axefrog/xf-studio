@@ -2,12 +2,13 @@
 // (tools/test/synthetic-window.ps1). No game involved.
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join, parse } from "node:path";
-import { captureWindow, CaptureError, recrop } from "../capture/capture.ts";
+import { CAPTURE_PORT, captureBurst, captureWindow, CaptureError, recrop } from "../capture/capture.ts";
+import { REFUSALS } from "../api/catalogue080.ts";
 import { decodePng, downscaleArea, encodePng, fitSize } from "../capture/image.ts";
 import { resolveRegion } from "../capture/regions.ts";
-import type { Pixels } from "../capture/win32.ts";
+import { describeWindow, type Pixels, type Route, type WindowInfo } from "../capture/win32.ts";
 import { HOOK_TIMEOUT_MS, openSyntheticWindow, projectDir, tempDir, type Synthetic } from "./helpers.ts";
 
 const at = (p: Pixels, x: number, y: number) => Array.from(p.rgb.subarray((y * p.width + x) * 3, (y * p.width + x) * 3 + 3));
@@ -212,13 +213,102 @@ describe("capture refusals", () => {
   });
 });
 
+// RB-120 (bridge 0.8.1): the screen route copies the monitor's pixels, so it may read only while the window is the front
+// one. A fake window whose state changes on cue (CAPTURE_PORT) stands in for an Alt+Tab mid-burst; nothing here touches
+// the desktop.
+describe("RB-120: the screen route never reads another application's pixels", () => {
+  const FAKE = 0x7ff0_0001n;
+  const base: WindowInfo = { hwnd: FAKE, pid: 0x3ffffff0, title: "fake game", width: 64, height: 32, screenX: 100, screenY: 50, minimized: false, foreground: true, coversMonitor: false };
+  const solid = (value: number): Pixels => ({ width: 64, height: 32, rgb: new Uint8Array(64 * 32 * 3).fill(value) });
+  const original = { ...CAPTURE_PORT };
+  let out: string;
+  let states: WindowInfo[];
+  let grabs: Route[];
+  /** The window's state on each describe() call, the last one repeated; grab answers printwindow blank, the screen grey. */
+  const script = (...seq: Partial<WindowInfo>[]) => {
+    states = seq.map((s) => ({ ...base, ...s }));
+    grabs = [];
+    let call = 0;
+    CAPTURE_PORT.describe = () => states[Math.min(call++, states.length - 1)] ?? null;
+    CAPTURE_PORT.grab = (_w, route) => {
+      grabs.push(route);
+      return route === "screen" ? solid(128) : null;
+    };
+  };
+  const refusedCode = (fn: () => unknown) => {
+    try {
+      fn();
+    } catch (error) {
+      return error instanceof CaptureError ? error.code : String(error);
+    }
+    return "captured";
+  };
+  beforeAll(() => {
+    out = tempDir("xfb-rb120-");
+  });
+  afterAll(() => {
+    Object.assign(CAPTURE_PORT, original);
+    rmSync(out, { recursive: true, force: true });
+  });
+
+  test("an explicit screen route refuses a window that isn't in front, without reading the screen", () => {
+    script({ foreground: false });
+    expect(refusedCode(() => captureWindow({ target: { hwnd: FAKE }, route: "screen", name: "behind", outDir: out }))).toBe("not_foreground");
+    expect(grabs).toEqual([]);
+  });
+
+  test("a grab during which the window lost the front (or moved) is discarded", () => {
+    script({}, {}, { foreground: false });
+    expect(refusedCode(() => captureWindow({ target: { hwnd: FAKE }, route: "screen", name: "lost", outDir: out }))).toBe("not_foreground");
+    expect(grabs).toEqual(["screen"]);
+    script({}, {}, { screenX: 300 });
+    expect(refusedCode(() => captureWindow({ target: { hwnd: FAKE }, route: "screen", name: "moved", outDir: out }))).toBe("not_foreground");
+  });
+
+  test("auto falls back to the screen only while the window is in front, and then captures", () => {
+    script({ foreground: false });
+    expect(refusedCode(() => captureWindow({ target: { hwnd: FAKE }, name: "auto-behind", outDir: out }))).toBe("not_foreground");
+    expect(grabs).toEqual(["printwindow", "printwindow-legacy"]);
+    script({});
+    const record = captureWindow({ target: { hwnd: FAKE }, name: "auto-front", outDir: out });
+    expect(record.source.route).toBe("screen");
+    expect(record.source.foreground).toBe(true);
+  });
+
+  test("a burst reads the window again before every frame: an Alt+Tab after the first frame refuses and writes nothing", async () => {
+    const burstDir = join(out, "burst");
+    // describe: findWindow, frame 1 before and after; frame 2's refresh says another app is in front.
+    script({}, {}, {}, { foreground: false });
+    let code = "captured";
+    try {
+      await captureBurst({ target: { hwnd: FAKE }, route: "screen", frames: 3, intervalMs: 1, name: "alt-tab", outDir: burstDir });
+    } catch (error) {
+      code = error instanceof CaptureError ? error.code : String(error);
+    }
+    expect(code).toBe("not_foreground");
+    expect(grabs).toEqual(["screen"]);
+    expect(existsSync(burstDir) ? readdirSync(burstDir) : []).toEqual([]);
+    // In front throughout: every frame is grabbed and recorded as taken in front.
+    script({});
+    const burst = await captureBurst({ target: { hwnd: FAKE }, route: "screen", frames: 3, intervalMs: 1, name: "front", outDir: burstDir });
+    expect(burst.frames).toHaveLength(3);
+    expect(burst.frames.every((f) => f.record.source.foreground && f.record.source.route === "screen")).toBe(true);
+  });
+
+  test("the code reaches the tools as capture_not_foreground, listed among the capture commands' refusals", () => {
+    for (const name of ["capture.screenshot", "capture.burst", "capture.sheet", "showroom.rotate"]) expect(REFUSALS[name]).toContain("capture_not_foreground");
+  });
+});
+
 // Routes that need the window on screen: a small, non-activating, top-most window shown on the primary monitor. The
 // screen route copies the desktop's pixels, so it reads whatever lies on top there: on a desktop in use another top-most
 // window (the maintainer's own, which share this machine) covers it and the test failed with that window's pixels (the
 // known screen-route failure: [252, 252, 251] instead of red in every run of 29 September 2026). The route itself is fine;
 // the test was environment-bound and put a window on the desktop the maintainer works at, against the standing rule that
 // test windows stay off-screen. So it runs only when asked (XFB_ONSCREEN_TESTS=1, on an idle desktop), and then first
-// checks that nothing covers the sampled points, failing with that reason instead of a colour mismatch.
+// checks that nothing covers the sampled points, failing with that reason instead of a colour mismatch. Since 0.8.1 (RB-120)
+// the screen route reads only a window in front, and the synthetic window never activates, so the screen case checks the
+// refusal on a real desktop instead.
 const onScreen = process.env.XFB_ONSCREEN_TESTS === "1";
 
 /** Whether the top-level window at each screen point is `hwnd` (WindowFromPoint, then its root). */
@@ -249,6 +339,20 @@ describe.if(onScreen)("on-screen routes (XFB_ONSCREEN_TESTS=1 only)", () => {
   for (const route of ["printwindow", "screen"] as const) {
     test(`${route} route reads the window's pixels`, async () => {
       if (route === "screen") {
+        // RB-120: the synthetic window never takes the front (it doesn't activate, so it can't steal focus from whoever
+        // works at this desktop), so the screen route must refuse it, read nothing and write nothing. Only a window that
+        // is in front (not arranged by this test) is read.
+        if (!describeWindow(window.hwnd)?.foreground) {
+          let code = "captured";
+          try {
+            captureWindow({ target: { hwnd: window.hwnd }, route, name: "screen-behind", outDir: out });
+          } catch (error) {
+            code = error instanceof CaptureError ? error.code : String(error);
+          }
+          expect(code).toBe("not_foreground");
+          expect(readdirSync(out).filter((f) => f.includes("screen-behind"))).toEqual([]);
+          return;
+        }
         // The sampled pixels, in screen coordinates (the window's client area starts at 780, 420).
         expect(await uncovered(window.hwnd, [[780 + 150, 420 + 100], [780 + 240, 420 + 135], [780 + 479, 420 + 269]]), "another window covers the synthetic window, so the screen route can't see it").toBe(true);
       }

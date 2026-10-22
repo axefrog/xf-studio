@@ -332,7 +332,7 @@ The earlier rendering order (upside-down albedo, no shell) is fixed; the shell r
 
 ## 10. What the browser adapter reproduces
 
-`projects/xf-studio/authoring/src/eye-material.ts`, wired by `character-material-adapters.ts` and `render-templates.ts` [observed by comparing the adapter with the decompiled programs]:
+`projects/xf-studio/authoring/src/materials/render/eye-material.ts`, wired by `character-material-adapters.ts` and `render-templates.ts` [observed by comparing the adapter with the decompiled programs]:
 
 | Step | Adapter | Status |
 |---|---|---|

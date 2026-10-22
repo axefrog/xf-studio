@@ -13,21 +13,26 @@
 #include <cmath>
 #include <cstring>
 #include <string>
+#include <fstream>
 #include <functional>
 #include <limits>
 #include <map>
+#include <new>
 #include <vector>
 #include <thread>
 
 #include "core/Behaviours.hpp"
 #include "core/Bridge.hpp"
 #include "core/Events.hpp"
+#include "core/Hooks070.hpp"
+#include "core/overlay/Host.hpp"
 #include "core/Player.hpp"
 #include "core/Scene.hpp"
 #include "core/Config.hpp"
 #include "core/Dispatcher.hpp"
 #include "core/GameThreadQueue.hpp"
 #include "core/InkUi.hpp"
+#include "core/KillKey.hpp"
 #include "core/LivePose.hpp"
 #include "core/Log.hpp"
 #include "core/Messages.hpp"
@@ -156,18 +161,21 @@ void QueueTests()
     }
 
     // A task already running at the timeout is waited for within the grace period.
+    // 0.8.3 (two of these checks failed once right after a clean build): the game thread drains from the start and the
+    // timeout is 300 ms, not 50, so a busy machine has to keep that thread from running for 300 ms to make the task miss its
+    // start; the task still runs past the timeout (it sleeps 500 ms), which is what the check is about.
     {
         xfb::GameThreadQueue queue;
         queue.SetPumping(true);
-        std::thread game([&] { DrainOne(queue, 20ms); });
+        std::thread game([&] { DrainOne(queue, 0ms); });
         json result;
         std::string error;
         const auto outcome = queue.Run(
             [] {
-                std::this_thread::sleep_for(120ms);
+                std::this_thread::sleep_for(500ms);
                 return json(42);
             },
-            50ms, result, error, "unit.grace", 1000ms);
+            300ms, result, error, "unit.grace", 3000ms);
         game.join();
         Check("running task that finishes within the grace period returns its result",
               outcome == xfb::QueueResult::Done && result == json(42) && queue.LateCompletions() == 0);
@@ -175,22 +183,24 @@ void QueueTests()
 
     // A task still running after timeout + grace: timeout_after_start, then a logged late completion.
     {
+        // 0.8.3: drained from the start, a 300 ms timeout and grace, the task 1.5 s long: the answer comes after about 600 ms,
+        // long before the task ends (the bound is the task's length, not a tight timing).
         xfb::GameThreadQueue queue;
         queue.SetPumping(true);
-        std::thread game([&] { DrainOne(queue, 10ms); });
+        std::thread game([&] { DrainOne(queue, 0ms); });
         json result;
         std::string error;
         const auto started = std::chrono::steady_clock::now();
         const auto outcome = queue.Run(
             [] {
-                std::this_thread::sleep_for(400ms);
+                std::this_thread::sleep_for(1500ms);
                 return json(7);
             },
-            50ms, result, error, "unit.late", 50ms);
+            300ms, result, error, "unit.late", 300ms);
         const auto waited = MsSince(started);
         game.join();
         Check("running task past the grace period reports timeout_after_start",
-              outcome == xfb::QueueResult::TimeoutAfterStart && waited < 300, std::to_string(waited) + " ms");
+              outcome == xfb::QueueResult::TimeoutAfterStart && waited >= 550 && waited < 1400, std::to_string(waited) + " ms");
         Check("its completion afterwards is counted as late", queue.LateCompletions() == 1);
     }
 
@@ -235,15 +245,16 @@ void QueueTests()
         const auto started = std::chrono::steady_clock::now();
         const auto outcome = queue.Run(
             [] {
-                std::this_thread::sleep_for(300ms);
+                std::this_thread::sleep_for(1500ms);
                 return json(1);
             },
             5000ms, result, error, "unit.close_running");
         const auto waited = MsSince(started);
         game.join();
         closer.join();
+        // 0.8.3: the bound is the task's length (1.5 s), not a tight 250 ms: released by the close, not by the task's end.
         Check("Close releases the waiter of a running task at once",
-              outcome == xfb::QueueResult::TimeoutAfterStart && waited < 250 && queue.LateCompletions() == 1,
+              outcome == xfb::QueueResult::TimeoutAfterStart && waited < 1200 && queue.LateCompletions() == 1,
               std::to_string(waited) + " ms");
     }
 }
@@ -703,6 +714,10 @@ std::string ParamsCode(const std::function<void()>& aParse)
     catch (const xfb::MethodError& e)
     {
         return e.code;
+    }
+    catch (const std::exception& e)
+    {
+        return std::string("exception: ") + e.what();
     }
 }
 
@@ -1621,7 +1636,8 @@ void MessageTests()
     Check("message text: control characters become single spaces, the ends are trimmed",
           xfb::CleanMessageText("  Open\tthe\n\ncreator  ", 200) == "Open the creator");
     const auto longText = xfb::CleanMessageText(std::string(10, 'a') + "\xC3\xA9\xC3\xA9", 11, &cut);
-    Check("message text is cut at a character boundary, never inside a UTF-8 sequence", longText == std::string(10, 'a') + "\xC3\xA9" && cut, longText);
+    // 0.8: a cut text ends with an ellipsis (U+2026), which takes one of the characters.
+    Check("message text is cut at a character boundary, never inside a UTF-8 sequence", longText == std::string(10, 'a') + "\xE2\x80\xA6" && cut, longText);
     Check("invalid UTF-8 becomes U+FFFD", xfb::CleanMessageText("a\xFF" "b", 20) == "a\xEF\xBF\xBD" "b");
     Check("an overlong encoding is invalid too", xfb::CleanMessageText("\xC0\xAF", 20) == "\xEF\xBF\xBD\xEF\xBF\xBD");
 
@@ -1791,6 +1807,7 @@ struct FakeWardrobe
     std::string pendingItem;
     bool never = false;
     bool debugNames = false;
+    std::vector<std::string> askedIds; // the copy each slot read asked for (RB-125)
     xfb::writes::InventoryOps Ops(const std::string& aItem, const std::string& aSlot, bool aAdd)
     {
         xfb::writes::InventoryOps ops;
@@ -1814,7 +1831,8 @@ struct FakeWardrobe
             pendingItem.clear();
             return json{{"slot", aSlot}, {"previous", previous}, {"was_empty", previous.empty()}};
         };
-        ops.slot = [this, aSlot](const std::string&, const std::string& aAsked) {
+        ops.slot = [this, aSlot](const std::string&, const std::string& aAsked, const std::string& aId) {
+            askedIds.push_back(aId);
             const auto item = worn.count(aSlot) ? worn[aSlot] : std::string();
             // The script compares record IDs; a debug name that differs from the record's name (debugNames)
             // must not matter (RB-63).
@@ -1948,6 +1966,11 @@ void InventoryAndSaveTests()
                 }
             };
             ops.prepare = [this, aOverride] {
+                if (throwAt == "prepare")
+                {
+                    // RB-119: the game thread released the lock, but the answer was lost (timeout after start).
+                    throw xfb::MethodError("timeout_after_start", "a game-thread step started but did not finish in time");
+                }
                 if (bridgeLock && !aOverride)
                 {
                     throw xfb::MethodError("bridge_save_lock", "the bridge keeps saving locked");
@@ -2037,6 +2060,25 @@ void InventoryAndSaveTests()
         fake.throwAt = "status";
         Check("a game-thread timeout while waiting for the answer takes the lock back (RB-52)",
               saveCode(fake, overrideLock) == "timeout_after_start" && fake.relocks == 1);
+    }
+    {
+        FakeSaves fake;
+        fake.throwAt = "prepare";
+        Check("RB-119: override_lock whose prepare answer is lost: the relock is already owned and runs (nothing saved)",
+              saveCode(fake, overrideLock) == "timeout_after_start" && fake.relocks == 1 && fake.saves == 0);
+    }
+    {
+        FakeSaves fake;
+        fake.throwAt = "prepare";
+        Check("RB-119: without override_lock prepare can't release, so a lost answer asks for no relock",
+              saveCode(fake, json::object()) == "timeout_after_start" && fake.relocks == 0);
+    }
+    {
+        FakeSaves fake;
+        fake.bridgeLock = false;
+        fake.locked = false;
+        Check("RB-119: override_lock when prepare released nothing: saved, the relock disarmed",
+              saveCode(fake, overrideLock) == "saved" && fake.relocks == 0);
     }
     {
         FakeSaves fake;
@@ -2571,7 +2613,7 @@ void WardrobeTests()
         return json{{"item", "Items.Helmet_01_basic_01"}, {"slot", "Head"}, {"added", true}, {"already_equipped", false}, {"previous", ""},
                     {"outfit", {{"set", 1}, {"area", "Head"}, {"shows", "hidden"}, {"outfit_item", ""}}}};
     };
-    inventory.slot = [](const std::string&, const std::string&) { return json{{"slot", "Head"}, {"item", "Items.Helmet_01_basic_01"}, {"matches", true}}; };
+    inventory.slot = [](const std::string&, const std::string&, const std::string&) { return json{{"slot", "Head"}, {"item", "Items.Helmet_01_basic_01"}, {"matches", true}}; };
     inventory.settle = [] {};
     const auto equipped = w::InventoryEquip(p::ParseInventoryEquip(json::parse(R"({"item":"Items.Helmet_01_basic_01","add_if_missing":true})")), inventory);
     Check("0.5.2 inventory.equip says when an active outfit hides the equipped item (sessions 4 and 5's helmet)",
@@ -2598,7 +2640,7 @@ void InkUiTests()
     const auto moved = panel.Configure(json{{"show", true}, {"anchor", "bottom_left"}, {"x", 40}, {"y", -20.5}, {"scale", 1.5}});
     Check("ui.hud shows and moves the panel; its undo puts back the earlier settings",
           moved["changed"] == true && moved["settings"]["anchor"] == "bottom_left" && moved["settings"]["y"] == -20.5 &&
-              moved["undo"]["method"] == "ui.hud" && moved["undo"]["params"]["show"] == false && moved["undo"]["params"]["anchor"] == "top_right");
+              moved["undo"]["method"] == "ui.hud" && moved["undo"]["params"]["show"] == false && moved["undo"]["params"]["anchor"] == "top_left");
     panel.Configure(moved["undo"]["params"]);
     Check("ui.hud's undo, replayed, restores exactly the earlier settings", k::ToJson(panel.Current()) == k::ToJson(defaults));
     Check("ui.hud refuses an unknown anchor, layer, scale out of range, a non-boolean, an unknown key",
@@ -2636,8 +2678,8 @@ void InkUiTests()
     const auto frame = k::Frame(shown, view, lines);
     const auto parsed = k::ParseFrame(frame);
     Check("the frame starts with its version and carries settings, gate, tone and message lines",
-          frame.rfind("xfhud\t1\n", 0) == 0 && parsed["version"] == 1 && parsed["show"] == true && parsed["anchor"] == "top_right" &&
-              parsed["x"] == 72.0 && parsed["live"] == true && parsed["tone"] == "write" && parsed["messages"].size() == 2 &&
+          frame.rfind("xfhud\t1\n", 0) == 0 && parsed["version"] == 1 && parsed["show"] == true && parsed["anchor"] == "top_left" &&
+              parsed["x"] == 40.0 && parsed["y"] == 360.0 && parsed["live"] == true && parsed["tone"] == "write" && parsed["messages"].size() == 2 &&
               parsed["messages"][0]["level"] == "ask");
     Check("message text never breaks the frame (tabs and newlines become spaces)",
           parsed["messages"][0]["text"] == "Press the photo-mode key now");
@@ -2659,11 +2701,12 @@ void InkUiTests()
           atPoint.target == k::PinRequest::Target::Position && atPoint.label == "XF test pin" && atPoint.variant == "custom" &&
               atPoint.lift == 0.0 && atPoint.x == -1200.5);
     const auto onPiece = k::ParsePin(json{{"piece", 3}, {"label", "Gloss A"}, {"variant", "clothes"}});
-    Check("world.pin on a showroom head: 0.45 m above its eyes by default", onPiece.target == k::PinRequest::Target::Piece && onPiece.piece == 3 &&
-                                                                           onPiece.lift == 0.45 && onPiece.variant == "clothes");
+    Check("world.pin on a showroom head: 0.25 m above its eyes by default (0.8)", onPiece.target == k::PinRequest::Target::Piece && onPiece.piece == 3 &&
+                                                                           onPiece.lift == 0.25 && onPiece.variant == "clothes");
     Check("world.pin above V", k::ParsePin(json{{"at", "v"}, {"label", "V"}, {"lift_m", 1.0}}).lift == 1.0);
     const std::string longLabel(80, 'x');
-    Check("world.pin cuts a long label to 48 characters", k::ParsePin(json{{"at", "v"}, {"label", longLabel}}).label.size() == 48);
+    Check("world.pin cuts a long label to 48 characters (0.8: the last one an ellipsis)",
+          k::ParsePin(json{{"at", "v"}, {"label", longLabel}}).label == std::string(47, 'x') + "\xE2\x80\xA6");
     Check("world.pin refuses no target, two targets, a bad position, a piece out of range, an empty label, an unknown variant",
           ParamsCode([&] { k::ParsePin(json{{"label", "x"}}); }) == "bad_params" &&
               ParamsCode([&] { k::ParsePin(json{{"at", "v"}, {"piece", 1}, {"label", "x"}}); }) == "bad_params" &&
@@ -3059,6 +3102,1710 @@ void Bridge061Tests()
     }
 }
 
+// Bridge 0.7: in-game driving (asks with answers, pinning, 600 characters), the answer keys and overlay config, the new hooks'
+// parameters and undos, and the overlay host's game-independent half (refusals, the three-slot hand-off, the descriptor
+// list, the theme table).
+void Bridge070Tests()
+{
+    namespace h = xfb::hooks;
+    namespace o = xfb::overlay;
+    namespace p = xfb::params;
+    namespace k = xfb::inkui;
+    const auto t0 = xfb::MessageBoard::Clock::now();
+    {
+        xfb::MessageBoard board;
+        xfb::MessageBoard defaults;
+        const auto plain = defaults.Post({"Is V in the apartment?", 60, "ask", false}, t0);
+        Check("0.8 an ask without choices gets one Done button (session 8: Ready, Yes and No confused the maintainer)",
+              plain["choices"] == json::array({"Done"}), plain.dump());
+        const auto ask = board.Post({"Is V in the apartment?", 60, "ask", false, {"Ready", "Yes", "No"}}, t0);
+        for (int i = 0; i < 5; ++i)
+        {
+            board.Post({"info " + std::to_string(i), 60, "info", false}, t0);
+        }
+        xfb::PendingAsk pending;
+        Check("0.7 the newest unanswered ask stays pinned while newer lines push the others out",
+              board.Pending(pending, t0) && pending.id == ask["id"].get<uint64_t>() && board.Active(t0) == 4);
+        const auto wrong = board.Answer(0, 7, t0);
+        Check("0.7 an answer with no such choice is refused", !wrong.value("ok", true));
+        const auto answered = board.Answer(0, 1, t0);
+        Check("0.7 answering the pending ask names the choice and the question", answered.value("ok", false) && answered["label"] == "Yes" &&
+                                                                                    answered["message_id"] == ask["id"], answered.dump());
+        Check("0.7 an answered ask stops waiting and can't be answered twice", !board.Pending(pending, t0) && !board.Answer(ask["id"].get<uint64_t>(), 0, t0).value("ok", true));
+        xfb::MessageRequest custom{"Which light?", 30, "ask", false, {"Key", "Fill", "Rim"}};
+        const auto posted = board.Post(custom, t0);
+        Check("0.7 an ask takes its own choices", posted["choices"] == json::array({"Key", "Fill", "Rim"}));
+        Check("0.7 the snapshot names the pending ask for the CET window", json::parse(board.Snapshot(t0)).contains("pending_ask"));
+        Check("0.7 an expired ask isn't pending", !board.Pending(pending, t0 + std::chrono::seconds(31)));
+        const auto longPost = board.Post({std::string(900, 'a'), 5, "info", false}, t0);
+        Check("0.7 messages show up to 600 characters (0.8: the 600th an ellipsis)",
+              longPost["text"].get<std::string>() == std::string(599, 'a') + "\xE2\x80\xA6" && longPost["truncated"] == true);
+        Check("0.7 choices go with asks only", ParamsCode([] { p::ParseMessage(json{{"text", "hi"}, {"choices", {"A"}}}); }) == "bad_params");
+        Check("0.7 at most four choices", ParamsCode([] { p::ParseMessage(json{{"text", "hi"}, {"level", "ask"}, {"choices", {"A", "B", "C", "D", "E"}}}); }) == "bad_params");
+        Check("0.7 a message may be up to 2000 characters long when sent", ParamsCode([] { p::ParseMessage(json{{"text", std::string(1500, 'b')}}); }) == "ok");
+    }
+    {
+        const auto config = xfb::ParseConfig("[ui]\nanswer_keys = IK_F7, IK_F8\n[overlay]\nenabled = true\ntheme = light\nscale_percent = 150\n");
+        Check("0.7 config: answer keys, overlay switch, theme and scale", config.answerKeys == std::vector<std::string>{"IK_F7", "IK_F8"} && config.overlayEnabled &&
+                                                                               config.overlayTheme == "light" && config.overlayScalePercent == 150 && config.warnings.empty());
+        const auto bad = xfb::ParseConfig("[ui]\nanswer_keys = F7; rm\n[overlay]\ntheme = neon\n");
+        Check("0.7 config: a bad key list or theme keeps the defaults", bad.answerKeys.size() == 4 && bad.answerKeys[0] == "IK_F6" && bad.overlayTheme == "dark" &&
+                                                                               bad.warnings.size() == 2);
+        Check("0.7 config: the overlay is off by default", !xfb::ParseConfig("").overlayEnabled);
+    }
+    {
+        k::HudSettings settings;
+        k::BridgeView view;
+        view.pluginEnabled = true;
+        view.listening = true;
+        k::AskView ask;
+        ask.id = 9;
+        ask.keyed = {{"IK_F6", "Ready"}, {"IK_F7", "Yes"}};
+        const auto frame = k::ParseFrame(k::Frame(settings, view, {{"ask", "Ready?"}}, &ask));
+        Check("0.7 the HUD frame carries the ask's keys", frame["ask"]["id"] == 9 && frame["ask"]["choices"].size() == 2 && frame["ask"]["choices"][1]["key"] == "IK_F7",
+              frame.dump());
+        view.killed = true;
+        Check("0.7 a killed bridge's frame has no ask", !k::ParseFrame(k::Frame(settings, view, {}, &ask)).contains("ask"));
+    }
+    {
+        Check("0.7 cyberware.state refuses an unknown area", ParamsCode([] { h::ParseCyberwareState(json{{"areas", {"Clothing"}}}); }) == "bad_params");
+        Check("0.7 cyberware.equip needs a record", ParamsCode([] { h::ParseCyberwareEquip(json{{"item", "not a record"}}); }) == "bad_params");
+        Check("0.7 cyberware.unequip needs area or item", ParamsCode([] { h::ParseCyberwareUnequip(json::object()); }) == "bad_params");
+        Check("0.7 remove_added needs the item", ParamsCode([] { h::ParseCyberwareUnequip(json{{"area", "ArmsCW"}, {"remove_added", true}}); }) == "bad_params");
+        const auto swap = h::CyberwareEquipUndo(json{{"area", "ArmsCW"}, {"slot", 0}, {"previous", "Items.StrongArms"}, {"added", false}}, "Items.MantisBlades");
+        Check("0.7 an equip's undo puts the earlier item back", swap["method"] == "cyberware.equip" && swap["params"]["item"] == "Items.StrongArms");
+        const auto empty = h::CyberwareEquipUndo(json{{"area", "ArmsCW"}, {"slot", 0}, {"previous", ""}, {"added", true}}, "Items.MantisBlades");
+        Check("0.7 an equip into an empty slot undoes by emptying it and removing what the bridge added",
+              empty["method"] == "cyberware.unequip" && empty["params"]["remove_added"] == true && empty["params"]["item"] == "Items.MantisBlades");
+        Check("0.7 an equip of what was there has no undo", h::CyberwareEquipUndo(json{{"already_equipped", true}}, "Items.X").is_null());
+        Check("0.7 an unequip's undo equips the item again, unless it was removed",
+              h::CyberwareUnequipUndo(json{{"area", "ArmsCW"}, {"slot", 0}, {"previous", "Items.StrongArms"}}, false)["method"] == "cyberware.equip" &&
+                  h::CyberwareUnequipUndo(json{{"previous", "Items.StrongArms"}}, true).is_null());
+        Check("0.7 world.probe needs points or around_v, not both", ParamsCode([] { h::ParseWorldProbe(json::object()); }) == "bad_params" &&
+                                                                        ParamsCode([] { h::ParseWorldProbe(json::parse(R"({"points":[[1,2,3]],"around_v":true})")); }) == "bad_params");
+        const auto ring = h::RingPoints({0, 0, 0}, 0.0, 2.0, 4);
+        Check("0.7 a ring starts at V and its first point is straight ahead (+Y at yaw 0)",
+              ring.size() == 5 && std::abs(ring[1][1] - 2.0) < 1e-9 && std::abs(ring[1][0]) < 1e-9 && std::abs(ring[2][0] + 2.0) < 1e-9);
+        Check("0.7 world.state refuses a fact name with odd characters", ParamsCode([] { h::ParseWorldState(json{{"facts", {"a b"}}}); }) == "bad_params");
+        Check("0.7 the weather needs name or cycle", ParamsCode([] { h::ParseWeather(json::object()); }) == "bad_params");
+        const auto weatherUndo = h::WeatherUndo(json{{"before", "24h_weather_sunny"}});
+        Check("0.7 the weather's undo sets the earlier state with the cycle on", weatherUndo["params"]["name"] == "24h_weather_sunny" && weatherUndo["params"]["cycle"] == true);
+        Check("0.7 photo.scene.set needs a row", ParamsCode([] { h::ParsePhotoScene(json::object()); }) == "bad_params");
+        const auto scene = h::ParsePhotoScene(json{{"npcs", {{"label", "Off"}}}, {"game_speed", 0.5}});
+        Check("0.7 photo.scene.set: a label row and a speed", scene.rows.size() == 2 && scene.rows[0].key == 54 && scene.rows[0].label == "Off" && scene.rows[1].key == 71);
+        const auto saves = h::TrimSaves(json{{"ready", true}, {"names", {"a", "b", "c"}}, {"metadata", {{{"name", "a"}, {"timestamp", 1}}, {{"name", "b"}, {"timestamp", 3}}}}}, 1);
+        const auto three = h::TrimSaves(json{{"ready", true}, {"names", {"a", "b", "c"}}, {"metadata", {{{"name", "a"}, {"timestamp", 1}}, {{"name", "b"}, {"timestamp", 3}}}}}, 3);
+        Check("0.7 game.saves keeps the newest and says when details are missing (0.8.2: of the limit asked for)",
+              saves["saves"].size() == 1 && saves["saves"][0]["name"] == "b" && saves["note"].get<std::string>().empty() &&
+                  !three["note"].get<std::string>().empty());
+    }
+    {
+        o::DeviceFacts facts;
+        facts.deviceData = facts.swapChain = facts.directQueue = facts.sameDevice = true;
+        facts.format = "R8G8B8A8_UNORM";
+        facts.windowClass = "W2ViewportClass";
+        facts.bufferCount = 3;
+        Check("0.7 overlay: an SDR 8-bit game window may be drawn on", o::RefusalFor(facts).empty());
+        auto hdr = facts;
+        hdr.hdrMode = 1;
+        Check("0.7 overlay: HDR is refused", o::RefusalFor(hdr).find("HDR") != std::string::npos);
+        auto wide = facts;
+        wide.format = "R16G16B16A16_FLOAT";
+        Check("0.7 overlay: a float back buffer is refused", !o::RefusalFor(wide).empty());
+        auto other = facts;
+        other.windowClass = "Chrome_WidgetWin_1";
+        Check("0.7 overlay: another window is refused", !o::RefusalFor(other).empty());
+
+        o::OverlayHost host;
+        Check("0.7 overlay: off by default, nothing drawn", !host.Enabled() && !host.ShouldDraw() && host.Snapshot()["phase"] == "disabled");
+        host.Configure(true, o::ThemeKind::Dark, 100);
+        host.NoteHooks(true, true, true, "");
+        Check("0.7 overlay: hooked, waiting for the first present", host.Snapshot()["phase"] == "waiting" && !host.ShouldDraw());
+        host.NoteInit(facts, "");
+        Check("0.7 overlay: drawing after a clean first present", host.ShouldDraw());
+        const auto now = std::chrono::steady_clock::now();
+        host.HideForCapture(true, 500, now);
+        Check("0.7 overlay: hidden for a capture, and back by itself", !host.ShouldDraw(now + std::chrono::milliseconds(100)) && host.ShouldDraw(now + std::chrono::milliseconds(600)));
+        host.SetCetOpen(true);
+        Check("0.7 overlay: yields while CET's overlay is open", !host.ShouldDraw(now + std::chrono::seconds(1)));
+        host.SetCetOpen(false);
+        host.SetPassThrough(true);
+        Check("0.7 overlay: the pass-through switch stops drawing without unhooking", !host.ShouldDraw(now + std::chrono::seconds(1)) && host.Snapshot()["hooks"]["present"] == true);
+        host.SetPassThrough(false);
+        host.SetKilled(true);
+        Check("0.7 overlay: the kill switch stops drawing", !host.ShouldDraw(now + std::chrono::seconds(1)));
+        o::OverlayHost missing;
+        missing.Configure(true, o::ThemeKind::Light, 100);
+        missing.NoteHooks(false, false, false, "GpuApi::Present");
+        Check("0.7 overlay: a missing address leaves it unhooked, with the reason", missing.Snapshot()["phase"] == "unhooked" && missing.Snapshot()["missing"] == "GpuApi::Present" &&
+                                                                                       missing.Snapshot()["theme"] == "light");
+
+        o::TripleBuffer<int> hand;
+        Check("0.7 hand-off: nothing to take before a publish", !hand.Take());
+        hand.Back() = 1;
+        hand.Publish();
+        hand.Back() = 2;
+        hand.Publish();
+        Check("0.7 hand-off: the reader takes the newest", hand.Take() && hand.Front() == 2 && !hand.Take());
+        hand.Back() = 3;
+        hand.Publish();
+        Check("0.7 hand-off: and the next one after it", hand.Take() && hand.Front() == 3);
+
+        o::DescriptorFreeList list(2);
+        const auto a = list.Alloc(), b = list.Alloc();
+        Check("0.7 descriptors: full after its capacity, a freed slot is reused", a == 0 && b == 1 && list.Alloc() == -1 && list.Free(0) && list.Alloc() == 0 && !list.Free(5));
+
+        float rgba[4] = {};
+        size_t colours = 0;
+        o::ThemeColors(colours);
+        Check("0.7 theme: the table maps ImGui's colours from the Studio's tokens", colours >= 40 && o::ThemeColorOf("WindowBg", o::ThemeKind::Dark, rgba) && rgba[0] < 0.3f &&
+                                                                                        o::ThemeColorOf("WindowBg", o::ThemeKind::Light, rgba) && rgba[0] > 0.8f);
+        Check("0.7 theme: dark is the default and light is chosen by name", o::ThemeFromName("") == o::ThemeKind::Dark && o::ThemeFromName("light") == o::ThemeKind::Light);
+        Check("0.7 theme: the Studio's body text size", o::ThemeMetricOf("FontSize", 0.0f) == 13.0f);
+    }
+}
+
+// The deep review of bridge 0.7.0 (research/authoring/code-health.md, RB-96..RB-118): the question board's clear, withdraw and
+// state (session.wait's early answer and question_gone), cyberware.equip's sequence keeping its undo, the exact copy and the
+// added copy in a swap's undo, photo.scene.set putting rows back, game.saves' final step, and the overlay host's checks
+// after a resize, its hook rule and its glyph limit.
+void Bridge070ReviewTests()
+{
+    namespace h = xfb::hooks;
+    namespace o = xfb::overlay;
+    namespace p = xfb::params;
+    const auto t0 = xfb::MessageBoard::Clock::now();
+    {
+        xfb::MessageBoard board;
+        const auto ask = board.Post({"Ready for the next frame?", 60, "ask", false}, t0);
+        const auto askId = ask["id"].get<uint64_t>();
+        board.Post({"a line", 60, "info", false}, t0);
+        Check("RB-96 a posted question is pending", board.StateOf(askId, t0).state == "pending");
+        // 0.8.2: a capture's clear (keep_asks) keeps the question; a plain clear withdraws it (Session9Tests).
+        const auto cleared = board.Post({"", 8, "info", true, {}, true}, t0);
+        xfb::PendingAsk pending;
+        Check("RB-103 a capture's clear (keep_asks) takes the lines down but keeps the waiting question", cleared.value("cleared", 0) == 1 && board.Pending(pending, t0) &&
+                                                                                        pending.id == askId && cleared.value("kept_question", 0ull) == askId,
+              cleared.dump());
+        board.Answer(askId, 0, t0);
+        const auto answered = board.StateOf(askId, t0);
+        Check("RB-96 an answered question says so with its answer, even after its line fades",
+              answered.state == "answered" && answered.label == "Done" && board.StateOf(askId, t0 + std::chrono::seconds(30)).state == "answered");
+        const auto second = board.Post({"And now?", 60, "ask", false}, t0)["id"].get<uint64_t>();
+        const auto withdrawn = board.Post({"", 8, "info", false, {}, false, second}, t0);
+        Check("RB-103 a withdrawn question is gone", withdrawn.value("withdrawn", false) && board.StateOf(second, t0).state == "gone");
+        const auto third = board.Post({"Still there?", 5, "ask", false}, t0)["id"].get<uint64_t>();
+        Check("RB-103 a question that ran out of time is gone", board.StateOf(third, t0 + std::chrono::seconds(6)).state == "gone");
+        const auto fourth = board.Post({"Last one", 60, "ask", false}, t0)["id"].get<uint64_t>();
+        board.Post({"", 8, "info", true}, t0);
+        Check("RB-103 a plain clear withdraws a waiting question too (0.8.2: the default)", board.StateOf(fourth, t0).state == "gone" && board.Active(t0) == 0);
+        Check("RB-96 an id never posted is unknown", board.StateOf(9999, t0).state == "unknown");
+        const auto undo = xfb::UiMessageUndo(json{{"id", 7}});
+        Check("RB-103 a message's undo withdraws it by id", undo["params"]["withdraw"] == 7 && xfb::UiMessageUndo(json{{"cleared", 1}}).is_null());
+        Check("RB-103 clear_asks goes with clear", ParamsCode([] { p::ParseMessage(json{{"clear_asks", true}}); }) == "bad_params" &&
+                                                       ParamsCode([] { p::ParseMessage(json{{"withdraw", 3}}); }) == "ok");
+    }
+    {
+        // RB-101: cyberware.equip keeps its undo when reading the slot back fails.
+        h::CyberwareEquipRequest request;
+        request.item = "Items.MantisBlades";
+        h::CyberwareEquipOps ops;
+        ops.equip = [] { return json{{"area", "ArmsCW"}, {"slot", 0}, {"added", true}, {"previous", ""}}; };
+        ops.settle = [](const std::string&, int32_t) -> json { throw xfb::MethodError("game_loading", "a save started loading"); };
+        ops.removeAdded = [](const std::string&) { return json{{"removed", true}}; };
+        const auto out = h::RunCyberwareEquip(request, ops);
+        Check("RB-101 a failed read-back answers equipped unknown with the undo", out["equipped"] == "unknown" && out["undo"]["method"] == "cyberware.unequip" &&
+                                                                                     out["undo"]["params"]["remove_added"] == true && out["settle_error"]["code"] == "game_loading",
+              out.dump());
+        ops.equip = []() -> json { throw xfb::MethodError("not_equippable", "the game says V can't equip it"); };
+        Check("RB-101 a refusal in the equip step passes through (nothing changed)", ParamsCode([&] { h::RunCyberwareEquip(request, ops); }) == "not_equippable");
+
+        // RB-109: a swap's undo names the exact earlier copy and removes the copy the bridge added.
+        const auto swap = h::CyberwareEquipUndo(json{{"area", "ArmsCW"}, {"slot", 0}, {"previous", "Items.StrongArms"}, {"id", "123456789"}, {"added", true}},
+                                                "Items.MantisBlades");
+        Check("RB-109 a swap's undo carries the earlier copy's id and removes the added item",
+              swap["params"]["id"] == "123456789" && swap["params"]["remove_added_item"] == "Items.MantisBlades", swap.dump());
+        const auto parsed = h::ParseCyberwareEquip(swap["params"]);
+        Check("RB-109 cyberware.equip takes the undo's id and remove_added_item", parsed.id == "123456789" && parsed.removeAddedItem == "Items.MantisBlades");
+        Check("RB-109 an id is digits only", ParamsCode([] { h::ParseCyberwareEquip(json{{"item", "Items.StrongArms"}, {"id", "12a"}}); }) == "bad_params");
+        int removed = 0;
+        ops.equip = [] { return json{{"area", "ArmsCW"}, {"slot", 0}, {"added", false}, {"previous", "Items.MantisBlades"}}; };
+        ops.settle = [](const std::string&, int32_t) { return json{{"item", "Items.StrongArms"}}; };
+        ops.removeAdded = [&](const std::string& aItem) {
+            removed += aItem == "Items.MantisBlades" ? 1 : 100;
+            return json{{"removed", true}};
+        };
+        h::CyberwareEquipRequest back = parsed;
+        const auto undone = h::RunCyberwareEquip(back, ops);
+        Check("RB-109 running that undo equips the earlier copy, then removes the added one", undone["equipped"] == true && undone["removed"] == true && removed == 1,
+              undone.dump());
+    }
+    {
+        // RB-111: photo.scene.set puts rows already set back when a later row fails.
+        const auto request = h::ParsePhotoScene(json{{"npcs", {{"label", "Off"}}}, {"weather", {{"label", "Blizzard"}}}});
+        std::map<int32_t, double> rows{{54, 1.0}, {69, 0.0}};
+        h::PhotoSceneOps ops;
+        ops.resolve = [](const h::PhotoSceneRow& aRow) -> json {
+            if (aRow.label == "Off")
+            {
+                return json{{"value", 0.0}, {"matched_by", "exact"}};
+            }
+            throw xfb::MethodError("bad_params", "no option labelled " + aRow.label);
+        };
+        ops.set = [&](int32_t aKey, double aValue) {
+            const auto before = rows[aKey];
+            rows[aKey] = aValue;
+            return json{{"before", before}, {"before_known", true}, {"after", aValue}};
+        };
+        std::string message;
+        try
+        {
+            h::RunPhotoScene(request, ops);
+        }
+        catch (const xfb::MethodError& e)
+        {
+            message = std::string(e.code) + ": " + e.what();
+        }
+        Check("RB-111 a failed row puts the rows already set back and says so", rows[54] == 1.0 && message.find("bad_params") == 0 && message.find("put back") != std::string::npos,
+              message);
+    }
+    {
+        // RB-118: game.saves' final step runs even when a read throws.
+        h::SavesOps ops;
+        int reads = 0;
+        bool done = false;
+        auto now = std::chrono::steady_clock::now();
+        ops.request = [](int32_t) {};
+        ops.read = [&](bool aDone) -> json {
+            if (aDone)
+            {
+                done = true;
+                return json{{"ready", true}};
+            }
+            if (++reads == 2)
+            {
+                throw xfb::MethodError("game_loading", "a save started loading");
+            }
+            return json{{"ready", false}, {"names", json::array()}};
+        };
+        ops.sleep = [&](std::chrono::milliseconds aMs) { now += aMs; };
+        ops.now = [&] { return now; };
+        const auto code = ParamsCode([&] { h::RunSaves(h::SavesRequest{}, ops); });
+        Check("RB-118 game.saves stops collecting in its final step even after a failed read", code == "game_loading" && done && reads == 2);
+    }
+    {
+        o::DeviceFacts first;
+        first.deviceData = first.swapChain = first.directQueue = first.sameDevice = true;
+        first.format = "R8G8B8A8_UNORM";
+        first.windowClass = "W2ViewportClass";
+        first.bufferCount = 3;
+        auto same = first;
+        same.width = 1920;
+        same.height = 1080;
+        Check("RB-97 a resize to a new size alone goes on drawing", o::RefusalAfterResize(first, same).empty());
+        auto hdr = same;
+        hdr.format = "R10G10B10A2_UNORM";
+        Check("RB-97 HDR switched on without a restart refuses after the resize", o::RefusalAfterResize(first, hdr).find("after a resize") == 0);
+        auto hdrMode = same;
+        hdrMode.hdrMode = 2;
+        Check("RB-97 an HDR mode reported after the resize refuses", !o::RefusalAfterResize(first, hdrMode).empty());
+        auto bgra = same;
+        bgra.format = "B8G8R8A8_UNORM";
+        Check("RB-97 a changed 8-bit format refuses too (the pipeline keeps the first)", o::RefusalAfterResize(first, bgra).find("format") != std::string::npos);
+        auto two = same;
+        two.bufferCount = 2;
+        Check("RB-97 a changed buffer count refuses", o::RefusalAfterResize(first, two).find("back buffers") != std::string::npos);
+
+        o::OverlayHost host;
+        host.Configure(true, o::ThemeKind::Dark, 100);
+        host.NoteHooks(true, true, false, "");
+        Check("RB-107 without the render-shutdown hook the host stays unhooked and says why",
+              host.Snapshot()["phase"] == "unhooked" && host.Snapshot()["missing"].get<std::string>().find("render shutdown") != std::string::npos);
+        host.NoteHooks(true, true, true, "");
+        host.NoteInit(first, "");
+        host.NoteInit(hdr, o::RefusalAfterResize(first, hdr));
+        Check("RB-97 a refusal after a resize moves the host to refused", host.Snapshot()["phase"] == "refused" && !host.ShouldDraw());
+        host.NoteFrame(1500.0);
+        Check("RB-108 the panel's figures come from atomics", host.Frames() == 1 && std::abs(host.CpuMs() - 1.5) < 1e-9 && std::abs(host.CpuMsMax() - 1.5) < 1e-9);
+
+        const std::string baked = "Ready? \xE2\x80\x94 caf\xC3\xA9 \xE2\x82\xAC" "5";
+        Check("RB-99 baked text passes unchanged", o::LimitToGlyphs(baked) == baked);
+        Check("RB-99 glyphs outside the baked ranges become the mark (0.8: U+00A4)", o::LimitToGlyphs("\xE6\x97\xA5\xF0\x9F\x98\x80x") == "\xC2\xA4\xC2\xA4x");
+        Check("RB-99 invalid UTF-8 and control characters are replaced", o::LimitToGlyphs("a\xFF\tb") == "a\xC2\xA4 b");
+        bool covered = true;
+        for (const auto& [lo, hi] : o::GlyphRanges())
+        {
+            covered = covered && lo <= hi && hi <= 0xFFFF;
+        }
+        Check("RB-99 the ranges fit Dear ImGui's 16-bit glyph type; U+FFFD becomes the mark too (Segoe UI lacks it)",
+              covered && o::LimitToGlyphs("\xEF\xBF\xBD") == "\xC2\xA4");
+    }
+}
+
+// Bridge 0.8 (bridge-080a): session 8's findings and the UI review's fixes.
+size_t Chars(const std::string& aText)
+{
+    size_t n = 0;
+    for (const auto c : aText)
+    {
+        n += (static_cast<unsigned char>(c) & 0xC0) != 0x80 ? 1 : 0;
+    }
+    return n;
+}
+
+void Bridge080Tests()
+{
+    namespace k = xfb::inkui;
+    namespace o = xfb::overlay;
+    namespace b = xfb::behave;
+    const auto t0 = xfb::MessageBoard::Clock::now();
+
+    // The UI review's 10: a cut text backs up to a word and adds an ellipsis.
+    bool cut = false;
+    Check("0.8 a cut text ends at a word with an ellipsis", xfb::CleanMessageText("The quick brown fox jumps", 12, &cut) == "The quick\xE2\x80\xA6" && cut);
+    Check("0.8 a text with no space near the cut is cut mid-word, ellipsis added",
+          xfb::CleanMessageText(std::string(30, 'z'), 10) == std::string(9, 'z') + "\xE2\x80\xA6");
+    Check("0.8 an uncut text has no ellipsis", xfb::CleanMessageText("short", 10, &cut) == "short" && !cut);
+
+    // Session 8's I7 and the UI review: one mark on every surface; CET gets a Latin-1 copy.
+    const std::string mixed = "\xC5\x81\xC3\xB3" "d\xC5\xBA \xE2\x80\x94 \xE6\x9D\xB1\xE4\xBA\xAC \xF0\x9F\x8C\x86";
+    // 0.8.2 (session 9's B4): the ink mark is the bullet, which the game's ink font has (it lacks U+00A4).
+    Check("0.8 the ink panel keeps the Polish letters and the em dash, marks the rest (0.8.2: with the bullet)",
+          k::ForInk(mixed) == "\xC5\x81\xC3\xB3" "d\xC5\xBA \xE2\x80\x94 \xE2\x80\xA2\xE2\x80\xA2 \xE2\x80\xA2", k::ForInk(mixed));
+    Check("0.8.2 the ink copy: what the font lacks becomes its plain letters (\xC3\xA5 a, \xC3\xA6 ae, \xC4\x88 C), U+00A4 the bullet, invalid bytes too",
+          k::ForInk("\xC3\xA5\xC3\xA6\xC4\x88 \xC2\xA4\xFF \xC5\x91") == "aaeC \xE2\x80\xA2\xE2\x80\xA2 \xC5\x91", k::ForInk("\xC3\xA5\xC3\xA6\xC4\x88 \xC2\xA4\xFF \xC5\x91"));
+    Check("0.8.2 the ink font's table: the bullet and the Polish letters in, U+00A4 and U+00E5 out",
+          k::InkHas(0x2022) && k::InkHas(0x0142) && k::InkHas(0x017C) && k::InkHas(0x00E9) && !k::InkHas(0x00A4) && !k::InkHas(0x00E5) && !k::InkHas(0x6771));
+    Check("0.8 the CET copy transliterates Polish and punctuation to Latin-1, marks the rest",
+          k::ForCet(mixed) == "L\xC3\xB3" "dz - \xC2\xA4\xC2\xA4 \xC2\xA4", k::ForCet(mixed));
+    Check("0.8 the CET copy: zolc gesla jazn, the ellipsis, OE, euro",
+          k::ForCet("\xC5\xBC\xC3\xB3\xC5\x82\xC4\x87 g\xC4\x99\xC5\x9Bl\xC4\x85 ja\xC5\xBA\xC5\x84\xE2\x80\xA6 \xC5\x92 \xE2\x82\xAC" "5") ==
+              "z\xC3\xB3lc gesla jazn... OE EUR5");
+    Check("0.8 the CET copy keeps Latin-1 (caf\xC3\xA9) and turns invalid bytes into the mark", k::ForCet("caf\xC3\xA9\xFF") == "caf\xC3\xA9\xC2\xA4");
+    Check("0.8 CET and the overlay use the same mark (0.8.2: the ink panel its own)",
+          std::string(k::kReplacementMark) == "\xC2\xA4" && o::LimitToGlyphs("\xE6\x97\xA5") == k::kReplacementMark && std::string(k::kInkReplacementMark) == "\xE2\x80\xA2");
+
+    // Session 8's item 17: a 600-character question reaches the ink panel and the CET layer whole.
+    {
+        xfb::MessageBoard board;
+        std::string question;
+        while (Chars(question) < 590)
+        {
+            question += "word ";
+        }
+        question += "end?";
+        const auto posted = board.Post({question, 60, "ask", false}, t0);
+        const auto text = posted["text"].get<std::string>();
+        k::HudSettings settings;
+        k::BridgeView view;
+        view.pluginEnabled = view.listening = view.allowWrites = view.hasClient = view.scriptReady = true;
+        const auto frame = k::ParseFrame(k::BuildFrame(settings, view, board, {"IK_F6", "IK_F7"}, 0));
+        const auto cet = json::parse(board.Snapshot(t0, &k::ForCet));
+        Check("0.8 a 594-character question is kept whole (no cut)", !posted["truncated"].get<bool>() && Chars(text) == Chars(question));
+        Check("0.8 the ink frame and the CET copy carry it whole", frame["messages"][0]["text"] == text && cet["pending_ask"]["text"] == text);
+        const auto full = board.Post({std::string(700, 'q'), 60, "info", false}, t0);
+        const auto cetText = json::parse(board.Snapshot(t0, &k::ForCet))["messages"].back()["text"].get<std::string>();
+        Check("0.8 the cap is 600 characters; the CET copy writes the ellipsis as three dots", Chars(full["text"].get<std::string>()) == 600 &&
+                                                                                              cetText == std::string(599, 'q') + "...");
+    }
+
+    // The UI review's 9: an answered ask keeps its question, shows the answer where its keys were, until the next message.
+    {
+        xfb::MessageBoard board;
+        const auto ask = board.Post({"Fully visible?", 60, "ask", false, {"Fully visible", "Partly cut off"}}, t0);
+        const auto id = ask["id"].get<uint64_t>();
+        k::HudSettings settings;
+        k::BridgeView view;
+        view.pluginEnabled = view.listening = view.allowWrites = view.hasClient = view.scriptReady = true;
+        const auto before = k::ParseFrame(k::BuildFrame(settings, view, board, {"IK_F6", "IK_F7", "IK_F8", "IK_F11"}, id));
+        Check("0.8 the frame carries the ask's keys and the ink panel's report of it", before["ask"]["choices"].size() == 2 &&
+                                                                                        before["ask"]["choices"][0]["key"] == "IK_F6" && before.value("ink_shows", 0ull) == id);
+        Check("0.8 a report for another question isn't passed on", !k::ParseFrame(k::BuildFrame(settings, view, board, {"IK_F6"}, id + 7)).contains("ink_shows"));
+        board.Answer(id, 1, t0);
+        xfb::AnsweredAsk answered;
+        const auto after = k::ParseFrame(k::BuildFrame(settings, view, board, {"IK_F6", "IK_F7"}, id));
+        Check("0.8 once answered: the question stays, the answer replaces the keys",
+              board.Answered(answered, t0) && answered.label == "Partly cut off" && after["messages"][0]["text"] == "Fully visible?" &&
+                  !after.contains("ask") && after["answered"]["label"] == "Partly cut off" && after["answered"]["id"] == id);
+        const auto snap = json::parse(board.Snapshot(t0 + std::chrono::seconds(20)));
+        Check("0.8 the answered ask outlasts the old six seconds", snap["answered_ask"]["label"] == "Partly cut off" && !snap.contains("pending_ask"));
+        board.Post({"Next step", 8, "info", false}, t0);
+        Check("0.8 the next message takes the answered ask away", !board.Answered(answered, t0) && board.Active(t0) == 1 &&
+                                                                   board.StateOf(id, t0).state == "answered");
+    }
+
+    // The UI review's 3, 4 and 14: one wording, plain words, the colour meaning.
+    {
+        k::BridgeView view;
+        view.pluginEnabled = view.listening = view.allowWrites = view.hasClient = true;
+        const auto connected = k::Summarize(view);
+        Check("0.8 the status: XF Studio connected · changes allowed, amber",
+              connected.text == "XF Studio connected \xC2\xB7 changes allowed" && connected.label == "XF Runtime Bridge \xC2\xB7 XF Studio connected \xC2\xB7 changes allowed" &&
+                  connected.tone == "write" && connected.connection == "XF Studio connected" && connected.connectionTone == "ok" && connected.changesTone == "write");
+        auto readOnly = view;
+        readOnly.allowWrites = false;
+        auto waiting = view;
+        waiting.hasClient = false;
+        auto off = view;
+        off.pluginEnabled = false;
+        auto idle = view;
+        idle.listening = false;
+        auto killed = view;
+        killed.killed = true;
+        Check("0.8 the status: read-only green, not connected grey, off grey, not ready grey, stopped red",
+              k::Summarize(readOnly).tone == "ok" && k::Summarize(readOnly).text == "XF Studio connected \xC2\xB7 read-only" &&
+                  k::Summarize(waiting).text == "XF Studio not connected \xC2\xB7 changes allowed" && k::Summarize(waiting).connectionTone == "idle" &&
+                  k::Summarize(off).text == "Switched off in the bridge's settings." && k::Summarize(off).tone == "off" &&
+                  k::Summarize(idle).text == "Not ready yet. Restart the game if this stays." && k::Summarize(idle).tone == "idle" &&
+                  k::Summarize(killed).tone == "killed" &&
+                  k::Summarize(killed).text == "Stopped. Reconnect in the XF Runtime Bridge window (CET overlay), or restart the game.");
+        bool plain = true;
+        for (const auto& v : {view, readOnly, waiting, off, idle, killed})
+        {
+            const auto status = k::Summarize(v);
+            for (const auto* word : {"listening", "writes ON", "client", "an XF tool", "config.ini"})
+            {
+                plain = plain && status.text.find(word) == std::string::npos && status.connection.find(word) == std::string::npos;
+            }
+        }
+        Check("0.8 no jargon in any state (listening, writes ON, client, an XF tool, config.ini)", plain);
+        Check("0.8 the CET layer reads the same wording (StatusJson)", k::StatusJson(view)["label"] == connected.label && k::StatusJson(view)["changes_tone"] == "write");
+        Check("0.8 key labels drop IK_", k::KeyLabel("IK_F6") == "F6" && k::KeyLabel("F9") == "F9");
+    }
+
+    // Session 8's item 1: every documented anchor, center among them; the default top left below the XF box.
+    {
+        k::HudPanel panel;
+        panel.SetDefaults({});
+        Check("0.8 the default panel: top left, 40 by 360 of the visible screen", panel.Current().anchor == "top_left" && panel.Current().x == 40.0 &&
+                                                                                   panel.Current().y == 360.0);
+        bool all = true;
+        for (const auto* anchor : {"top_left", "top_center", "top_right", "center_left", "center", "center_right", "bottom_left", "bottom_center", "bottom_right"})
+        {
+            all = all && panel.Configure(json{{"anchor", anchor}})["settings"]["anchor"] == anchor;
+        }
+        Check("0.8 ui.hud takes all nine anchors, center included", all);
+        Check("0.8 center takes negative offsets from the middle", panel.Configure(json{{"anchor", "center"}, {"x", -300}, {"y", -120}})["settings"]["x"] == -300.0);
+    }
+
+    // Session 8's I5c: Streamline's proxies resolved to their native objects before the device check.
+    {
+        Check("0.8 overlay: one object is one device", o::MatchDevices({10, 0}, {10, 0}).same && !o::MatchDevices({10, 0}, {10, 0}).throughProxy);
+        Check("0.8 overlay: a proxy swap chain's device and the engine's native device match through the proxy",
+              o::MatchDevices({20, 10}, {10, 0}).same && o::MatchDevices({20, 10}, {10, 0}).throughProxy && o::MatchDevices({10, 0}, {30, 10}).same &&
+                  o::MatchDevices({20, 10}, {30, 10}).same);
+        Check("0.8 overlay: two different native devices, or an unknown one, never match",
+              !o::MatchDevices({20, 11}, {30, 10}).same && !o::MatchDevices({0, 0}, {10, 0}).same && !o::MatchDevices({20, 0}, {30, 0}).same);
+        o::DeviceFacts facts;
+        facts.deviceData = facts.swapChain = facts.directQueue = true;
+        facts.format = "R8G8B8A8_UNORM";
+        facts.windowClass = "W2ViewportClass";
+        facts.bufferCount = 3;
+        facts.sameDevice = false;
+        Check("0.8 overlay: a device that doesn't match even through the proxy is still refused, and says so",
+              o::RefusalFor(facts).find("Streamline") != std::string::npos);
+        facts.sameDevice = true;
+        facts.proxy = "streamline";
+        Check("0.8 overlay: through Streamline's proxy the host may draw", o::RefusalFor(facts).empty());
+        o::OverlayHost host;
+        host.Configure(true, o::ThemeKind::Dark, 100);
+        host.NoteHooks(true, true, true, "");
+        host.NoteFrameGeneration({"sl.dlss_g.dll"});
+        host.NoteInit(facts, "");
+        Check("0.8 overlay: drawing with frame generation isn't 'off for frame generation'; the answer names the proxy",
+              !host.OffForFrameGeneration() && host.Snapshot()["swap_chain_proxy"] == "streamline");
+        auto refused = facts;
+        refused.sameDevice = false;
+        host.NoteInit(refused, o::RefusalFor(refused));
+        Check("0.8 overlay: refused while a frame-generation module is loaded tells the CET label", host.OffForFrameGeneration());
+        Check("0.8 config: the overlay's diagnostics are off unless asked for", !xfb::ParseConfig("").overlayDiagnostics &&
+                                                                                 xfb::ParseConfig("[overlay]\ndiagnostics = true\n").overlayDiagnostics);
+    }
+
+    // Session 8's D4: the camera turning away from a look's point ends it user_took_over (camera_drift).
+    {
+        b::Runner runner;
+        xfb::EventLog events;
+        runner.SetEvents(&events);
+        const auto allow = [](xfb::Access) {};
+        double camYaw = 0.0; // degrees, 0 = +Y, 90 = -X
+        b::Ops fake;
+        fake.camera = [&] {
+            const double r = camYaw * 3.14159265358979 / 180.0;
+            return json{{"position", {0, 0, 0}}, {"forward", {-std::sin(r), std::cos(r), 0.0}}};
+        };
+        fake.lookAt = [](const b::Vec3&, double) {};
+        fake.watchInput = [](bool) {};
+        fake.player = [] { return json{{"position", {0, 0, 0}}, {"yaw", 0.0}, {"busy", ""}, {"took_over", ""}}; };
+        runner.Start(b::StartParams("look", json{{"turn", {{"yaw", 90}}}, {"duration_s", 4}}), allow);
+        runner.Tick(0.1, fake, true); // starting
+        for (int i = 0; i < 4; ++i)
+        {
+            camYaw += 10.0; // the look turning the camera towards its point
+            runner.Tick(0.1, fake, true);
+        }
+        Check("0.8 behave.look: turning towards its point keeps it running", runner.Active());
+        camYaw -= 12.0; // the player's mouse turns it back
+        runner.Tick(0.1, fake, true);
+        const auto all = events.Read(0, 100, {"behaviour"})["events"];
+        const auto stop = all.empty() ? json() : all.back()["data"];
+        Check("0.8 behave.look: the camera turning away ends it user_took_over, input camera_drift",
+              !runner.Active() && stop.value("reason", std::string()) == "user_took_over" && stop.value("input", std::string()) == "camera_drift", stop.dump());
+        runner.Start(b::StartParams("look", json{{"turn", {{"yaw", 90}}}}), allow);
+        camYaw = 0.0;
+        runner.Tick(0.1, fake, true);
+        camYaw = -5.0; // at once, inside the grace time: not yet the player's
+        runner.Tick(0.1, fake, true);
+        Check("0.8 behave.look: a wobble in the first quarter second doesn't end it", runner.Active());
+        runner.DropAll("test");
+    }
+
+    // Session 8's H1: game.saves asks for the newest limit saves' details and stops once they are in.
+    {
+        namespace h = xfb::hooks;
+        h::SavesOps ops;
+        int32_t asked = 0;
+        int reads = 0;
+        auto now = std::chrono::steady_clock::now();
+        ops.request = [&](int32_t aLimit) { asked = aLimit; };
+        ops.read = [&](bool aDone) -> json {
+            ++reads;
+            json metadata = json::array();
+            for (int i = 0; i < std::min(reads, 5); ++i)
+            {
+                metadata.push_back({{"index", i}, {"name", "Save-" + std::to_string(i)}, {"timestamp", 100 - i}});
+            }
+            json names = json::array();
+            for (int i = 0; i < 40; ++i)
+            {
+                names.push_back("Save-" + std::to_string(i));
+            }
+            return json{{"ready", true}, {"names", names}, {"metadata", aDone ? metadata : metadata}};
+        };
+        ops.sleep = [&](std::chrono::milliseconds aMs) { now += aMs; };
+        ops.now = [&] { return now; };
+        h::SavesRequest request;
+        request.limit = 3;
+        const auto out = h::RunSaves(request, ops);
+        Check("0.8 game.saves asks the game for the newest limit saves' details", asked == 3);
+        Check("0.8 game.saves stops once the asked-for details are in (not after the whole list)", reads <= 5 && out["saves"].size() == 3, out.dump());
+    }
+
+    // Loading from the main menu: the load step is tried again while the save's details arrive.
+    {
+        namespace w = xfb::writes;
+        namespace p = xfb::params;
+        auto now = std::chrono::steady_clock::now();
+        int tries = 0;
+        std::string loaded;
+        w::LoadOps ops;
+        ops.guard = [] {};
+        ops.latest = [] { return json{{"route", "main_menu_continue"}}; };
+        ops.list = [] { return json{{"requested", true}}; };
+        ops.saves = [] { return json{{"ready", true}, {"saves", {"ManualSave-9", "AutoSave-1"}}}; };
+        ops.load = [&](const std::string& aName) -> json {
+            if (++tries < 3)
+            {
+                throw xfb::MethodError("metadata_pending", "details not in yet");
+            }
+            loaded = aName;
+            return json{{"route", "main_menu_load"}, {"modded", true}};
+        };
+        ops.sleep = [&](std::chrono::milliseconds aMs) { now += aMs; };
+        ops.now = [&] { return now; };
+        const auto out = w::GameLoad(p::ParseGameLoad(json{{"name", "ManualSave-9"}, {"discard_unsaved", true}}), ops);
+        Check("0.8 game.load at the main menu waits for the save's details, then loads it", loaded == "ManualSave-9" && tries == 3 && out["route"] == "main_menu_load");
+        tries = -1000;
+        const auto code = ParamsCode([&] { w::GameLoad(p::ParseGameLoad(json{{"name", "AutoSave-1"}, {"discard_unsaved", true}}), ops); });
+        Check("0.8 game.load gives up with timeout when the details never come, having loaded nothing", code == "timeout" && loaded == "ManualSave-9");
+    }
+}
+
+// Bridge 0.8.1: the wave-4 review's native fixes (RB-122, RB-123, RB-125, RB-127; RB-119's checks are with the save's).
+void Bridge081Tests()
+{
+    namespace p = xfb::params;
+    namespace w = xfb::writes;
+
+    // RB-122: a write accepted before the player paused (or handed over) is refused on the game thread, right before it runs.
+    {
+        xfb::Config config;
+        config.allowWrites = true;
+        xfb::Session session;
+        std::string error;
+        wchar_t temp[MAX_PATH]{};
+        GetTempPathW(MAX_PATH, temp);
+        xfb::CreateSession(session, error, std::filesystem::path(temp) / L"xfb-unit-rb122-not-created");
+        xfb::GameThreadQueue queue;
+        queue.SetPumping(true);
+        xfb::Dispatcher dispatcher(config, session, queue);
+        std::atomic<int> single{0}, first{0}, second{0}, restored{0}, reads{0};
+        dispatcher.Register({"unit.write", xfb::Access::Write, xfb::RunOn::GameThread, "a one-step write", [&](const xfb::MethodContext&) {
+                                 ++single;
+                                 return json::object();
+                             }});
+        dispatcher.Register({"unit.read", xfb::Access::Read, xfb::RunOn::GameThread, "a read", [&](const xfb::MethodContext&) {
+                                 ++reads;
+                                 return json::object();
+                             }});
+        // A multi-step write as the handlers write them: each changing step through RunWrite, and on a refusal a step that
+        // puts things back inside a RestoreScope (never refused by the write gate).
+        dispatcher.Register({"unit.multi", xfb::Access::Write, xfb::RunOn::BridgeThread, "a two-step write", [&](const xfb::MethodContext&) {
+                                 dispatcher.RunWrite(1000ms, [&] { ++first; return json::object(); }, "unit.first");
+                                 try
+                                 {
+                                     dispatcher.RunWrite(1000ms, [&] { ++second; return json::object(); }, "unit.second");
+                                 }
+                                 catch (const xfb::MethodError&)
+                                 {
+                                     xfb::RestoreScope restoring;
+                                     dispatcher.RunWrite(1000ms, [&] { ++restored; return json::object(); }, "unit.restore");
+                                     throw;
+                                 }
+                                 return json::object();
+                             }});
+        // The game gate runs on the game thread right before each task: here it plays the player's switch flipping
+        // between the queueing and the run, on the gate call given.
+        std::atomic<int> gateCalls{0};
+        std::atomic<int> flipOn{-1};
+        std::function<void()> flip;
+        xfb::SetGameGate([&](const std::string&) {
+            if (++gateCalls == flipOn.load() && flip)
+            {
+                flip();
+            }
+        });
+        std::atomic<bool> stop{false};
+        std::thread pump([&] {
+            while (!stop.load())
+            {
+                queue.Drain(4);
+                std::this_thread::sleep_for(1ms);
+            }
+        });
+        const auto send = [&](const std::string& aMethod) {
+            const auto line = json{{"v", 1}, {"id", 1}, {"token", session.token}, {"method", aMethod}}.dump();
+            const auto reply = json::parse(dispatcher.Handle(line, 1).line);
+            return reply.value("ok", false) ? std::string("ok") : reply["error"].value("code", std::string("?"));
+        };
+        const auto arm = [&](int aCall, std::function<void()> aFlip) {
+            gateCalls = 0;
+            flip = std::move(aFlip);
+            flipOn = aCall;
+        };
+
+        arm(-1, {});
+        const auto plain = send("unit.write");
+        arm(1, [&] { dispatcher.SetWritesPaused(true); });
+        const auto paused = send("unit.write");
+        Check("RB-122: a one-step write paused between its queueing and its run is refused writes_paused and never runs",
+              plain == "ok" && paused == "writes_paused" && single.load() == 1, plain + " " + paused);
+        const auto read = send("unit.read");
+        Check("RB-122: reads still run while changes are paused", read == "ok" && reads.load() == 1, read);
+        dispatcher.SetWritesPaused(false);
+
+        arm(1, [&] { dispatcher.SetHandover(true); });
+        const auto handedFirst = send("unit.multi");
+        Check("RB-122: a multi-step write's first step is checked on the game thread too (handed_over, nothing ran)",
+              handedFirst == "handed_over" && first.load() == 0 && second.load() == 0 && restored.load() == 0, handedFirst);
+        dispatcher.SetHandover(false);
+
+        arm(2, [&] { dispatcher.SetWritesPaused(true); });
+        const auto pausedSecond = send("unit.multi");
+        Check("RB-122: every changing step is checked, however many came before; the put-back step (RestoreScope) still runs",
+              pausedSecond == "writes_paused" && first.load() == 1 && second.load() == 0 && restored.load() == 1, pausedSecond);
+        dispatcher.SetWritesPaused(false);
+
+        arm(-1, {});
+        const auto clean = send("unit.multi");
+        Check("RB-122: with nothing in between, every step runs", clean == "ok" && first.load() == 2 && second.load() == 1 && restored.load() == 1, clean);
+
+        // Real multi-step handlers (core/Writes.cpp) with their steps bound as the plugin binds them.
+        dispatcher.SetWritesPaused(false);
+        arm(-1, {});
+        {
+            // photo.pose.set: the category changes, photo mode settles for a few ticks, the player pauses, then the pose
+            // step is refused and the category is put back.
+            int category = 1;
+            int poseSelected = 0;
+            w::PoseSetOps ops;
+            ops.category = [&] {
+                return dispatcher.RunWrite(1000ms, [&] {
+                    const int before = category;
+                    category = 7;
+                    return json{{"changed", true}, {"before_known", true}, {"before_category", before}, {"before_pose", 0},
+                                {"category_value", 7}, {"category_text", "XF"}};
+                }, "unit.pose.category");
+            };
+            ops.settle = [&] { dispatcher.SetWritesPaused(true); };
+            ops.pose = [&] {
+                return dispatcher.RunWrite(1000ms, [&] { ++poseSelected; return json{{"changed", true}, {"pose_value", 3}}; }, "unit.pose.pose");
+            };
+            ops.restoreCategory = [&](int32_t aValue) {
+                dispatcher.RunWrite(1000ms, [&, aValue] { category = aValue; return json::object(); }, "unit.pose.restore");
+            };
+            const auto code = ParamsCode([&] { w::PoseSet(ops); });
+            Check("RB-122: photo.pose.set paused during its settle selects no pose and puts the category back",
+                  code == "writes_paused" && poseSelected == 0 && category == 1, code + " category=" + std::to_string(category));
+            dispatcher.SetWritesPaused(false);
+        }
+        {
+            // photo.light.set: the light is selected, photo mode loads it, the player pauses, then the value step is
+            // refused and the earlier selection comes back.
+            int selected = 0; // light 1
+            int values = 0;
+            w::LightOps ops;
+            ops.set = [&](int32_t aKey, float aValue) {
+                return dispatcher.RunWrite(1000ms, [&, aKey, aValue] {
+                    if (aKey == xfb::params::key::kLightSelect)
+                    {
+                        const int before = selected;
+                        selected = static_cast<int>(aValue);
+                        return json{{"before", before}, {"after", aValue}};
+                    }
+                    ++values;
+                    return json{{"before", 0.0}, {"after", aValue}};
+                }, "unit.light.set");
+            };
+            ops.settle = [&] { dispatcher.SetWritesPaused(true); };
+            const auto code = ParamsCode([&] { w::LightSet(xfb::params::ParseLight(json{{"light", 2}, {"brightness", 50}}), ops); });
+            Check("RB-122: photo.light.set paused after its selection sets no value and selects the earlier light again",
+                  code == "writes_paused" && values == 0 && selected == 0, code + " selected=" + std::to_string(selected));
+            dispatcher.SetWritesPaused(false);
+        }
+        stop.store(true);
+        pump.join();
+        xfb::SetGameGate({});
+    }
+
+    // RB-123: scene.read's points.
+    {
+        namespace scene = xfb::scene;
+        Check("RB-123: scene.read refuses a null point before reading it",
+              ParamsCode([] { scene::ParseRead(json{{"points", json::array({nullptr})}}); }) == "bad_params" &&
+                  ParamsCode([] { scene::ParseRead(json{{"points", json::array({json::array({1, 2, 3}), nullptr})}}); }) == "bad_params");
+        Check("RB-123: and points that aren't three finite numbers within 1e6 m",
+              ParamsCode([] { scene::ParseRead(json{{"points", json::array({json::array({1, 2})})}}); }) == "bad_params" &&
+                  ParamsCode([] { scene::ParseRead(json{{"points", json::array({json::array({1, 2, "x"})})}}); }) == "bad_params" &&
+                  ParamsCode([] { scene::ParseRead(json{{"points", json::array({json::array({1, 2, 2e6})})}}); }) == "bad_params");
+        const auto ok = scene::ParseRead(json{{"points", json::array({json::array({1, 2, 3})})}});
+        Check("RB-123: a good point is read", ok.points.size() == 1 && ok.points[0][2] == 3.0);
+    }
+
+    // RB-125: inventory undo names the exact copy.
+    {
+        Check("RB-125: inventory.equip's id is the decimal identity an undo gives",
+              ParamsCode([] { p::ParseInventoryEquip(json{{"item", "Items.Cap_01"}, {"id", "1234567890123"}}); }) == "ok" &&
+                  p::ParseInventoryEquip(json{{"item", "Items.Cap_01"}, {"id", "42"}}).id == "42" &&
+                  ParamsCode([] { p::ParseInventoryEquip(json{{"item", "Items.Cap_01"}, {"id", "12a"}}); }) == "bad_params" &&
+                  ParamsCode([] { p::ParseInventoryEquip(json{{"item", "Items.Cap_01"}, {"id", 42}}); }) == "bad_params" &&
+                  ParamsCode([] { p::ParseInventoryEquip(json{{"item", "Items.Cap_01"}, {"id", std::string(21, '1')}}); }) == "bad_params");
+        FakeWardrobe wardrobe;
+        wardrobe.worn["Head"] = "Items.Cap_01";
+        auto ops = wardrobe.Ops("Items.Helmet_01", "Head", false);
+        const auto equip = ops.equip;
+        ops.equip = [equip] {
+            auto step = equip();
+            step["previous_id"] = "987654321";
+            return step;
+        };
+        const auto out = w::InventoryEquip(p::ParseInventoryEquip(json{{"item", "Items.Helmet_01"}}), ops);
+        Check("RB-125: equip over another item: the undo equips that exact copy (its id)",
+              out["undo"] == json{{"method", "inventory.equip"}, {"params", {{"item", "Items.Cap_01"}, {"slot", "Head"}, {"id", "987654321"}}}}, out.dump());
+        const auto again = w::InventoryEquip(p::ParseInventoryEquip(out["undo"]["params"]), wardrobe.Ops("Items.Cap_01", "Head", false));
+        Check("RB-125: the undo's parameters parse and run", again["equipped"] == true, again.dump());
+
+        FakeWardrobe other;
+        other.worn["Head"] = "Items.Cap_01";
+        auto odd = other.Ops("Items.Helmet_01", "Head", false);
+        const auto oddEquip = odd.equip;
+        odd.equip = [oddEquip] {
+            auto step = oddEquip();
+            step["previous_id"] = "not digits";
+            step["exact"] = false;
+            return step;
+        };
+        const auto loose = w::InventoryEquip(p::ParseInventoryEquip(json{{"item", "Items.Helmet_01"}, {"id", "55"}}), odd);
+        Check("RB-125: an identity that isn't digits is left out; a copy that wasn't found says so",
+              !loose["undo"]["params"].contains("id") && loose["exact"] == false && loose.value("exact_note", std::string()).find("55") != std::string::npos,
+              loose.dump());
+
+        FakeWardrobe worn;
+        worn.worn["Head"] = "Items.Cap_01";
+        auto unequipOps = worn.Ops("Items.Cap_01", "Head", false);
+        const auto unequip = unequipOps.unequip;
+        unequipOps.unequip = [unequip] {
+            auto step = unequip();
+            step["previous_id"] = "31337";
+            return step;
+        };
+        const auto off = w::InventoryUnequip(p::ParseInventoryUnequip(json{{"slot", "Head"}}), unequipOps);
+        {
+            FakeWardrobe polled;
+            auto pollOps = polled.Ops("Items.Helmet_01", "Head", false);
+            const auto pollEquip = pollOps.equip;
+            pollOps.equip = [pollEquip] {
+                auto step = pollEquip();
+                step["id"] = "424242";
+                return step;
+            };
+            w::InventoryEquip(p::ParseInventoryEquip(json{{"item", "Items.Helmet_01"}}), pollOps);
+            Check("RB-125: the wait after an equip reads the slot for the exact copy the equip step chose",
+                  !polled.askedIds.empty() && std::all_of(polled.askedIds.begin(), polled.askedIds.end(), [](const std::string& aId) { return aId == "424242"; }));
+        }
+        Check("RB-125: unequip's undo equips the exact copy again",
+              off["undo"] == json{{"method", "inventory.equip"}, {"params", {{"item", "Items.Cap_01"}, {"slot", "Head"}, {"id", "31337"}}}}, off.dump());
+    }
+
+    // RB-127: a long teleport's undo carries far.
+    {
+        namespace pl = xfb::player;
+        const auto farUndo = pl::TeleportUndo({100, 200, 10}, 45.0, {100, 290, 10});
+        const auto nearUndo = pl::TeleportUndo({100, 200, 10}, 45.0, {100, 230, 10});
+        Check("RB-127: a teleport's undo beyond 50 m has far: true, a short one doesn't",
+              farUndo["params"].value("far", false) && !nearUndo["params"].contains("far") && farUndo["params"]["ground"] == "exact" &&
+                  farUndo["params"]["yaw"] == 45.0 && farUndo["method"] == "player.teleport",
+              farUndo.dump() + " " + nearUndo.dump());
+        Check("RB-127: the undo parses as a teleport the bridge accepts", ParamsCode([&] { pl::ParseTeleport(farUndo["params"]); }) == "ok" &&
+                                                                              pl::ParseTeleport(farUndo["params"]).farOk);
+    }
+}
+
+// 0.8.2: the re-check's findings (native side) and session 9's bridge fixes.
+void Bridge082Tests()
+{
+    namespace p = xfb::params;
+    namespace w = xfb::writes;
+
+    // A dispatcher with a pump thread draining the queue and the cleanup lane, as the plugin's Running update does.
+    struct Rig
+    {
+        xfb::Config config;
+        xfb::Session session;
+        xfb::GameThreadQueue queue;
+        std::unique_ptr<xfb::Dispatcher> dispatcher;
+        std::atomic<bool> stop{false};
+        std::thread pump;
+        Rig()
+        {
+            config.allowWrites = true;
+            std::string error;
+            wchar_t temp[MAX_PATH]{};
+            GetTempPathW(MAX_PATH, temp);
+            xfb::CreateSession(session, error, std::filesystem::path(temp) / L"xfb-unit-082-not-created");
+            queue.SetPumping(true);
+            dispatcher = std::make_unique<xfb::Dispatcher>(config, session, queue);
+            pump = std::thread([this] {
+                while (!stop.load())
+                {
+                    queue.Drain(4);
+                    queue.DrainCleanup(4);
+                    std::this_thread::sleep_for(1ms);
+                }
+            });
+        }
+        ~Rig()
+        {
+            stop.store(true);
+            pump.join();
+        }
+        void Kill()
+        {
+            dispatcher->Kill("unit");
+            queue.Close();
+        }
+    };
+    const auto waitFor = [](const std::function<bool()>& aDone) {
+        const auto deadline = std::chrono::steady_clock::now() + 2s;
+        while (!aDone() && std::chrono::steady_clock::now() < deadline)
+        {
+            std::this_thread::sleep_for(2ms);
+        }
+        return aDone();
+    };
+    xfb::SetGameGate({});
+
+    // Re-check finding 6: the kill switch during photo.pose.set's settle. The pose step is refused; the category's put-back
+    // goes on the cleanup lane (the queue is closed) and the game thread runs it.
+    {
+        Rig rig;
+        auto& d = *rig.dispatcher;
+        std::atomic<int> category{1};
+        std::atomic<int> poseSelected{0};
+        w::PoseSetOps ops;
+        ops.category = [&] {
+            return d.RunWrite(1000ms, [&] {
+                const int before = category.exchange(7);
+                return json{{"changed", true}, {"before_known", true}, {"before_category", before}, {"before_pose", 0}, {"category_value", 7}, {"category_text", "XF"}};
+            }, "unit.pose.category");
+        };
+        ops.settle = [&] { rig.Kill(); };
+        ops.pose = [&] { return d.RunWrite(1000ms, [&] { ++poseSelected; return json{{"changed", true}}; }, "unit.pose.pose"); };
+        ops.restoreCategory = [&](int32_t aValue) { d.RunWrite(1000ms, [&, aValue] { category = aValue; return json::object(); }, "unit.pose.restore"); };
+        std::string message;
+        try
+        {
+            w::PoseSet(ops);
+        }
+        catch (const xfb::MethodError& e)
+        {
+            message = std::string(e.code) + ": " + e.what();
+        }
+        const bool restored = waitFor([&] { return category.load() == 1; });
+        Check("0.8.2 (re-check 6): photo.pose.set killed during its settle selects no pose, and the category's put-back runs on the cleanup lane",
+              message.rfind("killed:", 0) == 0 && poseSelected == 0 && restored && message.find("put back") != std::string::npos,
+              message + " category=" + std::to_string(category.load()));
+        Check("0.8.2 (re-check 6): a forward write after the kill is still refused (never on the cleanup lane)",
+              ParamsCode([&] { d.RunWrite(200ms, [&] { category = 9; return json::object(); }, "unit.forward"); }) == "killed" && category.load() == 1 &&
+                  rig.queue.PendingCleanups() == 0);
+    }
+    {
+        xfb::GameThreadQueue queue;
+        queue.Close();
+        size_t accepted = 0;
+        for (size_t i = 0; i < xfb::GameThreadQueue::kCleanupCapacity + 3; ++i)
+        {
+            accepted += queue.PostCleanup([] { return json::object(); }, "unit.cap") ? 1 : 0;
+        }
+        const auto ran = queue.DrainCleanup(100);
+        std::atomic<int> after{0};
+        queue.PostCleanup([]() -> json { throw std::runtime_error("x"); }, "unit.throw");
+        queue.PostCleanup([&] { ++after; return json::object(); }, "unit.after");
+        queue.DrainCleanup(100);
+        Check("0.8.2: the cleanup lane is bounded, accepted while closed, and a failing step doesn't stop the next",
+              accepted == xfb::GameThreadQueue::kCleanupCapacity && ran == xfb::GameThreadQueue::kCleanupCapacity && after == 1 && queue.PendingCleanups() == 0,
+              std::to_string(accepted) + " " + std::to_string(ran));
+    }
+
+    // Re-check finding 4: place "camera" switches the light off and on; the switch on is the placement, so it is gated.
+    struct LightFake : FakePhoto
+    {
+        std::map<int32_t, std::array<double, 3>> at;
+        xfb::Dispatcher* d = nullptr;
+        std::atomic<int> placed{0};
+        xfb::writes::LightOps Ops(std::function<void()> aSettle)
+        {
+            auto ops = FakePhoto::Ops();
+            const auto base = ops.set;
+            // By value: a step put on the cleanup lane runs after this call has returned.
+            ops.set = [this, base](int32_t aKey, float aValue) { return d->RunWrite(1000ms, [base, aKey, aValue] { return base(aKey, aValue); }, "unit.light.set"); };
+            ops.settle = aSettle;
+            ops.place = [this](int32_t aLight, const p::LightPlacement& aPlace) {
+                return d->RunWrite(1000ms, [this, aLight, aPlace] {
+                    ++placed;
+                    calls.push_back("place " + std::to_string(aLight));
+                    const auto before = at[aLight];
+                    at[aLight] = {aPlace.world[0], aPlace.world[1], aPlace.world[2]};
+                    const auto vec = [](const std::array<double, 3>& v) { return json{{"x", v[0]}, {"y", v[1]}, {"z", v[2]}}; };
+                    return json{{"before", vec(before)}, {"after", vec(at[aLight])}};
+                }, "unit.light.place");
+            };
+            ops.position = [this](int32_t aLight) {
+                const auto v = at[aLight];
+                return json{{"position", {{"x", v[0]}, {"y", v[1]}, {"z", v[2]}}}};
+            };
+            return ops;
+        }
+    };
+    {
+        Rig rig;
+        LightFake fake;
+        fake.d = rig.dispatcher.get();
+        fake.values[p::key::kLightSelect] = 0;
+        fake.values[p::key::kLightState] = 0; // off
+        fake.at[1] = {9.0, 9.0, 9.0};
+        bool paused = false;
+        const auto code = ParamsCode([&] {
+            w::LightSet(p::ParseLight(json{{"light", 1}, {"place", "camera"}}), fake.Ops([&] {
+                if (!paused)
+                {
+                    paused = true;
+                    rig.dispatcher->SetWritesPaused(true);
+                }
+            }));
+        });
+        Check("0.8.2 (re-check 4): a light that was off, placed at the camera and paused during the settle, stays off (the switch on is gated)",
+              code == "writes_paused" && fake.values[p::key::kLightState] == 0.0f &&
+                  std::find(fake.calls.begin(), fake.calls.end(), std::to_string(p::key::kLightState) + "=1") == fake.calls.end(),
+              code);
+    }
+    {
+        Rig rig;
+        LightFake fake;
+        fake.d = rig.dispatcher.get();
+        fake.values[p::key::kLightSelect] = 0;
+        fake.values[p::key::kLightState] = 1; // on
+        fake.at[1] = {9.0, 9.0, 9.0};
+        bool paused = false;
+        const auto code = ParamsCode([&] {
+            w::LightSet(p::ParseLight(json{{"light", 1}, {"place", "camera"}}), fake.Ops([&] {
+                if (!paused)
+                {
+                    paused = true;
+                    // In the game photo mode moves the light as it switches; here the pause comes first, so only the
+                    // light's earlier state may come back.
+                    fake.at[1] = {1.0, 2.0, 3.0};
+                    rig.dispatcher->SetWritesPaused(true);
+                }
+            }));
+        });
+        Check("0.8.2 (re-check 4): a light that was on comes back on and to where it stood (its earlier state, not the placement)",
+              code == "writes_paused" && fake.values[p::key::kLightState] == 1.0f && fake.at[1] == std::array<double, 3>{9.0, 9.0, 9.0}, code);
+    }
+
+    {
+        // 0.8.2 (the review): the kill switch during the settle between the switch-off and the switch-on. The real settle
+        // fails then (WaitTicks sees the closed queue); the light, which was on, comes back on and to where it stood, through
+        // the cleanup lane. 0.8.2's first fix kept the settle outside the guard and left the light dark; a settle that only
+        // paused (as the tests above) didn't show it.
+        Rig rig;
+        LightFake fake;
+        fake.d = rig.dispatcher.get();
+        fake.values[p::key::kLightSelect] = 0;
+        fake.values[p::key::kLightState] = 1; // on
+        fake.at[1] = {9.0, 9.0, 9.0};
+        bool killed = false;
+        const auto code = ParamsCode([&] {
+            w::LightSet(p::ParseLight(json{{"light", 1}, {"place", "camera"}}), fake.Ops([&] {
+                if (!killed)
+                {
+                    killed = true;
+                    fake.at[1] = {1.0, 2.0, 3.0};
+                    rig.Kill();
+                    throw xfb::MethodError("timeout", "photo mode didn't load the selected light's values in time");
+                }
+            }));
+        });
+        const bool restored = waitFor([&] { return fake.placed.load() >= 1; });
+        Check("0.8.2 (review 3): killed during the settle, a light that was on comes back on and in place through the cleanup lane",
+              code == "timeout" && restored && fake.values[p::key::kLightState] == 1.0f && fake.at[1] == std::array<double, 3>{9.0, 9.0, 9.0}, code);
+    }
+
+    // Review 2: a put-back step cancelled by the kill switch while queued goes on the cleanup lane (decided under the lock).
+    {
+        xfb::Config config;
+        xfb::Session session;
+        std::string error;
+        wchar_t temp[MAX_PATH]{};
+        GetTempPathW(MAX_PATH, temp);
+        xfb::CreateSession(session, error, std::filesystem::path(temp) / L"xfb-unit-082-defer");
+        xfb::GameThreadQueue queue;
+        queue.SetPumping(true); // pumping, but nothing drains: the step waits in the queue
+        xfb::Dispatcher dispatcher(config, session, queue);
+        xfb::SetGameGate({});
+        std::atomic<int> ran{0};
+        json answer;
+        std::thread restorer([&] {
+            xfb::RestoreScope restoring;
+            answer = dispatcher.RunWrite(5000ms, [&] { ++ran; return json::object(); }, "unit.restore.queued");
+        });
+        std::this_thread::sleep_for(50ms);
+        dispatcher.Kill("unit");
+        queue.Close();
+        restorer.join();
+        const auto pending = queue.PendingCleanups();
+        queue.DrainCleanup(4);
+        Check("0.8.2 (review 2): a put-back step the kill switch cancelled while it waited is posted to the cleanup lane, and runs there",
+              answer.value("deferred_to_cleanup", false) && pending == 1 && ran == 1, answer.dump());
+        xfb::GameThreadQueue closed;
+        closed.Close();
+        json result;
+        std::string closedError;
+        const auto refused = closed.Run([] { return json::object(); }, 100ms, result, closedError, "unit.forward");
+        const auto deferred = closed.Run([] { return json::object(); }, 100ms, result, closedError, "unit.restore", xfb::GameThreadQueue::kDefaultRunningGrace,
+                                         [] { return json::object(); });
+        Check("0.8.2 (review 2): a closed queue refuses a forward step and defers a put-back one",
+              refused == xfb::QueueResult::NotPumping && deferred == xfb::QueueResult::Deferred && closed.PendingCleanups() == 1);
+    }
+
+    // Re-check finding 2: player.stop between a look's steps ends it there.
+    {
+        Rig rig;
+        auto& d = *rig.dispatcher;
+        xfb::player::StopCount stops;
+        std::atomic<int> turned{0}, looked{0};
+        const auto seen = stops.Current();
+        d.RunWrite(1000ms, [&] { stops.Require(seen, "unit.look"); ++turned; return json::object(); }, "unit.look.turn");
+        stops.Stop(); // player.stop on the control pipe during the one-tick wait
+        const auto code = ParamsCode([&] { d.RunWrite(1000ms, [&] { stops.Require(seen, "unit.look"); ++looked; return json::object(); }, "unit.look.at"); });
+        const auto fresh = stops.Current();
+        const auto again = ParamsCode([&] { d.RunWrite(1000ms, [&] { stops.Require(fresh, "unit.look"); ++looked; return json::object(); }, "unit.look.at"); });
+        Check("0.8.2 (re-check 2): a stop between a look's steps refuses the look-at (stopped), and a look started after it runs",
+              turned == 1 && code == "stopped" && again == "ok" && looked == 1 && stops.StoppedSince(seen) && !stops.StoppedSince(fresh), code + " " + again);
+    }
+}
+
+
+// 0.8.2: session 9's bridge fixes and the surfaces' rule (core pieces).
+void Session9Tests()
+{
+    namespace p = xfb::params;
+    namespace k = xfb::inkui;
+    namespace h = xfb::hooks;
+    namespace b = xfb::behave;
+    const auto t0 = xfb::MessageBoard::Clock::now();
+
+    // One question at a time (B6), a clear withdraws a waiting one, keep_asks keeps it (a capture's clear).
+    {
+        xfb::MessageBoard board;
+        const auto first = board.Post({"First question?", 60, "ask", false}, t0)["id"].get<uint64_t>();
+        const auto second = board.Post({"Second question?", 60, "ask", false}, t0);
+        xfb::PendingAsk pending;
+        Check("0.8.2 a new question withdraws the one still waiting (one pending ask at a time)",
+              board.StateOf(first, t0).state == "gone" && second["withdrawn"] == json::array({first}) && board.Pending(pending, t0) &&
+                  pending.id == second["id"].get<uint64_t>(),
+              second.dump());
+        board.Answer(pending.id, 0, t0);
+        xfb::PendingAsk none;
+        Check("0.8.2 answering it reveals no older question underneath", !board.Pending(none, t0));
+        const auto third = board.Post({"Third?", 60, "ask", false}, t0)["id"].get<uint64_t>();
+        board.Post({"", 8, "info", true, {}, true}, t0);
+        Check("0.8.2 keep_asks: a capture's clear keeps the waiting question", board.StateOf(third, t0).state == "pending");
+        board.Post({"", 8, "info", true}, t0);
+        Check("0.8.2 a plain clear withdraws the waiting question", board.StateOf(third, t0).state == "gone" && board.Active(t0) == 0);
+        Check("0.8.2 keep_asks goes with clear; clear_asks is still accepted (true only)",
+              ParamsCode([] { p::ParseMessage(json{{"keep_asks", true}}); }) == "bad_params" &&
+                  ParamsCode([] { p::ParseMessage(json{{"clear", true}, {"clear_asks", true}}); }) == "ok" &&
+                  ParamsCode([] { p::ParseMessage(json{{"clear", true}, {"clear_asks", false}}); }) == "bad_params" &&
+                  p::ParseMessage(json{{"clear", true}, {"keep_asks", true}}).keepAsks);
+        std::string message;
+        try
+        {
+            p::ParseMessage(json{{"text", "Which?"}, {"level", "ask"}, {"choices", {"A label well over twenty-four characters"}}});
+        }
+        catch (const xfb::MethodError& e)
+        {
+            message = e.what();
+        }
+        Check("0.8.2 (D2) a choice over 24 characters is refused, and the refusal says why and how long it may be",
+              message.find("24 characters") != std::string::npos && message.find("button label") != std::string::npos, message);
+        Check("0.8.2 a choice of exactly 24 characters is fine",
+              ParamsCode([] { p::ParseMessage(json{{"text", "Which?"}, {"level", "ask"}, {"choices", {std::string(24, 'x')}}}); }) == "ok");
+    }
+
+    // game.saves (I1): limit applies to names, one entry per save.
+    {
+        const auto twice = json{{"index", 0}, {"name", "AutoSave-17"}, {"timestamp", 9}};
+        const auto saves = h::TrimSaves(json{{"ready", true},
+                                             {"names", {"AutoSave-17", "AutoSave-16", "AutoSave-15", "ManualSave-1"}},
+                                             {"metadata", {twice, twice, {{"index", 1}, {"name", "AutoSave-16"}, {"timestamp", 8}}}}},
+                                        2);
+        Check("0.8.2 (I1) game.saves: the newest save once, names cut to limit, count the whole list",
+              saves["saves"].size() == 2 && saves["saves"][0]["name"] == "AutoSave-17" && saves["saves"][1]["name"] == "AutoSave-16" &&
+                  saves["names"] == json::array({"AutoSave-17", "AutoSave-16"}) && saves["count"] == 4 && saves["with_metadata"] == 2 &&
+                  saves["note"].get<std::string>().empty(),
+              saves.dump());
+    }
+
+    // The surfaces' rule and the frame's surface record.
+    {
+        Check("0.8.2 surfaces: the ink panel while it is on screen, else the XF box, else the CET line",
+              k::ChooseStatusSurface({true, true}) == k::StatusSurface::InkPanel && k::ChooseStatusSurface({false, true}) == k::StatusSurface::XfBox &&
+                  k::ChooseStatusSurface({false, false}) == k::StatusSurface::CetLine && k::ChooseStatusSurface({true, false}) == k::StatusSurface::InkPanel);
+        Check("0.8.3 surfaces: none at all while no session is live (session 10: the XF box drew over the press-any-key screen)",
+              k::ChooseStatusSurface({false, true, false}) == k::StatusSurface::None && k::ChooseStatusSurface({true, true, false}) == k::StatusSurface::None &&
+                  k::ChooseStatusSurface({false, false, false}) == k::StatusSurface::None && std::string(k::SurfaceName(k::StatusSurface::None)) == "none");
+        k::BridgeView view;
+        view.pluginEnabled = true;
+        view.listening = true;
+        xfb::MessageBoard board;
+        const auto frame = k::ParseFrame(k::BuildFrame(k::HudSettings{}, view, board, {"IK_F6"}, 0, k::StatusSurface::XfBox));
+        Check("0.8.2 surfaces: the frame names the surface (the CET layer draws its line only for cet_line)",
+              frame.value("surface", std::string()) == "xf_box" &&
+                  k::ParseFrame(k::BuildFrame(k::HudSettings{}, view, board, {"IK_F6"}, 0))["surface"] == "cet_line",
+              frame.dump());
+        // Review 5: keys are offered only while they answer the question.
+        board.Post({"Which?", 60, "ask", false, {"Yes", "No"}}, t0);
+        xfb::PendingAsk pendingAsk;
+        board.Pending(pendingAsk);
+        const auto armed = k::ParseFrame(k::BuildFrame(k::HudSettings{}, view, board, {"IK_F6", "IK_F7"}, 0, k::StatusSurface::XfBox, pendingAsk.id));
+        const auto unarmed = k::ParseFrame(k::BuildFrame(k::HudSettings{}, view, board, {"IK_F6", "IK_F7"}, 0, k::StatusSurface::XfBox, 0));
+        Check("0.8.2 (review 5) the frame says whether the keys answer the question, and the XF box's line follows it",
+              armed.value("keys", std::string()) == "1" && unarmed.value("keys", std::string()) == "0" &&
+                  k::AnswerHint({"Yes", "No"}, {"IK_F6", "IK_F7"}, true) == "F6 Yes   F7 No" &&
+                  k::AnswerHint({"Yes", "No"}, {"IK_F6", "IK_F7"}, false) == "Answer in the XF Runtime Bridge window (CET overlay).",
+              armed.dump());
+        // Connection status follows the session (session 9): a request a moment ago counts as connected.
+        view.hasClient = false;
+        view.inSession = true;
+        const auto status = k::Summarize(view);
+        view.inSession = false;
+        Check("0.8.2 status: in a session (a recent request or the session lock) it says connected between calls",
+              status.connection == "XF Studio connected" && k::Summarize(view).connection == "XF Studio not connected", status.connection);
+    }
+
+    // The session lock read by the plugin (status follows the session).
+    {
+        wchar_t temp[MAX_PATH]{};
+        GetTempPathW(MAX_PATH, temp);
+        xfb::Session session;
+        session.runtimeDir = std::filesystem::path(temp) / L"xfb-unit-082-lock";
+        std::filesystem::create_directories(session.runtimeDir);
+        const auto lockFile = session.runtimeDir / L"session-runner.lock";
+        const auto write = [&](const std::string& aText) {
+            std::ofstream out(lockFile, std::ios::binary | std::ios::trunc);
+            out << aText;
+        };
+        std::filesystem::remove(lockFile);
+        const bool none = xfb::SessionRunnerActive(session);
+        write(json{{"pid", GetCurrentProcessId()}, {"script", "unit"}}.dump());
+        const bool mine = xfb::SessionRunnerActive(session);
+        FILETIME created{}, exited{}, kernel{}, user{};
+        GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user);
+        const auto started = std::to_string((static_cast<uint64_t>(created.dwHighDateTime) << 32) | created.dwLowDateTime);
+        write(json{{"pid", GetCurrentProcessId()}, {"process_started", started}}.dump());
+        const bool same = xfb::SessionRunnerActive(session);
+        write(json{{"pid", GetCurrentProcessId()}, {"process_started", "1"}}.dump());
+        const bool reused = xfb::SessionRunnerActive(session);
+        write(json{{"pid", 4294967290ull}}.dump());
+        const bool gone = xfb::SessionRunnerActive(session);
+        write("not json");
+        const bool bad = xfb::SessionRunnerActive(session);
+        std::filesystem::remove_all(session.runtimeDir);
+        Check("0.8.2 status: the session lock counts while its process runs (the same process: review 8); a missing, stale, reused-PID or unreadable lock doesn't",
+              !none && mine && same && !reused && !gone && !bad);
+    }
+
+    // game.load's press-any-key screen: the puppet before the player.
+    {
+        xfb::ScriptLayer layer;
+        layer.OnEvent("attach");
+        const bool before = layer.Describe()["waiting_for_input"].get<bool>();
+        layer.OnEvent("puppet");
+        const auto waiting = layer.Describe();
+        layer.OnEvent("player_attach");
+        const auto ready = layer.Describe();
+        layer.OnEvent("detach");
+        layer.OnEvent("puppet"); // detached: no screen to wait on
+        Check("0.8.2 load: the puppet in and the player not yet is the press-any-key screen (waiting_for_input), cleared by the player",
+              !before && waiting["waiting_for_input"] == true && ready["waiting_for_input"] == false && layer.Describe()["waiting_for_input"] == false &&
+                  xfb::writes::StatusWhileLoading("loading", waiting)["waiting_for_input"] == true,
+              waiting.dump());
+    }
+
+    // showroom.anchor's archives.
+    {
+        namespace s = xfb::showroom;
+        const std::string key(32, 'a');
+        Check("0.8.2 showroom.anchor: archive names (xfs_showroom_ and 32 hex digits) up to 16, nothing else",
+              s::ParseAnchorArchives(json::object()).empty() && s::ParseAnchorArchives(json{{"archives", {"xfs_showroom_" + key}}}).size() == 1 &&
+                  ParamsCode([&] { s::ParseAnchorArchives(json{{"archives", {"xfs_showroom_" + key + ".archive"}}}); }) == "bad_params" &&
+                  ParamsCode([&] { s::ParseAnchorArchives(json{{"archives", {"..\\\\x"}}}); }) == "bad_params" &&
+                  ParamsCode([&] { s::ParseAnchorArchives(json{{"archives", json::array({json(1)})}}); }) == "bad_params" &&
+                  ParamsCode([&] { s::ParseAnchorArchives(json{{"other", 1}}); }) == "bad_params");
+    }
+
+    // behave.look takes its duration (D2: 4 s ran in 1.2 s): steered along its arc, reached only near the end.
+    {
+        b::Runner runner;
+        b::Ops fake;
+        double yaw = 0.0; // the camera's yaw, turned instantly towards each look-at point (a fast game look-at)
+        int lookAts = 0;
+        fake.camera = [&] {
+            const double r = yaw * 3.14159265358979 / 180.0;
+            return json{{"position", {0.0, 0.0, 1.7}}, {"forward", {-std::sin(r), std::cos(r), 0.0}}, {"right", {std::cos(r), std::sin(r), 0.0}},
+                        {"up", {0, 0, 1}}, {"fov", 60.0}};
+        };
+        fake.lookAt = [&](const b::Vec3& aPoint, double) {
+            ++lookAts;
+            yaw = std::atan2(-aPoint[0], aPoint[1]) * 180.0 / 3.14159265358979;
+        };
+        fake.player = [] { return json{{"busy", ""}, {"phase", "gameplay"}}; };
+        runner.Start(b::StartParams("look", json{{"turn", {{"yaw", 90}}}, {"duration_s", 4}}), [](xfb::Access) {});
+        double t = 0.0;
+        double halfway = -1.0;
+        while (runner.Active() && t < 10.0)
+        {
+            runner.Tick(0.05, fake, true);
+            t += 0.05;
+            if (halfway < 0.0 && t >= 2.0)
+            {
+                halfway = yaw;
+            }
+        }
+        Check("0.8.2 (D2) behave.look of 90 degrees over 4 s: half way at 2 s, done after about 4 s, steered in short steps",
+              !runner.Active() && t >= 3.6 && t <= 4.6 && std::abs(halfway - 45.0) < 8.0 && lookAts >= 30,
+              "t=" + std::to_string(t) + " halfway=" + std::to_string(halfway) + " lookAts=" + std::to_string(lookAts));
+    }
+    {
+        // The review's case: from yaw 0, pitch 80 to yaw 180, pitch 0 over 4 s. Easing yaw and pitch apart moved the view away
+        // from the point (100 to about 107 degrees) and the drift check stopped the look as the player's own input; on the
+        // great circle the angle to the point only shrinks.
+        b::Runner runner;
+        xfb::EventLog events;
+        runner.SetEvents(&events);
+        b::Ops fake;
+        const double k = 3.14159265358979 / 180.0;
+        b::Vec3 forward{0.0, std::cos(80.0 * k), std::sin(80.0 * k)};
+        const b::Vec3 camera{0.0, 0.0, 1.7};
+        fake.camera = [&] { return json{{"position", camera}, {"forward", forward}, {"right", {1, 0, 0}}, {"up", {0, 0, 1}}, {"fov", 60.0}}; };
+        fake.lookAt = [&](const b::Vec3& aPoint, double) {
+            const b::Vec3 d{aPoint[0] - camera[0], aPoint[1] - camera[1], aPoint[2] - camera[2]};
+            const double n = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+            forward = {d[0] / n, d[1] / n, d[2] / n}; // a camera that follows each step at once, yaw and pitch
+        };
+        fake.player = [] { return json{{"busy", ""}, {"phase", "gameplay"}}; };
+        runner.Start(b::StartParams("look", json{{"yaw", 180}, {"pitch", 0}, {"duration_s", 4}}), [](xfb::Access) {});
+        double t = 0.0;
+        double worst = 0.0, previous = 1e9;
+        const b::Vec3 target{0.0, -1.0, 0.0};
+        while (runner.Active() && t < 10.0)
+        {
+            runner.Tick(0.05, fake, true);
+            t += 0.05;
+            const double angle = std::acos(std::clamp(forward[0] * target[0] + forward[1] * target[1] + forward[2] * target[2], -1.0, 1.0)) / k;
+            worst = std::max(worst, angle - previous);
+            previous = angle;
+        }
+        const auto stop = events.Read(0, 100, {"behaviour"})["events"].back();
+        Check("0.8.2 (review 4) behave.look from yaw 0, pitch 80 to yaw 180, pitch 0: the angle to the point never grows, and the look ends reached",
+              stop["data"].value("reason", std::string()) == "reached" && worst <= 1e-6 && t >= 3.6,
+              stop.dump() + " worst=" + std::to_string(worst) + " t=" + std::to_string(t));
+    }
+}
+
+// 0.8.3: session 10's bridge findings (core pieces): the bridge's own kill key, the staged showroom's discovery through the
+// game's own folder, inventory.list's parameters, the smooth look's arc (player.look shares behave.look's).
+void Bridge083Tests()
+{
+    namespace kk = xfb::killkey;
+    // The kill key: parsing, the default, the warning for a key the game binds, and the press detection.
+    {
+        kk::Chord chord;
+        std::string why;
+        const bool end = kk::Parse("End", chord, why);
+        kk::Chord ctrlEnd;
+        const bool chordOk = kk::Parse(" ctrl + End ", ctrlEnd, why);
+        kk::Chord numpadPlus;
+        const bool plusOk = kk::Parse("Ctrl+Numpad+", numpadPlus, why);
+        kk::Chord gameName;
+        const bool gameNameOk = kk::Parse("IK_Multiply", gameName, why);
+        kk::Chord off;
+        const bool offOk = kk::Parse("off", off, why);
+        kk::Chord bad;
+        std::string badWhy;
+        const bool badOk = kk::Parse("Hyper+End", bad, badWhy);
+        std::string unknownWhy;
+        const bool unknownOk = kk::Parse("Space", bad, unknownWhy);
+        Check("0.8.3 kill key: End, Ctrl + End, Ctrl + Numpad +, the game's own names and off parse; other modifiers and keys are refused plainly",
+              end && chord.vk == 0x23 && !chord.ctrl && chord.label == "End" && chordOk && ctrlEnd.ctrl && ctrlEnd.vk == 0x23 &&
+                  ctrlEnd.label == "Ctrl + End" && plusOk && numpadPlus.ctrl && numpadPlus.vk == 0x6B && gameNameOk && gameName.vk == 0x6A &&
+                  gameName.label == "Numpad *" && offOk && !off.enabled && !badOk && badWhy.find("modifier") != std::string::npos && !unknownOk &&
+                  unknownWhy.find("isn't a key") != std::string::npos,
+              ctrlEnd.label + " / " + badWhy + " / " + unknownWhy);
+        Check("0.8.3 kill key: the default is End, which the game's 2.31 bindings leave free (F9, Home and letters are bound)",
+              std::string(kk::kDefault) == "End" && xfb::Config{}.killKey.vk == 0x23 && xfb::Config{}.killKey.enabled && !kk::GameBinds(0x23) &&
+                  kk::GameBinds(0x78) && kk::GameBinds(0x24) && kk::GameBinds('W') && !kk::GameBinds(0x6A));
+        const auto parsed = xfb::ParseConfig("[ui]\nkill_key = Ctrl + End\n");
+        const auto warned = xfb::ParseConfig("[ui]\nkill_key = W\n");
+        const auto refused = xfb::ParseConfig("[ui]\nkill_key = Space\n");
+        const auto none = xfb::ParseConfig("[ui]\nkill_key = off\n");
+        Check("0.8.3 kill key in config.ini: a chord is read; a game key warns; an unknown key warns and keeps End; off switches it off",
+              parsed.killKey.ctrl && parsed.killKey.vk == 0x23 && parsed.warnings.empty() && warned.killKey.vk == 'W' && warned.warnings.size() == 1 &&
+                  refused.killKey.vk == 0x23 && refused.warnings.size() == 1 && refused.warnings[0].find("End") != std::string::npos && !none.killKey.enabled &&
+                  xfb::DescribeConfig(parsed).find("ui.kill_key=Ctrl+End") != std::string::npos,
+              refused.warnings.empty() ? std::string() : refused.warnings[0]);
+        // Press detection: once per press, only with every modifier the chord names, never while disarmed (the window not in
+        // front, CET's overlay open, the bridge stopped).
+        std::map<int, bool> keys;
+        const auto reader = [&keys](int aVk) { return keys[aVk]; };
+        kk::Watch watch;
+        int fired = 0;
+        keys[0x23] = true;
+        fired += watch.Poll(ctrlEnd, true, reader) ? 1 : 0; // End without Ctrl: nothing
+        keys[0x11] = true;
+        fired += watch.Poll(ctrlEnd, true, reader) ? 1 : 0; // Ctrl + End: once
+        fired += watch.Poll(ctrlEnd, true, reader) ? 1 : 0; // still held: not again
+        keys[0x23] = false;
+        fired += watch.Poll(ctrlEnd, true, reader) ? 1 : 0;
+        keys[0x23] = true;
+        fired += watch.Poll(ctrlEnd, true, reader) ? 1 : 0; // pressed again: once more
+        const int afterSecond = fired;
+        kk::Watch idle;
+        const bool notInFront = idle.Poll(chord, false, reader);
+        const bool switchedOff = idle.Poll(off, true, reader);
+        Check("0.8.3 kill key: one kill per press, only with its modifiers; nothing while disarmed or the key is off",
+              afterSecond == 2 && !notInFront && !switchedOff, std::to_string(afterSecond));
+        // The review: End held in another window (disarmed), then the game comes to the front with End still down: no kill;
+        // let go and press again: one kill. A press the last check refuses (CET opened in between) is used up.
+        std::map<int, bool> held{{0x23, true}};
+        const auto heldReader = [&held](int aVk) { return held[aVk]; };
+        kk::Watch focus;
+        int focusFired = 0;
+        focusFired += focus.Poll(chord, false, heldReader) ? 1 : 0; // held while another window is in front
+        focusFired += focus.Poll(chord, true, heldReader) ? 1 : 0;  // the game in front, End still down
+        focusFired += focus.Poll(chord, true, heldReader) ? 1 : 0;
+        const int whileHeld = focusFired;
+        held[0x23] = false;
+        focusFired += focus.Poll(chord, true, heldReader) ? 1 : 0;
+        held[0x23] = true;
+        focusFired += focus.Poll(chord, true, heldReader) ? 1 : 0; // a real press: one kill
+        const int afterPress = focusFired;
+        kk::Watch lastWatch;
+        held[0x23] = false;
+        lastWatch.Poll(chord, true, heldReader);
+        held[0x23] = true;
+        const bool lastCheck = lastWatch.Poll(chord, true, heldReader, [] { return false; }); // CET opened at that moment
+        const bool stillHeld = lastWatch.Poll(chord, true, heldReader, [] { return true; });
+        Check("0.8.3 (review) kill key: End held elsewhere then the game in front fires nothing; a release and a press fire once; "
+              "a press the last check refuses is used up",
+              whileHeld == 0 && afterPress == 1 && !lastCheck && !stillHeld, std::to_string(whileHeld) + "/" + std::to_string(afterPress));
+    }
+
+    // The staged showroom: the game's own archive/pc/mod (a temporary folder here), the archive's SHA-256, a self-describing
+    // build's manifest beside it, a manifest that names another archive refused, other mods' files ignored.
+    {
+        wchar_t temp[MAX_PATH]{};
+        GetTempPathW(MAX_PATH, temp);
+        const auto dir = std::filesystem::path(temp) / (L"xfb-unit-staged-" + std::to_wstring(GetCurrentProcessId()));
+        std::filesystem::remove_all(dir);
+        std::filesystem::create_directories(dir);
+        const std::string a = "xfs_showroom_4426018f6966620881cdcb78569544ab", b = "xfs_showroom_d11f5a7fd3192b9e4f6dd14f343578b8";
+        std::ofstream(dir / (a + ".archive"), std::ios::binary) << "abc";
+        std::ofstream(dir / (b + ".archive"), std::ios::binary) << "xyz";
+        std::ofstream(dir / (a + ".showroom.json"), std::ios::binary) << "\xEF\xBB\xBF{\"schema\":\"xfs/showroom-package-1\",\"archive\":\"" << a << "\",\"pieces\":[]}";
+        std::ofstream(dir / (b + ".showroom.json"), std::ios::binary) << "{\"schema\":\"xfs/showroom-package-1\",\"archive\":\"" << a << "\"}";
+        std::ofstream(dir / L"other_mod.archive", std::ios::binary) << "1";
+        std::ofstream(dir / L"xfs_showroom_NOTHEX.archive", std::ios::binary) << "1";
+        std::ofstream(dir / L"\x00C5sa_\x6771\x4EAC.archive", std::ios::binary) << "1"; // a name the narrow code page may not hold
+        const auto out = xfb::showroom::StagedShowrooms(dir);
+        const auto& list = out["archives"];
+        Check("0.8.3 showroom.staged: the game folder's showroom archives with their SHA-256 and a self-describing build's manifest",
+              out["found"] == true && list.size() == 2 && list[0]["archive"] == a && list[0]["bytes"] == 3 &&
+                  list[0]["sha256"] == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" && list[0]["manifest"].is_object() &&
+                  list[0]["manifest"]["archive"] == a && list[1]["archive"] == b && list[1]["manifest"].is_null() &&
+                  list[1].value("manifest_error", std::string()).find("not this archive") != std::string::npos,
+              out.dump());
+        // The review: a sidecar nested past the request limit, and one whose schema is null, each fail their own entry only;
+        // the listing stops when cancelled and hashes no more than its limit.
+        const std::string c = "xfs_showroom_" + std::string(32, 'c'), d = "xfs_showroom_" + std::string(32, 'd');
+        std::ofstream(dir / (c + ".archive"), std::ios::binary) << "c";
+        std::ofstream(dir / (d + ".archive"), std::ios::binary) << "d";
+        std::ofstream(dir / (c + ".showroom.json"), std::ios::binary)
+            << "{\"schema\":\"xfs/showroom-package-1\",\"archive\":\"" << c << "\",\"x\":" << std::string(40, '[') << std::string(40, ']') << "}";
+        std::ofstream(dir / (d + ".showroom.json"), std::ios::binary) << "{\"schema\":null,\"archive\":\"" << d << "\"}";
+        const auto four = xfb::showroom::StagedShowrooms(dir);
+        const auto byName = [](const json& aList, const std::string& aArchive) {
+            for (const auto& entry : aList["archives"])
+            {
+                if (entry["archive"] == aArchive)
+                {
+                    return entry;
+                }
+            }
+            return json::object();
+        };
+        Check("0.8.3 (review) showroom.staged: a sidecar nested too deep and one with a null schema fail their own entries; the others stand",
+              four["archives"].size() == 4 && byName(four, a)["manifest"].is_object() && byName(four, c)["manifest"].is_null() &&
+                  byName(four, c).value("manifest_error", std::string()).find("nests deeper") != std::string::npos && byName(four, d)["manifest"].is_null() &&
+                  byName(four, d).value("manifest_error", std::string()).find("not this archive") != std::string::npos,
+              four.dump().substr(0, 600));
+        std::string cancelledCode;
+        try
+        {
+            xfb::showroom::StagedShowrooms(dir, [] { return true; });
+        }
+        catch (const xfb::MethodError& e)
+        {
+            cancelledCode = e.code;
+        }
+        const auto bounded = xfb::showroom::StagedShowrooms(dir, {}, 4);
+        Check("0.8.3 (review) showroom.staged: a cancelled listing stops (interrupted); past the hashing limit an archive is listed unhashed",
+              cancelledCode == "interrupted" && byName(bounded, a)["sha256"].is_string() && byName(bounded, c)["sha256"].is_string() &&
+                  byName(bounded, b)["sha256"].is_null() && byName(bounded, b).value("sha256_error", std::string()).find("not hashed") != std::string::npos,
+              cancelledCode + " " + bounded.dump().substr(0, 400));
+        const auto missing = xfb::showroom::StagedShowrooms(dir / L"none");
+        Check("0.8.3 showroom.staged: a missing folder answers found false and no archives", missing["found"] == false && missing["archives"].empty(), missing.dump());
+        std::filesystem::remove_all(dir);
+    }
+
+    // inventory.list's parameters.
+    {
+        const auto all = xfb::params::ParseInventoryList(json::object());
+        const auto jackets = xfb::params::ParseInventoryList(json{{"slot", "OuterChest"}, {"limit", 5}});
+        std::string badSlot, badLimit;
+        try
+        {
+            xfb::params::ParseInventoryList(json{{"slot", "Weapon"}});
+        }
+        catch (const xfb::MethodError& e)
+        {
+            badSlot = e.what();
+        }
+        try
+        {
+            xfb::params::ParseInventoryList(json{{"limit", 500}});
+        }
+        catch (const xfb::MethodError& e)
+        {
+            badLimit = e.what();
+        }
+        Check("0.8.3 inventory.list: every clothing slot by default (limit 100), one slot by name, other slots and limits refused",
+              all.slot.empty() && all.limit == 100 && jackets.slot == "OuterChest" && jackets.limit == 5 && !badSlot.empty() && !badLimit.empty());
+    }
+
+    // The smooth look's arc (behave.look's since 0.8.2, player.look's since 0.8.3): it starts at the view, ends at the point,
+    // only ever comes closer to it, and a duration_s of 5 takes 50 steps of kLookArcStepS (session 10's L2a took 1.5 s).
+    {
+        namespace pl = xfb::player;
+        const double k = 3.14159265358979323846 / 180.0;
+        const auto from = pl::DirectionOf(0.0, 0.0);
+        const auto to = pl::DirectionOf(90.0, -10.0);
+        double previous = 1e9, worst = -1.0;
+        const double duration = 5.0;
+        int steps = 0;
+        for (int step = 1;; ++step)
+        {
+            const double next = std::min(1.0, step * pl::kLookArcStepS / duration);
+            const auto d = pl::LookArc(from, to, next);
+            const double angle = std::acos(std::clamp(d[0] * to[0] + d[1] * to[1] + d[2] * to[2], -1.0, 1.0)) / k;
+            worst = std::max(worst, angle - previous);
+            previous = angle;
+            steps = step;
+            if (next >= 1.0)
+            {
+                break;
+            }
+        }
+        const auto start = pl::LookArc(from, to, 0.0);
+        const auto half = pl::LookArc(from, to, 0.5);
+        const double halfAngle = std::acos(std::clamp(half[0] * to[0] + half[1] * to[1] + half[2] * to[2], -1.0, 1.0)) / k;
+        const auto back = pl::LookArc(from, pl::DirectionOf(180.0, 0.0), 0.5);
+        Check("0.8.3 the smooth look's arc: from the view to the point, never wider on the way, 50 steps for 5 s, eased half way",
+              std::abs(start[0] - from[0]) < 1e-9 && std::abs(start[1] - from[1]) < 1e-9 && previous < 1e-6 && worst <= 1e-9 && steps == 50 &&
+                  std::abs(halfAngle - 45.25) < 1.0 && std::abs(back[2]) < 1e-9 && std::abs(std::hypot(back[0], back[1]) - 1.0) < 1e-9,
+              "steps=" + std::to_string(steps) + " half=" + std::to_string(halfAngle));
+    }
+}
+
+// 0.8.2: the crash investigation's offline checks (run under AddressSanitizer by the build record's ASan step).
+//
+// RunPipeStress: both pipes (the main one and <pipe>-control) started and stopped over and over, with clients connecting to
+// both from the moment the names exist, a kill racing the start in some rounds and two threads stopping at once in others;
+// each round builds the bridge through Bridge::Create as the plugin does, and tears it down again.
+// RunLayoutRepro: what 0.8.1's stale Main.obj did: a Bridge constructed in an allocation of 0x2F8 bytes (the size the old
+// object file asked for). Under AddressSanitizer this stops at once with a heap-buffer-overflow in the constructor; without
+// it the overrun corrupts the heap silently, as the game's three launches showed.
+namespace
+{
+std::wstring Widen(const std::string& aText)
+{
+    return std::wstring(aText.begin(), aText.end());
+}
+
+void StressClient(const std::wstring& aPipe, const std::string& aToken, int aWhich, std::atomic<bool>& aStop, std::atomic<int>& aAnswers)
+{
+    const std::wstring name = (aWhich % 2) ? aPipe + L"-control" : aPipe;
+    const std::string line = json{{"v", 1}, {"id", aWhich}, {"token", aToken}, {"method", (aWhich % 2) ? "behave.stop" : "stress.ping"}}.dump() + "\n";
+    while (!aStop.load())
+    {
+        HANDLE pipe = CreateFileW(name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+        if (pipe == INVALID_HANDLE_VALUE)
+        {
+            std::this_thread::sleep_for(std::chrono::microseconds(200));
+            continue;
+        }
+        DWORD written = 0;
+        if (WriteFile(pipe, line.data(), static_cast<DWORD>(line.size()), &written, nullptr))
+        {
+            char buffer[512];
+            DWORD read = 0;
+            if (ReadFile(pipe, buffer, sizeof(buffer), &read, nullptr) && read > 0)
+            {
+                ++aAnswers;
+            }
+        }
+        CloseHandle(pipe);
+    }
+}
+} // namespace
+
+int RunPipeStress(int aRounds)
+{
+    wchar_t temp[MAX_PATH]{};
+    GetTempPathW(MAX_PATH, temp);
+    std::atomic<int> answers{0};
+    int started = 0;
+    for (int round = 0; round < aRounds; ++round)
+    {
+        xfb::Config config;
+        config.bridgeEnabled = true;
+        config.idleDisconnectSeconds = 2;
+        xfb::Session session;
+        std::string error;
+        const auto dir = std::filesystem::path(temp) / (L"xfb-pipe-stress-" + std::to_wstring(GetCurrentProcessId()));
+        std::filesystem::create_directories(dir);
+        if (!xfb::CreateSession(session, error, dir))
+        {
+            std::printf("STRESS FAILED: session: %s\n", error.c_str());
+            return 1;
+        }
+        xfb::GameThreadQueue queue;
+        queue.SetPumping(true);
+        auto bridge = xfb::Bridge::Create(config, session, queue);
+        bridge->GetDispatcher().Register({"stress.ping", xfb::Access::Read, xfb::RunOn::BridgeThread, "stress", [](const xfb::MethodContext&) {
+                                              return json{{"pong", true}};
+                                          }});
+        std::atomic<bool> stop{false};
+        std::vector<std::thread> clients;
+        for (int c = 0; c < 4; ++c)
+        {
+            clients.emplace_back([&, c] { StressClient(session.pipeName, session.token, c, stop, answers); });
+        }
+        std::thread killer;
+        if (round % 3 == 1)
+        {
+            killer = std::thread([&] {
+                std::this_thread::sleep_for(std::chrono::microseconds(50 * (round % 7)));
+                bridge->Kill("stress");
+            });
+        }
+        if (bridge->Start(error))
+        {
+            ++started;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(round % 5));
+        if (killer.joinable())
+        {
+            killer.join();
+        }
+        if (round % 3 == 2)
+        {
+            std::thread other([&] { bridge->Stop("stress_other"); });
+            bridge->Stop("stress");
+            other.join();
+        }
+        else
+        {
+            bridge->Stop("stress");
+        }
+        bridge.reset();
+        stop.store(true);
+        for (auto& client : clients)
+        {
+            client.join();
+        }
+        std::filesystem::remove_all(dir);
+    }
+    std::printf("STRESS OK rounds=%d started=%d answers=%d\n", aRounds, started, answers.load());
+    return 0;
+}
+
+int RunLayoutRepro()
+{
+    xfb::Config config;
+    xfb::Session session;
+    xfb::GameThreadQueue queue;
+    std::printf("sizeof(Bridge)=0x%zx; 0.8.1's Main.obj allocated 0x2F8\n", sizeof(xfb::Bridge));
+    std::fflush(stdout);
+    void* memory = ::operator new(0x2F8);
+    auto* bridge = new (memory) xfb::Bridge(config, session, queue); // writes past the allocation's end
+    bridge->~Bridge();
+    ::operator delete(memory);
+    std::printf("REPRO RAN WITHOUT A REPORT (not an AddressSanitizer build?)\n");
+    return 2;
+}
+
 int RunUnitTests()
 {
     SanitizeTests();
@@ -3087,6 +4834,13 @@ int RunUnitTests()
     InkUiTests();
     Bridge060Tests();
     Bridge061Tests();
+    Bridge070Tests();
+    Bridge080Tests();
+    Bridge070ReviewTests();
+    Bridge081Tests();
+    Bridge082Tests();
+    Session9Tests();
+    Bridge083Tests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;
 }

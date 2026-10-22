@@ -1,6 +1,6 @@
 /** Read-only preview by default; writes to real MO2 require an explicit verb. */
 import { planRuntimePromotion, promoteRuntimeDiagnostic, recoverRuntimePromotion,
-  rollbackRuntimePromotion, type PromotionOptions } from "../src/runtime-diagnostic-promotion";
+  rollbackRuntimePromotion, type PromotionOptions } from "../src/installation/host/runtime-diagnostic-promotion";
 
 function usage(): never {
   throw Error("Usage: bun tools/runtime-diagnostic-promotion.ts --candidate-store <absolute> --candidate-id <id> --game-root <absolute> --mo2-root <absolute> --profile <existing-name> --staging-root <existing-absolute-stage> --new-profile <new-name> [--promote|--recover|--rollback]");

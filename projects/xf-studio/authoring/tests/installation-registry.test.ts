@@ -3,14 +3,14 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, 
 import { lstat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { type ArchiveFile, buildMountPlan, DepotIndex } from "../src/archive-precedence";
-import { readArchiveXlConfig } from "../src/archivexl-config";
-import { installationFingerprint, type CharacterDetailSettings } from "../src/character-detail-host";
-import { depotHash, refFromPath } from "../src/depot-path";
-import { InstallationRegistry, installations } from "../src/installation-registry";
-import { openInstallation, ResolverFetcher, WolvenKitFetcher, type Installation, type InstallationOptions } from "../src/resolver-host";
-import { ResourceGraph } from "../src/resource-graph";
-import { pathStamp } from "../src/source-discovery";
+import { type ArchiveFile, buildMountPlan, DepotIndex } from "../src/game/archive-precedence";
+import { readArchiveXlConfig } from "../src/game/archivexl-config";
+import { installationFingerprint, type CharacterDetailSettings } from "../src/character/host/character-detail-host";
+import { depotHash, refFromPath } from "../src/game/depot-path";
+import { InstallationRegistry, installations } from "../src/game/host/installation-registry";
+import { openInstallation, ResolverFetcher, WolvenKitFetcher, type Installation, type InstallationOptions } from "../src/game/host/resolver-host";
+import { ResourceGraph } from "../src/game/resource-graph";
+import { pathStamp } from "../src/game/host/source-discovery";
 import { app, cr2w, ent, mesh, meshComponent, mi, rp } from "./resolver-fixtures";
 
 /**

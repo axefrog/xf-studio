@@ -1,5 +1,5 @@
 import type { HistorySnapshot } from "../platform/api/history";
-import type { StudioCapability } from "../studio-application";
+import type { StudioCapability } from "../app/studio-application";
 
 /**
  * Pure presentation logic for the History panel and the Undo/Redo entry points: rows,
@@ -18,8 +18,8 @@ export type HistoryRow = {
 };
 
 export const HISTORY_TRIMMED_NOTE = "Older steps were not kept";
-/** What the header's Undo, Redo and History cover (UI-81): the look, not the character it is shown on. */
-export const HISTORY_SCOPE = "Covers your makeup and presets. Changes in the Character panel have their own Undo there.";
+/** What the header's Undo, Redo and History cover when nothing names the editing context (profiles design §3.7): what was last edited. */
+export const HISTORY_SCOPE = "Undo follows what you last edited: a preset or a V. View and lighting changes have their own Undo.";
 
 export function historyRows(timeline: HistorySnapshot, formatTime: (at: number) => string = defaultTime): HistoryRow[] {
   const atStart = timeline.current < 0;
@@ -43,6 +43,17 @@ export function historySummary(timeline: HistorySnapshot) {
   const steps = timeline.steps.length;
   if (!steps) return "No changes yet";
   return `${steps} ${steps === 1 ? "step" : "steps"}${timeline.redoCount ? ` · ${timeline.redoCount} undone` : ""}`;
+}
+
+/**
+ * The History panel's visible summary, naming whose history it lists (the editing context, profiles design §3.7): "Smoky · 1 step",
+ * "V · Valerie · 3 steps · 1 undone", "Smoky · no changes yet"; the count alone when nothing names the context.
+ */
+export function historyHeading(context: string | undefined, timeline: HistorySnapshot): { name: string; count: string; text: string } {
+  const summary = historySummary(timeline);
+  if (!context) return { name: "", count: summary, text: summary };
+  const count = timeline.steps.length ? summary : summary.charAt(0).toLowerCase() + summary.slice(1);
+  return { name: context, count, text: `${context} · ${count}` };
 }
 
 /**

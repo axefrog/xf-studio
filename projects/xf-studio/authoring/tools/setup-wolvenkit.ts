@@ -3,10 +3,10 @@
 // first; pass --yes to agree up front. A WolvenKit path in Local setup or XFS_PACKAGE_WOLVENKIT
 // still wins over this copy.
 //   bun tools/setup-wolvenkit.ts [--yes]
-import { LocalSettingsStore } from "../src/local-settings-store";
-import { localToolsRoot } from "../src/package-server";
-import { WolvenKitSetupHost } from "../src/wolvenkit-setup-host";
-import { wolvenKitConsent } from "../src/wolvenkit-setup";
+import { LocalSettingsStore } from "../src/setup/host/local-settings-store";
+import { localToolsRoot } from "../src/host/package-server";
+import { WolvenKitSetupHost } from "../src/setup/host/wolvenkit-setup-host";
+import { wolvenKitConsent } from "../src/setup/wolvenkit-setup";
 
 const settings = new LocalSettingsStore().load().settings;
 const host = new WolvenKitSetupHost({ root: localToolsRoot(), configured: () => process.env.XFS_PACKAGE_WOLVENKIT || settings.wolvenKitCli,

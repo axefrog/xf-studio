@@ -14,12 +14,13 @@ import { EYE_MAKEUP, assignEyeMakeupIds } from "../src/features/eye-makeup";
 import { undoPolicyOf, type ActionSpec, type FeatureActionSpec } from "../src/platform/api";
 import { Registry } from "../src/platform/core/registry";
 import { type Recipe } from "../src/engines/layered-makeup/recipe";
-import type { EyeMakeupAction, EyeMakeupState } from "../src/eye-makeup-model";
-import { createTrustedAuthoringCore, type StudioComposition } from "../src/trusted-authoring-core";
+import type { EyeMakeupAction, EyeMakeupState } from "../src/legacy/eye-makeup/eye-makeup-model";
+import { createTrustedAuthoringCore, type StudioComposition } from "../src/app/trusted-authoring-core";
 import { glitterRecipe, opticsRecipe } from "./fixtures/workspace-v1-fixtures";
-import { readRecipe as parseRecipe } from "../src/recipe-schema";
+import { readRecipe as parseRecipe } from "../src/legacy/eye-makeup/recipe-schema";
 import { freshWorkspace } from "./fixtures/eye-region";
 
+import { namedCore } from "./fixtures/named-targets";
 type Spec = FeatureActionSpec<Recipe, EyeMakeupState["editor"], EyeMakeupAction>;
 const deepFreeze = <T>(value: T): T => { if (value && typeof value === "object") { Object.values(value).forEach(deepFreeze); Object.freeze(value); } return value; };
 
@@ -39,8 +40,8 @@ function counted(overrides: Record<string, Partial<ActionSpec>> = {}) {
   const registry = new Registry(STUDIO_OWNERS.map(owner => owner.id === EYE_MAKEUP.id ? module : owner) as never);
   const composition: StudioComposition = { registry, documents: STUDIO_COMPOSITION.documents, region: STUDIO_COMPOSITION.region };
   let ids = 0;
-  const core = createTrustedAuthoringCore(freshWorkspace(mixedRecipe()), { resetStack: () => {}, selectedCollection: () => "draft",
-    newId: () => `host-${++ids}` }, composition);
+  const core = namedCore(createTrustedAuthoringCore(freshWorkspace(mixedRecipe()), { resetStack: () => {}, selectedCollection: () => "draft",
+    newId: () => `host-${++ids}` }, composition));
   return { core, calls };
 }
 
@@ -84,8 +85,8 @@ test("Undo is recorded by the action's Undo policy, not by its effect (CORE-32)"
 });
 
 test("context-menu input options report the Undo policy of the variant they edit (CORE-32)", () => {
-  const core = createTrustedAuthoringCore(freshWorkspace(mixedRecipe()), { resetStack: () => {}, selectedCollection: () => "draft" },
-    STUDIO_COMPOSITION);
+  const core = namedCore(createTrustedAuthoringCore(freshWorkspace(mixedRecipe()), { resetStack: () => {}, selectedCollection: () => "draft" },
+    STUDIO_COMPOSITION));
   const layer = core.document.recipe.layers[0];
   let checked = 0;
   for (const hit of [{ kind: "point" as const, layerId: layer.id, index: 0 }, { kind: "shape" as const, layerId: layer.id },

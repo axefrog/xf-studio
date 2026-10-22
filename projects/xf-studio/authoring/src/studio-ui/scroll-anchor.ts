@@ -1,4 +1,4 @@
-import type { ScrollAnchor } from "../ui-preferences";
+import type { ScrollAnchor } from "../app/ui-preferences";
 import { viewState, type ViewStateStore } from "./view-state";
 
 /**

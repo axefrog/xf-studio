@@ -3,21 +3,22 @@ import { readFileSync } from "node:fs";
 import { STUDIO_OWNERS, STUDIO_REGISTRY, STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { EYE_MAKEUP } from "../src/features/eye-makeup";
 import { EXPRESSIONS } from "../src/features/expressions";
-import { IDLE_UNAVAILABLE, MotionActions } from "../src/motion-actions";
-import { actionTable, familyId, featureId, type SystemFamily } from "../src/platform/api";
+import { IDLE_UNAVAILABLE, MotionActions } from "../src/animation/motion-actions";
+import { actionTable, familyId, featureId, LOOK_TARGET, type SystemFamily } from "../src/platform/api";
 import { Registry } from "../src/platform/core/registry";
 import { RECIPE_ACTION_KINDS } from "../src/engines/layered-makeup/recipe-actions";
-import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
-import { StudioApplication } from "../src/studio-application";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
+import { ACTION_DESCRIPTORS } from "../src/app/studio-action-descriptors";
+import { StudioApplication } from "../src/app/studio-application";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { freshWorkspace } from "./fixtures/eye-region";
 
+import { namedCore } from "./fixtures/named-targets";
 /** Actions of features the application binds generically (no bespoke handler, not in the hand-kept `ACTION_DESCRIPTORS`). */
 const GENERIC_KINDS = new Set(Object.keys(EXPRESSIONS.actions));
 
 function fixture() {
   const workspace = freshWorkspace();
-  return createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  return namedCore(createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
 }
 
 test("the application's catalogue is the registry's: the hand-kept table plus the generically bound features' own", () => {
@@ -26,8 +27,12 @@ test("the application's catalogue is the registry's: the hand-kept table plus th
   expect(app.actionKinds() as readonly string[]).toEqual([...STUDIO_REGISTRY.kinds()]);
   expect(app.actionDescriptors() as Readonly<Record<string, unknown>>).toEqual(STUDIO_REGISTRY.descriptors());
   // The hand-kept list covers the owners with bespoke handlers; generically bound features register their own descriptors only.
+  // The registry adds `look` to every feature action (profiles design §3.6): a feature's action names the look it edits.
   const bespoke = Object.fromEntries(Object.entries(app.actionDescriptors()).filter(([kind]) => !GENERIC_KINDS.has(kind)));
-  expect(JSON.stringify(bespoke)).toBe(JSON.stringify(ACTION_DESCRIPTORS));
+  const named = Object.fromEntries(Object.entries(ACTION_DESCRIPTORS).map(([kind, descriptor]) => [kind,
+    STUDIO_REGISTRY.route(kind).ok && (STUDIO_REGISTRY.route(kind) as { owner: { owner: string } }).owner.owner === "feature"
+      ? { ...descriptor, payload: { ...descriptor.payload, look: LOOK_TARGET } } : descriptor]));
+  expect(JSON.stringify(bespoke)).toBe(JSON.stringify(named));
 });
 
 test("every action is owned by exactly one registered owner", () => {
@@ -56,8 +61,10 @@ test("derived kind sets equal the sets StudioApplication used to keep by hand", 
   // Before step 1: `recipeKinds = RECIPE_ACTION_KINDS` plus the two literal layer kinds.
   expect(kinds("eye-makeup")).toEqual([...RECIPE_ACTION_KINDS, "layer.edit", "layer.setEnabled"].sort());
   // Before step 1: `COLLECTION_KIND_TABLE`.
-  expect(kinds("collection")).toEqual(["collection.importRecipe", "collection.open", "collection.rename",
-    "collection.undoOpen", "package.assign", "package.merge", "package.rename", "package.split", "preset.edit", "preset.select"]);
+  expect(kinds("collection")).toEqual(["collection.importRecipe", "collection.rename",
+    "collection.undoOpen", "package.assign", "package.merge", "package.rename", "package.split", "preset.edit"]);
+  // Choosing a preset is what its scene shows (profiles design §3.6): `scene.setLook` replaced `preset.select`.
+  expect(kinds("scenes")).toEqual(["scene.setLook", "scene.setSubject"]);
   // Before step 1: literal comparisons and `startsWith` prefixes, with saved-V as the final fallback.
   expect(kinds("history")).toEqual(["history.jumpTo", "history.redo", "history.undo"]);
   expect(kinds("preview")).toEqual(all.filter(kind => kind.startsWith("preview.") || kind.startsWith("camera.")).sort());
@@ -72,9 +79,9 @@ test("derived kind sets equal the sets StudioApplication used to keep by hand", 
     .toEqual(["preview", "motion", "savedV", "views"]);
   // Every creator choice for the shown V has one owner, the character context (CORE-58); it needs no scene, so a change before the
   // preview is ready is refused as not ready (CORE-64).
-  expect(kinds("characterContext")).toEqual(["character.clearPreparedFiles", "character.keepChanges", "character.loadPreset", "character.loadSave", "character.redo",
-    "character.redoClothing", "character.reset", "character.resetAll", "character.retry", "character.setClothing", "character.setClothingArea", "character.setOption",
-    "character.setOptions", "character.setOwnMakeup", "character.undo", "character.undoClothing", "character.useDefault"]);
+  expect(kinds("characterContext")).toEqual(["character.clearPreparedFiles", "character.keepChanges", "character.loadPreset", "character.loadSave",
+    "character.redoClothing", "character.reset", "character.resetAll", "character.resolveConflict", "character.retry", "character.setClothing", "character.setClothingArea", "character.setOption",
+    "character.setOptions", "character.setOwnMakeup", "character.setSource", "character.undoClothing", "character.useDefault"]);
   expect(STUDIO_OWNERS.filter(owner => owner.owner === "system" && owner.thrown === "unavailable").map(owner => owner.id as string))
     .toEqual(["preview", "motion", "quality", "views"]);
 });
@@ -103,7 +110,7 @@ test("routing is exhaustive: every owner needs a handler and unknown kinds are r
 });
 
 test("reason codes are structured where refusals are decided, not read from message text (CORE-15)", () => {
-  const source = readFileSync(new URL("../src/studio-application.ts", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../src/app/studio-application.ts", import.meta.url), "utf8");
   expect(source).not.toMatch(/reason(?:\?)?\.includes\(|function reasonCode|startsWith\("(?:preview|camera|motion|quality|savedV)\./);
   // A device error whose text never says "unavailable" is still an unavailable asset.
   const { app } = fixture();
@@ -111,7 +118,7 @@ test("reason codes are structured where refusals are decided, not read from mess
     setIdle() {}, setIdlePaused() {}, setIdleContributions() {}, setBlink() {}, animateBlink() {} });
   app.attach({ motion });
   // The rig's own error goes to the diagnostics log; the refusal is plain (UI-88).
-  expect(app.capability({ kind: "motion.setIdle", enabled: true }))
+  expect(app.capability({ kind: "motion.setIdle", view: "main", enabled: true }))
     .toEqual({ available: false, code: "asset_unavailable", reason: IDLE_UNAVAILABLE });
 });
 

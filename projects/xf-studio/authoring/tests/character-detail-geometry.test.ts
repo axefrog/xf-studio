@@ -5,12 +5,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { DetailPartPool, loadCharacterDetails, partKeyFor, type LoadedCharacterDetails } from "../src/character-detail-loader";
-import { storeChunkGeometry } from "../src/character-detail-service";
-import { GlbWriter, keepGlbMeshes, parseGlb, readAccessor } from "../src/glb";
-import { CHARACTER_DETAIL_SCHEMA, type CharacterDetail, type RenderComponent, UNCOVERED_BODY } from "../src/render-detail";
-import { characterDetailsEvidence } from "../src/scene-evidence";
-import { restoreFirstWeights } from "../src/skin";
+import { DetailPartPool, loadCharacterDetails, partKeyFor, type LoadedCharacterDetails } from "../src/character/render/character-detail-loader";
+import { storeChunkGeometry } from "../src/character/host/character-detail-service";
+import { GlbWriter, keepGlbMeshes, parseGlb, readAccessor } from "../src/formats/glb";
+import { CHARACTER_DETAIL_SCHEMA, type CharacterDetail, type RenderComponent, UNCOVERED_BODY } from "../src/character/render-detail";
+import { characterDetailsEvidence } from "../src/character/render/scene-evidence";
+import { restoreFirstWeights } from "../src/materials/render/skin";
 
 const root = mkdtempSync(join(tmpdir(), "xfs-chunk-geometry-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -360,7 +360,7 @@ test("face decal evidence comes from the loaded decal entry, so a V switch in an
 });
 
 test("an unskinned chunk (a framework's rigid linked mesh) is bound whole to one bone and stays where the export placed it", async () => {
-  const { bindRigid } = await import("../src/character-detail-loader");
+  const { bindRigid } = await import("../src/character/render/character-detail-loader");
   const THREE = await import("three");
   const root = new THREE.Group();
   const geometry = new THREE.BufferGeometry();

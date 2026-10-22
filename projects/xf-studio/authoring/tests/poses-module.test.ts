@@ -112,7 +112,7 @@ function fakeMotion(options: { pending?: { id: string; label: string } } = {}) {
 function harness(options: { pending?: { id: string; label: string }; catalogue?: PoseListing; phases?: string[] } = {}) {
   const motion = fakeMotion(options);
   const listeners = new Set<() => void>();
-  const stage: PoseStage = { bodyGender: () => "female", wornTags: () => [], motion: () => motion.port, frame: () => { motion.calls.push("frame"); return { available: true }; },
+  const stage: PoseStage = { view: () => "main", bodyGender: () => "female", wornTags: () => [], motion: () => motion.port, frame: () => { motion.calls.push("frame"); return { available: true }; },
     frameCapability: () => ({ available: true }), subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); } };
   const phases = [...(options.phases ?? [])];
   const saved: unknown[] = [];
@@ -142,16 +142,16 @@ test("the service reads the catalogue for V's body, applies a pose in one click 
   const { service, motion, saved } = harness({ phases: ["preparing"] });
   await settle();
   expect(service.snapshot().catalogue).toMatchObject({ phase: "ready", bodyGender: "female", listed: 4, categories: 2 });
-  expect(service.capability({ kind: "pose.select", id: "PhotoModePoses.sera_02" })).toMatchObject({ available: false, reason: expect.stringContaining("isn't installed") });
-  expect(service.capability({ kind: "pose.select", id: "PhotoModePoses.nowhere" }).available).toBe(false);
-  expect(await service.dispatch({ kind: "pose.select", id: "PhotoModePoses.sera_01" })).toEqual({ ok: true });
+  expect(service.capability({ kind: "pose.select", view: "main", id: "PhotoModePoses.sera_02" })).toMatchObject({ available: false, reason: expect.stringContaining("isn't installed") });
+  expect(service.capability({ kind: "pose.select", view: "main", id: "PhotoModePoses.nowhere" }).available).toBe(false);
+  expect(await service.dispatch({ kind: "pose.select", view: "main", id: "PhotoModePoses.sera_01" })).toEqual({ ok: true });
   expect(motion.calls).toEqual(["hold PhotoModePoses.sera_01 [0,0,0]"]);
   expect(service.snapshot()).toMatchObject({ current: { id: "PhotoModePoses.sera_01", label: "01", loading: false }, body: "pose" });
   expect(service.snapshot().preferences.recent).toEqual([{ id: "PhotoModePoses.sera_01", label: "01" }]);
   await settle();
   expect(saved.at(-1)).toMatchObject({ revision: 3 });
   // A clip the host can't read says so and leaves the body source as it was.
-  const failed = await service.dispatch({ kind: "pose.select", id: "PhotoModePoses.idle_lean" });
+  const failed = await service.dispatch({ kind: "pose.select", view: "main", id: "PhotoModePoses.idle_lean" });
   expect(failed).toMatchObject({ ok: false, message: expect.stringContaining("isn't installed") });
 });
 
@@ -168,8 +168,8 @@ test("favourites, open groups and the outfit override change at once; Still, the
   expect(service.capability({ kind: "pose.favourite", id: "PhotoModePoses.nowhere", on: true }).available).toBe(false);
   await service.dispatch({ kind: "pose.showFiltered", shown: true });
   expect(service.snapshot().showFiltered).toBe(true);
-  await service.dispatch({ kind: "pose.clear", to: "still" });
-  await service.dispatch({ kind: "pose.frame" });
+  await service.dispatch({ kind: "pose.clear", view: "main", to: "still" });
+  await service.dispatch({ kind: "pose.frame", view: "main" });
   expect(motion.calls).toEqual(["still", "frame"]);
   expect(service.capability({ kind: "pose.retry" }).available).toBe(false);
 });

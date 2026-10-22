@@ -8,6 +8,7 @@
  * be read (by guidance, the style guide and tests) without loading any panel.
  */
 import type { IconName } from "../icons";
+import type { PanelContext } from "../../platform/api/subjects";
 
 /**
  * Where a panel sits in the shell's factory layouts. The shell maps slots to tab groups per size class
@@ -37,6 +38,11 @@ export type PanelContribution = {
    * (library and package capabilities).
    */
   readonly heavy?: boolean;
+  /**
+   * What the panel shows and edits, and what its binding resolves from (profiles design §3.1, §5): its instances follow focus to that
+   * by default. Absent: the panel works on the profile (no binding).
+   */
+  readonly context?: PanelContext;
 };
 
 /** Which activity-log source an action kind reports under (first matching pattern wins within a contribution). */
@@ -67,6 +73,8 @@ export function viewCatalogue(views: readonly ViewContribution[]) {
   return {
     panels,
     ids: panels.map(panel => panel.id),
+    /** Each panel type's context (§3.1, §5); a type no contribution names, or one without a context, works on the profile. */
+    context: (type: string): PanelContext => panels.find(panel => panel.id === type)?.context ?? { kind: "profile" },
     meta: Object.fromEntries(panels.map(({ id, title, icon, description }) => [id, { title, icon, description }])) as Record<string, PanelMeta>,
     heavy: panels.filter(panel => panel.heavy).map(panel => panel.id),
     activity: views.flatMap(view => view.activity),

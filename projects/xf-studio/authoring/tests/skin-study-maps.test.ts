@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { skinPackedRgToRgb, skinRoughnessToGreen } from "../src/skin-study-maps";
+import { skinPackedRgToRgb, skinRoughnessToGreen } from "../src/studies/skin-study-maps";
 
 test("skin source roughness maps R to Three's G and brackets B detail", () => {
   const source = new Uint8Array([200, 0, 255, 255, 100, 73, 0, 255]);

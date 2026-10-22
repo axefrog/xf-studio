@@ -1,0 +1,72 @@
+import { formatFence, WORKSPACE_FENCE_HEADER, type WorkspaceFence } from "../../platform/api/document-store";
+import type { MigrationAnswer, MigrationRequest, MigrationResult } from "../profiles/profiles-migration-data";
+import { migrated, ProfilesMigration, type ProfilesMigrationOutcome } from "../profiles/profiles-migration";
+import type { MigrationMark, WorkspaceProfiles } from "../profiles/profile-session";
+import type { DocumentModel } from "../workspace/collection-workspace";
+import type { WorkspaceState } from "../workspace/workspace-state";
+
+/**
+ * The page's transport for the profiles migration (`/api/profiles/migrate`, or `/api/verification/profiles/migrate`; profiles design
+ * §8): the request carries the workspace lease, so the host refuses it from a window that released the workspace. A host that doesn't
+ * answer (down or restarting) or fails throws, and the migration sends the same token again; a request it refuses as malformed is
+ * answered `refused`.
+ */
+export function profilesMigrationTransport(endpoint: string, send: (url: string, init?: RequestInit) => Promise<Response>,
+  fence?: () => WorkspaceFence | null): (request: MigrationRequest, signal: AbortSignal) => Promise<MigrationAnswer> {
+  return async (request, signal) => {
+    const lease = fence?.();
+    const response = await send(endpoint, { method: "POST", signal, body: JSON.stringify(request),
+      headers: { "Content-Type": "application/json", Accept: "application/json", ...(lease ? { [WORKSPACE_FENCE_HEADER]: formatFence(lease) } : {}) } });
+    const body = await response.json().catch(() => null) as (MigrationResult & { code?: string; error?: string }) | null;
+    if (response.status === 409 && body?.code === "superseded") return { ok: false, reason: "superseded" };
+    if (response.status === 400 || response.status === 413) return { ok: false, reason: "refused", ...(body?.error ? { message: body.error } : {}) };
+    if (!response.ok || !body) throw Error(body?.error ?? "The library couldn't be reached.");
+    return { ok: true, result: body };
+  };
+}
+
+/**
+ * Whether the Studio migrates its workspace at start (on since phase 1d-ii's switch-over: the Studio works on the profile services, and the
+ * legacy fields are migration input only, frozen as they were).
+ */
+export const PROFILES_MIGRATION_ENABLED: boolean = true;
+
+/**
+ * Runs the profiles migration for this window's workspace (profiles design §8): only in the window holding the workspace, and only for a
+ * workspace it may write. `marks` is the workspace's own holder of the mark and sessions (what the workspace stores); `flush` writes the
+ * workspace at once and answers whether it is stored. The Studio runs it before it builds anything, since it opens on the session the
+ * migration makes (a migrated workspace costs nothing). It ends with `signal`, and starts again with the next page load if it didn't finish.
+ */
+export function startProfilesMigration(options: {
+  endpoint: string;
+  send: (url: string, init?: RequestInit) => Promise<Response>;
+  workspace: string;
+  fence: () => WorkspaceFence | null;
+  model: DocumentModel;
+  state: () => WorkspaceState;
+  marks: { migration?: MigrationMark; profiles?: WorkspaceProfiles };
+  flush: () => boolean;
+  signal: AbortSignal;
+  report?: (error: unknown) => void;
+  /** How long to wait before it begins (default: none). */
+  delayMs?: number;
+  /** Tests only: run whatever `PROFILES_MIGRATION_ENABLED` says. */
+  enabled?: boolean;
+}): Promise<ProfilesMigrationOutcome | "disabled"> {
+  if (!(options.enabled ?? PROFILES_MIGRATION_ENABLED)) return Promise.resolve("disabled");
+  // A migrated workspace costs nothing at start: its stored mark says so, without capturing the workspace.
+  if (migrated(options.marks)) return Promise.resolve("already");
+  const migration = new ProfilesMigration({ workspace: options.workspace, model: options.model, state: options.state,
+    record: next => {
+      options.marks.migration = next.migration;
+      if (next.profiles) options.marks.profiles = next.profiles; else delete options.marks.profiles;
+      return options.flush();
+    },
+    send: profilesMigrationTransport(options.endpoint, options.send, options.fence), report: options.report });
+  return new Promise<void>(resolve => {
+    const timer = setTimeout(done, options.delayMs ?? 0);
+    function done() { clearTimeout(timer); options.signal.removeEventListener("abort", done); resolve(); }
+    options.signal.addEventListener("abort", done, { once: true });
+  }).then(() => options.signal.aborted ? "stopped" as const : migration.run(options.signal))
+    .catch(error => { options.report?.(error); return "stopped" as const; });
+}

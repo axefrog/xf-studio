@@ -1,12 +1,12 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { IDLES_ENDPOINT } from "../../idle-endpoint";
-import { IDLE_STATE_SCHEMA, type IdleState, type RestJoint } from "../../idle-body";
-import { DEFAULT_IDLE, type IdleCatalogue, type IdleEntry } from "../../idle-catalogue";
-import { faceMotionClip, faceMotionScene } from "../../game-blink";
-import { poseClip, rotationToGltf, scaleToGltf, translationToGltf } from "../../pose-clip";
+import { IDLES_ENDPOINT } from "../../animation/idle-endpoint";
+import { IDLE_STATE_SCHEMA, type IdleState, type RestJoint } from "../../animation/idle-body";
+import { DEFAULT_IDLE, type IdleCatalogue, type IdleEntry } from "../../animation/idle-catalogue";
+import { faceMotionClip, faceMotionScene } from "../../animation/render/game-blink";
+import { poseClip, rotationToGltf, scaleToGltf, translationToGltf } from "../../animation/render/pose-clip";
 import type { FaceClipRecord } from "../api/facial";
-import type { PoseSample } from "../../pose-sample";
+import type { PoseSample } from "../../animation/pose-sample";
 
 /**
  * Where the scene's idle comes from (the renderer side of idle-body.ts): the host's idles, read from the player's game files (`game`, both

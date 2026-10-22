@@ -14,19 +14,19 @@ import { ExportRefusal, PrerequisiteStale, type ExportWarning, type FeatureCheck
 import { parsePlateUvFootprint } from "../../../engines/layered-makeup/plate-uv-window";
 import { compilePreset } from "../../../engines/layered-makeup/preset-compiler";
 import { COLLECTION_2 } from "../../../platform/api";
-import { EYE_MAKEUP_FEATURE, readRecipe } from "../../../recipe-schema";
-import { packagePresetIdentities, PLATE_REACH_UNCHECKED_NOTE, preparePackageCollection } from "../../../package-filter";
-import { expectedPaths } from "../../../archive-inventory";
-import { eyeMakeupXl } from "../../../package-resources";
+import { EYE_MAKEUP_FEATURE, readRecipe } from "../../../legacy/eye-makeup/recipe-schema";
+import { packagePresetIdentities, PLATE_REACH_UNCHECKED_NOTE, preparePackageCollection } from "../../../legacy/eye-makeup/export/package-filter";
+import { expectedPaths } from "../../../legacy/eye-makeup/export/archive-inventory";
+import { eyeMakeupXl } from "../../../legacy/eye-makeup/export/package-resources";
 import { buildEyeMakeupResources, MASCULINE_PLATE_STEMS, MasculinePlateFootprintChangedError, PlateFootprintChangedError,
-  type BuildRecord } from "../../../package-resource-builder";
-import { PackageToolError } from "../../../package-build-wolvenkit";
-import { NO_EYE_MAKEUP_REASON, type planCollection } from "../../../preset-collection";
-import type { PlateReachInput } from "../../../plate-reach";
-import type { PackagePlate } from "../../../package-action";
+  type BuildRecord } from "../../../legacy/eye-makeup/export/host/package-resource-builder";
+import { PackageToolError } from "../../../legacy/eye-makeup/export/host/package-build-wolvenkit";
+import { NO_EYE_MAKEUP_REASON, type planCollection } from "../../../legacy/eye-makeup/export/preset-collection";
+import type { PlateReachInput } from "../../../legacy/eye-makeup/export/plate-reach";
+import type { PackagePlate } from "../../../legacy/eye-makeup/export/package-action";
 import { EYE_MAKEUP_REGION } from "../region";
 import { EYE_MAKEUP_EXPORT, EYE_MAKEUP_EXPORTER_ID, EYE_PLATE_MASCULINE_PREREQUISITE, EYE_PLATE_PREREQUISITE } from "../export-info";
-import { unavailablePlate } from "../../../eye-plate-service";
+import { unavailablePlate } from "../../../legacy/eye-makeup/plate/host/eye-plate-service";
 import { manifestPlateReach, plateBuilderInput, plateBuildValue, type PlateBuildValue } from "./plate-input";
 
 /** Bumped whenever the same input would build different bytes. */

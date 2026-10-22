@@ -12,7 +12,7 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { decodePng } from "../src/png";
+import { decodePng } from "../src/formats/png";
 import { launch } from "./cdp";
 
 const argv = process.argv.slice(2);

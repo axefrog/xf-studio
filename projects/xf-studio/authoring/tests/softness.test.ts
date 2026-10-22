@@ -4,7 +4,7 @@ import {editSoftness} from "../src/engines/layered-makeup/softness-edit";
 import {bezierAt,splitBezierSegment} from "../src/engines/layered-makeup/bezier-path";
 import {insertPathPoint} from "../src/engines/layered-makeup/path-edit";
 import { coverage, raster, initialRecipe, transformLayer } from "./fixtures/eye-region";
-import { readRecipe as parseRecipe, parseRecipeFile } from "../src/recipe-schema";
+import { readRecipe as parseRecipe, parseRecipeFile } from "../src/legacy/eye-makeup/recipe-schema";
 
 function strip(): Layer {
   const l=editSoftness(initialRecipe().layers[0],{kind:"variable-softness",enabled:true});

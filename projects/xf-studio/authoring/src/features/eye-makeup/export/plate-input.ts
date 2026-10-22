@@ -7,13 +7,13 @@ import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ExportRefusal, type ResourceTools } from "../../../platform/api";
-import { EYE_PLATE_MANIFEST_SCHEMA, packagePlateRecord } from "../../../eye-plate-service";
-import { plateReachInput, readManifestPlateReach } from "../../../plate-uv-footprint-io";
+import { EYE_PLATE_MANIFEST_SCHEMA, packagePlateRecord } from "../../../legacy/eye-makeup/plate/host/eye-plate-service";
+import { plateReachInput, readManifestPlateReach } from "../../../legacy/eye-makeup/export/host/plate-uv-footprint-io";
 import { plateUvFootprint } from "../../../engines/layered-makeup/plate-uv-window";
-import { PLATE_STEMS, plateStem } from "../../../package-resource-builder";
-import { PackageToolError } from "../../../package-build-wolvenkit";
-import type { PackagePlate } from "../../../package-action";
-import type { PlateReachInput } from "../../../plate-reach";
+import { PLATE_STEMS, plateStem } from "../../../legacy/eye-makeup/export/host/package-resource-builder";
+import { PackageToolError } from "../../../legacy/eye-makeup/export/host/package-build-wolvenkit";
+import type { PackagePlate } from "../../../legacy/eye-makeup/export/package-action";
+import type { PlateReachInput } from "../../../legacy/eye-makeup/export/plate-reach";
 
 /**
  * What the host hands the builder for the plate: the plate directory and, for the built-in plate, its cache manifest and

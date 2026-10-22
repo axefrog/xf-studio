@@ -1,57 +1,57 @@
-import { createReferenceCharacterRoutes } from "./src/reference-character-server";
+import { createReferenceCharacterRoutes } from "./src/character/host/reference-character-server";
 import { resolve, sep } from "node:path";
 import { isBelow } from "./src/platform/api/path-containment";
 import { existsSync, mkdirSync } from "node:fs";
-// The library files: one owner per file, its stores, durability, daily backups and routes (src/library-files.ts).
+// The library files: one owner per file, its stores, durability, daily backups and routes (src/library/host/library-files.ts).
 import { hostClock } from "./src/platform/core/clock";
-import { openLibraryFiles } from "./src/library-files";
+import { openLibraryFiles } from "./src/library/host/library-files";
 import { EXPERIMENT_FLAGS, type ExperimentFlagsDocument } from "./src/platform/api/experiments";
 // A composition root: the part registry is built once and injected (CORE-29).
 import { STUDIO_PARTS } from "./src/compose/studio-registry";
 import { EXPRESSIONS_GAME_PREREQUISITE } from "./src/features/expressions/export/game";
-import { createPackageHandler, localCandidateStore, localEyePlate, localExpressionsGame, localMasculineEyePlate, testMasculineEyePlate, localPackageAdapter, localPackageTools, localPlateCache, localToolsRoot, packageRequestSettings } from "./src/package-server";
-import { createModInstallHandler, explorerReveal, ModInstallHost, READ_ONLY_TEST_SERVER, READ_ONLY_VERIFICATION, systemAnsiCodePage, windowsRunningApps } from "./src/mod-install-host";
-import { localHostState, verificationInstallReceipts, verificationSettingsDirectory } from "./src/host-state";
+import { createPackageHandler, localCandidateStore, localEyePlate, localExpressionsGame, localMasculineEyePlate, testMasculineEyePlate, localPackageAdapter, localPackageTools, localPlateCache, localToolsRoot, packageRequestSettings } from "./src/host/package-server";
+import { createModInstallHandler, explorerReveal, ModInstallHost, READ_ONLY_TEST_SERVER, READ_ONLY_VERIFICATION, systemAnsiCodePage, windowsRunningApps } from "./src/installation/host/mod-install-host";
+import { localHostState, verificationInstallReceipts, verificationSettingsDirectory } from "./src/setup/host/host-state";
 import { STUDIO_EXPORTERS } from "./src/compose/exporters";
 import { EYE_PLATE_MASCULINE_PREREQUISITE, EYE_PLATE_PREREQUISITE } from "./src/features/eye-makeup";
-import { WolvenKitSetupHost, wolvenKitReadinessIssue } from "./src/wolvenkit-setup-host";
-import { createWolvenKitSetupHandler } from "./src/wolvenkit-setup-server";
-import { eyePlateReadiness } from "./src/eye-plate-cache";
-import { EYE_PLATE_RECIPE } from "./src/eye-plate-recipe";
-import { createLocalSettingsHandler } from "./src/local-settings-server";
-import { createInstallDetectionHandler, hostFrameworkCheck, profileFrameworkMods } from "./src/install-detection-server";
+import { WolvenKitSetupHost, wolvenKitReadinessIssue } from "./src/setup/host/wolvenkit-setup-host";
+import { createWolvenKitSetupHandler } from "./src/setup/host/wolvenkit-setup-server";
+import { eyePlateReadiness } from "./src/legacy/eye-makeup/plate/host/eye-plate-cache";
+import { EYE_PLATE_RECIPE } from "./src/legacy/eye-makeup/plate/eye-plate-recipe";
+import { createLocalSettingsHandler } from "./src/setup/host/local-settings-server";
+import { createInstallDetectionHandler, hostFrameworkCheck, profileFrameworkMods } from "./src/installation/host/install-detection-server";
 import { createSavesHandler } from "./src/features/save-explorer/host/saves-server";
-import { savesFolderProbe, savesHostSources } from "./src/saves-host-sources";
-import { UPDATE_CHECK_FILE, updateCheckEndpoints } from "./src/update-check-host";
-import { textFileAt } from "./src/derived-cache";
-import { gitHubReleases, SIMULATED_RELEASE_KINDS, type SimulatedReleaseKind, simulatedReleases } from "./src/update-check-github";
+import { savesFolderProbe, savesHostSources } from "./src/saves/host/saves-host-sources";
+import { UPDATE_CHECK_FILE, updateCheckEndpoints } from "./src/setup/host/update-check-host";
+import { textFileAt } from "./src/host/derived-cache";
+import { gitHubReleases, SIMULATED_RELEASE_KINDS, type SimulatedReleaseKind, simulatedReleases } from "./src/setup/host/update-check-github";
 import desktopPackage from "./desktop/package.json";
-import { createDesktopAppHandler, createDesktopAppHostPort, DESKTOP_APP_READ_ONLY_TEST_SERVER, DESKTOP_APP_READ_ONLY_VERIFICATION, detectDesktopApp } from "./src/desktop-app-host";
-import { packageToolPaths } from "./src/local-settings-readiness";
-import { LocalSettingsStore } from "./src/local-settings-store";
-import type { LocalSettings } from "./src/local-settings";
+import { createDesktopAppHandler, createDesktopAppHostPort, DESKTOP_APP_READ_ONLY_TEST_SERVER, DESKTOP_APP_READ_ONLY_VERIFICATION, detectDesktopApp } from "./src/setup/host/desktop-app-host";
+import { packageToolPaths } from "./src/setup/host/local-settings-readiness";
+import { LocalSettingsStore } from "./src/setup/host/local-settings-store";
+import type { LocalSettings } from "./src/setup/local-settings";
 import { buildBrowser } from "./browser-build";
-import { PreviewCoreHost } from "./src/preview-core-host";
-import { createPreviewCoreHandler } from "./src/preview-core-server";
-import { PREVIEW_CORE_ASSET_NAMES } from "./src/preview-core-recipe";
-import { CharacterDetailHost, characterRoute, installationFingerprint } from "./src/character-detail-host";
-import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "./src/character-detail-server";
-import { CHOICE_PREVIEW_ENDPOINT, createChoicePreviewHandler } from "./src/choice-preview-server";
-import { PreparedFiles, preparedBudgetFrom } from "./src/prepared-files";
-import { hostJobs } from "./src/host-jobs";
-import { CREATOR_ENDPOINT, createCreatorHandler } from "./src/cc-catalogue-server";
-import { createFacialHandler, FACIAL_ENDPOINT, FacialHost, locateFacialSolver } from "./src/facial-host";
-import { createPoseHandler, POSES_ENDPOINT } from "./src/pose-catalogue-server";
-import { IdleHost, idlePrepared } from "./src/idle-host";
-import { createIdleHandler, IDLES_ENDPOINT } from "./src/idle-server";
+import { PreviewCoreHost } from "./src/preview/host/preview-core-host";
+import { createPreviewCoreHandler } from "./src/preview/host/preview-core-server";
+import { PREVIEW_CORE_ASSET_NAMES } from "./src/preview/preview-core-recipe";
+import { CharacterDetailHost, characterRoute, installationFingerprint } from "./src/character/host/character-detail-host";
+import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "./src/character/host/character-detail-server";
+import { CHOICE_PREVIEW_ENDPOINT, createChoicePreviewHandler } from "./src/character/host/choice-preview-server";
+import { PreparedFiles, preparedBudgetFrom } from "./src/host/prepared-files";
+import { hostJobs } from "./src/host/host-jobs";
+import { CREATOR_ENDPOINT, createCreatorHandler } from "./src/character/host/cc-catalogue-server";
+import { createFacialHandler, FACIAL_ENDPOINT, FacialHost, locateFacialSolver } from "./src/animation/host/facial-host";
+import { createPoseHandler, POSES_ENDPOINT } from "./src/animation/host/pose-catalogue-server";
+import { IdleHost, idlePrepared } from "./src/animation/host/idle-host";
+import { createIdleHandler, IDLES_ENDPOINT } from "./src/animation/host/idle-server";
 import { createPosePreferencesHandler, PosePreferencesStore } from "./src/features/poses/host/preferences-store";
-import { POSE_PREFERENCES_ENDPOINT, VERIFICATION_POSE_PREFERENCES_ENDPOINT } from "./src/pose-endpoint";
-import { PoseCatalogueHost } from "./src/pose-catalogue-host";
-import { createGradingLutHandler, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT, GradingLutHost, serveGradingLut } from "./src/grading-lut-host";
-import { consoleEcho, hostDiagnosticsAt, hostFailure, logUnhandledRejections, setProcessDiagnostics } from "./src/diagnostics/host-log";
-import { createDiagnosticsHandler, DIAGNOSTICS_PREFIX, withRequestDiagnostics } from "./src/diagnostics/host-endpoint";
+import { POSE_PREFERENCES_ENDPOINT, VERIFICATION_POSE_PREFERENCES_ENDPOINT } from "./src/animation/pose-endpoint";
+import { PoseCatalogueHost } from "./src/animation/host/pose-catalogue-host";
+import { createGradingLutHandler, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT, GradingLutHost, serveGradingLut } from "./src/preview/host/grading-lut-host";
+import { consoleEcho, hostDiagnosticsAt, hostFailure, logUnhandledRejections, setProcessDiagnostics } from "./src/diagnostics/host/host-log";
+import { createDiagnosticsHandler, DIAGNOSTICS_PREFIX, withRequestDiagnostics } from "./src/diagnostics/host/host-endpoint";
 // Settings and install receipts follow an isolated data folder (XFAS_DATA_DIR, XFS_SETTINGS_DIR); an isolated server never reads or
-// writes the person's real settings and doesn't add mods (src/host-state.ts, INSTALL-01).
+// writes the person's real settings and doesn't add mods (src/setup/host/host-state.ts, INSTALL-01).
 const state = localHostState(resolve(import.meta.dir, "data"));
 const dataRoot = state.dataRoot;
 mkdirSync(dataRoot, { recursive: true });
@@ -223,6 +223,7 @@ const diagnosticsRequest = createDiagnosticsHandler(diagnostics, {
   roots: () => [{ label: "<data>", path: dataRoot }, { label: "<tools>", path: localToolsRoot() }, { label: "<preview-cache>", path: previewCacheRoot },
     { label: "<studio>", path: import.meta.dir }],
   resolverCache: resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache")),
+  resources: (refs, progress) => characterDetails.reportResources(refs, progress),
   installReceipts: () => [state.installReceipts, ...state.legacyInstallReceipts],
   testHook: process.env.XFS_DIAGNOSTICS_TEST_HOOK === "1",
 });

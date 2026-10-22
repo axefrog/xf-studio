@@ -2,12 +2,12 @@
 // resolved materials and decoded textures. Shapes follow the real exports; values are made up.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { GlbWriter } from "../src/glb";
-import { encodePng } from "../src/png";
-import { idListSha256, sha256Hex, type EyePlateRecipe } from "../src/eye-plate-recipe";
-import { PREVIEW_CORE_RECIPE, type PreviewCoreRecipe } from "../src/preview-core-recipe";
-import { createGameAssetExporter, type GameAssetExporter, type UncookRun } from "../src/game-asset-export";
-import { depotHash } from "../src/depot-path";
+import { GlbWriter } from "../src/formats/glb";
+import { encodePng } from "../src/formats/png";
+import { idListSha256, sha256Hex, type EyePlateRecipe } from "../src/legacy/eye-makeup/plate/eye-plate-recipe";
+import { PREVIEW_CORE_RECIPE, type PreviewCoreRecipe } from "../src/preview/preview-core-recipe";
+import { createGameAssetExporter, type GameAssetExporter, type UncookRun } from "../src/game/host/game-asset-export";
+import { depotHash } from "../src/game/depot-path";
 
 export const GRID = 5;
 export const HEAD_VERTICES = GRID * GRID;

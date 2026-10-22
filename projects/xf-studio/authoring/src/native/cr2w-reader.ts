@@ -13,6 +13,7 @@
  * One `DecodeSession` (limits.ts) spans the file and every buffer parsed inside it: it counts decoded values and bytes, caps
  * nesting, and collects notes such as a property stored with a type the RTTI slice disagrees with (decoded by the stored type).
  */
+import { setOwn } from "../platform/api/own-property";
 import { Cr2wError, Cr2wFile, CR2W_MIN_SIZE } from "./cr2w-file";
 import type { Decompress } from "./kark";
 import { DecodeSession } from "./limits";
@@ -77,7 +78,8 @@ export class Cr2wDecoder implements ValueContext {
         cursor.pos = end;
         continue;
       }
-      object.fields[name] = value;
+      // A property named from the file's name table is always an own key (`__proto__` too), never the fields' prototype.
+      setOwn(object.fields, name, value);
       if (inner.pos !== end && Array.isArray(value) && type.startsWith("array:")) this.readPastCount(inner, value, type, `${object.type}.${name}`);
       if (inner.pos !== end) throw new Cr2wError(`${object.type}.${name} (${type}) read ${inner.pos - start} of ${size} bytes.`);
       cursor.pos = end;

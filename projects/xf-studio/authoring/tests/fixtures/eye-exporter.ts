@@ -4,11 +4,11 @@
  */
 import { EYE_MIRROR, EYE_REGION, inMemory } from "./eye-region";
 import type * as recipe from "../../src/engines/layered-makeup/recipe";
-import * as reach from "../../src/plate-reach";
-import * as filter from "../../src/package-filter";
-import * as glitter from "../../src/glitter-route";
-import * as bake from "../../src/package-bake";
-import * as resources from "../../src/package-resource-builder";
+import * as reach from "../../src/legacy/eye-makeup/export/plate-reach";
+import * as filter from "../../src/legacy/eye-makeup/export/package-filter";
+import * as glitter from "../../src/legacy/eye-makeup/export/glitter-route";
+import * as bake from "../../src/legacy/eye-makeup/export/host/package-bake";
+import * as resources from "../../src/legacy/eye-makeup/export/host/package-resource-builder";
 import { EYE_MAKEUP_EXPORTER } from "../../src/features/eye-makeup/export";
 import { EYE_PLATE_PREREQUISITE } from "../../src/features/eye-makeup";
 

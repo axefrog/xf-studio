@@ -1,5 +1,5 @@
 // Local build input adapter. Packaging and game installation are separate operations.
-import { bakeCollection } from "../src/package-bake";
+import { bakeCollection } from "../src/legacy/eye-makeup/export/host/package-bake";
 import { EYE_MAKEUP_REGION } from "../src/features/eye-makeup/region";
 
 const [source, destination] = process.argv.slice(2);

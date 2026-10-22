@@ -40,15 +40,15 @@ describe("bridge 0.5.3 Demo A: the ink HUD panel (ui.hud)", () => {
     await host?.stop();
   });
 
-  test("the panel shows by default, top right, with the bridge's state; ui.message lines reach its frame", async () => {
+  test("the panel shows by default, top left (0.8), with the bridge's state; ui.message lines reach its frame", async () => {
     const start = await frame(api);
-    expect(start).toMatchObject({ show: true, anchor: "top_right", layer: "hud", nameplates: true, cet_label: true, live: true, tone: "write" });
+    expect(start).toMatchObject({ show: true, anchor: "top_left", x: 40, y: 360, layer: "hud", nameplates: true, cet_label: true, live: true, tone: "write" });
     expect(start.status).toMatch(/changes allowed/);
     const posted = await api.run("ui.message", { text: "Press the photo-mode key", level: "ask", seconds: 30 });
     expect(posted.ok, JSON.stringify(posted)).toBe(true);
     const after = await frame(api);
     expect(after.messages).toEqual([{ level: "ask", text: "Press the photo-mode key" }]);
-    await api.run("ui.message", { clear: true });
+    await api.run("ui.message", { clear: true, clear_asks: true });
   });
 
   test("ui.hud moves, scales and hides it, and its undo puts every setting back", async () => {
@@ -63,7 +63,7 @@ describe("bridge 0.5.3 Demo A: the ink HUD panel (ui.hud)", () => {
     // Undo the move first (its settings still include show: true), then everything is as it started.
     const undone = await api.run(result.undo.method, result.undo.params);
     expect(undone.ok, JSON.stringify(undone)).toBe(true);
-    expect(await frame(api)).toMatchObject({ show: true, anchor: "top_right", x: 72, y: 300, scale: 1, cet_label: true });
+    expect(await frame(api)).toMatchObject({ show: true, anchor: "top_left", x: 40, y: 360, scale: 1, cet_label: true });
   });
 
   test("ui.hud with nothing only reads; reset goes back to the configured panel; bad values are refused in plain words", async () => {
@@ -132,7 +132,7 @@ describe("bridge 0.5.3 Demo C: XF map pins (world.pin, world.pin.clear)", () => 
     await bridge(api, "showroom.place", { items: [{ index: 0, template: HEAD, appearance: "xfs_p0170d3e01f014a519c3e000000000005", label: "Gloss A", x: 100, y: 203, z: 10, yaw: 180 }] });
     const onHead = await api.run("world.pin", { piece: 0, label: "Gloss A", variant: "clothes" });
     expect(onHead.ok, JSON.stringify(onHead)).toBe(true);
-    if (onHead.ok) expect(onHead.result).toMatchObject({ target: "piece", bound: "object", variant: "clothes" });
+    if (onHead.ok) expect(onHead.result).toMatchObject({ target: "piece", bound: "position", variant: "clothes" });
     const missing = await api.run("world.pin", { piece: 5, label: "none" });
     expect(!missing.ok && missing.error.code).toBe("no_such_piece");
 

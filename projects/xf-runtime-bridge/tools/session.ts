@@ -28,7 +28,7 @@
 // running "restore", and prints the --from label that continues after it; the report folder
 // (--out) collects every part's run in one manifest.json.
 //
-// Notes and asks are also shown to the player in the game (ui.message, under the bridge's status label),
+// Notes and asks are also shown to the player in the game (ui.message, on the bridge's status surface),
 // so the maintainer can follow the session without leaving the game: a note for 20 s, an ask until it is
 // answered (then the messages are cleared), plus a line when the run starts and ends. Best effort: a
 // bridge that isn't there, or a build without ui.message, changes nothing (the record says echoed: false).

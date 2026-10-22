@@ -1,4 +1,4 @@
-import { MM_PER_UV } from "../src/glitter-region";
+import { MM_PER_UV } from "../src/legacy/eye-makeup/export/glitter-region";
 import { expect, test } from "bun:test";
 import { coverage, createRasterJob, raster, rasterWindow, type Layer, type Recipe } from "../src/engines/layered-makeup/recipe";
 import { editLayers } from "../src/engines/layered-makeup/layer-stack";

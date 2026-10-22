@@ -1,30 +1,49 @@
 -- XF Runtime Bridge: CET (Cyber Engine Tweaks) layer.
 --
 -- Proves: CET events, per-mod logging, calls into the RED4ext natives (Game.XFBridge_*) and into
--- the redscript layer, a kill-switch hotkey, and a small always-visible status indicator with the
--- coordinator's messages under it (ui.message, bridge 0.4).
+-- the redscript layer, a kill-switch hotkey, and the CET line (top left) with the coordinator's messages under it
+-- (ui.message, bridge 0.4). 0.8.2 (the maintainer's decision after session 9): one status surface at a time; the CET line
+-- (one line with a coloured dot at the far top left) is the fallback, drawn only when neither the ink panel nor the XF box
+-- (the small box with the yellow heading) can show (the plugin says which: the HUD frame's surface record; none while a
+-- loading screen shows, 0.8.3). The XF Runtime Bridge window (panel.lua) stays the interactive place.
 -- CET has no networking (its sandbox exposes no sockets or HTTP), so the external bridge lives
 -- in the RED4ext plugin; this layer only reports to it and shows its state.
 --
--- Logs: bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge/xf_runtime_bridge.log
+-- Logs: bin/x64/plugins/cyber_engine_tweaks/mods/XF_Runtime_Bridge/XF_Runtime_Bridge.log
 -- (CET per-mod rotating log, 5 MiB x 3) and, through XFBridge_Log, the plugin's RED4ext log
 -- with layer=cet. Every call here is pcall-guarded: if the plugin is missing, the mod says so
 -- once and keeps running.
 
-local MOD = "xf_runtime_bridge"
+-- 0.8.2: CET names the mod after its folder, XF_Runtime_Bridge, so its Bindings group reads "XF Runtime Bridge".
+local MOD = "XF_Runtime_Bridge"
 local REFRESH_SECONDS = 2.0
 local PENDING_REFRESH_SECONDS = 0.5
 local OPTIONS_POLL_SECONDS = 0.25
 local MESSAGES_POLL_SECONDS = 0.25
 -- The message lines wrap at this width (pixels), so they stay in the top-left corner, clear of the
--- centre of the screen where every framing and capture region sits.
-local MESSAGE_WRAP_PX = 520
+-- centre of the screen where every framing and capture region sits. The XF box sits right of it (x 700).
+local MESSAGE_WRAP_PX = 640
+-- 0.8 (the UI review): each level's colour is a theme token (theme.lua, from XF Studio's own tokens); these are the
+-- fallbacks for a package without the theme.
+local MESSAGE_TOKENS = { info = "Text", ask = "XfAccentText", warn = "XfWarning", done = "XfSuccess" }
 local MESSAGE_COLORS = {
   info = { 0.92, 0.92, 0.92, 1.0 },
   ask = { 1.0, 0.82, 0.3, 1.0 },
   warn = { 1.0, 0.45, 0.4, 1.0 },
   done = { 0.45, 0.95, 0.55, 1.0 },
 }
+local MUTED = { 0.69, 0.71, 0.73, 1.0 }
+-- 0.8: the status line's tone (the plugin's core/InkUi.cpp Summarize): amber only while changes are allowed or paused.
+local TONE_TOKENS = { ok = "XfSuccess", write = "XfWarning", paused = "XfWarning", killed = "XfDanger", off = "TextDisabled", idle = "TextDisabled" }
+local TONE_COLORS = {
+  ok = { 0.4, 0.9, 0.5, 1.0 },
+  write = { 1.0, 0.7, 0.2, 1.0 },
+  paused = { 1.0, 0.7, 0.2, 1.0 },
+  killed = { 1.0, 0.35, 0.35, 1.0 },
+  off = { 0.6, 0.6, 0.6, 1.0 },
+  idle = { 0.6, 0.6, 0.6, 1.0 },
+}
+local MIDDLE_DOT = " \194\183 " -- U+00B7, which CET's Latin-1 font has
 -- The plugin refuses a value longer than this, and an answer larger than its 64 KiB limit
 -- (core/OptionsExchange.hpp); such values are left out and named under "skipped" instead (RB-47).
 local MAX_OPTION_VALUE_CHARS = 256
@@ -36,6 +55,11 @@ local hasPanel, panel = pcall(require, "panel")
 if not hasPanel or type(panel) ~= "table" then
   panel = nil
 end
+-- Bridge 0.7: the XF Studio theme (generated from the Studio's design tokens by tools/overlay/theme.ts).
+local hasTheme, theme = pcall(require, "theme")
+if not hasTheme or type(theme) ~= "table" then
+  theme = nil
+end
 
 local state = {
   initialized = false,
@@ -45,7 +69,12 @@ local state = {
   sinceOptionsPoll = 0,
   sinceMessagesPoll = 0,
   messages = {},   -- ui.message lines: { {text, level}, ... }, oldest first (XFBridge_Messages)
-  cetLabel = true, -- bridge 0.5.3: [ui] cet_label / ui.hud's cet_label (read from XFBridge_Hud's frame); the ink panel may replace it
+  pendingAsk = nil, -- 0.7: the ask waiting for the player's answer: { id, text, choices } (XFBridge_Messages' pending_ask)
+  answeredAsk = nil, -- 0.8: the answered ask still showing: { id, text, label } (answered_ask)
+  inkAsk = 0,        -- 0.8: the question the ink panel shows on screen now (the frame's inkask record), or 0
+  comment = "",     -- 0.7: the commentary box's text
+  cetLabel = true, -- bridge 0.5.3: [ui] cet_label / ui.hud's cet_label (read from XFBridge_Hud's frame)
+  surface = "cet_line", -- 0.8.2: the status surface the plugin chose (0.8.3: ink_panel, xf_box, cet_line, none)
   overlayOpen = false,
   cidCounter = 0,
   lastError = nil,
@@ -179,18 +208,36 @@ end
 -- A killed bridge answers none. Read-only; polled four times a second while the bridge is on.
 local function pollMessages()
   local bridge = state.info and state.info.bridge
+  -- 0.8.2: the CET line shows only when the plugin names it the status surface (a plugin without the record, or no answer:
+  -- always), a stopped bridge included: while the HUD shows, its ink panel says how to reconnect.
+  local hudOk, frame = false, nil
+  if state.pluginPresent and bridge and bridge.enabled then
+    hudOk, frame = pcall(function() return Game.XFBridge_Hud() end)
+  end
+  local surface = hudOk and type(frame) == "string" and string.match(frame, "\nsurface\t([%a_]+)\n") or nil
+  state.surface = surface or "cet_line"
   if not state.pluginPresent or not bridge or not bridge.enabled or bridge.killed then
     state.messages = {}
-    state.cetLabel = true -- a stopped bridge always shows its red label (the panel's Reconnect is here)
+    state.pendingAsk = nil
+    state.answeredAsk = nil
+    state.cetLabel = true -- cet_label never hides a stopped bridge's label (the window's Reconnect is named there)
     return
   end
   -- Bridge 0.5.3 (temporary test feature): the ink HUD panel's frame says whether this label should show (cet_label). A plugin
   -- without XFBridge_Hud (older builds) keeps the label.
-  local hudOk, frame = pcall(function() return Game.XFBridge_Hud() end)
   state.cetLabel = not (hudOk and type(frame) == "string" and string.find(frame, "\ncet_label\t0\n", 1, true) ~= nil)
+  -- 0.8 (the UI review): while the ink panel shows the question on screen, this label keeps to the status and the keys.
+  -- 0.8.2 (the review): whether the answer keys answer the pending question now (a plugin without the record: as before).
+  local keys = hudOk and type(frame) == "string" and string.match(frame, "\nkeys\t(%d)\n") or nil
+  state.keysArmed = keys ~= "0"
+  local inkAsk = hudOk and type(frame) == "string" and string.match(frame, "\ninkask\t(%d+)\n") or nil
+  state.inkAsk = tonumber(inkAsk) or 0
   local ok, text = pcall(function() return Game.XFBridge_Messages() end)
   if not ok or type(text) ~= "string" or text == "" then
+    -- 0.8.2 (session 9: "Answer: F6 Done" stayed after the last answer): an empty board has no question either.
     state.messages = {}
+    state.pendingAsk = nil
+    state.answeredAsk = nil
     return
   end
   local decoded, answer = pcall(json.decode, text)
@@ -198,10 +245,22 @@ local function pollMessages()
   local lines = {}
   for _, message in ipairs(answer.messages) do
     if type(message) == "table" and type(message.text) == "string" then
-      table.insert(lines, { text = message.text, level = MESSAGE_COLORS[message.level] and message.level or "info" })
+      table.insert(lines, { id = message.id, text = message.text, level = MESSAGE_COLORS[message.level] and message.level or "info" })
     end
   end
   state.messages = lines
+  local ask = answer.pending_ask
+  if type(ask) == "table" and type(ask.id) == "number" and type(ask.choices) == "table" then
+    state.pendingAsk = ask
+  else
+    state.pendingAsk = nil
+  end
+  local answered = answer.answered_ask
+  if type(answered) == "table" and type(answered.id) == "number" and type(answered.label) == "string" then
+    state.answeredAsk = answered
+  else
+    state.answeredAsk = nil
+  end
 end
 
 -- The panel's actions, run from onUpdate. Each asks the plugin, then shows its answer in plain words.
@@ -239,10 +298,36 @@ local function runAction(action)
     log("info", cid, "panel: writes paused=" .. tostring(answer and answer.writes_paused))
   elseif action.name == "mark" then
     -- 0.6: a marker in the session's event stream, for the coordinator to find (session.log); changes nothing.
-    local ok, noted = callNative("XFBridge_Note", "ask", "The player marked this moment in the XF panel")
+    local ok, noted = callNative("XFBridge_Note", "ask", "The player marked this moment in the XF Runtime Bridge window")
     state.message = (ok and noted) and "Marked: the session log has a marker at this moment." or "Couldn't add the marker."
     state.messageOk = ok and noted
     log("info", cid, "panel: marker noted=" .. tostring(ok and noted))
+  elseif action.name == "answer" then
+    -- 0.7: the player's answer to the coordinator's question (the panel's buttons), into the session's event stream.
+    local arg = action.argument or {}
+    local answer = decodeAnswer(callNative("XFBridge_Answer", arg.id or 0, arg.choice or 0, "cet_button"))
+    if answer and answer.ok then
+      -- 0.8 (the UI review): the question's own slot says so ("Sent: ..."), from the answered ask; no extra line here.
+      state.message = nil
+    else
+      state.message = "Couldn't send the answer: " .. tostring(answer and answer.why or "the plugin didn't answer")
+      state.messageOk = false
+    end
+    log("info", cid, "panel: answer id=" .. tostring(arg.id) .. " choice=" .. tostring(arg.choice) .. " ok=" .. tostring(answer and answer.ok))
+    pollMessages()
+  elseif action.name == "comment" then
+    local text = tostring(action.argument or "")
+    local ok, sent = callNative("XFBridge_Comment", text)
+    if ok and sent then
+      state.message = "Comment sent to the session log."
+      state.messageOk = true
+      state.comment = ""
+      state.commentGen = (state.commentGen or 0) + 1 -- a fresh box: ImGui keeps an active box's own text
+    else
+      state.message = "Couldn't send the comment."
+      state.messageOk = false
+    end
+    log("info", cid, "panel: comment sent=" .. tostring(ok and sent) .. " chars=" .. tostring(#text))
   elseif action.name == "kill" then
     local ok, killed = callNative("XFBridge_Kill", "cet-panel")
     state.message = (ok and killed) and "The bridge is stopped. Reconnect starts it again." or "The bridge wasn't running."
@@ -293,13 +378,17 @@ registerForEvent("onUpdate", function(deltaTime)
   end
 end)
 
+-- 0.7: the plugin hears about the CET overlay too (ui.state, the capture pre-check that keeps CET's windows out of pictures,
+-- and the XF overlay host's rule of yielding to CET).
 registerForEvent("onOverlayOpen", function()
   state.overlayOpen = true
+  callNative("XFBridge_CetOverlay", true)
   log("debug", "-", "overlay opened")
 end)
 
 registerForEvent("onOverlayClose", function()
   state.overlayOpen = false
+  callNative("XFBridge_CetOverlay", false)
   log("debug", "-", "overlay closed")
 end)
 
@@ -308,74 +397,143 @@ registerForEvent("onShutdown", function()
 end)
 
 -- Kill switch: bind it in CET's Bindings tab. The bridge refuses everything until it is reconnected (the
--- test builds' panel) or the game restarts.
-registerHotkey("xf_bridge_kill", "Kill XF Runtime Bridge (stop the local pipe)", function()
+-- test builds' panel) or the game restarts. The ID, xf_bridge_kill, has never changed and must not: CET keys a binding by
+-- the mod's name and this ID. CET drops a mod's bindings at a launch where the mod isn't installed (its
+-- Developer.RemoveDeadBindings, on by default), so a launch of another profile without the bridge unbinds it (session 9).
+-- 0.8.3: the bridge's own kill key ([ui] kill_key, End by default) works without CET or a binding; this hotkey is the optional
+-- second route.
+registerHotkey("xf_bridge_kill", "Stop XF Runtime Bridge", function()
   local cid = nextCid()
   local ok, killed = callNative("XFBridge_Kill", "cet-hotkey")
   log("warn", cid, "kill switch hotkey pressed; bridge killed=" .. tostring(ok and killed))
   refreshInfo()
 end)
 
-local function bridgeSummary()
+-- 0.8 (the UI review): the status every surface shows, from the plugin (XFBridge_Info's status, made in core/InkUi.cpp), with
+-- its tone; the CET layer's own words only when the plugin can't say.
+local function bridgeStatus()
   if state.pluginPresent == false then
-    return "plugin not loaded", { 0.6, 0.6, 0.6, 1.0 }
+    return { label = "XF Runtime Bridge" .. MIDDLE_DOT .. "The bridge's plugin isn't loaded.", tone = "off" }
   end
-  local bridge = state.info and state.info.bridge
-  if not bridge then
-    return "starting", { 0.6, 0.6, 0.6, 1.0 }
+  local status = state.info and state.info.status
+  if type(status) == "table" and type(status.label) == "string" then
+    return status
   end
-  if bridge.killed then
-    return "killed", { 1.0, 0.35, 0.35, 1.0 }
+  return { label = "XF Runtime Bridge" .. MIDDLE_DOT .. "Starting...", tone = "idle" }
+end
+
+-- A key's name as the panels show it ("IK_F6" to "F6").
+local function keyLabel(key)
+  return (string.gsub(tostring(key), "^IK_", ""))
+end
+
+-- 0.8: "Answer: F6 Fully visible · F7 Partly cut off, or in the XF Runtime Bridge window." The keys answer whenever the ink
+-- panel has the question, even while the game hides the HUD.
+local function answerHint(ask)
+  local keys = state.info and state.info.answer_keys or {}
+  if state.keysArmed == false then keys = {} end -- 0.8.2: no key answers it now (the ink panel is off, or no Codeware)
+  local parts = {}
+  for i, label in ipairs(ask.choices or {}) do
+    if keys[i] then
+      table.insert(parts, keyLabel(keys[i]) .. " " .. tostring(label))
+    end
   end
-  if not bridge.enabled then
-    return "off", { 0.6, 0.6, 0.6, 1.0 }
+  if #parts == 0 then
+    return "Answer in the XF Runtime Bridge window (CET overlay)."
   end
-  if bridge.listening then
-    local mode = bridge.allow_writes and (bridge.writes_paused and "writes paused" or "writes ON") or "read-only"
-    local client = bridge.has_client and ", client connected" or ""
-    local color = bridge.allow_writes and { 1.0, 0.7, 0.2, 1.0 } or { 0.4, 0.9, 0.5, 1.0 }
-    return "listening (" .. mode .. client .. ")", color
+  return "Answer: " .. table.concat(parts, MIDDLE_DOT) .. ", or in the XF Runtime Bridge window."
+end
+
+local function themeColour(which, token, fallback)
+  return panel and panel.colour and panel.colour(theme, which, token, fallback) or fallback
+end
+
+local function colouredWrapped(colour, text)
+  ImGui.PushStyleColor(ImGuiCol.Text, colour[1], colour[2], colour[3], colour[4])
+  ImGui.TextWrapped(text)
+  ImGui.PopStyleColor(1)
+end
+
+-- The CET line (0.8, the UI review): themed like the XF Runtime Bridge window; the status line (a bullet in its tone, the words
+-- muted); then, while the ink panel shows the question, only how to answer it; otherwise the messages, the question in the
+-- text colour, and how to answer it.
+local function drawLabelBody(which)
+  local status = bridgeStatus()
+  local muted = themeColour(which, "XfTextMuted", MUTED)
+  local tone = themeColour(which, TONE_TOKENS[status.tone] or "TextDisabled", TONE_COLORS[status.tone] or TONE_COLORS.off)
+  ImGui.PushTextWrapPos(MESSAGE_WRAP_PX)
+  ImGui.PushStyleColor(ImGuiCol.Text, tone[1], tone[2], tone[3], tone[4])
+  ImGui.Bullet()
+  ImGui.PopStyleColor(1)
+  ImGui.SameLine()
+  colouredWrapped(muted, status.label)
+  local ask = state.pendingAsk
+  local answered = state.answeredAsk
+  local inkShows = (ask and state.inkAsk == ask.id) or (not ask and answered and state.inkAsk == answered.id)
+  if inkShows then
+    colouredWrapped(muted, ask and answerHint(ask) or ("Answered: " .. tostring(answered.label) .. "."))
+  else
+    for _, message in ipairs(state.messages) do
+      local isQuestion = ask and message.id == ask.id
+      local token = isQuestion and "Text" or MESSAGE_TOKENS[message.level] or "Text"
+      colouredWrapped(themeColour(which, token, MESSAGE_COLORS[message.level] or MESSAGE_COLORS.info), message.text)
+    end
+    if ask then
+      colouredWrapped(muted, answerHint(ask))
+    elseif answered then
+      colouredWrapped(muted, "Answered: " .. tostring(answered.label) .. ".")
+    end
   end
-  return "not listening", { 1.0, 0.35, 0.35, 1.0 }
+  -- 0.8 (the UI review): why the XF box isn't there.
+  if state.info and type(state.info.overlay) == "table" and state.info.overlay.off_for_frame_generation then
+    colouredWrapped(muted, "XF overlay is off while frame generation is on.")
+  end
+  ImGui.PopTextWrapPos()
+end
+
+local function drawLabel()
+  local which = (state.info and type(state.info.overlay) == "table" and state.info.overlay.theme == "light") and "light" or "dark"
+  local colours, vars = 0, 0
+  if panel and panel.pushTheme then
+    colours, vars = panel.pushTheme(theme, which)
+  end
+  ImGui.SetNextWindowPos(12, 12, ImGuiCond.Always)
+  local flags = bit32.bor(ImGuiWindowFlags.NoDecoration, ImGuiWindowFlags.NoInputs,
+    ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.NoSavedSettings, ImGuiWindowFlags.NoFocusOnAppearing)
+  local ok, err = true, nil
+  if ImGui.Begin("XF Runtime Bridge##indicator", flags) then
+    ok, err = pcall(drawLabelBody, which)
+  end
+  ImGui.End()
+  if vars > 0 then ImGui.PopStyleVar(vars) end
+  if colours > 0 then ImGui.PopStyleColor(colours) end
+  if not ok then error(err) end
 end
 
 registerForEvent("onDraw", function()
-  local text, color = bridgeSummary()
   local enabled = state.info and state.info.bridge and state.info.bridge.enabled
 
-  -- Always-visible indicator whenever the bridge is enabled: green while listening read-only,
-  -- amber with writes on, red once killed. Never hidden while the bridge can be used.
-  if enabled and state.cetLabel and not state.overlayOpen then
-    ImGui.SetNextWindowPos(12, 12, ImGuiCond.Always)
-    local flags = bit32.bor(ImGuiWindowFlags.NoDecoration, ImGuiWindowFlags.NoInputs,
-      ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.NoSavedSettings, ImGuiWindowFlags.NoFocusOnAppearing)
-    if ImGui.Begin("XF Runtime Bridge##indicator", flags) then
-      ImGui.TextColored(color[1], color[2], color[3], color[4], "XF bridge: " .. text)
-      -- The coordinator's messages (ui.message), one wrapped line each, under the status.
-      if #state.messages > 0 then
-        ImGui.PushTextWrapPos(MESSAGE_WRAP_PX)
-        for _, message in ipairs(state.messages) do
-          local c = MESSAGE_COLORS[message.level] or MESSAGE_COLORS.info
-          ImGui.PushStyleColor(ImGuiCol.Text, c[1], c[2], c[3], c[4])
-          ImGui.TextWrapped(message.text)
-          ImGui.PopStyleColor(1)
-        end
-        ImGui.PopTextWrapPos()
-      end
+  -- The CET line whenever the bridge is enabled and it is the status surface (0.8.2: the fallback, when neither the
+  -- ink panel nor the XF box can show); while CET's overlay is open the XF Runtime Bridge window shows the status.
+  if enabled and state.cetLabel and not state.overlayOpen and state.surface == "cet_line" then
+    local drew, err = pcall(drawLabel)
+    if not drew then
+      state.lastError = tostring(err)
     end
-    ImGui.End()
   end
 
   -- The panel (test builds) or the plain details while the CET overlay is open.
   if state.overlayOpen and panel then
-    local drew, err = pcall(panel.draw, state, queueAction)
+    local drew, err = pcall(panel.draw, state, queueAction, theme)
     if not drew then
+      -- 0.8: panel.body ends its own window even when it fails, so nothing is ended here.
       state.lastError = tostring(err)
-      pcall(ImGui.End)
     end
   elseif state.overlayOpen then
     if ImGui.Begin("XF Runtime Bridge", ImGuiWindowFlags.AlwaysAutoResize) then
-      ImGui.TextColored(color[1], color[2], color[3], color[4], "Bridge: " .. text)
+      local status = bridgeStatus()
+      local color = TONE_COLORS[status.tone] or TONE_COLORS.off
+      ImGui.TextColored(color[1], color[2], color[3], color[4], status.label)
       if state.info then
         ImGui.Text("Plugin " .. tostring(state.info.plugin_version) .. "  sid " .. tostring(state.info.sid))
         ImGui.Text("Game " .. tostring(state.info.game_product_version) .. " (" .. tostring(state.info.game_file_version) .. ")")
@@ -392,7 +550,7 @@ registerForEvent("onDraw", function()
 end)
 
 return {
-  version = "0.6.1",
-  -- For other CET mods: GetMod("xf_runtime_bridge").info()
+  version = "0.8.3",
+  -- For other CET mods: GetMod("XF_Runtime_Bridge").info()
   info = function() return state.info end,
 }

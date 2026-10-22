@@ -10,12 +10,9 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CollectionService, type CollectionTransport } from "../src/collection-service";
-import type { EditorSnapshot } from "../src/collection-session";
-import type { CollectionLibrary } from "../src/collection-store";
-import { collectionDraft, emptyMemory } from "../src/collection-workspace";
-import { STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
-import { openTestLibrary } from "./fixtures/library-file";
+import { STUDIO_PARTS } from "../src/compose/studio-registry";
+import { openTestLibrary, type TestLibrary } from "./fixtures/library-file";
+import { collectionServiceOver } from "./fixtures/profile-studio";
 import { COLLECTION_1, COLLECTION_2, type LookCollection } from "../src/platform/api";
 import { alpha2Unreadable } from "./fixtures/alpha-0.1.0-alpha.2/schemas";
 import { COLLECTION_FIXTURES, readFixture } from "./fixtures/capture-plan-golden";
@@ -24,7 +21,7 @@ import { recipeOf } from "./fixtures/looks";
 function library() {
   const dir = mkdtempSync(join(tmpdir(), "xfs-alpha-library-")), path = join(dir, "library.sqlite");
   const file = openTestLibrary(path);
-  return { path, store: file.collections, cleanup: () => { file.close();  try { rmSync(dir, { recursive: true, force: true }); } catch { /* WAL files may still be closing. */ } } };
+  return { path, file, store: file.collections, cleanup: () => { file.close();  try { rmSync(dir, { recursive: true, force: true }); } catch { /* WAL files may still be closing. */ } } };
 }
 
 /** Every collection revision row in the library, parsed. */
@@ -40,18 +37,9 @@ function rows(path: string) {
 const EXPRESSION = { schema: "xfs/expression-part-1", body: { label: "Warm smile", controls: { jaw_mid_open: 0.125, lips_l_corner_up: 0.5, lips_r_corner_up: 0.5 },
   links: {}, origin: { kind: "installed", clip: "warm_smile", set: "base\animations\facial\photomode.anims" } } };
 
-/**
- * A collection service over the real library, editing the collection's first look; its expression, if any, is live in the
- * editor as the Expressions panel holds it.
- */
-function serviceOver(store: CollectionLibrary, collection: LookCollection) {
-  const transport: CollectionTransport = { list: async () => store.list(), get: async id => store.get(id),
-    save: async (value, revision) => store.save({ collection: value, revision }), package: async () => { throw Error("unused"); } };
-  const expression = collection.presets[0].parts.expressions?.body;
-  let editor: EditorSnapshot = { recipe: structuredClone(recipeOf(collection.presets[0])), ...emptyMemory(),
-    ...(expression ? { liveFeatures: { expressions: { part: structuredClone(expression) } } } : {}) };
-  return new CollectionService(STUDIO_DOCUMENTS, collectionDraft(collection, STUDIO_DOCUMENTS), { selected: "", name: "" },
-    () => editor, value => editor = value, transport);
+/** A collection service over the real library, showing the collection's first look (its working copy made from `collection`). */
+async function serviceOver(file: TestLibrary, collection: LookCollection) {
+  return (await collectionServiceOver(collection, { library: file, recipe: structuredClone(recipeOf(collection.presets[0])) })).svc;
 }
 
 test("ordinary eye-makeup collections still save as collection-1 rows, all of which 0.1.0-alpha.2 reads", () => {
@@ -78,7 +66,7 @@ test("Save keeps a look with a tried expression: a collection-2 revision 0.1.0-a
     const collection = STUDIO_PARTS.readCollection(readFixture(COLLECTION_FIXTURES[1]));
     collection.presets[0].parts.expressions = STUDIO_PARTS.readCollection({ schema: COLLECTION_2, id: collection.id, name: collection.name,
       presets: [{ id: collection.presets[0].id, name: "Look", revision: 1, parts: { expressions: EXPRESSION } }] }).presets[0].parts.expressions;
-    const service = serviceOver(store, collection);
+    const service = await serviceOver(temp.file, collection);
     await service.execute({ kind: "initialize" });
     const save = await service.execute({ kind: "save" });
     expect(save).toMatchObject({ ok: true });
@@ -114,7 +102,7 @@ test("export saves first whenever the library takes the collection, expressions 
         parts: { "eye-makeup": i === 1 ? { schema: "xfs/eye-makeup-part-9", body: { layers: [] } } : { schema: "xfs/eye-makeup-part-1", body: preset.recipe } } })) },
       false, "keep");
     expect(newer.presets.map(look => !!look.locked)).toEqual(newer.presets.map((_, i) => i === 1));
-    const refused = serviceOver(store, newer), before = store.list();
+    const refused = await serviceOver(temp.file, newer), before = store.list();
     await refused.execute({ kind: "initialize" });
     for (const kind of ["exportCollection", "exportPlan"] as const) {
       expect(refused.capability({ kind })).toEqual({ available: true });
@@ -133,11 +121,11 @@ test("export saves first whenever the library takes the collection, expressions 
     expect(store.list()).toEqual(before);
     expect(refused.summary().draft?.revision).toBeUndefined();
 
-    // A collection with a tried expression is saved first, then exported as collection-2.
-    const withExpression = STUDIO_PARTS.readCollection(file);
+    // A collection with a tried expression is saved first, then exported as collection-2 (another collection: the first is in the library).
+    const withExpression = { ...STUDIO_PARTS.readCollection(file), id: crypto.randomUUID() };
     withExpression.presets[0].parts.expressions = STUDIO_PARTS.readCollection({ schema: COLLECTION_2, id: file.id, name: file.name,
       presets: [{ id: withExpression.presets[0].id, name: "Look", revision: 1, parts: { expressions: EXPRESSION } }] }).presets[0].parts.expressions;
-    const expressive = serviceOver(store, withExpression);
+    const expressive = await serviceOver(temp.file, withExpression);
     await expressive.execute({ kind: "initialize" });
     const exported = await expressive.execute({ kind: "exportCollection" });
     if (!exported.ok || exported.result.kind !== "export") throw Error(JSON.stringify(exported));
@@ -151,7 +139,7 @@ test("export saves first whenever the library takes the collection, expressions 
 
     // An eye-makeup-only collection is saved first too, and exported as collection-1.
     const plainFile = readFixture(COLLECTION_FIXTURES[0]);
-    const plain = serviceOver(store, STUDIO_PARTS.readCollection(plainFile));
+    const plain = await serviceOver(temp.file, STUDIO_PARTS.readCollection(plainFile));
     await plain.execute({ kind: "initialize" });
     const plainExport = await plain.execute({ kind: "exportCollection" });
     if (!plainExport.ok || plainExport.result.kind !== "export") throw Error(JSON.stringify(plainExport));

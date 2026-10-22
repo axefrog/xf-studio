@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { extractZip, readZip, safeEntryName, ZipError } from "../src/zip-extract";
+import { extractZip, readZip, safeEntryName, ZipError } from "../src/setup/host/zip-extract";
 import { makeZip } from "./zip-fixture";
 
 const roots: string[] = [];

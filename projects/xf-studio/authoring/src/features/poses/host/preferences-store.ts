@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BodyTooLargeError, readBodyText } from "../../../request-body";
+import { BodyTooLargeError, readBodyText } from "../../../platform/api/request-body";
 import { defaultPosePreferences, parsePosePreferences, POSE_PREFERENCES_SCHEMA, type PosePreferences } from "../preferences";
 
 /**

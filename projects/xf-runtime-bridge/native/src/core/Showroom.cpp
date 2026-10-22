@@ -1,9 +1,14 @@
 #include "core/Showroom.hpp"
 
+#include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cmath>
+#include <fstream>
+#include <iterator>
 
 #include "core/Dispatcher.hpp"
+#include "core/Win32.hpp"
 
 namespace xfb::showroom
 {
@@ -288,6 +293,36 @@ json TurnPieces(const std::vector<Turn>& aTurns, const Ops& aOps)
     return out;
 }
 
+std::vector<std::string> ParseAnchorArchives(const json& aParams)
+{
+    RequireOnly(aParams, {"archives"}, "the parameters");
+    std::vector<std::string> out;
+    const auto it = aParams.find("archives");
+    if (it == aParams.end() || it->is_null())
+    {
+        return out;
+    }
+    if (!it->is_array() || it->size() > 16)
+    {
+        Bad("'archives' must be a list of at most 16 showroom archive names");
+    }
+    for (const auto& name : *it)
+    {
+        const auto text = name.is_string() ? name.get<std::string>() : std::string();
+        bool ok = text.size() == 13 + 32 && text.rfind("xfs_showroom_", 0) == 0;
+        for (size_t i = 13; ok && i < text.size(); ++i)
+        {
+            ok = (text[i] >= '0' && text[i] <= '9') || (text[i] >= 'a' && text[i] <= 'f');
+        }
+        if (!ok)
+        {
+            Bad("each of 'archives' must be a showroom archive's name (xfs_showroom_ and 32 hex digits, no extension)");
+        }
+        out.push_back(text);
+    }
+    return out;
+}
+
 json Clear(const std::string& aWhat, const Ops& aOps)
 {
     aOps.guard();
@@ -297,4 +332,171 @@ json Clear(const std::string& aWhat, const Ops& aOps)
     out["undo_note"] = "showroom.spawn and showroom.light place them again";
     return out;
 }
+namespace
+{
+// One sidecar's manifest, or the reason it can't be used (0.8.3, the review: nesting checked before parsing, the schema's
+// fields checked by type, so a malformed file fails its own entry only).
+json ReadSidecar(const std::filesystem::path& aFile, const std::string& aArchive, std::string& aError)
+{
+    std::error_code ec;
+    const auto bytes = std::filesystem::file_size(aFile, ec);
+    if (ec || bytes > kMaxManifestBytes)
+    {
+        aError = "too large or unreadable";
+        return nullptr;
+    }
+    std::ifstream in(aFile, std::ios::binary);
+    std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    if (text.size() >= 3 && static_cast<unsigned char>(text[0]) == 0xEF && static_cast<unsigned char>(text[1]) == 0xBB &&
+        static_cast<unsigned char>(text[2]) == 0xBF)
+    {
+        text.erase(0, 3);
+    }
+    if (JsonNestingDepth(text, kMaxJsonDepth) > kMaxJsonDepth)
+    {
+        aError = "nests deeper than " + std::to_string(kMaxJsonDepth) + " levels";
+        return nullptr;
+    }
+    auto manifest = json::parse(text, nullptr, false);
+    if (manifest.is_discarded() || !manifest.is_object())
+    {
+        aError = "not a JSON object";
+        return nullptr;
+    }
+    const auto schema = manifest.find("schema");
+    const auto archive = manifest.find("archive");
+    if (schema == manifest.end() || !schema->is_string() || schema->get<std::string>() != "xfs/showroom-package-1" || archive == manifest.end() ||
+        !archive->is_string() || archive->get<std::string>() != aArchive)
+    {
+        aError = "not this archive's showroom manifest";
+        return nullptr;
+    }
+    return manifest;
+}
+
+std::string Narrowed(const std::filesystem::path& aPath)
+{
+    return win32::Narrow(aPath.wstring());
+}
+} // namespace
+
+json StagedShowrooms(const std::filesystem::path& aModFolder, const std::function<bool()>& aCancelled, uintmax_t aMaxHashBytes)
+{
+    const auto started = std::chrono::steady_clock::now();
+    const auto check = [&] {
+        if (aCancelled && aCancelled())
+        {
+            throw MethodError("interrupted", "the bridge stopped while it listed the staged showroom archives");
+        }
+        if (std::chrono::steady_clock::now() - started > std::chrono::milliseconds(kMaxStagedMs))
+        {
+            throw MethodError("timeout", "listing the staged showroom archives took longer than " + std::to_string(kMaxStagedMs / 1000) +
+                                             " s (a slow drive?); give the showroom's manifest instead");
+        }
+    };
+    json archives = json::array();
+    std::error_code ec;
+    bool more = false;
+    bool truncated = false;
+    const bool found = std::filesystem::is_directory(aModFolder, ec);
+    if (found)
+    {
+        std::vector<std::filesystem::path> files;
+        size_t examined = 0;
+        for (std::filesystem::directory_iterator it(aModFolder, ec), end; !ec && it != end; it.increment(ec))
+        {
+            check();
+            if (++examined > kMaxFolderEntries)
+            {
+                truncated = true;
+                break;
+            }
+            // Wide names: other mods' files may have names the narrow code page can't hold.
+            const auto name = it->path().filename().wstring();
+            if (name.size() == 13 + 32 + 8 && name.rfind(L"xfs_showroom_", 0) == 0 && name.substr(45) == L".archive" &&
+                std::all_of(name.begin() + 13, name.begin() + 45, [](wchar_t c) { return (c >= L'0' && c <= L'9') || (c >= L'a' && c <= L'f'); }))
+            {
+                files.push_back(it->path());
+            }
+        }
+        std::sort(files.begin(), files.end());
+        uintmax_t hashed = 0;
+        for (size_t i = 0; i < files.size(); ++i)
+        {
+            check();
+            if (i >= kMaxStagedArchives)
+            {
+                more = true;
+                break;
+            }
+            const auto& file = files[i];
+            const auto stem = Narrowed(file.stem()); // xfs_showroom_<key>: ASCII by the filter above
+            json entry{{"archive", stem}, {"file", stem + ".archive"}, {"sha256", nullptr}, {"manifest", nullptr}};
+            try
+            {
+                std::error_code sizeError;
+                const auto bytes = std::filesystem::file_size(file, sizeError);
+                entry["bytes"] = sizeError ? json(nullptr) : json(static_cast<uint64_t>(bytes));
+                if (sizeError)
+                {
+                    entry["sha256_error"] = "unreadable";
+                }
+                else if (bytes > kMaxHashBytesPerArchive || hashed + bytes > aMaxHashBytes)
+                {
+                    entry["sha256_error"] = "not hashed: past the listing's limit of " + std::to_string(kMaxHashBytesPerArchive >> 20) + " MB an archive and " +
+                                            std::to_string(aMaxHashBytes >> 20) + " MB in all";
+                }
+                else
+                {
+                    hashed += bytes;
+                    std::string hex, why;
+                    if (win32::FileSha256(file, hex, why, kMaxHashBytesPerArchive, [&] {
+                            check();
+                            return false;
+                        }))
+                    {
+                        entry["sha256"] = hex;
+                    }
+                    else
+                    {
+                        entry["sha256_error"] = why;
+                    }
+                }
+                const auto sidecar = aModFolder / (file.stem().wstring() + L".showroom.json");
+                std::error_code sidecarError;
+                if (std::filesystem::is_regular_file(sidecar, sidecarError))
+                {
+                    entry["manifest_file"] = stem + kManifestSuffix;
+                    std::string why;
+                    auto manifest = ReadSidecar(sidecar, stem, why);
+                    if (manifest.is_null())
+                    {
+                        entry["manifest_error"] = why;
+                    }
+                    else
+                    {
+                        entry["manifest"] = std::move(manifest);
+                    }
+                }
+            }
+            catch (const MethodError&)
+            {
+                throw; // cancelled or out of time: the whole listing stops
+            }
+            catch (const std::exception& e)
+            {
+                entry["error"] = std::string("couldn't be read: ") + e.what();
+            }
+            archives.push_back(std::move(entry));
+        }
+    }
+    return json{{"folder", "archive/pc/mod"},
+                {"found", found},
+                {"archives", std::move(archives)},
+                {"more", more},
+                {"folder_truncated", truncated},
+                {"how", "the game's own view of its archive/pc/mod folder (MO2's virtual folder when MO2 launched the game: the staged, "
+                        "enabled mods)"}};
+}
+
 } // namespace xfb::showroom

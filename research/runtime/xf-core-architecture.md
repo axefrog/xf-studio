@@ -26,7 +26,7 @@ Evidence grades follow the [knowledge rules](../../knowledge/README.md): **[sour
 | CET's sandbox confines file access to the mod's folder and has no networking | Storage and the external link belong to the native core; the CET layer reaches them through natives | [source] CET `LuaSandbox.cpp` ([runtime access §2](../../knowledge/runtime-access.md#2-rules-learned-the-hard-way-from-source)) |
 | Photo Mode Tools sets the global `LookAt/MaxIterationsCount`: 1.0 on start, 0.9 or 1.0 on freeze and a hard-coded 3.0 on restore and shutdown. It never records the original, and AMM writes the same option | The rebuilt freeze needs an actor-scoped route or a managed global one (§6.5), and XF Core provides the settings guard for it (§2.4) | [source] legacy `init.lua`; AMM `Modules/tools.lua:484-491`; the snapshots design §4 |
 | Vanilla photo-mode slots live in the save file, store only vanilla attribute keys and one value per NPC row, and are saved and loaded natively | XF Photo Mode's snapshots are its own files, read and applied live through the menu. XF Core stores them and never writes the vanilla slots | [offline] the snapshots design §1–2 |
-| The Studio's install host already places one XF mod through a consented plan, with MO2 section-aware placement, receipts and backups, Vortex attribution, and refusal while MO2 or the game runs | XF Core and its plugins extend that host (§6) | [mod-install-host.ts](../../projects/xf-studio/authoring/src/mod-install-host.ts), [mo2-placement.ts](../../projects/xf-studio/authoring/src/mo2-placement.ts), [knowledge/vortex.md](../../knowledge/vortex.md) |
+| The Studio's install host already places one XF mod through a consented plan, with MO2 section-aware placement, receipts and backups, Vortex attribution, and refusal while MO2 or the game runs | XF Core and its plugins extend that host (§6) | [mod-install-host.ts](../../projects/xf-studio/authoring/src/installation/host/mod-install-host.ts), [mo2-placement.ts](../../projects/xf-studio/authoring/src/installation/mo2-placement.ts), [knowledge/vortex.md](../../knowledge/vortex.md) |
 | The desktop release workflow starts on `v*` tags | Mod releases need namespaced tags (`xf-core-v1.0.0-alpha.1`) | [desktop release decisions](../authoring/desktop-release-decisions.md) |
 
 ## 2. Boundaries: what lives where
@@ -368,7 +368,7 @@ User data never lives in a mod folder. Settings, consent, the store and quaranti
 ### 6.2 Per mod manager
 
 - **MO2.** Each XF mod is its own MO2 mod named as above.
-  - **Placement rule:** [mo2-placement.ts](../../projects/xf-studio/authoring/src/mo2-placement.ts) adds one row and moves nothing else. `modlist.txt` is the reverse of MO2's left pane.
+  - **Placement rule:** [mo2-placement.ts](../../projects/xf-studio/authoring/src/installation/mo2-placement.ts) adds one row and moves nothing else. `modlist.txt` is the reverse of MO2's left pane.
   - **XF Core:** proposed to go at the bottom of a recognised framework section (such as "CORE, LIBS, FRAMEWORKS"), since other mods depend on it, or by the existing rule when there is none.
   - **Plugins:** beside the nearest XF mod (the `beside-related` rule), else the existing rule.
   - **Separators:** XF Studio never creates one. File sets never overlap, so order doesn't change what the game loads; placement is purely the player's organisation.

@@ -18,8 +18,8 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { decodePng } from "../src/png";
-import { readSavedV } from "../src/save-reader";
+import { decodePng } from "../src/formats/png";
+import { readSavedV } from "../src/saves/save-reader";
 import { launch } from "./cdp";
 
 const argv = process.argv.slice(2);

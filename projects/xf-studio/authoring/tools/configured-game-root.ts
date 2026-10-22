@@ -1,7 +1,7 @@
 /** The game folder for local research tools: the one chosen in the Studio's setup, or XFS_PACKAGE_GAMEPATH.
  * Tools never assume a store's default install location. */
-import { packageToolPaths } from "../src/local-settings-readiness";
-import { LocalSettingsStore } from "../src/local-settings-store";
+import { packageToolPaths } from "../src/setup/host/local-settings-readiness";
+import { LocalSettingsStore } from "../src/setup/host/local-settings-store";
 
 export function configuredGameRoot(): string {
   const root = packageToolPaths(new LocalSettingsStore().load().settings).gamepath;

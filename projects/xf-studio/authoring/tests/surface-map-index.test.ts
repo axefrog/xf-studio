@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { SurfaceMap, type UV } from "../src/surface-map";
+import { SurfaceMap, type UV } from "../src/legacy/eye-makeup/browser/surface-map";
 import { derivedPreviewFile, derivedPreviewTest } from "./private-assets";
 
 // Bypass only the new broad phase in the comparison instance. This retains the

@@ -5,13 +5,13 @@
  */
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { IdleAnimation } from "../src/idle-animation";
+import { IdleAnimation } from "../src/animation/render/idle-animation";
 import { FaceDriver } from "../src/platform/scene/face-driver";
-import { composePreviewMotion } from "../src/preview-motion";
-import { poseClip, rotationToGltf, translationToGltf } from "../src/pose-clip";
-import { clipMotion } from "../src/pose-catalogue-host";
-import type { PoseSample } from "../src/pose-catalogue";
-import { MotionActions, type MotionPort } from "../src/motion-actions";
+import { composePreviewMotion } from "../src/animation/render/preview-motion";
+import { poseClip, rotationToGltf, translationToGltf } from "../src/animation/render/pose-clip";
+import { clipMotion } from "../src/animation/host/pose-catalogue-host";
+import type { PoseSample } from "../src/animation/pose-catalogue";
+import { MotionActions, type MotionPort } from "../src/animation/motion-actions";
 import { freshWorkspace } from "./fixtures/eye-region";
 import type { AnimClip, AnimRig } from "../src/native/anim-set";
 
@@ -156,9 +156,9 @@ test("the motion service holds a pose at once, lets a newer choice supersede it,
   expect(calls).toEqual(["pose.PhotoModePoses.b"]);
   expect(motion.snapshot()).toMatchObject({ pose: { id: "PhotoModePoses.b", label: "B" }, poseLoading: false });
   // Blink is refused while a pose is held.
-  expect(motion.capability({ kind: "motion.setBlink", value: 0.5 }).available).toBe(false);
+  expect(motion.capability({ kind: "motion.setBlink", view: "main", value: 0.5 }).available).toBe(false);
   // Still: the idle goes off first, then the pose gives the idle its clips back.
-  motion.dispatch({ kind: "motion.setIdle", enabled: false });
+  motion.dispatch({ kind: "motion.setIdle", view: "main", enabled: false });
   expect(calls.slice(-2)).toEqual(["idle.false", "pose.none"]);
   expect(motion.snapshot().pose).toBeNull();
   // A failing pose puts the previous body source back and rejects.
@@ -179,7 +179,7 @@ test("a stored pose waits for the Poses module and can be dropped; without a mot
 });
 
 test("the held pose is view state in the workspace: stored with its label, restored, and dropped when unreadable", async () => {
-  const { parseWorkspace, serializeWorkspace } = await import("../src/workspace-state");
+  const { parseWorkspace, serializeWorkspace } = await import("../src/app/workspace/workspace-state");
   const { STUDIO_DOCUMENTS } = await import("../src/compose/studio-registry");
   const state = freshWorkspace();
   state.preview.pose = { id: "PhotoModePoses.idle_stand_01", label: "Standing" };

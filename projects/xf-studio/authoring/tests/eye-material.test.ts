@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import * as THREE from "three";
-import { materialAdapter, type AdapterContext, type ChunkTextures } from "../src/character-material-adapters";
+import { materialAdapter, type AdapterContext, type ChunkTextures } from "../src/materials/render/character-material-adapters";
 import { bakeGradientRamp, createEyeMaterial, EYE_FLAT_ROUGHNESS, eyeParameters, eyeSampleCoordinates, gradientColourAt, GRADIENT_RAMP_SIZE,
   IRIS_MASK_ENCODING, irisBaseColour, irisCoordinate, patchEyeShader, patchEyeShellShader, shellAlpha, shellLuminance, shellParameters,
-  shellRoughness, shellSpecular, type EyeballHandle, type EyeShellHandle } from "../src/eye-material";
-import type { RenderChunkMaterial, RenderGradientStop, RenderTexture } from "../src/render-detail";
+  shellRoughness, shellSpecular, type EyeballHandle, type EyeShellHandle } from "../src/materials/render/eye-material";
+import type { RenderChunkMaterial, RenderGradientStop, RenderTexture } from "../src/character/render-detail";
 
 // The resolved stops of two vanilla profiles (knowledge/eye-rendering.md §1.1), sorted as the record carries them.
 const LIGHT_BLUE: RenderGradientStop[] = [{ value: 0, color: [22, 22, 22, 255] }, { value: 0.785713971, color: [130, 192, 229, 255] },

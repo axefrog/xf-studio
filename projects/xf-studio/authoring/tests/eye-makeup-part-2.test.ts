@@ -18,17 +18,17 @@ import { defaultStudioIrregularFlakes } from "../src/engines/layered-makeup/flak
 import { selectGlitterModel } from "../src/engines/layered-makeup/glitter-model";
 import { canonicalJson, COLLECTION_1, COLLECTION_2, NEWER_LOOK_MESSAGE, type LookCollection } from "../src/platform/api";
 import { PartRegistry } from "../src/platform/core/document";
-import { eyeMakeupCollection } from "../src/preset-collection";
+import { eyeMakeupCollection } from "../src/legacy/eye-makeup/export/preset-collection";
 import { type Layer, type Recipe } from "../src/engines/layered-makeup/recipe";
 import { type RecipeAction } from "../src/engines/layered-makeup/recipe-actions";
-import { EYE_MAKEUP_FEATURE, portableRecipe, readPortableRecipe, recipeFile } from "../src/recipe-schema";
-import { loadWorkspace } from "../src/workspace-state";
+import { EYE_MAKEUP_FEATURE, portableRecipe, readPortableRecipe, recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
+import { loadWorkspace } from "../src/app/workspace/workspace-state";
 import { COLLECTION_FIXTURES, readFixture } from "./fixtures/capture-plan-golden";
 import { recipeOf, storedWorkspace } from "./fixtures/looks";
 import { glitterFixtures, part2Observation, recipeSchemaFixtures } from "./fixtures/part-2-parity";
 import { restore } from "./fixtures/workspace-observable";
 import { fixedId, opticsRecipe, smallWorkspaceV1 } from "./fixtures/workspace-v1-fixtures";
-import { EYE_MAKEUP_LAYER_MODELS, LAYER_MODELS, RecipeModelRegistry as LayerModelRegistry, RECIPE_FILE_SCHEMAS, schemaRank, type RecipeFileSchema, readRecipe as parseRecipe, parseRecipeFile, parseRecipePart, RECIPE_FILE_MESSAGE, type RecipeFile } from "../src/recipe-schema";
+import { EYE_MAKEUP_LAYER_MODELS, LAYER_MODELS, RecipeModelRegistry as LayerModelRegistry, RECIPE_FILE_SCHEMAS, schemaRank, type RecipeFileSchema, readRecipe as parseRecipe, parseRecipeFile, parseRecipePart, RECIPE_FILE_MESSAGE, type RecipeFile } from "../src/legacy/eye-makeup/recipe-schema";
 import { initialRecipe, newLayerTemplate, applyRecipeAction } from "./fixtures/eye-region";
 
 const EYE = "eye-makeup";

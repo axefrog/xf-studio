@@ -92,7 +92,7 @@ if (import.meta.main) {
     console.error("Usage: bun tools/compare-package-candidates.ts <candidate-a> <candidate-b> --wolvenkit <WolvenKit.CLI.exe> [--gamepath <game>] [--work <dir>] [--tree <a> <b>]...");
     process.exit(2);
   }
-  const { createWolvenKitVerifierTools } = await import("../src/verifier-wolvenkit");
+  const { createWolvenKitVerifierTools } = await import("../src/legacy/eye-makeup/export/host/verifier-wolvenkit");
   const base = resolve(import.meta.dir, "../../build");
   if (!work) mkdirSync(base, { recursive: true });
   const scratch = work ? resolve(work) : mkdtempSync(join(base, "candidate-compare-"));

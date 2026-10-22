@@ -12,6 +12,7 @@
 #include <RED4ext/Api/v1/Sdk.hpp>
 
 #include "core/Behaviours.hpp"
+#include "core/LayoutGuard.hpp"
 #include "core/Bridge.hpp"
 #include "core/Events.hpp"
 #include "core/Player.hpp"
@@ -25,6 +26,7 @@
 #include "core/ScriptLayer.hpp"
 #include "core/Session.hpp"
 #include "core/Writes.hpp"
+#include "core/overlay/Host.hpp"
 
 namespace xfb::plugin
 {
@@ -88,10 +90,40 @@ struct State
     EventLog events;
     behave::Runner behaviours;
     player::TeleportPacer teleports;
+    // 0.8.2: player.stop's count (core/Player.hpp StopCount), checked by player.look's and player.teleport's later steps.
+    player::StopCount playerStops;
 
     // Bridge 0.5.3, temporary test feature: the ink HUD panel's settings (ui.hud), read with the bridge's state and the
     // message lines by the redscript layer through XFBridge_Hud (core/InkUi.hpp). Defaults from [ui] in config.ini.
     inkui::HudPanel hud;
+
+    // 0.7: whether Cyber Engine Tweaks' overlay is open (XFBridge_CetOverlay from the CET layer), and whether the CET layer
+    // has reported it at all (older CET layers never do).
+    std::atomic<bool> cetOverlayOpen{false};
+    std::atomic<bool> cetOverlaySeen{false};
+
+    // 0.8 (the UI review: the question showed three times): the question the ink panel reports drawing on screen now
+    // (XFBridge_InkDrawn, about five times a second while it draws one) and when, in steady-clock milliseconds; stale after
+    // kInkShownMs. The CET label then shows only the status and the answer keys.
+    static constexpr int64_t kInkShownMs = 1500;
+    std::atomic<uint64_t> inkShownAsk{0};
+    std::atomic<int64_t> inkShownAtMs{0};
+    // 0.8.2: whether the ink panel reported itself on screen (its HUD shown), with the same staleness; and the status surface
+    // chosen this tick (core/InkUi.hpp ChooseStatusSurface).
+    std::atomic<bool> inkVisible{false};
+    std::atomic<int> statusSurface{static_cast<int>(inkui::StatusSurface::None)};
+    bool InkVisible() const;
+    // 0.8.2 (the review): the question the ink panel holds with its answer keys (reported whether or not it is on screen), so
+    // its keys answer it; 0 when stale or none.
+    std::atomic<uint64_t> inkKeysAsk{0};
+    uint64_t InkKeysAsk() const;
+    uint64_t InkShownAsk() const;
+
+    // 0.8.3: the bridge's own kill key's press detection (game thread only; Main.cpp PollKillKey).
+    killkey::Watch killKeyWatch;
+
+    // 0.7: the XF ImGui overlay host (P0, draw-only; core/overlay/Host.hpp, plugin/Overlay.cpp), configured from [overlay].
+    xfb::overlay::OverlayHost overlayHost;
 
     // Reconnect after the kill switch (the CET panel's button, XFBridge_Rearm): requested from script,
     // carried out by the next Running ticks once the old listener has stopped and the kill switch's
@@ -107,4 +139,6 @@ std::string GameStateName(int aState);
 nlohmann::json InfoJson();
 // XFBridge_Hud's answer: the panel's settings, the bridge's state and the message lines as a text frame (core/InkUi.hpp).
 std::string HudFrame();
+// 0.8: the bridge's state as every panel's status line reads it (core/InkUi.hpp Summarize).
+inkui::BridgeView BridgeViewNow();
 } // namespace xfb::plugin

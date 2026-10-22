@@ -1,6 +1,6 @@
 import {expect,test} from "bun:test";
 import {assessPreviewQuality,DEFAULT_PREVIEW_BUDGET_BYTES,DEFAULT_PREVIEW_TEXTURE_SIZE,isPreviewTextureSize,
-  parsePreviewTextureSize,PREVIEW_TEXTURE_SIZES} from "../src/preview-quality";
+  parsePreviewTextureSize,PREVIEW_TEXTURE_SIZES} from "../src/legacy/eye-makeup/preview/preview-quality";
 import { initialRecipe } from "./fixtures/eye-region";
 
 test("preview texture sizes validate strictly while saved invalid preferences use the default",()=>{

@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test";
-import { CollectionServiceError } from "../src/collection-service";
-import { PreviewQualityActions } from "../src/preview-quality-actions";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
+import { CollectionServiceError } from "../src/library/collection-service";
+import { PreviewQualityActions } from "../src/legacy/eye-makeup/preview/preview-quality-actions";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 
-const makeCore = () => createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+import { namedCore } from "./fixtures/named-targets";
+const makeCore = () => namedCore(createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
 
 test("capability applies descriptor payload ranges to every entry point, not only context menus", () => {
   const { app, document } = makeCore(), id = document.recipe.layers[0].id;

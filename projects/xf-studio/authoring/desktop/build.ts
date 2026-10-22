@@ -7,24 +7,24 @@ import { HOST_REAL_PATHS } from "../src/platform/export/host-real-paths";
 
 /** The host's file-system reads for the containment checks. */
 const HOST_PATHS = HOST_REAL_PATHS;
-import type { LocalSettings } from "../src/local-settings";
-import { eyePlateHeadOverride, type EyePlateTools } from "../src/eye-plate-service";
-import { eyePlatePrerequisite, masculineEyePlatePrerequisite } from "../src/eye-plate-prerequisite";
-import { expressionsGamePrerequisite } from "../src/expressions-game-prerequisite";
-import { runProcessTree } from "../src/process-tree";
-import { hostFailure } from "../src/diagnostics/host-log";
+import type { LocalSettings } from "../src/setup/local-settings";
+import { eyePlateHeadOverride, type EyePlateTools } from "../src/legacy/eye-makeup/plate/host/eye-plate-service";
+import { eyePlatePrerequisite, masculineEyePlatePrerequisite } from "../src/legacy/eye-makeup/plate/host/eye-plate-prerequisite";
+import { expressionsGamePrerequisite } from "../src/animation/host/expressions-game-prerequisite";
+import { runProcessTree } from "../src/host/process-tree";
+import { hostFailure } from "../src/diagnostics/host/host-log";
 import type { FeatureExporterEntry } from "../src/platform/api";
 import type { HostPrerequisite, PackageHostAdapter } from "../src/platform/export/product-host";
-import { cachedWolvenKitProbeResult, probeWolvenKitCli, probeWolvenKitCliAsync } from "../src/wolvenkit-cli";
+import { cachedWolvenKitProbeResult, probeWolvenKitCli, probeWolvenKitCliAsync } from "../src/host/wolvenkit-cli";
 
 /**
- * The packaged tools (src/packaged-build-tools.ts): the TypeScript builder, one Bun bundle of tools/build_collection_package.ts (no
+ * The packaged tools (src/legacy/eye-makeup/export/host/packaged-build-tools.ts): the TypeScript builder, one Bun bundle of tools/build_collection_package.ts (no
  * Python), and XF Studio's texture compressor (native/bcn over DirectXTex, PIPE-130). The compressor is optional: without it (or when it
  * won't load) the builder imports textures with WolvenKit and says so in the manifest's `resourceWriters`. When the manifest lists it, it
  * must be the listed bytes (checked here before a Build, and again by the builder before it loads it).
  */
-export { BUILD_TOOLS_SCHEMA, bcnEntry, builderEntry } from "../src/packaged-build-tools";
-import { BUILD_TOOLS_SCHEMA, bcnEntry, builderEntry } from "../src/packaged-build-tools";
+export { BUILD_TOOLS_SCHEMA, bcnEntry, builderEntry } from "../src/legacy/eye-makeup/export/host/packaged-build-tools";
+import { BUILD_TOOLS_SCHEMA, bcnEntry, builderEntry } from "../src/legacy/eye-makeup/export/host/packaged-build-tools";
 const toolNames = [builderEntry];
 const optionalToolNames = [bcnEntry];
 const file = (path: string) => { try { return statSync(path).isFile(); } catch { return false; } };

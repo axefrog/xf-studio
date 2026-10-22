@@ -3,7 +3,7 @@ import { warpFields, type Layer } from "../src/engines/layered-makeup/recipe";
 import { bezierAt, splitBezierSegment } from "../src/engines/layered-makeup/bezier-path";
 import { shapeWheelScaleFactor, wheelScaleFactor, type ShapeTransform } from "../src/engines/layered-makeup/shape-transform";
 import { coverage, initialRecipe, shapeHit, transformLayer } from "./fixtures/eye-region";
-import { readRecipe as parseRecipe } from "../src/recipe-schema";
+import { readRecipe as parseRecipe } from "../src/legacy/eye-makeup/recipe-schema";
 
 const sample = (): Layer => {
   const layer = initialRecipe().layers[0];

@@ -2,11 +2,11 @@ import { test, expect } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { libraryRequest } from "../src/library-store";
+import { libraryRequest } from "../src/library/host/library-store";
 import { openTestLibrary } from "./fixtures/library-file";
 import { Database } from "bun:sqlite";
 import { initialRecipe } from "./fixtures/eye-region";
-import { readRecipe as parseRecipe, parseRecipeFile } from "../src/recipe-schema";
+import { readRecipe as parseRecipe, parseRecipeFile } from "../src/legacy/eye-makeup/recipe-schema";
 
 /** A library file's look store, closed with its file. */
 function lookLibrary(path: string) { const file = openTestLibrary(path); return Object.assign(file.looks, { close: () => file.close() }); }

@@ -1,4 +1,4 @@
-import { applyCapability, button, note, setButtonLabel, setButtonVariant, section, Segmented, Toggle } from "../controls";
+import { applyCapability, button, capabilityScope, note, setButtonLabel, setButtonVariant, section, Segmented, Toggle } from "../controls";
 import { h, setText } from "../dom";
 import { openReportDialog } from "../diagnostics/report-dialog";
 import type { HelpText } from "../help-tip";
@@ -41,6 +41,8 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
   const experimental = section({ title: "Experimental features", help: "Early tools to try. Your usual tools and saved looks stay available." }, ...experiments.map(item => item.toggle.element));
   experimental.hidden = !experiments.length;
   const reference = button({ label: "Keyboard & mouse…", icon: "keyboard", small: true, variant: "quiet", onClick: () => appearance.openReference() });
+  // It only opens the reference, so a read-only page keeps it (t-read-only-window).
+  reference.dataset.readSafe = "";
 
   const deep = new Toggle({ label: "Diagnostic mode", help: "Records more detail about what XF Studio does, for a day, to help find a problem. It stays on this computer.",
     reserveNote: true, onChange: on => { void setDiagnosticMode(on ? "deep" : "normal"); } });
@@ -142,6 +144,10 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
       theme.update(appearance.theme());
       hints.update(appearance.hints());
       research.update(appearance.research());
+      // The view preferences' own capabilities (a read-only page keeps what the port allows, t-read-only-window).
+      capabilityScope(theme.element, port.preferences.capability({ kind: "theme.set", theme: appearance.theme() }));
+      capabilityScope(hints.element, port.preferences.capability({ kind: "inputHints.set", enabled: !appearance.hints() }));
+      capabilityScope(research.element, port.preferences.capability({ kind: "researchTools.set", enabled: !appearance.research() }));
       experimental.hidden = !experiments.length || !appearance.research();
       for (const { info, toggle } of experiments) {
         const state = port.experiments!.snapshot().find(item => item.id === info.id)!;
@@ -149,9 +155,11 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
       }
       const mode = port.diagnostics.snapshot().mode;
       const next = mode?.mode === "deep" ? "normal" : "deep", allowed = port.diagnostics.capability({ kind: "diagnostics.setMode", mode: next });
+      capabilityScope(deep.element, allowed);
       deep.update(mode?.mode === "deep", { disabled: !allowed.available, reason: allowed.reason,
         note: mode?.mode === "deep" && mode.until ? `On until ${new Date(mode.until).toLocaleString()}.` : "" });
-      applyCapability(report, port.diagnostics.capability({ kind: "diagnostics.prepareReport" }));
+      const reporting = port.diagnostics.capability({ kind: "diagnostics.prepareReport" });
+      applyCapability(report, reporting); capabilityScope(report, reporting);
     },
   };
 }

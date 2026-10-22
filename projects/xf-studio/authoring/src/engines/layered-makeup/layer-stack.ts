@@ -1,6 +1,6 @@
 import { MAX_LAYERS, parseRecipe, type Recipe } from "./recipe";
 import type { LayeredMakeupRegion } from "./region";
-import { nameIssue, positionIssue, refuse } from "../../validation-issues";
+import { nameIssue, positionIssue, refuse } from "../../platform/api/validation-issues";
 import { refusal, type Capability } from "../../platform/api";
 
 /**

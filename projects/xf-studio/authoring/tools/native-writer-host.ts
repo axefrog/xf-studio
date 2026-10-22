@@ -1,9 +1,9 @@
 /**
  * The native writer's `WriterHost` over the file system and the process clock, for the Build's CLI and the writer's tests
- * (src/native-resource-tools.ts takes its files and clock through this port).
+ * (src/legacy/eye-makeup/export/host/native-resource-tools.ts takes its files and clock through this port).
  */
 import { copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import type { WriterHost } from "../src/native-resource-tools";
+import type { WriterHost } from "../src/legacy/eye-makeup/export/host/native-resource-tools";
 import { fileTimeOf } from "../src/native/write/rdar-writer";
 
 export const nodeWriterHost: WriterHost = {

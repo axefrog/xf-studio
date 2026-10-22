@@ -13,13 +13,13 @@
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { CharacterDetailHost, type CharacterDetailSettings } from "../src/character-detail-host";
-import { characterRequestOf, DEFAULT_CHARACTER, type CharacterRequest } from "../src/character-detail-request";
-import type { CharacterChoice } from "../src/character-context";
-import { savedDescriptorsOf } from "../src/character-context";
-import { LocalSettingsStore } from "../src/local-settings-store";
-import { readSavedV } from "../src/save-reader";
-import { wolvenKitRunStats } from "../src/wolvenkit-cli";
+import { CharacterDetailHost, type CharacterDetailSettings } from "../src/character/host/character-detail-host";
+import { characterRequestOf, DEFAULT_CHARACTER, type CharacterRequest } from "../src/character/character-detail-request";
+import type { CharacterChoice } from "../src/character/character-context";
+import { savedDescriptorsOf } from "../src/character/character-context";
+import { LocalSettingsStore } from "../src/setup/host/local-settings-store";
+import { readSavedV } from "../src/saves/save-reader";
+import { wolvenKitRunStats } from "../src/host/wolvenkit-cli";
 
 const args = Bun.argv.slice(2);
 const flag = (name: string) => { const i = args.indexOf(`--${name}`); if (i < 0) return null; const value = args[i + 1] ?? null; args.splice(i, 2); return value; };

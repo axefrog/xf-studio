@@ -6,6 +6,7 @@ import type { Clock } from "../../src/platform/core/clock";
 import type { DocumentStorePort } from "../../src/platform/api/document-store";
 import type { DocumentStore } from "../../src/platform/persistence/document-store";
 import { openTestLibrary } from "./library-file";
+import { DocumentOutbox, type OutboxOptions, type OutboxStorage } from "../../src/platform/core/document-outbox";
 
 type Timer = { id: number; due: number; run: () => void; cancelled?: boolean };
 
@@ -51,5 +52,37 @@ export async function settle(turns = 24): Promise<void> { for (let i = 0; i < tu
 /** The document store's port over a real store (in memory by default; a file's is closed with the test library). */
 export function storeDocuments(path = ":memory:"): DocumentStorePort & { store: DocumentStore } {
   const store = openTestLibrary(path).documents;
-  return { store, list: async kind => store.list(kind), put: async (kind, id, value, revision) => store.put(kind, id, value, revision) };
+  return { store, list: async kind => store.list(kind), transact: async request => store.transact(request),
+    revisions: async refs => store.revisions(refs), read: async refs => store.read(refs) };
+}
+
+/**
+ * Outbox storage in memory: `fail` makes every write throw (a full quota), `failKeys` only those keys', and `killAfter(n)` lets `n` more
+ * writes land and then freezes the storage as a crash would, mid-command (later writes are lost).
+ */
+export function memoryOutboxStorage(): OutboxStorage & { keys: Map<string, string>; fail: boolean; failKeys: Set<string>; writes: number;
+  killAfter(writes: number, kill?: () => void): void; killed: boolean } {
+  const keys = new Map<string, string>();
+  let left = Infinity, onKill: (() => void) | undefined;
+  const storage = {
+    keys, fail: false, failKeys: new Set<string>(), writes: 0, killed: false,
+    load: () => new Map(keys),
+    write(key: string, text: string, empty: boolean) {
+      if (storage.killed) return;
+      if (storage.fail || storage.failKeys.has(key)) throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+      // The process dies here: nothing after this write runs (`kill` stops the window that was writing).
+      if (left-- <= 0) { storage.killed = true; onKill?.(); return; }
+      if (empty) keys.delete(key); else keys.set(key, text);
+      storage.writes++;
+    },
+    killAfter(writes: number, kill?: () => void) { left = writes; onKill = kill; storage.killed = false; },
+  };
+  return storage;
+}
+
+/** An outbox over the in-memory library, opened. */
+export function memoryOutbox(documents: DocumentStorePort = storeDocuments(), storage = memoryOutboxStorage(), options: OutboxOptions = {}) {
+  const outbox = new DocumentOutbox(documents, storage, { retryMs: 5, ...options });
+  outbox.open();
+  return { outbox, documents, storage };
 }

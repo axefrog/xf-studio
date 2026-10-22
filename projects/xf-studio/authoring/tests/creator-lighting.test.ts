@@ -3,8 +3,8 @@ import * as THREE from "three";
 import { calibrationGain, coneFactor, coneFold, contribution, CREATOR_CALIBRATION, CREATOR_HEAD_SLOT, CREATOR_RIG_FEMALE, CREATOR_RIG_MALE,
   CREATOR_SHADOW, creatorCamera, creatorRigSpecs, creatorShadowCasters, creatorShadowMapSize, creatorShadowRadius, DEFAULT_CREATOR_EXPOSURE,
   DEFAULT_CREATOR_LIGHTING, halfAngles, inverseSquareFalloff, lightColourLinear, linearFalloff, lumensToCandela, readCreatorLighting,
-  rotateLight, spotLightSpec, threeConeFactor, validCreatorLighting, type Vec3 } from "../src/creator-lighting";
-import { aimShadowAtHead } from "../src/creator-lighting-rig";
+  rotateLight, spotLightSpec, threeConeFactor, validCreatorLighting, type Vec3 } from "../src/preview/creator-lighting";
+import { aimShadowAtHead } from "../src/preview/render/creator-lighting-rig";
 
 const byName = (name: string) => CREATOR_RIG_FEMALE.find(light => light.name === name)!;
 const angleTo = (from: Vec3, axis: Vec3, to: Vec3) => {

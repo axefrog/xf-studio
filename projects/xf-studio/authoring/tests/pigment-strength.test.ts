@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { preparePigmentStrength } from "../src/engines/layered-makeup/pigment-strength";
 import { curve, warpFields, DEFAULT_STRENGTH_BLEND, MIN_STRENGTH_BLEND, MAX_STRENGTH_BLEND, type Layer, type Point } from "../src/engines/layered-makeup/recipe";
-import { recipeFile } from "../src/recipe-schema";
+import { recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
 import { coverage, initialRecipe, raster } from "./fixtures/eye-region";
-import { readRecipe as parseRecipe } from "../src/recipe-schema";
+import { readRecipe as parseRecipe } from "../src/legacy/eye-makeup/recipe-schema";
 
 const points = (values: number[][]): Point[] => values.map(([u, v, weight]) => ({ u, v, weight }));
 const square = points([[.3,.3,0],[.7,.3,0],[.7,.7,1],[.3,.7,1]]);

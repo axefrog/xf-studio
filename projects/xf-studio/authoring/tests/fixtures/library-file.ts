@@ -1,10 +1,10 @@
 /**
  * A library file for tests: its owner (`LibraryDatabase`, with the Studio's migrations) and every store of it, as the hosts compose
- * them (src/library-files.ts). `close()` flushes and closes the file.
+ * them (src/library/host/library-files.ts). `close()` flushes and closes the file.
  */
 import { STUDIO_PARTS } from "../../src/compose/studio-registry";
-import { libraryStores, openLibraryDatabase, type LibraryStores } from "../../src/library-files";
-import { PartPresetLibrary } from "../../src/part-preset-store";
+import { libraryStores, openLibraryDatabase, type LibraryStores } from "../../src/library/host/library-files";
+import { PartPresetLibrary } from "../../src/library/host/part-preset-store";
 import type { LibraryDatabaseOptions } from "../../src/platform/persistence/library-database";
 
 export type TestLibrary = LibraryStores & { close(): void };

@@ -1,4 +1,4 @@
-import { chordsLabel, KEY_BINDINGS } from "../../input-bindings";
+import { chordsLabel, KEY_BINDINGS } from "../../app/input-bindings";
 
 /**
  * Markdown-lite for tours and help topics (see `HelpContent`). Parsing is pure so tests can check

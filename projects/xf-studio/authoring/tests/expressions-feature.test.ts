@@ -8,11 +8,12 @@ import { EXPRESSIONS, expressionPart, expressionPose } from "../src/features/exp
 import { applyExpression, expressionCapability, pairLinked, type ExpressionAction } from "../src/features/expressions/core";
 import type { ExpressionPart } from "../src/features/expressions/part";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { parseWorkspace, serializeWorkspace } from "../src/workspace-state";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
 import { f32 } from "../src/engines/facial-rig/vector";
 import { freshWorkspace } from "./fixtures/eye-region";
 
+import { namedCore } from "./fixtures/named-targets";
 const state = (controls: Record<string, number> = {}, links: Record<string, boolean> = {}) => ({ part: { controls, links }, editor: {} });
 const apply = (action: ExpressionAction, from = state()) => applyExpression(from, action);
 
@@ -73,7 +74,7 @@ test("capability refuses with structured codes and plain reasons", () => {
   expect(() => apply({ kind: "expression.setControl", name: "jaw_mid_open", value: 2 })).toThrow();
 });
 
-const core = (workspace = freshWorkspace()) => createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+const core = (workspace = freshWorkspace()) => namedCore(createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
 const part = (c: ReturnType<typeof core>) => c.app.featureState("expressions")?.part as { controls: Record<string, number> } | undefined;
 
 test("in the Studio: the generic handler records steps, a slider drag is one Undo step, Escape restores the start", () => {

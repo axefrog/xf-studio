@@ -5,22 +5,23 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildCatalogue, CatalogueIndex, readCcoWithPresentation } from "../src/cc-catalogue";
-import { type CatalogueLabels, LABELS_NEED_WOLVENKIT, LABELS_RETRY } from "../src/cc-catalogue-host";
-import { CreatorCatalogueHost, CreatorFailedError, structuralInput } from "../src/cc-catalogue-service";
-import { createCreatorHandler } from "../src/cc-catalogue-server";
-import { choicePage, panelProjection, rowOption, searchChoices, type CcPanel, type CreatorView } from "../src/cc-panel";
-import { CC_PRESET_SCHEMA, parseCcPreset, serializeCcPreset } from "../src/cc-preset";
-import { catalogueCoverage } from "../src/cc-render-coverage";
-import { carryPreset, type CharacterChoice, type CharacterSource, deriveCharacter, lastChoices, matchChoice } from "../src/character-context";
-import { CharacterContextActions, type CreatorPort, storedCharacterOf } from "../src/character-context-actions";
-import { characterRequestOf, DEFAULT_CHARACTER, parseCharacterRequest, type CharacterRequest } from "../src/character-detail-request";
-import { createCharacterDetailHandler } from "../src/character-detail-server";
-import { followCharacter } from "../src/character-follow";
-import { loadMergedCco } from "../src/character-resolver";
-import { CREATOR_LIMITS, isCreatorName, isOptionId } from "../src/creator-names";
+import { buildCatalogue, CatalogueIndex, readCcoWithPresentation } from "../src/character/cc-catalogue";
+import { type CatalogueLabels, LABELS_NEED_WOLVENKIT, LABELS_RETRY } from "../src/character/host/cc-catalogue-host";
+import { CreatorCatalogueHost, CreatorFailedError, structuralInput } from "../src/character/host/cc-catalogue-service";
+import { createCreatorHandler } from "../src/character/host/cc-catalogue-server";
+import { choicePage, panelProjection, rowOption, searchChoices, type CcPanel, type CreatorView } from "../src/character/cc-panel";
+import { CC_PRESET_SCHEMA, parseCcPreset, serializeCcPreset } from "../src/character/cc-preset";
+import { catalogueCoverage } from "../src/character/cc-render-coverage";
+import { carryPreset, type CharacterChoice, type CharacterSource, deriveCharacter, lastChoices, matchChoice } from "../src/character/character-context";
+import { CharacterContextActions, type CreatorPort, storedCharacterOf } from "../src/character/character-context-actions";
+import { characterRequestOf, DEFAULT_CHARACTER, parseCharacterRequest, type CharacterRequest } from "../src/character/character-detail-request";
+import { createCharacterDetailHandler } from "../src/character/host/character-detail-server";
+import { followCharacter } from "../src/character/character-follow";
+import { loadMergedCco } from "../src/character/character-resolver";
+import { CREATOR_LIMITS, isCreatorName, isOptionId } from "../src/character/creator-names";
 import { appearance, creator, fixtureSource, switcher } from "./cc-fixtures";
 import { fixtureInstallation } from "./resolver-fixtures";
+import { vHistory } from "./fixtures/character-steps";
 
 const root = mkdtempSync(join(tmpdir(), "xfs-ccpanel-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -385,7 +386,7 @@ describe("CORE-71 and CORE-73: the quick action and gating", () => {
   test("the V's own makeup is a switch: hidden and shown at once in the view, undoable in the panel's Undo, never a creator change", async () => {
     const source = await fixtureSource(true);
     const { port: creatorPort } = await port(source, panel => ({ ...panel, sections: panel.sections.map(section => ({ ...section, makeup: section.id === "Scars" })) }));
-    const context = new CharacterContextActions({ creator: creatorPort, showSave: () => {} });
+    const steps = vHistory(), context = new CharacterContextActions({ creator: creatorPort, showSave: () => {}, history: steps.home });
     // Hiding needs the creator options (they say which rows are makeup); showing never waits.
     expect(context.capability({ kind: "character.setOwnMakeup", shown: false })).toMatchObject({ code: "not_ready" });
     expect(context.capability({ kind: "character.setOwnMakeup", shown: true })).toMatchObject({ available: false, code: "invalid_value" });
@@ -405,12 +406,12 @@ describe("CORE-71 and CORE-73: the quick action and gating", () => {
     // A real switch: shown again directly, and the panel's one Undo steps back through it in order with the creator choices.
     context.dispatch({ kind: "character.setOwnMakeup", shown: true });
     expect(context.hiddenOptions()).toEqual([]);
-    context.dispatch({ kind: "character.undo" });
+    steps.undo();
     expect(context.snapshot()).toMatchObject({ ownMakeup: false, undo: "Hide my V's own makeup", redo: "Show my V's own makeup" });
-    context.dispatch({ kind: "character.undo" });
+    steps.undo();
     expect(context.snapshot()).toMatchObject({ ownMakeup: true });
     expect(context.request().choices).toEqual([set("scars", "scar_01")]);
-    context.dispatch({ kind: "character.redo" });
+    steps.redo();
     expect(context.snapshot().ownMakeup).toBe(false);
     // Reset all resets creator changes only; the setting stays, and is restored with the workspace.
     context.dispatch({ kind: "character.resetAll" });
@@ -544,7 +545,7 @@ describe("UI-72: the search runs on the host over every choice", () => {
 
 describe("CORE-74: the retired tried style is kept until the context stores choices", () => {
   test("written back as read while nothing is set, written empty once choices are stored", async () => {
-    const { WorkspaceComposer } = await import("../src/workspace-composer");
+    const { WorkspaceComposer } = await import("../src/app/workspace/workspace-composer");
     const { freshWorkspace } = await import("./fixtures/eye-region");
     const initial = freshWorkspace();
     initial.preview.piercingStyle = "01"; initial.preview.piercingDefinition = "gold";
@@ -561,7 +562,7 @@ describe("CORE-74: the retired tried style is kept until the context stores choi
 
 describe("PREV-189: a prepared choice under the pointer loads ahead", () => {
   test("after a moment on a prepared choice its V loads ahead; a sweep, an unprepared choice or a change loads nothing, and a choice that becomes prepared loads then", async () => {
-    const { PRELOAD_DWELL_MS } = await import("../src/character-context-actions");
+    const { PRELOAD_DWELL_MS } = await import("../src/character/character-context-actions");
     const source = await fixtureSource(true);
     const { port: base } = await port(source);
     const states = new Map<number, string>();

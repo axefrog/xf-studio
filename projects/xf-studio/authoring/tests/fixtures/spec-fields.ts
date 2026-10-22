@@ -4,7 +4,8 @@
  * `action-limits.ts` and `action-consequences.ts` into the action specs). Captured before the move by
  * `capture-spec-fields-golden.ts`; `tests/spec-fields.test.ts` compares the code with it.
  */
-import type { StudioAction, StudioTarget } from "../../src/studio-application";
+import type { StudioAction, StudioTarget } from "../../src/app/studio-application";
+import type { TestAction } from "./named-targets";
 import { trustedFixture } from "../studio-presentation-fixture";
 
 type Shell = ReturnType<typeof trustedFixture>["shell"];
@@ -28,7 +29,7 @@ function limits(shell: Shell) {
 function consequences(shell: Shell) {
   const document = shell.snapshot().authoring.document, layer = document.recipe.layers[document.active];
   const preset = shell.library.view().draft!.selected!;
-  const actions: StudioAction[] = [
+  const actions: TestAction[] = [
     { kind: "layer.setOpacity", layerId: layer.id, opacity: .5 }, { kind: "point.remove", layerId: layer.id, index: 0 },
     { kind: "field.remove", layerId: layer.id, fieldId: layer.fields[0]?.id ?? "none" }, { kind: "field.add", layerId: layer.id },
     { kind: "layer.edit", command: { kind: "remove", id: layer.id } }, { kind: "layer.edit", command: { kind: "reset", id: layer.id } },
@@ -49,7 +50,7 @@ function consequences(shell: Shell) {
 /** Limits and consequences in six editor states: the starter look, irregular Glitter densities and flake sizes, point modes, and an Undo history with Redo. */
 export function observeSpecFields() {
   const { shell } = trustedFixture();
-  const ok = (action: StudioAction) => { const result = shell.authoring.dispatch(action); if (!result.ok) throw Error(`${action.kind}: ${result.message}`); };
+  const ok = (action: TestAction) => { const result = shell.authoring.dispatch(action); if (!result.ok) throw Error(`${action.kind}: ${result.message}`); };
   const layerId = () => { const d = shell.snapshot().authoring.document; return d.recipe.layers[d.active].id; };
   const states: Record<string, unknown> = {};
   // The active layer's modes the limits depend on, so the golden shows which branch each state takes.

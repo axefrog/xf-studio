@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import type * as THREE from "three";
-import { createBrowserViewportDevice } from "../src/browser-viewport-device";
+import { createBrowserViewportDevice } from "../src/preview/browser/browser-viewport-device";
 import type { createSceneHost } from "../src/platform/scene/scene-host";
-import type { createSurfaceEditor } from "../src/surface-editor";
-import type { createUVEditor } from "../src/uv-editor";
+import type { createSurfaceEditor } from "../src/legacy/eye-makeup/browser/surface-editor";
+import type { createUVEditor } from "../src/legacy/eye-makeup/browser/uv-editor";
 import { EYE_REGION } from "./fixtures/eye-region";
 
 test("a toolbar-free browser viewport mounts once and rehosts live editors", async () => {

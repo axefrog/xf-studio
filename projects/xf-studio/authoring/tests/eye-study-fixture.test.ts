@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseEyeManifest, roughnessRedToGreen, verifyEyeBytes, type EyeAsset } from "../src/eye-study-fixture";
+import { parseEyeManifest, roughnessRedToGreen, verifyEyeBytes, type EyeAsset } from "../src/studies/eye-study-fixture";
 
 // The render-fidelity study's historical saved-eye pair: strict parsing and digest checks only. The preview's eyes
 // are resolved (render record v3), never read from this fixture.

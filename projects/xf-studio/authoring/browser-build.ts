@@ -5,10 +5,10 @@ import { existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from
 // script must come from this list; tests/browser-build.test.ts enforces that.
 // The desktop shell deliberately bundles only its distributable subset (desktop/prepare-static.ts).
 export const browserEntries = [
-  "src/studio-main.ts",
-  "src/raster-worker.ts",
-  "src/choice-preview-worker.ts",
-  "src/render-fidelity-study.ts",
+  "src/compose/studio-main.ts",
+  "src/legacy/eye-makeup/browser/raster-worker.ts",
+  "src/character/browser/choice-preview-worker.ts",
+  "src/studies/render-fidelity-study.ts",
   "tools/glitter-head-study.ts",
 ].map(path => resolve(import.meta.dir, path));
 

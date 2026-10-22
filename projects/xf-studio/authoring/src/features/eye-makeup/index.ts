@@ -10,9 +10,9 @@ import { featureActionTable, featureId, type FeatureModule } from "../../platfor
 import type { Recipe } from "../../engines/layered-makeup/recipe";
 import { applyRecipeGesture, type GestureEdit } from "../../engines/layered-makeup/recipe-actions";
 import { EYE_MAKEUP_REGION } from "./region";
-import { EYE_MAKEUP_FEATURE } from "../../recipe-schema";
-import { gestureHistoryLabel, historyLabel } from "../../history-labels";
-import { EYE_MAKEUP_DESCRIPTORS, EYE_MAKEUP_GESTURE_DESCRIPTORS, type EyeMakeupScope } from "../../eye-makeup-descriptors";
+import { EYE_MAKEUP_FEATURE } from "../../legacy/eye-makeup/recipe-schema";
+import { gestureHistoryLabel, historyLabel } from "../../legacy/eye-makeup/history-labels";
+import { EYE_MAKEUP_DESCRIPTORS, EYE_MAKEUP_GESTURE_DESCRIPTORS, type EyeMakeupScope } from "../../legacy/eye-makeup/eye-makeup-descriptors";
 import { applyEyeMakeup, assignEyeMakeupIds, eyeMakeupCapability, type EyeMakeupAction, type EyeMakeupEditorState,
   type EyeMakeupEffect } from "./core";
 import { eyeMakeupEditor, eyeMakeupMemory, eyeMakeupPart } from "./part";

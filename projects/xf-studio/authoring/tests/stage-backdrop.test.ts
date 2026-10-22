@@ -4,10 +4,10 @@ import { resolve } from "node:path";
 import {
   linearToSrgbByte, oklabToLinearSrgb, oklchToOklab, STAGE_GRADIENT, STAGE_TOKENS, stageBackdropPixels, stageColour,
   stageGradientPosition,
-} from "../src/stage-backdrop";
-import { bindStageTheme } from "../src/stage-theme-binding";
-import type { StageTheme } from "../src/stage-backdrop";
-import type { ThemePreference } from "../src/ui-preferences";
+} from "../src/preview/stage-backdrop";
+import { bindStageTheme } from "../src/preview/browser/stage-theme-binding";
+import type { StageTheme } from "../src/preview/stage-backdrop";
+import type { ThemePreference } from "../src/app/ui-preferences";
 
 const srgb = (theme: StageTheme, t: number) => stageColour(theme, t).map(linearToSrgbByte);
 

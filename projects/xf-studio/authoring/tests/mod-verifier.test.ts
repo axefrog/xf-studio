@@ -14,8 +14,8 @@ import { verifyBuild, verifyEyeMakeupBuild, type ToolResult, type VerifierTools,
 import { oracleTest } from "./optional-oracles";
 // Test-only use of the plate cut and lift: they make a real single-chunk plate and its packaged form,
 // which the verifier's own decoder must accept (and reject when tampered).
-import { derivePlateDocuments } from "../src/eye-plate-cut";
-import { liftPlate } from "../src/plate-lift";
+import { derivePlateDocuments } from "../src/legacy/eye-makeup/plate/eye-plate-cut";
+import { liftPlate } from "../src/legacy/eye-makeup/export/plate-lift";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "./eye-plate-fixture";
 import { coverageReference, plateWindow, storedBc4, texelUv, WINDOW_H, WINDOW_W } from "./window-fixture";
 
@@ -698,6 +698,33 @@ test("plate-local window: stored row order, record window and texture space are 
   await expectFailure(/has no head-UV coverage reference at least 4096/, undefined, rewrite(b => { b.compiled[1].reference.grid = 1024; }));
   await expectFailure(/was built on head UV, but its route and diagnostics need plate-window/, (_b, d) => { d.plan.presets[0].uvSpace = "head"; });
   await expectFailure(/invalid diagnostic uvSpace/, (_b, d) => { (d.plan.presets[0] as any).diagnostics = { uvSpace: "window" }; });
+}, 30_000);
+
+test("a reference that reads the same upside down passes; its stored rows and mapping are still checked (PIPE-141)", async () => {
+  // Uniform Matte coverage across the whole window: the base maps equal their own mirror, so the row-orientation heuristic cannot decide.
+  const uniform = (seed: number) => {
+    const n = W * H, diffuse = new Uint8Array(n * 4), roughness = new Uint8Array(n).fill(140), metalness = new Uint8Array(n), coverage = () => 1;
+    for (let t = 0; t < n; t++) diffuse.set([40 + 20 * seed, 120, 200 - 30 * seed, 255], t * 4);
+    return { diffuse, roughness, metalness, chain: flatMipChain(diffuse, roughness, metalness, W, H), reference: coverageReference(WINDOW.window, coverage) };
+  };
+  const symmetric = [uniform(0), uniform(1)], original = maps;
+  maps = seed => symmetric[seed];
+  try {
+    const fixture = makeBuild();
+    try {
+      const report = await run(fixture);
+      expect(report.decodedPixelChecks[0]).toMatchObject({ storedRows: "reversed", uvSpace: "plate-window" });
+    } finally { rmSync(fixture.build, { recursive: true, force: true }); }
+    // The independent gates still refuse a wrong stored row order and misplaced content.
+    await expectFailure(/is not stored with reversed rows/, (_b, d) => {
+      const stripes = Uint8Array.from({ length: W * H }, (_, t) => Math.floor(t / W) < H / 2 ? 40 : 220);
+      d.xbm[presets[0].textures.roughness].renderTextureResource = storedBc4(stripes, W, H);
+    });
+    await expectFailure(/uses another UV window than the packaged plate's/, undefined, f => {
+      const path = join(f.build, "build.json"), build = JSON.parse(readFileSync(path, "utf8"));
+      build.compiled[0].window.u0 += .001; writeFileSync(path, JSON.stringify(build));
+    });
+  } finally { maps = original; }
 }, 30_000);
 
 // ---- The merged branch (PIPE-95): eye makeup beside another feature in one product archive ----

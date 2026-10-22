@@ -1,8 +1,8 @@
 import {expect,test} from "bun:test";
 import * as THREE from "three";
 import {GLTFLoader} from "three/addons/loaders/GLTFLoader.js";
-import {createSurfaceOcclusion} from "../src/surface-occlusion";
-import {extendSkin,restoreFirstWeights} from "../src/skin";
+import {createSurfaceOcclusion} from "../src/legacy/eye-makeup/browser/surface-occlusion";
+import {extendSkin,restoreFirstWeights} from "../src/materials/render/skin";
 import {derivedPreviewFile,derivedPreviewTest} from "./private-assets";
 
 function reference(mesh:THREE.Mesh,ray:THREE.Ray,limit:number){

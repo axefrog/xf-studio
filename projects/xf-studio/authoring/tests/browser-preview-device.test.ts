@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { AuthoringDocument } from "../src/authoring-document";
-import { createBrowserPreviewDevice } from "../src/browser-preview-device";
-import type { RasterPort } from "../src/raster-client";
+import { AuthoringDocument } from "../src/app/authoring/authoring-document";
+import { createBrowserPreviewDevice } from "../src/legacy/eye-makeup/browser/browser-preview-device";
+import type { RasterPort } from "../src/legacy/eye-makeup/browser/raster-client";
 import type { LayeredMakeupSurface } from "../src/engines/layered-makeup/render/makeup-stack";
 import type { RasterRequest } from "../src/engines/layered-makeup/raster-processor";
 import { freshWorkspace, editLayers, EYE_RASTER_REGION } from "./fixtures/eye-region";

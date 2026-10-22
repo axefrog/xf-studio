@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { inScope, patchModifies, readArchiveXlConfig, settleDepotAdditions } from "../src/archivexl-config";
-import { descriptorsFromUiState, mergeCustomizations, overrideKey, readCco } from "../src/cco-model";
-import { depotHash } from "../src/depot-path";
-import { cr2wRoot } from "../src/red-json";
+import { inScope, patchModifies, readArchiveXlConfig, settleDepotAdditions } from "../src/game/archivexl-config";
+import { descriptorsFromUiState, mergeCustomizations, overrideKey, readCco } from "../src/character/cco-model";
+import { depotHash } from "../src/game/depot-path";
+import { cr2wRoot } from "../src/game/red-json";
 import { appearanceOption, cco, morphOption, switcherOption } from "./resolver-fixtures";
 
 const root = (document: object) => cr2wRoot(document).root;
