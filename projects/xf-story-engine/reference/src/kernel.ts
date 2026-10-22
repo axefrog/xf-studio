@@ -5,8 +5,13 @@
 import { type Config, makeConfig } from './config.ts';
 import { H, b as hb, f as hf, i as hi, id as hid, isId, memberId, mirroredId, ownedId, rootId, s as hs, val as hval } from './id.ts';
 import { Events } from './events.ts';
+import { Evolution, type Envelope, type SubmitResult } from './evolution.ts';
+import { Beliefs } from './beliefs.ts';
+import { Frames } from './frames.ts';
+import { Groups } from './groups.ts';
+import { Dispatcher } from './relevance.ts';
 import { Queries } from './query.ts';
-import { type Registry, coreRegistry } from './registry.ts';
+import { CONFLICT_TABLE, type Registry, coreRegistry } from './registry.ts';
 import { Resolver, type Trace } from './resolve.ts';
 import { Retention } from './retention.ts';
 import type { Schema } from './schema.ts';
@@ -15,12 +20,13 @@ import type { SchemaDefs } from './schema-types.ts';
 import { Store } from './store.ts';
 import { Summaries } from './summary.ts';
 import type {
+  FnRef,
   Change, Contribution, Edge, Form, GameTime, Id, KindId, Layer, Pin, PinReason, Query, QueryOutcome, Region,
   ResolveResult, Selector, SlotPath, Value,
 } from './types.ts';
 import { PIN_PRECEDENCE, type PendingChange } from './types.ts';
 import { checkValue, encodeValue, normalizeRegion } from './value.ts';
-import { DefectLog } from './work.ts';
+import { Budget, DefectLog } from './work.ts';
 
 export interface KernelOptions {
   schema: Schema;
@@ -70,6 +76,17 @@ export interface EdgeSpec {
   silent?: boolean;
 }
 
+export interface TickReport {
+  boundaries: number;
+  runs: number;
+  frameSteps: number;
+  dispatchSteps: number;
+  materialised: number;
+  forgotten: number;
+  /** Nothing is left pending. */
+  done: boolean;
+}
+
 export function splitWindowPath(raw: string): { path: SlotPath; window?: number } {
   const m = /^(.*)@w(-?\d+)$/.exec(raw);
   if (!m) return { path: raw };
@@ -96,7 +113,17 @@ export class Kernel {
   readonly queries: Queries;
   readonly summaries: Summaries;
   readonly events: Events;
+  readonly beliefs: Beliefs;
+  readonly frames: Frames;
+  readonly groups: Groups;
+  readonly dispatcher: Dispatcher;
+  readonly evolution: Evolution;
   readonly retention: Retention;
+
+  /** The effect conflict table in force (spec 10.8): a registry function owned by S1. */
+  conflictTable: FnRef = CONFLICT_TABLE;
+  /** A load under newer versions that cannot satisfy a persisted record is read-only (spec 14.4). */
+  readOnly: { message: string } | null = null;
 
   private epochSource: () => Id;
   private epochCount = 0;
@@ -113,6 +140,11 @@ export class Kernel {
     this.queries = new Queries(this);
     this.summaries = new Summaries(this);
     this.events = new Events(this);
+    this.beliefs = new Beliefs(this);
+    this.frames = new Frames(this);
+    this.groups = new Groups(this);
+    this.dispatcher = new Dispatcher(this);
+    this.evolution = new Evolution(this);
     this.retention = new Retention(this);
   }
 
@@ -409,6 +441,7 @@ export class Kernel {
     this.store.addEdge(e);
     this.bump();
     if (!spec.silent) this.emit({ c: 'edge', edge: e, ended: false });
+    this.groups.onEdgeChange(e);
     return e;
   }
 
@@ -419,6 +452,7 @@ export class Kernel {
     e.valid = { from: e.valid.from, to: at };
     this.bump();
     this.emit({ c: 'edge', edge: e, ended: true });
+    this.groups.onEdgeChange(e);
   }
 
   /** Change an edge's attributes or data in place (a membership's strength or obligations, spec 10.8). */
@@ -436,7 +470,40 @@ export class Kernel {
     if (patch.data) e.data = { ...(e.data ?? {}), ...patch.data };
     this.bump();
     this.emit({ c: 'edge', edge: e, ended: false });
+    this.groups.onEdgeChange(e);
     return e;
+  }
+
+  // ---- external operations and ticking ----
+
+  /** Queue an external operation under an epoch (spec 9.4, 14.3). Stale epochs are refused. */
+  submit(env: Envelope): SubmitResult {
+    return this.evolution.submit(env);
+  }
+
+  /**
+   * Advance the world to `to` (default: the engine time) within a work budget. Order: boundaries (spec
+   * 9.4), the frame worklist, relevance dispatch, summary materialisation, forgetting. Each worklist runs
+   * in a fixed order, takes its first step always, and resumes where it stopped (spec 10.7).
+   */
+  tick(opts: { to?: GameTime; budget?: number } = {}): TickReport {
+    const budget = new Budget(opts.budget ?? this.config.tickBudget);
+    const adv = this.evolution.advanceTo(opts.to ?? this.now, budget);
+    const frameSteps = this.frames.runWorklist(budget);
+    const dispatchSteps = this.dispatcher.run(budget);
+    const materialised = this.summaries.runMaterialisation(budget);
+    const forgotten = this.retention.runForgetting(budget);
+    return {
+      boundaries: adv.boundaries, runs: adv.runs, frameSteps, dispatchSteps, materialised, forgotten,
+      done: adv.done && this.frames.worklist.isEmpty && this.dispatcher.idle && this.summaries.pendingMaterialisation === 0 && this.retention.pendingForgetting === 0,
+    };
+  }
+
+  /** Run ticks until nothing is pending (a test and tool convenience). */
+  settle(opts: { to?: GameTime; budget?: number } = {}): TickReport {
+    let r = this.tick(opts);
+    for (let n = 0; n < 10_000 && !r.done; n++) r = this.tick(opts);
+    return r;
   }
 
   isId(x: unknown): x is Id {

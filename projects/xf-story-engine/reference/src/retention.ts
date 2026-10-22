@@ -1,11 +1,236 @@
-// Retention and forgetting (spec 7.3). STUB until the retention module is written.
+// Retention and forgetting (spec 7.3): mark and sweep over current semantic facts.
+//
+// The roots are the facts the world still stands on, not the records that merely support them:
+// pins in effect now (or observed, or committed), edges that have not ended, memorable beliefs, canon
+// events and the canon items of summaries, live seeds, the active and blocked frames of demand roots and
+// live seeds with every ancestor, the nodes those frames focus on, and the mirrored nodes the game
+// currently streams in. Marking follows every root's Id fields, origin chains and owned-value links.
+// Sweeping discards unmarked nodes' in-memory state; a swept node regenerates identically (I-3).
+
 import type { Kernel } from './kernel.ts';
-import type { Id } from './types.ts';
+import { splitWindowPath } from './kernel.ts';
+import { isId } from './id.ts';
+import type { Id, Pin, Region, Value } from './types.ts';
+import { type Budget, Worklist } from './work.ts';
+
+export interface SeedRecord {
+  id: Id;
+  /** The seed's own state (S2's), plain data. */
+  state: unknown;
+  /** Nodes the seed holds live. */
+  nodes: Id[];
+  /** The seed's demand-root actor, if it has one. */
+  actor?: Id;
+}
+
+const cmpId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 export class Retention {
+  readonly seeds = new Map<Id, SeedRecord>();
+  readonly streamed = new Set<Id>();
+  private cache: { revision: number; marked: Set<Id>; maxMember: Map<string, number> } | null = null;
+  private sweepList = new Worklist<{ id: Id }>();
+
   constructor(private readonly k: Kernel) {}
-  maxRetainedMember(_owner: Id, _slotKey: string): number | undefined {
-    void this.k;
-    return undefined;
+
+  // ---- seeds and streaming ----
+
+  setSeed(rec: SeedRecord): void {
+    this.seeds.set(rec.id, { ...rec, nodes: [...rec.nodes] });
+    if (rec.actor !== undefined) this.k.frames.demandRoots.add(rec.actor);
+    this.k.bump();
+  }
+
+  endSeed(id: Id): void {
+    const s = this.seeds.get(id);
+    if (!s) return;
+    this.seeds.delete(id);
+    if (s.actor !== undefined) this.k.frames.demandRoots.delete(s.actor);
+    this.k.bump();
+  }
+
+  streamIn(ids: Id[]): void {
+    for (const i of ids) this.streamed.add(i);
+    this.k.bump();
+  }
+
+  streamOut(ids: Id[]): void {
+    for (const i of ids) this.streamed.delete(i);
+    this.k.bump();
+  }
+
+  clear(): void {
+    this.seeds.clear();
+    this.streamed.clear();
+    this.cache = null;
+    this.sweepList.clear();
+  }
+
+  // ---- roots ----
+
+  /** Whether a pin is in effect now (spec 6.1, 6.2, 6.3, SPEC-NOTES 5). */
+  pinInEffectNow(p: Pin): boolean {
+    const k = this.k;
+    const h = k.store.header(p.node);
+    if (!h) return false;
+    const { path, window } = splitWindowPath(p.slot);
+    const info = k.schema.slotInfo(h.kind, path);
+    if (!info) return false;
+    const temporal = window !== undefined;
+    const timeline = h.origin.by === 'mirrored' && info.def.mode === 'mirrored';
+    if (!temporal && !timeline) return true;
+    return p.valid.from <= k.now && (p.valid.to === undefined || k.now < p.valid.to);
+  }
+
+  private idsIn(v: Value | Region | undefined, out: Id[]): void {
+    if (v === undefined) return;
+    if (typeof v === 'string') {
+      if (isId(v)) out.push(v);
+    } else if (!Array.isArray(v) && typeof v === 'object' && v.r === 'set') {
+      for (const x of v.values) if (isId(x)) out.push(x);
+    }
+  }
+
+  /** The Ids of every root and the Id fields of the records that make it one (spec 7.3). */
+  rootIds(): Id[] {
+    const k = this.k;
+    const out: Id[] = [];
+    const push = (...ids: Array<Id | undefined>): void => {
+      for (const i of ids) if (i !== undefined) out.push(i);
+    };
+    for (const p of k.store.allPins()) {
+      if (k.store.isWithdrawn(p.id)) continue;
+      if (!(p.reason === 'observed' || p.reason === 'committed' || this.pinInEffectNow(p))) continue;
+      push(p.node, p.cause, p.evidence);
+      this.idsIn(p.value, out);
+      this.idsIn(p.region, out);
+    }
+    const canonEvents = new Set(k.events.canonEvents());
+    for (const e of k.store.allEdges()) {
+      const live = e.valid.to === undefined || e.valid.to > k.now;
+      const ownEventEdge = e.cause === e.from && e.type === 'core:located-in' && k.store.header(e.from) !== undefined &&
+        k.schema.hasFacet(k.store.header(e.from)!.kind, 'event') && !canonEvents.has(e.from);
+      const referenced = canonEvents.has(e.from) || canonEvents.has(e.to) || canonEvents.has(e.cause);
+      if ((live && !ownEventEdge) || (!live && referenced)) push(e.from, e.to, e.cause);
+    }
+    for (const { belief: b } of k.beliefs.memorable()) {
+      push(b.believer, b.subject, ...b.evidence);
+      this.idsIn(b.value, out);
+      this.idsIn(b.region, out);
+      if (b.source.by === 'observed') push(b.source.event);
+      else if (b.source.by === 'told') push(b.source.teller, b.source.event);
+      else push(...b.source.from);
+    }
+    push(...canonEvents, ...k.summaries.canonItemIds());
+    for (const s of k.summaries.records()) if (s.canon.length > 0) push(s.summary);
+    for (const s of this.seeds.values()) push(s.id, s.actor, ...s.nodes);
+    // Frames of demand roots and live seeds, with every ancestor.
+    const rootActors = new Set<Id>(k.frames.demandRoots);
+    for (const s of this.seeds.values()) {
+      if (s.actor !== undefined) rootActors.add(s.actor);
+      rootActors.add(s.id);
+    }
+    const frameIds = new Set<Id>();
+    for (const f of k.frames.all()) {
+      if (rootActors.has(f.actor) && k.frames.eligible(f)) for (const a of k.frames.ancestorsOrSelf(f.id)) frameIds.add(a);
+    }
+    for (const fid of frameIds) {
+      const f = k.frames.frame(fid)!;
+      push(f.actor, f.origin, f.payload.place, f.cause, ...f.focus.nodes);
+      for (const p of f.parents) push(p.frame);
+      for (const e of f.payload.goal?.effects ?? []) {
+        if (typeof e.on === 'string') push(e.on);
+        else if (e.on.scope && 'nodes' in e.on.scope) push(...e.on.scope.nodes);
+      }
+    }
+    push(...this.streamed);
+    return out;
+  }
+
+  /** The marked set: every root's closure over Id fields, origin chains and owned-value links (spec 7.3). Cached per revision. */
+  marked(): Set<Id> {
+    return this.compute().marked;
+  }
+
+  private compute(): { marked: Set<Id>; maxMember: Map<string, number> } {
+    if (this.cache && this.cache.revision === this.k.revision) return this.cache;
+    const store = this.k.store;
+    const marked = new Set<Id>();
+    const stack = [...this.rootIds()];
+    while (stack.length > 0) {
+      const id = stack.pop()!;
+      if (marked.has(id)) continue;
+      marked.add(id);
+      const h = store.header(id);
+      if (!h) continue;
+      if (h.origin.by === 'value' || h.origin.by === 'member') stack.push(h.origin.owner);
+      else if (h.origin.by === 'minted') stack.push(h.origin.creator, h.origin.cause);
+      for (const o of store.ownedOf(id)) {
+        if (store.header(o)?.origin.by === 'value') stack.push(o);
+      }
+    }
+    const maxMember = new Map<string, number>();
+    for (const id of marked) {
+      const h = store.header(id);
+      if (h && h.origin.by === 'member') {
+        const key = `${h.origin.owner}|${h.origin.slot}`;
+        const cur = maxMember.get(key);
+        if (cur === undefined || h.origin.index > cur) maxMember.set(key, h.origin.index);
+      }
+    }
+    this.cache = { revision: this.k.revision, marked, maxMember };
+    return this.cache;
+  }
+
+  /** The highest index of a retained member of a many-slot, or undefined (spec 6.5). */
+  maxRetainedMember(owner: Id, slotKey: string): number | undefined {
+    return this.compute().maxMember.get(`${owner}|${slotKey}`);
+  }
+
+  isRetained(id: Id): boolean {
+    return this.marked().has(id);
+  }
+
+  // ---- forgetting (spec 7.3, 10.7) ----
+
+  /** Queue every unmarked header for the sweep. Returns how many were queued. */
+  scheduleSweep(): number {
+    const marked = this.marked();
+    let n = 0;
+    for (const id of [...this.k.store.headers.keys()].sort(cmpId)) {
+      if (!marked.has(id)) {
+        this.sweepList.push({ id });
+        n++;
+      }
+    }
+    return n;
+  }
+
+  get pendingForgetting(): number {
+    return this.sweepList.length;
+  }
+
+  /** Discard one node's in-memory state. A minted node, which nothing can regenerate, goes entirely with the records it owns. */
+  sweepNode(id: Id): void {
+    const store = this.k.store;
+    const h = store.header(id);
+    if (!h) return;
+    store.dropNode(id);
+    if (h.origin.by === 'minted') {
+      for (const c of store.contributionsOrigin(id)) store.removeContribution(c.id);
+      for (const e of store.edgesFrom(id)) if (e.cause === id) store.removeEdge(e.id);
+      for (const o of store.ownedOf(id)) this.sweepNode(o);
+      store.removeHeader(id);
+    } else if ((h.origin.by === 'value' || h.origin.by === 'member') && !store.header(h.origin.owner)) {
+      store.removeHeader(id);
+    }
+  }
+
+  /** Run the forgetting worklist under a budget: one node per step, resumable. Silent: no revision, no change. */
+  runForgetting(budget: Budget): number {
+    return this.sweepList.run(budget, (item) => {
+      if (!this.marked().has(item.id)) this.sweepNode(item.id);
+      return { cost: 1, done: true };
+    });
   }
 }
