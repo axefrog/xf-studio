@@ -9,7 +9,7 @@ import { join, resolve } from "node:path";
 import { EYE_PLATE_MASCULINE_RECIPE, EYE_PLATE_RECIPE, EYE_PLATE_RECIPES, eyePlateBody, idListSha256, selectedFaceIds } from "../src/legacy/eye-makeup/plate/eye-plate-recipe";
 import { createGameAssetExporter } from "../src/game/host/game-asset-export";
 import { HeadLoadError } from "../src/preview/head-load-error";
-import { PreviewCoreHost, type PreviewCoreState } from "../src/preview/host/preview-core-host";
+import { PREVIEW_LEASE_TTL_MS, PreviewCoreHost, type PreviewCoreState } from "../src/preview/host/preview-core-host";
 import {
   coreAssetName, parseCoreAssetName, PREVIEW_CORE_ASSET_NAMES, PREVIEW_CORE_FILES, PREVIEW_CORE_MALE_RECIPE, PREVIEW_CORE_RECIPE, PREVIEW_CORE_RECIPES,
   PREVIEW_MASCULINE_PLATE_RECIPE, previewCoreRecipeSha256,
@@ -258,6 +258,94 @@ test("an abort cuts off a request in flight: a held Refresh or Prepare never kee
   const idle = new PreviewPreparationActions(async action => { none.push(action); return { ok: true, data: state({}) }; }, 1, instant);
   expect(await idle.ensureBody("male", () => {}, AbortSignal.abort()).catch(caught => caught.name)).toBe("AbortError");
   expect(none).toEqual([]);
+});
+
+test("no lease outlives its page: a closed window's leases are given back, a failure gives its own back, and a page that is gone stops renewing (D1)", async () => {
+  // A real host through its endpoint, with a clock the test moves; the export waits on a gate.
+  const { game, cli, cacheRoot } = setup();
+  let release!: () => void, clock = 0;
+  const gate = new Promise<void>(done => { release = done; });
+  const host = new PreviewCoreHost({ cacheRoot, settings: () => ({ gameRoot: game, wolvenKitCli: cli }), now: () => clock,
+    exporter: () => createGameAssetExporter(join(cacheRoot, "exports"), async () => { await gate; }, { contains: () => new Set() }) });
+  const handler = createPreviewCoreHandler(host), url = "http://127.0.0.1:4317/api/preview-core";
+  const sent: { action: string; lease?: string }[] = [];
+  const transport = async (action: string, body?: string, options: { lease?: string; signal?: AbortSignal } = {}) => {
+    options.signal?.throwIfAborted();
+    sent.push({ action, ...(options.lease ? { lease: options.lease } : {}) });
+    if (action === "refresh") {
+      const query = new URLSearchParams({ body: body ?? "female", ...(options.lease ? { lease: options.lease } : {}) });
+      return { ok: true, data: await (await handler(new Request(`${url}?${query}`))).json() };
+    }
+    const response = await handler(new Request(url, { method: "POST", headers: { Origin: "http://127.0.0.1:4317", "Content-Type": "application/json" },
+      body: JSON.stringify({ action, ...(body ? { body } : {}), ...(options.lease ? { lease: options.lease } : {}) }) }));
+    return { ok: response.ok, data: await response.json() };
+  };
+  // Polling once a minute: the windows wait until something ends them.
+  const slow = { set: (run: () => void, ms: number) => setTimeout(run, ms * 60_000), clear: (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>) };
+  const windowA = new PreviewPreparationActions(transport as never, 1, slow), windowB = new PreviewPreparationActions(transport as never, 1, slow);
+  const b = new AbortController();
+  void windowA.ensureBody("male", () => {}).catch(() => {});
+  await Bun.sleep(5);
+  const waitingB = windowB.ensureBody("male", () => {}, b.signal).catch(caught => caught);
+  await Bun.sleep(5);
+  // Window A closes (pagehide): its lease goes, though its call never ended. Then B is superseded: nobody holds it, so it stops.
+  windowA.releaseLeases();
+  await Bun.sleep(5);
+  expect(host.snapshot("male").phase).toBe("preparing");
+  b.abort();
+  expect(await waitingB).toMatchObject({ name: "AbortError" });
+  await Bun.sleep(5);
+  release();
+  await host.settled();
+  expect(host.snapshot("male")).toMatchObject({ phase: "failed", code: "preview_cancelled" });
+  expect(sent.filter(item => item.action === "withdraw")).toHaveLength(2);
+  expect(sent.some(item => item.action === "cancel")).toBe(false);
+
+  // A window that crashed sends nothing: its lease expires once its page stops renewing it, and the last withdrawal then stops the work.
+  let open!: () => void;
+  const held = new Promise<void>(done => { open = done; });
+  const second = new PreviewCoreHost({ cacheRoot, settings: () => ({ gameRoot: game, wolvenKitCli: cli }), now: () => clock,
+    exporter: () => createGameAssetExporter(join(cacheRoot, "exports"), async () => { await held; }, { contains: () => new Set() }) });
+  const secondHandler = createPreviewCoreHandler(second);
+  second.prepare("male", "lease-crashed");
+  second.prepare("male", "lease-waiting");
+  // The waiting page renews its lease with every poll (GET with its lease); the crashed one never does.
+  clock += PREVIEW_LEASE_TTL_MS - 1000;
+  expect((await secondHandler(new Request(`${url}?body=male&lease=lease-waiting`))).status).toBe(200);
+  expect((await secondHandler(new Request(`${url}?body=male&lease=no spaces`))).status).toBe(400);
+  clock += 2000;
+  expect(second.snapshot("male").phase).toBe("preparing");
+  expect(second.withdraw("male", "lease-waiting").phase).toBe("preparing");
+  open();
+  await second.settled();
+  expect(second.snapshot("male").code).toBe("preview_cancelled");
+
+  // With nobody asking anything, the host's own sweep lets an expired lease go.
+  let shut!: () => void;
+  const third = new PreviewCoreHost({ cacheRoot, settings: () => ({ gameRoot: game, wolvenKitCli: cli }), leaseTtlMs: 60,
+    exporter: () => createGameAssetExporter(join(cacheRoot, "exports"), () => new Promise<void>(done => { shut = done; }), { contains: () => new Set() }) });
+  third.prepare("male", "lease-alone");
+  await Bun.sleep(150);
+  shut?.();
+  await third.settled();
+  expect(third.snapshot("male").code).toBe("preview_cancelled");
+});
+
+test("a preparation that fails without an abort gives its lease back", async () => {
+  const calls: string[] = [];
+  let reads = 0;
+  const actions = new PreviewPreparationActions(async (action, body, options = {}) => {
+    calls.push(`${action}:${body ?? "-"}${options.lease ? "+lease" : ""}`);
+    if (action === "refresh" && reads++ > 0) throw Error("offline");
+    if (action === "withdraw") return { ok: true, data: state({ body: "male" }) };
+    return { ok: true, data: state({ body: "male", ...(action === "prepare" ? { phase: "preparing", canPrepare: false, canCancel: true } : {}) }) };
+  }, 1, instant);
+  expect(await actions.ensureBody("male").catch(caught => caught.code)).toBe("body_unavailable");
+  // The poll after the Prepare carried the lease (renewing it), failed, and the lease went back.
+  expect(calls).toEqual(["refresh:male", "prepare:male+lease", "refresh:male+lease", "withdraw:male+lease"]);
+  // Nothing is left to give back when the page closes.
+  actions.dispose();
+  expect(calls).toHaveLength(4);
 });
 
 test("a head follows only its own body's V: another body's details and facial shape wait for that body's head", async () => {

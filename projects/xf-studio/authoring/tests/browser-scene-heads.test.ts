@@ -223,7 +223,7 @@ test("a later head that can't be built leaves the V shown before, with a plain n
   o.heads.dispose();
 });
 
-test("residency bounds the choice-preview devices too: four Vs with previews open leave only the resident Vs' devices alive", async () => {
+test("residency bounds the choice-preview devices too: four Vs with previews open leave only the resident Vs' devices alive, and a non-resident V's questions wait for its head", async () => {
   const devices: { made: number; disposed: number }[] = [];
   const device = (): ChoicePreviewPort => {
     const counts = { made: devices.length + 1, disposed: 0 };
@@ -233,10 +233,9 @@ test("residency bounds the choice-preview devices too: four Vs with previews ope
   const o = owner({ v1: "female", v2: "female", v3: "female", v4: "female" }, [], device);
   await o.heads.load();
   const alive = () => devices.filter(item => !item.disposed).length;
+  const show = async (subject: string) => { o.scene.subject = subject; o.changeScene(); await settle(); };
   for (const subject of ["v1", "v2", "v3", "v4"]) {
-    o.scene.subject = subject;
-    o.changeScene();
-    await settle();
+    await show(subject);
     // The V's Character panel draws a preview: its device starts.
     await o.people.offered.at(-1)!.previews!.subject("female");
     expect(alive()).toBeLessThanOrEqual(2);
@@ -244,10 +243,58 @@ test("residency bounds the choice-preview devices too: four Vs with previews ope
   // Four devices were made over time; only the shown V's and the warm V's are alive.
   expect(devices).toHaveLength(4);
   expect(alive()).toBe(2);
-  // A suspended V's previews start again when asked, loading its subject head first; its context and choices stayed.
-  const first = o.people.offered[0]!.previews!;
-  expect(await first.stored("k")).toBeNull();
+  // Requesters of the two Vs no resident head shows keep asking: nothing is made, and their questions wait.
+  const answered: string[] = [];
+  for (const index of [0, 1]) void o.people.offered[index]!.previews!.stored(`k${index}`).then(() => answered.push(`v${index + 1}`));
+  const aborted = new AbortController();
+  const lookup = o.people.offered[0]!.previews!.sources({} as never, "o", "hair", [1], null, aborted.signal).catch(error => error.name);
+  await settle();
+  expect(devices).toHaveLength(4);
+  expect(answered).toEqual([]);
+  // A waiting question its requester gives up on ends at once.
+  aborted.abort();
+  expect(await lookup).toBe("AbortError");
+  // v1 is shown again: its head is built, it is admitted within the budget (the least recent warm V's device goes first), and its question runs.
+  await show("v1");
+  expect(answered).toEqual(["v1"]);
   expect(devices).toHaveLength(5);
+  expect(alive()).toBe(2);
   o.heads.dispose();
   expect(alive()).toBe(0);
+});
+
+test("a live turn survives its V's eviction: A's live preview, B, then C evict A, back to A and the new device draws A's turn again", async () => {
+  type Log = string[];
+  const devices: Log[] = [];
+  const device = (): ChoicePreviewPort => {
+    const log: Log = [];
+    devices.push(log);
+    let uploaded: unknown = null, ended = false;
+    return { sources: async () => [], subject: async body => { log.push(`subject ${body}`); return body; }, stored: async () => null, render: async () => ({ url: "u" }),
+      dispose: () => { ended = true; },
+      live: {
+        start: async source => { log.push("start"); uploaded = source; },
+        // A worker without the source draws nothing (the reviewed failure: every later frame was null).
+        frame: async () => { if (ended || !uploaded) throw Error("No source is uploaded."); log.push("frame"); return { bitmap: { close() {} } as unknown as ImageBitmap }; },
+        stop: () => { uploaded = null; log.push("stop"); },
+      } };
+  };
+  const o = owner({ a: "female", b: "female", c: "female" }, [], device);
+  await o.heads.load();
+  const show = async (subject: string) => { o.scene.subject = subject; o.changeScene(); await settle(); };
+  const previews = o.people.offered[0]!.previews!, source = { parts: [] } as never;
+  await previews.subject("female");
+  await previews.live!.start(source);
+  expect(await previews.live!.frame(0, false)).toBeTruthy();
+  await show("b");
+  await show("c");
+  // A is evicted (C shown, B warm): its device ended, its context and its service's live turn stayed.
+  expect(o.heads.snapshot().residents.map(item => item.key)).toEqual(["s1|b|female", "s1|c|female"]);
+  await show("a");
+  // A's next frame makes a new device, which gets the subject head and the live source back before it draws.
+  expect(await previews.live!.frame(30, false)).toBeTruthy();
+  // B and C drew no previews, so A's are the only devices: the first ended with A's eviction.
+  expect(devices).toHaveLength(2);
+  expect(devices[1]).toEqual(["subject female", "start", "frame"]);
+  o.heads.dispose();
 });

@@ -7,7 +7,8 @@
  *   one stops (a masculine core's preparation too, decision D1), and the head shown before stays drawn until the new one is built. Nothing
  *   is refused meanwhile: the V's context stays attached, and its changes land as they are made.
  * - **Residency.** The shown head plus at most one warm one (`warm`, decision D2); a warm head is shown again at once, catching up with
- *   its V. A lost context drops the warm heads first.
+ *   its V. A lost context drops the warm heads first. The same decisions bound the choice-preview devices: only a V a resident head shows
+ *   is admitted to have one, and a question for any other V waits for its admission (choice-preview-suspension.ts).
  * - **The V's context outlives heads.** It is made once per V by the character's owner, with scene ports bound late: they reach the head
  *   that shows the V now, and do nothing while none does (a warm head stops following its V and catches up when shown).
  *
@@ -48,8 +49,8 @@ export type SceneHeadsPorts = {
   /** Hear the pane's WebGL context being lost and restored. */
   onContext?(listener: (event: "lost" | "restored") => void): () => void;
   /**
-   * Choice previews for a V's context (default: a page worker per context, made when first used and suspended while no resident head
-   * shows the V; null: none, for fixtures).
+   * Choice previews for a V's context (default: a page worker per context, made when first used while a resident head shows the V, and
+   * ended while none does; null: none, for fixtures).
    */
   previews?: (() => CharacterScenePorts["previews"]) | null;
   /** How many heads stay warm beside the shown one (default 1). */
@@ -75,10 +76,10 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
       // The V's context stays attached while heads swap: creator changes are never refused for a reload (the old `not_ready`).
       ports.head.attach({ characterContext: head.characterContext });
       ports.shown(head);
-      suspendPreviews();
+      admitPreviews();
     },
     hide: head => { head.hide(); ports.shown(undefined); },
-    dispose: head => { head.dispose(); suspendPreviews(); },
+    dispose: head => { head.dispose(); admitPreviews(); },
   }, { warm: ports.warm });
   const offContext = ports.onContext?.(event => { if (event === "lost") residency.contextLost(); });
   const offScenes = ports.scenes.subscribe(() => schedule());
@@ -95,12 +96,14 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
     return save ? { save } : {};
   }
   /**
-   * The budget bounds preview workers too: a V no resident head shows keeps its context (its choices, its history), but its
-   * choice-preview device (a worker with its own WebGL context) is suspended until it is used again.
+   * The budget bounds preview workers too, as one decision with the heads': a V no resident head shows keeps its context (its choices,
+   * its history), but its choice-preview device (a worker with its own WebGL context) ends, and its questions wait until a resident head
+   * shows it again. Admission is withdrawn first, so a V admitted now never makes its device while one past the budget still lives.
    */
-  function suspendPreviews() {
+  function admitPreviews() {
     const resident = new Set(residency.wants().map(want => want.character));
-    for (const [character, entry] of contexts) if (!resident.has(character)) entry.previews?.suspend();
+    for (const [character, entry] of contexts) if (!resident.has(character)) entry.previews?.admit(false);
+    for (const [character, entry] of contexts) if (resident.has(character)) entry.previews?.admit(true);
   }
   /** The head showing `character` now, if any. */
   function showing(character: string): AttachedHead | undefined {
@@ -118,6 +121,8 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
     const releases = [made.subscribe(() => schedule()), made.subscribe(ports.head.changed), made.subscribe(ports.head.persist)];
     contexts.set(character, { context: made, previews: offered.previews as SuspendablePreviews | undefined,
       release: () => { for (const release of releases.splice(0)) release(); } });
+    // A context made again for a V a resident head shows keeps that V's admission.
+    if (residency.wants().some(want => want.character === character)) contexts.get(character)!.previews?.admit(true);
     made.start();
     return made;
   }

@@ -42,7 +42,14 @@ export type PreviewCoreHostOptions = {
   exporter?: (cli: string | null) => GameAssetExporter;
   log?: (message: string) => void;
   now?: () => number;
+  /** How long a lease lives without its page renewing it (default `PREVIEW_LEASE_TTL_MS`). */
+  leaseTtlMs?: number;
 };
+/**
+ * A lease its page stopped renewing (a crashed or frozen page) expires after this long. A waiting page renews its lease with every poll
+ * (700 ms, or about once a second in a hidden tab), so only a page that is gone misses it.
+ */
+export const PREVIEW_LEASE_TTL_MS = 30_000;
 
 const MESSAGES = {
   ready: "The 3D view is ready.",
@@ -61,15 +68,16 @@ const isGame = (path: string | null) => { try { return !!path && existsSync(join
 export class PreviewCoreHost {
   /**
    * The running preparation. `leases`: the requesters that asked for it on demand (a page that needs the masculine head: profiles
-   * phase 4a-iv); it stops when the last of them withdraws. Null: someone asked for it outright (the setup card's Prepare, a rebuild),
-   * so only a Cancel stops it.
+   * phase 4a-iv), each with when its page last renewed it; it stops when the last of them withdraws or expires. Null: someone asked for
+   * it outright (the setup card's Prepare, a rebuild), so only a Cancel stops it.
    */
-  private running: { controller: AbortController; promise: Promise<void>; body: CoreBody; leases: Set<string> | null } | null = null;
+  private running: { controller: AbortController; promise: Promise<void>; body: CoreBody; leases: Map<string, number> | null } | null = null;
   private progress: PreviewCoreState["progress"] = null;
   private lastFailure: Partial<Record<CoreBody, { code: string; message: string; gameRoot: string | null }>> = {};
   private lastDurationSeconds: number | null = null;
   private readinessMemo = new Map<CoreBody, { key: string; value: ReturnType<typeof previewCoreReadiness>; at: number }>();
   constructor(private readonly options: PreviewCoreHostOptions) {}
+  private now() { return (this.options.now ?? Date.now)(); }
 
   private readiness(gameRoot: string | null, body: CoreBody) {
     const now = (this.options.now ?? Date.now)();
@@ -119,7 +127,7 @@ export class PreviewCoreHost {
   prepare(body: CoreBody = "female", lease?: string): PreviewCoreState {
     if (this.running?.body === body) {
       if (!lease) this.running.leases = null;
-      else this.running.leases?.add(lease);
+      else this.running.leases?.set(lease, this.now());
       return this.snapshot(body);
     }
     const state = this.snapshot(body);
@@ -144,8 +152,11 @@ export class PreviewCoreHost {
         this.options.log?.(`3D preview preparation stopped: ${code}. ${(error as PreviewCoreError).detail ?? ""}`.trim());
         if (code !== "preview_cancelled") hostFailure("preview", code, message, error);
       })
-      .finally(() => { this.running = null; this.progress = null; this.forget(); });
-    this.running = { controller, promise, body, leases: lease ? new Set([lease]) : null };
+      .finally(() => { clearInterval(sweep); this.running = null; this.progress = null; this.forget(); });
+    this.running = { controller, promise, body, leases: lease ? new Map([[lease, this.now()]]) : null };
+    // Leases expire even while no page asks anything (the last page holding one crashed).
+    const sweep = setInterval(() => this.expire(), this.ttl() / 3);
+    (sweep as { unref?: () => void }).unref?.();
     return this.snapshot(body);
   }
 
@@ -183,7 +194,23 @@ export class PreviewCoreHost {
   withdraw(body: CoreBody, lease: string): PreviewCoreState {
     const running = this.running;
     if (running?.body === body && running.leases?.delete(lease) && running.leases.size === 0) running.controller.abort();
+    this.expire();
     return this.snapshot(body);
+  }
+  /** A waiting page polls with its lease: it is still there, so its lease lives on (an unknown or expired lease isn't taken back). */
+  renew(body: CoreBody, lease: string): void {
+    const leases = this.running?.body === body ? this.running.leases : null;
+    if (leases?.has(lease)) leases.set(lease, this.now());
+    this.expire();
+  }
+  private ttl() { return this.options.leaseTtlMs ?? PREVIEW_LEASE_TTL_MS; }
+  /** Leases their pages stopped renewing go; the preparation stops once none is left (unless someone asked for it outright). */
+  private expire() {
+    const running = this.running, leases = running?.leases;
+    if (!leases?.size) return;
+    const now = this.now();
+    for (const [lease, renewed] of leases) if (now - renewed > this.ttl()) leases.delete(lease);
+    if (leases.size === 0) running!.controller.abort();
   }
 
   /** Wait for a running preparation (tests and shutdown). */

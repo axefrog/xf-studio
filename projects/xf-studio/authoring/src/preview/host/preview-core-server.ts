@@ -2,7 +2,8 @@ import type { PreviewCoreHost } from "./preview-core-host";
 import { CORE_BODIES, type CoreBody } from "../preview-core-recipe";
 
 /**
- * Host endpoint for the 3D preview preparation. GET returns the read-only state (`?body=male` for the masculine V's core);
+ * Host endpoint for the 3D preview preparation. GET returns the read-only state (`?body=male` for the masculine V's core; `&lease=` renews
+ * that requester's lease, which a page waiting for the head sends with every poll);
  * POST takes only `{ action: "prepare" | "cancel" | "rebuild", body?: "female" | "male", lease?: string }` or
  * `{ action: "withdraw", body?, lease }` (rebuild prepares a damaged preview again; the body defaults to the feminine core). A `lease` names
  * one requester asking on demand: a preparation held by leases stops when the last one withdraws (`PreviewCoreHost.withdraw`). Paths come from the host's own settings, never the browser.
@@ -20,8 +21,9 @@ export function createPreviewCoreHandler(host: PreviewCoreHost, options: { trust
     if (url.hostname !== "127.0.0.1" || (origin && origin !== url.origin))
       return json({ code: "forbidden", error: "Use the local studio to prepare the 3D view." }, 403);
     if (request.method === "GET") {
-      const body = url.searchParams.get("body") ?? "female";
-      if (!isBody(body)) return json({ code: "invalid", error: "Choose the female or male head." }, 400);
+      const body = url.searchParams.get("body") ?? "female", lease = url.searchParams.get("lease");
+      if (!isBody(body) || (lease !== null && !isLease(lease))) return json({ code: "invalid", error: "Choose the female or male head." }, 400);
+      if (lease !== null) host.renew(body, lease);
       return json(host.snapshot(body));
     }
     if (request.method !== "POST") return json({ code: "method", error: "Method not allowed." }, 405);

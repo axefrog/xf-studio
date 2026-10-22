@@ -12,6 +12,8 @@ import { createBrowserChoicePreviewDevice, OBJECT_URLS } from "../src/character/
 import { createChoicePreviewHandler } from "../src/character/host/choice-preview-server";
 import { ChoicePreviewService, type ChoicePreviewPort, type PreviewAsk, PreviewHostError, PREVIEW_NOTICES, PreviewSuperseded } from "../src/character/choice-preview-service";
 import type { RenderComponent } from "../src/character/render-detail";
+import { ChoicePreviewOwner } from "../src/character/choice-preview-owner";
+import { suspendablePreviews } from "../src/character/choice-preview-suspension";
 import { DEFAULT_CHARACTER } from "../src/character/character-detail-request";
 
 /** Choice previews phase 1 (research/character-customization/choice-previews-design.md §10): keys, sources, theming, camera, store, endpoint, scheduling. */
@@ -507,6 +509,42 @@ describe("the preview service's failures, cancellation and live turns (PREV-150.
     service.update(part({ spin: null }));
     service.update(hair({ spin: 2 }));
     expect(log).toEqual(["start 2", "stop", "start 7", "stop", "start 2"]);
+  });
+
+  test("a suspended device's live turn is drawn again: the service's ready live turn draws on the new device, which gets the subject and the source back first", async () => {
+    const devices: string[][] = [];
+    const bitmap = { close() {} } as unknown as ImageBitmap;
+    const make = (): ChoicePreviewPort => {
+      const log: string[] = [];
+      devices.push(log);
+      let uploaded: number | null = null;
+      return readyPort({ async subject(body) { log.push(`subject ${body}`); return "subject"; },
+        live: { async start(drawn) { uploaded = positionOf(drawn); log.push(`start ${uploaded}`); },
+          async frame() { if (uploaded === null) throw Error("No source is uploaded."); log.push("frame"); return { bitmap }; }, stop() { uploaded = null; } } });
+    };
+    const previews = suspendablePreviews(make);
+    // Nothing is made before the residency owner admits the V.
+    const service = new ChoicePreviewService(new ChoicePreviewOwner(previews).lease(), () => {});
+    service.update(ask({ spin: 2 }));
+    await settle();
+    expect(devices).toHaveLength(0);
+    previews.admit(true);
+    await settle();
+    service.update(ask({ spin: 2 }));
+    await settle();
+    const live = service.row("o")!.live!;
+    expect(await live.frame(0)).toBe(bitmap);
+    // The V's head is evicted, then shown again: the service still holds its ready live turn.
+    previews.admit(false);
+    expect(previews.active).toBe(false);
+    previews.admit(true);
+    expect(service.update(ask({ spin: 2 })).live).toBe(live);
+    expect(await live.frame(15)).toBe(bitmap);
+    expect(devices).toHaveLength(2);
+    expect(devices[1]).toEqual(["subject female", "start 2", "frame"]);
+    expect(service.liveStats.failed).toBe(0);
+    service.dispose();
+    previews.dispose();
   });
 
   test("a live turn only superseded isn't a failure: the choice turns live again when wanted (PREV-151)", async () => {
