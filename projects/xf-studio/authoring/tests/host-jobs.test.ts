@@ -1,8 +1,7 @@
 // The host on its job scheduler (host-jobs.ts, character-detail-host.ts): what a person's change, a page's lease, a committed derivation
 // and the resolver's lanes do together. Fakes stand in for the preparation and WolvenKit; no game file is read.
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CharacterDetailHost, PAGE_LEASE_MS, type CharacterDetailSettings } from "../src/character/host/character-detail-host";
 import type { CharacterRequest } from "../src/character/character-detail-request";
@@ -11,8 +10,9 @@ import type { Clock } from "../src/platform/core/clock";
 import { WolvenKitFetcher } from "../src/game/host/resolver-host";
 import { REQUEST_A, REQUEST_B } from "./character-detail-fixtures";
 import { cr2w } from "./resolver-fixtures";
+import { tempDir } from "./temp-dir";
 
-const root = mkdtempSync(join(tmpdir(), "xfs-host-jobs-"));
+const root = tempDir("xfs-host-jobs-");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 const settings: CharacterDetailSettings = { gameRoot: join(root, "game"), launchRoute: "direct", mo2Root: null, mo2ProfileId: null,
   manualModRoot: null, wolvenKitCli: process.execPath };

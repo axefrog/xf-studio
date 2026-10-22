@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   CONTRIBUTION_CHANNELS, DDS_HEADER_BYTES, destinationContributions, encodeContributions, encodeFlatDds,
   flatMipChain, mipLevelCount, reduceContributions,
 } from "../src/engines/layered-makeup/flat-mip-chain";
 import { oracleTest } from "./optional-oracles";
+import { tempDir } from "./temp-dir";
 
 const study = resolve(import.meta.dir, "../../../../experiments/005-preset-collection");
 const linear = (b: number) => { const v = b / 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; };
@@ -173,7 +173,7 @@ const oracle = (() => {
 const oracleCase = oracleTest(oracle, "the mip_maps.py byte-identity oracle needs Python with NumPy (set XFS_PYTHON).");
 
 oracleCase("DDS bytes are identical to the Python mip_maps.py oracle", () => {
-  const dir = mkdtempSync(resolve(tmpdir(), "xfs-mip-oracle-"));
+  const dir = tempDir("xfs-mip-oracle-");
   try {
     const cases = [{ size: 1, seed: 1 }, { size: 2, seed: 2 }, { size: 64, seed: 3 }, { size: 256, seed: 4 }];
     for (const c of cases) {

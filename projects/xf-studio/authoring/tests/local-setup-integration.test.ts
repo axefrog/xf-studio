@@ -1,15 +1,15 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { defaultLocalSettings } from "../src/setup/local-settings";
 import { LocalSettingsStore } from "../src/setup/host/local-settings-store";
 import { createLocalSettingsHandler } from "../src/setup/host/local-settings-server";
 import { LocalSetupActions } from "../src/setup/local-setup-actions";
 import { localPackageTools } from "../src/host/package-server";
+import { tempDir } from "./temp-dir";
 
 test("local setup edits control package paths without accepting paths in package requests", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "xfs-setup-integration-"));
+  const dir = tempDir("xfs-setup-integration-");
   try {
     const store = new LocalSettingsStore(dir);
     const handler = createLocalSettingsHandler(store, {});
@@ -55,7 +55,7 @@ test("local setup edits control package paths without accepting paths in package
 });
 
 test("saved MO2 route reports profile readiness while direct route excludes MO2", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "xfs-setup-route-"));
+  const dir = tempDir("xfs-setup-route-");
   try {
     const store = new LocalSettingsStore(dir), game = join(dir, "game"), mo2 = join(dir, "mo2");
     mkdirSync(join(game, "bin", "x64"), { recursive: true });
@@ -95,7 +95,7 @@ test("a save from one view waits for another view's refresh instead of being ref
 });
 
 test("the saves folder: detected by default and only described; a chosen folder must be there; one gone since never blocks other fields (UI-109)", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "xfs-setup-saves-"));
+  const dir = tempDir("xfs-setup-saves-");
   try {
     const store = new LocalSettingsStore(dir);
     const display = "Saved Games\\CD Projekt Red\\Cyberpunk 2077";

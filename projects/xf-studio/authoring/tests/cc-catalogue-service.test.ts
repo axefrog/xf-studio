@@ -1,8 +1,7 @@
 // The creator catalogue on the host (cc-catalogue-service.ts, cc-catalogue-server.ts), the text and TweakDB readers it relies on, and
 // degraded preparations, over the asset-free fixtures (no game file, save or real mod name).
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { CreatorCatalogueHost } from "../src/character/host/cc-catalogue-service";
 import { createCreatorHandler } from "../src/character/host/cc-catalogue-server";
@@ -20,8 +19,9 @@ import { TweakDbBlob, TWEAKDB_MAGIC, tweakDbId } from "../src/game/tweakdb-flats
 import { fixtureSource, MOD_NAME } from "./cc-fixtures";
 import { detailFixture, REQUEST_A } from "./character-detail-fixtures";
 import PRIVATE from "../../../../tools/private-data.json";
+import { tempDir } from "./temp-dir";
 
-const root = mkdtempSync(join(tmpdir(), "xfs-creator-"));
+const root = tempDir("xfs-creator-");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 /** A catalogue service over the fixture creator, counting its builds. */

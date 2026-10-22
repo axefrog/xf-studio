@@ -4,10 +4,14 @@
  * Never points at the active working draft or library.
  */
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { Subprocess } from "bun";
 import { localSettingsDirectory } from "../src/setup/host/local-settings-store";
+
+/** Windows will not delete a folder a just-ended process (Chrome and its helpers, the server) still holds, so removal is retried. */
+const REMOVAL = { recursive: true, force: true, maxRetries: 10, retryDelay: 200 } as const;
 
 const CHROME = process.env.CHROME ?? "C:/Program Files/Google/Chrome/Application/chrome.exe";
 const root = resolve(import.meta.dir, "..");
@@ -41,6 +45,8 @@ export type Session = {
  */
 export async function startServer(port: number, options: { settings?: "copy" | "empty" } = {}) {
   const data = mkdtempSync(join(tmpdir(), "xfs-ui-data-"));
+  // The server is killed by the script, not by us, so the folder goes when the script ends (whatever the way it ends).
+  process.once("exit", () => { try { rmSync(data, REMOVAL); } catch { /* still held; nothing more to do at exit */ } });
   const real = join(localSettingsDirectory(), "settings.json");
   if ((options.settings ?? "copy") === "copy" && existsSync(real)) copyFileSync(real, join(data, "settings.json"));
   const server = Bun.spawn(["bun", "server.ts"], { cwd: root, env: { ...process.env, PORT: String(port), XFAS_DATA_DIR: data,
@@ -91,7 +97,7 @@ async function stopChrome(chrome: Subprocess, profile: string, keep = false): Pr
   chrome.kill();
   await Promise.race([chrome.exited, Bun.sleep(5_000)]);
   if (keep) return;
-  try { rmSync(profile, { recursive: true, force: true }); } catch { /* A file Chrome still holds; the temp folder is cleaned later. */ }
+  try { await rm(profile, REMOVAL); } catch { /* A file Chrome still holds after the retries. */ }
 }
 /**
  * Start a throwaway headless Chrome and connect to its page. Without `debugPort`, Chrome picks a free debugging port itself (read from

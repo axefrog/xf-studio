@@ -3,8 +3,7 @@
 // other resolver oracles; under XFS_REQUIRE_ORACLES=1 a missing prerequisite fails instead of skipping.
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, lstatSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 import { depotHash } from "../src/game/depot-path";
 import { depotPathRegex } from "../src/legacy/eye-makeup/plate/host/eye-plate-wolvenkit";
@@ -15,6 +14,7 @@ import { readResourceJson } from "../src/native/resource-document";
 import { trimBuffers } from "../src/game/host/resolver-host";
 import { runWolvenKit } from "../src/host/wolvenkit-cli";
 import { oracleDescribe } from "./optional-oracles";
+import { tempDir } from "./temp-dir";
 
 const env = process.env;
 const game = env.XFS_RESOLVER_GAME_ROOT ? resolve(env.XFS_RESOLVER_GAME_ROOT) : "";
@@ -54,7 +54,7 @@ const walk = (root: string, folder = root, out = new Map<string, string>()) => {
 oracleDescribe(available, "the native reader oracle needs XFS_RESOLVER_GAME_ROOT (with the game's Oodle library) and XFS_WOLVENKIT_CLI (read-only).")("native reader against WolvenKit", () => {
   test("the extracted bytes of 60 spread entries per archive equal WolvenKit's unbundle output", async () => {
     const oodle = loadGameOodle(game);
-    const work = mkdtempSync(join(tmpdir(), "xfs-native-oracle-"));
+    const work = tempDir("xfs-native-oracle-");
     try {
       for (const name of ["basegame_4_appearance.archive", "basegame_1_engine.archive"]) {
         const archive = NativeArchive.open(join(content, name), oodle.decompress);
@@ -78,7 +78,7 @@ oracleDescribe(available, "the native reader oracle needs XFS_RESOLVER_GAME_ROOT
 
   test("the JSON of one resource per type equals WolvenKit's `uncook -s` output (hash-only names aside)", async () => {
     const oodle = loadGameOodle(game);
-    const work = mkdtempSync(join(tmpdir(), "xfs-native-oracle-json-"));
+    const work = tempDir("xfs-native-oracle-json-");
     const archives = readdirSync(content).filter(name => /^basegame_.*\.archive$/.test(name)).map(name => join(content, name));
     try {
       await runWolvenKit(cli, ["uncook", ...archives, "-o", work, "-r", `(?i)${depotPathRegex(RESOURCES)}`, "-u", "-s", "-v", "Minimal"], { timeoutMs: 600_000, keep: 16_000 });

@@ -1,6 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { CharacterDetailHost, type CharacterDetailSettings } from "../src/character/host/character-detail-host";
 import { CharacterDetailActions, type CharacterDetailPort } from "../src/character/character-detail-actions";
@@ -10,8 +9,9 @@ import { createBrowserCharacterDetailDevice } from "../src/character/browser/bro
 import { CHARACTER_DETAIL_SCHEMA } from "../src/character/render-detail";
 import type { CharacterRequest } from "../src/character/character-detail-request";
 import { REQUEST_A, REQUEST_B } from "./character-detail-fixtures";
+import { tempDir } from "./temp-dir";
 
-const root = mkdtempSync(join(tmpdir(), "xfs-character-pages-"));
+const root = tempDir("xfs-character-pages-");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 const settings: CharacterDetailSettings = { gameRoot: join(root, "game"), launchRoute: "direct", mo2Root: null, mo2ProfileId: null,
   manualModRoot: null, wolvenKitCli: process.execPath };

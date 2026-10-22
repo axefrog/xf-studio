@@ -2,15 +2,15 @@
 // drawn floating beside the fingers as one rigid part). The skin route exports the source's own raw copy once more, with the game
 // folder, and keeps that GLB only when it has a skin and the same vertices. Small fixtures only.
 import { afterAll, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { archiveExportSource, createGameAssetExporter, GameAssetExportError, glbSkinState, type MorphTargetSkin, type UncookRun } from "../src/game/host/game-asset-export";
 import { createWolvenKitMorphSkin } from "../src/game/host/game-asset-export-wolvenkit";
 import { GlbWriter } from "../src/formats/glb";
 import { WolvenKitRunError } from "../src/host/wolvenkit-cli";
+import { tempDir } from "./temp-dir";
 
-const root = mkdtempSync(join(tmpdir(), "xfs-morph-skin-"));
+const root = tempDir("xfs-morph-skin-");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 let serial = 0;
 const temporary = () => { const dir = join(root, `t${serial++}`); mkdirSync(dir, { recursive: true }); return dir; };

@@ -1,14 +1,14 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { planRuntimeDiagnostic, stageRuntimeDiagnostic } from "../src/installation/host/runtime-diagnostic-stage";
 import { EYE_MAKEUP_MOD } from "../src/legacy/eye-makeup/mod-branding";
+import { tempDir } from "./temp-dir";
 
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), "xfs-runtime-diagnostic-"));
+  const root = tempDir("xfs-runtime-diagnostic-");
   const gameRoot = join(root, "game"), mo2Root = join(root, "source-mo2");
   const candidateStore = join(root, "candidates"), candidateId = "build_1";
   const profileId = "2025 (again)";

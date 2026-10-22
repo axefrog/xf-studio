@@ -1,7 +1,6 @@
 import { afterAll, afterEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { lstat } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { type ArchiveFile, buildMountPlan, DepotIndex } from "../src/game/archive-precedence";
 import { readArchiveXlConfig } from "../src/game/archivexl-config";
@@ -12,6 +11,7 @@ import { openInstallation, ResolverFetcher, WolvenKitFetcher, type Installation,
 import { ResourceGraph } from "../src/game/resource-graph";
 import { pathStamp } from "../src/game/host/source-discovery";
 import { app, cr2w, ent, mesh, meshComponent, mi, rp } from "./resolver-fixtures";
+import { tempDir } from "./temp-dir";
 
 /**
  * The long-lived installation (installation-registry.ts): one opened route reused across preparations, reopened
@@ -21,7 +21,7 @@ import { app, cr2w, ent, mesh, meshComponent, mi, rp } from "./resolver-fixtures
 const roots: string[] = [];
 afterEach(() => installations.clear());
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
-const temporary = () => { const root = mkdtempSync(join(tmpdir(), "xfs-registry-")); roots.push(root); return root; };
+const temporary = () => { const root = tempDir("xfs-registry-"); roots.push(root); return root; };
 const put = (path: string, content: string | Uint8Array) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, content); };
 
 /** A minimal RDAR archive whose index lists `paths`. */

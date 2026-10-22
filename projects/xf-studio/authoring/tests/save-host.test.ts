@@ -2,20 +2,20 @@
 // fields, newest first, no user name), the file endpoint's refusals (paths, links, unknown parts), the names endpoint, the origin check,
 // and the host sources (the Saved Games folder from the registry or profile, and the script bundles the launch route loads).
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createSavesHandler, describeSave, listSaves } from "../src/features/save-explorer/host/saves-server";
 import { cyberpunkSavesFolder, expandEnvironment, savedGamesFromRegistry, SAVES_FOLDER_DISPLAY, savesLocation, scriptBundleCandidates, SHELL_FOLDERS_KEY } from "../src/saves/host/saves-host-sources";
 import { parseSaveListing, parseSaveTypeNames } from "../src/features/save-explorer";
 import { scriptBundle } from "./fixtures/synthetic-save";
+import { tempDir } from "./temp-dir";
 
-let root = "", bundle = "";
+const root = tempDir("xfs-saves-");
+let bundle = "";
 const engine = { enums: ["gameE"], bitfields: [], classes: ["gameC"], properties: ["p"] };
 const metadata = (fields: Record<string, unknown>) => JSON.stringify({ RootType: "handle:saveMetadataContainer", Data: { metadata: fields } });
 
 beforeAll(() => {
-  root = mkdtempSync(join(tmpdir(), "xfs-saves-"));
   const save = (folder: string, when: number, meta?: Record<string, unknown>, screenshot = false) => {
     mkdirSync(join(root, folder));
     writeFileSync(join(root, folder, "sav.dat"), new Uint8Array([1, 2, 3, 4]));
@@ -75,7 +75,7 @@ describe("saves endpoints", () => {
 
   test("a saves folder that is itself a link or junction is followed; a linked save folder below it is still refused (SAVE-07)", async () => {
     // A junction on Windows (no rights needed), a directory link elsewhere: Saved Games moved to another drive.
-    const outer = mkdtempSync(join(tmpdir(), "xfs-saves-link-")), link = join(outer, "Cyberpunk 2077"), inner = join(root, "Linked-1");
+    const outer = tempDir("xfs-saves-link-"), link = join(outer, "Cyberpunk 2077"), inner = join(root, "Linked-1");
     try {
       symlinkSync(root, link, "junction");
       symlinkSync(join(root, "QuickSave-0"), inner, "junction");

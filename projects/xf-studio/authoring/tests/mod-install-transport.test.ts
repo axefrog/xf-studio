@@ -1,15 +1,15 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createModInstallTransport, declaredResources, extraFileKind, installedDuplicates } from "../src/installation/host/mod-install-transport";
 import { defaultLocalSettings } from "../src/setup/local-settings";
 import { EYE_MAKEUP_MOD } from "../src/legacy/eye-makeup/mod-branding";
+import { tempDir } from "./temp-dir";
 
 const digest = (body: string) => createHash("sha256").update(body).digest("hex");
 function fixture(route: "direct" | "mo2") {
-  const root = mkdtempSync(join(tmpdir(), "xfs-install-"));
+  const root = tempDir("xfs-install-");
   const game = join(root, "game"), mo2 = join(root, "mo2"), store = join(root, "candidates");
   const profileId = "2025 (again)";
   mkdirSync(join(game, "bin", "x64"), { recursive: true });

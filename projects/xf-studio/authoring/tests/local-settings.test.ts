@@ -1,14 +1,14 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { defaultLocalSettings, migrateLocalSettings, parseLocalSettings } from "../src/setup/local-settings";
 import { evaluateLocalReadiness, packageToolPaths } from "../src/setup/host/local-settings-readiness";
 import { LocalSettingsStore } from "../src/setup/host/local-settings-store";
 import { BUILD_TOOLS_CHECKING } from "../src/setup/local-readiness-codes";
+import { tempDir } from "./temp-dir";
 
 const withDirectory = (run: (dir: string) => void) => {
-  const dir = mkdtempSync(join(tmpdir(), "xfs-settings-test-"));
+  const dir = tempDir("xfs-settings-test-");
   try { run(dir); } finally { rmSync(dir, { recursive: true, force: true }); }
 };
 

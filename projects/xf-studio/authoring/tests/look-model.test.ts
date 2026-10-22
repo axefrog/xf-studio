@@ -10,8 +10,7 @@
  */
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { openTestLibrary } from "./fixtures/library-file";
 import { collectionDraft, parseCollectionWorkspace, readCollectionWorkspaceV1 } from "../src/app/workspace/collection-workspace";
@@ -40,6 +39,7 @@ import { readRecipe as parseRecipe } from "../src/legacy/eye-makeup/recipe-schem
 import { preparePackageCollection } from "./fixtures/eye-exporter";
 
 import { namedCore } from "./fixtures/named-targets";
+import { tempDir } from "./temp-dir";
 const golden = (name: string) => JSON.parse(readFileSync(new URL(`./golden/${name}`, import.meta.url), "utf8"));
 const EYE = "eye-makeup";
 
@@ -195,7 +195,7 @@ test("every collection fixture reads, plans and compiles identically through col
 
 function legacyLibrary() {
   const rows = golden("library-v2-rows.json");
-  const dir = mkdtempSync(join(tmpdir(), "xfs-library-v2-")), path = join(dir, "library.sqlite");
+  const dir = tempDir("xfs-library-v2-"), path = join(dir, "library.sqlite");
   const db = new Database(path, { create: true, strict: true });
   db.exec(`CREATE TABLE looks (id TEXT PRIMARY KEY, created_at TEXT NOT NULL);
     CREATE TABLE look_revisions (look_id TEXT NOT NULL REFERENCES looks(id), revision INTEGER NOT NULL,

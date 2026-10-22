@@ -3,13 +3,13 @@
 // registry. Built the same way here, the worker must start and answer. Without the game's Oodle library it reports why, and the decoder
 // answers `unavailable`, so resources fall back to WolvenKit. With XFS_RESOLVER_GAME_ROOT set, it also decodes a real resource.
 import { afterAll, expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readdirSync, readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { NATIVE_ROOTS, nativeReaderIdentity, openNativeDecoderAsync } from "../../src/native/native-fetch-port";
 import { WorkerDecoder } from "../../src/native/native-decode";
+import { tempDir } from "../../tests/temp-dir";
 
-const directory = mkdtempSync(resolve(tmpdir(), "xfs-native-worker-"));
+const directory = tempDir("xfs-native-worker-");
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
 const source = (name: string) => readFileSync(resolve(import.meta.dir, "..", name), "utf8");
 

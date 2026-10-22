@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CharacterDetailActions, type CharacterDetailPort, type HostCharacterState } from "../src/character/character-detail-actions";
 import { CHARACTER_REQUEST_SCHEMA, characterRequestFor, characterRequestFromSave, type CharacterRequest } from "../src/character/character-detail-request";
@@ -17,6 +16,7 @@ import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 
 import { namedCore } from "./fixtures/named-targets";
+import { tempDir } from "./temp-dir";
 // Application-level save switching (A → B → A) over records the real preparation produced from the
 // synthetic installation (character-detail-fixtures.ts), never from the private saves.
 
@@ -43,7 +43,7 @@ const savedV = (request: Extract<CharacterRequest, { source: "save" }>, morphs: 
   perspectives: [], tags: [], evidence: { nodeName: "appearance", nodeBytes: 1, bytesRead: 1, trailingBytes: 0, chunks: 1, decompressedBytes: 1 } } as SavedV);
 
 test("switching A → B → A replaces the whole character, and the makeup draft and library are untouched", async () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-switch-"));
+  const root = tempDir("xfs-switch-");
   try {
     const records = new Map<string, CharacterDetail>();
     const prepare = async (request: CharacterRequest) => {

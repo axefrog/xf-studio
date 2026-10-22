@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { type BakedRecord } from "../src/legacy/eye-makeup/export/host/package-bake";
 import { describePackageOmissions, OFF_PLATE_REASON } from "../src/legacy/eye-makeup/export/package-filter";
@@ -18,6 +17,7 @@ import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlat
 import { initialRecipe } from "./fixtures/eye-region";
 import { mottlePreset, type Mottle } from "../src/engines/layered-makeup/mottle";
 import { bakeCollection, preparePackageCollection, preflightPackageCollection, presetReachesPlate } from "./fixtures/eye-exporter";
+import { tempDir } from "./temp-dir";
 
 /** A synthetic plate with UVs over the built-in plate's lid area (stored U .3–.7, V .7–.8; authored v .2–.3). */
 const PLATE = withPlateUvs(derivePlateDocuments(fixtureHeadMesh(), fixtureHeadMorph(), fixtureRecipe(), "xfs\\eye_plate\\xfs_eye_plate.mesh"), plateLikeUv);
@@ -106,7 +106,7 @@ const UV = expectedUvConstants(expectedWindow(SAMPLES.bounds));
 
 /** A one-preset collection on the lids (or `layer`), baked into the built-in plate's window; returns the map and reference as the verifier reads them. */
 async function bakeLid(mirror: boolean, layer: Layer = lid()) {
-  const dir = mkdtempSync(join(tmpdir(), "xfs-plate-reach-")), value = collection(recipe(layer));
+  const dir = tempDir("xfs-plate-reach-"), value = collection(recipe(layer));
   try {
     if (mirror) {
       writeFileSync(join(dir, "collection.json"), JSON.stringify(value));
@@ -205,7 +205,7 @@ test("PIPE-39: no offset is estimated from too little content or too weak an edg
 }, 60_000);
 
 test("PIPE-34: a bake without a window plans every preset on head UV, as its maps are", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "xfs-oracle-bake-"));
+  const dir = tempDir("xfs-oracle-bake-");
   try {
     const shimmer = { ...lid(), finish: "shimmer", optics: { model: "game-matched-1" } } as Layer;
     const { plan, records } = await bakeCollection(collection(recipe(lid()), recipe(shimmer)), dir);

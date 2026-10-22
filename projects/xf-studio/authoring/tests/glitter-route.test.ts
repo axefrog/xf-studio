@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 // Test-only use of the builder side (bake, mip and resource code): it writes the supplied chains and resources that
 // the independent verifier must accept, and the tampered copies it must refuse.
@@ -24,6 +23,7 @@ import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlat
 import { encodedBc4, plateWindow, storedBc4 } from "./window-fixture";
 import { presetCoverage } from "./fixtures/eye-region";
 import { compileGlitterPreset, mirrorCatalogue, bakeCollection, preparePackageCollection } from "./fixtures/eye-exporter";
+import { tempDir } from "./temp-dir";
 
 // Asset-free: a synthetic plate with plate-like UVs, Satin pigment rectangles and generated flakes.
 const CUT = withPlateUvs(derivePlateDocuments(fixtureHeadMesh(), fixtureHeadMorph(), fixtureRecipe(), "xfs\\eye_plate\\xfs_eye_plate.mesh"), plateLikeUv);
@@ -248,12 +248,12 @@ function rg8(levels: readonly Uint8Array[], dims: { width: number; height: numbe
 
 type Plan = ReturnType<typeof planCollection>;
 const BAKED = (() => {
-  const dir = mkdtempSync(resolve(tmpdir(), "xfs-glitter-bake-")), packaged = JSON.parse(JSON.stringify(preparePackageCollection(collection()).packaged));
+  const dir = tempDir("xfs-glitter-bake-"), packaged = JSON.parse(JSON.stringify(preparePackageCollection(collection()).packaged));
   return { dir, packaged, result: bakeCollection(packaged, join(dir, "baked"), undefined, { window: WINDOW.window }) };
 })();
 
 async function makeBuild(mutate?: (d: { mesh: any; plan: Plan }) => void, tamper?: (build: string, plan: Plan) => void) { // eslint-disable-line @typescript-eslint/no-explicit-any
-  const { plan, records } = await BAKED.result, build = mkdtempSync(resolve(tmpdir(), "xfs-glitter-build-"));
+  const { plan, records } = await BAKED.result, build = tempDir("xfs-glitter-build-");
   cpSync(join(BAKED.dir, "baked"), join(build, "baked"), { recursive: true });
   const sourceMesh = { renderResourceBlob: CUT.mesh.Data.RootChunk.renderResourceBlob, boneNames: [cname("root")], boneRigMatrices: [], boundingBox: {},
     appearances: [], materialEntries: [], localMaterialBuffer: {} };
@@ -414,7 +414,7 @@ test("glitter tampering fails: accent constants and binding, supplied chains, BO
 }, 600_000);
 
 test("PIPE-76: two bakes of the same collection are identical in every channel, the references and the records", async () => {
-  const first = await BAKED.result, dir = mkdtempSync(resolve(tmpdir(), "xfs-glitter-rebake-"));
+  const first = await BAKED.result, dir = tempDir("xfs-glitter-rebake-");
   try {
     const second = await bakeCollection(JSON.parse(JSON.stringify(BAKED.packaged)), dir, undefined, { window: WINDOW.window });
     const files = (records: typeof first.records) => records.flatMap(r => [...r.maps.map(m => [m.file, m.sha256]),

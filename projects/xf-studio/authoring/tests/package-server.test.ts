@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { createPackageHandler, LOCAL_BUILD_ENV_REASONS, LOCAL_BUILD_REASONS, localBuildIssue, localEyePlate, localPackageAdapter, localPackageTools, localPlateRouteKey, packageRequestSettings, SETUP_UNREADABLE_MESSAGE,
   type PackageTools } from "../src/host/package-server";
@@ -20,6 +19,7 @@ import { withGlitterKnob } from "./glitter-knob-fixture";
 import { preparePackageCollection } from "./fixtures/eye-exporter";
 import { FOOTPRINT } from "./fixtures/product-fixture";
 import { CHECK_BUILD_DECIDES_NOTE, CHECK_MASCULINE_NOTE } from "../src/features/eye-makeup/export";
+import { tempDir } from "./temp-dir";
 
 const fixture = JSON.parse(readFileSync(resolve(import.meta.dir, "../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
 const url = "http://127.0.0.1:4317/api/package";
@@ -115,7 +115,7 @@ test("check and build both refuse a wholly unsupported collection before any bui
 });
 
 test("the package server resolves local settings for each request", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "xfs-package-settings-"));
+  const directory = tempDir("xfs-package-settings-");
   try {
     const store = new LocalSettingsStore(directory);
     const seen: string[] = [];
@@ -136,7 +136,7 @@ test("the package server resolves local settings for each request", async () => 
 });
 
 test("PIPE-134: Build's setup reasons are plain, with one next step, and never name a script, an override or a path", () => {
-  const directory = mkdtempSync(join(tmpdir(), "xfs-package-reasons-"));
+  const directory = tempDir("xfs-package-reasons-");
   try {
     const wolvenkit = join(directory, "WolvenKit.CLI.exe"), game = join(directory, "game");
     writeFileSync(wolvenkit, "");
@@ -160,7 +160,7 @@ test("PIPE-134: Build's setup reasons are plain, with one next step, and never n
 });
 
 test("PIPE-134: a path an environment variable supplied is named as such, since choosing or clearing the setting would not help", () => {
-  const directory = mkdtempSync(join(tmpdir(), "xfs-package-env-reasons-"));
+  const directory = tempDir("xfs-package-env-reasons-");
   try {
     const wolvenkit = join(directory, "WolvenKit.CLI.exe"), game = join(directory, "game");
     writeFileSync(wolvenkit, "");
@@ -181,7 +181,7 @@ test("PIPE-134: a path an environment variable supplied is named as such, since 
 });
 
 test("PIPE-33: Check plans on the plate the cache last prepared for this game, route and head choice", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "xfs-package-plate-reach-"));
+  const directory = tempDir("xfs-package-plate-reach-");
   try {
     // A prepared plate in the private cache: its status, manifest and UV footprint (a synthetic plate over the lids).
     const cacheRoot = join(directory, "cache"), game = join(directory, "game"), name = "xfs-expanded-eye-plate-r1-fixture";
@@ -245,7 +245,7 @@ test("PIPE-70: a posted collection's glitter knob gives no glitter route and no 
 });
 
 test("unreadable Local setup: Check still answers with the defaults, Build answers a plain JSON refusal (PIPE-94)", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "xfs-package-settings-"));
+  const dir = tempDir("xfs-package-settings-");
   try {
     const store = new LocalSettingsStore(dir);
     writeFileSync(store.file, "{ damaged");

@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { LOCAL_BUILD_REASONS, localEyePlate, localPackageAdapter, type PackageTools } from "../src/host/package-server";
 import { runProductBuild } from "../src/platform/export/product-host";
 import { STUDIO_EXPORTERS } from "../src/compose/exporters";
 import { EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
 import type { EyePlateTools } from "../src/legacy/eye-makeup/plate/host/eye-plate-service";
+import { tempDir } from "./temp-dir";
 
 const noHead: EyePlateTools = {
   async extract() { /* The game's content archives contain no head resource. */ },
@@ -16,7 +16,7 @@ const noHead: EyePlateTools = {
 const fixture = JSON.parse(readFileSync(resolve(import.meta.dir, "../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
 
 test("localhost Build prepares the built-in plate before starting the builder", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "xfs-package-plate-"));
+  const dir = tempDir("xfs-package-plate-");
   try {
     const game = join(dir, "game"), cli = join(dir, "WolvenKit.CLI.exe");
     mkdirSync(join(game, "bin", "x64"), { recursive: true });

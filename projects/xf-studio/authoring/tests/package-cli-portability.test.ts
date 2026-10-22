@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { tempDir } from "./temp-dir";
 
 const app = join(import.meta.dir, "..");
 const hq = join(app, "../../..");
@@ -10,7 +10,7 @@ const fixture = join(hq, "experiments", "005-preset-collection", "editor-collect
 const text = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 
 test("CLI Check accepts host-supplied roots and confines output to its private dist root", () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-portable-cli-"));
+  const root = tempDir("xfs-portable-cli-");
   const work = join(root, "work");
   const dist = join(root, "dist");
   mkdirSync(work);
@@ -33,7 +33,7 @@ test("CLI Check accepts host-supplied roots and confines output to its private d
 });
 
 test("Build refuses a game destination before writing and accepts separate private roots", () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-private-roots-"));
+  const root = tempDir("xfs-private-roots-");
   try {
     const work = join(root, "work"), game = join(root, "game"), plate = join(root, "plate"), tools = join(root, "tools");
     for (const path of [work, game, plate, tools]) mkdirSync(path);
@@ -83,7 +83,7 @@ test("Build refuses a game destination before writing and accepts separate priva
 }, 60_000);
 
 test("a linked output directory cannot escape the dist root", () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-linked-output-"));
+  const root = tempDir("xfs-linked-output-");
   try {
     const dist = join(root, "dist"), outside = join(root, "outside"), work = join(root, "work");
     for (const path of [dist, outside, work]) mkdirSync(path);

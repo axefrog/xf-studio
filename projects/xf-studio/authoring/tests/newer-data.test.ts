@@ -7,8 +7,7 @@
  * schema that holds them, so older builds read them.
  */
 import { afterAll, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { DesktopWorkspaceStore, desktopWorkspaceStartFresh } from "../desktop/workspace-store";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
@@ -25,9 +24,10 @@ import { historyRecipes } from "./fixtures/looks";
 import { fixedId, smallWorkspaceV1 } from "./fixtures/workspace-v1-fixtures";
 import { EYE_MAKEUP_LAYER_MODELS, RecipeModelRegistry as LayerModelRegistry, readRecipe as parseRecipe } from "../src/legacy/eye-makeup/recipe-schema";
 import { initialRecipe } from "./fixtures/eye-region";
+import { tempDir } from "./temp-dir";
 
 const EYE = "eye-makeup", NEWER_PART = "xfs/eye-makeup-part-9";
-const root = mkdtempSync(resolve(tmpdir(), "xfs-newer-data-"));
+const root = tempDir("xfs-newer-data-");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 /** The small fixture as this build stores it (workspace-2), through JSON. */

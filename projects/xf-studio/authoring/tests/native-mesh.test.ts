@@ -3,8 +3,7 @@
 // geometry message, the native-first exporter and a mutation fuzz. Synthetic data only; the real-data comparison with WolvenKit's GLBs
 // is tools/native-mesh-oracle.ts (knowledge/archive-format.md §12).
 import { afterAll, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { depotHash } from "../src/game/depot-path";
 import { archiveExportSource, type ExportAnswer, type ExportRequest, type GameAssetExporter } from "../src/game/host/game-asset-export";
@@ -24,10 +23,11 @@ import { InProcessDecoder, WorkerDecoder } from "../src/native/native-decode";
 import { classifyNativeFailure } from "../src/native/native-errors";
 import { fakeDecompress, syntheticArchive } from "./fixtures/native-archive";
 import { Bytes, Cr2wBuilder, prop, v, type Prop } from "./fixtures/native-cr2w";
+import { tempDir } from "./temp-dir";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
-const tempRoot = () => { const root = mkdtempSync(join(tmpdir(), "xfs-native-mesh-")); roots.push(root); return root; };
+const tempRoot = () => { const root = tempDir("xfs-native-mesh-"); roots.push(root); return root; };
 const f = Math.fround;
 
 // ---------------------------------------------------------------------------------------------------------------------------------

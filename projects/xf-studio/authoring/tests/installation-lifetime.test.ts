@@ -1,7 +1,6 @@
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { lstat } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { installationFingerprint, type CharacterDetailSettings } from "../src/character/host/character-detail-host";
 import { depotHash, refFromPath } from "../src/game/depot-path";
@@ -10,6 +9,7 @@ import { InstallationRegistry, installations } from "../src/game/host/installati
 import { openInstallation, type Installation, type InstallationOptions } from "../src/game/host/resolver-host";
 import { pathStamp } from "../src/game/host/source-discovery";
 import { cr2w } from "./resolver-fixtures";
+import { tempDir } from "./temp-dir";
 
 /**
  * How long an opened installation and its graphs live (prepare speed review, `88b5379`): an evicted route still notices a change
@@ -20,7 +20,7 @@ import { cr2w } from "./resolver-fixtures";
 const roots: string[] = [];
 afterEach(() => installations.clear());
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
-const temporary = () => { const root = mkdtempSync(join(tmpdir(), "xfs-lifetime-")); roots.push(root); return root; };
+const temporary = () => { const root = tempDir("xfs-lifetime-"); roots.push(root); return root; };
 const put = (path: string, content: string | Uint8Array) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, content); };
 function rdar(paths: string[]): Uint8Array {
   const indexOffset = 64, indexSize = 28 + paths.length * 56;

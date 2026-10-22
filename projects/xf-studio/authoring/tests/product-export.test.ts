@@ -5,8 +5,7 @@
  * reader for versions 1 and 2.
  */
 import { afterAll, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { runProductCommand } from "../src/platform/export/product-builder";
 import { checkProducts } from "../src/platform/export/product-check";
@@ -21,9 +20,10 @@ import { packagePlateRecord, type EyePlateManifest } from "../src/legacy/eye-mak
 import { plateReachInput } from "../src/legacy/eye-makeup/export/host/plate-uv-footprint-io";
 import { eyeEntry, fakeEyeVerifier, fakeTools, fakeVerifierTools, FOOTPRINT, LIPS, LIPS_ENTRY, LIPS_EXPORTER, sha, writePlate } from "./fixtures/product-fixture";
 import type { FeatureVerifier } from "../src/platform/api";
+import { tempDir } from "./temp-dir";
 
 const fixture = JSON.parse(readFileSync(resolve(import.meta.dir, "../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
-const root = realpathSync.native(mkdtempSync(join(tmpdir(), "xfs-product-export-")));
+const root = realpathSync.native(tempDir("xfs-product-export-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 const OTHER = "11111111-2222-4333-8444-555555555555";
 const key = (id: string) => id.replaceAll("-", "");

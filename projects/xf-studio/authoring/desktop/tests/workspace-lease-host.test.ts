@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { DESKTOP_LEASE_SCHEMA, DesktopWorkspaceLeases } from "../workspace-lease-host";
 import { formatFence, WORKSPACE_FENCE_HEADER } from "../../src/platform/api/document-store";
+import { tempDir } from "../../tests/temp-dir";
 
 /** A page's stream, read line by line. */
 async function page(leases: DesktopWorkspaceLeases, id: string) {
@@ -66,14 +67,13 @@ test("a withdrawn takeover leaves the queue, so the holder's next release grants
 });
 
 test("a workspace write that stalls in transit is fenced again at the save: a handover in between refuses it", async () => {
-  const { mkdtempSync, rmSync } = await import("node:fs");
-  const { tmpdir } = await import("node:os");
+  const { rmSync } = await import("node:fs");
   const { join } = await import("node:path");
   const { DesktopWorkspaceStore, desktopWorkspaceRequest } = await import("../workspace-store");
   const { serializeWorkspace } = await import("../../src/app/workspace/workspace-state");
   const { STUDIO_DOCUMENTS } = await import("../../src/compose/studio-registry");
   const { freshWorkspace } = await import("../../tests/fixtures/eye-region");
-  const root = mkdtempSync(join(tmpdir(), "xfs-fence-"));
+  const root = tempDir("xfs-fence-");
   try {
     let issued = 0;
     const leases = new DesktopWorkspaceLeases(() => ++issued, 60_000), store = new DesktopWorkspaceStore(root, STUDIO_DOCUMENTS);

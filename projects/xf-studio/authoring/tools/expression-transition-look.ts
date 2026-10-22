@@ -15,7 +15,7 @@
  *
  *   bun tools/expression-transition-look.ts <out dir> [port]
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { launch, startServer } from "./cdp";
@@ -222,6 +222,7 @@ try {
   // own, with the Studio's stylesheet, over a fake view context with no facial preview. ----
   const harness = resolve(tmpdir(), `xfs-transition-harness-${Date.now()}`);
   mkdirSync(harness, { recursive: true });
+  process.once("exit", () => rmSync(harness, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const drawerPath = resolve(import.meta.dir, "..", "src", "features", "expressions", "view", "drawer.ts").replaceAll("\\", "/");
   writeFileSync(resolve(harness, "entry.ts"), `import { expressionDrawer } from "${drawerPath}";
     const ctx = { facade: { view: () => ({ part: { controls: {}, links: {} } }), editable: () => ({ available: true }), controlBegin: () => true,

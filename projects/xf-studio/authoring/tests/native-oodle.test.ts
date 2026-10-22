@@ -5,11 +5,11 @@
 // (XFS_RESOLVER_GAME_ROOT).
 import { afterAll, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { authenticodeSignature, authenticodeSignatureSync, GAME_OODLE_LIBRARY, holdFile, isPublisherSignature, KNOWN_OODLE_SHA256, loadGameOodle, openGameOodle, OodleUnavailableError, subjectField } from "../src/native/oodle";
 import { oracleTest } from "./optional-oracles";
+import { tempDir } from "./temp-dir";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
@@ -29,7 +29,7 @@ test("the signer check needs a valid signature by CD PROJEKT S.A. on exactly the
 });
 
 function fakeGame(bytes: Uint8Array): { root: string; dll: string } {
-  const root = mkdtempSync(join(tmpdir(), "xfs-oodle-")); roots.push(root);
+  const root = tempDir("xfs-oodle-"); roots.push(root);
   const folder = join(root, ...GAME_OODLE_LIBRARY.slice(0, -1));
   mkdirSync(folder, { recursive: true });
   const dll = join(folder, GAME_OODLE_LIBRARY.at(-1)!);
@@ -76,7 +76,7 @@ onWindows("while held for checking, the library cannot be renamed, replaced or d
 
 /** A game folder whose `bin` is a junction to `real/bin`, and a second library under `other/bin` to repoint it at. */
 function junctionGame(): { root: string; real: string; repoint: () => void } {
-  const base = mkdtempSync(join(tmpdir(), "xfs-oodle-junction-")); roots.push(base);
+  const base = tempDir("xfs-oodle-junction-"); roots.push(base);
   const library = (folder: string, text: string) => {
     const path = join(base, folder, ...GAME_OODLE_LIBRARY);
     mkdirSync(dirname(path), { recursive: true });

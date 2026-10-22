@@ -1,6 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createDesktopServer, smokeMessage } from "../server";
 import { desktopVersionFromMetadata } from "../host";
@@ -13,11 +12,12 @@ import { STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
 import { createPackageHandler, localPackageAdapter, localPackageTools } from "../../src/host/package-server";
 import { STUDIO_EXPORTERS } from "../../src/compose/exporters";
 import { defaultLocalSettings } from "../../src/setup/local-settings";
+import { tempDir } from "../../tests/temp-dir";
 
 const collectionFixture = JSON.parse(readFileSync(resolve(import.meta.dir,
   "../../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
 
-const root = mkdtempSync(resolve(tmpdir(), "xfs-desktop-test-"));
+const root = tempDir("xfs-desktop-test-");
 const staticRoot = resolve(root, "static");
 mkdirSync(resolve(staticRoot, "build"), { recursive: true });
 writeFileSync(resolve(staticRoot, "index.html"), "<!doctype html><title>Studio</title>");
@@ -429,7 +429,7 @@ test("the desktop host serves diagnostics behind its session and logs to its dat
 });
 
 test("the desktop serves Add to my mod manager and its folder picker behind its session, with plain answers (UI-82, UI-83)", async () => {
-  const pickRoot = mkdtempSync(resolve(tmpdir(), "xfs-desktop-pick-"));
+  const pickRoot = tempDir("xfs-desktop-pick-");
   const picked: (string | null)[] = [];
   const host = createDesktopServer(staticRoot, resolve(pickRoot, "data"), { version: "0.0.1", channel: "dev", buildHash: "dev", metadataStatus: "ready" },
     undefined, undefined, undefined, undefined, undefined, { pickFolder: async start => { picked.push(start); return "E:\\Games\\Cyberpunk 2077"; } });
@@ -451,7 +451,7 @@ test("the desktop serves Add to my mod manager and its folder picker behind its 
 });
 
 test("?verify on the desktop edits its own copy of the settings and never adds a mod (INSTALL-01, UI-98)", async () => {
-  const verifyRoot = mkdtempSync(resolve(tmpdir(), "xfs-desktop-verify-"));
+  const verifyRoot = tempDir("xfs-desktop-verify-");
   const data = resolve(verifyRoot, "data");
   // Absolute on this OS: a drive path is absolute only on Windows.
   const game = resolve(verifyRoot, "Cyberpunk 2077"), testGame = resolve(verifyRoot, "Test game");

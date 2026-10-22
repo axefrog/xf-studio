@@ -6,16 +6,16 @@
  */
 import { afterEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, rmSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { checkpointDone, checkpointInWorker, checkpointLibrary, LIBRARY_FLUSH, LibraryDurability, useWriteAheadLog, WAL_AUTOCHECKPOINT_PAGES } from "../src/platform/persistence/library-durability";
 import { ManualClock } from "./fixtures/platform-doubles";
 import { openTestLibrary } from "./fixtures/library-file";
 import { initialRecipe } from "./fixtures/eye-region";
+import { tempDir } from "./temp-dir";
 
 const folders: string[] = [];
-function library(): string { const dir = mkdtempSync(join(tmpdir(), "xfs-durability-")); folders.push(dir); return join(dir, "library.sqlite"); }
+function library(): string { const dir = tempDir("xfs-durability-"); folders.push(dir); return join(dir, "library.sqlite"); }
 afterEach(() => { for (const dir of folders.splice(0)) try { rmSync(dir, { recursive: true, force: true }); } catch { /* closing */ } });
 
 /** A durability on simulated time whose flushes are recorded (and fail while `fail` says so). */
