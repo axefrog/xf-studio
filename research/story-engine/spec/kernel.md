@@ -1,8 +1,8 @@
 # S0. Kernel specification
 
-**Status:** v2, 22 October 2026. This is the specification stage of the [foundation](../foundation.md): exactly how the dimensional model works, so the reference model can be built from this page alone. It is work package [WP-05](../plan.md#82-work-packages).
+**Status:** v3, final for the first implementation, 22 October 2026. This is the specification stage of the [foundation](../foundation.md): exactly how the dimensional model works, so the reference model can be built from this page alone. It is work package [WP-05](../plan.md#82-work-packages).
 
-v2 takes in two independent review rounds. The [review record](#18-review-record) lists what changed and why. What the first implementation includes is settled in [§0.2](#02-the-first-implementation). One more review round is allowed ([D-17](../decisions.md)).
+v3 takes in three independent review rounds. The [review record](#18-review-record) lists what changed and why. What the first implementation includes is settled in [§0.2](#02-the-first-implementation), and that scope is final ([D-19](../decisions.md)).
 
 **Normative words:**
 - **MUST** and **MUST NOT** are requirements.
@@ -69,6 +69,8 @@ Deferred items are named in the text where they apply, and are recorded as compr
 | Frame suspension under budget | Queued work pauses; frame status and interests are unchanged (§10.4) |
 | Fine-grained cache dependency tracking | Cache keyed by revision and query time (§5.5) |
 | Processes with different base periods | One shared simulation window. Processes run every n-th window (§9.4) |
+| Function-specific query bounds (`Bound`) | Optional; without one, the verdict is `maybe` (§2.1, §8.2) |
+| Reasoning about "opposite" effects in the conflict table | Explicit violation pairs only (§10.8) |
 
 ## 1. Identity, arithmetic and randomness
 
@@ -99,7 +101,7 @@ Every `Id` is reproducible from its header. Moving a node changes its edges, nev
 | `0x05` | bool | One byte |
 | `0x06` | `Value` | Its canonical encoding (§2.1), then `0x00` |
 
-`toUnit(h) = (bits₅₃(h) + 0.5) / 2^53`, where `bits₅₃` is the first 53 bits as an unsigned integer. The result is in the open interval (0, 1), so `ln` never sees 0 or 1.
+`toUnit(h) = (bits₅₂(h) + 0.5) / 2^52`, where `bits₅₂` is the first 52 bits as an unsigned integer. Every step is exact in binary64, and the result lies strictly inside (0, 1), so `ln` never sees 0 or 1.
 
 ### 1.3 Arithmetic
 
@@ -108,7 +110,7 @@ Determinism across implementations (I-1) needs identical arithmetic:
 - **`ln`** is fdlibm's `e_log.c` ([netlib](https://netlib.org/fdlibm/e_log.c)), ported literally: the same constants and the same operation order. Platform `Math.log` and `f64::ln` MUST NOT be used for kernel decisions. The kernel needs no `exp`.
 - **Falloff kernels are polynomials** (§4.3).
 - **Sums run in canonical order:** contributions by `Id` ascending.
-- **Each weight factor is normalised** over the feasible set before its `ln` is taken: divided by its maximum over `F`, so its maximum becomes exactly 1. Scaling a factor uniformly is therefore exactly invisible (I-7).
+- **Each weight factor is normalised** over the feasible set before its `ln` is taken: divided by its maximum over `F`. Scaling a factor uniformly is then invisible mathematically. In binary64, rounding can differ at the edges, so tests check the specified computation, not exact invariance (I-7).
 - **Outcome comparisons are exact.** Ties are broken as each rule states.
 
 **What is exact.** The draw (§5.4) samples the specified distribution mathematically. The implementation reproduces the same finite-precision computation bit for bit; it does not promise mathematical exactness beyond that.
@@ -150,7 +152,7 @@ type ValueType =
 ```
 
 - **`N_enum`** is the largest domain one draw may enumerate: **[tunable 4096]**. An `enum-by` list longer than `N_enum` is rejected at schema load.
-- **`vec` and `text`** are never drawn by the generic sampler. They are derived, mirrored, or set by pins.
+- **`vec` and `text`** are never drawn by the generic sampler. Their slots are `derived`, `mirrored` or `assigned`.
 - **Canonical value encoding:**
   - `enum` and `enum-by`: the value's string;
   - `int`: i64;
@@ -171,7 +173,7 @@ type Buckets     = (value: Value, params) => string[];
 type Bound       = (inputBounds: Region[], params) => Region;                   // conservative, for queries
 ```
 
-Every `Derive` used by a queried slot MUST provide a `Bound`. Function versions are part of the compatibility record (§14.4).
+A `Derive` MAY provide a `Bound`. Without one, its query verdict is `maybe`. Function versions are part of the compatibility record (§14.4).
 
 ### 2.2 Kinds
 
@@ -188,7 +190,7 @@ interface SlotDef {
   key: string;                         // [a-z0-9-]+
   dim: DimId;
   card: 'one' | { many: { count: DimId } };       // the count is the slot '<key>#count'
-  mode: 'sampled' | 'derived' | 'mirrored';
+  mode: 'sampled' | 'derived' | 'mirrored' | 'assigned';   // assigned: value comes only from value pins
   derive?: { fn: FnRef; inputs: SlotPath[]; preimage?: FnRef };  // preimage only for one input
   conditioned?: { fn: FnRef; inputs: SlotPath[] };
   temporal?: { window: number };       // simulated temporal slots only (§6.3)
@@ -198,7 +200,9 @@ interface SlotDef {
 type Tier = 0 | 1 | 2 | 3 | 4 | 5;     // city, district, block, scene, individual, fine detail
 ```
 
-`mirrored` slots are read from the game for mirrored nodes. The same slot on a generated or minted node is `sampled`, or `derived` if it has a `derive`.
+`mirrored` slots are read from the game for mirrored nodes. The same slot on a generated or minted node is `sampled`, `derived` (if it has a `derive`) or `assigned` (if its dimension is `vec` or `text`).
+
+`assigned` slots are never drawn. Their value is supplied by value pins, from processes, seeds or authors (§5.1).
 
 ### 2.3 Dependencies are well-founded
 
@@ -265,7 +269,7 @@ core:person      facets: actor
                  slots: name (node core:name), age (int 16..90),
                         age-band (int, derived from age; preimage: the band's 10 ages),
                         traits (many node core:trait), drives (many node core:drive-state),
-                        position (vec 3; mirrored for mirrored people, otherwise pinned by simulation), place (ref core:place)
+                        position (vec 3; mirrored for mirrored people, otherwise assigned by simulation), place (ref core:place)
 core:group       facets: actor, group   slots: name (node core:name), drives (many node core:drive-state)
 core:place       facets: place          slots: position (vec 3), district (ref core:place), public (enum)
 core:event       facets: event          (§9.2)
@@ -408,7 +412,8 @@ Every step is deterministic, and resolution never emits relevance (I-13).
 
 1. **Derived slots** return `derive(inputs)`, after resolving the inputs. A pin on a derived slot constrains its inputs through §6.4, and is checked here: if the result violates an active pin, the status is `contradiction`.
 2. **Mirrored slots of mirrored nodes** return the game's reading in effect at `t`: the latest reading at or before `t` (§6.3). If there is no reading, the result is `unavailable`.
-3. **Every other slot** goes through arbitration (§5.2), weights (§5.3) and the draw (§5.4).
+3. **Assigned slots** go through arbitration (§5.2) with every value pin and constraint. The value is that of the first active value pin in arbitration order. With no active value pin, the result is `unavailable`.
+4. **Every other slot** goes through arbitration (§5.2), weights (§5.3) and the draw (§5.4).
 
 ### 5.2 Constraint arbitration
 
@@ -460,7 +465,7 @@ Exact ties go to the lower `H("tie", worldSeed, node.id, slotPath, k, v)`.
 
 The draw samples from the normalised distribution `∝ exp(score)`. With fixed per-value noise:
 - changing one value's weight changes the result only if that value was the winner or becomes it;
-- scaling any factor uniformly changes nothing (I-7).
+- scaling a factor uniformly changes nothing mathematically. The binary64 computation may differ at rounding edges, so I-7 is tested on the specified computation.
 
 **Cost.** Noise depends only on (node, slot, window, value). An implementation MAY cache it across re-resolutions; the reference model computes it fresh.
 
@@ -490,7 +495,7 @@ interface Pin {
 }
 ```
 
-A pin is a hard constraint at its precedence, in effect over `valid`. It is history. It is removed only by its source's withdrawal or the loss of its save branch (§6.6).
+A pin is a hard constraint at its precedence, in effect over the half-open interval `[valid.from, valid.to)`. It is history. It is removed only by its source's withdrawal or the loss of its save branch (§6.6).
 
 ### 6.2 Enduring slots
 
@@ -500,7 +505,7 @@ A slot without `temporal`, and not mirrored, has one value for the node's life. 
 
 There are two kinds of time-varying slot.
 
-**Mirrored slots are timelines of readings.** Each game reading of a mirrored slot (on a mirrored node) is a pin with reason `game`, valid from the reading's time until the next reading of that slot, with no fixed windows. Resolution at `t` uses the reading in effect at `t` (§5.1, step 2).
+**Mirrored slots are timelines of readings.** Each game reading of a mirrored slot (on a mirrored node) is a pin with reason `game`, valid over `[its time, the next reading's time)`, with no fixed windows. Readings with equal timestamps are ordered by `Id`, and the last one wins. When a later reading ends a retained reading or observation, the end is recorded as a `PinEnded` operation, even if the later reading itself isn't persisted (§14.2). Resolution at `t` uses the reading in effect at `t` (§5.1, step 2).
 
 V's observation of a mirrored value is an `observed` pin over the same interval as the reading it saw. So "V saw rain at 1,000" and "V saw clear skies at 2,000" are two consecutive intervals, not a conflict.
 
@@ -517,7 +522,7 @@ Joint inverses are deferred ([C-05](#17-compromises-and-open-items)).
 ### 6.5 Structural constraints
 
 Some constraints hold whatever any source says, so they take precedence 700:
-- **Retained members stay in their collection.** If member `i` of a `many` slot is retained (§7.3) for any reason, the count gets `count ≥ i + 1`. A smaller count from any source is rejected.
+- **Retained members stay in their collection.** While member `i` of a `many` slot is retained by a current root (§7.3), the count gets `count ≥ i + 1`. A smaller count from any source is rejected. When nothing retains the member any more, the constraint lapses.
 - **Summaries never shrink below their canon items:** `count ≥ max(canon) + 1` (§9.3).
 
 ### 6.6 Withdrawing pins
@@ -538,14 +543,21 @@ A pin is removed only by a recorded withdrawal from the source that created it, 
 
 Forgetting is mark and sweep, run between ticks as a worklist (§10.7).
 
-**The roots:**
-- every persisted record (§14.1) and every `Id` field it holds: pins, edges, contributions, beliefs (subject, evidence, sources), canon events, summaries, seed states, frames, process states;
-- the nodes in the focus of active or blocked frames;
+**The roots are current semantic facts,** not supporting records:
+- pins in effect now, or observed, or committed;
+- edges that haven't ended, and ended edges referenced by a canon event;
+- memorable beliefs;
+- canon events and the canon items of summaries;
+- live seeds;
+- active and blocked frames of demand roots and live seeds, and every ancestor frame of those;
+- the nodes in those frames' focus;
 - the mirrored nodes the game currently has streamed in.
+
+Persisted headers, withdrawn pins and other history are not roots on their own.
 
 **Marking** follows every root's `Id` fields, origin chains (to owners and creators), and owned-value links in both directions.
 
-**Sweeping** discards unmarked nodes' in-memory state. A swept node regenerates identically while its constraints and contributions are unchanged (I-3). Retained nodes' headers are persisted, so they stay addressable.
+**Sweeping** discards unmarked nodes' in-memory state. A swept node regenerates identically while its constraints and contributions are unchanged (I-3). The headers of the marked closure are persisted, together with the complete records the closure needs, including ancestor frames (§14.1). Retained nodes therefore stay addressable.
 
 ## 8. Queries
 
@@ -574,7 +586,7 @@ interface Predicate {
 
 A predicate's verdict over a compound region comes from the region's pins and the bounds of applicable contributions (§4.3). A constraint that arbitration might reject narrows nothing. When in doubt, the verdict is `maybe`.
 
-The first implementation MAY return `maybe` for every compound region. Tight bounds and spatial pruning are deferred (§0.2).
+The first implementation MAY return `maybe` for every compound region. Tight bounds, spatial pruning and function-specific `Bound`s are deferred (§0.2).
 
 ### 8.3 Traversal
 
@@ -587,9 +599,10 @@ A query runs atomically, within the hard limits of §10.7, against one revision.
 5. **Check** every candidate that isn't pruned exactly: resolve it and evaluate each `must`. Score passing candidates by the sum of the `prefer` weights that hold.
 6. **Deduplicate** by `Id`.
 7. **Stop.**
-   - With `limit = n`: when `n` candidates are confirmed and no frontier entry's upper bound exceeds the `n`-th score. Score ties go to the lower `Id`.
+   - With `limit = n`: when `n` candidates are confirmed and every remaining frontier bound is strictly lower than the `n`-th score. Score ties go to the lower `Id`.
    - With `'all'`: when the frontier is empty.
-8. **Limits.** Hitting a hard limit returns `failed`, never a partial result presented as complete.
+8. **Limits.** Exhausting the query's work allowance (§10.7) returns `failed`, never a partial result presented as complete.
+9. **Summaries** within scope are expanded synchronously: their item descriptors (§9.3) are enumerated as candidates under the same allowance. Materialising an item is silent cache population.
 
 **Soundness (I-6).** Against a fixed revision:
 - `'all'` returns every in-scope node satisfying every `must`;
@@ -633,8 +646,7 @@ A summary is a minted node of kind `core:summary`:
 | `length` | int, seconds |
 | `scope` | ref to a place node |
 | `count` | int |
-| `materialised` | A set of indices, kept as data on the summary's persisted record |
-| `canon` | A set of indices, likewise |
+| `canon` | A set of indices, kept as data on the summary's persisted record |
 
 **Item `i`,** for `0 ≤ i < count`:
 - is minted with `creator = cause = S.id` and `name = "item:<i>"`;
@@ -642,7 +654,7 @@ A summary is a minted node of kind `core:summary`:
 - its `place` is drawn among the places under `scope`, with the candidates found as for a ref (§2.4) and the key `("item-p", S.id, i)`;
 - its other slots resolve normally.
 
-**Querying.** A query over a time or place region materialises exactly the items whose time and place fall inside it. Overlapping queries see the same items and nothing is counted twice.
+**Querying.** A query enumerates item descriptors (`Id`, time, place) and materialises the items whose time and place fall inside its region, as silent cache population. Overlapping queries see the same items, and nothing is counted twice. Only canon items are persisted.
 
 **Revisions.** A process may revise `count`, subject to the structural constraint (§6.5).
 
@@ -657,6 +669,7 @@ Simulation processes are S1's. The kernel defines when they run and what they ma
   3. Take the snapshot that processes starting at `t` read.
 
   Processes never see each other's outputs within a span (double buffering).
+- **Outstanding outputs are state.** A batch computed but not yet applied is part of the process's `ProcessState`, with its application boundary. It is persisted, restored on load under the new epoch, and applied at its boundary without re-running the process.
 - **Partition independence (I-15).** Given the same timestamped external operations and the same demand history, a process's history doesn't depend on how ticks fell.
 - **Catch-up.** After an absence, tiers 0–2 run every missed boundary in order, each within the hard limits.
 - **Fine tiers (3–5)** run only where demand reaches them (§10.6). They never catch up: when V arrives, their state is generated from the coarse state, consistent with the pins.
@@ -734,20 +747,26 @@ type Change =
 
 Cache fills, regeneration and save replay produce no changes.
 
-**Matching.** An interest selector `σ` matches change `x` when all of the following hold:
-1. **Kind:** `σ.kind`, if set, is the kind (or an ancestor kind) of one of `x`'s subjects. A change's subjects are:
-   - for a pin or reading: its node;
-   - for an edge: both endpoints;
-   - for an event: the event node, every participant's `who` and every effect's `on`;
-   - for a minted node: the node itself;
-   - for a contribution: every node its target selector can match. The reference model treats a contribution as matching an interest whose kind and scope overlap the target's, which may over-match.
-2. **Scope:** `σ.scope`, if set, contains one of the subjects.
-3. **Where:** `σ.where` holds for that subject, evaluated on new values. For ended edges and removals, it is evaluated on old values.
+**Matching.** A change has one or more **subject bindings**. Each binding is a subject node together with how it relates to the change:
+
+| Change | Bindings |
+|---|---|
+| Pin or reading | Its node, with `slot` = the pinned slot |
+| Edge | Each endpoint, with `role` = `from` or `to` and `edge` = the edge's type |
+| Event | The event node itself, its `place` (with `role` = `place`), each participant's `who` (with `role` = the participant's role), and each effect's `on` (with `role` = `target` and `effect` = the effect) |
+| Minted node | The node |
+| Contribution | Each node its target selector names by scope. The reference model treats any other target as matching interests whose kind and scope overlap it, which may over-match |
+
+An interest selector `σ` matches change `x` if **one binding** satisfies all of the following:
+1. **Kind:** `σ.kind`, if set, is the binding's kind or an ancestor of it.
+2. **Scope:** `σ.scope`, if set, contains the binding's node.
+3. **Slot:** if `σ.slot` is not `'*'`, the binding's `slot` equals it.
+4. **Where:** every `σ.where` predicate holds for the binding. Predicates read the binding's node, evaluated on new values (on old values for ended edges and removals). They may also test the binding's relation with the paths `@role`, `@effect` and `@edge`.
 
 **The first implementation scans every registered interest.** A routing index is deferred (§0.2).
 
 **Specificity `s(σ, x)`** **[calibrate]**:
-- 1.0 when the matched subject was named by `σ.scope.nodes`, or is an edge endpoint or participant matched by `Id`;
+- 1.0 when the matching binding's node was named by `σ.scope.nodes`, or by `Id` in `σ.where`;
 - 0.5 for kind or tag matches;
 - 0.3 for bucket matches, meaning `where` predicates on `buckets` keys.
 
@@ -769,12 +788,13 @@ Tiers are scheduling bands, not an ontology or a depth limit.
 
 ### 10.7 Work: hard limits and worklists
 
-**Atomic operations are bounded by hard limits** **[tunable]**. Hitting a limit returns `failed` for that operation and records a defect for inspection:
+**Atomic operations are bounded by one shared work allowance** **[tunable]**. Each outer operation (a resolution or a query) gets one counter. Nested resolutions, candidate queries, value enumeration, contribution evaluation and predicate tests all consume from it. Exhausting it returns `failed` for the outer operation and records a defect for inspection. The shape limits below also apply:
 
 | Atomic operation | Hard limits |
 |---|---|
 | A resolution | `N_enum` values; 256 applicable contributions; 64 points per field; dependency depth 32 |
 | A query | 50,000 frontier steps; 5,000 exact checks |
+| The shared allowance per outer operation | 200,000 units: one per value enumerated, contribution evaluated, predicate tested or frontier step |
 
 **Worklists are resumable and budgeted.** Each worklist runs in a fixed order, and stops and resumes deterministically:
 - relevance dispatch;
@@ -783,7 +803,7 @@ Tiers are scheduling bands, not an ontology or a depth limit.
 - summary materialisation;
 - process catch-up.
 
-The per-tick work budget is **[tunable; P7 measures it]**. It is counted in atomic operations and dispatched matches. Work for demand roots, and for the player's own actions, is taken first.
+The per-tick work budget is **[tunable; P7 measures it]**. It is counted in allowance units consumed, plus one unit per interest examined by relevance dispatch, whether or not the interest matches. Work for demand roots, and for the player's own actions, is taken first.
 
 ### 10.8 Effects and cross-pressure
 
@@ -794,7 +814,7 @@ The per-tick work budget is **[tunable; P7 measures it]**. It is counted in atom
 | Interest | Violated by |
 |---|---|
 | `protects X` | `harm`, `kill`, `take` or `expose` on X |
-| `wants Y` | `conceal` or `take` on Y, or the effect opposite the wanted one |
+| `wants Y` | `conceal` or `take` on Y |
 
 `help`, `protect`, `rescue`, `give` and `meet` violate nothing in it.
 
@@ -898,9 +918,9 @@ The trace is the complete account (I-8).
 - **Contributions** that packs can't reproduce: seeds, committed procedural decisions, runtime authored decisions. Pack contributions are reloaded, and the record keeps each pack's id and version.
 - **Memorable beliefs.**
 - **Canon events:** their headers and pinned fields.
-- **Summaries,** with their `materialised` and `canon` sets.
-- **Frames** of demand roots and live seeds.
-- **States:** seed states (S2), and process cursors and states (S1).
+- **Summaries,** with their `canon` sets.
+- **Frames:** those of demand roots and live seeds, and every ancestor frame they inherit from, whoever's it is.
+- **States:** seed states (S2), and process cursors and states (S1), including each process's outstanding output batches (§9.4).
 - **Lineage:** the world seed, plus schema and function versions (§14.4).
 
 **Not persisted:**
@@ -913,7 +933,7 @@ The trace is the complete account (I-8).
 
 Each save has a record `{ saveKey, parent, ops }`, where `parent` is the record of the save it was made from. `ops` is an append-only log of these operations:
 - `HeaderAdded`;
-- `PinAdded`, `PinWithdrawn`;
+- `PinAdded`, `PinWithdrawn`, `PinEnded` (sets a retained pin's `valid.to`, §6.3);
 - `EdgeAdded`, `EdgeEnded`;
 - `ContributionAdded`, `ContributionEnded`;
 - `BeliefSet`, `BeliefDropped`;
@@ -945,7 +965,7 @@ The lineage root records the schema and function versions. Loading under newer v
 | I-4 | **No caches persisted** |
 | I-5 | **Active views agree.** Inputs satisfy every active preimage constraint. A violated multi-input view pin yields `contradiction` |
 | I-6 | **Queries are sound and complete** against one revision (§8.3) |
-| I-7 | **Coupled draws.** Changing one value's weight changes a result only if that value was or becomes the winner. Scaling a factor uniformly changes nothing |
+| I-7 | **Coupled draws.** Changing one value's weight changes a result only if that value was or becomes the winner. Scaling a factor uniformly changes nothing mathematically; tests check the specified binary64 computation |
 | I-8 | **The trace is complete** |
 | I-9 | **One active belief** per (believer, subject, path, at) |
 | I-10 | **Bounded work.** Atomic operations stay within hard limits or return `failed`. Worklists stay within the tick budget and resume deterministically |
@@ -967,30 +987,33 @@ Fully specified: outcomes that depend on hashes are checked as properties, not n
 | F-2 | **Contradiction.** F-1, plus a second observation pin {c} with a higher `Id` | The second observation is rejected; `F` is {b}; value b; `contradiction` |
 | F-3 | **Timeline.** Weather is mirrored. Readings: rain at 1,000, clear at 2,000. V observes each reading | Resolving at 1,500 gives rain; at 2,500, clear. Two observed pins with consecutive intervals; no contradiction |
 | F-4 | **Unary view.** `age` 16..90; `age-band` derived as `floor(age / 10)` with its preimage. Observation pins `age-band = 3` | `F_age` is 30..39 and `age` lies in it. A later authored pin `age = 45` (400) is rejected |
-| F-5 | **Coupling.** 1,000 nodes, each with an enum slot of 100 values and equal priors. Resolve; multiply value `a`'s factor by 4; resolve again | For every node, the result changed exactly when `a`'s new perturbed score exceeds the previous winner's, which is checked from the trace. Every other node is unchanged. Multiplying every value's factor by 3 changes nothing |
+| F-5 | **Coupling.** 1,000 nodes, each with an enum slot of 100 values and equal priors. Resolve; give value `a` a `Table` factor of 4 (others 1); resolve again | For every node, the new result is `a` exactly when `a`'s updated perturbed score beats every other value's updated score (ties by the hash rule). Otherwise the result is unchanged. Both are checked from the trace. Multiplying every factor by 3 leaves every result unchanged |
 | F-6 | **Query.** A tree: 1 district, 4 blocks, 16 places, all compound regions bounded `maybe`. Five places satisfy `influence ≥ 0.6` and `police ≤ 0.2` | `'all'` returns exactly those 5, with no duplicates |
 | F-7 | **Summary.** Five robberies over one day, scope = a district with two blocks. Query block 1, then the whole district; make item 2 canon; then the process withdraws its count pin and pins `count = 2` | Block 1's items are a subset of the district's, with the same `Id`s. The pin `count = 2` is rejected by the structural constraint (≥ 3), and the count resolves to a value ≥ 3 |
-| F-8 | **Cross-pressure.** M is a member of G. M's family frame `protects X`. G's goal A has effects [{kill, X}]; G's goal B has [{rescue, X}] | A gives one `Dilemma`; B gives none |
+| F-8 | **Cross-pressure.** M is a member of G. M's family frame (origin: M's `family` drive) `protects X`. G orders M: order A, a goal with effects [{kill, X}]; separately, order B, a goal with [{rescue, X}]. Each creates a goal frame on M whose origin is G's goal | A gives one `Dilemma`; B gives none |
 | F-9 | **Hearsay.** Alice observes E (belief with evidence {E}), tells Carl, Carl tells Dana; then Alice tells Dana | Dana's belief has `evidence = {E}`. The second telling only refreshes it |
 | F-10 | **Secret affiliation.** `core:member-of` is perceivable. Bob's Militech membership is `secret`; Alice witnesses Bob | `knows(Alice, Bob, member-of)` is `unknown`. With the same edge type and `visibility: open`, it returns the membership |
 | F-11 | **Leadership.** L leads G and is a member of G | No frame cycle. G's concerns change only through decision operations attributed to L |
 | F-12 | **Branching.** Save A; pin p1; save B; load A; pin p2; save C; load B | B has p1 and not p2. An operation queued under C's epoch is refused. Replay emits nothing |
-| F-13 | **Partition.** Process "tally": every window it pins `counter@w<k> = counter@w<k−1> + floor(rand("proc", seed, "tally", k) × 10)`. Run 12 windows as one tick, and again as 12 ticks | Identical counter histories |
+| F-13 | **Partition.** Process "tally", tier 0, period 1 window: in window k it pins `counter@w<k> = counter@w<k−1> + floor(rand("proc", seed, "tally", k) × 10)`, with `counter@w<−1> = 0`. Run 12 windows as one tick, and again as 12 ticks | Identical counter histories |
 | F-14 | **Retained member.** A crowd count of 12; member 9 is focused by V's frame (no pin). An authored constraint sets the count to 6 | The count is 10 or more (the structural constraint, 700, rejects 6), and member 9 stays addressable |
 | F-15 | **Cycle guard.** A kind whose slot reads itself through an invalid schema the loader missed (tested by bypassing the loader) | Resolution returns `cycle` and records a defect |
 
 ### 16.2 Calibration fixtures
 
-These fix the **[calibrate]** values. Every frame weight is stated, and every expectation is an inequality on `r` with `θ_react`.
+These set the **[calibrate]** values. The chosen values are:
+- `m`: `wants`, `threatenedBy` and `protects` 1.0; `blockedBy` 0.8; `reactsTo` 0.6;
+- `s`: by `Id` 1.0; by kind or tag 0.5; by bucket 0.3;
+- `θ_react = 0.08`.
 
-| # | Frames | Change | Expected |
-|---|---|---|---|
-| C-a | A pedestrian: drive frame `comfort`, weight 0.5; situation frame, weight 1, with `reactsTo: { where: weather in {rain} }` (a bucket match) | Weather reading changes to rain | `r ≥ θ_react` |
-| C-b | A vendor: drive frame `money`, weight 0.8; concern frame `protection-payment`, weight 0.9, with `threatenedBy: kind core:person, where member-of Tyger Claws, role collector, scope: { nodes: [the stall] }` | (1) A collector event at the stall. (2) A Tyger Claw member event elsewhere in the district | (1) `r ≥ θ_react`; (2) no match |
-| C-c | The vendor's work frame, weight 0.6, `wants: kind core:person, role customer` | A customer arrives | `θ_react ≤ r <` the r of C-b(1) |
-| C-d | V: a frame `protects [friend]`, weight 1 | An event with effect `harm` on the friend | `r` is the greatest of C-a to C-d |
+Downstream consumers (S1, S3) apply their own, higher thresholds for anything costly.
 
-The chosen values of `m`, `s` and `θ_react` are recorded with the fixtures.
+| # | Frames (root frames have no parents; child edges weigh 1) | Change | `r` | Expected |
+|---|---|---|---|---|
+| C-a | A pedestrian. Drive frame `comfort`, weight 0.5, root. Situation frame, weight 1, child of it, with `reactsTo: { where: [weather-bucket in {rain}] }` | A weather reading changes to rain | 0.5 × 0.6 × 0.3 = 0.09 | ≥ θ_react |
+| C-b | A vendor. Drive frame `money`, weight 0.8, root. Concern frame `protection-payment`, weight 0.9, child of it, with `threatenedBy: { kind: core:person, where: [@role = collector, has-edge member-of → Tyger Claws] }`, plus a second interest `threatenedBy: { kind: core:place, scope: { nodes: [stall] }, where: [@role = place] }` | (1) An event at the stall whose participant is a Tyger Claw collector. (2) The same event elsewhere in the district | (1) The stall binding: 0.72 × 1.0 × 1.0 = 0.72. The collector binding: 0.72 × 1.0 × 0.5 = 0.36. The greatest, 0.72, is emitted. (2) The collector binding only: 0.36 | (1) ≥ θ_react, and the greatest of C-a to C-c. (2) ≥ θ_react, but lower than (1) |
+| C-c | The vendor's work frame, weight 0.6, root, `wants: { kind: core:person, where: [@role = customer] }` | A customer arrives (an event with a `customer` participant) | 0.6 × 1.0 × 0.5 = 0.30 | ≥ θ_react, and below C-b(1) |
+| C-d | V: a frame `protects`, weight 1, root, `{ scope: { nodes: [friend] }, where: [@effect = harm] }` | An event with effect `harm` on the friend | 1 × 1.0 × 1.0 = 1.0 | The greatest of all |
 
 ## 17. Compromises and open items
 
@@ -1042,3 +1065,28 @@ These are recorded in the foundation's [ledger](../foundation.md#9-the-reference
 ### Round 2: GPT-6 Astra, extra-high effort, on v1
 
 19 findings (B-01 to B-19), all adopted. B-03, B-06, B-11 and B-12 were adopted mainly by deferring the general mechanism and narrowing the first implementation (§0.2), as the review recommended. Its "defer to v2" list was adopted in full.
+
+### Round 3 (final): GPT-6 Astra, extra-high effort, on v2
+
+**Round-2 resolutions:** 11 sound, 5 sound with a caveat, 3 not fixed (B-06, B-12, B-18). The caveats and gaps are closed by the findings below.
+
+**10 findings (C-01 to C-10), all adopted:**
+
+| Finding | v3 change |
+|---|---|
+| C-01 Pending process outputs could vanish on load | Outstanding batches are part of `ProcessState`: persisted and restored (§9.4, §14.1) |
+| C-02 Pinned-only values had no resolution branch | The `assigned` mode (§2.2, §5.1) |
+| C-03 Matching couldn't express the calibration cases | Subject bindings with `@role`, `@effect` and `@edge`; slot tests; event places as subjects; calibration fixtures with computed `r` and `θ_react` = 0.08 (§10.5, §16.2) |
+| C-04 Limits didn't bound total work | One shared allowance per outer operation; dispatch charges every interest examined (§10.7) |
+| C-05 Reading intervals didn't survive saving | Half-open intervals, equal-time ordering, a `PinEnded` operation (§6.1, §6.3, §14.2) |
+| C-06 Retention kept too much and missed parent frames | Roots are current semantic facts; ancestor frames persisted (§7.3, §14.1) |
+| C-07 The top-k stop broke ties | Stop only when every remaining bound is strictly lower (§8.3) |
+| C-08 Summary refinement versus atomic queries | Item descriptors enumerated synchronously; materialisation is cache; only canon persisted (§8.3, §9.3) |
+| C-09 Two numerical claims were false | 52-bit open-interval unit; scaling invariance stated mathematically, tests on the computation; F-5 compares updated scores (§1.2, §1.3, I-7) |
+| C-10 Opposite-effect rule and F-8 setup | Explicit violation pairs only; F-8 uses explicit orders (§10.8, §16.1) |
+
+Its "could be lighter" points were adopted: `Bound`s are optional, summary materialisation is cache, the conflict table uses explicit pairs only, and there is no promise of exact invariance under rescaling.
+
+### Final decision on the first implementation
+
+The review process is complete ([D-17](../decisions.md)). This vertical's coordinator has decided ([D-19](../decisions.md)) that the first implementation, the TypeScript reference model, implements this specification as v3 states it: everything except the items deferred in §0.2. Every deferred item returns only with a recorded contract that agrees with the reference model. Changes to this scope come only through a new decision.
