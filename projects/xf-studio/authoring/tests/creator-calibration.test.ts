@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fitExposure, oklab, hueDegrees, passMarks, patchMean, type Rgba8Image } from "../src/preview/creator-calibration";
 import { displayTransform, encodeGradingLut, neutralGradingLut, type GradingLut } from "../src/preview/grading-lut";
 import { encodePng } from "../src/formats/png";
 import { DEFAULT_CREATOR_EXPOSURE } from "../src/preview/creator-lighting";
+import { tempDir } from "./temp-dir";
 
 /** A warm, darkening LUT (like the vanilla grade's cast) so the fit is not trivially neutral. */
 function warmLut(): GradingLut {
@@ -62,7 +62,7 @@ test("the forehead fit recovers the game's exposure through the LUT, and matched
 });
 
 test("the command-line tool reads PNGs and prints the fitted exposure without writing anything", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "xfs-calibrate-"));
+  const dir = tempDir("xfs-calibrate-");
   try {
     const lut = warmLut(), game = render(SCENE, 0.8, lut), studio = render(SCENE, 0.5, lut);
     writeFileSync(join(dir, "game.png"), encodePng(game.image, { alpha: false }));

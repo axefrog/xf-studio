@@ -7,7 +7,7 @@
  * Full screenshots go to evidence/screenshots/ (ignored); asset-free masked copies
  * go to evidence/ui-overhaul-2026-09-24/ for review.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { launch, MASK_VIEWPORTS, MOD, saveJson, startServer, UNMASK_VIEWPORTS, type Session } from "./cdp";
@@ -233,6 +233,7 @@ try {
 
   await step("files: export recipe, collection and mask; re-import the recipe as a preset and the collection with confirm and Reopen previous", async () => {
     const dir = join(tmpdir(), `xfs-ui-downloads-${Date.now()}`);
+    process.once("exit", () => rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
     await page.downloadTo(dir);
     await js(`${S}.dock.reveal('library')`); await page.wait(250);
     const clickButton = async (label: string) => {

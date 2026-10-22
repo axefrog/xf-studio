@@ -1,7 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync, realpathSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync, realpathSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { runProductCommand, type ProductCommandOptions } from "../src/platform/export/product-builder";
 import { verifyProductBuildResult } from "../src/platform/export/product-host";
@@ -14,10 +13,11 @@ import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/le
 import { OFF_PLATE_REASON } from "../src/legacy/eye-makeup/export/package-filter";
 import { preparePackageCollection } from "./fixtures/eye-exporter";
 import { eyeEntry, fakeEyeVerifier, fakeTools, fakeVerifierTools, FOOTPRINT, sha, writePlate } from "./fixtures/product-fixture";
+import { tempDir } from "./temp-dir";
 
 const app = resolve(import.meta.dir, "..");
 const fixture = JSON.parse(readFileSync(resolve(app, "../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
-const root = realpathSync.native(mkdtempSync(join(tmpdir(), "xfs-product-builder-"))); // Canonical: CI temp folders use 8.3 short names.
+const root = realpathSync.native(tempDir("xfs-product-builder-")); // Canonical: CI temp folders use 8.3 short names.
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 function setup(collection: unknown = fixture, recordFootprint = true) {

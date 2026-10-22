@@ -4,13 +4,13 @@
  * changed declaration, a changed manifest field or a changed intermediate file fails, named.
  */
 import { afterAll, expect, test } from "bun:test";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { cpSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { compareCandidates, treeDifferences, treeFiles } from "../tools/compare-package-candidates";
 import type { VerifierTools } from "../src/platform/api";
+import { tempDir } from "./temp-dir";
 
-const root = realpathSync.native(mkdtempSync(join(tmpdir(), "xfs-candidate-compare-")));
+const root = realpathSync.native(tempDir("xfs-candidate-compare-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 const ARCHIVE = "xfs_c0ec3546e3fac43e78c19a65d20383d41";
 const sha = (text: string) => new Bun.CryptoHasher("sha256").update(text).digest("hex");

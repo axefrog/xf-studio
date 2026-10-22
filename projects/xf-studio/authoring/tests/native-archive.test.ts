@@ -1,18 +1,18 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { depotHash } from "../src/game/depot-path";
 import { NativeArchive, NativeArchivePool } from "../src/native/archive-reader";
 import { decodeSegment, SegmentError } from "../src/native/kark";
 import { parseRdarHeader, RdarIndex } from "../src/native/rdar-archive";
 import { fakeDecompress, kark, syntheticArchive } from "./fixtures/native-archive";
+import { tempDir } from "./temp-dir";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
 const bytes = (...values: number[]) => new Uint8Array(values);
 const write = (name: string, data: Uint8Array) => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-native-archive-")); roots.push(root);
+  const root = tempDir("xfs-native-archive-"); roots.push(root);
   const path = join(root, name); writeFileSync(path, data); return path;
 };
 

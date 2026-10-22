@@ -1,9 +1,9 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { innoSetupHome } from "../single-installer";
+import { tempDir } from "../../tests/temp-dir";
 
 // The single setup decides success by what is installed (installer/install-outcome.iss). These tests compile that Pascal code into a
 // small harness setup with the pinned Inno Setup and run it silently with fake facts: no Electrobun setup runs and nothing is
@@ -19,7 +19,7 @@ let compiled: string | null = null;
 /** The harness setup, compiled once for this file (removed after its tests). */
 function harnessSetup(): string {
   if (compiled) return compiled;
-  const work = mkdtempSync(resolve(tmpdir(), "xfs-outcome-"));
+  const work = tempDir("xfs-outcome-");
   const compile = spawnSync(iscc, [`/DOutputDir=${work}`, "/Q", harness], { encoding: "utf8", cwd: import.meta.dir, timeout: 120_000, windowsHide: true });
   if (compile.status !== 0) throw Error(`The harness did not compile:\n${compile.stdout}${compile.stderr}`);
   return compiled = resolve(work, "outcome-harness.exe");
@@ -28,7 +28,7 @@ afterAll(() => { if (compiled) rmSync(resolve(compiled, ".."), { recursive: true
 
 /** Run every case in one silent run of the harness; one answer per case. */
 function run(cases: readonly string[]): string[] {
-  const work = mkdtempSync(resolve(tmpdir(), "xfs-outcome-run-"));
+  const work = tempDir("xfs-outcome-run-");
   try {
     const input = resolve(work, "cases.txt"), output = resolve(work, "results.txt");
     writeFileSync(input, cases.join("\r\n") + "\r\n");
@@ -111,7 +111,7 @@ describe.skipIf(!available)("single setup outcome (Inno Setup Pascal, Windows)",
   });
 
   test("the physical-path lookup reads a real folder through the Windows API", () => {
-    const folder = mkdtempSync(resolve(tmpdir(), "xfs-physical-"));
+    const folder = tempDir("xfs-physical-");
     try {
       const [physical, missing] = run([`physical|${folder}`, `physical|${resolve(folder, "missing")}`]);
       expect(physical!.toLowerCase()).toBe(realpathSync.native(folder).toLowerCase());

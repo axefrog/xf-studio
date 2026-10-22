@@ -3,8 +3,7 @@
 // `Header.ArchiveFileName` is removed. WolvenKit writes only into a temporary folder. Enable with:
 //   XFS_RESOLVER_GAME_ROOT and XFS_WOLVENKIT_CLI (several CLIs separated by `;`, one per accepted version).
 import { expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { buildMountPlan, DepotIndex, type ArchiveFile } from "../src/game/archive-precedence";
 import { depotHash } from "../src/game/depot-path";
@@ -12,6 +11,7 @@ import { depotPathRegex } from "../src/legacy/eye-makeup/plate/host/eye-plate-wo
 import { readArchiveIndex, trimBuffers, withoutArchiveFileName } from "../src/game/host/resolver-host";
 import { runWolvenKit, SUPPORTED_WOLVENKIT_VERSIONS, wolvenKitIdentity } from "../src/host/wolvenkit-cli";
 import { oracleDescribe } from "./optional-oracles";
+import { tempDir } from "./temp-dir";
 
 const env = process.env;
 const game = env.XFS_RESOLVER_GAME_ROOT ? resolve(env.XFS_RESOLVER_GAME_ROOT) : "";
@@ -36,7 +36,7 @@ oracleDescribe(available, "the uncook oracle needs XFS_RESOLVER_GAME_ROOT and XF
     const accepted = (SUPPORTED_WOLVENKIT_VERSIONS as readonly string[]).includes(version);
     // A WolvenKit XF Studio doesn't accept is not compared (the resolver refuses it anyway).
     (accepted ? test : test.skip)(`WolvenKit ${version}: the same JSON by either route`, async () => {
-      const work = mkdtempSync(join(tmpdir(), "xfs-uncook-oracle-"));
+      const work = tempDir("xfs-uncook-oracle-");
       try {
         const files: ArchiveFile[] = readdirSync(content).filter(name => name.endsWith(".archive")).map(name => ({ id: join(content, name),
           virtualPath: `archive/pc/content/${name}`, provider: "game", providerName: "Installed game", active: true, priority: null }));

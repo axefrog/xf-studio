@@ -4,8 +4,7 @@
  * catching injected faults. Synthetic fixtures only: a small rig and table built here, no game data.
  */
 import { expect, test } from "bun:test";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { createHash } from "node:crypto";
 import { encodeStaticFace, staticFaceTracks, unknownControls } from "../src/engines/facial-rig/clip";
@@ -15,6 +14,7 @@ import { EXPRESSIONS_EXPORTER, GAME_UNREAD_NOTE, NO_CONTROLS_REASON, plannedRows
 import { animationSet, expressionTable, faceRigPatch, tweakRecords } from "../src/features/expressions/export/files";
 import { EXPRESSIONS_GAME_1, EXPRESSIONS_GAME_PREREQUISITE, type GameInputs } from "../src/features/expressions/export/game";
 import { EXPRESSIONS_VERIFIER, yamlQuoted } from "../src/features/expressions/verify";
+import { tempDir } from "./temp-dir";
 
 const sha = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 const TRACKS = ["env_a", "env_b", "env_c", "eye_l_brows_raise_in", "eye_r_brows_raise_in", "jaw_mid_open", "lips_l_corner_up", "lips_r_corner_up", "wr_a", "wr_b"];
@@ -143,7 +143,7 @@ test("the TweakXL records are one per expression, appended once, with the label 
 
 /** A product built with the exporter's writers into a folder, and a verifier input whose "WolvenKit" reads the JSON resources as they are. */
 function product(value: unknown) {
-  const dir = mkdtempSync(join(tmpdir(), "xfs-expr-verify-")), outcome = plan(value), planned = outcome.plan as ExpressionPlan;
+  const dir = tempDir("xfs-expr-verify-"), outcome = plan(value), planned = outcome.plan as ExpressionPlan;
   const unpacked = join(dir, "unpacked"), extras = join(dir, "extras"), overlay = join(dir, "overlay");
   const write = (rootDir: string, path: string, content: string) => { const file = join(rootDir, ...path.split("/")); mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, content); };
   const clips = planned.expressions.map(item => ({ clip: item.clip, controls: item.controls }));

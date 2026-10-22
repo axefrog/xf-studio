@@ -3,8 +3,7 @@
 // kept of them is keyed by the native reader's identity; the reader's notes and left-out properties reach the resolver's models, the
 // plan and the diagnostics log. Synthetic archives only: no game data, no WolvenKit (its launches are faked).
 import { afterAll, afterEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { MountedArchive } from "../src/game/archive-precedence";
 import { planCharacterDetails } from "../src/character/character-detail-plan";
@@ -23,10 +22,11 @@ import { detailFixture, P, REQUEST_A } from "./character-detail-fixtures";
 import { inputFromCharacterRequest } from "../src/character/character-detail-request";
 import { fakeDecompress, syntheticArchive } from "./fixtures/native-archive";
 import { Cr2wBuilder, prop, v } from "./fixtures/native-cr2w";
+import { tempDir } from "./temp-dir";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
-const temporary = () => { const root = mkdtempSync(join(tmpdir(), "xfs-native-resolver-")); roots.push(root); return root; };
+const temporary = () => { const root = tempDir("xfs-native-resolver-"); roots.push(root); return root; };
 const put = (path: string, content: string | Uint8Array) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, content); };
 const closers: (() => void)[] = [];
 afterEach(() => { for (const close of closers.splice(0)) close(); });

@@ -1,6 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { inflateRawSync } from "node:zlib";
 import { personalDataIn, redactPersonalData } from "../src/app/private-data";
@@ -14,10 +13,11 @@ import { DiagnosticsActions, type DiagnosticsDevice } from "../src/diagnostics/a
 import { involvedMods } from "../src/diagnostics/host/mod-identity";
 import { crc32, zip } from "../src/diagnostics/host/zip";
 import { defaultLocalSettings } from "../src/setup/local-settings";
+import { tempDir } from "./temp-dir";
 
 const vectors = JSON.parse(readFileSync(resolve(import.meta.dir, "../../../../tools/private-data.json"), "utf8")).vectors as
   { userPath: string[]; email: string[]; clean: string[] };
-const root = mkdtempSync(resolve(tmpdir(), "xfs-diagnostics-"));
+const root = tempDir("xfs-diagnostics-");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 /** A user folder name assembled at run time, so this file itself holds no personal path for the repository check. */
 const WHO = ["j", "doe"].join("");

@@ -2,8 +2,7 @@
 // choices gives the event loop a turn between choices and between a manifest's entries (event-loop.ts), and a person's request stops the
 // batch being prepared ahead. Synthetic work stands in for the manifest checks; no game file is read.
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { CharacterDetailHost, PREVIEW_DERIVE_WAIT_MS, QUIET_MS, type CharacterDetailSettings } from "../src/character/host/character-detail-host";
 import { DEFAULT_CHARACTER, type CharacterRequest } from "../src/character/character-detail-request";
@@ -15,6 +14,7 @@ import { hostClock } from "../src/platform/core/clock";
 import { createJobScheduler } from "../src/platform/core/jobs";
 import { withArchiveFingerprints } from "../src/game/host/resolver-host";
 import { REQUEST_A } from "./character-detail-fixtures";
+import { tempDir } from "./temp-dir";
 
 const busy = (ms: number) => { const until = performance.now() + ms; while (performance.now() < until) { /* Synchronous work, like a manifest check. */ } };
 const sleep = (ms: number) => new Promise(done => setTimeout(done, ms));
@@ -120,7 +120,7 @@ describe("a person's request pre-empts preparing ahead", () => {
 });
 
 describe("the character-detail host puts a person first", () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-host-first-"));
+  const root = tempDir("xfs-host-first-");
   afterAll(() => rmSync(root, { recursive: true, force: true }));
   const settings: CharacterDetailSettings = { gameRoot: join(root, "game"), launchRoute: "direct", mo2Root: null, mo2ProfileId: null,
     manualModRoot: null, wolvenKitCli: process.execPath };

@@ -6,8 +6,7 @@
  * it and the mod export leaves it out, saying why.
  */
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { EVERY_LOOK_NEWER_MESSAGE, NO_EDITABLE_EYE_MAKEUP_MESSAGE } from "../src/library/collection-service";
 import { collectionDraft, NEWER_LOOKS_LIBRARY_MESSAGE } from "../src/app/workspace/collection-workspace";
@@ -23,6 +22,7 @@ import { readRecipe as parseRecipe } from "../src/legacy/eye-makeup/recipe-schem
 import { profileStudio } from "./fixtures/profile-studio";
 import { lookRef, type LookRef } from "../src/library/collection-documents";
 import { documentKey } from "../src/platform/api/document-commands";
+import { tempDir } from "./temp-dir";
 
 const EYE = "eye-makeup";
 const ID = { collection: "00000000-0000-4000-8000-00000000c011", a: "00000000-0000-4000-8000-00000000000a",
@@ -150,7 +150,7 @@ test("the mod export leaves a locked look out and says why; the library never ta
   expect(view.omitted).toEqual([{ presetId: ID.b, presetName: "B", reason: NEWER_LOOK_REASON },
     { presetId: ID.c, presetName: "C", reason: NEWER_LOOK_REASON }]);
   // The library store refuses it with the plain message and writes nothing.
-  const dir = mkdtempSync(join(tmpdir(), "xfs-locked-library-")), path = join(dir, "library.sqlite");
+  const dir = tempDir("xfs-locked-library-"), path = join(dir, "library.sqlite");
   const file = openTestLibrary(path), store = file.collections;
   try {
     const before = store.list();

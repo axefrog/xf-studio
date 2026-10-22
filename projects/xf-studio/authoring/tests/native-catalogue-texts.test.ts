@@ -3,8 +3,7 @@
 // fetcher's JSON-resource mode (a raw `.json` resource kept apart from its `.json.json` companion), a catalogue builds with no WolvenKit
 // launch, and the text reads never hold up a V's resolution in the decode worker. Synthetic archives only: no game data, no WolvenKit.
 import { afterAll, afterEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { labelsOf, loadCreatorCatalogue, readTextResources } from "../src/character/host/cc-catalogue-host";
 import { depotHash, refFromPath } from "../src/game/depot-path";
@@ -17,10 +16,11 @@ import { type InstallationOptions, openInstallation, type ResolverFetcher } from
 import { BASE_CCO, TEXTS, vanillaCreator } from "./cc-fixtures";
 import { fakeDecompress, syntheticArchive } from "./fixtures/native-archive";
 import { Cr2wBuilder, prop, v } from "./fixtures/native-cr2w";
+import { tempDir } from "./temp-dir";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
-const temporary = () => { const root = mkdtempSync(join(tmpdir(), "xfs-native-texts-")); roots.push(root); return root; };
+const temporary = () => { const root = tempDir("xfs-native-texts-"); roots.push(root); return root; };
 const put = (path: string, content: string | Uint8Array) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, content); };
 const closers: (() => void)[] = [];
 afterEach(() => { for (const close of closers.splice(0)) close(); });

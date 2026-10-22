@@ -1,7 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { MountedArchive } from "../src/game/archive-precedence";
 import { refFromPath } from "../src/game/depot-path";
@@ -13,6 +12,7 @@ import { inProcessDecoder, NATIVE_ROOTS, type NativeFetchedResource, NativeFirst
 import type { FetchedResource, ResourceFetchPort } from "../src/game/resource-graph";
 import { fakeDecompress, syntheticArchive } from "./fixtures/native-archive";
 import { Cr2wBuilder, prop, v } from "./fixtures/native-cr2w";
+import { tempDir } from "./temp-dir";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
@@ -24,7 +24,7 @@ function resource(className: string, props = [prop("sampleCount", "Uint16", v.u1
 const testWorker = new URL("./fixtures/native-decode-test-worker.ts", import.meta.url);
 
 function setup() {
-  const root = mkdtempSync(join(tmpdir(), "xfs-native-port-")); roots.push(root);
+  const root = tempDir("xfs-native-port-"); roots.push(root);
   const profile = resource("CHairProfile"), other = resource("Multilayer_Mask", []);
   const path = join(root, "mod.archive");
   writeFileSync(path, syntheticArchive([

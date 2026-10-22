@@ -4,15 +4,15 @@
  */
 import { afterEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { BACKUP_CHECK_MS, FIRST_BACKUP_DELAY_MS, LibraryBackups } from "../src/platform/persistence/backups";
 import { openTestLibrary } from "./fixtures/library-file";
 import { ManualClock } from "./fixtures/platform-doubles";
+import { tempDir } from "./temp-dir";
 
 const folders: string[] = [];
-function folder(): string { const dir = mkdtempSync(join(tmpdir(), "xfs-backups-")); folders.push(dir); return dir; }
+function folder(): string { const dir = tempDir("xfs-backups-"); folders.push(dir); return dir; }
 afterEach(() => { for (const dir of folders.splice(0)) try { rmSync(dir, { recursive: true, force: true }); } catch { /* WAL files may still be closing */ } });
 const DAY = 86_400_000, START = Date.UTC(2026, 8, 1, 9);
 

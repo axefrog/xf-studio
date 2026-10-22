@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import config from "../electrobun.config";
 import { COTTONTAIL_CAPABILITIES, hostCapabilities, hostCapabilityUses } from "../runtime-capabilities";
 import { devkitIssue } from "../devkit-check";
 import desktopPackage from "../package.json";
+import { tempDir } from "../../tests/temp-dir";
 
 test("the Cottontail capability declaration is exactly what the host reaches", () => {
   const declared = [...(config.build.cottontail?.capabilities ?? [])].sort();
@@ -25,7 +26,7 @@ test("the walk covers the workers and the Build tool, and finds uses the bundle 
   expect(where("ffi").some(file => file.endsWith("src/native/oodle.ts"))).toBe(true);
   expect(where("yaml").length).toBeGreaterThan(0);
 
-  const folder = mkdtempSync(join(tmpdir(), "xfs-capabilities-"));
+  const folder = tempDir("xfs-capabilities-");
   try {
     writeFileSync(join(folder, "entry.ts"), 'import "./helper";\nexport const data = Bun.YAML.parse("a: 1");\n');
     writeFileSync(join(folder, "helper.ts"), 'export const ffi = import.meta.require("bun:ffi");\nexport const h = new Bun.CryptoHasher("sha256");\n');
@@ -46,7 +47,7 @@ test("the known capability names match the Cottontail this checkout's devkit sel
 
 test("a devkit prepared for another Electrobun release is named as the cause before the typecheck runs (DESK-16)", () => {
   expect(desktopPackage.scripts.check).toBe("bun devkit-check.ts && tsc --noEmit");
-  const folder = mkdtempSync(join(tmpdir(), "xfs-devkit-"));
+  const folder = tempDir("xfs-devkit-");
   try {
     expect(devkitIssue(folder, "2.0.2")).toContain("missing");
     mkdirSync(join(folder, ".hutch"));

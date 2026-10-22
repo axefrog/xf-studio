@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { EYE_MAKEUP_MOD, isEyeMakeupModFolder } from "../src/legacy/eye-makeup/mod-branding";
 import { planCollection } from "../src/legacy/eye-makeup/export/preset-collection";
@@ -9,6 +8,7 @@ import { createModInstallTransport } from "../src/installation/host/mod-install-
 import { defaultLocalSettings } from "../src/setup/local-settings";
 import { preflightPackageCollection } from "./fixtures/eye-exporter";
 import { sourceFiles, sourceText } from "./fixtures/source-files";
+import { tempDir } from "./temp-dir";
 
 const authoring = resolve(import.meta.dir, "..");
 const hq = resolve(authoring, "../../..");
@@ -35,7 +35,7 @@ test("the selector label, Check result and MO2 install folder all come from the 
   const check = preflightPackageCollection(fixture);
   expect([check.brand, check.selectorLabel]).toEqual([EYE_MAKEUP_MOD.modName, EYE_MAKEUP_MOD.selectorLabel]);
 
-  const root = mkdtempSync(join(tmpdir(), "xfs-branding-"));
+  const root = tempDir("xfs-branding-");
   try {
     const game = join(root, "game"), mo2 = join(root, "mo2"), store = join(root, "candidates");
     mkdirSync(join(game, "bin", "x64"), { recursive: true }); mkdirSync(join(game, "archive", "pc"), { recursive: true });

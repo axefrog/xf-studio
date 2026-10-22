@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
+import { tempDir } from "../../../projects/xf-studio/authoring/tests/temp-dir";
 
 // The S3 migration sweep on the production code (profiles design §8, chunk 1d-i): hosts and pages really killed at every protocol step,
 // two hosts at once with identical and divergent drafts, and the downgrade round trip. About 15 s per round.
 test("the migration sweep passes", async () => {
-  const scratch = mkdtempSync(join(tmpdir(), "xfs-s3-migration-"));
+  const scratch = tempDir("xfs-s3-migration-");
   try {
     const run = Bun.spawn([process.execPath, join(import.meta.dir, "..", "tools", "s3-migration.ts"), scratch, "1"], { stdout: "pipe", stderr: "ignore" });
     const [code, text] = await Promise.all([run.exited, new Response(run.stdout).text()]);

@@ -1,16 +1,16 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { planRuntimeDiagnostic, stageRuntimeDiagnostic } from "../src/installation/host/runtime-diagnostic-stage";
 import { planRuntimePromotion, promoteRuntimeDiagnostic, recoverRuntimePromotion,
   rollbackRuntimePromotion } from "../src/installation/host/runtime-diagnostic-promotion";
 import { EYE_MAKEUP_MOD } from "../src/legacy/eye-makeup/mod-branding";
+import { tempDir } from "./temp-dir";
 
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), "xfs-promotion-"));
+  const root = tempDir("xfs-promotion-");
   const gameRoot = join(root, "game"), mo2Root = join(root, "real-mo2");
   const candidateStore = join(root, "candidates"), candidateId = "build_1";
   const profileId = "Existing Profile", newProfileId = "XF Eye Artistry diagnostic";
@@ -239,7 +239,7 @@ test("a stage prepared under the legacy folder name must be staged again", () =>
 
 /** A version-2 candidate of a renamed mod, with a real declaration (as a product Build writes it). */
 function renamedFixture(modName = "XF Night Looks") {
-  const root = mkdtempSync(join(tmpdir(), "xfs-promotion-renamed-"));
+  const root = tempDir("xfs-promotion-renamed-");
   const gameRoot = join(root, "game"), mo2Root = join(root, "real-mo2"), candidateStore = join(root, "candidates"), candidateId = "build_2";
   const profileId = "Existing Profile", sourceProfile = join(mo2Root, "profiles", profileId);
   mkdirSync(join(gameRoot, "bin", "x64"), { recursive: true });

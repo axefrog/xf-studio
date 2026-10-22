@@ -1,18 +1,18 @@
 import { test, expect } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { libraryRequest } from "../src/library/host/library-store";
 import { openTestLibrary } from "./fixtures/library-file";
 import { Database } from "bun:sqlite";
 import { initialRecipe } from "./fixtures/eye-region";
 import { readRecipe as parseRecipe, parseRecipeFile } from "../src/legacy/eye-makeup/recipe-schema";
+import { tempDir } from "./temp-dir";
 
 /** A library file's look store, closed with its file. */
 function lookLibrary(path: string) { const file = openTestLibrary(path); return Object.assign(file.looks, { close: () => file.close() }); }
 
 test("legacy SQLite revisions stay byte-identical while empty and expanded recipes survive reopening", () => {
-  const dir = mkdtempSync(join(tmpdir(), "xfs-variable-library-")), path = join(dir, "library.sqlite");
+  const dir = tempDir("xfs-variable-library-"), path = join(dir, "library.sqlite");
   let db = lookLibrary(path);
   try {
     const recipe = initialRecipe(), original = db.save({ name: "Legacy", recipe });
@@ -40,7 +40,7 @@ test("legacy SQLite revisions stay byte-identical while empty and expanded recip
 });
 
 test("library persists editable revisions and rejects stale or invalid writes atomically", () => {
-  const dir = mkdtempSync(join(tmpdir(), "xfas-library-")), path = join(dir, "library.sqlite");
+  const dir = tempDir("xfas-library-"), path = join(dir, "library.sqlite");
   let db = lookLibrary(path);
   try {
     const recipe = initialRecipe();

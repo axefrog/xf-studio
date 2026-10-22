@@ -4,10 +4,10 @@
  */
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { privateBuildRootsIssue } from "../desktop/build";
+import { tempDir } from "./temp-dir";
 
 function shortName(path: string): string | null {
   if (process.platform !== "win32") return null;
@@ -17,7 +17,7 @@ function shortName(path: string): string | null {
 }
 
 test("private build folders: separate inputs pass, a linked folder or an overlapping input is refused", () => {
-  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "xfs-build-roots-")));
+  const dir = realpathSync.native(tempDir("xfs-build-roots-"));
   try {
     const data = join(dir, "user data folder"), game = join(dir, "game"), elsewhere = join(dir, "elsewhere");
     for (const path of [data, game, elsewhere]) mkdirSync(path, { recursive: true });

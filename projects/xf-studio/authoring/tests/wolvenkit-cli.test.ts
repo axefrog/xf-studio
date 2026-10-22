@@ -1,11 +1,12 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { classifyWolvenKitRun, isRuntimeMissing, runWolvenKit, runWolvenKitSync, WOLVENKIT_RUNTIME_MISSING_MESSAGE, wolvenKitIdentity,
   wolvenKitIdentityKey, WolvenKitRunError } from "../src/host/wolvenkit-cli";
 import { createWolvenKitVerifierTools } from "../src/legacy/eye-makeup/export/host/verifier-wolvenkit";
 import type { ProcessTreeResult } from "../src/host/process-tree";
+import { tempDir } from "./temp-dir";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
@@ -43,7 +44,7 @@ test("a missing .NET runtime is recognised from the host's own message or exit c
 test("a missing CLI is typed before any process starts, and identity is read from the files", async () => {
   await expect(runWolvenKit(null, ["--version"], { timeoutMs: 1000 })).rejects.toMatchObject({ code: "tool_missing" });
   await expect(runWolvenKit(join(tmpdir(), "no-such-wolvenkit.exe"), ["--version"], { timeoutMs: 1000 })).rejects.toBeInstanceOf(WolvenKitRunError);
-  const root = mkdtempSync(join(tmpdir(), "xfs-wk-identity-")); roots.push(root);
+  const root = tempDir("xfs-wk-identity-"); roots.push(root);
   const cli = join(root, "WolvenKit.CLI.exe");
   writeFileSync(cli, "MZ launcher");
   writeFileSync(join(root, "WolvenKit.CLI.dll"), "MZ managed entry");

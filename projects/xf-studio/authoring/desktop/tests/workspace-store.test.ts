@@ -1,6 +1,5 @@
 import { afterAll, expect, spyOn, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { DesktopWorkspaceStore } from "../workspace-store";
 import { fitWorkspace } from "../../src/app/workspace/workspace-budget";
@@ -8,8 +7,9 @@ import { loadWorkspace, parseWorkspace, serializeWorkspace, storesLookLevelHisto
 import { historyRecipes } from "../../tests/fixtures/looks";
 import { largeWorkspaceV1, smallWorkspaceV1 } from "../../tests/fixtures/workspace-v1-fixtures";
 import { STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
+import { tempDir } from "../../tests/temp-dir";
 
-const root = mkdtempSync(resolve(tmpdir(), "xfs-workspace-store-"));
+const root = tempDir("xfs-workspace-store-");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 test("the first version-2 save keeps the version-1 workspace beside it, once, byte for byte (downgrade protection)", () => {
