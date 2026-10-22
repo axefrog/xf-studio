@@ -3,7 +3,7 @@ import { allowsNativeTextMenu } from "./context-menu";
 import { checkForUpdatesNow, startupUpdateCheck } from "./update-check";
 import { comingSoon, liveFeatures, plannedShown } from "./coming-soon";
 import type { PresentationAction } from "../app/studio-presentation";
-import type { StudioFileAction } from "../app/studio-file-operations";
+import type { PresentationFileAction } from "../app/studio-presentation";
 import { effectiveTheme, type ThemePreference } from "../app/ui-preferences";
 import { shortcutLabel } from "../app/input-bindings";
 import { openInputReference, openPalette, type Command } from "./commands";
@@ -808,7 +808,7 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     capability: () => port.authoring.capability(action),
     run: () => { rt.dispatch(action); },
   });
-  const file = (id: string, title: string, group: string, action: StudioFileAction, extra: Partial<Command> = {}): Command => ({
+  const file = (id: string, title: string, group: string, action: PresentationFileAction, extra: Partial<Command> = {}): Command => ({
     id, title, group, ...extra, capability: () => port.files.capability(action), run: () => void rt.file(action) });
   const request = (id: string, title: string, group: string, value: Parameters<StudioRuntime["request"]>[0], extra: Partial<Command> = {}): Command => ({
     id, title, group, ...extra, capability: () => port.authoring.requestCapability(value), run: () => void rt.request(value) });

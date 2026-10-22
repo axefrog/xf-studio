@@ -4,6 +4,7 @@ import type { ValueSchema } from "../app/studio-action-descriptors";
 import type { StudioDispatchResult } from "../app/studio-application";
 import type { PresentationAction } from "../app/studio-presentation";
 import type { StudioFileAction, StudioFileOutcome } from "../app/studio-file-operations";
+import type { PresentationFileAction } from "../app/studio-presentation";
 import type { EyeMakeupFacade, StudioPresentationPort } from "../app/studio-presentation";
 import type { DockView } from "./dock/dock-view";
 import type { Feedback, FeedbackAction } from "./feedback";
@@ -157,7 +158,7 @@ export class StudioRuntime {
     if (options.success) this.feedback.record("success", this.sourceLabel(kind), options.success);
     return true;
   }
-  async file(action: StudioFileAction, options: { quietSuccess?: boolean; actions?: FeedbackAction[] } = {}): Promise<StudioFileOutcome> {
+  async file(action: PresentationFileAction, options: { quietSuccess?: boolean; actions?: FeedbackAction[] } = {}): Promise<StudioFileOutcome> {
     const outcome = await this.port.files.execute(action);
     const source = fileSource(action.kind);
     if (!outcome.ok) {

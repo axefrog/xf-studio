@@ -1,4 +1,3 @@
-import type { StudioAction } from "./studio-application";
 import type { DesktopAppActions } from "../setup/desktop-app";
 import type { UpdateCheckActions } from "../setup/update-check-actions";
 import { CollectionApplication } from "../library/collection-application";
@@ -69,23 +68,23 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   savedAppearance: {
     has(): boolean;
     read(): SavedV | undefined;
-    load(bytes: Uint8Array): Readonly<SavedAppearanceState>;
+    /** Show a save's V on `character` (the V the request named when it was asked). */
+    load(bytes: Uint8Array, character: string): Readonly<SavedAppearanceState>;
     ready(): boolean;
     unavailableReason?(): string | undefined;
   };
 }) {
   const { core } = options;
-  const named = <A extends { kind: string }>(action: A): A => options.targets ? options.targets.complete(action, core.app.descriptor(action.kind)) : action;
   let collection: CollectionApplication;
   const files = new StudioFileOperations(options.fileDevice, {
     recipe: () => core.presentation.recipe(), selectedLayer: () => core.presentation.layer(),
-    importRecipe: (recipe, name) => {
-      collection.importRecipe(recipe, name);
+    importRecipe: (recipe, name, into) => {
+      collection.importRecipe(recipe, name, into);
       options.onRecipeImported();
     },
     hasSavedV: options.savedAppearance.has, savedV: options.savedAppearance.read,
-    loadSavedV: bytes => {
-      const applied = options.savedAppearance.load(bytes);
+    loadSavedV: (bytes, character) => {
+      const applied = options.savedAppearance.load(bytes, character);
       core.app.recordAppliedSavedAppearance(applied);
       return applied;
     },
@@ -93,9 +92,9 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     savedVUnavailableReason: options.savedAppearance.unavailableReason,
     characterPreset: {
       unavailable: kind => core.app.characterPresetUnavailable(kind),
-      load: value => {
-        // The V the shown tab's focused view shows (the input layer names it, profiles design §3.6).
-        const result = core.app.dispatch(named({ kind: "character.setSource", source: { kind: "preset", value } }) as StudioAction);
+      // The V the request named when it was asked (profiles design §3.3).
+      load: (value, character) => {
+        const result = core.app.dispatch({ kind: "character.setSource", character, source: { kind: "preset", value } });
         if (!result.ok) throw Error(result.message);
       },
       save: () => core.app.characterPresetFile(),

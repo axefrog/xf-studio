@@ -69,7 +69,7 @@ export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>
   const files = new StudioFileOperations({ pick: async () => undefined,
     download: (_blob, name) => downloads.push(name), bakeMask: async () => new Blob() }, {
     recipe: () => document.recipe, selectedLayer: () => document.recipe.layers[document.active],
-    importRecipe: (value, name) => library.importRecipe(value, name),
+    importRecipe: (value, name, collection) => library.importRecipe(value, name, collection),
     hasSavedV: () => false, savedV: () => undefined, loadSavedV: () => ({}),
     savedVReady: () => false, executeCollection: request => app.execute(request),
     recoverCollection: () => library.recover(),

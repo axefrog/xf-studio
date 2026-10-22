@@ -65,7 +65,7 @@ test("opening a collection replaces nothing and Undo open shows the one before; 
   expect(studio.document.recipe.layers).toHaveLength(0);
   expect(studio.collection.dispatch({ kind: "collection.undoOpen" }).ok).toBe(true);
   expect(studio.document.recipe.layers[0]!.color).toBe("#ffeedd"); expect(studio.shown()).toBe(prior);
-  studio.collection.importRecipe(initialRecipe(), "Portable");
+  studio.collection.importRecipe(initialRecipe(), "Portable", studio.shown()!);
   expect(studio.collection.summary().draft!.presets.map(preset => preset.name)).toEqual(["A1", "Portable"]);
   void parseCollection;
 });

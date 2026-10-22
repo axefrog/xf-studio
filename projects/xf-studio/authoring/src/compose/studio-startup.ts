@@ -429,11 +429,10 @@ async function start(host: StudioHost, root: HTMLElement) {
       read: () => savedAppearance?.snapshot().savedV,
       // A save file becomes where the V comes from (`character.setSource`, which `savedV.load` stays an alias of until phase 1 ends);
       // the shown V's scene applies it.
-      load: bytes => {
+      // The V the request named when it was asked (profiles design §3.3).
+      load: (bytes, character) => {
         if (bytes.byteLength > 128 * 1024 * 1024) throw Error("Save is larger than the supported limit.");
-        // The V the shown tab's focused view shows (the input layer names it, profiles design §3.6).
-        const result = core.app.dispatch(targets.complete({ kind: "character.setSource" as const, source: { kind: "save" as const, value: readSavedV(bytes) } },
-          core.app.descriptor("character.setSource")) as StudioAction);
+        const result = core.app.dispatch({ kind: "character.setSource", character, source: { kind: "save", value: readSavedV(bytes) } });
         if (!result.ok) throw Error(result.message);
         return savedAppearance!.snapshot();
       },

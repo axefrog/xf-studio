@@ -217,12 +217,12 @@ Gesture proposals (sent inside a gesture session; the session owns the Undo step
 
 | Request | Scope | Effect | Cancellable | Inputs |
 |---|---|---|---|---|
-| `recipe.import` | file, collection | import | no |  |
+| `recipe.import` | file, collection | import | no | collection: string |
 | `recipe.export` | file, layer | download | no |  |
 | `mask.export` | file, layer | download | no |  |
-| `savedV.import` | file | import | no |  |
+| `savedV.import` | file | import | no | character: string |
 | `savedV.export` | file | download | no |  |
-| `characterPreset.import` | file | import | no |  |
+| `characterPreset.import` | file | import | no | character: string |
 | `characterPreset.export` | file | download | no |  |
 | `collection.import` | file, collection | import | no |  |
 | `collection.export` | collection | download | no |  |

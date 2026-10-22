@@ -275,20 +275,21 @@ export const GESTURE_DESCRIPTORS = EYE_MAKEUP_GESTURE_DESCRIPTORS satisfies Reco
  * it refuses is exported unsaved, CORE-38), and `recovery` marks draft switches that
  * the collection recovery queue can undo. None records a recipe Undo entry.
  */
+/** A file workflow; `payload`: what one that waits for a picker names when it is asked (profiles design §3.3). */
 export type FileDescriptor = { scope: readonly ActionScope[];
   effect: "import" | "download" | "package" | "recover"; device: "picker" | "download" | "none";
-  async: true; cancellable: false; savesFirst: boolean; undo: UndoPolicy };
+  async: true; cancellable: false; savesFirst: boolean; undo: UndoPolicy; payload: PayloadSchema };
 const file = (scope: ActionScope | readonly ActionScope[], effect: FileDescriptor["effect"],
-  device: FileDescriptor["device"], options: { savesFirst?: boolean; undo?: UndoPolicy } = {}): FileDescriptor =>
+  device: FileDescriptor["device"], options: { savesFirst?: boolean; undo?: UndoPolicy; payload?: PayloadSchema } = {}): FileDescriptor =>
   ({ scope: typeof scope === "string" ? [scope] : scope, effect, device, async: true, cancellable: false,
-    savesFirst: options.savesFirst ?? false, undo: options.undo ?? "none" });
+    savesFirst: options.savesFirst ?? false, undo: options.undo ?? "none", payload: options.payload ?? {} });
 export const FILE_DESCRIPTORS = {
-  "recipe.import": file(["file", "collection"], "import", "picker"),
+  "recipe.import": file(["file", "collection"], "import", "picker", { payload: { collection: TARGET_SCHEMA.collection } }),
   "recipe.export": file(["file", "layer"], "download", "download"),
   "mask.export": file(["file", "layer"], "download", "download"),
-  "savedV.import": file("file", "import", "picker"),
+  "savedV.import": file("file", "import", "picker", { payload: { character: TARGET_SCHEMA.character } }),
   "savedV.export": file("file", "download", "download"),
-  "characterPreset.import": file("file", "import", "picker"),
+  "characterPreset.import": file("file", "import", "picker", { payload: { character: TARGET_SCHEMA.character } }),
   "characterPreset.export": file("file", "download", "download"),
   "collection.import": file(["file", "collection"], "import", "picker", { undo: "recovery" }),
   "collection.export": file("collection", "download", "download", { savesFirst: true }),

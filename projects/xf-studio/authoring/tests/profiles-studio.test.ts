@@ -295,7 +295,7 @@ describe("presets", () => {
   test("a recipe file becomes a preset of its own, shown at once", async () => {
     const studio = await profileStudio();
     await studio.collection.initialize();
-    studio.collection.importRecipe(initialRecipe(), "Imported");
+    studio.collection.importRecipe(initialRecipe(), "Imported", studio.shown()!);
     expect(studio.collection.summary().draft!.presets.map(p => p.name)).toEqual(["Look", "Imported"]);
     expect(studio.document.recipe.layers).toHaveLength(initialRecipe().layers.length);
   });

@@ -23,7 +23,7 @@ async function fixture(buildReadiness?: () => "ready" | "needs-setup" | "checkin
   let nextFile: StudioPickedFile | undefined, layer = structuredClone(recipe.layers[0]);
   const downloads: { name: string; type: string; blob: Blob }[] = [];
   let maskInput: typeof layer | undefined, imported: { recipe: Recipe; name: string } | undefined;
-  let loadedBytes: Uint8Array | undefined;
+  let loadedBytes: Uint8Array | undefined, loadedFor: string | undefined;
   let bakeMask = async (_value: typeof layer) => new Blob(["png"], { type: "image/png" });
   const files = new StudioFileOperations({
     pick: async () => { const file = nextFile; nextFile = undefined; return file; },
@@ -34,7 +34,7 @@ async function fixture(buildReadiness?: () => "ready" | "needs-setup" | "checkin
     importRecipe: (value, name) => { imported = { recipe: value, name }; },
     hasSavedV: () => true,
     savedV: () => ({ gameVersion: 2000 } as any),
-    loadSavedV: bytes => { loadedBytes = bytes; return { suggestedEyeShape: 3 }; },
+    loadSavedV: (bytes, character) => { loadedBytes = bytes; loadedFor = character; return { suggestedEyeShape: 3 }; },
     savedVReady: () => true,
     executeCollection: request => service.execute(request),
     recoverCollection: draft => service.dispatch({ kind: "collection.undoOpen", collection: studio.shown()!, ...(draft !== undefined ? { draft } : {}) }),
@@ -55,7 +55,7 @@ async function fixture(buildReadiness?: () => "ready" | "needs-setup" | "checkin
     setFile: (file?: StudioPickedFile) => nextFile = file, downloads, saved: () => studio.library.collections.list().length,
     setBakeMask: (next: typeof bakeMask) => bakeMask = next, setColor, importOther,
     packageInput: () => studio.packageInput() as { presets: { recipe: Recipe }[] } | undefined, imported: () => imported, maskInput: () => maskInput,
-    loadedBytes: () => loadedBytes };
+    loadedBytes: () => loadedBytes, loadedFor: () => loadedFor };
 }
 
 test("recipe and mask workflows use typed file ports with the original names, limits and detached layer", async () => {
@@ -67,18 +67,18 @@ test("recipe and mask workflows use typed file ports with the original names, li
   const exported = JSON.parse(await f.downloads[0]!.blob.text());
   expect(exported).toEqual({ schema: "xfs/recipe-7", ...f.editor().recipe });
   f.setFile(picked("wing.json", JSON.stringify(exported)));
-  expect((await f.files.execute({ kind: "recipe.import" })).ok).toBe(true);
+  expect((await f.files.execute({ kind: "recipe.import", collection: "c-1" })).ok).toBe(true);
   expect(f.imported()?.name).toBe("wing");
   expect(f.imported()?.recipe).toEqual(f.editor().recipe);
   // Only recipe files import: a bare in-memory recipe or a collection is refused as before.
   for (const text of [JSON.stringify(f.editor().recipe), JSON.stringify({ schema: "xfas/collection-1", id: crypto.randomUUID(), name: "Library", presets: [] })]) {
     f.setFile(picked("other.json", text));
-    expect(await f.files.execute({ kind: "recipe.import" })).toMatchObject({ ok: false });
+    expect(await f.files.execute({ kind: "recipe.import", collection: "c-1" })).toMatchObject({ ok: false });
   }
   f.setFile(picked("wing.json", JSON.stringify(exported)));
-  expect((await f.files.execute({ kind: "recipe.import" })).ok).toBe(true);
+  expect((await f.files.execute({ kind: "recipe.import", collection: "c-1" })).ok).toBe(true);
   f.setFile(picked("large.json", "{}", 1_000_001));
-  expect(await f.files.execute({ kind: "recipe.import" })).toMatchObject({ ok: false, code: "too_large" });
+  expect(await f.files.execute({ kind: "recipe.import", collection: "c-1" })).toMatchObject({ ok: false, code: "too_large" });
   expect(f.imported()?.name).toBe("wing");
   expect((await f.files.execute({ kind: "mask.export" })).ok).toBe(true);
   expect(f.downloads.at(-1)).toMatchObject({ name: `xfs-${f.layer().id}-alpha.png`, type: "image/png" });
@@ -127,17 +127,21 @@ test("refused file actions cannot release or replace an in-flight mask export", 
     message: "Raster worker failed." });
   expect(f.files.snapshot()).toMatchObject({ last: { kind: "mask.export", ok: false, code: "file_failed" } });
   expect(f.files.snapshot().busy).toBeUndefined();
-  expect(await f.files.execute({ kind: "recipe.import" })).toMatchObject({ ok: false, code: "cancelled" });
+  expect(await f.files.execute({ kind: "recipe.import", collection: "c-1" })).toMatchObject({ ok: false, code: "cancelled" });
   expect(f.files.snapshot()).toMatchObject({ last: { kind: "recipe.import", ok: false, code: "cancelled" } });
 });
 
 test("saved-V acquisition returns typed result and cancellation never applies bytes", async () => {
   const f = await fixture();
   f.setFile(picked("V.dat", "bytes"));
-  expect(await f.files.execute({ kind: "savedV.import" })).toMatchObject({ ok: true, code: "loaded",
+  expect(await f.files.execute({ kind: "savedV.import", character: "c-1" })).toMatchObject({ ok: true, code: "loaded",
     savedAppearance: { suggestedEyeShape: 3 } });
   expect(new TextDecoder().decode(f.loadedBytes())).toBe("bytes");
-  expect(await f.files.execute({ kind: "savedV.import" })).toMatchObject({ ok: false, code: "cancelled" });
+  // The V the request named when it was asked is the one the save goes to (profiles design §3.3); a request naming none is refused.
+  expect(f.loadedFor()).toBe("c-1");
+  expect(f.files.capability({ kind: "savedV.import", character: "" })).toMatchObject({ available: false, code: "missing_target" });
+  expect(f.files.capability({ kind: "recipe.import", collection: "" })).toMatchObject({ available: false, code: "missing_target" });
+  expect(await f.files.execute({ kind: "savedV.import", character: "c-1" })).toMatchObject({ ok: false, code: "cancelled" });
   expect(f.files.snapshot().busy).toBeUndefined();
   expect((await f.files.execute({ kind: "savedV.export" })).ok).toBe(true);
   expect(f.downloads.at(-1)?.name).toBe("v-appearance.json");

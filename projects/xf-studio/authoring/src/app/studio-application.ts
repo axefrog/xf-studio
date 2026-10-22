@@ -1076,6 +1076,8 @@ export class StudioApplication {
     return this.ownsAsync("library", request.kind) ? this.asyncHandlers.library.execute(request)
       : { ok: false as const, code: "invalid_value", message: "Unknown command." };
   }
+  /** A file workflow's descriptor (shared and frozen), for an input layer naming its targets. */
+  fileDescriptor(kind: string) { return this.routes.asyncDescriptors("files")[kind] as FileDescriptor | undefined; }
   /** A file workflow's capability, routed by the registry to the `files` family (the workflow's own answer). */
   fileCapability(action: StudioFileAction): { available: boolean; reason?: string; code?: ReasonCode } {
     const denied = this.denied();

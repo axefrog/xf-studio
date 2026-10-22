@@ -7,6 +7,7 @@ import type { ReadonlyDeep } from "../platform/api/read-only";
 import type { SavedAppearanceState } from "../character/saved-appearance-actions";
 import type { SavedV } from "../saves/save-reader";
 import { CC_PRESET_LIMITS, readPresetJson } from "../character/cc-preset";
+import { refusal, type ReasonCode } from "../platform/api/capability";
 
 export type StudioFileKind = "recipe" | "collection" | "savedV" | "characterPreset";
 export type StudioPickedFile = { name: string; size: number; text(): Promise<string>; bytes(): Promise<Uint8Array> };
@@ -15,10 +16,17 @@ export type StudioFilePort = {
   download(blob: Blob, name: string): void;
   bakeMask(layer: Layer): Promise<Blob>;
 };
+/**
+ * A file workflow. One that waits for a file picker names, when it is asked, what the file goes to (profiles design §3.3: an asynchronous
+ * picker holds a capture): a save or character preset names its V (`character`), a recipe its collection (`collection`).
+ */
 export type StudioFileAction =
-  | { kind: "recipe.import" | "recipe.export" | "mask.export" | "savedV.import" | "savedV.export" }
-  /** A portable character preset (`xfs/cc-preset-1`): load it as the shown V, or save the choices set on the shown V. */
-  | { kind: "characterPreset.import" | "characterPreset.export" }
+  | { kind: "recipe.export" | "mask.export" | "savedV.export" }
+  | { kind: "recipe.import"; collection: string }
+  | { kind: "savedV.import"; character: string }
+  /** A portable character preset (`xfs/cc-preset-1`): load it as the V it names, or save the choices set on the shown V. */
+  | { kind: "characterPreset.import"; character: string }
+  | { kind: "characterPreset.export" }
   | { kind: "collection.import" | "collection.export" | "collection.plan" | "package.check" | "package.build" }
   /** Bring back an earlier draft: `draft` (its collection ID, from the recent-drafts list) names one, else the previous one. */
   | { kind: "collection.recover"; draft?: string };
@@ -46,10 +54,12 @@ export type StudioFileState = { busy?: StudioFileAction["kind"];
 type FileSources = {
   recipe(): ReadonlyDeep<Recipe>;
   selectedLayer(): ReadonlyDeep<Layer> | undefined;
-  importRecipe(recipe: Recipe, name: string): void;
+  /** Import a recipe as a new preset of `collection` (the one the request named when it was asked). */
+  importRecipe(recipe: Recipe, name: string, collection: string): void;
   hasSavedV(): boolean;
   savedV(): SavedV | undefined;
-  loadSavedV(bytes: Uint8Array): Readonly<SavedAppearanceState>;
+  /** Show a save's V on `character` (the V the request named when it was asked). */
+  loadSavedV(bytes: Uint8Array, character: string): Readonly<SavedAppearanceState>;
   savedVReady(): boolean;
   savedVUnavailableReason?(): string | undefined;
   executeCollection(request: CollectionRequest): Promise<CollectionOutcome>;
@@ -58,8 +68,8 @@ type FileSources = {
   characterPreset?: {
     /** Why a preset can't be loaded or saved now, or undefined. */
     unavailable(kind: "import" | "export"): string | undefined;
-    /** Load a decoded preset file as the shown V (the context validates it once); throws its plain reason. */
-    load(value: unknown): void;
+    /** Load a decoded preset file as `character` (the context validates it once); throws its plain reason. */
+    load(value: unknown, character: string): void;
     save(): Promise<{ text: string; name: string; values: number; leftOut: number; personal: number }>;
   };
   /**
@@ -117,8 +127,11 @@ export class StudioFileOperations {
       ? "This work cannot be cancelled once started; its result will still arrive and can be retried after it completes."
       : "Nothing with that ID is running." };
   }
-  capability(action: StudioFileAction): { available: boolean; reason?: string } {
+  capability(action: StudioFileAction): { available: boolean; reason?: string; code?: ReasonCode } {
     if (this.busy) return { available: false, reason: "Another file operation is in progress." };
+    // What a picker's file goes to is named when it is asked (profiles design §3.3), never decided when the file arrives.
+    if (action.kind === "recipe.import" && !action.collection) return refusal("missing_target", "Open a collection first.");
+    if ((action.kind === "savedV.import" || action.kind === "characterPreset.import") && !action.character) return refusal("missing_target", "Choose a V first.");
     switch (action.kind) {
       case "recipe.import": case "recipe.export": return { available: true };
       case "mask.export": return this.sources.selectedLayer() ? { available: true } :
@@ -169,7 +182,7 @@ export class StudioFileOperations {
           if (file.size > 1_000_000) throw new FileOperationError("too_large", "Recipe is too large.");
           const recipe = readPortableRecipe(JSON.parse(await file.text()));
           if (!recipe) throw Error(RECIPE_FILE_MESSAGE);
-          this.sources.importRecipe(recipe, file.name.replace(/\.json$/i, ""));
+          this.sources.importRecipe(recipe, file.name.replace(/\.json$/i, ""), action.collection);
           outcome = { ok: true, code: "imported", message: `Opened ${file.name}` }; break;
         }
         case "recipe.export":
@@ -187,7 +200,7 @@ export class StudioFileOperations {
           const file = await this.port.pick("savedV");
           if (!file) return this.finish(owner, action.kind, { ok: false, code: "cancelled", message: "Saved V selection cancelled." });
           if (file.size > 128 * 1024 * 1024) throw new FileOperationError("too_large", "Save is larger than the supported limit.");
-          const savedAppearance = this.sources.loadSavedV(await file.bytes());
+          const savedAppearance = this.sources.loadSavedV(await file.bytes(), action.character);
           outcome = { ok: true, code: "loaded", message: "Your V is loaded. Skin, face details, eyes, brows, lashes, hair, piercings and body follow in a moment.",
             savedAppearance }; break;
         }
@@ -200,7 +213,7 @@ export class StudioFileOperations {
           if (!file) return this.finish(owner, action.kind, { ok: false, code: "cancelled", message: "Character preset selection cancelled." });
           if (file.size > CC_PRESET_LIMITS.bytes) throw new FileOperationError("too_large", "This character preset can't be read: the file is larger than 1 MB.");
           // The JSON is read once here and the preset once by the context (CORE-55).
-          this.sources.characterPreset!.load(readPresetJson(await file.bytes()));
+          this.sources.characterPreset!.load(readPresetJson(await file.bytes()), action.character);
           outcome = { ok: true, code: "loaded", message: `Loaded ${file.name}. Your V's skin, face details, eyes, brows, lashes, hair, piercings and body follow in a moment.` }; break;
         }
         case "characterPreset.export": {

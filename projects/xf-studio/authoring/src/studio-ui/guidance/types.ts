@@ -1,6 +1,6 @@
 import type { PreviewSetupAction } from "../../preview/preview-setup";
 import type { PresentationAction } from "../../app/studio-presentation";
-import type { StudioFileAction } from "../../app/studio-file-operations";
+import type { PresentationFileAction } from "../../app/studio-presentation";
 import type { StudioPanelId } from "../layout-defaults";
 import type { AnchorId } from "./anchors";
 
@@ -27,7 +27,7 @@ export type ActiveLayerAction = DistributiveOmit<Extract<PresentationAction, { l
 export type TourCommand =
   | { kind: "studio"; action: PresentationAction }
   | { kind: "studio.activeLayer"; action: ActiveLayerAction }
-  | { kind: "file"; action: StudioFileAction }
+  | { kind: "file"; action: PresentationFileAction }
   | { kind: "previewSetup"; action: PreviewSetupAction }
   /** The existing dock command that opens (or brings forward) a panel. */
   | { kind: "panel"; panel: StudioPanelId };

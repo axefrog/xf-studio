@@ -61,8 +61,9 @@ export class CollectionApplication implements CollectionViewPort {
   initialize() { return this.execute({ kind: "initialize" }); }
   /** The collection shown (the Presets panel's), which its own requests name; undefined while loading. */
   private shown() { return this.service.draftIdentity()?.collectionId ?? ""; }
-  importRecipe(recipe: Recipe, name: string) {
-    const outcome = this.dispatch({ kind: "collection.importRecipe", collection: this.shown(), recipe, name });
+  /** Import a recipe as a new preset of `collection` (the one the import named when it was asked). */
+  importRecipe(recipe: Recipe, name: string, collection: string) {
+    const outcome = this.dispatch({ kind: "collection.importRecipe", collection, recipe, name });
     if (!outcome.ok) throw Error(outcome.message);
   }
   recover(draft?: string) {

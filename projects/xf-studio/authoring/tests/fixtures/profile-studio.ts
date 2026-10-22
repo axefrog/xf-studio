@@ -113,7 +113,7 @@ export async function profileStudio(options: {
   const files = new StudioFileOperations({ pick: async () => options.pick?.(), download: (blob, name) => { void blob.text().then(text => downloads.push({ name, text })); },
     bakeMask: async () => new Blob() }, {
     recipe: () => core.document.recipe, selectedLayer: () => core.document.recipe.layers[core.document.active],
-    importRecipe: (value, name) => application!.importRecipe(value, name),
+    importRecipe: (value, name, collection) => application!.importRecipe(value, name, collection),
     hasSavedV: () => false, savedV: () => undefined, loadSavedV: () => ({}), savedVReady: () => false,
     executeCollection: request => core.app.execute(request), recoverCollection: draft => application!.recover(draft),
   });

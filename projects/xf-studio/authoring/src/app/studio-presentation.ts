@@ -21,7 +21,7 @@ import type { ModuleService, PlannedModule, StudioModule, ViewId, ViewSummaryCon
 import type { EyeMakeupAction } from "../legacy/eye-makeup/eye-makeup-model";
 import type { RecipeAction } from "../engines/layered-makeup/recipe-actions";
 import type { FieldLimit } from "../platform/api";
-import type { StudioFileOperations } from "./studio-file-operations";
+import type { StudioFileAction, StudioFileOperations } from "./studio-file-operations";
 import type { UIPreferenceActions } from "./ui-preferences";
 import type { ViewportAttachment } from "./viewport-attachment";
 import type { LocalSetupActions } from "../setup/local-setup-actions";
@@ -135,6 +135,8 @@ export type FeatureLookup = {
 
 /** An action as a presentation dispatches it: its named targets may be left for the port to name (profiles design §3.6). */
 export type PresentationAction = Unnamed<StudioAction>;
+/** A file workflow as a presentation asks for it: what a picker's file goes to may be left for the port to name. */
+export type PresentationFileAction = Unnamed<StudioFileAction>;
 /**
  * The application's entry points as a presentation calls them (profiles design §3.6): an action may leave its named targets out, and the
  * port, the input layer, names them before the application sees it, from what the shown tab's focused view resolves to (a menu's targets
@@ -171,7 +173,10 @@ export type StudioPresentationPort<Slot> = {
   readonly experiments?: ExperimentPort;
   readonly authoring: PresentationAuthoring;
   readonly library: CollectionViewPort;
-  readonly files: Pick<StudioFileOperations, "capability" | "execute" | "activity" | "cancel"> & {
+  /** File workflows; one that waits for a picker may leave what its file goes to for the port to name (profiles design §3.3). */
+  readonly files: Pick<StudioFileOperations, "activity" | "cancel"> & {
+    capability(action: Unnamed<StudioFileAction>): ReturnType<StudioFileOperations["capability"]>;
+    execute(action: Unnamed<StudioFileAction>): ReturnType<StudioFileOperations["execute"]>;
     snapshot(): ReadonlyDeep<ReturnType<StudioFileOperations["snapshot"]>>;
   };
   readonly viewport: Pick<ViewportAttachment<Slot>, "attach" | "rehost" |
@@ -417,6 +422,9 @@ export function createStudioPresentation<Slot>(sources: {
   const name = <A extends { kind: string }>(action: A | Unnamed<A>): A => resolver
     ? resolver.complete(action as A, a.descriptor(action.kind)) : action as A;
   const editingScope = () => resolver?.editing();
+  // A picker's request names what its file goes to now, when it is asked (§3.3), not when the file arrives.
+  const nameFile = (action: Unnamed<StudioFileAction>): StudioFileAction => (resolver
+    ? resolver.complete(action, a.fileDescriptor(action.kind)) : action) as StudioFileAction;
   const authoring: StudioPresentationPort<Slot>["authoring"] = {
     snapshot: () => a.snapshot(), actionKinds: () => a.actionKinds(),
     requestKinds: () => a.requestKinds(), actionDescriptors: () => a.actionDescriptors(),
@@ -508,8 +516,8 @@ export function createStudioPresentation<Slot>(sources: {
   };
   const files: StudioPresentationPort<Slot>["files"] = {
     // File workflows route through the application's registry (the `files` family).
-    snapshot: () => f.snapshot(), capability: action => a.fileCapability(action),
-    execute: action => a.executeFile(action), activity: () => f.activity(), cancel: id => f.cancel(id),
+    snapshot: () => f.snapshot(), capability: action => a.fileCapability(nameFile(action)),
+    execute: action => a.executeFile(nameFile(action)), activity: () => f.activity(), cancel: id => f.cancel(id),
   };
   const viewport: StudioPresentationPort<Slot>["viewport"] = {
     snapshot: () => v.snapshot(), attach: (kind, slot) => v.attach(kind, slot),
