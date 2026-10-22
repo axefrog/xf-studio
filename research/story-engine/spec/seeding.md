@@ -1,24 +1,9 @@
 # S2. Seed language and seeding layer specification
 
-**Status:** v0.3, 23 October 2026.
-- **The review.** v0.2 went through one review, by GPT-6 Astra; [§16](#16-review-record) records what changed.
-- **Dossiers folded in.**
-  - v0.1 folded in [dossier 8](../craft/d08-scale-threads-time.md#9-requirements-for-the-seed-language-p4) (scale, threads and time).
-  - v0.16 folds in [dossier 23](../craft/d23-evaluation-testing.md) (evaluation and testing): fixtures for every lint group, and the property tests (§14.1).
-  - v0.15 folds in [dossier 22](../craft/d22-language-models.md) (language models): a model call as a text-valued draw, a write-once render ledger, two invariants, the phrasing-author mode, checks and fallbacks (§2.23).
-  - v0.14 folds in [dossier 21](../craft/d21-words-dialogue.md) (words): subtext, voice cards, V's options, told stories, humour, variety in frames, channel budgets, the author-fill contract (§2.22).
-  - v0.13 folds in [dossier 20](../craft/d20-staging-legibility.md) (staging in the world): stage blocks, a ladder of rungs, focal cards, audiences, "why?" answers, kits (§2.21).
-  - v0.12 folds in [dossier 19](../craft/d19-rights-platforms.md) (rights, licences and platforms): game content by reference, voices, origin, real-world names (§2.20); the minors floor extended to exploitation roles.
-  - v0.11.1 clarifies author-fill seams: the engine composes and places authored-source content like any data, procedural seeds included; only its source material comes from people.
-  - v0.11 folds in [dossier 18](../craft/d18-content-boundaries.md) (representation and content boundaries): content classes with one ceiling ladder each, author-fill seams ([D-23](../decisions.md)), the legal floors, and representation checks (§2.19).
-  - v0.10 folds in [dossier 17](../craft/d17-setting-tone.md) (setting and tone): the tone vocabulary and tone lint, stake scale, dread guards, withheld patron motives, outlets for media, setting reads (§2.18).
-  - v0.9 folds in [dossier 16](../craft/d16-authoring-tools.md) (authoring formats and tools): maturity and placeholders, a text syntax for predicates, source maps, the finding contract, structure versions, and missing content at run time. R1 is now lint-clean.
-  - v0.8 folds in [dossier 15](../craft/d15-people-networks-order.md) (people, networks, norms and order): social reads, casting through ties, betrayal and norm seeds, reputation through behaviour (§2.17).
-  - v0.7 folds in [dossier 14](../craft/d14-city-events.md) (where and when things happen in the city): city reads, hot-state windows, and the limits on the director over city events (§2.16).
-  - v0.6 folds in [dossier 13](../craft/d13-perception-curiosity.md) (perception, memory and curiosity): three exposure grades and the display contract, re-cued callbacks, `mustReach`, hooks and twists, counter-cues, channel modality.
-  - v0.5 folds in [dossier 12](../craft/d12-player-model-trust.md) (the player model, trust and manipulation): the model's boundary (§8.8), bounded hooks, offers frozen at display, a "why this?" record, and the `believes` firewall.
-  - v0.4 folds in [dossier 11](../craft/d11-saves-memory-forgetting.md) (saves, memory and forgetting): session and wall-clock independence, the return view and recaps, durable cosmetic marks, recall in responses.
-  - v0.3 folds in [dossier 10](../craft/d10-change-theme-payoff.md) (character change, theme and payoff): premises and costs, NPC turns, typed plants and traces, and NPC attribution lines ([D-22](../decisions.md)).
+**Status:** v1.0, 23 October 2026.
+- **Reviews.** Two reviews by GPT-6 Astra: of v0.1 (25 findings) and of v0.16 (23 findings), all adopted (§16).
+- **The core.** v1.0 defines the core: the subset the first implementation builds (§0.3). Everything else on this page is a **later capability**, which the first implementation rejects plainly rather than accepting with partial behaviour.
+- **The research.** Versions v0.1 to v0.16 folded in the requirements of dossiers 8 and 10 to 23. §15 traces each dossier's list; git history has the version steps.
 
 This is the specification stage of [P4](../p4-seeding-layer.md) (work package [WP-10](../plan.md#82-work-packages)). It is exact enough to implement layer 2 in the reference model from this page plus the kernel specification [S0](kernel.md) and the reference model's [notes](../../../projects/xf-story-engine/reference/SPEC-NOTES.md).
 
@@ -62,21 +47,67 @@ Authored packs (layer 4), the procedural engine (layer 3) and other plugins (`st
 2. **Fixed parts don't all compile the same way.** A fixed role constraint becomes a casting `must` (§5). A fixed requirement on world state becomes a `constrain` contribution (§3.2).
 3. **Content choices** (alternates, variants, modes) are drawn by layer 2 with the kernel's draw arithmetic (§3.4), not as kernel slots.
 
-### 0.3 The first implementation
+### 0.3 The core: what the first implementation builds
 
-The first implementation is in the TypeScript reference model, beside the kernel. It implements everything here except:
+The first implementation proves one complete path: **pack → cast → offer → response → consequence → save and load**, with authoring failures an author can understand. It is built in the TypeScript reference model, beside the kernel.
 
-| Deferred | The first implementation instead |
+**The core.**
+
+| Area | In the core |
 |---|---|
-| Profiles other than the relationship ladder (§2.10) | The ladder only ([Appendix A](#appendix-a-the-relationship-ladder-profile)) |
-| The text-honesty lexicon (§11.1, L-20, L-21) | A small provisional lexicon in a fixture pack; the checks are warnings |
-| Capability predicates over V's state (`cap`, §2.6) | A registry stub answering `maybe` unless a fixture sets it |
-| Rendering scale forms differently | The form is chosen and recorded; rendering is S7's |
-| The fit report under director policies (§11.2) | The director off |
-| The director's form, phase, scoring and joint hooks (§2.13, §8.3) | The built-in fallbacks |
-| Migration with a beat map (§12.3) | `continue` and `withdraw` only |
-| Stand-ins beyond the constructible subset (§5.4) | The subset only; anything else fails the lint |
-| Extension slots: other packs adding alternates to a beat (§2.8) | None; deferred past the first public pack |
+| Packs and instances (§1) | Namespaced ids, maturity, structure versions with a frozen semantic closure (§12.3), one-shot and bounded repeatable seeds |
+| Binding (§2.2, §2.4, §5) | Fixed, preferred and open parts; bounded role queries; identities; `must` and `prefer`; claim priority; ladders of `wait`, `relax` and `withdraw` |
+| Predicates (§2.6) | Kleene logic; guarded game facts; seed facts; `role`, `cast`; beat, response and seed states; `since`, `hour`; `count`; `exposed`; `setting`; registered reads (`fn`) with declared dependencies |
+| Execution (§6, §7) | One beat graph; links with their conditions always evaluated (§7.1); objectives and failures; one end predicate; the unattended plan |
+| Offers (§2.9, §7.4) | Actions, declines, null path, bounded reoffers, retract, foresight and writes; one response lifecycle for every offer |
+| Effects (§2.5) | Seed-fact writes, declared kernel effects, reward-table references, capability-checked game writes, only for operations the game port supports |
+| Delivery (§8) | One arbiter, channel fallback, attention gates, spacing and caps, a total retry bound, three exposure grades, persistent answerable offers, receipts |
+| Content (§2.19, §2.20) | Registered classes, ceilings, the floors, one fallback chain, author-fill presentation slots, game content by reference, origin |
+| Text (§2.8, §2.22) | Authored text with typed placeholders, speaker and evidence metadata, correctable attribution lines (D-22), released words frozen |
+| Persistence and tools (§10 to §12) | Delivery receipts, draws, responses, the maintenance queue, safe pack continuation and removal, predicate explanation, a deterministic fit report |
+| Profiles | The relationship ladder (Appendix A), expanded entirely into core constructs |
+
+**Later capabilities.** The first implementation rejects these with a plain finding ("not supported yet"):
+
+| Later capability | Why it waits |
+|---|---|
+| Live language models and generated phrasing packs (§2.23) | An optional presentation layer with heavy validation; the renderer seam and frozen text records are enough now |
+| The memory machinery: forgetting, widening, recall curves (S0 V4-9 to V4-11) | Exact beliefs already support coherent speech; nuanced memory needs a measured policy |
+| The player-preference hooks: scoring, phase, form and joint (§8.3, §8.8) | World fitting stays available. Preference-based scheduling comes after option invariance is shown |
+| Staging: rungs, kits, approaches, interference (§2.21) | Needs the realiser and game-port contracts. The core uses one carrier with a report fallback |
+| Told-story assembly, humour blocks, subtext and voice-card analysis (§2.22) | Authoring patterns and audits, not runtime primitives. Told stories start as authored report templates |
+| City, norm, brokerage and reputation reads (§2.16, §2.17) | S1 produces them. The core reads them through registered reads |
+| Premises, scale ancestry, turn taxonomies, tension annotations (§2.3, §2.13) | Metadata and pack audits until a director uses them |
+| Short and full forms, abstract settlement, stand-ins beyond the constructible subset (§2.13, §5.4) | They enlarge the state space. Authored alternatives and explicit paths suffice |
+| Clocks and projections (§2.14) | Clocks start as sugar over consumed counts, threshold predicates and sign deliveries |
+| Further profiles and extension slots (§2.10) | Pack data can show demand first |
+| Tone, slang, specificity, representation and variety audits (§2.18, §2.19, §2.22) | The policies stand, with manual review; automated scoring waits for calibration on real content |
+| The full return view (§8.7) | The core has a pull recap grounded in exposure |
+| Migration by beat map (§12.3) | `continue` and `withdraw` only |
+
+**Lints in the core** (§11.1):
+
+| Group | Checks |
+|---|---|
+| Document integrity | L-01, L-13, L-73, L-74 |
+| Binding guarantees | L-02, L-17, L-76 |
+| Choices and writes | L-05, L-06, L-12, L-15 |
+| Closure and failure | L-07, L-09, L-89 |
+| Perspective | L-19, L-52, L-56, L-57, L-60, L-61 |
+| Evidence | L-49, L-58, L-62, L-63 |
+| Content and seams | L-93 to L-95, L-97 to L-101, L-109, L-111, L-116 |
+| Asset declarations | L-114, L-115; L-112 if flashing effects are supported |
+| Advice (warnings) | L-04, L-20, L-21, L-28, L-44 |
+
+Other checks wait for the construct they check. Craft patterns aren't correctness conditions in the core: three stances, three clue routes, a cost on every success, a hidden patron motive, a fact on every non-texture beat, and three wording frames are all advice.
+
+**Shared fallbacks.** These are one mechanism: presentation fallbacks over one semantic payload:
+- `implied` forms;
+- fades;
+- an author-fill slot's partner;
+- a model-free `says`.
+
+Callbacks, reports, "why?" answers and recaps share one evidence-backed way of rendering claims. Fronts, testing arcs, slides and ladders expand into ordinary seeds.
 
 ### 0.4 What S2 needs from the kernel (S0 v4)
 
@@ -111,7 +142,7 @@ A **seed instance** is a minted `core:seed` node. Its `Id` follows S0 §1.1:
 | The procedural engine | `director` | The id of S3's sowing decision | `"seed:" + templateId + ":" + localName` |
 | Another plugin | Its root, `H("root", worldSeed, "plugin:" + pluginId)` | The id of its `story.seed@1` request | As the plugin names it |
 
-An instance keeps its **expanded document**: the template after profile expansion and the variant merge (§3.1). It keeps this in its state (§12.1). It runs on that document until it ends, whatever later pack versions say (§12.3). Content references (`ContentRef`) still resolve against the active pack, so wording can be corrected under a live instance; structure can't.
+An instance keeps its **expanded document**: the template after profile expansion and the variant merge (§3.1). It keeps this in its state (§12.1). It also keeps the **semantic closure** of that document: every fragment and definition it references transitively, with their `needs`, `leaves`, offers, responses and effects. It runs on that closure until it ends, whatever later pack versions say (§12.3). Only **presentation** (the text behind `ContentRef`s) still resolves against the active pack, so wording can be corrected under a live instance; consequences can't.
 
 ### 1.3 Sowing authored templates
 
@@ -780,7 +811,7 @@ interface SeedForms {
 
 **Consumed events.** Clocks and `count` atoms read only events layer 2 has **consumed**. When a relevance event reports a canon event that matches a clock's tick pattern or a `count` pattern, layer 2:
 1. commits every field the pattern used (participants, place, effect), with `committed` pins, so the match can never change on a reload (S0 §9.2);
-2. adds the event's `Id` and time to the seed's consumed set, once. An event that matches twice is still one entry.
+2. records the consumption **per subscription** (each clock, and each `count`): the event's `Id`, its time, the `fills` it contributed and the cast binding used. Each is recorded once, and never recomputed. Every event field the pattern read (kind, participants, place, effect, witnesses) is committed.
 
 A role in a pattern means that role's committed cast **at the event's time**. Before the role commits, nothing matches it.
 
@@ -978,7 +1009,7 @@ A fragment carries `content: Array<{ class; intensity: 1 | 2 | 3 }>`. A seed car
 - **Defaults.** The `as-the-game` preset is the default. A pack may lower a ceiling for its own seeds, never raise the player's.
 - **One gate, four checks.** The ceiling is checked at sowing, at fragment choice (§7.2), at release (§8.3) and at display (§8.5). The release step uses the settings in force at release. Each gating is recorded in `provenance.gated`, with no model input (§8.8).
 - **Reading the ceiling.** The `setting` atom reads `content.<class>` as an integer, never `maybe`.
-- **Skip.** The player's one-input **retract** (§8.3) plays the running beat's `implied` form or ends it, withdraws the offer quietly, and writes a neutral `retracted` entry: no reoffer of that seed, no effect, no input to the model. It adds the class and level to `softExclusions`. Leaving, skipping past or letting it lapse is a plain decline.
+- **Skip.** The player's one-input **retract** (§8.3) plays the running beat's `implied` form or ends it, and withdraws the seed quietly (T10a): no reoffer, no effect, no unattended consequence, no input to the model. It adds the class and level to `softExclusions`. Leaving, skipping past or letting it lapse is a plain decline.
 - **Notices before, not during.** A warning shows only for classes the player flagged, and before the scene. Each delivery's descriptors are always available under "Details", in the settings voice. Warnings don't protect a player; the player's own controls do.
 
 **Author-fill seams** ([D-23](../decisions.md)). Explicit sexual content is part of the genre, and the engine handles it like any other content class. It sows, fits, casts, composes, places and times it, procedural seeds included, within the player's ceilings.
@@ -986,7 +1017,7 @@ A fragment carries `content: Array<{ class; intensity: 1 | 2 | 3 }>`. A seed car
 **What humans supply is data.** The model-driven tools that write the project's own text and assets (the authoring assistant, and any language model in S7) don't produce it. So for such a class, the **source material** (text units, scenes, assets) comes from packs people write:
 - **Authored-source classes.** S4 marks a class `authoredSource`. A text unit or asset in it needs `authored: 'human'` and a named author in the pack manifest (L-97). No model-generated text or asset fills it. How the engine uses that material (selection, recombination, casting, timing) is unrestricted.
 - **Every such fragment has a non-explicit partner,** its `implied` form or `fade`, that leaves the same facts (L-100). A seed therefore runs identically whether or not a pack supplies the material, and model-written content always has a form it can produce.
-- **Unfilled slots are marked.** A seed may reference an author-fill slot with a `todo` content reference of kind `author-fill` (§11.1). Below `ready` it shows as a placeholder; at `ready`, the implied form plays until a pack fills it.
+- **Author-fill slots are typed, optional presentation slots.** The seed's own pack owns the slot and its partner, and both share one semantic definition. A slot with a valid partner is exempt from L-72 at `ready`: the partner plays until a pack fills the slot. Removing the pack that fills a slot selects the partner. Removing the seed's own pack withdraws the seed (§12.3).
 
 **The explicit scene:**
 - its source material is `authored: 'human'`;
@@ -1078,7 +1109,7 @@ A constructed source is refused where it contradicts confirmed exposure or V's a
 4. **report:** someone tells of it;
 5. **record:** only the record holds it.
 
-The rung falls as V's distance and attention fall, and rises without skipping. A rung always agrees with the rung below it and with the record. A seed declares its `lowestRung`, and, per rung, the world requirements it `needs`. The fit report names the rung chosen for each capability gap, in plain words (L-28). After a load, the scene is restaged at the rung its current phase needs.
+The scene's **phase** is authoritative event state; the **rung** is only a presentation choice compatible with it. Raising the rung after an event has ended never replays the performance or re-runs its effects, and restaging is idempotent. The rung falls as V's distance and attention fall, and rises without skipping. Physical staging agrees with the world; a reported claim agrees with its teller's recorded perspective, which may be wrong. A seed declares its `lowestRung`, and, per rung, the world requirements it `needs`. The fit report names the rung chosen for each capability gap, in plain words (L-28). After a load, the scene is restaged at the rung its current phase needs.
 
 **Arriving from any side.** S4 supplies a place's approach keys: the walkable entries into it. Reads (`reads.from`) name the approaches they serve, or `all`. An approach within 30 m with no read within about 15 seconds' walk is warned.
 
@@ -1202,7 +1233,7 @@ A second-person mental verb inside the template, or a leading question about V's
 - `stance`: `polarise` or `integrate`;
 - `quotes`: at most two.
 
-How reportable an event is, is computed, not authored. Every event a teller tells must be one the teller witnessed or was told (L-130). The evaluation is the teller's own, so perspectives reach speech directly. A `standard` form needs an evaluation.
+Each claim in a told story, including its causes and quotations, is checked against the **teller's own beliefs and evidence**, not just against the event: knowing that an event happened isn't knowing its hidden participants or causes (L-130). In the core, told stories are ordinary authored report templates; computed reportability and six-part assembly are later capabilities. The evaluation is the teller's own, so perspectives reach speech directly. A `standard` form needs an evaluation.
 
 **Humour.** A fragment marked comic carries a `humour` block:
 - `opposition`: what clashes;
@@ -1431,6 +1462,8 @@ At sowing, layer 2 collects every kernel value the instance's predicates can rea
 | Clock ticks and `count` patterns | `{ kind: core:event, where: [the pattern's kind] }`, with the pattern's place or participant scope where it names one |
 | `fn` | Each fact or node in its `reads` |
 | `believes` | None: beliefs produce no kernel changes. A live instance with a `believes` atom re-evaluates at every simulation window boundary (§4.3) |
+| Registered reads (`fn`, and the `city` and `social` reads when supported) | Each registered read declares its dependencies (kernel values, time, bound roles) and its invalidation rule; interests and wake-ups follow from them |
+| `setting`, `exposed` | Layer 2 re-evaluates readers when settings change, and when a receipt or canon event changes the exposure ledger |
 | `seed` | None: layer 2 re-evaluates readers when any seed changes state, through a reverse index from template and instance ids to the instances whose predicates name them |
 
 Casting candidates are not watched individually. A `waiting` seed re-casts on its wake-up deadline (§4.3), and on any relevance event to its frames.
@@ -1592,8 +1625,9 @@ Each transition is recorded (§10.1). At each re-evaluation step, the first appl
 | T7 | `cast` | The first release was prepared and confirmed, for an offer | `offered` | Commit (§5.3) |
 | T8 | `cast` | The first release was prepared and confirmed, for a beat that isn't an offer | `running` | Commit; start the beat |
 | T9 | `offered` | V's response to the first offer is an action (§7.4) | `running` | Apply the action's writes; the offer beat is `done` |
-| T10 | `offered` | V's response to the first offer is a decline, a retract, the null path, or an exposed lapse with `then: 'unattended'` | `unattended` | Its content and writes (§7.4) |
-| T11 | `offered` | The first offer lapsed with `then: 'reoffer'`, or lapsed without ever being displayed | `cast` | `attempt` + 1 for the offer's draws |
+| T10 | `offered` | V's response to the first offer is a decline; the null path with no reoffers left; or an exposed lapse with `then: 'unattended'` | `unattended` | Its content and writes (§7.4) |
+| T10a | `offered`, `running` | V retracts an offer (§7.4) | `withdrawn` | Quietly: pending deliveries cancelled; no response effects; no unattended plan; a neutral `retracted` entry. History already committed stays |
+| T11 | `offered` | The first offer was answered "not now" with reoffers left, lapsed with `then: 'reoffer'`, or lapsed without ever being displayed, within the offer's total attempt bound (§8.5) | `cast` | The offer beat is `deferred` (§7.4); `attempt` + 1 for the offer's draws |
 | T12 | `running` | `end` is yes, and no promise without `mayStayOpen` is open | `resolved` | Close as a success (§6.4) |
 | T13 | `unattended` | The plan's `after` has passed since entry | `resolved` | Apply `outcome`; mint its events; close as settled (§6.4) |
 | T14 | `cast` | The first request expired unreleased with `onExpire: 'unattended'` | `unattended` | — |
@@ -1662,7 +1696,9 @@ Loose ends are a record, not new seeds. S3 MAY grow new seeds from them, naming 
 A final state never changes. A beat leaves `locked` at most once.
 
 **Links.** A link is satisfied when:
-- `because b, on p`: `b` is in a final state and `p` is yes. A `skipped` source passes through: the link is satisfied once `b` is skipped, whatever `p` says;
+- `because b, on p`: `b` is in a final state and `p` is yes. `p` is **always** evaluated. A skip is one of two kinds:
+  - **omitted** (a short form, a content ceiling, a shrunk role): the beat is transparent. Its link passes through as if it were done without effects, and `p` still decides;
+  - **rejected** (an unchosen branch, a cancelled aftermath): the link is never satisfied.
 - `obstructedBy b`: `b` is not `available` and not `running`;
 - `then b`: `b` is in a final state.
 
@@ -1712,8 +1748,8 @@ Every offer beat, first or later, follows the same **response lifecycle**:
 |---|---|---|---|
 | An action | `response` event, `kind = action:<id>` | The action's `writes`, once | `done` |
 | A decline | `response` event, `kind = decline:<id>` | The decline's `writes`, and its response content is delivered | `done` |
-| The null path ("not now") | `response` event, `kind = null` | The null path's `writes` | `deferred`, if it has `reoffer` and offers remain; else `done` |
-| A retract (one input) | `response` event, `kind = retract` | None; `retractQuietly` is delivered | `done` |
+| The null path ("not now") | `response` event, `kind = null` | The null path's `writes` | `deferred`, if it has `reoffer` and offers remain; else `done`. The first offer follows the same rule (T10, T11) |
+| A retract (one input) | A neutral `retracted` record entry; no `response` event, and nothing for the player model | None; `retractQuietly` is delivered; the class and level join `softExclusions` | The seed is withdrawn quietly (T10a). No reoffer and no unattended consequence follow from it |
 | A lapse, after the offer was exposed | No event; a `lapse` record entry | The lapse content is delivered | By `lapse.then`: `deferred` for `reoffer`, else `done` |
 | A lapse, never exposed | A `missed` record entry | None | Back to `available`, with `attempt` + 1 |
 
@@ -1850,12 +1886,12 @@ Releasing a delivery is two steps, so nothing invalid reaches V.
 1. re-evaluates its windows. A delivery with `windowClose` needs the release window, or for a first release some window, to be `open`;
 2. re-checks the casts the delivery binds: tentative casts against their effective `must`, committed ones by §5.5;
 3. re-checks claims (§9.2);
-4. for a first release: records the release window and the form, then commits (§5.3);
-5. runs the fixed-part watch (§3.5) on everything installed in step 4.
+4. for a first release: opens a **staged batch** (S0 §14.2a), records the release window and the form, and commits (§5.3) inside it;
+5. runs the fixed-part watch (§3.5) on everything in the batch.
 
-**Confirm.** If every step passed, the delivery is `released` and handed to the game port.
+**Confirm.** If every step passed, the batch is committed: its cast edges, contributions, frames, beliefs and edges take effect together, and only then are their relevance and dilemmas dispatched. The delivery is `released` and handed to the game port.
 
-**On failure,** the seed undoes step 4: it ends the edges and contributions it just added, and closes the frames it opened. All of these are history in the op log, but they were never in effect for V. The seed then applies the failure's policy:
+**On failure,** the batch is discarded. Nothing it held is ever persisted or dispatched; only a `prepare-failed` record entry remains. The seed then applies the failure's policy:
 - a closed window: T2 or T3;
 - a lost cast: the role's ladder;
 - a rejected fixed part: its `ifRejected`.
@@ -1890,6 +1926,9 @@ Release is not exposure.
   - **Persistent channels** (a message thread, a journal line, a shard, a pin) wait `displayTimeoutPersistent` play seconds **[tunable 600]**.
 
   An offer that lapses having been only `presented` counts as missed, not declined.
+
+  **A total attempt bound.** Retries, misses and timeouts all count towards one bound per logical offer, `maxAttempts` **[tunable 3]**, across channels and reloads. After it, the offer stops being pushed. It stays available by pull, and only a genuinely new trigger in the seed can push it again.
+- **Ceilings at presentation.** The content ceiling is checked again **just before presenting**, including when persistent content is reopened after a load. The player's current settings win over the settings in force at release. A released text that is now over the ceiling is not replaced (S2-I-16): the presentation layer hides it, or shows its separately identified permitted fallback, and records which.
 - **The cue.** The display record keeps `cue { place, speaker, object }`: the ids present when the delivery was shown. Callbacks use it to re-cue memory (§10.2).
 
 Delivery state (`released`, `displayed`, `answered`) is persisted in the seed's state (§12.1). After a load:
@@ -1902,7 +1941,14 @@ The closing deliveries of §6.4 belong to a terminal seed, but they must still a
 - `H("close", seedId, kind)`, for the closing trace and coda content;
 - `H("news", seedId)`, for news.
 
-The terminal instance stays in the seed table until they are displayed, or until `closeExpiry` game seconds have passed **[tunable 3 game days]**. While it waits, it is not a demand root and holds no retention roots (§12.1). After a load, its closing deliveries are queued again.
+The terminal instance stays in the seed table until they are displayed, or until `closeExpiry` game seconds have passed **[tunable 3 game days]**. After a load, its closing deliveries are queued again.
+
+**The maintenance queue.** Work that outlives a seed is kept in a small layer-2 queue, independent of live-seed re-evaluation:
+- resets of `resettable` pins;
+- expiry of cosmetic carriers;
+- closing deliveries.
+
+Each job retains only the references it needs, such as a cast node or a carrier's place, as retention roots, and releases them when it finishes. A terminal seed is not a demand root.
 
 ### 8.7 The return view
 
@@ -1919,7 +1965,7 @@ The terminal instance stays in the seed table until they are displayed, or until
 
 The bucket bounds are **[tunable]**.
 
-**How the deliveries are made.** They are `recap` deliveries, and pass in the `returning` state (§8.2). They are assembled from:
+**An orientation surface, not story.** The return view consumes no push budget, changes no deadline, and is no hook input, so the save's age never reaches story scheduling (S2-I-12). In the core it is a pull recap, grounded in exposure. **How its items are made.** They are `recap` deliveries, shown in the `returning` state (§8.2). They are assembled from:
 - the exposure ledger;
 - `closure` entries;
 - loose ends;
@@ -1942,14 +1988,16 @@ The director (S3) keeps a model of V: beliefs held by the root actor `director` 
 - Registry functions declare their read-set, and one that reads a `director → v` belief is rejected (L-57).
 - `believes` can't name the director (L-56).
 
+**The model ranks and defers formed offers, and nothing else.** Every structural choice (variants, alternates, casting, forms, unattended resolution) is made without it. With `noticing: off`, every model-dependent exit is off. In the core, the preference hooks are a later capability (§0.3).
+
 **Its only exits are these, each bounded:**
 
 | Exit | Bound |
 |---|---|
-| The fitting hook | `fitWeight` clamped to ±`fitCap` (§3.4) |
+| The fitting hook | **World fitting only:** it reads the world, never the player model. Its `fitWeight` is clamped to ±`fitCap` (§3.4) |
 | The scoring hook | A delta clamped to ±`scoreCap` (§8.3) |
 | The phase hook | Removes only (§8.3) |
-| The form hook | Chooses among a seed's declared forms (§2.13) |
+| The form hook | Reads explicit settings only, never the model (§2.13) |
 | The joint hook | Reads game state only |
 | V's inferred frames (S0 §10.4) | They focus attention; they pin nothing (S0 I-12) |
 
@@ -2049,7 +2097,11 @@ The kinds:
 - `stuck`;
 - `rung`.
 
-The record is capped at `recordMax` entries **[tunable 512]**. Past the cap, the oldest `draw`, `expired`, `missed` and `prepare-failed` entries are dropped first. The other kinds are kept. Dropping never renumbers: references by `n` (`growsFrom`, `looseEnds`) stay valid, and a reference to a dropped entry reads as "dropped".
+**Two kinds of history.** The seed's state is split:
+- **Semantic state** must survive, and is compacted, never dropped: counters, entries something references by `n` (`growsFrom`, `looseEnds`), receipts, responses and released text.
+- **The diagnostic record** (the other entry kinds) is bounded at `recordMax` entries **[tunable 512]**, dropping the oldest first.
+
+Dropping never renumbers; a reference to a dropped entry reads as "dropped". P7 measures save size and save latency on a long-running arc before setting the bounds.
 
 ### 10.2 The exposure ledger
 
@@ -2067,7 +2119,9 @@ type ExposurePattern = { event?: EventPattern; fragment?: FragmentId; seed?: Tem
                          atLeast?: ExposureGrade };   // default confirmed
 ```
 
-`exposed(pattern)` is yes if any entry matches at `atLeast` or above, and no otherwise. After a load, the ledger is rebuilt from the kernel's canon events and the instances' delivery states.
+`exposed(pattern)` is yes if any entry matches at `atLeast` or above, and no otherwise.
+
+**Receipts.** Every delivery that reaches `presented` or above leaves a compact **receipt** that outlives it: `{ delivery, grade, channels, cites, cue, at }`. Receipts are kept in the instance's state, and moved to the layer-2 global record when the instance is compacted. After a load, the ledger is rebuilt from the kernel's canon events and the receipts. The two-channel warning rule (§7.3) reads the receipts' `channels`.
 
 **Uses:**
 - a lapse counts as declined only if the offer was `confirmed` (§7.4);
@@ -2090,6 +2144,13 @@ interface Callback { cites: ExposurePattern; atLeast: ExposureGrade; recue?: Con
 ## 11. Lint and the fit report
 
 ### 11.1 Lint
+
+**Three kinds of check.** Each check has one class, one severity and one execution point:
+- **structural validation** at compile time;
+- **runtime gate**, where missing evidence waits or selects a fallback, never errors;
+- **advisory audit**, which reports and never blocks a correct, playable seed.
+
+Checks whose evidence is only known in play (actual exposure, a cast's age, a confirmed baseline) are runtime gates. Where this page names one check as both an error and a fallback, as with dread intensity, the runtime fallback rules and the static check is advice.
 
 **Findings are for authors.** Each lint check declares:
 - **`speed`:** `static`, checked from the document alone, or `sampled`, checked by running sample states;
@@ -2382,7 +2443,7 @@ The new template's `migrate` entry covering the instance's version can say other
 - **`withdraw`** withdraws the instance (T1);
 - **`migrate`** moves it to the new structure by `beatMap`. It is deferred in the first implementation (§0.3).
 
-**Structure versions.** `structureHash` is the hash of the expanded document, excluding the contents of text units. `Seed.version` MUST rise exactly when the structure hash changes; the authoring tool enforces it. `Migration.from` names those versions. A text-only edit keeps the version, and reaches live instances as corrected wording.
+**Structure versions.** `structureHash` is the hash of the expanded document and the semantic hashes of everything it references (§1.2), excluding the contents of text units. `Seed.version` MUST rise exactly when the structure hash changes; the authoring tool enforces it. `Migration.from` names those versions. A text-only edit keeps the version, and reaches live instances as corrected wording.
 
 **Ids are permanent.** A retired id leaves a **tombstone**, optionally naming its replacement (L-74).
 
@@ -2415,7 +2476,7 @@ A **removed pack** withdraws its live instances (T1), because their content refe
 | S2-I-12 | **No wall clock.** Wake-ups run on game or play time only, and no predicate reads the wall clock. Real-world absence advances nothing; the save's age is read only by the return view |
 | S2-I-13 | **The model has no entrance.** No seed construct reads or writes the director's model of V; it reaches layer 2 only through the bounded hooks of §8.8 |
 | S2-I-14 | **Closed hook inputs.** Hooks receive only the inputs listed in §8.8 |
-| S2-I-15 | **Words don't steer.** Nothing structural reads rendered text, whether a model ran, or the model settings (§2.23) |
+| S2-I-15 | **Words don't steer.** Given identical timestamped external inputs, rendering never changes a semantic payload or blocks structural scheduling. Nothing structural reads rendered text, whether a model ran, or the model settings. Display durations come from authored duration slots, not from text length; a slow render falls back at once (§2.23) |
 | S2-I-16 | **Released words are immutable.** A released delivery's text is never replaced (§2.23) |
 
 ## 14. Fixtures
@@ -2453,7 +2514,7 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 | SF-28 | **Recap from exposure only.** A save 20 days old, with one exposed closure and one closure V never saw | The view cites the exposed closure only (plus any settled news already queued) |
 | SF-29 | **Cosmetic mark survives.** A `cosmetic` effect with a place carrier and durability of 5 game days is displayed; save; load | The mark is re-derived and shown when the place's district is active, until it expires |
 | SF-30 | **Settings are lenses.** Change `memoryScale` after several exposures | Every exposure, pin and closure is unchanged |
-| SF-31 | **Returning or not.** Load a save 3 days old, then quick-reload it | The first load enters `returning`; the quick reload doesn't |
+| SF-31 | **Returning or not.** Load a save 3 days old; play; save; load that new save at once | The first load enters `returning`. The second doesn't: its save's own age is minutes. All story decisions in the two runs are identical |
 | SF-32 | **`believes` firewall.** A seed whose `believes` atom names the director | L-56 error; not sown |
 | SF-33 | **Frozen at display.** Change the model between an offer's display and V's answer | Nothing about the offer changes, and no hook concerning it sees the change |
 | SF-34 | **Option invariance.** Release the same offer under two different model states | Identical options, order, costs and wording; only timing may differ |
@@ -2482,6 +2543,11 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 | SF-57 | **Stage lint** (L-118). A stage with one implied event and one sign kind; its corrected twin | The first fails; the twin passes |
 | SF-58 | **Words lints** (L-119 to L-130). One tripping seed and one passing seed per check | Each check fires on its trip and not on its twin |
 | SF-59 | **Model lints** (L-131 to L-137), with a stub renderer and a tape | Each check fires on its trip and not on its twin. Structural hashes equal with no model, a stub and a different stub (S2-I-15) |
+| SF-60 | **Branch safety.** An acceptance-only successor, after a decline, after a content omission, and after missing content | Never reachable. An omitted beat's link still evaluates its condition |
+| SF-61 | **Failed release leaks nothing.** SF-23, with authored beliefs, edges and a goal frame that triggers a dilemma | The batch is discarded: no belief, edge, frame or dilemma ever takes effect or is dispatched |
+| SF-62 | **Retry bound.** A transient offer that keeps going unseen across channels and two reloads | At most `maxAttempts` pushes in total; then it waits for pull |
+| SF-63 | **Reset after closure.** A seed writes a resettable fact and resolves the same day | The maintenance queue still withdraws the pin at the reset time |
+| SF-64 | **First-rung "not now".** R1's first offer answered with the null path | The offer beat is deferred and offered again within its bounds; the seed doesn't go unattended |
 | SF-26 | **Constructed trace.** A trace with no found cause, `latitude` allowing `trace-cause`. S3's stub contributes a cause: an event at a stall. The trace is displayed; save; load | The `display` entry records `constructed`. The cause's fields are pinned `committed` at display, and resolve identically after the load |
 
 ### 14.1 Property tests
@@ -2536,7 +2602,32 @@ The fixtures are examples. With the layer-2 implementation, the reference model 
 
 ## 16. Review record
 
-v0.3's additions from dossier 10 have not been reviewed. They will be reviewed with the layer-2 implementation's code review, by the fixtures.
+### Round 2: GPT-6 Astra, extra-high effort, on v0.16
+
+The review found 23 issues: 3 blockers and 20 important. All were adopted, and its core set with small changes (§0.3). The changes:
+- **C-01** link conditions are always evaluated; skips are omitted or rejected (§7.1).
+- **C-02** releases are prepared in a staged batch (§8.4; S0 §14.2a).
+- **C-03** the semantic closure is frozen (§1.2, §12.3).
+- **C-04** the core and the later capabilities (§0.3).
+- **C-05** retract is one quiet transition (T10a).
+- **C-06** receipts (§10.2).
+- **C-07** ceilings are checked at presentation (§8.5).
+- **C-08** the production gate (S0 V4-28).
+- **C-09** author-fill slots (§2.19).
+- **C-10** S2-I-15 is restated.
+- **C-11** the model only ranks formed offers (§8.8).
+- **C-12** registered reads and routing (§4.1; S0 V4-27).
+- **C-13** consumption per subscription (§2.14).
+- **C-14** a total attempt bound (§8.5).
+- **C-15** one offer lifecycle (T10, T11).
+- **C-16** the maintenance queue (§8.6).
+- **C-17** the return view is an orientation surface (§8.7, SF-31).
+- **C-18** phase against rung (§2.21).
+- **C-19** told claims are checked against the teller's beliefs (§2.22).
+- **C-20** recall once per encounter (S0 V4-29).
+- **C-21** semantic state against the diagnostic record (§10.1).
+- **C-22** Appendix A declares `exit` and defers absence.
+- **C-23** three kinds of check (§11.1).
 
 ### Round 1: GPT-6 Astra, extra-high effort, on v0.1
 
@@ -2600,6 +2691,7 @@ For `n = rungs.length`, and rung index `i` from 0:
 
 1. **Facts.**
    - `rung`: a route variable, initial 0, `lasting`. Its consumers are the offer beats and the end.
+   - `exit`: a route variable, initial 0 (1 decline, 2 stay, 3 lapse), `lasting`. Its consumers are the exit beats and the end.
    - Each boundary fact: `authoredOnly`, `lasting`.
 2. **Offer beats** `offer-i`, for `i = 1 … n−1`:
    - **Fragment.** `play: offers[rungs[i]].offer`, fixed. The fragment's `OfferSpec`:
@@ -2619,7 +2711,7 @@ For `n = rungs.length`, and rung index `i` from 0:
    - `exit-lapse`: available when `since` the last `done` offer beat (or sowing) ≥ `lapseAfter`, and the count of qualifying acts in that span is 0. Content `exits.lapse`.
 
    The three are mutually `obstructedBy`, so at most one plays.
-4. **Absence.** If `absence` is set: a texture beat `reunion`, available when V has had no qualifying act with the person for `absence.after`. It has `reoffer: { when: (same condition), max: unbounded }`, so it can recur. A reunion never lowers `rung`.
+4. **Absence** (a later capability). A reunion after a long absence needs a supported repetition mechanism. In the core, `absence` is not expanded, and the lapse exit covers a relationship left alone.
 5. **Intimacy.** If `intimate` is set: a beat `intimate`, `because offer-(n−1), on: rung = n−1`. It plays `{ alternates: [scene, fade] }`:
    - `scene` applies when the player's content setting allows `contentTag`;
    - `fade` applies otherwise.

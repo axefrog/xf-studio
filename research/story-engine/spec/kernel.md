@@ -1,6 +1,7 @@
 # S0. Kernel specification
 
-**Status:** v4.5, 23 October 2026.
+**Status:** v4.6, 23 October 2026.
+- v4.6 adds staged batches, widens relevance routing to layer 2, tightens the production gate, fixes recall to once per encounter, and defers the memory machinery and implicit edges from the first version, after GPT-6 Astra's second review of S2 (V4-26 to V4-30 in §20).
 - v4.5 adds the `coarseFine` declaration on processes and the property-test plan, from [dossier 23](../craft/d23-evaluation-testing.md) (V4-24 and V4-25 in §20).
 - v4.4 adds an age class on people, typed and sensitive content settings, and lines that refuse events, from [dossier 18](../craft/d18-content-boundaries.md) (V4-21 to V4-23 in §20).
 - v4.3 adds implicit edge types (specified; implementation deferred) and states the `aggregate` hook's contract, from [dossier 15](../craft/d15-people-networks-order.md) (V4-18 to V4-20 in §20).
@@ -74,6 +75,7 @@ Deferred items are named in the text where they apply, and are recorded as compr
 | Frame suspension under budget | Queued work pauses; frame status and interests are unchanged (§10.4) |
 | Fine-grained cache dependency tracking | Cache keyed by revision and query time (§5.5) |
 | Implicit edge types (§2.5, v4.3) | Only materialised edges are tested. Casting through ties opens a bounded candidate set first (S2) |
+| Memory machinery: accessibility, the forgetting sweep, widening and `onRecall` (§11.2, v4.1) | Beliefs are kept exactly; non-memorable beliefs follow the existing fading hooks. The fields `uses`, `salience` and `widened` are carried but unused |
 | Processes with different base periods | One shared simulation window. Processes run every n-th window (§9.4) |
 | Function-specific query bounds (`Bound`) | Optional; without one, the verdict is `maybe` (§2.1, §8.2) |
 | Reasoning about "opposite" effects in the conflict table | Explicit violation pairs only (§10.8) |
@@ -672,7 +674,19 @@ An event becomes **canon** when:
 - a seed commits it, which pins the committed fields `committed`;
 - a persisted effect depends on it, which pins the fields the effect needs `committed`.
 
-**Lines refuse events** (v4.4). An event whose kind falls in a content class the player has excluded (`SettingsSet.classExclusions`, or a content ceiling of 0) is refused before it is minted, with reason `excluded`. Nothing downstream is minted from it. Settings that change only presentation never refuse events.
+**Lines refuse new occurrences** (v4.4; tightened in v4.6). The exclusion gate applies to **new occurrences the engine produces**, before they are published, together with everything that depends on them:
+- process outputs;
+- summary counts and their items;
+- fact writes;
+- rewards.
+
+An occurrence in a content class the player has excluded (`SettingsSet.classExclusions`, or a content ceiling of 0) is not produced, with reason `excluded`.
+
+**What the gate doesn't touch:**
+- **Records of what the game itself did** (mirrored readings, observed events) are kept as they are: the engine must still understand the world accurately. Their presentation is filtered separately (S2 §2.19).
+- **Replayed history** is never re-filtered.
+
+Where a generic event kind can't identify the class, the occurrence carries a content classification.
 
 Only those fields are pinned. Causes, other participants and other details stay open until something needs them.
 
@@ -832,7 +846,7 @@ An interest selector `σ` matches change `x` if **one binding** satisfies all of
 - **Emission.**
   1. Each receiving actor gets at most one emission per (change, frame, interest type): the one with the greatest `r`.
   2. It is emitted when `r ≥ θ_react` **[calibrate]**, as `Relevance { actor, frame, change, type, r }`.
-  3. Emissions go to S1 and S3, in order of actor (demand roots first), then frame `Id`. Emissions on frames whose actor is a `core:seed` go to layer 2 (S2) as well, in the same order (v4).
+  3. Emissions go to S1 and S3, in order of actor (demand roots first), then frame `Id`. Emissions on frames whose actor is one layer 2 has registered (every `core:seed`, and the pack roots that carry sowing watchers) go to layer 2 (S2) as well, in the same order (v4; widened in v4.6). Layer 2 also hears dilemmas (§10.8) whose frames belong to those actors.
 
 ### 10.6 Demand and tiers
 
@@ -926,7 +940,7 @@ Beliefs are stored per believer and indexed by (subject, path, at). They never c
   ```
 
   It uses only `ln` and arithmetic (§1.3). No process ticks it.
-- **Recall.** `onRecall` returns the form of a belief at an encounter: `exact`, `region`, `gist` or `gone`. A `region` comes from the slot class's `Widen`. The draw is `rand("recall", believer, belief.id, encounter)`, where `encounter` is the stable `Id` of the contact event S1 mints, so the same question gets the same answer after a reload. A recall increments `uses`. The forms nest: a believer who can recall a belief exactly can also recall it as a region or as gist.
+- **Recall.** `onRecall` returns the form of a belief at an encounter: `exact`, `region`, `gist` or `gone`. A `region` comes from the slot class's `Widen`. The draw is `rand("recall", believer, belief.id, encounter)`, where `encounter` is the stable `Id` of the contact event S1 mints, so the same question gets the same answer after a reload. Recall is evaluated **once** per (belief, encounter): the result is stored with the encounter, `uses` increments once, and a delivery that depends on it keeps the result and the belief state it rests on (v4.6). The forms nest: a believer who can recall a belief exactly can also recall it as a region or as gist.
 - **The sweep** runs once per `W_forget` game seconds **[tunable 86,400]**, as the forgetting worklist (§10.7). It touches only beliefs that are not memorable, and only those whose accessibility has fallen below the **floor**: the accessibility at the most generous memory setting. A belief below the floor is widened one level by `BeliefSet`, or dropped by `BeliefDropped` once it is gist. A setting raised later can therefore restore anything blurred under a stricter one, because the sweep never went below what the most generous setting would keep.
 
 Events, pins and canon are never forgotten by this. Beliefs are views of them.
@@ -1016,6 +1030,16 @@ Each save has a record `{ saveKey, parent, ops }`, where `parent` is the record 
 - `SettingsSet { memoryScale, resetScale, noticing, exclusions, modelFloor, cityScale, classExclusions, content, at }` (v4.1; city settings v4.2; `content` v4.3, typed in v4.4 as `{ preset, ceiling per class 0..3, notice per class, softExclusions }`, marked sensitive and dropped from exports and bug reports by default, like the director's beliefs about V): every player setting that changes what is offered or remembered, in force from `at`. `noticing`, `exclusions` and `modelFloor` are the director's model settings ([S2 §8.8](seeding.md#88-the-player-models-boundary)). The lineage root records the initial settings. Replays and the harness use the settings in force at each op. Settings that change only presentation are not recorded.
 
 Snapshots are written every **[tunable 10,000]** ops. Ops carry complete data.
+
+### 14.2a Staged batches (v4.6)
+
+Layer 2 sometimes needs to try a set of changes, check them, and keep them only if the checks pass (S2 §8.4). A **staged batch** supports this:
+1. **Open.** `stage()` opens a batch. Operations applied inside it are visible to resolution, `trace` and queries made through the batch, and to nothing else.
+2. **Silence.** While a batch is open, it emits no changes, relevance or dilemmas. Its operations aren't persisted. Other operations are not interleaved with it.
+3. **Commit.** `commit()` applies the batch's operations as one unit. They are persisted, the revision advances, and their changes are dispatched in the order the operations were made.
+4. **Discard.** `discard()` drops the batch. No operation, change or revision remains. Only the caller's own diagnostic record says it happened.
+
+A batch is bounded by the shared work allowance (§10.7). The reference model MAY implement it by snapshot and restore.
 
 ### 14.3 Loading is replacement
 
@@ -1241,6 +1265,11 @@ v4 adds what the seeding layer and sifting need. None of the additions changes a
 | V4-23 | Lines refuse events before minting | §9.2 | Lines (S18-S0-03) | To implement with S1's first process |
 | V4-24 | `coarseFine` on process registrations | §9.4 | Simulation validation ([dossier 23](../craft/d23-evaluation-testing.md) S23-S0-07) | Optional; ignored by resolution |
 | V4-25 | The property, soak and docking test plan | §16.3 | S23-S0-01 to S23-S0-17 | With the next reference-model version |
+| V4-26 | Staged batches: stage, commit, discard | §14.2a | S2 §8.4: a failed release leaves nothing in effect (Astra's second S2 review, C-02) | To implement |
+| V4-27 | Relevance and dilemmas routed to layer 2 for every actor it registers | §10.5, §10.8 | S2 §1.3 sowing watchers (C-12) | Delivery only |
+| V4-28 | The production gate applies to new occurrences and their dependents; observed history is kept | §9.2 | C-08 | To implement with S1's first process |
+| V4-29 | Recall once per (belief, encounter) | §11.2 | C-20 | With V4-11, deferred |
+| V4-30 | The memory machinery (V4-9 to V4-11) and implicit edges (V4-18) are deferred from the first version | §0.2 | Astra's core set | Deferred |
 
 **Dossier 11's other kernel requirements:**
 - **S1 policies:**
