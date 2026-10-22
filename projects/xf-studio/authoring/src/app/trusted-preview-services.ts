@@ -15,7 +15,10 @@ import { DEFAULT_MOTION, type MotionScene } from "../animation/scene-motion";
 export function graphMotionScene(graph: ViewGraph, preview: () => PreviewActions | undefined, shown: ViewId = MAIN_VIEW): MotionScene {
   return {
     motion: () => structuredClone(graph.state<SceneState>(shown, "scene").motion ?? DEFAULT_MOTION),
-    setMotion: (motion, options) => { graph.edit(shown, "scene", { state: { motion } }, { applied: true, ...(options?.seed ? { seed: true } : {}) }); },
+    setMotion: (motion, options) => {
+      if (options?.sample) graph.sample(shown, "scene", { motion });
+      else graph.edit(shown, "scene", { state: { motion } }, { applied: true, ...(options?.seed ? { seed: true } : {}) });
+    },
     physics: view => preview()?.scenePhysics(view) ?? graph.state<SceneState>(shown, "scene").physics === true,
     setPhysics: (enabled, view) => preview()?.setScenePhysics(enabled, view),
     draws: view => preview()?.drawsScene(view) ?? view === shown,

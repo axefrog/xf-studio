@@ -270,7 +270,9 @@ G1 (scene parity on a real V) has not run.
 - **`MotionActions` holds no settings** (`animation/motion-actions.ts`). It is `new MotionActions(port, scene)`, where the `MotionScene` port reads and stores the drawn scene's motion. In the Studio that port is `graphMotionScene(graph, preview, view)` in `app/trusted-preview-services.ts`; fixtures use `localMotionScene()`. The service keeps only what the device is doing now: an idle loading, a pose loading or playing. Changes behave as follows:
   - Every dispatch stores the changed settings, with the device's idle state and phase at that moment, as an applied, unrecorded edit.
   - `restore()` applies the node's motion to a head built for the scene. The order is unchanged: contributions, the idle's clip, the idle, then its phase and pause, else the blink. What the device couldn't take is stored back as restore-time state (`seed`), as the workspace used to save it: an idle or blink not prepared on this computer, or an idle it doesn't have.
-  - `release()` stores the idle's phase. The head attachment calls it before the scene goes (`preview/browser/browser-head-attachment.ts`), so the scene's next head starts where this one was.
+  - `release()` stores the idle's phase. The head attachment calls it before the scene goes (`preview/browser/browser-head-attachment.ts`), so the scene's next head starts where this one was. It also ends the service: an idle load, its rollback or a pose still under way never reaches the device or the scene again, and the service refuses actions (`RELEASED`). Without this, a released head's late load failure reset the shared node to the close-up while its replacement played the chosen idle.
+  - `sample()` reads the playing idle's phase into the node for a save. The workspace composer calls it (its `sample` port) before every capture, so autosaves and the flushes on close and reload store the live phase. It goes through `ViewGraph.sample`, which takes only a codec's `unrecorded` fields and records and publishes nothing, so a save never asks for another save.
+- **A damaged optional scene setting never costs the graph.** The scene codec still refuses invalid values on an edit. On read, `recoverScenes` (`preview/preview-view-graph.ts`) recovers each character scene's optional settings first: each damaged motion field goes back to its default (`recoverSceneMotion`), a damaged idle choice or pose is left out, a motion that isn't an object is left out, and a damaged optional switch (`eyeOwnRoughness`, `uncensored`, `physics`) is left out. Before this, one out-of-range closure in a second scene rejected that scene, the graph fell back to the default one-view graph, and the next save made the loss permanent. Both the session's graph (`workspaceViewGraph`) and the legacy `views` field (`parseWorkspace`) read this way.
 - **The workspace no longer carries motion.** `WorkspaceComposer` lost its `motion` port. The `preview` block's motion fields are written back exactly as they were read, and the root no longer passes the motion snapshot to the workspace session (`compose/studio-startup.ts`; one capture line removed). `parseWorkspace` reads the legacy idle and pose with the node's validators (`validIdleClip`, `storedPoseOf`).
 - **Reduced:**
   - `MotionActions`' `initial`, `blink`, `blinkPlaying`, `clip` and `pending` fields;
@@ -288,14 +290,15 @@ G1 (scene parity on a real V) has not run.
 
 **Gates.**
 
-- **T1** (`tests/scene-motion.test.ts`, 7 tests):
+- **T1** (`tests/scene-motion.test.ts`, 11 tests):
   - an upgraded workspace's motion comes through unchanged (read once, then only the node is written, and the node wins on the next read);
   - a workspace round-trips byte-identically when nothing changed; an upgraded one gains only its main scene's `motion`, once;
   - an older-build reader: the scene codec at `d9f88a33` reads every stored scene node, the legacy fields hold the upgrade's motion, and the downgrade round trip reads the older build's motion again;
   - the codec validates and normalises, and refuses a damaged motion;
   - motion records no step, and Undo and Redo of eye shape and hair physics leave it as it is now (fails with `keepUnrecorded` removed);
   - a new head of the same scene restores the node's motion from the phase the previous head left, whatever the workspace snapshot says;
-  - a device's fallbacks are stored as restore-time state that records nothing.
+  - a device's fallbacks are stored as restore-time state that records nothing;
+  - after review: a damaged closure in a second scene (and a damaged switch beside it) keeps both views and recovers only that field, and so does the legacy `views` field; a released service's late idle load failure leaves the replacement's choice, and a pose still loading on it never plays; a save reads the playing idle's phase (7.25 s, not the 3.5 s of the last change) without recording, publishing or touching the legacy fields. The recovery and release tests fail with their fixes taken out.
 - **Restore order:** `tests/trusted-preview-services.test.ts` and `tests/preview-service.test.ts` are unchanged and pass.
 - **History parity:** `tests/golden/history-parity.json` is unchanged. The View and lighting session's data digest now leaves out the scenes' `motion` (`tests/fixtures/history-parity.ts`), and every step, label, event and Undo or Redo state matches.
 - **Tests that built `MotionActions` from a `preview` block** now pass the motion to a scene. The composer and idle-choice persistence tests now check the node and the session.
@@ -304,9 +307,8 @@ G1 (scene parity on a real V) has not run.
 
 | Run | Result |
 |---|---|
-| Motion, idle, pose, blink, view-graph, history, parity, workspace, profiles, boundary, lighting, preview-service and scene tests | 96 files, 974 pass, 0 fail (peak 1.5 GB) |
-| Every other test file importing a changed module | 18 files, 138 pass, 0 fail |
-| `tests/scene-motion.test.ts` | 7 of 7 pass |
+| Motion, idle, pose, blink, view-graph, history, parity, workspace, profiles, boundary, lighting, preview-service and scene tests, and every other test file importing a changed module (after the review fixes) | 114 files, 1,115 pass, 0 fail (peak 1.6 GB) |
+| `tests/scene-motion.test.ts` | 11 of 11 pass |
 | WebGL probes whose tests touch motion | scene host 7 of 7, renderer device 7 of 7 (peaks 1.1 and 1.2 GB) |
 | WebGL disposal gate (its page plays the idle) | 4 of 4 pass (peak 1.1 GB; the first attempt was stopped by the guard's free-memory floor while the game ran, and passed once memory recovered) |
 | `bun run check` | passes |
@@ -314,7 +316,7 @@ G1 (scene parity on a real V) has not run.
 **Decisions and caveats.**
 
 - **The legacy fields are frozen, not mirrored.** The plan's row said the mirror stays. The brief said to write only the new place, and profiles design §2.4 freezes legacy fields, so they are written back as read.
-- **The idle's phase while it plays.** The node holds the phase as of the last motion change or head release, not the live clock. The workspace used to read the clock at every save. A page reload therefore resumes a playing idle from the last stored phase. A paused idle's phase is exact.
+- **The idle's phase while it plays.** The node holds the phase of the last motion change, head release or save (`sample`), so a page reload resumes a playing idle where it was when the page last saved, as before the move.
 - **Fallbacks are stored, as before.** A head that can't play the idle stores it off, and a missing idle choice falls back to the default. This matches what the workspace used to save, so behaviour is unchanged. Under 4a-iv's residency, though, a masculine runtime (idle `IDLE_MASCULINE`) would write the idle off into a scene a feminine runtime shares. Whether the node should keep the person's choice while a device can't play it is a 4a-iv decision.
 - **Layout fragments carry the motion.** `layoutFragment` copies node state, so a default made from a scene now holds its whole motion (phase, blink, pose), not only the idle choice that design §4.2 names. Phase 2 may trim it.
 - **`storedViewGraph` and `isDefaultViewGraph`** have written nothing in production since phase 1 froze `views`. Their rule ("the default graph's state is the mirrored `preview`") no longer covers motion. They are candidates for removal.

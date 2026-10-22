@@ -24,6 +24,11 @@ export type WorkspaceCapturePorts = {
    * so a workspace that never changes it keeps its bytes. Stored whether or not the 3D preview is ready (it is set before the head loads).
    */
   transitions?(): WorkspaceState["preview"]["transitions"];
+  /**
+   * Read live device state that moves without any change into its owners before anything is captured (the shown head's idle phase into its
+   * scene node, `MotionActions.sample`); records and publishes nothing.
+   */
+  sample?(): void;
   /** The profiles migration's mark and the sessions it built (profiles design §8), as the migration holds them now. */
   profiles?(): Pick<WorkspaceState, "migration" | "profiles">;
 };
@@ -38,6 +43,7 @@ export class WorkspaceComposer {
   constructor(private initial: WorkspaceState, private ports: WorkspaceCapturePorts) {}
   setPreviewReady() { this.previewReady = true; }
   capture(): WorkspaceState {
+    this.ports.sample?.();
     const editing = { ...this.ports.editor(), uvView: this.ports.uvView(),
       savedV: this.ports.savedV(), glitterChoices: this.initial.glitterChoices,
       library: this.initial.library, collections: this.ports.collections(),

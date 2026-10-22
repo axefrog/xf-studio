@@ -20,7 +20,7 @@ import { DEFAULT_CREATOR_LIGHTING, LIGHTING_PRESETS, readCreatorLighting, stored
 import { STUDIO_EXPOSURE_RANGE, STUDIO_KEY_ANGLE_RANGE, validStudioLights, type StudioLights } from "./studio-lighting";
 import { DEFAULT_SETUP_LIBRARY, legacyStudioStage, migrateLegacyLighting, parseSetupLibrary, rigKindOf, type SetupLibrary } from "./lighting-setups";
 import { CAMERA_DISTANCE_RANGE } from "./camera-framing";
-import { previewMotion, sceneMotionOf, type SceneMotion } from "../animation/scene-motion";
+import { previewMotion, recoverSceneMotion, sceneMotionOf, type SceneMotion } from "../animation/scene-motion";
 
 /**
  * A character scene's state: the head's eye shape, the V's material studies and body mode (design §3.1), whether its dangles simulate
@@ -210,7 +210,7 @@ export function defaultViewGraph(preview: PreviewState): ViewGraphData {
  * moved into the scene takes the legacy fields' (read once: from then on the node holds it).
  */
 export function workspaceViewGraph(preview: PreviewState, stored: ViewGraphData | undefined): ViewGraphData {
-  const parsed = stored && parseViewGraph(stored, STUDIO_VIEW_GRAPH_RULES);
+  const parsed = stored && parseViewGraph(recoverScenes(stored), STUDIO_VIEW_GRAPH_RULES);
   if (!parsed) return defaultViewGraph(preview);
   const main = parsed.views.find(view => view.id === MAIN_VIEW) as ViewRecord, nodes = mainNodes(preview);
   // The legacy fields hold only Surface controls and Plate wireframe: every other tool the main view has stays as stored (CORE-97).
@@ -224,6 +224,21 @@ export function workspaceViewGraph(preview: PreviewState, stored: ViewGraphData 
     cameras: overlay(parsed.cameras, main.camera, nodes.camera), lights: overlay(parsed.lights, main.lights, nodes.lights, nodes.rig),
     display: overlay(parsed.display, main.display, nodes.display), tools: overlay(parsed.tools, main.tools, tools) },
   STUDIO_VIEW_GRAPH_RULES) ?? defaultViewGraph(preview);
+}
+
+/**
+ * A stored graph with each character scene's optional settings recovered field by field (a damaged motion field at its default, a damaged
+ * optional switch left out): the scene codec refuses them on an edit, but on read one bad optional value must never cost its scene, and with
+ * it the whole graph. A scene whose required settings are damaged is still refused.
+ */
+export function recoverScenes(stored: ViewGraphData): ViewGraphData {
+  if (!Array.isArray(stored.scenes)) return stored;
+  return { ...stored, scenes: stored.scenes.map(node => {
+    if (!node || typeof node !== "object" || node.kind !== "character") return node;
+    const { motion, eyeOwnRoughness, uncensored, physics, ...rest } = node as typeof node & Partial<SceneState>, recovered = recoverSceneMotion(motion);
+    return { ...rest, ...(bool(eyeOwnRoughness) ? { eyeOwnRoughness } : {}), ...(bool(uncensored) ? { uncensored } : {}),
+      ...(bool(physics) ? { physics } : {}), ...(recovered ? { motion: recovered } : {}) };
+  }) };
 }
 
 /** A graph service for a workspace's preview (and its stored views, if any). */

@@ -85,6 +85,8 @@ export type MotionPort = {
   /** The drawn parts' dangle components (idle-animation.ts): how many, and whether any of them simulates. Absent: no idle rig. */
   dangles?(): { parts: number; simulated: boolean; loaded?: boolean };
 };
+/** Why a released motion service refuses (its head is being replaced; the next one takes the actions). */
+export const RELEASED = "The 3D view is loading again; try again in a moment.";
 /** Why a pose can't be held, in plain words. */
 export const POSE_UNAVAILABLE = "Poses play on V's idle, which XF Studio couldn't read, so she holds still.";
 export type { MotionScene } from "./scene-motion";
@@ -105,6 +107,11 @@ export class MotionActions {
   private poseGeneration = 0;
   /** Whether the scene plays a pose now (so leaving it must give the idle's own clips back). */
   private posePlaying = false;
+  /**
+   * Set once the device is released (`release`): the scene's next runtime owns its motion from then on, so nothing this service still has
+   * under way (an idle load, a pose) may reach the device or the scene any more.
+   */
+  private released = false;
   /** `scene`: where the settings live (the drawn view's scene node); without one, a private store at the default motion. */
   constructor(private port: MotionPort, private scene: MotionScene = localMotionScene()) {
     port.onFaceChange?.(() => this.notify());
@@ -117,7 +124,9 @@ export class MotionActions {
   /** The scene's stored motion settings. */
   private stored(): SceneMotion { return this.scene.motion(); }
   /** Store changed settings in the scene (normalised; the device already shows them). */
-  private store(changes: Partial<SceneMotion>, seed = false) { this.scene.setMotion(withMotion(this.stored(), changes), { seed }); }
+  private store(changes: Partial<SceneMotion>, seed = false) {
+    if (!this.released) this.scene.setMotion(withMotion(this.stored(), changes), { seed });
+  }
   /** The device's idle state now, as the scene stores it (its phase too, so a runtime built later starts where this one is). */
   private live(): Partial<SceneMotion> {
     const idle = this.port.idle;
@@ -141,7 +150,9 @@ export class MotionActions {
   private select(id: string, rollbackTo: string | null, seed = false) {
     this.store({ idleClip: id }, seed);
     const load = this.port.selectIdle ? this.port.selectIdle(id) : Promise.resolve();
-    const pending = this.loading = load.then(() => { if (this.loading === pending) this.loading = null; this.notify(); }, error => {
+    const pending = this.loading = load.then(() => { if (this.released) return; if (this.loading === pending) this.loading = null; this.notify(); }, error => {
+      // A load the released device still had under way: the scene's next runtime decides what plays now.
+      if (this.released) return;
       if (this.loading === pending) this.loading = null;
       if (rollbackTo !== null && this.clip === id) this.store({ idleClip: rollbackTo });
       pageFailure("preview", "idle_clip_unavailable", "That idle couldn't be played from its prepared files, so the previous one stays.", error, { level: "warn" });
@@ -189,6 +200,7 @@ export class MotionActions {
     return this.port.blink.available ? undefined : this.port.blink.error || GAME_BLINK_MISSING;
   }
   capability(action: MotionAction): Capability {
+    if (this.released) return refusal("not_ready", RELEASED);
     // The idle, pause, contributions and blink are the drawn scene's device's (profiles design §3.6): they act only for a view showing it.
     // Physics is a scene-node setting, edited on the named view's scene.
     if (action.kind !== "motion.setPhysics" && !(this.scene.draws ? this.scene.draws(action.view) : action.view === MAIN_VIEW))
@@ -243,10 +255,26 @@ export class MotionActions {
     this.store({ ...this.live(), idleClip: this.clip, ...blink }, true);
     this.notify();
   }
-  /** The device is about to be released: the idle's phase now is stored in the scene, so the scene's next runtime starts there. */
-  release() { this.store(this.live()); }
+  /**
+   * The device is about to be released: the idle's phase now is stored in the scene, so the scene's next runtime starts there. From then on
+   * nothing this service still has under way (an idle load, its rollback, a pose) reaches the device or the scene, and it refuses actions.
+   */
+  release() {
+    if (this.released) return;
+    this.store(this.live());
+    this.released = true; this.loading = null; this.poseGeneration++; this.poseBusy = false;
+  }
+  /**
+   * The idle's phase now, read into the scene for a save in progress (the workspace session calls it before it captures): the clock moves
+   * without any change, so a reload starts the idle where it was. Records nothing and publishes no change.
+   */
+  sample() {
+    const idleTime = this.live().idleTime;
+    if (!this.released && idleTime !== undefined) this.scene.setMotion(withMotion(this.stored(), { idleTime }), { sample: true });
+  }
   /** Whether a pose can be held now (V's motion rig is prepared on this host), with the plain reason when not. */
   poseCapability(): Capability {
+    if (this.released) return refusal("not_ready", RELEASED);
     if (!this.port.setPose || !this.port.available) return refusal("asset_unavailable", this.port.error === IDLE_MASCULINE ? IDLE_MASCULINE : POSE_UNAVAILABLE);
     return { available: true };
   }

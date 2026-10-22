@@ -297,6 +297,20 @@ export class ViewGraph {
     if (trail.back.length > CAMERA_TRAIL_LIMIT) trail.back.shift();
     this.commit([to], undefined, { label, applied: true });
   }
+  /**
+   * Device state read for a save in progress (an idle's phase, which moves without any change): only the slot codec's `unrecorded` fields,
+   * validated, kept as the node's state without recording or publishing anything. No device has to apply it, and the save that read it is
+   * already being written, so publishing would only ask for another save. Returns whether anything changed.
+   */
+  sample(view: ViewId, slot: ViewSlot, state: Readonly<Record<string, unknown>>): boolean {
+    const current = this.nodes.get(this.record(view)[slot])!, fields = this.rules.codecs[slot].unrecorded ?? [];
+    if (Object.keys(state).some(key => !fields.includes(key))) throw new ViewGraphError("invalid_value", "Only live device state can be sampled.");
+    const next = nodeEntry(this.rules, slot, current.id, current.kind, { ...current.state, ...state });
+    if (!next) throw new ViewGraphError("invalid_value", "That setting isn't valid for this view.");
+    if (same(next.state, current.state)) return false;
+    this.nodes.set(current.id, next);
+    return true;
+  }
   /** Camera navigation the device did (orbit, zoom, pan, a lens change): kept as the node's state, never recorded (§3.6). */
   cameraMoved(view: ViewId, pose: Readonly<Record<string, unknown>>): void {
     this.edit(view, "camera", { state: pose }, { applied: true });

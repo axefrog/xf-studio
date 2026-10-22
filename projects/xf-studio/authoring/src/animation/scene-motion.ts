@@ -60,6 +60,21 @@ export function sceneMotionOf(value: unknown): SceneMotion | undefined {
     blinkPlaying: m.blinkPlaying, ...(m.idleClip === undefined ? {} : { idleClip: m.idleClip as string }), ...(pose ? { pose } : {}) });
 }
 
+/**
+ * A stored motion as a reader recovers it: each damaged field at its default (a damaged idle choice or pose left out), so one bad value never
+ * costs the scene or the graph (undefined: not a motion at all, which a reader leaves out). Edits are refused by `sceneMotionOf` instead.
+ */
+export function recoverSceneMotion(value: unknown): SceneMotion | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const m = value as Record<string, unknown>, d = DEFAULT_MOTION;
+  const pose = storedPoseOf(m.pose);
+  return normalised({ idle: bool(m.idle) ? m.idle : d.idle, idleTime: finite(m.idleTime, 0, Number.MAX_SAFE_INTEGER) ? m.idleTime : d.idleTime,
+    idlePaused: bool(m.idlePaused) ? m.idlePaused : d.idlePaused, idleBody: bool(m.idleBody) ? m.idleBody : d.idleBody,
+    idleFace: bool(m.idleFace) ? m.idleFace : d.idleFace, blink: finite(m.blink, 0, 1) ? m.blink : d.blink,
+    blinkPlaying: bool(m.blinkPlaying) ? m.blinkPlaying : d.blinkPlaying, ...(validIdleClip(m.idleClip) ? { idleClip: m.idleClip } : {}),
+    ...(pose ? { pose } : {}) });
+}
+
 /** The motion a workspace's legacy `preview` fields hold (as `parseWorkspace` read them): what a scene stored before the move takes, once. */
 export function previewMotion(preview: Pick<PreviewState, "idle" | "idleTime" | "idlePaused" | "idleBody" | "idleFace" | "blink" | "blinkPlaying" |
   "idleClip" | "pose">): SceneMotion {
@@ -83,8 +98,11 @@ export function withMotion(motion: SceneMotion, changes: Partial<SceneMotion>): 
 export type MotionScene = {
   /** The drawn scene's motion settings (the default motion while its node holds none). */
   motion(): SceneMotion;
-  /** Store the drawn scene's motion settings: the device already shows them, so nothing is applied again. `seed`: restore-time state. */
-  setMotion(motion: SceneMotion, options?: { seed?: boolean }): void;
+  /**
+   * Store the drawn scene's motion settings: the device already shows them, so nothing is applied again. `seed`: restore-time state.
+   * `sample`: the device's live state read for a save in progress (the idle's phase): kept without publishing a change.
+   */
+  setMotion(motion: SceneMotion, options?: { seed?: boolean; sample?: boolean }): void;
   /** Whether a view's scene simulates its dangles, and turning it on or off (a recorded scene setting). */
   physics(view?: string): boolean;
   setPhysics(enabled: boolean, view: string): void;

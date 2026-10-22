@@ -26,7 +26,7 @@ import { parseSetupLibrary, rigKindOf, type SetupLibrary } from "../../preview/l
 import type { ViewGraphData } from "../../platform/api/view-graph";
 import { parseTransitions, type StoredTransitions } from "../../platform/core/transition-settings";
 import { parseViewGraph } from "../../platform/core/view-graph";
-import { EYE_SHAPE_RANGE, HAIR_LOOK_RANGE, inRange, isDefaultViewGraph, STUDIO_VIEW_GRAPH_RULES, validCameraPose } from "../../preview/preview-view-graph";
+import { EYE_SHAPE_RANGE, HAIR_LOOK_RANGE, inRange, isDefaultViewGraph, recoverScenes, STUDIO_VIEW_GRAPH_RULES, validCameraPose } from "../../preview/preview-view-graph";
 
 export type CameraState = { position: number[]; target: number[]; fov: number };
 export type LibraryState = { selected: string; name: string; current?: { id: string; revision: number } };
@@ -272,7 +272,8 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
     if (validCameraPose(p.camera)) state.preview.camera = structuredClone(p.camera);
   }
   // A damaged graph, or the default one written anyway, falls back to the default graph over `preview`.
-  const views = v.views !== undefined ? parseViewGraph(v.views, STUDIO_VIEW_GRAPH_RULES) : undefined;
+  // A scene's damaged optional setting is recovered alone, never costing the graph (`recoverScenes`).
+  const views = v.views && typeof v.views === "object" ? parseViewGraph(recoverScenes(v.views as ViewGraphData), STUDIO_VIEW_GRAPH_RULES) : undefined;
   if (views && !isDefaultViewGraph(views)) state.views = views;
   // The profiles migration's mark and sessions (profiles design §8): kept when they read, else left for the migration to make again.
   const mark = migrationMarkOf(v.migration), profiles = workspaceProfilesOf(v.profiles);

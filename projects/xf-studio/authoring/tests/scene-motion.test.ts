@@ -6,8 +6,8 @@
  * applies the node's motion, with the phase its previous head left.
  */
 import { describe, expect, test } from "bun:test";
-import { MotionActions, type MotionPort } from "../src/animation/motion-actions";
-import { DEFAULT_MOTION, previewMotion, sceneMotionOf, type SceneMotion } from "../src/animation/scene-motion";
+import { MotionActions, RELEASED, type MotionPort } from "../src/animation/motion-actions";
+import { DEFAULT_MOTION, previewMotion, recoverSceneMotion, sceneMotionOf, type SceneMotion } from "../src/animation/scene-motion";
 import { graphMotionScene, createTrustedPreviewServices } from "../src/app/trusted-preview-services";
 import { WorkspaceComposer } from "../src/app/workspace/workspace-composer";
 import { parseWorkspace, serializeWorkspace, type WorkspaceState } from "../src/app/workspace/workspace-state";
@@ -57,14 +57,14 @@ function upgradedWorkspace(): WorkspaceState {
 }
 
 /** A window over a stored workspace: its session, the graph the core makes from it, and the composer that stores it back. */
-function open(state: WorkspaceState) {
+function open(state: WorkspaceState, sample?: () => void) {
   const sessionState = new ProfileSessionState("p-1", state.profiles!.sessions["p-1"]!, seeded());
   const history = createHistoryService();
   const graph = createStudioViewGraph(state.preview, sessionState.graph(), history, viewScope("p-1"));
   const composer = new WorkspaceComposer(state, {
     editor: () => ({ recipe: state.recipe, active: state.active, selected: state.selected, fieldSelection: state.fieldSelection, history: state.history }),
     uvView: () => state.uvView, savedV: () => state.savedV, collections: () => state.collections, quality: () => state.preview.textureSize,
-    preview: () => undefined, views: () => state.views,
+    preview: () => undefined, views: () => state.views, ...(sample ? { sample } : {}),
     profiles: () => ({ migration: state.migration, profiles: sessionState.stored({ graph: sessionViewGraph(graph), dock: sessionState.dock() }, state.profiles) }),
   });
   const save = () => JSON.stringify(serializeWorkspace(composer.capture(), MODEL));
@@ -138,6 +138,65 @@ describe("persistence and migration", () => {
       expect(sceneMotionOf(bad)).toBeUndefined();
     const graph = createStudioViewGraph(freshWorkspace().preview);
     expect(() => graph.edit(MAIN_VIEW, "scene", { state: { motion: { ...DEFAULT_MOTION, blink: 3 } } })).toThrow();
+    // A reader recovers field by field instead: each damaged field at its default, a damaged idle choice or pose left out.
+    expect(recoverSceneMotion({ ...DEFAULT_MOTION, idleTime: 4, blink: 2, blinkPlaying: true, idleBody: "no", idleClip: "../x", pose: { id: "a b", label: "x" } }))
+      .toEqual({ ...DEFAULT_MOTION, idleTime: 4, blinkPlaying: true });
+    expect(recoverSceneMotion({})).toEqual(DEFAULT_MOTION);
+    for (const bad of [null, [], "motion", 3]) expect(recoverSceneMotion(bad)).toBeUndefined();
+  });
+
+  test("one damaged optional scene setting never costs the scene or the graph: it is recovered alone, and the next save keeps every view", () => {
+    const window = open(upgradedWorkspace());
+    window.graph.addView(MAIN_VIEW, {}, { label: "New 3D view" });
+    const graphOf = (text: string) => open(read(text)).graph;
+    const stored = JSON.parse(window.save()), scenes = stored.profiles.sessions["p-1"].views.scenes;
+    expect(scenes).toHaveLength(2);
+    // Sol's reproduction: an eyelid closure out of range in the second scene, and a damaged optional switch beside it.
+    scenes[1].motion = { ...scenes[1].motion, blink: 2, idleTime: 5 };
+    scenes[1].physics = "yes";
+    const graph = graphOf(JSON.stringify(stored));
+    expect(graph.viewIds()).toHaveLength(2);
+    const second = graph.viewIds().find(view => view !== MAIN_VIEW)!;
+    // The new view's scene started as a copy of the main one's; only the damaged field went back to its default.
+    expect(graph.state<SceneState>(second, "scene").motion).toEqual({ ...sceneMotion(window.graph)!, blink: 0, idleTime: 5 });
+    expect(graph.state<SceneState>(second, "scene")).not.toHaveProperty("physics");
+    expect(sceneMotion(graph)).toEqual(sceneMotion(window.graph));
+    // A whole motion that isn't one is left out: the main scene then reads the legacy fields again, another scene the default.
+    scenes[0].motion = "damaged"; scenes[1].motion = [];
+    const reread = graphOf(JSON.stringify(stored));
+    expect(reread.viewIds()).toHaveLength(2);
+    expect(sceneMotion(reread)).toEqual(previewMotion(read(JSON.stringify(stored)).preview));
+    // The legacy `views` field recovers the same way.
+    const legacy = createStudioViewGraph(freshWorkspace().preview);
+    legacy.addView(MAIN_VIEW, {}, { label: "New 3D view" });
+    const views = sessionViewGraph(legacy), base = JSON.parse(window.save());
+    (views.scenes[1] as Record<string, unknown>).motion = { ...DEFAULT_MOTION, blink: 2 };
+    expect(read(JSON.stringify({ ...base, views })).views?.views).toHaveLength(2);
+  });
+
+  test("a save reads the playing idle's phase into the scene first, without recording, publishing or touching the legacy fields", () => {
+    const state = upgradedWorkspace();
+    let motion: MotionActions | undefined;
+    const window = open(state, () => motion?.sample());
+    const port = motionPort([], ["closeup", "inventory"]);
+    motion = new MotionActions(port, graphMotionScene(window.graph, () => undefined));
+    motion.restore();
+    motion.dispatch({ kind: "motion.setPaused", view: MAIN_VIEW, paused: false });
+    expect(sceneMotion(window.graph)?.idleTime).toBe(3.5);
+    port.idle.time = 7.25;
+    let published = 0;
+    window.graph.subscribe(() => published++);
+    const saved = read(window.save());
+    expect(saved.profiles!.sessions["p-1"]!.views.scenes[0]!.motion).toMatchObject({ idle: true, idleTime: 7.25, idlePaused: false });
+    expect(published).toBe(0);
+    expect(window.graph.history().depth).toBe(0);
+    expect(saved.preview).toEqual(state.preview);
+    // A reload (a flush, no head released) starts the idle there.
+    const calls: string[] = [];
+    new MotionActions(motionPort(calls, ["closeup", "inventory"]), graphMotionScene(open(saved).graph, () => undefined)).restore();
+    expect(calls).toContain("seek:7.25");
+    // Only live state can be sampled.
+    expect(() => window.graph.sample(MAIN_VIEW, "scene", { eyeShape: 2 })).toThrow();
   });
 });
 
@@ -197,6 +256,50 @@ describe("a runtime applies its scene's motion", () => {
     const calls: string[] = [], next = restored(workspace, graph, motionPort(calls));
     expect(calls).toEqual(["parts:true:true", "idle:true", "seek:7.25", "pause:false"]);
     expect(next.motion.snapshot()).toMatchObject({ idle: true, idleTime: 7.25 });
+  });
+
+  test("a released service never reaches the scene or the device again: its idle load failing later leaves the replacement's choice", async () => {
+    const workspace = freshWorkspace(), graph = createStudioViewGraph(workspace.preview);
+    let reject!: (error: Error) => void;
+    const first = { ...motionPort([], ["closeup", "inventory"]),
+      selectIdle: () => new Promise<void>((_resolve, fail) => { reject = fail; }) };
+    const old = new MotionActions(first, graphMotionScene(graph, () => undefined));
+    old.restore();
+    old.dispatch({ kind: "motion.setIdleClip", view: MAIN_VIEW, clip: "inventory" });
+    expect(old.snapshot()).toMatchObject({ idleClip: "inventory", idleLoading: true });
+    // Sol's reproduction: the head is released while the load is under way, its replacement plays the choice, then the old load fails.
+    old.release();
+    const replacement = new MotionActions(motionPort([], ["closeup", "inventory"]), graphMotionScene(graph, () => undefined));
+    replacement.restore();
+    await Bun.sleep(0);
+    expect(replacement.snapshot()).toMatchObject({ idleClip: "inventory", idleLoading: false });
+    reject(Error("missing file"));
+    await Bun.sleep(0);
+    expect(sceneMotion(graph)?.idleClip).toBe("inventory");
+    expect(replacement.snapshot().idleClip).toBe("inventory");
+    // The released service refuses actions and writes nothing more.
+    expect(old.capability({ kind: "motion.setIdle", view: MAIN_VIEW, enabled: false })).toMatchObject({ available: false, reason: RELEASED });
+    expect(old.poseCapability()).toMatchObject({ available: false, reason: RELEASED });
+    const before = sceneMotion(graph);
+    old.sample(); old.release();
+    expect(sceneMotion(graph)).toEqual(before);
+  });
+
+  test("a pose still loading on a released service never plays nor reaches the scene", async () => {
+    const workspace = freshWorkspace(), graph = createStudioViewGraph(workspace.preview), played: unknown[] = [];
+    let resolve!: (sample: never) => void;
+    const port = { ...motionPort(), setPose: async (pose: unknown) => { played.push(pose); } };
+    const old = new MotionActions(port, graphMotionScene(graph, () => undefined));
+    const holding = old.holdPose({ id: "PhotoModePoses.a", label: "A", moves: false }, new Promise(done => { resolve = done; }));
+    expect(sceneMotion(graph)?.pose).toEqual({ id: "PhotoModePoses.a", label: "A" });
+    old.release();
+    // The replacement takes the scene: it drops the pose it can't hold.
+    const replacement = new MotionActions(motionPort(), graphMotionScene(graph, () => undefined));
+    replacement.dropPendingPose();
+    resolve({} as never);
+    expect(await holding).toBe(false);
+    expect(played).toEqual([]);
+    expect(sceneMotion(graph)).not.toHaveProperty("pose");
   });
 
   test("what a device can't take is stored back as the scene shows it, as restore-time state that records nothing", () => {
