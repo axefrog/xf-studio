@@ -308,7 +308,7 @@ G1 (scene parity on a real V) has not run.
 | Every other test file importing a changed module | 18 files, 138 pass, 0 fail |
 | `tests/scene-motion.test.ts` | 7 of 7 pass |
 | WebGL probes whose tests touch motion | scene host 7 of 7, renderer device 7 of 7 (peaks 1.1 and 1.2 GB) |
-| WebGL disposal gate (its page plays the idle) | not run: the guard stopped it when the machine's free memory fell to 15.9 GB (the game was running); this chunk changes no scene, rig or render code |
+| WebGL disposal gate (its page plays the idle) | 4 of 4 pass (peak 1.1 GB; the first attempt was stopped by the guard's free-memory floor while the game ran, and passed once memory recovered) |
 | `bun run check` | passes |
 
 **Decisions and caveats.**
