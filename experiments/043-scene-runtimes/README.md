@@ -1,6 +1,6 @@
 # Experiment 043: scene runtimes (profiles phase 4a)
 
-**Status:** gap map and chunk plan, approved 22 October 2026 with decisions D1–D4 at their defaults (§4). Chunks 4a-i (§7), 4a-ii (§8) and 4a-iii (§9) are built on `claude/profiles-4a`. This is the working record for [profiles design §4.5](../../research/authoring/profiles-views-layouts-design.md#45-scene-runtimes-and-switching-phase-4a) and its phase 4a row in §9.2. It builds on spike S2 ([experiment 039](../039-view-switch-spike/README.md), prototype on branch `claude/spike-views`).
+**Status:** gap map and chunk plan, approved 22 October 2026 with decisions D1–D4 at their defaults (§4). Chunks 4a-i (§7), 4a-ii (§8), 4a-iii (§9) and 4a-iv (§10) are built on `claude/profiles-4a`. This is the working record for [profiles design §4.5](../../research/authoring/profiles-views-layouts-design.md#45-scene-runtimes-and-switching-phase-4a) and its phase 4a row in §9.2. It builds on spike S2 ([experiment 039](../039-view-switch-spike/README.md), prototype on branch `claude/spike-views`).
 
 Source paths are relative to `projects/xf-studio/authoring/src/`, and line numbers are at `72369156` (phase 1 merged). Tests are in `projects/xf-studio/authoring/tests/`.
 
@@ -209,7 +209,7 @@ What stays after the first cycle is shared by every later scene and freed only w
 - **Each draw sets its own renderer state** (`platform/scene/renderer-state.ts`). `RendererState` is the record of the renderer-global fields: tone mapping, exposure, clear colour and alpha, output colour space, and the shadow map's switch, type and auto-update. `applyRendererState` writes all of them and sets the canvas as the target. The lighting stage holds its scene's record and no longer writes the renderer when it is made or when a setup changes (the studio exposure used to go straight to `renderer.toneMappingExposure`). It applies the record at the start of every draw (the runtime's `draw` opens with `lighting.applyRendererState()`) and of every compile ahead (`prepare`), because Three keys programs on these fields. The shadow maps' redraw is the scene's own flag, set true or false on every draw from its fingerprint, never left over from another scene's frame.
 - **Camera input reaches only the shown runtime** (decision D3). Each runtime makes its controls without an element. When the device shows it, it connects them, with a fresh binding-catalogue input (`attachHeadCameraInput`); when hidden, it disconnects them. The surface editor's target resolver is kept across shows. A hidden runtime's disposal never touches the canvas's cursor or touch action.
 - **The viewport device holds the device** (`preview/browser/browser-viewport-device.ts`). It makes the device with the first head and builds each head on it with a signal: a newer load or a release aborts a build still running, and a head superseded on its last step is disposed, never shown. Then it shows the head. One head is drawn, and it is released before the next is built, as before. Tests stand in for the device through `deviceFactory`.
-- **The root keeps one head variable** (`compose/studio-startup.ts`): the saved-V, preview and motion services are read from `head`, so `savedAppearance`, `previewActions` and `motionActions` are gone. `scene` (a mirror of `head.scene` for the developer evidence), `attachHead`, `releaseHead` and `headWorkspace` go with the superseding subject change (4a-iv).
+- **The root's head variables went.** 4a-ii read the saved-V, preview and motion services from one `head` variable (`savedAppearance`, `previewActions` and `motionActions` went then); 4a-iv removed `head`, `scene`, `attachHead`, `releaseHead` and `headWorkspace` too, for the scene runtime owner (§10).
 - **Callers moved.** The probe pages (`webgl-scene-host`, `webgl-body`, `webgl-clothing`, `webgl-scene-dispose`), `tools/depth-study.ts` and `tools/glitter-head-study.ts` make a device and show one runtime on it. `bindRenderTriggers` takes any of controls, canvas and lighting: the device binds its canvas, and each runtime its controls and lighting.
 
 **Gates.**
@@ -253,7 +253,7 @@ G1 (scene parity on a real V) has not run.
 2. On the base, run `bun tools/scene-parity.ts capture <evidence/screenshots/043-g1/base-1> <port>` twice (`base-1`, `base-2`: the first creator frame can differ between runs of one build). On this branch, run `capture <…/after> <port>`. Chrome runs under `--limit 4`.
 3. Run `bun tools/scene-parity.ts compare <…/after> <…/base-1> <…/base-2>`. Every frame (five looks, both lighting presets, 1K and 2K: 20 frames) must be identical to one base capture. The outputs are private renders; keep them in the ignored `evidence/screenshots` tree.
 
-**What 4a-iii and 4a-iv need from this.**
+**What 4a-iii and 4a-iv needed from this** (each built: motion in §9, the rest in §10).
 
 - **The camera pose to and from the camera node** (the second half of D3) is not wired. With one runtime nothing is swapped, so an orbit still persists only through the live `cameraState()`. When a runtime is hidden for another (4a-iv), its pose must be written to the view's camera node (`PreviewActions` already has the unrecorded `cameraMoved` path), and a runtime shown again must take the node's pose. Writing on hide and reading on show avoids a graph edit for every orbit step.
 - **The surface editor binds once, to the drawn runtime,** and its listeners sit on the device's canvas. A swap must settle any open gesture and rebind it (§2.5), with the layered surfaces.
@@ -318,12 +318,116 @@ G1 (scene parity on a real V) has not run.
 
 - **The legacy fields are frozen, not mirrored.** The plan's row said the mirror stays. The brief said to write only the new place, and profiles design §2.4 freezes legacy fields, so they are written back as read.
 - **The idle's phase while it plays.** The node holds the phase of the last motion change, head release or save (`sample`), so a page reload resumes a playing idle where it was when the page last saved, as before the move.
-- **Fallbacks are stored, as before.** A head that can't play the idle stores it off, and a missing idle choice falls back to the default. This matches what the workspace used to save, so behaviour is unchanged. Under 4a-iv's residency, though, a masculine runtime (idle `IDLE_MASCULINE`) would write the idle off into a scene a feminine runtime shares. Whether the node should keep the person's choice while a device can't play it is a 4a-iv decision.
+- **Fallbacks were stored in this chunk.** A head that couldn't play the idle stored it off, and a missing idle choice fell back to the default, as the workspace used to save it. 4a-iv reversed this by the coordinator's decision: the node keeps the person's choice (§10).
 - **Layout fragments carry the motion.** `layoutFragment` copies node state, so a default made from a scene now holds its whole motion (phase, blink, pose), not only the idle choice that design §4.2 names. Phase 2 may trim it.
 - **`storedViewGraph` and `isDefaultViewGraph`** have written nothing in production since phase 1 froze `views`. Their rule ("the default graph's state is the mirrored `preview`") no longer covers motion. They are candidates for removal.
 
-**What 4a-iv needs from this.**
+**What 4a-iv needed from this** (built in §10).
 
 - **A new runtime reads motion from the graph.** `headWorkspace` no longer carries motion, so dropping the snapshot loses no motion. It still carries the live camera pose (an orbit doesn't write the camera node, §8), so the camera's write-on-hide comes first.
 - **Apply on show, not on build.** A runtime built hidden while another shows should apply the scene's motion when it is shown: release the shown runtime's motion (`release()`, which stores its phase), then `restore()` the new one. With one runtime, build and show are the same moment.
 - **One motion service per runtime, over the same node.** `graphMotionScene` takes the view whose scene the runtime draws, so runtimes of one scene share the node. The decision on stored fallbacks (above) belongs with residency.
+
+## 10. Chunk 4a-iv: residency and the superseding subject change (built)
+
+**What changed.**
+
+- **Residency is one DOM-free owner** (`preview/scene-residency.ts`, `SceneResidency`). The drawn scene wants one runtime, named by its (scene, subject, body) key. Phase 4a draws one view, so the drawn scene's want is the only one; with several drawn views (4b) wants become per view.
+  - **The newest want wins.** A build in flight for an older want is aborted through its `AbortController`. Whatever it still produces is disposed and never shown: a generation check compares the finished build with the one wanted now.
+  - **The previous runtime stays shown** until the wanted one is built. The swap is one step: the shown runtime is hidden first, so it can hand over its camera and motion, then the new one is shown.
+  - **The budget is a count** (decision D2): the shown runtime plus `warm` others, 1 by default and set at construction. A runtime that stops being shown becomes warm. Past the budget, the least recently shown is disposed. Wanting a warm runtime again shows it at once, with no build.
+  - **A lost context drops the warm runtimes first** (`contextLost`). The shown one, and one still being built, are restored by the device as in 4a-ii.
+  - **Disposal is ordinary disposal** through the port, the same for eviction, context loss, a superseded build, `close(scene)` and `dispose()`. 4a-i's gate holds.
+  - A runtime that can't be shown goes, and the one shown before is shown again.
+- **The window's scene runtime owner** (`preview/browser/browser-scene-heads.ts`, `createBrowserSceneHeads`). It owns the residency and wants a head for the drawn scene's V and that V's body.
+  - **A subject or body change is a new want.** It follows the session's scenes (the scene's V) and the V's context (its body: a save, a preset, the other Default V, Undo), once the change that asked for it has finished (a microtask).
+  - **Nothing is refused meanwhile.** The V's context stays attached while heads swap, so a creator change during a body switch lands at once. The old `not_ready` refusal ("The creator options are still loading.") came from the context being detached for the reload, and is gone.
+  - **The V's context outlives heads.** The character's owner makes it once per V. Its scene ports are bound late: `showSave`, `details` and the previews reach the head showing that V now, and do nothing while none does. A save of the other body is shown only on a head of its body; the new head is built with it and catches up on show. `CharacterService.detach` is gone, and contexts live for the page.
+  - **`load()` is the preview setup's first load** and its Try again. It resolves once a head of the drawn scene is shown. A want superseded during the first load waits for the one that replaced it.
+  - **A later head that can't be built leaves the V shown before**, with one plain notice ("Your V couldn't be shown in the 3D view, so the V shown before stays. Change the V again to try once more.") and a diagnostics entry. The next change builds again.
+  - **Core preparation progress.** While nothing is shown it goes to the head pane, as before. While another V is shown, the person gets one plain notice per want ("… The V shown now stays until it's ready."). Progress in the pane's quiet overlay is 4a-v's.
+- **A head is built, shown and hidden** (`preview/browser/browser-head-attachment.ts`, `buildBrowserHead`).
+  - *Built hidden, with the signal:* the body's core prepared, the scene built on the device, the stage theme, research tools and quality followers, the V's detail service, and the saved-V, preview and motion services. Nothing reaches the application.
+  - *Shown:* drawn on the device, its services attached, its layered surfaces connected and the on-head editor mounted, its save caught up with the V's, the scene's motion restored and the view's camera read. It follows the V's context (details, facial shape, makeup, body switch, puppet).
+  - *Hidden:* the camera pose goes to the view's camera node, the motion is released, then everything `show` connected is let go, newest first. The on-head editor goes with it. Detaching settles any open gesture (it is cancelled), and the next head shown mounts its own editor. A hidden head is warm: it stops following its V and catches up when shown again.
+- **The camera pose round-trips through hide and show** (decision D3's second half). `PreviewActions.storeCamera` writes the device's pose to the drawn view's camera node, unrecorded. `storedCamera` reads it back, and the next head shown restores it without a step or a trail entry. An orbit still writes nothing while it moves.
+- **Motion is released on hide and restored on show** (`MotionActions`). `release` stores the playing idle's phase and stops anything under way from reaching the device or the scene. `restore` takes the service back, applies the node's motion and drops a pose the scene no longer holds. An epoch counts releases, so an idle load begun before a release never lands after a later restore. `createTrustedPreviewServices(...).finish()` builds without applying motion or camera; its `show` applies the motion, then the camera, and its `hide` stores the camera, then releases the motion.
+- **Intent stays in the node** (the coordinator's decision). The scene node keeps the person's choice when a runtime can't honour it. The runtime shows its fallback as status and writes nothing:
+  - **Motion.** The idle on a masculine head (`IDLE_MASCULINE`), an idle not prepared on this computer, or one whose clip failed to load (kept per device as unplayable): the device plays its own fallback, and `snapshot` shows it (idle off, the close-up, eyes open on a device without the blink). Only the person's own changes and the playing idle's phase are stored. A blink change on a head that can't play the idle stores the idle off too, because the person chose it on what they see.
+  - **Eye shape.** A head lacking the chosen eye shape shows its base shape; the scene node keeps the choice.
+  - The display's restore-time fallback for brows and lashes stays: it is per view, and no browser host reports it.
+- **`ensureBody` takes the signal** (decision D1). An abort stops polling at once and rejects with the signal's reason. A preparation this call started is cancelled on the host (`cancel` for that body), because nothing else asked for it. One another window started is left running.
+- **The viewport device holds several heads.** `buildHead(body, signal)`, `showHead`, `hideHead` and `disposeHead` replace `loadHead` and `unloadHead`. `onContext` lets the runtime owner hear a lost context.
+- **The composition root keeps only wiring.** `head`, `scene`, `headWorkspace`, `attachHead` and `releaseHead` are gone. The root makes the scene runtime owner with its ports, connects the shown head's followers (the live face, the poses stage, prefetching, readiness) in one `shown` hook, and reads the shown head through `heads.shown()`. The developer evidence (`xfStudioSceneEvidence`) adds `residency`.
+
+**Removed.**
+
+- `PreviewSetupActions.reloadHead`, the root's `headWorkspace` snapshot and its reload path, and the `not_ready` refusal during a reload.
+- `attachHead`, `releaseHead`, `head` and `scene` in `compose/studio-startup.ts`; `attachBrowserHead` (now `buildBrowserHead` with `show`, `hide` and `dispose`).
+- `CharacterService.detach`.
+- The viewport device's `loadHead` and `unloadHead`.
+- The motion's and eye shape's restore-time fallbacks written into the scene node (`MotionScene.setMotion`'s `seed` option).
+- `storedViewGraph` and `isDefaultViewGraph`. A legacy `views` field that reads is now kept and written back as read, the default graph included, since the field has been frozen since phase 1. Their tests now use `sessionViewGraph`, or were dropped where they only tested the dead rule.
+
+**Gates.**
+
+- **T1, residency** (`tests/scene-residency.test.ts`, an injected clock, builds in steps that check their signal):
+  - female, male, then female 150 ms later shows female, and the male build stops at its next step (≤ 100 ms of clock);
+  - the previous runtime stays shown until the new one is built, and a superseded want's runtime is never shown;
+  - a build finishing after it was superseded is disposed (the generation check; fails with it taken out);
+  - a warm runtime is reused without a build, the least recently shown is evicted past the budget (fails with the order reversed), and closing disposes everything;
+  - a context loss drops the warm runtimes first; a zero budget keeps only the shown one;
+  - a failed build leaves the previous runtime shown; a runtime that can't be shown goes, and the previous one is shown again;
+  - five seeded model runs of 60 random subject and body changes each. After each step there is at most one shown and one warm runtime. At the end the last choice is shown, every want was shown or superseded, every cancel took ≤ 100 ms, a warm want was shown with no build, and every runtime built was disposed exactly once.
+- **The scene runtime owner** (`tests/browser-scene-heads.test.ts`, the real head attachment and viewport device over fake scenes):
+  - a superseding body switch shows the last choice: the female V stays drawn while the male head is wanted, the context stays attached, and back to female the male core's preparation is aborted;
+  - the new head is built hidden and the old one stays drawn until it is ready; the old one stays warm and comes back at once (also by Undo); a lost context drops it first;
+  - no late result is shown;
+  - each V's context is made once, its ports reach the head showing it, and do nothing while none does;
+  - the first load waits for the head that superseded it; a failed first load rejects with nothing shown;
+  - a later head that can't be built leaves the V shown before, with the notice.
+- **The head attachment** (`tests/browser-head-attachment.test.ts`):
+  - built hidden, a head reaches neither the application nor the canvas;
+  - a failed show releases what it connected;
+  - surfaces connect on show and go on hide;
+  - an aborted masculine preparation rejects with the abort rather than falling back to the feminine head;
+  - **the camera pose round-trips through hide and show.**
+- **Motion** (`tests/scene-motion.test.ts`):
+  - **a runtime that can't honour the node's motion leaves the node unchanged** (a masculine head with the idle on, a clip and a phase; a device without the blink or a catalogue). It shows its fallback, and the feminine head shown next plays the chosen idle from the stored phase;
+  - **motion is released and restored across a swap:** a warm head shown again plays from the phase the other head left, and its load from before it was hidden failing later changes nothing.
+- **D1** (`tests/masculine-core.test.ts`): a superseded masculine preparation stops polling at once and cancels the preparation it started; one another window started is left alone.
+- **Eye shape** (`tests/trusted-preview-services.test.ts`): a head lacking the scene's eye shape shows its base shape and leaves the node's choice. Restore order is unchanged: saved V, optics, eye shape and details when built; motion, then camera, when shown.
+- **T2, the renderer device probe** (`tests/webgl-renderer-device.test.ts`, section 7 of its page): real runtimes on one counted context, under `SceneResidency`.
+  - Female shown; male wanted, his core taking 600 ms; female again 150 ms later. Female stays shown, the male build rejects with `AbortError`, no male runtime is ever built, and the canvas is byte-identical.
+  - Male is then built and shown, with female warm. A second feminine V evicts the least recently shown (female v1). Closing everything returns the GL objects and Three's programs to where they were.
+
+**Results** (22 October 2026; RTX 4070, ANGLE D3D11, headless Chrome; every run under the 3 GB guard):
+
+| Run | Result |
+|---|---|
+| T1 residency | 12 of 12 pass |
+| Scene runtime owner, head attachment, motion, D1, eye shape | 6, 5, 13, 1 and 7 tests: all pass |
+| T2 renderer device probe | 9 of 9 pass (peak 1.1 GB). Superseded build: `AbortError`, 0.2 ms from the superseding want to the build's rejection, canvas unchanged, only `s1\|v1\|female` built. Eviction: `s1\|v1\|female` evicted, `s1\|v1\|male` warm, `s1\|v2\|female` shown. After closing: 12 textures, 6 buffers, 6 framebuffers, 2 programs and 2 vertex arrays, as before the section, with only `BackgroundMaterial` used once. (The section runs after section 6's context loss, whose dead objects the counter still lists.) |
+| WebGL scene host, disposal gate | 7 of 7, 4 of 4 (peaks 1.1 and 1.2 GB) |
+| Scene, view, preview, character, viewport, motion, history, parity, profiles, boundary, lighting, workspace and setup tests, and every other test file importing a changed module | 139 files, 1,321 pass, 10 skip (real-game oracles), 0 fail (peak 1.8 GB) |
+| `bun run check` | passes |
+
+**Decisions and caveats.**
+
+- **Ready means built.** "The previous V stays drawn until the new one is ready" holds for the runtime: the new head is shown once it is built, then its V's details fill in as before. Preparing details, programs and textures while hidden, with progress, is 4a-v. The details aren't prepared while hidden in this chunk, because a hidden runtime draws no frames and the detail uploads are paced per frame.
+- **Contexts live for the page.** A V no scene shows keeps its context. Releasing one (`CharacterService.release`, after its changes are in the library) when no resident head shows it is a follow-up: an async release racing a switch back would hand the owner a disposed context.
+- **The save loader's answer.** `savedAppearance.load` returns the shown head's saved-V snapshot. For a save of the other body that is the head shown before the switch, so its suggested eye shape is the old head's. This was already approximate before, when the old head applied the other body's save first.
+- **No per-runtime byte estimate yet.** D2 asks for each runtime's estimated bytes as evidence. The snapshot carries the residents and their states; the bytes wait for G3's measurements and a port to report them.
+- **No real-data run.** G1 is still to be run (§8), and G2 and G3 come with 4a-v and 4a-vi. A body switch on a real V, with the masculine core prepared, is the next in-browser check.
+
+**What 4a-v needs from this.**
+
+- **A prepare step before `show`.** The residency shows a runtime as soon as its build resolves. 4a-v puts `runtime.prepare(view, signal)` (and the V's details) inside the owner's build, or adds a preparing state between built and shown, so the previous V stays drawn until the new one is prepared.
+- **Progress in place.** While another V is shown, the owner's `preparing` hook tells the person once, by notice. 4a-v replaces that with the pane's quiet overlay (`studio-ui/panels/viewports.ts`), through a typed preparation state on the owner's snapshot.
+- **`device.show(view)`** for phase 2's tabs goes through the same owner: a tab switch becomes a want.
+
+**What 4a-vi needs from this.**
+
+- **Routing by named view.** The owner shows one drawn scene. Routing a view action to the named view's runtime, and readiness per scene for the loaders (the `savedAppearance.ready` port reads `heads.shown()`), replace the single attachments the shown head makes (`attach({ preview, motion, … })`).
+- **The editors per view.** The shown head mounts the on-head editor in `show`; `preview/browser/scene-editors.ts` takes that over per view, and exception 17 goes.
+- **T3** (`measure.ts` in this folder) can drive a body switch through the production page: `xfStudioSceneEvidence().residency` lists the residents and the build in flight.
