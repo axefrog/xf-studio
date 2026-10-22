@@ -11,6 +11,7 @@ import { DETAIL_SLOTS, parseCharacterDetail } from "../src/character/render-deta
 import type { SavedLoadout } from "../src/saves/save-loadout";
 import type { SavedV } from "../src/saves/save-reader";
 import { tweakDbId } from "../src/game/tweakdb-flats";
+import { vHistory } from "./fixtures/character-steps";
 
 const loadout: SavedLoadout = { schema: "xfs/saved-loadout-1", wardrobeSet: null, evidence: { owner: "1", owners: 1, skipped: [] },
   equipped: [{ area: "Head", item: "100" }, { area: "InnerChest", item: "101" }, { area: "Legs", item: "102" }, { area: "UnderwearBottom", item: "103" }],
@@ -44,7 +45,7 @@ describe("Clothing setting", () => {
   });
 
   test("the context's clothing actions change the request, share the panel's one Undo and survive storage", () => {
-    const context = new CharacterContextActions({ creator: {} as CreatorPort, showSave: () => {} }, { save: save(), stored: { origin: "save", choices: [] } });
+    const steps = vHistory(), context = new CharacterContextActions({ creator: {} as CreatorPort, showSave: () => {}, history: steps.home }, { save: save(), stored: { origin: "save", choices: [] } });
     const first = context.detailRequest();
     expect(first.clothing?.shown).not.toContain("Head");
     expect(context.snapshot().clothing).toMatchObject({ state: "no-headwear", source: "save", worn: ["InnerChest", "Legs", "Head", "UnderwearBottom"], undo: null });
@@ -69,14 +70,14 @@ describe("Clothing setting", () => {
     context.dispatch({ kind: "character.redoClothing" });
     expect(context.snapshot().clothing.state).toBe("saved");
     // The panel's Undo and Redo step creator choices and Clothing in the order they were made.
-    context.dispatch({ kind: "character.undo" });
+    steps.undo();
     expect(context.snapshot().clothing.state).toBe("no-headwear");
     expect(context.snapshot()).toMatchObject({ undo: null, redo: "Clothing: As saved" });
-    context.dispatch({ kind: "character.redo" });
+    steps.redo();
     expect(context.snapshot().clothing.state).toBe("saved");
-    context.dispatch({ kind: "character.redo" });
+    steps.redo();
     expect(context.snapshot().clothing.state).toBe("custom");
-    expect(context.capability({ kind: "character.redo" })).toMatchObject({ available: false });
+    expect(steps.capability("history.redo")).toMatchObject({ available: false });
     // A V read before clothes were read, or whose clothes couldn't be read, says so.
     const { loadout: _none, ...before } = save();
     const older = new CharacterContextActions({ creator: {} as CreatorPort, showSave: () => {} }, { save: before as SavedV, stored: { origin: "save", choices: [] } });

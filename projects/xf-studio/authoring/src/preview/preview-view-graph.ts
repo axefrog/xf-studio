@@ -217,8 +217,8 @@ export function workspaceViewGraph(preview: PreviewState, stored: ViewGraphData 
 }
 
 /** A graph service for a workspace's preview (and its stored views, if any). */
-export function createStudioViewGraph(preview: PreviewState, stored?: ViewGraphData, history?: HistoryService) {
-  return new ViewGraph(workspaceViewGraph(preview, stored), STUDIO_VIEW_GRAPH_RULES, history);
+export function createStudioViewGraph(preview: PreviewState, stored?: ViewGraphData, history?: HistoryService, scope?: string) {
+  return new ViewGraph(workspaceViewGraph(preview, stored), STUDIO_VIEW_GRAPH_RULES, history, scope);
 }
 
 /**
@@ -242,7 +242,14 @@ export function isDefaultViewGraph(data: ViewGraphData): boolean {
  */
 export function storedViewGraph(graph: ViewGraph): ViewGraphData | undefined {
   const data = graph.data();
-  if (isDefaultViewGraph(data)) return undefined;
+  return isDefaultViewGraph(data) ? undefined : storedGraphData(data);
+}
+/**
+ * A graph as a profile session stores it (profiles design §1.1): always whole (the session is its only home), each lights node's
+ * calibration in its stored form, as `storedViewGraph` writes it.
+ */
+export function sessionViewGraph(graph: ViewGraph): ViewGraphData { return storedGraphData(graph.data()); }
+function storedGraphData(data: ViewGraphData): ViewGraphData {
   const known = new Set<string>(LIGHTING_PRESETS);
   return { ...data, lights: data.lights.map(node => {
     const calibration = node.kind !== undefined && known.has(node.kind) ? readCreatorLighting(node.creatorLighting) : null;

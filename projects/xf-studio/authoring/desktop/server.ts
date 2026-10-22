@@ -22,6 +22,9 @@ import { eyePlateReadiness } from "../src/legacy/eye-makeup/plate/host/eye-plate
 import { EYE_PLATE_RECIPE } from "../src/legacy/eye-makeup/plate/eye-plate-recipe";
 import { DesktopUpdateService, type NativeUpdater, type UpdateTrust } from "./update-service";
 import { DesktopWorkspaceStore, desktopWorkspaceRequest, desktopWorkspaceStartFresh } from "./workspace-store";
+import { DesktopOutboxStore, desktopOutboxRequest } from "./outbox-store";
+import { DESKTOP_WORKSPACE, DesktopWorkspaceLeases } from "./workspace-lease-host";
+import { INSTANCE_ROUTE, instanceActivateRequest } from "./single-instance";
 // A composition root: the part registry and document model are built once and injected (CORE-29).
 import { STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
 import { DesktopWorkActivity } from "./work-activity";
@@ -64,6 +67,11 @@ export const desktopToolsRoot = (dataRoot: string) => resolve(dataRoot, "tools")
 const OPEN_LINKS: readonly WolvenKitLink[] = ["wolvenkit-licence", "wolvenkit-release", "runtime-installer", "runtime-page"];
 
 export type DesktopHostOptions = {
+  /**
+   * This process's single-instance claim (`single-instance.ts`): a second launch asks it, with its token, to bring the window forward.
+   * The one route outside the page session.
+   */
+  instance?: { token: string; focus(): void };
   /** Test seams for WolvenKit setup (fixture release, fetch, .NET detection). */
   wolvenKit?: Partial<Omit<WolvenKitSetupOptions, "root" | "configured">>;
   /** Open an official page in the user's browser (Electrobun `Utils.openExternal`). */
@@ -139,6 +147,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const verificationPosePreferencesRequest = createPosePreferencesHandler(new PosePreferencesStore(verificationSettingsDirectory(dataRoot),
     { seed: () => posePreferences.load().preferences }));
   const workspaceStore = new DesktopWorkspaceStore(dataRoot, STUDIO_DOCUMENTS);
+  // The workspace's outbox keys, beside it (profiles design §2.2): one file per document, fenced by the same lease.
+  const outboxStore = new DesktopOutboxStore(dataRoot);
   let closeAck: ((nonce: string, status: "saved" | "failed") => boolean) | undefined;
   // Renderer progress for the host's blank-window watchdog and close handling.
   const renderer = { pageServed: false, bootstrapped: false, smoke: null as string | null };
@@ -151,6 +161,10 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const libraries = openLibraryFiles(dataRoot, { clock, parts: STUDIO_PARTS, isolated: false,
     log: message => diagnostics.log.info("library", "legacy_import", message) });
   setProcessDiagnostics(diagnostics);
+  // One writer per workspace (profiles design §2.3): the page holding the lease writes the workspace; its generations come from the
+  // library, so document writes are fenced by the same ones.
+  const leases = new DesktopWorkspaceLeases(verification => (verification ? libraries.verification : libraries.main).documents.nextLease(DESKTOP_WORKSPACE),
+    5000, message => diagnostics.log.info("workspace", "lease", message));
   // The resolver reads game files natively first, in a worker; the packaged app starts the built one.
   if (hostOptions.nativeDecodeWorker) {
     installations.useNativeWorker(hostOptions.nativeDecodeWorker);
@@ -308,6 +322,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       const url = new URL(request.url);
       const origin = `http://127.0.0.1:${server.port}`;
       if (url.origin !== origin) return new Response("Forbidden", { status: 403 });
+      // A second launch of the app hands over to this one (single-instance.ts); it has no page session, only the instance token.
+      if (url.pathname === INSTANCE_ROUTE) return instanceActivateRequest(request, hostOptions.instance?.token, () => hostOptions.instance?.focus());
       const firstVisit = url.pathname === "/" && url.searchParams.get("session") === token;
       const cookie = request.headers.get("Cookie") ?? "";
       if (!firstVisit && !cookie.split("; ").includes(`xfs_session=${token}`))
@@ -376,8 +392,20 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         if (response.ok) report("The user started fresh; an unreadable workspace was set aside.");
         return response;
       }
+      if (url.pathname === "/api/desktop/workspace/lease") return leases.request(routedRequest, url.searchParams.has("verify"));
+      if (url.pathname === "/api/desktop/workspace/outbox") {
+        const fence = () => leases.refuseWrite(request, url.searchParams.has("verify"));
+        const fenced = fence();
+        if (fenced) return fenced;
+        return desktopOutboxRequest(routedRequest, outboxStore, url.searchParams.has("verify"), fence);
+      }
       if (url.pathname === "/api/desktop/workspace") {
-        const response = await desktopWorkspaceRequest(routedRequest, workspaceStore, url.searchParams.has("verify"));
+        // A late write from a page that released the workspace (an older lease generation) is refused, never written: checked on arrival
+        // and again at the save itself, after the body has come in, with nothing awaited in between.
+        const fence = () => leases.refuseWrite(request, url.searchParams.has("verify"));
+        const fenced = fence();
+        if (fenced) return fenced;
+        const response = await desktopWorkspaceRequest(routedRequest, workspaceStore, url.searchParams.has("verify"), fence);
         // Only a successfully loaded workspace makes the close handshake wait for the page.
         if (request.method === "GET" && !renderer.bootstrapped) {
           if (response.ok) { renderer.bootstrapped = true; report("Renderer bootstrap loaded the workspace."); }
@@ -483,7 +511,10 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     characterDetails,
     /** WolvenKit setup (tests and shutdown). */
     wolvenKit,
+    /** The workspace leases (tests and the lease harness). */
+    leases,
     stop() {
+      leases.close();
       diagnostics.trace.flush();
       shutdown.abort();
       previewCore.cancel();

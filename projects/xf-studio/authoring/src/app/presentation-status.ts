@@ -1,3 +1,5 @@
+import type { WorkspaceLeaseSnapshot } from "./workspace/workspace-lease";
+import type { OutboxStatus } from "../platform/core/document-outbox";
 import type { CharacterDetailStatus } from "../character/character-detail-actions";
 import type { WorkspaceSaveStatus } from "./workspace/workspace-persistence";
 import type { EditorSlot } from "./viewport-adapter";
@@ -32,7 +34,30 @@ export type PresentationStatus = {
   assets: PreviewAssetStatus;
   glitter: GlitterPreviewMeasurement[];
   message?: AdapterMessage;
+  /** Whether this page holds its workspace (profiles design §2.3); absent where nothing else can hold it (fixtures). */
+  lease?: WorkspaceLeaseSnapshot;
+  /** The outbox (profiles design §2.2): whether this window's latest changes are protected on this computer. Absent without one. */
+  outbox?: OutboxView;
 };
+
+/** What the presentation shows of the outbox: the unprotected-changes warning, and how many changes wait or are in conflict. */
+export type OutboxView = {
+  /** Documents whose latest change isn't protected on this computer, once that warrants the warning (a failed write, or a long wait); else 0. */
+  readonly unprotected: number;
+  /** Changes not yet in the library. */
+  readonly pending: number;
+  readonly conflicts: number;
+  /** The library didn't answer the last send; changes are sent again shortly. */
+  readonly failing: boolean;
+  /**
+   * Restoring changes from the last session (t-recovering): `shown` once it has taken over a second, `long` (offer a way on) after
+   * `RECOVERY_NOTICE_MS`, `safe` when keeping on working is safe; `missing`: changes waiting for a save that is gone.
+   */
+  readonly recovering: { readonly shown: boolean; readonly long: boolean; readonly safe: boolean; readonly missing: number };
+};
+export const outboxView = (status: OutboxStatus): OutboxView =>
+  ({ unprotected: status.unprotectedWarning ? status.unprotected.length : 0, pending: status.pending, conflicts: status.conflicts, failing: status.failing,
+    recovering: { shown: status.recoveringShown, long: status.recoveringLong, safe: status.recoveringSafe, missing: status.missing.length } });
 
 export function emptyPresentationStatus(verification = false): PresentationStatus {
   return { verification, workspace: { kind: "idle", message: "" },

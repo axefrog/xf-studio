@@ -13,6 +13,7 @@ import type { DocumentStorePort } from "../api/document-store";
 import type { Random } from "./random";
 import { createHistoryService, type HistoryService } from "./history-service";
 import { documentOwners } from "./saved-document";
+import type { DocumentOutbox } from "./document-outbox";
 import { createTask, type Task } from "./tasks";
 
 export type ExperimentDefinition<T extends ExperimentRegistration = ExperimentRegistration> = ExperimentInfo & {
@@ -26,7 +27,8 @@ export function experimentOverrides(query: string, known: readonly string[], ver
 }
 export type ExperimentOptions<T extends ExperimentRegistration> = {
   definitions: readonly ExperimentDefinition<T>[]; overrides: Readonly<Record<string, boolean>>;
-  documents: DocumentStorePort; random: Random; signal: AbortSignal;
+  /** Reads the library's documents; every write goes through `outbox`, the one way a document reaches the library. */
+  documents: Pick<DocumentStorePort, "list">; outbox: DocumentOutbox; random: Random; signal: AbortSignal;
   /** The session's history service: the experiments' documents are its `doc:*` scopes (default: one of their own). */
   history?: HistoryService;
 };
@@ -40,7 +42,7 @@ export async function createExperiments<T extends ExperimentRegistration>(option
   const stored = (await documents.list<ExperimentFlagsDocument>(EXPERIMENT_FLAGS.kind, signal)).find(item => item.id === EXPERIMENT_FLAGS.id);
   signal.throwIfAborted();
   // One holder per stored document for the page's lifetime, shared by every experiment instance (the one-owner rule).
-  const owners = documentOwners(documents);
+  const owners = documentOwners(options.outbox);
   const preference = owners.open<ExperimentFlagsDocument>(EXPERIMENT_FLAGS.kind, EXPERIMENT_FLAGS.id, { schema: EXPERIMENT_FLAGS.schema, flags: {} }, stored);
   // Each document's history is a scope of the session's history service; the documents an experiment offers reach global Undo.
   const service = options.history ?? createHistoryService(), history = service.documents;
@@ -96,25 +98,28 @@ export async function createExperiments<T extends ExperimentRegistration>(option
   return {
     context,
     history,
+    settle: () => owners.settle(),
     snapshot: () => definitions.map(info => ({ id: info.id, label: info.label, description: info.description, enabled: effective(info.id), overridden: info.id in options.overrides,
       phase: phases[info.id]?.phase ?? "off", message: saveErrors[info.id] || phases[info.id]?.message || "" })),
     registrations: registered,
     async set(id, enabled) {
       if (!definitions.some(d => d.id === id) || typeof enabled !== "boolean") return { ok: false, message: "That experiment isn't available." };
       if (id in options.overrides) return { ok: false, message: "This verification page fixes that experiment setting. Open a page without the override to change it." };
-      // The choice applies at once; a save that can't be confirmed never rolls it back behind what the store may already hold.
-      const saved = preference.save({ schema: EXPERIMENT_FLAGS.schema, flags: { ...preference.value.flags, [id]: enabled } });
-      reconcile();
-      changed();
-      try {
-        await saved;
-        if (saveErrors[id]) { saveErrors[id] = ""; changed(); }
-        return { ok: true };
-      } catch {
-        const message = "This change applies for this session, but Studio couldn't confirm saving it. Try again.";
+      // The choice applies at once and is recorded in the outbox, which takes it to the library in the background (profiles design
+      // §2.2): the answer doesn't wait for the library. A save that can't be recorded, or is later overtaken by another page's, says so.
+      const next = { schema: EXPERIMENT_FLAGS.schema, flags: { ...preference.value.flags, [id]: enabled } };
+      const saved = preference.save(next);
+      const message = "This change applies for this session, but Studio couldn't confirm saving it. Try again.";
+      if (preference.value !== next) {
+        await saved.catch(() => {});
         saveErrors[id] = message; changed();
         return { ok: false, message };
       }
+      reconcile();
+      if (saveErrors[id]) saveErrors[id] = "";
+      changed();
+      saved.catch(() => { saveErrors[id] = message; changed(); });
+      return { ok: true };
     },
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
   };
@@ -147,6 +152,7 @@ export function startExperiments<T extends ExperimentRegistration>(options: Expe
     get history() { return runtime()?.history; },
     snapshot: (): readonly ExperimentState[] => runtime()?.snapshot() ?? (reading.state().phase === "failed" ? failed : initial),
     registrations: () => runtime()?.registrations() ?? [],
+    settle: async () => await runtime()?.settle?.() ?? true,
     async set(id: string, enabled: boolean) { return await ready && runtime() ? runtime()!.set(id, enabled) : { ok: false, message: "Couldn't read experimental settings. Reload Studio to try again." }; },
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
   };

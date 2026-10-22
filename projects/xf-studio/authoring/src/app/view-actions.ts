@@ -20,7 +20,7 @@ import { createStudioViewGraph, RESEARCH_RENDERING } from "../preview/preview-vi
 import type { PreviewState } from "./workspace/workspace-state";
 
 export type ViewAction =
-  | { kind: "view.setTool"; view?: ViewId; tool: string; enabled: boolean }
+  | { kind: "view.setTool"; view: ViewId; tool: string; enabled: boolean }
   | { kind: "view.undo" }
   | { kind: "view.redo" }
   | { kind: "view.endEdit" };
@@ -33,8 +33,8 @@ export const NO_MODULES: ModuleRegistration = Object.freeze({ modules: [], tools
  * the composition's modules. The trusted core builds one per session; fixtures build their own.
  */
 export function createViewServices(preview: PreviewState, stored?: ViewGraphData, modules: ModuleRegistration = NO_MODULES,
-  history?: HistoryService) {
-  const views = createStudioViewGraph(preview, stored, history);
+  history?: HistoryService, scope?: string) {
+  const views = createStudioViewGraph(preview, stored, history, scope);
   const viewActions = new ViewActions(views, { ...modules, tools: [...PLATFORM_VIEW_TOOLS, ...modules.tools.filter(tool => tool.module !== "platform")] });
   return { views, viewActions };
 }
@@ -46,17 +46,16 @@ export class ViewActions {
   snapshot() {
     return { ...this.graph.snapshot(), history: this.graph.history() };
   }
-  /** The scene kind a view shows (its own, else the focused view's). */
-  sceneKind(view?: ViewId): SceneKind | undefined {
-    const snapshot = this.graph.snapshot(), id = view ?? snapshot.focused;
-    return snapshot.views.find(item => item.id === id)?.sceneKind;
+  /** The scene kind a view shows. */
+  sceneKind(view: ViewId): SceneKind | undefined {
+    return this.graph.snapshot().views.find(item => item.id === view)?.sceneKind;
   }
   /** The tools a view shows for the given module visibility and research preference (design §3.9), in order. */
-  tools(view: ViewId | undefined, filter: ViewToolFilter) {
+  tools(view: ViewId, filter: ViewToolFilter) {
     const kind = this.sceneKind(view);
     return kind ? deriveViewTools(this.registration, kind, filter) : [];
   }
-  summaries(view: ViewId | undefined, filter: Pick<ViewToolFilter, "modules">) {
+  summaries(view: ViewId, filter: Pick<ViewToolFilter, "modules">) {
     const kind = this.sceneKind(view);
     return kind ? deriveViewSummaries(this.registration, kind, filter) : [];
   }
@@ -79,7 +78,8 @@ export class ViewActions {
     if (action.kind === "view.undo") return this.graph.history().depth ? { available: true } : refusal("invalid_value", "There is no view or lighting change to undo.");
     if (action.kind === "view.redo") return this.graph.history().redoDepth ? { available: true } : refusal("invalid_value", "There is no undone view or lighting change to redo.");
     if (action.kind === "view.endEdit") return { available: true };
-    if (action.view !== undefined && !this.graph.has(action.view)) return refusal("missing_target", "That view no longer exists.");
+    if (typeof action.view !== "string") return refusal("missing_target", "Open a 3D view to use this.");
+    if (!this.graph.has(action.view)) return refusal("missing_target", "That view no longer exists.");
     const tool = this.registration.tools.find(item => item.id === action.tool);
     if (!tool || tool.dispatches !== SET_VIEW_TOOL) return refusal("invalid_value", "That view tool does not exist.");
     const kind = this.sceneKind(action.view);

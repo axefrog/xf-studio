@@ -10,6 +10,8 @@ import { createHostLog } from "./host-log";
 import { detectWebView2, WEBVIEW2_DOWNLOAD_URL } from "./webview2";
 import { ensureWebView2 } from "./webview2-install";
 import { blankWindowNotice, BLANK_WINDOW_TIMEOUT_MS, MISSING_WEBVIEW2_TIMEOUT_MS, mainWindowPlacement } from "./startup-watchdog";
+import { claimSingleInstance, INSTANCE_HEADER, INSTANCE_ROUTE, windowsMutex } from "./single-instance";
+import { mkdirSync } from "node:fs";
 
 // The packaged app has no console: startup facts and failures go to the structured
 // diagnostics log in the app's data folder, and the user never faces a silent blank window.
@@ -19,6 +21,31 @@ try { metadata = JSON.parse(readFileSync(resolve(PATHS.RESOURCES_FOLDER, "versio
 catch { log.write("Packaged XF Studio version metadata could not be read."); }
 const version = desktopVersionFromMetadata(metadata);
 log.write(`Starting XF Studio ${version.version} (${version.channel}, build ${version.buildHash}); Windows ${process.platform}/${process.arch}.`);
+
+// One XF Studio per user data folder (profiles design §2.3): a second launch brings the running window forward and quits, so two host
+// processes never share the workspace file.
+mkdirSync(Utils.paths.userData, { recursive: true });
+// Fail closed: a launch that can't check the lock never starts, and says so (the details go to the diagnostics log).
+let instance: Awaited<ReturnType<typeof claimSingleInstance>>;
+try {
+  instance = await claimSingleInstance(Utils.paths.userData, { pid: process.pid, lock: windowsMutex(),
+    sleep: ms => new Promise(done => setTimeout(done, ms)),
+    activate: async (port, token) => (await fetch(`http://127.0.0.1:${port}${INSTANCE_ROUTE}`, { method: "POST",
+      headers: { [INSTANCE_HEADER]: token }, signal: AbortSignal.timeout(3000) })).status === 204 });
+} catch (error) {
+  await fatal("XF Studio couldn't check whether it's already running, so it didn't start.",
+    `This keeps two copies from saving over each other. Restart your computer and open XF Studio again. If this keeps happening, ` +
+    `report a problem on XF Studio's GitHub page and include the diagnostics log: ${log.path}.`, error);
+  throw error;
+}
+if (!instance.first) {
+  log.write(instance.activated ? "XF Studio is already running; its window was brought forward."
+    : "XF Studio is already running (it didn't answer yet, so its window wasn't brought forward); this launch ends.");
+  Utils.quit(0);
+  await new Promise(() => {});
+}
+/** Brings the window forward for a second launch; set once the window exists. */
+let focusWindow = () => {};
 
 // Before any window: a missing WebView2 Runtime is installed with one consent click using
 // Microsoft's bootstrapper packaged with the app, instead of showing an empty window.
@@ -57,6 +84,7 @@ try {
   app = createDesktopServer(viewRoot, Utils.paths.userData, version, resolve(viewRoot, "check-worker.js"),
     resolve(PATHS.RESOURCES_FOLDER, "app", "build-tools"), undefined, undefined, undefined,
     { openExternal: url => Utils.openExternal(url), webView2: webView2.version, nativeDecodeWorker: resolve(viewRoot, "native-decode-worker.js"),
+      instance: instance.first ? { token: instance.token, focus: () => focusWindow() } : undefined,
       // Install receipts are per user on this computer, shared with localhost (INSTALL-04).
       installReceipts: machineInstallReceiptsRoot(),
       revealPath: path => { Utils.showItemInFolder(path); return true; },
@@ -68,6 +96,7 @@ try {
   throw error;
 }
 log.write(`Loopback server ready on 127.0.0.1:${app.port}.`);
+if (instance.first && app.port) instance.publish(app.port);
 // A background failure nobody caught goes to the diagnostics log; it never closes the app (PREV-101).
 logUnhandledRejections();
 const origin = `http://127.0.0.1:${app.port}`;
@@ -82,6 +111,7 @@ const window = new BrowserWindow({
   navigationRules: JSON.stringify(["^*", `${origin}/*`, `blob:${origin}/*`, "about:blank"]),
 });
 log.write("Window created.");
+focusWindow = () => { window.unminimize(); window.activate(); };
 const close = new DesktopWorkspaceClose({
   requestFlush: nonce => window.webview.executeJavascript(desktopFlushScript(nonce)),
   close: () => { window.close(); },
@@ -101,7 +131,7 @@ app.onWorkspaceCloseAck((nonce, status) => close.acknowledge(nonce, status));
 window.on("will-close", event => close.request(event as { response?: { allow: boolean } }));
 Electrobun.events.on("before-quit", event => {
   app.beforeQuit(event as { response?: { allow: boolean } });
-  if (event.response?.allow !== false) app.stop();
+  if (event.response?.allow !== false) { app.stop(); if (instance.first) instance.release(); }
 });
 
 // Blank-window watchdog: if the WebView never asks for the Studio page, explain

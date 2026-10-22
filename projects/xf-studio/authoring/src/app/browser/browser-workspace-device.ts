@@ -28,21 +28,25 @@ export function createBrowserWorkspaceSession(options: {
   onStatus(status: WorkspaceSaveStatus): void;
   /** Serialized size budget; the desktop host file allows more than browser storage. */
   budget?: number;
+  /** What else in the same storage counts against the budget now (the outbox's keys, profiles design §2.2). */
+  reserved?: () => number;
   /** The document model the workspace is stored with (from the composition root). */
   model: DocumentModel;
+  /** Whether this window may write its workspace now (the workspace lease); always, without one. */
+  canWrite?: () => boolean;
 }) {
   const composer = new WorkspaceComposer(options.workspace, options.capture);
   const persistence = new WorkspacePersistence({ storage: options.storage,
     key: workspaceKeys(options.verification).workspace, writable: options.restored.writable,
     restoreError: options.restored.error, restoreWarning: options.restored.warning, capture: () => composer.capture(),
-    budget: options.budget, model: options.model });
+    budget: options.budget, reserved: options.reserved, model: options.model, canWrite: options.canWrite });
   persistence.subscribe(options.onStatus);
   for (const source of options.sources) source.subscribe(() => persistence.request());
   const request = () => persistence.request(), flush = () => persistence.flush();
-  options.window.addEventListener("pagehide", flush);
+  options.window.addEventListener("pagehide", () => { flush(); });
   options.document.addEventListener("visibilitychange", () => { if (options.document.hidden) flush(); });
   for (const event of ["input", "change", "click"]) options.document.addEventListener(event, request);
-  return { request, flush, activate: () => persistence.activate(),
+  return { request, flush, activate: () => persistence.activate(), retire: () => persistence.retire(),
     /** Add a content source created after the session (for example the collection library). */
     watch: (source: Observable) => source.subscribe(request),
     setPreviewReady: () => composer.setPreviewReady(),

@@ -283,7 +283,7 @@ export interface MaterialAdapter { matches(template: DepotRef): boolean;
 
 - **Renderers are view-independent.** A feature renderer is created per *scene node*, not per view. It must never depend on the camera or the light rig that draws it. The port's `lighting()` and `subscribeLighting` assume one rig per scene; no renderer uses them, and they are removed in phase P1. Per-view differences, such as eye makeup's plate wireframe, reach a renderer only through an optional `viewTools` hook.
 - **Surface controls and Plate wireframe are eye makeup's view tools.** They are not preview-family toggles: they become its `ViewToolContribution`s, and the head toolbar is derived rather than hard-coded.
-- **The `viewport` target and the camera and preview actions gain a view.** `StudioTarget {kind: "viewport"}` and the camera and preview actions gain an optional view, which defaults to the focused view (§4).
+- **The `viewport` target and the camera and preview actions gain a view.** `StudioTarget {kind: "viewport"}` and the camera and preview actions name their view (required since profiles phase 1e: the input layer resolves it, [profiles design §3.6](profiles-views-layouts-design.md#36-actions-name-their-targets)).
 
 ## 6. Export: mod products and the package plan (PIPE-12)
 

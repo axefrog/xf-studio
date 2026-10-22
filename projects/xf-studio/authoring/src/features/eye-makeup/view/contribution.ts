@@ -9,17 +9,17 @@ import { panelMeta, type ViewContribution } from "../../../studio-ui/views/contr
 export const EYE_MAKEUP_VIEW = {
   owner: "eye-makeup",
   panels: [
-    { id: "layers", title: "Layers", icon: "layers", order: 20, slot: "stack",
+    { id: "layers", context: { kind: "look" }, title: "Layers", icon: "layers", order: 20, slot: "stack",
       description: "The current preset's layer stack, front first." },
-    { id: "uv", title: "UV map", icon: "uv", order: 70, slot: "canvas",
+    { id: "uv", context: { kind: "look" }, title: "UV map", icon: "uv", order: 70, slot: "canvas",
       description: "Flat editor for the same contour, handles and warps in texture space." },
-    { id: "finish", title: "Colour & finish", icon: "finish", order: 80, slot: "inspect",
+    { id: "finish", context: { kind: "look" }, title: "Colour & finish", icon: "finish", order: 80, slot: "inspect",
       description: "Pigment colour, opacity and finish of the selected layer." },
-    { id: "shape", title: "Shape", icon: "shape", order: 90, slot: "inspect",
+    { id: "shape", context: { kind: "look" }, title: "Shape", icon: "shape", order: 90, slot: "inspect",
       description: "Contour points, Bézier handles and mirroring for the selected layer." },
-    { id: "edge", title: "Pigment & edge", icon: "edge", order: 100, slot: "inspect",
+    { id: "edge", context: { kind: "look" }, title: "Pigment & edge", icon: "edge", order: 100, slot: "inspect",
       description: "Point pigment strength, edge softness and mottle, independent of each other." },
-    { id: "warp", title: "Warp", icon: "warp", order: 110, slot: "inspect",
+    { id: "warp", context: { kind: "look" }, title: "Warp", icon: "warp", order: 110, slot: "inspect",
       description: "Smooth displacement fields that bend the selected layer's mask." },
   ],
   // Layer-stack kinds first: `layer.setEnabled` is a Layers action, not a colour or finish one.

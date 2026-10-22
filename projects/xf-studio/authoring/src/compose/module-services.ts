@@ -4,7 +4,7 @@
  * service here; nothing in the shell or the application names it.
  */
 import type { ModuleService } from "../platform/api";
-import { saveExplorerFacade, SaveExplorerActions, type SaveExplorerDevice } from "../features/save-explorer";
+import { saveExplorerFacade, SaveExplorerSessions, type SaveExplorerDevice } from "../features/save-explorer";
 import { poseLibraryFacade, PoseLibraryActions, type PoseLibraryDevice, type PoseStage } from "../features/poses";
 
 /**
@@ -14,6 +14,6 @@ import { poseLibraryFacade, PoseLibraryActions, type PoseLibraryDevice, type Pos
 export type ModuleDevices = { readonly saves: SaveExplorerDevice | null; readonly poses: { readonly device: PoseLibraryDevice; readonly stage: PoseStage } };
 
 export function createModuleServices(devices: ModuleDevices): readonly ModuleService[] {
-  return Object.freeze([saveExplorerFacade(new SaveExplorerActions(devices.saves)),
+  return Object.freeze([saveExplorerFacade(new SaveExplorerSessions(devices.saves)),
     poseLibraryFacade(new PoseLibraryActions(devices.poses.device, devices.poses.stage))]);
 }

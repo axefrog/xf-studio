@@ -15,6 +15,20 @@ export type ValueSchema = { type: "string" | "number" | "number|string" | "integ
   minLength?: number; maxLength?: number;
   values?: readonly (string | number)[] };
 export type PayloadSchema = Record<string, ValueSchema>;
+/**
+ * Named targets (profiles design §3.6): the payload fields an action names what it acts on with, the same in every family (`view`, a
+ * scene and its `sceneGen`, a `character`, a `look`, a `collection`, a history `scope`, a layout `tab`). The input layer resolves and
+ * fills them; owners validate them. Every feature module's action names the look whose part it changes: the registry adds `look` to
+ * each feature action's payload.
+ */
+export const TARGET_FIELDS = ["view", "scene", "sceneGen", "character", "look", "collection", "scope", "tab"] as const;
+export type TargetField = typeof TARGET_FIELDS[number];
+const named = (type: ValueSchema["type"]): ValueSchema => Object.freeze({ type, required: true, from: "target" });
+export const TARGET_SCHEMA: Readonly<Record<TargetField, ValueSchema>> = Object.freeze({
+  view: named("string"), scene: named("string"), sceneGen: named("integer"), character: named("string"), look: named("object"),
+  collection: named("string"), scope: named("string"), tab: named("string"),
+});
+export const LOOK_TARGET = TARGET_SCHEMA.look;
 /** What an action changes: only the selection, authored content, workspace view state, the library or files. */
 export type ActionEffect = "selection" | "content" | "workspace" | "library" | "file";
 export type ActionDescriptor<Scope extends string = string> = { scope: readonly Scope[]; undo: UndoPolicy;

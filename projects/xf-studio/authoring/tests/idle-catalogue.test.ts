@@ -41,14 +41,14 @@ test("choosing an idle shows it at once, loads it behind, and a failed load puts
   const motion = new MotionActions(freshWorkspace().preview, motionPort(idles, "ok", asked));
   expect(motion.snapshot()).toMatchObject({ idleClip: "closeup", idleLoading: false });
   expect(motion.snapshot().idles.map(item => item.id)).toEqual(["closeup", "fullbody", "inventory"]);
-  expect(motion.capability({ kind: "motion.setIdleClip", clip: "nope" })).toMatchObject({ available: false });
-  motion.dispatch({ kind: "motion.setIdleClip", clip: "inventory" });
+  expect(motion.capability({ kind: "motion.setIdleClip", view: "main", clip: "nope" })).toMatchObject({ available: false });
+  motion.dispatch({ kind: "motion.setIdleClip", view: "main", clip: "inventory" });
   expect(motion.snapshot()).toMatchObject({ idleClip: "inventory", idleLoading: true });
   await Bun.sleep(0);
   expect(motion.snapshot()).toMatchObject({ idleClip: "inventory", idleLoading: false });
   expect(asked).toEqual(["inventory"]);
   const failing = new MotionActions(freshWorkspace().preview, motionPort(idles, "fail"));
-  failing.dispatch({ kind: "motion.setIdleClip", clip: "fullbody" });
+  failing.dispatch({ kind: "motion.setIdleClip", view: "main", clip: "fullbody" });
   expect(failing.snapshot().idleClip).toBe("fullbody");
   await Bun.sleep(0);
   expect(failing.snapshot()).toMatchObject({ idleClip: "closeup", idleLoading: false });
@@ -64,7 +64,7 @@ test("the chosen idle is stored only when it isn't the default, and a stored one
     motion: () => motion.snapshot() });
   const composer = compose(); composer.setPreviewReady();
   expect("idleClip" in composer.capture().preview).toBe(false);
-  motion.dispatch({ kind: "motion.setIdleClip", clip: "inventory" });
+  motion.dispatch({ kind: "motion.setIdleClip", view: "main", clip: "inventory" });
   const stored = composer.capture();
   expect(stored.preview.idleClip).toBe("inventory");
   // Read back through the workspace reader and restored: the stored idle is asked for again.

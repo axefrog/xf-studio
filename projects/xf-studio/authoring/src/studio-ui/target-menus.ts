@@ -1,4 +1,5 @@
-import type { StudioAction, StudioCapability, StudioTarget } from "../app/studio-application";
+import type { StudioCapability, StudioTarget } from "../app/studio-application";
+import type { PresentationAction } from "../app/studio-presentation";
 import type { StudioBoundContext } from "../app/studio-context-targets";
 import { chordLabel, keyBindingById, shortcutLabel, TARGET_LABELS } from "../app/input-bindings";
 import type { ViewportHostKind } from "../app/viewport-attachment";
@@ -11,7 +12,7 @@ type Query = ReturnType<StudioRuntime["port"]["authoring"]["contextQuery"]>;
 type Option = Query["options"][number];
 export const CONTEXT_LABELS: Readonly<Record<string, [string, IconName?]>> = {
   "preset.add": ["Add preset", "plus"], "preset.restore": ["Restore removed preset", "reset"],
-  "collection.undoOpen": ["Recover previous draft", "undo"], "collection.rename": ["Rename collection…", "rename"],
+  "collection.undoOpen": ["Show the previous collection", "undo"], "collection.rename": ["Rename collection…", "rename"],
   "preset.select": ["Edit this preset", "target"], "preset.copy": ["Duplicate preset", "duplicate"],
   "preset.remove": ["Remove preset", "trash"], "preset.rename": ["Rename…", "rename"], "preset.move": ["Move to position…", "arrowDown"],
   "layer.select": ["Select layer", "target"], "layer.duplicate": ["Duplicate layer", "duplicate"],
@@ -56,62 +57,62 @@ export function contextItems(rt: StudioRuntime, query: Query, anchor: MenuAnchor
   }
   return items;
 }
-function dispatchBound(rt: StudioRuntime, context: StudioBoundContext, action: StudioAction) {
+function dispatchBound(rt: StudioRuntime, context: StudioBoundContext, action: PresentationAction) {
   const result = rt.port.authoring.dispatchContext(context, action);
   if (!result.ok) rt.feedback.toast("warning", "Context menu", result.message);
 }
 
 function openInput(rt: StudioRuntime, context: StudioBoundContext, option: Extract<Option, { requiresInput: true }>, anchor: MenuAnchor) {
   const port = rt.port, hit = context.hit, recipe = rt.editor.recipe();
-  const bound = (action: StudioAction) => port.authoring.boundActionCapability(context, action);
-  const commit = (action: StudioAction) => dispatchBound(rt, context, action);
+  const bound = (action: PresentationAction) => port.authoring.boundActionCapability(context, action);
+  const commit = (action: PresentationAction) => dispatchBound(rt, context, action);
   const percent = (value: number) => `${Math.round(value * 100)}%`;
   if (option.id === "point.strength" && (hit.kind === "point" || hit.kind === "tangent")) {
     const layer = recipe.layers.find(item => item.id === hit.layerId), range = rt.range("pigment.edit", "value", "point-strength");
-    const make = (value: number): StudioAction => ({ kind: "pigment.edit", layerId: hit.layerId, command: { kind: "point-strength", index: hit.index, value } });
+    const make = (value: number): PresentationAction => ({ kind: "pigment.edit", layerId: hit.layerId, command: { kind: "point-strength", index: hit.index, value } });
     openValuePopover({ kind: "range", label: "Pigment strength", value: layer?.points[hit.index]?.weight ?? 1, ...range, step: .01, format: percent },
       anchor, { title: `Point ${hit.index + 1} pigment`, apply: "Apply", validate: value => bound(make(Number(value))), commit: value => commit(make(Number(value))) });
   } else if (option.id === "point.softness" && (hit.kind === "point" || hit.kind === "tangent")) {
     const layer = recipe.layers.find(item => item.id === hit.layerId), range = rt.range("softness.edit", "value", "point-softness");
-    const make = (value: number): StudioAction => ({ kind: "softness.edit", layerId: hit.layerId, command: { kind: "point-softness", index: hit.index, value } });
+    const make = (value: number): PresentationAction => ({ kind: "softness.edit", layerId: hit.layerId, command: { kind: "point-softness", index: hit.index, value } });
     openValuePopover({ kind: "range", label: "Edge softness", value: layer?.points[hit.index]?.feather ?? layer?.feather ?? .012, ...range, step: .0005, format: scaleText(range.min, range.max) },
       anchor, { title: `Point ${hit.index + 1} edge softness`, apply: "Apply", validate: value => bound(make(Number(value))), commit: value => commit(make(Number(value))) });
   } else if (option.id === "field.reach" && hit.kind === "field") {
     const field = recipe.layers.find(item => item.id === hit.layerId)?.fields.find(item => item.id === hit.id);
     const range = rt.range("field.setReach", "radius");
-    const make = (radius: number): StudioAction => ({ kind: "field.setReach", layerId: hit.layerId, fieldId: hit.id, radius });
+    const make = (radius: number): PresentationAction => ({ kind: "field.setReach", layerId: hit.layerId, fieldId: hit.id, radius });
     openValuePopover({ kind: "range", label: "Reach", value: field?.radius ?? .03, ...range, step: .001, format: scaleText(range.min, range.max) },
       anchor, { title: "Warp reach", apply: "Apply", validate: value => bound(make(Number(value))), commit: value => commit(make(Number(value))) });
   } else if (option.id === "layer.rename" && hit.kind === "layer") {
     const layer = recipe.layers.find(item => item.id === hit.id);
-    const make = (name: string): StudioAction => ({ kind: "layer.edit", command: { kind: "rename", id: hit.id, name } });
+    const make = (name: string): PresentationAction => ({ kind: "layer.edit", command: { kind: "rename", id: hit.id, name } });
     openValuePopover({ kind: "text", label: "Layer name", value: layer?.name ?? "", maxLength: 80 }, anchor,
       { title: "Rename layer", apply: "Rename", validate: value => bound(make(String(value))), commit: value => commit(make(String(value))) });
   } else if (option.id === "layer.move" && hit.kind === "layer") {
     const count = recipe.layers.length, index = recipe.layers.findIndex(item => item.id === hit.id);
-    const make = (position: number): StudioAction => ({ kind: "layer.edit", command: { kind: "move", id: hit.id, to: count - position } });
+    const make = (position: number): PresentationAction => ({ kind: "layer.edit", command: { kind: "move", id: hit.id, to: count - position } });
     openValuePopover({ kind: "integer", label: `Position from front (1–${count})`, value: count - index, min: 1, max: count }, anchor,
       { title: "Move layer", apply: "Move", validate: value => bound(make(Number(value))), commit: value => commit(make(Number(value))) });
   } else if (option.id === "preset.rename" && hit.kind === "preset") {
     const preset = port.library.summary().draft?.presets.find(item => item.id === hit.id);
-    const make = (name: string): StudioAction => ({ kind: "preset.edit", command: { kind: "rename", id: hit.id, name } });
+    const make = (name: string): PresentationAction => ({ kind: "preset.edit", command: { kind: "rename", id: hit.id, name } });
     openValuePopover({ kind: "text", label: "Preset name", value: preset?.name ?? "", maxLength: 120 }, anchor,
       { title: "Rename preset", apply: "Rename", validate: value => bound(make(String(value))), commit: value => commit(make(String(value))) });
   } else if (option.id === "preset.move" && hit.kind === "preset") {
     const presets = port.library.summary().draft?.presets ?? [], index = presets.findIndex(item => item.id === hit.id);
-    const make = (position: number): StudioAction => ({ kind: "preset.edit", command: { kind: "move", id: hit.id, to: position - 1 } });
+    const make = (position: number): PresentationAction => ({ kind: "preset.edit", command: { kind: "move", id: hit.id, to: position - 1 } });
     openValuePopover({ kind: "integer", label: `Position (1–${presets.length})`, value: index + 1, min: 1, max: presets.length }, anchor,
       { title: "Move preset", apply: "Move", validate: value => bound(make(Number(value))), commit: value => commit(make(Number(value))) });
   } else if (option.id === "collection.rename") {
     const name = port.library.summary().draft?.name ?? "";
-    const make = (value: string): StudioAction => ({ kind: "collection.rename", name: value });
+    const make = (value: string): PresentationAction => ({ kind: "collection.rename", name: value });
     openValuePopover({ kind: "text", label: "Collection name", value: name, maxLength: 120 }, anchor,
       { title: "Rename collection", apply: "Rename", validate: value => bound(make(String(value))), commit: value => commit(make(String(value))) });
   }
 }
 
 /** Extra platform commands for a known target (a preset), checked with the hit target's identity, not the selection. */
-export function targetAction(rt: StudioRuntime, target: StudioTarget, action: StudioAction, label: string,
+export function targetAction(rt: StudioRuntime, target: StudioTarget, action: PresentationAction, label: string,
   iconName?: IconName, extra: Partial<Extract<MenuItem, { kind: "action" }>> = {}): MenuItem {
   const capability: StudioCapability = rt.port.authoring.contextCapability(target, action);
   return { kind: "action", label, icon: iconName, capability, ...extra, run: () => { rt.dispatch(action); } };

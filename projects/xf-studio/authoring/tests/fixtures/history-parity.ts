@@ -26,7 +26,8 @@ import { encodeWorkspaceAt } from "../../src/app/workspace/workspace-budget";
 import { STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
 import { largeWorkspaceV1, looseWorkspaceV1, smallWorkspaceV1 } from "./workspace-v1-fixtures";
 
-type Core = ReturnType<typeof createTrustedAuthoringCore>;
+import { namedCore, type NamedTrustedCore } from "./named-targets";
+type Core = NamedTrustedCore;
 
 /**
  * How a session is assembled: the only part of this observer that follows the code (see the header). Before the service the
@@ -39,15 +40,15 @@ export function wiring() {
     documents,
     core(composition: StudioComposition, resetStack: () => void, workspace = freshWorkspace()) {
       let n = 0;
-      return createTrustedAuthoringCore(workspace, { resetStack, selectedCollection: () => "draft", history: service,
-        newId: () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}` }, composition);
+      return namedCore(createTrustedAuthoringCore(workspace, { resetStack, selectedCollection: () => "draft", history: service,
+        newId: () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}` }, composition));
     },
     /** The presentation port over a core, with experiments that contribute `participants` and use `documents`. */
     port(core: Core, participants: () => HistoryParticipant[]) {
       service.participants(participants);
       const experiments = { history: documents, snapshot: () => [], set: async () => ({ ok: true }), subscribe: () => () => {},
         registrations: () => [{ histories: participants } as never] };
-      return createStudioPresentation({ authoring: core.app, library: {} as never, files: {} as never, viewport: {} as never,
+      return createStudioPresentation({ authoring: core.application, targets: core.targets, library: {} as never, files: {} as never, viewport: {} as never,
         preferences: {} as never, previewReadiness: { readiness: () => ({}) as never, subscribe: () => () => {} }, experiments });
     },
   };
@@ -168,7 +169,8 @@ export function redoValiditySession() {
 const calibrated = (exposure: number) => ({ state: { creatorLighting: { ...DEFAULT_CREATOR_LIGHTING, exposure } } });
 
 export function viewSession() {
-  const { views, viewActions } = createViewServices(freshWorkspace().preview, undefined, STUDIO_MODULE_REGISTRATION);
+  const history = createHistoryService(), focus = history.focus;
+  const { views, viewActions } = createViewServices(freshWorkspace().preview, undefined, STUDIO_MODULE_REGISTRATION, history);
   const events: unknown[] = [], seen: unknown[] = [];
   views.subscribe((change: ViewGraphChange) => events.push({ ...change, nodes: [...change.nodes].sort(), views: [...change.views].sort() }));
   const note = (what: string, result?: unknown) => {
@@ -187,7 +189,7 @@ export function viewSession() {
   note("drag after undo 2", views.edit(MAIN_VIEW, "lights", calibrated(1.9), { label: "Exposure", coalesce: "exposure" }));
   note("undo 2", run({ kind: "view.undo" }));
   note("redo", run({ kind: "view.redo" }));
-  note("tool toggle records nothing", run({ kind: "view.setTool", tool: "eye-makeup.surface", enabled: false }));
+  note("tool toggle records nothing", run({ kind: "view.setTool", view: "main", tool: "eye-makeup.surface", enabled: false }));
   note("display edit", views.edit(MAIN_VIEW, "display", { state: { brows: false } }, { label: "Hide eyebrows" }));
   note("unlabelled edit", views.edit(MAIN_VIEW, "display", { state: { lashes: false } }));
   note("seed", views.edit(MAIN_VIEW, "display", { state: { lashes: true } }, { label: "Show eyelashes", seed: true }));
@@ -203,10 +205,10 @@ export function viewSession() {
   note("exposure in the new view", views.edit(v2, "lights", calibrated(3), { label: "Exposure" }));
   note("unlink lights", views.unlink(v2, "lights"));
   note("link camera", views.link(v2, "camera", MAIN_VIEW));
-  note("focus records nothing", views.focusView(v2));
+  note("focus records nothing", focus.focusView(v2));
   // (Focus back on the main view before the next step: Redo now restores what the Undo replaced, focus included, where the code
   // before the service restored what the step left. history-service.test.ts says what holds.)
-  views.focusView(MAIN_VIEW);
+  focus.focusView(MAIN_VIEW);
   note("close view", views.closeView(v2, { label: "Close view" }));
   note("undo close", run({ kind: "view.undo" }));
   note("undo link", run({ kind: "view.undo" }));

@@ -7,7 +7,9 @@
 #   (`theme.ts --check`). The suite has no platform-specific tests.
 # - desktop (Windows): the desktop typecheck extends the Electrobun SDK type devkit, which Hutch
 #   generates; that step is proven on Windows by desktop-release.yml, so it runs there, followed by
-#   the desktop package's own `bun test tests`.
+#   the desktop package's own `bun test tests`, then the profiles persistence harnesses of
+#   experiment 038 (the workspace lease, the S1 outbox kill harness with half its kills, the S3
+#   migration sweep for one round), which kill real processes and were proven on Windows.
 #
 # Private preview assets, the game, WolvenKit, MO2 and the Python oracles are absent here, so the
 # tests that need them are skipped with a printed reason. Before a release, run the suite on the
@@ -26,6 +28,7 @@ on:
       - "tools/private-data.json"
       - "experiments/005-preset-collection/**"
       - "experiments/*/*.ts"
+      - "experiments/038-profiles-spikes/**"
       - ".github/workflows/authoring.yml"
   pull_request:
     paths:
@@ -36,6 +39,7 @@ on:
       - "tools/private-data.json"
       - "experiments/005-preset-collection/**"
       - "experiments/*/*.ts"
+      - "experiments/038-profiles-spikes/**"
       - ".github/workflows/authoring.yml"
   workflow_dispatch:
 
@@ -139,4 +143,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: Test
+        run: bun test tests
+
+      - name: Profiles persistence harnesses (experiment 038)
+        working-directory: experiments/038-profiles-spikes
+        env:
+          XFS_HARNESS_QUICK: "1"
         run: bun test tests

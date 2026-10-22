@@ -87,6 +87,8 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
   const description = h("p", { class: "finish-description" });
   const exportLine = h("div", { class: "export-line" });
   const openPackage = button({ label: "Open mod package", icon: "package", small: true, variant: "quiet", onClick: () => ctx.reveal("package") });
+  // It only opens a panel, so a read-only window keeps it (style guide t-read-only-window).
+  openPackage.dataset.readSafe = "";
   const useGame = button({ label: "Use game-matched model", icon: "finish", small: true, onClick: () => {
     const layer = ctx.facade.view().layer(); if (layer) ctx.dispatch({ kind: "layer.useGameOptics", layerId: layer.id });
   } });

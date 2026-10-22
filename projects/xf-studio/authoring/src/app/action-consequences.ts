@@ -1,4 +1,5 @@
 import type { CollectionDraftSummary } from "../library/collection-actions";
+import type { Unnamed } from "./action-targets";
 import type { CollectionRequest } from "../library/collection-service";
 import type { HistoryJumpPlan, HistoryState } from "../platform/api/history";
 import { FILE_DESCRIPTORS } from "./studio-action-descriptors";
@@ -20,12 +21,14 @@ export type Consequence = {
    * `locked` when it holds a look made with a newer version (the library can't take it, so the draft may be its
    * only copy; CORE-49).
    */
-  discards: { kind: "recovery-draft" | "removed-preset" | "undo-entry" | "redo"; label: string; id?: string; locked?: true }[];
+  discards: { kind: "removed-preset" | "undo-entry" | "redo"; label: string }[];
   recoverableBy: "history.undo" | "history.redo" | "preset.restore" | "collection.undoOpen" | "none";
   /** True only when something recoverable would be lost for good. */
   confirm: boolean;
 };
 export type ConsequenceSubject = { action: StudioAction } | { file: StudioFileAction } | { request: CollectionRequest };
+/** A subject as a presentation asks about it: an action's named targets may be left for the port to name (profiles design §3.6). */
+export type PresentationSubject = { action: Unnamed<StudioAction> } | { file: StudioFileAction } | { request: CollectionRequest };
 type State = { draft?: CollectionDraftSummary; history: HistoryState; undoLimit: number; removedLimit: number;
   /** For `history.jumpTo`: which way the jump goes. */
   jump?: HistoryJumpPlan;
@@ -35,13 +38,10 @@ type State = { draft?: CollectionDraftSummary; history: HistoryState; undoLimit:
 export function consequenceOf(subject: ConsequenceSubject, state: State): Consequence {
   const none: Consequence = { discards: [], recoverableBy: "none", confirm: false };
   const done = (value: Omit<Consequence, "confirm">): Consequence => ({ ...value, confirm: value.discards.some(item =>
-    item.kind === "recovery-draft" || item.kind === "removed-preset") });
+    item.kind === "removed-preset") });
   const draft = state.draft;
-  // Opening or importing adds the current draft to a bounded queue; at capacity the oldest goes.
-  const replaceDraft = () => done({ replaces: "draft", recoverableBy: "collection.undoOpen",
-    discards: draft && draft.recoveryCount >= draft.recoveryLimit && draft.oldestRecoverable
-      ? [{ kind: "recovery-draft", label: draft.oldestRecoverable.name, id: draft.oldestRecoverable.id,
-        ...(draft.oldestRecoverable.locked ? { locked: true as const } : {}) }] : [] });
+  // Opening or importing shows another collection; the one shown stays in the library as it is, and Undo open shows it again.
+  const replaceDraft = () => done({ replaces: "draft", recoverableBy: "collection.undoOpen", discards: [] });
   if ("request" in subject) {
     const request = subject.request;
     if (request.kind === "open" || request.kind === "import") return replaceDraft();
@@ -60,7 +60,6 @@ export function consequenceOf(subject: ConsequenceSubject, state: State): Conseq
     return none;
   }
   const action = subject.action;
-  if (action.kind === "collection.open") return replaceDraft();
   if (action.kind === "collection.undoOpen") return done({ replaces: "draft", recoverableBy: "collection.undoOpen", discards: [] });
   if (action.kind === "preset.edit" && action.command.kind === "remove") {
     const removed = draft?.removed ?? [];

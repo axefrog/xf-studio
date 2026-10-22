@@ -1,19 +1,18 @@
 /**
  * The spike's host process: the real library owner (WAL, `synchronous=NORMAL`, the durability flush on a fast schedule) behind
  * a local HTTP transport for `SpikeHost` and the migration. Prints `port <n>` when it listens.
- *   bun harness/host-server.ts <library.sqlite> [commit-log.jsonl] [static-dir]
+ *   bun harness/host-server.ts <library.sqlite> [commit-log.jsonl]
  * `XFS_KILL=<point>:<n>` terminates the process at a protocol point on the n-th command (S1: before-commit, after-commit;
  * S3: see migration.ts MIGRATION_POINTS), as a crash would.
  */
 import { appendFileSync } from "node:fs";
-import { join } from "node:path";
 import { openLibraryDatabase } from "../../../projects/xf-studio/authoring/src/library/host/library-files";
 import { hostClock } from "../../../projects/xf-studio/authoring/src/platform/core/clock";
 import { SpikeHost, refKey, type TransactRequest } from "../prototype/host";
 import { migrateProfiles, type MigrationRequest } from "../prototype/migration";
 
-const [path, commitLog, staticDir] = process.argv.slice(2);
-if (!path) throw Error("Usage: bun harness/host-server.ts <library.sqlite> [commit-log.jsonl] [static-dir]");
+const [path, commitLog] = process.argv.slice(2);
+if (!path) throw Error("Usage: bun harness/host-server.ts <library.sqlite> [commit-log.jsonl]");
 const [killPoint, killAt] = (process.env.XFS_KILL ?? ":").split(":");
 let count = 0;
 export const die = () => process.kill(process.pid, "SIGKILL");
@@ -44,11 +43,6 @@ const server = Bun.serve({
       const result = migrateProfiles(db, await request.json() as MigrationRequest, point => killHere(point));
       killHere("m-after-commit");
       return Response.json(result);
-    }
-    if (request.method === "POST" && url.pathname === "/results") { console.log(`results ${await request.text()}`); return new Response("ok"); }
-    if (request.method === "GET" && staticDir) {
-      const file = Bun.file(join(staticDir, url.pathname === "/" ? "bench.html" : url.pathname.slice(1)));
-      if (await file.exists()) return new Response(file, { headers: { "Cache-Control": "no-store" } });
     }
     return new Response("Not found", { status: 404 });
   },

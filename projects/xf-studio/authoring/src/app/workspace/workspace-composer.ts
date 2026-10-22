@@ -26,6 +26,8 @@ export type WorkspaceCapturePorts = {
    * so a workspace that never changes it keeps its bytes. Stored whether or not the 3D preview is ready (it is set before the head loads).
    */
   transitions?(): WorkspaceState["preview"]["transitions"];
+  /** The profiles migration's mark and the sessions it built (profiles design §8), as the migration holds them now. */
+  profiles?(): Pick<WorkspaceState, "migration" | "profiles">;
 };
 
 /** Composes durable workspace state from typed ports; the dock layout arrives with the UI preferences. */
@@ -46,6 +48,12 @@ export class WorkspaceComposer {
     }
     const base: WorkspaceState = { ...this.initial };
     if (this.ports.views) delete base.views;
+    if (this.ports.profiles) {
+      const { migration, profiles } = this.ports.profiles();
+      delete base.migration; delete base.profiles;
+      if (migration) base.migration = migration;
+      if (profiles) base.profiles = profiles;
+    }
     if (!this.previewReady) return structuredClone({ ...base, ...editing,
       preview: this.withTransitions({ ...this.initial.preview, textureSize: quality }) });
     const config = this.ports.preview(), motion = this.ports.motion(), original = this.initial.preview;

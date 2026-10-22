@@ -9,7 +9,7 @@
  * Step IDs are opaque, so they are compared by first appearance; times are session clocks and are
  * compared only for presence.
  */
-import { CollectionActions } from "../../src/library/collection-actions";
+import { LegacyDraftActions as CollectionActions } from "./legacy-draft";
 import type { HistorySnapshot } from "../../src/platform/api/history";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
 import { createTrustedAuthoringCore } from "../../src/app/trusted-authoring-core";
@@ -17,13 +17,14 @@ import { encodeWorkspaceAt } from "../../src/app/workspace/workspace-budget";
 import type { WorkspaceState } from "../../src/app/workspace/workspace-state";
 import { digest, restore } from "./workspace-observable";
 
-type Core = ReturnType<typeof createTrustedAuthoringCore>;
+import { namedCore, type NamedTrustedCore } from "./named-targets";
+type Core = NamedTrustedCore;
 
 /** A trusted core over a restored workspace, with its collection boundary wired as the app wires it. */
 export function studio(state: WorkspaceState) {
   let n = 0;
-  const core = createTrustedAuthoringCore(state, { resetStack: () => {}, selectedCollection: () => "draft",
-    newId: () => `step4-${++n}` }, STUDIO_COMPOSITION);
+  const core = namedCore(createTrustedAuthoringCore(state, { resetStack: () => {}, selectedCollection: () => "draft",
+    newId: () => `step4-${++n}` }, STUDIO_COMPOSITION));
   const actions = state.collections ? new CollectionActions(STUDIO_DOCUMENTS, state.collections, () => core.document.export(),
     editor => core.document.restore({ ...editor, fieldSelection: editor.fieldSelection ?? {} })) : undefined;
   return { core, actions };
@@ -102,6 +103,16 @@ export function observeStored(state: WorkspaceState) {
 }
 
 /**
+ * What a scripted session drives: the core, the collection's preset commands (absent for a loose look) and a reload (the workspace or
+ * library as stored, opened again).
+ */
+export type SessionDriver = {
+  core: Core;
+  presets?: { selected(): string; add(): void; select(id: string): void; remove(id: string): void; restore(): void };
+  reload(): { writable: boolean; core: Core } | Promise<{ writable: boolean; core: Core }>;
+};
+
+/**
  * A scripted session on a restored workspace: dispatched edits, a form-control transaction (committed
  * and cancelled), a gesture (committed and cancelled), Undo, Redo and history jumps, a Redo discarded
  * by an edit, preset switches with Undo across a preset add and remove, and a reload of the stored form.
@@ -109,7 +120,23 @@ export function observeStored(state: WorkspaceState) {
 export function session(stored: unknown) {
   const loaded = restore(stored);
   if (!loaded.writable) throw Error(loaded.error);
-  const { core, actions } = studio(loaded.state), { app, document } = core, ids = new Ids();
+  const { core, actions } = studio(loaded.state);
+  return script({ core, ...(actions ? { presets: {
+    selected: () => actions.summary().selected!, add: () => actions.dispatch({ kind: "preset.edit", command: { kind: "add" } }),
+    select: id => actions.dispatch({ kind: "preset.select", id }), remove: id => actions.dispatch({ kind: "preset.edit", command: { kind: "remove", id } }),
+    restore: () => actions.dispatch({ kind: "preset.edit", command: { kind: "restore" } }) } } : {}),
+    // Reload: the workspace as the browser captures it, stored in its standard form and restored (the
+    // added preset's ID is random, so the stored text itself is not compared).
+    reload: () => {
+      const captured: WorkspaceState = { ...loaded.state, ...core.document.export(), collections: actions?.snapshot() ?? loaded.state.collections };
+      const reloaded = restore(encodeWorkspaceAt(captured, 0, STUDIO_DOCUMENTS).encoded);
+      return { writable: reloaded.writable, core: studio(reloaded.state).core };
+    } }) as ReturnType<typeof finish>;
+}
+
+/** The script itself, through any driver; a reload that is asynchronous answers a promise. */
+export function script(driver: SessionDriver) {
+  const { core, presets } = driver, { app, document } = core, ids = new Ids();
   const log: { step: string; result?: unknown; moment: ReturnType<typeof moment> }[] = [];
   const record = (step: string, result?: unknown) => log.push({ step, ...(result === undefined ? {} : { result: asCaptured(result) }), moment: moment(core, ids) });
   const layer = () => document.recipe.layers[document.active] ?? document.recipe.layers[0];
@@ -154,33 +181,31 @@ export function session(stored: unknown) {
   record("undo 4", app.dispatch({ kind: "history.undo" }));
   record("edit discards redo", app.dispatch({ kind: "layer.setSymmetry", layerId: id, symmetry: false }));
   record("redo refused", app.dispatch({ kind: "history.redo" }));
-  if (actions) {
-    const home = actions.summary().selected!;
-    actions.dispatch({ kind: "preset.edit", command: { kind: "add" } });
+  if (presets) {
+    const home = presets.selected();
+    presets.add();
     // Add preset now starts from the starter look (release-readiness-audit.md item 12). This session starts the new look empty, as
     // the code the golden was captured from did (no history step), so it still checks Undo, Redo and History parity.
     document.restore({ ...document.export(), recipe: { ...document.export().recipe, layers: [] }, active: 0, selected: 0 });
     record("preset add");
-    const added = actions.summary().selected!;
+    const added = presets.selected();
     record("undo in the new preset", app.dispatch({ kind: "history.undo" }));
     record("edit the new preset", app.dispatch({ kind: "layer.edit", command: { kind: "add" } }));
-    actions.dispatch({ kind: "preset.select", id: home }); record("back to the first preset");
+    presets.select(home); record("back to the first preset");
     record("undo across the add", app.dispatch({ kind: "history.undo" }));
     record("redo there", app.dispatch({ kind: "history.redo" }));
-    actions.dispatch({ kind: "preset.edit", command: { kind: "remove", id: added } }); record("remove the added preset");
+    presets.remove(added); record("remove the added preset");
     record("undo after the remove", app.dispatch({ kind: "history.undo" }));
-    actions.dispatch({ kind: "preset.edit", command: { kind: "restore" } }); record("restore the removed preset");
+    presets.restore(); record("restore the removed preset");
     record("undo in the restored preset", app.dispatch({ kind: "history.undo" }));
-    actions.dispatch({ kind: "preset.select", id: home }); record("home again");
+    presets.select(home); record("home again");
   }
-  // Reload: the workspace as the browser captures it, stored in its standard form and restored (the
-  // added preset's ID is random, so the stored text itself is not compared).
-  const captured: WorkspaceState = { ...loaded.state, ...document.export(), collections: actions?.snapshot() ?? loaded.state.collections };
-  const stored2 = encodeWorkspaceAt(captured, 0, STUDIO_DOCUMENTS);
-  const reloaded = restore(stored2.encoded);
-  const again = studio(reloaded.state);
+  const reloaded = driver.reload();
+  return reloaded instanceof Promise ? reloaded.then(again => finish(log, again)) : finish(log, reloaded);
+}
+function finish(log: { step: string; result?: unknown; moment: ReturnType<typeof moment> }[], again: { writable: boolean; core: Core }) {
   const reloadIds = new Ids();
   return { log: log.map(entry => ({ step: entry.step, result: entry.result === undefined ? null : entry.result,
     moment: entry.moment })),
-    reload: { writable: reloaded.writable, moment: moment(again.core, reloadIds), walk: walk(again.core) } };
+    reload: { writable: again.writable, moment: moment(again.core, reloadIds), walk: walk(again.core) } };
 }

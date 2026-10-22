@@ -7,6 +7,7 @@ import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 
+import { namedCore } from "./fixtures/named-targets";
 // Transactions identify the Undo entry their checkpoint added. At the limit a new entry
 // displaces the oldest, so the depth no longer grows; depth-based detection used to
 // mislabel entries and keep no-op entries there.
@@ -21,7 +22,7 @@ function fullHistory() {
     recipe.layers[0].opacity = (i + 1) / 200;
     return recipe;
   });
-  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  const core = namedCore(createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
   expect(core.document.history.state().depth).toBe(RECIPE_HISTORY_LIMIT);
   return core;
 }

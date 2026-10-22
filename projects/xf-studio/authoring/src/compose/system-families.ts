@@ -15,6 +15,7 @@ import type { PreviewAction } from "../preview/preview-actions";
 import type { QualityAction } from "../legacy/eye-makeup/preview/preview-quality-actions";
 import type { SavedAppearanceAction } from "../character/saved-appearance-actions";
 import type { ViewAction } from "../app/view-actions";
+import type { SceneAction } from "../app/profiles/scene-commands";
 import type { PartPresetRequest } from "../library/part-presets";
 import { ACTION_DESCRIPTORS, FILE_DESCRIPTORS, PART_PRESET_DESCRIPTORS, REQUEST_DESCRIPTORS, type ActionScope, type FileDescriptor,
   type RequestDescriptor } from "../app/studio-action-descriptors";
@@ -28,6 +29,7 @@ const MOTION_ID = familyId("motion");
 const TRANSITIONS_ID = familyId("transitions");
 const QUALITY_ID = familyId("quality");
 const SAVED_V_ID = familyId("savedV");
+const SCENES_ID = familyId("scenes");
 const VIEWS_ID = familyId("views");
 const LIBRARY_ID = familyId("library");
 const FILES_ID = familyId("files");
@@ -42,8 +44,8 @@ export const HISTORY_FAMILY: SystemFamily<HistoryAction, ActionScope, typeof HIS
 export const COLLECTION_FAMILY: SystemFamily<CollectionStudioAction, ActionScope, typeof COLLECTION_ID> = Object.freeze({
   owner: "system", id: COLLECTION_ID, label: "Collection",
   actions: actionTable<CollectionStudioAction, ActionScope>(ACTION_DESCRIPTORS, {
-    "preset.edit": true, "preset.select": true, "collection.rename": true,
-    "collection.open": true, "collection.undoOpen": true, "collection.importRecipe": true,
+    "preset.edit": true, "collection.rename": true,
+    "collection.undoOpen": true, "collection.importRecipe": true,
     "package.rename": true, "package.assign": true, "package.split": true, "package.merge": true },
     { "preset.edit": { "rename.name": "characters", "move.to": "index" }, "package.rename": { modName: "characters" } }),
 });
@@ -103,6 +105,12 @@ export const QUALITY_FAMILY: SystemFamily<QualityAction, ActionScope, typeof QUA
 export const SAVED_V_FAMILY: SystemFamily<SavedAppearanceAction, ActionScope, typeof SAVED_V_ID> = Object.freeze({
   owner: "system", id: SAVED_V_ID, label: "Saved V", needsScene: true,
   actions: actionTable<SavedAppearanceAction, ActionScope>(ACTION_DESCRIPTORS, { "savedV.load": true, "savedV.restore": true, "savedV.clear": true }),
+});
+
+/** What each scene shows (app/profiles/scene-commands.ts): `scene.setLook` (choosing a preset) and `scene.setSubject`. */
+export const SCENES_FAMILY: SystemFamily<SceneAction, ActionScope, typeof SCENES_ID> = Object.freeze({
+  owner: "system", id: SCENES_ID, label: "Scenes",
+  actions: actionTable<SceneAction, ActionScope>(ACTION_DESCRIPTORS, { "scene.setLook": true, "scene.setSubject": true }),
 });
 
 /**

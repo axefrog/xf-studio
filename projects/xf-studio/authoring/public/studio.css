@@ -105,7 +105,8 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 }
 
 /* ---------- Boot ---------- */
-.studio { height: 100vh; display: grid; grid-template-rows: var(--header-h) minmax(0, 1fr) var(--status-h); }
+.studio { height: 100vh; display: grid; grid-template-rows: var(--header-h) auto minmax(0, 1fr) var(--status-h); }
+.studio > .shell-header { grid-row: 1; } .studio > .workspace-notice { grid-row: 2; } .studio > .workspace { grid-row: 3; } .studio > .status-bar { grid-row: 4; }
 .boot { display: grid; place-content: center; gap: var(--sp-5); justify-items: center; grid-row: 1 / -1; color: var(--text-muted); font-family: var(--font-display); letter-spacing: .12em; text-transform: uppercase; font-size: var(--fs-sm); }
 .boot-error { padding: var(--sp-8); color: var(--danger); }
 .device-parking { position: absolute; width: 0; height: 0; overflow: hidden; }
@@ -1105,8 +1106,12 @@ span.category { border-color: transparent; background: transparent; padding-left
 .activity-item strong { font-weight: 600; white-space: nowrap; }
 .activity-item.success { border-color: var(--success); } .activity-item.warning { border-color: var(--warning); } .activity-item.error { border-color: var(--danger); }
 
-/* History: the current preset's steps, oldest first, on one timeline */
+/* History: the editing context's steps (a preset or a V), oldest first, on one timeline, under a summary naming it */
 .history-panel .list-head { flex-wrap: wrap; row-gap: var(--sp-3); }
+.history-head { flex: 1 1 auto; }
+.history-context { min-width: 0; gap: var(--sp-2); }
+.history-context-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-context .count { flex: none; white-space: nowrap; }
 .history-trimmed { display: flex; align-items: center; gap: var(--sp-3); }
 .history-trimmed .icon { flex: none; }
 .history-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; background: var(--bg-panel); border: 1px solid var(--line); container-type: inline-size; }
@@ -1300,6 +1305,24 @@ span.category { border-color: transparent; background: transparent; padding-left
 .status-item { overflow: hidden; text-overflow: ellipsis; }
 .status-item[data-tone="saved"] { color: var(--text-muted); }
 .status-item[data-tone="protected"], .status-item[data-tone="unavailable"] { color: var(--danger); font-weight: 600; }
+/* The workspace notice (style guide t-read-only-window, t-unprotected, t-recovering): the full-width band under the header, open only
+   for a state the person must act on or wait out. One layout at every width: the message, whole (it wraps, never ends in an ellipsis),
+   then its labelled buttons, beside it where they fit and on the row under it where they don't (narrower than 720 px, always), wrapping
+   and never shrinking to icons. Restoring's first seconds take the status bar's fixed line instead, so nothing transient moves the dock. */
+.workspace-notice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4); min-width: 0; box-sizing: border-box;
+  min-height: calc(var(--control-h-sm) + 2 * var(--sp-2) + 1px); padding-block: var(--sp-2); border-bottom: 1px solid var(--line); container-type: inline-size; }
+.workspace-notice-text { flex: 1 1 14em; min-width: 0; font-weight: 600; line-height: 1.3; }
+.workspace-notice-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-3); }
+@container (max-width: 720px) {
+  .workspace-notice-text { flex-basis: 100%; }
+}
+/* Changed in another window (style guide t-conflict): first in the owning section, the warning state line holding a lead-in sentence and
+   the three ways out on one row of small buttons. */
+.doc-conflict { display: grid; gap: var(--sp-3); margin-bottom: var(--sp-3); }
+.doc-conflict[hidden] { display: none; }
+.doc-conflict-text { margin: 0; }
+.studio[data-workspace="read-only"] .dock-body [aria-disabled="true"]:is(button, [role="radio"], [role="option"], [role="switch"], [role="checkbox"]),
+.studio[data-workspace="read-only"] .dock-body :is(input, select, textarea):disabled { opacity: .45; cursor: not-allowed; }
 .status-message { border: 0; background: transparent; padding: 2px 4px; max-width: 55vw; text-align: left; color: var(--text-muted); }
 .status-message:hover { color: var(--text); background: var(--bg-hover); }
 .status-message[data-tone="error"] { color: var(--danger); } .status-message[data-tone="warning"] { color: var(--warning); } .status-message[data-tone="progress"] { color: var(--signal); }

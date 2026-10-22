@@ -212,6 +212,54 @@ describe("preparing a row's choices ahead", () => {
     expect(ask(service, [0, 1]).states).toBe("xr");
     expect(requestKey(withChoice(1))).toBe(requestKey(structuredClone(withChoice(1))));
   });
+
+  test("more requesters than run at once wait their turn and take it fairly between units; nothing is cancelled (1b scenario 13)", async () => {
+    const { service, warmed } = prefetcher({ limits: { batch: 1, maxBatch: 1 } });
+    const requesters = Array.from({ length: 9 }, (_, index) => `c-${index}/panel`);
+    const poll = (requester: string) => service.update({ base: DEFAULT_CHARACTER, option: "head/hair", positions: [0, 1, 2], requester });
+    const end = Date.now() + 5000;
+    while (!requesters.every(requester => poll(requester).states === "rrr")) {
+      if (Date.now() > end) throw Error(`Timed out: ${requesters.map(requester => poll(requester).states).join(" ")}`);
+      await sleep(2);
+    }
+    expect(service.stats.cancelled).toBe(0);
+    expect(warmed).toHaveLength(27);
+  });
+
+  test("a cancelled and recreated requester keeps its new place: the old job's end never frees it, and at most 8 jobs ever run (1b scenario 13)", async () => {
+    const { service } = prefetcher({ limits: { batch: 1, maxBatch: 1 },
+      warm: async requests => { await sleep(10); return requests.map(() => ({ ready: true })); } });
+    const poll = (requester: string) => service.update({ base: DEFAULT_CHARACTER, option: "head/hair", positions: [0, 1, 2, 3], requester });
+    const eight = Array.from({ length: 8 }, (_, index) => `c-${index}/panel`);
+    for (const requester of eight) poll(requester);
+    await sleep(15);
+    service.cancel("c-3/panel");
+    poll("c-3/panel");
+    poll("c-8/panel");
+    const all = [...eight, "c-8/panel"], end = Date.now() + 8000;
+    while (!all.every(requester => poll(requester).states === "rrrr")) {
+      if (Date.now() > end) throw Error("Timed out.");
+      expect(service.stats.peak).toBeLessThanOrEqual(8);
+      await sleep(2);
+    }
+    expect(service.stats.peak).toBe(8);
+    expect(service.stats.cancelled).toBe(1);
+  });
+
+  test("the session's byte budget, spent by one requester's batch, stops every job before its next batch (1b scenario 14)", async () => {
+    let bytes = 0;
+    const { service, warmed } = prefetcher({ limits: { batch: 1, maxBatch: 1, bytes: 50 }, bytes: () => bytes,
+      warm: async requests => { warmed.push(requests.map(() => 0)); bytes += 100; await sleep(5); return requests.map(() => ({ ready: true })); } });
+    const poll = (requester: string) => service.update({ base: DEFAULT_CHARACTER, option: "head/hair", positions: [0, 1, 2, 3], requester });
+    poll("a"); poll("b");
+    const end = Date.now() + 5000;
+    while (poll("a").stopped !== "disk" || poll("b").stopped !== "disk") { if (Date.now() > end) throw Error("Timed out."); await sleep(2); }
+    await settle();
+    // One batch runs at a time: the one that spent the budget is the only one; the other job's batch, waiting to start, never does.
+    expect(warmed).toHaveLength(1);
+    expect(poll("a").states).toMatch(/n/);
+    expect(poll("b").states).toMatch(/n/);
+  });
 });
 
 // ---- A synthetic installation on disk: archives, the resolver's cache and the exporter's ----

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { CollectionService } from "../src/library/collection-service";
-import { collectionDraft } from "../src/app/workspace/collection-workspace";
+import { bootstrapCollections } from "./fixtures/profile-studio";
 import { PreviewActions } from "../src/preview/preview-actions";
 import { CharacterContextActions } from "../src/character/character-context-actions";
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
@@ -10,9 +10,11 @@ import { ACTION_DESCRIPTORS, type ActionDescriptor } from "../src/app/studio-act
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 
+import { namedCore } from "./fixtures/named-targets";
+import { vHistory } from "./fixtures/character-steps";
 function fixture() {
   const workspace = freshWorkspace();
-  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  const core = namedCore(createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
   return { workspace, document: core.document, app: core.app, core };
 }
 
@@ -55,9 +57,9 @@ test("unavailable 3D device leaves authoring and Undo available with explicit re
   const { app, document } = fixture();
   const reason = "The 3D preview needs your Cyberpunk 2077 game folder.";
   app.setPreviewUnavailable(reason);
-  expect(app.capability({ kind: "camera.front" })).toEqual({ available: false, code: "asset_unavailable", reason });
-  expect(app.capability({ kind: "motion.setBlink", value: .5 })).toEqual({ available: false, code: "asset_unavailable", reason });
-  expect(app.capability({ kind: "preview.setWire", enabled: true })).toEqual({ available: false, code: "asset_unavailable", reason });
+  expect(app.capability({ kind: "camera.front", view: "main" })).toEqual({ available: false, code: "asset_unavailable", reason });
+  expect(app.capability({ kind: "motion.setBlink", view: "main", value: .5 })).toEqual({ available: false, code: "asset_unavailable", reason });
+  expect(app.capability({ kind: "preview.setWire", view: "main", enabled: true })).toEqual({ available: false, code: "asset_unavailable", reason });
   const layer = document.recipe.layers[0], originalColor = layer.color;
   expect(app.canBeginGesture("surface", layer.id)).toMatchObject({ available: false, code: "asset_unavailable" });
   expect(app.canBeginGesture("uv", layer.id).available).toBe(true);
@@ -69,7 +71,7 @@ test("unavailable 3D device leaves authoring and Undo available with explicit re
 });
 
 test("saved-V eye suggestion updates application state without applying the morph a second time", async () => {
-  const { app } = fixture(), calls: number[] = [];
+  const { app, core } = fixture(), calls: number[] = [];
   const preview = new PreviewActions(freshWorkspace().preview, {
     cameraState: () => ({ position: [0, 0, 1], target: [0, 0, 0], fov: 30 }),
     front: () => false, setFov: () => false, endFovGesture: () => {}, restoreCamera: () => {},
@@ -86,7 +88,7 @@ test("saved-V eye suggestion updates application state without applying the morp
   expect(snapshot.preview?.eyeShape).toBe(9);
   expect(calls).toEqual([]);
   // With the context attached, its actions route to it; its large reads are shared and frozen, its snapshot is a copy.
-  const context = new CharacterContextActions({ showSave: () => {}, creator: {
+  const steps = vHistory("local", core.history), context = new CharacterContextActions({ showSave: () => {}, history: steps.home, creator: {
     panel: async () => ({ phase: "ready", message: "", panel: { schema: "xfs/cc-panel-5", bodyGender: "female", identity: "t", language: null, mods: [], groups: [{ label: "Base game", kind: "game" }], modGroups: [], pools: [], notes: [""],
       options: [{ id: "head/eyes_color", part: "head", name: "eyes_color", label: "Eye Color", type: "appearance", grid: true, count: 2, off: null, defaultChoice: "a",
         mod: -1, link: null, dependsOn: [], coverage: ["rendered", 0], groups: 1, pool: -1 }], sections: [{ id: "Eyes", label: "Eyes", makeup: false, rows: [{ slot: "eyes_color", part: "head", options: [0] }] }],
@@ -100,7 +102,8 @@ test("saved-V eye suggestion updates application state without applying the morp
   expect(app.dispatch({ kind: "character.setOption", part: "head", option: "eyes_color", choice: "b" }).ok).toBe(true);
   expect(app.previewState().character).toMatchObject({ phase: "ready", set: 1, undo: "Change Eye Color" });
   expect(Object.isFrozen(app.characterPanel())).toBe(true);
-  expect(app.dispatch({ kind: "character.undo" }).ok).toBe(true);
+  // The Character panel's Undo is history.undo naming the V's scope (profiles design §3.7).
+  expect(app.dispatch({ kind: "history.undo", scope: steps.scope }).ok).toBe(true);
   expect(app.previewState().character).toMatchObject({ set: 0, redo: "Change Eye Color" });
   context.dispose();
 });
@@ -132,25 +135,21 @@ test("facade groups form changes and hides live gesture targets", () => {
 });
 
 test("facade exposes collection target capabilities and typed async outcomes", async () => {
-  const { app, document, workspace } = fixture(), presetId = crypto.randomUUID();
-  const collection = { schema: "xfas/collection-1" as const, id: crypto.randomUUID(),
-    name: "Draft", presets: [{ id: presetId, name: "One", revision: 1, recipe: document.export().recipe }] };
-  const service = new CollectionService(STUDIO_DOCUMENTS, collectionDraft(collection, STUDIO_DOCUMENTS), workspace.library,
-    () => document.export(), editor => document.restore({ ...editor,
-      fieldSelection: editor.fieldSelection ?? {} }), {
-      list: async () => [], get: async () => { throw Error("not used"); },
-      save: async () => { throw Error("not used"); }, package: async () => { throw Error("not used"); },
-    });
+  const { app, document } = fixture();
+  const collections = bootstrapCollections(document, { name: "Draft", looks: [{ name: "One", recipe: document.export().recipe }] });
+  const presetId = collections.looks[0]!.id;
+  const service = new CollectionService({ model: STUDIO_DOCUMENTS, ...collections.deps });
   app.attach({ collection: service });
   const copy = app.actionsFor({ kind: "preset", id: presetId }).find(item =>
     item.action.kind === "preset.edit" && item.action.command.kind === "copy")!;
   expect(copy.capability.available).toBe(true);
   expect(copy.undo).toBe("none");
   expect(app.dispatch(copy.action).ok).toBe(true);
-  expect(service.view().draft?.collection.presets).toHaveLength(2);
+  expect(service.view().draft?.presets).toHaveLength(2);
   expect(app.requestCapability({ kind: "package", action: "check" }).available).toBe(true);
   expect(await app.execute({ kind: "refresh" })).toMatchObject({ ok: true, result: { kind: "list" } });
-  expect(app.dispatch({ kind: "preset.select", id: "stale" })).toMatchObject({ ok: false });
+  // A choice resolved before the scene changed what it shows is refused, never applied to the replacement.
+  expect(app.dispatch({ kind: "scene.setLook", sceneGen: 99, look: { collection: collections.id, look: presetId } })).toMatchObject({ ok: false, code: "missing_target" });
 });
 
 test("descriptors cover every public command, including nested variants and structured reasons", () => {
@@ -259,16 +258,9 @@ test("hit-context commands recheck field, layer and collection identity at invoc
   expect(app.dispatchContext(field.context, { kind: "field.clear", layerId, fieldId }))
     .toMatchObject({ ok: false, code: "missing_target" });
 
-  const presetId = crypto.randomUUID();
-  const collection = { schema: "xfas/collection-1" as const, id: crypto.randomUUID(),
-    name: "Draft", presets: [{ id: presetId, name: "One", revision: 1,
-      recipe: document.export().recipe }] };
-  const service = new CollectionService(STUDIO_DOCUMENTS, collectionDraft(collection, STUDIO_DOCUMENTS), workspace.library,
-    () => document.export(), editor => document.restore({ ...editor,
-      fieldSelection: editor.fieldSelection ?? {} }), {
-      list: async () => [], get: async () => { throw Error("not used"); },
-      save: async () => { throw Error("not used"); }, package: async () => { throw Error("not used"); },
-    });
+  const collections = bootstrapCollections(document, { name: "Draft", looks: [{ name: "One", recipe: document.export().recipe }] });
+  const presetId = collections.looks[0]!.id;
+  const service = new CollectionService({ model: STUDIO_DOCUMENTS, ...collections.deps });
   app.attach({ collection: service });
   const layer = app.contextQuery({ kind: "layer", id: layerId });
   const preset = app.contextQuery({ kind: "preset", id: presetId });

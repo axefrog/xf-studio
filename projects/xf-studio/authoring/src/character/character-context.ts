@@ -29,7 +29,7 @@ import { CC_PRESET_SCHEMA, type CcPreset, type CcPresetEntry, type CcPresetValue
 import { CREATOR_LIMITS, isCreatorName, isModName } from "./creator-names";
 import { depotHash, refFromHash } from "../game/depot-path";
 import type { Ambiguity } from "../game/resolution-evidence";
-import { actionTable, type ActionDescriptor, familyId, type SystemFamily, type ValueSchema } from "../platform/api";
+import { actionTable, type ActionDescriptor, familyId, type SystemFamily, TARGET_SCHEMA, type ValueSchema } from "../platform/api";
 import { CLOTHING_STATES, type ClothingState } from "./clothing-dressing";
 import { CLOTHING_AREAS, type ClothingArea } from "../saves/save-loadout";
 
@@ -457,6 +457,8 @@ export function characterChoiceOf(value: unknown): CharacterChoice | null {
 
 /** One option set to a choice: the choice's key, and for a switcher choice the options it activates (its identity, CORE-70). */
 export type CharacterChange = { part: CcoPart; option: string; choice: string; activates?: readonly string[] };
+/** A V's source as `character.setSource` names it. */
+export type CharacterSourceChange = { kind: "default"; bodyGender: BodyGender } | { kind: "save"; value: unknown } | { kind: "preset"; value: unknown };
 export type CharacterContextAction =
   /** Set one option to a choice (a key from the catalogue, with a switcher choice's activated options); its link family follows. */
   | ({ kind: "character.setOption" } & CharacterChange)
@@ -471,6 +473,11 @@ export type CharacterContextAction =
   | { kind: "character.reset"; part: CcoPart; option: string }
   /** Every change back to the V's own; the V stays. */
   | { kind: "character.resetAll" }
+  /**
+   * Where the V comes from (profiles design §7; absorbs `savedV.*`, which stay as aliases until phase 1 ends): the creator's default V of
+   * a body, a decoded save (applied on the scene showing it), or a decoded `xfs/cc-preset-1` preset. One step, like the actions below.
+   */
+  | { kind: "character.setSource"; source: CharacterSourceChange }
   /** Show the creator's default V (Undo shows the previous V again). */
   | { kind: "character.useDefault"; bodyGender: BodyGender }
   /** Show a decoded save's V; the choices made on the previous V are cleared (one step; `keepChanges` brings them back). */
@@ -483,8 +490,11 @@ export type CharacterContextAction =
   | { kind: "character.retry" }
   /** Remove the game files prepared for the 3D view on this computer; they are read from the game again when needed. */
   | { kind: "character.clearPreparedFiles" }
-  | { kind: "character.undo" }
-  | { kind: "character.redo" }
+  /**
+   * The V changed in another window while this one changed it too (profiles design §2.2): keep this window's version over the other
+   * (`mine`), take the other window's (`theirs`), or keep both (this window's becomes a copy of the V, beside the other).
+   */
+  | { kind: "character.resolveConflict"; keep: "mine" | "theirs" | "both" }
   /** Which of V's clothes the preview shows (clothing-dressing.ts); a viewing setting with its own Undo. */
   | { kind: "character.setClothing"; state: ClothingState }
   /** Show or hide one clothing area (the setting becomes `custom`, starting from the areas shown now). */
@@ -495,9 +505,12 @@ export type CharacterContextAction =
 const input = (type: ValueSchema["type"], extra: Partial<ValueSchema> = {}): ValueSchema => ({ type, required: true, from: "input", ...extra });
 const optional = (type: ValueSchema["type"], extra: Partial<ValueSchema> = {}): ValueSchema => ({ type, required: false, from: "input", ...extra });
 type Scope = "viewport" | "file";
-/** Every creator change records a step in the character's own history, never in a look's (CORE-59): the look history policy is `none`. */
+/**
+ * Every creator change records a step in the character's own history, never in a look's (CORE-59): the look history policy is `none`.
+ * Every action names the V it acts on (`character`, profiles design §3.6); the context it reaches is that V's.
+ */
 const desc = (scope: Scope, effect: ActionDescriptor["effect"], payload: ActionDescriptor["payload"]): ActionDescriptor<Scope> =>
-  ({ scope: [scope], effect, undo: "none", payload });
+  ({ scope: [scope], effect, undo: "none", payload: { character: TARGET_SCHEMA.character, ...payload } });
 const target = { part: input("enum", { values: CCO_PARTS }), option: input("string", { minLength: 1, maxLength: CREATOR_LIMITS.name }) };
 export const CHARACTER_CONTEXT_DESCRIPTORS = {
   "character.setOption": desc("viewport", "workspace", { ...target, choice: input("string", { maxLength: CREATOR_LIMITS.name }), activates: optional("object") }),
@@ -505,14 +518,14 @@ export const CHARACTER_CONTEXT_DESCRIPTORS = {
   "character.setOwnMakeup": desc("viewport", "workspace", { shown: input("boolean") }),
   "character.reset": desc("viewport", "workspace", target),
   "character.resetAll": desc("viewport", "workspace", {}),
+  "character.setSource": desc("file", "workspace", { source: input("object") }),
   "character.useDefault": desc("viewport", "workspace", { bodyGender: input("enum", { values: ["female", "male"] }) }),
   "character.loadSave": desc("file", "workspace", { value: input("object") }),
   "character.loadPreset": desc("file", "workspace", { value: input("object") }),
   "character.keepChanges": desc("viewport", "workspace", {}),
   "character.retry": desc("viewport", "workspace", {}),
   "character.clearPreparedFiles": desc("viewport", "file", {}),
-  "character.undo": desc("viewport", "workspace", {}),
-  "character.redo": desc("viewport", "workspace", {}),
+  "character.resolveConflict": desc("file", "workspace", { keep: input("enum", { values: ["mine", "theirs", "both"] }) }),
   "character.setClothing": desc("viewport", "workspace", { state: input("enum", { values: CLOTHING_STATES }) }),
   "character.setClothingArea": desc("viewport", "workspace", { area: input("enum", { values: CLOTHING_AREAS }), shown: input("boolean") }),
   "character.undoClothing": desc("viewport", "workspace", {}),
@@ -524,7 +537,7 @@ export const CHARACTER_CONTEXT_FAMILY: SystemFamily<CharacterContextAction, Scop
   owner: "system", id: CHARACTER_ID, label: "Character",
   actions: actionTable<CharacterContextAction, Scope>(CHARACTER_CONTEXT_DESCRIPTORS, {
     "character.setOption": true, "character.setOptions": true, "character.setOwnMakeup": true, "character.reset": true, "character.resetAll": true,
-    "character.useDefault": true, "character.loadSave": true, "character.loadPreset": true, "character.keepChanges": true, "character.retry": true, "character.clearPreparedFiles": true,
-    "character.undo": true, "character.redo": true, "character.setClothing": true, "character.setClothingArea": true,
+    "character.setSource": true, "character.useDefault": true, "character.loadSave": true, "character.loadPreset": true, "character.keepChanges": true, "character.retry": true, "character.clearPreparedFiles": true,
+    "character.resolveConflict": true, "character.setClothing": true, "character.setClothingArea": true,
     "character.undoClothing": true, "character.redoClothing": true }),
 });

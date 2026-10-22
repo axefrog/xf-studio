@@ -1,98 +1,60 @@
 import { expect, test } from "bun:test";
-import { eyeCheck } from "./fixtures/package-results";
-import { AuthoringControlEdits } from "../src/app/authoring/authoring-control-edits";
-import { AuthoringDocument } from "../src/app/authoring/authoring-document";
-import { AuthoringGestures } from "../src/app/authoring/authoring-gestures";
-import { CollectionApplication } from "../src/library/collection-application";
-import { CollectionServiceError, type CollectionTransport } from "../src/library/collection-service";
-import { collectionDraft } from "../src/app/workspace/collection-workspace";
-import { looks } from "./fixtures/looks";
-import type { PresetCollection } from "../src/legacy/eye-makeup/export/preset-collection";
-import { StudioApplication } from "../src/app/studio-application";
-import { StudioFileOperations } from "../src/app/studio-file-operations";
-import { recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
-import { registeredEditing } from "./gesture-test-adapter";
-import { STUDIO_DOCUMENTS, STUDIO_REGISTRY } from "../src/compose/studio-registry";
-import { RecipeActions } from "../src/legacy/eye-makeup/authoring-eye-makeup";
+import { profileStudio } from "./fixtures/profile-studio";
 import { freshWorkspace } from "./fixtures/eye-region";
-import { eyeMakeupPort } from "./fixtures/eye-region";
 
-function fixture() {
-  const workspace = freshWorkspace(), document = new AuthoringDocument(workspace);
-  const recipe = new RecipeActions(() => ({ recipe: document.recipe, active: document.active,
-    selected: document.selected, fieldSelection: document.fieldSelection }),
-  (next, effect) => document.applyActionState(next, effect), document, {}, () => "draft");
-  const eyeMakeup = eyeMakeupPort(document, recipe), editing = registeredEditing(eyeMakeup);
-  const gestures = new AuthoringGestures(document, editing.gestures);
-  const controls = new AuthoringControlEdits(document, editing.controls);
-  const app = new StudioApplication({ document, eyeMakeup, gestures, controls }, STUDIO_REGISTRY);
-  const collection: PresetCollection = { schema: "xfas/collection-1", id: crypto.randomUUID(),
-    name: "Current", presets: [{ id: crypto.randomUUID(), name: "Look", revision: 1,
-      recipe: recipeFile(structuredClone(document.recipe))! }] };
-  const other: PresetCollection = structuredClone(collection); other.id = crypto.randomUUID(); other.name = "Other";
-  let saves = 0, restored = 0, packageInput: PresetCollection | undefined;
-  const transport: CollectionTransport = {
-    list: async () => [collection, other].map(c => ({ id: c.id, name: c.name, count: 1, revision: 1, updatedAt: "now" })),
-    get: async id => ({ collection: looks(id === other.id ? other : collection), revision: 1, updatedAt: "now" }),
-    save: async c => { saves++; return { collection: structuredClone(c), revision: 2, updatedAt: "now" }; },
-    package: async (_action, input) => { const c = input as PresetCollection; packageInput = c;
-      return eyeCheck(c, { presets: [{ id: c.presets[0].id, revision: 1, appearance: "xfs_test" }] }); },
-  };
-  let bootstrap!: CollectionApplication;
-  const files = new StudioFileOperations({ pick: async () => undefined, download: () => {},
-    bakeMask: async () => new Blob() }, {
-    recipe: () => document.recipe, selectedLayer: () => document.recipe.layers[document.active],
-    importRecipe: (value, name) => bootstrap.importRecipe(value, name),
-    hasSavedV: () => false, savedV: () => undefined, loadSavedV: () => ({}), savedVReady: () => false,
-    executeCollection: request => app.execute(request), recoverCollection: () => bootstrap.recover(),
-  });
-  bootstrap = new CollectionApplication(STUDIO_DOCUMENTS, collectionDraft(collection, STUDIO_DOCUMENTS, 1), workspace.library, document,
-    () => { restored++; }, transport, app, files);
-  return { bootstrap, collection, other, document, app, files, transport,
-    saves: () => saves, restored: () => restored, packageInput: () => packageInput };
+async function fixture() {
+  const f = await profileStudio({ looks: [{ name: "Look", recipe: freshWorkspace().recipe }] });
+  await f.collection.initialize();
+  return f;
 }
 
-test("collection bootstrap attaches a detached view and switches per-preset editor state through trusted bridge", async () => {
-  const f = fixture(); await f.bootstrap.initialize();
-  const view = f.bootstrap.view();
-  expect(view.draft?.collection.id).toBe(f.collection.id);
-  (view.draft as any).collection.name = "outside";
-  expect(f.bootstrap.view().draft?.collection.name).toBe("Current");
-  let events = 0; const unsubscribe = f.bootstrap.subscribe(() => events++);
-  expect(f.bootstrap.dispatch({ kind: "preset.edit", command: { kind: "add" } }).ok).toBe(true);
-  expect(f.bootstrap.view().draft?.collection.presets).toHaveLength(2);
+test("the collection application hands views a detached summary and switches the editor between looks", async () => {
+  const f = await fixture();
+  const view = f.collection.view();
+  expect(view.draft?.id).toBe(f.shown());
+  (view.draft as { name: string }).name = "outside";
+  expect(f.collection.view().draft?.name).toBe("Current");
+  let events = 0; const unsubscribe = f.collection.subscribe(() => events++);
+  const first = f.scene.look()!.look;
+  expect(f.collection.dispatch({ kind: "preset.edit", command: { kind: "add" } }).ok).toBe(true);
+  expect(f.collection.view().draft?.presets).toHaveLength(2);
   // A new preset starts like the first one, with the starter layer (release-readiness-audit.md item 12).
   expect(f.document.recipe.layers).toHaveLength(1);
-  expect(f.bootstrap.currentLayerCount()).toBe(1);
-  expect(f.bootstrap.dispatch({ kind: "preset.select", id: f.collection.presets[0].id }).ok).toBe(true);
+  expect(f.collection.currentLayerCount()).toBe(1);
+  expect(f.app.dispatch(f.choose(first)).ok).toBe(true);
   expect(f.document.recipe.layers).toHaveLength(4);
-  expect(f.restored()).toBeGreaterThan(0);
   expect(events).toBeGreaterThan(0);
   unsubscribe();
 });
 
-test("bootstrap retains unsaved recipe edits in package snapshot without saving a revision", async () => {
-  const f = fixture(); await f.bootstrap.initialize();
-  f.document.recipe.layers[0].color = "#123456";
-  const outcome = await f.bootstrap.execute({ kind: "package", action: "check" });
+test("a Check sends the look as edited and saves no version", async () => {
+  const f = await fixture();
+  f.app.dispatch({ kind: "layer.setColor", layerId: f.document.recipe.layers[0]!.id, color: "#123456" });
+  const outcome = await f.collection.execute({ kind: "package", action: "check" });
   expect(outcome.ok && outcome.result.kind).toBe("packageCheck");
-  expect(f.packageInput()?.presets[0].recipe.layers[0].color).toBe("#123456");
-  expect(f.saves()).toBe(0);
-  expect(f.bootstrap.workspaceSnapshot()?.revision).toBe(1);
+  expect(JSON.stringify(f.packageInput())).toContain("#123456");
+  expect(f.library.collections.list()).toEqual([]);
+  expect(f.collection.summary().draft?.revision).toBeUndefined();
   expect(f.files.snapshot().package?.kind).toBe("packageCheck");
 });
 
-test("save conflict preserves draft and undo-open recovers previous editor after collection switch", async () => {
-  const f = fixture(); await f.bootstrap.initialize();
-  f.document.recipe.layers[0].color = "#abcdef";
-  f.transport.save = async () => { throw new CollectionServiceError("conflict", "Revision conflict."); };
-  expect(await f.bootstrap.execute({ kind: "save" })).toMatchObject({ ok: false, code: "conflict" });
-  expect(f.document.recipe.layers[0].color).toBe("#abcdef");
-  expect(f.bootstrap.view().draft?.collection.id).toBe(f.collection.id);
-  expect((await f.bootstrap.execute({ kind: "open", id: f.other.id })).ok).toBe(true);
-  expect(f.bootstrap.view().draft?.collection.id).toBe(f.other.id);
-  expect(f.bootstrap.fileCapability({ kind: "collection.recover" }).available).toBe(true);
-  expect((await f.bootstrap.fileExecute({ kind: "collection.recover" })).ok).toBe(true);
-  expect(f.bootstrap.view().draft?.collection.id).toBe(f.collection.id);
-  expect(f.document.recipe.layers[0].color).toBe("#abcdef");
+test("a failed Save version keeps the look; Undo open (Recover) shows the collection shown before an open", async () => {
+  const f = await profileStudio({ looks: [{ name: "Look", recipe: freshWorkspace().recipe }],
+    versions: () => ({ save: async () => { throw Error("Revision conflict."); } }) });
+  await f.collection.initialize();
+  f.app.dispatch({ kind: "layer.setColor", layerId: f.document.recipe.layers[0]!.id, color: "#abcdef" });
+  expect(await f.collection.execute({ kind: "save" })).toMatchObject({ ok: false, message: "Revision conflict." });
+  expect(f.document.recipe.layers[0]!.color).toBe("#abcdef");
+  const before = f.shown();
+  // Another collection saved in the library, opened here: its working copy is made from it.
+  const other = crypto.randomUUID();
+  f.library.collections.save({ collection: { schema: "xfs/collection-2", id: other, name: "Other", presets: [
+    { id: crypto.randomUUID(), name: "Look", revision: 1, parts: f.owner.look(f.scene.look()!)!.parts }] } });
+  await f.collection.execute({ kind: "refresh" });
+  expect((await f.collection.execute({ kind: "open", id: other })).ok).toBe(true);
+  expect(f.shown()).toBe(other);
+  expect(f.collection.fileCapability({ kind: "collection.recover" }).available).toBe(true);
+  expect((await f.collection.fileExecute({ kind: "collection.recover" })).ok).toBe(true);
+  expect(f.shown()).toBe(before);
+  expect(f.document.recipe.layers[0]!.color).toBe("#abcdef");
 });

@@ -6,15 +6,18 @@
 import { expect, test } from "bun:test";
 import { HISTORY_LIMIT, type HistoryLabel, type HistoryTarget } from "../src/platform/api/history";
 import { MAIN_VIEW } from "../src/platform/api/view-graph";
-import { createHistoryService, LOOK_SCOPE, VIEW_SCOPE } from "../src/platform/core/history-service";
+import { createHistoryService, lookScope as lookScopeOf, LOCAL_VIEW_SCOPE } from "../src/platform/core/history-service";
+const LOOK_SCOPE = lookScopeOf({ collection: "c", look: "l" });
 import { CONTROL_TRANSACTION, GESTURE_TRANSACTION } from "../src/platform/core/history-transaction";
 import { createStudioViewGraph, defaultViewGraph, STUDIO_VIEW_GRAPH_RULES } from "../src/preview/preview-view-graph";
 import { ViewGraph } from "../src/platform/core/view-graph";
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { DEFAULT_CREATOR_LIGHTING } from "../src/preview/creator-lighting";
+import { CHARACTER_NOT_SHOWN, characterHistory } from "../src/character/character-history";
 import { freshWorkspace } from "./fixtures/eye-region";
 
+import { namedCore } from "./fixtures/named-targets";
 const label = (text: string): HistoryLabel => ({ label: text, actionKind: text });
 
 /** A target over a record of values, counting how often moves are applied; `refuse` makes the next apply inconsistent. */
@@ -37,20 +40,20 @@ function store(initial: Record<string, unknown>, options: { content?: boolean } 
 
 test("scopes are isolated and global Undo goes to the focused one; a document is focused only while its experiment offers it", () => {
   const service = createHistoryService(), look = store({ a: 1 }), view = store({ n: 1 });
-  const lookScope = service.open(LOOK_SCOPE, look.target), viewScope = service.open(VIEW_SCOPE, view.target);
+  const lookScope = service.open(LOOK_SCOPE, look.target), viewScope = service.open(LOCAL_VIEW_SCOPE, view.target);
   lookScope.checkpoint(["a"], label("A")); look.set("a", 2);
   viewScope.checkpoint(["n"], label("N")); view.set("n", 2);
-  expect(service.focused()).toBe(lookScope);
+  expect(service.acting(service.focus.recent())).toBe(lookScope);
   service.documents.record("hair:g", "Hair Lab", { id: "g1", ...label("Hair length") }, { before: 1, after: 2 });
   expect(service.documents.selected()).toBe("hair:g");
   // Recorded and selected, but no experiment offers it: Undo stays with the look.
-  expect(service.focused()).toBe(lookScope);
+  expect(service.acting(service.focus.recent())).toBe(lookScope);
   const offered = new Set(["hair:g"]);
   const off = service.participants(() => [...offered].map(id => ({ id, dispatch: () => true })));
-  expect(service.focused().id).toBe("doc:hair:g");
-  expect(service.focused().timeline()).toMatchObject({ startId: "hair:g:start", documentLabel: "Hair Lab", steps: [{ id: "g1", label: "Hair length" }] });
+  expect(service.acting(service.focus.recent())!.id).toBe("doc:hair:g");
+  expect(service.acting(service.focus.recent())!.timeline()).toMatchObject({ startId: "hair:g:start", documentLabel: "Hair Lab", steps: [{ id: "g1", label: "Hair length" }] });
   offered.clear();
-  expect(service.focused()).toBe(lookScope);
+  expect(service.acting(service.focus.recent())).toBe(lookScope);
   off();
   // Each scope moves on its own.
   expect(viewScope.undo()).toBe(true);
@@ -75,7 +78,7 @@ test("a step kept in the look's history returns global Undo to the look; a cance
   expect(service.documents.selected()).toBeNull();
   // The View and lighting history is not the look's: its steps leave the focus alone.
   focusDocument();
-  service.open(VIEW_SCOPE, store({ n: 0 }).target).checkpoint(["n"], label("N"));
+  service.open(LOCAL_VIEW_SCOPE, store({ n: 0 }).target).checkpoint(["n"], label("N"));
   expect(service.documents.selected()).toBe("hair:g");
 });
 
@@ -113,7 +116,7 @@ test("a jump applies once, however many steps it crosses, and keeps every step r
 });
 
 test("a move the target refuses drops the scope's steps and changes nothing (CORE-94)", () => {
-  const service = createHistoryService(), view = store({ n: 0 }), scope = service.open(VIEW_SCOPE, view.target);
+  const service = createHistoryService(), view = store({ n: 0 }), scope = service.open(LOCAL_VIEW_SCOPE, view.target);
   scope.checkpoint(["n"], label("One")); view.set("n", 1);
   scope.checkpoint(["n"], label("Two")); view.set("n", 2);
   view.refuseNext();
@@ -127,7 +130,7 @@ test("a slider drag coalesces into one step until it is released (CORE-95), in t
   const exposure = (value: number) => ({ state: { creatorLighting: { ...DEFAULT_CREATOR_LIGHTING, exposure: value } } });
   const shown = () => views.state<{ creatorLighting: { exposure: number } }>(MAIN_VIEW, "lights").creatorLighting.exposure, start = shown();
   for (const value of [1.3, 1.4, 1.5]) views.edit(MAIN_VIEW, "lights", exposure(value), { label: "Exposure", coalesce: "exposure" });
-  expect(service.scope(VIEW_SCOPE)!.state()).toMatchObject({ undo: { label: "Exposure" }, depth: 1 });
+  expect(service.scope(LOCAL_VIEW_SCOPE)!.state()).toMatchObject({ undo: { label: "Exposure" }, depth: 1 });
   views.seal();
   views.edit(MAIN_VIEW, "lights", exposure(1.6), { label: "Exposure", coalesce: "exposure" });
   expect(views.history().depth).toBe(2);
@@ -178,12 +181,12 @@ test("at the limit a new step displaces the oldest, and undoing it brings that o
 
 test("the trusted core's look, View and lighting history live in the one service it is given", () => {
   const service = createHistoryService();
-  const core = createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft", history: service }, STUDIO_COMPOSITION);
-  expect(service.scope(LOOK_SCOPE)).toBe(core.document.history);
+  const core = namedCore(createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft", history: service }, STUDIO_COMPOSITION));
+  expect(service.scope(core.document.scopeId)).toBe(core.document.history);
   core.app.dispatch({ kind: "layer.setOpacity", layerId: core.document.recipe.layers[0].id, opacity: 0.3 });
   core.views.edit(MAIN_VIEW, "lights", { state: { creatorLighting: { ...DEFAULT_CREATOR_LIGHTING, exposure: 2 } } }, { label: "Exposure" });
-  expect(service.focused().state()).toMatchObject({ undo: { label: "Opacity" }, depth: 1 });
-  expect(service.scope(VIEW_SCOPE)!.state()).toMatchObject({ undo: { label: "Exposure" }, depth: 1 });
+  expect(service.acting(service.focus.recent())!.state()).toMatchObject({ undo: { label: "Opacity" }, depth: 1 });
+  expect(service.scope(LOCAL_VIEW_SCOPE)!.state()).toMatchObject({ undo: { label: "Exposure" }, depth: 1 });
 });
 
 // ----- Review regressions -----
@@ -223,4 +226,43 @@ test("the view graph publishes an Undo once its history has settled, so subscrib
   expect(seen).toEqual([{ origin: "history", history: { redo: "Exposure", depth: 0, redoDepth: 1 } }]);
   views.redo();
   expect(seen.at(-1)).toEqual({ origin: "history", history: { undo: "Exposure", depth: 1, redoDepth: 0 } });
+});
+
+test("a target that can't move now (a V still being restored) refuses Undo and Redo with its reason, keeps its steps and applies nothing", () => {
+  const history = createHistoryService(), plain = store({ v: 1 });
+  let held: string | undefined;
+  const scope = history.open("character:v", { ...plain.target, unavailable: () => held });
+  scope.checkpoint(["v"], label("Change")); plain.set("v", 2);
+  held = "Restoring changes from your last session…";
+  expect(scope.capability({ kind: "history.undo" })).toEqual({ available: false, code: "not_ready", reason: held });
+  expect(scope.command({ kind: "history.undo" })).toBe(false);
+  expect([plain.values.v, plain.applies(), scope.state().depth]).toEqual([2, 0, 1]);
+  held = undefined;
+  expect(scope.command({ kind: "history.undo" })).toBe(true);
+  expect(plain.values.v).toBe(1);
+});
+
+test("a character's history with no context bound (its head loading again) refuses Undo and Redo with a reason and keeps every step", () => {
+  const history = createHistoryService(), home = { service: history, id: "v" };
+  const first = store({ v: 1 }), made = characterHistory(home);
+  const unbind = made.bind(first.target);
+  made.scope.checkpoint(["v"], label("Change")); first.set("v", 2);
+  made.scope.checkpoint(["v"], label("Again")); first.set("v", 3);
+  expect(made.scope.command({ kind: "history.undo" })).toBe(true);
+  expect([first.values.v, made.scope.state().depth, made.scope.state().redoDepth]).toEqual([2, 1, 1]);
+  // Detached: both moves wait with their reason, nothing applies and nothing is dropped.
+  unbind();
+  for (const kind of ["history.undo", "history.redo"] as const) {
+    expect(made.scope.capability({ kind })).toEqual({ available: false, code: "not_ready", reason: CHARACTER_NOT_SHOWN });
+    expect(made.scope.command({ kind })).toBe(false);
+  }
+  expect([made.scope.state().depth, made.scope.state().redoDepth, first.applies()]).toEqual([1, 1, 1]);
+  // The next context (the head loaded again) is bound to the same scope and gets the steps back.
+  const second = store({ v: 2 });
+  characterHistory(home).bind(second.target);
+  expect(made.scope.command({ kind: "history.redo" })).toBe(true);
+  expect(second.values.v).toBe(3);
+  expect(made.scope.command({ kind: "history.undo" })).toBe(true);
+  expect(made.scope.command({ kind: "history.undo" })).toBe(true);
+  expect([second.values.v, made.scope.state().depth]).toEqual([1, 0]);
 });

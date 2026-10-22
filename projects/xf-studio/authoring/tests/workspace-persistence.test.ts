@@ -13,6 +13,7 @@ import { historyRecipes, looks, memoryOf, recipeOf, storedWorkspace } from "./fi
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { editLayers, initialRecipe, freshWorkspace } from "./fixtures/eye-region";
 
+import { namedCore } from "./fixtures/named-targets";
 afterEach(() => { jest.useRealTimers(); });
 
 const key = workspaceKeys(true).workspace;
@@ -25,7 +26,7 @@ function memoryStorage() {
 /** The shape the composition root builds, including the status feedback that used to loop. */
 function studioSession(storage: ReturnType<typeof memoryStorage>, options: { watchStatus?: boolean } = {}) {
   const restored = loadWorkspace(storage, true, STUDIO_DOCUMENTS), workspace = restored.state;
-  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  const core = namedCore(createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
   let status = emptyPresentationStatus(true);
   const statusSource = new PresentationStatusSource(() => status);
   const events = Object.assign(new EventTarget(), { hidden: false });

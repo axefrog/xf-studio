@@ -3,18 +3,21 @@
  * tags of what she wears in the view (the character details), her motion service (the body source) and the whole-body view, as the
  * composition root hands them over once the 3D view is ready and takes them back when it goes. Wiring only: it decides nothing.
  */
-import type { Capability } from "../platform/api";
+import type { Capability, ViewId } from "../platform/api";
 import type { PoseSample } from "./pose-sample";
 import type { MotionActions } from "./motion-actions";
 import type { CharacterDetailActions } from "../character/character-detail-actions";
 import type { CharacterContextActions } from "../character/character-context-actions";
 
 export type PoseStageHead = {
+  /** The view the head draws: the one its motion actions name (profiles design §3.6). */
+  view: ViewId;
   motion: MotionActions;
   details: Pick<CharacterDetailActions, "snapshot" | "subscribe">;
   context: Pick<CharacterContextActions, "shownBody" | "subscribe">;
 };
-export type PoseStageFraming = { capability(): Capability; frame(): Capability };
+/** The whole-body view of the view a head draws (`camera.body`, naming that view). */
+export type PoseStageFraming = { capability(view: ViewId): Capability; frame(view: ViewId): Capability };
 type Placement = { readonly offset: readonly [number, number, number]; readonly rotation: readonly [number, number, number] };
 /** The motion service in the Poses module's terms (features/poses/actions.ts `PoseMotionPort`, matched by shape). */
 export type PoseStageMotion = {
@@ -39,7 +42,7 @@ export class PoseStageHub {
   attach(head: PoseStageHead | null) {
     for (const release of this.releases.splice(0)) release();
     this.head = head;
-    this.port = head ? motionPort(head.motion) : null;
+    this.port = head ? motionPort(head.motion, head.view) : null;
     this.tags = head?.details.snapshot().garmentTags ?? [];
     if (head) {
       const changed = () => this.notify();
@@ -53,12 +56,13 @@ export class PoseStageHub {
   bodyGender() { return this.head ? this.head.context.shownBody() : null; }
   wornTags() { return this.tags; }
   motion() { return this.port; }
-  frameCapability() { return this.head ? this.framing.capability() : { available: false, code: "not_ready" as const, reason: "V can be framed once the 3D view is ready." }; }
-  frame() { const allowed = this.frameCapability(); return allowed.available ? this.framing.frame() : allowed; }
+  view() { return this.head?.view ?? null; }
+  frameCapability() { return this.head ? this.framing.capability(this.head.view) : { available: false, code: "not_ready" as const, reason: "V can be framed once the 3D view is ready." }; }
+  frame() { const allowed = this.frameCapability(); return allowed.available && this.head ? this.framing.frame(this.head.view) : allowed; }
 }
 
 /** The motion service in the Poses module's terms: a sampled pose passes through (its schema checked), Still and the idle are its actions. */
-function motionPort(motion: MotionActions): PoseStageMotion {
+function motionPort(motion: MotionActions, view: ViewId): PoseStageMotion {
   return {
     snapshot: () => motion.snapshot(),
     poseCapability: () => motion.poseCapability(),
@@ -68,7 +72,7 @@ function motionPort(motion: MotionActions): PoseStageMotion {
     }), placement && { offset: [...placement.offset] as [number, number, number], rotation: [...placement.rotation] as [number, number, number] }),
     pendingPose: () => motion.pendingPose(),
     dropPendingPose: () => motion.dropPendingPose(),
-    bodyCapability: idle => motion.capability({ kind: "motion.setIdle", enabled: idle }),
-    setBody: idle => motion.dispatch({ kind: "motion.setIdle", enabled: idle }),
+    bodyCapability: idle => motion.capability({ kind: "motion.setIdle", enabled: idle, view }),
+    setBody: idle => motion.dispatch({ kind: "motion.setIdle", enabled: idle, view }),
   };
 }

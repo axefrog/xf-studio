@@ -5,9 +5,12 @@
  * from its message text (CORE-15).
  */
 
-/** Why an action is refused. Presentations branch on the code; the reason is for people. */
+/**
+ * Why an action is refused. Presentations branch on the code; the reason is for people. `stale`: the target changed since the revision
+ * the action names was read (profiles design §3.6).
+ */
 export type ReasonCode = "missing_target" | "busy" | "limit" | "invalid_value" |
-  "incompatible_mode" | "asset_unavailable" | "not_ready" | "unavailable" | "needs_input";
+  "incompatible_mode" | "asset_unavailable" | "not_ready" | "unavailable" | "needs_input" | "stale";
 
 /** Structured validation failure (audit A-8): lets a presentation mark the right field. */
 export type ValidationIssueCode = "required" | "name.blank" | "name.too-long" | "range" | "mode" | "format";

@@ -7,6 +7,13 @@ import { createBrowserLocalSetup, desktopFolderPicker } from "../src/setup/brows
 import { createBrowserPreviewPreparation } from "../src/preview/preview-preparation";
 import { createBrowserWolvenKitSetup } from "../src/setup/wolvenkit-setup";
 import { EYE_MAKEUP_MOD } from "../src/legacy/eye-makeup/mod-branding";
+import { browserLeaseClock, desktopWorkspaceLease } from "../src/app/browser/workspace-lease-device";
+import { WorkspaceLease } from "../src/app/workspace/workspace-lease";
+import { DESKTOP_SAVE_FAILED, desktopWorkspaceWriter } from "../src/app/browser/desktop-workspace-writer";
+import { formatFence, WORKSPACE_FENCE_HEADER } from "../src/platform/api/document-store";
+import { browserPage, startDocumentOutbox } from "../src/app/browser/document-outbox-device";
+import { desktopOutboxStorage } from "../src/app/browser/outbox-storage";
+import { immutableDocumentKind } from "../src/compose/document-kinds";
 const capabilities = await fetch("/api/desktop/capabilities").then(response => response.json());
 if (capabilities.schema !== "xfs/desktop-capabilities-1") throw Error("Desktop host capabilities are unavailable.");
 // The loopback port changes on each launch, so WebView localStorage alone does
@@ -29,6 +36,16 @@ const workspaceAlert = message => {
 // Installed before anything can fail, so the host's close handshake always gets an answer.
 window.xfDesktopWorkspaceError = workspaceAlert;
 window.xfDesktopWorkspaceFlush = async () => {};
+// One writer per workspace (profiles design §2.3): the host grants this page the workspace's lease, or it opens read-only. The lease
+// comes first, so the workspace is read only after this page knows whether it holds it (a holder that just released has written its
+// last copy by then). Its writes carry the lease's generation, so one sent after this page released the workspace is refused.
+// `writer` (below) is read only when a release settles, long after it exists.
+const lease = new WorkspaceLease(desktopWorkspaceLease({ endpoint: `/api/desktop/workspace/lease${verification ? "?verify=1" : ""}`,
+  send: (url, init) => fetch(url, init),
+  // A release waits for the last host write, sends the latest draft again if that write failed (Try again does too), and is refused
+  // while it still doesn't land, so the page keeps the lease and says so.
+  settle: () => writer.settle() }), { clock: browserLeaseClock });
+await lease.start();
 const workspaceResponse = await fetch(workspaceEndpoint, { cache: "no-store" });
 if (!workspaceResponse.ok) {
   // A damaged workspace, or one written by a newer XF Studio, must never brick the app.
@@ -71,31 +88,43 @@ try { localCopy = localStorage.getItem(workspaceKey); } catch { /* Storage unava
 let workspaceText = workspaceDocument.workspace ?? localCopy;
 // Autosave: at most one host write in flight; the newest draft wins. The host file is the
 // source of truth on desktop, so browser storage failures never block it.
-let pendingText = null, inFlight = null, lastSaveFailed = false;
-const SAVE_FAILED = "Your latest changes could not be saved. Keep this window open and export your collection from the Library panel.";
+const SAVE_FAILED = DESKTOP_SAVE_FAILED;
 async function postWorkspace(text, headers = {}) {
+  const generation = lease.generation();
+  // A read-only page (or one that released the workspace) writes nothing.
+  if (generation === null && !lease.draining()) return;
   const response = await fetch(workspaceEndpoint, { method: "POST", credentials: "same-origin",
-    headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify({ workspace: text }),
-    keepalive: new TextEncoder().encode(text).length < 60_000 });
+    headers: { "Content-Type": "application/json", ...headers,
+      ...(generation === null ? {} : { [WORKSPACE_FENCE_HEADER]: formatFence({ workspace: "desktop", generation }) }) },
+    body: JSON.stringify({ workspace: text }), keepalive: new TextEncoder().encode(text).length < 60_000 });
+  // Refused (another page holds the workspace now) is a failed save like any other: it is never counted as stored.
   if (!response.ok) throw Error(SAVE_FAILED);
 }
-function saveWorkspace(text) {
-  pendingText = text;
-  if (!inFlight) inFlight = (async () => {
-    while (pendingText !== null) {
-      const next = pendingText; pendingText = null;
-      try { await postWorkspace(next); lastSaveFailed = false; workspaceAlert(""); }
-      catch (error) { lastSaveFailed = true; workspaceAlert(error.message); }
-    }
-    inFlight = null;
-  })();
-  return inFlight;
-}
+const writer = desktopWorkspaceWriter(postWorkspace, failed => workspaceAlert(failed ? SAVE_FAILED : ""));
+const saveWorkspace = text => writer.save(text);
+// The outbox (profiles design §2.2): the one way documents reach the library. Its keys are written to this launch's WebView storage at
+// once and kept by the host beside the workspace file, fenced by the same lease as the workspace's writes.
+const outboxEndpoint = `/api/desktop/workspace/outbox${verification ? "?verify=1" : ""}`;
+const outboxResponse = await fetch(outboxEndpoint, { cache: "no-store" }).then(response => response.ok ? response.json() : null).catch(() => null);
+if (outboxResponse?.schema !== "xfs/desktop-outbox-1") throw Error("The desktop outbox is unavailable.");
+const outboxWorkspace = verification ? "desktop-verification" : "desktop";
+const outboxStorage = desktopOutboxStorage(localStorage, outboxWorkspace, outboxResponse.launch, outboxResponse.keys, async (key, text) => {
+  const generation = lease.generation();
+  if (generation === null) throw Error("This window no longer holds the workspace.");
+  const response = await fetch(outboxEndpoint, { method: "POST", credentials: "same-origin",
+    headers: { "Content-Type": "application/json", [WORKSPACE_FENCE_HEADER]: formatFence({ workspace: "desktop", generation }) },
+    body: JSON.stringify({ key, text }) });
+  if (!response.ok) throw Error("The outbox key wasn't stored.");
+});
+const documents = startDocumentOutbox({ prefix: `${verification ? "/api/verification" : "/api"}/documents`, send: fetch, workspace: "desktop",
+  storage: outboxStorage, immutable: immutableDocumentKind, lease, page: browserPage() });
 window.xfDesktopWorkspaceFlush = async updateNonce => {
   window.dispatchEvent(new Event("xfs-desktop-close-flush"));
-  if (inFlight) await inFlight;
-  if (lastSaveFailed && workspaceText !== null) await saveWorkspace(workspaceText);
-  if (lastSaveFailed) throw Error(SAVE_FAILED);
+  await writer.idle();
+  if (writer.failed() && workspaceText !== null) await saveWorkspace(workspaceText);
+  if (writer.failed()) throw Error(SAVE_FAILED);
+  // Changes not yet in the library are safe once the host holds the outbox's keys: they are sent at the next start.
+  if (!await outboxStorage.settle()) throw Error(SAVE_FAILED);
   if (updateNonce !== undefined) {
     if (typeof updateNonce !== "string" || !/^[0-9a-f-]{36}$/.test(updateNonce) || workspaceText === null)
       throw Error("The update workspace snapshot is unavailable.");
@@ -115,7 +144,7 @@ const workspaceStorage = {
     try { localStorage.setItem(key, value); } catch { /* The host file already has it. */ }
   },
 };
-if (workspaceDocument.workspace === null && workspaceText !== null) saveWorkspace(workspaceText);
+if (workspaceDocument.workspace === null && workspaceText !== null && lease.writable()) saveWorkspace(workspaceText);
 const stylesheet = document.createElement("link");
 stylesheet.rel = "stylesheet";
 stylesheet.href = "/about.css";
@@ -284,6 +313,8 @@ const initialSetup = setupAction({ kind: "setup.refresh" });
 void initialSetup.then(() => {
   // A fresh install gets the plain-language welcome; damaged settings open Settings, which
   // offers to restore them. Everyone else reaches Settings from the header's Settings button or About.
+  // A read-only page (another one holds the workspace) opens no prompt that would write settings (style guide t-read-only-window).
+  if (!lease.writable()) return;
   if (setupView?.source === "new") welcome.showModal();
   else if (setupView?.source === "backup") openGameSetup();
 }).catch(() => { aboutReadiness.textContent = "Your settings couldn't be loaded. Check still works; restart XF Studio to try again."; });
@@ -307,6 +338,8 @@ void import("/build/studio-startup.js").then(({ startStudio }) => startStudio({
   onMounted: shell => { startup.editorReadyMs ??= Math.round(performance.now()); studio = shell; if (setupWanted) { setupWanted = false; shell.openGameSetup(); } },
   onFlushRequest: flush => { flushRequest = flush; },
   onPreviewReady: () => { previewReady = true; startup.previewReadyMs ??= Math.round(performance.now()); },
+  lease,
+  documents,
 })).catch(() => {
     const root = document.getElementById("studio");
     root.removeAttribute("aria-busy");

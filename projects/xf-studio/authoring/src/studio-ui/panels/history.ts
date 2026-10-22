@@ -2,7 +2,7 @@ import { keyBinding, shortcutLabel } from "../../app/input-bindings";
 import { button, emptyState } from "../controls";
 import { h, setAttr, setText, setUnavailable } from "../dom";
 import { helpTip } from "../help-tip";
-import { historyCommandTitle, historyRows, historySummary, HISTORY_TRIMMED_NOTE, jumpable, jumpAnnouncement, type HistoryRow } from "../history-model";
+import { historyCommandTitle, historyHeading, historyRows, HISTORY_TRIMMED_NOTE, jumpable, jumpAnnouncement, type HistoryRow } from "../history-model";
 import { icon } from "../icons";
 import { PANEL_META } from "../panel-meta";
 import type { Frame, StudioRuntime } from "../runtime";
@@ -11,25 +11,28 @@ import type { PanelController } from "./collection";
 type RowView = { element: HTMLLIElement; main: HTMLButtonElement; label: HTMLElement; time: HTMLElement; state: HTMLElement };
 
 /**
- * The current preset's recent changes, oldest first. Clicking a step dispatches one
+ * The editing context's recent changes (what was last edited: a preset or a V), oldest first, under a summary that names it
+ * ("Smoky · 1 step"; the name truncates first, the whole line its tooltip). Clicking a step dispatches one
  * `history.jumpTo`; the application performs the Undo or Redo steps and refuses while an
  * adjustment is open. Undone steps stay listed (dimmed) until a new change discards them.
  */
 export function historyPanel(rt: StudioRuntime): PanelController {
   const port = rt.port, keys = { undo: shortcutLabel("shell.undo"), redo: shortcutLabel("shell.redo") };
-  const summary = h("span", { class: "count" });
+  // Whose history this is, then how many steps (H6): the name truncates first, and the whole line is the summary's tooltip.
+  const summaryName = h("span", { class: "history-context-name" }), summaryCount = h("span", { class: "count" });
+  const summary = h("span", { class: "eyebrow history-context" }, summaryName, summaryCount);
   const undo = button({ label: "Undo", icon: "undo", small: true, variant: "quiet", onClick: () => { rt.dispatch({ kind: "history.undo" }); } });
   const redo = button({ label: "Redo", icon: "redo", small: true, variant: "quiet", onClick: () => { rt.dispatch({ kind: "history.redo" }); } });
   const trimmed = h("p", { class: "note info history-trimmed" }, icon("info"),
     h("span", { text: `${HISTORY_TRIMMED_NOTE}: only the latest are kept.` }));
-  const list = h("ol", { class: "history-list", "aria-label": "Changes to this preset, oldest first" });
-  // The heading already says "No changes yet" or "No preset", so the empty states say what comes next instead of repeating it.
+  const list = h("ol", { class: "history-list", "aria-label": "Changes, oldest first" });
+  // The heading already says "No changes yet" or "Nothing edited", so the empty states say what comes next instead of repeating it.
   const empty = emptyState("Your edits appear here", "Oldest first. Click any step to go back to it.");
-  const noPreset = emptyState("Select a preset", "History belongs to a preset: select or add one to see its changes.");
+  const noPreset = emptyState("Select a preset or change your V", "History follows what you last edited, a preset or a V, and lists its changes here.");
   // How the list works, in a help tip beside its heading (help-tip.ts).
   const help = helpTip("history", `Click a step to go back to it. Steps after it stay listed, dimmed, until you make a new change, so you can go forward again. ${keys.undo} and ${keys.redo} move one step at a time.`);
   const element = h("div", { class: "panel-content history-panel" },
-    h("div", { class: "list-head" }, h("span", { class: "control-line" }, h("span", { class: "eyebrow" }, summary), help), h("div", { class: "row gap-xs" }, undo, redo)),
+    h("div", { class: "list-head" }, h("span", { class: "control-line history-head" }, summary, help), h("div", { class: "row gap-xs" }, undo, redo)),
     noPreset, empty, trimmed, list);
   rt.anchors.register("history.list", list);
 
@@ -65,14 +68,19 @@ export function historyPanel(rt: StudioRuntime): PanelController {
     spec: { id: "history", ...PANEL_META["history"], element },
     update(frame: Frame) {
       const timeline = frame.history, draft = frame.library.draft;
-      const hasPreset = !!timeline.documentLabel || !draft || !!draft.selected;
-      setAttr(list, "aria-label", `Changes to ${timeline.documentLabel ?? "this preset"}, oldest first`);
+      // The editing context the panel shows (profiles design §3.7), by name.
+      const context = timeline.documentLabel ?? port.focus.editing()?.name;
+      const hasPreset = !!context || !draft || !!draft.selected;
+      setAttr(list, "aria-label", context ? `Changes to ${context}, oldest first` : "Changes, oldest first");
       const undoCap = port.authoring.capability({ kind: "history.undo" }), redoCap = port.authoring.capability({ kind: "history.redo" });
       const labels = port.authoring.history();
       // The main-action pattern (UI-84), as the header's Undo and Redo: unavailable, each stays focusable and says why.
-      setUnavailable(undo, !undoCap.available, undoCap.reason); undo.title = historyCommandTitle("undo", undoCap, labels.undo?.label, keys.undo, timeline.documentLabel);
-      setUnavailable(redo, !redoCap.available, redoCap.reason); redo.title = historyCommandTitle("redo", redoCap, labels.redo?.label, keys.redo, timeline.documentLabel);
-      setText(summary, hasPreset ? historySummary(timeline) : "No preset");
+      setUnavailable(undo, !undoCap.available, undoCap.reason); undo.title = historyCommandTitle("undo", undoCap, labels.undo?.label, keys.undo, context);
+      setUnavailable(redo, !redoCap.available, redoCap.reason); redo.title = historyCommandTitle("redo", redoCap, labels.redo?.label, keys.redo, context);
+      const heading = hasPreset ? historyHeading(context, timeline) : { name: "", count: "Nothing edited", text: "Nothing edited" };
+      setText(summaryName, heading.name); summaryName.hidden = !heading.name;
+      setText(summaryCount, heading.name ? ` · ${heading.count}` : heading.count);
+      summary.title = heading.text;
       // One capability stands for every row: jumps are refused for the same reason (busy, no preset).
       rows = hasPreset ? historyRows(timeline) : [];
       const probe = rows.find(jumpable);

@@ -5,8 +5,7 @@
  * captured with this extractor from the pre-migration code; the migrated code must match it.
  */
 import { createHash } from "node:crypto";
-import { CollectionActions } from "../../src/library/collection-actions";
-import type { EditorSnapshot } from "../../src/library/collection-session";
+import { LegacyDraftActions as CollectionActions, type EditorSnapshot } from "./legacy-draft";
 import { encodeWorkspaceAt } from "../../src/app/workspace/workspace-budget";
 import { loadWorkspace, type WorkspaceState } from "../../src/app/workspace/workspace-state";
 import { STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";

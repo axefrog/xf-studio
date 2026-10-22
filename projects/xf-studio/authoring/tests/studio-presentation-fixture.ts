@@ -1,10 +1,17 @@
+import type { WorkspaceLease } from "../src/app/workspace/workspace-lease";
 import { eyeCheck } from "./fixtures/package-results";
 import { AuthoringControlEdits } from "../src/app/authoring/authoring-control-edits";
 import { AuthoringDocument } from "../src/app/authoring/authoring-document";
 import { AuthoringGestures } from "../src/app/authoring/authoring-gestures";
 import { CollectionApplication } from "../src/library/collection-application";
 import type { CollectionTransport } from "../src/library/collection-service";
-import { collectionDraft } from "../src/app/workspace/collection-workspace";
+import { CollectionOwner } from "../src/library/collection-owner";
+import { LookEditor } from "../src/library/look-editor";
+import { LookSessions } from "../src/library/look-sessions";
+import { DocumentOutbox } from "../src/platform/core/document-outbox";
+import { openTestLibrary } from "./fixtures/library-file";
+import { memoryOutboxStorage } from "./fixtures/platform-doubles";
+import { libraryPort, libraryVersions, storedLook, testScene } from "./fixtures/profile-studio";
 import { PreviewQualityActions } from "../src/legacy/eye-makeup/preview/preview-quality-actions";
 import type { PresetCollection } from "../src/legacy/eye-makeup/export/preset-collection";
 import { StudioApplication } from "../src/app/studio-application";
@@ -19,16 +26,20 @@ import { registeredEditing } from "./gesture-test-adapter";
 import { STUDIO_DOCUMENTS, STUDIO_REGISTRY } from "../src/compose/studio-registry";
 import { RecipeActions } from "../src/legacy/eye-makeup/authoring-eye-makeup";
 import { freshWorkspace } from "./fixtures/eye-region";
+import { fixtureTargets } from "./fixtures/named-targets";
+import { createHistoryService } from "../src/platform/core/history-service";
 import { eyeMakeupPort } from "./fixtures/eye-region";
 
 /**
  * A trusted presentation over real application services, without a browser. `hitAt` stands in
  * for the viewport pickers (default: the selected layer's first point).
  */
-export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>["hitAt"] } = {}): {
+export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>["hitAt"];
+  /** The window's workspace lease (profiles design §2.3); without it the window is the only one. */
+  lease?: WorkspaceLease } = {}): {
   shell: StudioPresentationPort<string>; packageInput: () => PresetCollection | undefined;
   downloads: string[]; locations: string[] } {
-  const workspace = freshWorkspace(), document = new AuthoringDocument(workspace);
+  const workspace = freshWorkspace(), history = createHistoryService(), document = new AuthoringDocument(workspace, undefined, { history });
   const recipe = new RecipeActions(() => ({ recipe: document.recipe, active: document.active,
     selected: document.selected, fieldSelection: document.fieldSelection }),
   (next, effect) => document.applyActionState(next, effect), document, {}, () => "fixture");
@@ -36,15 +47,20 @@ export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>
   const gestures = new AuthoringGestures(document, editing.gestures);
   const controls = new AuthoringControlEdits(document, editing.controls);
   const quality = new PreviewQualityActions(512, { assess: () => ({ accepted: true }), replace: () => {} });
-  const app = new StudioApplication({ document, eyeMakeup, gestures, controls, quality,
-    ...createViewServices(workspace.preview, undefined, STUDIO_MODULE_REGISTRATION) }, STUDIO_REGISTRY);
-  const source: PresetCollection = { schema: "xfas/collection-1", id: crypto.randomUUID(),
-    name: "Current", presets: [{ id: crypto.randomUUID(), name: "Look", revision: 1,
-      recipe: recipeFile(structuredClone(document.recipe))! }] };
+  const viewServices = createViewServices(workspace.preview, undefined, STUDIO_MODULE_REGISTRATION, history);
+  const app = new StudioApplication({ document, eyeMakeup, gestures, controls, quality, history,
+    ...viewServices, ...(options.lease ? { access: options.lease } : {}) }, STUDIO_REGISTRY);
+  // The collection the scene shows: a working copy of one look in a library in memory (made at once; nothing is awaited).
+  const store = openTestLibrary(), port = libraryPort(store), outbox = new DocumentOutbox(port, memoryOutboxStorage(), { retryMs: 5 });
+  outbox.open();
+  const owner = new CollectionOwner({ documents: port, outbox, versions: libraryVersions(store) });
+  const collectionId = crypto.randomUUID(), lookId = crypto.randomUUID();
+  owner.dispatch({ kind: "collection.create", id: collectionId, name: "Current", looks: [storedLook({ name: "Look", recipe: structuredClone(document.recipe) }, lookId)] });
+  const scene = testScene({ collection: collectionId, look: lookId });
+  const lookEditor = new LookEditor({ model: STUDIO_DOCUMENTS, sessions: new LookSessions(owner, outbox), document });
   let packageInput: PresetCollection | undefined;
   const transport: CollectionTransport = {
     list: async () => [], get: async () => { throw Error("No saved fixture collection."); },
-    save: async () => { throw Error("No SQLite write in this fixture."); },
     package: async (_action, input) => { const value = input as PresetCollection; packageInput = value;
       return eyeCheck(value, { presets: value.presets.map(preset => ({ id: preset.id, revision: preset.revision, appearance: "xfs_fixture" })) }); },
   };
@@ -53,13 +69,16 @@ export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>
   const files = new StudioFileOperations({ pick: async () => undefined,
     download: (_blob, name) => downloads.push(name), bakeMask: async () => new Blob() }, {
     recipe: () => document.recipe, selectedLayer: () => document.recipe.layers[document.active],
-    importRecipe: (value, name) => library.importRecipe(value, name),
+    importRecipe: (value, name, collection) => library.importRecipe(value, name, collection),
     hasSavedV: () => false, savedV: () => undefined, loadSavedV: () => ({}),
     savedVReady: () => false, executeCollection: request => app.execute(request),
     recoverCollection: () => library.recover(),
   });
-  library = new CollectionApplication(STUDIO_DOCUMENTS, collectionDraft(source, STUDIO_DOCUMENTS, 1), workspace.library, document,
-    () => {}, transport, app, files);
+  library = new CollectionApplication({ model: STUDIO_DOCUMENTS, owner, scene, transport, flushLook: () => lookEditor.commit() }, document, app, files);
+  // The input layer (profiles design §3.6): the port names what the scene shows and the editing context.
+  const targets = fixtureTargets({ app, views: viewServices.views, history, document }, { scene, collection: () => library.service.draftIdentity()?.collectionId });
+  lookEditor.show(scene.look());
+  scene.subscribe(() => lookEditor.show(scene.look()));
   const locations: string[] = [];
   let uvView = { mode: "both" as "both" | "single", side: "low" as "low" | "high",
     u: 0, v: 0, span: 1 };
@@ -75,13 +94,13 @@ export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>
     },
     hitAt: options.hitAt ?? (() => ({ hit: { kind: "point", layerId: document.recipe.layers[document.active].id,
       index: 0 }, affordance: "point" })),
-    queryContext: hit => app.contextQuery(hit),
+    queryContext: hit => app.contextQuery(hit, targets.named()),
   });
   viewport.setReady("uv"); viewport.setReady("head");
   const preferences = new UIPreferenceActions(workspace.uiPreferences);
   const previewReadiness = { readiness: () => ({ phase: "ready" as const, size: 1024 as const,
     pending: 0, waiting: false, estimatedBytes: 1024, layers: [] }), subscribe: (_listener: () => void) => () => {} };
   return { shell: createStudioPresentation({ authoring: app, library, files, viewport, preferences,
-    previewReadiness }),
+    previewReadiness, targets, focus: history.focus, ...(options.lease ? { workspace: options.lease } : {}) }),
     packageInput: () => packageInput, downloads, locations };
 }

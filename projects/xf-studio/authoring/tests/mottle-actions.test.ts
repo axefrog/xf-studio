@@ -6,20 +6,21 @@ import { expect, test } from "bun:test";
 import { mottlePreset, mottleSeed, nextMottleSeed } from "../src/engines/layered-makeup/mottle";
 import type { Recipe } from "../src/engines/layered-makeup/recipe";
 import { recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
-import type { StudioAction } from "../src/app/studio-application";
+import type { TestAction } from "./fixtures/named-targets";
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { freshWorkspace, initialRecipe } from "./fixtures/eye-region";
 import { historyLabel } from "../src/legacy/eye-makeup/history-labels";
 
+import { namedCore } from "./fixtures/named-targets";
 function fixture(recipe: Recipe = initialRecipe()) {
-  const core = createTrustedAuthoringCore(freshWorkspace(recipe), { resetStack: () => {}, selectedCollection: () => "preset-a" }, STUDIO_COMPOSITION);
+  const core = namedCore(createTrustedAuthoringCore(freshWorkspace(recipe), { resetStack: () => {}, selectedCollection: () => "preset-a" }, STUDIO_COMPOSITION));
   const layer = () => core.document.recipe.layers[0];
-  const ok = (action: StudioAction) => {
+  const ok = (action: TestAction) => {
     expect(core.app.capability(action)).toMatchObject({ available: true });
     expect(core.app.dispatch(action)).toMatchObject({ ok: true });
   };
-  const refused = (action: StudioAction, reason: string) =>
+  const refused = (action: TestAction, reason: string) =>
     expect(core.app.capability(action)).toMatchObject({ available: false, reason });
   return { ...core, layer, ok, refused };
 }

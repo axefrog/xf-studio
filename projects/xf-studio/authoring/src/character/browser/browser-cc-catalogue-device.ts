@@ -81,13 +81,13 @@ export function createBrowserCreatorDevice(transport: Fetch = (url, init) => fet
       const value = await answer<{ choices?: unknown }>(await post({ kind: "legacy", bodyGender: gender, style, definition }));
       return Array.isArray(value?.choices) ? value.choices.flatMap((item): CharacterChoice[] => { const choice = characterChoiceOf(item); return choice ? [choice] : []; }) : [];
     },
-    async prefetch(request, option, positions, focus, signal) {
+    async prefetch(request, option, positions, focus, signal, requester) {
       const value = await answer<{ schema?: unknown; states?: unknown; stopped?: unknown; busy?: unknown }>(await post({ kind: "prefetch", request, option,
-        positions: [...positions], ...(focus !== null ? { focus } : {}) }, signal));
+        positions: [...positions], ...(focus !== null ? { focus } : {}), ...(requester ? { requester } : {}) }, signal));
       if (value?.schema !== PREFETCH_SCHEMA || typeof value.states !== "string" || !/^[?nqfrx]*$/.test(value.states)) throw Error(SKEW);
       return { states: value.states, stopped: value.stopped === "time" || value.stopped === "disk" || value.stopped === "setup" ? value.stopped : null, busy: value.busy === true };
     },
-    async stopPrefetch() { await answer(await post({ kind: "prefetchStop" })); },
+    async stopPrefetch(requester) { await answer(await post({ kind: "prefetchStop", ...(requester ? { requester } : {}) })); },
     async preparedFiles(signal) {
       const value = await answer<{ bytes?: unknown }>(await post({ kind: "prepared" }, signal));
       if (typeof value?.bytes !== "number" || !Number.isFinite(value.bytes)) throw Error(SKEW);

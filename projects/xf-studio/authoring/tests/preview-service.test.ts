@@ -20,13 +20,13 @@ test("motion service restores composition before clock, preserves pause phase an
   actions.restore();
   expect(calls).toEqual(["parts:false:true", "idle:true", "seek:2.5", "pause:true"]);
   expect(actions.snapshot()).toMatchObject({ idle: true, idlePaused: true, idleTime: 2.5, idleBody: false, blink: 0 });
-  expect(actions.capability({ kind: "motion.playBlink", playing: true }).available).toBe(false);
-  actions.dispatch({ kind: "motion.setPaused", paused: false });
+  expect(actions.capability({ kind: "motion.playBlink", view: "main", playing: true }).available).toBe(false);
+  actions.dispatch({ kind: "motion.setPaused", view: "main", paused: false });
   expect(actions.snapshot().idleTime).toBe(2.5);
-  actions.dispatch({ kind: "motion.setIdle", enabled: false });
-  actions.dispatch({ kind: "motion.setBlink", value: .4 });
+  actions.dispatch({ kind: "motion.setIdle", view: "main", enabled: false });
+  actions.dispatch({ kind: "motion.setBlink", view: "main", value: .4 });
   expect(actions.snapshot()).toMatchObject({ idle: false, blink: .4, blinkPlaying: false });
-  expect(actions.capability({ kind: "motion.setBlink", value: 2 }).available).toBe(false);
+  expect(actions.capability({ kind: "motion.setBlink", view: "main", value: 2 }).available).toBe(false);
 });
 
 test("quality service validates tiers before replacing resources and tracks recoverable failures", () => {

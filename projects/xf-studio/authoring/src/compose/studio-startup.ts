@@ -1,3 +1,4 @@
+import type { StudioAction } from "../app/studio-application";
 import { browserReferenceTextures } from "../character/browser/browser-reference-textures-device";
 import { OFF_EXPERIMENTS } from "../platform/core/experiments";
 import { createHistoryService, type HistoryService } from "../platform/core/history-service";
@@ -28,12 +29,15 @@ import { createBrowserModInstall } from "../installation/browser/browser-mod-ins
 import { builtModsOf, type BuiltMod } from "../installation/mod-install-actions";
 import { createBrowserPreviewDevice } from "../legacy/eye-makeup/browser/browser-preview-device";
 import { attachBrowserHead, type AttachedHead } from "../preview/browser/browser-head-attachment";
+import { sceneLayeredSurfaces } from "../preview/browser/scene-surfaces";
 import { CharacterWarmStart } from "../character/browser/character-warm-start";
-import type { ContextHistory } from "../character/character-context-actions";
+import { CreatorCatalogue } from "../character/creator-catalogue";
+import { createBrowserCreatorDevice } from "../character/browser/browser-cc-catalogue-device";
+import { readSavedV } from "../saves/save-reader";
 import { rasterRegion } from "../engines/layered-makeup/region";
 import { createBrowserViewportDevice } from "../preview/browser/browser-viewport-device";
 import { createBrowserWorkspaceSession, loadBrowserWorkspace } from "../app/browser/browser-workspace-device";
-import { collectionTransport } from "../library/browser/collection-transport";
+import { collectionTransport, collectionVersions } from "../library/browser/collection-transport";
 import { GlitterMeasurements } from "../legacy/eye-makeup/glitter-measurements";
 import type { LocalSetupActions } from "../setup/local-setup-actions";
 import type { DesktopAppActions } from "../setup/desktop-app";
@@ -49,6 +53,7 @@ import { createTrustedStudioBootstrap } from "../app/trusted-studio-bootstrap";
 // The composition root: the one browser module that imports the composition list (CORE-29).
 import { STUDIO_COMPOSITION } from "./studio-registry";
 import { STUDIO_VIEW_COMPOSITION } from "./view-panels";
+import { STUDIO_CATALOGUE } from "./views";
 import { STUDIO_FACE_POSES, STUDIO_LAYERED_SURFACES, STUDIO_RENDERERS } from "./renderers";
 import { combineFacePoses, FacialPreview } from "../animation/facial-preview";
 import { headQuiet, prefetchWhenQuiet } from "../animation/facial-prefetch";
@@ -56,11 +61,26 @@ import { TransitionSettings } from "../platform/core/transition-settings";
 import { createBrowserFacialDevice } from "../animation/browser/browser-facial-device";
 import { PartPresetService, partPresetTransport, setExportTransport } from "../library/part-presets";
 import { UIPreferenceActions } from "../app/ui-preferences";
-import { storedViewGraph } from "../preview/preview-view-graph";
+import { sessionViewGraph } from "../preview/preview-view-graph";
 import { DiagnosticsActions } from "../diagnostics/actions";
 import { createBrowserDiagnostics } from "../diagnostics/browser/browser-device";
 import { createBrowserUpdateCheck } from "../setup/browser/browser-update-check-device";
 import { pageFailure, setPageDiagnostics } from "../diagnostics/page-sink";
+import type { WorkspaceLease } from "../app/workspace/workspace-lease";
+import type { StartedOutbox } from "../app/browser/document-outbox-device";
+import { PROFILES_MIGRATION_ENABLED, startProfilesMigration } from "../app/browser/profiles-migration-device";
+import { workspaceKeys, type WorkspaceState } from "../app/workspace/workspace-state";
+import { WorkspacePersistence } from "../app/workspace/workspace-persistence";
+import { outboxView } from "../app/presentation-status";
+import type { TargetResolver } from "../app/profiles/targets";
+import { createProfileServices, createTargetResolver, drawnScene, historyScopeName, openProfileSession, sceneCharacter, sceneCommands } from "../app/profiles/profile-window";
+import { createStudioSubjects } from "./subjects";
+import { LookEditor, lookContent } from "../library/look-editor";
+import { lookRef, type LookRef } from "../library/collection-documents";
+import { lookScope, viewScope } from "../platform/core/history-service";
+import { MAIN_VIEW } from "../platform/api/view-graph";
+import { emptyLookHistory } from "../platform/core/look-history";
+import { emptyRecipe } from "../engines/layered-makeup/recipe";
 
 export type StudioHost = {
   /** Optional host capability; the desktop omits experimental modules until their assets are supported. */
@@ -95,6 +115,16 @@ export type StudioHost = {
   onFlushRequest?: (flush: () => void) => void;
   /** Called once the 3D head is interactive. */
   onPreviewReady?: () => void;
+  /**
+   * The window's workspace lease, already started (profiles design §2.3): while another window holds the workspace this one is
+   * read-only, and it restarts once Use it here has taken the workspace over. Without one (tools) this window is the only one.
+   */
+  lease?: WorkspaceLease;
+  /**
+   * The page's outbox, started (`app/browser/document-outbox-device.ts`, profiles design §2.2): the one way documents reach the library.
+   * Its status is shown (the unprotected-changes warning), and it counts against the workspace's storage budget.
+   */
+  documents: StartedOutbox;
 };
 
 const byId = <T extends HTMLElement>(id: string) => {
@@ -139,7 +169,37 @@ async function start(host: StudioHost, root: HTMLElement) {
   // `?warm=off` leaves it out (a developer's A/B measurement, tools/measure-warm-restart.ts).
   const warmStart = new CharacterWarmStart({ storage, verification });
   if (new URLSearchParams(location.search).get("warm") !== "off") void warmStart.start();
-  const preferences = new UIPreferenceActions(workspace.uiPreferences);
+  const documents = host.documents, lease = host.lease, base = verification ? "/api/verification" : "/api";
+  // One history service for the session: every look's history (`look:<collection>/<look>`), every V's (`character:<id>`) and the View and
+  // lighting history, beside the experiments' documents (profiles design §3.7).
+  const historyService = ("historyService" in experiments && experiments.historyService) || createHistoryService();
+  // One creator catalogue for the page (creator-catalogue.ts): every character, and every head made again for another body, shares it.
+  const creatorCatalogue = new CreatorCatalogue(createBrowserCreatorDevice());
+  // The library's owners (profiles design §7): profiles, Vs, collections and looks, each changed only through its commands (the outbox).
+  const services = createProfileServices({ documents: documents.documents, outbox: documents.outbox, subjects: createStudioSubjects(),
+    catalogue: creatorCatalogue, history: historyService, versions: collectionVersions(`${base}/collection-versions`, fetch, documents.fence),
+    report: error => diagnostics.failure("library", "library_owner_failed", "Part of your library couldn't be read.", error, { level: "warn" }) });
+  // The profiles migration (profiles design §8) runs before anything is built, in the window holding the workspace: the Studio opens on the
+  // session it makes, and the workspace's own fields stay as they were (migration input only). A migrated workspace costs nothing.
+  if (PROFILES_MIGRATION_ENABLED && restored.writable && (!lease || lease.writable())) {
+    const life = new AbortController();
+    window.addEventListener("pagehide", () => life.abort(), { once: true });
+    const early = new WorkspacePersistence({ storage, key: workspaceKeys(verification).workspace, writable: true, capture: () => workspace,
+      budget: host.storageBudget, reserved: () => documents.outbox.storedSize(), model: STUDIO_COMPOSITION.documents,
+      ...(lease ? { canWrite: () => lease.draining() } : {}) });
+    early.activate();
+    await startProfilesMigration({ endpoint: `${base}/profiles/migrate`, send: fetch, workspace: documents.workspace, fence: documents.fence,
+      model: STUDIO_COMPOSITION.documents, state: () => workspace, marks: workspace, flush: () => early.flush(), signal: life.signal,
+      report: error => diagnostics.failure("library", "profiles_migration_failed", "Your work couldn't be moved into your profile yet; it will try again.", error, { level: "warn" }) });
+  }
+  await services.load();
+  // The session this window opens on (tab 1, the views and scenes, and what each scene shows), with the window's focus: the history
+  // service records the editing context into it (profiles design §3.3, §3.7).
+  const { state: sessionState, stored: sessionStored } = openProfileSession(workspace, services, historyService.focus);
+  // Tab 1's arrangement is the dock's; the workspace's own arrangement stays as it was (migration input only).
+  const legacyLayout = workspace.uiPreferences.layout, tabDock = sessionState.dock();
+  const { layout: _legacy, ...uiPreferences } = workspace.uiPreferences;
+  const preferences = new UIPreferenceActions({ ...uiPreferences, ...(tabDock ? { layout: tabDock } : {}) });
   // How a held expression's changes animate (design §5.5): the workspace's setting, available before the head loads.
   const transitions = new TransitionSettings(workspace.preview.transitions);
   // A verification workspace has its own settings and never adds a mod (INSTALL-01, UI-98).
@@ -149,8 +209,8 @@ async function start(host: StudioHost, root: HTMLElement) {
   // folder and follows Settings › Saves (UI-109). Poses reach the shown V through the stage, which the head fills in once it is attached;
   // the whole-body view goes through the application like the toolbar's.
   const poseStage = new PoseStageHub({
-    capability: () => core.app.capability({ kind: "camera.body" }),
-    frame: () => { const done = core.app.dispatch({ kind: "camera.body" }); return done.ok ? { available: true } : { available: false, reason: done.message }; },
+    capability: view => core.app.capability({ kind: "camera.body", view }),
+    frame: view => { const done = core.app.dispatch({ kind: "camera.body", view }); return done.ok ? { available: true } : { available: false, reason: done.message }; },
   });
   const moduleServices = createModuleServices({ saves: createBrowserSaveExplorerDevice(document,
     { verification, locationChanged: savesLocationSignal(localSetup) }),
@@ -179,51 +239,106 @@ async function start(host: StudioHost, root: HTMLElement) {
   // Device facts published read-only to the view.
   let status = emptyPresentationStatus(verification);
   const region = STUDIO_COMPOSITION.region;
-  // The live feature's layered surface: the renderer the preview device fills and the on-head editor edits (UI-76; none named here).
-  const liveSurface = STUDIO_LAYERED_SURFACES.get(STUDIO_COMPOSITION.documents.live);
   const measurements = new GlitterMeasurements({
     layers: () => core.document.recipe.layers, size: () => previewDevice.coordinator.size, fineGlitter: region.fineGlitter });
   const statusSource = new PresentationStatusSource(() => {
     const eye = scene?.eyeAppearance().optics;
-    return { ...status, glitter: measurements.snapshot(), assets: { ...status.assets,
+    return { ...status, ...(lease ? { lease: lease.snapshot() } : {}), outbox: outboxView(documents.outbox.status()),
+      glitter: measurements.snapshot(), assets: { ...status.assets,
       characterDetails: head?.characterDetails.snapshot(),
       eyeOptics: eye ? { requested: eye.requested, active: eye.active, reason: eye.reason, error: eye.error } : undefined } };
   });
+  // The outbox's warning follows its status (a failed outbox write, a send that failed, a conflict).
+  documents.outbox.subscribe(event => { if (event.kind !== "acknowledged") statusSource.changed(); });
 
   let messageId = 0;
   const adapterMessage = (source: AdapterMessage["source"], text: string) => {
     status = { ...status, message: { id: ++messageId, source, text } }; statusSource.changed();
   };
-  const core = createTrustedAuthoringCore(workspace, {
-    // One history service for the session: the look's and the View and lighting history beside the experiments' documents.
-    history: ("historyService" in experiments && experiments.historyService) || createHistoryService(),
+  // The look the drawn view's scene shows, read from its working copy: what the editor document starts with (the look editor keeps it).
+  const firstLook = sessionState.scene(drawnScene(sessionState)).look, firstView = firstLook ? services.collections.look(firstLook) : null;
+  let first: ReturnType<typeof lookContent> | null = null;
+  if (firstView?.state === "live") {
+    try { first = lookContent(firstView, STUDIO_COMPOSITION.documents); }
+    catch (error) { pageFailure("library", "look_unreadable", "A look couldn't be read.", error); }
+  }
+  const shownState = first?.state ?? { recipe: emptyRecipe(), active: 0, selected: 0, fieldSelection: {}, history: emptyLookHistory() };
+  const core = createTrustedAuthoringCore({ ...workspace, views: sessionState.graph(), recipe: shownState.recipe, active: shownState.active,
+    selected: shownState.selected, fieldSelection: shownState.fieldSelection, history: shownState.history, historyTrimmed: shownState.historyTrimmed,
+    liveFeatures: shownState.liveFeatures, liveLocked: shownState.liveLocked }, {
+    history: historyService, ...(first && firstLook ? { scope: lookScope(firstLook) } : {}), viewScope: viewScope(sessionState.profile),
     resetStack: previous => previewDevice?.coordinator.syncStack(previous),
     // A cheap read: Glitter-model and finish changes ask for it, and a snapshot would stash and copy the whole draft (CORE-05).
     selectedCollection: () => bootstrap?.collection.selectedPresetId() ?? "draft",
   }, STUDIO_COMPOSITION);
+  // One writer per workspace: while another window holds it, every action, request, control and gesture is refused here.
+  if (lease) core.app.attach({ access: lease });
   // The view graph the core owns (view-graph-design.md §3.3): the head restores and follows its main view.
   const views = core.views;
+  // The scene the drawn view shows (phase 1 draws one view: the main one) and the look it shows, which the collection service changes.
+  const drawn = () => views.node(MAIN_VIEW, "scene").id;
+  const shownScene = { look: () => sessionState.scene(drawn()).look, setLook: (ref: LookRef | undefined) => sessionState.setLook(drawn(), ref),
+    subscribe: (listener: () => void) => sessionState.subscribe(listener) };
+  // The scenes' `gen` (what a view action that edits a scene names) and the input layer's resolution over the session.
+  core.app.attach({ scenes: sceneCommands(sessionState, services) });
+  const targets: TargetResolver = createTargetResolver({ state: sessionState, graph: views, history: historyService, services, contexts: type => STUDIO_CATALOGUE.context(type),
+    collection: () => bootstrap?.collection.service.draftIdentity()?.collectionId });
+  // Dispatch checks what an action names by the resolver's rule (the one its captures follow).
+  core.app.attach({ targetCheck: targets });
   const headHost = byId("device-head"), uvHost = byId("device-uv");
-  const viewportDevice = createBrowserViewportDevice({ region, headHost, uvHost, queryContext: hit => core.app.contextQuery(hit), renderers: STUDIO_RENDERERS, optionalRenderers: experiments, referenceTextures: browserReferenceTextures(verification),
+  const viewportDevice = createBrowserViewportDevice({ region, headHost, uvHost, queryContext: hit => core.app.contextQuery(hit, targets.named()), renderers: STUDIO_RENDERERS, optionalRenderers: experiments, referenceTextures: browserReferenceTextures(verification),
     onContext: event => event === "lost" ? diagnostics.contextLost("3D view") : diagnostics.contextRestored("3D view") });
+  // The workspace's own editor fields, V and arrangement as the migration found them: stored back unchanged (an older build opens them).
+  const frozenEditor = { recipe: workspace.recipe, active: workspace.active, selected: workspace.selected, fieldSelection: workspace.fieldSelection,
+    history: workspace.history, ...(workspace.historyTrimmed ? { historyTrimmed: true } : {}), ...(workspace.liveFeatures ? { liveFeatures: workspace.liveFeatures } : {}) };
+  // The session as it is now, stored with the migration's mark (a session made for this window from the library is stored nowhere).
+  const profileMarks = (): Pick<WorkspaceState, "migration" | "profiles"> => ({ migration: workspace.migration,
+    profiles: sessionStored ? sessionState.stored({ graph: sessionViewGraph(views), dock: preferences.snapshot().layout ?? null },
+      workspace.profiles) : workspace.profiles });
   const session = createBrowserWorkspaceSession({
     workspace, restored, verification, storage, budget: host.storageBudget, model: STUDIO_COMPOSITION.documents,
+    // The outbox's keys share the workspace's storage, so they count against its budget (profiles design §2.2).
+    reserved: () => documents.outbox.storedSize(),
     capture: {
-      editor: () => core.document.export(),
+      editor: () => frozenEditor,
       uvView: () => uvEditor?.snapshot() ?? workspace.uvView,
-      savedV: () => savedAppearance?.snapshot().savedV ?? workspace.savedV,
-      collections: () => bootstrap?.collection.workspaceSnapshot() ?? workspace.collections,
+      savedV: () => workspace.savedV,
+      collections: () => workspace.collections,
       quality: () => previewDevice?.coordinator.quality.snapshot().size ?? workspace.preview.textureSize,
-      preview: () => previewActions?.snapshot(), motion: () => motionActions?.snapshot(), views: () => storedViewGraph(views),
-      character: () => head ? head.characterContext.stored() ?? null : undefined,
-      uiPreferences: () => preferences.snapshot(),
+      preview: () => previewActions?.snapshot(), motion: () => motionActions?.snapshot(), views: () => workspace.views,
+      uiPreferences: () => { const { layout: _live, ...rest } = preferences.snapshot(); return { ...rest, ...(legacyLayout ? { layout: legacyLayout } : {}) }; },
       previewSetup: () => ({ autostart, ...(declined ? { declined: true as const } : {}) }),
       transitions: () => transitions.stored(),
+      profiles: profileMarks,
     },
-    sources: [core.document, preferences], window, document,
+    sources: [preferences, sessionState, views], window, document,
     onStatus: save => { status = { ...status, workspace: save }; statusSource.changed(); },
+    canWrite: lease ? () => lease.draining() : undefined,
   });
-  host.onFlushRequest?.(() => session.flush());
+  // The shown look's edits are written through its session (the outbox); anything that needs them now writes them first.
+  let lookShown: (() => void) | undefined;
+  const lookEditor = new LookEditor({ model: STUDIO_COMPOSITION.documents, sessions: services.looks, document: core.document,
+    store: () => documents.outbox.store(),
+    restoring: ref => documents.outbox.recovering(lookRef(ref)), shown: () => lookShown?.(), note: text => adapterMessage("preview", text),
+    report: error => diagnostics.failure("library", "look_write_failed", "Your latest look change couldn't be recorded yet; it will be tried again.", error, { level: "warn" }) });
+  host.onFlushRequest?.(() => { lookEditor.commit(); session.flush(); });
+  window.addEventListener("pagehide", () => lookEditor.commit());
+  document.addEventListener("visibilitychange", () => { if (document.hidden) lookEditor.commit(); });
+  if (lease) {
+    // Releasing to another window: after the pending document saves drain (a step the host registered first), the workspace is
+    // written a last time and its timers stop (§2.3 release steps 3 to 5).
+    lease.onReleaseStart(() => { core.app.settleEdits(); lookEditor.commit(); });
+    // Every experiment document stored (an unsaved one written again), then the last workspace write: both must succeed, and
+    // autosave retires only once the lease is released and confirmed.
+    lease.onRelease(async () => await (experiments as ExperimentPort).settle?.() ?? true);
+    lease.onRelease(() => session.flush());
+    lease.onReleased(() => session.retire());
+    lease.subscribe(() => {
+      statusSource.changed();
+      // Taken over: this page was built from the workspace as it was when it opened, so it restarts from the one just released.
+      if (lease.snapshot().phase === "taken-over") location.reload();
+    });
+  }
   const persist = () => session.request();
   const drawUV = () => viewportDevice.drawUV();
   previewDevice = createBrowserPreviewDevice({
@@ -256,18 +371,30 @@ async function start(host: StudioHost, root: HTMLElement) {
   core.app.subscribe(() => facial.changed());
   facial.start();
   previewDevice.coordinator.quality.subscribe(persist);
+  // The editors' own selections and gestures name the look the drawn view shows (the input layer's resolution, profiles design §3.6).
+  const named = <A extends { kind: string }>(action: A) => targets.complete(action, core.app.descriptor(action.kind)) as unknown as StudioAction;
   const fieldHooks = {
     selectedField: () => core.presentation.selectedField()?.id,
-    selectField: (id: string) => { const layer = core.presentation.layer(); if (layer) core.app.dispatch({ kind: "field.select", layerId: layer.id, fieldId: id }); },
-    select: (index: number) => { const layer = core.presentation.layer(); if (layer) core.app.dispatch({ kind: "point.select", layerId: layer.id, index }); },
+    selectField: (id: string) => { const layer = core.presentation.layer(); if (layer) core.app.dispatch(named({ kind: "field.select", layerId: layer.id, fieldId: id })); },
+    select: (index: number) => { const layer = core.presentation.layer(); if (layer) core.app.dispatch(named({ kind: "point.select", layerId: layer.id, index })); },
   };
+  // Every composed layered surface is registered; the drawn scene connects the one its look editor edits (profiles design §7): the preview
+  // device fills its layers and the on-head editor edits it, naming the look the scene shows. The root names no feature.
+  const surfaces = sceneLayeredSurfaces(STUDIO_LAYERED_SURFACES, { feature: core.document.feature, preview: previewDevice, editor: {
+    layer: () => core.geometry.layer(), layers: () => core.geometry.recipe().layers,
+    selected: () => core.presentation.selected, ...fieldHooks,
+    begin: () => { const layer = core.presentation.layer(); if (layer) core.app.beginGesture("surface", layer.id, targets.named().look); },
+    apply: proposal => core.app.applyGesture("surface", proposal),
+    cancel: () => core.app.endGesture("surface", true), finish: () => core.app.endGesture("surface"),
+    message: text => adapterMessage("surface", text),
+  } });
   uvEditor = viewportDevice.mountUV(byId<HTMLCanvasElement>("device-uv-canvas"), undefined, {
     recipe: () => core.geometry.recipe(), layer: () => core.geometry.layer(),
     selected: () => core.presentation.selected, ...fieldHooks,
     canvases: () => previewDevice.canvases,
     albedo: () => scene?.albedo.image as HTMLImageElement | undefined,
     surfaceEdge: () => core.app.surfaceEdge(core.presentation.layer()?.id),
-    begin: () => { const layer = core.presentation.layer(); if (layer) core.app.beginGesture("uv", layer.id); },
+    begin: () => { const layer = core.presentation.layer(); if (layer) core.app.beginGesture("uv", layer.id, targets.named().look); },
     apply: proposal => core.app.applyGesture("uv", proposal),
     cancel: () => core.app.endGesture("uv", true), finish: () => core.app.endGesture("uv"),
     persist: () => { persist(); viewportDevice.attachment.viewChanged(); },
@@ -283,7 +410,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     loadHead: () => attachHead(),
   });
   bootstrap = createTrustedStudioBootstrap({
-    workspace, core, preferences, localSetup, installDetection, modInstall, previewSetup, viewport: viewportDevice.attachment,
+    core, preferences, localSetup, installDetection, modInstall, previewSetup, viewport: viewportDevice.attachment,
     links: { open: async link => {
       try { await (host.openLink ? host.openLink(link) : openProjectLinkInNewTab(link)); return { ok: true }; }
       catch (error) { return { ok: false, message: error instanceof Error ? error.message : "That page couldn't be opened. Try again." }; }
@@ -291,18 +418,39 @@ async function start(host: StudioHost, root: HTMLElement) {
     previewReadiness: previewDevice.coordinator, status: statusSource, about: host.about, desktopApp: host.desktopApp,
     // Both hosts serve the update check; a verification workspace keeps what it found apart (UI-98).
     updates: createBrowserUpdateCheck(verification ? "/api/verification/update-check" : "/api/update-check"),
-    transport: collectionTransport(verification ? "/api/verification/collections" : "/api/collections"),
-    onEditorRestored: () => { previewDevice.coordinator.resetStack(); drawUV(); },
+    collections: { owner: services.collections, scene: shownScene, transport: collectionTransport(`${base}/collections`),
+      flushLook: () => lookEditor.commit(),
+      membership: id => services.profiles.collectionMembership(sessionState.profile, id),
+      join: id => {
+        const profile = services.profiles.profile(sessionState.profile);
+        if (profile && !profile.collections.includes(id))
+          void services.profiles.dispatch({ kind: "profile.addCollection", profile: profile.id, base: profile.revision, collection: id });
+      } },
     onRecipeImported: persist,
     savedAppearance: {
       has: () => savedAppearance?.hasSavedV() ?? false,
       read: () => savedAppearance?.snapshot().savedV,
-      load: bytes => savedAppearance!.dispatch({ kind: "savedV.load", bytes }),
+      // A save file becomes where the V comes from (`character.setSource`, which `savedV.load` stays an alias of until phase 1 ends);
+      // the shown V's scene applies it.
+      // The V the request named when it was asked (profiles design §3.3).
+      load: (bytes, character) => {
+        if (bytes.byteLength > 128 * 1024 * 1024) throw Error("Save is larger than the supported limit.");
+        const result = core.app.dispatch({ kind: "character.setSource", character, source: { kind: "save", value: readSavedV(bytes) } });
+        if (!result.ok) throw Error(result.message);
+        return savedAppearance!.snapshot();
+      },
       ready: () => !!scene,
       unavailableReason: () => { const head = viewportDevice.attachment.snapshot().head; return head.error ?? head.message; },
     },
-    fileDevice, diagnostics, modules: moduleServices, experiments,
+    fileDevice, diagnostics, modules: moduleServices, experiments, lease, outbox: documents.outbox,
+    panelInstance: panel => sessionState.instance(panel),
+    // The input layer: what each action names (profiles design §3.6), resolved from the session, focus and the owners.
+    targets, focus: historyService.focus, scopeName: scope => historyScopeName(scope, { services, history: historyService }),
   });
+  // The editor shows the scene's look, and follows it when the scene shows another one.
+  lookShown = () => { previewDevice.coordinator.resetStack(); drawUV(); };
+  lookEditor.show(shownScene.look());
+  sessionState.subscribe(() => lookEditor.show(shownScene.look()));
   // The only object handed to the presentation.
   const viewComposition = { ...STUDIO_VIEW_COMPOSITION, optional: () => experiments.registrations().map(item => ({ contribution: item.contribution, binding: item.binding })) };
   bootstrap.mount(publicPort => { port = publicPort; mountStudio(publicPort, root, viewComposition); });
@@ -310,7 +458,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   if (verification) Object.assign(window, { xfStudioPresentation: port,
     // Developer evidence about the loaded head (read-only): what loaded, how the V's details landed, frame timing.
     xfStudioSceneEvidence: () => scene ? structuredClone({ core: scene.evidence, characterDetails: scene.characterDetailsEvidence(),
-      frames: scene.frameTiming(), plateBlend: (liveSurface && scene.feature(liveSurface)?.evidence?.()) ?? null,
+      frames: scene.frameTiming(), plateBlend: (surfaces.edited && scene.feature(surfaces.edited)?.evidence?.()) ?? null,
       features: scene.featureEvidence(), bands: scene.featureBands(), dangles: scene.dangleEvidence(), mouth: scene.mouthEvidence() }) : null,
     // Developer captures: hold the mouth interior's light at a fixed parting and floor (the earlier stand-in: 0.010, 0.3), null to follow the face.
     xfStudioPinMouthInterior: (pin: { parting: number; floor: number } | null) => { scene?.pinMouthInterior(pin); },
@@ -354,9 +502,6 @@ async function start(host: StudioHost, root: HTMLElement) {
         return performance.now() - start;
       },
     } });
-  // Library content (preset edits, switches, saves) persists; the whole port is not watched,
-  // because it also publishes the save status and preview readiness (CORE-01).
-  session.watch(bootstrap.collection);
   void localSetup.dispatch({ kind: "setup.refresh" });
   for (let i = 0; i < core.document.recipe.layers.length; i++) previewDevice.coordinator.render(i);
   session.activate();
@@ -388,33 +533,30 @@ async function start(host: StudioHost, root: HTMLElement) {
   }
 
   /** The workspace a head attaches with: the restored one, then (after a V changed body) the workspace as it was then. */
-  let headWorkspace = workspace, headHistory: ContextHistory | undefined;
+  let headWorkspace = workspace;
   /** Load the 3D head and connect every head-dependent service once the preview is ready. */
   async function attachHead() {
     core.app.setPreviewUnavailable("");
     // A retry starts from nothing: an earlier head and its connections are released first (PREV-20).
     releaseHead(head);
-    const priorAssets = status.assets, history = headHistory;
-    headHistory = undefined;
+    const priorAssets = status.assets;
     let attached: AttachedHead | undefined;
     try {
+      // The V the drawn view's scene shows (made when it has none), through its owner: its document says its body and its save.
+      const character = await sceneCharacter(sessionState, drawn(), services);
+      const shown = character ? services.characters.document(character) : null;
+      if (!character || !shown) throw Error("The V couldn't be shown: this window can't make one. Reload the window to continue.");
+      const save = shown.source.kind === "save" ? services.characters.decoded(shown.source.decoded) ?? undefined : undefined;
       attached = await attachBrowserHead({
         workspace: headWorkspace, graph: views, viewport: viewportDevice, preferences,
         // The shown V's body decides the core head (the masculine V's is prepared on first use); a V that changes body loads it again.
         prepareCore: body => host.previewPreparation.ensureBody(body, (message, progress) => viewportDevice.headPending("preparing", message, progress)),
-        reload: history => { headWorkspace = session.snapshot(); headHistory = history; previewSetup.reloadHead(); }, history,
+        reload: () => { headWorkspace = session.snapshot(); previewSetup.reloadHead(); },
+        character: { body: shown.body, ...(save ? { save } : {}), context: ports => services.characters.context(character, ports),
+          release: context => services.characters.detach(character, context) },
         notice: text => adapterMessage("preview", text), warmStart,
-        // The live feature's layered surface: the preview device fills its layers and the on-head editor edits it. Other composed layered
-        // surfaces have no layer source until the core edits more than one live feature.
-        layered: liveSurface ? [{ feature: liveSurface.feature, surface: loaded => loaded.feature(liveSurface), preview: previewDevice,
-          editor: {
-            layer: () => core.geometry.layer(), layers: () => core.geometry.recipe().layers,
-            selected: () => core.presentation.selected, ...fieldHooks,
-            begin: () => { const layer = core.presentation.layer(); if (layer) core.app.beginGesture("surface", layer.id); },
-            apply: proposal => core.app.applyGesture("surface", proposal),
-            cancel: () => core.app.endGesture("surface", true), finish: () => core.app.endGesture("surface"),
-            message: text => adapterMessage("surface", text),
-          } }] : [],
+        // The drawn scene's layered surfaces: every composed one is registered, and the scene wires those its look editor edits.
+        layered: surfaces.wiring,
         // The stage backdrop follows the resolved UI theme through the renderer's typed input.
         colourScheme: matchMedia("(prefers-color-scheme: dark)"),
         quality: previewDevice.coordinator.quality,
@@ -425,7 +567,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       ({ scene, savedAppearance, preview: previewActions, motion: motionActions } = attached);
       facial.attachScene(scene.face);
       stopPrefetch = prefetchWhenQuiet(() => facial.prefetch(), headQuiet({ details: attached.characterDetails, scene }));
-      poseStage.attach({ motion: attached.motion, details: attached.characterDetails, context: attached.characterContext });
+      poseStage.attach({ view: MAIN_VIEW, motion: attached.motion, details: attached.characterDetails, context: attached.characterContext });
       status = { ...status, assets: { ...status.assets, loaded: true } };
       viewportDevice.headReady();
       session.setPreviewReady(); session.flush(); drawUV();

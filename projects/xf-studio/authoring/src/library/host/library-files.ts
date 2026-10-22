@@ -6,7 +6,7 @@
  * `close` flushes and closes both files.
  */
 import { resolve } from "node:path";
-import { CollectionLibrary, collectionRequest } from "./collection-store";
+import { CollectionLibrary, collectionRequest, collectionVersionsHandler } from "./collection-store";
 import { hostFailure } from "../../diagnostics/host/host-log";
 import { LookLibrary, libraryRequest } from "./library-store";
 import { LIBRARY_MIGRATIONS } from "./library-migrations";
@@ -14,9 +14,10 @@ import { PartPresetLibrary, partPresetRequest } from "./part-preset-store";
 import { hostClock, type Clock } from "../../platform/core/clock";
 import type { PartRegistry } from "../../platform/core/document";
 import { LibraryBackups } from "../../platform/persistence/backups";
-import { createDocumentsHandler, DocumentStore } from "../../platform/persistence/document-store";
+import { createDocumentsHandler, createWorkspaceLeaseHandler, DocumentStore, keepLibraryClean } from "../../platform/persistence/document-store";
 import { importLegacyExperiments } from "../../platform/persistence/legacy-experiment-import";
 import { LibraryDatabase, type LibraryDatabaseOptions } from "../../platform/persistence/library-database";
+import { createProfilesMigrationHandler } from "../../app/profiles/host/profiles-migrate";
 
 /** The library file `path` with the Studio's migrations (tools and tests; the hosts use `openLibraryFiles`). */
 export function openLibraryDatabase(path: string, options: Partial<Omit<LibraryDatabaseOptions, "migrations">> = {}): LibraryDatabase {
@@ -41,7 +42,7 @@ export function libraryStores(database: LibraryDatabase, parts: PartRegistry, no
 export type LibraryFiles = {
   readonly main: LibraryStores;
   readonly verification: LibraryStores;
-  /** The answer to a library request (`/api/looks`, `/api/collections`, `/api/part-presets`, `/api/documents`, each also under `/api/verification`), or null for any other path. */
+  /** The answer to a library request (`/api/looks`, `/api/collections`, `/api/part-presets`, `/api/documents`, `/api/collection-versions`, `/api/workspace-lease`, `/api/profiles/migrate`, each also under `/api/verification`), or null for any other path. */
   handle(request: Request, url?: URL): Promise<Response> | null;
   /** Flushes and closes both files and stops the backups. Idempotent. */
   close(): void;
@@ -68,6 +69,9 @@ export function openLibraryFiles(dataRoot: string, options: LibraryFilesOptions)
     const database = openLibraryDatabase(resolve(dataRoot, file), { clock, signal: life.signal, backups, report });
     const stores = libraryStores(database, parts, () => clock.now());
     importLegacyExperiments(database, stores.documents, options.log);
+    // The library's retention (profiles design §1.4): tombstones after 30 days, unreferenced decoded saves, receipts after 7 days; a
+    // background job on the host's clock, never in the way of opening the file.
+    keepLibraryClean(stores.documents, clock, life.signal, error => hostFailure("library", "cleanup_failed", "The library's cleanup didn't run; it will try again.", error, "warn"));
     return stores;
   };
   const backups = options.isolated ? null : new LibraryBackups(resolve(dataRoot, "library.sqlite"), () => clock.now());
@@ -82,7 +86,13 @@ export function openLibraryFiles(dataRoot: string, options: LibraryFilesOptions)
       { prefix: `${base}/looks`, nested: true, handle: (request: Request) => libraryRequest(request, stores.looks, `${base}/looks`) },
       { prefix: `${base}/collections`, nested: true, handle: (request: Request) => collectionRequest(request, stores.collections, `${base}/collections`) },
       { prefix: `${base}/part-presets`, nested: true, handle: (request: Request) => partPresetRequest(request, stores.partPresets, `${base}/part-presets`) },
-      { prefix: `${base}/documents`, nested: false, handle: documents },
+      { prefix: `${base}/documents`, nested: true, handle: documents },
+      { prefix: `${base}/collection-versions`, nested: false,
+        handle: collectionVersionsHandler(stores.collections, stores.documents, stores.database, `${base}/collection-versions`) },
+      { prefix: `${base}/workspace-lease`, nested: false, handle: createWorkspaceLeaseHandler(stores.documents, `${base}/workspace-lease`) },
+      // The profiles migration (profiles design §8): one transaction per workspace run, fenced by its lease.
+      { prefix: `${base}/profiles/migrate`, nested: false, handle: createProfilesMigrationHandler(stores, `${base}/profiles/migrate`,
+        { parts, backups: stores.database.backups, now: () => clock.now() }) },
     ];
   });
   return {

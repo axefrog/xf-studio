@@ -24,7 +24,12 @@ export type SavedAppearanceAction = { kind: "savedV.load"; bytes: Uint8Array } |
   /** Show no save: the creator's default V (the character context's Undo back to it). */
   { kind: "savedV.clear" };
 
-/** Save parsing and preview application without file inputs or renderer object types. */
+/**
+ * One scene's application of its character's save (profiles design §7): the head the scene shows takes the save's facial shapes and
+ * body. Where a V comes from is the character's `source` (`character.setSource`, character-context-actions.ts; its document,
+ * character-document.ts); this only applies it on its own scene. `savedV.load`, `savedV.restore` and `savedV.clear` stay as aliases
+ * until phase 1 ends. Save parsing and preview application without file inputs or renderer object types.
+ */
 export class SavedAppearanceActions {
   private state: SavedAppearanceState = {};
   private listeners = new Set<() => void>();

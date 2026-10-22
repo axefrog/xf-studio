@@ -9,9 +9,9 @@ export const BUN = process.execPath;
 export type Child = { proc: Bun.Subprocess<"ignore", "pipe", "pipe">; lines: string[]; exited: Promise<number>; killed: boolean;
   wait(match: (line: string) => boolean, ms?: number): Promise<string | null> };
 
-export function spawn(script: string, args: string[], kill?: string): Child {
+export function spawn(script: string, args: string[], kill?: string, env: Record<string, string> = {}): Child {
   const proc = Bun.spawn([BUN, join(HERE, script), ...args], { stdin: "ignore", stdout: "pipe", stderr: "pipe",
-    env: { ...process.env, XFS_KILL: kill ?? "" } });
+    env: { ...process.env, XFS_KILL: kill ?? "", ...env } });
   const lines: string[] = [];
   const watchers: { match(line: string): boolean; resolve(line: string | null): void }[] = [];
   const child: Child = { proc, lines, killed: false, exited: proc.exited,
@@ -39,8 +39,8 @@ export function spawn(script: string, args: string[], kill?: string): Child {
 }
 
 /** Starts the host on `library` and points `portFile` at it. */
-export async function startHost(library: string, portFile: string, kill?: string, commitLog?: string, staticDir?: string): Promise<Child> {
-  const host = spawn("harness/host-server.ts", [library, commitLog ?? "", ...(staticDir ? [staticDir] : [])], kill);
+export async function startHost(library: string, portFile: string, kill?: string, commitLog?: string): Promise<Child> {
+  const host = spawn("harness/host-server.ts", [library, commitLog ?? ""], kill);
   const line = await host.wait(text => text.startsWith("port "));
   if (!line) throw Error("The host didn't start.");
   writeFileSync(portFile, line.slice(5));

@@ -36,6 +36,7 @@ export { progressBar, type ProgressBar } from "./progress";
 export { attachSwatchCard, ChoiceList, choiceItem, swatchCard, type ChoiceListOptions, type ChoiceOption } from "./choice-list";
 export { FolderSetting, type FolderChoice, type FolderOutcome, type FolderSettingOptions, type FolderSettingState } from "./folder-setting";
 export { RecordList, recordTime, type RecordListOptions, type RecordRow } from "./record-list";
+export { ConflictNotice, type ConflictKeep, type ConflictNoticeOptions, type ConflictNoticeState } from "./conflict-notice";
 // Feature-specific: mod packaging (the Mod package and Expression sets panels).
 export { modLine, type ModLineOptions } from "./mod-line";
 export { contrastMark, CONTRAST_WORDS, sampleBackground, setContrastMark, SwatchCard, type SwatchCardOptions, type SwatchSample } from "./swatch-card";

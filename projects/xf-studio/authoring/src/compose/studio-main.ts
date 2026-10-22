@@ -9,13 +9,26 @@ import { startStudio } from "./studio-startup";
 import { createBrowserDesktopApp } from "../setup/browser/browser-desktop-app-device";
 import { createBrowserWolvenKitSetup } from "../setup/wolvenkit-setup";
 import { browserExperiments } from "./experiments";
+import { startBrowserWorkspaceLease } from "../app/browser/workspace-lease-device";
+import { browserPage, startDocumentOutbox } from "../app/browser/document-outbox-device";
+import { localOutboxStorage } from "../app/browser/outbox-storage";
+import { immutableDocumentKind } from "./document-kinds";
 
+const verification = new URLSearchParams(location.search).has("verify");
+// One writer per workspace (profiles design §2.3): the lease is settled before the Studio builds anything, so a second tab opens read-only.
+const workspaceLease = await startBrowserWorkspaceLease({ verification }).catch(() => null);
+// The outbox (§2.2): the one way documents reach the library, kept in this browser's storage under the workspace's identity.
+const workspace = workspaceLease?.workspace ?? (verification ? "browser-verification" : "browser");
+const documents = startDocumentOutbox({ prefix: `${verification ? "/api/verification" : "/api"}/documents`, send: fetch, workspace,
+  storage: localOutboxStorage(localStorage, workspace), immutable: immutableDocumentKind, ...(workspaceLease ? { lease: workspaceLease.lease } : {}), page: browserPage() });
 void startStudio({
   storage: localStorage,
-  experiments: (verification, signal) => browserExperiments(location.search, fetch, signal, verification),
+  ...(workspaceLease ? { lease: workspaceLease.lease } : {}),
+  documents,
+  experiments: (verify, signal) => browserExperiments(location.search, signal, verify, documents),
   previewPreparation: createBrowserPreviewPreparation("/api/preview-core"),
   wolvenKitSetup: createBrowserWolvenKitSetup("/api/wolvenkit"),
   setupPlace: LOCALHOST_SETUP_PLACE,
   // Localhost-only: offer the desktop app (a verification workspace checks it too, but never starts anything).
-  desktopApp: createBrowserDesktopApp(new URLSearchParams(location.search).has("verify") ? "/api/verification/desktop-app" : "/api/desktop-app"),
+  desktopApp: createBrowserDesktopApp(verification ? "/api/verification/desktop-app" : "/api/desktop-app"),
 });

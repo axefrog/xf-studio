@@ -9,12 +9,13 @@ import { parseWorkspace } from "../src/app/workspace/workspace-state";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 
+import { namedCore } from "./fixtures/named-targets";
 // The History panel's read model and its single jump action (history.jumpTo).
 
 function fixture(history = freshWorkspace().history) {
   const workspace = { ...freshWorkspace(), history };
   let resets = 0;
-  const core = createTrustedAuthoringCore(workspace, { resetStack: () => { resets++; }, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  const core = namedCore(createTrustedAuthoringCore(workspace, { resetStack: () => { resets++; }, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
   return { ...core, resets: () => resets };
 }
 /** Three labelled edits: Colour, Opacity, Rename layer. Returns the look after each one. */
@@ -201,7 +202,7 @@ test("the presentation port publishes the timeline without the live history", as
   const { createStudioPresentation } = await import("../src/app/studio-presentation");
   const core = fixture();
   threeEdits(core);
-  const port = createStudioPresentation({ authoring: core.app, library: {} as never, files: {} as never,
+  const port = createStudioPresentation({ authoring: core.application, targets: core.targets, library: {} as never, files: {} as never,
     viewport: {} as never, preferences: {} as never, previewReadiness: { readiness: () => ({}) as never, subscribe: () => () => {} } });
   const timeline = port.authoring.historyTimeline();
   expect(timeline.steps).toHaveLength(3);

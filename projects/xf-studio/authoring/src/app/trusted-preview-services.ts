@@ -63,7 +63,7 @@ export function createTrustedPreviewServices(workspace: WorkspaceState, ports: {
       // Motion's scene settings (hair physics) live in the view graph's scene node, which the preview service edits.
       let preview: PreviewActions | undefined;
       const motion = new MotionActions(initial, ports.motion, { physics: view => preview?.scenePhysics(view) ?? initial.physics === true,
-        setPhysics: (enabled, view) => preview?.setScenePhysics(enabled, view) });
+        setPhysics: (enabled, view) => preview?.setScenePhysics(enabled, view), draws: view => preview?.drawsScene(view) ?? view === MAIN_VIEW });
       motion.restore();
       // The head shows the restored state now: the graph's main view learns the fallbacks it needed.
       graph?.withoutHistory(() => {

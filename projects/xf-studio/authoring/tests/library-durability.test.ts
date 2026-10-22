@@ -9,7 +9,7 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { checkpointDone, checkpointInWorker, checkpointLibrary, LIBRARY_FLUSH, LibraryDurability, useWriteAheadLog } from "../src/platform/persistence/library-durability";
+import { checkpointDone, checkpointInWorker, checkpointLibrary, LIBRARY_FLUSH, LibraryDurability, useWriteAheadLog, WAL_AUTOCHECKPOINT_PAGES } from "../src/platform/persistence/library-durability";
 import { ManualClock } from "./fixtures/platform-doubles";
 import { openTestLibrary } from "./fixtures/library-file";
 import { initialRecipe } from "./fixtures/eye-region";
@@ -140,6 +140,26 @@ test("the library file's one connection, which every store writes through, runs 
   expect(useWriteAheadLog(memory)).toBe(false);
   expect(memory.query("PRAGMA synchronous").get()).toEqual({ synchronous: 2 });
   memory.close();
+});
+
+test("the host's thread never checkpoints a run of look-sized commits: the flush does, and a crash before it loses nothing (§2.1)", () => {
+  const path = library(), file = openTestLibrary(path, { clock: new ManualClock(), writes: { wrote() {} } });
+  // Different content each commit (SQLite rewrites only the overflow pages that changed).
+  const look = () => Buffer.from(crypto.getRandomValues(new Uint8Array(160_000))).toString("hex");
+  try {
+    expect(file.database.read(db => db.query("PRAGMA wal_autocheckpoint").get())).toEqual({ wal_autocheckpoint: WAL_AUTOCHECKPOINT_PAGES });
+    // 40 commits of about 80 pages each: with SQLite's default (1,000 pages) the host's own connection would have checkpointed three times.
+    for (let i = 0; i < 40; i++) file.documents.put("look-working", "c/l", { look: look(), i }, i);
+    const state = walState(path);
+    expect(state.log).toBeGreaterThan(3_000);
+    expect(state.checkpointed).toBe(0);
+    // An app crash here (no flush yet): every commit is in the log, and the next open reads the last one.
+    const other = new Database(path, { readonly: true });
+    expect((JSON.parse((other.query("SELECT value FROM documents WHERE kind = 'look-working'").get() as { value: string }).value) as { i: number }).i).toBe(39);
+    other.close();
+    // The flush's checkpoint copies every frame (and syncs the log first).
+    expect(checkpointLibrary(path)).toBe(true);
+  } finally { file.close(); }
 });
 
 test("a library in rollback-journal mode moves to WAL when it opens, its rows intact", () => {

@@ -3,6 +3,7 @@
  * visibility, research preference and scene kind; the application's resolved tool list and `view.setTool`; parked panel layouts per
  * size class; collapsed groups; the modules preference.
  */
+import { MAIN_VIEW } from "../src/platform/api/view-graph";
 import { expect, test } from "bun:test";
 import { deriveViewSummaries, deriveViewTools, moduleRegistrationIssues, viewTitles, type ModuleRegistration, type ViewToolContribution } from "../src/platform/api";
 import { PLATFORM_VIEW_TOOLS } from "../src/platform/core/view-tools";
@@ -19,6 +20,7 @@ import { EYE_MAKEUP_GRANDFATHERED_PANELS } from "../src/features/eye-makeup/view
 import { freshWorkspace } from "./fixtures/eye-region";
 import { PreviewActions, type PreviewPort } from "../src/preview/preview-actions";
 
+import { namedCore } from "./fixtures/named-targets";
 const ids = (tools: readonly ViewToolContribution[]) => tools.map(tool => tool.id);
 
 test("a view's tools: the platform's always, a module's only while it shows, research tools only with research on", () => {
@@ -76,29 +78,29 @@ function recordingPreviewPort(calls: string[]): PreviewPort {
 
 test("the application resolves each tool's state and action; view.setTool edits the view's tools node, and a hidden module's tool stays dispatchable", () => {
   const workspace = freshWorkspace();
-  const { app, views } = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
-  const tools = app.viewTools(undefined, { modules: ["eye-makeup"], research: false });
+  const { app, views } = namedCore(createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
+  const tools = app.viewTools(MAIN_VIEW, { modules: ["eye-makeup"], research: false });
   expect(tools.map(tool => [tool.id, tool.action.kind, tool.on])).toEqual([["camera.front", "camera.front", undefined], ["camera.body", "camera.body", undefined],
     ["eye-makeup.surface", "view.setTool", true], ["motion.idle", "motion.setIdle", false]]);
   // Idle hides where the head has no idle; the camera tools act on the view they belong to.
   expect(tools.find(tool => tool.id === "motion.idle")?.shown).toBe(false);
   expect(tools[0].action).toEqual({ kind: "camera.front", view: "main" });
   // Before the 3D view is ready a toggle would reach no device and not be saved: it waits, and says so (UI-106).
-  expect(app.capability({ kind: "view.setTool", tool: "eye-makeup.surface", enabled: false })).toMatchObject({ available: false, code: "not_ready" });
+  expect(app.capability({ kind: "view.setTool", view: "main", tool: "eye-makeup.surface", enabled: false })).toMatchObject({ available: false, code: "not_ready" });
   app.attach({ preview: new PreviewActions(workspace.preview, recordingPreviewPort([]), views) });
   // Toggle Surface controls: the graph's tools node changes; no View and lighting step is recorded.
-  expect(app.dispatch({ kind: "view.setTool", tool: "eye-makeup.surface", enabled: false })).toEqual({ ok: true, result: undefined });
+  expect(app.dispatch({ kind: "view.setTool", view: "main", tool: "eye-makeup.surface", enabled: false })).toEqual({ ok: true, result: undefined });
   expect(views.state("main", "tools")).toEqual({ on: { "eye-makeup.surface": false, "eye-makeup.wire": false } });
   expect(views.history().depth).toBe(0);
   // A slider's drag is one View and lighting step until it is released (view.endEdit), however long it pauses (CORE-95).
-  for (const value of [1.3, 1.4]) app.dispatch({ kind: "preview.setExposure", value });
+  for (const value of [1.3, 1.4]) app.dispatch({ kind: "preview.setExposure", view: "main", value });
   expect(app.dispatch({ kind: "view.endEdit" })).toMatchObject({ ok: true });
-  app.dispatch({ kind: "preview.setExposure", value: 1.5 });
+  app.dispatch({ kind: "preview.setExposure", view: "main", value: 1.5 });
   expect(views.history()).toMatchObject({ undo: "Exposure", depth: 2 });
   // Even with eye makeup hidden (the presentation's filter), its action is still valid: visibility is presentation state.
-  expect(app.viewTools(undefined, { modules: [], research: true }).map(tool => tool.id)).not.toContain("eye-makeup.wire");
-  expect(app.capability({ kind: "view.setTool", tool: "eye-makeup.wire", enabled: true }).available).toBe(true);
-  expect(app.capability({ kind: "view.setTool", tool: "camera.front", enabled: true })).toMatchObject({ available: false, code: "invalid_value" });
+  expect(app.viewTools(MAIN_VIEW, { modules: [], research: true }).map(tool => tool.id)).not.toContain("eye-makeup.wire");
+  expect(app.capability({ kind: "view.setTool", view: "main", tool: "eye-makeup.wire", enabled: true }).available).toBe(true);
+  expect(app.capability({ kind: "view.setTool", view: "main", tool: "camera.front", enabled: true })).toMatchObject({ available: false, code: "invalid_value" });
   expect(app.capability({ kind: "view.setTool", tool: "eye-makeup.wire", enabled: true, view: "gone" })).toMatchObject({ available: false, code: "missing_target" });
   expect(app.capability({ kind: "view.undo" })).toMatchObject({ available: true });
   expect(app.modules().map(module => module.id)).toEqual(["eye-makeup", "save-explorer", "expressions", "poses"]);
@@ -108,7 +110,7 @@ test("the application resolves each tool's state and action; view.setTool edits 
 test("a tool the presentation withdraws keeps its state but reaches no device until it is offered again (UI-102)", () => {
   const workspace = freshWorkspace(), calls: string[] = [];
   workspace.preview.wire = true;
-  const { app, views } = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  const { app, views } = namedCore(createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
   // Research tools are hidden before the head loads: the head starts with the wireframe it stored, then turns it off at once.
   app.withdrawViewTools(["eye-makeup.wire", "no.such-tool"]);
   const preview = new PreviewActions(workspace.preview, recordingPreviewPort(calls), views);
@@ -121,8 +123,8 @@ test("a tool the presentation withdraws keeps its state but reaches no device un
   expect(preview.snapshot()).toMatchObject({ surface: true, wire: true });
   expect(views.history().depth).toBe(0);
   // A choice made while withdrawn is kept and reaches the device only once the tool is offered again.
-  app.dispatch({ kind: "view.setTool", tool: "eye-makeup.surface", enabled: false });
-  app.dispatch({ kind: "view.setTool", tool: "eye-makeup.surface", enabled: true });
+  app.dispatch({ kind: "view.setTool", view: "main", tool: "eye-makeup.surface", enabled: false });
+  app.dispatch({ kind: "view.setTool", view: "main", tool: "eye-makeup.surface", enabled: true });
   expect(calls).toEqual(["wire:false", "surface:false"]);
   app.withdrawViewTools([]);
   expect(calls).toEqual(["wire:false", "surface:false", "surface:true", "wire:true"]);
@@ -199,7 +201,7 @@ test("a collapsed group keeps its flag through a save and restore, and expanding
 test("a view's title comes from the graph: its own name, else \"3D view\", numbered when there are several; the panel ID never changes", () => {
   expect(viewTitles([{ id: "main" }])).toEqual(["3D view"]);
   expect(viewTitles([{ id: "main" }, { id: "side" }, { id: "close", title: "Close-up" }])).toEqual(["3D view 1", "3D view 2", "Close-up"]);
-  const { app } = createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  const { app } = namedCore(createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
   // Without a character context the scene still shows a V: the creator's default one.
   expect(app.viewTitles()).toEqual([{ view: "main", panel: "head", title: "3D view", subject: "V (the character creator's default V)" }]);
   expect(STUDIO_CATALOGUE.meta.head?.title).toBe("3D view");

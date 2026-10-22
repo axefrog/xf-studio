@@ -208,7 +208,7 @@ flowchart TB
   - **Required content.** Immutable content a pending command needs is kept with it. The host checks `requires` inside the transaction and answers `missing`, which triggers a re-put. If no copy exists anywhere, the restoring notice offers **Import save…** or **Discard those changes**. Re-importing the V's own save is a plain upload that changes nothing else.
   - **A V without its save** records nothing and refuses changes until the save arrives.
   - **Send attempts** and required-document lookups have a 15 s deadline. Each is cancellable and resent under the same ID, and late answers are ignored. Commands on a document are sent strictly in order. Receipt answers carry the value the command committed.
-  - **The restoring notice** (`t-recovering`): "Restoring changes from your last session…". After 5 s it offers Try again, plus Use restored only where it is provably safe, otherwise Export. No timer ever unlocks edits.
+  - **The restoring notice** (`t-recovering`): after 1 s the status bar's line says "Restoring changes from your last session…" (nothing moves). After 5 s the notice under the header opens and offers Try again, plus Use restored only where it is provably safe, otherwise Export. No timer ever unlocks edits.
   - **Limits.** The outbox refuses a command over 64 writes before recording it, so a collection is created with at most 63 looks. A look listed by a live collection is never purged. Snapshots and Save version refuse an incomplete collection. Keep mine on a collection reads its looks from the library first, then restores them or refuses, in one command.
   - **Accepted limit.** After a crash that loses pending host writes, a false conflict can still occur. It is shown to the person and never written over.
 
@@ -259,7 +259,7 @@ flowchart TB
   - A second window opens read-only: "This workspace is open in another window." It offers **Use it here**. Read-only windows refuse every dispatch with `unavailable` and write nothing.
 - **Takeover happens only after release.**
   - The holder is asked to release. It stops accepting edits at once, drains its outbox (flushes), stops its timers and callbacks, writes the workspace a last time, then releases the lease and confirms.
-  - If the holder doesn't answer, the new window waits: "Waiting for the other window to finish saving. Close it to continue." The lease moves only when the holder terminates (localhost: the browser releases its Web Lock `xfs.workspace.<key>`; desktop: the host sees its page end).
+  - If the holder doesn't answer, the new window waits: "Waiting for the other window to finish saving. Close the other window to continue." The lease moves only when the holder terminates (localhost: the browser releases its Web Lock `xfs.workspace.<key>`; desktop: the host sees its page end).
   - There is no timed steal.
 - **Built in phase 1a, with these details:**
   - **The desktop app is single-instance.** A second launch brings the running window forward and quits, so two host processes never share `workspace.json`.

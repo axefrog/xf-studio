@@ -7,7 +7,7 @@ import type { ReadonlyDeep } from "../../platform/api/read-only";
 import type { HistoryLabel } from "../../legacy/eye-makeup/history-labels";
 import { LOOK_HISTORY_1, type HistoryParts, type HistoryTarget, type LookHistoryData } from "../../platform/api";
 import { LookHistory } from "../../platform/core/look-history";
-import { createHistoryService, LOOK_SCOPE, type HistoryScope, type HistoryService } from "../../platform/core/history-service";
+import { createHistoryService, lookScope, type HistoryScope, type HistoryService } from "../../platform/core/history-service";
 import type { LiveFeatureState, LiveFeatures } from "../../platform/core/live-features";
 
 /**
@@ -31,7 +31,8 @@ export type DocumentState = { recipe: Recipe; active: number; selected: number;
    */
   liveLocked?: string };
 /** `part`: another feature's live part changed (an action of that feature, or an Undo or Redo). */
-export type DocumentChange = "recipe" | "selection" | "history" | "restore" | "part";
+/** `access`: whether the document can be edited changed (`setBlocked`). */
+export type DocumentChange = "recipe" | "selection" | "history" | "restore" | "part" | "access";
 export type DocumentEffect = RecipeActionEffect | { kind: "gesture"; layerIndex: number };
 /**
  * Which feature's part the document edits and how the look history splits parts (the composition's part
@@ -42,10 +43,13 @@ export type DocumentParts = { readonly feature: string; readonly parts: HistoryP
 /** What an Undo, Redo or reverted step restored: this document's recipe when the step touched it, and the other features it restored. */
 type LookRestore = { recipe?: Recipe; features: string[] };
 /**
- * Where the document's look history lives (the session's history service; default: one of its own) and how a restored recipe
- * resets the preview's layer resources (the trusted core's port).
+ * Where the document's look history lives (the session's history service; default: one of its own), the scope of the look it shows
+ * first (`look:<collection>/<look>`, profiles design §3.7; default: a look of its own, for fixtures), and how a restored recipe resets
+ * the preview's layer resources (the trusted core's port).
  */
-export type DocumentHistoryOptions = { readonly history?: HistoryService; readonly resetStack?: (previous: Recipe) => void };
+export type DocumentHistoryOptions = { readonly history?: HistoryService; readonly scope?: string; readonly resetStack?: (previous: Recipe) => void };
+/** The scope a document without a look of the profile's shows (fixtures and tools). */
+export const LOCAL_LOOK_SCOPE = lookScope({ collection: "local", look: "local" });
 
 /** A look history from either form; throws on a damaged entry (checked before anything is published). */
 function lookHistory(value: DocumentHistory | undefined, trimmed: boolean, parts: DocumentParts): LookHistory {
@@ -59,17 +63,22 @@ function lookHistory(value: DocumentHistory | undefined, trimmed: boolean, parts
 }
 
 /**
- * The live in-process authoring document; snapshots never expose its mutable recipe. It is the target of the history
- * service's look scope (`history`): the scope records and restores the look's parts through it, and the document carries the
- * scope's steps in and out of its state (`export`, `restore`).
+ * The live in-process authoring document; snapshots never expose its mutable recipe. It is the target of the shown look's history
+ * scope (`history`, `look:<collection>/<look>`): the scope records and restores the look's parts through it, and the document carries
+ * the scope's steps in and out of its state (`export`, `restore`). Showing another look (`restore` with its scope) closes the previous
+ * look's scope and opens the next one's.
  */
 export class AuthoringDocument {
   private state: Omit<DocumentState, "history" | "historyTrimmed">;
-  /** The look's Undo history: the history service's look scope over this document. */
-  readonly history: HistoryScope;
+  private scope: HistoryScope;
+  private readonly service: HistoryService;
+  private readonly target: HistoryTarget;
+  /** The shown look's Undo history: the history service's scope of that look, over this document. */
+  get history(): HistoryScope { return this.scope; }
   private readonly resetStack: (previous: Recipe) => void;
   private restoring = false;
   private listeners = new Set<(change: DocumentChange) => void>();
+  private replacingListeners = new Set<() => void>();
   private effectListeners = new Set<(effect: DocumentEffect) => void>();
   private geometryRevision = 0;
   private changedLayerIndex: number | undefined;
@@ -81,17 +90,35 @@ export class AuthoringDocument {
       selected: clamp(initial.selected, recipe.layers[clamp(initial.active, recipe.layers.length)]?.points.length ?? 0),
       fieldSelection: parseFieldSelection(initial.fieldSelection, recipe) };
     this.resetStack = options.resetStack ?? (() => {});
-    const target: HistoryTarget = { read: this.read, apply: values => this.applyHistory(values),
+    this.target = { read: this.read, apply: values => this.applyHistory(values),
       // The recipe's and the other parts' revisions: while unchanged, Redo stays valid without comparing content.
       revision: () => `${this.geometryRevision}:${this.otherRevision}`, fingerprint: keys => this.contentKey(keys) };
-    this.history = (options.history ?? createHistoryService()).open(LOOK_SCOPE, target, {
-      stack: lookHistory(initial.history, initial.historyTrimmed === true, parts), changed: () => { if (!this.restoring) this.notify("history"); } });
+    this.service = options.history ?? createHistoryService();
+    const stack = lookHistory(initial.history, initial.historyTrimmed === true, parts);
+    this.scope = this.openScope(options.scope ?? LOCAL_LOOK_SCOPE, stack);
+    // The look shown is the editing context until something else is edited (profiles design §3.7: Undo in a view undoes its look).
+    this.scope.replace(stack);
     parts.others?.load(initial.liveFeatures);
     this.lockedReason = initial.liveLocked;
   }
+  private openScope(id: string, stack: LookHistory): HistoryScope {
+    return this.service.open(id, this.target, { stack, changed: () => { if (!this.restoring) this.notify("history"); } });
+  }
+  /** The shown look's scope ID (`look:<collection>/<look>`). */
+  get scopeId(): string { return this.scope.id; }
   private lockedReason?: string;
-  /** Why the selected look is not editable in this version (it holds a newer build's data), or undefined. */
-  get locked(): string | undefined { return this.lockedReason; }
+  private blockedReason?: string;
+  /**
+   * Why the shown look can't be edited now, or undefined: it holds a newer build's data (kept exactly as it came), or it is being
+   * restored from the last session (`setBlocked`).
+   */
+  get locked(): string | undefined { return this.lockedReason ?? this.blockedReason; }
+  /** The look can't be edited for now (the reason), or can again (undefined): the look editor's recovery gate. */
+  setBlocked(reason: string | undefined) {
+    if (reason === this.blockedReason) return;
+    this.blockedReason = reason;
+    this.notify("access");
+  }
   /** The look as the history reads it: this document's feature is its recipe; the others are their live documents. */
   private readonly read = (feature: string) => feature === this.parts.feature ? this.state.recipe : this.parts.others?.read(feature);
   private recipeOf(parts: Record<string, unknown> | undefined) { return parts?.[this.parts.feature] as Recipe | undefined; }
@@ -131,6 +158,16 @@ export class AuthoringDocument {
     return others && { revision: this.otherRevision,
       parts: Object.fromEntries(others.features().map(feature => [feature, others.read(feature)])) };
   }
+  /**
+   * Calls `listener` before the document's content is replaced (another look shown, or the same look taken from elsewhere): an open
+   * gesture or control run settles on the content it began on, never on what replaces it.
+   */
+  onReplacing(listener: () => void): () => void { this.replacingListeners.add(listener); return () => { this.replacingListeners.delete(listener); }; }
+  /**
+   * The content is about to be replaced: whatever is open settles first. `restore` calls it; a caller that records the look before
+   * replacing it (the look editor) calls it before recording, so the settled run is recorded with the look it belongs to.
+   */
+  replacing() { for (const listener of [...this.replacingListeners]) listener(); }
   subscribe(listener: (change: DocumentChange) => void) {
     this.listeners.add(listener); return () => this.listeners.delete(listener);
   }
@@ -213,8 +250,12 @@ export class AuthoringDocument {
     return { ...structuredClone(this.state), history: this.history.data(),
       ...(this.history.trimmed ? { historyTrimmed: true } : {}), ...(others && Object.keys(others).length ? { liveFeatures: others } : {}) };
   }
-  /** For collection switches and workspace restore, publish the whole validated editor state at once. */
-  restore(value: DocumentState) {
+  /**
+   * Show a look (another one, or the same one taken from elsewhere): publish the whole validated editor state at once. `scope` is the
+   * look's history scope when it is another look's: the previous look's scope closes and the shown one's opens with its steps.
+   */
+  restore(value: DocumentState, scope?: string) {
+    this.replacing();
     const recipe = parseRecipe(value.recipe), active = clamp(value.active, recipe.layers.length);
     const fieldSelection = parseFieldSelection(value.fieldSelection, recipe);
     const history = lookHistory(value.history, value.historyTrimmed === true, this.parts);
@@ -225,7 +266,14 @@ export class AuthoringDocument {
     this.geometryRevision++; this.changedLayerIndex = undefined; this.changedGestureKind = undefined;
     // The restored look's history replaces the scope's steps, and their Redo with them (announced once, as the restore).
     this.restoring = true;
-    try { this.history.replace(history); } finally { this.restoring = false; }
+    try {
+      if (scope !== undefined && scope !== this.scope.id) {
+        this.service.close(this.scope.id);
+        this.scope = this.openScope(scope, history);
+        // Showing a look is an editing interaction with it (§3.7): announced like a replaced stack.
+        this.scope.replace(history);
+      } else this.scope.replace(history);
+    } finally { this.restoring = false; }
     this.notify("restore");
   }
 }

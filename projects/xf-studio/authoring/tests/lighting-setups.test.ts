@@ -24,6 +24,7 @@ import { freshWorkspace } from "./fixtures/eye-region";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+import { namedCore } from "./fixtures/named-targets";
 /** Workspaces written by the build before setups (commit f1aa3bd), by its own serializer. */
 type OldPreview = WorkspaceState["preview"] & { studioLights?: WorkspaceState["preview"]["studioLights"] };
 const before = JSON.parse(readFileSync(resolve(import.meta.dir, "fixtures", "workspace-before-lighting-setups.json"), "utf8")) as {
@@ -113,39 +114,39 @@ test("one flat list: the six built-ins as templates, then the person's own; Soft
   expect(view.shown.lights.map(light => light.name)).toEqual(["Key", "Fill", "Rim"]);
   expect(view.shown.lights[0]).toMatchObject({ azimuth: expect.closeTo(329, 9), colour: "#fff2e9", intensity: 2.5 });
   // Choosing the creator is a setup like any other: the device gets the game rig, the node's kind becomes the game display.
-  actions.dispatch({ kind: "preview.selectLightingSetup", setup: "creator" });
+  actions.dispatch({ kind: "preview.selectLightingSetup", view: "main", setup: "creator" });
   expect(device.sources.at(-1)).toEqual({ kind: "game", calibration: DEFAULT_CREATOR_LIGHTING });
   expect(actions.snapshot().lightingPreset).toBe("creator");
   expect(actions.lightingSetups().shown).toMatchObject({ id: "creator", display: "game", backdrop: "black", environment: 0 });
   expect(actions.lightingSetups().shown.lights).toHaveLength(15);
-  expect(actions.capability({ kind: "preview.selectLightingSetup", setup: "disco" })).toMatchObject({ available: false });
+  expect(actions.capability({ kind: "preview.selectLightingSetup", view: "main", setup: "disco" })).toMatchObject({ available: false });
 });
 
 test("editing a built-in forks it into Custom (from <base>) at once; the built-in never changes and switching away loses nothing", () => {
   const { actions, device } = setup();
-  actions.dispatch({ kind: "preview.setRoomLight", value: 0.4 });
+  actions.dispatch({ kind: "preview.setRoomLight", view: "main", value: 0.4 });
   let view = actions.lightingSetups();
   expect(view.active).toBe("u1");
   expect(view.setups.at(-1)).toMatchObject({ id: "u1", label: "Custom (from Soft studio)", builtIn: false, base: "soft", baseLabel: "Soft studio" });
   expect(view.shown).toMatchObject({ label: "Custom (from Soft studio)", builtIn: false, environment: 0.4, resettable: true, baseLabel: "Soft studio" });
   expect(device.sources.at(-1)).toMatchObject({ kind: "setup", setup: { environment: 0.4 } });
   // A second edit changes the fork, not another copy.
-  actions.dispatch({ kind: "preview.setExposure", value: 2 });
+  actions.dispatch({ kind: "preview.setExposure", view: "main", value: 2 });
   expect(actions.lightingSetups().setups.filter(entry => !entry.builtIn)).toHaveLength(1);
   // Away and back: the built-in is untouched, the fork keeps its edits.
-  actions.dispatch({ kind: "preview.selectLightingSetup", setup: "soft" });
+  actions.dispatch({ kind: "preview.selectLightingSetup", view: "main", setup: "soft" });
   expect(actions.lightingSetups().shown).toMatchObject({ environment: 1, exposure: 1.2 });
-  actions.dispatch({ kind: "preview.selectLightingSetup", setup: "u1" });
+  actions.dispatch({ kind: "preview.selectLightingSetup", view: "main", setup: "u1" });
   expect(actions.lightingSetups().shown).toMatchObject({ environment: 0.4, exposure: 2 });
   // A change that changes nothing forks nothing and records nothing.
-  actions.dispatch({ kind: "preview.selectLightingSetup", setup: "key" });
+  actions.dispatch({ kind: "preview.selectLightingSetup", view: "main", setup: "key" });
   const steps = actions.views().history().depth;
-  actions.dispatch({ kind: "preview.setBackdrop", backdrop: "studio" });
+  actions.dispatch({ kind: "preview.setBackdrop", view: "main", backdrop: "studio" });
   expect(actions.lightingSetups().active).toBe("key");
   expect(actions.views().history().depth).toBe(steps);
   // Editing the creator forks the game rig resolved for the body shown, exactly.
-  actions.dispatch({ kind: "preview.selectLightingSetup", setup: "creator" });
-  actions.dispatch({ kind: "preview.setLightColour", light: "Main_Face", colour: "#ff8040" });
+  actions.dispatch({ kind: "preview.selectLightingSetup", view: "main", setup: "creator" });
+  actions.dispatch({ kind: "preview.setLightColour", view: "main", light: "Main_Face", colour: "#ff8040" });
   view = actions.lightingSetups();
   expect(view.shown).toMatchObject({ label: "Custom (from Character creator)", display: "game", builtIn: false });
   expect(view.shown.lights.find(light => light.id === "Main_Face")!.colour).toBe("#ff8040");
@@ -158,7 +159,7 @@ test("editing a built-in forks it into Custom (from <base>) at once; the built-i
 
 test("setup edits are View and lighting steps: a drag is one step, and Undo takes the fork away again", () => {
   const { actions, views } = setup();
-  for (const value of [0.9, 0.8, 0.7]) actions.dispatch({ kind: "preview.setRoomLight", value });
+  for (const value of [0.9, 0.8, 0.7]) actions.dispatch({ kind: "preview.setRoomLight", view: "main", value });
   views.seal(); // the slider was released (view.endEdit)
   expect(views.history()).toMatchObject({ undo: "Room light", depth: 1 });
   expect(actions.lightingSetups().shown.environment).toBe(0.7);
@@ -168,35 +169,35 @@ test("setup edits are View and lighting steps: a drag is one step, and Undo take
   views.redo();
   expect(actions.lightingSetups().shown).toMatchObject({ id: "u1", environment: 0.7 });
   // A later drag of a different control is its own step.
-  actions.dispatch({ kind: "preview.setExposure", value: 1.5 });
+  actions.dispatch({ kind: "preview.setExposure", view: "main", value: 1.5 });
   expect(views.history()).toMatchObject({ undo: "Exposure", depth: 2 });
 });
 
 test("the person's own setups: new from any template, rename, delete (its base shows) and Reset to the base", () => {
   const { actions } = setup();
-  actions.dispatch({ kind: "preview.createLightingSetup", from: "rim" });
+  actions.dispatch({ kind: "preview.createLightingSetup", view: "main", from: "rim" });
   expect(actions.lightingSetups().shown).toMatchObject({ id: "u1", label: "Rim / dramatic copy", baseLabel: "Rim / dramatic", resettable: false });
   // An own setup is a template too; names stay distinct.
-  actions.dispatch({ kind: "preview.createLightingSetup", from: "u1" });
-  actions.dispatch({ kind: "preview.createLightingSetup", from: "u1" });
+  actions.dispatch({ kind: "preview.createLightingSetup", view: "main", from: "u1" });
+  actions.dispatch({ kind: "preview.createLightingSetup", view: "main", from: "u1" });
   expect(actions.lightingSetups().setups.filter(entry => !entry.builtIn).map(entry => [entry.id, entry.label, entry.base]))
     .toEqual([["u1", "Rim / dramatic copy", "rim"], ["u2", "Rim / dramatic copy copy", "rim"], ["u3", "Rim / dramatic copy copy 2", "rim"]]);
-  actions.dispatch({ kind: "preview.renameLightingSetup", setup: "u2", name: "  Night market  " });
+  actions.dispatch({ kind: "preview.renameLightingSetup", view: "main", setup: "u2", name: "  Night market  " });
   expect(actions.lightingSetups().setups.find(entry => entry.id === "u2")!.label).toBe("Night market");
-  expect(actions.capability({ kind: "preview.renameLightingSetup", setup: "u2", name: " " })).toMatchObject({ available: false });
+  expect(actions.capability({ kind: "preview.renameLightingSetup", view: "main", setup: "u2", name: " " })).toMatchObject({ available: false });
   // Built-ins are read-only: renaming, deleting or resetting one says how to make it your own.
-  for (const action of [{ kind: "preview.renameLightingSetup", setup: "soft", name: "Mine" }, { kind: "preview.deleteLightingSetup", setup: "creator" },
-    { kind: "preview.resetLightingSetup", setup: "key" }] as const)
+  for (const action of [{ kind: "preview.renameLightingSetup", view: "main", setup: "soft", name: "Mine" }, { kind: "preview.deleteLightingSetup", view: "main", setup: "creator" },
+    { kind: "preview.resetLightingSetup", view: "main", setup: "key" }] as const)
     expect(actions.check(action)).toMatchObject({ available: false, code: "incompatible_mode", reason: expect.stringContaining("Make your own setup from it") });
   // Reset: refused while it matches its base, then returns the base's values (the name stays).
-  expect(actions.capability({ kind: "preview.resetLightingSetup", setup: "u3" }).reason).toBe("Rim / dramatic copy copy 2 already matches Rim / dramatic.");
-  actions.dispatch({ kind: "preview.setLight", light: "key", key: "azimuth", value: 90 });
+  expect(actions.capability({ kind: "preview.resetLightingSetup", view: "main", setup: "u3" }).reason).toBe("Rim / dramatic copy copy 2 already matches Rim / dramatic.");
+  actions.dispatch({ kind: "preview.setLight", view: "main", light: "key", key: "azimuth", value: 90 });
   expect(actions.lightingSetups().shown.resettable).toBe(true);
-  actions.dispatch({ kind: "preview.resetLightingSetup", setup: "u3" });
+  actions.dispatch({ kind: "preview.resetLightingSetup", view: "main", setup: "u3" });
   expect(actions.lightingSetups().shown).toMatchObject({ id: "u3", label: "Rim / dramatic copy copy 2", resettable: false });
   expect(actions.lightingSetups().shown.lights[0]!.azimuth).toBeCloseTo(STUDIO_SETUPS.rim.angle, 9);
   // Delete, no prompt: the shown one gives way to its base; Undo brings it back.
-  actions.dispatch({ kind: "preview.deleteLightingSetup", setup: "u3" });
+  actions.dispatch({ kind: "preview.deleteLightingSetup", view: "main", setup: "u3" });
   expect(actions.lightingSetups().active).toBe("rim");
   actions.views().undo();
   expect(actions.lightingSetups().active).toBe("u3");
@@ -205,52 +206,52 @@ test("the person's own setups: new from any template, rename, delete (its base s
 
 test("the light editor: add, place about the head, recolour, shape the cone, shadows up to the budget, type, aim and remove", () => {
   const { actions } = setup();
-  actions.dispatch({ kind: "preview.addLight", type: "spot" });
+  actions.dispatch({ kind: "preview.addLight", view: "main", type: "spot" });
   let shown = actions.lightingSetups().shown;
   expect(shown.label).toBe("Custom (from Soft studio)");
   const added = shown.lights.at(-1)!;
   expect(added).toMatchObject({ id: "light-4", name: "Light 4", type: "spot", azimuth: expect.closeTo(45, 9), elevation: expect.closeTo(30, 9),
     distance: expect.closeTo(1, 9), colour: "#ffffff", shadows: false, cone: expect.closeTo(30, 9) });
   // Placement about the focus round-trips, and a move keeps what the light points at.
-  actions.dispatch({ kind: "preview.setLight", light: "light-4", key: "azimuth", value: 200 });
-  actions.dispatch({ kind: "preview.setLight", light: "light-4", key: "elevation", value: -10 });
-  actions.dispatch({ kind: "preview.setLight", light: "light-4", key: "distance", value: 2.5 });
+  actions.dispatch({ kind: "preview.setLight", view: "main", light: "light-4", key: "azimuth", value: 200 });
+  actions.dispatch({ kind: "preview.setLight", view: "main", light: "light-4", key: "elevation", value: -10 });
+  actions.dispatch({ kind: "preview.setLight", view: "main", light: "light-4", key: "distance", value: 2.5 });
   shown = actions.lightingSetups().shown;
   expect(shown.lights.at(-1)).toMatchObject({ azimuth: expect.closeTo(200, 9), elevation: expect.closeTo(-10, 9), distance: expect.closeTo(2.5, 9) });
   const stored = () => actions.views().state<SetupLibrary>(MAIN_VIEW, "lights").setups[0]!.setup;
   expect(stored().lights.at(-1)!.target).toEqual([0, 1.67, 0]);
-  actions.dispatch({ kind: "preview.setLightColour", light: "light-4", colour: "#3366ff" });
-  actions.dispatch({ kind: "preview.setLight", light: "light-4", key: "cone", value: 12 });
-  actions.dispatch({ kind: "preview.setLight", light: "light-4", key: "softness", value: 0.2 });
+  actions.dispatch({ kind: "preview.setLightColour", view: "main", light: "light-4", colour: "#3366ff" });
+  actions.dispatch({ kind: "preview.setLight", view: "main", light: "light-4", key: "cone", value: 12 });
+  actions.dispatch({ kind: "preview.setLight", view: "main", light: "light-4", key: "softness", value: 0.2 });
   expect(actions.lightingSetups().shown.lights.at(-1)).toMatchObject({ colour: "#3366ff", cone: expect.closeTo(12, 9), softness: 0.2 });
-  expect(actions.capability({ kind: "preview.setLightColour", light: "light-4", colour: "blue" }).reason).toBe("Choose a colour as #rrggbb.");
+  expect(actions.capability({ kind: "preview.setLightColour", view: "main", light: "light-4", colour: "blue" }).reason).toBe("Choose a colour as #rrggbb.");
   // A directional light has no cone.
-  expect(actions.check({ kind: "preview.setLight", light: "key", key: "cone", value: 20 })).toMatchObject({ available: false, code: "incompatible_mode" });
-  expect(actions.capability({ kind: "preview.setLight", light: "key", key: "elevation", value: 95 }).available).toBe(false);
+  expect(actions.check({ kind: "preview.setLight", view: "main", light: "key", key: "cone", value: 20 })).toMatchObject({ available: false, code: "incompatible_mode" });
+  expect(actions.capability({ kind: "preview.setLight", view: "main", light: "key", key: "elevation", value: 95 }).available).toBe(false);
   // Shadows: at most the budget at once.
-  actions.dispatch({ kind: "preview.setLightShadows", light: "light-4", enabled: true });
-  for (let i = 0; i < 3; i++) { actions.dispatch({ kind: "preview.addLight", type: "directional" }); }
-  for (const id of ["light-5", "light-6", "light-7"]) actions.dispatch({ kind: "preview.setLightShadows", light: id, enabled: true });
+  actions.dispatch({ kind: "preview.setLightShadows", view: "main", light: "light-4", enabled: true });
+  for (let i = 0; i < 3; i++) { actions.dispatch({ kind: "preview.addLight", view: "main", type: "directional" }); }
+  for (const id of ["light-5", "light-6", "light-7"]) actions.dispatch({ kind: "preview.setLightShadows", view: "main", light: id, enabled: true });
   expect(actions.lightingSetups().shown.shadowCasters).toBe(LIGHTING_LIMITS.shadowCasters);
-  actions.dispatch({ kind: "preview.addLight", type: "spot" });
-  expect(actions.capability({ kind: "preview.setLightShadows", light: "light-8", enabled: true }).reason).toContain("At most 6 lights");
+  actions.dispatch({ kind: "preview.addLight", view: "main", type: "spot" });
+  expect(actions.capability({ kind: "preview.setLightShadows", view: "main", light: "light-8", enabled: true }).reason).toContain("At most 6 lights");
   // Type, aim, rename and remove.
-  actions.dispatch({ kind: "preview.setLightType", light: "light-4", type: "directional" });
-  actions.dispatch({ kind: "preview.setLightType", light: "light-4", type: "spot" });
+  actions.dispatch({ kind: "preview.setLightType", view: "main", light: "light-4", type: "directional" });
+  actions.dispatch({ kind: "preview.setLightType", view: "main", light: "light-4", type: "spot" });
   expect(actions.lightingSetups().shown.lights.find(light => light.id === "light-4")!.cone).toBeCloseTo(12, 9);
-  actions.dispatch({ kind: "preview.aimLightAtHead", light: "light-4" });
-  actions.dispatch({ kind: "preview.renameLight", light: "light-4", name: "Neon sign" });
-  actions.dispatch({ kind: "preview.removeLight", light: "fill" });
+  actions.dispatch({ kind: "preview.aimLightAtHead", view: "main", light: "light-4" });
+  actions.dispatch({ kind: "preview.renameLight", view: "main", light: "light-4", name: "Neon sign" });
+  actions.dispatch({ kind: "preview.removeLight", view: "main", light: "fill" });
   expect(actions.lightingSetups().shown.lights.map(light => light.name)).toEqual(["Key", "Rim", "Neon sign", "Light 5", "Light 6", "Light 7", "Light 8"]);
-  expect(actions.capability({ kind: "preview.removeLight", light: "fill" })).toMatchObject({ available: false });
+  expect(actions.capability({ kind: "preview.removeLight", view: "main", light: "fill" })).toMatchObject({ available: false });
   // At most 16 lights.
-  while (actions.lightingSetups().shown.lights.length < LIGHTING_LIMITS.lights) actions.dispatch({ kind: "preview.addLight", type: "directional" });
-  expect(actions.capability({ kind: "preview.addLight", type: "spot" }).reason).toContain("at most 16 lights");
+  while (actions.lightingSetups().shown.lights.length < LIGHTING_LIMITS.lights) actions.dispatch({ kind: "preview.addLight", view: "main", type: "directional" });
+  expect(actions.capability({ kind: "preview.addLight", view: "main", type: "spot" }).reason).toContain("at most 16 lights");
   // The display transform: exposure goes to the new display's default and its range follows.
-  actions.dispatch({ kind: "preview.setDisplayTransform", display: "game" });
+  actions.dispatch({ kind: "preview.setDisplayTransform", view: "main", display: "game" });
   expect(actions.lightingSetups().shown).toMatchObject({ display: "game", exposure: DEFAULT_CREATOR_LIGHTING.exposure, exposureRange: { min: 0.01, max: 20 } });
   expect(actions.snapshot().lightingPreset).toBe("creator");
-  expect(actions.capability({ kind: "preview.setExposure", value: 15 }).available).toBe(true);
+  expect(actions.capability({ kind: "preview.setExposure", view: "main", value: 15 }).available).toBe(true);
 });
 
 test("an unedited fork of every built-in draws exactly as the built-in: the same definition and the same Three lights", () => {
@@ -271,10 +272,10 @@ test("an unedited fork of every built-in draws exactly as the built-in: the same
   for (const sex of ["female", "male"] as const) for (const id of BUILT_IN_SETUP_IDS) {
     const { actions, device } = setup();
     (device.port.lightingStatus!() as LightingStatus).sex = sex;
-    actions.dispatch({ kind: "preview.selectLightingSetup", setup: id });
+    actions.dispatch({ kind: "preview.selectLightingSetup", view: "main", setup: id });
     const builtInSource = lightingSource(libraryOf(actions), DEFAULT_CREATOR_LIGHTING);
     const sent = device.sources.length;
-    actions.dispatch({ kind: "preview.createLightingSetup", from: id });
+    actions.dispatch({ kind: "preview.createLightingSetup", view: "main", from: id });
     const forkSource = lightingSource(libraryOf(actions), DEFAULT_CREATOR_LIGHTING);
     expect(forkSource.kind).toBe("setup");
     // A studio fork is the same source as its built-in, so the device isn't even asked to redraw; the creator's arrives resolved.
@@ -314,14 +315,14 @@ test("the light rig updates in place while the types hold, and replaces only a l
 
 test("scripts keep working: setKeyAngle turns the shown setup's key (forking a built-in), setLightingPreset picks creator or Soft studio", () => {
   const { actions } = setup();
-  actions.dispatch({ kind: "preview.setKeyAngle", degrees: 90 });
+  actions.dispatch({ kind: "preview.setKeyAngle", view: "main", degrees: 90 });
   expect(actions.lightingSetups().shown).toMatchObject({ label: "Custom (from Soft studio)" });
   expect(actions.lightingSetups().shown.lights[0]!.azimuth).toBeCloseTo(90, 9);
   expect(actions.snapshot().lightAngle).toBeCloseTo(90, 9);
-  actions.dispatch({ kind: "preview.setLightingPreset", preset: "creator" });
+  actions.dispatch({ kind: "preview.setLightingPreset", view: "main", preset: "creator" });
   expect(actions.lightingSetups().active).toBe("creator");
-  expect(actions.capability({ kind: "preview.setKeyAngle", degrees: 10 }).available).toBe(false);
-  actions.dispatch({ kind: "preview.setLightingPreset", preset: "studio" });
+  expect(actions.capability({ kind: "preview.setKeyAngle", view: "main", degrees: 10 }).available).toBe(false);
+  actions.dispatch({ kind: "preview.setLightingPreset", view: "main", preset: "studio" });
   expect(actions.lightingSetups().active).toBe("soft");
   // Descriptors: workspace view state, never look Undo.
   for (const kind of ["preview.selectLightingSetup", "preview.createLightingSetup", "preview.setLight", "preview.addLight", "preview.resetLightingSetup"] as const)
@@ -329,17 +330,17 @@ test("scripts keep working: setKeyAngle turns the shown setup's key (forking a b
   expect(ACTION_DESCRIPTORS["preview.setLight"].variants!.elevation!.payload.value).toMatchObject({ min: -89, max: 89 });
   // A preview without the lighting stage says so.
   const bare = new PreviewActions(freshWorkspace().preview, lightingPort({ lighting: false }).port);
-  expect(bare.check({ kind: "preview.selectLightingSetup", setup: "key" })).toMatchObject({ available: false, code: "unavailable" });
+  expect(bare.check({ kind: "preview.selectLightingSetup", view: "main", setup: "key" })).toMatchObject({ available: false, code: "unavailable" });
 });
 
 test("through the application: the read model carries the setups and a built-in's edit forks it", () => {
   const workspace = freshWorkspace();
-  const { app } = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  const { app } = namedCore(createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
   app.attach({ preview: new PreviewActions(workspace.preview, lightingPort().port) });
   expect(app.previewState().lightingSetups?.active).toBe("soft");
-  expect(app.dispatch({ kind: "preview.setLight", light: "rim", key: "intensity", value: 4 })).toMatchObject({ ok: true });
+  expect(app.dispatch({ kind: "preview.setLight", view: "main", light: "rim", key: "intensity", value: 4 })).toMatchObject({ ok: true });
   expect(app.previewState().lightingSetups?.shown).toMatchObject({ label: "Custom (from Soft studio)" });
-  expect(app.dispatch({ kind: "preview.deleteLightingSetup", setup: "soft" })).toMatchObject({ ok: false });
+  expect(app.dispatch({ kind: "preview.deleteLightingSetup", view: "main", setup: "soft" })).toMatchObject({ ok: false });
 });
 
 // ----- Workspaces -----
@@ -417,8 +418,8 @@ test("workspaces saved before setups: a stored view graph's lights nodes migrate
 
 test("own setups round-trip through the workspace, and the field goes when the last one is deleted", () => {
   const { actions, workspace, views } = setup();
-  actions.dispatch({ kind: "preview.createLightingSetup", from: "creator" });
-  actions.dispatch({ kind: "preview.setLight", light: "Rim_Top", key: "intensity", value: 12 });
+  actions.dispatch({ kind: "preview.createLightingSetup", view: "main", from: "creator" });
+  actions.dispatch({ kind: "preview.setLight", view: "main", light: "Rim_Top", key: "intensity", value: 12 });
   const capture = () => {
     const composer = new WorkspaceComposer(workspace, { editor: () => ({ recipe: workspace.recipe, active: 0, selected: 0, history: workspace.history,
       fieldSelection: {} }) as never, uvView: () => workspace.uvView, savedV: () => undefined, collections: () => undefined,
@@ -434,7 +435,7 @@ test("own setups round-trip through the workspace, and the field goes when the l
   const damaged = structuredClone(stored);
   damaged.preview.lightingSetups.setups[0].setup.lights[0].colour = [2, 0, 0];
   expect(parseWorkspace(damaged, STUDIO_DOCUMENTS).preview.lightingSetups).toBeUndefined();
-  actions.dispatch({ kind: "preview.deleteLightingSetup", setup: "u1" });
+  actions.dispatch({ kind: "preview.deleteLightingSetup", view: "main", setup: "u1" });
   expect("lightingSetups" in capture().preview).toBe(false);
 });
 
@@ -464,21 +465,21 @@ test("creator lights carry the game's own values, kept through the edits they st
   expect(studioStageSetup(DEFAULT_STUDIO_STAGE).lights.every(light => light.game === undefined)).toBe(true);
   // Through a fork's edits.
   const { actions } = setup();
-  actions.dispatch({ kind: "preview.selectLightingSetup", setup: "creator" });
-  actions.dispatch({ kind: "preview.setLight", light: "Main_Face", key: "intensity", value: 10 });
+  actions.dispatch({ kind: "preview.selectLightingSetup", view: "main", setup: "creator" });
+  actions.dispatch({ kind: "preview.setLight", view: "main", light: "Main_Face", key: "intensity", value: 10 });
   const face = () => actions.views().state<SetupLibrary>(MAIN_VIEW, "lights").setups[0]!.setup.lights.find(light => light.id === "Main_Face")!;
   const before = built.lights.find(light => light.id === "Main_Face")!.game!;
   expect(face().game).toEqual(before); // the strength is carried by the ratio to studioIntensity
-  actions.dispatch({ kind: "preview.setLight", light: "Main_Face", key: "azimuth", value: 300 });
+  actions.dispatch({ kind: "preview.setLight", view: "main", light: "Main_Face", key: "azimuth", value: 300 });
   expect(face().game).toEqual(before);
-  actions.dispatch({ kind: "preview.setLightColour", light: "Main_Face", colour: "#ff8040" });
+  actions.dispatch({ kind: "preview.setLightColour", view: "main", light: "Main_Face", colour: "#ff8040" });
   expect(face().game!.colour).toEqual([255, 128, 64]);
-  actions.dispatch({ kind: "preview.setLight", light: "Main_Face", key: "cone", value: 20 });
-  actions.dispatch({ kind: "preview.setLight", light: "Main_Face", key: "softness", value: 0.5 });
+  actions.dispatch({ kind: "preview.setLight", view: "main", light: "Main_Face", key: "cone", value: 20 });
+  actions.dispatch({ kind: "preview.setLight", view: "main", light: "Main_Face", key: "softness", value: 0.5 });
   expect(face().game).toMatchObject({ outer: expect.closeTo(40, 9), inner: expect.closeTo(20, 9), softness: before.softness });
-  actions.dispatch({ kind: "preview.setLightShadows", light: "Main_Face", enabled: false });
+  actions.dispatch({ kind: "preview.setLightShadows", view: "main", light: "Main_Face", enabled: false });
   expect(face().game).toMatchObject({ localShadows: false, contactShadows: "none" });
-  actions.dispatch({ kind: "preview.setLightType", light: "Main_Face", type: "directional" });
+  actions.dispatch({ kind: "preview.setLightType", view: "main", light: "Main_Face", type: "directional" });
   expect(face().game).toBeUndefined();
   // Stored and read back exactly; a damaged setup is dropped alone (PREV-161; the shown one falls back to its built-in base).
   const library = parseSetupLibrary(JSON.parse(JSON.stringify({ setup: "u1", setups: actions.views().state<SetupLibrary>(MAIN_VIEW, "lights").setups })))!;
@@ -495,9 +496,9 @@ test("creator lights carry the game's own values, kept through the edits they st
 
 test("lights can be reordered and duplicated (the copy casts no shadow until asked)", () => {
   const { actions } = setup();
-  actions.dispatch({ kind: "preview.moveLight", light: "rim", index: 0 });
+  actions.dispatch({ kind: "preview.moveLight", view: "main", light: "rim", index: 0 });
   expect(actions.lightingSetups().shown.lights.map(light => light.id)).toEqual(["rim", "key", "fill"]);
-  actions.dispatch({ kind: "preview.duplicateLight", light: "key" });
+  actions.dispatch({ kind: "preview.duplicateLight", view: "main", light: "key" });
   expect(actions.lightingSetups().shown.lights.map(light => [light.name, light.shadows])).toEqual([["Rim", true], ["Key", true], ["Key copy", false], ["Fill", false]]);
-  expect(actions.capability({ kind: "preview.moveLight", light: "key", index: 9 }).available).toBe(false);
+  expect(actions.capability({ kind: "preview.moveLight", view: "main", light: "key", index: 9 }).available).toBe(false);
 });

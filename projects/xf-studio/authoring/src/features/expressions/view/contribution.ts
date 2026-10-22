@@ -7,9 +7,9 @@ import { panelMeta, type ViewContribution } from "../../../studio-ui/views/contr
 export const EXPRESSIONS_VIEW = {
   owner: "expressions",
   panels: [
-    { id: "expressions.controls", title: "Expression", icon: "character", order: 115, slot: "inspect",
+    { id: "expressions.controls", context: { kind: "look" }, title: "Expression", icon: "character", order: 115, slot: "inspect",
       description: "V's facial expression: start from rest or an installed expression, and set the face's own controls." },
-    { id: "expressions.sets", title: "Expression sets", icon: "package", order: 116, slot: "inspect",
+    { id: "expressions.sets", context: { kind: "look" }, title: "Expression sets", icon: "package", order: 116, slot: "inspect",
       description: "Group your saved expressions into sets; each set becomes its own photo-mode expression mod." },
   ],
   activity: [{ pattern: /^expression\./, label: "Expression" }],

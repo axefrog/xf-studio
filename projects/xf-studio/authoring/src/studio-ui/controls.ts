@@ -379,6 +379,14 @@ export function setButtonVariant(element: HTMLElement, variant: ButtonVariant | 
 export function applyCapability(control: HTMLElement, capability: { available: boolean; reason?: string }) {
   setUnavailable(control, !capability.available, capability.reason);
 }
+/**
+ * Records what the port answered for a control's action, without changing how the control shows it: a read-only page keeps what its
+ * port still allows (`read-only-sweep.ts`, style guide t-read-only-window). Only a port capability belongs here, never a local one.
+ */
+export function capabilityScope(control: HTMLElement, capability: { available: boolean }) {
+  const value = capability.available ? "allowed" : "refused";
+  if (control.dataset.capability !== value) control.dataset.capability = value;
+}
 
 /** A panel section; `{ title, help }` puts what the section is in a help tip beside its title (help-tip.ts) rather than a note. */
 export function section(heading: string | { title: string; help: HelpText }, ...children: (Node | null | undefined | false)[]) {

@@ -1,5 +1,5 @@
 /** Live specimens for the style guide's Component library section: each is the production component, wired to sample state. */
-import { badge, blockSection, button, setButtonLabel, setButtonVariant, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
+import { badge, blockSection, button, ConflictNotice, setButtonLabel, setButtonVariant, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
   PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, Splitter, stack, TabStrip,
   Toggle, ColorField, applyCapability, openMenu, openValuePopover, openConfirmPopover, TreeView, favouriteToggle, FolderSetting, BipolarSlider, ScrubSlider, ChoiceList, choiceItem, attachSwatchCard, contrastMark, setContrastMark,
   sampleBackground, LightList, DirectionDial, SizeBar, previewTile, previewStage, ScrollMemory, VIEW_KEY, stageTag, RecordList, recordTime, modLine, type LightListItem, type TabItem, type TreeNodeData } from "../components";
@@ -62,7 +62,7 @@ function recursiveTree() {
 const MOUNTS: Record<string, Mount> = {
   "lib-button": () => { const unavailable = button({ label: "Build mod files", icon: "package", onClick: () => {} });
     applyCapability(unavailable, { available: false, reason: "Choose your Cyberpunk 2077 folder in Settings › Game first." });
-    return h("div", { class: "row wrap gap-s" }, button({ label: "Save to library", icon: "save", variant: "primary", onClick: () => {} }),
+    return h("div", { class: "row wrap gap-s" }, button({ label: "Save version", icon: "save", variant: "primary", onClick: () => {} }),
       button({ label: "Check", icon: "check", onClick: () => {} }), button({ label: "Restore removed", icon: "reset", variant: "quiet", onClick: () => {} }),
       button({ label: "More actions", icon: "more", iconOnly: true, variant: "ghost", menu: true, onClick: event => openMenu([{ kind: "action", label: "Duplicate", icon: "duplicate", run: () => {} }], event.currentTarget as Element, { label: "More actions" }) }),
       unavailable); },
@@ -304,12 +304,19 @@ const MOUNTS: Record<string, Mount> = {
     return stack({ gap: "normal" }, h("ul", { class: "result-list package-mods", "aria-label": "Mods this collection builds" },
       modLine({ name: EYE_MAKEUP_MOD.modName, kind: "Eye makeup", action: more(EYE_MAKEUP_MOD.modName) })), narrow);
   },
+  "lib-conflict-notice": () => {
+    const preset = new ConflictNotice({ onResolve: () => {} }), collection = new ConflictNotice({ onResolve: () => {} });
+    preset.update({ message: "You changed the preset “Smoky” here too (its makeup). Which version should it keep?", keepBoth: true, subject: "the preset “Smoky”" });
+    collection.update({ message: "You changed the collection “Night market set” here too (the order of its presets). Which version should it keep?", keepBoth: false,
+      subject: "the collection “Night market set”" });
+    return stack({ gap: "normal" }, preset.element, collection.element);
+  },
   "lib-record-list": () => {
     const saved = new RecordList({ label: "Saved collections" });
     const at = new Date(2026, 8, 29, 18, 2, 49);
     saved.update([
-      { id: "night", name: "Night market set", meta: ["4 presets", "version 5", recordTime(at)], badge: { text: "This draft", tone: "info" }, current: true,
-        action: button({ label: "Reopen", small: true, onClick: () => {} }) },
+      { id: "night", name: "Night market set", meta: ["4 presets", "version 5", recordTime(at)], badge: { text: "Open now", tone: "info" }, current: true,
+        action: Object.assign(button({ label: "Open", small: true, title: "This collection is already open.", onClick: () => {} }), { disabled: true }) },
       { id: "day", name: "Day looks for the badlands convoy", meta: ["2 presets", "version 1", recordTime(at.getTime() - 86_400_000)],
         action: button({ label: "Open", small: true, onClick: () => {} }) }]);
     const drafts = new RecordList({ label: "Recent drafts" });

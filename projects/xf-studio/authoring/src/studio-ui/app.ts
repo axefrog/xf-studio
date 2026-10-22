@@ -2,8 +2,8 @@ import { viewCatalogue } from "./views/contribution";
 import { allowsNativeTextMenu } from "./context-menu";
 import { checkForUpdatesNow, startupUpdateCheck } from "./update-check";
 import { comingSoon, liveFeatures, plannedShown } from "./coming-soon";
-import type { StudioAction } from "../app/studio-application";
-import type { StudioFileAction } from "../app/studio-file-operations";
+import type { PresentationAction } from "../app/studio-presentation";
+import type { PresentationFileAction } from "../app/studio-presentation";
 import { effectiveTheme, type ThemePreference } from "../app/ui-preferences";
 import { shortcutLabel } from "../app/input-bindings";
 import { openInputReference, openPalette, type Command } from "./commands";
@@ -16,11 +16,12 @@ import type { PanelId } from "./dock/layout";
 import { defaultDockStateFor, restoreDockPreference, serializeDockState } from "./dock/persist";
 import type { StudioModule } from "../platform/api";
 import { h, isTextInput, setAttr, setText } from "./dom";
+import { markReadOnly } from "./read-only-sweep";
 import { Feedback } from "./feedback";
 import { icon, isIconName } from "./icons";
 import { sizeClassFor } from "./layout-defaults";
 import { layoutController, type LayoutController } from "./layouts";
-import { closeMenus, openMenu, type Capability, type MenuItem } from "./menu";
+import { closeMenus, openConfirmPopover, openMenu, type Capability, type MenuItem } from "./menu";
 import { importCollection, libraryState, type PanelController } from "./panels/collection";
 import { HISTORY_SCOPE, historyCommandLabel, historyCommandTitle } from "./history-model";
 import { previewSetupCard } from "./preview-setup-card";
@@ -36,6 +37,7 @@ import { readinessText } from "./readiness-text";
 import { SETTINGS_PANEL, type SettingsSection } from "./settings-sections";
 import { bindViewState, PreferenceViewState } from "./view-state";
 import { flushScrollMemories } from "./scroll-anchor";
+import { DISCARD_WAITING_CONFIRM, MISSING_SAVE, RESTORING, RESTORING_LONG, UNPROTECTED } from "./notice-text";
 
 /**
  * Mount the XF Studio presentation. It receives only the public presentation
@@ -214,9 +216,28 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   guidance = mountGuidance(rt, { openHelp });
   const header = shellHeader(rt, theme, view, openHelp, layouts);
   const status = statusBar(rt);
+  const leaseNotice = workspaceNotice(rt);
   const setupCard = previewSetupCard(rt);
   const main = h("main", { class: "workspace", "aria-label": "Workspace panels" }, dock.element);
-  root.replaceChildren(header.element, main, status.element, setupCard.element, setupCard.consent, ...guidance.elements, feedback.toasts, feedback.live, feedback.assertive);
+  // A read-only window: controls marked unavailable never act, whatever kind of control they are (the reason tip answers instead).
+  const refuseUnavailable = (event: Event) => {
+    if (root.dataset.workspace !== "read-only") return;
+    const target = event.target as Element | null, control = target?.closest?.("[aria-disabled='true']");
+    if (control && main.contains(control)) { event.preventDefault(); event.stopPropagation(); }
+  };
+  for (const type of ["click", "dblclick", "pointerdown"]) main.addEventListener(type, refuseUnavailable, true);
+  // Where the person works (profiles design §3.3): the panel holding keyboard focus, and a pointer press or keyboard focus inside a 3D view
+  // makes that view the most recently focused. The application never reads it; actions name what it resolves to. Never an Undo step.
+  const reportFocus = (target: EventTarget | null, keyboard: boolean) => {
+    const node = target instanceof Node ? target : null;
+    const panel = node ? [...byId.keys()].find(id => byId.get(id)!.spec.element.contains(node)) : undefined;
+    const view = panel === undefined ? undefined : port.views.snapshot()?.views.find(entry => entry.panel === panel)?.id;
+    if (view !== undefined) port.focus.view(view);
+    if (keyboard) port.focus.panel(panel);
+  };
+  main.addEventListener("focusin", event => reportFocus(event.target, true));
+  main.addEventListener("pointerdown", event => reportFocus(event.target, false), true);
+  root.replaceChildren(header.element, leaseNotice.element, main, status.element, setupCard.element, setupCard.consent, ...guidance.elements, feedback.toasts, feedback.live, feedback.assertive);
   root.classList.add("studio-ready");
   dock.render();
   requestAnimationFrame(() => dock.recover());
@@ -258,7 +279,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     if (key === optionalKey) return;
     const owners = new Set(optional.map(item => item.contribution.owner));
     const gone = panels.filter(panel => { const entry = catalogue.panels.find(item => item.id === panel.spec.id); return entry && !views.catalogue.ids.includes(entry.id) && !owners.has(entry.owner); });
-    for (const panel of gone) { panel.spec.visibility?.(false); byId.delete(panel.spec.id); panels.splice(panels.indexOf(panel), 1); }
+    for (const panel of gone) { panel.spec.visibility?.(false); panel.dispose?.(); byId.delete(panel.spec.id); panels.splice(panels.indexOf(panel), 1); }
     if (gone.length) dock.removePanels(gone.map(panel => panel.spec.id));
     const extra = viewCatalogue(optional.map(item => item.contribution));
     catalogue.panels.splice(0, catalogue.panels.length, ...views.catalogue.panels, ...extra.panels);
@@ -302,7 +323,14 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
       if (inView) feedback.record("error", notice.source, notice.message, notice.ref ?? undefined);
       else feedback.toast("error", notice.source, notice.message, [], { ref: notice.ref });
     }
-    header.update(frame); status.update(frame); setupCard.update(frame); dockSetupCard(frame.previewSetup.card.open); guidance.update(frame);
+    // A read-only window opens no prompt that would write settings or data (t-read-only-window): the setup card and the onboarding
+    // offer wait for a window that holds the workspace.
+    const lease = frame.status.lease, readOnly = !!lease && !lease.writable;
+    root.dataset.workspace = readOnly ? "read-only" : "writable";
+    header.update(frame); status.update(frame); leaseNotice.update(frame);
+    if (readOnly) { setupCard.element.hidden = true; dockSetupCard(false); }
+    else { setupCard.update(frame); dockSetupCard(frame.previewSetup.card.open); }
+    guidance.update(frame);
     // A view's tab is titled from the view graph (its name, numbered when there are several) with what it shows as context.
     for (const view of frame.viewTitles) dock.retitle(view.panel, view.title, view.subject);
     // The preview setup asked for the game folder or WolvenKit on a host without its own setup form: Settings › Game.
@@ -317,6 +345,8 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
       if (heavy.has(panel.spec.id) && !heavyOk) continue;
       panel.update(frame);
     }
+    if (readOnly) for (const panel of panels)
+      if (!READ_SAFE_PANELS.has(panel.spec.id) && dock.isVisible(panel.spec.id)) markReadOnly(panel.spec.element, lease!.refusal);
   };
   // Library and Mod package read file-operation capabilities that re-validate the whole
   // draft (~30 ms with long Undo histories). Never repaint them mid-gesture, and otherwise
@@ -365,7 +395,11 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
       // Undo follows focus (view-graph-design.md §3.6): in Camera & light and Preview quality (its Rendering options) it steps the View
       // and lighting history, not the look's.
       if (["lighting", "quality"].some(id => byId.get(id)?.spec.element.contains(document.activeElement))) { rt.dispatch({ kind: shortcut === "redo" ? "view.redo" : "view.undo" }); return; }
-      rt.dispatch({ kind: shortcut === "redo" ? "history.redo" : "history.undo" });
+      // A focused panel's own history comes first: in the 3D view Ctrl+Z undoes the look it shows, even when a creator choice was changed
+      // last (the Character panel steps its V's history itself). Elsewhere Undo follows the editing context, as the header's and History's do.
+      const focusedPanel = [...byId.keys()].find(id => byId.get(id)!.spec.element.contains(document.activeElement));
+      const scope = focusedPanel ? port.panels.historyScope(focusedPanel) : undefined;
+      rt.dispatch({ kind: shortcut === "redo" ? "history.redo" : "history.undo", ...(scope ? { scope } : {}) });
     } else if (shortcut === "regions" || shortcut === "regions-back") cycleRegions(root, shortcut === "regions-back");
     else if (shortcut === "guide") { closeMenus(false); openHelp(); }
     else view.openReference();
@@ -454,9 +488,9 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
   const keys = { undo: shortcutLabel("shell.undo"), redo: shortcutLabel("shell.redo"), save: shortcutLabel("shell.save"), palette: shortcutLabel("shell.palette") };
   const undo = button({ label: "Undo", icon: "undo", iconOnly: true, variant: "ghost", title: `Undo (${keys.undo})`, onClick: () => rt.dispatch({ kind: "history.undo" }) });
   const redo = button({ label: "Redo", icon: "redo", iconOnly: true, variant: "ghost", title: `Redo (${keys.redo})`, onClick: () => rt.dispatch({ kind: "history.redo" }) });
-  const historyButton = button({ label: "History", icon: "history", iconOnly: true, variant: "ghost", title: `History: every recent change to this preset\n${HISTORY_SCOPE}`,
+  const historyButton = button({ label: "History", icon: "history", iconOnly: true, variant: "ghost", title: `History: recent changes to what you last edited\n${HISTORY_SCOPE}`,
     onClick: () => rt.dock.reveal("history") });
-  const save = button({ label: "Save", icon: "save", title: `Save to library (${keys.save})`, onClick: () => void rt.request({ kind: "save" }) });
+  const save = button({ label: "Save version", icon: "save", title: `Save version (${keys.save})`, onClick: () => void rt.request({ kind: "save" }) });
   const pkg = button({ label: "Package", icon: "package", variant: "quiet", title: "Open mod package review", onClick: () => rt.dock.reveal("package") });
   const palette = button({ label: "Commands", icon: "command", variant: "ghost", title: `Command palette (${keys.palette})`, onClick: () => {} });
   const helpButton = button({ label: "Help", icon: "help", iconOnly: true, variant: "ghost", title: `Help: tours, answers and shortcuts (${shortcutLabel("shell.help")})`, onClick: openHelp });
@@ -511,14 +545,14 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
       const state = libraryState(frame);
       setText(chip, state.label); chip.className = `chip ${state.tone}`; chip.title = state.detail;
       const undoCap = port.authoring.capability({ kind: "history.undo" }), redoCap = port.authoring.capability({ kind: "history.redo" });
-      const history = port.authoring.history();
-      // Name what each would change, and keep the shortcut visible even while unavailable.
-      applyCapability(undo, undoCap); undo.title = historyCommandTitle("undo", undoCap, history.undo?.label, keys.undo, frame.history.documentLabel);
-      applyCapability(redo, redoCap); redo.title = historyCommandTitle("redo", redoCap, history.redo?.label, keys.redo, frame.history.documentLabel);
+      const history = port.authoring.history(), context = frame.history.documentLabel ?? port.focus.editing()?.name;
+      // Name what each would change and in what (the editing context, profiles design §3.7), and keep the shortcut visible even while unavailable.
+      applyCapability(undo, undoCap); undo.title = historyCommandTitle("undo", undoCap, history.undo?.label, keys.undo, context);
+      applyCapability(redo, redoCap); redo.title = historyCommandTitle("redo", redoCap, history.redo?.label, keys.redo, context);
       setAttr(undo, "aria-label", historyCommandLabel("undo", undoCap, history.undo?.label));
       setAttr(redo, "aria-label", historyCommandLabel("redo", redoCap, history.redo?.label));
       const saveCap = port.authoring.requestCapability({ kind: "save" });
-      applyCapability(save, saveCap); save.title = saveCap.available ? `Save to library (${keys.save})` : saveCap.reason ?? "";
+      applyCapability(save, saveCap); save.title = saveCap.available ? `Save version (${keys.save})` : saveCap.reason ?? "";
       verify.hidden = !frame.status.verification;
       const layout = layouts.label();
       setButtonLabel(layoutsButton, layout.name);
@@ -529,21 +563,100 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
   };
 }
 
+/**
+ * The workspace notice: the full-width band under the header for a workspace state the person must act on or wait out (style guide
+ * t-read-only-window, t-unprotected, t-recovering): this window read-only, taking over, waiting, handing over or kept; changes not
+ * protected on this computer; restoring that is taking a while; restored changes waiting for a missing save. Nothing transient opens
+ * it (F5, transient UI never shifts layout): restoring's first seconds are said in the status bar's fixed line instead (`restoringLine`),
+ * the band opens only for those states and stays until the state is resolved, and a non-lease state never opens it in the middle of a
+ * gesture or slider adjustment (it waits until that ends). One layout at every width: the message, whole, then its labelled buttons,
+ * which go to the row under it where they don't fit beside it (narrower than 720 px, always), and wrap, never shrinking to icons.
+ */
+export function workspaceNotice(rt: StudioRuntime) {
+  const text = h("span", { class: "workspace-notice-text" });
+  const toastRefusal = (outcome: { ok: boolean; message?: string; code?: string }) => {
+    if (!outcome.ok) rt.feedback.toast("warning", "Workspace", outcome.message ?? "", [], { code: outcome.code });
+  };
+  const act = (kind: "workspace.takeOver" | "workspace.retryRelease") => () => { void rt.port.workspace.dispatch({ kind }).then(toastRefusal); };
+  const takeOver = button({ label: "Use it here", small: true, onClick: act("workspace.takeOver") });
+  const retry = button({ label: "Try again", small: true, onClick: act("workspace.retryRelease") });
+  // Changes not protected on this computer (t-unprotected): Export collection keeps a copy now, Try again writes the record again.
+  const exportCollection = button({ label: "Export collection", small: true, title: "Keep a copy of your collection as a file now", onClick: () => void rt.file({ kind: "collection.export" }) });
+  const protect = button({ label: "Try again", small: true, title: "Write the record of your changes again", onClick: () => {
+    void rt.port.documents.dispatch({ kind: "documents.protect" }).then(toastRefusal);
+  } });
+  // Restoring changes from the last session (t-recovering): Use restored where that is safe, else Export collection; Try again; and,
+  // for changes waiting for a save that is gone, Import save… or Discard those changes (which asks first: they can't be got back).
+  const documents = (kind: "documents.retryRecovery" | "documents.keepRestored" | "documents.discardWaiting") => () => {
+    void rt.port.documents.dispatch({ kind }).then(toastRefusal);
+  };
+  const keepRestored = button({ label: "Use restored", small: true, title: "Keep working on the restored version", onClick: documents("documents.keepRestored") });
+  const retryRestore = button({ label: "Try again", small: true, title: "Send the restored changes again now", onClick: documents("documents.retryRecovery") });
+  const importSave = button({ label: "Import save…", small: true, title: "Import the game save again", onClick: () => void rt.file({ kind: "savedV.import" }) });
+  const discardWaiting = button({ label: "Discard those changes", small: true, title: "Discard the restored changes that need that game save (asks first)",
+    onClick: () => openConfirmPopover(discardWaiting, { ...DISCARD_WAITING_CONFIRM, danger: true, onConfirm: documents("documents.discardWaiting") }) });
+  const actions = h("div", { class: "workspace-notice-actions" }, takeOver, retry, keepRestored, exportCollection, importSave, discardWaiting, protect, retryRestore);
+  const element = h("div", { class: "state-line warning workspace-notice", role: "status", hidden: true }, text, actions);
+  return {
+    element,
+    update(frame: Frame) {
+      const lease = frame.status.lease, leaseShown = !!lease?.message;
+      const unprotected = !leaseShown && !!frame.status.outbox?.unprotected;
+      const restoring = frame.status.outbox?.recovering, missing = !leaseShown && !unprotected && !!restoring?.missing;
+      const long = !leaseShown && !unprotected && !missing && !!restoring?.shown && !!restoring?.long;
+      const wanted = leaseShown || unprotected || missing || long;
+      // A state that comes up mid-gesture waits for the gesture to end, so the panels never move under the pointer; the lease's states
+      // change what this window can do, so they show at once.
+      if (element.hidden && wanted && !leaseShown && (frame.preview.gesture || frame.preview.control)) return;
+      const message = leaseShown ? lease!.message : unprotected ? UNPROTECTED : missing ? MISSING_SAVE : long ? RESTORING_LONG : "";
+      element.hidden = !wanted;
+      setText(text, message);
+      takeOver.hidden = !lease?.canTakeOver;
+      retry.hidden = !lease?.canRetry;
+      protect.hidden = !unprotected;
+      exportCollection.hidden = !unprotected && !(long && !restoring?.safe);
+      keepRestored.hidden = !(long && restoring?.safe);
+      retryRestore.hidden = !long;
+      discardWaiting.hidden = importSave.hidden = !missing;
+      actions.hidden = [...actions.children].every(child => (child as HTMLElement).hidden);
+    },
+  };
+}
+
+/**
+ * Restoring's first seconds (t-recovering): while restored changes wait and it isn't yet taking a while, the status bar's fixed line
+ * says so, in place of the band, so nothing moves when it comes and goes. Empty otherwise.
+ */
+export function restoringLine(frame: Frame): string {
+  const lease = frame.status.lease, outbox = frame.status.outbox, restoring = outbox?.recovering;
+  if (lease?.message || outbox?.unprotected || restoring?.missing || !restoring?.shown || restoring.long) return "";
+  return RESTORING;
+}
+
+/** Panels whose controls only read or open things (Help, Activity): a read-only window keeps them all (t-read-only-window). */
+const READ_SAFE_PANELS = new Set<string>(["help", "activity"]);
 function statusBar(rt: StudioRuntime) {
+  // Restoring's first seconds (t-recovering) take this fixed line, not the workspace notice: nothing moves when they come and go.
+  const restoring = h("span", { class: "status-item", "data-tone": "restoring", role: "status", hidden: true });
   const workspace = h("span", { class: "status-item" }), activity = h("button", { class: "status-item status-message", type: "button",
     title: "Open the activity log" }), ready = h("span", { class: "status-item ready-badge" }), gesture = h("span", { class: "status-item muted" });
   activity.addEventListener("click", () => rt.dock.reveal("activity"));
-  const element = h("footer", { class: "status-bar", "aria-label": "Status" }, workspace, activity, h("span", { class: "grow" }), gesture, ready);
+  const element = h("footer", { class: "status-bar", "aria-label": "Status" }, restoring, workspace, activity, h("span", { class: "grow" }), gesture, ready);
   return {
     element,
     update(frame: Frame) {
       // One save status (UI-89): the header's library chip says whether your work is saved; the draft's own autosave shows here
       // only when it has a problem to tell you about.
-      const save = frame.status.workspace, problem = save.kind !== "saved" && save.kind !== "idle";
+      // A read-only window writes nothing, so it has no autosave problem to tell; the notice under the header says what it is.
+      const readOnly = !!frame.status.lease && !frame.status.lease.writable;
+      const save = frame.status.workspace, problem = !readOnly && save.kind !== "saved" && save.kind !== "idle";
       workspace.dataset.tone = save.kind;
       workspace.hidden = !problem;
       setText(workspace, problem ? `▲ ${save.message}` : "");
       workspace.title = problem ? save.message : "";
+      const restoringText = restoringLine(frame);
+      restoring.hidden = !restoringText;
+      setText(restoring, restoringText);
       const library = frame.library;
       const last = rt.feedback.log.at(-1);
       const message = library.busy && library.progress?.phase === "working" ? library.progress.message : last?.message ?? "Ready";
@@ -654,7 +767,7 @@ function panelMenuItems(rt: StudioRuntime, research: boolean): MenuItem[] {
   if (graph && (graph.views.length > 1 || upcoming.length)) items.push({ kind: "separator" }, { kind: "heading", label: "Views", detail: `${graph.views.length} 3D view${graph.views.length === 1 ? "" : "s"}` },
     ...graph.views.map(entry => { const panel = entry.panel;
       return { kind: "action" as const, label: entry.title ?? rt.views.meta[panel]?.title ?? entry.id, icon: "head" as const,
-        hint: `${entry.id === graph.focused ? "Focused · " : ""}${entry.sceneKind === "character" ? "Your V" : entry.sceneKind}${entry.shared.length ? ` · shares ${entry.shared.join(", ")}` : ""}`,
+        hint: `${entry.id === rt.port.focus.targets().view ? "Focused · " : ""}${entry.sceneKind === "character" ? "Your V" : entry.sceneKind}${entry.shared.length ? ` · shares ${entry.shared.join(", ")}` : ""}`,
         run: () => dock.reveal(panel) }; }), ...upcoming);
   return items;
 }
@@ -696,17 +809,18 @@ export function withPreviewSetup(rt: Pick<StudioRuntime, "port" | "feedback" | "
 /** The palette's commands: the platform's own, with each feature view's commands after the platform's Edit entries. */
 function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels: Map<PanelId, PanelController>, features: Command[], layouts: LayoutController): Command[] {
   const port = rt.port;
-  const act = (id: string, title: string, group: string, action: StudioAction, extra: Partial<Command> = {}): Command => ({
+  const act = (id: string, title: string, group: string, action: PresentationAction, extra: Partial<Command> = {}): Command => ({
     id, title, group, ...extra,
     capability: () => port.authoring.capability(action),
     run: () => { rt.dispatch(action); },
   });
-  const file = (id: string, title: string, group: string, action: StudioFileAction, extra: Partial<Command> = {}): Command => ({
+  const file = (id: string, title: string, group: string, action: PresentationFileAction, extra: Partial<Command> = {}): Command => ({
     id, title, group, ...extra, capability: () => port.files.capability(action), run: () => void rt.file(action) });
   const request = (id: string, title: string, group: string, value: Parameters<StudioRuntime["request"]>[0], extra: Partial<Command> = {}): Command => ({
     id, title, group, ...extra, capability: () => port.authoring.requestCapability(value), run: () => void rt.request(value) });
   const always = { capability: () => ({ available: true }) };
   const preview = port.authoring.previewState(), motion = preview.motion, history = port.authoring.history(), character = preview.character;
+  const characterScope = port.panels.historyScope("character");
   const views = port.views.snapshot() ?? { history: { depth: 0, redoDepth: 0 } as { undo?: string; redo?: string; depth: number; redoDepth: number } };
   // Research tools (UI-85) are offered only once the person turns them on.
   const research = (commands: Command[]) => view.research() ? commands : [];
@@ -720,10 +834,10 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     act("preset.add", "Add preset", "Edit", { kind: "preset.edit", command: { kind: "add" } }, { icon: "plus" }),
     act("preset.restore", "Restore removed preset", "Edit", { kind: "preset.edit", command: { kind: "restore" } }, { icon: "reset" }),
     ...features,
-    request("library.save", "Save to library", "Library", { kind: "save" }, { icon: "save", shortcut: shortcutLabel("shell.save") }),
+    request("library.save", "Save version", "Library", { kind: "save" }, { icon: "save", shortcut: shortcutLabel("shell.save") }),
     request("library.copy", "Save as new collection", "Library", { kind: "saveCopy" }, { icon: "duplicate", keywords: "copy" }),
     // The saved list updates itself (release-readiness-audit.md item 13), so there is no Refresh command.
-    file("library.recover", "Recover previous draft", "Library", { kind: "collection.recover" }, { icon: "undo" }),
+    file("library.recover", "Show the previous collection", "Library", { kind: "collection.recover" }, { icon: "undo" }),
     { id: "collection.import", title: "Import collection…", group: "Files", icon: "import", capability: () => port.files.capability({ kind: "collection.import" }),
       run: () => importCollection(rt, { x: Math.round(window.innerWidth / 2 - 170), y: 120 }) },
     file("collection.export", "Export collection (saves first)", "Files", { kind: "collection.export" }, { icon: "export" }),
@@ -745,10 +859,11 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     act("character.setOwnMakeup", character?.ownMakeup === false ? "Show my V's own makeup" : "Hide my V's own makeup", "Character",
       { kind: "character.setOwnMakeup", shown: character?.ownMakeup === false }, { icon: "eye", keywords: "makeup off on show hide creator options" }),
     act("character.resetAll", "Reset every creator change", "Character", { kind: "character.resetAll" }, { icon: "reset", keywords: "creator options undo back to my v" }),
-    act("character.undo", character?.undo ? `Undo in the Character panel: ${character.undo}` : "Undo in the Character panel", "Character", { kind: "character.undo" },
-      { icon: "undo", keywords: "character creator clothing undo" }),
-    act("character.redo", character?.redo ? `Redo in the Character panel: ${character.redo}` : "Redo in the Character panel", "Character", { kind: "character.redo" },
-      { icon: "redo", keywords: "character creator clothing redo" }),
+    // The Character panel's Undo and Redo: its V's history, named (profiles design §3.7); offered while the panel shows a V.
+    ...(characterScope ? [act("character.undo", character?.undo ? `Undo in the Character panel: ${character.undo}` : "Undo in the Character panel", "Character",
+      { kind: "history.undo", scope: characterScope }, { icon: "undo", keywords: "character creator clothing undo" }),
+    act("character.redo", character?.redo ? `Redo in the Character panel: ${character.redo}` : "Redo in the Character panel", "Character",
+      { kind: "history.redo", scope: characterScope }, { icon: "redo", keywords: "character creator clothing redo" })] : []),
     ...(character?.clothing?.states ?? []).map(state => act(`character.clothing.${state.value}`, `Clothes in the 3D view: ${state.label}`, "Character",
       { kind: "character.setClothing", state: state.value }, { icon: "body", keywords: "clothing clothes outfit underwear headwear" })),
     act("character.clearPreparedFiles", "Clear prepared game files", "Character", { kind: "character.clearPreparedFiles" }, { icon: "trash", keywords: "cache disk space prepared files" }),

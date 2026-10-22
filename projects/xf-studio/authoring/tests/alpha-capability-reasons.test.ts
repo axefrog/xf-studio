@@ -6,12 +6,13 @@ import { BUILD_NEEDS_SETUP, BUILD_TOOLS_CHECKING_REASON, NO_3D_PREVIEW_IN_ALPHA,
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 
+import { namedCore } from "./fixtures/named-targets";
 // Release gate for the community alpha: every catalogued action a user can reach
 // is either available or explains itself in plain words. Nothing is silently
 // disabled and no developer/evidence jargon reaches a reason.
 
 function uvOnlyApp() {
-  const { app, document } = createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  const { app, document } = namedCore(createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
   app.setPreviewUnavailable(NO_3D_PREVIEW_IN_ALPHA);
   return { app, document };
 }

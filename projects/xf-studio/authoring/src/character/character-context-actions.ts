@@ -10,9 +10,11 @@
  *   the parts every row of the makeup section brings (the host's projection marks the section; `hiddenOptions`), which are already
  *   prepared, so it applies at once and nothing is prepared again. It joins the panel's one Undo, survives a change of V and is stored
  *   with the workspace while hidden. Reset all leaves it alone.
- * - **One Undo for the Character panel** (UI-81): `character.undo` and `character.redo` step back and forward through every change
- *   made in the panel, creator choices and Clothing alike, in the order they were made (`order`); a new change of either kind clears
- *   what could be redone. `character.undoClothing` and `character.redoClothing` still step the Clothing setting's own steps alone.
+ * - **One Undo for the Character panel** (UI-81): the character's history scope (`character:<id>`, character-history.ts) holds every
+ *   change made in the panel, creator choices and Clothing alike, in the order they were made; `history.undo` and `history.redo` naming
+ *   that scope step through it (the panel's Undo and its keys), and a new change of either kind clears what could be redone. While the
+ *   V's last session's changes are still being restored the scope can't move. `character.undoClothing` and `character.redoClothing` still
+ *   step the Clothing setting's own steps alone.
  * - **A new V clears the choices made on the previous one**; `character.keepChanges` puts them back on the new V as one more step
  *   (offered until the next change).
  * - **Gating** (CORE-73): every action that changes choices needs the catalogue of the shown V's body (`not_ready` until then); a V
@@ -44,20 +46,25 @@
  */
 import type { CcoPart } from "./cco-model";
 import type { BodyGender } from "./cc-catalogue";
-import { type CcChoicePage, type CcChoiceSearch, type CcSwatches, type CcPanel, type CcPanelChoice, type CcPanelOption, CC_PAGE_SIZE, type CreatorNext, type CreatorState, type CreatorView,
-  searchQuery } from "./cc-panel";
+import { type CcChoicePage, type CcChoiceSearch, type CcSwatches, type CcPanel, type CcPanelChoice, type CcPanelOption, CC_PAGE_SIZE, type CreatorNext, type CreatorState, type CreatorView } from "./cc-panel";
 import { type CcPreset, parseCcPreset, serializeCcPreset, serializeCcPresetEntry } from "./cc-preset";
 import { carryPreset, type CharacterChange, type CharacterChoice, characterChoiceOf, type CharacterContextAction, type MissingChoice,
   type SavedDescriptors, savedDescriptorsOf, summariseMissing } from "./character-context";
 import { characterRequestOf, type CharacterRequest } from "./character-detail-request";
 import { CREATOR_LIMITS, isPresetName } from "./creator-names";
-import { type DisplayedSwatchState, SwatchDisplayMemo } from "./cc-swatch-display";
+import type { DisplayedSwatchState } from "./cc-swatch-display";
 import { refusal, type Capability } from "../platform/api";
 import type { SavedV } from "../saves/save-reader";
 import { CLOTHING_AREA_LABELS, CLOTHING_STATE_LABELS, CLOTHING_STATES, type ClothingSetting, clothingSettingOf, type ClothingState, DEFAULT_CLOTHING,
   dressingFor, HEADWEAR_AREAS, UNDERWEAR_AREAS } from "./clothing-dressing";
 import { CLOTHING_AREAS, type ClothingArea, wornAreas } from "../saves/save-loadout";
-import { type ChoicePreviewPort, type ChoicePreviewRow, ChoicePreviewService } from "./choice-preview-service";
+import type { ChoicePreviewPort, ChoicePreviewRow } from "./choice-preview-service";
+import { CreatorCatalogue } from "./creator-catalogue";
+import { ChoicePreviewOwner } from "./choice-preview-owner";
+import { CreatorRequester, type RequesterHost } from "./creator-requester";
+import { characterHistory, type CharacterHistoryHome, type CharacterHistoryKey, privateHistory } from "./character-history";
+import type { HistoryScope } from "../platform/core/history-service";
+export { PRELOAD_DWELL_MS } from "./creator-requester";
 
 /** The host side of the context: the installed catalogue's panel, pages, searches, views and presets (cc-catalogue-server.ts). */
 export type CreatorPort = {
@@ -72,10 +79,13 @@ export type CreatorPort = {
   retry?(gender: BodyGender, signal: AbortSignal): Promise<CreatorState>;
   /** The choices an earlier build's tried piercing style stands for on this installation (CORE-74). */
   legacy?(gender: BodyGender, style: string, definition: string): Promise<CharacterChoice[]>;
-  /** Prepare a row's choices ahead (visible ones first; `focus` first of all) and answer their states, one character per position. */
-  prefetch?(request: CharacterRequest, option: string, positions: readonly number[], focus: number | null, signal: AbortSignal): Promise<PrefetchReply>;
-  /** Stop preparing ahead (the row closed). */
-  stopPrefetch?(): Promise<void>;
+  /**
+   * Prepare a row's choices ahead (visible ones first; `focus` first of all) and answer their states, one character per position.
+   * `requester`: who asks (a character's panel instance); each requester's row is its own job on the host.
+   */
+  prefetch?(request: CharacterRequest, option: string, positions: readonly number[], focus: number | null, signal: AbortSignal, requester?: string): Promise<PrefetchReply>;
+  /** Stop preparing ahead (the row closed): `requester`'s row only, or without one every row. */
+  stopPrefetch?(requester?: string): Promise<void>;
   /** A colour row's swatches and icons by position (`pending` while the host is still working them out). */
   swatches?(gender: BodyGender, option: string, signal: AbortSignal): Promise<CcSwatches>;
   /** Where the page fetches an icon sheet. */
@@ -94,7 +104,20 @@ export type ChoiceFetch = "?" | "n" | "q" | "f" | "r" | "x";
 export type CharacterFetchState = { readonly option: string; readonly states: ReadonlyMap<number, ChoiceFetch>; readonly stopped: "time" | "disk" | "setup" | null;
   readonly busy: boolean };
 export type CharacterContextPorts = {
-  creator: CreatorPort;
+  /** The host's creator catalogue, when no shared `catalogue` is given (a fixture, a test): the context keeps a private one over it. */
+  creator?: CreatorPort;
+  /** The page's shared creator catalogue (creator-catalogue.ts): every character of a body shares its panel, pages and tables. */
+  catalogue?: CreatorCatalogue;
+  /** This character's requester name with the catalogue (`<character>`; its panel instances are `<character>/<instance>`). */
+  requester?: string;
+  /** Where the character's Undo history lives (the history service's `character:<id>`); default: a private one. */
+  history?: CharacterHistoryHome;
+  /**
+   * The character's document, when an owner holds it (character-service.ts): whether it changed in another window while this one changed
+   * it too (a conflict), and resolving that. Every change the context makes, its source included, reaches the document through the
+   * owner's outbox; the context never waits for the library.
+   */
+  document?: CharacterDocumentPort;
   /** Show a save's V on the head (its facial shape and body), or none for the default V: used when Undo returns to another V. */
   showSave(save: SavedV | null): void;
   /**
@@ -105,6 +128,27 @@ export type CharacterContextPorts = {
   /** Choice previews (choice-preview-service.ts): pictures of a shape row's choices, drawn off the main thread. */
   previews?: ChoicePreviewPort;
 };
+/** The status line's note once another version replaced the V (the owner names where it came from: `replace`'s `note`). */
+const ELSEWHERE = "Changed elsewhere. Undo starts here.";
+/** A conflict on the character's document (profiles design §2.2), as the Character panel shows it. */
+export type CharacterConflict = { readonly message: string; readonly keepBoth: boolean;
+  /** The V as Keep mine's and Use theirs's confirmations name it ("this V"). */
+  readonly subject: string };
+export type CharacterDocumentPort = {
+  conflict(): CharacterConflict | null;
+  /** Keep mine (over theirs), Use theirs, or Keep both (mine becomes a copy of the V). */
+  resolve(keep: "mine" | "theirs" | "both"): Capability;
+  /** Why the V can't take changes now (a change from the last session is still being restored, style guide t-recovering), or null. */
+  restoring?(): string | null;
+  /** Whether a save being loaded is the very one the V comes from and can't show yet: loading it then only imports it (`importSave`). */
+  namesSave?(value: unknown): boolean;
+  /** Import that save (an immutable put, taken while restoring); the context is brought up to the V's document with it. */
+  importSave?(value: unknown): void;
+};
+/** Actions that change the V (refused while a change from the last session is still being restored). */
+const CHANGES = new Set<CharacterContextAction["kind"]>(["character.setSource", "character.setOption", "character.setOptions", "character.setOwnMakeup",
+  "character.reset", "character.resetAll", "character.useDefault", "character.loadSave", "character.loadPreset", "character.keepChanges",
+  "character.setClothing", "character.setClothingArea"]);
 export type ContextOrigin = { readonly kind: "default" } | { readonly kind: "save" } | { readonly kind: "preset"; readonly name: string | null };
 type State = {
   readonly origin: ContextOrigin;
@@ -117,14 +161,6 @@ type State = {
   /** A loaded preset's entries the page couldn't carry to the host (PIPE-79): reported, never sent. */
   readonly notCarried: readonly MissingChoice[];
 };
-/**
- * The panel's Undo history, carried from one head to the next when the V changes body (each body has its own head, so the head
- * attachment is made again; browser-head-attachment.ts). Opaque to everyone but this service.
- */
-export type ContextHistory = { readonly kind: "xfs/character-history"; readonly history: unknown };
-type HistoryParts = { past: { label: string; state: State }[]; future: { label: string; state: State }[]; order: StepKind[];
-  undone: StepKind[]; clothingPast: { label: string; setting: ClothingSetting }[]; clothingFuture: { label: string; setting: ClothingSetting }[];
-  makeupPast: { label: string; shown: boolean }[]; makeupFuture: { label: string; shown: boolean }[] };
 /** The workspace's form (preview state `character`): what was set and where the V came from, and the Clothing setting when not the default. */
 export type StoredCharacter = { origin: "default" | "save" | "preset"; name?: string; bodyGender?: BodyGender; choices: CharacterChoice[];
   kept?: Record<string, unknown>; clothing?: ClothingSetting; ownMakeup?: "hidden" };
@@ -173,24 +209,18 @@ export type CharacterContextSnapshot = {
   clothing: ClothingSnapshot;
   /** Whether the 3D view shows the V's own makeup (`character.setOwnMakeup`). */
   ownMakeup: boolean;
+  /** The V changed in another window while this window changed it too: the panel offers which to keep (`character.resolveConflict`). */
+  conflict: CharacterConflict | null;
+  /** The V was replaced by another window's version (a change from elsewhere, or Use theirs): its Undo starts here. Until the next change. */
+  elsewhere: string | null;
   /** Bumps on every change of state, panel, view or pages. */
   revision: number;
 };
 
-const HISTORY_LIMIT = 100;
-/** Which of the panel's histories a step is in: the V and its choices, Clothing, or the V's own makeup. */
-type StepKind = "v" | "clothing" | "makeup";
-/** Most positions one question about a row's choices names. */
-const CHOICE_PREFETCH_POSITIONS = 512;
-/**
- * How long the pointer (or focus) rests on a prepared choice before its parts are loaded ahead (PREV-189): long enough that sweeping
- * across a row loads nothing, short enough that the load is done before most clicks.
- */
-export const PRELOAD_DWELL_MS = 150;
+/** The Clothing setting's steps in the character's history (its own Undo is retired: `undoClothing` steps only a Clothing step on top). */
+const CLOTHING_STEPS = new Set(["character.setClothing", "character.setClothingArea"]);
 /** Polling the catalogue's build: while the panel is being looked at, and otherwise (PIPE-78). */
 const POLL_MS = 800, POLL_IDLE_MS = 4000, WATCHED_MS = 3000;
-/** How often an open colour row asks again while the host is still working out its swatches. */
-const SWATCH_POLL_MS = 1500;
 const LOADING = "The creator options are still loading.";
 const plainStep = (option: CcPanelOption | undefined, choice: string, label?: string) =>
   label ? label : option ? `Change ${option.label}` : `Change ${choice || "an option"}`;
@@ -204,8 +234,27 @@ const sameSet = (a: readonly string[] | undefined, b: readonly string[] | undefi
   (a?.length ?? 0) === (b?.length ?? 0) && [...a ?? []].sort().join("\u0000") === [...b ?? []].sort().join("\u0000");
 /** A save's identity by content (the saved-V service hands out copies). */
 const saveKey = (save: SavedV | null | undefined) => save ? JSON.stringify([save.isMale, save.groups]) : "";
-const pageKey = (option: string, query: string) => `${option}\n${query}`;
 /** A change as a choice, validated by the shared rule (null when it breaks it). */
+/**
+ * A preset as a V carries it: its choices, the entries kept for writing back (the ones this installation can't use, and those past what
+ * one V carries, verbatim; PIPE-79) and the plain reports of what wasn't carried.
+ */
+export function presetLoad(preset: CcPreset): { choices: CharacterChoice[]; kept: CcPreset; notCarried: MissingChoice[] } {
+  const { choices, carried, notCarried } = carryPreset(preset);
+  const left = preset.values.filter(entry => !carried.includes(entry)), at = preset.values.length + preset.unknownEntries.length;
+  const kept: CcPreset = { ...preset, values: carried,
+    unknownEntries: [...preset.unknownEntries, ...left.map((entry, i) => ({ at: at + i, entry: serializeCcPresetEntry(entry) }))] };
+  return { choices, kept, notCarried };
+}
+/** `character.setSource`'s source as the action it stands for (null when it isn't one). */
+function sourceAction(source: unknown): Extract<CharacterContextAction, { kind: "character.useDefault" | "character.loadSave" | "character.loadPreset" }> | null {
+  const s = source as { kind?: unknown; bodyGender?: unknown; value?: unknown } | null;
+  if (!s || typeof s !== "object") return null;
+  if (s.kind === "default") return s.bodyGender === "female" || s.bodyGender === "male" ? { kind: "character.useDefault", bodyGender: s.bodyGender } : null;
+  if (s.kind === "save") return { kind: "character.loadSave", value: s.value };
+  if (s.kind === "preset") return { kind: "character.loadPreset", value: s.value };
+  return null;
+}
 const changeOf = (change: unknown): CharacterChoice | null => {
   const c = change as CharacterChange | null;
   if (!c || typeof c !== "object") return null;
@@ -242,20 +291,11 @@ export function initialBodyGender(stored: unknown, save: SavedV | undefined): Bo
 
 export class CharacterContextActions {
   private state: State;
-  private past: { label: string; state: State }[] = [];
-  private future: { label: string; state: State }[] = [];
   /** Choices a V change cleared (for `keepChanges`), until the next change. */
   private cleared: readonly CharacterChoice[] = [];
   private catalogue: { phase: CharacterContextSnapshot["phase"]; message: string; next?: CreatorNext | null; panel: CcPanel | null; gender: BodyGender | null } =
     { phase: "idle", message: "", panel: null, gender: null };
   private byId = new Map<string, CcPanelOption>();
-  /** Pages by option and search (`pageKey`). */
-  private pages = new Map<string, { choices: CcPanelChoice[]; total: number; loading: boolean; error: string | null }>();
-  /** Colour rows' swatches by option, and the rows being asked about now. */
-  private swatchRows = new Map<string, CharacterSwatchState>();
-  private readonly swatchDisplay = new SwatchDisplayMemo();
-  private swatchLoading = new Set<string>();
-  private searching: (CharacterSearchState & { controller: AbortController | null }) | null = null;
   private currentView: CreatorView | null = null;
   private viewKey: string | null = null;
   /** The host's last view with the current state's choices shown on it while the host's view of that state is on its way (`view`). */
@@ -269,6 +309,19 @@ export class CharacterContextActions {
   private session: AbortController | null = null;
   private loading = false;
   private generation = 0;
+  /** The shared catalogue, and this character's own port onto it (its requester's interest). */
+  private readonly shared: CreatorCatalogue;
+  private readonly creator: CreatorPort;
+  private readonly requesterName: string;
+  /** What each panel instance of this character asks of the catalogue (creator-requester.ts); `main` is the Character panel's. */
+  private readonly requesters = new Map<string, CreatorRequester>();
+  private readonly main: CreatorRequester;
+  /** The one owner of the character's choice-preview device; each requester draws through its own lease. */
+  private readonly previewOwner: ChoicePreviewOwner | null;
+  /** The character's Undo history: the history service's `character:<id>` scope (character-history.ts). */
+  private readonly home: CharacterHistoryHome;
+  private readonly scope: HistoryScope;
+  private readonly unbind: () => void;
   private presets = new WeakMap<object, CcPreset | Error>();
   private revision = 0;
   private listeners = new Set<() => void>();
@@ -280,28 +333,13 @@ export class CharacterContextActions {
   private fetch: { key: string; option: string; positions: number[]; focus: number | null; sent: string; states: Map<number, ChoiceFetch>;
     stopped: "time" | "disk" | "setup" | null; busy: boolean; asking: AbortController | null; again: boolean; view: CharacterFetchState } | null = null;
   private firstTime = false;
-  /**
-   * The choice under the pointer whose parts are loaded ahead (`details.preload`): waiting out the dwell, waiting until the host has it
-   * prepared (`waiting`), or loading (`controller`).
-   */
-  private ahead: { option: string; position: number; timer: ReturnType<typeof setTimeout> | null; waiting: boolean; controller: AbortController | null } | null = null;
-  /** Pictures of shape rows' choices, once a row with them is shown (choice-preview-service.ts). */
-  private previewService: ChoicePreviewService | null = null;
   private prepared: { bytes: number | null; clearing: boolean; freed: number | null; asking: boolean } = { bytes: null, clearing: false, freed: null, asking: false };
-  /** The Clothing setting and its own Undo history (it is not a creator choice). */
+  /** The Clothing setting (it is not a creator choice); its steps join the character's one history. */
   private clothing: ClothingSetting = DEFAULT_CLOTHING;
-  private clothingPast: { label: string; setting: ClothingSetting }[] = [];
-  private clothingFuture: { label: string; setting: ClothingSetting }[] = [];
-  /** Whether the V's own makeup shows, and its steps (a viewing setting like Clothing; they join the panel's one Undo). */
+  /** Whether the V's own makeup shows (a viewing setting like Clothing; its steps join the character's one history). */
   private ownMakeup = true;
-  private makeupPast: { label: string; shown: boolean }[] = [];
-  private makeupFuture: { label: string; shown: boolean }[] = [];
-  /** Which history each of the panel's steps is in, oldest first, and the undone ones (newest last): one order for Undo (UI-81). */
-  private order: StepKind[] = [];
-  private undone: StepKind[] = [];
 
-  constructor(private readonly ports: CharacterContextPorts, initial: { stored?: unknown; save?: SavedV; legacy?: { style: string; definition: string };
-    history?: ContextHistory } = {}) {
+  constructor(private readonly ports: CharacterContextPorts, initial: { stored?: unknown; save?: SavedV; legacy?: { style: string; definition: string } } = {}) {
     const stored = storedCharacterOf(initial.stored);
     const save = initial.save ? this.saveOf(initial.save) : null;
     const origin = originOf(stored, !!save);
@@ -313,22 +351,80 @@ export class CharacterContextActions {
     this.legacy = !stored && initial.legacy?.style && initial.legacy.definition ? { ...initial.legacy } : null;
     this.clothing = stored?.clothing ?? DEFAULT_CLOTHING;
     this.ownMakeup = stored?.ownMakeup !== "hidden";
-    if (initial.history?.kind === "xfs/character-history") {
-      const carried = structuredClone(initial.history.history) as HistoryParts;
-      ({ past: this.past, future: this.future, order: this.order, undone: this.undone, clothingPast: this.clothingPast,
-        clothingFuture: this.clothingFuture, makeupPast: this.makeupPast, makeupFuture: this.makeupFuture } = carried);
-    }
+    if (!ports.catalogue && !ports.creator) throw Error("A character context needs the creator catalogue.");
+    this.shared = ports.catalogue ?? new CreatorCatalogue(ports.creator!);
+    this.requesterName = ports.requester ?? "character";
+    this.creator = this.shared.port(this.requesterName);
+    this.previewOwner = ports.previews ? new ChoicePreviewOwner(ports.previews) : null;
+    this.main = this.requester("panel");
+    // The character's own history home (`character:<id>`: a head made again for another body binds to the same one), else a private one.
+    this.home = ports.history ?? privateHistory();
+    const history = characterHistory(this.home);
+    this.scope = history.scope;
+    this.unbind = history.bind({ read: key => this.historyRead(key), apply: values => this.historyApply(values),
+      unavailable: () => this.ports.document?.restoring?.() ?? undefined });
   }
-  /** The panel's Undo history, for the head made next when the V changes body (`initial.history`). */
-  history(): ContextHistory {
-    const parts: HistoryParts = { past: this.past, future: this.future, order: this.order, undone: this.undone,
-      clothingPast: this.clothingPast, clothingFuture: this.clothingFuture, makeupPast: this.makeupPast, makeupFuture: this.makeupFuture };
-    return { kind: "xfs/character-history", history: structuredClone(parts) };
+  /**
+   * What one panel instance of this character asks of the catalogue (its open rows, search, choices prepared ahead and previews), made
+   * the first time it is named. The Character panel's is `panel`.
+   */
+  requester(instance: string): CreatorRequester {
+    let requester = this.requesters.get(instance);
+    if (!requester) {
+      const name = `${this.requesterName}/${instance}`;
+      requester = new CreatorRequester(name, this.shared, this.shared.port(name), this.requesterHost());
+      this.requesters.set(instance, requester);
+    }
+    return requester;
+  }
+  /** A panel instance closed: its questions are let go (the Character panel's own stays). */
+  releaseRequester(instance: string): void {
+    const requester = this.requesters.get(instance);
+    if (!requester || requester === this.main) return;
+    requester.dispose();
+    this.requesters.delete(instance);
+  }
+  private requesterHost(): RequesterHost {
+    const details = this.ports.details;
+    return { phase: () => this.catalogue.phase, gender: () => this.state.bodyGender, panel: () => this.catalogue.panel,
+      option: id => this.byId.get(id), ready: () => this.ready(),
+      session: () => this.session ? { signal: this.session.signal, generation: this.generation } : null,
+      generation: () => this.generation, disposed: () => this.disposed, stale: identity => this.stale(identity), publish: () => this.publish(),
+      detailRequest: () => this.detailRequest(), aheadRequest: change => this.aheadRequest(change),
+      ...(details?.preload ? { preload: (request: CharacterRequest, signal: AbortSignal) => details.preload!(request, signal) } : {}),
+      ...(this.previewOwner ? { previews: () => this.previewOwner!.lease() } : {}),
+      viewing: () => this.viewing !== null, refreshPrepared: () => this.refreshPrepared(), watchedAt: () => this.watchedAt };
+  }
+  /** A row's choices loaded so far for the shown V's body and catalogue (shared by every requester). */
+  private rowOf(option: string) { return this.shared.rowOf(this.state.bodyGender, this.catalogue.panel?.identity ?? "", option, ""); }
+
+  // The character's history scope reads and restores these values (character-history.ts).
+  private historyRead(key: string): unknown {
+    return key === "v" ? this.state : key === "clothing" ? this.clothing : key === "makeup" ? this.ownMakeup : undefined;
+  }
+  private historyApply(values: Readonly<Record<string, unknown>>): boolean {
+    if ("clothing" in values) this.clothing = values.clothing as ClothingSetting;
+    if ("makeup" in values) this.ownMakeup = values.makeup as boolean;
+    if (!("v" in values)) { this.publish(); return true; }
+    const previous = this.state, next = values.v as State;
+    this.cleared = [];
+    this.apply(next);
+    if (saveKey(previous.save?.value) !== saveKey(next.save?.value)) this.showSave(next.save?.value ?? null);
+    return true;
+  }
+  /** Record one step of the character's history before `key` changes. */
+  private record(key: CharacterHistoryKey, label: string, actionKind: string) {
+    this.elsewhere = null;
+    this.scope.checkpoint([key], { label, actionKind }, { distinct: true });
   }
   /** The save the saved-V service shows now (its content key), as this service last saw it: a change it didn't make is a new V. */
   private knownSave: string;
 
+  /** The V this context shows: its ID (its history scope's, `character:<id>`), which `character.*` actions name; `local` for a context no owner holds. */
+  character(): string { return this.home.id; }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+  /** The decoded save the V comes from (a V from a save), else null. */
+  shownSave(): SavedV | null { return this.state.origin.kind === "save" ? this.state.save?.value ?? null : null; }
   /** The shown V's body (a cheap read of what `snapshot().bodyGender` says): the head shows that body's core. */
   shownBody(): BodyGender { return this.state.bodyGender; }
   private publish() { this.revision++; for (const listener of this.listeners) listener(); }
@@ -339,11 +435,11 @@ export class CharacterContextActions {
   snapshot(): CharacterContextSnapshot {
     const notes = summariseMissing(this.state.notCarried).summary.map(item => item.message);
     return structuredClone({ phase: this.catalogue.phase, message: this.catalogue.message, next: this.catalogue.next ?? null, origin: this.state.origin, bodyGender: this.state.bodyGender,
-      set: this.state.choices.length, undo: this.stepLabel(this.order, "past"), redo: this.stepLabel(this.undone, "future"),
+      set: this.state.choices.length, undo: this.scope.state().undo?.label ?? null, redo: this.scope.state().redo?.label ?? null,
       keepable: this.cleared.length, viewing: !!this.viewing, viewError: this.viewError, notes,
       retry: this.capability({ kind: "character.retry" }).available, firstTime: this.firstTime,
       prepared: { bytes: this.prepared.bytes, clearing: this.prepared.clearing, freed: this.prepared.freed }, clothing: this.clothingSnapshot(),
-      ownMakeup: this.ownMakeup, revision: this.revision });
+      ownMakeup: this.ownMakeup, conflict: this.ports.document?.conflict() ?? null, elsewhere: this.elsewhere, revision: this.revision });
   }
   /**
    * The head's creator options whose parts the 3D view hides: every option of the makeup section's rows while the V's own makeup is hidden
@@ -372,7 +468,12 @@ export class CharacterContextActions {
     return { state: this.clothing.state, custom: [...this.clothing.custom], worn, shown: this.shownAreas(),
       states: this.offeredStates().map(value => ({ value, label: CLOTHING_STATE_LABELS[value] })),
       areas: worn.map(area => ({ area, label: CLOTHING_AREA_LABELS[area] })), source, note,
-      undo: this.clothingPast.at(-1)?.label ?? null, redo: this.clothingFuture.at(-1)?.label ?? null };
+      ...this.clothingSteps() };
+  }
+  /** The Clothing step next in the character's history, either way (the setting's Undo and Redo labels). */
+  private clothingSteps(): { undo: string | null; redo: string | null } {
+    const { undo, redo } = this.scope.state();
+    return { undo: undo && CLOTHING_STEPS.has(undo.actionKind) ? undo.label : null, redo: redo && CLOTHING_STEPS.has(redo.actionKind) ? redo.label : null };
   }
   /** What the Clothing setting dresses the shown V in, for a request (null: nothing worn). */
   private dressing(setting: ClothingSetting = this.clothing) {
@@ -426,7 +527,7 @@ export class CharacterContextActions {
       const option = this.byId.get(id);
       if (!option) continue;
       const choice = chosen.get(`${option.part}/${option.name}`) ?? null;
-      const page = this.pages.get(pageKey(option.id, ""));
+      const page = this.rowOf(option.id);
       const item = choice ? page?.choices.find(entry => entry.position === this.positionOf(choice))
         : value.set ? page?.choices.find(entry => entry.key === value.own) : undefined;
       if (!item || (item.position === value.position && !!choice === value.set)) continue;
@@ -437,175 +538,41 @@ export class CharacterContextActions {
   }
   /** Whether `view()` answers the current state (not an earlier one still shown while the new view is on its way). */
   viewCurrent(): boolean { return !!this.currentView && this.viewKey === JSON.stringify(this.request()); }
-  /** An option's choices loaded so far (with `query`, its choices matching it); asking starts loading the next page. */
-  choices(option: string, want = CC_PAGE_SIZE, query = ""): CharacterChoicesState {
-    const wanted = searchQuery(query), key = pageKey(option, wanted);
-    const page = this.pages.get(key);
-    if (!page || (!page.loading && !page.error && page.choices.length < Math.min(want, page.total))) void this.loadPage(option, wanted);
-    return this.pages.get(key) ?? { choices: [], total: this.byId.get(option)?.count ?? 0, loading: true, error: null };
-  }
-  /**
-   * A colour row's swatches and icons (derived on the host from what wins for each choice; cc-swatch.ts), or null before they arrive or
-   * when the host doesn't offer them. Asking loads them, and asks again while the host is still working them out.
-   */
-  swatches(option: string): DisplayedSwatchState | null {
-    if (!this.swatchRows.has(option) || this.swatchRows.get(option)!.pending) void this.loadSwatches(option);
-    const state = this.swatchRows.get(option);
-    if (!state) return null;
-    // Shown per set (maker group, or the whole row), each tightly clustered set contrast-enhanced (cc-swatch-display.ts); the true
-    // colours stay in `truth`. Recomputed only when the swatches, the loaded choices or the grouping change.
-    const entry = this.byId.get(option), panel = this.catalogue.panel;
-    const choices = this.pages.get(pageKey(option, searchQuery("")))?.choices ?? [];
-    const grouping = entry && panel && entry.groups > 1 ? { modGroups: panel.modGroups, pooled: panel.pools[entry.pool] ?? [] } : null;
-    return this.swatchDisplay.get(option, state, choices, grouping);
-  }
-  private async loadSwatches(option: string) {
-    const port = this.ports.creator;
-    if (!port.swatches || this.swatchLoading.has(option) || this.catalogue.phase !== "ready" || !this.session) return;
-    const generation = this.generation, gender = this.state.bodyGender, signal = this.session.signal;
-    this.swatchLoading.add(option);
-    try {
-      // A row asked about again while its swatches are pending waits a moment first.
-      if (this.swatchRows.get(option)?.pending) await port.wait(SWATCH_POLL_MS, signal);
-      if (generation !== this.generation || this.disposed) return;
-      const answer = await port.swatches(gender, option, signal);
-      if (generation !== this.generation || this.disposed || this.stale(answer.identity)) return;
-      const sheets = new Map(answer.sheets.map(sheet => [sheet.id, { url: port.sheetUrl?.(gender, sheet.id, sheet.key) ?? "", columns: sheet.columns, rows: sheet.rows }]));
-      this.swatchRows.set(option, deepFreeze({ swatches: [...answer.swatches], icons: [...answer.icons], sheets, pending: answer.pending }));
-    } catch {
-      // Swatches are a nicety: without them the row shows the definitions' own colours.
-      if (generation === this.generation && !this.disposed) this.swatchRows.set(option, { swatches: [], icons: [], sheets: new Map(), pending: false });
-    } finally { this.swatchLoading.delete(option); }
-    if (generation === this.generation && !this.disposed) this.publish();
-  }
-  /** The options with a choice matching `query` (the host searches every choice, not only those loaded; UI-72). */
-  search(query: string): CharacterSearchState {
-    const wanted = searchQuery(query);
-    if (!wanted) return { query: "", options: null, more: false, loading: false, error: null };
-    if (this.searching?.query !== wanted) this.startSearch(wanted);
-    const found = this.searching!;
-    return { query: found.query, options: found.options, more: found.more, loading: found.loading, error: found.error };
-  }
-  /**
-   * A row's choices prepared ahead: asks the host to prepare `positions` (visible ones first) in the background and returns their
-   * states so far (frozen; a new object when they change). `focus` (a hovered or focused choice) goes to the front. Null when the host
-   * can't prepare ahead or the catalogue isn't ready.
-   */
-  prefetch(option: string, positions: readonly number[], focus: number | null = null): CharacterFetchState | null {
-    if (!this.ports.creator.prefetch || !this.ready() || !positions.length) return null;
-    // Keyed by the V without the row's own choice, so choosing in the row keeps the states it has.
-    const request = this.detailRequest();
-    const key = JSON.stringify([{ ...request, choices: (request.choices ?? []).filter(choice => `${choice.part}/${choice.option}` !== option) }, option]);
-    if (this.fetch?.key !== key) {
-      this.fetch?.asking?.abort();
-      this.fetch = { key, option, positions: [], focus: null, sent: "", states: new Map(), stopped: null, busy: true, asking: null, again: false,
-        view: Object.freeze({ option, states: new Map(), stopped: null, busy: true }) };
-    }
-    // A hint stays until the next one (the next paint asks without one).
-    const fetch = this.fetch, wanted = positions.slice(0, CHOICE_PREFETCH_POSITIONS), hint = focus ?? fetch.focus;
-    const sent = JSON.stringify([wanted, hint]);
-    if (sent !== fetch.sent) { fetch.sent = sent; fetch.positions = wanted; fetch.focus = hint; this.askPrefetch(fetch); }
-    if (focus !== null) this.hintAhead(option, focus);
-    return fetch.view;
-  }
-  /** A choice under the pointer (or focused): once it has rested there a moment and the host has it prepared, its parts load ahead. */
-  private hintAhead(option: string, position: number) {
-    if (!this.ports.details?.preload) return;
-    if (this.ahead?.option === option && this.ahead.position === position) return;
-    this.cancelAhead();
-    const entry: NonNullable<CharacterContextActions["ahead"]> = { option, position, timer: null, waiting: false, controller: null };
-    this.ahead = entry;
-    entry.timer = setTimeout(() => { entry.timer = null; this.startAhead(entry); }, PRELOAD_DWELL_MS);
-  }
-  private startAhead(entry: NonNullable<CharacterContextActions["ahead"]>) {
-    if (this.ahead !== entry || this.disposed || entry.controller || entry.timer) return;
-    // Only a choice the host has prepared: a load ahead never starts a preparation of its own.
-    if (this.fetch?.option !== entry.option || this.fetch.states.get(entry.position) !== "r") { entry.waiting = true; return; }
-    entry.waiting = false;
-    const option = this.byId.get(entry.option), choice = this.pages.get(pageKey(entry.option, ""))?.choices.find(item => item.position === entry.position);
-    if (!option || !choice) return;
-    const change: CharacterChoice = { part: option.part, option: option.name, choice: choice.key, ...(choice.activates ? { activates: [...choice.activates] } : {}) };
-    if (!this.choiceCheck(change).available) return;
-    const next = this.withChoices([change]);
-    if (next.choices.length > CREATOR_LIMITS.choices || sameChoices(next.choices, this.state.choices)) return;
-    const request = characterRequestOf({ bodyGender: next.bodyGender, saved: next.save?.saved ?? null }, next.choices, undefined, this.dressing(),
-      this.bodyShown, this.uncensored, this.creatorPuppet, this.armsCyberware());
-    entry.controller = new AbortController();
-    void this.ports.details!.preload!(request, entry.controller.signal);
-  }
-  /** Nothing is loaded ahead any more (another hint, a change, the row closed). */
-  private cancelAhead() {
-    if (!this.ahead) return;
-    if (this.ahead.timer) clearTimeout(this.ahead.timer);
-    this.ahead.controller?.abort();
-    this.ahead = null;
-  }
-  /**
-   * A shape row's choice pictures (choice-previews-design.md): asks for the pictures of `positions` (view order), the V's chosen one and
-   * the one under the pointer first, as preparing ahead makes each ready, and `spin`'s turntable strip. Null when the row has no picture
-   * kind or previews are off.
-   */
+  /** The Character panel's requester (`requester("panel")`): an option's choices loaded so far; asking loads the next page. */
+  choices(option: string, want = CC_PAGE_SIZE, query = ""): CharacterChoicesState { return this.main.choices(option, want, query); }
+  /** A colour row's swatches and icons, as the Character panel's requester has them (creator-requester.ts). */
+  swatches(option: string): DisplayedSwatchState | null { return this.main.swatches(option); }
+  /** The options with a choice matching `query` (UI-72), as the Character panel's requester searched. */
+  search(query: string): CharacterSearchState { return this.main.search(query); }
+  /** A row's choices prepared ahead for the Character panel (creator-requester.ts `prefetch`). */
+  prefetch(option: string, positions: readonly number[], focus: number | null = null): CharacterFetchState | null { return this.main.prefetch(option, positions, focus); }
+  /** A shape row's choice pictures for the Character panel (creator-requester.ts `previews`). */
   previews(option: string, positions: readonly number[], selected: number | null, focus: number | null = null, spin: number | null = null): ChoicePreviewRow | null {
-    const kind = this.byId.get(option)?.preview;
-    if (!kind || !this.ports.previews || !this.ready()) return null;
-    this.previewService ??= new ChoicePreviewService(this.ports.previews, () => this.publish());
-    const fetch = this.fetch?.option === option ? this.fetch : null;
-    return this.previewService.update({ option, kind, request: this.detailRequest(), body: this.state.bodyGender, catalogue: this.catalogue.panel?.identity ?? "",
-      positions, selected, focus, spin,
-      ready: position => fetch?.states.get(position) === "r", busy: this.viewing !== null });
+    return this.main.previews(option, positions, selected, focus, spin);
   }
   /** What choice previews have cost so far (measurement and diagnostics). */
-  previewStats() { return this.previewService?.stats ?? null; }
+  previewStats() { return this.main.previewStats(); }
   /** The row closed: stop preparing its choices ahead. */
-  stopPrefetch(option: string): void {
-    if (this.ahead?.option === option) this.cancelAhead();
-    if (this.fetch?.option !== option) return;
-    this.fetch.asking?.abort();
-    this.fetch = null;
-    void this.ports.creator.stopPrefetch?.().catch(() => {});
-  }
-  private askPrefetch(fetch: NonNullable<CharacterContextActions["fetch"]>) {
-    if (fetch.asking) { fetch.again = true; return; }
-    const controller = new AbortController();
-    fetch.asking = controller;
-    const current = () => this.fetch === fetch && !this.disposed;
-    this.ports.creator.prefetch!(this.detailRequest(), fetch.option, fetch.positions, fetch.focus, controller.signal).then(reply => {
-      if (!current()) return;
-      let changed = reply.stopped !== fetch.stopped || reply.busy !== fetch.busy;
-      fetch.positions.forEach((position, index) => {
-        const state = (reply.states[index] ?? "?") as ChoiceFetch;
-        if (fetch.states.get(position) !== state) { fetch.states.set(position, state); changed = true; }
-      });
-      const wasBusy = fetch.busy;
-      fetch.stopped = reply.stopped; fetch.busy = reply.busy;
-      // The choice under the pointer became prepared: its parts load ahead now.
-      if (this.ahead?.waiting && this.ahead.option === fetch.option && fetch.states.get(this.ahead.position) === "r") this.startAhead(this.ahead);
-      if (changed) {
-        fetch.view = Object.freeze({ option: fetch.option, states: new Map(fetch.states), stopped: fetch.stopped, busy: fetch.busy });
-        this.publish();
-      }
-      // The prepared files grew: their size is read again once the row settles.
-      if (wasBusy && !reply.busy) this.refreshPrepared();
-    }, () => { /* The host is unreachable or the page is older: the states stay as they were. */ }).finally(() => {
-      if (fetch.asking === controller) fetch.asking = null;
-      if (!current()) return;
-      if (fetch.again) { fetch.again = false; this.askPrefetch(fetch); return; }
-      // While the host has work, ask again: quickly while the panel is looked at, slowly otherwise.
-      if (fetch.busy) void this.ports.creator.wait(Date.now() - this.watchedAt < WATCHED_MS ? POLL_MS : POLL_IDLE_MS, controller.signal)
-        .then(() => { if (current() && !fetch.asking) this.askPrefetch(fetch); });
-    });
+  stopPrefetch(option: string): void { this.main.stopPrefetch(option); }
+  /** The request with one more change set (a choice under the pointer loaded ahead), or null when it changes nothing or is refused. */
+  private aheadRequest(change: CharacterChoice): CharacterRequest | null {
+    if (!this.choiceCheck(change).available) return null;
+    const next = this.withChoices([change]);
+    if (next.choices.length > CREATOR_LIMITS.choices || sameChoices(next.choices, this.state.choices)) return null;
+    return characterRequestOf({ bodyGender: next.bodyGender, saved: next.save?.saved ?? null }, next.choices, undefined, this.dressing(),
+      this.bodyShown, this.uncensored, this.creatorPuppet, this.armsCyberware());
   }
   /** Read the prepared game files' size again (once at a time). */
   refreshPrepared(): void {
-    if (!this.ports.creator.preparedFiles || this.prepared.asking || this.prepared.clearing) return;
+    if (!this.creator.preparedFiles || this.prepared.asking || this.prepared.clearing) return;
     this.prepared.asking = true;
-    this.ports.creator.preparedFiles().then(size => { this.prepared.bytes = size.bytes; this.publish(); }, () => {})
+    this.creator.preparedFiles().then(size => { this.prepared.bytes = size.bytes; this.publish(); }, () => {})
       .finally(() => { this.prepared.asking = false; });
   }
   /** Where a choice sits among its option's loaded choices (null when it isn't loaded). */
   private positionOf(change: CharacterChoice): number | null {
     const option = this.option(change.part, change.option);
-    const page = option ? this.pages.get(pageKey(option.id, "")) : undefined;
+    const page = option ? this.rowOf(option.id) : undefined;
     return page?.choices.find(item => item.key === change.choice && (!change.activates || sameSet(item.activates, change.activates)))?.position ?? null;
   }
 
@@ -665,10 +632,16 @@ export class CharacterContextActions {
    * stored: without it a reload would show the feminine one.
    */
   stored(): StoredCharacter | undefined {
-    const { origin, choices, kept } = this.state;
+    const { origin, choices } = this.state;
     const clothing = sameClothing(this.clothing, DEFAULT_CLOTHING) ? null : this.clothing;
     if (!choices.length && !clothing && this.ownMakeup && origin.kind !== "preset" &&
       !(origin.kind === "default" && (this.knownSave || this.state.bodyGender !== "female"))) return undefined;
+    return this.form();
+  }
+  /** What the context holds, always (the character document's form, character-document.ts; `stored` leaves out a V as loaded). */
+  form(): StoredCharacter {
+    const { origin, choices, kept } = this.state;
+    const clothing = sameClothing(this.clothing, DEFAULT_CLOTHING) ? null : this.clothing;
     return { origin: origin.kind, ...(origin.kind === "preset" && origin.name ? { name: origin.name } : {}),
       ...(origin.kind !== "save" ? { bodyGender: this.state.bodyGender } : {}), choices: choices.map(choice => ({ ...choice })),
       ...(kept ? { kept: serializeCcPreset(kept) } : {}), ...(clothing ? { clothing: { state: clothing.state, custom: [...clothing.custom] } } : {}),
@@ -686,19 +659,20 @@ export class CharacterContextActions {
     if (this.disposed) return;
     const gender = this.state.bodyGender;
     if (!restart && this.catalogue.gender === gender && (this.catalogue.phase === "ready" || this.loading)) { this.refreshView(); return; }
-    this.follow(gender, signal => this.ports.creator.panel(gender, signal));
+    // Starting again means the catalogue may have changed: nothing the page kept for this body stands.
+    if (restart) this.shared.forget(gender);
+    this.follow(gender, signal => this.creator.panel(gender, signal));
   }
   private follow(gender: BodyGender, first: (signal: AbortSignal) => Promise<CreatorState>) {
     this.session?.abort();
     this.viewing?.controller.abort();
     this.viewing = null;
-    this.searching?.controller?.abort();
-    this.searching = null;
     const controller = new AbortController(), generation = ++this.generation;
     this.session = controller;
     this.loading = true;
     this.catalogue = { phase: "preparing", message: "", panel: null, gender };
-    this.byId.clear(); this.pages.clear(); this.swatchRows.clear(); this.swatchLoading.clear(); this.swatchDisplay.clear();
+    this.byId.clear();
+    for (const requester of this.requesters.values()) requester.reset();
     this.publish();
     const live = () => !controller.signal.aborted && generation === this.generation && !this.disposed;
     void (async () => {
@@ -707,9 +681,9 @@ export class CharacterContextActions {
         while (state.phase === "preparing" && live()) {
           this.catalogue = { ...this.catalogue, message: state.message };
           // Polled quickly while the panel is looked at, slowly otherwise; the host's state is a cheap read that never builds again.
-          await this.ports.creator.wait(Date.now() - this.watchedAt < WATCHED_MS ? POLL_MS : POLL_IDLE_MS, controller.signal);
+          await this.creator.wait(Date.now() - this.watchedAt < WATCHED_MS ? POLL_MS : POLL_IDLE_MS, controller.signal);
           if (!live()) return;
-          state = await this.ports.creator.panel(gender, controller.signal);
+          state = await this.creator.panel(gender, controller.signal);
         }
         if (!live()) return;
         if (state.phase !== "ready" || !state.panel) {
@@ -740,43 +714,6 @@ export class CharacterContextActions {
     return true;
   }
 
-  private async loadPage(option: string, query: string) {
-    const key = pageKey(option, query), current = this.pages.get(key);
-    if (current?.loading || this.catalogue.phase !== "ready" || !this.session) return;
-    const generation = this.generation, gender = this.state.bodyGender, signal = this.session.signal;
-    const offset = current?.choices.length ?? 0;
-    this.pages.set(key, { choices: current?.choices ?? [], total: current?.total ?? this.byId.get(option)?.count ?? 0, loading: true, error: null });
-    try {
-      const page = await this.ports.creator.page(gender, option, offset, signal, query || undefined);
-      if (generation !== this.generation || this.disposed || this.stale(page.identity)) return;
-      const before = this.pages.get(key)?.choices ?? [];
-      this.pages.set(key, { choices: deepFreeze([...before, ...page.choices]), total: page.total, loading: false, error: null });
-    } catch (error) {
-      if (generation !== this.generation || this.disposed) return;
-      this.pages.set(key, { choices: current?.choices ?? [], total: current?.total ?? 0, loading: false,
-        error: (error as Error)?.message || "The choices couldn't be read." });
-    }
-    this.publish();
-  }
-  private startSearch(query: string) {
-    this.searching?.controller?.abort();
-    if (!this.ports.creator.search || this.catalogue.phase !== "ready") {
-      this.searching = { query, options: null, more: false, loading: false, error: null, controller: null };
-      return;
-    }
-    const controller = new AbortController(), generation = this.generation;
-    this.searching = { query, options: null, more: false, loading: true, error: null, controller };
-    this.ports.creator.search(this.state.bodyGender, query, controller.signal).then(found => {
-      if (controller.signal.aborted || generation !== this.generation || this.stale(found.identity)) return;
-      this.searching = { query, options: new Set(found.options), more: found.more, loading: false, error: null, controller: null };
-      this.publish();
-    }, error => {
-      if (controller.signal.aborted || generation !== this.generation) return;
-      this.searching = { query, options: null, more: false, loading: false, error: (error as Error)?.message || "The search couldn't be run.", controller: null };
-      this.publish();
-    });
-  }
-
   /** Ask the host for the view of the current state (the previous question is dropped). */
   private refreshView() {
     if (this.catalogue.phase !== "ready" || this.disposed) return;
@@ -787,7 +724,7 @@ export class CharacterContextActions {
     const controller = new AbortController(), generation = this.generation;
     this.viewing = { key, controller };
     this.publish();
-    this.ports.creator.view(request, controller.signal).then(view => {
+    this.creator.view(request, controller.signal).then(view => {
       if (controller.signal.aborted || generation !== this.generation) return;
       if (this.stale(view.identity)) return;
       this.currentView = deepFreeze(view); this.viewKey = key; this.viewError = null;
@@ -814,10 +751,10 @@ export class CharacterContextActions {
   private migrateLegacy() {
     const legacy = this.legacy;
     this.legacy = null;
-    if (!legacy || !this.ports.creator.legacy || this.state.choices.length || this.past.length || this.state.bodyGender !== "female") return;
+    if (!legacy || !this.creator.legacy || this.state.choices.length || this.scope.canUndo() || this.state.bodyGender !== "female") return;
     const before = this.state, generation = this.generation;
-    this.ports.creator.legacy(before.bodyGender, legacy.style, legacy.definition).then(choices => {
-      if (this.disposed || generation !== this.generation || this.state !== before || this.past.length) return;
+    this.creator.legacy!(before.bodyGender, legacy.style, legacy.definition).then(choices => {
+      if (this.disposed || generation !== this.generation || this.state !== before || this.scope.canUndo()) return;
       const carried = choices.flatMap(choice => { const valid = characterChoiceOf(choice); return valid ? [valid] : []; });
       if (!carried.length) return;
       this.state = { ...before, choices: carried };
@@ -840,9 +777,9 @@ export class CharacterContextActions {
   private choiceCheck(change: CharacterChoice): Capability {
     const option = this.option(change.part, change.option);
     if (!option) return refusal("missing_target", "That creator option isn't offered by the installed game and mods.");
-    const page = this.pages.get(pageKey(option.id, ""));
+    const page = this.rowOf(option.id);
     // A choice is checked against the option's choices once they are all here; the host checks it again either way.
-    if (page && !page.loading && page.choices.length >= page.total &&
+    if (page && page.choices.length >= page.total &&
       !page.choices.some(item => item.key === change.choice && (!change.activates || sameSet(item.activates, change.activates))))
       return refusal("invalid_value", `“${change.choice || "None"}” isn't one of ${option.label}'s choices.`);
     return { available: true };
@@ -874,7 +811,18 @@ export class CharacterContextActions {
   }
 
   capability(action: CharacterContextAction): Capability {
+    // Loading the very save the V comes from, while it can't be shown, only imports it: taken even while the V is being restored.
+    if (this.importsOwnSave(action)) return { available: true };
+    const restoring = CHANGES.has(action.kind) ? this.ports.document?.restoring?.() ?? null : null;
+    if (restoring) return refusal("not_ready", restoring);
     switch (action.kind) {
+      case "character.setSource": {
+        const source = sourceAction(action.source);
+        if (!source) return refusal("invalid_value", "That isn't somewhere a V can come from.");
+        // The save already shown is shown again on this scene, and nothing else changes.
+        if (source.kind === "character.loadSave" && this.sameSave(source.value)) return { available: true };
+        return this.capability(source);
+      }
       case "character.setOption":
         if (!this.ready()) return this.notReady();
         return this.changesCheck([{ part: action.part, option: action.option, choice: action.choice, ...(action.activates ? { activates: action.activates } : {}) }]).capability;
@@ -915,13 +863,15 @@ export class CharacterContextActions {
         return this.catalogue.phase === "failed" || this.retryableLabels() || this.ports.details?.failed() ? { available: true }
           : refusal("invalid_value", "Nothing failed, so there is nothing to try again.");
       case "character.clearPreparedFiles":
-        if (!this.ports.creator.clearPrepared) return refusal("unavailable", "This version of XF Studio can't clear its prepared game files.");
+        if (!this.creator.clearPrepared) return refusal("unavailable", "This version of XF Studio can't clear its prepared game files.");
         if (this.prepared.clearing) return refusal("busy", "The prepared game files are being cleared.");
         return this.prepared.bytes === 0 ? refusal("invalid_value", "There are no prepared game files to clear.") : { available: true };
-      case "character.undo":
-        return this.order.length ? { available: true } : refusal("invalid_value", "There is no character change to undo.");
-      case "character.redo":
-        return this.undone.length ? { available: true } : refusal("invalid_value", "There is no undone character change to redo.");
+      case "character.resolveConflict": {
+        const conflict = this.ports.document?.conflict();
+        if (!conflict) return refusal("invalid_value", "There is no other version of this V to choose from.");
+        if (action.keep === "both" && !conflict.keepBoth) return refusal("unavailable", "This V can't be copied right now.");
+        return action.keep === "mine" || action.keep === "theirs" || action.keep === "both" ? { available: true } : refusal("invalid_value", "Choose which V to keep.");
+      }
       case "character.setClothing":
         if (this.clothing.state === action.state) return refusal("invalid_value", `${CLOTHING_STATE_LABELS[action.state]} is already shown.`);
         return this.offeredStates().includes(action.state) ? { available: true }
@@ -930,10 +880,11 @@ export class CharacterContextActions {
         const shown = this.shownAreas().includes(action.area);
         return shown === action.shown ? refusal("invalid_value", action.shown ? "That area is already shown." : "That area is already hidden.") : { available: true };
       }
+      // The Clothing setting's own Undo is retired (profiles design §3.7): these step the character's history while a Clothing step is next.
       case "character.undoClothing":
-        return this.clothingPast.length ? { available: true } : refusal("invalid_value", "There is no clothing change to undo.");
+        return this.scope.canUndo() && this.clothingSteps().undo !== null ? { available: true } : refusal("invalid_value", "There is no clothing change to undo.");
       case "character.redoClothing":
-        return this.clothingFuture.length ? { available: true } : refusal("invalid_value", "There is no undone clothing change to redo.");
+        return this.scope.canRedo() && this.clothingSteps().redo !== null ? { available: true } : refusal("invalid_value", "There is no undone clothing change to redo.");
     }
   }
   /** The clothing areas the current setting shows (`custom` starts from them when an area is picked in another state). */
@@ -945,70 +896,69 @@ export class CharacterContextActions {
       case "saved": return [...CLOTHING_AREAS];
     }
   }
-  private clothingStep(label: string, setting: ClothingSetting) {
+  private clothingStep(label: string, setting: ClothingSetting, kind: string) {
     if (sameClothing(setting, this.clothing)) return;
-    this.clothingPast.push({ label, setting: this.clothing });
-    this.ordered("clothing", this.clothingPast);
+    this.record("clothing", label, kind);
     this.clothing = setting;
     this.publish();
   }
-  /** A new step of one kind: it joins the panel's order, the oldest step past the limit goes, and nothing can be redone any more. */
-  private ordered(kind: StepKind, past: unknown[]) {
-    this.order.push(kind);
-    if (past.length > HISTORY_LIMIT) { past.shift(); this.order.splice(this.order.indexOf(kind), 1); }
-    this.future = []; this.clothingFuture = []; this.makeupFuture = []; this.undone = [];
-  }
-  /** The label of the step the panel's Undo (or Redo) would take next. */
-  private stepLabel(order: StepKind[], side: "past" | "future") {
-    const kind = order.at(-1);
-    const steps = kind === "v" ? side === "past" ? this.past : this.future : kind === "clothing" ? side === "past" ? this.clothingPast : this.clothingFuture
-      : kind === "makeup" ? side === "past" ? this.makeupPast : this.makeupFuture : [];
-    return steps.at(-1)?.label ?? null;
-  }
-  /** Step the V's own makeup setting back or forward. */
-  private makeupTravel(from: { label: string; shown: boolean }[], to: { label: string; shown: boolean }[]) {
-    const entry = from.pop()!;
-    to.push({ label: entry.label, shown: this.ownMakeup });
-    this.ownMakeup = entry.shown;
-    this.publish();
-  }
-  /** Move the newest step of `kind` from one order to the other (the Clothing setting's own Undo and Redo). */
-  private reorder(kind: StepKind, from: StepKind[], to: StepKind[]) {
-    const at = from.lastIndexOf(kind);
-    if (at >= 0) from.splice(at, 1);
-    to.push(kind);
-  }
-  private clothingTravel(from: { label: string; setting: ClothingSetting }[], to: { label: string; setting: ClothingSetting }[]) {
-    const entry = from.pop()!;
-    to.push({ label: entry.label, setting: this.clothing });
-    this.clothing = entry.setting;
-    this.publish();
-  }
 
+  /** Whether `value` is the save the V already comes from. */
+  private importsOwnSave(action: CharacterContextAction): boolean {
+    const value = action.kind === "character.loadSave" ? action.value
+      : action.kind === "character.setSource" && (action.source as { kind?: string } | null)?.kind === "save" ? (action.source as { value: unknown }).value : undefined;
+    return value !== undefined && !!this.ports.document?.namesSave?.(value);
+  }
+  private sameSave(value: unknown): boolean {
+    return this.state.origin.kind === "save" && !!this.state.save && saveKey(this.state.save.value) === saveKey(value as SavedV);
+  }
   /** Apply an action; throws the refusal's reason when the capability refuses. */
   dispatch(action: CharacterContextAction): Record<string, never> {
     const allowed = this.capability(action);
     if (!allowed.available) throw Error(allowed.reason);
+    if (this.importsOwnSave(action)) {
+      this.ports.document!.importSave!(action.kind === "character.loadSave" ? action.value : (action as { source: { value: unknown } }).source.value);
+      return {};
+    }
+    if (action.kind === "character.resolveConflict") {
+      const done = this.ports.document!.resolve(action.keep);
+      if (!done.available) throw Error(done.reason);
+      this.publish();
+      return {};
+    }
     if (action.kind !== "character.setOption" && action.kind !== "character.clearPreparedFiles") this.firstTime = false;
     // A change of the person's own: nothing more is loaded ahead for the V it replaces (a load in progress is stopped by the change's own).
-    if (this.ahead?.timer || this.ahead?.waiting) this.cancelAhead();
+    for (const requester of this.requesters.values()) requester.cancelWaitingAhead();
     switch (action.kind) {
+      case "character.setSource": {
+        // Where the V comes from (absorbs `savedV.*`, profiles design §7): a save is applied on this scene as well.
+        const source = sourceAction(action.source)!;
+        if (source.kind === "character.loadSave") {
+          const value = source.value as SavedV;
+          if (this.sameSave(value)) { this.ports.showSave(value); break; }
+          const save = this.saveOf(value);
+          this.knownSave = saveKey(value);
+          this.changeV("Load a save", { origin: { kind: "save" }, bodyGender: save.value.isMale ? "male" : "female", save, choices: [], kept: null, notCarried: [] }, action.kind, false);
+          this.ports.showSave(value);
+          break;
+        }
+        return this.dispatch(source);
+      }
       case "character.setOption": {
         const { choices } = this.changesCheck([{ part: action.part, option: action.option, choice: action.choice, ...(action.activates ? { activates: action.activates } : {}) }]);
         // A choice not prepared ahead reads the game files now (the status line says so); one prepared ahead is instant.
         const position = choices[0] ? this.positionOf(choices[0]) : null, option = this.option(action.part, action.option);
-        this.firstTime = !(this.fetch && option && this.fetch.option === option.id && position !== null && this.fetch.states.get(position) === "r");
-        this.step(plainStep(this.option(action.part, action.option), action.choice), this.withChoices(choices));
+        this.firstTime = !(option && [...this.requesters.values()].some(requester => requester.prepared(option.id, position)));
+        this.step(plainStep(this.option(action.part, action.option), action.choice), this.withChoices(choices), action.kind);
         break;
       }
       case "character.setOptions": {
         const { choices } = this.changesCheck(action.changes);
-        this.step(action.label || `Change ${choices.length} options`, this.withChoices(choices));
+        this.step(action.label || `Change ${choices.length} options`, this.withChoices(choices), action.kind);
         break;
       }
       case "character.setOwnMakeup":
-        this.makeupPast.push({ label: action.shown ? "Show my V's own makeup" : "Hide my V's own makeup", shown: this.ownMakeup });
-        this.ordered("makeup", this.makeupPast);
+        this.record("makeup", action.shown ? "Show my V's own makeup" : "Hide my V's own makeup", action.kind);
         this.ownMakeup = action.shown;
         this.publish();
         break;
@@ -1016,39 +966,35 @@ export class CharacterContextActions {
         const family = this.option(action.part, action.option)?.link?.key;
         this.step(`Reset ${this.option(action.part, action.option)?.label ?? action.option}`, { ...this.state,
           choices: this.state.choices.filter(choice => !(choice.part === action.part && choice.option === action.option) &&
-            !(family && this.option(choice.part, choice.option)?.link?.key === family)) });
+            !(family && this.option(choice.part, choice.option)?.link?.key === family)) }, action.kind);
         break;
       }
-      case "character.resetAll": this.step("Reset every change", { ...this.state, choices: [] }); break;
+      case "character.resetAll": this.step("Reset every change", { ...this.state, choices: [] }, action.kind); break;
       case "character.useDefault":
-        this.changeV("Show the default V", { origin: { kind: "default" }, bodyGender: action.bodyGender, save: null, choices: [], kept: null, notCarried: [] });
+        this.changeV("Show the default V", { origin: { kind: "default" }, bodyGender: action.bodyGender, save: null, choices: [], kept: null, notCarried: [] }, action.kind);
         break;
       case "character.loadSave": {
         const save = this.saveOf(action.value as SavedV);
         this.knownSave = saveKey(action.value as SavedV);
-        this.changeV("Load a save", { origin: { kind: "save" }, bodyGender: save.value.isMale ? "male" : "female", save, choices: [], kept: null, notCarried: [] }, false);
+        this.changeV("Load a save", { origin: { kind: "save" }, bodyGender: save.value.isMale ? "male" : "female", save, choices: [], kept: null, notCarried: [] }, action.kind, false);
         break;
       }
       case "character.loadPreset": {
         const preset = this.preset(action.value) as CcPreset;
-        // What can't be carried is reported and kept verbatim, so saving the preset writes it back (PIPE-79).
-        const { choices, carried, notCarried } = carryPreset(preset);
-        const left = preset.values.filter(entry => !carried.includes(entry)), at = preset.values.length + preset.unknownEntries.length;
-        const kept: CcPreset = { ...preset, values: carried,
-          unknownEntries: [...preset.unknownEntries, ...left.map((entry, i) => ({ at: at + i, entry: serializeCcPresetEntry(entry) }))] };
+        const { choices, kept, notCarried } = presetLoad(preset);
         this.changeV(`Load ${preset.name ? `“${preset.name}”` : "a character preset"}`, { origin: { kind: "preset", name: preset.name },
-          bodyGender: preset.bodyGender, save: null, choices, kept, notCarried });
+          bodyGender: preset.bodyGender, save: null, choices, kept, notCarried }, action.kind);
         break;
       }
       case "character.keepChanges": {
         const choices = this.cleared;
         this.cleared = [];
-        this.step("Keep my changes", this.withChoices(choices));
+        this.step("Keep my changes", this.withChoices(choices), action.kind);
         break;
       }
       case "character.retry":
         if (this.catalogue.phase === "failed" || this.retryableLabels()) {
-          const gender = this.state.bodyGender, creator = this.ports.creator;
+          const gender = this.state.bodyGender, creator = this.creator;
           this.follow(gender, signal => creator.retry ? creator.retry(gender, signal) : creator.panel(gender, signal));
         }
         if (this.ports.details?.failed()) this.ports.details.retry();
@@ -1056,44 +1002,27 @@ export class CharacterContextActions {
         break;
       case "character.clearPreparedFiles": {
         this.prepared = { ...this.prepared, clearing: true, freed: null };
-        this.fetch?.asking?.abort();
-        this.fetch = null;
+        for (const requester of this.requesters.values()) requester.dropPrefetch();
         this.publish();
-        this.ports.creator.clearPrepared!().then(result => { this.prepared = { ...this.prepared, clearing: false, freed: result.freed }; },
+        this.creator.clearPrepared!().then(result => { this.prepared = { ...this.prepared, clearing: false, freed: result.freed }; },
           () => { this.prepared = { ...this.prepared, clearing: false }; })
           .finally(() => { this.publish(); this.refreshPrepared(); });
         break;
       }
-      // The panel's one Undo (UI-81): the newest change, creator choice or Clothing.
-      case "character.undo": {
-        const kind = this.order.pop()!;
-        this.undone.push(kind);
-        if (kind === "v") this.travel(this.past, this.future);
-        else if (kind === "makeup") this.makeupTravel(this.makeupPast, this.makeupFuture);
-        else this.clothingTravel(this.clothingPast, this.clothingFuture);
-        break;
-      }
-      case "character.redo": {
-        const kind = this.undone.pop()!;
-        this.order.push(kind);
-        if (kind === "v") this.travel(this.future, this.past);
-        else if (kind === "makeup") this.makeupTravel(this.makeupFuture, this.makeupPast);
-        else this.clothingTravel(this.clothingFuture, this.clothingPast);
-        break;
-      }
+      // The Clothing setting's own Undo is retired: these step the character's history (`character:<id>`) while a Clothing step is next.
+      case "character.undoClothing": this.scope.undo(); break;
+      case "character.redoClothing": this.scope.redo(); break;
       case "character.setClothing":
         this.clothingStep(`Clothing: ${CLOTHING_STATE_LABELS[action.state]}`, { state: action.state,
-          custom: action.state === "custom" ? this.shownAreas() : this.clothing.custom });
+          custom: action.state === "custom" ? this.shownAreas() : this.clothing.custom }, action.kind);
         break;
       case "character.setClothingArea": {
         const shown = new Set(this.shownAreas());
         if (action.shown) shown.add(action.area); else shown.delete(action.area);
         this.clothingStep(`${action.shown ? "Show" : "Hide"} ${CLOTHING_AREA_LABELS[action.area].toLowerCase()}`,
-          { state: "custom", custom: CLOTHING_AREAS.filter(area => shown.has(area)) });
+          { state: "custom", custom: CLOTHING_AREAS.filter(area => shown.has(area)) }, action.kind);
         break;
       }
-      case "character.undoClothing": this.reorder("clothing", this.order, this.undone); this.clothingTravel(this.clothingPast, this.clothingFuture); break;
-      case "character.redoClothing": this.reorder("clothing", this.undone, this.order); this.clothingTravel(this.clothingFuture, this.clothingPast); break;
     }
     return {};
   }
@@ -1110,27 +1039,18 @@ export class CharacterContextActions {
     return { ...this.state, choices };
   }
 
-  private step(label: string, next: State, clearKeep = true) {
+  private step(label: string, next: State, kind: string, clearKeep = true) {
     if (next === this.state || (sameChoices(next.choices, this.state.choices) && next.origin === this.state.origin && next.save === this.state.save)) return;
-    this.past.push({ label, state: this.state });
-    this.ordered("v", this.past);
+    this.record("v", label, kind);
     if (clearKeep) this.cleared = [];
     this.apply(next);
   }
   /** Another V: one step, and the choices made on the previous V can be kept (`keepChanges`). */
-  private changeV(label: string, next: State, showSave = true) {
+  private changeV(label: string, next: State, kind: string, showSave = true) {
     const previous = this.state;
     this.cleared = next.choices.length ? [] : previous.choices;
-    this.step(label, next, false);
+    this.step(label, next, kind, false);
     if (showSave && saveKey(previous.save?.value) !== saveKey(next.save?.value)) this.showSave(next.save?.value ?? null);
-  }
-  private travel(from: { label: string; state: State }[], to: { label: string; state: State }[]) {
-    const entry = from.pop()!;
-    to.push({ label: entry.label, state: this.state });
-    this.cleared = [];
-    const previous = this.state;
-    this.apply(entry.state);
-    if (saveKey(previous.save?.value) !== saveKey(entry.state.save?.value)) this.showSave(entry.state.save?.value ?? null);
   }
   private showSave(save: SavedV | null) {
     this.knownSave = saveKey(save);
@@ -1154,22 +1074,44 @@ export class CharacterContextActions {
     if (!save) return;
     let parsed: { value: SavedV; saved: SavedDescriptors };
     try { parsed = this.saveOf(save); } catch (error) { console.error(error); return; }
-    this.changeV("Load a save", { origin: { kind: "save" }, bodyGender: save.isMale ? "male" : "female", save: parsed, choices: [], kept: null, notCarried: [] }, false);
+    this.changeV("Load a save", { origin: { kind: "save" }, bodyGender: save.isMale ? "male" : "female", save: parsed, choices: [], kept: null, notCarried: [] }, "character.loadSave", false);
   }
+
+  /**
+   * Another window's version of the V replaced this one's (a change made elsewhere, or Use theirs, profiles design §2.2): the context
+   * shows `stored` (with `save`, its decoded save), and its Undo starts here, since the steps before it were of the version replaced.
+   */
+  replace(stored: unknown, save?: SavedV, note = ELSEWHERE): void {
+    const form = storedCharacterOf(stored), parsed = save ? this.saveOf(save) : null;
+    const origin = originOf(form, !!parsed);
+    let kept: CcPreset | null = null;
+    if (form?.kept) { try { kept = parseCcPreset(form.kept); } catch { kept = null; } }
+    const previous = this.state;
+    this.cleared = [];
+    this.clothing = form?.clothing ?? DEFAULT_CLOTHING;
+    this.ownMakeup = form?.ownMakeup !== "hidden";
+    this.scope.clear();
+    this.elsewhere = note;
+    this.apply({ origin, bodyGender: initialBodyGender(stored, save), save: origin.kind === "save" ? parsed : null, choices: form?.choices ?? [], kept, notCarried: [] });
+    if (saveKey(previous.save?.value) !== saveKey(this.state.save?.value)) this.showSave(this.state.save?.value ?? null);
+  }
+  private elsewhere: string | null = null;
+  /** The owner's document changed in a way the snapshot shows (a conflict came or went). */
+  documentChanged(): void { this.publish(); }
 
   /** A portable preset of the choices set on this V (the host names each choice as this installation offers it). */
   exportPreset(name: string | null): Promise<{ text: string; values: number; leftOut: number; personal: number }> {
-    return this.ports.creator.preset(this.request(), name, this.state.kept ? serializeCcPreset(this.state.kept) : undefined);
+    return this.creator.preset(this.request(), name, this.state.kept ? serializeCcPreset(this.state.kept) : undefined);
   }
 
   dispose() {
     this.disposed = true;
-    this.cancelAhead();
-    this.fetch?.asking?.abort();
-    this.previewService?.dispose();
+    for (const requester of this.requesters.values()) requester.dispose();
+    this.previewOwner?.dispose();
+    this.shared.release(this.requesterName);
     this.session?.abort();
     this.viewing?.controller.abort();
-    this.searching?.controller?.abort();
+    this.unbind();
     this.listeners.clear();
   }
 }

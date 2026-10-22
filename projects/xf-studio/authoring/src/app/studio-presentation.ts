@@ -4,16 +4,24 @@ import type { PartPresetList, PartPresetOutcome, PartPresetRequest, PartPresetSe
 import type { AuthoringPresentation } from "./authoring/authoring-presentation";
 import type { CollectionViewPort } from "../library/collection-application";
 import { emptyPresentationStatus, type PresentationStatus } from "./presentation-status";
-import { PREVIEW_SETUP_DESCRIPTORS } from "./studio-action-descriptors";
+import { DOCUMENT_OUTBOX_DESCRIPTORS, PREVIEW_SETUP_DESCRIPTORS, WORKSPACE_LEASE_DESCRIPTORS } from "./studio-action-descriptors";
+import type { DocumentOutbox } from "../platform/core/document-outbox";
+import { leaseSnapshot, type WorkspaceLease, type WorkspaceLeaseAction, type WorkspaceLeaseSnapshot } from "./workspace/workspace-lease";
 import type { Layer, Recipe, WarpField } from "../engines/layered-makeup/recipe";
 import type { PreviewReadiness } from "../legacy/eye-makeup/preview/authoring-preview-coordinator";
 import type { ReadonlyDeep } from "../platform/api/read-only";
-import type { StudioApplication, StudioCapability, StudioDispatchResult, StudioTarget, ViewToolEntry } from "./studio-application";
+import type { StudioAction, StudioApplication, StudioCapability, StudioDispatchResult, StudioTarget, ViewToolEntry } from "./studio-application";
+import type { StudioBoundContext, StudioContextHit } from "./studio-context-targets";
+import { nameTargets, type NamedTargets, type Unnamed } from "./action-targets";
+import type { TargetResolver } from "./profiles/targets";
+import type { FocusService } from "../platform/core/focus";
+import type { HistorySnapshot, HistoryState } from "../platform/api/history";
+import type { ConsequenceSubject, PresentationSubject } from "./action-consequences";
 import type { ModuleService, PlannedModule, StudioModule, ViewId, ViewSummaryContribution, ViewToolFilter } from "../platform/api";
 import type { EyeMakeupAction } from "../legacy/eye-makeup/eye-makeup-model";
 import type { RecipeAction } from "../engines/layered-makeup/recipe-actions";
 import type { FieldLimit } from "../platform/api";
-import type { StudioFileOperations } from "./studio-file-operations";
+import type { StudioFileAction, StudioFileOperations } from "./studio-file-operations";
 import type { UIPreferenceActions } from "./ui-preferences";
 import type { ViewportAttachment } from "./viewport-attachment";
 import type { LocalSetupActions } from "../setup/local-setup-actions";
@@ -67,10 +75,10 @@ export type FeatureFacade<A extends { kind: string } = { kind: string }> = Featu
    * from this, never from an `unavailable` refusal (UI-53).
    */
   locked(): string | undefined;
-  capability(action: A): StudioCapability;
+  capability(action: Unnamed<A>): StudioCapability;
   /** The action's capability on a concrete target (a layer, a point, a warp field): what that target's controls show. */
-  contextCapability(target: StudioTarget, action: A): StudioCapability;
-  dispatch(action: A): StudioDispatchResult;
+  contextCapability(target: StudioTarget, action: Unnamed<A>): StudioCapability;
+  dispatch(action: Unnamed<A>): StudioDispatchResult;
   limitsFor(target: StudioTarget, kind: A["kind"], variant?: string): Record<string, FieldLimit>;
   choicesFor(target: StudioTarget, kind: A["kind"], field: string, base?: Record<string, unknown>):
     ReturnType<StudioApplication["choicesFor"]>;
@@ -93,7 +101,7 @@ export type EyeMakeupView = {
 export type EyeMakeupFacade = FeatureFacade<EyeMakeupAction> & {
   view(): EyeMakeupView;
   controlBegin(id: string, layerId: string): boolean;
-  controlEdit(id: string, action: RecipeAction): StudioDispatchResult;
+  controlEdit(id: string, action: Unnamed<RecipeAction>): StudioDispatchResult;
   controlCommit(id: string): void;
   controlCancel(id: string): void;
   layerExport: StudioApplication["layerExport"];
@@ -125,22 +133,50 @@ export type FeatureLookup = {
   (id: string): (FeatureFacade & { view(): unknown }) | undefined;
 };
 
+/** An action as a presentation dispatches it: its named targets may be left for the port to name (profiles design §3.6). */
+export type PresentationAction = Unnamed<StudioAction>;
+/** A file workflow as a presentation asks for it: what a picker's file goes to may be left for the port to name. */
+export type PresentationFileAction = Unnamed<StudioFileAction>;
+/**
+ * The application's entry points as a presentation calls them (profiles design §3.6): an action may leave its named targets out, and the
+ * port, the input layer, names them before the application sees it, from what the shown tab's focused view resolves to (a menu's targets
+ * are frozen when it opens). Undo and the history reads act on the editing context.
+ */
+type PresentationAuthoring = Pick<StudioApplication,
+    "actionKinds" | "requestKinds" | "actionDescriptors" | "requestDescriptors" |
+    "gestureDescriptors" | "fileKinds" | "fileDescriptors" | "registry" | "descriptorsFor" | "targetCapability" |
+    "limitsFor" | "contextOptionsFor" |
+    "controlBegin" | "controlCommit" | "controlCancel" |
+    "requestCapability" | "execute" | "canBeginGesture" | "gestureCapability" |
+    "beginGesture" | "applyGesture" | "endGesture" | "previewState" | "finishCatalogue" | "layerExport" | "layerSurfaceEdge" |
+    "glitterModelCatalogue" | "characterPanel" | "characterView" | "characterChoices" | "characterSwatches" | "characterSearch" | "characterPrefetch" | "characterStopPrefetch" | "characterPreviews"> & {
+  snapshot(): ReadonlyDeep<ReturnType<StudioApplication["snapshot"]>>;
+  capability(action: Unnamed<StudioAction>): StudioCapability;
+  dispatch(action: Unnamed<StudioAction>): StudioDispatchResult;
+  contextCapability(target: StudioTarget, action: Unnamed<StudioAction>): StudioCapability;
+  choicesFor(target: StudioTarget, kind: StudioAction["kind"], field: string, base?: Record<string, unknown>): ReturnType<StudioApplication["choicesFor"]>;
+  actionsFor(target: StudioTarget): ReturnType<StudioApplication["actionsFor"]>;
+  contextFor(hit: StudioContextHit): StudioBoundContext;
+  contextQuery(hit: StudioContextHit): ReturnType<StudioApplication["contextQuery"]>;
+  boundActionCapability(context: StudioBoundContext, action: Unnamed<StudioAction>): StudioCapability;
+  dispatchContext(context: StudioBoundContext, action: Unnamed<StudioAction>): StudioDispatchResult;
+  controlEdit(id: string, action: Unnamed<RecipeAction>): StudioDispatchResult;
+  /** What an action, file workflow or request replaces, writes or discards (an action's targets named as for dispatch). */
+  consequences(subject: PresentationSubject): ReturnType<StudioApplication["consequences"]>;
+  /** What Undo and Redo would change next in the editing context (§3.7); nothing before anything was edited. */
+  history(): HistoryState;
+  /** The editing context's steps, for the History panel. */
+  historyTimeline(): HistorySnapshot;
+};
 /** The complete current UI entry point. Construct it only in the trusted composition root. */
 export type StudioPresentationPort<Slot> = {
   readonly experiments?: ExperimentPort;
-  readonly authoring: Pick<StudioApplication,
-    "actionKinds" | "requestKinds" | "actionDescriptors" | "requestDescriptors" |
-    "gestureDescriptors" | "fileKinds" | "fileDescriptors" | "registry" | "descriptorsFor" | "targetCapability" | "contextCapability" |
-    "choicesFor" | "limitsFor" | "contextFor" | "contextOptionsFor" | "contextQuery" |
-    "boundActionCapability" | "dispatchContext" | "capability" | "actionsFor" | "dispatch" |
-    "controlBegin" | "controlEdit" | "controlCommit" | "controlCancel" |
-    "requestCapability" | "execute" | "canBeginGesture" | "gestureCapability" |
-    "beginGesture" | "applyGesture" | "endGesture" | "previewState" | "history" | "historyTimeline" | "consequences" | "finishCatalogue" | "layerExport" | "layerSurfaceEdge" |
-    "glitterModelCatalogue" | "characterPanel" | "characterView" | "characterChoices" | "characterSwatches" | "characterSearch" | "characterPrefetch" | "characterStopPrefetch" | "characterPreviews"> & {
-      snapshot(): ReadonlyDeep<ReturnType<StudioApplication["snapshot"]>>;
-    };
+  readonly authoring: PresentationAuthoring;
   readonly library: CollectionViewPort;
-  readonly files: Pick<StudioFileOperations, "capability" | "execute" | "activity" | "cancel"> & {
+  /** File workflows; one that waits for a picker may leave what its file goes to for the port to name (profiles design §3.3). */
+  readonly files: Pick<StudioFileOperations, "activity" | "cancel"> & {
+    capability(action: Unnamed<StudioFileAction>): ReturnType<StudioFileOperations["capability"]>;
+    execute(action: Unnamed<StudioFileAction>): ReturnType<StudioFileOperations["execute"]>;
     snapshot(): ReadonlyDeep<ReturnType<StudioFileOperations["snapshot"]>>;
   };
   readonly viewport: Pick<ViewportAttachment<Slot>, "attach" | "rehost" |
@@ -162,6 +198,7 @@ export type StudioPresentationPort<Slot> = {
     modules(): readonly StudioModule[];
     /** Modules with an agreed design, not built yet: the Modules menu lists them as Planned. */
     plannedModules(): readonly PlannedModule[];
+    /** A view's tools (absent: the view the shown tab's focus resolves to). */
     tools(view: ViewId | undefined, filter: ViewToolFilter): readonly ViewToolEntry[];
     summaries(view: ViewId | undefined, filter: Pick<ViewToolFilter, "modules">): readonly ViewSummaryContribution[];
     /** Each view's derived title and its scene's subject, with the panel that shows it. */
@@ -233,6 +270,48 @@ export type StudioPresentationPort<Slot> = {
   readonly about: AboutPort;
   /** Problem reports, diagnostic mode and error references. */
   readonly diagnostics: DiagnosticsPort;
+  /**
+   * Whether this page holds its workspace (profiles design §2.3), and Use it here. While another page holds it, every other
+   * family's dispatch is refused with `unavailable` (reads stay available; diagnostics and this page's own view preferences too).
+   */
+  readonly workspace: Pick<WorkspaceLease, "capability" | "dispatch" | "descriptors"> & { snapshot(): WorkspaceLeaseSnapshot };
+  /**
+   * The outbox (profiles design §2.2): Try again for changes whose record on this computer couldn't be written (`status.outbox` says
+   * how many). Without an outbox (fixtures, tools) there is nothing to try again.
+   */
+  /**
+   * The panel instances of the tab shown (profiles design §1.1; phase 1, one instance of each panel): a module panel's own instance ID
+   * (`<panel>--<base36>`), which names its session in its module's service.
+   */
+  readonly panels: {
+    instance(panel: string): string;
+    /**
+     * The history scope Ctrl+Z acts on while focus is in a panel: a 3D view's is the look its scene shows (`look:<collection>/<look>`,
+     * decided, §3.7); the Character panel's is its V's (`character:<id>`; undefined while it shows none); any other panel's is the editing
+     * context. Header and History-panel Undo always act on the editing context.
+     */
+    historyScope(panel: string | undefined): string | undefined;
+  };
+  /**
+   * Focus and the editing context (profiles design §3.3, §3.7): the presentation reports where the person is (a pointer press or keyboard
+   * focus in a view, the panel holding keyboard focus); none of it is ever an Undo step. `editing` names the scope Undo acts on.
+   */
+  readonly focus: {
+    view(view: ViewId): void;
+    panel(panel: string | undefined): void;
+    /**
+     * The editing context Undo acts on, and its name ("Look 3", "V · ManualSave-12"; none for a scope nothing names, such as the empty
+     * document while no preset is shown); null before anything was edited.
+     */
+    editing(): { readonly scope: string; readonly name?: string } | null;
+    /** What the shown tab's most recently focused view shows (its view, scene, V and look), for a header naming its target. */
+    targets(): Readonly<NamedTargets>;
+  };
+  readonly documents: {
+    capability(action: DocumentsAction): StudioCapability;
+    dispatch(action: DocumentsAction): Promise<{ ok: true } | { ok: false; code: string; message: string }>;
+    descriptors(): typeof DOCUMENT_OUTBOX_DESCRIPTORS;
+  };
   snapshot(): ReadonlyDeep<{
     authoring: ReturnType<StudioApplication["snapshot"]>;
     library: ReturnType<CollectionViewPort["view"]>;
@@ -255,6 +334,28 @@ const NO_PREVIEW_SETUP: PreviewSetupSnapshot = Object.freeze({
   card: { open: false, title: "", body: "", progress: null, step: null, notice: null, primary: null, secondary: null, links: [], canDismiss: true, busy: false, route: null },
   consent: null, head: { phase: "unavailable", code: null, message: "", progress: null, next: null }, setupRequests: 0, showRequests: 0, autostart: true, wolvenKitStep: null,
 }) as PreviewSetupSnapshot;
+export type DocumentsAction = { kind: "documents.protect" | "documents.retryRecovery" | "documents.keepRestored" | "documents.discardWaiting" };
+/**
+ * Try again is offered while a change's record couldn't be written; the restoring actions while changes from the last session are being
+ * restored (t-recovering): Keep working only where that is safe, Discard only for changes waiting for a save that is gone.
+ */
+function documentsCapability(outbox: DocumentOutbox | undefined, action: DocumentsAction): StudioCapability {
+  const status = outbox?.status();
+  switch (action?.kind) {
+    case "documents.protect":
+      return status?.unprotected.length ? { available: true } : { available: false, code: "invalid_value", reason: "Every change is recorded on this computer." };
+    case "documents.retryRecovery":
+      return status?.recovering.length || status?.missing.length ? { available: true } : { available: false, code: "invalid_value", reason: "Nothing from your last session is waiting." };
+    case "documents.keepRestored":
+      return status?.recoveringSafe ? { available: true }
+        : { available: false, code: "not_ready", reason: "Your restored changes may be older than what's in your library, so they can't be edited until it answers." };
+    case "documents.discardWaiting":
+      return status?.missing.length ? { available: true } : { available: false, code: "invalid_value", reason: "No change is waiting for a missing save." };
+    default: return { available: false, code: "invalid_value", reason: "Unknown command." };
+  }
+}
+/** Without a lease the page is the only one, and holds its workspace. */
+const SOLE_WINDOW: WorkspaceLeaseSnapshot = Object.freeze(leaseSnapshot({ phase: "holder", generation: null }));
 type StatusSource = { snapshot(): PresentationStatus; subscribe(listener: () => void): () => void };
 
 /** Method wrappers prevent a presentation consumer from receiving trusted service objects. */
@@ -287,14 +388,54 @@ export function createStudioPresentation<Slot>(sources: {
   /** The modules' services (`compose/module-services.ts`), already facades: the port hands each to its module's view. */
   modules?: readonly ModuleService[];
   experiments?: ExperimentPort;
+  /** The page's workspace lease; without it (fixtures, tools) this page is the only one and always holds its workspace. */
+  workspace?: WorkspaceLease;
+  /** The page's outbox; without it (fixtures, tools) nothing is recorded there. */
+  outbox?: DocumentOutbox;
+  /** A panel's instance in the tab shown (the session's); without it (fixtures, tools) each panel is one instance, `<panel>--local`. */
+  panelInstance?: (panel: string) => string;
+  /**
+   * The input layer's target resolution (app/profiles/targets.ts) and the session's focus: what each action the presentation dispatches
+   * names. Without them (tools) actions are dispatched as given, and one that leaves a target out is refused.
+   */
+  targets?: TargetResolver;
+  focus?: Pick<FocusService, "focusView" | "focusPanel">;
+  /** A history scope's name for people ("Look 3"); without it the scope ID. */
+  scopeName?: (scope: string) => string | undefined;
 }): StudioPresentationPort<Slot> {
   const a = sources.authoring, l = sources.library, f = sources.files,
     v = sources.viewport, p = sources.preferences, r = sources.previewReadiness,
     e = sources.editor;
   const s: StatusSource = sources.status ?? { snapshot: () => emptyPresentationStatus(),
     subscribe: () => () => {} };
+  // The lease's gate for the families that don't route through the application (which refuses by itself, `Services.access`).
+  const lease = sources.workspace;
+  const denied = () => lease?.refusal();
+  const refusedAsync = async () => { const why = denied()!; return { ok: false as const, code: why.code!, message: why.reason! }; };
+  /** A family's capability and dispatch behind the lease. */
+  const leased = <F extends { capability(action: never): unknown; dispatch(action: never, ...rest: never[]): Promise<unknown> }>(family: F): F => ({
+    ...family,
+    capability: ((action: never) => denied() ?? family.capability(action)) as F["capability"],
+    dispatch: ((action: never, ...rest: never[]) => denied() ? refusedAsync() : family.dispatch(action, ...rest)) as F["dispatch"],
+  });
   // An experiment may explain why an action is unavailable while it is on ("Turn Hair Lab off for hair physics").
   const hint = (action: { kind: string }) => sources.experiments?.registrations().map(item => item.actionHints?.()[action.kind]).find(Boolean);
+  // The input layer (profiles design §3.6): what the shown tab's focused view resolves to, and the editing context, named in each action.
+  const resolver = sources.targets;
+  const named = (): NamedTargets => resolver?.named() ?? {};
+  const name = <A extends { kind: string }>(action: A | Unnamed<A>): A => resolver
+    ? resolver.complete(action as A, a.descriptor(action.kind)) : action as A;
+  const editingScope = () => resolver?.editing();
+  // A control run (a slider drag) captures what it acts on when it begins (§3.3): its edits name that, never what focus resolves to later,
+  // so a run that outlives its look is refused instead of landing on the next one.
+  const runs = new Map<string, NamedTargets>();
+  const beginRun = (id: string) => { const targets = named(); runs.set(id, targets); return targets; };
+  const nameRun = <A extends { kind: string }>(id: string, action: A | Unnamed<A>): A =>
+    nameTargets(action as A, a.descriptor(action.kind), runs.get(id) ?? named());
+  const endRun = (id: string) => { runs.delete(id); };
+  // A picker's request names what its file goes to now, when it is asked (§3.3), not when the file arrives.
+  const nameFile = (action: Unnamed<StudioFileAction>): StudioFileAction => (resolver
+    ? resolver.complete(action, a.fileDescriptor(action.kind)) : action) as StudioFileAction;
   const authoring: StudioPresentationPort<Slot>["authoring"] = {
     snapshot: () => a.snapshot(), actionKinds: () => a.actionKinds(),
     requestKinds: () => a.requestKinds(), actionDescriptors: () => a.actionDescriptors(),
@@ -302,27 +443,31 @@ export function createStudioPresentation<Slot>(sources: {
     fileKinds: () => a.fileKinds(), fileDescriptors: () => a.fileDescriptors(), registry: () => a.registry(),
     descriptorsFor: target => a.descriptorsFor(target),
     targetCapability: target => a.targetCapability(target),
-    contextCapability: (target, action) => a.contextCapability(target, action),
-    choicesFor: (target, kind, field, base) => a.choicesFor(target, kind, field, base),
+    contextCapability: (target, action) => a.contextCapability(target, name<StudioAction>(action)),
+    choicesFor: (target, kind, field, base) => a.choicesFor(target, kind, field, base, named()),
     limitsFor: (target, kind, variant) => a.limitsFor(target, kind, variant),
-    contextFor: hit => a.contextFor(hit),
+    contextFor: hit => a.contextFor(hit, named()),
     contextOptionsFor: context => a.contextOptionsFor(context),
-    contextQuery: hit => a.contextQuery(hit),
+    contextQuery: hit => a.contextQuery(hit, named()),
     boundActionCapability: (context, action) => a.boundActionCapability(context, action),
     dispatchContext: (context, action) => a.dispatchContext(context, action),
-    capability: action => { const result = a.capability(action), note = hint(action); return note ? { ...result, note } : result; }, actionsFor: target => a.actionsFor(target),
-    dispatch: action => a.dispatch(action),
-    controlBegin: (id, layerId) => a.controlBegin(id, layerId),
-    controlEdit: (id, action) => a.controlEdit(id, action),
-    controlCommit: id => a.controlCommit(id), controlCancel: id => a.controlCancel(id),
+    capability: unnamed => { const action = name<StudioAction>(unnamed), result = a.capability(action), note = hint(action); return note ? { ...result, note } : result; },
+    actionsFor: target => a.actionsFor(target, named()),
+    dispatch: action => a.dispatch(name<StudioAction>(action)),
+    controlBegin: (id, layerId) => a.controlBegin(id, layerId, beginRun(id).look),
+    controlEdit: (id, action) => a.controlEdit(id, nameRun<RecipeAction>(id, action) as Parameters<StudioApplication["controlEdit"]>[1]),
+    controlCommit: id => { endRun(id); a.controlCommit(id); }, controlCancel: id => { endRun(id); a.controlCancel(id); },
     requestCapability: request => a.requestCapability(request), execute: request => a.execute(request),
-    canBeginGesture: (source, layerId) => a.canBeginGesture(source, layerId),
+    // A gesture captures the look the shown tab's focused view shows when it begins (profiles design §3.3).
+    canBeginGesture: (source, layerId) => a.canBeginGesture(source, layerId, named().look),
     gestureCapability: (source, target) => a.gestureCapability(source, target),
-    beginGesture: (source, layerId) => a.beginGesture(source, layerId),
+    beginGesture: (source, layerId) => a.beginGesture(source, layerId, named().look),
     applyGesture: (source, proposal) => a.applyGesture(source, proposal),
     endGesture: (source, cancel) => a.endGesture(source, cancel),
-    previewState: () => a.previewState(), history: () => a.history(),
-    historyTimeline: () => a.historyTimeline(), consequences: subject => a.consequences(subject), finishCatalogue: () => a.finishCatalogue(),
+    previewState: () => a.previewState(), history: () => a.history(editingScope()),
+    historyTimeline: () => a.historyTimeline(editingScope()),
+    consequences: subject => a.consequences("action" in subject ? { ...subject, action: name<StudioAction>(subject.action) } as ConsequenceSubject : subject as ConsequenceSubject),
+    finishCatalogue: () => a.finishCatalogue(),
     layerExport: layerId => a.layerExport(layerId),
     layerSurfaceEdge: layerId => a.layerSurfaceEdge(layerId),
     glitterModelCatalogue: () => a.glitterModelCatalogue(),
@@ -341,7 +486,7 @@ export function createStudioPresentation<Slot>(sources: {
     active: () => fallback().active, selected: () => fallback().selected,
     selectedField: () => { const d = fallback(), layer = d.recipe.layers[d.active];
       return layer?.fields.find(field => field.id === d.fieldSelection[layer.id]) ?? layer?.fields[0]; },
-    revision: () => -1, canUndo: () => a.capability({ kind: "history.undo" }).available,
+    revision: () => -1, canUndo: () => a.capability(name<StudioAction>({ kind: "history.undo" })).available,
   };
   // Feature facades: each feature's own kinds only; eye makeup adds its editor view, controls and catalogues.
   const infos: readonly FeatureInfo[] = Object.freeze(a.features().map(info => Object.freeze(info)));
@@ -351,21 +496,23 @@ export function createStudioPresentation<Slot>(sources: {
     return { ...info,
       kinds: () => a.actionKinds().filter(own),
       editable: () => a.featureEditable(info.id), locked: () => a.featureLocked(info.id),
-      capability: action => own(action.kind) ? a.capability(action as never) : foreign,
-      contextCapability: (target, action) => own(action.kind) ? a.contextCapability(target, action as never) : foreign,
-      dispatch: action => own(action.kind) ? a.dispatch(action as never) : { ok: false, code: foreign.code, message: foreign.reason },
+      capability: action => own(action.kind) ? a.capability(name(action) as never) : foreign,
+      contextCapability: (target, action) => own(action.kind) ? a.contextCapability(target, name(action) as never) : foreign,
+      dispatch: action => own(action.kind) ? a.dispatch(name(action) as never) : { ok: false, code: foreign.code, message: foreign.reason },
       limitsFor: (target, kind, variant) => own(kind) ? a.limitsFor(target, kind as never, variant) : {},
-      choicesFor: (target, kind, field, base) => own(kind) ? a.choicesFor(target, kind as never, field, base) : [],
+      choicesFor: (target, kind, field, base) => own(kind) ? a.choicesFor(target, kind as never, field, base, named()) : [],
     };
   };
   const facades = new Map<string, FeatureFacade>(infos.map(info => {
     const base = facade(info);
     if (info.id !== "eye-makeup") return [info.id, Object.freeze({ ...base, view: () => a.featureState(info.id),
-      controlBegin: (id: string) => a.featureControlBegin(info.id, id), controlEdit: (id: string, action: { kind: string }) => a.featureControlEdit(info.id, id, action),
-      controlCommit: (id: string) => a.featureControlCommit(id), controlCancel: (id: string) => a.featureControlCancel(id) }) as GenericFeatureFacade];
+      controlBegin: (id: string) => a.featureControlBegin(info.id, id, beginRun(id).look),
+      controlEdit: (id: string, action: { kind: string }) => a.featureControlEdit(info.id, id, nameRun(id, action)),
+      controlCommit: (id: string) => { endRun(id); a.featureControlCommit(id); }, controlCancel: (id: string) => { endRun(id); a.featureControlCancel(id); } }) as GenericFeatureFacade];
     const eye: EyeMakeupFacade = { ...(base as FeatureFacade<EyeMakeupAction>), view: () => editor,
-      controlBegin: (id, layerId) => a.controlBegin(id, layerId), controlEdit: (id, action) => a.controlEdit(id, action),
-      controlCommit: id => a.controlCommit(id), controlCancel: id => a.controlCancel(id),
+      controlBegin: (id, layerId) => a.controlBegin(id, layerId, beginRun(id).look),
+      controlEdit: (id, action) => a.controlEdit(id, nameRun<RecipeAction>(id, action) as Parameters<StudioApplication["controlEdit"]>[1]),
+      controlCommit: id => { endRun(id); a.controlCommit(id); }, controlCancel: id => { endRun(id); a.controlCancel(id); },
       layerExport: layerId => a.layerExport(layerId), layerSurfaceEdge: layerId => a.layerSurfaceEdge(layerId), finishCatalogue: () => a.finishCatalogue(),
       glitterModelCatalogue: () => a.glitterModelCatalogue(), mottleCatalogue: () => a.mottleCatalogue() };
     return [info.id, Object.freeze(eye)];
@@ -376,14 +523,14 @@ export function createStudioPresentation<Slot>(sources: {
   const library: CollectionViewPort = {
     view: () => l.view(), summary: () => l.summary(), persistence: () => l.persistence(),
     subscribe: listener => l.subscribe(listener),
-    capability: action => l.capability(action), dispatch: action => l.dispatch(action),
+    capability: action => l.capability(name(action)), dispatch: action => l.dispatch(name(action)),
     fileCapability: action => l.fileCapability(action), fileExecute: action => l.fileExecute(action),
     execute: request => l.execute(request), currentLayerCount: () => l.currentLayerCount(),
   };
   const files: StudioPresentationPort<Slot>["files"] = {
     // File workflows route through the application's registry (the `files` family).
-    snapshot: () => f.snapshot(), capability: action => a.fileCapability(action),
-    execute: action => a.executeFile(action), activity: () => f.activity(), cancel: id => f.cancel(id),
+    snapshot: () => f.snapshot(), capability: action => a.fileCapability(nameFile(action)),
+    execute: action => a.executeFile(nameFile(action)), activity: () => f.activity(), cancel: id => f.cancel(id),
   };
   const viewport: StudioPresentationPort<Slot>["viewport"] = {
     snapshot: () => v.snapshot(), attach: (kind, slot) => v.attach(kind, slot),
@@ -400,12 +547,14 @@ export function createStudioPresentation<Slot>(sources: {
     dispatch: action => p.dispatch(action),
   };
   const previewReadiness = Object.freeze({ snapshot: () => r.readiness() });
+  // A view the presentation leaves out is the one the shown tab's focus resolves to (the input layer's, never the application's).
+  const viewOf = (view: ViewId | undefined) => view ?? named().view;
   const views: StudioPresentationPort<Slot>["views"] = Object.freeze({
     snapshot: () => a.views(), modules: () => [...a.modules(), ...(sources.experiments?.registrations().map(item => item.module) ?? [])], plannedModules: () => a.plannedModules(),
-    tools: (view: ViewId | undefined, filter: ViewToolFilter) => a.viewTools(view, filter),
-    summaries: (view: ViewId | undefined, filter: Pick<ViewToolFilter, "modules">) => a.viewSummaries(view, filter),
+    tools: (view: ViewId | undefined, filter: ViewToolFilter) => { const id = viewOf(view); return id === undefined ? [] : a.viewTools(id, filter); },
+    summaries: (view: ViewId | undefined, filter: Pick<ViewToolFilter, "modules">) => { const id = viewOf(view); return id === undefined ? [] : a.viewSummaries(id, filter); },
     titles: () => a.viewTitles(),
-    setTool: (view: ViewId | undefined, tool: string, enabled: boolean) => a.dispatch({ kind: "view.setTool", ...(view === undefined ? {} : { view }), tool, enabled }),
+    setTool: (view: ViewId | undefined, tool: string, enabled: boolean) => a.dispatch(name<StudioAction>({ kind: "view.setTool", ...(view === undefined ? {} : { view }), tool, enabled })),
     withdraw: (tools: readonly string[]) => a.withdrawViewTools(tools),
     settings: (filter: Pick<ViewToolFilter, "research">) => a.viewSettings(filter),
   });
@@ -470,14 +619,52 @@ export function createStudioPresentation<Slot>(sources: {
     : Promise.resolve({ ok: false as const, message: "Web pages can't be opened from here." }) });
   return Object.freeze({ authoring: Object.freeze(authoring), library: Object.freeze(library),
     files: Object.freeze(files), viewport: Object.freeze(viewport), preferences: Object.freeze(preferences),
-    previewReadiness, views, features: () => infos, feature, module: (id: string) => moduleServices.get(id) ?? sources.experiments?.registrations().find(item => item.module.id === id)?.service,
-    experiments: sources.experiments, localSetup: Object.freeze(localSetup),
+    previewReadiness, views, features: () => infos, feature, module: (id: string) => {
+      const service = moduleServices.get(id) ?? sources.experiments?.registrations().find(item => item.module.id === id)?.service;
+      return service && lease ? leased(service) : service;
+    },
+    experiments: sources.experiments && lease ? { ...sources.experiments, subscribe: sources.experiments.subscribe.bind(sources.experiments),
+      snapshot: () => sources.experiments!.snapshot(), registrations: () => sources.experiments!.registrations(),
+      set: (id: string, enabled: boolean) => denied() ? refusedAsync() : sources.experiments!.set(id, enabled) } : sources.experiments,
+    localSetup: Object.freeze(leased(localSetup)),
     facial: Object.freeze({ snapshot: () => a.facialPreview(), retry: () => a.facialRetry(), installed: () => a.facialInstalled() }),
     // A save without a part saves the feature's live part, serialized with its own codec.
     presets: Object.freeze({ list: (feature: string) => a.presetList(feature), sets: (feature: string) => a.presetSets(feature), exports: () => a.presetExports(),
       capability: (request: PartPresetRequest) => a.presetCapability(withPart(request)), execute: (request: PartPresetRequest) => a.executePreset(withPart(request)) }),
-    installDetection: Object.freeze(installDetection), modInstall: Object.freeze(modInstall), previewSetup: Object.freeze(previewSetup), desktopApp, updates,
+    installDetection: Object.freeze(leased(installDetection)), modInstall: Object.freeze(leased(modInstall)), previewSetup: Object.freeze(leased(previewSetup)),
+    desktopApp: Object.freeze(leased(desktopApp)), updates: Object.freeze(leased(updates)),
     status: Object.freeze({ snapshot: () => s.snapshot() }), links, about, diagnostics: Object.freeze(diagnostics),
+    panels: Object.freeze({ instance: (panel: string) => sources.panelInstance?.(panel) ?? `${panel}--local`,
+      historyScope: (panel: string | undefined) => resolver?.undoScope(panel === undefined ? undefined : sources.panelInstance?.(panel)) }),
+    focus: Object.freeze({
+      view: (view: ViewId) => sources.focus?.focusView(view),
+      panel: (panel: string | undefined) => sources.focus?.focusPanel(panel === undefined ? undefined : sources.panelInstance?.(panel) ?? panel),
+      editing: () => { const scope = editingScope(), name = scope && sources.scopeName?.(scope); return scope ? { scope, ...(name ? { name } : {}) } : null; },
+      targets: () => named(),
+    }),
+    documents: Object.freeze({
+      capability: (action: DocumentsAction) => documentsCapability(sources.outbox, action),
+      async dispatch(action: DocumentsAction) {
+        const allowed = documentsCapability(sources.outbox, action);
+        if (!allowed.available) return { ok: false as const, code: allowed.code ?? "unavailable", message: allowed.reason ?? "Not available right now." };
+        const outbox = sources.outbox!;
+        try {
+          switch (action.kind) {
+            case "documents.retryRecovery": outbox.retry(); return { ok: true as const };
+            case "documents.keepRestored": return outbox.keepRestored().length ? { ok: false as const, code: "not_ready",
+              message: "Some restored changes still need the library's answer before they can be edited." } : { ok: true as const };
+            case "documents.discardWaiting": outbox.discardWaiting(); return { ok: true as const };
+            default: break;
+          }
+        } catch (error) { return { ok: false as const, code: "unavailable", message: (error as Error).message }; }
+        return outbox.protect() ? { ok: true as const }
+          : { ok: false as const, code: "unavailable", message: "Your changes still couldn't be recorded on this computer. Export your collection to keep a copy." };
+      },
+      descriptors: () => structuredClone(DOCUMENT_OUTBOX_DESCRIPTORS) }),
+    workspace: Object.freeze({ snapshot: () => lease?.snapshot() ?? SOLE_WINDOW,
+      capability: (action: WorkspaceLeaseAction) => lease ? lease.capability(action) : { available: false, code: "unavailable" as const, reason: "This workspace is already editable here." },
+      dispatch: (action: WorkspaceLeaseAction) => lease ? lease.dispatch(action) : Promise.resolve({ ok: false as const, code: "unavailable", message: "This workspace is already editable here." }),
+      descriptors: () => structuredClone(WORKSPACE_LEASE_DESCRIPTORS) }),
     snapshot: () => ({ authoring: a.snapshot(), library: l.view(), files: f.snapshot(),
       viewport: v.snapshot(), preferences: p.snapshot(), previewReadiness: r.readiness(),
       status: s.snapshot(), localSetup: localSetup.snapshot(),
@@ -492,7 +679,7 @@ export function createStudioPresentation<Slot>(sources: {
         ...(sources.desktopApp ? [sources.desktopApp.subscribe(listener)] : []),
         ...(sources.updates ? [sources.updates.subscribe(listener)] : []),
         ...(sources.experiments ? [sources.experiments.subscribe(listener)] : []),
-        ...(setup ? [setup.subscribe(listener)] : []), ...(d ? [d.subscribe(listener)] : []),
+        ...(setup ? [setup.subscribe(listener)] : []), ...(d ? [d.subscribe(listener)] : []), ...(lease ? [lease.subscribe(listener)] : []),
         ...[...moduleServices.values()].map(service => service.subscribe(listener))];
       return () => { for (const unsubscribe of unsubs) unsubscribe(); };
     },

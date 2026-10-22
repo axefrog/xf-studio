@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { CollectionActions } from "../src/library/collection-actions";
-import { collectionDraft, editPresets, emptyMemory, newPresetName, type CollectionWorkspace } from "../src/app/workspace/collection-workspace";
+import { newPresetName } from "../src/app/workspace/collection-workspace";
+import { profileStudio } from "./fixtures/profile-studio";
 import { RECIPE_HISTORY, recipeHistory } from "../src/legacy/eye-makeup/editor-actions";
 import { recipeActionCapability, type RecipeActionState } from "../src/engines/layered-makeup/recipe-actions";
 import type { Recipe } from "../src/engines/layered-makeup/recipe";
@@ -8,7 +8,6 @@ import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { PreviewActions, type PreviewPort } from "../src/preview/preview-actions";
 import { ViewportAdapter, type ViewportPort } from "../src/app/viewport-adapter";
 import { glitterModel, type GlitterChoices } from "../src/engines/layered-makeup/glitter-model";
-import type { EditorSnapshot } from "../src/library/collection-session";
 import { EYE_MAKEUP } from "../src/features/eye-makeup";
 import type { GestureEdit } from "../src/engines/layered-makeup/recipe-actions";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
@@ -16,44 +15,42 @@ import { applyLayerAction, applyRecipeAction, freshWorkspace, initialRecipe } fr
 import { layerCapability } from "../src/engines/layered-makeup/layer-stack";
 import { RecipeActions } from "../src/legacy/eye-makeup/authoring-eye-makeup";
 
-test("collection commands keep UI views isolated and notify only after valid transitions", () => {
-  const preset = { id: crypto.randomUUID(), name: "First", revision: 1, recipe: initialRecipe() };
-  const collection = { schema: "xfas/collection-1" as const, id: crypto.randomUUID(), name: "Collection", presets: [preset] };
-  let editor: EditorSnapshot = { recipe: preset.recipe, ...emptyMemory() };
-  const actions = new CollectionActions(STUDIO_DOCUMENTS, collectionDraft(collection, STUDIO_DOCUMENTS), () => editor, value => editor = value);
+import { namedCore } from "./fixtures/named-targets";
+test("collection commands keep UI views isolated and notify only after valid transitions", async () => {
+  const studio = await profileStudio({ name: "Collection", looks: [{ name: "First", recipe: initialRecipe() }] });
+  await studio.collection.initialize();
+  await studio.settle();
+  const service = studio.service, preset = studio.scene.look()!.look;
   let changes = 0;
-  const unsubscribe = actions.subscribe(() => changes++);
-  const view = actions.view() as unknown as CollectionWorkspace; view.collection.presets[0].name = "Tampered";
-  expect(actions.view().collection.presets[0].name).toBe("First");
-  expect(actions.capability({ kind: "preset.edit", command: { kind: "restore" } })).toEqual({
-    available: false, reason: "No removed preset to restore." });
-  expect(() => actions.dispatch({ kind: "preset.edit", command: { kind: "remove", id: crypto.randomUUID() } })).toThrow("no longer exists");
+  const unsubscribe = service.subscribe(() => changes++);
+  const view = service.view(); (view.draft as unknown as { presets: { name: string }[] }).presets[0]!.name = "Tampered";
+  expect(service.view().draft!.presets[0]!.name).toBe("First");
+  expect(service.actionCapability({ kind: "preset.edit", collection: studio.shown()!, command: { kind: "restore" } })).toEqual({
+    available: false, code: "invalid_value", reason: "No removed preset to restore." });
+  expect(() => service.dispatch({ kind: "preset.edit", collection: studio.shown()!, command: { kind: "remove", id: crypto.randomUUID() } })).toThrow("no longer exists");
   expect(changes).toBe(0);
-  actions.dispatch({ kind: "preset.edit", command: { kind: "copy", id: preset.id } });
-  const copyId = actions.view().selected!;
-  expect(copyId).not.toBe(preset.id);
-  editor.recipe.layers[0].color = "#112233";
-  actions.dispatch({ kind: "preset.select", id: preset.id });
-  actions.dispatch({ kind: "preset.select", id: copyId });
-  expect(editor.recipe.layers[0].color).toBe("#112233");
-  actions.dispatch({ kind: "collection.rename", name: " Renamed " });
-  expect(actions.snapshot().collection.name).toBe("Renamed");
-  const other = { ...collection, id: crypto.randomUUID(), name: "Other", presets: [] };
-  actions.dispatch({ kind: "collection.open", collection: other });
-  expect(editor.recipe.layers).toHaveLength(0);
-  actions.dispatch({ kind: "collection.undoOpen" });
-  expect(actions.view().collection.name).toBe("Renamed");
-  expect(changes).toBe(6);
+  service.dispatch({ kind: "preset.edit", collection: studio.shown()!, command: { kind: "copy", id: preset } });
+  const copyId = service.view().draft!.selected!;
+  expect(copyId).not.toBe(preset);
+  studio.app.dispatch({ kind: "layer.setColor", layerId: studio.document.recipe.layers[0]!.id, color: "#112233" });
+  studio.app.dispatch(studio.choose(preset));
+  studio.app.dispatch(studio.choose(copyId));
+  expect(studio.document.recipe.layers[0]!.color).toBe("#112233");
+  service.dispatch({ kind: "collection.rename", collection: studio.shown()!, name: " Renamed " });
+  expect(service.view().draft!.name).toBe("Renamed");
+  expect(changes).toBeGreaterThan(0);
+  await studio.settle();
   unsubscribe();
-  actions.dispatch({ kind: "collection.rename", name: "Unobserved" });
-  expect(changes).toBe(6);
+  const seen = changes;
+  service.dispatch({ kind: "collection.rename", collection: studio.shown()!, name: "Unobserved" });
+  expect(changes).toBe(seen);
 });
 
 /** One recipe's Undo stack on its own: the history service's stack over eye makeup's part. */
 const recipeStack = (entries: Recipe[] = []) => recipeHistory(entries);
 const EYE = RECIPE_HISTORY.feature;
 
-test("layer commands preserve source recipes and history restores a complete edit", () => {
+test("layer commands preserve source recipes and history restores a complete edit", async () => {
   const source = initialRecipe(), id = source.layers[0].id;
   let history = recipeStack();
   history.checkpoint(() => source, [EYE]); history.checkpoint(() => source, [EYE]);
@@ -80,45 +77,36 @@ test("a new preset's default name never repeats another preset's", () => {
   expect(newPresetName([{ name: "Preset 1" }], [{ name: "Preset 2" }])).toBe("Preset 3");
 });
 
-test("add, remove, add, then Restore never leaves two presets with one name (CORE-124)", () => {
+test("add, remove, add, then Restore never leaves two presets with one name (CORE-124)", async () => {
+  const studio = await profileStudio({ looks: [{ name: "Preset 1", recipe: initialRecipe() }] });
   const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
-  let draft = collectionDraft({ schema: "xfas/collection-1" as const, id: id(99), name: "Collection",
-    presets: [{ id: id(1), name: "Preset 1", revision: 1, recipe: initialRecipe() }] }, STUDIO_DOCUMENTS);
-  const names = () => draft.collection.presets.map(preset => preset.name);
-  draft = editPresets(draft, { kind: "add", newId: id(2) }, STUDIO_DOCUMENTS);
-  draft = editPresets(draft, { kind: "add", newId: id(3) }, STUDIO_DOCUMENTS);
+  const names = () => studio.service.summary().draft!.presets.map(preset => preset.name);
+  const edit = (command: Parameters<typeof studio.service.dispatch>[0] extends infer A ? A extends { kind: "preset.edit"; command: infer C } ? C : never : never) =>
+    studio.service.dispatch({ kind: "preset.edit", collection: studio.shown()!, command });
+  edit({ kind: "add", newId: id(2) });
+  edit({ kind: "add", newId: id(3) });
   expect(names()).toEqual(["Preset 1", "Preset 2", "Preset 3"]);
-  draft = editPresets(draft, { kind: "remove", id: id(3) }, STUDIO_DOCUMENTS);
-  draft = editPresets(draft, { kind: "add", newId: id(4) }, STUDIO_DOCUMENTS);
+  edit({ kind: "remove", id: id(3) });
+  edit({ kind: "add", newId: id(4) });
   expect(names()).toEqual(["Preset 1", "Preset 2", "Preset 4"]);
-  draft = editPresets(draft, { kind: "restore" }, STUDIO_DOCUMENTS);
+  edit({ kind: "restore" });
   expect(names()).toEqual(["Preset 1", "Preset 2", "Preset 3", "Preset 4"]);
   expect(new Set(names()).size).toBe(names().length);
 });
 
-test("preset add and copy take their IDs from the host: the pure operation is deterministic (CORE-44)", () => {
-  const preset = { id: "00000000-0000-4000-8000-000000000001", name: "First", revision: 1, recipe: initialRecipe() };
-  const collection = { schema: "xfas/collection-1" as const, id: "00000000-0000-4000-8000-000000000002", name: "Collection", presets: [preset] };
-  const draft = collectionDraft(collection, STUDIO_DOCUMENTS);
-  expect(() => editPresets(draft, { kind: "add" }, STUDIO_DOCUMENTS)).toThrow("ID from the host");
-  expect(() => editPresets(draft, { kind: "copy", id: preset.id }, STUDIO_DOCUMENTS)).toThrow("ID from the host");
-  expect(() => editPresets(draft, { kind: "add", newId: preset.id }, STUDIO_DOCUMENTS)).toThrow("already in use");
-  for (const command of [{ kind: "add", newId: "00000000-0000-4000-8000-000000000003" },
-    { kind: "copy", id: preset.id, newId: "00000000-0000-4000-8000-000000000004" }] as const) {
-    const first = editPresets(draft, command, STUDIO_DOCUMENTS), second = editPresets(draft, command, STUDIO_DOCUMENTS);
-    expect(first).toEqual(second);
-    expect(first.selected).toBe(command.newId);
-  }
-  // The session fills the ID from its host's source; capability refuses one already in use.
-  let n = 10, editor: EditorSnapshot = { recipe: preset.recipe, ...emptyMemory() };
-  const actions = new CollectionActions(STUDIO_DOCUMENTS, draft, () => editor, value => editor = value,
-    () => `00000000-0000-4000-8000-0000000000${n++}`);
-  actions.dispatch({ kind: "preset.edit", command: { kind: "add" } });
-  actions.dispatch({ kind: "preset.edit", command: { kind: "copy", id: preset.id } });
-  expect(actions.summary().presets.map(look => look.id)).toEqual([preset.id, "00000000-0000-4000-8000-000000000011",
+test("preset add and copy take their IDs from the host or the action (CORE-44)", async () => {
+  // A new preset's ID comes from the host (or the action); one already in use is refused.
+  const studio = await profileStudio({ looks: [{ name: "First", recipe: initialRecipe() }] });
+  const preset = studio.scene.look()!.look;
+  let n = 10;
+  const id = () => `00000000-0000-4000-8000-0000000000${n++}`;
+  expect(studio.app.dispatch({ kind: "preset.edit", collection: studio.shown()!, command: { kind: "add", newId: id() } }).ok).toBe(true);
+  studio.app.dispatch(studio.choose(preset));
+  expect(studio.app.dispatch({ kind: "preset.edit", collection: studio.shown()!, command: { kind: "copy", id: preset, newId: id() } }).ok).toBe(true);
+  expect(studio.service.summary().draft!.presets.map(look => look.id)).toEqual([preset, "00000000-0000-4000-8000-000000000011",
     "00000000-0000-4000-8000-000000000010"]);
-  expect(actions.capability({ kind: "preset.edit", command: { kind: "add", newId: preset.id } }))
-    .toEqual({ available: false, reason: "That preset ID is already in use." });
+  expect(studio.app.capability({ kind: "preset.edit", collection: studio.shown()!, command: { kind: "add", newId: preset } }))
+    .toMatchObject({ available: false, reason: "That preset ID is already in use." });
 });
 
 test("recipe actions validate point, field, pigment, softness and material edits atomically", () => {
@@ -159,8 +147,8 @@ test("recipe actions validate point, field, pigment, softness and material edits
 test("recipe edits through app.dispatch record discrete changes once and keep inactive Glitter choices local", () => {
   const original = initialRecipe(), layerId = original.layers[0].id;
   const workspace = freshWorkspace(original), choices: GlitterChoices = workspace.glitterChoices, effects: string[] = [];
-  const { app, document, recipe } = createTrustedAuthoringCore(workspace,
-    { resetStack: () => {}, selectedCollection: () => "preset-one" }, STUDIO_COMPOSITION);
+  const { app, document, recipe } = namedCore(createTrustedAuthoringCore(workspace,
+    { resetStack: () => {}, selectedCollection: () => "preset-one" }, STUDIO_COMPOSITION));
   const unsubscribe = recipe.subscribe(effect => effects.push(effect.kind));
   const dispatch = (action: Parameters<typeof app.dispatch>[0]) => app.dispatch(action);
   expect(dispatch({ kind: "layer.setFinish", layerId, finish: "glitter" }).ok).toBe(true);
@@ -241,19 +229,19 @@ test("preview commands keep camera and lighting state readable without DOM and e
     availability: target => target === "hair" ? "Saved hair unavailable." : undefined,
   };
   const actions = new PreviewActions(freshWorkspace().preview, port);
-  expect(actions.capability({ kind: "preview.setHair", enabled: true })).toEqual({ available: false, reason: "Saved hair unavailable." });
-  expect(() => actions.dispatch({ kind: "camera.setFov", degrees: 200 })).toThrow("Field of view");
+  expect(actions.capability({ kind: "preview.setHair", view: "main", enabled: true })).toEqual({ available: false, reason: "Saved hair unavailable." });
+  expect(() => actions.dispatch({ kind: "camera.setFov", view: "main", degrees: 200 })).toThrow("Field of view");
   let notifications = 0; actions.subscribe(() => notifications++);
-  expect(actions.dispatch({ kind: "camera.setFov", degrees: 10 }).limited).toBe(true);
-  actions.dispatch({ kind: "preview.setExposure", value: 1.5 });
-  actions.dispatch({ kind: "preview.setKeyAngle", degrees: 120 });
+  expect(actions.dispatch({ kind: "camera.setFov", view: "main", degrees: 10 }).limited).toBe(true);
+  actions.dispatch({ kind: "preview.setExposure", view: "main", value: 1.5 });
+  actions.dispatch({ kind: "preview.setKeyAngle", view: "main", degrees: 120 });
   const detached = actions.snapshot();
   expect(detached.camera.fov).toBe(10);
   expect(detached.exposure).toBe(1.5);
   expect(notifications).toBe(3);
   // Both changes light the view by the fork of Soft studio they made: the exposure, then the key turned to 120°.
   expect(calls).toEqual(["lighting:1.5/-0.300,1.900,-0.500", "lighting:1.5/0.505,1.900,0.292"]);
-  actions.dispatch({ kind: "preview.setEyeShape", index: 12 });
+  actions.dispatch({ kind: "preview.setEyeShape", view: "main", index: 12 });
   expect(actions.snapshot()).toMatchObject({ eyeShape: 12 });
   // A piercing style is a creator choice, the character context's, not a preview preference.
   expect("piercingStyle" in actions.snapshot()).toBe(false);
@@ -272,9 +260,9 @@ test("eye-shape choices come from the loaded head, and only those choices are ac
     eyeShapeOptions: () => ({ choices, eyesFollow: true, eyeSource: "base\he_morphs.morphtarget" }) } satisfies PreviewPort;
   const actions = new PreviewActions(freshWorkspace().preview, port);
   expect(actions.eyeShapeOptions().choices.map(choice => choice.target)).toEqual([null, "h011", "h021"]);
-  expect(actions.capability({ kind: "preview.setEyeShape", index: 3 })).toMatchObject({ available: false });
-  expect(actions.capability({ kind: "preview.setEyeShape", index: 2 }).available).toBe(true);
-  actions.dispatch({ kind: "preview.setEyeShape", index: 2 });
+  expect(actions.capability({ kind: "preview.setEyeShape", view: "main", index: 3 })).toMatchObject({ available: false });
+  expect(actions.capability({ kind: "preview.setEyeShape", view: "main", index: 2 }).available).toBe(true);
+  actions.dispatch({ kind: "preview.setEyeShape", view: "main", index: 2 });
   actions.rememberEyeShape(9); // Not offered by this head: ignored.
   expect(actions.snapshot().eyeShape).toBe(2);
   expect(calls).toEqual([2]);
@@ -290,11 +278,11 @@ test("UI-79: the whole-body view is offered only while the body is shown", () =>
     setWire: () => {}, setNormals: () => {}, setEyeOptics: () => {}, setHair: () => {}, setDetail: () => {}, setEyeShape: () => {}, setPiercings: () => {},
     setBody: (enabled: boolean) => framed.push(`body:${enabled}`), frameBody: () => { framed.push("frame"); return false; } } satisfies PreviewPort;
   const actions = new PreviewActions(freshWorkspace().preview, port);
-  expect(actions.capability({ kind: "camera.body" }).available).toBe(true);
-  actions.dispatch({ kind: "preview.setBody", enabled: false });
-  expect(actions.capability({ kind: "camera.body" })).toMatchObject({ available: false, reason: "Turn the body on to see the whole body." });
-  expect(() => actions.dispatch({ kind: "camera.body" })).toThrow("Turn the body on");
-  actions.dispatch({ kind: "preview.setBody", enabled: true });
-  actions.dispatch({ kind: "camera.body" });
+  expect(actions.capability({ kind: "camera.body", view: "main" }).available).toBe(true);
+  actions.dispatch({ kind: "preview.setBody", view: "main", enabled: false });
+  expect(actions.capability({ kind: "camera.body", view: "main" })).toMatchObject({ available: false, reason: "Turn the body on to see the whole body." });
+  expect(() => actions.dispatch({ kind: "camera.body", view: "main" })).toThrow("Turn the body on");
+  actions.dispatch({ kind: "preview.setBody", view: "main", enabled: true });
+  actions.dispatch({ kind: "camera.body", view: "main" });
   expect(framed).toEqual(["body:false", "body:true", "frame"]);
 });

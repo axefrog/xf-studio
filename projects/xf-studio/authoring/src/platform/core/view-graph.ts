@@ -16,7 +16,7 @@
 import { MAIN_VIEW, SLOT_COLLECTIONS, VIEW_GRAPH_1, VIEW_SLOTS, validViewId, viewPanelId, type GraphNode, type KeptView, type SceneKind,
   type StoredNode, type ViewGraphChange, type ViewGraphData, type ViewGraphRules, type ViewGraphSnapshot, type ViewHistoryState,
   type ViewId, type ViewRecord, type ViewSlot } from "../api/view-graph";
-import { createHistoryService, VIEW_SCOPE, type HistoryScope, type HistoryService } from "./history-service";
+import { createHistoryService, LOCAL_VIEW_SCOPE, type HistoryScope, type HistoryService } from "./history-service";
 
 /** At most this many views (design §3.7: four visible, the rest as tabs) and nodes of one slot. */
 export const MAX_VIEWS = 16;
@@ -40,12 +40,12 @@ type NodeEntry = { id: string; slot: ViewSlot; kind?: string; state: Record<stri
 type KeptNode = { slot: ViewSlot; record: StoredNode };
 /** A view this build can't show, with its place in the stored list (so a round trip keeps the order). */
 type KeptEntry = { at: number; record: KeptView };
-type Structure = { views: ViewRecord[]; focused: ViewId };
-/** The View and lighting history's key for the views and the focus: outside the node-ID grammar, so no node can take it. */
+type Structure = { views: ViewRecord[] };
+/** The View and lighting history's key for the views: outside the node-ID grammar, so no node can take it. */
 export const VIEW_HISTORY_STRUCTURE = "@structure";
 const STRUCTURE = VIEW_HISTORY_STRUCTURE;
 type Trail = { back: Record<string, unknown>[]; forward: Record<string, unknown>[] };
-type Parsed = { views: ViewRecord[]; nodes: Map<string, NodeEntry>; focused: ViewId; keptViews: KeptEntry[]; keptNodes: Map<string, KeptNode> };
+type Parsed = { views: ViewRecord[]; nodes: Map<string, NodeEntry>; legacyFocus: ViewId; keptViews: KeptEntry[]; keptNodes: Map<string, KeptNode> };
 const clone = <T>(value: T): T => structuredClone(value);
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 const record = (value: unknown): Record<string, unknown> | undefined =>
@@ -66,7 +66,7 @@ export class ViewGraphError extends Error {
  */
 export function parseViewGraph(value: unknown, rules: ViewGraphRules): ViewGraphData | undefined {
   const parsed = parseGraph(value, rules);
-  return parsed && writeData(parsed.views, parsed.nodes, parsed.focused, parsed.keptViews, parsed.keptNodes);
+  return parsed && writeData(parsed.views, parsed.nodes, parsed.legacyFocus, parsed.keptViews, parsed.keptNodes);
 }
 
 /** Whether a slot's node kind is one this build doesn't know (kept, not refused). */
@@ -115,14 +115,14 @@ function parseGraph(value: unknown, rules: ViewGraphRules): Parsed | undefined {
     }
     views.push({ id: view.id, kind: "3d", ...(view.title !== undefined ? { title: view.title as string } : {}), ...refs });
   }
-  if (!views.some(view => view.id === MAIN_VIEW) || typeof input.focused !== "string" || !ids.has(input.focused)) return;
+  // `focused` is no longer focus (that is the session's, platform/core/focus.ts): it is kept as stored for older builds, which need it.
+  if (!views.some(view => view.id === MAIN_VIEW) || (input.focused !== undefined && (typeof input.focused !== "string" || !ids.has(input.focused)))) return;
   for (const view of views) if (fitIssue(rules, view, nodes)) return;
-  // Focus on a kept view falls back to the main view: nothing here can draw it.
-  const focused = views.some(view => view.id === input.focused) ? input.focused : MAIN_VIEW;
+  const legacyFocus = typeof input.focused === "string" && views.some(view => view.id === input.focused) ? input.focused : MAIN_VIEW;
   const used = usedNodes(views, keptViews);
   for (const id of [...nodes.keys()]) if (!used.has(id)) nodes.delete(id);
   for (const id of [...keptNodes.keys()]) if (!used.has(id)) keptNodes.delete(id);
-  return { views, nodes, focused, keptViews, keptNodes };
+  return { views, nodes, legacyFocus, keptViews, keptNodes };
 }
 
 /** Every node a view references: the shown views' slots and whatever the kept views name. */
@@ -144,7 +144,8 @@ function fitIssue(rules: ViewGraphRules, view: ViewRecord, nodes: ReadonlyMap<st
   if (camera === undefined || !rule.cameras.includes(camera)) return `This camera can't look at a ${rule.kind} scene.`;
   if (rig === undefined || !rule.rigs.includes(rig)) return `These lights can't light a ${rule.kind} scene.`;
 }
-function writeData(views: readonly ViewRecord[], nodes: ReadonlyMap<string, NodeEntry>, focused: ViewId,
+/** `legacyFocus`: the stored `focused`, written back for older builds while it names a shown view (else the main view). */
+function writeData(views: readonly ViewRecord[], nodes: ReadonlyMap<string, NodeEntry>, legacyFocus: ViewId,
   keptViews: readonly KeptEntry[] = [], keptNodes: ReadonlyMap<string, KeptNode> = new Map()): ViewGraphData {
   const used = usedNodes(views, keptViews);
   const list = (slot: ViewSlot): StoredNode[] => [
@@ -155,14 +156,15 @@ function writeData(views: readonly ViewRecord[], nodes: ReadonlyMap<string, Node
   const all: (ViewRecord | KeptView)[] = clone([...views]);
   for (const kept of [...keptViews].sort((a, b) => a.at - b.at)) all.splice(Math.min(kept.at, all.length), 0, clone(kept.record));
   return { schema: VIEW_GRAPH_1, views: all, scenes: list("scene"), cameras: list("camera"), lights: list("lights"),
-    display: list("display"), tools: list("tools"), focused };
+    display: list("display"), tools: list("tools"), focused: views.some(view => view.id === legacyFocus) ? legacyFocus : MAIN_VIEW };
 }
 
 /** The graph service. One per workspace; devices and services act on the views it lists. */
 export class ViewGraph {
   private views: ViewRecord[];
   private nodes = new Map<string, NodeEntry>();
-  private focus: ViewId;
+  /** The stored `focused`, kept for older builds only: this graph has no focus (the session's focus service does). */
+  private readonly legacyFocus: ViewId;
   /** Views and nodes this build keeps unchanged (never drawn or edited); the nodes the kept views name stay alive. */
   private readonly keptViews: readonly KeptEntry[];
   private readonly keptNodes: ReadonlyMap<string, KeptNode>;
@@ -175,39 +177,39 @@ export class ViewGraph {
   private withdrawnIds = new Set<string>();
   private counter = 0;
 
-  /** `history` is the session's history service (default: one of its own); the graph's edits record in its view scope. */
-  constructor(data: ViewGraphData, private rules: ViewGraphRules, history: HistoryService = createHistoryService()) {
+  /**
+   * `history` is the session's history service (default: one of its own); the graph's edits record in its View and lighting scope, `scope`
+   * (`view:<profile>`, profiles design §3.7; default: a graph no session holds).
+   */
+  constructor(data: ViewGraphData, private rules: ViewGraphRules, history: HistoryService = createHistoryService(), scope: string = LOCAL_VIEW_SCOPE) {
     const parsed = parseGraph(data, rules);
     if (!parsed) throw new ViewGraphError("invalid_value", "The view graph is not valid.");
     this.views = parsed.views;
     this.nodes = parsed.nodes;
-    this.focus = parsed.focused;
+    this.legacyFocus = parsed.legacyFocus;
     this.keptViews = parsed.keptViews;
     this.keptNodes = parsed.keptNodes;
     this.keptRefs = usedNodes([], parsed.keptViews);
     // Values are kept by reference (each step holds detached copies), so a drag costs no serialisation.
-    this.scope = history.open(VIEW_SCOPE, { read: key => this.readHistory(key), apply: values => this.applyHistory(values),
+    this.scope = history.open(scope, { read: key => this.readHistory(key), apply: values => this.applyHistory(values),
       settled: () => this.publishHistory() },
       { limit: VIEW_HISTORY_LIMIT });
   }
 
   // ----- Reads -----
   /** The stored form (`xfs/view-graph-1`), detached, with every kept view and node as it was stored. */
-  data(): ViewGraphData { return writeData(this.views, this.nodes, this.focus, this.keptViews, this.keptNodes); }
+  data(): ViewGraphData { return writeData(this.views, this.nodes, this.legacyFocus, this.keptViews, this.keptNodes); }
   snapshot(): ViewGraphSnapshot {
-    return { focused: this.focus, views: this.views.map(view => ({ ...clone(view),
+    return { views: this.views.map(view => ({ ...clone(view),
       shared: VIEW_SLOTS.filter(slot => this.views.some(other => other !== view && other[slot] === view[slot])),
       sceneKind: this.nodes.get(view.scene)!.kind as SceneKind, panel: viewPanelId(view.id) })) };
   }
   viewIds(): ViewId[] { return this.views.map(view => view.id); }
   has(view: ViewId) { return this.views.some(item => item.id === view); }
-  /** The focused view: the one a view-scoped command acts on when it names none (design §3.8). */
-  focused(): ViewId { return this.focus; }
-  /** The view a command means: the one it names, else the focused one. Throws for a view that does not exist. */
-  target(view?: ViewId): ViewId {
-    const id = view ?? this.focus;
-    if (!this.has(id)) throw new ViewGraphError("missing_target", "That view no longer exists.");
-    return id;
+  /** The view a command names, checked: throws `missing_target` for a view that does not exist. */
+  target(view: ViewId): ViewId {
+    if (!this.has(view)) throw new ViewGraphError("missing_target", "That view no longer exists.");
+    return view;
   }
   /** The node a view's slot references, detached. */
   node(view: ViewId, slot: ViewSlot): GraphNode {
@@ -343,7 +345,7 @@ export class ViewGraph {
       created.push(node); refs[slot] = node.id;
     }
     const view: ViewRecord = { id, kind: "3d", ...(options.title ? { title: options.title } : {}), ...refs };
-    this.commit(created, { views: [...this.views, view], focused: this.focus }, { label: "New view", ...options });
+    this.commit(created, { views: [...this.views, view] }, { label: "New view", ...options });
     return id;
   }
   /** Close a view. Its unshared nodes go with it (collected); the main view cannot be closed. */
@@ -351,7 +353,7 @@ export class ViewGraph {
     if (view === MAIN_VIEW) throw new ViewGraphError("invalid_value", "The main view can't be closed.");
     this.record(view);
     const views = this.views.filter(item => item.id !== view);
-    this.commit([], { views, focused: this.focus === view ? MAIN_VIEW : this.focus }, { label: "Close view", ...options });
+    this.commit([], { views }, { label: "Close view", ...options });
   }
   /** Point a view's slot at another view's node (design §3.4); its old node is collected if nothing else references it. */
   link(view: ViewId, slot: ViewSlot, to: ViewId, options: ViewEditOptions = {}): boolean {
@@ -360,7 +362,7 @@ export class ViewGraph {
     const relinked = { ...current, [slot]: target };
     const issue = fitIssue(this.rules, relinked, this.nodes);
     if (issue) throw new ViewGraphError("incompatible_mode", issue);
-    this.commit([], { views: this.views.map(item => item.id === view ? relinked : item), focused: this.focus },
+    this.commit([], { views: this.views.map(item => item.id === view ? relinked : item) },
       { label: `Link ${SLOT_NAMES[slot]}`, ...options });
     return true;
   }
@@ -369,16 +371,9 @@ export class ViewGraph {
     const current = this.record(view), node = this.nodes.get(current[slot])!;
     if (this.viewsOf(node.id).length < 2) return false;
     const copy: NodeEntry = { ...clone(node), id: this.freshNodeId(slot) };
-    this.commit([copy], { views: this.views.map(item => item.id === view ? { ...current, [slot]: copy.id } : item), focused: this.focus },
+    this.commit([copy], { views: this.views.map(item => item.id === view ? { ...current, [slot]: copy.id } : item) },
       { label: `Unlink ${SLOT_NAMES[slot]}`, ...options });
     return true;
-  }
-  /** Move the focus (the last view pressed or focused); records nothing. */
-  focusView(view: ViewId): void {
-    this.record(view);
-    if (this.focus === view) return;
-    this.focus = view;
-    this.emit([], true, "edit", false, [view]);
   }
   private takenView(id: string) { return this.has(id) || this.keptViews.some(kept => kept.record.id === id); }
   private freshViewId() { let id: string; do id = `v${++this.counter + 1}`; while (this.takenView(id)); return id; }
@@ -398,9 +393,9 @@ export class ViewGraph {
   seal() { this.scope.seal(); }
   undo(): boolean { return this.scope.undo(); }
   redo(): boolean { return this.scope.redo(); }
-  /** The View and lighting history's value of a node (by ID) or of the views and focus (`structure`), detached. */
+  /** The View and lighting history's value of a node (by ID) or of the views (`structure`), detached. */
   private readHistory(key: string): unknown {
-    if (key === STRUCTURE) return { views: clone(this.views), focused: this.focus } satisfies Structure;
+    if (key === STRUCTURE) return { views: clone(this.views) } satisfies Structure;
     const node = this.nodes.get(key);
     return node && clone(node);
   }
@@ -415,7 +410,7 @@ export class ViewGraph {
     const views = structure ? structure.views : this.views, nodes = new Map(this.nodes);
     for (const id of ids) { const value = values[id] as NodeEntry | undefined; if (value) nodes.set(id, value); else nodes.delete(id); }
     if (!this.consistent(views, nodes)) { this.emit([], false, "history", false); return false; }
-    if (structure) { this.views = clone(structure.views); this.focus = this.has(structure.focused) ? structure.focused : MAIN_VIEW; }
+    if (structure) this.views = clone(structure.views);
     for (const id of ids) { const value = values[id] as NodeEntry | undefined; if (value) this.nodes.set(id, clone(value)); else this.nodes.delete(id); }
     const touched = [...ids];
     this.collect(touched);
@@ -441,9 +436,9 @@ export class ViewGraph {
   private commit(nodes: readonly NodeEntry[], structure: Structure | undefined, options: ViewEditOptions) {
     const before = new Map<string, NodeEntry | undefined>();
     for (const node of nodes) before.set(node.id, this.nodes.has(node.id) ? clone(this.nodes.get(node.id)!) : undefined);
-    const priorStructure = structure ? { views: clone(this.views), focused: this.focus } : undefined;
+    const priorStructure = structure ? { views: clone(this.views) } : undefined;
     for (const node of nodes) this.nodes.set(node.id, clone(node));
-    if (structure) { this.views = clone(structure.views); this.focus = structure.focused; }
+    if (structure) this.views = clone(structure.views);
     // Nodes no view references any more go in the same commit (design §3.3): no dangling nodes, no manual clean-up.
     for (const [id, node] of this.nodes) if (!this.referenced(id)) { if (!before.has(id)) before.set(id, clone(node)); this.nodes.delete(id); this.trails.delete(id); }
     const touched = [...before.keys()];

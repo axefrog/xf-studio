@@ -13,6 +13,8 @@ export type ExperimentPort = {
   set(id: string, enabled: boolean): Promise<{ ok: boolean; message?: string }>;
   registrations(): readonly ExperimentRegistration[];
   subscribe(listener: () => void): () => void;
+  /** True once every experiment document this page holds is stored, unsaved ones written again first (a workspace handover waits on it). */
+  settle?(): Promise<boolean>;
 };
 
 /** The experimental-features preference: one document in the document store. */

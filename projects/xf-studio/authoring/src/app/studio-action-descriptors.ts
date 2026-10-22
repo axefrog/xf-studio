@@ -20,6 +20,7 @@ import { describe, enumerated, input, inputText, state, target } from "./action-
 import { TRANSITION_SECONDS, TRANSITION_SOURCES } from "../platform/core/transition-settings";
 import { EASING_IDS } from "../platform/api/easing";
 import { EYE_MAKEUP_DESCRIPTORS, EYE_MAKEUP_GESTURE_DESCRIPTORS } from "../legacy/eye-makeup/eye-makeup-descriptors";
+import { TARGET_SCHEMA } from "./action-targets";
 
 /** `host` actions read this computer's configuration (e.g. installed launchers); they never touch a recipe. */
 export type ActionScope = StudioTarget["kind"] | "file" | "host";
@@ -27,40 +28,47 @@ export type ActionScope = StudioTarget["kind"] | "file" | "host";
 export type { PayloadSchema, UndoPolicy, ValueSchema } from "../platform/api";
 export type ActionDescriptor = PlatformActionDescriptor<ActionScope>;
 export type RequestDescriptor = { scope: readonly ActionScope[]; payload: PayloadSchema;
-  effect: "read" | "save" | "download" | "import" | "package" | "derive" | "install-tool" | "install-mod" | "reveal" | "launch"; async: true;
+  effect: "read" | "save" | "download" | "import" | "package" | "derive" | "install-tool" | "install-mod" | "reveal" | "launch" | "lease"; async: true;
   cancellable: boolean };
 
 const desc = (scope: ActionScope | readonly ActionScope[], effect: ActionDescriptor["effect"], undo: UndoPolicy,
   payload: PayloadSchema = {}, variants?: Record<string, PayloadSchema>, variantUndo?: Record<string, UndoPolicy>): ActionDescriptor =>
   describe<ActionScope>(scope, effect, undo, payload, variants, variantUndo);
 
+/** A camera, preview, motion or view action: it names the view it acts on (profiles design §3.6), which the input layer resolves. */
+const inView: typeof desc = (...args) => { const d = desc(...args); return { ...d, payload: { ...d.payload, view: TARGET_SCHEMA.view } }; };
 /**
- * A camera, preview or motion action: it may name the view it acts on (view-graph-design.md §3.8); without one it acts on the
- * focused view. Optional, so every existing caller is unchanged.
+ * A view action that edits the view's scene: it names that scene and the `gen` it was resolved at too, so it never edits a replacement
+ * (another scene the view was relinked to, or the same scene showing another V or look).
  */
-const inView: typeof desc = (...args) => { const d = desc(...args); return { ...d, payload: { ...d.payload, view: { type: "string", required: false, from: "target" } } }; };
+const onScene: typeof desc = (...args) => { const d = inView(...args);
+  return { ...d, payload: { ...d.payload, scene: TARGET_SCHEMA.scene, sceneGen: TARGET_SCHEMA.sceneGen } }; };
 
 /** Every public top-level action ID is covered at compile time; nested commands have named variants. */
 export const ACTION_DESCRIPTORS = {
-  "history.undo": desc("workspace", "content", "none"),
-  "history.redo": desc("workspace", "content", "none"),
-  "history.jumpTo": desc("workspace", "content", "none", { entryId: input("string") }),
+  // Each names the history scope it steps (profiles design §3.7): the editing context, or a focused 3D view's look.
+  "history.undo": desc("workspace", "content", "none", { scope: TARGET_SCHEMA.scope }),
+  "history.redo": desc("workspace", "content", "none", { scope: TARGET_SCHEMA.scope }),
+  "history.jumpTo": desc("workspace", "content", "none", { scope: TARGET_SCHEMA.scope, entryId: input("string") }),
   // Eye makeup's actions, in catalogue order (eye-makeup-descriptors.ts).
   ...EYE_MAKEUP_DESCRIPTORS,
-  "preset.edit": desc(["preset", "collection"], "library", "none", { command: input("object") }, {
+  "preset.edit": desc(["preset", "collection"], "library", "none", { collection: TARGET_SCHEMA.collection, command: input("object") }, {
     add: {}, copy: { id: target("string") }, remove: { id: target("string") },
     restore: {}, rename: { id: target("string"), name: inputText(1, 120) },
     move: { id: target("string"), to: input("integer", 0) } }, { remove: "recovery", restore: "recovery" }),
-  "preset.select": desc("preset", "selection", "none", { id: target("string") }),
-  "collection.rename": desc("collection", "library", "none", { name: input("string") }),
-  "collection.open": desc("collection", "library", "recovery", { collection: input("object"), revision: { ...state("integer"), required: false } }),
-  "collection.undoOpen": desc("collection", "library", "recovery", { draft: { ...target("string"), required: false } }),
-  "collection.importRecipe": desc("file", "library", "none", { recipe: input("object"), name: input("string") }),
+  "collection.rename": desc("collection", "library", "none", { collection: TARGET_SCHEMA.collection, name: input("string") }),
+  "collection.undoOpen": desc("collection", "library", "recovery", { collection: TARGET_SCHEMA.collection, draft: { ...target("string"), required: false } }),
+  "collection.importRecipe": desc("file", "library", "none", { collection: TARGET_SCHEMA.collection, recipe: input("object"), name: input("string") }),
   // The package plan (feature-module platform §6): which features ship in which XF mod; stored with the collection.
-  "package.rename": desc("collection", "library", "none", { productId: target("string"), modName: inputText(0, 80) }),
-  "package.assign": desc("collection", "library", "none", { feature: target("string"), productId: target("string") }),
-  "package.split": desc("collection", "library", "none", { feature: target("string"), newId: { ...state("string"), required: false } }),
-  "package.merge": desc("collection", "library", "none", { productId: target("string"), intoId: target("string") }),
+  "package.rename": desc("collection", "library", "none", { collection: TARGET_SCHEMA.collection, productId: target("string"), modName: inputText(0, 80) }),
+  "package.assign": desc("collection", "library", "none", { collection: TARGET_SCHEMA.collection, feature: target("string"), productId: target("string") }),
+  "package.split": desc("collection", "library", "none", { collection: TARGET_SCHEMA.collection, feature: target("string"), newId: { ...state("string"), required: false } }),
+  "package.merge": desc("collection", "library", "none", { collection: TARGET_SCHEMA.collection, productId: target("string"), intoId: target("string") }),
+  // What a scene shows (app/profiles/scene-commands.ts): choosing a preset shows its look on the scene the Presets panel resolves to.
+  "scene.setLook": desc("preset", "selection", "none", { scene: TARGET_SCHEMA.scene, sceneGen: TARGET_SCHEMA.sceneGen,
+    look: { type: "object", required: false, from: "input" } }),
+  "scene.setSubject": desc("viewport", "workspace", "none", { scene: TARGET_SCHEMA.scene, sceneGen: TARGET_SCHEMA.sceneGen,
+    subject: { type: "object", required: false, from: "input" } }),
   "camera.front": inView("viewport", "workspace", "none"),
   "camera.body": inView("viewport", "workspace", "none"),
   "camera.setFov": inView("viewport", "workspace", "none", { degrees: input("number", 10, 90) }),
@@ -103,14 +111,14 @@ export const ACTION_DESCRIPTORS = {
   "preview.moveLight": inView("viewport", "workspace", "none", { light: target("string"), index: input("integer", 0, LIGHTING_LIMITS.lights - 1) }),
   "preview.duplicateLight": inView("viewport", "workspace", "none", { light: target("string") }),
   "preview.setKeyAngle": inView("viewport", "workspace", "none", { degrees: input("number", STUDIO_KEY_ANGLE_RANGE.min, STUDIO_KEY_ANGLE_RANGE.max) }),
-  "preview.setEyeShape": inView("viewport", "workspace", "none", { index: input("integer", 0, 21) }),
+  "preview.setEyeShape": onScene("viewport", "workspace", "none", { index: input("integer", 0, 21) }),
   "preview.setPiercings": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
   "preview.setBody": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
-  "preview.setUncensored": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
+  "preview.setUncensored": onScene("viewport", "workspace", "none", { enabled: input("boolean") }),
   "preview.setSurfaceControls": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
   "preview.setWire": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
-  "preview.setNormals": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
-  "preview.setEyeOptics": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
+  "preview.setNormals": onScene("viewport", "workspace", "none", { enabled: input("boolean") }),
+  "preview.setEyeOptics": onScene("viewport", "workspace", "none", { enabled: input("boolean") }),
   "preview.setHair": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
   "preview.setDetail": inView("viewport", "workspace", "none", { detail: enumerated(["brows", "lashes"]), enabled: input("boolean") }),
   // The Rendering options: how the view draws (its display node), workspace view state in the View and lighting history, never the looks.
@@ -123,20 +131,21 @@ export const ACTION_DESCRIPTORS = {
   "motion.setContributions": inView("viewport", "workspace", "none", { body: input("boolean"), face: input("boolean") }),
   "motion.setBlink": inView("viewport", "workspace", "none", { value: input("number", 0, 1) }),
   "motion.playBlink": inView("viewport", "workspace", "none", { playing: input("boolean") }),
-  "motion.setPhysics": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
+  "motion.setPhysics": onScene("viewport", "workspace", "none", { enabled: input("boolean") }),
   // Animated transitions (platform/core/transition-settings.ts): whether a held expression's changes ease, how long and along which curve.
   "transition.set": desc("viewport", "workspace", "none", { source: enumerated(TRANSITION_SOURCES),
     enabled: { ...input("boolean"), required: false }, seconds: { ...input("number", TRANSITION_SECONDS.min, TRANSITION_SECONDS.max), required: false },
     easing: { ...enumerated(EASING_IDS), required: false } }),
   "quality.set": desc("viewport", "workspace", "none", { size: enumerated([512, 1024, 2048, 4096]) }),
   "quality.rebuild": desc("viewport", "workspace", "none"),
-  "savedV.load": desc("file", "file", "none", { bytes: input("bytes", 0, 128 * 1024 * 1024) }),
-  "savedV.restore": desc("file", "workspace", "none", { value: input("object") }),
-  "savedV.clear": desc("viewport", "workspace", "none"),
+  // Aliases of `character.setSource` until profiles phase 1 ends: each names the V it shows a save on.
+  "savedV.load": desc("file", "file", "none", { character: TARGET_SCHEMA.character, bytes: input("bytes", 0, 128 * 1024 * 1024) }),
+  "savedV.restore": desc("file", "workspace", "none", { character: TARGET_SCHEMA.character, value: input("object") }),
+  "savedV.clear": desc("viewport", "workspace", "none", { character: TARGET_SCHEMA.character }),
   // The character context's family (character-context.ts): creator choices record their own history, never a look's.
   ...CHARACTER_CONTEXT_DESCRIPTORS,
   // The views family (view-actions.ts): view tools in a view's tools node, and the View and lighting history (never a look's).
-  "view.setTool": desc("viewport", "workspace", "none", { view: { type: "string", required: false, from: "target" }, tool: target("string"),
+  "view.setTool": desc("viewport", "workspace", "none", { view: TARGET_SCHEMA.view, tool: target("string"),
     enabled: input("boolean") }),
   "view.undo": desc("workspace", "workspace", "none"),
   "view.redo": desc("workspace", "workspace", "none"),
@@ -182,6 +191,8 @@ export const REQUEST_DESCRIPTORS = {
   exportPlan: request("collection", "download"),
   import: request("file", "import", { text: input("string"), bytes: input("integer", 0, 16_000_000) }),
   package: request("collection", "package", { action: enumerated(["check", "build"]) }),
+  // Keep mine, Use theirs or Keep both for a conflict on this collection or one of its presets (style guide t-conflict).
+  resolveConflict: request("collection", "save", { conflict: target("string"), keep: enumerated(["mine", "theirs", "both"]) }),
 } satisfies Record<CollectionRequest["kind"], RequestDescriptor>;
 
 /** Read-only host detection. Results are private host metadata (absolute paths) for a setup view to
@@ -209,6 +220,27 @@ export const DESKTOP_APP_DESCRIPTORS = {
  * which the host skips when Settings turns it off; `check` is the person's own; `skipVersion` stops the check at start announcing a
  * version. Each reads or keeps only what the host found; none changes a recipe, the library or Undo. The page asks after first paint.
  */
+/**
+ * The workspace lease (`app/workspace/workspace-lease.ts`, profiles design §2.3): Use it here asks the page holding this workspace
+ * to release it, and waits until it has. It changes no content; the page restarts from the released workspace.
+ */
+/**
+ * The outbox (profiles design §2.2): Try again writes again the records of changes this page couldn't protect on this computer. It
+ * changes no content.
+ */
+export const DOCUMENT_OUTBOX_DESCRIPTORS = {
+  "documents.protect": request("host", "save"),
+  // Restoring changes from the last session (style guide t-recovering): send them again now; keep working where that is safe; discard
+  // the changes waiting for a save that is gone.
+  "documents.retryRecovery": request("host", "save"),
+  "documents.keepRestored": request("host", "save"),
+  "documents.discardWaiting": request("host", "save"),
+} satisfies Record<"documents.protect" | "documents.retryRecovery" | "documents.keepRestored" | "documents.discardWaiting", RequestDescriptor>;
+export const WORKSPACE_LEASE_DESCRIPTORS = {
+  "workspace.takeOver": request("host", "lease"),
+  "workspace.retryRelease": request("host", "lease"),
+} satisfies Record<"workspace.takeOver" | "workspace.retryRelease", RequestDescriptor>;
+
 export const UPDATE_CHECK_DESCRIPTORS = {
   "updates.startupCheck": request("host", "read", {}, true),
   "updates.check": request("host", "read", {}, true),
@@ -247,20 +279,21 @@ export const GESTURE_DESCRIPTORS = EYE_MAKEUP_GESTURE_DESCRIPTORS satisfies Reco
  * it refuses is exported unsaved, CORE-38), and `recovery` marks draft switches that
  * the collection recovery queue can undo. None records a recipe Undo entry.
  */
+/** A file workflow; `payload`: what one that waits for a picker names when it is asked (profiles design §3.3). */
 export type FileDescriptor = { scope: readonly ActionScope[];
   effect: "import" | "download" | "package" | "recover"; device: "picker" | "download" | "none";
-  async: true; cancellable: false; savesFirst: boolean; undo: UndoPolicy };
+  async: true; cancellable: false; savesFirst: boolean; undo: UndoPolicy; payload: PayloadSchema };
 const file = (scope: ActionScope | readonly ActionScope[], effect: FileDescriptor["effect"],
-  device: FileDescriptor["device"], options: { savesFirst?: boolean; undo?: UndoPolicy } = {}): FileDescriptor =>
+  device: FileDescriptor["device"], options: { savesFirst?: boolean; undo?: UndoPolicy; payload?: PayloadSchema } = {}): FileDescriptor =>
   ({ scope: typeof scope === "string" ? [scope] : scope, effect, device, async: true, cancellable: false,
-    savesFirst: options.savesFirst ?? false, undo: options.undo ?? "none" });
+    savesFirst: options.savesFirst ?? false, undo: options.undo ?? "none", payload: options.payload ?? {} });
 export const FILE_DESCRIPTORS = {
-  "recipe.import": file(["file", "collection"], "import", "picker"),
+  "recipe.import": file(["file", "collection"], "import", "picker", { payload: { collection: TARGET_SCHEMA.collection } }),
   "recipe.export": file(["file", "layer"], "download", "download"),
   "mask.export": file(["file", "layer"], "download", "download"),
-  "savedV.import": file("file", "import", "picker"),
+  "savedV.import": file("file", "import", "picker", { payload: { character: TARGET_SCHEMA.character } }),
   "savedV.export": file("file", "download", "download"),
-  "characterPreset.import": file("file", "import", "picker"),
+  "characterPreset.import": file("file", "import", "picker", { payload: { character: TARGET_SCHEMA.character } }),
   "characterPreset.export": file("file", "download", "download"),
   "collection.import": file(["file", "collection"], "import", "picker", { undo: "recovery" }),
   "collection.export": file("collection", "download", "download", { savesFirst: true }),

@@ -11,6 +11,7 @@ import { trustedFixture } from "./studio-presentation-fixture";
 import { withHair, type Hair } from "./fixtures/hair-feature";
 import { freshWorkspace } from "./fixtures/eye-region";
 
+import { namedCore } from "./fixtures/named-targets";
 test("the port lists the registered features and eye makeup's facade owns exactly its actions", () => {
   const { shell } = trustedFixture();
   expect(shell.features()).toEqual([{ id: "eye-makeup", label: "Eye makeup", stage: "stable" },
@@ -20,7 +21,7 @@ test("the port lists the registered features and eye makeup's facade owns exactl
   expect(shell.feature("hair")).toBeUndefined();
   // Another owner's kind is not this facade's: refused, never routed elsewhere.
   expect(eye.capability({ kind: "history.undo" } as never)).toMatchObject({ available: false, code: "invalid_value" });
-  expect(eye.dispatch({ kind: "camera.front" } as never)).toMatchObject({ ok: false, code: "invalid_value" });
+  expect(eye.dispatch({ kind: "camera.front", view: "main" } as never)).toMatchObject({ ok: false, code: "invalid_value" });
   expect(eye.limitsFor({ kind: "viewport" }, "camera.setFov" as never)).toEqual({});
   const layer = eye.view().layer()!;
   expect(eye.limitsFor({ kind: "layer", id: layer.id }, "layer.setOpacity")).toEqual(
@@ -43,8 +44,8 @@ test("the port lists the registered features and eye makeup's facade owns exactl
 });
 
 test("a second feature gets a generic facade with a detached view of its live document", () => {
-  const core = createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, withHair());
-  const port = createStudioPresentation({ authoring: core.app, editor: core.presentation,
+  const core = namedCore(createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, withHair()));
+  const port = createStudioPresentation({ authoring: core.application, targets: core.targets, editor: core.presentation,
     library: {} as never, files: {} as never, viewport: {} as never, preferences: {} as never,
     previewReadiness: { readiness: () => ({}) as never, subscribe: () => () => {} } });
   expect(port.features().map(feature => feature.id)).toEqual(["eye-makeup", "expressions", "hair"]);

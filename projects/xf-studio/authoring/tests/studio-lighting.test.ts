@@ -78,7 +78,7 @@ test("the workspace stores the rig only when adjusted, restores it, and older or
   const { port: p } = port();
   const actions = new PreviewActions(round.preview, p);
   expect(actions.lightingSetups().shown.label).toBe("Custom (from Key light)");
-  actions.dispatch({ kind: "preview.selectLightingSetup", setup: "soft" });
+  actions.dispatch({ kind: "preview.selectLightingSetup", view: "main", setup: "soft" });
   const composer = new WorkspaceComposer(round, { editor: () => ({ recipe: round.recipe, active: round.active, selected: round.selected,
     fieldSelection: round.fieldSelection, history: round.history }) as never, uvView: () => round.uvView, savedV: () => undefined,
   collections: () => undefined, quality: () => round.preview.textureSize, preview: () => actions.snapshot(), motion: () => undefined });

@@ -26,14 +26,27 @@ import type { Clock } from "../core/clock";
 export interface LibraryWrites { wrote(): void }
 
 /**
+ * The log size (in pages) at which a commit checkpoints on the writing connection's own thread: a backstop only. A committed look
+ * writes about 80 pages, so SQLite's default (1,000) would checkpoint on the host's thread about every 12 commits, at 67–184 ms on a
+ * slow drive (profiles design §2.1). The scheduled flush (`LibraryDurability`, on its worker, within about 5 s) does the checkpointing;
+ * this fires only when that flush hasn't completed for a long run of commits (about 64 MB of log at 4 KB pages).
+ */
+export const WAL_AUTOCHECKPOINT_PAGES = 16_384;
+/** The log file is cut back to this once a checkpoint has emptied it, so a burst never leaves a large file behind. */
+export const WAL_SIZE_LIMIT_BYTES = 64 * 1024 * 1024;
+
+/**
  * Puts a library connection in WAL mode (persistent in the file; a no-op when it already is) and, once WAL is confirmed,
- * `synchronous=NORMAL`. Returns whether the file is in WAL mode. `synchronous` is per connection, so every connection
- * that writes a library file calls this.
+ * `synchronous=NORMAL` and the raised autocheckpoint (`WAL_AUTOCHECKPOINT_PAGES`). Returns whether the file is in WAL mode.
+ * `synchronous` and the autocheckpoint are per connection, so every connection that writes a library file calls this.
+ * Durability is unchanged: a commit is in the log the moment it returns (an app crash or kill loses nothing), and the flush's
+ * checkpoint, which syncs the log first, still runs within seconds of the last commit (a power cut loses at most those seconds).
  */
 export function useWriteAheadLog(db: Database): boolean {
   const { journal_mode: mode } = db.query("PRAGMA journal_mode=WAL").get() as { journal_mode: string };
   const wal = mode.toLowerCase() === "wal";
   db.exec(`PRAGMA synchronous=${wal ? "NORMAL" : "FULL"};`);
+  if (wal) db.exec(`PRAGMA wal_autocheckpoint=${WAL_AUTOCHECKPOINT_PAGES}; PRAGMA journal_size_limit=${WAL_SIZE_LIMIT_BYTES};`);
   return wal;
 }
 
