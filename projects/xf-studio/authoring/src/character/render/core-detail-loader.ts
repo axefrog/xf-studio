@@ -62,7 +62,10 @@ async function resourceBytes(resource: RenderResource, fetcher: CoreDetailFetch,
 export async function loadCoreDetail(renderer: THREE.WebGLRenderer, fetcher: CoreDetailFetch = fetch, body: CoreBody = "female",
   signal?: AbortSignal): Promise<LoadedCoreDetail> {
   signal?.throwIfAborted();
-  const record = await readCoreDetail(fetcher, body);
+  let record: CoreDetail;
+  try { record = await readCoreDetail(fetcher, body); }
+  // An abort is no failure of the files: a read cut short by it rejects with its reason, not as an unreachable preview.
+  catch (error) { if (signal?.aborted) throw signal.reason; throw error; }
   signal?.throwIfAborted();
   const textures: Partial<Record<CoreTextureSlot, THREE.Texture>> = {};
   let gltf: GLTF | undefined;

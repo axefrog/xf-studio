@@ -10,6 +10,8 @@
  *    byte-identical.
  * 4. Input: a wheel on the canvas moves the shown runtime's camera only.
  * 5. Disposal of both leaves the device drawing-ready, its canvas in place, and the GPU objects where the first disposal left them.
+ * 6. A context lost and restored while a runtime is still being built (after its stage prefiltered the room, before its core loads):
+ *    once shown, it draws byte-identically to the same runtime built on an undisturbed context.
  * Results land in `window.probe` as plain data.
  */
 import * as THREE from "three";
@@ -33,13 +35,16 @@ export type RendererDeviceProbe = {
   /** After a runtime was built, shown, drawn and disposed once: what lives as long as the renderer is made. */
   warm: Counts;
   aborts: { step: string; error: string; after: Counts }[];
-  hidden: { framesA: [number, number]; framesB: number; canvasBefore: string; canvasAfter: string; drawnB: string[] };
+  hidden: { framesA: [number, number]; framesB: number; canvasBefore: string; canvasAfter: string; drawnB: string[];
+    /** B's makeup composite draws before and after its renderer prepared it ahead, while hidden. */
+    composite: [number, number] };
   aba: { a: string; b: string; aAgain: string; identical: boolean; framesBWhileHidden: number; framesAWhileB: number; bytes: number };
   input: { shownA: { a: boolean; b: boolean }; shownB: { a: boolean; b: boolean } };
   disposed: { counts: Counts; canvases: number; hidden: boolean; lost: boolean; drawsAgain: boolean };
+  restoredWhileBuilding: { events: string[]; built: string; reference: string; identical: boolean };
 };
 const probe: RendererDeviceProbe = { ok: false, errors: [], renderer: "", warm: null as never, aborts: [], hidden: null as never, aba: null as never,
-  input: null as never, disposed: null as never };
+  input: null as never, disposed: null as never, restoredWhileBuilding: null as never };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 try {
@@ -49,7 +54,8 @@ try {
   const canvas = document.createElement("canvas");
   const gl = canvas.getContext("webgl2", { alpha: false, antialias: false, depth: false, stencil: false, preserveDrawingBuffer: true })!;
   const counter = countGlObjects(gl);
-  const device = createRendererDevice(element, { context: gl }), renderer = device.renderer;
+  const contextEvents: string[] = [];
+  const device = createRendererDevice(element, { context: gl, onContext: event => { contextEvents.push(event); } }), renderer = device.renderer;
   renderer.debug.onShaderError = (context, program, vertex, fragment) => {
     probe.errors.push(`${context.getProgramInfoLog(program) ?? ""} ${context.getShaderInfoLog(vertex) ?? ""} ${context.getShaderInfoLog(fragment) ?? ""}`.trim() || "shader error");
   };
@@ -101,6 +107,8 @@ try {
     const options: SceneHostOptions = { signal: controller.signal };
     if (step === "before") controller.abort();
     if (step === "core") options.loadCore = async () => { const core = syntheticCore(); controller.abort(); return core; };
+    // A step that fails because of the abort (a fetch cut short) rejects with the abort, not with its own error.
+    if (step === "core-failing") options.loadCore = async () => { controller.abort(); throw new TypeError("Failed to fetch"); };
     if (step === "motion") { const loaded = motion(); options.loadMotion = async (...args) => { const made = await loaded(...args); controller.abort(); return made; }; }
     if (step === "features") {
       // A renderer that aborts the build as it is made, with a mesh of its own on the rig: the next renderer is never made, and both go.
@@ -117,7 +125,7 @@ try {
     await sleep(20);
     probe.aborts.push({ step, error, after: counts() });
   };
-  for (const step of ["before", "core", "motion", "features"]) await abortAt(step);
+  for (const step of ["before", "core", "core-failing", "motion", "features"]) await abortAt(step);
 
   // 2. A shown; B built hidden, given a V and its parts prepared ahead, while A stays on the canvas.
   const a = await build();
@@ -130,10 +138,17 @@ try {
   const loaded = await b.details.load(recordB, { fetcher, reuse: null });
   await b.prepareDetails(loaded);
   await dress(b, recordB, 2.4, loaded);
+  // The runtime composites only in a drawn frame, so B's makeup is composited ahead here, through its renderer's own preparation, on the
+  // shared renderer while A is shown (preparing a whole runtime ahead is 4a-v's).
+  const makeupB = b.feature(EYE_MAKEUP_RENDERER)!;
+  const compositeDraws = () => (makeupB.evidence() as { plate: { compositeDraws: { layerDraws: number } } }).plate.compositeDraws.layerDraws;
+  const compositeBefore = compositeDraws();
+  makeupB.beforeDraw?.();
+  const compositeAfter = compositeDraws();
   b.requestRender();
   await settle();
   probe.hidden = { framesA: [framesA0, a.frameTiming().frames], framesB: b.frameTiming().frames, canvasBefore: checksum(shownA), canvasAfter: checksum(pixels()),
-    drawnB: b.characterDetailsEvidence().components.map(item => item.slot) };
+    drawnB: b.characterDetailsEvidence().components.map(item => item.slot), composite: [compositeBefore, compositeAfter] };
 
   // 3. A, then B, then A: A's pixels are byte-identical (each draw opens with its own renderer state; risk 4).
   const framesBHidden = b.frameTiming().frames;
@@ -168,9 +183,25 @@ try {
   const next = await build();
   device.show(next.slot);
   next.requestRender(); await settle();
-  const drawsAgain = next.frameTiming().frames > 0;
+  const drawsAgain = next.frameTiming().frames > 0, reference = pixels();
   next.dispose();
   probe.disposed = { counts: after, canvases: element.querySelectorAll("canvas").length, hidden, lost: gl.isContextLost(), drawsAgain };
+
+  // 6. The same runtime again, with the context lost and restored while it is built: after its stage prefiltered the room (into a target
+  // the loss empties), before its core loads. Shown, it draws as the undisturbed one did.
+  const lose = gl.getExtension("WEBGL_lose_context")!;
+  const waitFor = async (event: string) => { for (let i = 0; i < 300 && !contextEvents.includes(event); i++) await sleep(10); };
+  const disturbed = await build({ loadCore: async () => {
+    lose.loseContext(); await waitFor("lost");
+    lose.restoreContext(); await waitFor("restored");
+    return syntheticCore();
+  } });
+  device.show(disturbed.slot);
+  disturbed.requestRender(); await settle();
+  const built = pixels();
+  probe.restoredWhileBuilding = { events: [...contextEvents], built: checksum(built), reference: checksum(reference),
+    identical: built.length === reference.length && built.every((value, i) => value === reference[i]) };
+  disturbed.dispose();
   device.dispose();
   probe.ok = probe.errors.length === 0;
 } catch (error) {

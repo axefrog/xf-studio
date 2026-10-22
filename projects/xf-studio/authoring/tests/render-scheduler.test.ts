@@ -244,7 +244,7 @@ test("the authored plate's light, skin and composite change only inside calls th
   const normals = source.slice(source.indexOf("    setNormals: (v: boolean) => {"), source.indexOf("    setExposure:"));
   expect(normals).toContain("features?.setNormals(v);");
   expect(source).toContain("setWire: (v: boolean) => features?.setWireframe(v),");
-  const frame = source.slice(source.indexOf("  function draw(dt: number) {"), source.indexOf("  let slot: DeviceSlot | undefined;"));
+  const frame = source.slice(source.indexOf("  function draw(dt: number) {"), source.indexOf("  const invalidate = () => drawn.requestFrame();"));
   expect(frame.indexOf("features?.beforeDraw();")).toBeGreaterThan(-1);
   expect(frame.indexOf("features?.beforeDraw();")).toBeLessThan(frame.indexOf("lighting.render(camera);"));
   // The renderer is shared: a draw opens with this scene's own renderer-global state (renderer-state.ts).
@@ -254,9 +254,12 @@ test("the authored plate's light, skin and composite change only inside calls th
   expect(CANVAS_TRIGGERS).toContain("webglcontextrestored");
   expect(source).toContain("lighting.restore(); features?.contextRestored();");
   // …and bakes the shown V's layered parts again from their stacks (PREV-62).
-  expect(source.slice(source.indexOf("const contextRestored = () => {"), source.indexOf("function frameIdle()"))).toContain("character.contextRestored();");
+  expect(source.slice(source.indexOf("  restoreMade = () => {"), source.indexOf("function frameIdle()"))).toContain("character.contextRestored();");
   // The device hears the context come back and tells every runtime on it.
-  expect(source).toContain("const drawn = device.add({ draw, animating: () => rigMotion.animating() || settle.settling, attach, detach, resized, contextRestored });");
+  // The runtime is on the device before it makes anything, so a restore during its build reaches what it has made by then (the stage's room).
+  expect(source).toContain("resized: (width, height) => resized(width, height), contextRestored: () => restoreMade() });");
+  expect(source.indexOf("const drawn = device.add({")).toBeLessThan(source.indexOf("const lighting = createLightingSetupStage("));
+  expect(source).toContain("restoreMade = () => lighting.restore();");
   expect(deviceSource()).toContain(`canvas.addEventListener("webglcontextrestored", restored);`);
   expect(deviceSource()).toContain("for (const entry of [...entries]) entry.scene.contextRestored();");
   const restore = character.slice(character.indexOf("  function contextRestored() {"), character.indexOf("  return {", character.indexOf("  function contextRestored() {")));

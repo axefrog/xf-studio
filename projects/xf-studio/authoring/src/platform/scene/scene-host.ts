@@ -26,7 +26,7 @@ import { afterTask, createCharacterRenderer } from "./character-renderer";
 import { createCameraSettle } from "./camera-settle";
 import { createMouthApertureSampler, headBones } from "./mouth-aperture-sampler";
 import { createOrbitLimits, SceneOrbitControls } from "./orbit-limits";
-import type { DeviceSlot, RendererDevice } from "./renderer-device";
+import type { RendererDevice } from "./renderer-device";
 
 /**
  * The scene host (feature-module platform §5): one scene runtime, the platform's 3D scene of one subject, drawn by the window's renderer
@@ -73,7 +73,12 @@ export type SceneRuntime = Awaited<ReturnType<typeof createSceneRuntime>>;
 export async function createSceneRuntime(device: SceneDevice, options: SceneHostOptions = {}) {
   const releases: (() => void)[] = [];
   try { return await assembleRuntime(device, options, releases); }
-  catch (error) { releaseAll(releases); throw error; }
+  catch (error) {
+    releaseAll(releases);
+    // A step that failed because the build was aborted (a fetch cut short, say) rejects with the abort, never as a failure of its own.
+    if (options.signal?.aborted) throw options.signal.reason;
+    throw error;
+  }
 }
 
 /** Runs each release once, newest first; teardown is best effort. */
@@ -86,6 +91,13 @@ function releaseAll(releases: (() => void)[]) {
 async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, releases: (() => void)[]) {
   const { signal } = options, renderer = device.renderer;
   signal?.throwIfAborted();
+  // On the device from the start, hidden, before anything is made on the renderer: a context lost and restored while this runtime is
+  // still being built reaches what it has made so far (the stage's prefiltered room is made before the core loads), and the device
+  // never draws it until its owner shows it, once built. What it restores grows with the build (`restoreMade`).
+  let restoreMade = () => {};
+  const drawn = device.add({ draw: dt => draw(dt), animating: () => rigMotion.animating() || settle.settling, attach, detach,
+    resized: (width, height) => resized(width, height), contextRestored: () => restoreMade() });
+  releases.push(() => drawn.remove());
   const scene = new THREE.Scene(),
     camera = new THREE.PerspectiveCamera(30, 1, 0.005, 10);
   const backdrop = createViewportBackdrop(scene, options.stage ?? "dark");
@@ -167,6 +179,7 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
   // the backdrop is the stage's).
   const lighting = createLightingSetupStage({ scene, renderer, loadLut: options.loadLut ?? (() => loadGradingLut()), studioBackground: scene.background });
   releases.push(() => lighting.dispose());
+  restoreMade = () => lighting.restore();
   signal?.throwIfAborted();
   // The core head, plate, eyes and maps load through one typed render record (see core-detail-loader).
   const core: LoadedCoreDetail = await (options.loadCore ?? ((renderer, body, signal) => loadCoreDetail(renderer, fetch, body, signal)))(
@@ -204,7 +217,7 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
   releases.push(() => orbitLimits.dispose());
   // A restored context comes back with empty render targets: the studio stage prefilters its environment again, the feature
   // renderers redraw theirs (eye makeup's composite), and the shown V's layered parts are baked again from their stacks (PREV-62).
-  const contextRestored = () => {
+  restoreMade = () => {
     lighting.restore(); features?.contextRestored();
     character.contextRestored();
   };
@@ -270,8 +283,7 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
   // Render on demand (UI-38): a frame is drawn when something visible changed, or while the idle or Play blink runs. The runtime's own
   // mutators, the feature renderers' changes, the lighting device, the idle, the controls (every orbit and damping step), frame listeners
   // and the device's resizes and canvas input all request one; a hidden runtime's requests wait until it is shown.
-  let slot: DeviceSlot | undefined;
-  const invalidate = () => slot?.requestFrame();
+  const invalidate = () => drawn.requestFrame();
   releases.push(bindRenderTriggers(invalidate, { controls, lighting }));
   // A new setup or a trial turn doesn't always notify the lighting device's listeners (only a changed display or body does).
   Object.assign(lighting, invalidating(lighting, ["setSource", "trialYaw", "trialCasters", "solo", "setScatter", "setScatterScale"], invalidate));
@@ -301,10 +313,7 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
   // A renderer that replaces resolved parts hides them from the start.
   if (features.superseded().length) character.refreshVisibility();
   signal?.throwIfAborted();
-  // Built: the runtime takes its place on the device, hidden. The device draws it once it is shown, sizing its camera to the pane then.
-  const drawn = device.add({ draw, animating: () => rigMotion.animating() || settle.settling, attach, detach, resized, contextRestored });
-  slot = drawn;
-  releases.push(() => drawn.remove());
+  // Built: its owner may show it now (the device sizes its camera to the pane then).
   const evidence = coreSceneEvidence({ coreDetail, meshes: rig.meshes, blink, blinkError: motion.blinkError,
     eyeShape: { choices: rig.eyeShapeChoices.length, eyesFollow: rig.eyesFollowShape, eyeMorphTargets: eyes.morphTargetInfluences?.length ?? 0 },
     profileEncoding: character.profileEncoding, idle, idleError: motion.idleError, faceError: motion.faceError ?? "" });
@@ -324,7 +333,7 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
      * Releases the V's details, the feature renderers, the core head, the rig, the stage and every listener: all it made on the renderer, which
      * it never disposes (it leaves the device, hidden first if shown). The runtime is unusable afterwards.
      */
-    dispose: () => { character.dispose(); releaseAll(releases); },
+    dispose: () => { drawn.remove(); character.dispose(); releaseAll(releases); },
     /** Its place on the renderer device: the device shows it by this (`device.show(runtime.slot)`). */
     slot: drawn,
     onFrame,

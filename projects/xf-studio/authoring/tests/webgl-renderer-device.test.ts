@@ -25,8 +25,8 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     expect(probe.errors).toEqual([]);
   });
 
-  test("a build aborted before it starts, in the core head, in the rig's motion or among the feature renderers leaves nothing behind", () => {
-    expect(probe.aborts.map(abort => abort.step)).toEqual(["before", "core", "motion", "features"]);
+  test("a build aborted before it starts, in the core head (also one failing after the abort), in the rig's motion or among the feature renderers rejects with the abort and leaves nothing behind", () => {
+    expect(probe.aborts.map(abort => abort.step)).toEqual(["before", "core", "core-failing", "motion", "features"]);
     for (const abort of probe.aborts) {
       expect({ step: abort.step, error: abort.error }).toEqual({ step: abort.step, error: "AbortError" });
       expect({ step: abort.step, gl: abort.after.gl }).toEqual({ step: abort.step, gl: probe.warm.gl });
@@ -34,9 +34,11 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     }
   });
 
-  test("a runtime built, given a V and prepared while another is shown draws no frame and leaves the canvas as it was", () => {
+  test("a runtime built, given a V, its parts and its makeup composite prepared while another is shown draws no frame and leaves the canvas as it was", () => {
     const { hidden } = probe;
     expect([...hidden.drawnB].sort()).toEqual(["eyes", "face", "skin"]);
+    // The composite really ran on the shared renderer while B was hidden.
+    expect(hidden.composite[1]).toBeGreaterThan(hidden.composite[0]);
     expect(hidden.framesB).toBe(0);
     expect(hidden.framesA[1]).toBe(hidden.framesA[0]);
     expect(hidden.canvasAfter).toBe(hidden.canvasBefore);
@@ -55,6 +57,13 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
 
   test("camera input reaches only the shown runtime's camera", () => {
     expect(probe.input).toEqual({ shownA: { a: true, b: false }, shownB: { a: false, b: true } });
+  });
+
+  test("a context lost and restored while a runtime is built reaches it: shown, it draws as one built on an undisturbed context", () => {
+    const { restoredWhileBuilding: restored } = probe;
+    expect(restored.events).toEqual(["lost", "restored"]);
+    expect(restored.identical).toBe(true);
+    expect(restored.built).toBe(restored.reference);
   });
 
   test("disposing runtimes never touches the device: its canvas stays (hidden), the context lives, it draws the next runtime", () => {
