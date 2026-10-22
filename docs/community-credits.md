@@ -21,7 +21,7 @@ Credit here acknowledges what we learned or used. It does not imply endorsement 
 
 ### CD PROJEKT RED
 
-Developer of Cyberpunk 2077. The game's own resources, shaders, rigs, animation and materials are the ground truth for nearly everything we study. Their article [A World Full of Substance](https://magazine.substance3d.com/cyberpunk-2077-a-world-full-of-substance/) explained the shared-surface and mask approach behind the game's materials, and their [modding support](https://www.cyberpunk.net/en/modding-support) and [technical support](https://support.cdprojektred.com/en/cyberpunk/pc) pages, which name the Steam, GOG and Epic Games Store editions, set the stores XF Studio looks for. The TweakDB sources that ship with the game's REDmod tools showed how photo mode's expressions, poses and lists are defined. The address library they ship with the game for native mods, which gives every engine function a stable ID, let us trace and name, without any signature scanning, the whole path from a material template through the shader cache to a GPU pipeline state. Game content is used only as a private local reference for the preview and experiments; none is redistributed.
+Developer of Cyberpunk 2077. The game's own resources, shaders, rigs, animation and materials are the ground truth for nearly everything we study. Their article [A World Full of Substance](https://magazine.substance3d.com/cyberpunk-2077-a-world-full-of-substance/) explained the shared-surface and mask approach behind the game's materials, and their [modding support](https://www.cyberpunk.net/en/modding-support) and [technical support](https://support.cdprojektred.com/en/cyberpunk/pc) pages, which name the Steam, GOG and Epic Games Store editions, set the stores XF Studio looks for. The TweakDB sources that ship with the game's REDmod tools showed how photo mode's expressions, poses and lists are defined. The address library they ship with the game for native mods, which gives every engine function a stable ID, let us trace and name, without any signature scanning, the whole path from a material template through the shader cache to a GPU pipeline state. Game content is used only as a private local reference for the preview and experiments; none is redistributed. On quest design, Paweł Sasko's GDC 2023 talk, summarised by [Game Developer](https://www.gamedeveloper.com/marketing/10-key-takeaways-from-the-quest-design-of-cyberpunk-2077-and-the-witcher-3), taught us to bring early choices back later with visible consequences and to separate signal from noise. Philipp Weber's [interview with Game World Observer](https://gameworldobserver.com/2019/09/13/quests-witcher-cyberpunk-2077) (2019) describes Street Stories as small encounters with several ways through, in a studio that avoids sorting quests by type. [80.lv](https://80.lv/articles/cd-projekt-red-reveals-the-secret-key-to-impressive-side-quests) (2024) reported Sasko on pitching many ideas and the small share that are accepted.
 
 ## Frameworks and core mods
 
@@ -542,7 +542,7 @@ These games, books, essays and talks informed the design of the planned Story En
 
 ### Emily Short and Failbetter Games
 
-Emily Short, ["Beyond Branching: Quality-Based, Salience-Based, and Waypoint Narrative Structures"](https://emshort.blog/2016/04/12/beyond-branching-quality-based-and-salience-based-narrative-structures/) (2016), and [Fallen London](https://www.fallenlondon.com/), created by Alexis Kennedy and developed by Failbetter Games. Failbetter's quality-based narrative offers small pieces of story, called storylets, when the numbers that track a player's skills and progress (qualities) allow them, and Short's essay sets it beside other ways of choosing what happens next. It taught us to gate content by state rather than by branches.
+Emily Short, ["Beyond Branching: Quality-Based, Salience-Based, and Waypoint Narrative Structures"](https://emshort.blog/2016/04/12/beyond-branching-quality-based-and-salience-based-narrative-structures/) (2016), and [Fallen London](https://www.fallenlondon.com/), created by Alexis Kennedy and developed by Failbetter Games. Failbetter's quality-based narrative offers small pieces of story, called storylets, when the numbers that track a player's skills and progress (qualities) allow them, and Short's essay sets it beside other ways of choosing what happens next. It taught us to gate content by state rather than by branches. Short's ["Storylets: You Want Them"](https://emshort.blog/2019/11/29/storylets-you-want-them/) (2019) defines a storylet as content, prerequisites and effects, and explains why a branching "time cave" loses the benefits; her ["Small-Scale Structures in CYOA"](https://emshort.blog/2016/11/05/small-scale-structures-in-cyoa/) (2016) catalogues beat-level choice patterns. Failbetter's [Fallen London Writer Guidelines, Part II](https://www.failbettergames.com/news/fallen-london-writer-guidelines-part-ii) (2015) advise keeping qualities few and never trapping a player in a chain of linked events, and Alexis Kennedy's [Sunless Sea postmortem](https://www.gamedeveloper.com/audio/postmortem-failbetter-games-i-sunless-sea-i-) (Game Developer, 2015) records how a reused story engine collected special cases and hand-edited data stopped scaling.
 
 ### Kate Compton
 
@@ -554,11 +554,11 @@ By Tynan Sylvester. ["The Simulation Dream"](https://www.gamedeveloper.com/desig
 
 ### Valve and Michael Booth
 
-[Left 4 Dead](https://store.steampowered.com/app/500/Left_4_Dead/) (Valve, 2008) and Michael Booth's [The AI Systems of Left 4 Dead](https://cdn.fastly.steamstatic.com/apps/valve/2009/ai_systems_of_l4d_mike_booth.pdf) (Valve's slides from his AIIDE 2009 invited talk). The AI Director estimates how intense each player's moment is, removes major threats for a while when intensity runs too high, and otherwise supplies them. It is our model for pacing intensity around the people playing.
+[Left 4 Dead](https://store.steampowered.com/app/500/Left_4_Dead/) (Valve, 2008) and Michael Booth's [The AI Systems of Left 4 Dead](https://cdn.fastly.steamstatic.com/apps/valve/2009/ai_systems_of_l4d_mike_booth.pdf) (Valve's slides from his AIIDE 2009 invited talk). The AI Director estimates how intense each player's moment is, removes major threats for a while when intensity runs too high, and otherwise supplies them. It is our model for pacing intensity around the people playing. Elan Ruskin's GDC 2012 talk on dynamic dialogue at Valve, as recapped by Emily Short on [her blog](https://emshort.blog/2012/03/16/gdc-2012-talk-on-dynamic-dialogue/), showed rule matching in which the most specific matching rule wins and general rules serve as fallbacks.
 
 ### Michael Mateas and Andrew Stern
 
-[Façade](https://www.interactivestory.net/) (Procedural Arts, 2005) and their paper ["Façade: An Experiment in Building a Fully-Realized Interactive Drama"](https://faculty.cc.gatech.edu/~isbell/classes/reading/papers/MateasSternGDC03.pdf) (Game Developers Conference, 2003). A drama manager chooses the next beat, the smallest unit of dramatic action, from a pool of authored beats, each marked with preconditions and effects on the story state. We took from it the beat as a unit of authored content and the manager that sequences beats.
+[Façade](https://www.interactivestory.net/) (Procedural Arts, 2005) and their paper ["Façade: An Experiment in Building a Fully-Realized Interactive Drama"](https://faculty.cc.gatech.edu/~isbell/classes/reading/papers/MateasSternGDC03.pdf) (Game Developers Conference, 2003). A drama manager chooses the next beat, the smallest unit of dramatic action, from a pool of authored beats, each marked with preconditions and effects on the story state. We took from it the beat as a unit of authored content and the manager that sequences beats. Their paper ["Structuring Content in the Façade Interactive Drama Architecture"](https://ojs.aaai.org/index.php/AIIDE/article/view/18722) (AIIDE 2005) describes beats with preconditions, weights, priorities and effects on tension, and what authoring them cost. Mateas's ["A Preliminary Poetics for Interactive Drama and Games"](https://www.cs.uky.edu/~sgware/reading/papers/mateas2001preliminary.pdf) (2001) sets unity of action against episodic structure and treats agency as an effect that relates to the player's intent.
 
 ### Tarn and Zach Adams
 
@@ -574,11 +574,11 @@ By Tynan Sylvester. ["The Simulation Dream"](https://www.gamedeveloper.com/desig
 
 ### John Harper
 
-[Blades in the Dark](https://bladesinthedark.com/) (Evil Hat Productions, 2017). Flashbacks let players settle their preparation at the moment it matters, for a cost, and faction clocks advance during downtime so the city changes without the crew. We took from it preparation that resolves late and a world that keeps moving on its own.
+[Blades in the Dark](https://bladesinthedark.com/) (Evil Hat Productions, 2017). Flashbacks let players settle their preparation at the moment it matters, for a cost, and faction clocks advance during downtime so the city changes without the crew. We took from it preparation that resolves late and a world that keeps moving on its own. Its plan types, engagement roll, heat and entanglements also taught us how a job's approach shapes its opening and what it leaves behind.
 
 ### Justin Alexander (The Alexandrian)
 
-[Three Clue Rule](https://thealexandrian.net/wordpress/1118/roleplaying-games/three-clue-rule) (2008) and the nine-part series [Node-Based Scenario Design](https://thealexandrian.net/wordpress/8122/roleplaying-games/node-based-scenario-design-collectors-edition). The first says to give at least three clues for any conclusion the players must reach, because one may be missed, ignored or misread. The second builds a scenario from nodes that clues point to, so players can move through it in different orders. Together they taught us robust discovery, where no single missed clue stops the story.
+[Three Clue Rule](https://thealexandrian.net/wordpress/1118/roleplaying-games/three-clue-rule) (2008) and the nine-part series [Node-Based Scenario Design](https://thealexandrian.net/wordpress/8122/roleplaying-games/node-based-scenario-design-collectors-edition). The first says to give at least three clues for any conclusion the players must reach, because one may be missed, ignored or misread. The second builds a scenario from nodes that clues point to, so players can move through it in different orders. Together they taught us robust discovery, where no single missed clue stops the story. His [Scenario Structure Challenge #4: Heists](https://thealexandrian.net/wordpress/42867/roleplaying-games/scenario-structure-challenge-4-heists) (2019) breaks a heist scenario into five steps (identify the score, gather information, onsite surveillance, prep work and the operation), which gave us a reusable shape for job-style quests.
 
 ### Mike Shea (Sly Flourish)
 
@@ -594,11 +594,63 @@ By Michael Shea, who writes as Sly Flourish. [Return of the Lazy Dungeon Master]
 
 ### Maxis
 
-[The Sims](https://en.wikipedia.org/wiki/The_Sims_%28video_game%29) (Maxis, 2000), designed by Will Wright. Each Sim has a small set of needs, such as hunger, comfort and social contact, which fall over time and which objects in the world can restore. It informed our draft catalogue of character drives.
+[The Sims](https://en.wikipedia.org/wiki/The_Sims_%28video_game%29) (Maxis, 2000), designed by Will Wright. Each Sim has a small set of needs, such as hunger, comfort and social contact, which fall over time and which objects in the world can restore. It informed our draft catalogue of character drives. Kenneth Forbus and Will Wright's ["Some notes on programming objects in The Sims"](https://qrg.northwestern.edu/papers/Files/Programming_Objects_in_The_Sims.pdf) (2001) explains how objects advertise to needs and how a Sim's personality scales the effect.
 
 ### Bethesda Game Studios
 
-The Radiant AI and Radiant Story systems of *The Elder Scrolls IV: Oblivion* (2006) and *The Elder Scrolls V: Skyrim* (2011), as described in Matt Bertz's [The Technology Behind The Elder Scrolls V: Skyrim](https://gameinformer.com/games/the_elder_scrolls_v_skyrim/b/pc/archive/2011/01/17/the-technology-behind-the-elder-scrolls-v-skyrim.aspx) (Game Informer, 2011). Radiant AI gives characters broad goals to work out for themselves, and Radiant Story fills reusable quest templates from a player's history and nearby characters. Bethesda took on both ideas early and at great scale, and we read them as a cautionary example: template quests need variety the player can feel, and free-running character simulation needs constraints to stay on the story.
+The Radiant AI and Radiant Story systems of *The Elder Scrolls IV: Oblivion* (2006) and *The Elder Scrolls V: Skyrim* (2011), as described in Matt Bertz's [The Technology Behind The Elder Scrolls V: Skyrim](https://gameinformer.com/games/the_elder_scrolls_v_skyrim/b/pc/archive/2011/01/17/the-technology-behind-the-elder-scrolls-v-skyrim.aspx) (Game Informer, 2011). Radiant AI gives characters broad goals to work out for themselves, and Radiant Story fills reusable quest templates from a player's history and nearby characters. Bethesda took on both ideas early and at great scale, and we read them as a cautionary example: template quests need variety the player can feel, and free-running character simulation needs constraints to stay on the story. Bruce Nesmith's 2012 talk on Radiant Story, reported by [GamesBeat](https://gamesbeat.com/bethesdas-nesmith-reflects-on-the-difficult-birth-of-skyrims-radiant-story-system/), showed that realistic reactions are not always good play and that job quests worked best when limited to characters who suited them. An unsigned GamesBeat column, ["Dimming the Radiant AI in Oblivion"](https://gamesbeat.com/dimming-the-radiant-ai-in-oblivion/) (2010), described how autonomous characters can remove the people a story needs.
+
+### Ubisoft Toronto
+
+Christopher Dragert and Jurie Horneman, as described in Daniel O'Connor's [Watch Dogs: Legion – The Tools That Built London](https://news.ubisoft.com/en-us/article/4po3S9Pwp1YcgBmGPmQxAh/watch-dogs-legion-the-tools-that-built-london) (Ubisoft News, 2021), and Brandon Hennessy's GDC 2023 talk on the game's narrative design, as reported by Justin Carter in [How Watch Dogs: Legion changed Ubisoft's narrative design](https://www.gamedeveloper.com/marketing/how-i-watch-dogs-legion-i-made-ubisoft-rethink-its-storytelling) (Game Developer, 2023). The game's Player Attention System takes requests that each carry a priority, a lifetime and an attention need, and offers the player the most pressing one when they are ready; its writers made up for unknown cast members with fixed, authored characters and treated one-off missions as isolated. We took from them how to queue offers to the player, and what writers cannot assume about who will play a part.
+
+### Crusader Kings III and RimWorld modding wikis
+
+The community-written [Event modding](https://ck3.paradoxwikis.com/Event_modding) page of the Crusader Kings III wiki (Paradox Interactive's game) and the [Modding Tutorials/Quests](https://rimworldwiki.com/wiki/Modding_Tutorials/Quests) page of the RimWorld wiki (Ludeon Studios' game). The first shows triggers that must pass before an event fires and a fallback option that appears when no other option qualifies; the second shows a quest being test-run when it is considered for generation, before it takes effect. They taught us to plan for the case where nothing fits, and to check a quest before it is committed.
+
+### Robin Laws
+
+Robin D. Laws's GUMSHOE investigative role-playing system (Pelgrane Press, 2007), through Pelgrane's [GUMSHOE Rules Summary](https://pelgranepress.com/2017/09/29/gumshoe-rules-summary/) (2017). Clues the players must have are handed over when a character uses a fitting ability, and extra clues are optional. It taught us to separate what a story needs the player to learn from what merely enriches it.
+
+### Justin Andress
+
+By Justin Andress. [An Ode to Preston Garvey](https://www.inverse.com/article/14519-an-ode-to-preston-garvey-the-minuteman-of-fallout-4-who-deserves-a-defender) (Inverse, 2016), an essay on the character who keeps handing out generated quests in *Fallout 4*. It showed how a generated offer that keeps coming whatever the player is already doing reads as a nuisance.
+
+### Sam Kabo Ashwell
+
+By Sam Kabo Ashwell. [Standard Patterns in Choice-Based Games](https://heterogenoustasks.wordpress.com/2015/01/26/standard-patterns-in-choice-based-games/) (essay, 2015). It names recurring branching shapes, such as the time cave, the gauntlet, branch and bottleneck, the sorting hat and floating modules. It taught us which shapes collapse without a large volume of content.
+
+### Josh Sawyer
+
+Josh Sawyer of Obsidian Entertainment, in Kirk McKeand's [interview on branching dialogue](https://www.pcgamesn.com/josh-sawyer-branching-dialogue-ai) (PCGamesN, 2017). He names authorship, not storage, as the bottleneck of reactive writing. It taught us to count the cost of reactivity in writers' time.
+
+### David Bordwell
+
+By David Bordwell. [One last big job: how heist movies tell their stories](https://www.davidbordwell.net/blog/2017/10/12/one-last-big-job-how-heist-movies-tell-their-stories/) (essay, 2017). It lays out a five-stage heist plot of circumstances, recruitment, planning, execution and aftermath, and how suspense depends on what the audience knows. It gave us a stretchable shape for job-style quests.
+
+### Brandon Sanderson
+
+Brandon Sanderson's 2025 writing-class lecture on plot, in the write-up on his [official blog](https://www.brandonsanderson.com/blogs/blog/brandon-sandersons-2025-guide-to-plot-lecture-2). A plot makes a promise, shows progress towards it and pays it off, and plots nest inside one another. It taught us a plain vocabulary for how a quest holds attention from start to finish.
+
+### Warren Spector
+
+By Warren Spector. [Postmortem: Ion Storm's Deus Ex](https://www.gamedeveloper.com/design/postmortem-ion-storm-s-i-deus-ex-i-) (Game Developer, 2000). It records the team's decision to build multiple solutions by hand where the simulation was too shallow to supply them. It taught us the cost of reactive quest design that rests on authored alternatives.
+
+### Koichi Hayashida
+
+Koichi Hayashida of Nintendo, in Christian Nutt's interview [The secret to Mario level design](https://www.gamedeveloper.com/design/the-secret-to-i-mario-i-level-design) (Game Developer, 2012). He ties level design to a four-beat shape of setup, development, twist and conclusion, taken from four-panel comics, and stresses the surprise in the third beat. It gave us a compact beat shape for short encounters.
+
+### Daggerfall Unity
+
+The Daggerfall Unity project's [Quest System Status](https://www.dfworkshop.net/projects/daggerfall-unity/roadmap/quest-system-status/) page (Daggerfall Workshop). It describes the readable quest-scripting language of the 1996 game *Daggerfall*, with places, people, items, foes and clocks as resources, tasks that run when a condition holds, and actions that change the world. It showed how small and legible a quest language can be.
+
+### R. Talsorian Games
+
+[Cyberpunk RED Alert: Lifepath](https://rtalsoriangames.com/2020/10/16/cyberpunk-red-alert-lifepath/) (R. Talsorian Games, 2020), describing the Lifepath tables of the *Cyberpunk* tabletop game. A short run of rolls gives a character a background, relationships, enemies and life goals, with the relationships and enemies given causes. It is a compact example of how a character's history can produce relationships and wants.
+
+### Gustave Perna
+
+By General Gustave Perna. [Mission command requires sharp commander's intent](https://www.army.mil/article/215297/mission_command_requires_sharp_commanders_intent) (*Army Sustainment*, 2019, republished by the US Army), an essay on military practice. Intent is a task, a purpose, the critical factors and a vision of the end state, and the people carrying it out choose the means. It taught us to give authors a way to state what a piece of content is for without dictating how it is done.
 
 ## Research papers
 
@@ -762,11 +814,11 @@ Dakota Fisher, Matthew A. Hammer, William Byrd and Matthew Might, ["miniAdapton:
 
 ### Maslow (1943)
 
-Abraham Maslow, ["A theory of human motivation"](https://psychclassics.yorku.ca/Maslow/motivation.htm) (*Psychological Review*, 1943). Its hierarchy of needs orders human needs from the basic to the higher. It is one of the sources behind our draft catalogue of character drives.
+Abraham Maslow, ["A theory of human motivation"](https://psychclassics.yorku.ca/Maslow/motivation.htm) (*Psychological Review*, 1943). Its hierarchy of needs orders human needs from the basic to the higher. It is one of the sources behind our draft catalogue of character drives. The original paper is less rigid than the pyramid taught from it.
 
 ### Reiss (2004)
 
-Steven Reiss, ["Multifaceted nature of intrinsic motivation: the theory of 16 basic desires"](https://doi.org/10.1037/1089-2680.8.3.179) (*Review of General Psychology*, 2004). It proposes sixteen basic desires that motivate people and that differ in strength from person to person. It is one of the sources behind our draft catalogue of character drives.
+Steven Reiss, ["Multifaceted nature of intrinsic motivation: the theory of 16 basic desires"](https://doi.org/10.1037/1089-2680.8.3.179) (*Review of General Psychology*, 2004). It proposes sixteen basic desires that motivate people and that differ in strength from person to person. It is one of the sources behind our draft catalogue of character drives. Vengeance, honour and acceptance are among them.
 
 ### Ryan and Deci (2000)
 
@@ -775,6 +827,286 @@ Richard Ryan and Edward Deci, ["Self-determination theory and the facilitation o
 ### Schwartz (1992, 2012)
 
 Shalom Schwartz, ["Universals in the Content and Structure of Values: Theoretical Advances and Empirical Tests in 20 Countries"](https://doi.org/10.1016/S0065-2601(08)60281-6) (*Advances in Experimental Social Psychology*, 1992), and ["An Overview of the Schwartz Theory of Basic Values"](https://doi.org/10.9707/2307-0919.1116) (*Online Readings in Psychology and Culture*, 2012). The theory sets out a small set of basic values recognised across cultures and how they relate to one another. It is one of the sources behind our draft catalogue of character drives.
+
+### Wahba and Bridwell (1976)
+
+Mahmoud Wahba and Lawrence Bridwell, ["Maslow reconsidered: a review of research on the need hierarchy theory"](https://doi.org/10.1016/0030-5073(76)90038-6) (*Organizational Behavior and Human Performance*, 1976). It found little consistent support for the strict ordering of needs. It taught us not to build the drive catalogue on a fixed ladder.
+
+### Kenrick et al. (2010)
+
+Douglas Kenrick, Vladas Griskevicius, Steven Neuberg and Mark Schaller, ["Renovating the pyramid of needs"](https://pmc.ncbi.nlm.nih.gov/articles/PMC3161123/) (*Perspectives on Psychological Science*, 2010). It proposes that motives overlap, that affiliation splits into several, and that self-actualisation is not a basic need. It shaped how we group and separate social drives.
+
+### Tay and Diener (2011)
+
+Louis Tay and Ed Diener, ["Needs and subjective well-being around the world"](https://doi.org/10.1037/a0023779) (*Journal of Personality and Social Psychology*, 2011). Across 123 countries, how well different needs are met relates to wellbeing largely independently. It taught us to treat needs as parallel rather than stacked.
+
+### Sheldon and colleagues (1999, 2001)
+
+Kennon Sheldon and Andrew Elliot, ["Goal striving, need satisfaction, and longitudinal well-being: the self-concordance model"](https://doi.org/10.1037/0022-3514.76.3.482) (*Journal of Personality and Social Psychology*, 1999), and Kennon Sheldon, Andrew Elliot, Youngmee Kim and Tim Kasser, ["What is satisfying about satisfying events? Testing 10 candidate psychological needs"](https://doi.org/10.1037/0022-3514.80.2.325) (same journal, 2001). Goals a person endorses as their own are pursued harder and satisfy more, and in the second study autonomy, competence, relatedness and self-esteem led while popularity and money trailed. They informed which needs rank high in the drive catalogue and how a chosen goal differs from an imposed one.
+
+### Susan Fiske (2004)
+
+Susan Fiske, *Social Beings: Core Motives in Social Psychology* (Wiley, first edition 2004; [publisher page](https://www.wiley-vch.de/en/areas-interest/humanities-social-sciences/social-beings-978-1-119-49273-3) is for the current edition). It organises social life around belonging, understanding, controlling, enhancing the self and trusting. It informed the social side of the drive catalogue.
+
+### Alan Fiske (1992)
+
+Alan Fiske, ["The four elementary forms of sociality: framework for a unified theory of social relations"](https://doi.org/10.1037/0033-295x.99.4.689) (*Psychological Review*, 1992). The kind of relationship, of four, decides what a tie obliges people to do for one another. It taught us to distinguish ties by what they owe.
+
+### Baumeister and Leary (1995)
+
+Roy Baumeister and Mark Leary, ["The need to belong: desire for interpersonal attachments as a fundamental human motivation"](https://doi.org/10.1037/0033-2909.117.3.497) (*Psychological Bulletin*, 1995). Belonging is a pervasive motive, and lacking it harms health and adjustment. It supports belonging as a strong drive.
+
+### Anderson, Hildreth and Howland (2015)
+
+Cameron Anderson, John Hildreth and Laura Howland, ["Is the desire for status a fundamental human motive? A review of the empirical literature"](https://doi.org/10.1037/a0038781) (*Psychological Bulletin*, 2015). Respect and voluntary deference from others emerge as a fundamental motive. It shaped how we describe the drive for standing.
+
+### Parks-Leduc, Feldman and Bardi (2015)
+
+Laura Parks-Leduc, Gilad Feldman and Anat Bardi, ["Personality traits and personal values: a meta-analysis"](https://doi.org/10.1177/1088868314538548) (*Personality and Social Psychology Review*, 2015). Traits and values are linked only modestly, so they are distinct things. It taught us to keep a character's temperament and values apart.
+
+### Bardi and Goodwin (2011)
+
+Anat Bardi and Robin Goodwin, ["The dual route to value change: individual processes and cultural moderators"](https://doi.org/10.1177/0022022110396916) (*Journal of Cross-Cultural Psychology*, 2011). Values can change by an automatic route and an effortful one. It informed how slowly and how suddenly a character's values may shift.
+
+### DeYoung (2015)
+
+Colin DeYoung, ["Cybernetic Big Five Theory"](https://doi.org/10.1016/j.jrp.2014.07.004) (*Journal of Research in Personality*, 2015). It treats personality traits as parameters of goal-directed control, with goals as characteristic adaptations. It informed how temperament colours the pursuit of goals.
+
+### Carstensen, Isaacowitz and Charles (1999)
+
+Laura Carstensen, Derek Isaacowitz and Susan Charles, ["Taking time seriously: a theory of socioemotional selectivity"](https://doi.org/10.1037/0003-066x.54.3.165) (*American Psychologist*, 1999). A shorter sense of future time reweights goals towards the present and the close-at-hand. It informed how a limited horizon changes what a character wants.
+
+### Griskevicius et al. (2011)
+
+Vladas Griskevicius, Andrew Delton, Theresa Robertson and Joshua Tybur, ["Environmental contingency in life history strategies: the influence of mortality and socioeconomic status on reproductive timing"](https://doi.org/10.1037/a0021082) (*Journal of Personality and Social Psychology*, 2011). Cues of danger move reproductive timing earlier for people raised in poverty and later for those raised comfortably. It taught us that the same threat reweights drives differently by upbringing.
+
+### Pepper and Nettle (2017)
+
+Gillian Pepper and Daniel Nettle, ["The behavioural constellation of deprivation: causes and consequences"](https://doi.org/10.1017/s0140525x1600234x) (*Behavioral and Brain Sciences*, 2017). Deprivation goes with present-oriented behaviour, though the commentaries dispute how general that is. It informed how scarcity shapes what a character pursues, with caution.
+
+### Klein et al. (2022)
+
+Richard Klein and colleagues, ["Many Labs 4: failure to replicate mortality salience effect with and without original author involvement"](https://doi.org/10.1525/collabra.35271) (*Collabra: Psychology*, 2022). The effect did not replicate across 21 labs. It taught us to leave out drives resting on that finding.
+
+### Gal and Rucker (2018)
+
+David Gal and Derek Rucker, ["The loss of loss aversion: will it loom larger than its gain?"](https://doi.org/10.1002/jcpy.1047) (*Journal of Consumer Psychology*, 2018). The evidence does not show that losses generally weigh more than equal gains. It taught us not to build in a blanket loss-aversion rule.
+
+### Daan, Beersma and Borbély (1984)
+
+Serge Daan, Domien Beersma and Alexander Borbély, ["Timing of human sleep: recovery process gated by a circadian pacemaker"](https://doi.org/10.1152/ajpregu.1984.246.2.r161) (*American Journal of Physiology*, 1984). Pressure to rest builds on a saturating curve, discharges faster, and is gated by the body clock. It shaped how a rest drive rises and falls.
+
+### Tomova et al. (2020)
+
+Livia Tomova and colleagues, ["Acute social isolation evokes midbrain craving responses similar to hunger"](https://hdl.handle.net/1721.1/138313) (*Nature Neuroscience*, 2020). After ten hours alone, people crave social contact in a way that resembles hunger. It supported modelling the need for company as a drive that builds with absence.
+
+### Kivetz, Urminsky and Zheng (2006)
+
+Ran Kivetz, Oleg Urminsky and Yuhuang Zheng, ["The goal-gradient hypothesis resurrected"](https://doi.org/10.1509/jmkr.43.1.39) (*Journal of Marketing Research*, 2006). People accelerate towards a reward as it nears. It shaped how urgency grows as a goal comes within reach.
+
+### Boyd, Robinson and Fetterman (2011)
+
+Ryan Boyd, Michael Robinson and Adam Fetterman, ["Miller (1944) revisited: movement times in relation to approach and avoidance conflicts"](https://doi.org/10.1016/j.jesp.2011.04.017) (*Journal of Experimental Social Psychology*, 2011). It replicates Neal Miller's finding that the pull to avoid rises more steeply with closeness than the pull to approach. It informed how fear and desire weigh against each other.
+
+### Robinson and Berridge (2025)
+
+Terry Robinson and Kent Berridge, ["The incentive-sensitization theory of addiction 30 years on"](https://doi.org/10.1146/annurev-psych-011624-024031) (*Annual Review of Psychology*, 2025). Wanting something is separate from liking it, and cues can drive wanting. It taught us to let a character want what they do not enjoy.
+
+### McCullough, Kurzban and Tabak (2013)
+
+Michael McCullough, Robert Kurzban and Benjamin Tabak, ["Cognitive systems for revenge and forgiveness"](https://doi.org/10.1017/S0140525X11002160) (*Behavioral and Brain Sciences*, 2013). Revenge works as a deterrence system, and forgiveness depends on how valuable the relationship is expected to be. It shaped how vengeance and forgiveness are modelled.
+
+### Nisbett and Cohen (1996)
+
+Richard Nisbett and Dov Cohen, *Culture of Honor: The Psychology of Violence in the South* (Westview Press, 1996; [abstract](https://ojp.gov/ncjrs/virtual-library/abstracts/culture-honor-psychology-violence-south)). Responses to insult differ between honour cultures and others, though the authors' reading of the American South is disputed. It informed how honour changes a character's response to an affront.
+
+### Richardson, Elliott and Roberts (2013)
+
+Thomas Richardson, Peter Elliott and Ronald Roberts, ["The relationship between personal unsecured debt and mental and physical health: a systematic review and meta-analysis"](https://doi.org/10.1016/j.cpr.2013.08.009) (*Clinical Psychology Review*, 2013). Debt is strongly associated with poor mental health, though the direction of cause is not established. It informed how debt weighs on a character.
+
+### Blumberg (1996)
+
+Bruce Blumberg, [*Old Tricks, New Dogs: Ethology and Interactive Creatures*](https://characters.media.mit.edu/Theses/blumberg_phd.pdf) (PhD thesis, MIT, 1996). Sticking with an activity needs some inertia, mutual inhibition between competing drives and a falling level of interest. It shaped how a character holds to one pursuit before switching.
+
+### Tyrrell (1993)
+
+Toby Tyrrell, [*Computational Mechanisms for Action Selection*](https://era.ed.ac.uk/items/f882b365-c98c-417f-b934-ecff1f710e29/full) (PhD thesis, University of Edinburgh, 1993). It tested drive-based and spreading-activation models of choosing what to do in simulation and found both wanting. It taught us to treat a simple drive-picks-action rule with suspicion.
+
+### Locke and Latham (2002)
+
+Edwin Locke and Gary Latham, ["Building a practically useful theory of goal setting and task motivation: a 35-year odyssey"](https://doi.org/10.1037/0003-066x.57.9.705) (*American Psychologist*, 2002). Specific, difficult goals direct effort, moderated by commitment and conflict between goals. It informed how a goal's specificity and difficulty shape effort.
+
+### Ordóñez, Schweitzer, Galinsky and Bazerman (2009)
+
+Lisa Ordóñez, Maurice Schweitzer, Adam Galinsky and Max Bazerman, ["Goals gone wild: the systematic side effects of overprescribing goal setting"](https://doi.org/10.5465/amp.2009.37007999) (*Academy of Management Perspectives*, 2009). Hard targets narrow attention and invite corner-cutting. It taught us what a driven character will sacrifice.
+
+### Kruglanski et al. (2002)
+
+Arie Kruglanski, James Shah, Ayelet Fishbach, Ron Friedman, Woo Young Chun and Daniel Sleeth-Keppler, ["A theory of goal systems"](https://doi.org/10.1016/s0065-2601(02)80008-9) (*Advances in Experimental Social Psychology*, 2002). Means that serve several goals are preferred, and means that harm other goals are penalised. It informed how a character picks among ways of getting what they want.
+
+### Gollwitzer, Sheeran and Heckhausen
+
+Peter Gollwitzer and Paschal Sheeran, ["Implementation intentions and goal achievement: a meta-analysis of effects and processes"](https://doi.org/10.1016/S0065-2601(06)38002-1) (*Advances in Experimental Social Psychology*, 2006), and Heinz Heckhausen and Peter Gollwitzer, ["Thought contents and cognitive functioning in motivational versus volitional states of mind"](https://doi.org/10.1007/bf00992338) (*Motivation and Emotion*, 1987). If-then plans raise the chance of reaching a goal, and weighing a goal differs from committing to it. They informed the step from wanting something to acting on it.
+
+### Elliot (2006)
+
+Andrew Elliot, ["The hierarchical model of approach-avoidance motivation"](https://doi.org/10.1007/s11031-006-9028-7) (*Motivation and Emotion*, 2006). Moving towards something and moving away from something are different kinds of motive. It shaped how we separate wants from fears.
+
+### Higgins (1997)
+
+Tory Higgins, ["Beyond pleasure and pain"](https://doi.org/10.1037/0003-066x.52.12.1280) (*American Psychologist*, 1997). Promotion (seeking gains) and prevention (guarding against loss) are distinct ways of pursuing a goal. It shaped how a character's manner of pursuit is described.
+
+### Schank and Abelson (1977)
+
+Roger Schank and Robert Abelson, [*Scripts, Plans, Goals and Understanding*](https://www.routledge.com/Scripts-Plans-Goals-and-Understanding-An-Inquiry-Into-Human-Knowledge-Structures/Schank-Abelson/p/book/9780898591385) (Lawrence Erlbaum, 1977). It sorts goals into kinds, including wishes, opportunities and duties, and describes how goals relate. We took from it the kinds of goal a character can hold.
+
+### Harland et al. (2014)
+
+James Harland, David Morley, John Thangarajah and Neil Yorke-Smith, ["An operational semantics for the goal life-cycle in BDI agents"](https://doi.org/10.1007/s10458-013-9238-9) (*Autonomous Agents and Multi-Agent Systems*, 2014). A goal passes through explicit states, and can be dropped, aborted, suspended or resumed. It shaped how a character's goal can be set aside and picked up again.
+
+### Agnew (1992)
+
+Robert Agnew, ["Foundation for a general strain theory of crime and delinquency"](https://doi.org/10.1111/j.1745-9125.1992.tb01093.x) (*Criminology*, 1992). Pressure builds from blocked goals, loss of valued things and unpleasant treatment. It informed how frustration turns into pressure to act.
+
+### Merton (1938)
+
+Robert Merton, ["Social structure and anomie"](https://faculty.washington.edu/matsueda/courses/517/Readings/Merton%201938.pdf) (*American Sociological Review*, 1938). A gap between prized goals and approved means drives different kinds of adaptation. It informed what a character does when the legitimate road is shut.
+
+### Doran and Parberry (2011)
+
+Jonathon Doran and Ian Parberry, ["A prototype quest generator based on a structural analysis of quests from four MMORPGs"](https://ianparberry.com/pubs/pcg2011.pdf) (*Proceedings of the 2nd International Workshop on Procedural Content Generation in Games*, 2011). It analyses more than 750 quests as a motivation plus a strategy, and finds the motivations fall into a few kinds, very unevenly. A grammar of motives gives plausible quest shapes but, unaided, long errand chains, and general planning proved impractical. It informed the drive catalogue and what to avoid in quest structure.
+
+### Perrow (1961)
+
+Charles Perrow, ["The analysis of goals in complex organizations"](https://doi.org/10.2307/2090570) (*American Sociological Review*, 1961). The goals an organisation announces differ from the operative goals revealed by where its resources go. It informed how we describe what a group is actually after.
+
+### Cyert, March and Greve
+
+Richard Cyert and James March, *A Behavioral Theory of the Firm* (Prentice-Hall, 1963), and Henrich Greve, [*Organizational Learning from Performance Feedback*](https://www.cambridge.org/core/product/660EE3B71FEAC74729EEA787967AF503) (Cambridge University Press, 2003). Results measured against a shifting aspiration drive how much an organisation searches for new ways and how much risk it takes. They informed how a group's recent fortunes change its behaviour.
+
+### Levitt and Venkatesh (2000)
+
+Steven Levitt and Sudhir Venkatesh, ["An economic analysis of a drug-selling gang's finances"](https://nber.org/papers/w6592) (*Quarterly Journal of Economics*, 2000). A gang behaves like a firm with a very uneven wage bill, and violence against a rival's turf has a price. It informed how we describe what gangs want and what they pay for it.
+
+### Venkatesh (2006)
+
+Sudhir Venkatesh, [*Off the Books: The Underground Economy of the Urban Poor*](https://publishersweekly.com/9780674023550) (Harvard University Press, 2006). Informal and formal work are interlinked in a neighbourhood, and a gang's activity sits among them. It informed the everyday economy that groups sit in.
+
+### Simone (2004)
+
+AbdouMaliq Simone, ["People as infrastructure: intersecting fragments in Johannesburg"](https://doi.org/10.1215/08992363-16-3-407) (*Public Culture*, 2004). In places where formal services are thin, relationships between people do the work infrastructure would. It informed how personal ties serve as practical resources.
+
+### Meyer and Allen (1991)
+
+John Meyer and Natalie Allen, ["A three-component conceptualization of organizational commitment"](https://doi.org/10.1016/1053-4822(91)90011-z) (*Human Resource Management Review*, 1991). Commitment can be affective, rest on the cost of leaving, or rest on obligation. It informed why a member stays.
+
+### Le and Agnew (2003)
+
+Benjamin Le and Christopher Agnew, ["Commitment and its theorized determinants: a meta-analysis of the investment model"](https://doi.org/10.1111/1475-6811.00035) (*Personal Relationships*, 2003). Satisfaction, the quality of alternatives and what has been invested predict commitment. It informed what keeps a person in a relationship or a group.
+
+### Hirschman (1970)
+
+Albert Hirschman, [*Exit, Voice, and Loyalty*](https://casbs.stanford.edu/exit-voice-and-loyalty-responses-decline-firms-organizations-and-states) (Harvard University Press, 1970). Loyalty slows exit and gives complaint room to work. It informed how members respond when a group declines.
+
+### Pyrooz, Decker and Webb
+
+David Pyrooz and Scott Decker, ["Motives and methods for leaving the gang: understanding the process of gang desistance"](https://doi.org/10.1016/j.jcrimjus.2011.07.001) (*Journal of Criminal Justice*, 2011), and David Pyrooz, Scott Decker and Vincent Webb, ["The ties that bind: desistance from gangs"](https://doi.org/10.1177/0011128710372191) (*Crime & Delinquency*, 2010). Most exits from a gang are not hostile, and ties to it linger afterwards. They informed how a character can leave a group and not leave it behind.
+
+### Lipsky (1980)
+
+Michael Lipsky, [*Street-Level Bureaucracy*](https://muse.jhu.edu/book/15024) (Russell Sage Foundation, 1980). Frontline workers ration scarce services and favour easy cases, and their ways of coping become the effective policy. It informed how people at the counter shape what an institution does.
+
+### Gómez-Mejía et al. (2007)
+
+Luis Gómez-Mejía, Katalin Haynes, Manuel Núñez-Nickel, Kathyrn Jacobson and José Moyano-Fuentes, ["Socioemotional wealth and business risks in family-controlled firms: evidence from Spanish olive oil mills"](https://doi.org/10.2189/asqu.52.1.106) (*Administrative Science Quarterly*, 2007). Families protect identity, influence and the continuation of the dynasty, not only money. It informed what a family business is trying to keep.
+
+### Burnstein, Crandall and Kitayama (1994)
+
+Eugene Burnstein, Christian Crandall and Shinobu Kitayama, ["Some neo-Darwinian decision rules for altruism: weighing cues for inclusive fitness as a function of the biological importance of the decision"](https://doi.org/10.1037/0022-3514.67.5.773) (*Journal of Personality and Social Psychology*, 1994). People favour close kin in helping, most strongly when the stakes are high. It informed how kinship counts when the stakes are large.
+
+### de Haas (2021)
+
+Hein de Haas, ["A theory of migration: the aspirations-capabilities framework"](https://pmc.ncbi.nlm.nih.gov/articles/PMC7902564) (*Comparative Migration Studies*, 2021). Moving takes both the wish and the means, and staying is also a choice. It informed how wanting to leave differs from being able to.
+
+### Black (1983)
+
+Donald Black, ["Crime as social control"](https://doi.org/10.2307/2095143) (*American Sociological Review*, 1983). Where the law does not protect people, much crime works as self-help. It informed why people take matters into their own hands.
+
+### Gould (2003)
+
+Roger Gould, [*Collision of Wills: How Ambiguity about Social Rank Breeds Conflict*](https://chicagoreference.com/ucp/books/book/chicago/C/bo3616160.html) (University of Chicago Press, 2003). Conflict flares where social rank is unclear. It informed the quarrels of people whose standing is in doubt.
+
+### Collins (2008)
+
+Randall Collins, [*Violence: A Micro-Sociological Theory*](https://muse.jhu.edu/book/36669) (Princeton University Press, 2008). Violence is rarer and clumsier in practice than it appears in stories. It informed how we treat violence in a scene.
+
+### Jervis (1978)
+
+Robert Jervis, ["Cooperation under the security dilemma"](https://stafforini.com/works/jervis-1978-cooperation-security-dilemma/) (*World Politics*, 1978). When defensive measures are hard to tell from offensive ones, rivals arm and mistrust each other. It informed how one group's defence looks like a threat to another.
+
+### Boehm (1984)
+
+Christopher Boehm, [*Blood Revenge: The Enactment and Management of Conflict in Montenegro and Other Tribal Societies*](https://ci.nii.ac.jp/ncid/BA00372483?l=en) (University Press of Kansas, 1984). Feuds are managed, with elders helping to settle them. It informed how a feud can be brought to an end.
+
+### Gouldner (1960)
+
+Alvin Gouldner, ["The norm of reciprocity: a preliminary statement"](https://doi.org/10.2307/2092623) (*American Sociological Review*, 1960). Returning a favour is a social norm that holds across societies. It informed how debts and favours bind people.
+
+### Sahlins (1972)
+
+Marshall Sahlins, [*Stone Age Economics*](https://ci.nii.ac.jp/ncid/BA0403771X) (Aldine-Atherton, 1972). How readily a gift or help is returned depends on how close the two parties are. It informed how the expectation of return varies with distance.
+
+### Turner (1969)
+
+Victor Turner, *The Ritual Process: Structure and Anti-Structure* (Aldine, 1969; [catalogue record](https://search.worldcat.org/title/641307467)), which builds on Arnold van Gennep's *Les rites de passage*. A change of status is staged in public, with a threshold stage in between. It informed how a character's change in standing is marked.
+
+### Malle (1999, 2006)
+
+Bertram Malle, ["How people explain behavior: a new theoretical framework"](https://doi.org/10.1207/s15327957pspr0301_2) (*Personality and Social Psychology Review*, 1999), and ["The actor-observer asymmetry in attribution: a (surprising) meta-analysis"](https://doi.org/10.1037/0033-2909.132.6.895) (*Psychological Bulletin*, 2006). Explaining an action by the actor's reasons differs from explaining it by its causes, and the supposed difference between how actors and observers explain behaviour does not hold up. They informed how characters explain what others do.
+
+### Gilbert and Malone (1995)
+
+Daniel Gilbert and Patrick Malone, ["The correspondence bias"](https://doi.org/10.1037/0033-2909.117.1.21) (*Psychological Bulletin*, 1995). Observers infer a person's dispositions from their behaviour and adjust for the situation only partly. It informed how characters misjudge one another.
+
+### Evans and Short (2014)
+
+Richard Evans and Emily Short, ["Versu: a simulationist storytelling system"](https://doi.org/10.1109/tciaig.2013.2287297) (*IEEE Transactions on Computational Intelligence and AI in Games*, 2014). Its authoring practice keeps scenes agnostic about who plays each role. It informed how we write fragments that can be cast with different people.
+
+### McCoy et al. (2011)
+
+Joshua McCoy, Mike Treanor, Ben Samuel, Noah Wardrip-Fruin and Michael Mateas, ["Comme il Faut: a system for authoring playable social models"](https://ojs.aaai.org/index.php/AIIDE/article/view/12454) (*AIIDE*, 2011). Social exchanges have roles, including an optional third party, and weighted rules of influence; tuning thousands of such rules is costly. It informed how roles are cast and how costly tuning becomes.
+
+### Nelson et al. (2006)
+
+Mark Nelson, Michael Mateas, David Roberts and Charles Isbell, ["Declarative optimization-based drama management in interactive fiction"](https://doi.org/10.1109/mcg.2006.55) (*IEEE Computer Graphics and Applications*, 2006). An author's sense of a good story can be expressed as a weighted combination of features, though that is hard to specify. It informed how author preference can steer choices.
+
+### Tearse et al. (2014)
+
+Brandon Tearse, Peter Mawhorter, Michael Mateas and Noah Wardrip-Fruin, ["Skald: Minstrel reconstructed"](https://doi.org/10.1109/tciaig.2013.2292313) (*IEEE Transactions on Computational Intelligence and AI in Games*, 2014). Adapting stories from a library needs costed transformations and a library tuned to the operators that adapt it. It taught us why adaptation of stored material turns brittle.
+
+### Haralick and Elliott (1980)
+
+Robert Haralick and Gordon Elliott, ["Increasing tree search efficiency for constraint satisfaction problems"](https://doi.org/10.1016/0004-3702(80)90051-x) (*Artificial Intelligence*, 1980). Trying first the choices most likely to fail finds a dead end sooner. It informed the order in which parts are cast.
+
+### Yu, Guzdial and Sturtevant (2021)
+
+Yu, Matthew Guzdial and Nathan Sturtevant, ["The Definition-Context-Purpose paradigm and other insights from industry professionals about the definition of a quest"](https://doi.org/10.1609/aiide.v17i1.18897) (*AIIDE*, 2021). Developers define a quest by its purpose and circumstances rather than by its parts. It informed how we describe what a quest is for.
+
+### Sullivan, Mateas and Wardrip-Fruin (2012)
+
+Anne Sullivan, Michael Mateas and Noah Wardrip-Fruin, ["Making quests playable: choices, CRPGs, and the Grail framework"](https://ojs.gold.ac.uk/index.php/lea/article/view/183) (*Leonardo Electronic Almanac*, 2012). Role-playing quests are mostly task lists, varying only in a fight or one binary choice. It informed where quest structure is thin.
+
+### Dhami, Belton and Mandel (2019)
+
+Mandeep Dhami, Ian Belton and David Mandel, ["The 'analysis of competing hypotheses' in intelligence analysis"](https://doi.org/10.1002/acp.3550) (*Applied Cognitive Psychology*, 2019). The evidence that comparing rival explanations reduces bias is mixed. It tempered how much we expect from investigation structures.
+
+### Cornish (1994)
+
+Derek Cornish, ["The procedural analysis of offending and its relevance for situational prevention"](https://popcenter.asu.edu/sites/default/files/library/CrimePrevention/Volume_03/06_cornish.pdf) (*Crime Prevention Studies*, volume 3, 1994). It describes a crime as a script of stages, with alternative tracks and points where it can be interfered with. It informed how a job such as a heist breaks into stages.
+
+### Reagan et al. (2016)
+
+Andrew Reagan, Lewis Mitchell, Dilan Kiley, Christopher Danforth and Peter Dodds, ["The emotional arcs of stories are dominated by six basic shapes"](https://doi.org/10.1140/epjds/s13688-016-0093-1) (*EPJ Data Science*, 2016). Sentiment arcs of finished texts fall into a handful of shapes, with the authors' own stated limits. It informed which emotional shapes a quest can take.
 
 ## Reference imagery
 
