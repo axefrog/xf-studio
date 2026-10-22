@@ -136,7 +136,7 @@ export class Queries {
 
     // Summaries within scope: item descriptors enumerated as candidates under the same allowance (spec 8.3 step 9).
     const itemCandidates: Id[] = [];
-    if (this.k.schema.isKind('core:event', q.find) || findKinds.has('core:event')) {
+    if (this.k.schema.hasKind('core:event') && findKinds.has('core:event')) {
       itemCandidates.push(...this.k.summaries.itemCandidates(ctx, scope, q.at, this.roots(scope)));
     }
     for (const id of itemCandidates) {
