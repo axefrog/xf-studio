@@ -65,6 +65,8 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 3. **The eye-makeup editor and finish adapters** (track 6), and CORE-03's remaining steps (the [code-health ledger](../authoring/code-health.md)). *25 Sep*
 
 ### R&D (runs only while the polish lane is moving)
+Research questions from any chat go to the meta-coordinator's [research queue](research-queue.md). This lane lists the R&D build tracks, each kept by the chat that owns it.
+
 - **Hair Lab** (its own chat and branch, off `main` until the beta). *16 Oct*
 - **In-game overlay and UI; custom material shaders** (below). *29 Sep*
 - **The runtime bridge** (its own chat, XF · Runtime bridge): 0.8.2 staged after session 10, with 0.8.3 next, then the NPC and DM toolkit branches ([bridge autonomy](bridge-autonomy.md)). *30 Sep*
