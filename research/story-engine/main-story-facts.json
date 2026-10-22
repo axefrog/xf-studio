@@ -1,0 +1,2244 @@
+{
+ "about": "Curated main-story state facts read from the 2.31 quest, phase and scene resources. Names, hashes and conditions only; no game text or assets. Meanings are inferred from the names and their use. Written by the research page knowledge/main-story-state.md.",
+ "gameVersion": "2.31",
+ "hash": "FNV-1a 32-bit of the name (the key the save file stores in FactsDB), lowercase hex",
+ "valueNotation": "setValues are (setExactValue, value) pairs from the quest nodes: (1, n) sets the fact to n, (0, n) adds n. testOps are (comparison, value) pairs.",
+ "categories": [
+  "character",
+  "ending",
+  "lifepath",
+  "pl",
+  "ponr",
+  "relationship",
+  "romance",
+  "spine",
+  "turning"
+ ],
+ "facts": [
+  {
+   "name": "q000_street_kid_background",
+   "hash": "87368a9a",
+   "category": "lifepath",
+   "reading": "V's life path is Streetkid (read by Act 1 prologue phases)",
+   "setInPhases": [
+    "q000_kid"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "lizzies_q000"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "q000_nomad_background",
+   "hash": "931c1bb9",
+   "category": "lifepath",
+   "reading": "V's life path is Nomad",
+   "setInPhases": [
+    "q000_nomad"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "lizzies_q000"
+   ],
+   "testedInScenes": [
+    "q115_02b_ripperdoc_roof"
+   ],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "q000_corpo_background",
+   "hash": "c164aa53",
+   "category": "lifepath",
+   "reading": "V's life path is Corpo",
+   "setInPhases": [
+    "q000_corpo"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "lizzies_q000"
+   ],
+   "testedInScenes": [
+    "q113_06_saburo_office",
+    "q113_07_mikoshi",
+    "q115_00_johnny",
+    "q201_07_cabin_day_30",
+    "q201_08_cabin_day_30_takemura"
+   ],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "q000_done",
+   "hash": "6210fc8d",
+   "category": "spine",
+   "reading": "Life-path prologue finished",
+   "setInPhases": [
+    "q000",
+    "q303.quest",
+    "q306.quest"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [
+    "q114_debug_setup",
+    "q305_xx_chicken_test"
+   ],
+   "testedInPhases": [
+    "lizzies_default",
+    "lizzies_q000",
+    "lizzies_scenes",
+    "q004_nightclub",
+    "q204_columbarium_holograms"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('Greater', 0)",
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "q001_done",
+   "hash": "4de7cf88",
+   "category": "spine",
+   "reading": "The Rescue / The Ripperdoc finished (set in cleanup)",
+   "setInPhases": [
+    "q001_cleanup",
+    "q303.quest"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(0, 1)",
+    "(1, 1)"
+   ],
+   "testOps": []
+  },
+  {
+   "name": "q003_done",
+   "hash": "ad57502e",
+   "category": "spine",
+   "reading": "The Pickup finished",
+   "setInPhases": [
+    "q003_end"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "prologue",
+    "q003",
+    "q004_after_bd",
+    "q005_01_plan"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('Greater', 0)",
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "q004_done",
+   "hash": "642304d1",
+   "category": "spine",
+   "reading": "The Information finished",
+   "setInPhases": [
+    "q004_after_bd"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "prologue",
+    "q003",
+    "q003_end",
+    "q004",
+    "q005_01_plan"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q005_done",
+   "hash": "f4b049dc",
+   "category": "spine",
+   "reading": "The Heist finished",
+   "setInPhases": [
+    "q005_09_no_tell_motel"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q204_columbarium_holograms"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q003_brick_dead",
+   "hash": "9120405e",
+   "category": "character",
+   "reading": "Brick (Maelstrom) killed in The Pickup",
+   "setInPhases": [
+    "q003_end"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q204_columbarium_holograms"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(0, 1)"
+   ],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q003_dumdum_dead",
+   "hash": "a5095435",
+   "category": "character",
+   "reading": "Dum Dum (Maelstrom) killed in The Pickup",
+   "setInPhases": [
+    "q003_militech_combat"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q003_militech_combat",
+    "q204_columbarium_holograms"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q003_royce_dead",
+   "hash": "732d153b",
+   "category": "character",
+   "reading": "Royce (Maelstrom) killed in The Pickup",
+   "setInPhases": [
+    "q003_royce_bossfight"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q003_end",
+    "q003_militech_combat",
+    "q003_royce_bossfight",
+    "q204_columbarium_holograms"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(0, 1)"
+   ],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q105_woodman_dead",
+   "hash": "bfd0e1db",
+   "category": "character",
+   "reading": "Woodman killed in Automatic Love",
+   "setInPhases": [
+    "q105_dollhouse"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q204_columbarium_holograms"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q105_fingers_dead",
+   "hash": "44075f0c",
+   "category": "character",
+   "reading": "Fingers killed in The Space in Between (tested only)",
+   "setInPhases": [],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q204_columbarium_holograms"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q101_done",
+   "hash": "37811c85",
+   "category": "spine",
+   "reading": "Playing for Time / Love Like Fire finished",
+   "setInPhases": [
+    "q101_cleanup"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q003_stout"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(0, 1)"
+   ],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q103_done",
+   "hash": "5d0a54b3",
+   "category": "spine",
+   "reading": "Ghost Town finished (gates Lightning Breaks)",
+   "setInPhases": [
+    "q103"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "act_1"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "q104_done",
+   "hash": "4b16ccd4",
+   "category": "spine",
+   "reading": "Lightning Breaks / Life During Wartime finished",
+   "setInPhases": [
+    "q104"
+   ],
+   "setInScenes": [
+    "q112_000_setup"
+   ],
+   "setOnlyInTestHarness": [
+    "q305_xx_chicken_test"
+   ],
+   "testedInPhases": [
+    "act_1",
+    "q112_00_secret_meeting",
+    "q112_03_infiltration",
+    "q112_04_parade",
+    "q305_01_task"
+   ],
+   "testedInScenes": [
+    "q110_14_alt",
+    "q307_ending_01_rogue"
+   ],
+   "seen": true,
+   "setValues": [
+    "(0, 1)"
+   ],
+   "testOps": [
+    "('Equal', 0)",
+    "('Greater', 0)",
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "q105_done",
+   "hash": "62816829",
+   "category": "spine",
+   "reading": "Automatic Love chain finished",
+   "setInPhases": [
+    "q105_complete"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": []
+  },
+  {
+   "name": "q108_done",
+   "hash": "fbe60f18",
+   "category": "spine",
+   "reading": "Never Fade Away finished",
+   "setInPhases": [
+    "q108_07_finale"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": []
+  },
+  {
+   "name": "q110_done",
+   "hash": "05add3c7",
+   "category": "spine",
+   "reading": "I Walk the Line / Transmission finished",
+   "setInPhases": [
+    "q110b"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q105_msg_check_up",
+    "q110_persistent_content",
+    "q110_text_mesage_placide_post_quest"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "q112_done",
+   "hash": "51636e99",
+   "category": "spine",
+   "reading": "Down on the Street chain finished",
+   "setInPhases": [
+    "q112_abduction"
+   ],
+   "setInScenes": [
+    "q112_11_shotgun"
+   ],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(0, 1)"
+   ],
+   "testOps": []
+  },
+  {
+   "name": "q113_active",
+   "hash": "f6878ae6",
+   "category": "spine",
+   "reading": "Last Caress / Totalimmortal (Arasaka route) running",
+   "setInPhases": [
+    "q113"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 0)",
+    "(1, 1)"
+   ],
+   "testOps": []
+  },
+  {
+   "name": "q114_done",
+   "hash": "d52e72a3",
+   "category": "spine",
+   "reading": "Nomad route (We Gotta Live Together .. Belly of the Beast) finished",
+   "setInPhases": [
+    "q114_02_main_attack"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "final_boards",
+    "q116_combat_smasher_bossfight",
+    "q116_cyberspace",
+    "q116_mikoshi",
+    "q116_smasher"
+   ],
+   "testedInScenes": [
+    "q116_01_adam_smasher",
+    "q116_05_mikoshi",
+    "q116_05a_ripperdoc_roof"
+   ],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('Greater', 0)",
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "q115_done",
+   "hash": "18e20696",
+   "category": "spine",
+   "reading": "For Whom the Bell Tolls finished",
+   "setInPhases": [
+    "q115_02_ripperdoc",
+    "q115_afterlife"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": []
+  },
+  {
+   "name": "q116_done",
+   "hash": "10d8e175",
+   "category": "spine",
+   "reading": "Changes finished",
+   "setInPhases": [
+    "q116_mikoshi"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": []
+  },
+  {
+   "name": "q104_mitch_rescued",
+   "hash": "3eca89f5",
+   "category": "character",
+   "reading": "Mitch (Aldecaldos) rescued at the crash site",
+   "setInPhases": [],
+   "setInScenes": [
+    "q104_05_av_debris"
+   ],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "final_boards",
+    "q104_followup"
+   ],
+   "testedInScenes": [
+    "q104_07c_nomads_arrive",
+    "q114_04_initiation"
+   ],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Equal', 0)",
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q110_placide_dead",
+   "hash": "867fba90",
+   "category": "character",
+   "reading": "Placide killed in I Walk the Line",
+   "setInPhases": [
+    "q110_07b_placide_combat"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": []
+  },
+  {
+   "name": "q112_takemura_dead",
+   "hash": "d2c14f38",
+   "category": "character",
+   "reading": "Takemura dead (1) or alive (0) after Search and Destroy",
+   "setInPhases": [],
+   "setInScenes": [
+    "q112_000_setup",
+    "q112_10_safe_house"
+   ],
+   "setOnlyInTestHarness": [
+    "q201_00_chicken_test"
+   ],
+   "testedInPhases": [
+    "final_boards",
+    "q112_08_shotgun",
+    "q112_text_messages",
+    "q113",
+    "q113_03_drive_to_estate",
+    "q113_04_estate",
+    "q113_05_av_flight",
+    "q113_06_saburo_office",
+    "q113_10_jungle",
+    "q113_11_top_atrium",
+    "q113_12_ceo_floor",
+    "q113_atrium_combat",
+    "q113_estate_combat",
+    "q113_jungle_combat",
+    "q113_smasher_boss_fight",
+    "q113_smasher_combat",
+    "q115_02_ripperdoc",
+    "q201_heir",
+    "q307_ending_board"
+   ],
+   "testedInScenes": [
+    "q112_10_safe_house",
+    "q112_11_shotgun",
+    "q113_03a_haru_kasai_drive",
+    "q113_04_hanako_estate",
+    "q113_05_av_flight",
+    "q113_06_saburo_office",
+    "q113_09_jungle_start",
+    "q113_10_jungle_combat",
+    "q113_11_top_atrium",
+    "q113_12_ceo_floor",
+    "q113_13_adam_smasher",
+    "q113_14_yorinobu",
+    "q115_02d_misty",
+    "q201_01_cyberspace",
+    "q303_06a_paradise_roleplay_restaurant_floor",
+    "q306_13_epilogue"
+   ],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Greater', 0)",
+    "('GreaterOrEqual', 1)",
+    "('Less', 1)"
+   ]
+  },
+  {
+   "name": "q112_oda_dead",
+   "hash": "27a1020c",
+   "category": "character",
+   "reading": "Oda killed at the parade",
+   "setInPhases": [],
+   "setInScenes": [
+    "q112_08_parade_speech"
+   ],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q113_10_jungle",
+    "q113_jungle_combat"
+   ],
+   "testedInScenes": [
+    "q113_04_hanako_estate",
+    "q113_09_jungle_start",
+    "q113_10_jungle_combat",
+    "q113_13_adam_smasher"
+   ],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q112_hanako_meeting_set_up",
+   "hash": "91406908",
+   "category": "turning",
+   "reading": "Hanako meeting arranged (read at the PONR phase)",
+   "setInPhases": [],
+   "setInScenes": [
+    "q112_11_shotgun"
+   ],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q115_00_hanako"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q115_point_of_no_return",
+   "hash": "73189b35",
+   "category": "ponr",
+   "reading": "The point of no return has passed",
+   "setInPhases": [
+    "act_1",
+    "q115_00_hanako",
+    "q307.quest",
+    "q307_01_pickup"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [
+    "q201_00_chicken_test",
+    "q202_chicken_test"
+   ],
+   "testedInPhases": [
+    "ep1_main_quests",
+    "q103_emmerick_routine",
+    "q112_text_messages",
+    "q114_msg_panam_ending_hook",
+    "q305_10_reed_finale",
+    "q306_06_epilogues",
+    "q307_00_opt_in",
+    "q307_01_pickup",
+    "q307_persistent_content"
+   ],
+   "testedInScenes": [
+    "q307_00_pickup_holocall",
+    "q307_01_pickup"
+   ],
+   "seen": true,
+   "setValues": [
+    "(0, 1)",
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('Greater', 0)",
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "q115_no_return",
+   "hash": "40f766d0",
+   "category": "ponr",
+   "reading": "Second flag, set by the rooftop decision scene, read by the Nomad route",
+   "setInPhases": [],
+   "setInScenes": [
+    "q115_02b_ripperdoc_roof"
+   ],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q114_nomads"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q115_02_hanako_help",
+   "hash": "1190a765",
+   "category": "ending",
+   "reading": "V chose to go with Hanako (Arasaka route)",
+   "setInPhases": [],
+   "setInScenes": [
+    "q115_02b_ripperdoc_roof"
+   ],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [],
+   "testOps": []
+  },
+  {
+   "name": "q115_02_panam_help",
+   "hash": "421ff6c0",
+   "category": "ending",
+   "reading": "V chose to call Panam (Nomad route)",
+   "setInPhases": [],
+   "setInScenes": [
+    "q115_02b_ripperdoc_roof"
+   ],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [],
+   "testedInScenes": [
+    "q115_02b_ripperdoc_roof"
+   ],
+   "seen": true,
+   "setValues": [],
+   "testOps": []
+  },
+  {
+   "name": "q115_call_panam_done",
+   "hash": "72a753b1",
+   "category": "ending",
+   "reading": "The call to Panam happened",
+   "setInPhases": [],
+   "setInScenes": [
+    "q115_02b_ripperdoc_roof"
+   ],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [],
+   "testedInScenes": [
+    "q115_02b_ripperdoc_roof",
+    "q115_02c_holocalls"
+   ],
+   "seen": true,
+   "setValues": [],
+   "testOps": []
+  },
+  {
+   "name": "q115_v_johnny_solo_ending",
+   "hash": "b99d8811",
+   "category": "ending",
+   "reading": "V chose the Johnny-and-Rogue route",
+   "setInPhases": [],
+   "setInScenes": [
+    "q115_02b_ripperdoc_roof"
+   ],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [],
+   "testedInScenes": [
+    "q115_02b_ripperdoc_roof"
+   ],
+   "seen": true,
+   "setValues": [],
+   "testOps": []
+  },
+  {
+   "name": "q115_02b_made_final_choice",
+   "hash": "a1a8dc21",
+   "category": "ending",
+   "reading": "A final choice was made on the roof",
+   "setInPhases": [],
+   "setInScenes": [
+    "q115_02b_ripperdoc_roof"
+   ],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [],
+   "testedInScenes": [
+    "q115_02b_ripperdoc_roof"
+   ],
+   "seen": true,
+   "setValues": [],
+   "testOps": []
+  },
+  {
+   "name": "q115_suicide_option",
+   "hash": "6d53de36",
+   "category": "ending",
+   "reading": "The roof offers the suicide option",
+   "setInPhases": [],
+   "setInScenes": [
+    "q115_02b_ripperdoc_roof"
+   ],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [],
+   "testedInScenes": [
+    "q115_02b_ripperdoc_roof"
+   ],
+   "seen": true,
+   "setValues": [],
+   "testOps": []
+  },
+  {
+   "name": "q115_suicide_ending",
+   "hash": "b27e8ec0",
+   "category": "ending",
+   "reading": "The suicide ending was taken",
+   "setInPhases": [
+    "q115_02_ripperdoc"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q204_reborn"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q115_jungle_weyland_saved",
+   "hash": "e03baba2",
+   "category": "ending",
+   "reading": "Weyland saved during the Rogue's Last Flight assault",
+   "setInPhases": [
+    "q115_05_jungle",
+    "q115_05_jungle_weyland"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q115_05_jungle",
+    "q115_06_atrium",
+    "q115_07_netrunners_nest",
+    "q116_combat_smasher_bossfight",
+    "q116_mikoshi",
+    "q116_smasher",
+    "q203_afterlife"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(0, 1)",
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q115_weyland_dead",
+   "hash": "d8ee5307",
+   "category": "ending",
+   "reading": "Weyland dead (tested by the New Dawn Fades epilogue only)",
+   "setInPhases": [],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q204_columbarium_holograms"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q115_did_it_solo",
+   "hash": "95822215",
+   "category": "ending",
+   "reading": "V finished the Tower solo with Johnny",
+   "setInPhases": [
+    "q115_solo_the_mikoshi"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q116_cyberspace",
+    "q203_afterlife"
+   ],
+   "testedInScenes": [
+    "q116_05_mikoshi",
+    "q116_05a_ripperdoc_roof"
+   ],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q116_rogue_dead",
+   "hash": "3dac8198",
+   "category": "character",
+   "reading": "Rogue died in the Smasher fight",
+   "setInPhases": [],
+   "setInScenes": [
+    "q116_01_adam_smasher"
+   ],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "final_boards",
+    "q204_00_setup"
+   ],
+   "testedInScenes": [
+    "q204_01_waking_up"
+   ],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Greater', 0)",
+    "('Less', 1)"
+   ]
+  },
+  {
+   "name": "q116_saul_dead",
+   "hash": "be332f33",
+   "category": "character",
+   "reading": "Saul died in the Smasher fight",
+   "setInPhases": [],
+   "setInScenes": [
+    "q116_01_adam_smasher"
+   ],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "final_boards"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Equal', 0)"
+   ]
+  },
+  {
+   "name": "q116_smasher_defeated",
+   "hash": "d70cab6f",
+   "category": "turning",
+   "reading": "Smasher defeated",
+   "setInPhases": [
+    "q115_solo_smasher",
+    "q116_smasher"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": []
+  },
+  {
+   "name": "q201_done",
+   "hash": "0d591fbe",
+   "category": "spine",
+   "reading": "Where Is My Mind? epilogue finished",
+   "setInPhases": [
+    "q201_heir"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q204_reborn"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q202_done",
+   "hash": "6a06dc5d",
+   "category": "spine",
+   "reading": "All Along the Watchtower epilogue finished",
+   "setInPhases": [
+    "q202"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q204_reborn"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(0, 1)"
+   ],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q203_done",
+   "hash": "ef961718",
+   "category": "spine",
+   "reading": "Path of Glory epilogue finished",
+   "setInPhases": [
+    "q203_legend"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q204_reborn"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(0, 1)"
+   ],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q204_done",
+   "hash": "3750adaf",
+   "category": "spine",
+   "reading": "New Dawn Fades epilogue finished",
+   "setInPhases": [
+    "q204_reborn"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q204_reborn"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q115_panam_romance_chosen",
+   "hash": "d2331cfc",
+   "category": "romance",
+   "reading": "V's chosen partner at the roof is Panam",
+   "setInPhases": [],
+   "setInScenes": [
+    "q115_02b_ripperdoc_roof"
+   ],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "final_boards",
+    "q203_penthouse",
+    "q204_00_setup"
+   ],
+   "testedInScenes": [
+    "q114_05_quiet_place",
+    "q114_10_tunnel",
+    "q202_01_motel",
+    "q202_04a_badlands_travel",
+    "q202_06_border_running",
+    "q307_02_coma"
+   ],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Greater', 0)",
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "q115_judy_romance_chosen",
+   "hash": "060792f1",
+   "category": "romance",
+   "reading": "V's chosen partner at the roof is Judy",
+   "setInPhases": [],
+   "setInScenes": [
+    "q115_02b_ripperdoc_roof"
+   ],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "final_boards",
+    "q202_04_convoy",
+    "q203_penthouse",
+    "q204_00_setup"
+   ],
+   "testedInScenes": [
+    "q202_05_convoy",
+    "q202_06_border_running",
+    "q307_02_coma"
+   ],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Greater', 0)",
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "q115_kerry_romance_chosen",
+   "hash": "c152db46",
+   "category": "romance",
+   "reading": "V's chosen partner at the roof is Kerry",
+   "setInPhases": [],
+   "setInScenes": [
+    "q115_02b_ripperdoc_roof"
+   ],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "final_boards",
+    "q202_04_convoy",
+    "q203_penthouse",
+    "q204_00_setup"
+   ],
+   "testedInScenes": [
+    "q202_05_convoy",
+    "q202_06_border_running",
+    "q307_02_coma"
+   ],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Greater', 0)",
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "q115_river_romance_chosen",
+   "hash": "be3e86a5",
+   "category": "romance",
+   "reading": "V's chosen partner at the roof is River",
+   "setInPhases": [],
+   "setInScenes": [
+    "q115_02b_ripperdoc_roof"
+   ],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "final_boards",
+    "q202_04_convoy",
+    "q203_penthouse",
+    "q204_00_setup"
+   ],
+   "testedInScenes": [
+    "q202_05_convoy",
+    "q202_06_border_running",
+    "q307_02_coma"
+   ],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Greater', 0)",
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "sq027_panam_lover",
+   "hash": "2cb8e823",
+   "category": "romance",
+   "reading": "Panam is V's lover (set by her side quests)",
+   "setInPhases": [],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [
+    "q201_00_chicken_test"
+   ],
+   "testedInPhases": [
+    "q114_msg_panam_ending_hook",
+    "q302",
+    "q307_01_pickup",
+    "q307_03_hospital"
+   ],
+   "testedInScenes": [
+    "q115_00_johnny",
+    "q115_02b_ripperdoc_roof",
+    "q115_02d_misty",
+    "q201_05_cabin_day_7",
+    "q306_01_ride_to_spaceport",
+    "q307_02_coma"
+   ],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Greater', 0)",
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "sq028_kerry_relationship",
+   "hash": "8da7c40c",
+   "category": "romance",
+   "reading": "Kerry relationship flag (read as a romance by the roof scene and Phantom Liberty)",
+   "setInPhases": [],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [
+    "q201_00_chicken_test"
+   ],
+   "testedInPhases": [
+    "q302",
+    "q307_01_pickup",
+    "q307_03_hospital"
+   ],
+   "testedInScenes": [
+    "q115_02b_ripperdoc_roof",
+    "q201_05_cabin_day_7",
+    "q306_01_ride_to_spaceport",
+    "q307_02_coma",
+    "q307_03a_friends_holocall"
+   ],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Greater', 0)",
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "sq029_river_lover",
+   "hash": "296ab13e",
+   "category": "romance",
+   "reading": "River is V's lover",
+   "setInPhases": [],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [
+    "q201_00_chicken_test"
+   ],
+   "testedInPhases": [
+    "q302",
+    "q307_01_pickup",
+    "q307_03_hospital"
+   ],
+   "testedInScenes": [
+    "q103_07_ghost_town_drive",
+    "q115_02b_ripperdoc_roof",
+    "q201_05_cabin_day_7",
+    "q306_01_ride_to_spaceport",
+    "q307_02_coma",
+    "q307_03a_friends_holocall"
+   ],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Greater', 0)",
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "sq030_judy_lover",
+   "hash": "2c1c5bde",
+   "category": "romance",
+   "reading": "Judy is V's lover",
+   "setInPhases": [],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [
+    "q201_00_chicken_test"
+   ],
+   "testedInPhases": [
+    "q302",
+    "q307_01_pickup",
+    "q307_03_hospital"
+   ],
+   "testedInScenes": [
+    "q103_07_ghost_town_drive",
+    "q115_02b_ripperdoc_roof",
+    "q201_05_cabin_day_7",
+    "q307_02_coma",
+    "q307_03a_friends_holocall"
+   ],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Greater', 0)",
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "sq027_panam_ratted_out",
+   "hash": "86bb93c0",
+   "category": "relationship",
+   "reading": "A negative Panam flag (name: 'ratted out'); read by the roof scene, the epilogue boards and Down on the Street",
+   "setInPhases": [],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [
+    "q201_00_chicken_test"
+   ],
+   "testedInPhases": [
+    "final_boards",
+    "q112_text_messages",
+    "q201_heir"
+   ],
+   "testedInScenes": [
+    "q115_00_johnny",
+    "q115_02_ripperdoc",
+    "q115_02b_ripperdoc_roof",
+    "q115_02c_holocalls"
+   ],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Equal', 0)",
+    "('Equal', 1)",
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "sq027_done",
+   "hash": "e75e961d",
+   "category": "relationship",
+   "reading": "Panam side-quest chain finished (read by the roof scene)",
+   "setInPhases": [],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "final_boards",
+    "q112_text_messages",
+    "q114_nomad_scenes"
+   ],
+   "testedInScenes": [
+    "q110_14_alt",
+    "q115_00_johnny",
+    "q115_02_ripperdoc",
+    "q115_02b_ripperdoc_roof",
+    "q115_02c_holocalls",
+    "q305_02d_chang"
+   ],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Greater', 0)",
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "sq027_failed",
+   "hash": "ecf2bf10",
+   "category": "relationship",
+   "reading": "Panam side-quest chain failed (read by the roof scene)",
+   "setInPhases": [],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [],
+   "testedInScenes": [
+    "q115_00_johnny",
+    "q115_02b_ripperdoc_roof",
+    "q115_02c_holocalls",
+    "q305_02d_chang"
+   ],
+   "seen": true,
+   "setValues": [],
+   "testOps": []
+  },
+  {
+   "name": "sq028_kerry_dislike",
+   "hash": "00531609",
+   "category": "relationship",
+   "reading": "Negative Kerry flag (name: 'dislike')",
+   "setInPhases": [],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [
+    "q201_00_chicken_test"
+   ],
+   "testedInPhases": [
+    "q201_heir"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Equal', 1)"
+   ]
+  },
+  {
+   "name": "sq028_kerry_ignored",
+   "hash": "627f0f1c",
+   "category": "relationship",
+   "reading": "Negative Kerry flag (name: 'ignored')",
+   "setInPhases": [],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [
+    "q201_00_chicken_test"
+   ],
+   "testedInPhases": [
+    "q201_heir"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Equal', 1)"
+   ]
+  },
+  {
+   "name": "sq030_done",
+   "hash": "7ddc0111",
+   "category": "relationship",
+   "reading": "Judy side-quest chain finished",
+   "setInPhases": [],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [
+    "q201_00_chicken_test"
+   ],
+   "testedInPhases": [
+    "final_boards",
+    "q201_heir"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Equal', 1)",
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "sq030_failed",
+   "hash": "db688954",
+   "category": "relationship",
+   "reading": "Judy side-quest chain failed",
+   "setInPhases": [],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [
+    "q201_00_chicken_test"
+   ],
+   "testedInPhases": [
+    "q201_heir"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Equal', 1)"
+   ]
+  },
+  {
+   "name": "sq030_broken",
+   "hash": "ebb7db40",
+   "category": "relationship",
+   "reading": "Judy flag (name: 'broken')",
+   "setInPhases": [],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [
+    "q201_00_chicken_test"
+   ],
+   "testedInPhases": [
+    "final_boards",
+    "q201_heir"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Equal', 1)",
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "sq021_river_dead",
+   "hash": "b3dcecde",
+   "category": "character",
+   "reading": "River dead",
+   "setInPhases": [],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "final_boards",
+    "q201_heir",
+    "q204_columbarium_holograms"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Equal', 0)",
+    "('Equal', 1)",
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "sq021_river_hates_v",
+   "hash": "e5dae4d4",
+   "category": "relationship",
+   "reading": "Negative River flag (name: 'hates V')",
+   "setInPhases": [],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q201_heir"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Equal', 1)"
+   ]
+  },
+  {
+   "name": "sq021_randy_saved",
+   "hash": "02716e83",
+   "category": "character",
+   "reading": "Randy saved",
+   "setInPhases": [],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [
+    "q201_00_chicken_test",
+    "q305_xx_chicken_test"
+   ],
+   "testedInPhases": [
+    "final_boards",
+    "q201_heir"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Equal', 1)",
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "sq021_sobchak_friend",
+   "hash": "e30ba543",
+   "category": "relationship",
+   "reading": "River friendship flag",
+   "setInPhases": [],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [
+    "q201_00_chicken_test"
+   ],
+   "testedInPhases": [
+    "q307_03_hospital"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "sq032_johnny_friend",
+   "hash": "b431ccac",
+   "category": "relationship",
+   "reading": "Johnny friendship flag (read by the roof scene and later quests)",
+   "setInPhases": [],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [],
+   "testedInScenes": [
+    "q110_14_alt",
+    "q112_00b_secret_meeting",
+    "q115_02b_ripperdoc_roof",
+    "q116_05_mikoshi",
+    "q305_06b_bunker_intro",
+    "q307_01_pickup"
+   ],
+   "seen": true,
+   "setValues": [],
+   "testOps": []
+  },
+  {
+   "name": "sq031_rogue_met_johnny",
+   "hash": "e0f4205c",
+   "category": "relationship",
+   "reading": "Rogue and Johnny have met (name: 'met Johnny')",
+   "setInPhases": [],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "final_boards"
+   ],
+   "testedInScenes": [
+    "q203_05_afterlife",
+    "q307_ending_01_rogue"
+   ],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "sq031_done",
+   "hash": "e1f01a1c",
+   "category": "relationship",
+   "reading": "Chippin' In finished",
+   "setInPhases": [],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "final_boards",
+    "q112_text_messages",
+    "q204_00_setup"
+   ],
+   "testedInScenes": [
+    "q110_14_alt",
+    "q115_00_johnny",
+    "q115_02_ripperdoc",
+    "q115_02b_ripperdoc_roof",
+    "q116_05_mikoshi",
+    "q306_01_ride_to_spaceport"
+   ],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Greater', 0)",
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "ep1_installed",
+   "hash": "f5eb03be",
+   "category": "pl",
+   "reading": "Phantom Liberty is installed",
+   "setInPhases": [
+    "ep1.quest",
+    "ep1_standalone.quest"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q110_01_fixer"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "ep1_standalone",
+   "hash": "8fec3b23",
+   "category": "pl",
+   "reading": "Phantom Liberty standalone start",
+   "setInPhases": [
+    "ep1_standalone.quest"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "act_1",
+    "q000_vr_tutorial_course_03",
+    "q001_fistfight_tutorial",
+    "q103_01_afterlife_new",
+    "q110_text_messages_persistant",
+    "q301_fail",
+    "q301_fail_border",
+    "q301_hook",
+    "q302",
+    "q302_msg_gamereview",
+    "q302_ronald_tree",
+    "q304_03_songbird_meeting",
+    "q304_04e_alex_heart_to_heart",
+    "q305_11_after_quest"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('Greater', 0)",
+    "('GreaterOrEqual', 1)",
+    "('Less', 1)"
+   ]
+  },
+  {
+   "name": "ep1_active",
+   "hash": "a55f3606",
+   "category": "pl",
+   "reading": "Phantom Liberty content is active",
+   "setInPhases": [
+    "q110b",
+    "q301.quest",
+    "q302.quest",
+    "q303.quest",
+    "q304.quest",
+    "q306.quest",
+    "q307.quest"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [
+    "q305_xx_chicken_test"
+   ],
+   "testedInPhases": [
+    "cyberpunk2077"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(0, 1)",
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('GreaterOrEqual', 1)",
+    "('Less', 1)"
+   ]
+  },
+  {
+   "name": "ep1_side_content",
+   "hash": "fb86ba55",
+   "category": "pl",
+   "reading": "Dogtown side content open",
+   "setInPhases": [
+    "ep1_main_quests",
+    "q302.quest",
+    "q303.quest",
+    "q304.quest",
+    "q306",
+    "q306_00_setup"
+   ],
+   "setInScenes": [
+    "q302_04_squot"
+   ],
+   "setOnlyInTestHarness": [
+    "q305_xx_chicken_test",
+    "q306_cosmodrome_debug_setup",
+    "q306_restricted_debug_setup"
+   ],
+   "testedInPhases": [
+    "q301",
+    "q301_escape_pod"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(0, 1)",
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "q301_00_done",
+   "hash": "db23e2e0",
+   "category": "pl",
+   "reading": "The Dog Eat Dog hook (holocall) finished",
+   "setInPhases": [
+    "q301",
+    "q301_hook"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q301_border",
+    "q301_border_bugfixes"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "q301_done",
+   "hash": "311f0f03",
+   "category": "pl",
+   "reading": "PL quest 1 finished",
+   "setInPhases": [
+    "q301_shuttle",
+    "q306.quest"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": []
+  },
+  {
+   "name": "q302_done",
+   "hash": "f3ffa7f0",
+   "category": "pl",
+   "reading": "PL quest 2 finished",
+   "setInPhases": [
+    "q302_08_call",
+    "q306.quest"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q302_protest"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q303_done",
+   "hash": "c06d5f55",
+   "category": "pl",
+   "reading": "PL quest 3 finished",
+   "setInPhases": [
+    "q303",
+    "q303.quest",
+    "q306.quest"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q303_06d_concert_braindance"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(0, 1)",
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q304_done",
+   "hash": "3d1f03ba",
+   "category": "pl",
+   "reading": "PL quest 4 finished",
+   "setInPhases": [
+    "q304_09_cleanup",
+    "q306.quest"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q304_gear_pickup",
+    "q304_statue_chat"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "q304_songbirds_path",
+   "hash": "47ccc729",
+   "category": "pl",
+   "reading": "Branch: Songbird's path chosen (read at the q305/q306 split)",
+   "setInPhases": [],
+   "setInScenes": [
+    "q304_07b_lab"
+   ],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "ep1_main_quests",
+    "q304_08_escape_both_combaat_reinforcements",
+    "q304_escape_gate_manager",
+    "q304_gear_pickup",
+    "q304_safehouse_elevator_scanner",
+    "q304_weapons_locker_escape_handler"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Equal', 0)",
+    "('GreaterOrEqual', 1)",
+    "('Less', 1)"
+   ]
+  },
+  {
+   "name": "q305_done",
+   "hash": "619cdd27",
+   "category": "pl",
+   "reading": "PL Reed-route finale finished",
+   "setInPhases": [
+    "q305"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "final_boards",
+    "q307_ending_board"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q305_songbird_alive",
+   "hash": "ad574a4f",
+   "category": "pl",
+   "reading": "Songbird alive after the Reed route",
+   "setInPhases": [],
+   "setInScenes": [
+    "q305_10_songbird_finale"
+   ],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "ep1_main_quests",
+    "final_boards"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q306_done",
+   "hash": "3ab7f3a4",
+   "category": "pl",
+   "reading": "PL Songbird-route finale finished",
+   "setInPhases": [
+    "q306",
+    "q306_cleanup"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "final_boards",
+    "q306_persistent",
+    "q307_03_hospital"
+   ],
+   "testedInScenes": [
+    "q307_00_pickup_holocall"
+   ],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q306_finale_deal_done",
+   "hash": "5ef5b08b",
+   "category": "pl",
+   "reading": "The Songbird-route deal was made",
+   "setInPhases": [
+    "q306_06_epilogues",
+    "q306_msg_reed_launchpad_retreated_scenario"
+   ],
+   "setInScenes": [
+    "q306_09_monorail",
+    "q306_10_finale"
+   ],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "ep1_main_quests",
+    "final_boards",
+    "q306_06_epilogues"
+   ],
+   "testedInScenes": [
+    "q306_10_finale",
+    "q306_13b_epilogue_reed"
+   ],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q306_reed_killed",
+   "hash": "f1266024",
+   "category": "pl",
+   "reading": "Reed killed in the Songbird route",
+   "setInPhases": [],
+   "setInScenes": [
+    "q306_10_finale"
+   ],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "final_boards"
+   ],
+   "testedInScenes": [
+    "q306_songbird_recording"
+   ],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Less', 1)"
+   ]
+  },
+  {
+   "name": "q306_reed_trusted",
+   "hash": "cbdca8a0",
+   "category": "pl",
+   "reading": "Reed trusted",
+   "setInPhases": [
+    "q306_03c-02_undergroundpassage"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": []
+  },
+  {
+   "name": "q306_somi_betrayed",
+   "hash": "9ffe21c1",
+   "category": "pl",
+   "reading": "Somi betrayed",
+   "setInPhases": [
+    "q306_05_launchpad"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q306_persistent"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q307_aborted",
+   "hash": "1efdb7d8",
+   "category": "pl",
+   "reading": "Set by the roof scene; when above 0 the q307 phase is cut off from the Phantom Liberty graph",
+   "setInPhases": [],
+   "setInScenes": [
+    "q115_02b_ripperdoc_roof"
+   ],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "ep1_main_quests"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q307_main_game_killed",
+   "hash": "e6cce781",
+   "category": "pl",
+   "reading": "Set when the Phantom Liberty aftermath starts; read by its hospital and cab-ride phases",
+   "setInPhases": [
+    "cyberpunk2077",
+    "q307.quest"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q307_03_hospital",
+    "q307_04_cabride"
+   ],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": [
+    "('Greater', 0)"
+   ]
+  },
+  {
+   "name": "q307_done",
+   "hash": "5735c079",
+   "category": "pl",
+   "reading": "PL aftermath finished",
+   "setInPhases": [
+    "q307_cleanup"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": []
+  },
+  {
+   "name": "q302_jacob_killed",
+   "hash": "1cfe7fe9",
+   "category": "pl",
+   "reading": "Jacob killed (tested only)",
+   "setInPhases": [],
+   "setInScenes": [
+    "q302_04_squot",
+    "q302_07_oath"
+   ],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [
+    "q302",
+    "q302_07_oath",
+    "q302_squat_persistent_content"
+   ],
+   "testedInScenes": [
+    "q302_04_squot",
+    "q302_07_oath"
+   ],
+   "seen": true,
+   "setValues": [],
+   "testOps": [
+    "('GreaterOrEqual', 1)"
+   ]
+  },
+  {
+   "name": "q304_kurt_dead",
+   "hash": "7a268dcb",
+   "category": "pl",
+   "reading": "Kurt killed",
+   "setInPhases": [
+    "q304_08b_escape_songbird"
+   ],
+   "setInScenes": [],
+   "setOnlyInTestHarness": [],
+   "testedInPhases": [],
+   "testedInScenes": [],
+   "seen": true,
+   "setValues": [
+    "(1, 1)"
+   ],
+   "testOps": []
+  }
+ ]
+}

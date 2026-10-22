@@ -118,7 +118,7 @@ So a save's mod data can be read with **no per-mod schema**: the package names e
 2. What are the type database's 8-byte section, the high bits of each property record and the header's u64?
 3. Does the game re-save a removed mod's classes, drop them, or fail?
 4. Does the game read `TypeDatabase_v2` when loading, and what happens if a package uses a type it doesn't list?
-5. How many fact names can be recovered by hashing names found in the installed quest resources and scripts?
+5. How many fact names can be recovered by hashing names found in the installed quest resources and scripts? The main-story quest, phase and scene resources alone yield 3,687 distinct names ([main story as game state](main-story-state.md)); how many of a real save's hashes they cover is not yet measured.
 6. Which nodes does the game rewrite on every save even when nothing changed (the baseline an editor's diff is judged against)?
 
 ## In-game test asks
