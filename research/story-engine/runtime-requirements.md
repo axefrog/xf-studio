@@ -76,7 +76,7 @@ Refreshed whenever the bridge reaches a milestone; last refreshed 22 October 202
 | V5 | **Objectives and the map:** map pins, areas, and objectives in the journal or an XF tracker | M5 | **partial:** a test pin (`main`); quest dynamic map pins (0.8); a journal-free tracker (DM, in progress) |
 | V6 | **Props and places:**<br>- spawn props, containers and shards with our own text;<br>- lock and unlock doors;<br>- hide nodes;<br>- place lights | M4 | **branch (in progress):** spawn, despawn, doors and lights, at most 24 things within 60 m. No shards or containers |
 | V7 | **Facts:** read and set quest facts; keep XF's own | M5 | **partial:** read only |
-| V8 | **Scanner text:** our own scanner entries for people and props | M4 | want |
+| V8 | **Scanner text:** our own scanner entries for people and props | M4 | want. Three routes are known offline (TweakXL records with a scanning component, run-time events, rewriting chunks), none yet seen in game ([player channels](../../knowledge/player-channels.md)) |
 | V9 | **Rewards and costs:** money, items, street cred and fixer standing | M5 | want |
 | V10 | **Vehicles:** spawn them, drive routes, run chases | M6 | **branch (in progress):** `vehicle.set` |
 | V11 | **World nudges:** time, weather, crowd and traffic density near a scene | M5 | **partial:** time and pause (`main`); weather (0.8); no density |
