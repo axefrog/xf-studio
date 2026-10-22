@@ -40,7 +40,7 @@ Refreshed whenever the bridge reaches a milestone; last refreshed 22 October 202
 
 | ID | Requirement | Needed by | Status |
 |---|---|---|---|
-| H1 | **A host-side route.** The engine runs outside the game and drives it through the link | M4 | **main**, and agreed for the test profile |
+| H1 | **A host-side route.** The engine runs as an ordinary program beside the game and drives it through the link with catalogue commands: it reads state and events, and sends verbs. Frame-rate work stays in game, armed by the host (behaviours, watchers, the sequencer). Used for development, the offline-to-live step, and the authoring preview; the shipping route is H2 ([DS-46](design-seeds.md)) | M4 | **main**, and agreed for the test profile |
 | H2 | **A Story Engine plugin on XF Core:** redscript for game logic, plus a first-party native part for the simulation's hot paths | M5 | **planned:** the plugin host follows the 0.8 merge |
 | H3 | **An access class for story writes in the release flavour,** scoped to what the plugin owns, with consent. Release builds currently allow only reads, photo-mode changes and XF's own store | Later | want |
 | H4 | **A frame budget and background scheduling** for plugins: per-frame slices that yield to the player and pause in menus, plus worker time for a native part. The XF Core design has no tick capability; today's behaviours live in the core | M5 | want |

@@ -18,7 +18,7 @@ The work has two halves:
 2. **The system:** four layers above the game.
    1. A **simulation layer** sunk into the running game. It mirrors what the game is doing, simulates the rest at levels of detail, makes content present, and records what V perceives.
    2. A **seeding layer**, the only way content enters the simulation. It provides a seed language from vague to precise, casting, scheduling and intersections.
-   3. A **procedural engine** that sows content proactively. The player can tune how much it does, or switch it off.
+   3. A **procedural engine** with two roles. It sows content proactively, as much as the player wants, down to none. It also fits authored content into the world and the story so far, which stays available with sowing switched off.
    4. **Human-authored content** written as data, precisely or vaguely. It plays through the seeding layer on its own, or feeds the procedural engine.
 
 The [first-level plan](plan.md) breaks this down.
