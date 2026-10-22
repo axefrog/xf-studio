@@ -69,7 +69,7 @@ describe('the determinism digest', () => {
   test('1,000 mixed operations hash to the frozen digest', () => {
     const { digest, entries, k } = run();
     expect(entries).toBe(1053);
-    expect(k.revision).toBe(1956);
+    expect(k.revision).toBe(2069);
     expect(k.store.allPins()).toHaveLength(135);
     expect(k.store.allContributions()).toHaveLength(51);
     expect(digest).toBe('c896b062fda81bacfbb6d84563a2c77d');

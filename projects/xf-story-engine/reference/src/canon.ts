@@ -109,7 +109,9 @@ export function hrec(x: unknown): HArg {
 
 /**
  * Every Id named in a plain-data record: each string value that is an Id, and each `root:<name>` string
- * through `expand`. Keys are not read. Used to follow a record's Id fields (spec 7.3).
+ * through `expand`. Keys are not read, with one exception: the `weights` of a `table` form are keyed by the
+ * values they weigh, which are Ids for a ref-valued slot, so those keys are read wherever the form sits
+ * (nested in a `rule` too). Used to follow a record's Id fields (spec 7.3, SPEC-NOTES 33).
  */
 export function idsIn(x: unknown, expand?: (s: string) => Id): Id[] {
   const out: Id[] = [];
@@ -121,7 +123,12 @@ export function idsIn(x: unknown, expand?: (s: string) => Id): Id[] {
     } else if (Array.isArray(v)) {
       for (const item of v) walk(item);
     } else if (typeof v === 'object' && v !== null) {
-      for (const value of Object.values(v)) walk(value);
+      const rec = v as Record<string, unknown>;
+      const weights = rec.f === 'table' ? rec.weights : undefined;
+      if (typeof weights === 'object' && weights !== null && !Array.isArray(weights)) {
+        for (const key of Object.keys(weights)) if (isId(key)) out.push(key);
+      }
+      for (const value of Object.values(rec)) walk(value);
     }
   };
   walk(x);

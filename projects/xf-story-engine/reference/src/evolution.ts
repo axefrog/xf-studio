@@ -194,6 +194,9 @@ export class Evolution {
       }
       d.state.outstanding = d.state.outstanding.filter((x) => x !== d.batch);
     }
+    // The Ids the outstanding batches name are retention roots (SPEC-NOTES 33), so a batch leaving them changes
+    // what is retained, and the caches that depend on it, as a write does.
+    if (due.length > 0) k.bump();
 
     // 2. Apply the external operations stamped before this boundary (the window that just ended), by timestamp then Id.
     const ready = this.queue.filter((q) => q.stamp < T).sort((x, y) => x.stamp - y.stamp || cmpId(x.id, y.id));
@@ -238,6 +241,10 @@ export class Evolution {
         k.defects.record({ kind: 'limit', detail: `process ${def.id}: ${e.message}` });
       }
       this.stateOf(def.id).outstanding.push({ k: b, spanEnd: b + def.period, ops });
+      // A batch joining the outstanding ones adds roots to retention without any other write, and at boundary 0
+      // the engine time does not move either, so the revision moves: the retained set and every cache that
+      // depends on it (resolutions, candidate sets, item descriptors) are then recomputed (SPEC-NOTES 53).
+      k.bump();
       report.runs++;
       cost += 1 + ctx.allowance.used;
     }
