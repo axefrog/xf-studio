@@ -26,7 +26,7 @@ test("per-preset warp selection survives switches, removal and restore, and a re
   select("second");
   expect(app.dispatch({ kind: "preset.edit", command: { kind: "copy", id: preset } }).ok).toBe(true);
   select(l.fields[0].id);
-  expect(app.dispatch({ kind: "preset.select", id: preset }).ok).toBe(true);
+  expect(app.dispatch(studio.choose(preset)).ok).toBe(true);
   expect(document.fieldSelection[l.id]).toBe("second");
   expect(app.dispatch({ kind: "preset.edit", command: { kind: "remove", id: preset } }).ok).toBe(true);
   expect(app.dispatch({ kind: "preset.edit", command: { kind: "restore" } }).ok).toBe(true);

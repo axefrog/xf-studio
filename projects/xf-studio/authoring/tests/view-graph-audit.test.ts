@@ -61,7 +61,7 @@ test("the ratchet patterns match what they are meant to", () => {
   expect(VIEWPORT_KIND_UNION.test(`type K = "head" | "uv";`)).toBe(true);
   expect(VIEWPORT_KIND_UNION.test(`type S = "uv" | "surface" | "preview";`)).toBe(true);
   expect(VIEWPORT_KIND_UNION.test(`type V = ViewId;`)).toBe(false);
-  expect(FEATURE_TOOL_KINDS.test(`{ kind: "preview.setWire", enabled }`)).toBe(true);
+  expect(FEATURE_TOOL_KINDS.test(`{ kind: "preview.setWire", view: "main", enabled }`)).toBe(true);
   expect(FEATURE_TOOL_KINDS.test(`{ kind: "preview.setWireframe" }`)).toBe(false);
 });
 

@@ -52,11 +52,6 @@ export const ACTION_DESCRIPTORS = {
     add: {}, copy: { id: target("string") }, remove: { id: target("string") },
     restore: {}, rename: { id: target("string"), name: inputText(1, 120) },
     move: { id: target("string"), to: input("integer", 0) } }, { remove: "recovery", restore: "recovery" }),
-  // What a scene shows (app/profiles/scene-commands.ts): choosing a preset shows its look on the scene the Presets panel resolves to.
-  "scene.setLook": desc("preset", "selection", "none", { scene: TARGET_SCHEMA.scene, sceneGen: TARGET_SCHEMA.sceneGen,
-    look: { type: "object", required: false, from: "input" } }),
-  "scene.setSubject": desc("viewport", "workspace", "none", { scene: TARGET_SCHEMA.scene, sceneGen: TARGET_SCHEMA.sceneGen,
-    subject: { type: "object", required: false, from: "input" } }),
   "collection.rename": desc("collection", "library", "none", { collection: TARGET_SCHEMA.collection, name: input("string") }),
   "collection.undoOpen": desc("collection", "library", "recovery", { collection: TARGET_SCHEMA.collection, draft: { ...target("string"), required: false } }),
   "collection.importRecipe": desc("file", "library", "none", { collection: TARGET_SCHEMA.collection, recipe: input("object"), name: input("string") }),
@@ -65,6 +60,11 @@ export const ACTION_DESCRIPTORS = {
   "package.assign": desc("collection", "library", "none", { collection: TARGET_SCHEMA.collection, feature: target("string"), productId: target("string") }),
   "package.split": desc("collection", "library", "none", { collection: TARGET_SCHEMA.collection, feature: target("string"), newId: { ...state("string"), required: false } }),
   "package.merge": desc("collection", "library", "none", { collection: TARGET_SCHEMA.collection, productId: target("string"), intoId: target("string") }),
+  // What a scene shows (app/profiles/scene-commands.ts): choosing a preset shows its look on the scene the Presets panel resolves to.
+  "scene.setLook": desc("preset", "selection", "none", { scene: TARGET_SCHEMA.scene, sceneGen: TARGET_SCHEMA.sceneGen,
+    look: { type: "object", required: false, from: "input" } }),
+  "scene.setSubject": desc("viewport", "workspace", "none", { scene: TARGET_SCHEMA.scene, sceneGen: TARGET_SCHEMA.sceneGen,
+    subject: { type: "object", required: false, from: "input" } }),
   "camera.front": inView("viewport", "workspace", "none"),
   "camera.body": inView("viewport", "workspace", "none"),
   "camera.setFov": inView("viewport", "workspace", "none", { degrees: input("number", 10, 90) }),

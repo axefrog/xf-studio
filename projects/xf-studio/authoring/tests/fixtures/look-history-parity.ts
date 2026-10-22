@@ -17,13 +17,14 @@ import { encodeWorkspaceAt } from "../../src/app/workspace/workspace-budget";
 import type { WorkspaceState } from "../../src/app/workspace/workspace-state";
 import { digest, restore } from "./workspace-observable";
 
-type Core = ReturnType<typeof createTrustedAuthoringCore>;
+import { namedCore, type NamedTrustedCore } from "./named-targets";
+type Core = NamedTrustedCore;
 
 /** A trusted core over a restored workspace, with its collection boundary wired as the app wires it. */
 export function studio(state: WorkspaceState) {
   let n = 0;
-  const core = createTrustedAuthoringCore(state, { resetStack: () => {}, selectedCollection: () => "draft",
-    newId: () => `step4-${++n}` }, STUDIO_COMPOSITION);
+  const core = namedCore(createTrustedAuthoringCore(state, { resetStack: () => {}, selectedCollection: () => "draft",
+    newId: () => `step4-${++n}` }, STUDIO_COMPOSITION));
   const actions = state.collections ? new CollectionActions(STUDIO_DOCUMENTS, state.collections, () => core.document.export(),
     editor => core.document.restore({ ...editor, fieldSelection: editor.fieldSelection ?? {} })) : undefined;
   return { core, actions };

@@ -11,11 +11,12 @@ import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-regi
 import { finishCatalogue, freshWorkspace } from "./fixtures/eye-region";
 import { preparePackageCollection } from "./fixtures/eye-exporter";
 
+import { namedCore, type NamedTrustedCore } from "./fixtures/named-targets";
 function mountFixture() {
   const workspace = freshWorkspace();
   workspace.history = Array.from({ length: 40 }, () => structuredClone(workspace.recipe));
-  let core!: ReturnType<typeof createTrustedAuthoringCore>;
-  core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  let core!: NamedTrustedCore;
+  core = namedCore(createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
   core.app.attach({ quality: new PreviewQualityActions(1024, { assess: () => ({ accepted: true }), replace: () => {} }) });
   const viewport = new ViewportAttachment<string>({ moveHost: () => {}, measure: () => ({ width: 1, height: 1 }),
     resize: () => {}, cancelInput: () => {}, inputCapture: () => false, headView: () => undefined,
@@ -27,7 +28,7 @@ function mountFixture() {
   const source = { id: collections.id, presets: collections.looks };
   let status = emptyPresentationStatus(true);
   const statusSource = new PresentationStatusSource(() => status);
-  const bootstrap = createTrustedStudioBootstrap({ core, viewport, collections: collections.deps,
+  const bootstrap = createTrustedStudioBootstrap({ core: { ...core, app: core.application }, targets: core.targets, focus: core.history.focus, viewport, collections: collections.deps,
     preferences: new UIPreferenceActions(workspace.uiPreferences), status: statusSource,
     previewReadiness: { readiness: () => ({ phase: "ready", size: 1024, pending: 0, waiting: false, estimatedBytes: 1, layers: [] }),
       subscribe: () => () => {} },

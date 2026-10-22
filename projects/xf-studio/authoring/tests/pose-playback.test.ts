@@ -156,9 +156,9 @@ test("the motion service holds a pose at once, lets a newer choice supersede it,
   expect(calls).toEqual(["pose.PhotoModePoses.b"]);
   expect(motion.snapshot()).toMatchObject({ pose: { id: "PhotoModePoses.b", label: "B" }, poseLoading: false });
   // Blink is refused while a pose is held.
-  expect(motion.capability({ kind: "motion.setBlink", value: 0.5 }).available).toBe(false);
+  expect(motion.capability({ kind: "motion.setBlink", view: "main", value: 0.5 }).available).toBe(false);
   // Still: the idle goes off first, then the pose gives the idle its clips back.
-  motion.dispatch({ kind: "motion.setIdle", enabled: false });
+  motion.dispatch({ kind: "motion.setIdle", view: "main", enabled: false });
   expect(calls.slice(-2)).toEqual(["idle.false", "pose.none"]);
   expect(motion.snapshot().pose).toBeNull();
   // A failing pose puts the previous body source back and rejects.

@@ -5,7 +5,8 @@ import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 
-const makeCore = () => createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+import { namedCore } from "./fixtures/named-targets";
+const makeCore = () => namedCore(createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
 
 test("capability applies descriptor payload ranges to every entry point, not only context menus", () => {
   const { app, document } = makeCore(), id = document.recipe.layers[0].id;

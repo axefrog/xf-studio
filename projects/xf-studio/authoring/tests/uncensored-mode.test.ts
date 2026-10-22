@@ -25,7 +25,7 @@ describe("the uncensored setting (preview.setUncensored)", () => {
     expect(JSON.stringify(serializeWorkspace(workspace, STUDIO_DOCUMENTS))).not.toContain("uncensored");
     let told = 0;
     actions.subscribe(() => told++);
-    actions.dispatch({ kind: "preview.setUncensored", enabled: true });
+    actions.dispatch({ kind: "preview.setUncensored", view: "main", enabled: true });
     expect(actions.snapshot().uncensored).toBe(true);
     expect(told).toBe(1);
     // The workspace keeps the choice (as the composition root writes the snapshot back) and reads it again.
@@ -33,7 +33,7 @@ describe("the uncensored setting (preview.setUncensored)", () => {
     const restored = parseWorkspace(JSON.parse(JSON.stringify(serializeWorkspace(stored, STUDIO_DOCUMENTS))), STUDIO_DOCUMENTS);
     expect(restored.preview.uncensored).toBe(true);
     expect(new PreviewActions(restored.preview, port()).snapshot().uncensored).toBe(true);
-    actions.dispatch({ kind: "preview.setUncensored", enabled: false });
+    actions.dispatch({ kind: "preview.setUncensored", view: "main", enabled: false });
     expect(actions.snapshot().uncensored).toBe(false);
     // Anything but a boolean is dropped on restore (off).
     const garbled = parseWorkspace({ ...JSON.parse(JSON.stringify(serializeWorkspace(workspace, STUDIO_DOCUMENTS))),
@@ -43,10 +43,10 @@ describe("the uncensored setting (preview.setUncensored)", () => {
 
   test("refused on a head-only preview and for a value that isn't on or off", () => {
     const headOnly = new PreviewActions(freshWorkspace().preview, port(false));
-    expect(headOnly.check({ kind: "preview.setUncensored", enabled: true })).toMatchObject({ available: false, code: "unavailable" });
+    expect(headOnly.check({ kind: "preview.setUncensored", view: "main", enabled: true })).toMatchObject({ available: false, code: "unavailable" });
     const actions = new PreviewActions(freshWorkspace().preview, port());
-    expect(actions.check({ kind: "preview.setUncensored", enabled: "on" as never })).toMatchObject({ available: false, code: "invalid_value" });
-    expect(actions.check({ kind: "preview.setUncensored", enabled: true }).available).toBe(true);
+    expect(actions.check({ kind: "preview.setUncensored", view: "main", enabled: "on" as never })).toMatchObject({ available: false, code: "invalid_value" });
+    expect(actions.check({ kind: "preview.setUncensored", view: "main", enabled: true }).available).toBe(true);
   });
 });
 

@@ -205,7 +205,7 @@ test("preview actions edit the graph node of the view they name, and the device 
     setHair: enabled => calls.push(`hair:${enabled}`), setEyeShape: () => {}, setPiercings: () => {}, setDetail: () => {} };
   const workspace = freshWorkspace(), views = createStudioViewGraph(workspace.preview);
   const actions = new PreviewActions(workspace.preview, port, views);
-  actions.dispatch({ kind: "preview.setExposure", value: 2 });
+  actions.dispatch({ kind: "preview.setExposure", view: "main", value: 2 });
   expect(calls).toEqual(["exposure:2"]);
   expect(views.history().undo).toBe("Exposure");
   // Undo in the View and lighting history: the device follows the graph.
@@ -223,14 +223,14 @@ test("preview actions edit the graph node of the view they name, and the device 
   expect(actions.capability({ kind: "preview.setHair", enabled: true, view: "gone" })).toMatchObject({ available: false });
   // A camera jump: the device computes it, the graph records it, Undo moves the device back.
   calls.length = 0;
-  actions.dispatch({ kind: "camera.front" });
+  actions.dispatch({ kind: "camera.front", view: "main" });
   expect(calls).toEqual(["front"]);
   expect(views.cameraTrail(MAIN_VIEW).back).toBe(1);
   views.undo();
   expect(calls).toEqual(["front", "restore"]);
   expect(camera.position).toEqual([0, 1.6, -0.6]);
   // Tools record nothing; a released head stops following the graph.
-  actions.dispatch({ kind: "preview.setSurfaceControls", enabled: false });
+  actions.dispatch({ kind: "preview.setSurfaceControls", view: "main", enabled: false });
   expect(calls.at(-1)).toBe("surface:false");
   actions.dispose();
   calls.length = 0;

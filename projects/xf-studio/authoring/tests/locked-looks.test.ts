@@ -62,10 +62,10 @@ async function session(options: { parts?: Record<string, unknown>; memory?: Reco
   await seed.settle();
   const studio = await profileStudio({ library, show: { collection: ID.collection, look: options.select ?? ID.a } });
   await studio.collection.initialize();
-  const select = (id: string) => { const done = studio.app.dispatch({ kind: "preset.select", id }); expect(done.ok).toBe(true); };
+  const select = (id: string) => { const done = studio.app.dispatch(studio.choose(id)); expect(done.ok).toBe(true); };
   const stored = (id: string) => studio.library.documents.read([lookRef({ collection: ID.collection, look: id })])[documentKey(lookRef({ collection: ID.collection, look: id }))]?.value as
     { parts: unknown; memory?: unknown };
-  return { ...studio, core: { app: studio.app, document: studio.document, presentation: studio.core.presentation }, select, stored, looks };
+  return { ...studio, core: { app: studio.app, application: studio.core.app, targets: studio.targets, document: studio.document, presentation: studio.core.presentation }, select, stored, looks };
 }
 const ref = (look: string): LookRef => ({ collection: ID.collection, look });
 const find = (collection: LookCollection, id: string) => collection.presets.find(look => look.id === id)!;
@@ -86,7 +86,7 @@ test("a newer look opens locked while the rest of the collection stays editable"
   const refused = { available: false as const, code: "unavailable" as const, reason: NEWER_LOOK_MESSAGE };
   expect(core.app.featureEditable(EYE)).toEqual(refused);
   // The presentation reads it on the eye-makeup facade (the Layers view shows the notice from it).
-  const port = createStudioPresentation({ authoring: core.app, editor: core.presentation, library: {} as never, files: {} as never,
+  const port = createStudioPresentation({ authoring: core.application, targets: core.targets, editor: core.presentation, library: {} as never, files: {} as never,
     viewport: {} as never, preferences: {} as never, previewReadiness: { readiness: () => ({}) as never, subscribe: () => () => {} } });
   expect(port.feature("eye-makeup").editable()).toEqual(refused);
   expect(core.app.capability({ kind: "layer.edit", command: { kind: "add" } })).toEqual(refused);
@@ -215,7 +215,7 @@ test("a look locked by its newer Undo history stays locked through collection ed
 
 test("the eye-makeup facade says a look is locked explicitly (UI-53)", async () => {
   const { core, select } = await session();
-  const port = createStudioPresentation({ authoring: core.app, editor: core.presentation, library: {} as never, files: {} as never,
+  const port = createStudioPresentation({ authoring: core.application, targets: core.targets, editor: core.presentation, library: {} as never, files: {} as never,
     viewport: {} as never, preferences: {} as never, previewReadiness: { readiness: () => ({}) as never, subscribe: () => () => {} } });
   expect(port.feature("eye-makeup").locked()).toBeUndefined();
   select(ID.b);

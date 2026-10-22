@@ -3,12 +3,12 @@ import { trustedFixture } from "./studio-presentation-fixture";
 
 test("replacement presentation can perform current cross-surface workflows without trusted objects", async () => {
   const { shell, packageInput, downloads, locations } = trustedFixture();
-  expect(Object.keys(shell).sort()).toEqual(["about", "authoring", "desktopApp", "diagnostics", "documents", "experiments", "facial", "feature", "features", "files", "installDetection", "library", "links", "localSetup", "modInstall", "module", "panels", "preferences",
+  expect(Object.keys(shell).sort()).toEqual(["about", "authoring", "desktopApp", "diagnostics", "documents", "experiments", "facial", "feature", "features", "files", "focus", "installDetection", "library", "links", "localSetup", "modInstall", "module", "panels", "preferences",
     "presets", "previewReadiness", "previewSetup", "snapshot", "status", "subscribe", "updates", "viewport", "views", "workspace"]);
   expect("document" in shell.authoring).toBe(false);
-  // Without a session (fixtures) each panel is one instance and no panel has a history of its own: Undo follows the editing context.
+  // Without a session (fixtures) each panel is one instance; a panel that isn't a session's 3D view steps the editing context.
   expect(shell.panels.instance("save-explorer")).toBe("save-explorer--local");
-  expect(shell.panels.historyScope("head")).toBeUndefined();
+  expect(shell.panels.historyScope("head")).toBe(shell.focus.editing()?.scope);
   // No desktop-app offer without a host that has one (the desktop app, fixtures): nothing about it is shown.
   expect(shell.desktopApp.offered()).toBe(false);
   expect(shell.desktopApp.capability({ kind: "desktopApp.refresh" }).available).toBe(false);
@@ -26,7 +26,7 @@ test("replacement presentation can perform current cross-surface workflows witho
   expect(shell.authoring.dispatch({ kind: "preset.edit", command: { kind: "copy",
     id: shell.library.view().draft!.selected! } }).ok).toBe(true);
   expect(shell.library.view().draft?.presets).toHaveLength(2);
-  expect(shell.authoring.dispatch({ kind: "preset.select", id: initial.library.draft!.selected! }).ok).toBe(true);
+  expect(shell.authoring.dispatch({ kind: "scene.setLook", look: { collection: initial.library.draft!.id, look: initial.library.draft!.selected! } }).ok).toBe(true);
 
   expect(shell.viewport.uvCommandCapability("other").available).toBe(false);
   expect(shell.viewport.uvCommand("single")).toBe(true);

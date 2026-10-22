@@ -29,7 +29,7 @@ test("a library with no collection starts with the starter collection, not saved
 test("Add preset starts from the starter look, one layer like the first preset (item 12)", async () => {
   const lib = await library();
   await lib.service.execute({ kind: "initialize" });
-  lib.service.dispatch({ kind: "preset.edit", command: { kind: "add" } });
+  lib.service.dispatch({ kind: "preset.edit", collection: lib.shown()!, command: { kind: "add" } });
   const draft = lib.service.summary().draft!;
   expect(draft.presets.map(preset => preset.name)).toEqual(["Preset 1", "Preset 2"]);
   expect(lib.document.recipe.layers).toHaveLength(1);
@@ -102,14 +102,14 @@ test("Recent drafts: the library's other working copies never saved as a version
   expect(lib.service.summary().draft!.recovery.map(entry => entry.id)).toEqual([a, first]);
   expect(lib.service.summary().draft!.recovery[0]).toMatchObject({ name: "A", presets: 1, saved: "never" });
   // Pick the older one directly: it is shown, and the one that was open is first in the list.
-  lib.service.dispatch({ kind: "collection.undoOpen", draft: first });
+  lib.service.dispatch({ kind: "collection.undoOpen", collection: lib.shown()!, draft: first });
   expect(lib.shown()).toBe(first);
   expect(lib.service.summary().draft!.recovery.map(entry => entry.id)).toEqual([b, a]);
   // A collection saved as a version is a saved collection, not a recent draft.
   await lib.service.execute({ kind: "save" });
-  lib.service.dispatch({ kind: "collection.undoOpen", draft: a });
+  lib.service.dispatch({ kind: "collection.undoOpen", collection: lib.shown()!, draft: a });
   expect(lib.service.summary().draft!.recovery.map(entry => entry.id)).toEqual([b]);
-  expect(lib.service.actionCapability({ kind: "collection.undoOpen", draft: "no-such-draft" }))
+  expect(lib.service.actionCapability({ kind: "collection.undoOpen", collection: lib.shown()!, draft: "no-such-draft" }))
     .toMatchObject({ available: false, reason: "That earlier draft is no longer in the list." });
 });
 

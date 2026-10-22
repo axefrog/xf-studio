@@ -21,7 +21,7 @@ test("the collection application hands views a detached summary and switches the
   // A new preset starts like the first one, with the starter layer (release-readiness-audit.md item 12).
   expect(f.document.recipe.layers).toHaveLength(1);
   expect(f.collection.currentLayerCount()).toBe(1);
-  expect(f.collection.dispatch({ kind: "preset.select", id: first }).ok).toBe(true);
+  expect(f.app.dispatch(f.choose(first)).ok).toBe(true);
   expect(f.document.recipe.layers).toHaveLength(4);
   expect(events).toBeGreaterThan(0);
   unsubscribe();

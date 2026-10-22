@@ -217,14 +217,14 @@ test("blink commands say plainly why they are off: not prepared, or the idle is 
     idle: { enabled, time: 0, paused: false, bodyEnabled: true, faceEnabled: true, seek: noop },
     setIdle: noop, setIdlePaused: noop, setIdleContributions: noop, setBlink: noop, animateBlink: noop });
   const missing = new MotionActions(freshWorkspace().preview, port({ available: false, error: "The game's blink hasn't been prepared on this computer yet." }));
-  expect(missing.capability({ kind: "motion.setBlink", value: .5 })).toMatchObject({ available: false, code: "asset_unavailable",
+  expect(missing.capability({ kind: "motion.setBlink", view: "main", value: .5 })).toMatchObject({ available: false, code: "asset_unavailable",
     reason: "The game's blink hasn't been prepared on this computer yet." });
-  expect(missing.capability({ kind: "motion.playBlink", playing: true }).available).toBe(false);
+  expect(missing.capability({ kind: "motion.playBlink", view: "main", playing: true }).available).toBe(false);
   expect(missing.snapshot()).toMatchObject({ blinkAvailable: false });
   const idle = new MotionActions(freshWorkspace().preview, port({ available: true }, true));
-  expect(idle.capability({ kind: "motion.setBlink", value: .5 })).toMatchObject({ available: false, reason: "Blink is off while the game idle plays: the idle blinks on its own." });
+  expect(idle.capability({ kind: "motion.setBlink", view: "main", value: .5 })).toMatchObject({ available: false, reason: "Blink is off while the game idle plays: the idle blinks on its own." });
   const ready = new MotionActions(freshWorkspace().preview, port({ available: true }));
-  expect(ready.capability({ kind: "motion.setBlink", value: .5 }).available).toBe(true);
+  expect(ready.capability({ kind: "motion.setBlink", view: "main", value: .5 }).available).toBe(true);
   // A saved closure is not replayed onto a scene without the blink.
   const saved = { ...freshWorkspace().preview, blink: .7, blinkPlaying: true };
   const restoring = new MotionActions(saved, port({ available: false }));

@@ -15,11 +15,12 @@ import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspa
 import { withHair, withTint, type Hair } from "./fixtures/hair-feature";
 import { initialRecipe, freshWorkspace } from "./fixtures/eye-region";
 
+import { namedCore } from "./fixtures/named-targets";
 const RESET = { label: "Reset look", actionKind: "look.reset" };
 const ids = () => { let n = 0; return () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`; };
 
 function core(composition = withHair(), workspace = freshWorkspace()) {
-  return createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft", newId: ids() }, composition);
+  return namedCore(createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft", newId: ids() }, composition));
 }
 const hair = (c: ReturnType<typeof core>) => c.document.others?.read("hair") as Hair | undefined;
 const opacity = (c: ReturnType<typeof core>) => c.document.recipe.layers[0].opacity;
@@ -104,7 +105,7 @@ test("inside a transaction only the named parts change; Undo, other owners and n
   c.app.transaction(RESET, ["hair"], () => {
     expect(c.app.capability({ kind: "history.undo" })).toMatchObject({ available: false, code: "busy" });
     expect(setOpacity(c, .3)).toMatchObject({ ok: false, code: "busy" });
-    expect(c.app.dispatch({ kind: "camera.front" })).toMatchObject({ ok: false, code: "busy" });
+    expect(c.app.dispatch({ kind: "camera.front", view: "main" })).toMatchObject({ ok: false, code: "busy" });
     expect(c.app.transaction(RESET, ["hair"], () => 1)).toMatchObject({ ok: false, code: "busy" });
     expect(c.app.controlBegin("opacity", c.document.recipe.layers[0].id)).toBe(false);
     expect(c.app.canBeginGesture("uv", c.document.recipe.layers[0].id)).toMatchObject({ available: false, code: "busy" });
@@ -130,7 +131,7 @@ test("each look keeps its own hair part and editor memory through preset switche
   const editor = new LookEditor({ model, sessions: new LookSessions(f.owner, f.outbox), document: c.document });
   editor.show(f.scene.look());
   f.scene.subscribe(() => editor.show(f.scene.look()));
-  const select = (id: string) => f.svc.dispatch({ kind: "preset.select", id });
+  const select = (id: string) => f.scene.setLook({ collection: "00000000-0000-4000-8000-0000000000cc", look: id });
   const stored = (id: string) => { editor.commit(); return f.owner.look({ collection: "00000000-0000-4000-8000-0000000000cc", look: id })!.parts; };
   expect(hair(c)).toEqual({ colour: "#111111", strands: [4, 5] });
   c.app.dispatch({ kind: "hair.selectStrand", index: 1 } as never);

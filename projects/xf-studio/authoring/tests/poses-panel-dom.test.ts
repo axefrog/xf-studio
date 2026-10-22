@@ -22,7 +22,7 @@ function harness(options: { phase?: string; worn?: string[] } = {}) {
     holdPose: async (next, sample) => { const value = await sample; pose = next; calls.push(`hold ${value.id}`); return true; },
     pendingPose: () => null, dropPendingPose: () => {}, bodyCapability: () => ({ available: true }), setBody: idle => { pose = null; calls.push(idle ? "idle" : "still"); },
   };
-  const stage: PoseStage = { bodyGender: () => "female", wornTags: () => options.worn ?? [], motion: () => motion, frame: () => ({ available: true }),
+  const stage: PoseStage = { view: () => "main", bodyGender: () => "female", wornTags: () => options.worn ?? [], motion: () => motion, frame: () => ({ available: true }),
     frameCapability: () => ({ available: true }), subscribe: () => () => {} };
   const device: PoseLibraryDevice = {
     catalogue: async request => request.method === "GET" && request.query.pose ? { ok: true, status: 200, data: { schema: "xfs/pose-sample-1", id: request.query.pose } }
@@ -35,7 +35,7 @@ function harness(options: { phase?: string; worn?: string[] } = {}) {
   const revealed: string[] = [];
   let panel!: ReturnType<typeof posesPanel>;
   const ctx: ModuleViewContext<PoseLibraryFacade> = {
-    facade, instance: panelId => `${panelId}--test`,
+    facade, instance: panelId => `${panelId}--test`, targets: () => ({ view: "main" }),
     dispatch: async action => { const outcome = await facade.dispatch(action as never); panel.update(undefined as never); return outcome.ok; },
     feedback: { toast: () => undefined as never, announce: () => {}, record: () => undefined as never },
     anchors: { register: () => () => {} }, reveal: () => {}, openSettings: section => { revealed.push(`settings:${section}`); }, links: { open: async () => ({ ok: true }) }, changed: () => panel.update(undefined as never),
@@ -88,7 +88,7 @@ describe("Poses panel", () => {
   test("the held pose is marked where it shows (a collapsed Favourites doesn't take the mark); a pack name that repeats its label is left out", async () => {
     const { root, facade } = harness();
     await settle();
-    await facade.dispatch({ kind: "pose.select", id: "PhotoModePoses.sera_01" });
+    await facade.dispatch({ kind: "pose.select", view: "main", id: "PhotoModePoses.sera_01" });
     await facade.dispatch({ kind: "pose.favourite", id: "PhotoModePoses.sera_01", on: true });
     await facade.dispatch({ kind: "pose.openGroup", group: "xfs:favourites", open: false });
     await settle();

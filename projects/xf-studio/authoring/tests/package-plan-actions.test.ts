@@ -33,13 +33,13 @@ test("with eye makeup alone there is one mod, named XF Eye Artistry; it can be r
   expect(f.svc.summary().products!).toEqual([{ id: ID, isDefault: true, modName: "XF Eye Artistry", nameSource: "derived",
     features: [{ id: "eye-makeup", label: "Eye makeup" }] }]);
   // Splitting needs a second feature; the refusal says so plainly.
-  expect(f.svc.actionCapability({ kind: "package.split", feature: "eye-makeup" }))
+  expect(f.svc.actionCapability({ kind: "package.split", collection: ID, feature: "eye-makeup" }))
     .toMatchObject({ available: false, code: "unavailable", reason: "Eye makeup is already a mod of its own." });
-  expect(f.svc.actionCapability({ kind: "package.rename", productId: ID, modName: "a/b" })).toMatchObject({ available: false, code: "invalid_value" });
+  expect(f.svc.actionCapability({ kind: "package.rename", collection: ID, productId: ID, modName: "a/b" })).toMatchObject({ available: false, code: "invalid_value" });
   expect(f.svc.persistence()?.dirty).toBe(true);
   expect((await f.svc.execute({ kind: "save" })).ok).toBe(true);
   expect(f.svc.persistence()?.dirty).toBe(false);
-  f.svc.dispatch({ kind: "package.rename", productId: ID, modName: "My looks" });
+  f.svc.dispatch({ kind: "package.rename", collection: ID, productId: ID, modName: "My looks" });
   expect(f.svc.summary().products![0]).toMatchObject({ modName: "My looks", nameSource: "plan" });
   // A mod name is part of the collection: the draft now has unsaved changes.
   expect(f.svc.persistence()).toMatchObject({ dirty: true, structureDirty: true, dirtyPresets: [] });
@@ -52,7 +52,7 @@ test("with eye makeup alone there is one mod, named XF Eye Artistry; it can be r
   expect(alphaParseCollection(JSON.parse(JSON.stringify(stored)), false, value => value as never).presets).toHaveLength(1);
   expect(STUDIO_PARTS.readCollection(JSON.parse(JSON.stringify(stored))).packagePlan).toEqual(stored.packagePlan as never);
   // An empty name goes back to the default: the plan disappears again.
-  f.svc.dispatch({ kind: "package.rename", productId: ID, modName: "" });
+  f.svc.dispatch({ kind: "package.rename", collection: ID, productId: ID, modName: "" });
   expect(f.owner.collection(ID)!.packagePlan).toBeUndefined();
   expect(f.svc.summary().products![0]).toMatchObject({ modName: "XF Eye Artistry", nameSource: "derived" });
 });
@@ -88,12 +88,12 @@ test("a newer or damaged plan opens, saves back verbatim, and refuses package ac
     const f = await service(stored);
     await f.svc.execute({ kind: "initialize" });
     expect(f.svc.summary()).toMatchObject({ products: [], packagePlanIssue: NEWER_PLAN_MESSAGE });
-    for (const action of [{ kind: "package.rename", productId: ID, modName: "Other" }, { kind: "package.split", feature: "eye-makeup" }] as const)
+    for (const action of [{ kind: "package.rename", collection: ID, productId: ID, modName: "Other" }, { kind: "package.split", collection: ID, feature: "eye-makeup" }] as const)
       expect(f.svc.actionCapability(action)).toEqual({ available: false, code: "unavailable", reason: NEWER_PLAN_MESSAGE });
     for (const action of ["check", "build"] as const)
       expect(f.svc.capability({ kind: "package", action })).toEqual({ available: false, code: "unavailable", reason: NEWER_PLAN_MESSAGE });
     // Editing the looks and renaming the collection still work, and saving keeps the plan byte for byte.
-    f.svc.dispatch({ kind: "collection.rename", name: "Looks again" });
+    f.svc.dispatch({ kind: "collection.rename", collection: ID, name: "Looks again" });
     expect((await f.svc.execute({ kind: "save" })).ok).toBe(true);
     expect(STUDIO_PARTS.writeMinimal(f.saved()!).packagePlan).toEqual(plan);
   }
@@ -128,19 +128,19 @@ test("with two exporting features: split into its own mod, rename, assign back a
   const f = await service(value, model);
   const products = () => f.svc.summary().products!.map(p => [p.modName, p.features.map(f => f.id)]);
   expect(products()).toEqual([["XF Looks", ["eye-makeup", "hair"]]]);
-  f.svc.dispatch({ kind: "package.split", feature: "hair", newId: NEW });
+  f.svc.dispatch({ kind: "package.split", collection: ID, feature: "hair", newId: NEW });
   expect(products()).toEqual([["XF Eye Artistry", ["eye-makeup"]], ["XF Hair Artistry", ["hair"]]]);
   expect(f.svc.summary().products![1]!.id).toBe(NEW);
-  f.svc.dispatch({ kind: "package.rename", productId: NEW, modName: "XF Hair Only" });
+  f.svc.dispatch({ kind: "package.rename", collection: ID, productId: NEW, modName: "XF Hair Only" });
   expect(products()).toEqual([["XF Eye Artistry", ["eye-makeup"]], ["XF Hair Only", ["hair"]]]);
-  expect(f.svc.actionCapability({ kind: "package.assign", feature: "hair", productId: NEW }))
+  expect(f.svc.actionCapability({ kind: "package.assign", collection: ID, feature: "hair", productId: NEW }))
     .toMatchObject({ available: false, reason: "Hair is already in that mod." });
-  f.svc.dispatch({ kind: "package.assign", feature: "eye-makeup", productId: NEW });
+  f.svc.dispatch({ kind: "package.assign", collection: ID, feature: "eye-makeup", productId: NEW });
   expect(products()).toEqual([["XF Hair Only", ["eye-makeup", "hair"]]]);
-  f.svc.dispatch({ kind: "package.merge", productId: NEW, intoId: ID });
+  f.svc.dispatch({ kind: "package.merge", collection: ID, productId: NEW, intoId: ID });
   expect(products()).toEqual([["XF Looks", ["eye-makeup", "hair"]]]);
   expect(f.owner.collection(ID)!.packagePlan).toBeUndefined();
   // The working copy keeps its plan beside its looks, as a collection-2 file writes it.
-  f.svc.dispatch({ kind: "package.split", feature: "hair", newId: "22222222-2222-4333-8444-555555555555" });
+  f.svc.dispatch({ kind: "package.split", collection: ID, feature: "hair", newId: "22222222-2222-4333-8444-555555555555" });
   expect(f.owner.collection(ID)!.packagePlan).toEqual({ schema: PACKAGE_PLAN_1, products: [{ id: "22222222-2222-4333-8444-555555555555", features: ["hair"] }] });
 });

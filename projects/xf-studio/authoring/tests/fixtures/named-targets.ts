@@ -14,6 +14,10 @@ import type { StudioApplication, StudioAction } from "../../src/app/studio-appli
 import type { AuthoringDocument } from "../../src/app/authoring/authoring-document";
 import type { LookRef } from "../../src/library/collection-documents";
 import { TargetResolver } from "../../src/app/profiles/targets";
+import { SceneCommands } from "../../src/app/profiles/scene-commands";
+import type { Unnamed } from "../../src/app/action-targets";
+import type { PresentationSubject } from "../../src/app/action-consequences";
+import type { createTrustedAuthoringCore } from "../../src/app/trusted-authoring-core";
 
 /** The look a look history scope names (`look:<collection>/<look>`). */
 export function lookOfScope(scope: string): LookRef | undefined {
@@ -24,24 +28,35 @@ export function lookOfScope(scope: string): LookRef | undefined {
 
 export type FixtureCore = { app: StudioApplication; views: ViewGraph; history: HistoryService; document: Pick<AuthoringDocument, "scopeId"> };
 
+/** A scene double a fixture's collection service follows (fixtures/profile-studio.ts `testScene`). */
+export type FixtureScene = { look(): LookRef | undefined; setLook(ref: LookRef | undefined): void };
+
 /**
- * The fixture's resolver: one tab, the core's views (the main view focused first), one scene per view showing the document's look and
- * the character context's V, every subject and look existing. `collection`: the collection a scene without a look names.
+ * The fixture's resolver and scenes: one tab, the core's views (the main view focused first), one scene per view showing `scene`'s look
+ * (else the document's) and the character context's V (`character`, else `local`), every subject and look existing; `scene.setLook`
+ * shows a look on `scene` and raises the scene's `gen`. `collection`: the collection a scene without a look names.
  */
-export function fixtureTargets(core: FixtureCore, options: { character?: () => string | undefined; collection?: () => string | undefined } = {}): TargetResolver {
-  core.app.attach({ scenes: { gen: () => 0 } });
-  if (core.history.focus.topView(core.views.viewIds()) === undefined) core.history.focus.focusView(MAIN_VIEW);
+export function fixtureTargets(core: FixtureCore, options: { scene?: FixtureScene; character?: () => string | undefined; collection?: () => string | undefined } = {}): TargetResolver {
+  let gen = 0;
+  const lookNow = () => options.scene ? options.scene.look() : lookOfScope(core.document.scopeId);
   const character = options.character ?? (() => "local");
+  const shown = (id: string) => {
+    const node = core.views.viewIds().map(view => core.views.node(view, "scene")).find(item => item.id === id);
+    if (!node) return undefined;
+    const look = lookNow(), v = character();
+    return { kind: node.kind ?? "character", ...(v ? { subject: { kind: CHARACTER_KIND, id: v } } : {}), ...(look ? { look } : {}), gen };
+  };
+  core.app.attach({ scenes: new SceneCommands({
+    scene: shown,
+    setLook: (_scene, look) => { gen++; options.scene?.setLook(look); },
+    setSubject: () => { gen++; },
+  }, { look: () => true, subject: () => true }) });
+  if (core.history.focus.topView(core.views.viewIds()) === undefined) core.history.focus.focusView(MAIN_VIEW);
   return new TargetResolver({
     session: {
       tab: () => "t-fixture",
       views: () => core.views.viewIds().map((id: ViewId) => ({ id, scene: core.views.node(id, "scene").id })),
-      scene: id => {
-        const node = core.views.viewIds().map(view => core.views.node(view, "scene")).find(item => item.id === id);
-        if (!node) return undefined;
-        const look = lookOfScope(core.document.scopeId), v = character();
-        return { kind: node.kind ?? "character", ...(v ? { subject: { kind: CHARACTER_KIND, id: v } } : {}), ...(look ? { look } : {}), gen: 0 };
-      },
+      scene: shown,
       panel: () => undefined,
     },
     focus: core.history.focus,
@@ -52,36 +67,65 @@ export function fixtureTargets(core: FixtureCore, options: { character?: () => s
   });
 }
 
+type App = StudioApplication;
+type Action = Unnamed<StudioAction>;
+/** The application as the fixture's input layer drives it: its action entry points take actions whose targets it names. */
+export type NamedApplication = Omit<App, "dispatch" | "capability" | "contextCapability" | "controlEdit" | "featureControlEdit" | "consequences" |
+  "choicesFor" | "actionsFor" | "contextFor" | "contextQuery" | "boundActionCapability" | "dispatchContext" | "beginGesture" | "canBeginGesture"> & {
+  dispatch(action: Action): ReturnType<App["dispatch"]>;
+  capability(action: Action): ReturnType<App["capability"]>;
+  contextCapability(target: Parameters<App["contextCapability"]>[0], action: Action): ReturnType<App["contextCapability"]>;
+  controlEdit(id: string, action: Unnamed<Parameters<App["controlEdit"]>[1]>): ReturnType<App["controlEdit"]>;
+  featureControlEdit(feature: string, id: string, action: { kind: string }): ReturnType<App["featureControlEdit"]>;
+  consequences(subject: PresentationSubject): ReturnType<App["consequences"]>;
+  choicesFor(target: Parameters<App["choicesFor"]>[0], kind: StudioAction["kind"], field: string, base?: Record<string, unknown>): ReturnType<App["choicesFor"]>;
+  actionsFor(target: Parameters<App["actionsFor"]>[0]): ReturnType<App["actionsFor"]>;
+  contextFor(hit: Parameters<App["contextFor"]>[0]): ReturnType<App["contextFor"]>;
+  contextQuery(hit: Parameters<App["contextQuery"]>[0]): ReturnType<App["contextQuery"]>;
+  boundActionCapability(context: Parameters<App["boundActionCapability"]>[0], action: Action): ReturnType<App["boundActionCapability"]>;
+  dispatchContext(context: Parameters<App["dispatchContext"]>[0], action: Action): ReturnType<App["dispatchContext"]>;
+  canBeginGesture(source: Parameters<App["canBeginGesture"]>[0], layerId: string): ReturnType<App["canBeginGesture"]>;
+  beginGesture(source: Parameters<App["beginGesture"]>[0], layerId: string): ReturnType<App["beginGesture"]>;
+};
+
 /** The application with its entry points naming the targets they leave out, as the presentation port does. */
-export function named<App extends StudioApplication>(app: App, targets: TargetResolver): App {
+export function named(app: App, targets: TargetResolver): NamedApplication {
   const name = <A extends { kind: string }>(action: A): A => targets.complete(action, app.descriptor(action.kind));
-  const overrides: Partial<Record<keyof StudioApplication, unknown>> = {
+  const overrides: Record<string, unknown> = {
     dispatch: (action: StudioAction) => app.dispatch(name(action)),
     capability: (action: StudioAction) => app.capability(name(action)),
-    contextCapability: (target: Parameters<StudioApplication["contextCapability"]>[0], action: StudioAction) => app.contextCapability(target, name(action)),
-    controlEdit: (id: string, action: Parameters<StudioApplication["controlEdit"]>[1]) => app.controlEdit(id, name(action)),
+    contextCapability: (target: Parameters<App["contextCapability"]>[0], action: StudioAction) => app.contextCapability(target, name(action)),
+    controlEdit: (id: string, action: Parameters<App["controlEdit"]>[1]) => app.controlEdit(id, name(action)),
     featureControlEdit: (feature: string, id: string, action: { kind: string }) => app.featureControlEdit(feature, id, name(action)),
-    consequences: (subject: Parameters<StudioApplication["consequences"]>[0]) =>
+    consequences: (subject: Parameters<App["consequences"]>[0]) =>
       app.consequences("action" in subject ? { ...subject, action: name(subject.action) } : subject),
-    choicesFor: (target: Parameters<StudioApplication["choicesFor"]>[0], kind: StudioAction["kind"], field: string, base?: Record<string, unknown>) =>
+    choicesFor: (target: Parameters<App["choicesFor"]>[0], kind: StudioAction["kind"], field: string, base?: Record<string, unknown>) =>
       app.choicesFor(target, kind, field, base, targets.named()),
-    actionsFor: (target: Parameters<StudioApplication["actionsFor"]>[0]) => app.actionsFor(target, targets.named()),
-    contextFor: (hit: Parameters<StudioApplication["contextFor"]>[0]) => app.contextFor(hit, targets.named()),
-    contextQuery: (hit: Parameters<StudioApplication["contextQuery"]>[0]) => app.contextQuery(hit, targets.named()),
+    actionsFor: (target: Parameters<App["actionsFor"]>[0]) => app.actionsFor(target, targets.named()),
+    contextFor: (hit: Parameters<App["contextFor"]>[0]) => app.contextFor(hit, targets.named()),
+    contextQuery: (hit: Parameters<App["contextQuery"]>[0]) => app.contextQuery(hit, targets.named()),
+    canBeginGesture: (source: Parameters<App["canBeginGesture"]>[0], layerId: string) => app.canBeginGesture(source, layerId, targets.named().look),
+    beginGesture: (source: Parameters<App["beginGesture"]>[0], layerId: string) => app.beginGesture(source, layerId, targets.named().look),
     history: (scope?: string) => app.history(scope ?? targets.editing()),
     historyTimeline: (scope?: string) => app.historyTimeline(scope ?? targets.editing()),
   };
   return new Proxy(app, {
-    get(target, key, receiver) {
-      if (typeof key === "string" && key in overrides) return overrides[key as keyof StudioApplication];
-      const value = Reflect.get(target, key, receiver === undefined ? target : target);
+    get(target, key) {
+      if (typeof key === "string" && Object.hasOwn(overrides, key)) return overrides[key];
+      const value = Reflect.get(target, key, target);
       return typeof value === "function" ? value.bind(target) : value;
     },
-  });
+  }) as unknown as NamedApplication;
 }
 
 /** A fixture core's application, naming its targets through the fixture resolver. */
-export function namedCore<C extends FixtureCore>(core: C, options?: Parameters<typeof fixtureTargets>[1]): C & { targets: TargetResolver } {
+/** `application`: the trusted application itself, for wiring a presentation port (which names targets through `targets`). */
+export function namedCore<C extends FixtureCore>(core: C, options?: Parameters<typeof fixtureTargets>[1]): Omit<C, "app"> & { app: NamedApplication;
+  application: StudioApplication; targets: TargetResolver } {
   const targets = fixtureTargets(core, options);
-  return { ...core, app: named(core.app, targets), targets };
+  return { ...core, app: named(core.app, targets), application: core.app, targets };
 }
+export type TestAction = Unnamed<StudioAction>;
+/** A trusted core whose application names its targets (`namedCore` over `createTrustedAuthoringCore`). */
+export type NamedTrustedCore = Omit<ReturnType<typeof createTrustedAuthoringCore>, "app"> & { app: NamedApplication; application: StudioApplication;
+  targets: TargetResolver };

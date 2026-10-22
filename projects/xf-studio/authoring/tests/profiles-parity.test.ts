@@ -44,15 +44,15 @@ async function profiles(stored: unknown, withPresets: boolean) {
     const studio = await profileStudio({ library, show: look, newId: ids() });
     await studio.collection.initialize();
     const dispatch = (action: Parameters<typeof studio.app.dispatch>[0]) => { const done = studio.app.dispatch(action); if (!done.ok) throw Error(done.message); };
-    const driver: SessionDriver = { core: studio.core, ...(withPresets ? { presets: {
+    const driver: SessionDriver = { core: { ...studio.core, app: studio.app, application: studio.core.app, targets: studio.targets }, ...(withPresets ? { presets: {
       selected: () => studio.scene.look()!.look, add: () => dispatch({ kind: "preset.edit", command: { kind: "add" } }),
-      select: id => dispatch({ kind: "preset.select", id }), remove: id => dispatch({ kind: "preset.edit", command: { kind: "remove", id } }),
+      select: id => dispatch(studio.choose(id)), remove: id => dispatch({ kind: "preset.edit", command: { kind: "remove", id } }),
       restore: () => dispatch({ kind: "preset.edit", command: { kind: "restore" } }) } } : {}),
       // Reload: everything reaches the library, and a second window opens on the look the scene shows.
       reload: async () => {
         expect(await studio.settle()).toBe(true);
         const again = await profileStudio({ library, show: studio.scene.look(), newId: ids() });
-        return { writable: true, core: again.core };
+        return { writable: true, core: { ...again.core, app: again.app, application: again.core.app, targets: again.targets } };
       } };
     return await script(driver);
   } finally { library.close(); rmSync(dir, { recursive: true, force: true }); }

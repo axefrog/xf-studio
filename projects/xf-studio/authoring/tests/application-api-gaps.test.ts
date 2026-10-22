@@ -8,9 +8,10 @@ import { freshWorkspace } from "./fixtures/eye-region";
 import { profileStudio } from "./fixtures/profile-studio";
 import type { CollectionVersionsPort } from "../src/library/collection-owner";
 
+import { namedCore } from "./fixtures/named-targets";
 export function coreFixture() {
   const workspace = freshWorkspace();
-  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  const core = namedCore(createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
   return { workspace, core, app: core.app, document: core.document };
 }
 /** The Studio's collection wiring over a library in memory: one collection ("Draft") of one preset ("One"), shown. */
@@ -349,7 +350,7 @@ test("camera and UV navigation commands are view-only and bounded", async () => 
   expect(navigateCamera(state, { kind: "dolly", factor: -1 })).toEqual(state);
   const { app } = coreFixture();
   expect(app.actionKinds()).toContain("camera.navigate");
-  expect(app.capability({ kind: "camera.navigate", command: { kind: "orbit", yaw: .1, pitch: 0 } }).available).toBe(false);
+  expect(app.capability({ kind: "camera.navigate", view: "main", command: { kind: "orbit", yaw: .1, pitch: 0 } }).available).toBe(false);
   const { ViewportAttachment } = await import("../src/app/viewport-attachment");
   const moves: unknown[] = [];
   const attachment = new ViewportAttachment<object>({ moveHost: () => {}, measure: () => ({ width: 10, height: 10 }), resize: () => {},

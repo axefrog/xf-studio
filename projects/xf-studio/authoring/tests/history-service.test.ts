@@ -16,6 +16,7 @@ import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { DEFAULT_CREATOR_LIGHTING } from "../src/preview/creator-lighting";
 import { freshWorkspace } from "./fixtures/eye-region";
 
+import { namedCore } from "./fixtures/named-targets";
 const label = (text: string): HistoryLabel => ({ label: text, actionKind: text });
 
 /** A target over a record of values, counting how often moves are applied; `refuse` makes the next apply inconsistent. */
@@ -41,17 +42,17 @@ test("scopes are isolated and global Undo goes to the focused one; a document is
   const lookScope = service.open(LOOK_SCOPE, look.target), viewScope = service.open(VIEW_SCOPE, view.target);
   lookScope.checkpoint(["a"], label("A")); look.set("a", 2);
   viewScope.checkpoint(["n"], label("N")); view.set("n", 2);
-  expect(service.focused()).toBe(lookScope);
+  expect(service.acting(service.focus.recent())).toBe(lookScope);
   service.documents.record("hair:g", "Hair Lab", { id: "g1", ...label("Hair length") }, { before: 1, after: 2 });
   expect(service.documents.selected()).toBe("hair:g");
   // Recorded and selected, but no experiment offers it: Undo stays with the look.
-  expect(service.focused()).toBe(lookScope);
+  expect(service.acting(service.focus.recent())).toBe(lookScope);
   const offered = new Set(["hair:g"]);
   const off = service.participants(() => [...offered].map(id => ({ id, dispatch: () => true })));
-  expect(service.focused()!.id).toBe("doc:hair:g");
-  expect(service.focused()!.timeline()).toMatchObject({ startId: "hair:g:start", documentLabel: "Hair Lab", steps: [{ id: "g1", label: "Hair length" }] });
+  expect(service.acting(service.focus.recent())!.id).toBe("doc:hair:g");
+  expect(service.acting(service.focus.recent())!.timeline()).toMatchObject({ startId: "hair:g:start", documentLabel: "Hair Lab", steps: [{ id: "g1", label: "Hair length" }] });
   offered.clear();
-  expect(service.focused()).toBe(lookScope);
+  expect(service.acting(service.focus.recent())).toBe(lookScope);
   off();
   // Each scope moves on its own.
   expect(viewScope.undo()).toBe(true);
@@ -179,11 +180,11 @@ test("at the limit a new step displaces the oldest, and undoing it brings that o
 
 test("the trusted core's look, View and lighting history live in the one service it is given", () => {
   const service = createHistoryService();
-  const core = createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft", history: service }, STUDIO_COMPOSITION);
+  const core = namedCore(createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft", history: service }, STUDIO_COMPOSITION));
   expect(service.scope(core.document.scopeId)).toBe(core.document.history);
   core.app.dispatch({ kind: "layer.setOpacity", layerId: core.document.recipe.layers[0].id, opacity: 0.3 });
   core.views.edit(MAIN_VIEW, "lights", { state: { creatorLighting: { ...DEFAULT_CREATOR_LIGHTING, exposure: 2 } } }, { label: "Exposure" });
-  expect(service.focused()!.state()).toMatchObject({ undo: { label: "Opacity" }, depth: 1 });
+  expect(service.acting(service.focus.recent())!.state()).toMatchObject({ undo: { label: "Opacity" }, depth: 1 });
   expect(service.scope(VIEW_SCOPE)!.state()).toMatchObject({ undo: { label: "Exposure" }, depth: 1 });
 });
 

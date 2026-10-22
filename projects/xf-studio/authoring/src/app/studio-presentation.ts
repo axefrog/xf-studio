@@ -16,7 +16,7 @@ import type { NamedTargets, Unnamed } from "./action-targets";
 import type { TargetResolver } from "./profiles/targets";
 import type { FocusService } from "../platform/core/focus";
 import type { HistorySnapshot, HistoryState } from "../platform/api/history";
-import type { ConsequenceSubject } from "./action-consequences";
+import type { ConsequenceSubject, PresentationSubject } from "./action-consequences";
 import type { ModuleService, PlannedModule, StudioModule, ViewId, ViewSummaryContribution, ViewToolFilter } from "../platform/api";
 import type { EyeMakeupAction } from "../legacy/eye-makeup/eye-makeup-model";
 import type { RecipeAction } from "../engines/layered-makeup/recipe-actions";
@@ -160,7 +160,7 @@ type PresentationAuthoring = Pick<StudioApplication,
   dispatchContext(context: StudioBoundContext, action: Unnamed<StudioAction>): StudioDispatchResult;
   controlEdit(id: string, action: Unnamed<RecipeAction>): StudioDispatchResult;
   /** What an action, file workflow or request replaces, writes or discards (an action's targets named as for dispatch). */
-  consequences(subject: Unnamed<ConsequenceSubject>): ReturnType<StudioApplication["consequences"]>;
+  consequences(subject: PresentationSubject): ReturnType<StudioApplication["consequences"]>;
   /** What Undo and Redo would change next in the editing context (§3.7); nothing before anything was edited. */
   history(): HistoryState;
   /** The editing context's steps, for the History panel. */

@@ -83,11 +83,11 @@ test("Rendering actions: each edits the view's display node, reaches the device,
   expect(actions.rendering()).toEqual(DEFAULT_RENDERING);
   // Defaults are never written: an untouched workspace keeps its bytes.
   expect(Object.keys(actions.snapshot())).not.toContain("hairLook");
-  actions.dispatch({ kind: "preview.setSkinScatter", enabled: false });
-  actions.dispatch({ kind: "preview.setFaceShadows", enabled: false });
+  actions.dispatch({ kind: "preview.setSkinScatter", view: "main", enabled: false });
+  actions.dispatch({ kind: "preview.setFaceShadows", view: "main", enabled: false });
   expect(graph.history().undo).toBe("Face shadows off");
   // A drag coalesces into one step until the slider is released.
-  for (const value of [0.2, 0.6, 1]) actions.dispatch({ kind: "preview.setHairLook", value });
+  for (const value of [0.2, 0.6, 1]) actions.dispatch({ kind: "preview.setHairLook", view: "main", value });
   expect(graph.history()).toMatchObject({ undo: "Hair look", depth: 3 });
   expect(calls).toEqual(["scatter:false", "shadows:false", "hair:0.2", "hair:0.6", "hair:1"]);
   expect(actions.rendering()).toEqual({ skinScatter: false, faceShadows: false, hairLook: 1 });
@@ -98,9 +98,9 @@ test("Rendering actions: each edits the view's display node, reaches the device,
   graph.undo();
   expect(calls.at(-1)).toBe("shadows:true");
   // Refusals in plain words; the descriptors bound the payloads.
-  expect(actions.capability({ kind: "preview.setHairLook", value: 1.5 })).toEqual({ available: false, reason: "Hair look goes from Crisp (0) to Game-like (1)." });
-  expect(actions.capability({ kind: "preview.setHairLook", value: Number.NaN }).available).toBe(false);
-  expect(actions.capability({ kind: "preview.setSkinScatter", enabled: "yes" as never })).toEqual({ available: false, reason: "Choose on or off." });
+  expect(actions.capability({ kind: "preview.setHairLook", view: "main", value: 1.5 })).toEqual({ available: false, reason: "Hair look goes from Crisp (0) to Game-like (1)." });
+  expect(actions.capability({ kind: "preview.setHairLook", view: "main", value: Number.NaN }).available).toBe(false);
+  expect(actions.capability({ kind: "preview.setSkinScatter", view: "main", enabled: "yes" as never })).toEqual({ available: false, reason: "Choose on or off." });
   expect(ACTION_DESCRIPTORS["preview.setHairLook"].payload.value).toMatchObject({ min: 0, max: 1 });
   for (const kind of ["preview.setSkinScatter", "preview.setFaceShadows", "preview.setHairLook"] as const)
     expect(ACTION_DESCRIPTORS[kind]).toMatchObject({ scope: ["viewport"], effect: "workspace", undo: "none" });
@@ -157,8 +157,8 @@ test("the Rendering group's words: the scatter's help says what it does, and the
 test("research-only Rendering options: with research tools off each view draws them at their defaults and keeps the stored choice (UI-163)", () => {
   const workspace = freshWorkspace(), { port: p, calls } = port();
   const graph = createStudioViewGraph(workspace.preview), actions = new PreviewActions(workspace.preview, p, graph), views = new ViewActions(graph);
-  actions.dispatch({ kind: "preview.setSkinScatter", enabled: false });
-  actions.dispatch({ kind: "preview.setHairLook", value: 1 });
+  actions.dispatch({ kind: "preview.setSkinScatter", view: "main", enabled: false });
+  actions.dispatch({ kind: "preview.setHairLook", view: "main", value: 1 });
   calls.length = 0;
   // Research tools off: the presentation withdraws every setting it no longer offers.
   const offered = new Set(views.settings({ research: false }));
@@ -166,7 +166,7 @@ test("research-only Rendering options: with research tools off each view draws t
   expect(calls).toEqual(["scatter:true", "hair:0"]);
   // The stored choices stay (saved with the workspace), and a change made meanwhile is kept but not drawn.
   expect(actions.snapshot()).toMatchObject({ skinScatter: false, hairLook: 1 });
-  actions.dispatch({ kind: "preview.setFaceShadows", enabled: false });
+  actions.dispatch({ kind: "preview.setFaceShadows", view: "main", enabled: false });
   expect(calls).toEqual(["scatter:true", "hair:0"]);
   // Research tools on again: the stored choices are in force again.
   views.withdraw([]);

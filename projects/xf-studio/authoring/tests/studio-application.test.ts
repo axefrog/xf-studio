@@ -10,9 +10,10 @@ import { ACTION_DESCRIPTORS, type ActionDescriptor } from "../src/app/studio-act
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 
+import { namedCore } from "./fixtures/named-targets";
 function fixture() {
   const workspace = freshWorkspace();
-  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  const core = namedCore(createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
   return { workspace, document: core.document, app: core.app, core };
 }
 
@@ -55,9 +56,9 @@ test("unavailable 3D device leaves authoring and Undo available with explicit re
   const { app, document } = fixture();
   const reason = "The 3D preview needs your Cyberpunk 2077 game folder.";
   app.setPreviewUnavailable(reason);
-  expect(app.capability({ kind: "camera.front" })).toEqual({ available: false, code: "asset_unavailable", reason });
-  expect(app.capability({ kind: "motion.setBlink", value: .5 })).toEqual({ available: false, code: "asset_unavailable", reason });
-  expect(app.capability({ kind: "preview.setWire", enabled: true })).toEqual({ available: false, code: "asset_unavailable", reason });
+  expect(app.capability({ kind: "camera.front", view: "main" })).toEqual({ available: false, code: "asset_unavailable", reason });
+  expect(app.capability({ kind: "motion.setBlink", view: "main", value: .5 })).toEqual({ available: false, code: "asset_unavailable", reason });
+  expect(app.capability({ kind: "preview.setWire", view: "main", enabled: true })).toEqual({ available: false, code: "asset_unavailable", reason });
   const layer = document.recipe.layers[0], originalColor = layer.color;
   expect(app.canBeginGesture("surface", layer.id)).toMatchObject({ available: false, code: "asset_unavailable" });
   expect(app.canBeginGesture("uv", layer.id).available).toBe(true);
@@ -145,7 +146,8 @@ test("facade exposes collection target capabilities and typed async outcomes", a
   expect(service.view().draft?.presets).toHaveLength(2);
   expect(app.requestCapability({ kind: "package", action: "check" }).available).toBe(true);
   expect(await app.execute({ kind: "refresh" })).toMatchObject({ ok: true, result: { kind: "list" } });
-  expect(app.dispatch({ kind: "preset.select", id: "stale" })).toMatchObject({ ok: false });
+  // A choice resolved before the scene changed what it shows is refused, never applied to the replacement.
+  expect(app.dispatch({ kind: "scene.setLook", sceneGen: 99, look: { collection: collections.id, look: presetId } })).toMatchObject({ ok: false, code: "missing_target" });
 });
 
 test("descriptors cover every public command, including nested variants and structured reasons", () => {

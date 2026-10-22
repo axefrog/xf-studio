@@ -1,4 +1,5 @@
 import type { CollectionDraftSummary } from "../library/collection-actions";
+import type { Unnamed } from "./action-targets";
 import type { CollectionRequest } from "../library/collection-service";
 import type { HistoryJumpPlan, HistoryState } from "../platform/api/history";
 import { FILE_DESCRIPTORS } from "./studio-action-descriptors";
@@ -26,6 +27,8 @@ export type Consequence = {
   confirm: boolean;
 };
 export type ConsequenceSubject = { action: StudioAction } | { file: StudioFileAction } | { request: CollectionRequest };
+/** A subject as a presentation asks about it: an action's named targets may be left for the port to name (profiles design §3.6). */
+export type PresentationSubject = { action: Unnamed<StudioAction> } | { file: StudioFileAction } | { request: CollectionRequest };
 type State = { draft?: CollectionDraftSummary; history: HistoryState; undoLimit: number; removedLimit: number;
   /** For `history.jumpTo`: which way the jump goes. */
   jump?: HistoryJumpPlan;

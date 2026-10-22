@@ -27,7 +27,7 @@ test("preset switching keeps each look's edits, selection and Undo; structural o
   ok({ kind: "preset.edit", command: { kind: "copy", id: original } });
   const copyId = studio.scene.look()!.look; expect(copyId).not.toBe(original);
   ok({ kind: "layer.setColor", layerId: document.recipe.layers[0]!.id, color: "#aabbcc" });
-  ok({ kind: "preset.select", id: original });
+  ok(studio.choose(original));
   expect(document.recipe.layers[0]!.color).toBe("#123456"); expect(document.active).toBe(2); expect(document.selected).toBe(3);
   expect(app.history().depth).toBe(1);
   const plan = () => { const value = STUDIO_DOCUMENTS.parts.readCollection({ schema: COLLECTION_2, id: collection, name: "Looks",

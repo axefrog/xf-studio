@@ -51,15 +51,15 @@ describe("the shown look", () => {
     await studio.collection.initialize();
     const [one, two] = studio.owner.looksOf(studio.shown()!).map(look => look.id);
     dispatch(studio, { kind: "layer.setOpacity", layerId: layerId(studio), opacity: 0.3 });
-    dispatch(studio, { kind: "preset.select", id: two! });
+    dispatch(studio, studio.choose(two!));
     expect(studio.document.scopeId).toBe(lookScope({ collection: studio.shown()!, look: two! }));
     expect(studio.document.recipe.layers[0]!.opacity).not.toBe(0.3);
     expect(studio.app.history()).toMatchObject({ depth: 0 });
-    dispatch(studio, { kind: "preset.select", id: one! });
+    dispatch(studio, studio.choose(one!));
     expect(studio.document.recipe.layers[0]!.opacity).toBe(0.3);
     expect(studio.app.history()).toMatchObject({ depth: 1 });
     // Nothing edited yet in a fresh history service: no editing context, no Undo.
-    studio.history.focus(null); studio.history.focus(null); studio.history.focus(null);
+    studio.history.focus.withdraw(() => true);
     expect(studio.app.capability({ kind: "history.undo" })).toMatchObject({ available: false, reason: NOTHING_TO_UNDO });
   });
 
@@ -73,7 +73,7 @@ describe("the shown look", () => {
     const character = studio.history.open("character:v1", { read: () => choice, apply: values => { choice = (values as Record<string, unknown>).choice as string; return true; } });
     character.checkpoint(["choice"], { label: "Body", actionKind: "character.choose" });
     choice = "b";
-    expect(studio.history.editing()).toBe("character:v1");
+    expect(studio.history.focus.editing()).toBe("character:v1");
     // The header's Undo follows the editing context: the creator choice.
     expect(studio.app.capability({ kind: "history.undo" })).toMatchObject({ available: true });
     // The 3D view's Undo names the look it shows: the look's edit goes, the creator choice stays.
@@ -83,7 +83,7 @@ describe("the shown look", () => {
     expect(studio.app.dispatch({ kind: "history.redo", scope: look }).ok).toBe(true);
     expect(studio.document.recipe.layers[0]!.opacity).toBe(0.3);
     // A step kept in the look's history makes it the editing context again; the V's history is still there to step.
-    expect(studio.history.editing()).toBe(look);
+    expect(studio.history.focus.editing()).toBe(look);
     expect(studio.app.dispatch({ kind: "history.undo", scope: "character:v1" }).ok).toBe(true);
     expect(choice).toBe("a");
     expect(studio.document.recipe.layers[0]!.opacity).toBe(0.3);
@@ -239,7 +239,7 @@ describe("presets", () => {
     // A new preset starts with one layer, ready to shape (release-readiness-audit.md item 12), and an empty history.
     expect(studio.document.recipe.layers).toHaveLength(1);
     expect(studio.app.history()).toMatchObject({ depth: 0 });
-    dispatch(studio, { kind: "preset.select", id: first });
+    dispatch(studio, studio.choose(first));
     // The copy carries the look as edited (written first), named "(copy)", right after it; its history starts fresh.
     dispatch(studio, { kind: "preset.edit", command: { kind: "copy", id: first } });
     const copy = studio.scene.look()!.look;
@@ -262,7 +262,7 @@ describe("presets", () => {
     await again.collection.initialize();
     expect(again.collection.summary().draft!.presets.map(p => p.name)).toEqual(["Look", "Preset 2", "Smoky"]);
     expect(again.owner.collection(collection)!.looks).toHaveLength(3);
-    dispatch(again, { kind: "preset.select", id: first });
+    dispatch(again, again.choose(first));
     expect(again.document.recipe.layers[0]!.opacity).toBe(0.4);
   });
 

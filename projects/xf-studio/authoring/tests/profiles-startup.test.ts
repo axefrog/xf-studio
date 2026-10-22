@@ -35,10 +35,11 @@ const creator = { panel: () => new Promise<never>(() => {}), page: () => new Pro
 async function start(library: TestLibrary, workspace: WorkspaceState) {
   const port = libraryPort(library), outbox = new DocumentOutbox(port, memoryOutboxStorage(), { retryMs: 5, immutable: immutableDocumentKind });
   outbox.open();
+  const history = createHistoryService();
   const services = createProfileServices({ documents: port, outbox, subjects: createStudioSubjects(), catalogue: new CreatorCatalogue(creator),
-    history: createHistoryService(), versions: libraryVersions(library) });
+    history, versions: libraryVersions(library) });
   await services.load();
-  const { state, stored } = openProfileSession(workspace, services);
+  const { state, stored } = openProfileSession(workspace, services, history.focus);
   const scene = drawnScene(state), character = await sceneCharacter(state, scene, services);
   await outbox.settle();
   return { services, state, stored, scene, character, look: state.scene(scene).look };

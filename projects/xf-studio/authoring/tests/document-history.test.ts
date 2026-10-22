@@ -10,17 +10,17 @@ test("global history reaches the focused document through its participant, keeps
   book.record("b", "Other groom", step("two", "Hair waves"), { before: 10, after: 20 });
   expect(book.move("b", -1)).toBe(10); expect(book.snapshot("b").steps[0].id).toBe("two"); expect(book.snapshot("a").current).toBe(0);
   // Without a participant (the experiment no longer shows the document) and no other editing context, global Undo has nowhere to go.
-  expect(service.focused()).toBeNull();
+  expect(service.acting(service.focus.recent())).toBeNull();
   let moves = 0;
   service.participants(() => [{ id: "b", dispatch() { moves++; book.move("b", 0); return true; } }]);
-  expect(service.focused()!.capability({ kind: "history.redo" }).available).toBe(true);
-  expect(service.focused()!.command({ kind: "history.redo" })).toBe(true);
+  expect(service.acting(service.focus.recent())!.capability({ kind: "history.redo" }).available).toBe(true);
+  expect(service.acting(service.focus.recent())!.command({ kind: "history.redo" })).toBe(true);
   expect(moves).toBe(1);
-  expect(service.focused()!.timeline().documentLabel).toBe("Other groom");
+  expect(service.acting(service.focus.recent())!.timeline().documentLabel).toBe("Other groom");
   book.move("b", -1); book.record("b", "Other groom", step("three", "Hair volume"), { before: 10, after: 30 });
   expect(book.snapshot("b").steps.map(s => s.id)).toEqual(["three"]); expect(book.snapshot("a").steps.map(s => s.id)).toEqual(["one"]);
   expect(book.move("b", 0)).toBe(30); expect(book.move("b", -1)).toBe(10);
-  book.focus(null); expect(service.focused()).toBeNull();
+  book.focus(null); expect(service.acting(service.focus.recent())).toBeNull();
 });
 
 test("a step keeps the value after it: Undo, Redo and jumps hand back the value to restore, and a document without history has none", () => {

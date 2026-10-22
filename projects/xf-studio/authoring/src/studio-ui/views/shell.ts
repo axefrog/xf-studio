@@ -38,7 +38,8 @@ export const SHELL_VIEW = {
   ],
   activity: [
     { pattern: /^history\.(undo|redo)$/, label: "Undo" }, { pattern: /^history\./, label: "History" },
-    { pattern: /^preset\./, label: "Presets" }, { pattern: /^camera\./, label: "Camera & light" },
+    { pattern: /^preset\./, label: "Presets" }, { pattern: /^scene\.setLook$/, label: "Presets" }, { pattern: /^scene\./, label: "3D view" },
+    { pattern: /^camera\./, label: "Camera & light" },
     // The 3D view's lights, exposure and backdrop live in Camera & light; everything else a preview.* action changes is the 3D view.
     { pattern: /^preview\.(.*Light|setExposure|setBackdrop|setDisplayTransform|setKeyAngle|setCreatorShadows|resetCreatorLighting|setCreatorLighting|.*LightingSetup|setLightingPreset|setSurfaceControls|setNormals|setWire)/, label: "Camera & light" },
     { pattern: /^preview\./, label: "3D view" },

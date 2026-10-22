@@ -17,6 +17,7 @@ import { STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { trustedFixture } from "./studio-presentation-fixture";
 
+import { namedCore } from "./fixtures/named-targets";
 /** A simulated clock: timers run when `advance` passes them. */
 function simulatedClock() {
   let now = 0;
@@ -256,7 +257,7 @@ test("a release first ends an open gesture or slider drag (committed, one Undo s
   const script = scriptedAdapter(false), order: string[] = [];
   const lease = new WorkspaceLease(script.adapter, { clock: simulatedClock().clock });
   await lease.start();
-  const core = createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  const core = namedCore(createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
   const app = core.app, document = core.document;
   app.attach({ access: lease });
   lease.onReleaseStart(() => { order.push(`settle:${lease.writable()}`); app.settleEdits(); });
@@ -277,7 +278,7 @@ test("a release first ends an open gesture or slider drag (committed, one Undo s
   // A slider drag in progress: committed too.
   const second = scriptedAdapter(false), next = new WorkspaceLease(second.adapter, { clock: simulatedClock().clock });
   await next.start();
-  const other = createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  const other = namedCore(createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
   other.app.attach({ access: next });
   next.onReleaseStart(() => other.app.settleEdits());
   const layer = other.document.recipe.layers[0].id;

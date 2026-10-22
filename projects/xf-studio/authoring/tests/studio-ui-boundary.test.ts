@@ -216,7 +216,7 @@ export function typeProbes(ctx: EyeMakeupViewContext, facade: EyeMakeupFacade, f
   // @ts-expect-error nor a lookup of another feature's facade
   void ctx.feature;
   // @ts-expect-error the context's dispatch takes only eye makeup's own kinds
-  ctx.dispatch({ kind: "camera.front" });
+  ctx.dispatch({ kind: "camera.front", view: "main" });
   // @ts-expect-error the platform dispatch refuses a feature's kinds
   ctx.platform({ kind: "layer.edit", command: { kind: "add" } });
   const bound = ctx.platform.bind(ctx);

@@ -30,7 +30,7 @@ function harness(overrides: Partial<SaveExplorerDevice> = {}, options: Construct
   const toasts: string[] = [];
   let panel!: ReturnType<typeof explorerPanel>;
   const ctx: ModuleViewContext<SaveExplorerFacade> = {
-    facade: module, instance: panelId => `${panelId}--test`,
+    facade: module, instance: panelId => `${panelId}--test`, targets: () => ({}),
     dispatch: async (action, _options) => { const outcome = await module.dispatch(action); if (!outcome.ok) toasts.push(outcome.message); panel.update(undefined as never); return outcome.ok; },
     feedback: { toast: (_tone, _source, message) => { toasts.push(message); return undefined as never; }, announce: () => {}, record: () => undefined as never },
     anchors: { register: () => () => {} }, reveal: () => {}, openSettings: section => { settingsOpened.push(section); }, links: { open: async () => ({ ok: true }) }, changed: () => panel.update(undefined as never),

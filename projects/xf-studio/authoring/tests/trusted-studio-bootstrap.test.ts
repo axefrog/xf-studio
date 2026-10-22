@@ -7,6 +7,7 @@ import { UIPreferenceActions } from "../src/app/ui-preferences";
 import { ViewportAttachment } from "../src/app/viewport-attachment";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
+import { fixtureTargets } from "./fixtures/named-targets";
 
 test("a presentation mounts from trusted services without any page controls", async () => {
   expect(typeof document).toBe("undefined");
@@ -22,12 +23,14 @@ test("a presentation mounts from trusted services without any page controls", as
     moveHost: () => {}, measure: () => ({ width: 400, height: 300 }), resize: () => {},
     cancelInput: () => {}, inputCapture: () => false, headView: () => undefined,
     uvView: () => workspace.uvView, uvCommand: () => true, hitAt: () => undefined,
-    queryContext: hit => core.app.contextQuery(hit),
+    queryContext: hit => core.app.contextQuery(hit, targets.named()),
   });
   viewport.setReady("uv");
   const collections = bootstrapCollections(core.document, { looks: [{ name: "Look", recipe: workspace.recipe }] });
+  // The input layer the composition root gives the port (profiles design §3.6): what each action names.
+  const targets = fixtureTargets(core, { scene: collections.scene });
   const downloads: string[] = [];
-  const bootstrap = createTrustedStudioBootstrap({ core,
+  const bootstrap = createTrustedStudioBootstrap({ core, targets, focus: core.history.focus,
     preferences: new UIPreferenceActions(workspace.uiPreferences), viewport, collections: collections.deps,
     previewReadiness: { readiness: () => ({ phase: "ready", size: 1024,
       pending: 0, waiting: false, estimatedBytes: 1024, layers: [] }), subscribe: () => () => {} },

@@ -37,7 +37,7 @@ async function fixture(buildReadiness?: () => "ready" | "needs-setup" | "checkin
     loadSavedV: bytes => { loadedBytes = bytes; return { suggestedEyeShape: 3 }; },
     savedVReady: () => true,
     executeCollection: request => service.execute(request),
-    recoverCollection: draft => service.dispatch({ kind: "collection.undoOpen", ...(draft !== undefined ? { draft } : {}) }),
+    recoverCollection: draft => service.dispatch({ kind: "collection.undoOpen", collection: studio.shown()!, ...(draft !== undefined ? { draft } : {}) }),
     buildReadiness,
   });
   files.attachCollection(service);

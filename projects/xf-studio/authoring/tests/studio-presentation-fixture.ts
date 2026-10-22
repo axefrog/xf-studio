@@ -26,6 +26,8 @@ import { registeredEditing } from "./gesture-test-adapter";
 import { STUDIO_DOCUMENTS, STUDIO_REGISTRY } from "../src/compose/studio-registry";
 import { RecipeActions } from "../src/legacy/eye-makeup/authoring-eye-makeup";
 import { freshWorkspace } from "./fixtures/eye-region";
+import { fixtureTargets } from "./fixtures/named-targets";
+import { createHistoryService } from "../src/platform/core/history-service";
 import { eyeMakeupPort } from "./fixtures/eye-region";
 
 /**
@@ -37,7 +39,7 @@ export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>
   lease?: WorkspaceLease } = {}): {
   shell: StudioPresentationPort<string>; packageInput: () => PresetCollection | undefined;
   downloads: string[]; locations: string[] } {
-  const workspace = freshWorkspace(), document = new AuthoringDocument(workspace);
+  const workspace = freshWorkspace(), history = createHistoryService(), document = new AuthoringDocument(workspace, undefined, { history });
   const recipe = new RecipeActions(() => ({ recipe: document.recipe, active: document.active,
     selected: document.selected, fieldSelection: document.fieldSelection }),
   (next, effect) => document.applyActionState(next, effect), document, {}, () => "fixture");
@@ -45,8 +47,9 @@ export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>
   const gestures = new AuthoringGestures(document, editing.gestures);
   const controls = new AuthoringControlEdits(document, editing.controls);
   const quality = new PreviewQualityActions(512, { assess: () => ({ accepted: true }), replace: () => {} });
-  const app = new StudioApplication({ document, eyeMakeup, gestures, controls, quality,
-    ...createViewServices(workspace.preview, undefined, STUDIO_MODULE_REGISTRATION), ...(options.lease ? { access: options.lease } : {}) }, STUDIO_REGISTRY);
+  const viewServices = createViewServices(workspace.preview, undefined, STUDIO_MODULE_REGISTRATION, history);
+  const app = new StudioApplication({ document, eyeMakeup, gestures, controls, quality, history,
+    ...viewServices, ...(options.lease ? { access: options.lease } : {}) }, STUDIO_REGISTRY);
   // The collection the scene shows: a working copy of one look in a library in memory (made at once; nothing is awaited).
   const store = openTestLibrary(), port = libraryPort(store), outbox = new DocumentOutbox(port, memoryOutboxStorage(), { retryMs: 5 });
   outbox.open();
@@ -72,6 +75,8 @@ export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>
     recoverCollection: () => library.recover(),
   });
   library = new CollectionApplication({ model: STUDIO_DOCUMENTS, owner, scene, transport, flushLook: () => lookEditor.commit() }, document, app, files);
+  // The input layer (profiles design §3.6): the port names what the scene shows and the editing context.
+  const targets = fixtureTargets({ app, views: viewServices.views, history, document }, { scene, collection: () => library.service.draftIdentity()?.collectionId });
   lookEditor.show(scene.look());
   scene.subscribe(() => lookEditor.show(scene.look()));
   const locations: string[] = [];
@@ -89,13 +94,13 @@ export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>
     },
     hitAt: options.hitAt ?? (() => ({ hit: { kind: "point", layerId: document.recipe.layers[document.active].id,
       index: 0 }, affordance: "point" })),
-    queryContext: hit => app.contextQuery(hit),
+    queryContext: hit => app.contextQuery(hit, targets.named()),
   });
   viewport.setReady("uv"); viewport.setReady("head");
   const preferences = new UIPreferenceActions(workspace.uiPreferences);
   const previewReadiness = { readiness: () => ({ phase: "ready" as const, size: 1024 as const,
     pending: 0, waiting: false, estimatedBytes: 1024, layers: [] }), subscribe: (_listener: () => void) => () => {} };
   return { shell: createStudioPresentation({ authoring: app, library, files, viewport, preferences,
-    previewReadiness, ...(options.lease ? { workspace: options.lease } : {}) }),
+    previewReadiness, targets, focus: history.focus, ...(options.lease ? { workspace: options.lease } : {}) }),
     packageInput: () => packageInput, downloads, locations };
 }

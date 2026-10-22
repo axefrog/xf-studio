@@ -17,6 +17,7 @@ import { storedWorkspace } from "./fixtures/looks";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 
+import { namedCore } from "./fixtures/named-targets";
 const GAME: LightingSource = { kind: "game", calibration: DEFAULT_CREATOR_LIGHTING };
 const SOFT: LightingSource = { kind: "setup", setup: studioStageSetup(DEFAULT_STUDIO_STAGE) };
 /** A stand-in room: the prefiltered texture it would set, or (probe) the light probe it would add. */
@@ -56,29 +57,29 @@ test("Character creator is a setup like the others: reversible, the game rig to 
   const actions = new PreviewActions(freshWorkspace().preview, p);
   expect(actions.snapshot().lightingPreset).toBe("studio");
   expect(actions.snapshot().creatorLighting).toEqual(DEFAULT_CREATOR_LIGHTING);
-  actions.dispatch({ kind: "preview.selectLightingSetup", setup: "creator" });
+  actions.dispatch({ kind: "preview.selectLightingSetup", view: "main", setup: "creator" });
   expect(actions.snapshot().lightingPreset).toBe("creator");
   // Its exposure is the game display's k: the range follows, and a change forks it (the built-in's name never describes edited values).
-  expect(actions.capability({ kind: "preview.setExposure", value: 15 }).available).toBe(true);
-  expect(actions.capability({ kind: "preview.setExposure", value: 30 }).reason).toBe("Exposure must be between 0.01 and 20.");
-  actions.dispatch({ kind: "preview.selectLightingSetup", setup: "soft" });
-  expect(actions.capability({ kind: "preview.setExposure", value: 15 }).reason).toBe("Exposure must be between 0.125 and 8.");
+  expect(actions.capability({ kind: "preview.setExposure", view: "main", value: 15 }).available).toBe(true);
+  expect(actions.capability({ kind: "preview.setExposure", view: "main", value: 30 }).reason).toBe("Exposure must be between 0.01 and 20.");
+  actions.dispatch({ kind: "preview.selectLightingSetup", view: "main", setup: "soft" });
+  expect(actions.capability({ kind: "preview.setExposure", view: "main", value: 15 }).reason).toBe("Exposure must be between 0.125 and 8.");
   expect(calls).toEqual([`creator:isotropic/full/${DEFAULT_CREATOR_LIGHTING.exposure}`, "setup:studio"]);
 });
 
 test("creator diagnostics validate their switches and exposure, and the camera preset frames the creator page", () => {
   const { port: p, calls } = port();
   const actions = new PreviewActions(freshWorkspace().preview, p);
-  actions.dispatch({ kind: "preview.selectLightingSetup", setup: "creator" });
+  actions.dispatch({ kind: "preview.selectLightingSetup", view: "main", setup: "creator" });
   calls.length = 0;
-  expect(actions.capability({ kind: "preview.setCreatorLighting", key: "cone", value: "quarter" as never }).available).toBe(false);
-  expect(actions.capability({ kind: "preview.setCreatorLighting", key: "exposure", value: 0 }).reason).toContain("between");
-  expect(actions.capability({ kind: "preview.setLightingPreset", preset: "sunset" as never }).available).toBe(false);
-  actions.dispatch({ kind: "preview.setCreatorLighting", key: "intensity", value: "cone" });
-  actions.dispatch({ kind: "preview.setCreatorLighting", key: "cone", value: "half" });
-  actions.dispatch({ kind: "preview.setCreatorLighting", key: "exposure", value: 0.8 });
+  expect(actions.capability({ kind: "preview.setCreatorLighting", view: "main", key: "cone", value: "quarter" as never }).available).toBe(false);
+  expect(actions.capability({ kind: "preview.setCreatorLighting", view: "main", key: "exposure", value: 0 }).reason).toContain("between");
+  expect(actions.capability({ kind: "preview.setLightingPreset", view: "main", preset: "sunset" as never }).available).toBe(false);
+  actions.dispatch({ kind: "preview.setCreatorLighting", view: "main", key: "intensity", value: "cone" });
+  actions.dispatch({ kind: "preview.setCreatorLighting", view: "main", key: "cone", value: "half" });
+  actions.dispatch({ kind: "preview.setCreatorLighting", view: "main", key: "exposure", value: 0.8 });
   expect(actions.snapshot().creatorLighting).toEqual({ intensity: "cone", cone: "half", exposure: 0.8, shadows: true });
-  actions.dispatch({ kind: "camera.creatorFraming", page: "hair" });
+  actions.dispatch({ kind: "camera.creatorFraming", view: "main", page: "hair" });
   expect(actions.snapshot().camera).toEqual({ position: [0, 1.62, -2], target: [0, 1.62, 0], fov: 15 });
   expect(calls).toEqual([`creator:cone/full/${DEFAULT_CREATOR_LIGHTING.exposure}`, "creator:cone/half/" + DEFAULT_CREATOR_LIGHTING.exposure,
     "creator:cone/half/0.8", "camera:15"]);
@@ -87,28 +88,28 @@ test("creator diagnostics validate their switches and exposure, and the camera p
 test("Restore defaults puts every creator calibration control back, and says when there is nothing to restore", () => {
   const { port: p, calls } = port();
   const actions = new PreviewActions(freshWorkspace().preview, p);
-  actions.dispatch({ kind: "preview.selectLightingSetup", setup: "creator" });
-  expect(actions.capability({ kind: "preview.resetCreatorLighting" })).toEqual({ available: false, reason: "The calibration is already at its defaults." });
-  actions.dispatch({ kind: "preview.setCreatorLighting", key: "intensity", value: "cone" });
-  actions.dispatch({ kind: "preview.setCreatorLighting", key: "cone", value: "half" });
-  actions.dispatch({ kind: "preview.setCreatorLighting", key: "exposure", value: 0.8 });
-  actions.dispatch({ kind: "preview.setCreatorShadows", enabled: false });
+  actions.dispatch({ kind: "preview.selectLightingSetup", view: "main", setup: "creator" });
+  expect(actions.capability({ kind: "preview.resetCreatorLighting", view: "main" })).toEqual({ available: false, reason: "The calibration is already at its defaults." });
+  actions.dispatch({ kind: "preview.setCreatorLighting", view: "main", key: "intensity", value: "cone" });
+  actions.dispatch({ kind: "preview.setCreatorLighting", view: "main", key: "cone", value: "half" });
+  actions.dispatch({ kind: "preview.setCreatorLighting", view: "main", key: "exposure", value: 0.8 });
+  actions.dispatch({ kind: "preview.setCreatorShadows", view: "main", enabled: false });
   expect(actions.snapshot().creatorLighting.shadows).toBe(false);
-  expect(actions.capability({ kind: "preview.setCreatorShadows", enabled: "yes" as never }).reason).toBe("Choose on or off.");
-  expect(actions.capability({ kind: "preview.resetCreatorLighting" }).available).toBe(true);
-  actions.dispatch({ kind: "preview.resetCreatorLighting" });
+  expect(actions.capability({ kind: "preview.setCreatorShadows", view: "main", enabled: "yes" as never }).reason).toBe("Choose on or off.");
+  expect(actions.capability({ kind: "preview.resetCreatorLighting", view: "main" }).available).toBe(true);
+  actions.dispatch({ kind: "preview.resetCreatorLighting", view: "main" });
   expect(actions.snapshot().creatorLighting).toEqual({ ...DEFAULT_CREATOR_LIGHTING });
   expect(calls.at(-1)).toBe(`creator:isotropic/full/${DEFAULT_CREATOR_LIGHTING.exposure}`);
-  expect(actions.capability({ kind: "preview.resetCreatorLighting" }).available).toBe(false);
+  expect(actions.capability({ kind: "preview.resetCreatorLighting", view: "main" }).available).toBe(false);
   const bare = new PreviewActions(freshWorkspace().preview, port({ creator: false }).port);
-  expect(bare.capability({ kind: "preview.resetCreatorLighting" }).available).toBe(false);
+  expect(bare.capability({ kind: "preview.resetCreatorLighting", view: "main" }).available).toBe(false);
 });
 
 test("a preview without the lighting stage explains why, and the LUT's arrival notifies readers", () => {
   const bare = new PreviewActions(freshWorkspace().preview, port({ creator: false }).port);
-  expect(bare.capability({ kind: "preview.selectLightingSetup", setup: "creator" }).reason).toBe("Lighting controls are unavailable in this preview.");
-  expect(bare.capability({ kind: "preview.setLightingPreset", preset: "studio" }).available).toBe(false);
-  expect(bare.capability({ kind: "camera.creatorFraming", page: "face" }).available).toBe(false);
+  expect(bare.capability({ kind: "preview.selectLightingSetup", view: "main", setup: "creator" }).reason).toBe("Lighting controls are unavailable in this preview.");
+  expect(bare.capability({ kind: "preview.setLightingPreset", view: "main", preset: "studio" }).available).toBe(false);
+  expect(bare.capability({ kind: "camera.creatorFraming", view: "main", page: "face" }).available).toBe(false);
   expect(bare.lightingStatus()).toBeNull();
   const live = port(), actions = new PreviewActions(freshWorkspace().preview, live.port);
   let notified = 0; actions.subscribe(() => notified++);
@@ -128,14 +129,14 @@ test("descriptors and application validation cover the new actions", () => {
   for (const kind of ["preview.setLightingPreset", "preview.setCreatorLighting", "camera.creatorFraming"] as const)
     expect(ACTION_DESCRIPTORS[kind]).toMatchObject({ scope: ["viewport"], effect: "workspace", undo: "none" });
   const workspace = freshWorkspace();
-  const { app } = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  const { app } = namedCore(createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
   app.attach({ preview: new PreviewActions(workspace.preview, port().port) });
-  expect(app.capability({ kind: "preview.setCreatorLighting", key: "exposure", value: 50 })).toMatchObject({ available: false, reason: "Creator exposure must be between 0.01 and 20." });
-  expect(app.dispatch({ kind: "preview.setLightingPreset", preset: "creator" })).toMatchObject({ ok: true });
+  expect(app.capability({ kind: "preview.setCreatorLighting", view: "main", key: "exposure", value: 50 })).toMatchObject({ available: false, reason: "Creator exposure must be between 0.01 and 20." });
+  expect(app.dispatch({ kind: "preview.setLightingPreset", view: "main", preset: "creator" })).toMatchObject({ ok: true });
   expect(app.previewState().preview?.lightingPreset).toBe("creator");
   expect(app.previewState().lighting?.preset).toBe("creator");
   // A value other than the calibration's exposure (1), so the change forks the built-in.
-  expect(app.dispatch({ kind: "preview.setExposure", value: 1.5 })).toMatchObject({ ok: true });
+  expect(app.dispatch({ kind: "preview.setExposure", view: "main", value: 1.5 })).toMatchObject({ ok: true });
   expect(app.previewState().lightingSetups?.shown).toMatchObject({ label: "Custom (from Character creator)", exposure: 1.5 });
 });
 

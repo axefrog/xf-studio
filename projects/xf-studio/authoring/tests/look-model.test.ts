@@ -39,6 +39,7 @@ import { compilePreset, initialRecipe, raster, applyRecipeAction, freshWorkspace
 import { readRecipe as parseRecipe } from "../src/legacy/eye-makeup/recipe-schema";
 import { preparePackageCollection } from "./fixtures/eye-exporter";
 
+import { namedCore } from "./fixtures/named-targets";
 const golden = (name: string) => JSON.parse(readFileSync(new URL(`./golden/${name}`, import.meta.url), "utf8"));
 const EYE = "eye-makeup";
 
@@ -300,8 +301,8 @@ test("draft persistence compares canonically: a library revision read from colle
     // Opened from its collection-1 rows: its working copy is made from that version, which is its baseline.
     expect(await studio.collection.execute({ kind: "open", id })).toMatchObject({ ok: true });
     const service = studio.service;
-    service.dispatch({ kind: "preset.select", id: service.summary().draft!.presets[1].id });
-    service.dispatch({ kind: "preset.select", id: service.summary().draft!.presets[0].id });
+    studio.app.dispatch(studio.choose(service.summary().draft!.presets[1].id));
+    studio.app.dispatch(studio.choose(service.summary().draft!.presets[0].id));
     expect(service.persistence()).toMatchObject({ baseline: "known", dirty: false, dirtyPresets: [] });
     studio.app.dispatch({ kind: "layer.setOpacity", layerId: studio.document.recipe.layers[0]!.id, opacity: 0.123 });
     expect(service.persistence()).toMatchObject({ dirty: true, dirtyPresets: [service.summary().draft!.presets[0].id] });
@@ -382,7 +383,7 @@ test("apply is pure and matches the recipe service; the application dispatches t
   // Through the application: the same result, one Undo step, the memory written back under the preset.
   const workspace = freshWorkspace(recipe);
   workspace.glitterChoices = { "preset-a/pure-glit": structuredClone(remembered) };
-  const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "preset-a" }, STUDIO_COMPOSITION);
+  const core = namedCore(createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "preset-a" }, STUDIO_COMPOSITION));
   expect(core.app.dispatch({ kind: "glitter.selectModel", layerId: "pure-glit", model: "irregular" }).ok).toBe(true);
   expect(core.document.recipe).toEqual(selected.part);
   expect(core.document.history.state().depth).toBe(1);
@@ -439,7 +440,7 @@ test("target checks and context binding read the collection's identity without c
   expect(views).toBe(0);
   // An empty collection is still refused with the same message.
   while (service.summary().draft!.presets.length)
-    service.dispatch({ kind: "preset.edit", command: { kind: "remove", id: service.summary().draft!.presets[0].id } });
+    service.dispatch({ kind: "preset.edit", collection: studio.shown()!, command: { kind: "remove", id: service.summary().draft!.presets[0].id } });
   expect(core.app.requestCapability({ kind: "exportCollection" })).toMatchObject({ available: false,
     reason: "Expected a named XF Studio collection with a stable UUID and at least one preset." });
 });

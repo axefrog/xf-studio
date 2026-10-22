@@ -663,12 +663,12 @@ export class StudioApplication {
     // A look transaction records the parts it names: nothing else may change while it runs.
     if (this.look && !this.look.features.includes(route.owner.id))
       return { available: false, code: "busy", reason: "Only the parts this change names can be edited while it is applied." };
-    // Descriptor payload types and ranges gate every entry point, not only context menus.
-    const payload = payloadIssue(route.spec.descriptor, action);
-    if (payload && payload.code !== "limit") return payload;
     // What the action names (profiles design §3.6): every target its descriptor needs, each still what it was when it was resolved.
     const named = this.namedTargetIssue(route.spec.descriptor, action);
     if (named) return named;
+    // Descriptor payload types and ranges gate every entry point, not only context menus.
+    const payload = payloadIssue(route.spec.descriptor, action);
+    if (payload && payload.code !== "limit") return payload;
     // The owning module decides, with a structured code (CORE-15).
     const domain = coded(this.handler(route.owner.id).capability(action));
     // A range limit is generic; when the domain can say why in the user's terms

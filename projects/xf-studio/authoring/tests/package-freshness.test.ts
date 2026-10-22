@@ -54,9 +54,9 @@ test("an edit, a preset change or a rename makes the result stale; a new Check m
   await f.files.execute({ kind: "package.check" });
   expect(f.files.snapshot().package?.freshness).toBe("current");
   const other = f.service.summary().draft!.presets.find(preset => preset.id !== f.service.summary().draft!.selected)!;
-  f.service.dispatch({ kind: "preset.select", id: other.id });
+  f.app.dispatch(f.choose(other.id));
   expect(f.files.snapshot().package?.freshness).toBe("stale");
   await f.files.execute({ kind: "package.check" });
-  f.service.dispatch({ kind: "collection.rename", name: "Renamed" });
+  f.service.dispatch({ kind: "collection.rename", collection: f.shown()!, name: "Renamed" });
   expect(f.files.snapshot().package?.freshness).toBe("stale");
 });

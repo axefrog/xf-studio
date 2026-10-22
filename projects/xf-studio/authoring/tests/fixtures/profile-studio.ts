@@ -7,6 +7,8 @@
 import { ProfileService } from "../../src/app/profiles/profile-service";
 import { createStudioSubjects } from "../../src/compose/subjects";
 import { createTrustedAuthoringCore } from "../../src/app/trusted-authoring-core";
+import type { StudioApplication } from "../../src/app/studio-application";
+import { fixtureTargets, named } from "./named-targets";
 import { StudioFileOperations, type StudioPickedFile } from "../../src/app/studio-file-operations";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
 import type { Recipe } from "../../src/engines/layered-makeup/recipe";
@@ -123,14 +125,18 @@ export async function profileStudio(options: {
     if (!made.ok) throw Error(made.reason);
     profile = made.profile;
   }
+  // The input layer (profiles design §3.6): actions name the scene's look, its collection and the editing context, as the port names them.
+  const targets = fixtureTargets(core, { scene, collection: () => application?.service.draftIdentity()?.collectionId });
+  const app = named(core.app, targets);
   application = new CollectionApplication({ model: MODEL, owner, scene, transport, flushLook: () => lookEditor.commit(),
-    ...(profiles ? { membership: (collection: string) => profiles!.collectionMembership(profile!, collection) } : {}) }, core.document, core.app, files);
+    ...(profiles ? { membership: (collection: string) => profiles!.collectionMembership(profile!, collection) } : {}) }, core.document,
+    app as unknown as StudioApplication, files);
   lookEditor.show(scene.look());
   scene.subscribe(() => lookEditor.show(scene.look()));
   const all = () => [...owner.list().flatMap(view => [collectionRef(view.id), ...[...view.looks, ...view.removed.map(item => item.look)]
     .map(look => lookRef({ collection: view.id, look }))])];
   return {
-    library, port, outbox, storage, owner, sessions, scene, history, core, app: core.app, document: core.document, lookEditor, collection: application, files,
+    library, port, outbox, storage, owner, sessions, scene, history, core, app, targets, document: core.document, lookEditor, collection: application, files,
     profiles, profile,
     service: application.service,
     downloads, packageInput: () => packageInput, transport,
@@ -138,6 +144,8 @@ export async function profileStudio(options: {
     async settle() { lookEditor.commit(); return outbox.settle(all()); },
     /** The shown collection's ID. */
     shown: () => scene.look()?.collection,
+    /** Choosing a preset of the shown collection: `scene.setLook` (its scene and `gen` named by the input layer). */
+    choose: (look: string) => ({ kind: "scene.setLook" as const, look: { collection: application!.service.draftIdentity()!.collectionId, look } }),
   };
 }
 export type ProfileStudio = Awaited<ReturnType<typeof profileStudio>>;

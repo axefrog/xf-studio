@@ -15,6 +15,7 @@ import { applyLayerAction, applyRecipeAction, freshWorkspace, initialRecipe } fr
 import { layerCapability } from "../src/engines/layered-makeup/layer-stack";
 import { RecipeActions } from "../src/legacy/eye-makeup/authoring-eye-makeup";
 
+import { namedCore } from "./fixtures/named-targets";
 test("collection commands keep UI views isolated and notify only after valid transitions", async () => {
   const studio = await profileStudio({ name: "Collection", looks: [{ name: "First", recipe: initialRecipe() }] });
   await studio.collection.initialize();
@@ -24,24 +25,24 @@ test("collection commands keep UI views isolated and notify only after valid tra
   const unsubscribe = service.subscribe(() => changes++);
   const view = service.view(); (view.draft as unknown as { presets: { name: string }[] }).presets[0]!.name = "Tampered";
   expect(service.view().draft!.presets[0]!.name).toBe("First");
-  expect(service.actionCapability({ kind: "preset.edit", command: { kind: "restore" } })).toEqual({
+  expect(service.actionCapability({ kind: "preset.edit", collection: studio.shown()!, command: { kind: "restore" } })).toEqual({
     available: false, code: "invalid_value", reason: "No removed preset to restore." });
-  expect(() => service.dispatch({ kind: "preset.edit", command: { kind: "remove", id: crypto.randomUUID() } })).toThrow("no longer exists");
+  expect(() => service.dispatch({ kind: "preset.edit", collection: studio.shown()!, command: { kind: "remove", id: crypto.randomUUID() } })).toThrow("no longer exists");
   expect(changes).toBe(0);
-  service.dispatch({ kind: "preset.edit", command: { kind: "copy", id: preset } });
+  service.dispatch({ kind: "preset.edit", collection: studio.shown()!, command: { kind: "copy", id: preset } });
   const copyId = service.view().draft!.selected!;
   expect(copyId).not.toBe(preset);
   studio.app.dispatch({ kind: "layer.setColor", layerId: studio.document.recipe.layers[0]!.id, color: "#112233" });
-  service.dispatch({ kind: "preset.select", id: preset });
-  service.dispatch({ kind: "preset.select", id: copyId });
+  studio.app.dispatch(studio.choose(preset));
+  studio.app.dispatch(studio.choose(copyId));
   expect(studio.document.recipe.layers[0]!.color).toBe("#112233");
-  service.dispatch({ kind: "collection.rename", name: " Renamed " });
+  service.dispatch({ kind: "collection.rename", collection: studio.shown()!, name: " Renamed " });
   expect(service.view().draft!.name).toBe("Renamed");
   expect(changes).toBeGreaterThan(0);
   await studio.settle();
   unsubscribe();
   const seen = changes;
-  service.dispatch({ kind: "collection.rename", name: "Unobserved" });
+  service.dispatch({ kind: "collection.rename", collection: studio.shown()!, name: "Unobserved" });
   expect(changes).toBe(seen);
 });
 
@@ -81,7 +82,7 @@ test("add, remove, add, then Restore never leaves two presets with one name (COR
   const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
   const names = () => studio.service.summary().draft!.presets.map(preset => preset.name);
   const edit = (command: Parameters<typeof studio.service.dispatch>[0] extends infer A ? A extends { kind: "preset.edit"; command: infer C } ? C : never : never) =>
-    studio.service.dispatch({ kind: "preset.edit", command });
+    studio.service.dispatch({ kind: "preset.edit", collection: studio.shown()!, command });
   edit({ kind: "add", newId: id(2) });
   edit({ kind: "add", newId: id(3) });
   expect(names()).toEqual(["Preset 1", "Preset 2", "Preset 3"]);
@@ -99,12 +100,12 @@ test("preset add and copy take their IDs from the host or the action (CORE-44)",
   const preset = studio.scene.look()!.look;
   let n = 10;
   const id = () => `00000000-0000-4000-8000-0000000000${n++}`;
-  expect(studio.app.dispatch({ kind: "preset.edit", command: { kind: "add", newId: id() } }).ok).toBe(true);
-  studio.app.dispatch({ kind: "preset.select", id: preset });
-  expect(studio.app.dispatch({ kind: "preset.edit", command: { kind: "copy", id: preset, newId: id() } }).ok).toBe(true);
+  expect(studio.app.dispatch({ kind: "preset.edit", collection: studio.shown()!, command: { kind: "add", newId: id() } }).ok).toBe(true);
+  studio.app.dispatch(studio.choose(preset));
+  expect(studio.app.dispatch({ kind: "preset.edit", collection: studio.shown()!, command: { kind: "copy", id: preset, newId: id() } }).ok).toBe(true);
   expect(studio.service.summary().draft!.presets.map(look => look.id)).toEqual([preset, "00000000-0000-4000-8000-000000000011",
     "00000000-0000-4000-8000-000000000010"]);
-  expect(studio.app.capability({ kind: "preset.edit", command: { kind: "add", newId: preset } }))
+  expect(studio.app.capability({ kind: "preset.edit", collection: studio.shown()!, command: { kind: "add", newId: preset } }))
     .toMatchObject({ available: false, reason: "That preset ID is already in use." });
 });
 
@@ -146,8 +147,8 @@ test("recipe actions validate point, field, pigment, softness and material edits
 test("recipe edits through app.dispatch record discrete changes once and keep inactive Glitter choices local", () => {
   const original = initialRecipe(), layerId = original.layers[0].id;
   const workspace = freshWorkspace(original), choices: GlitterChoices = workspace.glitterChoices, effects: string[] = [];
-  const { app, document, recipe } = createTrustedAuthoringCore(workspace,
-    { resetStack: () => {}, selectedCollection: () => "preset-one" }, STUDIO_COMPOSITION);
+  const { app, document, recipe } = namedCore(createTrustedAuthoringCore(workspace,
+    { resetStack: () => {}, selectedCollection: () => "preset-one" }, STUDIO_COMPOSITION));
   const unsubscribe = recipe.subscribe(effect => effects.push(effect.kind));
   const dispatch = (action: Parameters<typeof app.dispatch>[0]) => app.dispatch(action);
   expect(dispatch({ kind: "layer.setFinish", layerId, finish: "glitter" }).ok).toBe(true);
@@ -228,19 +229,19 @@ test("preview commands keep camera and lighting state readable without DOM and e
     availability: target => target === "hair" ? "Saved hair unavailable." : undefined,
   };
   const actions = new PreviewActions(freshWorkspace().preview, port);
-  expect(actions.capability({ kind: "preview.setHair", enabled: true })).toEqual({ available: false, reason: "Saved hair unavailable." });
-  expect(() => actions.dispatch({ kind: "camera.setFov", degrees: 200 })).toThrow("Field of view");
+  expect(actions.capability({ kind: "preview.setHair", view: "main", enabled: true })).toEqual({ available: false, reason: "Saved hair unavailable." });
+  expect(() => actions.dispatch({ kind: "camera.setFov", view: "main", degrees: 200 })).toThrow("Field of view");
   let notifications = 0; actions.subscribe(() => notifications++);
-  expect(actions.dispatch({ kind: "camera.setFov", degrees: 10 }).limited).toBe(true);
-  actions.dispatch({ kind: "preview.setExposure", value: 1.5 });
-  actions.dispatch({ kind: "preview.setKeyAngle", degrees: 120 });
+  expect(actions.dispatch({ kind: "camera.setFov", view: "main", degrees: 10 }).limited).toBe(true);
+  actions.dispatch({ kind: "preview.setExposure", view: "main", value: 1.5 });
+  actions.dispatch({ kind: "preview.setKeyAngle", view: "main", degrees: 120 });
   const detached = actions.snapshot();
   expect(detached.camera.fov).toBe(10);
   expect(detached.exposure).toBe(1.5);
   expect(notifications).toBe(3);
   // Both changes light the view by the fork of Soft studio they made: the exposure, then the key turned to 120°.
   expect(calls).toEqual(["lighting:1.5/-0.300,1.900,-0.500", "lighting:1.5/0.505,1.900,0.292"]);
-  actions.dispatch({ kind: "preview.setEyeShape", index: 12 });
+  actions.dispatch({ kind: "preview.setEyeShape", view: "main", index: 12 });
   expect(actions.snapshot()).toMatchObject({ eyeShape: 12 });
   // A piercing style is a creator choice, the character context's, not a preview preference.
   expect("piercingStyle" in actions.snapshot()).toBe(false);
@@ -259,9 +260,9 @@ test("eye-shape choices come from the loaded head, and only those choices are ac
     eyeShapeOptions: () => ({ choices, eyesFollow: true, eyeSource: "base\he_morphs.morphtarget" }) } satisfies PreviewPort;
   const actions = new PreviewActions(freshWorkspace().preview, port);
   expect(actions.eyeShapeOptions().choices.map(choice => choice.target)).toEqual([null, "h011", "h021"]);
-  expect(actions.capability({ kind: "preview.setEyeShape", index: 3 })).toMatchObject({ available: false });
-  expect(actions.capability({ kind: "preview.setEyeShape", index: 2 }).available).toBe(true);
-  actions.dispatch({ kind: "preview.setEyeShape", index: 2 });
+  expect(actions.capability({ kind: "preview.setEyeShape", view: "main", index: 3 })).toMatchObject({ available: false });
+  expect(actions.capability({ kind: "preview.setEyeShape", view: "main", index: 2 }).available).toBe(true);
+  actions.dispatch({ kind: "preview.setEyeShape", view: "main", index: 2 });
   actions.rememberEyeShape(9); // Not offered by this head: ignored.
   expect(actions.snapshot().eyeShape).toBe(2);
   expect(calls).toEqual([2]);
@@ -277,11 +278,11 @@ test("UI-79: the whole-body view is offered only while the body is shown", () =>
     setWire: () => {}, setNormals: () => {}, setEyeOptics: () => {}, setHair: () => {}, setDetail: () => {}, setEyeShape: () => {}, setPiercings: () => {},
     setBody: (enabled: boolean) => framed.push(`body:${enabled}`), frameBody: () => { framed.push("frame"); return false; } } satisfies PreviewPort;
   const actions = new PreviewActions(freshWorkspace().preview, port);
-  expect(actions.capability({ kind: "camera.body" }).available).toBe(true);
-  actions.dispatch({ kind: "preview.setBody", enabled: false });
-  expect(actions.capability({ kind: "camera.body" })).toMatchObject({ available: false, reason: "Turn the body on to see the whole body." });
-  expect(() => actions.dispatch({ kind: "camera.body" })).toThrow("Turn the body on");
-  actions.dispatch({ kind: "preview.setBody", enabled: true });
-  actions.dispatch({ kind: "camera.body" });
+  expect(actions.capability({ kind: "camera.body", view: "main" }).available).toBe(true);
+  actions.dispatch({ kind: "preview.setBody", view: "main", enabled: false });
+  expect(actions.capability({ kind: "camera.body", view: "main" })).toMatchObject({ available: false, reason: "Turn the body on to see the whole body." });
+  expect(() => actions.dispatch({ kind: "camera.body", view: "main" })).toThrow("Turn the body on");
+  actions.dispatch({ kind: "preview.setBody", view: "main", enabled: true });
+  actions.dispatch({ kind: "camera.body", view: "main" });
   expect(framed).toEqual(["body:false", "body:true", "frame"]);
 });
