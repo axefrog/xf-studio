@@ -105,7 +105,7 @@ Written roughly in this order. Each one names the design seeds it absorbs.
 |---|---|---|
 | **F. [Foundation](foundation.md)** | The anchoring theory: dimensions, localities, bundles, contributions, the operations and rules, story in the same space, the reference model and the compromise ledger. Every plan below maps onto it | Drafted (v0) |
 | **P1. [Research method](p1-research-method.md)** | WS1: how disciplines are found (several independent lenses), the dossier template, evidence grades for craft knowledge, the composite's schema, the adversarial loop, credits | Drafted |
-| **P2. Game substrate research** | WS2: the main story's progression as facts and phases (so authored seeds can name windows such as "after the parade" and fitting can test them), the quest file chain, facts, journal and its limits, phone, map pins, communities and spawners, workspots and AI spots, the scanner, the open-world activities and the fixers' gig structure, save data; the corpus extraction | Next |
+| **P2. Game substrate research** | WS2: the main story's progression as facts and phases (so authored seeds can name windows such as "after the parade" and fitting can test them), the quest file chain, facts, journal and its limits, phone, map pins, communities and spawners, workspots and AI spots, the scanner, the open-world activities and the fixers' gig structure, save data; the corpus extraction | Next ([WP-04](#82-work-packages)) |
 | **P3. Simulation layer** | Layer 1: the world as sampled fields over dimensions ([DS-47](design-seeds.md) to [DS-51](design-seeds.md)), entities, facts, provenance, beliefs, the detail tiers and how a fact is refined between them, mirroring what the game owns, canon, forgetting, persistence and save branching, determinism | M2 |
 | **P4. Seeding layer and seed language** | Layer 2: the seed language across the binding spectrum, casting, the seed lifecycle, intersections, scheduling and the tension budget, the record | M2, first of the layer designs |
 | **P5. Procedural engine** | Layer 3: sowing (sifting, proactive seeding, escalation, the proactivity dial) and fitting (timing, context, channel, connecting material, fallbacks), the director's steering rules, how it uses authored material | M2 |
@@ -141,3 +141,58 @@ Written roughly in this order. Each one names the design seeds it absorbs.
 | Saves: reloads, branching, save-file growth | P3 and P7; the record is keyed to the save and branches with it |
 | Other mods that change crowds, reactions or gigs | Detect them and step aside or layer, decided in P8 |
 | Quota | Research agents kept few and focused; this chat's budget is recorded on the coordination board |
+
+## 8. Plan of action
+
+Work moves through four stages, and every area goes through all four ([D-11](decisions.md)):
+1. **Theory and research:** what is true, and what is known.
+2. **Design:** the second-level plans, P1 to P10.
+3. **Specification:** normative documents in `spec/` that say exactly how the engine works. Each one ends with test vectors.
+4. **Implementation:** first the TypeScript reference model, which is the oracle, then the native core.
+
+A specification must be complete enough that an agent with no memory of any discussion can implement it from the page.
+
+### 8.1 Areas and their stages
+
+| Area | Theory and research | Design | Specification | Implementation |
+|---|---|---|---|---|
+| Kernel: the dimensional model | [Foundation](foundation.md) v0; formal grounding (P3) | The foundation | S0 [kernel](spec/kernel.md) | Reference model, then native core |
+| Simulation layer: processes, tiers, mirroring the game | P2 | P3 | S1 simulation | |
+| Seeding layer and seed language | P1 | P4 | S2 seed language | |
+| Procedural engine: sowing, fitting, director | P1 | P5 | S3 procedural engine | |
+| Authored content and player configuration | P1 | P6 | S4 content packs and settings | |
+| Runtime: companion process, game port, persistence | [Requirements](runtime-requirements.md), the bridge | P7 | S5 game port and companion protocol; S6 persistence format | |
+| Realisation, perception and expression | P2 | P8 | S7 | |
+| Evaluation | P1 | P9 | S8 | The harness |
+| Tooling and inspection | | P10 | S9 | |
+
+### 8.2 Work packages
+
+Status values:
+- **done**;
+- **running:** in progress;
+- **next:** starts as soon as capacity allows;
+- **waiting:** blocked on something named in the row;
+- **later**.
+
+Update a row in the same checkpoint as the work it describes.
+
+| WP | Work | Output | Depends on | Status |
+|---|---|---|---|---|
+| 01 | Safeguards against lost context: decisions register, "start here" path, this plan of action | [decisions](decisions.md), [README](README.md#start-here), §8 | | done |
+| 02 | Credits for every work the design has drawn on so far | Entries in the [community credits](../../docs/community-credits.md) | | running |
+| 03 | P1 phase A, the lens runs:<br>1. L1 and L2 first;<br>2. then L3, L6, L7 and L8;<br>3. then L4, L5, L9, L10 and L11;<br>4. then second-model runs, until saturation | `craft/lenses/` (committed with the map) | | running |
+| 04 | P2, the game substrate research plan | [p2-game-substrate.md](p2-game-substrate.md) | | next |
+| 05 | S0, the kernel specification v0: the foundation made exact | [spec/kernel.md](spec/kernel.md) | 04 (for the game-mirror parts) | next |
+| 06 | P1 phase B, the discipline map, then the maintainer checkpoint | `craft/map.md` | 03 | waiting on 03 |
+| 07 | P2 desk research:<br>- the main story's progression as facts;<br>- the gig system;<br>- population;<br>- channels;<br>- event hooks;<br>- saves | Knowledge pages and research notes | 04 | waiting on 04 |
+| 08 | The reference model v0, implementing S0, with its test vectors. Code lives in `projects/xf-story-engine/reference/` and lands through the XF · Studio chat (which owns `main`) with a code review | Code and tests | 05 | waiting on 05 |
+| 09 | P1 phase C, the dossiers, starting with motivation and drives | `craft/*.md` | 06 | later |
+| 10 | P4, the seed language design, then S2. Scenario R1 is its first test | Design and spec | 05, 09 | later |
+| 11 | P3, the simulation layer beyond the kernel, then S1 | Design and spec | 05, 07 | later |
+| 12 | Quest corpus extraction (memory-guarded), then sample decompositions | `research/consumers/quest-corpus/`, decompositions | 07; the composite schema from 16 | later |
+| 13 | P5 and P6, then S3 and S4 | Designs and specs | 10 | later |
+| 14 | P7, then S5 and S6; a hello-world companion with the bridge's C1 work | Design, specs, proof | 05; bridge C1 | later |
+| 15 | P8, P9 and P10, then S7, S8 and S9 | Designs and specs | 11, 13 | later |
+| 16 | Composite v0, then the attempts to break it (P1 phases D and E) | `composite/` | 09, 12 | later |
+| 17 | The offline prototype (milestone M3) | Code, results | 08, 10, 11, 13 | later |

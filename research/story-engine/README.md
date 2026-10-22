@@ -2,6 +2,27 @@
 
 **Status:** an R&D vertical, started 22 October 2026. It is at the research and design stage, with no code yet. It runs at its own pace beside XF Studio's 1.0 work: the finish-first rule governs the Studio product, not this research. The practical dependency is the [runtime bridge](../../projects/xf-runtime-bridge/README.md) and its successor, [XF Core](../runtime/xf-core-architecture.md).
 
+## Start here
+
+Anyone picking up this work, including an agent that has lost its earlier context, reads these in order:
+
+1. This page: what the Story Engine is and where everything lives.
+2. [Decisions](decisions.md): everything settled, with sources.
+3. [Foundation](foundation.md): the anchoring theory every design maps onto.
+4. [Plan](plan.md), especially [§8](plan.md#8-plan-of-action): the current state of every work package and what comes next.
+5. [Design seeds](design-seeds.md): the fine points, and the plan or spec that absorbed each one.
+6. For any area being specified or built: its specification in `spec/`, and its second-level plan for the reasoning behind it.
+7. For anything that touches the game: [runtime requirements](runtime-requirements.md).
+
+Then read the private coordination board, `local/coordination.md`: this vertical's row and notes, the agreements, and the claimed namespaces.
+
+Standing rules that are easy to lose:
+- Never read the live DM's story folder.
+- No story content in messages, board entries or commit messages.
+- Research agents run a few at a time, with each one's burn logged.
+- Doc-only checkpoints land under Agreement 4.
+- Repository documents never name the maintainer.
+
 ## What it is
 
 The Story Engine generates gigs, quests and encounters that don't feel generated, at every scale from a passing moment on the street to a multi-part heist. It sits on top of a world simulated at different levels of detail. At the coarsest level there are only facts about the whole city. At the finest, the simulation knows what's written on the bag beside V and what the person next to her is worried about.
@@ -44,9 +65,12 @@ Work happens on the `claude/story-engine` branch in a worktree under `%USERPROFI
 
 | Document | What it holds |
 |---|---|
+| [Decisions](decisions.md) | Every settled decision, with its source |
 | [Foundation](foundation.md) | The anchoring theory: the dimensional model every design maps onto, and the compromise ledger |
 | [First-level plan](plan.md) | Quality bar, subsystems, workstreams, milestones and the second-level plans |
 | [P1. Research method](p1-research-method.md) | How the craft research finds every relevant discipline and merges it into the composite |
+| [P2. Game substrate research](p2-game-substrate.md) | What the engine must learn about the game itself, and how |
+| [S0. Kernel specification](spec/kernel.md) | Exactly how the dimensional model works: data, algorithms, invariants, test vectors |
 | [Design seeds](design-seeds.md) | Fine-grained design points, each waiting for the plan that will absorb it |
 | [Runtime requirements](runtime-requirements.md) | The senses and verbs the system needs in game, and their status |
 
