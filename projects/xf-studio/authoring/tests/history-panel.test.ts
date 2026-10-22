@@ -43,10 +43,10 @@ test("history wording: summary, announcements and Undo/Redo titles that name the
   expect(jumpAnnouncement(rows[1])).toBe("Went back to: Colour");
   expect(jumpAnnouncement(rows[3])).toBe("Redid up to: Opacity");
   const redo = shortcutLabel("shell.redo"), undo = shortcutLabel("shell.undo");
-  // Each title also says what the header's Undo covers: the makeup, not the Character panel's changes (UI-81).
+  // Each title also says what the header's Undo covers: with nothing named, what was last edited (profiles design §3.7).
   expect(historyCommandTitle("redo", { available: true }, "Move point", redo)).toBe(`Redo: Move point (${redo})\n${HISTORY_SCOPE}`);
   expect(historyCommandTitle("undo", { available: true }, "Opacity", undo)).toBe(`Undo: Opacity (${undo})\n${HISTORY_SCOPE}`);
-  expect(HISTORY_SCOPE).toContain("Character panel");
+  expect(HISTORY_SCOPE).toBe("Undo follows what you last edited: a preset, a V, or the view and lighting.");
   expect(historyCommandTitle("undo", { available: true }, "Hair length", undo, "Hair Lab")).toBe(`Undo: Hair length (${undo})\nChanges to Hair Lab.`);
   // Unavailable commands still show their shortcut, so Redo is discoverable before it can be used.
   expect(historyCommandTitle("redo", { available: false, reason: "There is no undone change to redo." }, undefined, redo))

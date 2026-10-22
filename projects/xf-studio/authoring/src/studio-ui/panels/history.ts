@@ -22,7 +22,7 @@ export function historyPanel(rt: StudioRuntime): PanelController {
   const redo = button({ label: "Redo", icon: "redo", small: true, variant: "quiet", onClick: () => { rt.dispatch({ kind: "history.redo" }); } });
   const trimmed = h("p", { class: "note info history-trimmed" }, icon("info"),
     h("span", { text: `${HISTORY_TRIMMED_NOTE}: only the latest are kept.` }));
-  const list = h("ol", { class: "history-list", "aria-label": "Changes to this preset, oldest first" });
+  const list = h("ol", { class: "history-list", "aria-label": "Changes, oldest first" });
   // The heading already says "No changes yet" or "No preset", so the empty states say what comes next instead of repeating it.
   const empty = emptyState("Your edits appear here", "Oldest first. Click any step to go back to it.");
   const noPreset = emptyState("Select a preset", "History belongs to a preset: select or add one to see its changes.");
@@ -68,7 +68,7 @@ export function historyPanel(rt: StudioRuntime): PanelController {
       // The editing context the panel shows (profiles design §3.7), by name.
       const context = timeline.documentLabel ?? port.focus.editing()?.name;
       const hasPreset = !!context || !draft || !!draft.selected;
-      setAttr(list, "aria-label", `Changes to ${context ?? "this preset"}, oldest first`);
+      setAttr(list, "aria-label", context ? `Changes to ${context}, oldest first` : "Changes, oldest first");
       const undoCap = port.authoring.capability({ kind: "history.undo" }), redoCap = port.authoring.capability({ kind: "history.redo" });
       const labels = port.authoring.history();
       // The main-action pattern (UI-84), as the header's Undo and Redo: unavailable, each stays focusable and says why.

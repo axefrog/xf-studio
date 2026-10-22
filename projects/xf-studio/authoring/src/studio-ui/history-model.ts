@@ -18,8 +18,8 @@ export type HistoryRow = {
 };
 
 export const HISTORY_TRIMMED_NOTE = "Older steps were not kept";
-/** What the header's Undo, Redo and History cover (UI-81): the look, not the character it is shown on. */
-export const HISTORY_SCOPE = "Covers your makeup and presets. Changes in the Character panel have their own Undo there.";
+/** What the header's Undo, Redo and History cover when nothing names the editing context (profiles design §3.7): what was last edited. */
+export const HISTORY_SCOPE = "Undo follows what you last edited: a preset, a V, or the view and lighting.";
 
 export function historyRows(timeline: HistorySnapshot, formatTime: (at: number) => string = defaultTime): HistoryRow[] {
   const atStart = timeline.current < 0;

@@ -246,7 +246,7 @@ export function components() {
       when: "Opened from the status bar message or the Panels menu; closed by default." }),
     pattern({ id: "c-history", title: "History timeline", status: "implemented",
       specimen: `<div style="max-width:360px" class="stack-s"><p class="note info history-trimmed">${i("info")}<span>Older steps were not kept. Only the latest changes are kept for each preset.</span></p>
-        <ol class="history-list" aria-label="Changes to this preset, oldest first">${([["start", "Oldest kept version", ""], ["done", "Colour", "14:01"], ["done", "Move point", "14:02"],
+        <ol class="history-list" aria-label="Changes, oldest first">${([["start", "Oldest kept version", ""], ["done", "Colour", "14:01"], ["done", "Move point", "14:02"],
           ["current", "Opacity", "14:02"], ["undone", "Rename layer", "14:03"], ["undone", "Mirroring", "14:03"]] as const).map(([kind, label, time]) =>
           `<li class="history-row" data-kind="${kind}"><button type="button" class="history-step"${kind === "current" ? ' aria-current="step" tabindex="0"' : ' tabindex="-1"'}><span class="history-marker" aria-hidden="true"></span><span class="history-label">${label}</span><span class="history-state">${kind === "current" ? "Current" : ""}</span><span class="history-time">${time}</span></button></li>`).join("")}</ol></div>`,
       what: "The current preset's changes on one timeline, oldest first, named with the same labels as Undo and Redo. The current step is highlighted with a yellow marker and “Current”; steps after it are undone and dimmed with hollow markers. The first row is the oldest kept version.",

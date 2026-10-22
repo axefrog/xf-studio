@@ -128,7 +128,7 @@ Each row gives the tier (§ intro), where the text sits, the current text (abrid
 | Crumbs | collection › preset, "Loading…" / "No preset" | K | Keep |
 | Library chip | "Unsaved changes" + long tooltip | K | Keep the label; the tooltip follows the shortened Library line (§3.9) |
 | Verification flag | "Verification workspace" | K | Keep |
-| Undo / Redo tooltips | "Undo: {step} (Ctrl+Z)\nCovers your makeup and presets. Changes in the Character panel have their own Undo there." | K | Keep (a tooltip, two lines) |
+| Undo / Redo tooltips | "Undo: {step} (Ctrl+Z)\nChanges to {what was last edited}." (when nothing names it: "Undo follows what you last edited: a preset, a V, or the view and lighting.") | K | Keep (a tooltip, two lines) |
 | Save / Package / Commands | labels and tooltips | K | Keep |
 | Settings tooltip | "Settings: your game and mod manager, saves folder, WolvenKit and appearance" | S | "Settings: game, mod manager, saves, tools and appearance" |
 | View preferences menu hints | "Corner strip and target tooltips that follow the pointer and held keys" | S | One wording for input hints everywhere: "Hints in the 3D view and UV map that follow the pointer and the keys you hold" |
