@@ -42,7 +42,7 @@ describe("bridge 0.5.3 Demo A: the ink HUD panel (ui.hud)", () => {
 
   test("the panel shows by default, top left (0.8), with the bridge's state; ui.message lines reach its frame", async () => {
     const start = await frame(api);
-    expect(start).toMatchObject({ show: true, anchor: "top_left", x: 40, y: 360, layer: "hud", nameplates: true, cet_label: true, live: true, tone: "write" });
+    expect(start).toMatchObject({ show: true, anchor: "top_left", x: 40, y: 360, layer: "photo_menu", nameplates: true, cet_label: true, live: true, tone: "write" });
     expect(start.status).toMatch(/changes allowed/);
     const posted = await api.run("ui.message", { text: "Press the photo-mode key", level: "ask", seconds: 30 });
     expect(posted.ok, JSON.stringify(posted)).toBe(true);
@@ -73,7 +73,7 @@ describe("bridge 0.5.3 Demo A: the ink HUD panel (ui.hud)", () => {
     expect(await frame(api)).toMatchObject({ layer: "top", nameplates: false });
     const reset = await api.run("ui.hud", { reset: true });
     expect(reset.ok, JSON.stringify(reset)).toBe(true);
-    expect(await frame(api)).toMatchObject({ layer: "hud", nameplates: true });
+    expect(await frame(api)).toMatchObject({ layer: "photo_menu", nameplates: true });
     const badAnchor = await api.run("ui.hud", { anchor: "middle" });
     expect(!badAnchor.ok && badAnchor.error.code).toBe("bad_input");
     const bad = await api.callBridge("ui.hud", { scale: 9 }, "t-bad");

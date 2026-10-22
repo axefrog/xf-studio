@@ -834,11 +834,15 @@ protected cb func OnShow(reversedUI: Bool) -> Bool {
     registry.SetPhotoUiHidden(false);
     registry.SetCursorHidden(false);
   }
+  // 0.8.6: the ink panel inside photo mode's menu (XFRuntimeBridgePhotoPanel.reds), after the game's own OnShow.
+  this.XFBridgePhotoPanelShow();
   return result;
 }
 
 @wrapMethod(gameuiPhotoModeMenuController)
 protected cb func OnHide() -> Bool {
+  // 0.8.6: the photo-menu panel gives back the camera's mouse and any ModalPopup it pushed before photo mode closes.
+  this.XFBridgePhotoPanelHide();
   let registry = XFBridgeRegistry.Get();
   if IsDefined(registry) {
     // Give the cursor back before photo mode closes, so no later menu inherits a hidden cursor.

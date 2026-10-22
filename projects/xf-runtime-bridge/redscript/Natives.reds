@@ -45,3 +45,8 @@ public static native func XFBridge_InkDrawn(id: Int32, shown: Bool) -> Bool
 // 0.8.4: the kill key chosen in the XF Runtime Bridge window (CET): action get, set (key: a chord such as Ctrl+Shift+End) or
 // reset; answers JSON with the key and what else may react to it. Saved to config.ini's [ui] kill_key.
 public static native func XFBridge_KillKey(action: String, key: String) -> String
+// Bridge 0.8.6: the panel inside photo mode's menu (XFRuntimeBridgePhotoPanel.reds). An event into the session's stream
+// (kind ink_tree, ink_pointer or ink_input; data a JSON object as text); and whether a mouse button is held now (its hover
+// guard: no hover is taken from photo mode's camera mid-drag).
+public static native func XFBridge_InkEvent(kind: String, text: String, data: String) -> Bool
+public static native func XFBridge_MouseHeld() -> Bool

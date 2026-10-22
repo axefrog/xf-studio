@@ -77,7 +77,7 @@ local state = {
   commentReload = nil, -- 0.8.4: rewrapped text for the box being edited, handed over in one read-only frame
   killKeyCapture = false, -- 0.8.4: Change... is waiting for the new stop key
   killKeyChanged = false, -- 0.8.4: the key was changed in this window (its notes then show)
-  killKeySaved = nil,     -- 0.8.5: what the last change did (saved, and where the old config.ini is kept), shown on the Keys line
+  killKeySaved = nil,     -- 0.8.5: what the last change did, shown on the Keys line (0.8.6: in the prompt's reserved line)
   cetLabel = true, -- bridge 0.5.3: [ui] cet_label / ui.hud's cet_label (read from XFBridge_Hud's frame)
   surface = "cet_line", -- 0.8.2: the status surface the plugin chose (0.8.3: ink_panel, xf_box, cet_line, none)
   overlayOpen = false,
@@ -277,6 +277,24 @@ local function decodeAnswer(ok, text)
   return nil
 end
 
+-- 0.8.6 (the UI review's P4: the window put the plugin's reason inside its own sentence, one of them naming the kill switch and
+-- giving two conflicting steps): a refused or failed Reconnect in plain words with one next step, by the plugin's code
+-- (XFBridge_Rearm's answer and last_rearm); the plugin's own reason goes only to the log. "Restart the game" only for a real
+-- failure.
+local REARM_AGAIN = "The bridge is still putting things back. Press Reconnect again in a moment."
+local REARM_FAILED = "The bridge couldn't start again. Restart the game to start it."
+local REARM_COPY = {
+  still_closing = REARM_AGAIN,
+  restore_pending = REARM_AGAIN,
+  already_running = "The bridge is already running.",
+  not_stopped = "The bridge is already running.",
+  off = "The bridge is switched off in its settings, so there is nothing to reconnect.",
+}
+
+local function rearmCopy(code)
+  return REARM_COPY[code] or REARM_FAILED
+end
+
 local function runAction(action)
   local cid = nextCid()
   if action.name == "rearm" then
@@ -287,10 +305,9 @@ local function runAction(action)
       state.messageOk = true
       log("warn", cid, "panel: reconnect requested")
     else
-      state.message = answer and answer.reason and ("The bridge couldn't start again: " .. tostring(answer.reason) .. ". Restart the game to start it.")
-        or "The bridge didn't answer. Restart the game to start it again."
+      state.message = answer and rearmCopy(answer.code) or "The bridge didn't answer. Restart the game to start it again."
       state.messageOk = false
-      log("warn", cid, "panel: reconnect refused: " .. tostring(answer and answer.reason))
+      log("warn", cid, "panel: reconnect refused: code=" .. tostring(answer and answer.code) .. " " .. tostring(answer and answer.reason))
     end
   elseif action.name == "pause" then
     local answer = decodeAnswer(callNative("XFBridge_PauseWrites", action.argument == true))
@@ -342,8 +359,8 @@ local function runAction(action)
   elseif action.name == "killkey" then
     -- 0.8.4: the stop key chosen in this window (Change... or Reset), saved by the plugin to config.ini's [ui] kill_key.
     -- 0.8.5 (session 12's K3: answering a question cleared the general message line, so "saved" was never seen): the outcome
-    -- stays on the Keys line (killKeySaved), with where the old config.ini is kept (the bridge's runtime folder, not beside
-    -- config.ini, where MO2 put new files into its shared overwrite folder).
+    -- stays on the Keys line (killKeySaved). 0.8.6 (the UI review's P1 and P2): without the backup's folder (the README and
+    -- config.ini's comment name it; the player can't act on a path), in the prompt's reserved line; a refusal replaces it there.
     local arg = action.argument or {}
     local answer = decodeAnswer(callNative("XFBridge_KillKey", arg.action or "get", arg.key or ""))
     if answer and answer.ok then
@@ -352,12 +369,13 @@ local function runAction(action)
       state.killKeyRefused = nil
       if answer.saved then
         state.killKeySaved = "The stop key is now " .. tostring(label) .. ", saved for next time."
-          .. (type(answer.backup_folder) == "string" and (" The old config.ini is kept in " .. answer.backup_folder .. ".") or "")
       else
-        state.killKeySaved = "The stop key is now " .. tostring(label) .. " until the game closes: " .. tostring(answer.save_error)
+        state.killKeySaved = "The stop key is now " .. tostring(label) .. " until the game closes; it couldn't be saved for next time."
+        log("warn", cid, "panel: stop key not saved: " .. tostring(answer.save_error))
       end
     elseif answer and answer.why then
       state.killKeyRefused = tostring(answer.why)
+      state.killKeySaved = nil
     else
       state.message = "The bridge didn't answer. Restart the game to start it again."
       state.messageOk = false
@@ -386,9 +404,10 @@ local function followPending()
     state.message = "Reconnected. XF tools connect again by themselves."
     state.messageOk = true
   else
-    state.message = (type(outcome) == "table" and outcome.message) and ("The bridge couldn't start again: " .. tostring(outcome.message) .. ". Restart the game to start it.")
-      or "The bridge didn't answer. Restart the game to start it again."
+    state.message = type(outcome) == "table" and rearmCopy(outcome.code) or "The bridge didn't answer. Restart the game to start it again."
     state.messageOk = false
+    log("warn", "-", "panel: reconnect failed: code=" .. tostring(type(outcome) == "table" and outcome.code or nil) .. " "
+      .. tostring(type(outcome) == "table" and outcome.message or nil))
   end
 end
 
@@ -463,21 +482,22 @@ local function keyLabel(key)
   return (string.gsub(tostring(key), "^IK_", ""))
 end
 
--- 0.8: "Answer: F6 Fully visible · F7 Partly cut off, or in the XF Runtime Bridge window." The keys answer whenever the ink
--- panel has the question, even while the game hides the HUD.
+-- 0.8.6 (the UI review's fix 6: one notation wherever a key is pressed, the game's own prompt style):
+-- "[F6] Fully visible · [F7] Partly cut off, or click an answer in the XF Runtime Bridge window." The keys answer whenever
+-- the ink panel has the question, even while the game hides the HUD.
 local function answerHint(ask)
   local keys = state.info and state.info.answer_keys or {}
   if state.keysArmed == false then keys = {} end -- 0.8.2: no key answers it now (the ink panel is off, or no Codeware)
   local parts = {}
   for i, label in ipairs(ask.choices or {}) do
     if keys[i] then
-      table.insert(parts, keyLabel(keys[i]) .. " " .. tostring(label))
+      table.insert(parts, "[" .. keyLabel(keys[i]) .. "] " .. tostring(label))
     end
   end
   if #parts == 0 then
-    return "Answer in the XF Runtime Bridge window (CET overlay)."
+    return "Click an answer in the XF Runtime Bridge window (CET overlay)."
   end
-  return "Answer: " .. table.concat(parts, MIDDLE_DOT) .. ", or in the XF Runtime Bridge window."
+  return table.concat(parts, MIDDLE_DOT) .. ", or click an answer in the XF Runtime Bridge window."
 end
 
 local function themeColour(which, token, fallback)
@@ -490,6 +510,31 @@ local function colouredWrapped(colour, text)
   ImGui.PopStyleColor(1)
 end
 
+-- 0.8.6 (the UI review's P5: the status words sat 66 px in against 26 px on the right): the status dot hangs in the window's
+-- left padding. A bullet one font size wide with no frame padding (its dot centred half a font size in, a fifth of one in
+-- radius) is placed a font size left of where the text starts, with the clip widened to the window so the padding doesn't
+-- cut it, and the words then start at the padding, as the right side ends there. Answers false, drawing nothing, where the
+-- padding is narrower than a font size or this CET lacks the calls.
+local function statusDot(tone, startX)
+  local font = ImGui.GetFontSize()
+  if not (startX >= font) or type(ImGui.PushClipRect) ~= "function" or type(ImGui.GetWindowPos) ~= "function"
+    or type(ImGui.GetWindowSize) ~= "function" or type(ImGui.SetCursorPosX) ~= "function" then
+    return false
+  end
+  local wx, wy = ImGui.GetWindowPos()
+  local ww, wh = ImGui.GetWindowSize()
+  ImGui.PushClipRect(wx, wy, wx + (ww or 0), wy + (wh or 0), false)
+  ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, 0, 0)
+  ImGui.PushStyleColor(ImGuiCol.Text, tone[1], tone[2], tone[3], tone[4])
+  ImGui.SetCursorPosX(startX - font)
+  ImGui.Bullet()
+  ImGui.PopStyleColor(1)
+  ImGui.PopStyleVar(1)
+  ImGui.PopClipRect()
+  ImGui.SameLine(0, 0)
+  return true
+end
+
 -- The CET line (0.8, the UI review): themed like the XF Runtime Bridge window; the status line (a bullet in its tone, the words
 -- muted); then, while the ink panel shows the question, only how to answer it; otherwise the messages, the question in the
 -- text colour, and how to answer it.
@@ -498,14 +543,18 @@ local function drawLabelBody(which)
   local muted = themeColour(which, "XfTextMuted", MUTED)
   local tone = themeColour(which, TONE_TOKENS[status.tone] or "TextDisabled", TONE_COLORS[status.tone] or TONE_COLORS.off)
   ImGui.PushTextWrapPos(MESSAGE_WRAP_PX)
-  -- 0.8.5 (the UI review's fix 9: the status words sat indented past the next line): a hanging indent, so every line under the
-  -- dot starts where the status words do.
+  -- 0.8.5 (the UI review's fix 9: the status words sat indented past the next line): every line under the dot starts where the
+  -- status words do. 0.8.6 (P5): the dot in the left padding (statusDot), so they start at the padding; only where it doesn't
+  -- fit there does the text hang past the dot, as in 0.8.5.
   local startX = ImGui.GetCursorPosX()
-  ImGui.PushStyleColor(ImGuiCol.Text, tone[1], tone[2], tone[3], tone[4])
-  ImGui.Bullet()
-  ImGui.PopStyleColor(1)
-  ImGui.SameLine()
-  local hang = ImGui.GetCursorPosX() - startX
+  local hang = 0
+  if not statusDot(tone, startX) then
+    ImGui.PushStyleColor(ImGuiCol.Text, tone[1], tone[2], tone[3], tone[4])
+    ImGui.Bullet()
+    ImGui.PopStyleColor(1)
+    ImGui.SameLine()
+    hang = ImGui.GetCursorPosX() - startX
+  end
   colouredWrapped(muted, status.label)
   if hang > 0 then ImGui.Indent(hang) end
   local ask = state.pendingAsk
@@ -592,7 +641,7 @@ registerForEvent("onDraw", function()
 end)
 
 return {
-  version = "0.8.5",
+  version = "0.8.6",
   -- For other CET mods: GetMod("XF_Runtime_Bridge").info()
   info = function() return state.info end,
 }

@@ -13,6 +13,8 @@
 
 #include <RED4ext/RED4ext.hpp>
 
+#include <Windows.h>
+
 #include <chrono>
 
 #include "core/Writes.hpp"
@@ -216,17 +218,21 @@ void Rearm(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::CString
 
     Guarded("XFBridge_Rearm", [&] {
         auto& state = Get();
+        // 0.8.6 (the UI review's P4): code for the window's plain copy; reason stays the log's detail.
         json answer{{"requested", false}};
         if (!state.config.bridgeEnabled)
         {
+            answer["code"] = "off";
             answer["reason"] = "the bridge is off in config.ini ([bridge] enabled = false), so there is nothing to reconnect";
         }
         else if (!state.bridge)
         {
+            answer["code"] = "not_started";
             answer["reason"] = "the bridge didn't start this session (see the plugin log); restart the game";
         }
         else if (!state.bridge->GetDispatcher().IsKilled())
         {
+            answer["code"] = "already_running";
             answer["reason"] = "the bridge is already running";
         }
         else
@@ -569,6 +575,63 @@ void KillKeyNative(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext:
     });
 }
 
+// XFBridge_InkEvent(kind: String, text: String, data: String) -> Bool   (0.8.6: the photo-menu panel's events into the
+// session's event stream: ink_tree, ink_pointer and ink_input only; data is a JSON object as text, core/InkUi.hpp
+// InkEventData). Bookkeeping only; works while the bridge is stopped too, like XFBridge_Note (the stop's own release is one).
+void InkEvent(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut, int64_t)
+{
+    RED4ext::CString kind;
+    RED4ext::CString text;
+    RED4ext::CString data;
+    RED4ext::GetParameter(aFrame, &kind);
+    RED4ext::GetParameter(aFrame, &text);
+    RED4ext::GetParameter(aFrame, &data);
+    aFrame->code++; // skip ParamEnd
+
+    if (aOut)
+    {
+        *aOut = false;
+    }
+    Guarded("XFBridge_InkEvent", [&] {
+        const auto what = ToStd(kind);
+        if (!inkui::InkEventKindOk(what))
+        {
+            log::Warn("ink.event_refused", "kind=" + Sanitize(what, 32));
+            return;
+        }
+        const auto body = Sanitize(ToStd(text), 300);
+        const auto raw = ToStd(data);
+        Get().events.Push(what, "info", "game", body, inkui::InkEventData(raw.substr(0, 8192)));
+        log::Debug("ink.event", "kind=" + what + " text=" + body);
+        if (aOut)
+        {
+            *aOut = true;
+        }
+    });
+}
+
+// XFBridge_MouseHeld() -> Bool   (0.8.6: whether a mouse button is down now, while the game's window is in front: the
+// photo-menu panel takes no hover from photo mode's camera while one is, so a drag that crosses the panel keeps turning the
+// camera; §15.2's guard, read from the system as Advanced Pose Mod's plugin does, since script sees no button state).
+void MouseHeld(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut, int64_t)
+{
+    aFrame->code++; // skip ParamEnd
+    Guarded("XFBridge_MouseHeld", [&] {
+        bool held = false;
+        const auto window = GetForegroundWindow();
+        DWORD pid = 0;
+        if (window && GetWindowThreadProcessId(window, &pid) != 0 && pid == GetCurrentProcessId())
+        {
+            held = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0 || (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0 ||
+                   (GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0;
+        }
+        if (aOut)
+        {
+            *aOut = held;
+        }
+    });
+}
+
 void RegisterGlobal(RED4ext::CRTTISystem* aRtti, const char* aName, auto aFunction, const char* aReturnType,
                     std::initializer_list<const char*> aStringParams, const char* aParamType = "String")
 {
@@ -637,7 +700,10 @@ void PostRegisterTypes()
         RegisterGlobalTyped(rtti, "XFBridge_InkDrawn", &InkDrawn, "Bool", {{"Int32", "id"}, {"Bool", "shown"}});
         // 0.8.4: the kill key chosen in the XF Runtime Bridge window.
         RegisterGlobal(rtti, "XFBridge_KillKey", &KillKeyNative, "String", {"action", "key"});
-        log::Info("rtti.register_types", "phase=post_register natives=20");
+        // 0.8.6: the photo-menu panel's events, and whether a mouse button is held (its hover guard).
+        RegisterGlobal(rtti, "XFBridge_InkEvent", &InkEvent, "Bool", {"kind", "text", "data"});
+        RegisterGlobal(rtti, "XFBridge_MouseHeld", &MouseHeld, "Bool", {});
+        log::Info("rtti.register_types", "phase=post_register natives=22");
     }
     catch (const std::exception& e)
     {

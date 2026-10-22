@@ -4354,7 +4354,7 @@ void Session9Tests()
         const auto unarmed = k::ParseFrame(k::BuildFrame(k::HudSettings{}, view, board, {"IK_F6", "IK_F7"}, 0, k::StatusSurface::XfBox, 0));
         Check("0.8.2 (review 5) the frame says whether the keys answer the question, and the XF box's line follows it",
               armed.value("keys", std::string()) == "1" && unarmed.value("keys", std::string()) == "0" &&
-                  k::AnswerHint({"Yes", "No"}, {"IK_F6", "IK_F7"}, true) == "F6 Yes   F7 No" &&
+                  k::AnswerHint({"Yes", "No"}, {"IK_F6", "IK_F7"}, true) == "[F6] Yes   [F7] No" &&
                   k::AnswerHint({"Yes", "No"}, {"IK_F6", "IK_F7"}, false) == "Answer in the XF Runtime Bridge window (CET overlay).",
               armed.dump());
         // Connection status follows the session (session 9): a request a moment ago counts as connected.
@@ -4957,6 +4957,55 @@ void StressClient(const std::wstring& aPipe, const std::string& aToken, int aWhi
 }
 } // namespace
 
+// Bridge 0.8.6: the ink panel inside photo mode's menu (ui.hud's photo_menu layer and modal, the frame's modal record, the
+// ink layer's events), [ui] layer, and the UI review's fix 6 (one key notation: "[F6] Done" wherever a key is pressed).
+void Bridge086Tests()
+{
+    namespace k = xfb::inkui;
+    k::HudPanel panel;
+    panel.SetDefaults(k::HudSettings{});
+    Check("0.8.6 the panel's default layer is photo_menu (the HUD in play, photo mode's menu while it is open), modal off",
+          panel.Current().layer == "photo_menu" && !panel.Current().modal && k::LayerIsHud("photo_menu") && k::LayerIsHud("hud") &&
+              !k::LayerIsHud("top") && k::LayerOk("photo_menu"));
+    const auto modal = panel.Configure(json{{"modal", true}, {"layer", "photo_menu"}});
+    Check("0.8.6 ui.hud takes modal; its undo turns it off again",
+          modal["changed"] == true && modal["settings"]["modal"] == true && modal["undo"]["params"]["modal"] == false, modal.dump());
+    Check("0.8.6 ui.hud refuses a modal that isn't true or false, and an unknown layer names photo_menu",
+          ParamsCode([&] { panel.Configure(json{{"modal", "on"}}); }) == "bad_params" &&
+              ParamsCode([&] { panel.Configure(json{{"layer", "photo"}}); }) == "bad_params");
+    k::BridgeView view;
+    view.pluginEnabled = true;
+    view.listening = true;
+    view.scriptReady = true;
+    xfb::MessageBoard board;
+    const auto on = k::ParseFrame(k::BuildFrame(panel.Current(), view, board, {"IK_F6"}, 0));
+    view.killed = true;
+    const auto stopped = k::ParseFrame(k::BuildFrame(panel.Current(), view, board, {"IK_F6"}, 0));
+    view.killed = false;
+    Check("0.8.6 the frame carries modal while it is on, never while the bridge is stopped, and its layer",
+          on.value("modal", false) == true && stopped.value("modal", true) == false && on.value("layer", std::string()) == "photo_menu",
+          on.dump() + " " + stopped.dump());
+    panel.DropModal();
+    Check("0.8.6 the kill switch drops modal (DropModal), keeping every other setting",
+          !panel.Current().modal && panel.Current().layer == "photo_menu" && panel.Current().show);
+    Check("0.8.6 (fix 6) a pressed key reads [F6] Done on the XF box and the CET line, as on the ink panel",
+          k::KeyPrompt("IK_F6", "Done") == "[F6] Done" && k::KeyPrompt("F11", "Not yet") == "[F11] Not yet" &&
+              k::AnswerHint({"Done", "Not yet"}, {"IK_F6", "IK_F7"}, true) == "[F6] Done   [F7] Not yet");
+    const auto data = k::InkEventData(R"({"created":true,"children":[{"name":"options_panel"}]})");
+    const auto raw = k::InkEventData("not json");
+    Check("0.8.6 the ink events: ink_tree, ink_pointer and ink_input only; data a JSON object, else its first characters as raw",
+          k::InkEventKindOk("ink_tree") && k::InkEventKindOk("ink_pointer") && k::InkEventKindOk("ink_input") &&
+              !k::InkEventKindOk("write") && !k::InkEventKindOk("kill") && !k::InkEventKindOk("") && data["created"] == true &&
+              data["children"][0]["name"] == "options_panel" && raw["raw"] == "not json" && k::InkEventData("").is_null(),
+          data.dump() + " " + raw.dump());
+    const auto config = xfb::ParseConfig("");
+    const auto hud = xfb::ParseConfig("[ui]\nlayer = hud\n");
+    const auto bad = xfb::ParseConfig("[ui]\nlayer = photo\n");
+    Check("0.8.6 [ui] layer: photo_menu by default, hud (the XF box in photo mode) by choice, an unknown one warned and the default kept",
+          config.hudLayer == "photo_menu" && hud.hudLayer == "hud" && hud.warnings.empty() && bad.hudLayer == "photo_menu" &&
+              bad.warnings.size() == 1);
+}
+
 int RunPipeStress(int aRounds)
 {
     wchar_t temp[MAX_PATH]{};
@@ -5078,6 +5127,7 @@ int RunUnitTests()
     Bridge082Tests();
     Session9Tests();
     Bridge083Tests();
+    Bridge086Tests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;
 }

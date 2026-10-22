@@ -388,25 +388,40 @@ end
 -- N3): "Keys" is a heading line, like "Comment for XF Studio", with the Stop key row under it (room for the answer keys
 -- later); the row wraps by the answer buttons' rule, so Reset appearing never widens the window; the key is a keycap (its
 -- text in the text colour inside a frame, not a disabled button); the capture prompt has its own line under the row, whose
--- height is always kept, so nothing moves when it appears; the notes are in the muted text colour.
+-- height is always kept, so nothing moves when it appears; the notes are in the muted text colour. 0.8.6 (the UI review's
+-- P2 and P3): that line holds the latest outcome when no key is being taken, and a click on the keycap starts Change... too.
 local CAPTURE_PROMPT = "Press the new key, with Ctrl, Shift or Alt if you like. Esc cancels."
 
--- The key as a keycap: a framed readout in the text colour. Drawn as a button whose fill, hover and press are all the sunken
--- field colour, so it never looks pressable or unavailable; clicks on it do nothing.
+-- The key as a keycap: a framed readout in the text colour (0.8.5). 0.8.6 (the UI review's P3: it looked more like a button
+-- than Change... did, so people would click it): a click on it starts Change... too, turning the misreading into a shortcut,
+-- and it answers the pointer like the window's other buttons (the theme's hover) with a tooltip saying so. Answers whether
+-- it was clicked.
 local function keycap(theme, which, label)
   local fill = panel.colour(theme, which, "FrameBg", { 0.08, 0.09, 0.1, 1.0 })
   local edge = panel.colour(theme, which, "XfLineStrong", GREY)
   local ink = panel.colour(theme, which, "Text", { 0.92, 0.92, 0.92, 1.0 })
   ImGui.PushStyleColor(ImGuiCol.Button, fill[1], fill[2], fill[3], fill[4])
-  ImGui.PushStyleColor(ImGuiCol.ButtonHovered, fill[1], fill[2], fill[3], fill[4])
-  ImGui.PushStyleColor(ImGuiCol.ButtonActive, fill[1], fill[2], fill[3], fill[4])
   ImGui.PushStyleColor(ImGuiCol.Text, ink[1], ink[2], ink[3], ink[4])
   ImGui.PushStyleColor(ImGuiCol.Border, edge[1], edge[2], edge[3], edge[4])
   local bordered = ImGuiStyleVar and ImGuiStyleVar.FrameBorderSize ~= nil
   if bordered then ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1) end
-  ImGui.Button(label .. "##xf_killkey_cap")
+  local clicked = button(label .. "##xf_killkey_cap")
   if bordered then ImGui.PopStyleVar(1) end
-  ImGui.PopStyleColor(5)
+  ImGui.PopStyleColor(3)
+  if ImGui.IsItemHovered() then
+    ImGui.SetTooltip("Click to change the stop key")
+  end
+  return clicked
+end
+
+-- 0.8.6 (the UI review's P2: the reserved prompt line was an empty band after a change): the line under the Stop key row holds
+-- the prompt while a key is being taken, else the latest outcome (a refusal, or the saved line), else nothing; its height is
+-- the tallest of the three, so nothing below it moves when one replaces another.
+function panel.keySlot(state)
+  if state.killKeyCapture then return "prompt", CAPTURE_PROMPT end
+  if state.killKeyRefused then return "refused", tostring(state.killKeyRefused) end
+  if state.killKeyChanged and state.killKeySaved then return "saved", tostring(state.killKeySaved) end
+  return nil, nil
 end
 
 local function mutedWrapped(theme, which, text)
@@ -427,15 +442,18 @@ drawKillKey = function(state, queue, theme, which, killKey)
   place(row, (ImGui.CalcTextSize("Stop key")), gap)
   coloured(panel.colour(theme, which, "XfTextMuted", GREY), "Stop key")
   place(row, (ImGui.CalcTextSize(capLabel)) + pad * 2, gap)
-  keycap(theme, which, capLabel)
+  local startChange = keycap(theme, which, capLabel)
   -- While a key is being taken, the row keeps its buttons (Change... disabled), so nothing in it moves either.
   place(row, (ImGui.CalcTextSize("Change...")) + pad * 2, gap)
   ImGui.BeginDisabled(state.killKeyCapture == true)
-  if button("Change...##xf_killkey_change") and not state.killKeyCapture then
+  if button("Change...##xf_killkey_change") then
+    startChange = true
+  end
+  ImGui.EndDisabled()
+  if startChange and not state.killKeyCapture then
     state.killKeyCapture = true
     state.killKeyRefused = nil
   end
-  ImGui.EndDisabled()
   if killKey.is_default == false then
     local reset = "Reset to " .. tostring(killKey.default)
     place(row, (ImGui.CalcTextSize(reset)) + pad * 2, gap)
@@ -445,15 +463,31 @@ drawKillKey = function(state, queue, theme, which, killKey)
     end
     ImGui.EndDisabled()
   end
-  -- The capture prompt's own line, its height kept while it is empty.
+  -- The reserved line under the row (0.8.6, P2): the prompt while a key is being taken, else the latest outcome; its height
+  -- is the tallest of the prompt and the outcome kept now, so nothing below moves when one takes the other's place.
   local limit = ImGui.GetFontSize() * WRAP_EM
-  local _, promptHeight = ImGui.CalcTextSize(CAPTURE_PROMPT, false, limit)
-  if type(promptHeight) ~= "number" or promptHeight <= 0 then promptHeight = ImGui.GetFontSize() end
-  if state.killKeyCapture then
+  local function wrappedHeight(text)
+    local _, h = ImGui.CalcTextSize(text, false, limit)
+    return (type(h) == "number" and h > 0) and h or ImGui.GetFontSize()
+  end
+  local slotHeight = wrappedHeight(CAPTURE_PROMPT)
+  local kept = state.killKeyRefused or (state.killKeyChanged and state.killKeySaved) or nil
+  if kept then slotHeight = math.max(slotHeight, wrappedHeight(tostring(kept))) end
+  local kind, text = panel.keySlot(state)
+  if kind then
+    local colour = kind == "prompt" and panel.colour(theme, which, "XfAccentText", AMBER)
+      or kind == "refused" and RED or panel.colour(theme, which, "XfTextMuted", GREY)
     ImGui.PushTextWrapPos(limit)
-    local accent = panel.colour(theme, which, "XfAccentText", AMBER)
-    ImGui.TextColored(accent[1], accent[2], accent[3], accent[4], CAPTURE_PROMPT)
+    ImGui.TextColored(colour[1], colour[2], colour[3], colour[4], text)
     ImGui.PopTextWrapPos()
+    local short = slotHeight - wrappedHeight(text)
+    if short > 0.5 then
+      ImGui.SetCursorPosY(ImGui.GetCursorPosY() + short)
+    end
+  else
+    ImGui.Dummy(1, slotHeight)
+  end
+  if state.killKeyCapture then
     local chord = panel.capturedChord()
     if chord == "cancel" then
       state.killKeyCapture = false
@@ -461,13 +495,6 @@ drawKillKey = function(state, queue, theme, which, killKey)
       state.killKeyCapture = false
       queue("killkey", { action = "set", key = chord })
     end
-  else
-    ImGui.Dummy(1, promptHeight)
-  end
-  if state.killKeyRefused then
-    ImGui.PushTextWrapPos(limit)
-    ImGui.TextColored(RED[1], RED[2], RED[3], RED[4], tostring(state.killKeyRefused))
-    ImGui.PopTextWrapPos()
   end
   for _, warning in ipairs(type(killKey.warnings) == "table" and killKey.warnings or {}) do
     ImGui.PushTextWrapPos(limit)
@@ -475,10 +502,6 @@ drawKillKey = function(state, queue, theme, which, killKey)
     ImGui.PopTextWrapPos()
   end
   if state.killKeyChanged then
-    -- 0.8.5 (session 12's K3: answering a question took the general message line away): the outcome of a change stays here.
-    if state.killKeySaved then
-      mutedWrapped(theme, which, state.killKeySaved)
-    end
     for _, note in ipairs(type(killKey.notes) == "table" and killKey.notes or {}) do
       mutedWrapped(theme, which, note)
     end

@@ -101,7 +101,12 @@ std::string HudFrame()
 {
     // 0.8: made in one place (core BuildFrame), shared with the self-test's selftest.hud.
     auto& state = Get();
-    return inkui::BuildFrame(state.hud.Current(), BridgeViewNow(), state.messages, state.config.answerKeys, state.InkShownAsk(),
+    const auto view = BridgeViewNow();
+    if (view.killed)
+    {
+        state.hud.DropModal(); // 0.8.6: the kill switch ends ui.hud's modal; Reconnect starts without it
+    }
+    return inkui::BuildFrame(state.hud.Current(), view, state.messages, state.config.answerKeys, state.InkShownAsk(),
                              static_cast<inkui::StatusSurface>(state.statusSurface.load()), state.InkKeysAsk());
 }
 

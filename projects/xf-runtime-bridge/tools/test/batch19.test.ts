@@ -74,7 +74,7 @@ describe.skipIf(!existsSync(FENGARI))("0.8.5 the XF Runtime Bridge window (panel
     local THEME = { colors = { XfTextMuted = { dark = { 0.5, 0.5, 0.5, 1 } }, TextDisabled = { dark = { 0.3, 0.3, 0.3, 1 } },
       XfDanger = { dark = { 0.9, 0.4, 0.4, 1 } } }, metrics = {} }
     local function state(extra)
-      local s = { info = { plugin_version = "0.8.5", answer_keys = { "IK_F6", "IK_F7", "IK_F8", "IK_F11" },
+      local s = { info = { plugin_version = "0.8.6", answer_keys = { "IK_F6", "IK_F7", "IK_F8", "IK_F11" },
         bridge = { enabled = true, listening = true, killed = false, allow_writes = true },
         status = { connection = "Connected to XF Studio", connection_tone = "ok" },
         kill_key = { enabled = true, label = "Ctrl + Alt + Page Down", default = "Ctrl + Shift + End", is_default = false, warnings = {},
@@ -99,7 +99,7 @@ describe.skipIf(!existsSync(FENGARI))("0.8.5 the XF Runtime Bridge window (panel
 
   test("N1: the Stop key row never runs past the window's text width, with Reset shown, and the capture prompt's line keeps its height", () => {
     const out = run(`${STUB}
-      local idle = state({})
+      local idle = state({ killKeySaved = false }) -- 0.8.6 (P2): a saved line would fill the reserved line
       draw(idle)
       local widest, keyRowCount = 0, 0
       for i in pairs(keyRows) do widest = math.max(widest, rows[i]); keyRowCount = keyRowCount + 1 end
@@ -172,10 +172,10 @@ describe("0.8.5 copy, the CET line and the question sound", () => {
     expect(native.some((s) => s.includes("for the stop key only matters while V moves"))).toBe(true);
   });
 
-  test("fix 9: the CET line's later lines hang at the status words, not under the dot", () => {
+  test("fix 9: the CET line's later lines hang at the status words, not under the dot (0.8.6: the fallback when the dot does not fit in the padding)", () => {
     const init = read("cet", "xf_runtime_bridge", "init.lua");
     const body = init.slice(init.indexOf("local function drawLabelBody"), init.indexOf("local function drawLabel()"));
-    expect(body).toMatch(/local hang = ImGui\.GetCursorPosX\(\) - startX/);
+    expect(body).toMatch(/hang = ImGui\.GetCursorPosX\(\) - startX/);
     expect(body).toMatch(/ImGui\.Indent\(hang\)/);
     expect(body).toMatch(/ImGui\.Unindent\(hang\)/);
     expect(body.indexOf("ImGui.Indent(hang)")).toBeLessThan(body.indexOf("for _, message in ipairs(state.messages)"));

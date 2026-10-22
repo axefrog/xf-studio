@@ -142,7 +142,7 @@ struct State
     std::atomic<bool> rearmRequested{false};
     std::atomic<uint64_t> rearmRequestedAt{0}; // running tick of the request
     std::mutex rearmMutex;
-    nlohmann::json lastRearm; // {ok, message, at_tick} or null; guarded by rearmMutex
+    nlohmann::json lastRearm; // {ok, code (0.8.6), message, at_tick} or null; guarded by rearmMutex
 };
 
 State& Get();

@@ -44,6 +44,9 @@ struct Config
     // [ui] (bridge 0.5.3, temporary test features): the ink HUD panel (Demo A) shown at start, the CET layer's CET line and
     // message lines, and the showroom's pedestal nameplates (Demo B). ui.hud changes each while the game runs.
     bool hudPanel = true;
+    // 0.8.6: where the ink panel draws ([ui] layer): photo_menu (default: the HUD layer in play, inside photo mode's menu while
+    // photo mode is open), hud (the HUD layer only; the XF box in photo mode), notifications or top (research).
+    std::string hudLayer = "photo_menu";
     bool cetLabel = true;
     bool nameplates = true;
     // 0.7 (session 7, in-game driving): the keys that answer an ask's choices in the ink panel, in order (EInputKey names;

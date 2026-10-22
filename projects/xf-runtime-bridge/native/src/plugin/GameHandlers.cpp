@@ -817,9 +817,20 @@ json UiHud(const MethodContext& aContext)
     auto out = Get().hud.Configure(aContext.params);
     const bool drawn = Get().layers.Has("ink");
     out["panel_attached"] = drawn;
+    // 0.8.6: the panel inside photo mode's menu announces itself as "ink_photo" when photo mode first opens with it.
+    out["photo_menu_attached"] = Get().layers.Has("ink_photo");
     if (!drawn)
     {
         out["note"] = "the ink panel hasn't announced itself yet: it needs Codeware and attaches once V is in the world (the CET label still shows)";
+    }
+    else if (out["settings"].value("layer", "") == "photo_menu" && !Get().layers.Has("ink_photo"))
+    {
+        out["note"] = "the panel moves into photo mode's menu when photo mode opens; until then it is on the HUD layer";
+    }
+    if (out["settings"].value("modal", false))
+    {
+        out["modal_note"] = "modal takes effect only while the panel is inside photo mode's menu (layer photo_menu, photo mode open); "
+                            "session_log kinds ink_input says when it is pushed and popped";
     }
     return out;
 }

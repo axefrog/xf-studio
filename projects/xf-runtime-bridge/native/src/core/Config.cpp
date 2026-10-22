@@ -227,6 +227,14 @@ Config ParseConfig(const std::string& aText)
         {
             ok = ParseBool(value, config.hudPanel);
         }
+        else if (key == "ui.layer")
+        {
+            ok = value == "photo_menu" || value == "hud" || value == "notifications" || value == "top";
+            if (ok)
+            {
+                config.hudLayer = value;
+            }
+        }
         else if (key == "ui.cet_label")
         {
             ok = ParseBool(value, config.cetLabel);
@@ -361,6 +369,7 @@ std::string DescribeConfig(const Config& aConfig)
     text += " bridge.max_requests_per_second=" + std::to_string(aConfig.maxRequestsPerSecond);
     text += " bridge.idle_disconnect_seconds=" + std::to_string(aConfig.idleDisconnectSeconds);
     text += " ui.hud_panel=" + std::string(aConfig.hudPanel ? "true" : "false");
+    text += " ui.layer=" + aConfig.hudLayer;
     text += " ui.cet_label=" + std::string(aConfig.cetLabel ? "true" : "false");
     text += " ui.nameplates=" + std::string(aConfig.nameplates ? "true" : "false");
     std::string keys;

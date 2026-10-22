@@ -348,7 +348,7 @@ export const SCENE_COMMANDS: CommandDef[] = [
     input: obj({
       since: int("Only events after this sequence number (default 0: the oldest kept).", 0),
       limit: int("At most this many events, 1 to 500. Default 100.", 1, 500),
-      kinds: { type: "array", description: "Only these kinds (write, refused, kill, handover, resume, behaviour, note).", items: str("An event kind.", { maxLength: 32 }), maxItems: 16 },
+      kinds: { type: "array", description: "Only these kinds (write, refused, kill, handover, resume, behaviour, note; 0.8.6: ink_tree, ink_pointer, ink_input from the panel inside photo mode's menu).", items: str("An event kind.", { maxLength: 32 }), maxItems: 16 },
     }),
     bridge: { method: "session.events" },
   },

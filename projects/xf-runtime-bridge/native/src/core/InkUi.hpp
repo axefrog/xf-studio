@@ -52,15 +52,25 @@ struct HudSettings
     double x = 40.0;
     double y = 360.0;
     double scale = 1.0;
-    std::string layer = "hud"; // hud (inkHUDLayer, hidden with the game's HUD), notifications, top (research: inkWatermarksLayer)
+    // hud (inkHUDLayer, hidden with the game's HUD), notifications, top (research: inkWatermarksLayer). 0.8.6: photo_menu (the
+    // default, [ui] layer): the HUD layer in play and, while photo mode is open, a layer of the bridge's own under photo mode's
+    // menu (knowledge/photo-mode.md §15.6), so the ink panel stays the status surface there and the XF box is the fallback.
+    std::string layer = "photo_menu";
     bool nameplates = true;    // Demo B
     bool cetLabel = true;      // the CET layer's CET line and message lines ([ui] cet_label)
+    // 0.8.6 (§15's row 9 and 10, a research switch): while the panel is inside photo mode's menu, it pushes one ModalPopup
+    // game context, which holds off photo mode's own keys (camera movement, the screenshot key, hide UI, exit) [community].
+    // Never from config.ini; the kill switch drops it.
+    bool modal = false;
 };
 json ToJson(const HudSettings& aSettings);
 bool AnchorOk(const std::string& aAnchor);
 bool LayerOk(const std::string& aLayer);
 
-// ui.hud: {show, anchor, x, y, scale, layer, nameplates, cet_label, reset}. Every key is optional; none reads the settings
+// The layer ui.hud names, as the overlay mounts it: photo_menu is the HUD layer outside photo mode (0.8.6).
+bool LayerIsHud(const std::string& aLayer);
+
+// ui.hud: {show, anchor, x, y, scale, layer, nameplates, cet_label, modal, reset}. Every key is optional; none reads the settings
 // without changing them. reset: true goes back to aDefaults ([ui] in config.ini), and cannot be combined with values.
 // Throws MethodError bad_params.
 HudSettings ApplyHudParams(const HudSettings& aCurrent, const HudSettings& aDefaults, const json& aParams);
@@ -86,6 +96,9 @@ struct BridgeView
 // 0.8.3: the names by appearance (session 10: "CET line" and "XF box" read alike), and None: no XF surface while
 // no game session is live (a loading screen, the press-any-key screen after a load, the start-up screens), session 10's
 // finding that the XF box drew over the press-any-key screen.
+// 0.8.6 (the maintainer: the ink panel inside photo mode's menu, the XF box the fallback): in photo mode the ink panel is
+// the copy under photo mode's menu (XFRuntimeBridgePhotoPanel.reds), which reports itself drawn the same way; the XF box
+// shows there only when that panel can't (ui.hud's layer hud, or the route failing).
 enum class StatusSurface
 {
     InkPanel,
@@ -168,7 +181,9 @@ struct AskView
 
 // 0.8.2 (the review: the XF box showed "F6 Done" while no key could answer): the line under a question on the overlay
 // panel and the CET line: its answer keys while they answer it (the ink panel holds the question with its keys), else
-// where to answer instead.
+// where to answer instead. 0.8.6 (the UI review's fix 6, UI-186): one notation wherever a key is pressed, the game's own
+// prompt style "[F6] Done" (the ink panel, the XF box, the CET line); a button names its key after the label ("Done (F6)",
+// the XF Runtime Bridge window).
 std::string AnswerHint(const std::vector<std::string>& aChoices, const std::vector<std::string>& aAnswerKeys, bool aKeysArmed);
 
 // XFBridge_Hud()'s answer: one record per line, fields separated by tabs, first line "xfhud<TAB>1". The redscript layer
@@ -195,6 +210,15 @@ std::string BuildFrame(const HudSettings& aSettings, const BridgeView& aView, Me
                        uint64_t aInkShownAsk, StatusSurface aSurface = StatusSurface::CetLine, uint64_t aKeysAsk = 0);
 // A key's name as the panels show it ("IK_F6" to "F6").
 std::string KeyLabel(const std::string& aKey);
+// 0.8.6: "[F6] Done", a key the player presses with what it answers (the UI review's fix 6).
+std::string KeyPrompt(const std::string& aKey, const std::string& aLabel);
+
+// 0.8.6: the ink layer's own events into the session's event stream (XFBridge_InkEvent): ink_tree (photo mode's menu root
+// and the XF layer under it, on each open and once laid out), ink_pointer (the photo-menu panel's hover and clicks) and
+// ink_input (its hold on the camera's mouse and the ModalPopup context, taken and released). Anything else is refused.
+bool InkEventKindOk(const std::string& aKind);
+// The event's data: the script's JSON object, or {raw: the first 200 characters} when it isn't one.
+json InkEventData(const std::string& aText);
 
 // The panel's settings, shared by the pipe (ui.hud) and the game thread (XFBridge_Hud). Thread-safe.
 class HudPanel
@@ -205,6 +229,8 @@ public:
     HudSettings Defaults() const;
     // ui.hud: {settings, previous, changed, undo: {method: "ui.hud", params: previous}}.
     json Configure(const json& aParams);
+    // 0.8.6: the kill switch drops ui.hud's modal (the frame never carries it while stopped, and Reconnect starts without it).
+    void DropModal();
 
 private:
     mutable std::mutex m_mutex;

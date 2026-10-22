@@ -99,7 +99,7 @@ struct PanelData
     bool diagnostics = false; // 0.8: [overlay] diagnostics: the panel's diagnostic lines and moving bar
     // 0.8.2 (the surfaces' rule): the panel shows only while it is the status surface (the ink panel off screen: photo mode,
     // menus), and then carries the coordinator's lines (level, text, oldest first), the question's answer keys
-    // ("F6 Done · F7 Not yet") or what was answered ("Answered: Done").
+    // ("[F6] Done   [F7] Not yet", 0.8.6: the ink panel's notation) or what was answered ("Answered: Done").
     bool show = false;
     std::vector<std::pair<std::string, std::string>> lines;
     std::string askHint;

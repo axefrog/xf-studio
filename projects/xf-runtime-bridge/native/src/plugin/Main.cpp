@@ -44,10 +44,14 @@ using namespace xfb::plugin;
 constexpr uint64_t kHeartbeatTicks = 60ull * 60ull * 10ull; // about every 10 minutes at 60 fps
 constexpr uint64_t kRearmPatienceTicks = 600;                 // about 10 s at 60 fps for the old listener and restore
 
-void RecordRearm(State& aState, bool aOk, const std::string& aMessage)
+// 0.8.6 (the UI review's P4: the window put this message inside its own sentence, internal words and all): code says what
+// happened, for the window's plain copy (init.lua rearmCopy): reconnected, still_closing and restore_pending (try again in a
+// moment), not_stopped, or failed (restart the game). message stays the log's and the agents' detail.
+void RecordRearm(State& aState, bool aOk, const std::string& aCode, const std::string& aMessage)
 {
     std::scoped_lock _(aState.rearmMutex);
-    aState.lastRearm = nlohmann::json{{"ok", aOk}, {"message", aMessage}, {"at_tick", aState.runningTicks.load()}};
+    aState.lastRearm =
+        nlohmann::json{{"ok", aOk}, {"code", aCode}, {"message", aMessage}, {"at_tick", aState.runningTicks.load()}};
 }
 
 // 0.8.3: whether the game's own window is the one in front (the kill key reads the keyboard only then).
@@ -130,14 +134,14 @@ void HandleRearm(State& aState)
     aState.rearmRequested.store(false);
     if (!refusal.empty())
     {
-        RecordRearm(aState, false, refusal);
+        RecordRearm(aState, false, aState.bridge->GetDispatcher().IsKilled() ? "still_closing" : "not_stopped", refusal);
         log::Warn("bridge.rearm_refused", "why=" + refusal);
         return;
     }
     if (!aState.restore.Reset())
     {
         const std::string why = "the kill switch's restore hasn't finished; try again in a moment";
-        RecordRearm(aState, false, why);
+        RecordRearm(aState, false, "restore_pending", why);
         log::Warn("bridge.rearm_refused", "why=restore_pending");
         return;
     }
@@ -154,7 +158,7 @@ void HandleRearm(State& aState)
             return true;
         },
         aState.queue.IsPumping() || aState.gameState.load() == 2, error);
-    RecordRearm(aState, ok, ok ? "reconnected: a new session is listening; clients read the new session.json" : error);
+    RecordRearm(aState, ok, ok ? "reconnected" : "failed", ok ? "reconnected: a new session is listening; clients read the new session.json" : error);
     if (!ok)
     {
         log::Error("bridge.rearm_failed", error);
@@ -498,6 +502,7 @@ bool Load(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk)
         // The ink HUD panel's starting settings (bridge 0.5.3, temporary test feature; ui.hud changes them).
         inkui::HudSettings hud;
         hud.show = state.config.hudPanel;
+        hud.layer = state.config.hudLayer;
         hud.cetLabel = state.config.cetLabel;
         hud.nameplates = state.config.nameplates;
         state.hud.SetDefaults(hud);
