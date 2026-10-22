@@ -19,7 +19,7 @@ export type HistoryRow = {
 
 export const HISTORY_TRIMMED_NOTE = "Older steps were not kept";
 /** What the header's Undo, Redo and History cover when nothing names the editing context (profiles design §3.7): what was last edited. */
-export const HISTORY_SCOPE = "Undo follows what you last edited: a preset, a V, or the view and lighting.";
+export const HISTORY_SCOPE = "Undo follows what you last edited: a preset or a V. View and lighting changes have their own Undo.";
 
 export function historyRows(timeline: HistorySnapshot, formatTime: (at: number) => string = defaultTime): HistoryRow[] {
   const atStart = timeline.current < 0;

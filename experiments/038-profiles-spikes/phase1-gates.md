@@ -23,7 +23,7 @@
 
 ## The S1 latency gate, revised
 
-- **The protection is the outbox record.** An edit is recorded in the outbox synchronously, as it is made.
+- **What protects an edit.** An edit enters the outbox in memory as it is made, so reads, checks and conflicts see it at once. Its write to recovery storage waits with the deferred store, up to 250 ms, so a renderer crash inside that window can lose that last fraction of a second. That is within the data-durability rule (lose seconds, never minutes).
 - **The library store is deferred by design.** The look editor asks the library to store a look at most once per 250 ms of continuous editing (`store: "soon"`, decided in chunk 1d-ii).
 - **The gate** is p95 from the library store request to its acknowledgement ≤ 250 ms: on D: p95 2.1–2.9 ms in seven of eight runs and 43 ms in one, max 52 ms. **PASS.**
 - **Edit to acknowledgement**, reported beside it as the expected deferred store and not as a pass: p95 255–256 ms, max 306 ms on D:.
