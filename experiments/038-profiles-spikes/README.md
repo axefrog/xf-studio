@@ -305,7 +305,7 @@ It found one defect: a session with two tabs lost its second tab. The resolver p
 
 `tools/s1-latency.ts` runs on the production code: the page's `DocumentOutbox` and HTTP transport (its localStorage adapter on a file written synchronously) against the real localhost host (`harness/s1-host.ts`: the document store and its routes, WAL with the raised autocheckpoint, the library's own flush timing). The look is the 16-layer fixture with a full 80-step history (156,852 UTF-16 units, 88 % of it history). Each edit rewrites the whole row, as a real edit does. Each cadence runs twice: with the outbox stored at once (`now`, S1's gate) and as the look editor records (`soon`, stored within 250 ms). One run on C: (NVMe) and two on D: (the mechanical data drive), 22 October 2026, Windows 11, Bun 1.4.2, peak 0.5 GB:
 
-| Run | Commit, main thread p95 | Commit to acknowledgement p50 / p95 / max | Host round trip p95 / max |
+| Run | Edit recorded, main thread p95 | Edit to acknowledgement p50 / p95 / max | Store request to acknowledgement (host round trip) p95 / max |
 |---|---|---|---|
 | C:, `now`, person (120 edits) | 2.2 ms | 2.8 / 3.8 / 9.2 ms | 2.4 / 7.3 ms |
 | C:, `now`, stress (300 edits) | 2.2 ms | 3.0 / 5.6 / 7.5 ms | 3.3 / 5.2 ms |
@@ -315,8 +315,9 @@ It found one defect: a session with two tabs lost its second tab. The resolver p
 | D:, `soon`, person (two runs) | 0.11; 0.12 ms | 223 / 256 / 300 ms; 224 / 256 / 304 ms | 2.3 / 47 ms; 43 / 52 ms |
 | D:, `soon`, stress (two runs) | 0.06; 0.06 ms | 140 / 255 / 301 ms; 141 / 255 / 306 ms | 2.1 / 47 ms; 2.3 / 51 ms |
 
-- **Within budget.** Stored at once, commit to acknowledgement is p95 3.4–5.5 ms on D: (budget 250 ms), the same as on C:. The data drive adds only a tail: a host round trip that meets the flush's checkpoint takes up to about 50 ms (7 ms on C:). The raised autocheckpoint keeps checkpoints off the host's thread, and no round trip came near SQLite's own 67–184 ms checkpoint.
-- **The look editor's deferred storing sets its acknowledgement.** An edit recorded with `store: "soon"` is stored and sent within `STORE_SOON_MS` (250 ms), so its acknowledgement is that wait plus the round trip: p95 255–256 ms, max 306 ms on D:. That is by design (chunk 1d-ii: one storage write per 250 ms of a continuous edit), not a drive cost. Its main-thread cost per edit drops to about 0.1 ms.
+- **The gate, revised in 1f.** An edit is recorded in the outbox synchronously; that record is the protection. The library store is deferred by up to 250 ms by design (chunk 1d-ii), so the gate is p95 from the library store request to its acknowledgement ≤ 250 ms (the host round trip column). The spike's gate measured edit to acknowledgement, which now includes that intended wait, so it was revised to measure what the drive and host affect.
+- **Within budget: PASS.** Store request to acknowledgement on D: is p95 2.1–2.9 ms in seven of eight runs and 43 ms in one, max 52 ms (C: p95 2.4–3.3 ms, max 7.3 ms). The data drive adds only a tail: a request that meets the flush's checkpoint takes up to about 50 ms. The raised autocheckpoint keeps checkpoints off the host's thread, and no request came near SQLite's own 67–184 ms checkpoint.
+- **Edit to acknowledgement in production** (`soon`), the expected deferred store and not a pass: p95 255–256 ms, max 306 ms on D:, that is the 250 ms wait plus the round trip. Stored at once (`now`, the spike's mode), edit to acknowledgement is p95 3.4–5.5 ms on D:. Recording with `soon` costs about 0.1 ms of main thread per edit.
 - **Main thread.** Stored at once, `commit` costs p95 1.9–2.3 ms here, most of it rewriting the stand-in outbox file (a browser's `setItem` measured 0.9 ms in the spike). That is within the 4 ms budget.
 - **Write volume.** The host process wrote about 167 KB per command on both drives (Windows' process I/O counters: WAL frames, checkpoints and the flush), 84 MB for about 500 commands. At the design's one command every 2 s that is about 300 MB an hour. A person editing without pause (the `soon` person run: 2.4 commands a second) writes about 1.4 GB an hour.
 
