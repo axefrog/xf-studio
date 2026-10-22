@@ -19,7 +19,7 @@
 
 - **`character.undo` and `character.redo` are retired.** The Character panel's Undo and Redo, its keys and its palette entries are `history.undo` and `history.redo` naming the V's scope (`character:<id>`).
 - **The experiment's own code is typechecked** by `bun run check`, and the look fixture is made by the production look editor.
-- **UI captures** of 1e's visible change, for the UI review: listed in the chunk's report, under `generated/history-captures/` (ignored).
+- **UI captures** of 1e's visible change, for the UI review: `tools/history-captures.ts` writes the header's Undo and the History panel in four states (no change yet, one step, no preset shown, a new preset), light and dark, narrow and wide, into `generated/history-captures/` (ignored), with the tooltips and accessible names in `texts.json`. They found Undo naming the empty document's scope by its ID ("Changes to look:none/none") while no preset is shown; a scope nothing names now has no name, and the wording falls back to its general text. "Nothing to undo here yet" needs no editing context at all, which phase 1's one drawn view never leaves: the drawn document always has a scope, so it is covered by the tests, not a capture.
 
 ## For the design
 

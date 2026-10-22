@@ -346,7 +346,7 @@ Chrome commits a page's `localStorage` to disk 5 s after its first change. While
 
 ### The harnesses in CI
 
-The Authoring workflow's desktop (Windows) job runs this folder's `bun test tests` after the desktop tests, with `XFS_HARNESS_QUICK=1`: the lease harness, the S1 outbox kill harness with half its kills, the S3 sweep for one round, and the S1 rules. Its path filter includes this folder, and the full kill counts stay the default locally. `bun run check` typechecks this folder's code.
+The Authoring workflow's desktop (Windows) job runs this folder's `bun test tests` after the desktop tests, with `XFS_HARNESS_QUICK=1`: the lease harness, the S1 outbox kill harness with half its kills, the S3 sweep for one round, and the S1 rules. Its path filter includes this folder, and the full kill counts stay the default locally. The CI set takes about 2.5 minutes (152 s locally, peak 1.6 GB); the full S1 kill harness alone takes about 2.3 minutes. `bun run check` typechecks this folder's code.
 
 ## Acknowledgement and rebasing rules (S1, answering Sol's Medium point)
 
