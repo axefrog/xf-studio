@@ -6,7 +6,7 @@
 import { expect, test } from "bun:test";
 import { HISTORY_LIMIT, type HistoryLabel, type HistoryTarget } from "../src/platform/api/history";
 import { MAIN_VIEW } from "../src/platform/api/view-graph";
-import { createHistoryService, lookScope as lookScopeOf, VIEW_SCOPE } from "../src/platform/core/history-service";
+import { createHistoryService, lookScope as lookScopeOf, LOCAL_VIEW_SCOPE } from "../src/platform/core/history-service";
 const LOOK_SCOPE = lookScopeOf({ collection: "c", look: "l" });
 import { CONTROL_TRANSACTION, GESTURE_TRANSACTION } from "../src/platform/core/history-transaction";
 import { createStudioViewGraph, defaultViewGraph, STUDIO_VIEW_GRAPH_RULES } from "../src/preview/preview-view-graph";
@@ -39,7 +39,7 @@ function store(initial: Record<string, unknown>, options: { content?: boolean } 
 
 test("scopes are isolated and global Undo goes to the focused one; a document is focused only while its experiment offers it", () => {
   const service = createHistoryService(), look = store({ a: 1 }), view = store({ n: 1 });
-  const lookScope = service.open(LOOK_SCOPE, look.target), viewScope = service.open(VIEW_SCOPE, view.target);
+  const lookScope = service.open(LOOK_SCOPE, look.target), viewScope = service.open(LOCAL_VIEW_SCOPE, view.target);
   lookScope.checkpoint(["a"], label("A")); look.set("a", 2);
   viewScope.checkpoint(["n"], label("N")); view.set("n", 2);
   expect(service.acting(service.focus.recent())).toBe(lookScope);
@@ -77,7 +77,7 @@ test("a step kept in the look's history returns global Undo to the look; a cance
   expect(service.documents.selected()).toBeNull();
   // The View and lighting history is not the look's: its steps leave the focus alone.
   focusDocument();
-  service.open(VIEW_SCOPE, store({ n: 0 }).target).checkpoint(["n"], label("N"));
+  service.open(LOCAL_VIEW_SCOPE, store({ n: 0 }).target).checkpoint(["n"], label("N"));
   expect(service.documents.selected()).toBe("hair:g");
 });
 
@@ -115,7 +115,7 @@ test("a jump applies once, however many steps it crosses, and keeps every step r
 });
 
 test("a move the target refuses drops the scope's steps and changes nothing (CORE-94)", () => {
-  const service = createHistoryService(), view = store({ n: 0 }), scope = service.open(VIEW_SCOPE, view.target);
+  const service = createHistoryService(), view = store({ n: 0 }), scope = service.open(LOCAL_VIEW_SCOPE, view.target);
   scope.checkpoint(["n"], label("One")); view.set("n", 1);
   scope.checkpoint(["n"], label("Two")); view.set("n", 2);
   view.refuseNext();
@@ -129,7 +129,7 @@ test("a slider drag coalesces into one step until it is released (CORE-95), in t
   const exposure = (value: number) => ({ state: { creatorLighting: { ...DEFAULT_CREATOR_LIGHTING, exposure: value } } });
   const shown = () => views.state<{ creatorLighting: { exposure: number } }>(MAIN_VIEW, "lights").creatorLighting.exposure, start = shown();
   for (const value of [1.3, 1.4, 1.5]) views.edit(MAIN_VIEW, "lights", exposure(value), { label: "Exposure", coalesce: "exposure" });
-  expect(service.scope(VIEW_SCOPE)!.state()).toMatchObject({ undo: { label: "Exposure" }, depth: 1 });
+  expect(service.scope(LOCAL_VIEW_SCOPE)!.state()).toMatchObject({ undo: { label: "Exposure" }, depth: 1 });
   views.seal();
   views.edit(MAIN_VIEW, "lights", exposure(1.6), { label: "Exposure", coalesce: "exposure" });
   expect(views.history().depth).toBe(2);
@@ -185,7 +185,7 @@ test("the trusted core's look, View and lighting history live in the one service
   core.app.dispatch({ kind: "layer.setOpacity", layerId: core.document.recipe.layers[0].id, opacity: 0.3 });
   core.views.edit(MAIN_VIEW, "lights", { state: { creatorLighting: { ...DEFAULT_CREATOR_LIGHTING, exposure: 2 } } }, { label: "Exposure" });
   expect(service.acting(service.focus.recent())!.state()).toMatchObject({ undo: { label: "Opacity" }, depth: 1 });
-  expect(service.scope(VIEW_SCOPE)!.state()).toMatchObject({ undo: { label: "Exposure" }, depth: 1 });
+  expect(service.scope(LOCAL_VIEW_SCOPE)!.state()).toMatchObject({ undo: { label: "Exposure" }, depth: 1 });
 });
 
 // ----- Review regressions -----

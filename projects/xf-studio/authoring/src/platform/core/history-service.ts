@@ -4,7 +4,7 @@
  *
  * - **Scopes** (profiles design §3.7). `look:<collection>/<look>` is one look's history (its stack is persisted with the look's
  *   working copy as `xfs/look-history-1`); `character:<id>` is one V's creator choices, Clothing and own makeup (session-only);
- *   `view` is the View and lighting history; `doc:<id>` is one experiment document's (Hair Lab's grooms). Each scope's
+ *   `view:<profile>` is a profile session's View and lighting history; `doc:<id>` is one experiment document's (Hair Lab's grooms). Each scope's
  *   target (`HistoryTarget`) owns its state: the scope reads and applies values through it and owns the steps, Redo
  *   validity, jumps, coalescing and transactions.
  * - **Redo validity** (CORE-46). Redo stays valid only while the top step is the one the last Undo, Redo or jump left and the
@@ -31,7 +31,11 @@ import { HistoryStack, ReferenceStore, WHOLE_VALUES, type LookReader } from "./h
 import { HistoryTransaction, type TransactionHost, type TransactionPolicy } from "./history-transaction";
 import { FocusService } from "./focus";
 
-export const VIEW_SCOPE = "view";
+const VIEW_PREFIX = "view:";
+/** A profile session's View and lighting history (`view:<profile>`, §3.7): its views and lighting, never a look's. */
+export const viewScope = (profile: string) => `${VIEW_PREFIX}${profile}`;
+/** The View and lighting history of a view graph no profile session holds (fixtures and tools). */
+export const LOCAL_VIEW_SCOPE = viewScope("local");
 const DOCUMENT_PREFIX = "doc:";
 export const LOOK_SCOPE_PREFIX = "look:";
 const CHARACTER_PREFIX = "character:";

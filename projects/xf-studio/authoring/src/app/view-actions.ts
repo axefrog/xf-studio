@@ -33,8 +33,8 @@ export const NO_MODULES: ModuleRegistration = Object.freeze({ modules: [], tools
  * the composition's modules. The trusted core builds one per session; fixtures build their own.
  */
 export function createViewServices(preview: PreviewState, stored?: ViewGraphData, modules: ModuleRegistration = NO_MODULES,
-  history?: HistoryService) {
-  const views = createStudioViewGraph(preview, stored, history);
+  history?: HistoryService, scope?: string) {
+  const views = createStudioViewGraph(preview, stored, history, scope);
   const viewActions = new ViewActions(views, { ...modules, tools: [...PLATFORM_VIEW_TOOLS, ...modules.tools.filter(tool => tool.module !== "platform")] });
   return { views, viewActions };
 }

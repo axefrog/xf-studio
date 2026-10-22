@@ -217,8 +217,8 @@ export function workspaceViewGraph(preview: PreviewState, stored: ViewGraphData 
 }
 
 /** A graph service for a workspace's preview (and its stored views, if any). */
-export function createStudioViewGraph(preview: PreviewState, stored?: ViewGraphData, history?: HistoryService) {
-  return new ViewGraph(workspaceViewGraph(preview, stored), STUDIO_VIEW_GRAPH_RULES, history);
+export function createStudioViewGraph(preview: PreviewState, stored?: ViewGraphData, history?: HistoryService, scope?: string) {
+  return new ViewGraph(workspaceViewGraph(preview, stored), STUDIO_VIEW_GRAPH_RULES, history, scope);
 }
 
 /**

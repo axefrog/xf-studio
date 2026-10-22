@@ -74,7 +74,7 @@ import { createProfileServices, createTargetResolver, drawnScene, historyScopeNa
 import { createStudioSubjects } from "./subjects";
 import { LookEditor, lookContent } from "../library/look-editor";
 import { lookRef, type LookRef } from "../library/collection-documents";
-import { lookScope } from "../platform/core/history-service";
+import { lookScope, viewScope } from "../platform/core/history-service";
 import { MAIN_VIEW } from "../platform/api/view-graph";
 import { emptyLookHistory } from "../platform/core/look-history";
 import { emptyRecipe } from "../engines/layered-makeup/recipe";
@@ -265,7 +265,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   const core = createTrustedAuthoringCore({ ...workspace, views: sessionState.graph(), recipe: shownState.recipe, active: shownState.active,
     selected: shownState.selected, fieldSelection: shownState.fieldSelection, history: shownState.history, historyTrimmed: shownState.historyTrimmed,
     liveFeatures: shownState.liveFeatures, liveLocked: shownState.liveLocked }, {
-    history: historyService, ...(first && firstLook ? { scope: lookScope(firstLook) } : {}),
+    history: historyService, ...(first && firstLook ? { scope: lookScope(firstLook) } : {}), viewScope: viewScope(sessionState.profile),
     resetStack: previous => previewDevice?.coordinator.syncStack(previous),
     // A cheap read: Glitter-model and finish changes ask for it, and a snapshot would stash and copy the whole draft (CORE-05).
     selectedCollection: () => bootstrap?.collection.selectedPresetId() ?? "draft",

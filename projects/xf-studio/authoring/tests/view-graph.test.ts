@@ -5,7 +5,7 @@
 import { expect, test } from "bun:test";
 import { MAIN_VIEW, validViewId, viewPanelId, type ViewGraphChange } from "../src/platform/api/view-graph";
 import { parseViewGraph, VIEW_HISTORY_STRUCTURE, ViewGraph } from "../src/platform/core/view-graph";
-import { createHistoryService, VIEW_SCOPE } from "../src/platform/core/history-service";
+import { createHistoryService, LOCAL_VIEW_SCOPE } from "../src/platform/core/history-service";
 import { createStudioViewGraph, defaultViewGraph, isDefaultViewGraph, previewMirror, storedViewGraph, STUDIO_VIEW_GRAPH_RULES,
   workspaceViewGraph } from "../src/preview/preview-view-graph";
 import { PreviewActions, type PreviewPort } from "../src/preview/preview-actions";
@@ -253,7 +253,7 @@ test("every structure edit records a step, an unrecorded one clears the history 
   // The check itself: a step whose views would name a missing node is dropped with the steps behind it, and nothing changes.
   views.edit(MAIN_VIEW, "lights", calibrated(2), { label: "Exposure" });
   const broken = { views: [{ id: MAIN_VIEW, kind: "3d", scene: "s1", camera: "gone", lights: "l1", display: "d1", tools: "t1" }], focused: MAIN_VIEW };
-  history.scope(VIEW_SCOPE)!.checkpoint([VIEW_HISTORY_STRUCTURE], { label: "Broken", actionKind: "view.edit" }, { read: () => broken });
+  history.scope(LOCAL_VIEW_SCOPE)!.checkpoint([VIEW_HISTORY_STRUCTURE], { label: "Broken", actionKind: "view.edit" }, { read: () => broken });
   const changes: ViewGraphChange[] = [];
   views.subscribe(change => changes.push(change));
   expect(views.undo()).toBe(false);

@@ -16,7 +16,7 @@
 import { MAIN_VIEW, SLOT_COLLECTIONS, VIEW_GRAPH_1, VIEW_SLOTS, validViewId, viewPanelId, type GraphNode, type KeptView, type SceneKind,
   type StoredNode, type ViewGraphChange, type ViewGraphData, type ViewGraphRules, type ViewGraphSnapshot, type ViewHistoryState,
   type ViewId, type ViewRecord, type ViewSlot } from "../api/view-graph";
-import { createHistoryService, VIEW_SCOPE, type HistoryScope, type HistoryService } from "./history-service";
+import { createHistoryService, LOCAL_VIEW_SCOPE, type HistoryScope, type HistoryService } from "./history-service";
 
 /** At most this many views (design §3.7: four visible, the rest as tabs) and nodes of one slot. */
 export const MAX_VIEWS = 16;
@@ -177,8 +177,11 @@ export class ViewGraph {
   private withdrawnIds = new Set<string>();
   private counter = 0;
 
-  /** `history` is the session's history service (default: one of its own); the graph's edits record in its view scope. */
-  constructor(data: ViewGraphData, private rules: ViewGraphRules, history: HistoryService = createHistoryService()) {
+  /**
+   * `history` is the session's history service (default: one of its own); the graph's edits record in its View and lighting scope, `scope`
+   * (`view:<profile>`, profiles design §3.7; default: a graph no session holds).
+   */
+  constructor(data: ViewGraphData, private rules: ViewGraphRules, history: HistoryService = createHistoryService(), scope: string = LOCAL_VIEW_SCOPE) {
     const parsed = parseGraph(data, rules);
     if (!parsed) throw new ViewGraphError("invalid_value", "The view graph is not valid.");
     this.views = parsed.views;
@@ -188,7 +191,7 @@ export class ViewGraph {
     this.keptNodes = parsed.keptNodes;
     this.keptRefs = usedNodes([], parsed.keptViews);
     // Values are kept by reference (each step holds detached copies), so a drag costs no serialisation.
-    this.scope = history.open(VIEW_SCOPE, { read: key => this.readHistory(key), apply: values => this.applyHistory(values),
+    this.scope = history.open(scope, { read: key => this.readHistory(key), apply: values => this.applyHistory(values),
       settled: () => this.publishHistory() },
       { limit: VIEW_HISTORY_LIMIT });
   }
