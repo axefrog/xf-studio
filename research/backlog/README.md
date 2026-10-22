@@ -84,6 +84,7 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 3. **The eye-makeup editor and finish adapters** (track 6), and CORE-03's remaining steps (the [code-health ledger](../authoring/code-health.md)). *25 Sep*
 
 ### R&D (runs only while the polish lane is moving)
+- **Game update 2.5 adds official mod support.** When its details are published, send the meta-coordinator a research request covering what it changes for the export pipeline: archive and resource versions, ArchiveXL and TweakXL compatibility, any official install route, and the beta's framework guidance. *23 Oct*
 Research questions from any chat go to the meta-coordinator's [research queue](research-queue.md). This lane lists the R&D build tracks, each kept by the chat that owns it.
 
 - **Hair Lab** (its own chat and branch, off `main` until the beta). *16 Oct*
