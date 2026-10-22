@@ -56,12 +56,17 @@ export function plateBuilderInput(value: unknown): PlateBuilderInput {
 export function plateProvenance(manifestPath: string | undefined, mesh: string, morph: string): { record: PackagePlate; morphTargets?: number } {
   const meshSha256 = fileHash(mesh), morphSha256 = fileHash(morph);
   if (!manifestPath) return { record: { source: "override", meshSha256, morphSha256 } };
-  const manifest = JSON.parse(readFileSync(existing(manifestPath, "Plate manifest"), "utf8"));
+  const path = existing(manifestPath, "Plate manifest");
+  // A truncated or unreadable manifest is a plate that doesn't match its files, a refusal like any other (never a raw parse error).
+  let manifest: any;
+  try { manifest = JSON.parse(readFileSync(path, "utf8").replace(/^﻿/, "")); }
+  catch { return refuse("package_plate_mismatch", "The eye plate manifest can't be read."); }
   const files = manifest?.files ?? {};
   if (manifest?.schema !== EYE_PLATE_MANIFEST_SCHEMA || files.mesh?.sha256 !== meshSha256 || files.morph?.sha256 !== morphSha256 ||
       !Number.isSafeInteger(manifest?.verification?.morphTargets))
     refuse("package_plate_mismatch", "The eye plate manifest does not match the plate resources.");
-  return { record: packagePlateRecord(manifest), morphTargets: manifest.verification.morphTargets };
+  try { return { record: packagePlateRecord(manifest), morphTargets: manifest.verification.morphTargets }; }
+  catch { return refuse("package_plate_mismatch", "The eye plate manifest does not match the plate resources."); }
 }
 
 /** The UV footprint a plate manifest records; null when it records none (a plate cached before footprints were recorded). */

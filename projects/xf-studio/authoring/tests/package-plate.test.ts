@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { localEyePlate, localPackageAdapter, type PackageTools } from "../src/host/package-server";
+import { LOCAL_BUILD_REASONS, localEyePlate, localPackageAdapter, type PackageTools } from "../src/host/package-server";
 import { runProductBuild } from "../src/platform/export/product-host";
 import { STUDIO_EXPORTERS } from "../src/compose/exporters";
 import { EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
@@ -29,7 +29,7 @@ test("localhost Build prepares the built-in plate before starting the builder", 
       runBuilder: async () => { runs++; return { exitCode: 1, stdout: "", stderr: "", stopped: null }; } }, fixture, new AbortController().signal);
     const tools: PackageTools = { bun: join(dir, "never-started", "bun.exe"), plate: "", plateCache: join(dir, "cache"), wolvenkit: cli, gamepath: game };
     // Bun runs the builder and is checked first; with a real one, plate preparation fails before any builder process starts.
-    expect(await build(tools)).toMatchObject({ ok: false, code: "package_build_unavailable", message: expect.stringContaining("Bun executable") });
+    expect(await build(tools)).toMatchObject({ ok: false, code: "package_build_unavailable", message: LOCAL_BUILD_REASONS.builderMissing });
     const missing = await build({ ...tools, bun: process.execPath });
     expect(missing).toMatchObject({ ok: false, code: "plate_source_missing", message: expect.stringContaining("verify the game files") });
     expect(await build({ ...tools, bun: process.execPath, plate: join(dir, "absent") }))
