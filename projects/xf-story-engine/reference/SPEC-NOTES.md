@@ -27,11 +27,11 @@ version of this file must be reordered and the determinism-digest note added (se
    `0x01`. (implemented: `src/id.ts`)
 4. **toUnit bit order, 1.2.** "The first 52 bits" is read as the first 13 hexadecimal characters of the
    Id, which is the big-endian reading of the first 6.5 bytes. (implemented)
-5. **Enduring slots and `t`, 6.2.** "A pin on it is valid from `at`, with no end" would make an enduring
-   slot resolve differently at a `t` earlier than the pin. Reading: taken literally (validity
-   `[at, ...)`), and `resolve` defaults `t` to the engine time, so the difference only shows if a caller
-   asks about a time before the pin. Stated so the owner can decide whether enduring slots should ignore
-   `t`. (planned: `src/resolve.ts`)
+5. **Enduring slots and `t`, 6.2. Changed by the coordinator.** A pin on an enduring slot (no
+   `temporal`, not mirrored) applies at **every** time `t`, whatever its `valid.from`; the pin's `at` and
+   `valid.from` only record when the fact was learned. Only withdrawal removes it. Pins on mirrored
+   timelines and on simulated temporal windows keep the intervals the specification gives them.
+   (decided by the coordinator; implemented: `src/resolve.ts`)
 6. **`assigned` slots and singleton constraints, 5.1 step 3.** The spec takes the value from "the first
    active value pin". Non-canon events must carry their fields without pins (a pin in effect is a
    retention root, so pinning every minted event would make forgetting impossible). Reading: after
