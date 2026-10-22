@@ -201,7 +201,11 @@ export class Summaries {
     if (path !== 'time' && path !== 'place' && path !== 'kind') return undefined;
     const it = this.itemOf(header);
     if (!it) return undefined;
-    if (path === 'kind') return this.k.resolver.resolveWithin(ctx, it.summary, 'kind', t).value;
+    if (path === 'kind') {
+      const r = this.k.resolver.resolveWithin(ctx, it.summary, 'kind', t);
+      failIfFailed(r.status, `kind of ${it.summary}`);
+      return r.value;
+    }
     const d = this.descriptor(ctx, it.summary, it.index, t);
     if (!d) return undefined;
     return path === 'time' ? d.time : d.place;

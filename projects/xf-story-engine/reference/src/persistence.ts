@@ -241,8 +241,12 @@ export class Persistence {
 
   // ---- packs (spec 14.1: reloaded, not stored) ----
 
-  /** Install a content pack: its contributions are reloaded from the pack, not stored in saves. */
+  /**
+   * Install a content pack: its contributions are reloaded from the pack, not stored in saves. A read-only
+   * world refuses a pack, empty or not, before either pack map changes (SPEC-NOTES 55).
+   */
   installPack(pack: Pack): void {
+    this.k.assertWritable();
     this.packs.set(pack.id, pack);
     this.installed.set(pack.id, pack.version);
     for (const c of pack.contributions) {
