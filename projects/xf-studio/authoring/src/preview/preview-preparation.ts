@@ -28,13 +28,9 @@ export type PreviewState = {
 export type PreviewAction = { kind: "preview.refresh" } | { kind: "preview.prepare" } | { kind: "preview.cancel" } | { kind: "preview.rebuild" };
 /** `body` names another body's core (the masculine V's); without it the feminine core, which the rest of this module follows. */
 export type PreviewTransport = (action: PreviewTransportAction, body?: CoreBody, options?: PreviewTransportOptions) => Promise<{ ok: boolean; data: unknown }>;
-/** `withdraw` gives back a requester's lease on a preparation (preview-core-host.ts). */
-export type PreviewTransportAction = "refresh" | "prepare" | "cancel" | "rebuild" | "withdraw";
-/**
- * `lease`: the requester asking on demand (with `prepare` and `withdraw`, and with `refresh` while it holds one, which keeps it alive on the
- * host); `signal` cuts the request off. A `withdraw` must reach the host even from a page that is closing (the browser sends it `keepalive`).
- */
-export type PreviewTransportOptions = { lease?: string; signal?: AbortSignal };
+export type PreviewTransportAction = "refresh" | "prepare" | "cancel" | "rebuild";
+/** `signal` cuts the request off. */
+export type PreviewTransportOptions = { signal?: AbortSignal };
 export type PreviewOutcome = { ok: true } | { ok: false; message: string };
 
 export function isPreviewState(value: unknown): value is PreviewState {
@@ -124,8 +120,8 @@ export const shouldAutoStart = (state: PreviewState, alreadyAttempted: boolean) 
 
 export class PreviewPreparationActions {
   private readonly host: PolledHostState<PreviewState, "refresh" | "prepare" | "cancel" | "rebuild">;
-  /** The leases this page holds on on-demand preparations (`ensureBody`), with their bodies. */
-  private readonly leases = new Map<string, CoreBody>();
+  /** Ends every `ensureBody` call still waiting when the service is disposed. */
+  private readonly life = new AbortController();
   constructor(private readonly transport: PreviewTransport, private readonly pollMs = 700, private readonly timers?: HostTimers) {
     this.host = new PolledHostState<PreviewState, "refresh" | "prepare" | "cancel" | "rebuild">({ transport, isState: isPreviewState, working: state => state.phase === "preparing",
       refresh: "refresh", pollMs, timers, messages: {
@@ -150,17 +146,10 @@ export class PreviewPreparationActions {
     if (!allowed.available) return { ok: false, message: allowed.reason! };
     return this.host.request(action.kind.slice("preview.".length) as "refresh" | "prepare" | "cancel" | "rebuild");
   }
-  /**
-   * Give back every lease this page holds: the page is closing (pagehide) or the service is disposed. A call still waiting for its head
-   * (a page restored from the back-forward cache) joins the preparation again at its next poll.
-   */
-  releaseLeases() { for (const lease of [...this.leases.keys()]) this.withdraw(lease); }
-  dispose() { this.releaseLeases(); this.host.dispose(); }
-  private withdraw(lease: string) {
-    const body = this.leases.get(lease);
-    if (!body) return;
-    this.leases.delete(lease);
-    void this.transport("withdraw", body, { lease }).catch(() => { /* The host may already have finished or stopped it; an unrenewed lease expires there. */ });
+  /** The service is gone: polling stops, and every `ensureBody` call still waiting rejects with an `AbortError`. */
+  dispose() {
+    this.life.abort(new DOMException("The 3D view was closed.", "AbortError"));
+    this.host.dispose();
   }
 
   /**
@@ -170,79 +159,61 @@ export class PreviewPreparationActions {
    * a failed or cancelled preparation, or lost contact), so the caller can show the feminine head instead.
    *
    * `signal`: the page no longer wants this body (a newer subject or body change superseded it; experiment 043 decision D1). A request
-   * in flight is cut off, polling stops at once, and the call rejects with the signal's reason. This call holds a lease on the body's
-   * preparation from the moment it asks for it or finds it running (`prepare` with its lease joins that preparation), renews it with every
-   * poll, and withdraws it whenever it ends without the head (an abort or a failure), as the page does for all its leases when it closes:
-   * the host stops the preparation only when no requester holds it any more and nobody asked for it outright, so another window waiting
-   * for the same head is never left without it. A lease its page stopped renewing (a crash) expires on the host.
+   * in flight is cut off, polling stops at once, and the call rejects with the signal's reason; so does every call still waiting when the
+   * service is disposed. Only the page stops waiting: the host's preparation, once started, runs to completion and is cached for the next
+   * request (one job per body, which every page that asks joins), because a one-time cached job is worth finishing and no page can tell
+   * whether another still wants it.
    */
-  async ensureBody(body: CoreBody, pending: (message: string, progress: number | null) => void = () => {}, signal?: AbortSignal): Promise<void> {
-    signal?.throwIfAborted();
+  async ensureBody(body: CoreBody, pending: (message: string, progress: number | null) => void = () => {}, wanted?: AbortSignal): Promise<void> {
+    const signal = wanted ? AbortSignal.any([wanted, this.life.signal]) : this.life.signal;
+    signal.throwIfAborted();
     if (body === "female") return;
     const timers = this.timers ?? { set: (run: () => void, ms: number) => setTimeout(run, ms), clear: (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>) };
     const wait = () => new Promise<void>(done => {
       const handle = timers.set(finish, this.pollMs);
-      function finish() { signal?.removeEventListener("abort", early); done(); }
+      function finish() { signal.removeEventListener("abort", early); done(); }
       function early() { timers.clear(handle); finish(); }
-      signal?.addEventListener("abort", early, { once: true });
+      signal.addEventListener("abort", early, { once: true });
     });
-    const lease = globalThis.crypto.randomUUID();
-    /** `asked`: this call asked for a preparation (once). The lease is held while it is in `leases` (the host may know it). */
+    /** This call asked for a preparation (once). */
     let asked = false;
-    const holding = () => this.leases.has(lease);
-    const hold = () => { this.leases.set(lease, body); };
     const read = async (action: "refresh" | "prepare") => {
       let reply: { ok: boolean; data: unknown };
-      try { reply = await this.transport(action, body, { ...(action === "prepare" || holding() ? { lease } : {}), ...(signal ? { signal } : {}) }); }
-      catch (error) { signal?.throwIfAborted(); throw new HeadLoadError("body_unavailable", "XF Studio couldn't reach its 3D view service.", { cause: error }); }
-      signal?.throwIfAborted();
+      try { reply = await this.transport(action, body, { signal }); }
+      catch (error) { signal.throwIfAborted(); throw new HeadLoadError("body_unavailable", "XF Studio couldn't reach its 3D view service.", { cause: error }); }
+      signal.throwIfAborted();
       if (!isPreviewState(reply.data)) throw new HeadLoadError("body_unavailable", "The 3D view state is unavailable.");
       return reply.data;
     };
-    try {
-      let state = await read("refresh");
-      for (let polls = 0; polls < 2000; polls++) {
-        if (state.phase === "ready") { this.leases.delete(lease); return; }
-        // This body is being prepared for someone else (or this page gave its lease back): hold a lease on it, so another requester's
-        // withdrawing never stops it while this page waits.
-        if (state.phase === "preparing" && !holding()) { hold(); state = await read("prepare"); continue; }
-        if (state.phase === "preparing" || (!state.canPrepare && !asked && state.phase === "idle")) {
-          // Preparing this body, or waiting for another body's preparation to finish.
-          const progress = state.progress ? Math.min(1, Math.max(0, (state.progress.index + 0.5) / state.progress.total)) : null;
-          pending(state.message, progress);
-          await wait();
-          signal?.throwIfAborted();
-          state = await read("refresh");
-          continue;
-        }
-        // A first ask prepares it; an earlier failure in this session is tried once more (as the card's Try again would).
-        if ((state.phase === "idle" || state.phase === "failed" || state.phase === "blocked") && state.canPrepare && !asked) {
-          asked = true; hold(); state = await read("prepare"); continue;
-        }
-        throw new HeadLoadError("body_unavailable", state.message);
+    let state = await read("refresh");
+    for (let polls = 0; polls < 2000; polls++) {
+      if (state.phase === "ready") return;
+      if (state.phase === "preparing" || (!state.canPrepare && !asked && state.phase === "idle")) {
+        // Preparing this body (for this page or another), or waiting for another body's preparation to finish.
+        const progress = state.progress ? Math.min(1, Math.max(0, (state.progress.index + 0.5) / state.progress.total)) : null;
+        pending(state.message, progress);
+        await wait();
+        signal.throwIfAborted();
+        state = await read("refresh");
+        continue;
       }
-      throw new HeadLoadError("body_unavailable", "Preparing the head took too long.");
-    } catch (error) {
-      // Superseded or failed: this call's lease goes at once; the host stops the preparation only if no one else holds it (D1).
-      this.withdraw(lease);
-      throw signal?.aborted ? signal.reason : error;
+      // A first ask prepares it; an earlier failure in this session is tried once more (as the card's Try again would).
+      if ((state.phase === "idle" || state.phase === "failed" || state.phase === "blocked") && state.canPrepare && !asked) {
+        asked = true; state = await read("prepare"); continue;
+      }
+      throw new HeadLoadError("body_unavailable", state.message);
     }
+    throw new HeadLoadError("body_unavailable", "Preparing the head took too long.");
   }
 }
 
-/**
- * `endpoint` is the host's preparation service: `/api/preview-core` on localhost, `/api/desktop/preview` on desktop. A withdrawal is sent
- * `keepalive`, and the page gives its leases back when it is hidden for good or put in the back-forward cache (pagehide).
- */
+/** `endpoint` is the host's preparation service: `/api/preview-core` on localhost, `/api/desktop/preview` on desktop. */
 export function createBrowserPreviewPreparation(endpoint: string) {
-  const actions = new PreviewPreparationActions(async (action, body, options = {}) => {
-    const signal = options.signal, query = new URLSearchParams({ ...(body ? { body } : {}), ...(options.lease ? { lease: options.lease } : {}) }).toString();
-    const response = action === "refresh" ? await fetch(query ? `${endpoint}?${query}` : endpoint, { cache: "no-store", ...(signal ? { signal } : {}) })
+  return new PreviewPreparationActions(async (action, body, options = {}) => {
+    const signal = options.signal;
+    const response = action === "refresh" ? await fetch(body ? `${endpoint}?body=${body}` : endpoint, { cache: "no-store", ...(signal ? { signal } : {}) })
       : await fetch(endpoint, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, ...(signal ? { signal } : {}),
-        ...(action === "withdraw" ? { keepalive: true } : {}),
-        body: JSON.stringify({ action, ...(body ? { body } : {}), ...(options.lease ? { lease: options.lease } : {}) }) });
+        body: JSON.stringify({ action, ...(body ? { body } : {}) }) });
     return { ok: response.ok, data: await response.json() };
   });
-  globalThis.addEventListener?.("pagehide", () => actions.releaseLeases());
-  return actions;
 }

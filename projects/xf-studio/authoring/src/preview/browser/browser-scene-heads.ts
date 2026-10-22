@@ -4,7 +4,7 @@
  *
  * - **A superseding subject change.** The drawn scene wants a head for (its V, the V's body). A change of the scene's V, or of the V's body
  *   (a save, a preset, the other Default V, Undo), is a new want: the newest wins (scene-residency.ts), a build still running for an older
- *   one stops (a masculine core's preparation too, decision D1), and the head shown before stays drawn until the new one is built. Nothing
+ *   one stops (and the page stops waiting for a masculine core, whose host job finishes and is cached: decision D1), and the head shown before stays drawn until the new one is built. Nothing
  *   is refused meanwhile: the V's context stays attached, and its changes land as they are made.
  * - **Residency.** The shown head plus at most one warm one (`warm`, decision D2); a warm head is shown again at once, catching up with
  *   its V. A lost context drops the warm heads first. The same decisions bound the choice-preview devices: only a V a resident head shows
@@ -38,7 +38,7 @@ export type SceneHeadsPorts = {
   };
   /** The characters' owner: each V's one context, its document and its decoded save. */
   characters: Pick<CharacterService, "context" | "document" | "decoded">;
-  /** Prepare a body's core head (the host's preparation, `ensureBody`), reporting progress; stops when `signal` aborts (decision D1). */
+  /** Prepare a body's core head (the host's preparation, `ensureBody`), reporting progress; stops waiting when `signal` aborts (decision D1). */
   prepareCore(body: CoreBody, pending: (message: string, progress: number | null) => void, signal: AbortSignal): Promise<void>;
   /** Show progress in the head pane while no head is shown yet (the first load). */
   pending(message: string, progress: number | null): void;

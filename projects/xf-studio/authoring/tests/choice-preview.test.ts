@@ -14,6 +14,9 @@ import { ChoicePreviewService, type ChoicePreviewPort, type PreviewAsk, PreviewH
 import type { RenderComponent } from "../src/character/render-detail";
 import { ChoicePreviewOwner } from "../src/character/choice-preview-owner";
 import { suspendablePreviews } from "../src/character/choice-preview-suspension";
+import { PreviewSpin } from "../src/studio-ui/components/choice-preview";
+import { h } from "../src/studio-ui/dom";
+import { installLightDom, lightEvent, type LightElement, uninstallLightDom } from "./light-dom";
 import { DEFAULT_CHARACTER } from "../src/character/character-detail-request";
 
 /** Choice previews phase 1 (research/character-customization/choice-previews-design.md §10): keys, sources, theming, camera, store, endpoint, scheduling. */
@@ -545,6 +548,61 @@ describe("the preview service's failures, cancellation and live turns (PREV-150.
     expect(service.liveStats.failed).toBe(0);
     service.dispose();
     previews.dispose();
+  });
+
+  test("a question waiting for a V that never returns is let go with its requester, and a frame waiting for a live turn with the turn", async () => {
+    let made = 0;
+    const previews = suspendablePreviews(() => { made++; return readyPort({ live: { async start() {}, async frame() { return { bitmap: { close() {} } as unknown as ImageBitmap }; }, stop() {} } }); });
+    const owner = new ChoicePreviewOwner(previews);
+    // A requester asks of a V no resident head shows (never admitted here), with no signal of its own.
+    const lease = owner.lease();
+    const waiting = [lease.stored("k"), lease.subject("female"), lease.render(sourceAt(2), "k2")].map(promise => promise.then(() => "answered", error => error.name));
+    await settle();
+    expect(previews.waiting).toBe(3);
+    // Its requester goes (its service is disposed): every question it left waiting is refused and let go.
+    lease.dispose!();
+    expect(await Promise.all(waiting)).toEqual(["AbortError", "AbortError", "AbortError"]);
+    expect(previews.waiting).toBe(0);
+    // A live turn: a frame waits for the V, then the turn stops. The frame is refused and let go; nothing was ever made.
+    const other = owner.lease();
+    void other.live!.start(sourceAt(3)).catch(() => {});
+    const frame = other.live!.frame(10, false).then(() => "drawn", error => error.constructor.name);
+    await settle();
+    expect(previews.waiting).toBe(2);
+    other.live!.stop();
+    expect(await frame).toBe("PreviewSuperseded");
+    expect(previews.waiting).toBe(0);
+    // A newer start ends the waiting frames of the turn it replaces too.
+    void other.live!.start(sourceAt(2)).catch(() => {});
+    const stale = other.live!.frame(20, false).then(() => "drawn", error => error.constructor.name);
+    void other.live!.start(sourceAt(3)).catch(() => {});
+    expect(await stale).toBe("PreviewSuperseded");
+    other.dispose!();
+    expect(previews.waiting).toBe(0);
+    expect(made).toBe(0);
+  });
+
+  test("the preview stage asks a new frame source at once: a frame left waiting by a stopped turn never keeps it busy", async () => {
+    installLightDom();
+    try {
+      const host = h("div", {}) as HTMLElement;
+      const spin = new PreviewSpin(host, { enabled: true });
+      spin.setStrip("blob:strip", TURNTABLE.frames);
+      (host.querySelector(".pv-strip") as unknown as LightElement).dispatchEvent(lightEvent("load"));
+      // The picture is dragged: it turns, and a live turn draws it.
+      (host as unknown as LightElement).dispatchEvent(lightEvent("pointerdown", { button: 0, pointerId: 1, clientX: 0 } as never));
+      (host as unknown as LightElement).dispatchEvent(lightEvent("pointermove", { pointerId: 1, clientX: 40 } as never));
+      const asked: string[] = [];
+      // Frames are asked no more often than every 33 ms.
+      spin.setLive(() => { asked.push("stopped turn"); return new Promise<ImageBitmap | null>(() => {}); });
+      await Bun.sleep(50);
+      expect(asked).toEqual(["stopped turn"]);
+      // Its frame never comes back; the turn stops, and a new one starts.
+      spin.setLive(null);
+      spin.setLive(async () => { asked.push("new turn"); return null; });
+      await Bun.sleep(50);
+      expect(asked).toEqual(["stopped turn", "new turn"]);
+    } finally { uninstallLightDom(); }
   });
 
   test("a live turn only superseded isn't a failure: the choice turns live again when wanted (PREV-151)", async () => {

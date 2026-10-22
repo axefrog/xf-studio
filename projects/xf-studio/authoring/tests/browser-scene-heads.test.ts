@@ -1,7 +1,7 @@
 /**
  * Profiles phase 4a-iv (experiment 043 §10): the window's scene runtime owner over the real head attachment and viewport device, with fake
  * scenes. A body switch supersedes: the V shown before stays drawn until the new head is built, the last choice is what ends up shown, a
- * superseded masculine core's preparation is stopped (D1), and a late build is disposed, never shown. The V's context outlives the heads:
+ * superseded masculine core is no longer waited for (D1), and a late build is disposed, never shown. The V's context outlives the heads:
  * it stays attached across a swap (no `not_ready` while a head loads), and a warm head is shown again at once.
  */
 import { expect, test } from "bun:test";
@@ -69,7 +69,7 @@ function owner(bodies: Record<string, "female" | "male">, failBuild: number[] = 
 }
 const settle = () => new Promise(resolve => setTimeout(resolve, 5));
 
-test("a superseding body switch shows the last choice: the female V stays drawn while the male head builds, and back to female the male build and its core preparation stop (D1)", async () => {
+test("a superseding body switch shows the last choice: the female V stays drawn while the male head builds, and back to female the male build and its wait for his core stop (D1)", async () => {
   const o = owner({ v1: "female" });
   await o.heads.load();
   const female = o.heads.shown()!;
@@ -87,7 +87,7 @@ test("a superseding body switch shows the last choice: the female V stays drawn 
   // Creator changes are never refused while the other head loads: the V's context stays attached.
   expect(o.h.attached.characterContext).toBe(context);
   expect(o.heads.snapshot().building).toMatchObject({ key: "s1|v1|male" });
-  // Back to female: the male build and his core's preparation stop; the female head is still the one shown.
+  // Back to female: the male build and its wait for his core stop; the female head is still the one shown.
   context.dispatch({ kind: "character.useDefault", bodyGender: "female" });
   await settle();
   expect(preparing.aborted).toBe(true);

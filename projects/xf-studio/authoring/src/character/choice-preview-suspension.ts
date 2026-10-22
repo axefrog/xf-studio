@@ -4,8 +4,9 @@
  * withdrawn ends the device without ending the V's context.
  *
  * - **Questions wait for admission.** A question asked while the V isn't admitted (a requester of a V no resident head shows) makes no
- *   device: it waits, and runs once the owner admits the V again, so devices never outnumber the residency budget. Its own signal, or the
- *   wrapper's disposal, ends the wait.
+ *   device: it waits, and runs once the owner admits the V again, so devices never outnumber the residency budget. Every wait is tied to
+ *   a lifetime: its requester's (the signal each requester's lease passes, choice-preview-owner.ts), the live turn's for a live question
+ *   (a newer start or `stop` ends it), and the wrapper's own. Whichever ends first refuses the question and lets go of it.
  * - **A new device is given back what the old one held** before it answers anything: the subject head, then the live turn's source. A
  *   question whose device was ended under it is asked again of the next one, so a suspension fails no work, and a live turn its service
  *   still holds keeps drawing.
@@ -20,6 +21,8 @@ export type SuspendablePreviews = ChoicePreviewPort & {
   admit(admitted: boolean): void;
   /** Whether a device is alive now. */
   readonly active: boolean;
+  /** How many questions wait for admission now (evidence). */
+  readonly waiting: number;
   /** The V's context is gone: the device ends, and every waiting question is refused. */
   dispose(): void;
 };
@@ -31,8 +34,8 @@ export function suspendablePreviews(make: () => ChoicePreviewPort): SuspendableP
   /** The subject head last asked for, and the device that loaded it (with its answer). */
   let subject: "female" | "male" | null = null;
   let head: { on: ChoicePreviewPort; body: "female" | "male"; identity: Promise<string> } | null = null;
-  /** The live turn wanted now (its source), and the device it was uploaded to (with that upload). */
-  let live: { source: ChoicePreviewSource; on: ChoicePreviewPort | null; upload: Promise<void> } | null = null;
+  /** The live turn wanted now (its source), the device it was uploaded to (with that upload), and its lifetime (ended by a newer start or `stop`). */
+  let live: { source: ChoicePreviewSource; on: ChoicePreviewPort | null; upload: Promise<void>; turn: AbortController } | null = null;
   const waiting = new Set<() => void>();
   const wake = () => { for (const resume of [...waiting]) resume(); };
 
@@ -75,6 +78,13 @@ export function suspendablePreviews(make: () => ChoicePreviewPort): SuspendableP
       catch (error) { if (disposed || device === on || signal?.aborted) throw error; }
     }
   }
+  /** The live turn ends: every question still waiting for it is refused. */
+  function endTurn() {
+    const ended = live;
+    live = null;
+    ended?.turn.abort(new PreviewSuperseded());
+  }
+  const within = (signal: AbortSignal | undefined, turn: AbortSignal) => signal ? AbortSignal.any([signal, turn]) : turn;
   function end() {
     const ended = device;
     device = null; head = null;
@@ -84,25 +94,31 @@ export function suspendablePreviews(make: () => ChoicePreviewPort): SuspendableP
 
   return {
     get active() { return !!device; },
+    get waiting() { return waiting.size; },
     admit(on) {
       if (disposed || on === admitted) return;
       admitted = on;
       if (on) wake(); else end();
     },
     sources: (request, option, kind, positions, derive, signal) => ask(on => on.sources(request, option, kind, positions, derive, signal), signal),
-    subject: body => { subject = body; return ask(on => headOn(on)); },
-    stored: key => ask(on => on.stored(key)),
-    render: (source, key, frames) => ask(on => on.render(source, key, frames)),
+    subject: (body, signal) => { subject = body; return ask(on => headOn(on), signal); },
+    stored: (key, signal) => ask(on => on.stored(key), signal),
+    render: (source, key, frames, signal) => ask(on => on.render(source, key, frames), signal),
     // A URL of a device already ended was let go with it.
     release: url => device?.release?.(url),
     live: {
-      start: source => {
-        const wanted = live = { source, on: null, upload: Promise.resolve() };
-        return ask(on => live === wanted ? liveOn(on) : Promise.reject(new PreviewSuperseded()));
+      start: (source, signal) => {
+        endTurn();
+        const wanted = live = { source, on: null, upload: Promise.resolve(), turn: new AbortController() };
+        return ask(on => liveOn(on), within(signal, wanted.turn.signal));
       },
-      frame: (turn, measure) => ask(async on => { await liveOn(on); return on.live ? on.live.frame(turn, measure) : NO_LIVE(); }),
-      stop: () => { live = null; device?.live?.stop(); },
+      frame: (angle, measure, signal) => {
+        const current = live;
+        if (!current) return Promise.reject(new PreviewSuperseded());
+        return ask(async on => { await liveOn(on); return on.live ? on.live.frame(angle, measure) : NO_LIVE(); }, within(signal, current.turn.signal));
+      },
+      stop: () => { endTurn(); device?.live?.stop(); },
     },
-    dispose() { disposed = true; end(); wake(); },
+    dispose() { disposed = true; endTurn(); end(); wake(); },
   };
 }
