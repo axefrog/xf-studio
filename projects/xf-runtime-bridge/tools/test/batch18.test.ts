@@ -139,7 +139,33 @@ describe("0.8.4 against the self-test host: sweeps in photo mode, the save's tes
     expect(calls.indexOf("hud:true")).toBeLessThan(calls.indexOf("capture"));
     expect(calls.lastIndexOf("hud:false")).toBeGreaterThan(calls.lastIndexOf("capture"));
     const state = await api.run("game.status", {});
-    expect(state.ok && (state.result as Any).photo_ui_hidden).not.toBe(true);
+    expect(state.ok && [(state.result as Any).ui_hidden, (state.result as Any).cursor_hidden]).toEqual([false, false]);
+    await phase("gameplay");
+    await api.run("showroom.clear", {});
+  });
+
+  test("the review of 0.8.4: a sweep puts the menu and the cursor back each as it was (menu hidden, cursor shown)", async () => {
+    await phase("gameplay");
+    expect(codeOf(await api.run("showroom.spawn", { manifest: fixture, presets: ["Gloss A · as before"], anchor: "v", distance_m: 2 }))).toBe("ok");
+    await phase("photo_mode");
+    // The menu hidden, the cursor shown: hide both, then show the cursor alone.
+    expect((await api.callBridge("photo.hud.hide", { hidden: true, cursor: true }, "t-hud")).ok).toBe(true);
+    expect((await api.callBridge("photo.hud.hide", { hidden: false, cursor: true }, "t-hud")).ok).toBe(true);
+    expect((await api.callBridge("photo.hud.hide", { hidden: true, cursor: false }, "t-hud")).ok).toBe(true);
+    const before = (await api.run("game.status", {})) as Any;
+    expect([before.result.ui_hidden, before.result.cursor_hidden]).toEqual([true, false]);
+    const context = { api, cid: "t-sweep3", captureRoot: tempDir("xfb-084-sweep3-") } as unknown as CommandContext;
+    const original = SWEEP_CAPTURE.capture;
+    SWEEP_CAPTURE.capture = ((options: Any) => ({ view: { path: join(options.outDir, `${options.name}.png`), width: 8, height: 8 }, full: null }) as Any) as never;
+    try {
+      const out = (await runShowroomRotate({ sweep: { steps: 1, capture: true, settle_ms: 0 } }, context)).value as Any;
+      expect(out.photo_menu_hidden_for_sweep).toBe(true);
+      expect(out.photo_menu_warning).toBeUndefined();
+    } finally {
+      SWEEP_CAPTURE.capture = original;
+    }
+    const after = (await api.run("game.status", {})) as Any;
+    expect([after.result.ui_hidden, after.result.cursor_hidden]).toEqual([true, false]);
     await phase("gameplay");
     await api.run("showroom.clear", {});
   });
@@ -300,6 +326,40 @@ describe.skipIf(!existsSync(FENGARI))("0.8.4 the CET comment box wraps at words 
         .. "," .. tostring(string.find(b, "Press a key", 1, true) ~= nil) .. "," .. tostring(string.find(b, "F6 answers", 1, true) ~= nil)
         .. "," .. tostring(string.find(b, "Version 0.8.4", 1, true) ~= nil)`);
     expect(out).toBe("true,true,true,true,true");
+  });
+
+  test("the review of 0.8.4: undo after deleting across a wrapped line gives the soft break back, so Send keeps the space", () => {
+    const out = run(`
+      local measure = function(line) return #line end
+      local state = { commentSoft = {} }
+      local function edit(old, new, typed)
+        state.commentSoft = panel.trackSoft(state, old, new, typed)
+        local wrapped, soft = panel.wrap(new, state.commentSoft, measure, 10)
+        state.commentSoft = soft
+        panel.rememberSoft(state, wrapped, soft)
+        return wrapped
+      end
+      local typed = edit("", "aaaa bbbb cccc dddd eeee", false)          -- typed (pasted) in one go: wrapped
+      local deleted = edit(typed, string.sub(typed, 1, 5) .. string.sub(typed, 15), false) -- select "bbbb<break>cccc", delete
+      local undone = edit(deleted, typed, false)                           -- Ctrl+Z: the exact earlier text
+      local a = panel.unwrap(undone, state.commentSoft)
+      -- Undo after a rewrap: the restored span carries a line break whose earlier state is remembered at that place.
+      state = { commentSoft = {} }
+      local w1 = edit("", "aaaa bbbb cccc dddd eeee", false)
+      local cut = string.sub(w1, 1, 5) .. string.sub(w1, 15)
+      local w2 = edit(w1, cut, false)
+      local changed = edit(w2, w2 .. " ffff", false)                         -- more typing, then undo puts the span back
+      local restored = string.sub(changed, 1, 5) .. string.sub(w1, 6, 14) .. string.sub(changed, 6)
+      state.commentSoft = panel.trackSoft(state, changed, restored, false)
+      local b = panel.unwrap(restored, state.commentSoft)
+      -- A line break the player typed with Enter is never taken for a soft one, even where one used to be.
+      state = { commentSoft = {} }
+      local w3 = edit("", "aaaa bbbb cccc", false)
+      local joined = edit(w3, "aaaa bbbbcccc", false)
+      state.commentSoft = panel.trackSoft(state, joined, "aaaa bbbb\\ncccc", true)
+      local c = panel.unwrap("aaaa bbbb\\ncccc", state.commentSoft)
+      return a .. "|" .. b .. "|" .. c`);
+    expect(out).toBe("aaaa bbbb cccc dddd eeee|aaaa bbbb cccc dddd eeee ffff|aaaa bbbb\ncccc");
   });
 
   test("a long line breaks at spaces within the width; the text keeps its length; sending turns the breaks back into spaces", () => {
