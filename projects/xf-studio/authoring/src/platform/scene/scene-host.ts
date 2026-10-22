@@ -8,7 +8,7 @@ import type { PosePlacement } from "../../animation/pose-sample";
 import { coreSceneEvidence, idleEvidence } from "../../character/render/scene-evidence";
 import { bindRenderTriggers, createRenderScheduler, invalidating } from "../../preview/render/render-scheduler";
 import { retainedViewportAspect, visibleViewportSize } from "../../preview/viewport-size";
-import { loadCoreDetail, type LoadedCoreDetail } from "../../character/render/core-detail-loader";
+import { coreDisposer, loadCoreDetail, type LoadedCoreDetail } from "../../character/render/core-detail-loader";
 import type { CoreBody } from "../../character/render-detail";
 import { HeadLoadError } from "../../preview/head-load-error";
 import { createViewportBackdrop } from "../../preview/render/viewport-backdrop";
@@ -60,6 +60,12 @@ export type SceneHostOptions = {
   onContext?: (event: "lost" | "restored") => void;
   /** Told when a feature renderer's method throws (default: the console); the host and the other features draw on (PREV-94). */
   onRendererError?: (feature: string, method: string, error: unknown) => void;
+  /**
+   * Draw with this renderer (one WebGL context the caller owns: a probe's, and from profiles phase 4a-ii the renderer device's) instead of
+   * opening a context of its own. The host never disposes it or moves its canvas, so `dispose()` must free everything the host made on it
+   * without relying on the context being lost (experiments/043-scene-runtimes).
+   */
+  renderer?: THREE.WebGLRenderer;
 };
 /** A stored orbit, in neutral head space (workspace-state.ts `CameraState` has the same shape). */
 export type SceneCameraState = { position: number[]; target: number[]; fov: number };
@@ -91,22 +97,26 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     return { canvas, direct, context: canvas.getContext("webgl2", {
       alpha: false, antialias: direct, depth: direct, stencil: false, preserveDrawingBuffer: true }) };
   };
-  let opened = open(false);
-  if (opened.context && !linearTargetSupported(opened.context)) {
-    opened.context.getExtension("WEBGL_lose_context")?.loseContext();
-    opened = open(true);
-  }
-  const { canvas, context } = opened;
-  if (!context) throw new HeadLoadError("webgl_unavailable", "WebGL 2 is unavailable");
   let renderer: THREE.WebGLRenderer;
-  try { renderer = new THREE.WebGLRenderer({ canvas, context, antialias: opened.direct, depth: opened.direct, preserveDrawingBuffer: true }); }
-  catch (error) { throw new HeadLoadError("webgl_unavailable", "WebGL 2 could not start", { cause: error }); }
+  if (options.renderer) renderer = options.renderer;
+  else {
+    let opened = open(false);
+    if (opened.context && !linearTargetSupported(opened.context)) {
+      opened.context.getExtension("WEBGL_lose_context")?.loseContext();
+      opened = open(true);
+    }
+    const { canvas, context } = opened;
+    if (!context) throw new HeadLoadError("webgl_unavailable", "WebGL 2 is unavailable");
+    try { renderer = new THREE.WebGLRenderer({ canvas, context, antialias: opened.direct, depth: opened.direct, preserveDrawingBuffer: true }); }
+    catch (error) { throw new HeadLoadError("webgl_unavailable", "WebGL 2 could not start", { cause: error }); }
+    host.prepend(renderer.domElement);
+    const own = renderer;
+    releases.push(() => { own.dispose(); own.forceContextLoss(); own.domElement.remove(); });
+  }
   renderer.setPixelRatio(viewportPixelRatio(devicePixelRatio));
   renderer.setClearColor(0x14181c, 1);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.2;
-  host.prepend(renderer.domElement);
-  releases.push(() => { renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); });
   const scene = new THREE.Scene(),
     camera = new THREE.PerspectiveCamera(30, 1, 0.005, 10);
   const backdrop = createViewportBackdrop(scene, options.stage ?? "dark");
@@ -168,6 +178,8 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   releases.push(() => lighting.dispose());
   // The core head, plate, eyes and maps load through one typed render record (see core-detail-loader).
   const core: LoadedCoreDetail = await (options.loadCore ?? ((renderer, body) => loadCoreDetail(renderer, fetch, body)))(renderer, options.body ?? "female");
+  // The core head's own geometry, materials and textures go with the host (not with the context, which may outlive it).
+  releases.push(coreDisposer(core));
   // The creator light rig follows the body of the head it lights (the game's preview controller does the same).
   lighting.setBodySex(core.body);
   const coreDetail = { identity: core.record.identity, origin: core.record.origin, label: core.record.provenance.label };

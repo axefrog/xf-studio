@@ -37,7 +37,13 @@ export function createStudioEnvironment(renderer: THREE.WebGLRenderer, scene: TH
   const mode: StudioEnvironmentMode = halfFloatRenderable(renderer.extensions) ? "pmrem" : "probe";
   const prefilter = () => {
     const pmrem = new THREE.PMREMGenerator(renderer), room = new RoomEnvironment();
-    try { return pmrem.fromScene(room, 0.04); } finally { pmrem.dispose(); room.dispose(); }
+    try { return pmrem.fromScene(room, 0.04); }
+    finally {
+      // The room's `dispose()` frees its geometry and materials but not its instanced boxes' matrix buffer, which the prefilter's draw
+      // uploaded: without this, each prefilter leaves one buffer on a renderer that outlives the scene (experiments/043-scene-runtimes).
+      pmrem.dispose(); room.dispose();
+      room.traverse(object => { if ((object as THREE.InstancedMesh).isInstancedMesh) (object as THREE.InstancedMesh).dispose(); });
+    }
   };
   let target: THREE.WebGLRenderTarget | null = null, probe: THREE.LightProbe | null = null;
   if (mode === "pmrem") {

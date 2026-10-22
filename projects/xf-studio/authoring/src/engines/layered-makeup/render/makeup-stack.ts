@@ -441,20 +441,20 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
   }
   /**
    * Release every layer slot, the lit plate, the composite and the stack's own geometry (PREV-100). The geometry shares the anchor's
-   * index, attributes and morph targets, which the platform's surface still draws, so they are taken off it first: the renderer's
-   * dispose then frees only what is the stack's (the skin underlay's attributes, the geometry's vertex-array states, its wireframe
-   * index and morph texture), and the anchor is as the stack found it.
+   * index, attributes and morph targets, and the anchor itself is never drawn (PREV-97): the GPU buffers of those shared attributes were
+   * uploaded through this geometry, and Three frees an attribute's buffer only when a geometry it drew is disposed. So the geometry is
+   * disposed whole, with the anchor's attributes still on it, when the anchor's geometry is (the core head goes with its scene), and
+   * nothing draws it meanwhile. Freeing it now would leave the anchor's buffers on a renderer that outlives the scene
+   * (experiments/043-scene-runtimes); stripping them first, as before, left them there for good.
    */
   function dispose() {
     setCanvases([]);
     releaseFinishStandIns();
     composite.dispose();
     plate.removeFromParent(); plateLight.material.dispose();
-    const own = new Set<string>(STACK_ATTRIBUTES);
-    geometry.setIndex(null);
-    for (const name of Object.keys(geometry.attributes)) if (!own.has(name)) geometry.deleteAttribute(name);
-    geometry.morphAttributes = {};
-    geometry.dispose();
+    const source = anchor.geometry;
+    const release = () => { source.removeEventListener("dispose", release); geometry.dispose(); };
+    source.addEventListener("dispose", release);
   }
   return { plates, materials, textures, plate, geometry, setCanvases, reconcileLayerCanvases, dispose,
     setLayerCanvas, needsOptics, needsAlbedo, updateLayer, diagnostics, setUnderlaySource, setSkinLight, prepareBlend, blendDiagnostics, contextRestored, prewarmFinishes,

@@ -1,6 +1,6 @@
 # Experiment 043: scene runtimes (profiles phase 4a)
 
-**Status:** gap map and chunk plan, 22 October 2026. **Planning only:** no production code has changed. The coordinator approves the plan before chunk 4a-i starts. This is the working record for [profiles design §4.5](../../research/authoring/profiles-views-layouts-design.md#45-scene-runtimes-and-switching-phase-4a) and its phase 4a row in §9.2. It builds on spike S2 ([experiment 039](../039-view-switch-spike/README.md), prototype on branch `claude/spike-views`).
+**Status:** gap map and chunk plan, approved 22 October 2026 with decisions D1–D4 at their defaults (§4). Chunk 4a-i is built (§7); 4a-ii waits for its review. This is the working record for [profiles design §4.5](../../research/authoring/profiles-views-layouts-design.md#45-scene-runtimes-and-switching-phase-4a) and its phase 4a row in §9.2. It builds on spike S2 ([experiment 039](../039-view-switch-spike/README.md), prototype on branch `claude/spike-views`).
 
 Source paths are relative to `projects/xf-studio/authoring/src/`, and line numbers are at `72369156` (phase 1 merged). Tests are in `projects/xf-studio/authoring/tests/`.
 
@@ -106,9 +106,9 @@ Effort is in the design's units. Each chunk leaves `main` green (suite, typechec
 
 ## 4. Decisions
 
-Each decision has a proposed default; the coordinator can change it.
+All four were approved at their defaults by the coordinator on 22 October 2026, with the plan. Chunks run one at a time (economical mode), so 4a-iii follows 4a-ii rather than running beside it.
 
-| # | Question | Proposed default |
+| # | Question | Decided |
 |---|---|---|
 | D1 | When a masculine body change is superseded, does the host's core preparation (18.5 s cold, one-time) stop? | It stops. The page withdraws its want, and the job scheduler cancels work nothing wants (architecture contract). The next masculine request starts again. |
 | D2 | Is the residency budget a count, or bytes too? | A count (N = 1), plus: warm runtimes are dropped first on context loss or a failed allocation, and each runtime's estimated bytes are published as evidence. A byte cap waits for G3's measurements. |
@@ -136,3 +136,44 @@ Each real-data run uses an isolated server and scratch caches, as S2 did: never 
 4. **Renderer-global state between runtimes** (shadow `needsUpdate`, exposure, clear colour). Every draw opens with the runtime's full state record, and the A-B-A pixel gate checks it.
 5. **Cancel latency inside one non-abortable step** (a whole-body glTF parse). Abort is checked between steps; if G3 shows a step over 100 ms, that step is sliced or moved to a worker.
 6. **The context outliving runtimes** changes the character service's lifecycle (detach goes). The model-based T1 test in 4a-iv covers interleavings, and the multi-subject service test grows to two bodies resident at once.
+
+## 7. Chunk 4a-i: disposal without context loss (built)
+
+**What changed.**
+
+- `createSceneHost` takes an optional `renderer` (`platform/scene/scene-host.ts`). The host draws with it and never disposes it or moves its canvas. Without one, behaviour is unchanged.
+- **The core head goes with its host.** `coreDisposer` (`character/render/core-detail-loader.ts`) captures, at load, every geometry, material, texture and skeleton of the core's glTF scene, plus its record's textures. The host frees them in its release list. The failure path in the loader uses the same function.
+- The rig frees the head's skin material, and the skinned eye copy the game idle makes for gaze (its geometry and skeleton) (`platform/scene/head-rig.ts`).
+- **The makeup stack's geometry waits for its anchor.** It draws over the plate anchor's index and attributes, and the anchor is never drawn (PREV-97), so those buffers were uploaded through the stack's geometry. Three frees an attribute's buffer only when a geometry it drew is disposed. The stack used to strip the shared attributes before disposing, which left the anchor's buffers on the renderer for good. Now its geometry is disposed whole when the anchor's geometry is (`engines/layered-makeup/render/makeup-stack.ts`).
+- The studio environment's prefilter also disposes the room's instanced boxes. Three's `RoomEnvironment.dispose()` frees the geometry and materials but not the instance-matrix buffer, so one buffer was left per prefilter and per context restore (`preview/render/studio-environment.ts`).
+
+**The counter and the gate.**
+
+- `tests/webgl-gl-objects.ts` wraps a WebGL 2 context's `create*`/`delete*` calls and counts live textures, buffers, framebuffers, renderbuffers, programs, shaders, vertex arrays, queries, samplers and syncs. With `stacks` it records the call stack that made each object, so a leak can be traced to its maker.
+- `tests/webgl-scene-dispose.test.ts` (page `tests/webgl-scene-dispose-probe-page.ts`) builds the real host five times on one renderer it doesn't own. Each cycle uses the synthetic head (`tests/webgl-synthetic-head.ts`, now shared with the scene-host probe) and the composition's renderers. It shows a synthetic V with two makeup layers, draws under the creator rig (shadows, scatter, grading) and a studio setup (the room environment), plays the idle, then disposes the host as it is.
+- The first disposal may leave only what lives as long as the renderer (the test's `RENDERER_LIFETIME`). Every later disposal must leave exactly what the first did. It runs as a release oracle, like the other WebGL probes (`XFS_REQUIRE_ORACLES=1`). Headless Chrome on a synthetic head peaked at 1.2 GB under the 3 GB guard, in about 60 s.
+
+**Counts after each disposal, minus the empty renderer's** (RTX 4070, ANGLE D3D11):
+
+| After cycle | Before (main) | After 4a-i |
+|---|---|---|
+| 1 | 10 textures, 23 buffers, 3 programs, 3 vertex arrays | 3 textures, 3 buffers, 2 programs, 1 vertex array |
+| 2 | 17, 43, 3, 5 | 3, 3, 2, 1 |
+| 5 | 38, 103, 3, 11 | 3, 3, 2, 1 |
+| Growth per cycle | +7 textures, +20 buffers, +2 vertex arrays (Three: +2 geometries, +7 textures) | none |
+
+Before the fix, per cycle, the leaks traced to:
+
+- the core head's four textures and its geometries;
+- the skeletons' bone textures (two);
+- the plate anchor's six buffers held through the makeup stack;
+- the room environment's instance buffer.
+
+What stays after the first cycle is shared by every later scene and freed only with the renderer. Three owns most of it: its DFG lookup texture, its shadow pass's depth program, and the background plane it draws a textured scene background with (three buffers, one vertex array, one program). The layered-makeup engine owns the rest: its 1×1 blank textures, shared on purpose (`plate-composite.ts`).
+
+**Not covered yet.**
+
+- **JS heap:** this gate counts GPU objects, not memory. S2's 200 MB of heap left behind is measured again in G3.
+- **The real masculine and feminine cores:** these use the same code path, but their counts come from G1–G3.
+- **The game idle's gaze-eye copy:** the synthetic idle doesn't make one, so the probe doesn't exercise that release.
+- **A replaced skin underlay of a different vertex count:** that case still waits for renderer teardown (`applyUnderlay`). It doesn't arise today, because the plate's vertex count never changes.

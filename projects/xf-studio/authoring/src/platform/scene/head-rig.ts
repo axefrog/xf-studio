@@ -220,6 +220,7 @@ export async function createHeadRig(scene: THREE.Scene, core: LoadedCoreDetail, 
     normalScale: new THREE.Vector2(0.35, -0.35),
   });
   head.material = skin;
+  options.releases.push(() => skin.dispose());
   extendSkin(head, skin);
   // The core eye is the fallback: the base game's eye texture through the same eyeball material as a resolved eye
   // (eye-material.ts: colour sampled V-flipped, as the game's program does). The shown V's own eyes come with the
@@ -235,7 +236,8 @@ export async function createHeadRig(scene: THREE.Scene, core: LoadedCoreDetail, 
   eyes.material = eyeMat;
   if (eyes instanceof THREE.SkinnedMesh) extendSkin(eyes, eyeMat);
   const motion = await (options.loadMotion ?? loadGameMotion)(scene, { get mesh() { return eyes; }, material: eyeMat,
-    replace(next) { meshes[meshes.indexOf(eyes)] = next; eyes.removeFromParent(); eyes = next; } }, core.body);
+    // The rig's skinned copy of the eye (gaze joints) has its own geometry and skeleton, freed with the rig; the core's own go with the core.
+    replace(next) { meshes[meshes.indexOf(eyes)] = next; eyes.removeFromParent(); eyes = next; options.releases.push(() => { next.geometry.dispose(); next.skeleton.dispose(); }); } }, core.body);
   const { idle, blink } = motion;
   const finalEyes = eyes;
   // The held expression's face driver (face-driver.ts): bound to the head's bones now, at their neutral pose, like the blink; its rig

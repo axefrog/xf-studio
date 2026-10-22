@@ -95,9 +95,37 @@ export async function loadCoreDetail(renderer: THREE.WebGLRenderer, fetcher: Cor
     }));
     return { record, body, gltf, meshes, head, surfaces: surfaces as Map<string, THREE.SkinnedMesh>, eyes, textures: textures as Record<CoreTextureSlot, THREE.Texture> };
   } catch (error) {
-    for (const texture of Object.values(textures)) texture?.dispose();
-    gltf?.scene.traverse(object => { if (object instanceof THREE.Mesh) object.geometry.dispose(); });
+    if (gltf) coreDisposer({ gltf, textures: textures as LoadedCoreDetail["textures"] })();
+    else for (const texture of Object.values(textures)) texture?.dispose();
     // Anything that fails once the files arrived intact (model parse, missing parts, textures) is a damaged preview.
     throw error instanceof HeadLoadError ? error : new HeadLoadError("preview_damaged", (error as Error)?.message ?? "The 3D view could not be read.", { cause: error });
   }
+}
+
+/**
+ * The GPU resources a loaded core head owns, captured now (before a rig swaps any mesh or material), and a function that frees them: every
+ * geometry, material, texture and skeleton (its bone texture) of its glTF scene, and its record's textures. Whoever holds the core calls
+ * it when the head goes; the renderer it was drawn with may live on (profiles phase 4a: several scenes on one renderer), so nothing waits
+ * for the context to be lost.
+ */
+export function coreDisposer(core: Pick<LoadedCoreDetail, "gltf" | "textures">): () => void {
+  const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>(), textures = new Set<THREE.Texture>();
+  const skeletons = new Set<THREE.Skeleton>();
+  for (const texture of Object.values(core.textures)) if (texture) textures.add(texture);
+  core.gltf.scene.traverse(object => {
+    if (!(object instanceof THREE.Mesh)) return;
+    geometries.add(object.geometry);
+    // A skinned mesh's bone texture is the skeleton's own GPU texture, made on its first draw.
+    if (object instanceof THREE.SkinnedMesh) skeletons.add(object.skeleton);
+    for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+      materials.add(material);
+      for (const value of Object.values(material)) if ((value as THREE.Texture | null)?.isTexture) textures.add(value as THREE.Texture);
+    }
+  });
+  return () => {
+    for (const geometry of geometries) geometry.dispose();
+    for (const material of materials) material.dispose();
+    for (const texture of textures) texture.dispose();
+    for (const skeleton of skeletons) skeleton.dispose();
+  };
 }
