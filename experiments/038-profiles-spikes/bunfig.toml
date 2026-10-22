@@ -1,0 +1,3 @@
+[test]
+# Removes any scratch folder a test left behind once the whole run ends (the authoring tests/temp-dir.ts helper).
+preload = ["../../projects/xf-studio/authoring/tests/temp-dir-sweep.ts"]

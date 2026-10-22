@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { INITIAL_LEASE, LEASE_MESSAGES, leaseTransition, WorkspaceLease, type LeaseClock, type WorkspaceLeaseAdapter } from "../src/app/workspace/workspace-lease";
 import { leasedDocuments } from "../src/app/workspace/leased-documents";
@@ -18,6 +17,7 @@ import { freshWorkspace } from "./fixtures/eye-region";
 import { trustedFixture } from "./studio-presentation-fixture";
 
 import { namedCore } from "./fixtures/named-targets";
+import { tempDir } from "./temp-dir";
 /** A simulated clock: timers run when `advance` passes them. */
 function simulatedClock() {
   let now = 0;
@@ -186,6 +186,9 @@ test("a read-only window refuses every dispatch with unavailable, keeps reads, a
   expect(shell.feature("eye-makeup").dispatch({ kind: "layer.edit", command: { kind: "add" } } as never)).toEqual(refused);
   expect(await shell.library.execute({ kind: "save" })).toMatchObject({ ok: false, code: "unavailable" });
   expect(await shell.files.execute({ kind: "recipe.export" } as never)).toMatchObject({ ok: false, code: "unavailable" });
+  // The one exception: the recovery export writes only this window's own copy to a file, so a read-only window can still get its work out.
+  expect(shell.files.capability({ kind: "collection.exportWindowCopy" }).code).not.toBe("unavailable");
+  expect(await shell.files.execute({ kind: "collection.exportWindowCopy" })).not.toMatchObject({ code: "unavailable" });
   expect(await shell.presets.execute({ kind: "partPreset.save", feature: "eye-makeup", name: "x" } as never)).toMatchObject({ ok: false, code: "unavailable" });
   expect(await shell.localSetup.dispatch({ kind: "setup.refresh" })).toMatchObject({ ok: false, code: "unavailable" });
   expect(await shell.modInstall.dispatch({ kind: "install.refresh" } as never)).toMatchObject({ ok: false, code: "unavailable" });
@@ -209,7 +212,7 @@ test("the window that holds its workspace behaves as before", async () => {
 });
 
 test("the host fences document writes by lease generation, in the write's own transaction, and issues generations that survive a restart", async () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-lease-")), clock = hostClock();
+  const root = tempDir("xfs-lease-"), clock = hostClock();
   try {
     let files = openLibraryFiles(root, { clock, parts: STUDIO_PARTS, isolated: true });
     const handle = (request: Request) => files.handle(request)!;

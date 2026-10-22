@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { claimSingleInstance, INSTANCE_HEADER, INSTANCE_LOCK, instanceActivateRequest, instanceName, type InstancePorts, type ProcessLock } from "../single-instance";
+import { tempDir } from "../../tests/temp-dir";
 
 /** A lock owned by whichever process asked first, as the named mutex is. */
 const sharedLock = () => { const owners = new Map<string, number>(); return (pid: number): ProcessLock => ({ acquire: name => {
@@ -15,7 +16,7 @@ const ports = (pid: number, lock: ProcessLock, activated: number[] = []): Instan
 });
 
 test("the lock decides who runs; the published port only brings the first window forward", async () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-instance-")), lock = sharedLock();
+  const root = tempDir("xfs-instance-"), lock = sharedLock();
   try {
     const first = await claimSingleInstance(root, ports(100, lock(100)));
     expect(first.first).toBe(true);
@@ -84,7 +85,7 @@ test("the mutex tells owned, taken and failed apart, closes every handle it does
   expect(() => windowsMutex(api(0xffffffff)).acquire("x")).toThrow(InstanceLockError);
   expect(closed).toEqual([7, 7]);
   expect(() => windowsMutex(api(0, 0)).acquire("x")).toThrow(InstanceLockError);
-  const root = mkdtempSync(join(tmpdir(), "xfs-instance-"));
+  const root = tempDir("xfs-instance-");
   try {
     await expect(claimSingleInstance(root, ports(1, windowsMutex(api(0xffffffff))))).rejects.toBeInstanceOf(InstanceLockError);
   } finally { rmSync(root, { recursive: true, force: true }); }

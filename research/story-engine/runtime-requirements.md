@@ -7,7 +7,12 @@ What the Story Engine needs from the running game. This list is decided by what 
 Refreshed whenever the bridge reaches a milestone; last refreshed 22 October 2026.
 
 - **Where the code is.** `main` has bridge 0.8.5. NPC direction (`claude/bridge-080-npc`) is built and tested offline but has never run in game; the DM toolkit (`claude/bridge-080-dm`) is work in progress.
-- **XF Core C1** is designed (`research/runtime/xf-core-architecture.md` on `claude/xf-core-design`). It takes all 12 plugin API needs and `companion@1` into account. The plugin lives in `projects/xf-story-engine/`, built against the published SDK. The Story Engine's review of it, 5 blocking findings and 9 missing items, went to the bridge chat on 22 October. The C3 column below follows that design and that review.
+- **XF Core C1** is designed (`research/runtime/xf-core-architecture.md` on `claude/xf-core-design`). It takes all 12 plugin API needs and `companion@1` into account. The plugin lives in `projects/xf-story-engine/`, built against the published SDK. The Story Engine's review (5 blocking, 9 missing, 6 changes) was resolved in design round 2 (`7adc6430`): 17 accepted, 2 changed, 1 partly deferred. Highlights:
+  - saves go through `ledger@1`, an append-only branching ledger with a five-fact pin, committing on change;
+  - release senses come from a first-party plugin, XF Senses;
+  - `npc.direct@1` and `dm.beats@1` drafts arrive at the end of C1, and the NPC Direction port is in C3;
+  - the SDK gets a protocol spec, fixtures, a core simulator and the TypeScript client, while the Rust crate is the Story Engine's own;
+  - writes to vanilla state (O5) are a maintainer decision.
 - **The order:**
   1. Session 11.
   2. Merge 0.7 and 0.8 into `main`.
@@ -56,11 +61,11 @@ Refreshed whenever the bridge reaches a milestone; last refreshed 22 October 202
 | ID | Requirement | Needed by | Status |
 |---|---|---|---|
 | S1 | **A world event feed:**<br>- V's movement between districts, subdistricts and interiors;<br>- combat starting and ending, kills and knockdowns, NPC deaths;<br>- crimes and police heat;<br>- vehicle use and purchases;<br>- calls answered and dialogue choices;<br>- quest fact changes, time and weather;<br>- saves loaded | M4 | **partial:** the bridge's own event ring (`main`); `npc.*` events (branch); DM watchers for V's own state. **Designed:** [game events](../../knowledge/game-events.md) gives graded hooks and a minimal set of twelve event kinds (session, death, combat, heat, district, vehicle, vehicle acquired, journal, a fact watch-list, dialogue, call, time). Gaps: interior entry is polled; there's no "any fact changed" hook; dialogue picks are inferred |
-| S2 | **Perception:** what V can see now (people and props in view, line of sight), what V looked at or scanned, and how close V came | M4 | **partial:** `scene.report` and the look-at target (`main`); a gaze watcher (DM branch); no scanner |
-| S3 | **The people around V:** record, archetype, faction, appearance, current activity or workspot, and crowd density | M4 | **partial:** people within a radius (`main`); `npc.list` up to 40 m with crowd, protected and busy flags (branch). **Wanted next:** each NPC's affiliation and entity template path in `scene.read`'s rows (the record paths are in [population and affiliations](../../knowledge/population-and-affiliations.md) §9) |
-| S4 | **The places around V:** district and subdistrict, nearby workspots and AI spots, interiors, points of interest, and whether a point is reachable on foot or by car | M4 | **partial:** `world.probe` (streamed, navmesh, ground, clearance, sight line) on 0.8. **Wanted next:** a district and subdistrict read for V's position; no workspot queries yet |
+| S2 | **Perception:** what V can see now (people and props in view, line of sight), what V looked at or scanned, and how close V came | M4 | **partial:** `scene.report` and the look-at target (`main`); a gaze watcher (DM branch); no scanner **Release route: planned** through the XF Senses plugin |
+| S3 | **The people around V:** record, archetype, faction, appearance, current activity or workspot, and crowd density | M4 | **partial:** people within a radius (`main`); `npc.list` up to 40 m with crowd, protected and busy flags (branch). **Wanted next:** each NPC's affiliation and entity template path in `scene.read`'s rows (the record paths are in [population and affiliations](../../knowledge/population-and-affiliations.md) §9) **Release route: planned** through the XF Senses plugin |
+| S4 | **The places around V:** district and subdistrict, nearby workspots and AI spots, interiors, points of interest, and whether a point is reachable on foot or by car | M4 | **partial:** `world.probe` (streamed, navmesh, ground, clearance, sight line) on 0.8. **Wanted next:** a district and subdistrict read for V's position; no workspot queries yet **Release route: planned** through the XF Senses plugin |
 | S5 | **Quest state:**<br>- facts;<br>- journal entries and their states;<br>- active quests and gigs;<br>- fixer standing;<br>- whether a vanilla quest has reserved a person or place | M4 | **partial:** up to 16 named facts, read-only, on 0.8. **Wanted next:** about 25 facts in one read, for the default story windows in [main-story state](../../knowledge/main-story-state.md) (the game's "final boards" list), and the [main-story facts table](main-story-facts.json) of 93 facts read in a few calls |
-| S6 | **V's state:** appearance tags, vehicle, wanted level, health, street cred, money, inventory summary and cyberware | M4 | **partial:** player state, appearance and wardrobe (`main`); cyberware and inventory (0.8) |
+| S6 | **V's state:** appearance tags, vehicle, wanted level, health, street cred, money, inventory summary and cyberware | M4 | **partial:** player state, appearance and wardrobe (`main`); cyberware and inventory (0.8) **Release route: planned** through the XF Senses plugin |
 
 ## Verbs
 
@@ -78,12 +83,16 @@ Refreshed whenever the bridge reaches a milestone; last refreshed 22 October 202
 | V10 | **Vehicles:** spawn them, drive routes, run chases | M6 | **branch (in progress):** `vehicle.set` |
 | V11 | **World nudges:** time, weather, crowd and traffic density near a scene | M5 | **partial:** time and pause (`main`); weather (0.8); no density |
 | V12 | **Messages to the player and a debug overlay** that shows what the director is doing (lab only) | M4 | **partial:** `ui.message` and `ui.hud` (`main`); overlay state (0.8); notifications (DM) |
+| V13 | **Direct people the game protects** (vendors, police, quest-adjacent people) for a staged moment, or a clean way to stand them in: a clone in their look and place, with the original hidden for the scene ([dossier 20](craft/d20-staging-legibility.md) §12.2) | M5 | want: today staged scenes must use clones, capped at three within 30 m on the branch |
+| V14 | **Marks and ambient sound:** decals, stains, scorch and damage that persist for a set time and survive a reload; ambience and named sound cues at a place, with a fallback | M5 | want: no route known; a research request |
+| V15 | **Mortal and hostile stand-ins:** spawned people who can be hurt and killed, who turn hostile or hand back to ordinary AI in combat, and who keep the game's reaction presets. Friendly, immortal clones read as a bug when V shoots one | M4 | want: branch clones are friendly and immortal |
+| V16 | **Out-of-sight staging:** spawn people and props outside V's view and hearing; dissolve by walking away and despawning only when out of sight; join a scene mid-phase, posed, with no visible fast-forward | M5 | partial: `world.probe` gives line of sight and navmesh; the rest isn't designed |
 
 ## Persistence
 
 | ID | Requirement | Needed by | Status |
 |---|---|---|---|
-| P1 | **A store keyed to the save:** the save's identity and its parent, so the world record branches with saves ([DS-08](design-seeds.md)) | M6 | **planned (C3), partly:** a save-node fact gives identity and parent; the branching op log needs the review's segmented node store |
+| P1 | **A store keyed to the save:** the save's identity and its parent, so the world record branches with saves ([DS-08](design-seeds.md)) | M6 | **planned (C3):** `ledger@1`, XF Core's append-only branching save ledger, with the five-fact pin from [save identity](../../knowledge/save-identity.md), committing on change; a session card proves the pin |
 | P2 | **Restage after load:** bring back whatever should be present | M5 | **planned (C3):** restage hooks; an asynchronous restaging state is a review item |
 | P3 | **A store quota sized for a world record** (megabytes, compressed) | M6 | **planned (C3):** save-scope store with quotas; large records need streaming |
 | P4 | **Story writes without the save lock:** a save-safe route for everything the Story Engine changes ([DS-39](design-seeds.md)) | M5 | **planned (C3):** play mode takes no save lock |

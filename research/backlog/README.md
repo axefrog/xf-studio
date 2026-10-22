@@ -52,14 +52,27 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 
 ### Polish lane (before 1.0)
 - **In-game styling spec for the bridge surfaces** (the XF Runtime Bridge window, the XF box and the CET line). A coat of slickness, with CharLi's CET plugin as the reference: dense ImGui theming, type hierarchy through font scale, styled value bars, child panels and subtle pulses. It never comes ahead of function. The UI track writes the spec in the style guide for the in-game theme generator (`projects/xf-runtime-bridge/tools/overlay/theme.ts`), and XF · Runtime bridge builds it. CharLi is credited if we borrow ideas. The XF box's text size stays, since it matches other CET windows. *22 Oct*
-- **Profiles phase 1 UI follow-ups** (from its design review; they don't block the merge):
-  - the workspace notice as a library component;
-  - "Save version" crowding the header crumbs at about 1,100 px;
-  - progress for Taking over, Waiting and Restoring, and a way back from Waiting;
-  - wording leftovers: the "Autosaved draft" chip, the "Draft" glossary entry, and three names for reopening a collection;
-  - "aren't protected" should say its consequence;
-  - save-toast and read-only-fade polish. *22 Oct*
-- **Tests leave temporary folders behind** (`xfs-part-2-library-*`, `xfs-locked-library-*`, `xfs-ui-data-*` and others pile up in the system temp folder). Every test removes what it creates. *22 Oct*
+- **Polish batch 2 follow-ups** (from its design review; they don't block it):
+  - "Back to XF Studio" in the interface guide opens a second, read-only Studio on localhost. Close the tab when the Studio opened it; elsewhere, label it as the site.
+  - The unprotected warning's edge cases:
+    - it says "couldn't" when a desktop backup copy is only more than 2 s late;
+    - it stays after the library already has the changes;
+    - it doesn't name storage-full when that is the known cause;
+    - "Back up" now also means export in Help.
+  - Stale style-guide copy:
+    - the c-chips "Open now" button;
+    - the t-saved specimen;
+    - a Try again reason that says "recorded";
+    - the Recent drafts help, the draft rows and the glossary's "Draft" disagree.
+  - Package's tooltip should name the button once its label is hidden, and the workspace notice's buttons should come in one order in every state.
+  - "Export this window's copy" has a tooltip that says "Save … to a file", which collides with Save version. Use "Write … to a file … Nothing goes to your library."
+  - The style guide's chip reference and specimens should show "Version N".
+  - The desktop save-failure message still points to Export collection, the export that saves first. Point it at "Export this window's copy".
+  - Optional: in verification workspaces, move the verification label so it doesn't float in the chip's gap.
+  - The V captures (UI-190) and a read-only capture showing the Character and Settings panels; check the Opacity slider there.
+
+  *22 Oct*
+- **Profiles phase 1 UI follow-ups** (from its design review): progress for Taking over, Waiting and Restoring, and a way back from Waiting (a Cancel that leaves the window read-only). Polish batch 2 (`claude/polish-2`) did the rest: the header keeps the names readable, the workspace notice is a library component, the wording leftovers, "couldn't be backed up", and the save-toast, open-row, "Use other window's", read-only-fade and Interface guide polish; its design review passed with conditions (the follow-ups above). *22 Oct*
 - **Starter eye-makeup shapes** under the contributed-defaults convention ([small bugs](#small-bugs-and-friction)). *21 Oct*
 - **The rest of [Small bugs and friction](#small-bugs-and-friction):** Build Stop, two windows on one draft, receipt matching. *21 Oct*
 - **A check that pure engine code never reads the clock, randomness or timers** (`engines/layered-makeup/raster-processor.ts` does today). *21 Oct*
@@ -71,6 +84,7 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 3. **The eye-makeup editor and finish adapters** (track 6), and CORE-03's remaining steps (the [code-health ledger](../authoring/code-health.md)). *25 Sep*
 
 ### R&D (runs only while the polish lane is moving)
+- **Game update 2.5 adds official mod support.** When its details are published, send the meta-coordinator a research request covering what it changes for the export pipeline: archive and resource versions, ArchiveXL and TweakXL compatibility, any official install route, and the beta's framework guidance. *23 Oct*
 Research questions from any chat go to the meta-coordinator's [research queue](research-queue.md). This lane lists the R&D build tracks, each kept by the chat that owns it.
 
 - **Hair Lab** (its own chat and branch, off `main` until the beta). *16 Oct*

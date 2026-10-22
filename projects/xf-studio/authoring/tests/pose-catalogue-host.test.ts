@@ -2,8 +2,7 @@
 // worker), the catalogue built from a synthetic installation (TweakDB blob, TweakXL file, puppet entity, ArchiveXL set, archive), its set
 // index cache, a sampled pose, the endpoint and the typed actions.
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readArchiveXlConfig } from "../src/game/archivexl-config";
 import { depotHash } from "../src/game/depot-path";
@@ -19,8 +18,9 @@ import { childId, tweakDbId } from "../src/game/tweakdb-flats";
 import { animSet, rig } from "./fixtures/anim-set";
 import { fakeDecompress, syntheticArchive } from "./fixtures/native-archive";
 import { tweakDbBlob } from "./fixtures/tweakdb-blob";
+import { tempDir } from "./temp-dir";
 
-const root = mkdtempSync(join(tmpdir(), "xfs-poses-"));
+const root = tempDir("xfs-poses-");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 const SET = "base\\animations\\ui\\photomode\\photomode__female__idle.anims", PACK_SET = "pack\\poses.anims";

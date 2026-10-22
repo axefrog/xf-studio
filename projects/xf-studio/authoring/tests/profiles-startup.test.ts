@@ -5,8 +5,7 @@
  * scene names its V and its look. A restart (new services, the stored workspace) shows the same V and looks, and makes nothing new.
  */
 import { afterAll, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { createProfileServices, drawnScene, openProfileSession, sceneCharacter } from "../src/app/profiles/profile-window";
 import { CreatorCatalogue } from "../src/character/creator-catalogue";
@@ -23,8 +22,9 @@ import { HarnessHost, HarnessWorkspace, migrateUntilDone } from "./fixtures/prof
 import { openTestLibrary, type TestLibrary } from "./fixtures/library-file";
 import { libraryPort, libraryVersions } from "./fixtures/profile-studio";
 import { memoryOutboxStorage } from "./fixtures/platform-doubles";
+import { tempDir } from "./temp-dir";
 
-const scratch = mkdtempSync(join(tmpdir(), "xfs-profiles-startup-"));
+const scratch = tempDir("xfs-profiles-startup-");
 afterAll(() => { try { rmSync(scratch, { recursive: true, force: true }); } catch { /* A file a failed test left open; the system cleans its temp folder. */ } });
 
 /** The creator catalogue host never answers here: the V's choices are read from the library, not rendered. */

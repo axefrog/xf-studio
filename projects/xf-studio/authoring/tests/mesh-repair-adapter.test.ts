@@ -2,15 +2,15 @@
 // what each command would, so its argument order, work-folder layout, packed archive, every missing output and the repair's own
 // wording are checked without launching the tool.
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { archiveExportSource, GameAssetExportError } from "../src/game/host/game-asset-export";
 import { createWolvenKitMeshRepair, uncookArguments } from "../src/game/host/game-asset-export-wolvenkit";
 import type { JsonObject } from "../src/game/red-json";
 import { WolvenKitRunError, type runWolvenKit } from "../src/host/wolvenkit-cli";
+import { tempDir } from "./temp-dir";
 
-const root = mkdtempSync(join(tmpdir(), "xfs-mesh-repair-"));
+const root = tempDir("xfs-mesh-repair-");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 const PONY = "anru\\highpony\\fhair_highpony_pony.mesh", NAME = "fhair_highpony_pony.mesh";
 

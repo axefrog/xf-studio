@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 // Test-only use of the builder side: it writes the supplied chains and resources that the
 // independent verifier must reproduce from its own restated specification.
@@ -18,6 +17,7 @@ import { liftPlate } from "../src/legacy/eye-makeup/export/plate-lift";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe, plateLikeUv, withPlateUvs } from "./eye-plate-fixture";
 import { coverageReference, plateWindow, storedBc4, texelUv, WINDOW_H, WINDOW_W } from "./window-fixture";
 import { preparePackageCollection } from "./fixtures/eye-exporter";
+import { tempDir } from "./temp-dir";
 
 // Synthetic, asset-free fixture in the style of mod-verifier.test.ts: archive members and plate inputs
 // hold their WolvenKit JSON as text, the fake `serialize` derives documents from the hash-checked bytes
@@ -96,7 +96,7 @@ function rg8(levels: readonly Uint8Array[], dims: { width: number; height: numbe
 
 type Mutation = (data: { mesh: any; xbm: Record<string, any>; plan: Plan }) => void; // eslint-disable-line @typescript-eslint/no-explicit-any
 function makeBuild(mutate?: Mutation, tamper?: (build: string, plan: Plan) => void, replan?: (plan: Plan) => void) {
-  const build = mkdtempSync(resolve(tmpdir(), "xfs-verifier-routes-"));
+  const build = tempDir("xfs-verifier-routes-");
   const plan = planCollection(collection);
   replan?.(plan);
   // A real single-chunk plate cut from the synthetic head, lifted as the builder lifts it.

@@ -1,5 +1,5 @@
 {
- "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + idle choice (claude/body-fidelity) + expressions feature (claude/expressions-p1) + mottle actions (claude/mottle) + expression.setAxis and setLinks (claude/expressions-drawer); the dense-field note shortened on claude/ui-copy-polish (text only) + lighting setups (claude/lighting-setups) + expression.intensity (claude/expression-interpolator) + rendering options (claude/rendering-options) + transition.set (claude/expression-transition) + character.resolveConflict (claude/profiles-p1; additions only)",
+ "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + idle choice (claude/body-fidelity) + expressions feature (claude/expressions-p1) + mottle actions (claude/mottle) + expression.setAxis and setLinks (claude/expressions-drawer); the dense-field note shortened on claude/ui-copy-polish (text only) + lighting setups (claude/lighting-setups) + expression.intensity (claude/expression-interpolator) + rendering options (claude/rendering-options) + transition.set (claude/expression-transition) + character.resolveConflict (claude/profiles-p1; additions only) + collection.exportWindowCopy (claude/polish-2; additions only)",
  "states": {
   "starter": {
    "modes": {
@@ -3334,6 +3334,11 @@
      "recoverableBy": "none",
      "confirm": false,
      "writes": "library-revision"
+    },
+    "file:collection.exportWindowCopy": {
+     "discards": [],
+     "recoverableBy": "none",
+     "confirm": false
     },
     "file:package.check": {
      "discards": [],
@@ -6727,6 +6732,11 @@
      "recoverableBy": "none",
      "confirm": false,
      "writes": "library-revision"
+    },
+    "file:collection.exportWindowCopy": {
+     "discards": [],
+     "recoverableBy": "none",
+     "confirm": false
     },
     "file:package.check": {
      "discards": [],
@@ -10123,6 +10133,11 @@
      "confirm": false,
      "writes": "library-revision"
     },
+    "file:collection.exportWindowCopy": {
+     "discards": [],
+     "recoverableBy": "none",
+     "confirm": false
+    },
     "file:package.check": {
      "discards": [],
      "recoverableBy": "none",
@@ -13516,6 +13531,11 @@
      "confirm": false,
      "writes": "library-revision"
     },
+    "file:collection.exportWindowCopy": {
+     "discards": [],
+     "recoverableBy": "none",
+     "confirm": false
+    },
     "file:package.check": {
      "discards": [],
      "recoverableBy": "none",
@@ -16908,6 +16928,11 @@
      "recoverableBy": "none",
      "confirm": false,
      "writes": "library-revision"
+    },
+    "file:collection.exportWindowCopy": {
+     "discards": [],
+     "recoverableBy": "none",
+     "confirm": false
     },
     "file:package.check": {
      "discards": [],
@@ -20347,6 +20372,11 @@
      "recoverableBy": "none",
      "confirm": false,
      "writes": "library-revision"
+    },
+    "file:collection.exportWindowCopy": {
+     "discards": [],
+     "recoverableBy": "none",
+     "confirm": false
     },
     "file:package.check": {
      "discards": [],

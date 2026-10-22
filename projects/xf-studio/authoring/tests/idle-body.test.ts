@@ -2,8 +2,7 @@
 // graph in the reader's JSON shape and synthetic rigs (no game data): which clips loop on which screen, the catalogue, the rests and
 // ancestry, the host's disk cache and prepared faces, and the endpoint's refusals. The real game is compared in native-idle-oracle.test.ts.
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as THREE from "three";
 import { EYES_SECTION_ID, faceClipFor, idleCatalogue, previewIdles, restJoints, rigAncestry, type GraphIdle, type IdleState } from "../src/animation/idle-body";
@@ -15,6 +14,7 @@ import { IDLE_CACHE_KEYS, IDLE_HOST_VERSION, IdleHost, IdleSetupError, pruneIdle
 import { createIdleHandler } from "../src/animation/host/idle-server";
 import type { IdleEntry } from "../src/animation/idle-catalogue";
 import { loadIdleSource, restSkeleton } from "../src/platform/scene/idle-source";
+import { tempDir } from "./temp-dir";
 
 const name = (value: string) => ({ $type: "CName", $storage: "string", $value: value });
 let handles = 0;
@@ -101,7 +101,7 @@ describe("rests, ancestry and the page's skeleton", () => {
 describe("the idle host and its endpoint", () => {
   const route = { gameRoot: "G", launchRoute: "direct" as const, mo2Root: null, mo2ProfileId: null, manualModRoot: null, wolvenKitCli: null };
   test("without a game folder it needs setup; a disk cache answers without opening the game; faces come from the facial host or say why not", async () => {
-    const root = mkdtempSync(join(tmpdir(), "xfs-idles-"));
+    const root = tempDir("xfs-idles-");
     try {
       expect((await new IdleHost({ route: () => null, fingerprint: () => "f", resolverCache: root }).state()).phase).toBe("needs-setup");
       const assets = join(root, "assets");
@@ -151,7 +151,7 @@ describe("the idle host and its endpoint", () => {
   });
 
   test("the idle cache keeps a few installations' folders, least recently used dropped first, never another host's current one (PREV-163)", () => {
-    const root = mkdtempSync(join(tmpdir(), "xfs-idle-cache-"));
+    const root = tempDir("xfs-idle-cache-");
     try {
       // Six installations' folders, oldest first; "main" is the other server's, used most recently.
       const names = ["a", "b", "c", "d", "main", "new"];
@@ -229,7 +229,7 @@ describe("the idle's face, solved by XF Studio's own solver on the host", () => 
   const faceOf = (state: IdleState, id: string) => state.phase === "ready" ? state.catalogue.idles.find(entry => entry.id === id)?.face ?? null : undefined;
 
   test("a face record: every frame at 30 Hz solved on the compiled face, cached by what it was solved from, read again when the face set's archive changes (PREV-175)", async () => {
-    const root = mkdtempSync(join(tmpdir(), "xfs-idle-face-"));
+    const root = tempDir("xfs-idle-face-");
     try {
       const first = world(root);
       expect(faceOf(await first.host.state(), "closeup")).toEqual({ clip: "ui_closeup_shot", file: "ui_closeup_shot.face" });
@@ -256,7 +256,7 @@ describe("the idle's face, solved by XF Studio's own solver on the host", () => 
   });
 
   test("a face clip longer than the bake takes is refused before it is decoded (PREV-173)", async () => {
-    const root = mkdtempSync(join(tmpdir(), "xfs-idle-face-"));
+    const root = tempDir("xfs-idle-face-");
     try {
       const { host, decodes } = world(root, { duration: 3600 });
       expect(await host.face("closeup")).toBeNull();
@@ -268,7 +268,7 @@ describe("the idle's face, solved by XF Studio's own solver on the host", () => 
   });
 
   test("the state answers at once while the face is still being read, and says so until it is ready (PREV-174)", async () => {
-    const root = mkdtempSync(join(tmpdir(), "xfs-idle-face-"));
+    const root = tempDir("xfs-idle-face-");
     try {
       let lend!: (value: FaceSource) => void;
       const lent = new Promise<FaceSource>(resolve => { lend = resolve; });
@@ -287,7 +287,7 @@ describe("the idle's face, solved by XF Studio's own solver on the host", () => 
   });
 
   test("a face set that couldn't be listed is asked for again, not kept for the installation (PREV-176)", async () => {
-    const root = mkdtempSync(join(tmpdir(), "xfs-idle-face-"));
+    const root = tempDir("xfs-idle-face-");
     try {
       const { host, opens } = world(root, { failOpens: 1 });
       const failed = await host.state();
@@ -298,7 +298,7 @@ describe("the idle's face, solved by XF Studio's own solver on the host", () => 
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
   test("the page plays the body at once and asks again for a face still being read, taking it when it's ready (PREV-174)", async () => {
-    const root = mkdtempSync(join(tmpdir(), "xfs-idle-face-"));
+    const root = tempDir("xfs-idle-face-");
     const fetched = globalThis.fetch;
     try {
       let lend!: (value: FaceSource) => void;

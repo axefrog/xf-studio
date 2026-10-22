@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadGradingLut } from "../src/preview/render/browser-grading-lut-device";
 import { GradingLutHost } from "../src/preview/host/grading-lut-host";
@@ -11,6 +10,7 @@ import { depotHash } from "../src/game/depot-path";
 import type { Installation } from "../src/game/host/resolver-host";
 import { WolvenKitRunError } from "../src/host/wolvenkit-cli";
 import { cr2w, fixtureInstallation, rp } from "./resolver-fixtures";
+import { tempDir } from "./temp-dir";
 
 /** A WolvenKit-shaped CBitmapTexture LUT whose texel (r, g, b) holds `value(r, g, b)`, blob in [B][G][R] order. */
 function lutDocument(size: number, value: (r: number, g: number, b: number) => [number, number, number], setup: object = {}) {
@@ -132,7 +132,7 @@ describe("LUT selection by archive precedence", () => {
 
 describe("host and browser transport", () => {
   test("the host follows the environment to the winning LUT, caches the decoded cube, and the browser loads it", async () => {
-    const root = mkdtempSync(join(tmpdir(), "xfs-lut-")), cli = join(root, "wk.exe");
+    const root = tempDir("xfs-lut-"), cli = join(root, "wk.exe");
     writeFileSync(cli, "fake");
     try {
       const fixture = fixtureInstallation([
@@ -174,7 +174,7 @@ describe("host and browser transport", () => {
   ]) as unknown as Installation;
 
   test("a WolvenKit failure answers neutral with a plain note and is retried later (PREV-30, PREV-31)", async () => {
-    const root = mkdtempSync(join(tmpdir(), "xfs-lut-")), cli = join(root, "wk.exe");
+    const root = tempDir("xfs-lut-"), cli = join(root, "wk.exe");
     writeFileSync(cli, "fake");
     try {
       let now = 0, extracted = 0;
@@ -209,7 +209,7 @@ describe("host and browser transport", () => {
   });
 
   test("retries keep the opened installation, back off, stop at the cap, and a WolvenKit exit code is lasting (PREV-45)", async () => {
-    const root = mkdtempSync(join(tmpdir(), "xfs-lut-")), cli = join(root, "wk.exe");
+    const root = tempDir("xfs-lut-"), cli = join(root, "wk.exe");
     writeFileSync(cli, "fake");
     try {
       let now = 0, opened = 0;
@@ -252,7 +252,7 @@ describe("host and browser transport", () => {
   });
 
   test("a failed cache write is tried again, and a damaged cached cube is extracted again (PREV-45, PREV-49)", async () => {
-    const root = mkdtempSync(join(tmpdir(), "xfs-lut-")), cli = join(root, "wk.exe");
+    const root = tempDir("xfs-lut-"), cli = join(root, "wk.exe");
     writeFileSync(cli, "fake");
     try {
       let now = 0, extracted = 0;
@@ -282,7 +282,7 @@ describe("host and browser transport", () => {
   });
 
   test("a changed installation cancels the running LUT preparation; only the newer answer is kept (PREV-30)", async () => {
-    const root = mkdtempSync(join(tmpdir(), "xfs-lut-")), cli = join(root, "wk.exe");
+    const root = tempDir("xfs-lut-"), cli = join(root, "wk.exe");
     writeFileSync(cli, "fake");
     try {
       let route: "direct" | "mo2" = "direct";

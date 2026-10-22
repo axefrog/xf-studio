@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { ensureWebView2, WEBVIEW2_FAILED, WEBVIEW2_INSTALLER_MISSING, WEBVIEW2_PROMPT } from "../webview2-install";
-import { mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { readFileSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { detectWebView2, parseRegVersion, WEBVIEW2_KEYS } from "../webview2";
 import { blankWindowNotice, mainWindowPlacement, trialWindowPosition } from "../startup-watchdog";
@@ -9,8 +9,9 @@ import { createHostLog } from "../host-log";
 import { DesktopWorkspaceClose } from "../workspace-close";
 import { createDesktopServer } from "../server";
 import { USER_FACING_JARGON } from "../../src/app/alpha-availability";
+import { tempDir } from "../../tests/temp-dir";
 
-const root = mkdtempSync(resolve(tmpdir(), "xfs-desktop-startup-"));
+const root = tempDir("xfs-desktop-startup-");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 const regOutput = (pv: string) => `\r\nHKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}\r\n    pv    REG_SZ    ${pv}\r\n\r\n`;
 

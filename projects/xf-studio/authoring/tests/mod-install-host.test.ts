@@ -4,13 +4,13 @@
 // nothing. The install review's fixes are pinned here too (INSTALL-01..11, UI-99..100).
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { chmodSync, existsSync, linkSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { defaultLocalSettings, type LocalSettings } from "../src/setup/local-settings";
 import { createModInstallHandler, installIssue, ModInstallError, ModInstallHost, READ_ONLY_VERIFICATION, windowsProcessImages, windowsRunningApps,
   type RunningApps } from "../src/installation/host/mod-install-host";
 import { EYE_MAKEUP_MOD } from "../src/legacy/eye-makeup/mod-branding";
+import { tempDir } from "./temp-dir";
 
 const digest = (body: string | Buffer) => createHash("sha256").update(body).digest("hex");
 const MOD = EYE_MAKEUP_MOD.modName;
@@ -28,7 +28,7 @@ const MODLIST = [
 ].join("\r\n") + "\r\n";
 
 function fixture(route: "direct" | "mo2", modlist: string | Buffer = MODLIST, options: { receipts?: string; legacy?: string[]; readOnly?: string; ansi?: number | null } = {}) {
-  const root = mkdtempSync(join(tmpdir(), "xfs-mod-install-"));
+  const root = tempDir("xfs-mod-install-");
   const game = join(root, "game"), mo2 = join(root, "mo2"), store = join(root, "candidates");
   const receipts = join(root, options.receipts ?? "receipts");
   const profile = "Main (2026)";

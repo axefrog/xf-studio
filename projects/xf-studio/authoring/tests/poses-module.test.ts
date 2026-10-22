@@ -5,8 +5,7 @@
  * recent written behind, a stored pose restored or dropped, Still and the idle, framing).
  */
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildPoseTree, defaultPosePreferences, FAVOURITES_GROUP, NOT_INSTALLED, parsePosePreferences, PoseLibraryActions, RECENT_GROUP,
   type PoseLibraryDevice, type PoseMotionPort, type PoseStage } from "../src/features/poses";
@@ -14,6 +13,7 @@ import type { PoseListing } from "../src/features/poses/types";
 import { CATALOGUE } from "./fixtures/pose-listing";
 import { withFavourite, withRecent, RECENT_LIMIT } from "../src/features/poses/preferences";
 import { createPosePreferencesHandler, PosePreferencesStore } from "../src/features/poses/host/preferences-store";
+import { tempDir } from "./temp-dir";
 
 
 test("the tree: favourites and recent first, categories in the game's order, search across label, category, pack, record and clip", () => {
@@ -59,7 +59,7 @@ test("preferences parse leniently and stay bounded", () => {
 });
 
 test("the host store keeps one document per user behind a revision guard; the verification copy starts from it and keeps its changes", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "xfs-pose-prefs-"));
+  const dir = tempDir("xfs-pose-prefs-");
   try {
     const store = new PosePreferencesStore(join(dir, "user"));
     const handler = createPosePreferencesHandler(store);
@@ -231,7 +231,7 @@ describe("pose preferences survive an early change and a host restart (CORE-112,
   });
 
   test("the host store keeps its revision across a restart, refuses a document that isn't one, and reads a body within its limit", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "xfs-pose-prefs-"));
+    const dir = tempDir("xfs-pose-prefs-");
     try {
       const first = new PosePreferencesStore(dir);
       expect(first.save(0, stored)).toMatchObject({ ok: true, state: { revision: 1 } });

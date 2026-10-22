@@ -4,8 +4,7 @@
  * masculine plate prerequisite, what Check and Build say when he can't be included, and the verifier's per-body checks.
  */
 import { afterAll, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { planCollection } from "../src/legacy/eye-makeup/export/preset-collection";
 import {
@@ -31,10 +30,11 @@ import { checkProducts } from "../src/platform/export/product-check";
 import { PrerequisiteStale, type PackageBuildResult, type PackageCheckResult } from "../src/platform/api";
 import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/legacy/eye-makeup/export/host/plate-uv-footprint-io";
 import { eyeEntry, fakeEyeVerifier, fakeTools, fakeVerifierTools, FOOTPRINT, sha, writePlate } from "./fixtures/product-fixture";
+import { tempDir } from "./temp-dir";
 
 const app = resolve(import.meta.dir, "..");
 const fixture = JSON.parse(readFileSync(resolve(app, "../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
-const root = realpathSync.native(mkdtempSync(join(tmpdir(), "xfs-masculine-export-")));
+const root = realpathSync.native(tempDir("xfs-masculine-export-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 const feminine = planCollection(fixture), both = planCollection(fixture, { masculine: true });

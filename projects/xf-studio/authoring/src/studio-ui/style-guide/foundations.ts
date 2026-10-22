@@ -1,4 +1,4 @@
-import { iconNames } from "../icons";
+import { iconNames, type IconName } from "../icons";
 import { contrastTable } from "./contrast";
 import { badge, btn, chip, code, helpTip, i, note, pattern, section, slider } from "./kit";
 
@@ -115,16 +115,11 @@ export function shell() {
     `The shell has three bands: a header that names where you are and holds the few global commitments, a dock workspace that owns everything else,
      and a status bar that tells the truth about saving, work in progress and preview readiness.`, [
     pattern({ id: "s-header", title: "Application header", status: "implemented", wide: true,
-      specimen: `<header class="shell-header demo-header">
-        <div class="brand"><span class="brand-mark">XF</span><span class="brand-name">Studio</span></div>
-        <span class="category" title="Authoring category: eye makeup">${i("category")}<span>Eye makeup</span></span>
-        <nav class="crumbs"><span class="crumb-collection">Night market set</span>${i("chevronRight")}<span class="crumb-preset">Chrome dusk</span>${chip("Saved")}</nav>
-        <span class="verify-flag">Verification workspace</span>
-        <div class="header-actions"><span class="history-controls" role="group" aria-label="Undo and Redo">${btn("Undo: Move point", { icon: "undo", iconOnly: true, variant: "ghost", title: "Undo: Move point (Ctrl+Z)" })}${btn("Redo", { icon: "redo", iconOnly: true, variant: "ghost", disabled: true, title: "Redo (Ctrl+Shift+Z) — There is no undone change to redo." })}${btn("History", { icon: "history", iconOnly: true, variant: "ghost" })}</span>${btn("Save version", { icon: "save" })}${btn("Package", { icon: "package", variant: "quiet" })}<span class="divider"></span>${btn("Commands", { icon: "command", variant: "ghost" })}${btn("Panels", { icon: "layout", iconOnly: true, variant: "ghost" })}${btn("Theme", { icon: "monitor", iconOnly: true, variant: "ghost" })}</div></header>`,
-      what: "Brand, the authoring category (a plain label while there is only one; the switcher later), a breadcrumb of collection › preset with the library state chip, the verification flag when isolated, and global actions: Undo, Redo and History (grouped; their tooltips name the step each would change, such as “Redo: Move point (Ctrl+Shift+Z)”, and keep the shortcut visible while unavailable), <strong>Save version</strong> (its icon alone in a compact window, below 1100 px, as every labelled header action), Package, command palette, panels/layout and theme.",
+      specimen: `<div class="stack-s" data-header-fit>${headerSpecimen()}<label class="control-label"><span>Window width</span><output class="readout">1,100 px</output></label><input type="range" class="slider" min="600" max="1500" step="10" value="1100" aria-label="Sample header width"></div>`,
+      what: "Brand (the XF mark, the word Studio and the Beta badge), the shown modules (the category), a breadcrumb of collection › preset, the library state chip, the verification label when isolated, and global actions: Undo, Redo and History (grouped; their tooltips name the step each would change, such as “Redo: Move point (Ctrl+Shift+Z)”, and keep the shortcut visible while unavailable), <strong>Save version</strong>, Package, Commands, Help, Settings, Panels, Layouts and View preferences. The specimen is the live header's fit: move the width to see the stages give way in order.",
       when: "Always visible. Only commands that act on the whole document or workspace belong here; anything about a layer or panel stays in that panel.",
       combine: "The library chip is the one place the save state shows (G3); no panel repeats it, and the Library panel says what it means in a sentence.",
-      adapt: "Below 1100 px the brand word, collection crumb and action labels collapse to icons with names; below 720 px the chip and verification flag hide (the Library panel's sentence still says whether your work is saved).",
+      adapt: "The names come first, so the person always sees what they are editing (UI-187): the collection and preset names show whole (up to their own maximum width) wherever the stages below can make the room, and otherwise each keeps at least about 12 characters. To give them that room the header's other items give way one stage at a time, always in this order (<code>header-fit.ts</code>, measured whenever the window, the names, the verification label or the layout's name change): 0 the shown modules' names go, whole, and their button shows its icon alone (the names stay its tooltip and accessible name, as below 720 px; never a name cut to a letter); 1 Commands shows its icon alone (Ctrl+K opens the palette anywhere); 2 the layout's name goes from Layouts (its tooltip and menu name it); 3 the verification label shortens to “Verification”; 4 Package shows its icon alone; 5 the word Studio goes (the XF mark and Beta stay); 6 Save version shows its icon alone (Ctrl+S); 7 last, and only when even the 12 characters don't fit, the collection's name goes and the preset's stays (the Presets panel names the collection). A label that gives way stays the button's accessible name and its tooltip. The chip keeps its whole words: it is the save state, and its vocabulary is fixed (c-chips). Its room is kept at its widest word (“Changed since last version”), so a save or an edit that changes it moves nothing: no stage depends on what the chip says, and Save version stays where it was clicked. Room the stages leave over goes to the space before the actions, never to a name or the category. Below 720 px the chip and the verification label hide (the Library panel's sentence still says whether your work is saved).",
       drives: `${code("library.summary()")}, ${code("authoring.capability({kind:'history.undo'|'history.redo'})")}, ${code("authoring.history()")}, ${code("authoring.requestCapability({kind:'save'})")}, ${code("status.snapshot().verification")}, ${code("preferences")}.` }),
     pattern({ id: "s-category", title: "Category label and growth", status: "implemented",
       specimen: `<div class="shell-header demo-header"><span class="category" title="Authoring category: eye makeup">${i("category")}<span>Eye makeup</span></span></div>`,
@@ -134,7 +129,7 @@ export function shell() {
       avoid: "A menu with nothing to choose, sections that only inform, listing unbuilt categories, or turning preview-context toggles (brows, hair) into authoring entries." }),
     pattern({ id: "s-status", title: "Status bar", status: "implemented", wide: true,
       specimen: `<footer class="status-bar demo-status"><button type="button" class="status-item status-message" data-tone="success">Saved “Night market set” · version 4.</button><span class="grow"></span><span class="status-item muted">Gesture in progress · Esc cancels</span><span class="status-item ready-badge" data-phase="updating">3D view 2K · updating</span></footer>`,
-      what: "Draft autosave state, restoring's first seconds (“Restoring changes from your last session…”, t-recovering: the line takes them so the workspace notice never opens for a moment), the latest activity or in-flight library message (click opens Activity), gesture/transaction hints and preview readiness.",
+      what: "Draft autosave state, restoring's first seconds (“Restoring changes from your last session…”, t-recovering: the line takes them so the workspace notice never opens for a moment), the latest activity or in-flight library message (click opens Activity; “Ready” when there is none, and not while the restoring line shows, which it would contradict), gesture/transaction hints and preview readiness.",
       when: "Always visible. It reports; it never hosts commands other than opening the activity log.",
       adapt: "Messages truncate with an ellipsis; the Activity panel keeps the full text.",
       drives: `${code("status.snapshot().workspace")}, ${code("status.outbox.recovering")} (${code("shown")} and not ${code("long")}), ${code("library.summary().progress")}, ${code("previewState().gesture/control")}, ${code("previewReadiness.snapshot()")}.`,
@@ -144,7 +139,7 @@ export function shell() {
         <ul class="palette-list"><li class="palette-group">Library</li>
         <li class="palette-item active"><span class="menu-icon">${i("save")}</span><span class="menu-text"><span class="menu-label">Save version</span></span><kbd>Ctrl+S</kbd></li>
         <li class="palette-item"><span class="menu-icon">${i("duplicate")}</span><span class="menu-text"><span class="menu-label">Save a copy</span></span></li>
-        <li class="palette-item" aria-disabled="true"><span class="menu-icon">${i("undo")}</span><span class="menu-text"><span class="menu-label">Show the previous collection</span><small class="menu-reason">No collection was open before this one.</small></span></li></ul>
+        <li class="palette-item" aria-disabled="true"><span class="menu-icon">${i("undo")}</span><span class="menu-text"><span class="menu-label">Reopen previous collection</span><small class="menu-reason">No collection was open before this one.</small></span></li></ul>
         <div class="palette-foot">↑↓ choose · Enter run · disabled commands explain why</div></div>`,
       what: "Every command in one searchable list: edit, shape, finish, library, files, package, view, motion, panels, layout, appearance and help. Unavailable commands stay listed with the application's reason.",
       when: "Ctrl+K (or Ctrl+Shift+P) anywhere, and the Commands header button.",
@@ -157,4 +152,16 @@ export function shell() {
       when: "Press ? outside text fields, View preferences or Panels › Keyboard & mouse, or the palette.",
       a11y: "Native <dialog> with showModal: focus is trapped, Escape closes and focus returns to the invoker." }),
   ]);
+}
+
+/** The live header's markup (s-header); the guide's script fits it as the Studio does (header-fit.ts) at the width chosen. */
+function headerSpecimen() {
+  const action = (label: string, icon: IconName, className: string, variant?: "quiet" | "ghost") =>
+    btn(label, { icon, variant, title: label }).replace('class="btn', `class="btn ${className}`);
+  return `<header class="shell-header demo-header" style="width:1100px;max-width:none">
+    <div class="brand"><span class="brand-mark">XF</span><span class="brand-name">Studio</span>${badge("Beta", "accent")}</div>
+    <button type="button" class="category" title="Eye makeup: show or hide parts of the Studio">${i("category")}<span>Eye makeup</span></button>
+    <nav class="crumbs"><span class="crumb-collection">Night market set</span>${i("chevronRight")}<span class="crumb-preset">Chrome dusk glow</span></nav><span class="chip-slot">${chip("Changed since last version", "info")}</span>
+    <span class="verify-flag">Verification<span class="verify-rest"> workspace</span></span>
+    <div class="header-actions"><span class="history-controls" role="group" aria-label="Undo and Redo">${btn("Undo: Move point", { icon: "undo", iconOnly: true, variant: "ghost", title: "Undo: Move point (Ctrl+Z)" })}${btn("Redo", { icon: "redo", iconOnly: true, variant: "ghost", disabled: true, title: "Redo (Ctrl+Shift+Z) — There is no undone change to redo." })}${btn("History", { icon: "history", iconOnly: true, variant: "ghost" })}</span>${action("Save version", "save", "header-save")}${action("Package", "package", "header-package", "quiet")}<span class="divider"></span>${action("Commands", "command", "header-commands", "ghost")}${btn("Help", { icon: "help", iconOnly: true, variant: "ghost" })}${btn("Settings", { icon: "settings", iconOnly: true, variant: "ghost" })}${btn("Panels", { icon: "layout", iconOnly: true, variant: "ghost" })}${action("My layout", "layouts", "layouts-btn", "ghost")}${btn("View preferences", { icon: "monitor", iconOnly: true, variant: "ghost" })}</div></header>`;
 }

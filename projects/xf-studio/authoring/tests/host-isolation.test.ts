@@ -2,14 +2,15 @@
 // add a mod to a real mod folder (INSTALL-01, UI-98): settings and receipts follow an isolated data folder, a verification
 // workspace edits its own copy of the settings, and neither adds mods.
 import { expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
-import { homedir, tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { defaultLocalSettings } from "../src/setup/local-settings";
 import { LocalSettingsStore } from "../src/setup/host/local-settings-store";
 import { localHostState, machineInstallReceiptsRoot } from "../src/setup/host/host-state";
 import { READ_ONLY_TEST_SERVER, READ_ONLY_VERIFICATION } from "../src/installation/host/mod-install-host";
+import { tempDir } from "./temp-dir";
 
 const LOCAL = "C:\\Users\\someone\\AppData\\Local";
 // Game folders the settings accept on this OS: a saved game folder must be absolute here, and a drive path is absolute only on Windows.
@@ -38,7 +39,7 @@ test("settings and install receipts follow an isolated data or settings folder, 
 });
 
 test("a verification store starts from the host's settings and keeps every change to itself", () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-verify-settings-"));
+  const root = tempDir("xfs-verify-settings-");
   try {
     const host = new LocalSettingsStore(join(root, "host"));
     host.save({ ...defaultLocalSettings(), gameRoot: GAME }, 0);
@@ -59,7 +60,7 @@ const freePort = () => new Promise<number>((ok, fail) => {
 });
 
 test("an isolated localhost server never touches the real settings folder, and neither it nor ?verify adds a mod", async () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-isolated-server-"));
+  const root = tempDir("xfs-isolated-server-");
   // A stand-in for the person's real %LOCALAPPDATA% (and its non-Windows equivalents): it must stay empty.
   const local = join(root, "local"), data = join(root, "data");
   mkdirSync(local); mkdirSync(data);

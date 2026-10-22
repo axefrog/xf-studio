@@ -6,8 +6,7 @@
  */
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { openTestLibrary } from "./fixtures/library-file";
 import { STUDIO_PARTS, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
@@ -30,6 +29,7 @@ import { restore } from "./fixtures/workspace-observable";
 import { fixedId, opticsRecipe, smallWorkspaceV1 } from "./fixtures/workspace-v1-fixtures";
 import { EYE_MAKEUP_LAYER_MODELS, LAYER_MODELS, RecipeModelRegistry as LayerModelRegistry, RECIPE_FILE_SCHEMAS, schemaRank, type RecipeFileSchema, readRecipe as parseRecipe, parseRecipeFile, parseRecipePart, RECIPE_FILE_MESSAGE, type RecipeFile } from "../src/legacy/eye-makeup/recipe-schema";
 import { initialRecipe, newLayerTemplate, applyRecipeAction } from "./fixtures/eye-region";
+import { tempDir } from "./temp-dir";
 
 const EYE = "eye-makeup";
 const golden = JSON.parse(readFileSync(new URL("./golden/part-2-parity.json", import.meta.url), "utf8"));
@@ -167,7 +167,7 @@ test("a pinned recipe-11 row and its part-2 form compare equal, so no preset get
 });
 
 test("saving a library whose rows hold pinned part-1 recipes adds no revision; an edit adds one, written minimally", () => {
-  const dir = mkdtempSync(join(tmpdir(), "xfs-part-2-library-")), path = join(dir, "library.sqlite");
+  const dir = tempDir("xfs-part-2-library-"), path = join(dir, "library.sqlite");
   new Database(path, { create: true }).exec(`CREATE TABLE looks (id TEXT PRIMARY KEY, created_at TEXT NOT NULL);
     CREATE TABLE look_revisions (look_id TEXT NOT NULL, revision INTEGER NOT NULL, name TEXT NOT NULL, recipe_json TEXT NOT NULL,
       created_at TEXT NOT NULL, PRIMARY KEY (look_id, revision)); PRAGMA user_version=1;`);

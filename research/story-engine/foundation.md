@@ -88,7 +88,7 @@ The structure is the same at every scale, from the city down to the words on a b
 
 ### 5.1 Drives: what governs relevance
 
-The top of every chain is a set of **drives**, the kinds of thing that make anything matter to an actor. This catalogue is the key design surface. It is data, so content packs can extend it. A first draft, to be replaced by P1's motivation dossier:
+The top of every chain is a set of **drives**, the kinds of thing that make anything matter to an actor. This catalogue is the key design surface. It is data, so content packs can extend it. The draft below shows the shape. It is superseded by **catalogue v1** in [dossier 1](craft/d01-motivation-drives.md): 39 drives in ten families, plus group, director and seed drives, with urgency derived from timestamped facts, never ticked ([DS-66](design-seeds.md)).
 
 | Family | Drives | Typical localities they make relevant |
 |---|---|---|

@@ -1,6 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 import { join } from "node:path";
 import { CharacterDetailHost, characterRequestKey, installationFingerprint, type CharacterDetailSettings } from "../src/character/host/character-detail-host";
@@ -17,8 +16,9 @@ import { archiveExportSource, BY_HASH_CONCURRENCY, createGameAssetExporter, Game
   type ExportedMask, type ExportedTexture, type GameAssetExporter } from "../src/game/host/game-asset-export";
 import { parseCharacterDetail, UNCOVERED_BODY } from "../src/character/render-detail";
 import { BEARD, beardRequest, BODY_REQUEST, detailFixture, eyeRequest, FACE, P, REQUEST_A, REQUEST_B, TONES } from "./character-detail-fixtures";
+import { tempDir } from "./temp-dir";
 
-const root = mkdtempSync(join(tmpdir(), "xfs-character-"));
+const root = tempDir("xfs-character-");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 const png = encodePng({ width: 2, height: 1, data: new Uint8Array([255, 0, 0, 255, 0, 0, 255, 128]) }, { alpha: true });
 

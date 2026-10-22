@@ -12,7 +12,7 @@ type Query = ReturnType<StudioRuntime["port"]["authoring"]["contextQuery"]>;
 type Option = Query["options"][number];
 export const CONTEXT_LABELS: Readonly<Record<string, [string, IconName?]>> = {
   "preset.add": ["Add preset", "plus"], "preset.restore": ["Restore removed preset", "reset"],
-  "collection.undoOpen": ["Show the previous collection", "undo"], "collection.rename": ["Rename collection…", "rename"],
+  "collection.undoOpen": ["Reopen previous collection", "undo"], "collection.rename": ["Rename collection…", "rename"],
   "preset.select": ["Edit this preset", "target"], "preset.copy": ["Duplicate preset", "duplicate"],
   "preset.remove": ["Remove preset", "trash"], "preset.rename": ["Rename…", "rename"], "preset.move": ["Move to position…", "arrowDown"],
   "layer.select": ["Select layer", "target"], "layer.duplicate": ["Duplicate layer", "duplicate"],

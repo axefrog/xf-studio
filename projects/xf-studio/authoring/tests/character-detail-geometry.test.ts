@@ -1,7 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
@@ -11,8 +10,9 @@ import { GlbWriter, keepGlbMeshes, parseGlb, readAccessor } from "../src/formats
 import { CHARACTER_DETAIL_SCHEMA, type CharacterDetail, type RenderComponent, UNCOVERED_BODY } from "../src/character/render-detail";
 import { characterDetailsEvidence } from "../src/character/render/scene-evidence";
 import { restoreFirstWeights } from "../src/materials/render/skin";
+import { tempDir } from "./temp-dir";
 
-const root = mkdtempSync(join(tmpdir(), "xfs-chunk-geometry-"));
+const root = tempDir("xfs-chunk-geometry-");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 /**

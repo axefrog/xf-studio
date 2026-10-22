@@ -6,11 +6,11 @@
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import config from "../electrobun.config";
 import { BUILD_TOOLS_SCHEMA, bcnEntry, builderEntry } from "../build";
+import { tempDir } from "../../tests/temp-dir";
 
 const desktop = resolve(import.meta.dir, "..");
 const bundle = `${config.app.name.replaceAll(" ", "")}-canary`;
@@ -38,7 +38,7 @@ test.skipIf(!required && (process.platform !== "win32" || !isDir(prepared)))("th
 
 test.skipIf(!required && (process.platform !== "win32" || !existsSync(archive)))("the packaged app contains its texture compressor, and it loads", () => {
   expect(existsSync(archive), archive).toBe(true);
-  const scratch = mkdtempSync(join(tmpdir(), "xfs-packaged-bcn-"));
+  const scratch = tempDir("xfs-packaged-bcn-");
   try {
     const tools = `${bundle}/Resources/app/build-tools`;
     const unpack = spawnSync(tar, ["-xf", archive, "-C", scratch, `${tools}/manifest.json`, `${tools}/${builderEntry}`, `${tools}/${bcnEntry}`],

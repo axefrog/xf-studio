@@ -5,8 +5,7 @@
  * `tools/native-mask-oracle.ts` (every mask WolvenKit exported into a cache, texel for texel).
  */
 import { afterAll, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { depotHash } from "../src/game/depot-path";
 import { archiveExportSource, type ExportAnswer, type ExportRequest, type GameAssetExporter } from "../src/game/host/game-asset-export";
@@ -21,10 +20,11 @@ import { hostClock } from "../src/platform/core/clock";
 import { createJobScheduler } from "../src/platform/core/jobs";
 import { fakeDecompress, syntheticArchive } from "./fixtures/native-archive";
 import { Cr2wBuilder, prop, v } from "./fixtures/native-cr2w";
+import { tempDir } from "./temp-dir";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
-const tempRoot = () => { const root = mkdtempSync(join(tmpdir(), "xfs-native-mask-")); roots.push(root); return root; };
+const tempRoot = () => { const root = tempDir("xfs-native-mask-"); roots.push(root); return root; };
 
 /** One BC4 block: endpoints and 16 three-bit indices (texel 0 first). */
 const bc4 = (e0: number, e1: number, indices: number[]) => {

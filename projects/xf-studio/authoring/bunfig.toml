@@ -1,0 +1,3 @@
+[test]
+# Removes any scratch folder a test left behind once the whole run ends (tests/temp-dir.ts).
+preload = ["./tests/temp-dir-sweep.ts"]

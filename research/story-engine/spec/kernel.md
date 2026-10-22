@@ -1,6 +1,14 @@
 # S0. Kernel specification
 
-**Status:** v3.1, final for the first implementation, 22 October 2026. v3.1 adopts the reference model's 57 accepted implementation notes ([§19](#19-decisions-adopted-from-the-reference-model)). This is the specification stage of the [foundation](../foundation.md): exactly how the dimensional model works, so the reference model can be built from this page alone. It is work package [WP-05](../plan.md#82-work-packages).
+**Status:** v4.8, 23 October 2026.
+- v4.8: an event-kind registry; occurrence ids and times on delivered envelopes; `tempo` in settings (V4-32 to V4-34).
+- v4.7 clarifies pattern frames for layer 3 (V4-31).
+- v4.6 adds staged batches, widens relevance routing to layer 2, tightens the production gate, fixes recall to once per encounter, and defers the memory machinery and implicit edges from the first version, after GPT-6 Astra's second review of S2 (V4-26 to V4-30 in §20).
+- v4.5 adds the `coarseFine` declaration on processes and the property-test plan, from [dossier 23](../craft/d23-evaluation-testing.md) (V4-24 and V4-25 in §20).
+- v4.4 adds an age class on people, typed and sensitive content settings, and lines that refuse events, from [dossier 18](../craft/d18-content-boundaries.md) (V4-21 to V4-23 in §20).
+- v4.3 adds implicit edge types (specified; implementation deferred) and states the `aggregate` hook's contract, from [dossier 15](../craft/d15-people-networks-order.md) (V4-18 to V4-20 in §20).
+- v4.2 adds city settings and clarifies arithmetic and summaries for simulated events, from [dossier 14](../craft/d14-city-events.md) (V4-14 to V4-17 in §20).
+- v4.1 added memory and forgetting from [dossier 11](../craft/d11-saves-memory-forgetting.md) (V4-8 to V4-13). v3.1 was final for the first implementation and adopted the reference model's 57 accepted implementation notes ([§19](#19-decisions-adopted-from-the-reference-model)). v4 adds what the seeding layer ([S2](seeding.md)) and the sifting research ([dossier 6](../craft/d06-sifting-tellability.md#74-gaps-with-a-route-that-leaves-s0-unchanged)) need. The additions are listed in [§20](#20-version-4-additions); none changes a result the reference model already produces. This is the specification stage of the [foundation](../foundation.md): exactly how the dimensional model works, so the reference model can be built from this page alone. It is work package [WP-05](../plan.md#82-work-packages).
 
 v3 takes in three independent review rounds. The [review record](#18-review-record) lists what changed and why. What the first implementation includes is settled in [§0.2](#02-the-first-implementation), and that scope is final ([D-19](../decisions.md)).
 
@@ -68,6 +76,8 @@ Deferred items are named in the text where they apply, and are recorded as compr
 | Resumable resolution and resumable queries | Hard limits keep each resolution and query atomic and bounded (§10.7). Worklists remain resumable |
 | Frame suspension under budget | Queued work pauses; frame status and interests are unchanged (§10.4) |
 | Fine-grained cache dependency tracking | Cache keyed by revision and query time (§5.5) |
+| Implicit edge types (§2.5, v4.3) | Only materialised edges are tested. Casting through ties opens a bounded candidate set first (S2) |
+| Memory machinery: accessibility, the forgetting sweep, widening and `onRecall` (§11.2, v4.1) | Beliefs are kept exactly; non-memorable beliefs follow the existing fading hooks. The fields `uses`, `salience` and `widened` are carried but unused |
 | Processes with different base periods | One shared simulation window. Processes run every n-th window (§9.4) |
 | Function-specific query bounds (`Bound`) | Optional; without one, the verdict is `maybe` (§2.1, §8.2) |
 | Reasoning about "opposite" effects in the conflict table | Explicit violation pairs only (§10.8) |
@@ -112,6 +122,10 @@ Determinism across implementations (I-1) needs identical arithmetic:
 - **Sums run in canonical order:** contributions by `Id` ascending.
 - **Each weight factor is normalised** over the feasible set before its `ln` is taken: divided by its maximum over `F`. Scaling a factor uniformly is then invisible mathematically. In binary64, rounding can differ at the edges, so tests check the specified computation, not exact invariance (I-7).
 - **Outcome comparisons are exact.** Ties are broken as each rule states.
+
+**Scope** (v4.2, a clarification). These rules govern every arithmetic that decides a pin, event, count or contribution, including those a simulation process (S1) produces, not only weights and scores.
+- `ln` is the only transcendental function in a decision.
+- S1 MAY add exact table-based sampling and fixed-order loops, specified bit for bit. That is how a process gets exponential-like decay or a log-normal spread without `exp`.
 
 **What is exact.** The draw (§5.4) samples the specified distribution mathematically. The implementation reproduces the same finite-precision computation bit for bit; it does not promise mathematical exactness beyond that.
 
@@ -165,15 +179,19 @@ type ValueType =
 
 ```ts
 type Prior       = (dim: DimensionDef, F: Value[], params) => number[];          // positive weights over F
-type Derive      = (inputs: Value[], params) => Value;
+type Derive      = (inputs: Value[], params, t: GameTime) => Value;              // t: the query time (v4)
 type Preimage    = (output: Region, otherInputs: Value[], params) => Region;     // unary views only (§6.4)
 type Conditioned = (inputs: Value[], F: Value[], params) => number[];           // positive weights over F
 type FieldMap    = (fieldValue: number, F: Value[], params) => number[];        // positive weights over F
 type Buckets     = (value: Value, params) => string[];
+type Widen       = (value: Value, level: number, params) => Region;              // v4.1: blurs a remembered value;
+                                                                                 // the region always contains the value
 type Bound       = (inputBounds: Region[], params) => Region;                   // conservative, for queries
 ```
 
 A `Derive` MAY provide a `Bound`. Without one, its query verdict is `maybe`. Function versions are part of the compatibility record (§14.4).
+
+**Derives read the query time** (v4). A `Derive` receives the time `t` that resolution was asked about (§5). It lets a derived value depend on elapsed time, such as urgency growing towards a deadline, without a process ticking it ([DS-66](../design-seeds.md)). A derive that reads `t` is still deterministic, because `t` is part of the cache key (§5.5). A derive that ignores `t` behaves exactly as before.
 
 ### 2.2 Kinds
 
@@ -251,9 +269,19 @@ interface EdgeTypeDef {
   attrs: Record<string, DimId>;        // plain values of declared dimensions
   data?: string[];                     // names of structured data fields carried on the edge record
   perceivable?: boolean;               // the type can be seen; each edge's visibility decides (§11.4)
+  implicit?: { fn: FnRef; neighbours?: FnRef };   // v4.3: edges that exist as a pure function, below
   symmetric?: boolean;
 }
 ```
+
+**Implicit edge types** (v4.3; implementation deferred, §0.2). Most ties between ordinary people never need storing: they follow from where people live, work and gather.
+- **The function.** An implicit type names a registered pure, symmetric function of `(a, b, t)` that returns the edge's attributes, or none. An optional `neighbours` function enumerates the candidates for one endpoint.
+- **Queries.** The `has-edge` and `lacks-edge` predicates evaluate it exactly on candidates, and return `maybe` over unopened regions.
+- **Retention.** Implicit edges are not retention roots.
+- **Materialising.** When V sees a tie, hears of it, or a seed uses it, it is materialised as an ordinary edge, pinned under the `Id` `H("edge", type, min(a, b), max(a, b))`.
+- **Cost.** Evaluation counts against the shared allowance (§10.7).
+
+The city therefore never stores a social graph; it stores only the ties that have mattered ([dossier 15](../craft/d15-people-networks-order.md)).
 
 ### 2.6 The core schema
 
@@ -269,7 +297,10 @@ core:person      facets: actor
                  slots: name (node core:name), age (int 16..90),
                         age-band (int, derived from age; preimage: the band's 10 ages),
                         traits (many node core:trait), drives (many node core:drive-state),
-                        position (vec 3; mirrored for mirrored people, otherwise assigned by simulation), place (ref core:place)
+                        position (vec 3; mirrored for mirrored people, otherwise assigned by simulation), place (ref core:place),
+                        age-class (enum adult | minor, v4.4: derived from age, adult at 18 and over, for generated people;
+                                   mirrored from the game's child flag for mirrored people; declared for pack people.
+                                   Floor checks treat a missing reading as minor)
 core:group       facets: actor, group   slots: name (node core:name), drives (many node core:drive-state)
 core:place       facets: place          slots: position (vec 3), district (ref core:place), public (enum)
 core:event       facets: event          (§9.2)
@@ -279,7 +310,15 @@ core:member-of   attrs: role (enum), strength (real), visibility (enum open|secr
                  data:  obligations (list of interest selectors); perceivable: true
 core:kin         attrs: relation (enum)
 core:located-in, core:knows
+
+# v4, for the seeding layer (S2 §0.4)
+core:game-fact   slots: value (int, mirrored). The fact named n is the mirrored node H("game", "fact:" + n)
+core:seed-fact   slots: value (int, assigned)
+core:seed        facets: actor. No slots the kernel reads
+core:cast        edge, from core:seed to any kind; data: role; not perceivable
 ```
+
+The core event vocabulary (§9.2) gains the kinds `offer`, `response` and `seed-outcome` (v4).
 
 ## 3. Nodes, slots and edges
 
@@ -627,11 +666,29 @@ Events are minted nodes of kind `core:event`:
 | `effects` | many node: `{ on: ref, effect: enum }`, with effects from §10.8 |
 | `witnesses` | many: ref |
 | `causes` | many: ref to events |
+| `outcome` | Optional enum: `done`, `failed`, `prevented` (v4) |
+| `served` | Optional data: the `Id` of the frame whose goal the act served (v4) |
+
+`outcome` and `served` are optional. An event without them means what it always meant. They let a reader tell an attempt from a success, and see which goal an act served ([dossier 6](../craft/d06-sifting-tellability.md) G-3).
 
 An event becomes **canon** when:
 - V observes it, which pins the observed fields `observed`;
 - a seed commits it, which pins the committed fields `committed`;
 - a persisted effect depends on it, which pins the fields the effect needs `committed`.
+
+**Lines refuse new occurrences** (v4.4; tightened in v4.6). The exclusion gate applies to **new occurrences the engine produces**, before they are published, together with everything that depends on them:
+- process outputs;
+- summary counts and their items;
+- fact writes;
+- rewards.
+
+An occurrence in a content class the player has excluded (`SettingsSet.classExclusions`, or a content ceiling of 0) is not produced, with reason `excluded`.
+
+**What the gate doesn't touch:**
+- **Records of what the game itself did** (mirrored readings, observed events) are kept as they are: the engine must still understand the world accurately. Their presentation is filtered separately (S2 §2.19).
+- **Replayed history** is never re-filtered.
+
+Where a generic event kind can't identify the class, the occurrence carries a content classification.
 
 Only those fields are pinned. Causes, other participants and other details stay open until something needs them.
 
@@ -658,6 +715,14 @@ A summary is a minted node of kind `core:summary`:
 
 **Revisions.** A process may revise `count`, subject to the structural constraint (§6.5).
 
+**Clarifications** (v4.2):
+- **Scope and span.** A summary may be scoped to any single place, and cover one simulation window.
+- **Empty summaries.** A summary whose count is zero is not minted.
+- **Re-minting.** Re-minting a summary from its persisted descriptor under the same `Id` yields the same items (I-3). A process may therefore keep descriptors for a bounded horizon, instead of making every summary a retention root.
+- **Item ids.** An item's `Id` is a pure function of the summary's `Id` and the item's index.
+
+A city's incidents can therefore start as counts in per-window summaries. Fine detail is the lazy materialisation of their items, so the counts agree at every tier and across reloads ([dossier 14](../craft/d14-city-events.md)).
+
 ### 9.4 Evolution
 
 Simulation processes are S1's. The kernel defines when they run and what they may read.
@@ -673,6 +738,7 @@ Simulation processes are S1's. The kernel defines when they run and what they ma
 - **Partition independence (I-15).** Given the same timestamped external operations and the same demand history, a process's history doesn't depend on how ticks fell.
 - **Catch-up.** After an absence, tiers 0–2 run every missed boundary in order, each within the hard limits.
 - **Fine tiers (3–5)** run only where demand reaches them (§10.6). They never catch up: when V arrives, their state is generated from the coarse state, consistent with the pins.
+- **Coarse against fine** (v4.5). A process registration MAY declare `coarseFine`: `exact`, `count`, or `distribution` with a tolerance. This is the agreement it owes between its coarse state and fine state generated from it. The test harness picks the test from it; resolution ignores it.
 
 ## 10. Context frames and relevance
 
@@ -742,8 +808,11 @@ type Change =
       participants: Array<{ who: Id; role: string }>; effects: Array<{ on: Id; effect: Effect }> }
   | { c: 'minted'; node: Id; kind: KindId }
   | { c: 'contribution'; contribution: Contribution; ended: boolean }
-  | { c: 'reading'; node: Id; slot: SlotPath; old?: Value; new: Value };   // a game reading that changed a value
+  | { c: 'reading'; node: Id; slot: SlotPath; old?: Value; new: Value }    // a game reading that changed a value
+  | { c: 'frame'; frame: Id; actor: Id; level: string; old: string; new: string };   // a frame status change (v4)
 ```
+
+A `frame` change is produced when a frame's `status` changes. Weight and parent changes produce none.
 
 Cache fills, regeneration and save replay produce no changes.
 
@@ -755,6 +824,7 @@ Cache fills, regeneration and save replay produce no changes.
 | Edge | Each endpoint, with `role` = `from` or `to` and `edge` = the edge's type |
 | Event | The event node itself, its `place` (with `role` = `place`), each participant's `who` (with `role` = the participant's role), and each effect's `on` (with `role` = `target` and `effect` = the effect) |
 | Minted node | The node |
+| Frame status (v4) | The frame's actor, with `role` = `actor`, and each node in the frame's focus, with `role` = `focus` |
 | Contribution | Each node its target selector names by scope. The reference model treats any other target as matching interests whose kind and scope overlap it, which may over-match |
 
 An interest selector `σ` matches change `x` if **one binding** satisfies all of the following:
@@ -778,7 +848,17 @@ An interest selector `σ` matches change `x` if **one binding** satisfies all of
 - **Emission.**
   1. Each receiving actor gets at most one emission per (change, frame, interest type): the one with the greatest `r`.
   2. It is emitted when `r ≥ θ_react` **[calibrate]**, as `Relevance { actor, frame, change, type, r }`.
-  3. Emissions go to S1 and S3, in order of actor (demand roots first), then frame `Id`.
+  3. Emissions go to S1 and S3, in order of actor (demand roots first), then frame `Id`. Emissions on frames whose actor is one layer 2 has registered (every `core:seed`, and the pack roots that carry sowing watchers) go to layer 2 (S2) as well, in the same order (v4; widened in v4.6). Layer 2 also hears dilemmas (§10.8) whose frames belong to those actors.
+
+**For layer 3** (v4.7, a clarification):
+- a frame MAY carry many interests for one pattern;
+- a `Relevance` emission carries the change payload itself, not only its id;
+- a root actor's frames may be opened and closed as packs load and unload.
+
+**Event kinds and envelopes** (v4.8):
+- **The registry.** An event's kind is the `kind` slot of `core:event` (§9.2). Packs register event kinds, with their tags and producers, in an **event-kind registry**. Selectors and patterns match kinds through `where` predicates on that slot, never through `KindId`s. The registry also holds the inert `meta:` kinds layer 3 mints.
+- **Envelopes.** Every delivered relevance emission and dilemma carries a stable **occurrence id** (the event's `Id`, or the change's own id) and the occurrence's **game time**.
+- **Soft exclusions** live in `SettingsSet.content.softExclusions` (V4-21).
 
 ### 10.6 Demand and tiers
 
@@ -829,6 +909,8 @@ The per-tick work budget is **[tunable; P7 measures it]**. It is counted in allo
 2. Apply the conflict table.
 3. For each violation, emit `Dilemma { actor, frameA, frameB, target, effect, severity: pull(A) × pull(B) }`, at most once per (frameA, frameB, target, effect) until either frame changes.
 
+**Recipients** (v4, a clarification). Dilemmas go to S1, S3 and layer 2, in emission order, with relevance emissions. They are not persisted: a reader that needs one keeps what it needs.
+
 ## 11. Beliefs and perspectives
 
 ### 11.1 The belief record
@@ -842,6 +924,9 @@ interface Belief {
   evidence: Id[];                      // originating events: the independent support
   source: { by: 'observed'; event: Id } | { by: 'told'; teller: Id; event: Id } | { by: 'inferred'; rule: FnRef; from: Id[] };
   formed: GameTime; refreshed: GameTime; memorable: boolean;
+  uses?: number;                       // v4.1: corroborations, recalls and retellings (default 0)
+  salience?: 0 | 1 | 2 | 3;            // v4.1: rated at formation by onWitness (default 0)
+  widened?: number;                    // v4.1: how far the value has blurred (0 = exact)
 }
 ```
 
@@ -856,7 +941,21 @@ Beliefs are stored per believer and indexed by (subject, path, at). They never c
   - `onWitness(event, observer)`;
   - `onSocial(event, teller, listener)`;
   - `onTick(believer)`;
-  - `aggregate(audience, subject, path)`.
+  - `aggregate(audience: Id | Selector, subject: Id, path: SlotPath, t: GameTime) → { value?: Value | Region; mass: number; items: number }` (contract stated in v4.3). It is a pure read over the beliefs of the audience's carriers, not over every resident. It is deterministic and cacheable by revision and `t`, counts against the shared allowance, and never writes. `mass` counts each independent piece of evidence once, so a rumour retold by three tellers weighs as its origin;
+  - `onRecall(believer, belief, encounter, cue)` (v4.1), below.
+
+**Forgetting beliefs** (v4.1). Forgetting is lazy, shaped like blurring, and never touches the record of events. It has three parts:
+- **Accessibility** is a registered pure function of a belief's fields and the query time, evaluated when read. The first policy follows [dossier 11](../craft/d11-saves-memory-forgetting.md):
+
+  ```
+  accessibility(b, t) = ln(2 · max(1, uses)) − ½ · ln(max(1, t − refreshed)) + importance(salience) + cue
+  ```
+
+  It uses only `ln` and arithmetic (§1.3). No process ticks it.
+- **Recall.** `onRecall` returns the form of a belief at an encounter: `exact`, `region`, `gist` or `gone`. A `region` comes from the slot class's `Widen`. The draw is `rand("recall", believer, belief.id, encounter)`, where `encounter` is the stable `Id` of the contact event S1 mints, so the same question gets the same answer after a reload. Recall is evaluated **once** per (belief, encounter): the result is stored with the encounter, `uses` increments once, and a delivery that depends on it keeps the result and the belief state it rests on (v4.6). The forms nest: a believer who can recall a belief exactly can also recall it as a region or as gist.
+- **The sweep** runs once per `W_forget` game seconds **[tunable 86,400]**, as the forgetting worklist (§10.7). It touches only beliefs that are not memorable, and only those whose accessibility has fallen below the **floor**: the accessibility at the most generous memory setting. A belief below the floor is widened one level by `BeliefSet`, or dropped by `BeliefDropped` once it is gist. A setting raised later can therefore restore anything blurred under a stricter one, because the sweep never went below what the most generous setting would keep.
+
+Events, pins and canon are never forgotten by this. Beliefs are views of them.
 
   The first policy follows [foundation §5.4](../foundation.md#54-perspectives-everyone-has-their-own-model).
 
@@ -920,7 +1019,7 @@ The trace is the complete account (I-8).
 - **Canon events:** their headers and pinned fields.
 - **Summaries,** with their `canon` sets.
 - **Frames:** those of demand roots and live seeds, and every ancestor frame they inherit from, whoever's it is.
-- **States:** seed states (S2), and process cursors and states (S1), including each process's outstanding output batches (§9.4).
+- **States:** seed states (S2), and process cursors and states (S1), including each process's outstanding output batches (§9.4). A seed state is a `SeedRecord { id, state, nodes, actor? }` whose `state` is the owning layer's plain data. Its `nodes` are retention roots, and its `actor`, if set, is a demand root. Any layer MAY keep its own records this way under an id it owns, such as S2's global record or S3's promoted sifting matches (v4, a clarification; [dossier 6](../craft/d06-sifting-tellability.md) G-8).
 - **Lineage:** the world seed, plus schema and function versions (§14.4).
 
 **Not persisted:**
@@ -939,9 +1038,20 @@ Each save has a record `{ saveKey, parent, ops }`, where `parent` is the record 
 - `BeliefSet`, `BeliefDropped`;
 - `EventCanon`;
 - `SummarySet`;
-- `FrameState`, `SeedState`, `ProcessState`.
+- `FrameState`, `SeedState`, `ProcessState`;
+- `SettingsSet { memoryScale, resetScale, noticing, exclusions, modelFloor, cityScale, classExclusions, content, tempo, at }` (v4.1; city settings v4.2; `content` v4.3, typed in v4.4 as `{ preset, ceiling per class 0..3, notice per class, softExclusions }`, marked sensitive and dropped from exports and bug reports by default, like the director's beliefs about V): every player setting that changes what is offered or remembered, in force from `at`. `noticing`, `exclusions` and `modelFloor` are the director's model settings ([S2 §8.8](seeding.md#88-the-player-models-boundary)). The lineage root records the initial settings. Replays and the harness use the settings in force at each op. Settings that change only presentation are not recorded.
 
 Snapshots are written every **[tunable 10,000]** ops. Ops carry complete data.
+
+### 14.2a Staged batches (v4.6)
+
+Layer 2 sometimes needs to try a set of changes, check them, and keep them only if the checks pass (S2 §8.4). A **staged batch** supports this:
+1. **Open.** `stage()` opens a batch. Operations applied inside it are visible to resolution, `trace` and queries made through the batch, and to nothing else.
+2. **Silence.** While a batch is open, it emits no changes, relevance or dilemmas. Its operations aren't persisted. Other operations are not interleaved with it.
+3. **Commit.** `commit()` applies the batch's operations as one unit. They are persisted, the revision advances, and their changes are dispatched in the order the operations were made.
+4. **Discard.** `discard()` drops the batch. No operation, change or revision remains. Only the caller's own diagnostic record says it happened.
+
+A batch is bounded by the shared work allowance (§10.7). The reference model MAY implement it by snapshot and restore.
 
 ### 14.3 Loading is replacement
 
@@ -974,6 +1084,7 @@ The lineage root records the schema and function versions. Loading under newer v
 | I-13 | **Silence.** Resolution, regeneration and replay produce no changes and no relevance |
 | I-14 | **Acyclic frames** |
 | I-15 | **Partition independence,** given the same timestamped external operations and the same demand history |
+| I-16 | **Session independence** (v4.1). No draw key, `Id`, ordering or tie-break reads the session `epoch`, the play clock, the wall clock or a load count. The epoch only refuses stale operations (§14.3). "Epoch" means only the session's |
 
 ## 16. Fixtures
 
@@ -998,6 +1109,16 @@ Fully specified: outcomes that depend on hashes are checked as properties, not n
 | F-13 | **Partition.** Process "tally", tier 0, period 1 window: in window k it pins `counter@w<k> = counter@w<k−1> + floor(rand("proc", seed, "tally", k) × 10)`, with `counter@w<−1> = 0`. Run 12 windows as one tick, and again as 12 ticks | Identical counter histories |
 | F-14 | **Retained member.** A crowd count of 12; member 9 is focused by V's frame (no pin). An authored constraint sets the count to 6 | The count is 10 or more (the structural constraint, 700, rejects 6), and member 9 stays addressable |
 | F-15 | **Cycle guard.** A kind whose slot reads itself through an invalid schema the loader missed (tested by bypassing the loader) | Resolution returns `cycle` and records a defect |
+| F-16 | **Session independence** (v4.1). Run F-12's sequence twice, with different epochs and play and wall clocks | Identical records and resolved values |
+| F-17 | **Jump versus tick** (v4.1). Beliefs and a forgetting sweep over 30 game days, run as one jump and as 30 daily ticks | Identical beliefs |
+| F-18 | **Widening keeps the truth** (v4.1). A belief `age = 34`, widened level by level to gist | Every region contains 34 |
+| F-19 | **Nested recall** (v4.1). The same belief recalled at one encounter at several accessibility levels | `exact` implies `region` implies `gist` |
+| F-20 | **Lens invariance** (v4.1). Blur beliefs under a strict memory setting; raise the setting | Beliefs above the new floor read as before blurring wherever the sweep didn't widen them; no event, pin or exposure changed |
+| F-21 | **Cluster process** (v4.2). A self-exciting process with a persisted pending calendar of offspring and thinning, run for 12 windows as one tick and as 12 ticks | Identical calendars and fired lists |
+| F-22 | **Mid-cascade reload** (v4.2). The F-21 process saved mid-cascade and reloaded under a different epoch, play clock and wall clock | The same future |
+| F-23 | **Implicit edges** (v4.3). An implicit tie type over a block's residents | Symmetric. Identical answers after a reload and under a changed tick partition |
+| F-24 | **Aggregate** (v4.3). A chain of three tellers from one origin; a 30-game-day absence; then `k` contrary independent items | The chain weighs as the origin. The absence changes no label. The `k` items flip it |
+| F-25 | **Norm slot** (v4.3). A norm updated by a public act and by a private act, over 12 windows as one tick and as 12 ticks | Identical results; only the public act moves perceived support |
 
 ### 16.2 Calibration fixtures
 
@@ -1014,6 +1135,25 @@ Downstream consumers (S1, S3) apply their own, higher thresholds for anything co
 | C-b | A vendor. Drive frame `money`, weight 0.8, root. Concern frame `protection-payment`, weight 0.9, child of it, with `threatenedBy: { kind: core:person, where: [@role = collector, has-edge member-of → Tyger Claws] }`, plus a second interest `threatenedBy: { kind: core:place, scope: { nodes: [stall] }, where: [@role = place] }` | (1) An event at the stall whose participant is a Tyger Claw collector. (2) The same event elsewhere in the district | (1) The stall binding: 0.72 × 1.0 × 1.0 = 0.72. The collector binding: 0.72 × 1.0 × 0.5 = 0.36. The greatest, 0.72, is emitted. (2) The collector binding only: 0.36 | (1) ≥ θ_react, and the greatest of C-a to C-c. (2) ≥ θ_react, but lower than (1) |
 | C-c | The vendor's work frame, weight 0.6, root, `wants: { kind: core:person, where: [@role = customer] }` | A customer arrives (an event with a `customer` participant) | 0.6 × 1.0 × 0.5 = 0.30 | ≥ θ_react, and below C-b(1) |
 | C-d | V: a frame `protects`, weight 1, root, `{ scope: { nodes: [friend] }, where: [@effect = harm] }` | An event with effect `harm` on the friend | 1 × 1.0 × 1.0 = 1.0 | The greatest of all |
+
+### 16.3 Property, soak and docking tests
+
+The fixtures above are examples. The next version of the reference model also checks the invariants as **properties**, over generated operation scripts drawn from logged named streams, shrinking failures to the smallest script ([dossier 23](../craft/d23-evaluation-testing.md) §12, S23-S0-01 to S23-S0-17):
+- I-1 to I-16 as properties;
+- random tick partitions and random save and load points;
+- regeneration under random forgetting;
+- summary and item agreement across scopes;
+- a library of metamorphic relations: unrelated nodes, renamed ids, permuted independent operations, scaled weights;
+- hard limits with fault injection;
+- damaged, truncated and foreign loads;
+- session independence;
+- never-dropped beliefs at every memory setting.
+
+**Further work:**
+- **Digests.** Second and third digest scripts cover the v4 operations, fine tiers and `explain`.
+- **A soak run:** 100 game-years on 20 seeds, under the memory guard.
+- **A cross-implementation runner** compares the reference model and the native core hash by hash.
+- **A relevance gold set:** 50 to 100 hand-written "who should care" cases. It is the evidence that would trigger revisiting C-03.
 
 ## 17. Compromises and open items
 
@@ -1105,3 +1245,62 @@ The [reference model](../../../projects/xf-story-engine/README.md) is on `main`:
 | Persistence | A save's `meta` carries the world seed, time, evolution cursor, function versions, packs, demand roots and demand history. Ops are produced by a diff at save time. A read-only load changes nothing, packs included | 19, 20, 39, 55 |
 
 **The determinism digest** frozen in the reference model's tests (`d534e0dc…`, 1,067 entries, covering save, load, branching, outstanding batches, beliefs, summaries and group decisions) is the cross-implementation check that the native core must reproduce.
+
+## 20. Version 4 additions
+
+v4 adds what the seeding layer and sifting need. None of the additions changes a result the reference model produces today: the determinism digest stays valid. Each is marked "v4" where it appears.
+
+| # | Addition | Section | Needed by | Reference model |
+|---|---|---|---|---|
+| V4-1 | Derives receive the query time `t` | §2.1 | S1 urgency and deadlines ([DS-66](../design-seeds.md)) | To implement; existing derives ignore `t` |
+| V4-2 | `core:game-fact`, `core:seed-fact`, `core:seed`, the `core:cast` edge, and event kinds `offer`, `response`, `seed-outcome` | §2.6 | S2 §0.4 | To implement (schema only) |
+| V4-3 | Optional `outcome` and `served` on events | §9.2 | Sifting ([dossier 6](../craft/d06-sifting-tellability.md) G-3) | To implement (schema only) |
+| V4-4 | A `frame` change on frame status changes, with its bindings | §10.5 | Sifting (G-2); closure and reversals | To implement. It adds changes, so relevance can grow; the digest's fixtures produce no status changes, so it is unaffected |
+| V4-5 | Relevance on seed frames reaches layer 2 | §10.5 | S2 §4 | To implement (delivery only) |
+| V4-6 | Dilemma recipients stated | §10.8 | S2 §9, S3 (G-5) | A clarification |
+| V4-7 | Any layer may keep `SeedRecord`s under its own ids | §14.1 | S2 §12, S3's promoted matches (G-8) | Already true |
+| V4-8 | Invariant I-16, session independence | §15 | Reload stability ([dossier 11](../craft/d11-saves-memory-forgetting.md) S11-S0-01) | Fixture F-16 to add |
+| V4-9 | Belief fields `uses`, `salience`, `widened` | §11.1 | Memory (S11-S0-03) | Optional fields, default 0 |
+| V4-10 | The `Widen` registry signature | §2.1 | Blurring (S11-S0-05) | To implement |
+| V4-11 | Lazy accessibility, `onRecall` and the forgetting sweep with its floor | §11.2 | S11-S0-04, 09, 10 | To implement; the sweep is a defined worklist |
+| V4-12 | The `SettingsSet` op | §14.2 | Settings as lenses (S11-S0-06) | To implement |
+| V4-13 | Fixtures F-16 to F-20 | §16.1 | S11-S0-11 | To add |
+| V4-14 | Arithmetic scope covers process decisions; `ln` is the only transcendental | §1.3 | Simulated events ([dossier 14](../craft/d14-city-events.md) S14-S0-01) | A clarification |
+| V4-15 | Summary clarifications: single-place scope, no empty summaries, re-minting, item ids | §9.3 | S14-S0-02 | A clarification; already true |
+| V4-16 | `cityScale` and `classExclusions` in `SettingsSet` | §14.2 | S14-S0-03 | To implement with V4-12 |
+| V4-17 | Fixtures F-21 and F-22 | §16.1 | S14-S0-04 | To add with S1's first process |
+| V4-18 | Implicit edge types | §2.5 | Casting through unopened ties ([dossier 15](../craft/d15-people-networks-order.md) S15-S0-01) | Deferred (§0.2) |
+| V4-19 | The `aggregate` hook's contract | §11.2 | Reputation (S15-S0-02) | A clarification |
+| V4-20 | Fixtures F-23 to F-25 | §16.1 | S15-S0-03 | F-23 with V4-18; F-24 and F-25 with S1's reputation and norm policies |
+| V4-21 | `SettingsSet.content` typed and marked sensitive | §14.2 | Content ceilings ([dossier 18](../craft/d18-content-boundaries.md) S18-S0-01; S2 §2.19) | With V4-12 |
+| V4-22 | `age-class` on `core:person`; missing counts as minor in floor checks | §2.6 | The minors floor (S18-S0-02) | To implement (schema and derive) |
+| V4-23 | Lines refuse events before minting | §9.2 | Lines (S18-S0-03) | To implement with S1's first process |
+| V4-24 | `coarseFine` on process registrations | §9.4 | Simulation validation ([dossier 23](../craft/d23-evaluation-testing.md) S23-S0-07) | Optional; ignored by resolution |
+| V4-25 | The property, soak and docking test plan | §16.3 | S23-S0-01 to S23-S0-17 | With the next reference-model version |
+| V4-26 | Staged batches: stage, commit, discard | §14.2a | S2 §8.4: a failed release leaves nothing in effect (Astra's second S2 review, C-02) | To implement |
+| V4-27 | Relevance and dilemmas routed to layer 2 for every actor it registers | §10.5, §10.8 | S2 §1.3 sowing watchers (C-12) | Delivery only |
+| V4-28 | The production gate applies to new occurrences and their dependents; observed history is kept | §9.2 | C-08 | To implement with S1's first process |
+| V4-29 | Recall once per (belief, encounter) | §11.2 | C-20 | With V4-11, deferred |
+| V4-30 | The memory machinery (V4-9 to V4-11) and implicit edges (V4-18) are deferred from the first version | §0.2 | Astra's core set | Deferred |
+| V4-31 | Pattern frames: many interests per frame, emissions carry the change, frames come and go with packs | §10.5 | S3's sifter | A clarification |
+| V4-32 | The event-kind registry; kinds matched through the `kind` slot | §9.2, §10.5 | S3's sifter (Astra's S3 review, D-16) | A clarification and a small registry |
+| V4-33 | Occurrence id and game time on delivered emissions and dilemmas | §10.5, §10.8 | D-16 | Delivery only |
+| V4-34 | `tempo` in `SettingsSet` | §14.2 | D-16 | With V4-12 |
+
+**Dossier 11's other kernel requirements:**
+- **S1 policies:**
+  - how telling transforms a story (S11-S0-07);
+  - coalescing many similar beliefs, and the cap per believer (S11-S0-09, the part beyond the floor);
+  - the memory policy list (S11-S0-12).
+- **S6 and P7:** the commit window on saving (S11-S0-08).
+- **S2:** the load class, as a session input (S11-S0-02).
+
+**Recorded compromise:** accessibility's closed form assumes evenly spaced use. Storing each use's time would be more exact. Revisit when recall feels wrong in the transcript panels (dossier 11's testing agenda).
+
+**Dossier 6's other gaps take routes that leave the kernel unchanged:**
+- **G-1:** S1's telling and lying policies mint events.
+- **G-4:** new event kinds come from packs.
+- **G-6:** the sifter's pool copies the descriptors it needs.
+- **G-7:** S1 mints events where a root's focus reaches the fine tiers.
+
+These follow the dossier's recommendations, and are recorded in [§7.4 of dossier 6](../craft/d06-sifting-tellability.md#74-gaps-with-a-route-that-leaves-s0-unchanged).

@@ -4,13 +4,13 @@
 // WolvenKit with the reason.
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BUILD_TOOLS_SCHEMA, bcnCandidates, bcnEntry, builderEntry } from "../src/legacy/eye-makeup/export/host/packaged-build-tools";
 import { loadNativeWriterLibraries } from "../src/legacy/eye-makeup/export/host/native-resource-tools";
 import type { BcnLibrary } from "../src/native/write/bcn";
 import * as desktopBuild from "../desktop/build";
+import { tempDir } from "./temp-dir";
 
 const files = (entries: Record<string, string>) => (path: string) => entries[path.replaceAll("\\", "/")] ?? null;
 const slashes = (items: readonly { path: string; sha256?: string | null }[]) => items.map(item => ({ ...item, path: item.path.replaceAll("\\", "/") }));
@@ -42,7 +42,7 @@ test("the source tree takes a developer's XFS_BCN_LIBRARY, then the built copy b
 });
 
 test("a compressor whose bytes differ from its hash, or whose hash is unknown, is not loaded; the right bytes are", () => {
-  const root = mkdtempSync(join(tmpdir(), "xfs-bcn-bind-"));
+  const root = tempDir("xfs-bcn-bind-");
   try {
     const dll = join(root, "xfs_bcn.dll");
     writeFileSync(dll, "MZ built bytes");
