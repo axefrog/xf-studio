@@ -542,11 +542,11 @@ These games, books, essays and talks informed the design of the planned Story En
 
 ### Emily Short and Failbetter Games
 
-Emily Short, ["Beyond Branching: Quality-Based, Salience-Based, and Waypoint Narrative Structures"](https://emshort.blog/2016/04/12/beyond-branching-quality-based-and-salience-based-narrative-structures/) (2016), and [Fallen London](https://www.fallenlondon.com/), created by Alexis Kennedy and developed by Failbetter Games. Failbetter's quality-based narrative offers small pieces of story, called storylets, when the numbers that track a player's skills and progress (qualities) allow them, and Short's essay sets it beside other ways of choosing what happens next. It taught us to gate content by state rather than by branches. Short's ["Storylets: You Want Them"](https://emshort.blog/2019/11/29/storylets-you-want-them/) (2019) defines a storylet as content, prerequisites and effects, and explains why a branching "time cave" loses the benefits; her ["Small-Scale Structures in CYOA"](https://emshort.blog/2016/11/05/small-scale-structures-in-cyoa/) (2016) catalogues beat-level choice patterns. Failbetter's [Fallen London Writer Guidelines, Part II](https://www.failbettergames.com/news/fallen-london-writer-guidelines-part-ii) (2015) advise keeping qualities few and never trapping a player in a chain of linked events, and Alexis Kennedy's [Sunless Sea postmortem](https://www.gamedeveloper.com/audio/postmortem-failbetter-games-i-sunless-sea-i-) (Game Developer, 2015) records how a reused story engine collected special cases and hand-edited data stopped scaling.
+Emily Short, ["Beyond Branching: Quality-Based, Salience-Based, and Waypoint Narrative Structures"](https://emshort.blog/2016/04/12/beyond-branching-quality-based-and-salience-based-narrative-structures/) (2016), and [Fallen London](https://www.fallenlondon.com/), created by Alexis Kennedy and developed by Failbetter Games. Failbetter's quality-based narrative offers small pieces of story, called storylets, when the numbers that track a player's skills and progress (qualities) allow them, and Short's essay sets it beside other ways of choosing what happens next. It taught us to gate content by state rather than by branches. Short's ["Storylets: You Want Them"](https://emshort.blog/2019/11/29/storylets-you-want-them/) (2019) defines a storylet as content, prerequisites and effects, and explains why a branching "time cave" loses the benefits; her ["Small-Scale Structures in CYOA"](https://emshort.blog/2016/11/05/small-scale-structures-in-cyoa/) (2016) catalogues beat-level choice patterns. Failbetter's [Fallen London Writer Guidelines, Part II](https://www.failbettergames.com/news/fallen-london-writer-guidelines-part-ii) (2015) advise keeping qualities few and never trapping a player in a chain of linked events, and Alexis Kennedy's [Sunless Sea postmortem](https://www.gamedeveloper.com/audio/postmortem-failbetter-games-i-sunless-sea-i-) (Game Developer, 2015) records how a reused story engine collected special cases and hand-edited data stopped scaling. Her [“Bowls of Oatmeal and Text Generation”](https://emshort.blog/2016/09/21/bowls-of-oatmeal-and-text-generation/) (2016) argues that generated text engages only where it connects to what happens in the game, and that procedural generation is a way of designing content, not a shortcut. Her recaps of James Ryan's thesis, [chapters 1 to 3](https://emshort.blog/2019/05/21/curating-simulated-storyworlds-james-ryan/) and [chapter 6 onward](https://emshort.blog/2019/05/28/curating-simulated-storyworlds-james-ryan-ch-6f/) (2019), gave an independent view that retelling alone does not make a generator succeed, and record Ryan's own admission that his simulated knowledge was not prone to narrative intrigue.
 
 ### Kate Compton
 
-By Kate Compton. ["So you want to build a generator…"](https://galaxykate0.tumblr.com/post/139774965871/so-you-want-to-build-a-generator) (blog post, 2016). Her 10,000 bowls of oatmeal problem points out that thousands of bowls can all differ mathematically while the person looking sees only oatmeal. It taught us to measure variety by what people can tell apart, not by how many combinations exist.
+By Kate Compton. ["So you want to build a generator…"](https://galaxykate0.tumblr.com/post/139774965871/so-you-want-to-build-a-generator) (blog post, 2016). Her 10,000 bowls of oatmeal problem points out that thousands of bowls can all differ mathematically while the person looking sees only oatmeal. It taught us to measure variety by what people can tell apart, not by how many combinations exist. Katherine Cross's [report of her GDC talk](https://www.gamedeveloper.com/design/practical-procedural-generation-for-everyone-) (Game Developer, 2017) adds that a smaller set of clearly different things beats many that cannot be told apart, and suggests asking whether players would write fan fiction about a generated thing.
 
 ### Tynan Sylvester and Ludeon Studios
 
@@ -558,7 +558,7 @@ By Tynan Sylvester. ["The Simulation Dream"](https://www.gamedeveloper.com/desig
 
 ### Michael Mateas and Andrew Stern
 
-[Façade](https://www.interactivestory.net/) (Procedural Arts, 2005) and their paper ["Façade: An Experiment in Building a Fully-Realized Interactive Drama"](https://faculty.cc.gatech.edu/~isbell/classes/reading/papers/MateasSternGDC03.pdf) (Game Developers Conference, 2003). A drama manager chooses the next beat, the smallest unit of dramatic action, from a pool of authored beats, each marked with preconditions and effects on the story state. We took from it the beat as a unit of authored content and the manager that sequences beats. Their paper ["Structuring Content in the Façade Interactive Drama Architecture"](https://ojs.aaai.org/index.php/AIIDE/article/view/18722) (AIIDE 2005) describes beats with preconditions, weights, priorities and effects on tension, and what authoring them cost. Mateas's ["A Preliminary Poetics for Interactive Drama and Games"](https://www.cs.uky.edu/~sgware/reading/papers/mateas2001preliminary.pdf) (2001) sets unity of action against episodic structure and treats agency as an effect that relates to the player's intent.
+[Façade](https://www.interactivestory.net/) (Procedural Arts, 2005) and their paper ["Façade: An Experiment in Building a Fully-Realized Interactive Drama"](https://faculty.cc.gatech.edu/~isbell/classes/reading/papers/MateasSternGDC03.pdf) (Game Developers Conference, 2003). A drama manager chooses the next beat, the smallest unit of dramatic action, from a pool of authored beats, each marked with preconditions and effects on the story state. We took from it the beat as a unit of authored content and the manager that sequences beats. Their paper ["Structuring Content in the Façade Interactive Drama Architecture"](https://ojs.aaai.org/index.php/AIIDE/article/view/18722) (AIIDE 2005) describes beats with preconditions, weights, priorities and effects on tension, and what authoring them cost. Mateas's ["A Preliminary Poetics for Interactive Drama and Games"](https://www.cs.uky.edu/~sgware/reading/papers/mateas2001preliminary.pdf) (2001) sets unity of action against episodic structure and treats agency as an effect that relates to the player's intent. That paper also counts the nested grains of Façade's content, from beats of 10 to 100 joint dialogue behaviours down to exchanges of one to five lines, and is candid that although thousands of beat sequences are possible, few of them play meaningfully differently. It taught us to count distinct outcomes, not combinations.
 
 ### Tarn and Zach Adams
 
@@ -651,6 +651,42 @@ The Daggerfall Unity project's [Quest System Status](https://www.dfworkshop.net/
 ### Gustave Perna
 
 By General Gustave Perna. [Mission command requires sharp commander's intent](https://www.army.mil/article/215297/mission_command_requires_sharp_commanders_intent) (*Army Sustainment*, 2019, republished by the US Army), an essay on military practice. Intent is a task, a purpose, the critical factors and a vision of the end state, and the people carrying it out choose the means. It taught us to give authors a way to state what a piece of content is for without dictating how it is done.
+
+### Telltale Games
+
+Sean Vanaman and Jake Rodkin of Telltale Games, speaking on an empathy and character-choice panel at GDC 2013, as reported by [Game Informer](https://www.gameinformer.com/b/news/archive/2013/03/28/telltale-why-fewer-people-saved-doug-in-the-walking-dead.aspx) (2013). Players saved the companion they had shared more moments with, about three in four of them, which the team read as attachment following the number of relationship moments rather than described traits. It informed how we think about what builds attachment to a character.
+
+### Larian Studios
+
+Baudelaire Welch and Lawrence Schick of Larian Studios, interviewed by Shannon Liao and Robin Bea for [Inverse](https://www.inverse.com/gaming/baldurs-gate-3-romance-sex-craft) (January 2024) about the romances of Baldur's Gate 3. They describe romances that can begin early and keep changing, so that sex is not the last step, and companions written with limits and histories of their own. It informed how we think about the pace and boundaries of relationships.
+
+### Mike Laidlaw
+
+Mike Laidlaw, lead designer of Dragon Age II at BioWare, in a [Destructoid interview](https://www.destructoid.com/keep-your-friends-close-character-interaction-in-dragon-age-ii/) (2011). The game removes negative standing: every choice moves a companion toward friendship or rivalry, and both ends unlock content. It informed how we treat opposition between characters as a relationship in its own right.
+
+### Nikhil Murthy
+
+Nikhil Murthy, [“Thoughts on romance in system-driven games”](https://www.gamedeveloper.com/design/thoughts-on-romance-in-system-driven-games) (Game Developer, 2018). It criticises the vending-machine pattern, in which gifts raise a meter that unlocks a result, and argues that it suits a game about trading goods better than one about a relationship. It informed what we avoid in relationship systems.
+
+### Michelle Clough
+
+Michelle Clough's GDC talks on romance and attraction, including [“Cooking with Chemistry: Recipes for Attraction in Narrative Design”](https://schedule.gdconf.com/session/game-narrative-summit-cooking-with-chemistry-recipes-for-attraction-in-narrative-design/901735) (Game Narrative Summit, 2024), which follows her 2022 talk on “kindness coins”. The session description looks for alternatives to treating approval as attraction. It informed how we think about attraction as chemistry between characters and not a reward for approval.
+
+### Stardew Valley wiki contributors
+
+The contributors' [Friendship page](https://stardewvalleywiki.com/Friendship) documents how friendship with each villager falls a little every day without contact, down to a floor, with gifts as the main way to raise it. It informed how we think about relationships that fade without upkeep.
+
+### Spotify Engineering
+
+Ludvig Borgne and Chidem Sahiner, [“Shuffle: Making Random Feel More Human”](https://engineering.atspotify.com/2025/11/shuffle-making-random-feel-more-human) (November 2025). A random draw can be statistically fair and still feel repetitive; generating several random candidates and keeping the one that is freshest against recent plays fixes this without changing the randomness. It informed how we think about repetition in generated quests.
+
+### Boris the Brave
+
+Boris, [“Oatmeal Spice”](https://www.boristhebrave.com/2026/07/05/oatmeal-spice/) (blog post, 2026), a reply to Kate Compton's oatmeal problem. Variation is noticed when a generator makes fewer, bigger, discrete and correlated decisions, not many independent random ones. It informed how we count variety.
+
+### Piotr Tomsiński
+
+GameAnim's account of his GDC 2016 talk, [“Cinematic Dialogue in The Witcher 3”](https://www.gameanim.com/?p=10962). A generator assembles a first draft of a scene from the recorded voice-over, taking idles and gestures from pools of small animation units, and designers can re-run it for a different result. It informed how small reusable units can be recombined while a person can still re-roll.
 
 ## Research papers
 
@@ -790,7 +826,7 @@ James Ryan, [*Curating Simulated Storyworlds*](https://escholarship.org/uc/item/
 
 ### Kreminski et al. (2019, 2021)
 
-Max Kreminski, Melanie Dickinson and Noah Wardrip-Fruin, ["Felt: A Simple Story Sifter"](https://doi.org/10.1007/978-3-030-33894-7_27) (*Interactive Storytelling*, ICIDS 2019), and Max Kreminski, Melanie Dickinson and Michael Mateas, ["Winnow: A Domain-Specific Language for Incremental Story Sifting"](https://ojs.aaai.org/index.php/AIIDE/article/view/18903) (AIIDE 2021). Felt writes sifting patterns as queries over a simulation's events, and Winnow runs such patterns incrementally, so a promising sequence can be flagged while it is still unfolding. They taught us sifting languages and incremental matching.
+Max Kreminski, Melanie Dickinson and Noah Wardrip-Fruin, ["Felt: A Simple Story Sifter"](https://doi.org/10.1007/978-3-030-33894-7_27) (*Interactive Storytelling*, ICIDS 2019), and Max Kreminski, Melanie Dickinson and Michael Mateas, ["Winnow: A Domain-Specific Language for Incremental Story Sifting"](https://ojs.aaai.org/index.php/AIIDE/article/view/18903) (AIIDE 2021). Felt writes sifting patterns as queries over a simulation's events, and Winnow runs such patterns incrementally, so a promising sequence can be flagged while it is still unfolding. They taught us sifting languages and incremental matching. Kreminski, Dickinson, Wardrip-Fruin and Mateas, [“Select the Unexpected: A Statistical Heuristic for Story Sifting”](https://mkremins.github.io/publications/StU_ICIDS2022.pdf) (ICIDS 2022), adds a second layer that ranks the matches of a pattern by how statistically unlikely they are. Kreminski, Wardrip-Fruin and Mateas, [“Toward Example-Driven Program Synthesis of Story Sifting Patterns”](https://ceur-ws.org/Vol-2862/paper18.pdf) (AIIDE workshop paper, 2020), shows that writing sifting patterns by hand is a bottleneck that examples can ease.
 
 ### Kreminski and Wardrip-Fruin (2018)
 
@@ -1002,7 +1038,7 @@ John Meyer and Natalie Allen, ["A three-component conceptualization of organizat
 
 ### Le and Agnew (2003)
 
-Benjamin Le and Christopher Agnew, ["Commitment and its theorized determinants: a meta-analysis of the investment model"](https://doi.org/10.1111/1475-6811.00035) (*Personal Relationships*, 2003). Satisfaction, the quality of alternatives and what has been invested predict commitment. It informed what keeps a person in a relationship or a group.
+Benjamin Le and Christopher Agnew, ["Commitment and its theorized determinants: a meta-analysis of the investment model"](https://doi.org/10.1111/1475-6811.00035) (*Personal Relationships*, 2003). Satisfaction, the quality of alternatives and what has been invested predict commitment. It informed what keeps a person in a relationship or a group. Caryl Rusbult's [original test of the investment model](https://faculty.wcas.northwestern.edu/eli-finkel/documents/6_Rusbult1980_JournalOfExperimentalSocialPsychology.pdf) (“Commitment and satisfaction in romantic associations: a test of the investment model”, *Journal of Experimental Social Psychology*, 1980), and Peter Tran, Madeline Judge and Yoshihisa Kashima's [updated meta-analysis](https://findanexpert.unimelb.edu.au/scholarlywork/1387213-commitment-in-relationships--an-updated-meta-analysis-of-the-investment-model) (*Personal Relationships*, 2019), taught the same lesson, with satisfaction the strongest predictor of commitment.
 
 ### Hirschman (1970)
 
@@ -1070,15 +1106,15 @@ Daniel Gilbert and Patrick Malone, ["The correspondence bias"](https://doi.org/1
 
 ### Evans and Short (2014)
 
-Richard Evans and Emily Short, ["Versu: a simulationist storytelling system"](https://doi.org/10.1109/tciaig.2013.2287297) (*IEEE Transactions on Computational Intelligence and AI in Games*, 2014). Its authoring practice keeps scenes agnostic about who plays each role. It informed how we write fragments that can be cast with different people.
+Richard Evans and Emily Short, ["Versu: a simulationist storytelling system"](https://doi.org/10.1109/tciaig.2013.2287297) (*IEEE Transactions on Computational Intelligence and AI in Games*, 2014). Its authoring practice keeps scenes agnostic about who plays each role. It informed how we write fragments that can be cast with different people. It also keeps a single public relationship state beside many asymmetric evaluations that each remember their reason, which we compared against when designing relationship records.
 
 ### McCoy et al. (2011)
 
-Joshua McCoy, Mike Treanor, Ben Samuel, Noah Wardrip-Fruin and Michael Mateas, ["Comme il Faut: a system for authoring playable social models"](https://ojs.aaai.org/index.php/AIIDE/article/view/12454) (*AIIDE*, 2011). Social exchanges have roles, including an optional third party, and weighted rules of influence; tuning thousands of such rules is costly. It informed how roles are cast and how costly tuning becomes.
+Joshua McCoy, Mike Treanor, Ben Samuel, Noah Wardrip-Fruin and Michael Mateas, ["Comme il Faut: a system for authoring playable social models"](https://ojs.aaai.org/index.php/AIIDE/article/view/12454) (*AIIDE*, 2011). Social exchanges have roles, including an optional third party, and weighted rules of influence; tuning thousands of such rules is costly. It informed how roles are cast and how costly tuning becomes. Their later paper [“Social story worlds with Comme il Faut”](https://doi.org/10.1109/TCIAIG.2014.2304692) (*IEEE Transactions on Computational Intelligence and AI in Games*, 2014), with Aaron Reed as a further co-author, keeps relationships as binary, non-exclusive states beside directional scalar networks, and lets statuses expire when their conditions no longer hold. It informed how we separate kinds of relationship record.
 
 ### Nelson et al. (2006)
 
-Mark Nelson, Michael Mateas, David Roberts and Charles Isbell, ["Declarative optimization-based drama management in interactive fiction"](https://doi.org/10.1109/mcg.2006.55) (*IEEE Computer Graphics and Applications*, 2006). An author's sense of a good story can be expressed as a weighted combination of features, though that is hard to specify. It informed how author preference can steer choices.
+Mark Nelson, Michael Mateas, David Roberts and Charles Isbell, ["Declarative optimization-based drama management in interactive fiction"](https://doi.org/10.1109/mcg.2006.55) (*IEEE Computer Graphics and Applications*, 2006). An author's sense of a good story can be expressed as a weighted combination of features, though that is hard to specify. It informed how author preference can steer choices. The paper also reports that the online search it tried performed poorly on larger, more complex stories.
 
 ### Tearse et al. (2014)
 
@@ -1107,6 +1143,146 @@ Derek Cornish, ["The procedural analysis of offending and its relevance for situ
 ### Reagan et al. (2016)
 
 Andrew Reagan, Lewis Mitchell, Dilan Kiley, Christopher Danforth and Peter Dodds, ["The emotional arcs of stories are dominated by six basic shapes"](https://doi.org/10.1140/epjds/s13688-016-0093-1) (*EPJ Data Science*, 2016). Sentiment arcs of finished texts fall into a handful of shapes, with the authors' own stated limits. It informed which emotional shapes a quest can take.
+
+### Tomlinson (2024)
+
+Christine Tomlinson, [“Designing Romance and the ‘Playersexuality’ Debate: Love, Romance, Identity, and Player Perceptions of Baldur's Gate 3 and the Dragon Age Series”](https://revistas.ulusofona.pt/index.php/ijgsi/article/view/9461) (*The International Journal of Games and Social Impact*, 2024). Players are divided on romance that bends to the player's own orientation, want romance that feels real, and find persistent pursuit by characters uncomfortable. It informed how we think about romance in games.
+
+### Smith and Whitehead (2010)
+
+Gillian Smith and Jim Whitehead, [“Analyzing the Expressive Range of a Level Generator”](https://www.pcgworkshop.com/archive/smith2010analyzing.pdf) (*Workshop on Procedural Content Generation in Games*, 2010). It judges a generator by plotting the variety of what it can produce on chosen measures, not by how much it makes, and shows that doing so exposes unexpected biases and gaps. It informed how we measure the variety of generated quests.
+
+### Shaib et al. (2024)
+
+Chantal Shaib, Yanai Elazar, Junyi Jessy Li and Byron Wallace, [“Detection and Measurement of Syntactic Templates in Generated Text”](https://arxiv.org/abs/2407.00211) (EMNLP 2024). It defines a template over an abstraction and offers measures of how templated a body of text is. We adapt the idea, not the code, to the skeletons of generated quests.
+
+### Redden (2008)
+
+Joseph Redden, [“Reducing Satiation: The Role of Categorization Level”](https://ideas.repec.org/a/oup/jconrs/v34y2008i5p624-634.html) (*Journal of Consumer Research*, 2008). People tire of repeated experiences more slowly when they categorise them more finely, so differences that can be named hold interest longer. It informed why variety must be nameable.
+
+### Saffran, Aslin and Newport (1996)
+
+Jenny Saffran, Richard Aslin and Elissa Newport, [“Statistical learning by 8-month-old infants”](https://pubmed.ncbi.nlm.nih.gov/8943209/) (*Science*, 1996). Infants learned which sounds follow which from about two minutes of listening. It informed how quickly people pick up the patterns in repeated material.
+
+### Agus, Thorpe and Pressnitzer (2010)
+
+Trevor Agus, Simon Thorpe and Daniel Pressnitzer, [“Rapid formation of robust auditory memories: insights from noise”](https://pure.qub.ac.uk/en/publications/rapid-formation-of-robust-auditory-memories-insights-from-noise/) (*Neuron*, 2010). Listeners learned repeating noise clips without trying, and several stayed in memory for weeks. It informed how quickly and durably repetition is noticed.
+
+### Falk and Konold (1997)
+
+Ruma Falk and Clifford Konold, [“Making sense of randomness: implicit encoding as a basis for judgment”](https://srri.umass.edu/publications/falk-1997msr/) (*Psychological Review*, 1997). People rate sequences that alternate too much as the most random, and perceived randomness tracks how hard a sequence is to encode. It informed why a fair random draw can feel repetitive.
+
+### Doshi and Hauser (2024)
+
+Anil Doshi and Oliver Hauser, [“Generative AI enhances individual creativity but reduces the collective diversity of novel content”](https://pmc.ncbi.nlm.nih.gov/articles/PMC11244532) (*Science Advances*, 2024). Stories written with model-generated ideas were rated better but were more like one another. It informed our caution about sameness in model-assisted writing.
+
+### Cilibrasi and Vitányi (2005)
+
+Rudi Cilibrasi and Paul Vitányi, [“Clustering by compression”](https://arxiv.org/abs/cs/0312044) (*IEEE Transactions on Information Theory*, 2005). A feature-free distance between two things can be computed from compressed lengths. It informed how we think about measuring similarity between generated items.
+
+### Aron et al. (1997)
+
+Arthur Aron, Edward Melinat, Elaine Aron, Robert Vallone and Renee Bator, [“The experimental generation of interpersonal closeness”](https://stafforini.com/works/aron-1997-experimental-generation-interpersonal/) (*Personality and Social Psychology Bulletin*, 1997). Escalating mutual self-disclosure over a short session produced a temporary feeling of closeness greater than small talk did. It informed how closeness builds within a conversation.
+
+### Laurenceau et al. (1998, 2005)
+
+Jean-Philippe Laurenceau, Lisa Feldman Barrett and Paula Pietromonaco, [a 1998 study](https://www.affective-science.org/pubs/1998/LaurenFBPl1998.pdf) (*Journal of Personality and Social Psychology*), and Laurenceau, Barrett and Michael Rovine, [“The interpersonal process model of intimacy in marriage: a daily-diary and multilevel modeling approach”](https://www.affective-science.org/pubs/2005/Laurenceauetal2005.pdf) (*Journal of Family Psychology*, 2005). Disclosure by either partner predicts intimacy, partly through how responsive the other is perceived to be. It informed how we think about responsiveness.
+
+### Hall (2018)
+
+Jeffrey Hall, "How many hours does it take to make a friend?" (*Journal of Social and Personal Relationships*, 2018), as [reported by the University of Kansas](https://news.ku.edu/news/article/2018/03/06/study-reveals-number-hours-it-takes-make-friend). Friendship takes tens to hundreds of hours together, and time spent working together counts for less. It informed the time that closeness takes.
+
+### Aron et al. (2000)
+
+Arthur Aron, Christina Norman, Elaine Aron, Caroline McKenna and Richard Heyman, [“Couples' shared participation in novel and arousing activities and experienced relationship quality”](https://doi.org/10.1037/0022-3514.78.2.273) (*Journal of Personality and Social Psychology*, 2000). A new shared activity raised relationship quality more than a mundane one. It informed why shared novelty counts for more than routine.
+
+### Clark and Mills (1979)
+
+Margaret Clark and Judson Mills, [“Interpersonal attraction in exchange and communal relationships”](https://clarkrelationshiplab.yale.edu/sites/default/files/files/Interpersonal%20attraction%20in%20exchance%20and%20commual%20relationships.pdf) (*Journal of Personality and Social Psychology*, 1979). Repaying a benefit raises attraction in an exchange relationship but lowers it in a communal one. It informed why repayment between close people can read as a refusal.
+
+### Heyman and Slep (2001)
+
+Richard Heyman and Amy Smith Slep, [“The hazards of predicting divorce without cross-validation”](https://pmc.ncbi.nlm.nih.gov/articles/PMC1622921/) (*Journal of Marriage and Family*, 2001). A prediction equation that looks accurate on the data it was built from does far worse on fresh data. It informed why we distrust predictions of relationship outcomes that have not been tested on new data.
+
+### Gable et al. (2004)
+
+Shelly Gable, Harry Reis, Emily Impett and Evan Asher, [“What do you do when things go right? The intrapersonal and interpersonal benefits of sharing positive events”](https://doi.org/10.1037/0022-3514.87.2.228) (*Journal of Personality and Social Psychology*, 2004). Sharing good news helps most when the listener responds actively and constructively, and such responses go with closer relationships. It informed how we think about responses to good news.
+
+### Mayer, Davis and Schoorman (1995)
+
+Roger Mayer, James Davis and F. David Schoorman, [“An integrative model of organizational trust”](https://doi.org/10.2307/258792) (*Academy of Management Review*, 1995). Trust rests on the trustee's perceived ability, benevolence and integrity. It informed how we describe what trust is built from.
+
+### Kim et al. (2004)
+
+Peter Kim, Donald Ferrin, Cecily Cooper and Kurt Dirks, [“Removing the shadow of suspicion: the effects of apology versus denial for repairing competence- versus integrity-based trust violations”](https://doi.org/10.1037/0021-9010.89.1.104) (*Journal of Applied Psychology*, 2004). An apology repairs a breach of competence better than a denial, and a denial repairs a breach of integrity better. It informed how repair depends on the kind of breach.
+
+### Roberts and Dunbar (2011, 2015)
+
+Sam Roberts and Robin Dunbar, [“Communication in social networks: effects of kinship, network size, and emotional closeness”](https://doi.org/10.1111/j.1475-6811.2010.01310.x) (*Personal Relationships*, 2011), and [“Managing relationship decay: network, gender, and contextual effects”](https://doi.org/10.1007/s12110-015-9242-7) (*Human Nature*, 2015). Kin ties appear cheaper to keep up than friendships, and friendships decline without effort, which women tend to offset with contact and men with shared activities. It informed how relationships fade and are maintained.
+
+### Levin, Walter and Murnighan (2011)
+
+Daniel Levin, Jorge Walter and J. Keith Murnighan, [“Dormant ties: the value of reconnecting”](https://doi.org/10.1287/orsc.1100.0576) (*Organization Science*, 2011). Reconnecting with a dormant tie can bring back trust and shared perspective that are usually linked to strong ties. It informed what a lapsed relationship keeps.
+
+### Liu et al. (2023)
+
+Peggy Liu, SoYon Rim, Lauren Min and Kate Min, [“The surprise of reaching out: appreciated more than we think”](https://pubmed.ncbi.nlm.nih.gov/35816566/) (*Journal of Personality and Social Psychology*, 2023). People underestimate how much others appreciate being reached out to. It informed how we think about contact after a gap.
+
+### De Freitas et al. (2025)
+
+Julian De Freitas, Zeliha Oğuz-Uğuralp and Ahmet Kaan-Uğuralp, [“Emotional manipulation by AI companions”](https://arxiv.org/abs/2508.19258) (Harvard Business School working paper, 2025). Guilt-tripping goodbyes from companion apps raised engagement while leaving people feeling manipulated. It informed what a character must not do when someone leaves.
+
+### Zagal, Björk and Lewis (2013)
+
+José Zagal, Staffan Björk and Chris Lewis, [“Dark patterns in the design of games”](https://research.chalmers.se/en/publication/177148) (*Foundations of Digital Games*, 2013). It names design elements that serve the maker over the player, including appointment play and grinding as temporal dark patterns. It informed what relationship and quest pacing must avoid.
+
+### Kilduff, Elfenbein and Staw (2010)
+
+Gavin Kilduff, Hillary Elfenbein and Barry Staw, [“The psychology of rivalry: a relationally dependent analysis of competition”](https://web-docs.stern.nyu.edu/management/Kilduff/KilduffEtAl%20AMJ%202010.pdf) (*Academy of Management Journal*, 2010). Rivalry grows with similarity, closeness and a history of contests. It informed how a rivalry forms.
+
+### Granovetter (1973)
+
+Mark Granovetter, [“The strength of weak ties”](https://smg.media.mit.edu/classes/library/granovetter.weak.ties/granovetter.html) (*American Journal of Sociology*, 1973). The strength of a tie combines time, emotional intensity, intimacy and reciprocal services. It informed how we describe the strength of a relationship.
+
+### Lessard et al. (2026)
+
+Jonathan Lessard, Stephen Friedrich, Samuel Paré-Chouinard and Leila Kosseim, [“Narrative Gold Digging: Sifting and Narrating Stories from a Procedural Simulation”](https://www.pcgworkshop.com/archive/lessard2026narrative.pdf) (*Foundations of Digital Games*, 2026). In a reader test, sifting by unexpectedness or by dramatic situations made no significant difference to how the stories were rated, and the authors reflect candidly on why criteria for eventfulness are hard to compute. It tempered how much we expect from any single sifting measure.
+
+### Lyu, Millard and Gibbins (2025)
+
+Qianwen Lyu, David Millard and Nicholas Gibbins, [“Stories from the Bottom Up: Emergent Narratives with Composable Story Sifting Patterns”](https://eprints.soton.ac.uk/502632/2/3723498.3723809.pdf) (2025). Sifting patterns can be composed so that higher-level stories are built from lower-level ones, and stability and scaling were tested. It informed how sifting patterns combine.
+
+### Leong, Porteous and Thangarajah (2022)
+
+Wilkins Leong, Julie Porteous and John Thangarajah, [“Automated Sifting of Stories from Simulated Storyworlds”](https://www.ijcai.org/proceedings/2022/0686.pdf) (IJCAI, 2022). Stories are sifted by drawing the shape of a story arc and matching it to the changing relationship scores in the simulation, which lowers the cost of writing queries. It informed how sifting might be specified without code.
+
+### Baroni (*Tellability*)
+
+Raphaël Baroni, [“Tellability”](https://www-archiv.fdm.uni-hamburg.de/lhn/node/30.html) (*the living handbook of narratology*, Hamburg University Press). It maps the accounts of what makes a story worth telling and their open problems. It informed how we treat tellability as unsettled.
+
+### Hühn (*Event and Eventfulness*)
+
+Peter Hühn, [“Event and eventfulness”](https://www-archiv.fdm.uni-hamburg.de/lhn/node/39.html) (*the living handbook of narratology*, Hamburg University Press). It separates the two senses of event, and holds that an event is stronger as its change is less predictable and more intense, momentous, irreversible or unique. It informed how we describe the strength of an event.
+
+### Jean-Louis Dessalles
+
+Jean-Louis Dessalles, [Simplicity Theory](https://simplicitytheory.telecom-paris.fr/), and Dimulescu and Dessalles, “Understanding narrative interest: some evidence on the role of unexpectedness” (Cognitive Science Society, 2009). Unexpectedness is the gap between expected and observed complexity, judged by the observer, and it drives narrative interest. It informed how we think about unexpectedness as part of tellability.
+
+### Harcup and O'Neill (2017)
+
+Tony Harcup and Deirdre O'Neill, [“What is news? News values revisited (again)”](https://eprints.hud.ac.uk/id/eprint/27268/) (*Journalism Studies*, 2017). A content analysis of UK news yields an updated set of news values, with the caution that no list can explain everything. It informed how we treat a list of selection criteria.
+
+### Riedl and Young (2010)
+
+Mark Riedl and R. Michael Young, [“Narrative planning: balancing plot and character”](https://jair.org/index.php/jair/article/view/10669) (*Journal of Artificial Intelligence Research*, 2010). Plans whose character goals are explained were better understood by audiences than plans from conventional planners. It informed why a story's motives should be stated.
+
+### Wilmot and Keller (2020)
+
+David Wilmot and Frank Keller, [“Modelling suspense in short stories as uncertainty reduction over neural representation”](https://arxiv.org/abs/2004.14905) (ACL 2020). Forward-looking uncertainty reduction predicted human suspense judgements better than backward-looking surprise. It informed how we think about suspense as looking ahead.
+
+### Deo, Chung and McCoy (2024)
+
+Sage Deo, Jonathan Chung and Joshua McCoy, [“Shepherd: an incremental story sifting-based drama manager”](https://ojs.aaai.org/index.php/AIIDE/article/view/31887) (AIIDE 2024). Incremental sifting can steer fully autonomous characters toward narratively interesting choices. It informed how sifting might feed back into a running simulation.
 
 ## Reference imagery
 
