@@ -181,12 +181,12 @@ Update a row in the same checkpoint as the work it describes.
 |---|---|---|---|---|
 | 01 | Safeguards against lost context: decisions register, "start here" path, this plan of action | [decisions](decisions.md), [README](README.md#start-here), §8 | | done |
 | 02 | Credits for every work the design has drawn on so far | Entries in the [community credits](../../docs/community-credits.md) | | running |
-| 03 | P1 phase A, the lens runs:<br>1. L1 and L2 first;<br>2. then L3, L6, L7 and L8;<br>3. then L4, L5, L9, L10 and L11;<br>4. then second-model runs, until saturation | `craft/lenses/` (committed with the map) | | running |
-| 04 | P2, the game substrate research plan | [p2-game-substrate.md](p2-game-substrate.md) | | next |
-| 05 | S0, the kernel specification v0: the foundation made exact | [spec/kernel.md](spec/kernel.md) | 04 (for the game-mirror parts) | next |
+| 03 | P1 phase A, the lens runs:<br>1. L1 and L2 first;<br>2. then L3, L6, L7 and L8;<br>3. then L4, L5, L9, L10 and L11;<br>4. then second-model runs, until saturation | `craft/lenses/` (committed with the map) | | running: L1 and L2. The other lenses wait while the usage mode is economical |
+| 04 | P2, the game substrate research plan | [p2-game-substrate.md](p2-game-substrate.md) | | done: [P2](p2-game-substrate.md) v1 |
+| 05 | S0, the kernel specification v0: the foundation made exact | [spec/kernel.md](spec/kernel.md) | 04 (for the game-mirror parts) | done: [S0](spec/kernel.md) v0, a draft for review |
 | 06 | P1 phase B, the discipline map, then the maintainer checkpoint | `craft/map.md` | 03 | waiting on 03 |
-| 07 | P2 desk research:<br>- the main story's progression as facts;<br>- the gig system;<br>- population;<br>- channels;<br>- event hooks;<br>- saves | Knowledge pages and research notes | 04 | waiting on 04 |
-| 08 | The reference model v0, implementing S0, with its test vectors. Code lives in `projects/xf-story-engine/reference/` and lands through the XF · Studio chat (which owns `main`) with a code review | Code and tests | 05 | waiting on 05 |
+| 07 | P2 desk research:<br>- the main story's progression as facts;<br>- the gig system;<br>- population;<br>- channels;<br>- event hooks;<br>- saves | Knowledge pages and research notes | 04 | next, after the usage reset |
+| 08 | The reference model v0, implementing S0, with its test vectors. Code lives in `projects/xf-story-engine/reference/` and lands through the XF · Studio chat (which owns `main`) with a code review | Code and tests | 05 | next, after S0 review |
 | 09 | P1 phase C, the dossiers, starting with motivation and drives | `craft/*.md` | 06 | later |
 | 10 | P4, the seed language design, then S2. Scenario R1 is its first test | Design and spec | 05, 09 | later |
 | 11 | P3, the simulation layer beyond the kernel, then S1 | Design and spec | 05, 07 | later |
