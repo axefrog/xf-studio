@@ -1,6 +1,6 @@
 /**
  * What the expression exporter reads from the player's game files (research/animation/expression-editor-design.md §6.2–6.3), prepared by
- * the host's prerequisite (`src/expressions-game-prerequisite.ts`) and handed to the plan. Pure types and a strict reader, so the plan is
+ * the host's prerequisite (`src/animation/host/expressions-game-prerequisite.ts`) and handed to the plan. Pure types and a strict reader, so the plan is
  * deterministic and the host's result gate can repeat it.
  */
 import { ExportRefusal } from "../../../platform/api";

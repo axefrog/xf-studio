@@ -3,13 +3,13 @@ import { readFileSync } from "node:fs";
 import { STUDIO_OWNERS, STUDIO_REGISTRY, STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { EYE_MAKEUP } from "../src/features/eye-makeup";
 import { EXPRESSIONS } from "../src/features/expressions";
-import { IDLE_UNAVAILABLE, MotionActions } from "../src/motion-actions";
+import { IDLE_UNAVAILABLE, MotionActions } from "../src/animation/motion-actions";
 import { actionTable, familyId, featureId, type SystemFamily } from "../src/platform/api";
 import { Registry } from "../src/platform/core/registry";
 import { RECIPE_ACTION_KINDS } from "../src/engines/layered-makeup/recipe-actions";
-import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
-import { StudioApplication } from "../src/studio-application";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
+import { ACTION_DESCRIPTORS } from "../src/app/studio-action-descriptors";
+import { StudioApplication } from "../src/app/studio-application";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { freshWorkspace } from "./fixtures/eye-region";
 
 /** Actions of features the application binds generically (no bespoke handler, not in the hand-kept `ACTION_DESCRIPTORS`). */
@@ -20,12 +20,11 @@ function fixture() {
   return createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
 }
 
-test("the registry reproduces the pre-platform catalogue exactly (golden snapshot)", () => {
-  // Captured from the application before migration step 1; any ID, order, scope or policy churn fails here.
-  const golden = JSON.parse(readFileSync(new URL("./golden/studio-registry.json", import.meta.url), "utf8"));
+test("the application's catalogue is the registry's: the hand-kept table plus the generically bound features' own", () => {
+  // The registry is the one catalogue; research/authoring/ui-action-catalogue.md is generated from it (tests/action-catalogue.test.ts).
   const { app } = fixture();
-  expect({ actionKinds: app.actionKinds(), actionDescriptors: app.actionDescriptors(), registry: app.registry() })
-    .toEqual(golden);
+  expect(app.actionKinds() as readonly string[]).toEqual([...STUDIO_REGISTRY.kinds()]);
+  expect(app.actionDescriptors() as Readonly<Record<string, unknown>>).toEqual(STUDIO_REGISTRY.descriptors());
   // The hand-kept list covers the owners with bespoke handlers; generically bound features register their own descriptors only.
   const bespoke = Object.fromEntries(Object.entries(app.actionDescriptors()).filter(([kind]) => !GENERIC_KINDS.has(kind)));
   expect(JSON.stringify(bespoke)).toBe(JSON.stringify(ACTION_DESCRIPTORS));
@@ -104,7 +103,7 @@ test("routing is exhaustive: every owner needs a handler and unknown kinds are r
 });
 
 test("reason codes are structured where refusals are decided, not read from message text (CORE-15)", () => {
-  const source = readFileSync(new URL("../src/studio-application.ts", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../src/app/studio-application.ts", import.meta.url), "utf8");
   expect(source).not.toMatch(/reason(?:\?)?\.includes\(|function reasonCode|startsWith\("(?:preview|camera|motion|quality|savedV)\./);
   // A device error whose text never says "unavailable" is still an unavailable asset.
   const { app } = fixture();

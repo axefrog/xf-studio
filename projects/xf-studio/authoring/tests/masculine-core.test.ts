@@ -6,19 +6,19 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { EYE_PLATE_MASCULINE_RECIPE, EYE_PLATE_RECIPE, EYE_PLATE_RECIPES, eyePlateBody, idListSha256, selectedFaceIds } from "../src/eye-plate-recipe";
-import { createGameAssetExporter } from "../src/game-asset-export";
-import { HeadLoadError } from "../src/head-load-error";
-import { PreviewCoreHost, type PreviewCoreState } from "../src/preview-core-host";
+import { EYE_PLATE_MASCULINE_RECIPE, EYE_PLATE_RECIPE, EYE_PLATE_RECIPES, eyePlateBody, idListSha256, selectedFaceIds } from "../src/legacy/eye-makeup/plate/eye-plate-recipe";
+import { createGameAssetExporter } from "../src/game/host/game-asset-export";
+import { HeadLoadError } from "../src/preview/head-load-error";
+import { PreviewCoreHost, type PreviewCoreState } from "../src/preview/host/preview-core-host";
 import {
   coreAssetName, parseCoreAssetName, PREVIEW_CORE_ASSET_NAMES, PREVIEW_CORE_FILES, PREVIEW_CORE_MALE_RECIPE, PREVIEW_CORE_RECIPE, PREVIEW_CORE_RECIPES,
   PREVIEW_MASCULINE_PLATE_RECIPE, previewCoreRecipeSha256,
-} from "../src/preview-core-recipe";
-import { createPreviewCoreHandler } from "../src/preview-core-server";
-import { PreviewCoreCache, previewCoreReadiness } from "../src/preview-core-service";
-import { PreviewPreparationActions, type PreviewState } from "../src/preview-preparation";
-import { coreDetailUrl, CORE_DETAIL_URL } from "../src/render-detail";
-import { USER_FACING_JARGON } from "../src/alpha-availability";
+} from "../src/preview/preview-core-recipe";
+import { createPreviewCoreHandler } from "../src/preview/host/preview-core-server";
+import { PreviewCoreCache, previewCoreReadiness } from "../src/preview/host/preview-core-service";
+import { PreviewPreparationActions, type PreviewState } from "../src/preview/preview-preparation";
+import { coreDetailUrl, CORE_DETAIL_URL } from "../src/character/render-detail";
+import { USER_FACING_JARGON } from "../src/app/alpha-availability";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
@@ -165,7 +165,7 @@ test("before a masculine head loads, the page has his core prepared (with progre
 });
 
 test("a head follows only its own body's V: another body's details and facial shape wait for that body's head", async () => {
-  const { followCharacter } = await import("../src/character-follow");
+  const { followCharacter } = await import("../src/character/character-follow");
   const asked: string[] = [], faces: unknown[] = [];
   let request = { schema: "xfs/character-request-7", source: "default", bodyGender: "male" } as const;
   let view = { bodyGender: "male", faceMorphs: [{ region: "eyes", target: "h051" }] };
@@ -184,8 +184,8 @@ test("a head follows only its own body's V: another body's details and facial sh
 });
 
 test("a masculine head holds still with its own plain reason: no idle and no idle choice until his clips are prepared", async () => {
-  const { MotionActions, IDLE_MASCULINE, IDLE_UNAVAILABLE } = await import("../src/motion-actions");
-  const { BUILT_IN_CATALOGUE } = await import("../src/idle-catalogue");
+  const { MotionActions, IDLE_MASCULINE, IDLE_UNAVAILABLE } = await import("../src/animation/motion-actions");
+  const { BUILT_IN_CATALOGUE } = await import("../src/animation/idle-catalogue");
   const { freshWorkspace } = await import("./fixtures/eye-region");
   const noop = () => {};
   const port = (error: string) => ({ available: false, error, blink: { available: false }, idles: BUILT_IN_CATALOGUE.idles, setIdle: noop, setIdlePaused: noop,

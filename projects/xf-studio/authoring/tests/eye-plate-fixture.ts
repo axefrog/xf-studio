@@ -1,7 +1,7 @@
 // Synthetic, asset-free stand-ins for WolvenKit's JSON form of the head mesh and morph target.
 // Layout mirrors the audited head: skinned stream 0 with ExtraData, UV, shading, colour/UV1,
 // a light-blocker stream and an unused per-instance stream.
-import { idListSha256, parseEyePlateRecipe, type EyePlateRecipe } from "../src/eye-plate-recipe";
+import { idListSha256, parseEyePlateRecipe, type EyePlateRecipe } from "../src/legacy/eye-makeup/plate/eye-plate-recipe";
 
 const layoutElements = [
   [0, "PT_Short4N", "PS_Position", 0], [0, "PT_UByte4", "PS_SkinIndices", 0], [0, "PT_UByte4", "PS_SkinIndices", 1],

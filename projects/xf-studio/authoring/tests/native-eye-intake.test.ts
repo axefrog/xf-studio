@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { NATIVE_EYE_SOURCE, parseNativeEyeManifest, validateNativeEyeParts, verifyNativeEyeBytes } from "../src/native-eye-intake";
+import { NATIVE_EYE_SOURCE, parseNativeEyeManifest, validateNativeEyeParts, verifyNativeEyeBytes } from "../src/studies/native-eye-intake";
 
 const manifest = {
   schema: "xfs/local-native-eye-1", status: "staged-research-only",

@@ -1,5 +1,5 @@
-import type { EyeMakeupAction } from "../../../eye-makeup-model";
-import { shortcutLabel } from "../../../input-bindings";
+import type { EyeMakeupAction } from "../../../legacy/eye-makeup/eye-makeup-model";
+import { shortcutLabel } from "../../../app/input-bindings";
 import type { FeatureCommand } from "../../../studio-ui/views/feature-view";
 import { addLayer, catalogues, finishOffered, type EyeMakeupViewContext } from "./actions";
 

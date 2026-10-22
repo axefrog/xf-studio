@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
-import { createTrustedPreviewServices } from "../src/trusted-preview-services";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import type { PreviewPort } from "../src/preview-actions";
-import type { MotionPort } from "../src/motion-actions";
-import type { SavedV } from "../src/save-reader";
-import { bodySexOf, SavedAppearanceActions } from "../src/saved-appearance-actions";
+import { createTrustedPreviewServices } from "../src/app/trusted-preview-services";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import type { PreviewPort } from "../src/preview/preview-actions";
+import type { MotionPort } from "../src/animation/motion-actions";
+import type { SavedV } from "../src/saves/save-reader";
+import { bodySexOf, SavedAppearanceActions } from "../src/character/saved-appearance-actions";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
@@ -106,12 +106,12 @@ test("the creator rig's body follows the applied save, derived by the saved-appe
   expect(() => refusing.dispatch({ kind: "savedV.restore", value: savedV(true) })).toThrow("Male head");
   expect(calls.length).toBe(4);
   // The browser port only forwards the derived value to the lighting device; it decides nothing itself.
-  const source = readFileSync(resolve(import.meta.dir, "..", "src", "browser-scene-preview-ports.ts"), "utf8");
+  const source = readFileSync(resolve(import.meta.dir, "..", "src", "preview/browser/browser-scene-preview-ports.ts"), "utf8");
   expect(source).toContain("setBodySex: sex => scene.lighting.setBodySex(sex)");
   expect(source).not.toContain("isMale");
   // The studio rig is part of the scene preview port, not spread in by the head attachment (PREV-69).
   expect(source).toContain("setLighting: source => scene.setLighting(source)");
-  expect(readFileSync(resolve(import.meta.dir, "..", "src", "browser-head-attachment.ts"), "utf8")).not.toMatch(/setLighting|...scenePorts/);
+  expect(readFileSync(resolve(import.meta.dir, "..", "src", "preview/browser/browser-head-attachment.ts"), "utf8")).not.toMatch(/setLighting|...scenePorts/);
 });
 
 test("restoring the preview never changes the caller's workspace (CORE-25)", () => {

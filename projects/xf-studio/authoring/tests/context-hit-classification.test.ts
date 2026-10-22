@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { type Layer } from "../src/engines/layered-makeup/recipe";
-import { createSurfaceEditor } from "../src/surface-editor";
-import { createUVEditor } from "../src/uv-editor";
-import { defaultUVView, uvRegion, uvToPixel } from "../src/uv-view";
-import type { ViewportHit } from "../src/viewport-attachment";
+import { createSurfaceEditor } from "../src/legacy/eye-makeup/browser/surface-editor";
+import { createUVEditor } from "../src/legacy/eye-makeup/browser/uv-editor";
+import { defaultUVView, uvRegion, uvToPixel } from "../src/legacy/eye-makeup/uv-view";
+import type { ViewportHit } from "../src/app/viewport-attachment";
 import { initialRecipe, EYE_REGION } from "./fixtures/eye-region";
 
 /** A closed square with zero Bézier arms and no warps, so shape coverage is the square itself. */

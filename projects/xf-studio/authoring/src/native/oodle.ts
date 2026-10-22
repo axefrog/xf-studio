@@ -30,7 +30,8 @@ import { execFile, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { Decompress } from "./kark";
+import type { Compress, Decompress } from "./kark";
+export type { Compress } from "./kark";
 import { NativeDecompressError } from "./native-errors";
 
 /** Where the game keeps the library, relative to the game folder. */
@@ -57,8 +58,14 @@ export interface OodleLibrary {
   /** How the library was trusted: `known-hash` or `authenticode`. */
   readonly trustedBy: string;
   readonly decompress: Decompress;
+  /**
+   * Compress with the same library (`OodleLZ_Compress`): one Oodle LZ stream of `raw` with `compressor` at `level`, no options,
+   * dictionary or scratch memory. Null when the library has no compressor export. See `compress.ts` for the KARK framing.
+   */
+  readonly compress: Compress | null;
   close(): void;
 }
+
 
 /**
  * The game's Oodle library can't be used. `permanent` when trying again can't help until the library file or the platform changes (not
@@ -235,12 +242,18 @@ function prepare(gameRoot: string): Prepared {
 function load({ ffi, held, sha256 }: Prepared, verdict: OodleVerdict): OodleLibrary {
   if ("refused" in verdict) throw new OodleUnavailableError(verdict.refused, verdict.permanent === true);
   const { FFIType } = ffi;
-  let library: { symbols: { OodleLZ_Decompress: (...args: unknown[]) => number | bigint }; close(): void };
+  let library: { symbols: { OodleLZ_Decompress: (...args: unknown[]) => number | bigint; OodleLZ_Compress?: (...args: unknown[]) => number | bigint };
+    close(): void };
+  const decompressSymbol = { OodleLZ_Decompress: { args: [FFIType.ptr, FFIType.i64, FFIType.ptr, FFIType.i64, FFIType.i32, FFIType.i32, FFIType.i32,
+    FFIType.ptr, FFIType.i64, FFIType.ptr, FFIType.ptr, FFIType.ptr, FFIType.i64, FFIType.i32], returns: FFIType.i64 } };
+  // SINTa OodleLZ_Compress(OodleLZ_Compressor, const void* raw, SINTa rawLen, void* comp, OodleLZ_CompressionLevel,
+  //   const OodleLZ_CompressOptions*, const void* dictionaryBase, const void* lrm, void* scratch, SINTa scratchSize)
+  const compressSymbol = { OodleLZ_Compress: { args: [FFIType.i32, FFIType.ptr, FFIType.i64, FFIType.ptr, FFIType.i32, FFIType.ptr, FFIType.ptr,
+    FFIType.ptr, FFIType.ptr, FFIType.i64], returns: FFIType.i64 } };
   try {
-    library = ffi.dlopen(held.finalPath, {
-      OodleLZ_Decompress: { args: [FFIType.ptr, FFIType.i64, FFIType.ptr, FFIType.i64, FFIType.i32, FFIType.i32, FFIType.i32,
-        FFIType.ptr, FFIType.i64, FFIType.ptr, FFIType.ptr, FFIType.ptr, FFIType.i64, FFIType.i32], returns: FFIType.i64 },
-    }) as unknown as typeof library;
+    // The compressor is optional: a library without it still decompresses.
+    try { library = ffi.dlopen(held.finalPath, { ...decompressSymbol, ...compressSymbol }) as unknown as typeof library; }
+    catch { library = ffi.dlopen(held.finalPath, decompressSymbol) as unknown as typeof library; }
   } catch (error) { throw new OodleUnavailableError(`The game's Oodle library could not be loaded: ${(error as Error).message}`); }
   const unload = moduleUnloader(ffi, held.finalPath);
   let closed = false;
@@ -254,7 +267,17 @@ function load({ ffi, held, sha256 }: Prepared, verdict: OodleVerdict): OodleLibr
     if (written !== size) throw new NativeDecompressError(`Oodle decompressed ${written} of ${size} bytes.`);
     return out.subarray(0, size);
   };
-  return { path: held.finalPath, identity: `oodle:${sha256.slice(0, 16)}`, sha256, trustedBy: verdict.trustedBy, decompress,
+  const compressFunction = library.symbols.OodleLZ_Compress;
+  const compress: Compress | null = compressFunction ? (raw, compressor, level) => {
+    if (closed) throw new NativeDecompressError("The Oodle library was closed.");
+    if (!raw.length) throw new NativeDecompressError("Nothing to compress.");
+    // Kraken's worst case is the raw size plus 274 bytes per 256 KiB block; a wider margin costs nothing here.
+    const out = new Uint8Array(raw.length + 274 * Math.ceil(raw.length / 0x40000) + 4096);
+    const written = Number(compressFunction(compressor, pointer(raw), raw.length, pointer(out), level, null, null, null, null, 0));
+    if (!(written > 0 && written <= out.length)) throw new NativeDecompressError(`Oodle compressed ${raw.length} bytes to ${written}.`);
+    return out.slice(0, written);
+  } : null;
+  return { path: held.finalPath, identity: `oodle:${sha256.slice(0, 16)}`, sha256, trustedBy: verdict.trustedBy, decompress, compress,
     close: () => { if (!closed) { closed = true; unload(); } } };
 }
 

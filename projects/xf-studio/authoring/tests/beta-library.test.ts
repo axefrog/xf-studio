@@ -7,11 +7,10 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CollectionLibrary } from "../src/collection-store";
-import { CollectionService, uniqueCollectionName, type CollectionTransport } from "../src/collection-service";
+import { CollectionService, uniqueCollectionName, type CollectionTransport } from "../src/library/collection-service";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
-import { LookLibrary } from "../src/library-store";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
+import { openTestLibrary } from "./fixtures/library-file";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { freshWorkspace } from "./fixtures/eye-region";
 
 function coreFixture() {
@@ -22,7 +21,7 @@ function coreFixture() {
 
 function library() {
   const dir = mkdtempSync(join(tmpdir(), "xfs-beta-library-")), path = join(dir, "library.sqlite");
-  const looks = new LookLibrary(path), db = new CollectionLibrary(path, STUDIO_PARTS);
+  const file = openTestLibrary(path), db = file.collections;
   let lists = 0;
   const transport: CollectionTransport = {
     list: async () => { lists++; return db.list(); },
@@ -35,7 +34,7 @@ function library() {
     editor => fixture.document.restore({ ...editor, fieldSelection: editor.fieldSelection ?? {} }), transport,
     () => ({ recipe: fixture.document.recipe, revision: fixture.document.geometryVersion.revision }));
   return { db, service, fixture, get lists() { return lists; },
-    close() { db.close(); looks.close(); rmSync(dir, { recursive: true, force: true }); } };
+    close() { file.close(); rmSync(dir, { recursive: true, force: true }); } };
 }
 
 test("a fresh library is empty, so the first draft is the starter collection, not saved yet (item 11)", async () => {
@@ -74,11 +73,12 @@ test("Save as new collection names the copy uniquely, and the draft takes the na
     await lib.service.execute({ kind: "initialize" });
     expect(await lib.service.execute({ kind: "save" })).toMatchObject({ ok: true });
     expect(await lib.service.execute({ kind: "saveCopy" })).toMatchObject({ ok: true });
-    expect(lib.db.list().map(item => item.name)).toEqual(["My collection", "My collection 2"]);
+    // Saves in the same millisecond are ordered by ID; this scenario checks unique names, not that tie-break.
+    expect(lib.db.list().map(item => item.name).sort()).toEqual(["My collection", "My collection 2"]);
     expect(lib.service.summary().draft).toMatchObject({ name: "My collection 2", revision: 1 });
     expect(lib.service.persistence()).toMatchObject({ baseline: "known", dirty: false });
     expect(await lib.service.execute({ kind: "saveCopy" })).toMatchObject({ ok: true });
-    expect(lib.db.list().map(item => item.name)).toEqual(["My collection", "My collection 2", "My collection 3"]);
+    expect(lib.db.list().map(item => item.name).sort()).toEqual(["My collection", "My collection 2", "My collection 3"]);
   } finally { lib.close(); }
 });
 

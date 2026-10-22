@@ -10,17 +10,17 @@
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { depotHash } from "../src/depot-path";
-import { archiveExportSource } from "../src/game-asset-export";
+import { depotHash } from "../src/game/depot-path";
+import { archiveExportSource } from "../src/game/host/game-asset-export";
 import { NativeArchivePool } from "../src/native/archive-reader";
 import { readCr2w } from "../src/native/cr2w-reader";
 import { DecodeSession } from "../src/native/limits";
 import { decodeMaskLayers, maskLayout } from "../src/native/mlmask";
 import { loadGameOodle } from "../src/native/oodle";
 import { TEXTURE_READ_LIMITS } from "../src/native/texture-decode";
-import { decodePng } from "../src/png";
-import { LocalSettingsStore } from "../src/local-settings-store";
-import { openInstallation } from "../src/resolver-host";
+import { decodePng } from "../src/formats/png";
+import { LocalSettingsStore } from "../src/setup/host/local-settings-store";
+import { openInstallation } from "../src/game/host/resolver-host";
 import { tmpdir } from "node:os";
 
 const args = process.argv.slice(2);

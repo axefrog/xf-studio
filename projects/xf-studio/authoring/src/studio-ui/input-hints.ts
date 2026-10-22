@@ -1,5 +1,5 @@
 import { cursorFor, targetTip, viewportHints, type BlockReason, type HintItem, type ViewportHints,
-  type ViewportInputContext, type ViewportScope } from "../input-bindings";
+  type ViewportInputContext, type ViewportScope } from "../app/input-bindings";
 import { h } from "./dom";
 import type { Frame, Port } from "./runtime";
 

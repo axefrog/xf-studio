@@ -3,8 +3,8 @@ import * as THREE from "three";
 import { calibrationGain, coneFactor, coneFold, contribution, CREATOR_CALIBRATION, CREATOR_HEAD_SLOT, CREATOR_RIG_FEMALE, CREATOR_RIG_MALE,
   CREATOR_SHADOW, creatorCamera, creatorRigSpecs, creatorShadowCasters, creatorShadowMapSize, creatorShadowRadius, DEFAULT_CREATOR_EXPOSURE,
   DEFAULT_CREATOR_LIGHTING, halfAngles, inverseSquareFalloff, lightColourLinear, linearFalloff, lumensToCandela, readCreatorLighting,
-  rotateLight, spotLightSpec, threeConeFactor, validCreatorLighting, type Vec3 } from "../src/creator-lighting";
-import { aimShadowAtHead } from "../src/creator-lighting-rig";
+  rotateLight, spotLightSpec, threeConeFactor, validCreatorLighting, type Vec3 } from "../src/preview/creator-lighting";
+import { aimShadowAtHead } from "../src/preview/render/creator-lighting-rig";
 
 const byName = (name: string) => CREATOR_RIG_FEMALE.find(light => light.name === name)!;
 const angleTo = (from: Vec3, axis: Vec3, to: Vec3) => {
@@ -41,11 +41,12 @@ describe("creator rig table", () => {
     expect(rim.angle).toBeCloseTo(37.5 * Math.PI / 180, 6);
     expect(rim.penumbra).toBeCloseTo(1 - 1 / 75, 6);
     expect(rim.target).toEqual([-2.253 + 0.788, 1.5 - 0.156, 1.577 - 0.595]);
-    // Linear lights: no Three falloff; intensity folded by 1 − d/r at the head.
+    // Linear lights: no Three falloff of their own; the radius goes to the renderer, which applies 1 − saturate(d/r) per fragment
+    // (linear-falloff.ts), so the intensity carries no head-distance fold (render gap plans §2 step A).
     const face = spotLightSpec(byName("Main_Face"), { intensity: "isotropic", cone: "full" }, head);
-    const d = Math.hypot(0.304, 0.62, 0.794);
-    expect([face.decay, face.distance]).toEqual([0, 0]);
-    expect(face.intensity).toBeCloseTo(40 / (4 * Math.PI) * (1 - d / 5) * coneFold(byName("Main_Face"), "full", head) * calibrationGain("Main_Face"), 6);
+    expect([face.decay, face.distance, face.linearRadius]).toEqual([0, 0, 5]);
+    expect(face.intensity).toBeCloseTo(40 / (4 * Math.PI) * coneFold(byName("Main_Face"), "full", head) * calibrationGain("Main_Face"), 6);
+    expect(rim.linearRadius).toBeNull();
     // Half-angle reading doubles the angles (capped below 90° for Three).
     const half = spotLightSpec(byName("Rim_Left_Head"), { intensity: "isotropic", cone: "half" }, head);
     expect(half.angle).toBeCloseTo(89.9 * Math.PI / 180, 6);

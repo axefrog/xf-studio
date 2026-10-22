@@ -5,10 +5,10 @@ import { expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createGameAssetExporter } from "../src/game-asset-export";
-import { createWolvenKitUncook } from "../src/game-asset-export-wolvenkit";
-import { ensurePreviewCore, previewCoreReadiness } from "../src/preview-core-service";
-import { accessorFloats, parseGlb, readAccessor } from "../src/glb";
+import { createGameAssetExporter } from "../src/game/host/game-asset-export";
+import { createWolvenKitUncook } from "../src/game/host/game-asset-export-wolvenkit";
+import { ensurePreviewCore, previewCoreReadiness } from "../src/preview/host/preview-core-service";
+import { accessorFloats, parseGlb, readAccessor } from "../src/formats/glb";
 
 /** Show-through counts at neutral, and per eye shape with the eyes left static (the old preview) or morphed. */
 function eyeSeating(bytes: Uint8Array) {

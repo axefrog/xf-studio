@@ -13,6 +13,7 @@
  * the session's budget (limits.ts). A watched property the file left out (`rendChunk.renderMask`) is reported with its path, so a
  * consumer can tell "missing" from a stored zero although both are written the same way.
  */
+import { setOwn } from "../platform/api/own-property";
 import { DecodeSession } from "./limits";
 import { defaultValue, learnedDefault, learnedKeys } from "./red-defaults";
 import { RedBuffer, type RedDocument, RedHandle, RedObject } from "./red-model";
@@ -96,7 +97,7 @@ class JsonWriter {
       const entries = Object.entries(value);
       this.session.jsonNodes(entries.length);
       const out: Record<string, unknown> = {};
-      for (const [key, item] of entries) out[key] = isNested(item) ? this.nested(key, item) : item;
+      for (const [key, item] of entries) setOwn(out, key, isNested(item) ? this.nested(key, item) : item);
       return out;
     }
     return value;
@@ -115,11 +116,11 @@ class JsonWriter {
     for (const key of ordered([...keys])) {
       if (Object.hasOwn(object.fields, key)) {
         const item = object.fields[key];
-        out[key] = isNested(item) ? this.nested(key, item) : item;
+        setOwn(out, key, isNested(item) ? this.nested(key, item) : item);
       } else {
         const learned = learnedDefault(object.type, key);
         const type = types?.get(key);
-        out[key] = learned !== undefined ? structuredClone(learned) : type !== undefined ? this.nested(key, defaultValue(type)) : null;
+        setOwn(out, key, learned !== undefined ? structuredClone(learned) : type !== undefined ? this.nested(key, defaultValue(type)) : null);
         if (watched?.has(key)) this.session.defaulted(`${object.type}.${key}`, () => `${this.pathText()}.${key}`);
       }
     }
@@ -157,7 +158,7 @@ class JsonWriter {
       this.session.jsonNodes(entries.length);
       this.session.enter();
       const out: Record<string, unknown> = {};
-      for (const [key, item] of entries) out[key] = this.plain(item);
+      for (const [key, item] of entries) setOwn(out, key, this.plain(item));
       this.session.leave();
       return out;
     }

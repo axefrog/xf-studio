@@ -2,12 +2,12 @@
 // focusable and say why, a Build offers "Add to my mod manager" with a reviewed plan and "Show in folder", Settings offers what
 // XF Studio found and saves each choice at once (the saves folder too), and the failure card offers a report instead of a log path.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { InstallDetectionActions } from "../src/install-detection-actions";
-import { LocalSetupActions, type LocalSetupTransport } from "../src/local-setup-actions";
-import { ModInstallActions, type ModInstallPlan } from "../src/mod-install-actions";
-import { UpdateCheckActions, type UpdateCheckTransport } from "../src/update-check-actions";
-import { emptyUpdateCheckMemory, UpdateCheckService } from "../src/update-check";
-import { simulatedReleases } from "../src/update-check-github";
+import { InstallDetectionActions } from "../src/installation/install-detection-actions";
+import { LocalSetupActions, type LocalSetupTransport } from "../src/setup/local-setup-actions";
+import { ModInstallActions, type ModInstallPlan } from "../src/installation/mod-install-actions";
+import { UpdateCheckActions, type UpdateCheckTransport } from "../src/setup/update-check-actions";
+import { emptyUpdateCheckMemory, UpdateCheckService } from "../src/setup/update-check";
+import { simulatedReleases } from "../src/setup/host/update-check-github";
 import { installLightDom, lightDocument, lightEvent, type LightElement, uninstallLightDom } from "./light-dom";
 
 beforeAll(() => installLightDom());

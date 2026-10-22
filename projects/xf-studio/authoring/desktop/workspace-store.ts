@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { closeSync, copyFileSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
-import type { DocumentModel } from "../src/collection-workspace";
+import type { DocumentModel } from "../src/app/workspace/collection-workspace";
 import { isNewerData } from "../src/platform/api";
-import { parseWorkspace, serializeWorkspace, storesLookLevelHistory, WORKSPACE_1, WORKSPACE_2 } from "../src/workspace-state";
+import { parseWorkspace, serializeWorkspace, storesLookLevelHistory, WORKSPACE_1, WORKSPACE_2 } from "../src/app/workspace/workspace-state";
 
 const maxWorkspaceBytes = 16_000_000;
 

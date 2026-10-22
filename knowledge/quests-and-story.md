@@ -143,7 +143,7 @@ The smallest complete quest built only from parts the installed mods prove, in t
 5. **Start it.** Either from the graph (a pause on vanilla facts such as `q101_enable_activities_flat`, then a game-time delay) or from script by setting `xfs_job_offer = 1`. Money rewards and anything computed go through a request fact answered by script (§4). [resource] [source]
 6. **Package** the phase, journal and sectors in one archive, texts in a second (so translators replace only that), and the `.xl` beside them; version the facts, because saves keep them. [resource] Eviction Notice's split archives.
 
-What this recipe does not yet cover: dialogue with voiced NPCs in the world (scenes with actors and lines), companions, and fail states; those need scene authoring, which the installed mods show only for V and props.
+What this recipe does not yet cover: dialogue with voiced NPCs in the world (scenes with actors and lines), companions, and fail states; those need scene authoring, which the installed mods show only for V and props. Directing an NPC and offering V choices *without* a scene (runtime AI commands, text lines and a hub added to the game's dialogue widget) is on [NPC direction](npc-direction.md).
 
 ## 4. How script and quest graphs work together
 

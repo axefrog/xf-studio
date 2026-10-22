@@ -2,7 +2,7 @@
 // failures kept once under one reference, and the report review over the light DOM harness (the summary files previewed from the
 // ticked parts, mod files behind the sharing confirmation, the whole of a long part on request, "Prepare again" after expiry).
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { createBrowserDiagnostics, PAGE_QUEUE } from "../src/diagnostics/browser-device";
+import { createBrowserDiagnostics, PAGE_QUEUE } from "../src/diagnostics/browser/browser-device";
 import { DiagnosticsActions, type DiagnosticsDevice } from "../src/diagnostics/actions";
 import { diagnosticEntry, type DiagnosticEntry } from "../src/diagnostics/model";
 import { PREVIEW_CHARS, type ReportManifest } from "../src/diagnostics/report";
@@ -72,6 +72,40 @@ describe("the browser device (DIAG-07)", () => {
     device.forward([entry("next")]);
     await settle();
     expect(batches.at(-1)!.map(item => item.message)).toEqual(["host busy", "next"]);
+  });
+});
+
+describe("flushes one at a time (DIAG-07)", () => {
+  test("entries forwarded while a batch is on its way stay queued, and a failure then is never lost", async () => {
+    const calls: { entries: string[]; answer: (status: number) => void }[] = [];
+    let inFlight = 0, most = 0;
+    const win = {
+      fetch: (_url: string, init: { body: string }) => new Promise<Response>(resolve => {
+        inFlight++; most = Math.max(most, inFlight);
+        calls.push({ entries: JSON.parse(init.body).entries.map((item: DiagnosticEntry) => item.message),
+          answer: status => { inFlight--; resolve(new Response(null, { status })); } });
+      }),
+      navigator: { userAgent: "Chrome/140.0" }, addEventListener() {}, removeEventListener() {},
+    } as unknown as Window & typeof globalThis;
+    const { device } = createBrowserDiagnostics({ window: win, download() {} });
+    device.forward([entry("first")]);
+    await settle();
+    expect(calls.map(call => call.entries)).toEqual([["first"]]);
+    // Two more failures while the first batch is on its way: no second request starts beside it.
+    device.forward([entry("second")]);
+    await settle();
+    device.forward([entry("third")]);
+    await settle();
+    expect(calls).toHaveLength(1);
+    // The host couldn't take the first batch; it goes again, ahead of what arrived meanwhile.
+    calls[0]!.answer(503);
+    await settle();
+    expect(calls.map(call => call.entries)).toEqual([["first"], ["first", "second", "third"]]);
+    calls[1]!.answer(204);
+    await settle();
+    expect(device.pending()).toEqual([]);
+    expect(most).toBe(1);
+    expect(calls).toHaveLength(2);
   });
 });
 

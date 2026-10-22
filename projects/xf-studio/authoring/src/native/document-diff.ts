@@ -6,8 +6,8 @@
  * - a hash-only `TweakDBID` where the reference shows the record name, when the name hashes to the same id.
  * Buffer `Type` strings (the reference tool's .NET type names) are not compared; a reference `Bytes` string compares by its length.
  */
-import { depotHash } from "../depot-path";
-import { tweakDbId } from "../tweakdb-flats";
+import { depotHash } from "../game/depot-path";
+import { tweakDbId } from "../game/tweakdb-flats";
 
 export interface DocumentMismatch { readonly path: string; readonly kind: string; readonly mine: string; readonly reference: string }
 

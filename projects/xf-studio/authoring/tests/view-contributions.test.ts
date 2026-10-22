@@ -6,7 +6,7 @@
  */
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
+import { ACTION_DESCRIPTORS } from "../src/app/studio-action-descriptors";
 import { group, locate, parseTree, split, type DockTree } from "../src/studio-ui/dock/layout";
 import { defaultDockStateFor, restoreDockPreference, serializeDockState } from "../src/studio-ui/dock/persist";
 import { defaultCompact, defaultWide } from "../src/studio-ui/layout-defaults";

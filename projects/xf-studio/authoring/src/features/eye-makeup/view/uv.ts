@@ -1,4 +1,4 @@
-import { keyBinding, shortcutLabel } from "../../../input-bindings";
+import { keyBinding, shortcutLabel } from "../../../app/input-bindings";
 import { applyCapability, button, Segmented } from "../../../studio-ui/controls";
 import { h } from "../../../studio-ui/dom";
 import type { PanelController } from "../../../studio-ui/panels/collection";

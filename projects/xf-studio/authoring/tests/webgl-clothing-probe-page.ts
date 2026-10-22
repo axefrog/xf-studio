@@ -15,11 +15,11 @@
  */
 import * as THREE from "three";
 import { createSceneHost } from "../src/platform/scene/scene-host";
-import type { LoadedCoreDetail } from "../src/core-detail-loader";
+import type { LoadedCoreDetail } from "../src/character/render/core-detail-loader";
 import type { MotionLoader } from "../src/platform/scene/head-rig";
-import { GlbWriter } from "../src/glb";
+import { GlbWriter } from "../src/formats/glb";
 import { CHARACTER_DETAIL_ASSETS, CHARACTER_DETAIL_SCHEMA, type CharacterDetail, type CoreDetail, type RenderComponent, type RenderLayer,
-  type RenderTexture } from "../src/render-detail";
+  type RenderTexture } from "../src/character/render-detail";
 
 type Memory = { geometries: number; textures: number };
 type Colour = [number, number, number];

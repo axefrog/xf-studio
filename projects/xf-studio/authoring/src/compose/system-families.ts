@@ -5,19 +5,19 @@
  * into `platform/core` when that table is split (migration step 5).
  */
 import { actionTable, asyncActionTable, familyId, type AsyncSystemFamily, type SystemFamily } from "../platform/api";
-import type { CollectionRequest } from "../collection-service";
-import type { StudioFileAction } from "../studio-file-operations";
-import type { CollectionStudioAction } from "../collection-actions";
-import type { HistoryAction } from "../authoring-history";
-import type { MotionAction } from "../motion-actions";
+import type { CollectionRequest } from "../library/collection-service";
+import type { StudioFileAction } from "../app/studio-file-operations";
+import type { CollectionStudioAction } from "../library/collection-actions";
+import type { HistoryCommand as HistoryAction } from "../platform/api/history";
+import type { MotionAction } from "../animation/motion-actions";
 import type { TransitionAction } from "../platform/core/transition-settings";
-import type { PreviewAction } from "../preview-actions";
-import type { QualityAction } from "../preview-quality-actions";
-import type { SavedAppearanceAction } from "../saved-appearance-actions";
-import type { ViewAction } from "../view-actions";
-import type { PartPresetRequest } from "../part-presets";
+import type { PreviewAction } from "../preview/preview-actions";
+import type { QualityAction } from "../legacy/eye-makeup/preview/preview-quality-actions";
+import type { SavedAppearanceAction } from "../character/saved-appearance-actions";
+import type { ViewAction } from "../app/view-actions";
+import type { PartPresetRequest } from "../library/part-presets";
 import { ACTION_DESCRIPTORS, FILE_DESCRIPTORS, PART_PRESET_DESCRIPTORS, REQUEST_DESCRIPTORS, type ActionScope, type FileDescriptor,
-  type RequestDescriptor } from "../studio-action-descriptors";
+  type RequestDescriptor } from "../app/studio-action-descriptors";
 
 export type { CollectionStudioAction, HistoryAction };
 
@@ -109,7 +109,7 @@ export const SAVED_V_FAMILY: SystemFamily<SavedAppearanceAction, ActionScope, ty
  * The character context (character-context.ts, owned by `CharacterContextActions`): which V the makeup is shown on and every creator
  * choice set on it (CORE-58). It keeps its own Undo history (CORE-59), so its actions record nothing in a look's history.
  */
-export { CHARACTER_CONTEXT_FAMILY } from "../character-context";
+export { CHARACTER_CONTEXT_FAMILY } from "../character/character-context";
 
 /**
  * Asynchronous families (CORE-36): the collection library's requests (`CollectionService.execute`) and

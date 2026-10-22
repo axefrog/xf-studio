@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
-import { HISTORY_START_ID } from "../src/authoring-history";
-import { collectionDraft, parseCollectionWorkspace, withLiveMemory } from "../src/collection-workspace";
+import { HISTORY_START_ID } from "../src/platform/api/history";
+import { collectionDraft, parseCollectionWorkspace, withLiveMemory } from "../src/app/workspace/collection-workspace";
 import { memoryOf } from "./fixtures/looks";
-import { RECIPE_HISTORY_LIMIT, RecipeHistory } from "../src/editor-actions";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { encodeWorkspaceForStorage, PERSISTED_BACKGROUND_HISTORY } from "../src/workspace-budget";
-import { parseWorkspace } from "../src/workspace-state";
+import { RECIPE_HISTORY_LIMIT, recipeHistory } from "../src/legacy/eye-makeup/editor-actions";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { encodeWorkspaceForStorage, PERSISTED_BACKGROUND_HISTORY } from "../src/app/workspace/workspace-budget";
+import { parseWorkspace } from "../src/app/workspace/workspace-state";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 
@@ -166,9 +166,9 @@ test("the trimmed flag follows the history limit and survives the workspace's bu
   expect(app.historyTimeline()).toMatchObject({ trimmed: true, redoCount: 0, current: RECIPE_HISTORY_LIMIT - 1 });
 
   // More than the limit, or an explicit flag, restores as trimmed.
-  expect(new RecipeHistory([...full, base.recipe]).trimmed).toBe(true);
-  expect(new RecipeHistory(full.slice(0, 3), true).trimmed).toBe(true);
-  expect(new RecipeHistory(full).trimmed).toBe(false);
+  expect(recipeHistory([...full, base.recipe]).trimmed).toBe(true);
+  expect(recipeHistory(full.slice(0, 3), true).trimmed).toBe(true);
+  expect(recipeHistory(full).trimmed).toBe(false);
 });
 
 test("stored copies mark presets whose Undo history the budget shortened", () => {
@@ -198,7 +198,7 @@ test("stored copies mark presets whose Undo history the budget shortened", () =>
 });
 
 test("the presentation port publishes the timeline without the live history", async () => {
-  const { createStudioPresentation } = await import("../src/studio-presentation");
+  const { createStudioPresentation } = await import("../src/app/studio-presentation");
   const core = fixture();
   threeEdits(core);
   const port = createStudioPresentation({ authoring: core.app, library: {} as never, files: {} as never,

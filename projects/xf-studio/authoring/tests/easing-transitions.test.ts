@@ -9,9 +9,9 @@ import { ValueTransition, weightBlend } from "../src/platform/core/value-transit
 import { DEFAULT_TRANSITION, parseTransitions, TransitionSettings } from "../src/platform/core/transition-settings";
 import { storedWeight } from "../src/engines/facial-rig/vector";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { parseWorkspace, serializeWorkspace } from "../src/workspace-state";
-import { WorkspaceComposer } from "../src/workspace-composer";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
+import { WorkspaceComposer } from "../src/app/workspace/workspace-composer";
 import { EASING_ICONS, iconPaths } from "../src/studio-ui/icons";
 import { freshWorkspace } from "./fixtures/eye-region";
 

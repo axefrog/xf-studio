@@ -13,6 +13,29 @@ export type HistoryLabel = {
   layerId?: string;
 };
 
+export type HistoryCommand = { kind: "history.undo" } | { kind: "history.redo" } | { kind: "history.jumpTo"; entryId: string };
+export type HistoryState = { undo?: HistoryLabel; redo?: HistoryLabel; depth: number; redoDepth: number };
+export type HistoryStep = HistoryLabel & { id: string; at?: number; state: "done" | "undone" };
+export type HistorySnapshot = { startId: string; steps: HistoryStep[]; current: number; redoCount: number; trimmed: boolean; documentLabel?: string };
+export type HistoryParticipant = { id: string; dispatch(action: HistoryCommand): boolean };
+/**
+ * The Undo history of separately stored documents (an experiment's documents, scoped by ID such as `hair:<id>`), beside the
+ * look history. Each document's history is linear and isolated; global Undo and Redo reach the selected one. A step keeps
+ * the document's value after it (and the history its value before the first step), so moving through the history hands
+ * back the value to restore. Session only, like the look history's labels and Redo.
+ */
+export type DocumentHistory = {
+  selected(): string | null;
+  focus(id: string | null): void;
+  snapshot(id: string): HistorySnapshot;
+  /** Records a step after the current one (dropping the redo branch), with the document's value before and after it. */
+  record(id: string, documentLabel: string, entry: HistoryLabel & { id: string }, change: { readonly before: unknown; readonly after: unknown }): void;
+  /** Moves to step `current` (-1: before the first step) and returns the document's value there; undefined when it has no history. */
+  move(id: string, current: number): unknown;
+  /** Calls `listener` after every change (selection, a step recorded or moved); returns the unsubscribe. */
+  subscribe(listener: () => void): () => void;
+};
+
 /** The label of a step whose label was not kept (restored from a saved workspace). */
 export const UNKNOWN_HISTORY_LABEL: HistoryLabel = Object.freeze({ label: "Earlier change", actionKind: "unknown" });
 
@@ -58,4 +81,47 @@ export const HISTORY_LIMIT = 80;
 export interface HistoryParts {
   chunks(feature: string, body: unknown): readonly unknown[];
   join(feature: string, chunks: readonly unknown[]): unknown;
+}
+
+/** The oldest kept state of a timeline (the look's); not a step of its own. */
+export const HISTORY_START_ID = "start";
+/** How many Undo or Redo steps reach a timeline entry. */
+export type HistoryJumpPlan = { direction: "undo" | "redo" | "none"; count: number };
+
+/**
+ * A history scope's name in the history service: `look` (the selected look, persisted), `view` (the View and lighting
+ * history) and `doc:<id>` (an experiment's document, such as `doc:hair:<groom>`). Session-only except the look's.
+ */
+export type HistoryScopeId = string;
+/** Why a scope applies values: an Undo, a Redo, or a cancelled transaction's revert (which never creates Redo). */
+export type HistoryCause = "undo" | "redo" | "revert";
+
+/**
+ * What a history scope records and restores: values by key (the look: features' parts; the view graph: node IDs and
+ * `structure`; a document: its ID). The service owns the steps, Redo validity and transactions; the target owns its state.
+ */
+export interface HistoryTarget {
+  /** The value of `key` as it is now; undefined when there is none (a part the look lacks, a node that does not exist). */
+  read(key: string): unknown | undefined;
+  /**
+   * Show `values` (undefined: remove), published once. False when they cannot be applied consistently (CORE-94): the scope then
+   * drops its steps, since they could never apply again, and nothing changes.
+   */
+  apply(values: Readonly<Record<string, unknown | undefined>>, cause: HistoryCause): boolean;
+  /**
+   * A cheap token that changes whenever the content may have: while it is what the last Undo or Redo left, Redo stays valid
+   * without comparing content. Without it, Redo validity compares the fingerprint every time.
+   */
+  revision?(): unknown;
+  /**
+   * Called once a move has settled (Redo validity included), after `apply`: a target that publishes its change from here hands
+   * subscribers the history state as it stands.
+   */
+  settled?(): void;
+  /**
+   * The content under `keys` (all, when omitted). Redo is valid only while it is what the last Undo or Redo left (CORE-46): a
+   * change that records no step hides Redo, which would overwrite it. A transaction compares it to tell an empty one. Targets
+   * without one keep Redo until a new step is recorded.
+   */
+  fingerprint?(keys?: readonly string[]): string;
 }

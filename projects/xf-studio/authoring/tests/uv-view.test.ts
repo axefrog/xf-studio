@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { defaultUVView, fitUVView, parseUVView, pixelToUV, reflectUV, uvRegion, uvToPixel, uvViewRegion } from "../src/uv-view";
-import { parseWorkspace } from "../src/workspace-state";
+import { defaultUVView, fitUVView, parseUVView, pixelToUV, reflectUV, uvRegion, uvToPixel, uvViewRegion } from "../src/legacy/eye-makeup/uv-view";
+import { parseWorkspace } from "../src/app/workspace/workspace-state";
 import { storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { initialRecipe, freshWorkspace, EYE_MIRROR } from "./fixtures/eye-region";
@@ -53,7 +53,7 @@ test("view state persists independently of recipe and legacy workspaces have the
 });
 
 test("selection visibility reports whether the selected point or warp origin is inside the UV view", async () => {
-  const { selectionVisibility, defaultUVView } = await import("../src/uv-view");
+  const { selectionVisibility, defaultUVView } = await import("../src/legacy/eye-makeup/uv-view");
   const layer = { symmetry: false, points: [{ u: .3, v: .28 }, { u: .9, v: .9 }], fields: [{ id: "w", u: .31, v: .27 }] };
   const view = defaultUVView();
   expect(selectionVisibility(view, 720 / 310, layer, 0, "w", EYE_MIRROR)).toEqual({ point: { index: 0, visible: true }, field: { id: "w", visible: true } });

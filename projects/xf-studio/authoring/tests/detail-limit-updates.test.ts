@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
-import { createBrowserCharacterDetailDevice } from "../src/browser-character-detail-device";
-import { CharacterDetailActions, type CharacterDetailPort } from "../src/character-detail-actions";
-import { DEFAULT_CHARACTER } from "../src/character-detail-request";
-import { withSlotLimits, type DetailLimit, type SlotLimits } from "../src/detail-limits";
-import { DETAIL_SLOTS, type DetailSlot } from "../src/render-detail";
+import { createBrowserCharacterDetailDevice } from "../src/character/browser/browser-character-detail-device";
+import { CharacterDetailActions, type CharacterDetailPort } from "../src/character/character-detail-actions";
+import { DEFAULT_CHARACTER } from "../src/character/character-detail-request";
+import { withSlotLimits, type DetailLimit, type SlotLimits } from "../src/character/detail-limits";
+import { DETAIL_SLOTS, type DetailSlot } from "../src/character/render-detail";
 
 /**
  * Limits the renderer finds after a V was placed reach the Character panel (PREV-74): a slot the viewer shows later bakes then, and

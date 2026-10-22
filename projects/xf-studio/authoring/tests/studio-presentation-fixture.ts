@@ -1,23 +1,23 @@
 import { eyeCheck } from "./fixtures/package-results";
-import { AuthoringControlEdits } from "../src/authoring-control-edits";
-import { AuthoringDocument } from "../src/authoring-document";
-import { AuthoringGestures } from "../src/authoring-gestures";
-import { CollectionApplication } from "../src/collection-application";
-import type { CollectionTransport } from "../src/collection-service";
-import { collectionDraft } from "../src/collection-workspace";
-import { PreviewQualityActions } from "../src/preview-quality-actions";
-import type { PresetCollection } from "../src/preset-collection";
-import { StudioApplication } from "../src/studio-application";
-import { StudioFileOperations } from "../src/studio-file-operations";
-import { createStudioPresentation, type StudioPresentationPort } from "../src/studio-presentation";
-import { createViewServices } from "../src/view-actions";
+import { AuthoringControlEdits } from "../src/app/authoring/authoring-control-edits";
+import { AuthoringDocument } from "../src/app/authoring/authoring-document";
+import { AuthoringGestures } from "../src/app/authoring/authoring-gestures";
+import { CollectionApplication } from "../src/library/collection-application";
+import type { CollectionTransport } from "../src/library/collection-service";
+import { collectionDraft } from "../src/app/workspace/collection-workspace";
+import { PreviewQualityActions } from "../src/legacy/eye-makeup/preview/preview-quality-actions";
+import type { PresetCollection } from "../src/legacy/eye-makeup/export/preset-collection";
+import { StudioApplication } from "../src/app/studio-application";
+import { StudioFileOperations } from "../src/app/studio-file-operations";
+import { createStudioPresentation, type StudioPresentationPort } from "../src/app/studio-presentation";
+import { createViewServices } from "../src/app/view-actions";
 import { STUDIO_MODULE_REGISTRATION } from "../src/compose/modules";
-import { UIPreferenceActions } from "../src/ui-preferences";
-import { ViewportAttachment, type ViewportAttachmentPort } from "../src/viewport-attachment";
-import { recipeFile } from "../src/recipe-schema";
+import { UIPreferenceActions } from "../src/app/ui-preferences";
+import { ViewportAttachment, type ViewportAttachmentPort } from "../src/app/viewport-attachment";
+import { recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
 import { registeredEditing } from "./gesture-test-adapter";
 import { STUDIO_DOCUMENTS, STUDIO_REGISTRY } from "../src/compose/studio-registry";
-import { RecipeActions } from "../src/authoring-eye-makeup";
+import { RecipeActions } from "../src/legacy/eye-makeup/authoring-eye-makeup";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { eyeMakeupPort } from "./fixtures/eye-region";
 
@@ -29,16 +29,14 @@ export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>
   shell: StudioPresentationPort<string>; packageInput: () => PresetCollection | undefined;
   downloads: string[]; locations: string[] } {
   const workspace = freshWorkspace(), document = new AuthoringDocument(workspace);
-  const undo = () => { const prior = document.undoRecipe(); if (!prior) return false;
-    document.replaceRecipe(prior, document.active); return true; };
   const recipe = new RecipeActions(() => ({ recipe: document.recipe, active: document.active,
     selected: document.selected, fieldSelection: document.fieldSelection }),
   (next, effect) => document.applyActionState(next, effect), document, {}, () => "fixture");
   const eyeMakeup = eyeMakeupPort(document, recipe), editing = registeredEditing(eyeMakeup);
-  const gestures = new AuthoringGestures(document, editing.gestures, undo);
-  const controls = new AuthoringControlEdits(document, editing.controls, undo);
+  const gestures = new AuthoringGestures(document, editing.gestures);
+  const controls = new AuthoringControlEdits(document, editing.controls);
   const quality = new PreviewQualityActions(512, { assess: () => ({ accepted: true }), replace: () => {} });
-  const app = new StudioApplication({ document, eyeMakeup, gestures, controls, undo, quality,
+  const app = new StudioApplication({ document, eyeMakeup, gestures, controls, quality,
     ...createViewServices(workspace.preview, undefined, STUDIO_MODULE_REGISTRATION) }, STUDIO_REGISTRY);
   const source: PresetCollection = { schema: "xfas/collection-1", id: crypto.randomUUID(),
     name: "Current", presets: [{ id: crypto.randomUUID(), name: "Look", revision: 1,

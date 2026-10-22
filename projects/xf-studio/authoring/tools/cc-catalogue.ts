@@ -9,11 +9,11 @@
  * XFS_RESOLVER_MO2_ROOT, XFS_RESOLVER_MO2_PROFILE, XFS_WOLVENKIT_CLI).
  */
 import { resolve } from "node:path";
-import { loadCreatorCatalogue } from "../src/cc-catalogue-host";
-import { userFacing } from "../src/cc-catalogue";
-import { catalogueCoverage } from "../src/cc-render-coverage";
-import { LocalSettingsStore } from "../src/local-settings-store";
-import { openInstallation, openNativeRoute } from "../src/resolver-host";
+import { loadCreatorCatalogue } from "../src/character/host/cc-catalogue-host";
+import { userFacing } from "../src/character/cc-catalogue";
+import { catalogueCoverage } from "../src/character/cc-render-coverage";
+import { LocalSettingsStore } from "../src/setup/host/local-settings-store";
+import { openInstallation, openNativeRoute } from "../src/game/host/resolver-host";
 
 const args = Bun.argv.slice(2);
 const option = (name: string) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] ?? null : null; };

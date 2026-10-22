@@ -1,0 +1,61 @@
+import { join } from "node:path";
+import { contentFingerprint, DerivedCache, samePath } from "../../../../host/derived-cache";
+import { eyePlateBody, type EyePlateRecipe } from "../eye-plate-recipe";
+
+/**
+ * Storage adapter for derived eye plates. The cache lives in host-owned private storage
+ * (never the repository, the game folder or a mod manager). Each derivation is published
+ * atomically into a directory named by recipe revision and cache key.
+ */
+export const EYE_PLATE_STATUS_SCHEMA = "xfs/eye-plate-status-1" as const;
+export type EyePlateStatusState = "ready" | "missing" | "unsupported" | "failed";
+export type EyePlateStatus = {
+  schema: typeof EYE_PLATE_STATUS_SCHEMA;
+  recipeId: string; recipeRevision: number;
+  state: EyePlateStatusState; code: string | null; message: string;
+  gameRoot: string; contentFingerprint: string; cacheName: string | null; updatedAt: string;
+  /**
+   * Launch route and head choice the plate was prepared for (`eyePlateRouteKey`); Check plans only on a plate
+   * prepared for the same one. Null or absent in statuses written before it was recorded.
+   */
+  routeKey?: string | null;
+};
+
+export { contentFingerprint, fileSha256 } from "../../../../host/derived-cache";
+
+/**
+ * One cache for both bodies' plates. Each body keeps its own status, so preparing one body's plate never hides the
+ * other's: the feminine plate keeps `status.json`, where every earlier status is, the masculine plate `status-<recipe id>.json`.
+ */
+export class EyePlateCache extends DerivedCache {
+  constructor(root: string, private readonly recipe?: Pick<EyePlateRecipe, "id" | "source">) { super(root, "eye plate"); }
+  protected override get statusFile() {
+    return this.recipe && eyePlateBody(this.recipe) === "male" ? join(this.root, `status-${this.recipe.id}.json`) : super.statusFile;
+  }
+  writeStatus(status: Omit<EyePlateStatus, "schema" | "updatedAt">): void {
+    this.writeStatusDocument({ schema: EYE_PLATE_STATUS_SCHEMA, ...status, updatedAt: new Date().toISOString() });
+  }
+  readStatus(): EyePlateStatus | null {
+    const status = this.readStatusDocument() as EyePlateStatus | null;
+    return status?.schema === EYE_PLATE_STATUS_SCHEMA ? status : null;
+  }
+}
+
+export type EyePlateReadiness = { issue: { code: string; reason: string } | null; limit: string };
+/**
+ * Advisory Build readiness from the last recorded derivation. A missing or unsupported head
+ * only blocks while the same game folder's content archives are unchanged, so repairing or
+ * updating the game (or XF Studio's recipe) lets the next Build try again.
+ */
+export function eyePlateReadiness(cacheRoot: string | null, gameRoot: string | null, recipe: EyePlateRecipe): EyePlateReadiness {
+  const labels = recipe.source.supported.map(item => item.label).join(", ");
+  const limit = `The expanded eye plate is built from your installed game on first Build (supports ${labels}) and cached privately.`;
+  if (!cacheRoot || !gameRoot) return { issue: null, limit };
+  let status: EyePlateStatus | null = null;
+  try { status = new EyePlateCache(cacheRoot, recipe).readStatus(); } catch { return { issue: null, limit }; }
+  if (!status || status.recipeId !== recipe.id || status.recipeRevision !== recipe.revision || !samePath(status.gameRoot, gameRoot) ||
+      (status.state !== "missing" && status.state !== "unsupported") ||
+      status.contentFingerprint !== contentFingerprint(gameRoot, recipe.source.archiveDirectory))
+    return { issue: null, limit };
+  return { issue: { code: status.state === "missing" ? "plate_source_missing" : "plate_source_unsupported", reason: status.message }, limit };
+}

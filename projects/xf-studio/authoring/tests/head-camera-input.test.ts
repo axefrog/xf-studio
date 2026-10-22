@@ -4,14 +4,14 @@ import { resolve } from "node:path";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { attachHeadCameraInput, CAMERA_EFFECTS, headCameraEffect, orbitMouseAction, orbitSlotFor, orbitSwapsSlots,
-  orbitTouchAction, type CameraEffect } from "../src/head-camera-input";
+  orbitTouchAction, type CameraEffect } from "../src/preview/render/head-camera-input";
 import { ADAPTER_INPUTS, ALL_TARGETS, MAKEUP_TARGETS, MODIFIER_KEYS, POINTER_BINDINGS, PRESS_INPUTS, pointerBinding,
   pointerBindingById, pointerInputOf, targetTip, viewportHints, type HeldModifiers, type ModifierKey, type PointerInput,
-  type PointerTarget, type ViewportScope } from "../src/input-bindings";
+  type PointerTarget, type ViewportScope } from "../src/app/input-bindings";
 import { type Layer, type Recipe } from "../src/engines/layered-makeup/recipe";
-import { createSurfaceEditor } from "../src/surface-editor";
-import { createUVEditor } from "../src/uv-editor";
-import { defaultUVView, uvRegion, uvToPixel } from "../src/uv-view";
+import { createSurfaceEditor } from "../src/legacy/eye-makeup/browser/surface-editor";
+import { createUVEditor } from "../src/legacy/eye-makeup/browser/uv-editor";
+import { defaultUVView, uvRegion, uvToPixel } from "../src/legacy/eye-makeup/uv-view";
 import { applyAdapterProposal } from "./gesture-test-adapter";
 import { initialRecipe, EYE_REGION } from "./fixtures/eye-region";
 
@@ -422,7 +422,8 @@ test("every hint the strip or a tooltip can show comes from a binding the adapte
   expect(problems).toEqual([]);
   // The adapters really do resolve these inputs through the catalogue (and classify presses one way).
   const source = (file: string) => readFileSync(resolve(import.meta.dir, "../src", file), "utf8");
-  const head = source("surface-editor.ts") + source("head-camera-input.ts"), uv = source("uv-editor.ts");
+  const head = source("legacy/eye-makeup/browser/surface-editor.ts") + source("preview/render/head-camera-input.ts"),
+    uv = source("legacy/eye-makeup/browser/uv-editor.ts");
   const viewports = source("studio-ui/panels/viewports.ts");
   for (const pattern of ["pointerInputOf(e) !== \"drag\"", "pointerBinding(\"head\", \"drag\"", "pointerBinding(\"head\", \"wheel\"",
     "pointerBinding(\"head\", input", "const input = pointerInputOf(event)", "setTargetResolver("])

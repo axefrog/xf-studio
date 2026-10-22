@@ -7,7 +7,7 @@
  * The reference composition of the layout primitives (style guide "Layout primitives"): a page header (back, title and view switch, meta
  * line), a split view between the tree and the inspector, block sections for a node and an object, property lists and code blocks.
  */
-import { chordsLabel, keyBinding, keyBindingById } from "../../../input-bindings";
+import { chordsLabel, keyBinding, keyBindingById } from "../../../app/input-bindings";
 import { applyCapability, badge, blockSection, button, codeBlock, emptyState, helpTip, note, PageHeader, propertyList, rowWords, Segmented, SizeBar, snapHeight, SplitView, stack }
   from "../../../studio-ui/components";
 import { h, setAttr, setText } from "../../../studio-ui/dom";

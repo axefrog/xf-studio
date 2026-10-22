@@ -6,17 +6,17 @@
 import { expect, test } from "bun:test";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS, STUDIO_PARTS, STUDIO_REGISTRY } from "../src/compose/studio-registry";
 import { EYE_MAKEUP } from "../src/features/eye-makeup";
-import { collectionDraft, withLiveMemory, type CollectionWorkspace, type DocumentModel } from "../src/collection-workspace";
+import { collectionDraft, withLiveMemory, type CollectionWorkspace, type DocumentModel } from "../src/app/workspace/collection-workspace";
 import { featureId, isNewerData, LOOK_HISTORY_1, LOOK_MEMORY, type AnyFeatureModule, type LookHistoryData, type PartCodec } from "../src/platform/api";
 import { ChunkStore } from "../src/platform/core/chunk-store";
 import { PartRegistry } from "../src/platform/core/document";
 import { CONTROL_TRANSACTION, GESTURE_TRANSACTION, HistoryTransaction, type TransactionHost } from "../src/platform/core/history-transaction";
 import { LookHistory, lookHistoryBodies, trimLookHistory } from "../src/platform/core/look-history";
 import { MAX_LAYERS, type Recipe } from "../src/engines/layered-makeup/recipe";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { encodeWorkspacePlan, fitWorkspace, MIN_SELECTED_HISTORY, PERSISTED_BACKGROUND_HISTORY, STANDARD_PLAN, WORKSPACE_STORAGE_BUDGET } from "../src/workspace-budget";
-import { WorkspacePersistence } from "../src/workspace-persistence";
-import { loadWorkspace, parseWorkspace, type WorkspaceState } from "../src/workspace-state";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { encodeWorkspacePlan, fitWorkspace, MIN_SELECTED_HISTORY, PERSISTED_BACKGROUND_HISTORY, STANDARD_PLAN, WORKSPACE_STORAGE_BUDGET } from "../src/app/workspace/workspace-budget";
+import { WorkspacePersistence } from "../src/app/workspace/workspace-persistence";
+import { loadWorkspace, parseWorkspace, type WorkspaceState } from "../src/app/workspace/workspace-state";
 import { historyRecipes, memoryOf } from "./fixtures/looks";
 import { PartRegistry as PreStep4Registry } from "./fixtures/pre-step4/platform/core/document";
 import { editLayers, initialRecipe, freshWorkspace } from "./fixtures/eye-region";
@@ -86,7 +86,7 @@ test("a gesture on one layer of a 32-layer look stores one layer chunk per step"
   expect(first.chunks).toBe(MAX_LAYERS + 1);   // the header and every layer, once
   drag(.001); drag(.001);
   expect(document.historyStats().chunks).toBe(first.chunks + 2);
-  expect(document.undoDepth).toBe(3);
+  expect(document.history.state().depth).toBe(3);
 });
 
 test("look steps record several parts at once; Undo and Redo restore them together with their identity", () => {

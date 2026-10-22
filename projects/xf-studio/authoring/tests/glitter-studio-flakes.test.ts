@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 // Glitter flakes 2 (experiment 032): the Studio's glint models as the diagnostic Glitter route's flake statistics.
 import { defaultClusteredGlintFlakes, defaultDirectGlintFlakes, defaultFineSpeckleFlakes } from "../src/engines/layered-makeup/direct-glint-settings";
-import { parseExportDiagnostics } from "../src/export-diagnostics";
-import { GLITTER_FLAKES_2, studioGlitterFlakes } from "../src/glitter-studio-flakes";
+import { parseExportDiagnostics } from "../src/legacy/eye-makeup/export/export-diagnostics";
+import { GLITTER_FLAKES_2, studioGlitterFlakes } from "../src/legacy/eye-makeup/export/glitter-studio-flakes";
 
 /** The maintainer's reference preset's glitter layer (research/materials/finish-designs/glitter.md): Dense fine speckles at full strength. */
 const GLITTERATI = { model: "uv-cell-direct-3", density: .88, fineShare: .88, strength: 16, seed: 2077, color: "#fa006c" } as const;

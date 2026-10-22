@@ -1,6 +1,6 @@
 /** Fixed authored fixtures for byte-preserving mask performance comparisons. */
 import { raster, curve, type Layer } from "../src/engines/layered-makeup/recipe";
-import { readRecipe as parseRecipe } from "../src/recipe-schema";
+import { readRecipe as parseRecipe } from "../src/legacy/eye-makeup/recipe-schema";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { EYE_MAKEUP_REGION, initialRecipe } from "../src/features/eye-makeup/region";

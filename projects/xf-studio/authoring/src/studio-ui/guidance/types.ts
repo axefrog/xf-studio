@@ -1,6 +1,6 @@
-import type { PreviewSetupAction } from "../../preview-setup";
-import type { StudioAction } from "../../studio-application";
-import type { StudioFileAction } from "../../studio-file-operations";
+import type { PreviewSetupAction } from "../../preview/preview-setup";
+import type { StudioAction } from "../../app/studio-application";
+import type { StudioFileAction } from "../../app/studio-file-operations";
 import type { StudioPanelId } from "../layout-defaults";
 import type { AnchorId } from "./anchors";
 

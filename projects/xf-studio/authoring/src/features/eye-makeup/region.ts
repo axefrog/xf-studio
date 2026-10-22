@@ -6,7 +6,7 @@ import type { FlakeRegion } from "../../engines/layered-makeup/flake-field";
 import { convertToBezier } from "../../engines/layered-makeup/bezier-path";
 import { DEFAULT_STRENGTH_BLEND, type Layer, type Recipe } from "../../engines/layered-makeup/recipe";
 import type { LayeredMakeupRegion } from "../../engines/layered-makeup/region";
-import { EYE_MAKEUP_FEATURE, LAYER_MODELS } from "../../recipe-schema";
+import { EYE_MAKEUP_FEATURE, LAYER_MODELS } from "../../legacy/eye-makeup/recipe-schema";
 
 /**
  * The historical four-layer sample recipe: an example and test fixture (the first build's startup recipe).

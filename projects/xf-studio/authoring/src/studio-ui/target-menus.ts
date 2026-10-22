@@ -1,7 +1,7 @@
-import type { StudioAction, StudioCapability, StudioTarget } from "../studio-application";
-import type { StudioBoundContext } from "../studio-context-targets";
-import { chordLabel, keyBindingById, shortcutLabel, TARGET_LABELS } from "../input-bindings";
-import type { ViewportHostKind } from "../viewport-attachment";
+import type { StudioAction, StudioCapability, StudioTarget } from "../app/studio-application";
+import type { StudioBoundContext } from "../app/studio-context-targets";
+import { chordLabel, keyBindingById, shortcutLabel, TARGET_LABELS } from "../app/input-bindings";
+import type { ViewportHostKind } from "../app/viewport-attachment";
 import { scaleText } from "./dom";
 import { isIconName, type IconName } from "./icons";
 import { menuFromSections, openMenu, openValuePopover, type MenuAnchor, type MenuItem, type MenuSection } from "./menu";

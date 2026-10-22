@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
-import { CollectionService, type CollectionTransport } from "../src/collection-service";
-import { collectionDraft } from "../src/collection-workspace";
-import { cancelsGesture } from "../src/gesture-cancel";
+import { CollectionService, type CollectionTransport } from "../src/library/collection-service";
+import { collectionDraft } from "../src/app/workspace/collection-workspace";
+import { cancelsGesture } from "../src/legacy/eye-makeup/gesture-cancel";
 import { IRREGULAR_RANGE_MESSAGE } from "../src/engines/layered-makeup/recipe-actions";
-import { StudioFileOperations } from "../src/studio-file-operations";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
+import { StudioFileOperations } from "../src/app/studio-file-operations";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 
@@ -47,7 +47,7 @@ test("a gesture commits an open form transaction, so a late Escape cannot revert
   app.controlCancel("opacity");
   expect(document.recipe.layers[0].opacity).toBe(.42);
   expect(document.recipe.layers[0].points[0].u).toBeCloseTo(u + .002, 9);
-  expect(document.undoDepth).toBe(2);
+  expect(document.history.state().depth).toBe(2);
 });
 
 test("content edits are refused while a loaded collection has no selected preset", () => {
@@ -302,7 +302,7 @@ test("consequences say what an action replaces, writes or discards and how to re
 });
 
 test("the viewport snapshot carries UV selection visibility and view-change notifications", async () => {
-  const { ViewportAttachment } = await import("../src/viewport-attachment");
+  const { ViewportAttachment } = await import("../src/app/viewport-attachment");
   let selection: { point?: { index: number; visible: boolean } } | undefined = { point: { index: 2, visible: false } };
   const attachment = new ViewportAttachment<object>({ moveHost: () => {}, measure: () => ({ width: 10, height: 10 }), resize: () => {},
     cancelInput: () => {}, inputCapture: () => false, headView: () => undefined, uvView: () => undefined,
@@ -375,8 +375,8 @@ test("the contour point limit refuses insertion with a structured issue", () => 
 });
 
 test("camera and UV navigation commands are view-only and bounded", async () => {
-  const { navigateCamera } = await import("../src/camera-navigation");
-  const { CAMERA_DISTANCE_RANGE } = await import("../src/camera-framing");
+  const { navigateCamera } = await import("../src/preview/camera-navigation");
+  const { CAMERA_DISTANCE_RANGE } = await import("../src/preview/camera-framing");
   const state = { position: [0, 0, 1], target: [0, 0, 0], fov: 30 };
   const orbited = navigateCamera(state, { kind: "orbit", yaw: Math.PI / 2, pitch: 0 });
   expect(orbited.position[0]).toBeCloseTo(1, 9); expect(Math.hypot(...orbited.position)).toBeCloseTo(1, 9);
@@ -394,7 +394,7 @@ test("camera and UV navigation commands are view-only and bounded", async () => 
   const { app } = coreFixture();
   expect(app.actionKinds()).toContain("camera.navigate");
   expect(app.capability({ kind: "camera.navigate", command: { kind: "orbit", yaw: .1, pitch: 0 } }).available).toBe(false);
-  const { ViewportAttachment } = await import("../src/viewport-attachment");
+  const { ViewportAttachment } = await import("../src/app/viewport-attachment");
   const moves: unknown[] = [];
   const attachment = new ViewportAttachment<object>({ moveHost: () => {}, measure: () => ({ width: 10, height: 10 }), resize: () => {},
     cancelInput: () => {}, inputCapture: () => false, headView: () => undefined, uvView: () => undefined, uvCommand: () => true,

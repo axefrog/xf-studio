@@ -7,7 +7,7 @@
  */
 import { entryLine, type DiagnosticEntry } from "./model";
 import { redactValue, remainingPersonalData, textRedactor, type Redactor } from "./redact";
-import { PROJECT_LINKS } from "../project-links";
+import { PROJECT_LINKS } from "../app/project-links";
 
 export const REPORT_MANIFEST_SCHEMA = "xfs/problem-report-manifest-1" as const;
 export const REPORT_FILE_SCHEMA = "xfs/problem-report-1" as const;

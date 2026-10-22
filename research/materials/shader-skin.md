@@ -395,7 +395,7 @@ So the game's texture set does not draw a white seam. Under skin's dual lobe the
 
 ## 8. What the browser adapter reproduces
 
-`projects/xf-studio/authoring/src/skin-material.ts` ports §5.1–§5.4 line by line and approximates §6 [observed by comparing the adapter with the decompiled program]:
+`projects/xf-studio/authoring/src/materials/render/skin-material.ts` ports §5.1–§5.4 line by line and approximates §6 [observed by comparing the adapter with the decompiled program]:
 
 | Step | Adapter | Status |
 |---|---|---|

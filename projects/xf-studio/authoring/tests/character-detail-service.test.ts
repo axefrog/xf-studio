@@ -3,20 +3,20 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync
 import { tmpdir } from "node:os";
 import { deflateSync } from "node:zlib";
 import { join } from "node:path";
-import { CharacterDetailHost, characterRequestKey, installationFingerprint, type CharacterDetailSettings } from "../src/character-detail-host";
-import { createBrowserCharacterDetailDevice } from "../src/browser-character-detail-device";
-import type { DetailLimit, SlotLimits } from "../src/detail-limits";
-import type { DetailSlot } from "../src/render-detail";
+import { CharacterDetailHost, characterRequestKey, installationFingerprint, type CharacterDetailSettings } from "../src/character/host/character-detail-host";
+import { createBrowserCharacterDetailDevice } from "../src/character/browser/browser-character-detail-device";
+import type { DetailLimit, SlotLimits } from "../src/character/detail-limits";
+import type { DetailSlot } from "../src/character/render-detail";
 import { CacheRun, CENSORED_BODY, CharacterDetailError, CharacterPreparationCache, gradientStops, hairProfileStops, halveImage, pngSize, prepareCharacterDetails, RECORD_NOTE_CAP, recordNotes,
-  skinProfileValues, storeScaledTexture, templateIdentity, textureIsGamma, withCacheRun } from "../src/character-detail-service";
-import { DEFAULT_CHARACTER } from "../src/character-detail-request";
-import { readChoiceManifest } from "../src/choice-manifest";
-import { depotHash } from "../src/depot-path";
-import { decodePng, decodePngHalved, encodePng, encodePngAsync } from "../src/png";
+  skinProfileValues, storeScaledTexture, templateIdentity, textureIsGamma, withCacheRun } from "../src/character/host/character-detail-service";
+import { DEFAULT_CHARACTER } from "../src/character/character-detail-request";
+import { readChoiceManifest } from "../src/character/host/choice-manifest";
+import { depotHash } from "../src/game/depot-path";
+import { decodePng, decodePngHalved, encodePng, encodePngAsync } from "../src/formats/png";
 import { archiveExportSource, BY_HASH_CONCURRENCY, createGameAssetExporter, GameAssetExportCache, GameAssetExportError, type ExportedGeometry,
-  type ExportedMask, type ExportedTexture, type GameAssetExporter } from "../src/game-asset-export";
-import { parseCharacterDetail, UNCOVERED_BODY } from "../src/render-detail";
-import { BODY_REQUEST, detailFixture, eyeRequest, FACE, P, REQUEST_A, REQUEST_B, TONES } from "./character-detail-fixtures";
+  type ExportedMask, type ExportedTexture, type GameAssetExporter } from "../src/game/host/game-asset-export";
+import { parseCharacterDetail, UNCOVERED_BODY } from "../src/character/render-detail";
+import { BEARD, beardRequest, BODY_REQUEST, detailFixture, eyeRequest, FACE, P, REQUEST_A, REQUEST_B, TONES } from "./character-detail-fixtures";
 
 const root = mkdtempSync(join(tmpdir(), "xfs-character-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -426,12 +426,14 @@ describe("host preparation", () => {
     const host = new CharacterDetailHost({ cacheRoot: join(root, "host"), settings: () => settings, exporter: () => fakeExporter(),
       prepare: async options => {
         started.push(options.request.source === "save" ? options.request.appearances[0]!.option : "default");
-        if (started.length === 1) { await gate; if (options.signal?.aborted) throw new (await import("../src/character-detail-service")).CharacterDetailError("character_cancelled", "cancelled"); }
+        if (started.length === 1) { await gate; if (options.signal?.aborted) throw new (await import("../src/character/host/character-detail-service")).CharacterDetailError("character_cancelled", "cancelled"); }
         return prepareCharacterDetails({ ...options, open: () => detailFixture().installation() });
       } });
     const a = host.request(REQUEST_A);
     expect(a.phase).toBe("preparing");
     expect(a.key).toBe(characterRequestKey(REQUEST_A, installationFingerprint(settings)));
+    // Started (the scheduler starts it on the next turn of the event loop; replaced before that, it would never start).
+    for (let i = 0; i < 100 && !started.length; i++) await new Promise(resolve => setTimeout(resolve, 2));
     const b = host.request(REQUEST_B);
     release();
     await host.settled();
@@ -500,6 +502,8 @@ describe("host preparation", () => {
         }, 40));
       }) });
     const v1 = host.request(REQUEST_A);
+    // V1 has started (the scheduler starts it on the next turn of the event loop).
+    for (let i = 0; i < 100 && !log.length; i++) await new Promise(resolve => setTimeout(resolve, 2));
     host.request(REQUEST_B);
     const again = host.request(REQUEST_A);
     expect(again).toMatchObject({ key: v1.key, phase: "preparing" });
@@ -511,8 +515,8 @@ describe("host preparation", () => {
   });
 
   test("without WolvenKit the host stops at once as a need, resolving nothing and reporting no failure (NATIVE-47, NATIVE-48)", async () => {
-    const { hostDiagnosticsAt, withDiagnostics } = await import("../src/diagnostics/host-log");
-    const { TOOL_MISSING } = await import("../src/character-detail-service");
+    const { hostDiagnosticsAt, withDiagnostics } = await import("../src/diagnostics/host/host-log");
+    const { TOOL_MISSING } = await import("../src/character/host/character-detail-service");
     const diagnostics = hostDiagnosticsAt(join(root, "diagnostics-need"));
     const settings: CharacterDetailSettings = { gameRoot: route.gameRoot, launchRoute: "direct", mo2Root: null, mo2ProfileId: null,
       manualModRoot: null, wolvenKitCli: null };
@@ -536,7 +540,7 @@ describe("host preparation", () => {
     });
     // The page's reader keeps the need of a failed state only.
     const device = createBrowserCharacterDetailDevice({ setCharacterDetails: () => ({ limits: [] }), details: {} as never }, async () => new Response(JSON.stringify({
-      ...host.state(characterRequestKey(REQUEST_A, installationFingerprint(settings))), recordSchema: (await import("../src/render-detail")).CHARACTER_DETAIL_SCHEMA })));
+      ...host.state(characterRequestKey(REQUEST_A, installationFingerprint(settings))), recordSchema: (await import("../src/character/render-detail")).CHARACTER_DETAIL_SCHEMA })));
     expect(await device.poll("k", new AbortController().signal)).toMatchObject({ phase: "failed", need: "wolvenkit" });
   });
 
@@ -568,6 +572,28 @@ describe("face details in the record", () => {
       message: "Some of your V's face details couldn't be read from your game files, so not all of them are shown." });
   });
 
+  test("a beard's cards are served with the hair profile beside its stubble; an option drawn only in part is named in the record", async () => {
+    const { record } = await prepare(beardRequest(BEARD.brown));
+    const [beard] = record.components.filter(c => c.slot === "face");
+    expect(beard!.materials.map(m => [m.chunk, m.template])).toEqual([[0, P.meshDecalMt], [1, P.hairMt]]);
+    expect(beard!.materials[1]!.profiles.HairProfile).toBeDefined();
+    expect(record.partial).toBeUndefined();
+    // The glassy colour's second chunk isn't drawn on the face: the stubble is, and the option is named as drawn in part.
+    const glassy = (await prepare(beardRequest(BEARD.glassy))).record;
+    expect(glassy.components.filter(c => c.slot === "face").map(c => c.chunks)).toEqual([[0]]);
+    expect(glassy.partial).toEqual(["beard_color5"]);
+    expect(parseCharacterDetail(JSON.parse(JSON.stringify(glassy)))).toEqual(glassy);
+    // The face cyberware's emissive chunk is only recorded (a decal template the preview can't draw yet), so it too is drawn in part.
+    expect((await prepare(REQUEST_B)).record.partial).toEqual(["cyberware_01"]);
+  });
+
+  test("the record's reader keeps only drawn options as drawn in part", async () => {
+    const { record } = await prepare(beardRequest(BEARD.glassy));
+    const read = parseCharacterDetail(JSON.parse(JSON.stringify({ ...record, partial: ["beard_color5", "not_drawn", 7, "beard_color5"] })));
+    expect(read.partial).toEqual(["beard_color5"]);
+    expect(parseCharacterDetail(JSON.parse(JSON.stringify({ ...record, partial: "beard_color5" }))).partial).toBeUndefined();
+  });
+
   test("templateIdentity reads a template's name and priority; an absent priority is the engine's default", () => {
     expect(templateIdentity({ $type: "CMaterialTemplate", name: { $type: "CName", $storage: "string", $value: "mesh_decal" }, materialPriority: "EMP_Front" }))
       .toEqual({ name: "mesh_decal", priority: "EMP_Front" });
@@ -589,6 +615,15 @@ test("two face choices drawing one shared mesh are two components with their own
 });
 
 describe("the body in the character record", () => {
+  test("equipped arm cyberware the host can't follow (no TweakDB here) draws the default arms, and the record says why", async () => {
+    const { record } = await prepare({ ...BODY_REQUEST, arms: "179425979353" });
+    expect(record.components.filter(c => c.slot === "body").map(c => c.component)).toContain("a0_arms");
+    expect(record.components.some(c => c.component.startsWith("a0_strong"))).toBe(false);
+    expect(record.provenance.notes.some(line => line.includes("TweakDB couldn't be read") && line.includes("179425979353"))).toBe(true);
+    // Without arm cyberware nothing is said.
+    expect((await prepare(BODY_REQUEST)).record.provenance.notes.some(line => line.includes("arms are drawn"))).toBe(false);
+  });
+
   test("the V's body parts with their own shapes; the head's parts are served as without the body", async () => {
     const { record } = await prepare(BODY_REQUEST);
     const body = record.components.filter(c => c.slot === "body");

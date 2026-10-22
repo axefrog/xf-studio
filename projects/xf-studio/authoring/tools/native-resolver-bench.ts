@@ -23,14 +23,14 @@
 import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { descriptorsFromUiState } from "../src/cco-model";
-import { type CharacterInput, inputFromSave, loadMergedCco, resolveCharacter } from "../src/character-resolver";
-import { LocalSettingsStore } from "../src/local-settings-store";
+import { descriptorsFromUiState } from "../src/character/cco-model";
+import { type CharacterInput, inputFromSave, loadMergedCco, resolveCharacter } from "../src/character/character-resolver";
+import { LocalSettingsStore } from "../src/setup/host/local-settings-store";
 import type { NativeDecoder } from "../src/native/native-decode";
 import { inProcessDecoder, type NativeFetchStats, openNativeDecoder, openNativeReader } from "../src/native/native-fetch-port";
-import type { ResourceGraph } from "../src/resource-graph";
-import { type NativeRoute, openInstallation } from "../src/resolver-host";
-import { readSavedV } from "../src/save-reader";
+import type { ResourceGraph } from "../src/game/resource-graph";
+import { type NativeRoute, openInstallation } from "../src/game/host/resolver-host";
+import { readSavedV } from "../src/saves/save-reader";
 
 const args = Bun.argv.slice(2);
 const option = (name: string) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] ?? null : null; };

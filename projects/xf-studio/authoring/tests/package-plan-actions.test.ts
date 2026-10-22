@@ -5,19 +5,19 @@
  * either collection schema, readable by 0.1.0-alpha.1) and its dirty state.
  */
 import { expect, test } from "bun:test";
-import { CollectionActions } from "../src/collection-actions";
-import { CollectionService, type CollectionTransport } from "../src/collection-service";
-import type { EditorSnapshot } from "../src/collection-session";
-import { collectionDraft, parseCollectionWorkspace, writeCollectionWorkspace, type DocumentModel } from "../src/collection-workspace";
+import { CollectionActions } from "../src/library/collection-actions";
+import { CollectionService, type CollectionTransport } from "../src/library/collection-service";
+import type { EditorSnapshot } from "../src/library/collection-session";
+import { collectionDraft, parseCollectionWorkspace, writeCollectionWorkspace, type DocumentModel } from "../src/app/workspace/collection-workspace";
 import { STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
 import { EYE_MAKEUP } from "../src/features/eye-makeup";
 import { PartRegistry } from "../src/platform/core/document";
 import { COLLECTION_1, COLLECTION_2, DAMAGED_PLAN_MESSAGE, NEWER_PLAN_MESSAGE, PACKAGE_PLAN_1, type LookCollection, type ModPackagePlan } from "../src/platform/api";
-import { recipeFile, readRecipe } from "../src/recipe-schema";
+import { recipeFile, readRecipe } from "../src/legacy/eye-makeup/recipe-schema";
 import { initialRecipe } from "./fixtures/eye-region";
 import { HAIR } from "./fixtures/hair-feature";
 import { alphaParseCollection } from "./fixtures/alpha-0.1.0/collection-list";
-import { emptyMemory } from "../src/collection-workspace";
+import { emptyMemory } from "../src/app/workspace/collection-workspace";
 
 const ID = "0ec3546e-3fac-43e7-8c19-a65d20383d41";
 const NEW = "11111111-2222-4333-8444-555555555555";

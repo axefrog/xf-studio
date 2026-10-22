@@ -77,7 +77,7 @@ export const ROUTE_SPEC: Record<VerifierRoute, { template: string; textures: rea
 export const ACCENT_SPEC = { template: "base/materials/mesh_decal_emissive_subsurface.mt", textures: [["EmissiveMask", "accent"]] } as const;
 export const ACCENT_PREFIX = "@accent_";
 
-// ---- The diagnostic glitter knob, restated (src/export-diagnostics.ts, src/glitter-region.ts) ----
+// ---- The diagnostic glitter knob, restated (src/legacy/eye-makeup/export/export-diagnostics.ts, src/legacy/eye-makeup/export/glitter-region.ts) ----
 const FLAKE_FIELDS: Readonly<Record<string, readonly [number, number]>> = {
   sizeMm: [.05, 1.2], sizeSigma: [0, 1], cover: [.01, .6], tiltSigmaDeg: [0, 90], tiltMaxDeg: [1, 89], roughness: [0, 1], metalness: [0, 1], seed: [0, 2147483647],
 };
@@ -666,7 +666,7 @@ export function checkResources(plan: VerifierPlan, r: RoundTrippedResources, art
   ensure(cc.headCustomizationOptions?.length === 1, "Customization must have exactly one head option");
   const option = cc.headCustomizationOptions[0].Data;
   ensure(option.$type === "gameuiAppearanceInfo" && option.enabled === 1 && option.hidden === 0, "Selector is not an enabled visible appearance option");
-  // Branding is display text supplied by the Studio plan (src/mod-branding.ts), never an identity.
+  // Branding is display text supplied by the Studio plan (src/legacy/eye-makeup/mod-branding.ts), never an identity.
   ensure(typeof plan.selectorLabel === "string" && /^XF(\s|$)/.test(plan.selectorLabel), "Plan lacks an XF-branded selector label");
   ensure(option.localizedName === plan.selectorLabel, "Selector label differs from the plan");
   // The component is the one generated name that doesn't start with xfs_: restated here, ArchiveXL's prefix rule (the text

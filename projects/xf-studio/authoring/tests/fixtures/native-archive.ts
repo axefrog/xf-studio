@@ -3,7 +3,7 @@
  * segments use a stand-in codec (`fakeCompress`/`fakeDecompress`: bytes XOR 0x5A) behind a real `KARK` header, so the tests
  * exercise the container logic without the game's Oodle library.
  */
-import { depotHash } from "../../src/depot-path";
+import { depotHash } from "../../src/game/depot-path";
 import { NativeDecompressError } from "../../src/native/native-errors";
 
 export const fakeCompress = (raw: Uint8Array) => raw.map(byte => byte ^ 0x5a);

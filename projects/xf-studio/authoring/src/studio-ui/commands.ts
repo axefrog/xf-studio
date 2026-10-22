@@ -1,4 +1,4 @@
-import { bindingReference } from "../input-bindings";
+import { bindingReference } from "../app/input-bindings";
 import { Toggle } from "./controls";
 import { iconButton } from "./components/icon-button";
 import { h, uid } from "./dom";

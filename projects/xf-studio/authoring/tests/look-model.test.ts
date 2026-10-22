@@ -13,23 +13,23 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CollectionLibrary } from "../src/collection-store";
-import { CollectionService, type CollectionTransport } from "../src/collection-service";
-import type { EditorSnapshot } from "../src/collection-session";
-import { collectionDraft, emptyMemory, parseCollectionWorkspace, readCollectionWorkspaceV1 } from "../src/collection-workspace";
+import { openTestLibrary } from "./fixtures/library-file";
+import { CollectionService, type CollectionTransport } from "../src/library/collection-service";
+import type { EditorSnapshot } from "../src/library/collection-session";
+import { collectionDraft, emptyMemory, parseCollectionWorkspace, readCollectionWorkspaceV1 } from "../src/app/workspace/collection-workspace";
 import { LIVE_FEATURE, STUDIO_COMPOSITION, STUDIO_DOCUMENTS, STUDIO_PARTS, STUDIO_REGISTRY } from "../src/compose/studio-registry";
 import { defaultClusteredGlintFlakes, defaultDirectGlintFlakes } from "../src/engines/layered-makeup/direct-glint-settings";
-import { packagePresetIdentities } from "../src/package-filter";
-import { EYE_MAKEUP_FEATURE, recipeFile } from "../src/recipe-schema";
+import { packagePresetIdentities } from "../src/legacy/eye-makeup/export/package-filter";
+import { EYE_MAKEUP_FEATURE, recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
 import { canonicalJson, COLLECTION_1, COLLECTION_2, NEWER_LOOK_MESSAGE, type FeatureActionSpec, type LookCollection } from "../src/platform/api";
 import { PartRegistry } from "../src/platform/core/document";
-import { eyeMakeupCollection, parseCollection, planCollection } from "../src/preset-collection";
+import { eyeMakeupCollection, parseCollection, planCollection } from "../src/legacy/eye-makeup/export/preset-collection";
 import { type Recipe } from "../src/engines/layered-makeup/recipe";
 import type { LayerChoices } from "../src/engines/layered-makeup/glitter-model";
 import type { EyeMakeupState } from "../src/compose/studio-registry";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { encodeWorkspaceAt } from "../src/workspace-budget";
-import { loadWorkspace, parseWorkspace, serializeWorkspace } from "../src/workspace-state";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { encodeWorkspaceAt } from "../src/app/workspace/workspace-budget";
+import { loadWorkspace, parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
 import { COLLECTION_FIXTURES, readFixture } from "./fixtures/capture-plan-golden";
 import { historiesAsRecipes, recipeOf, storedWorkspace } from "./fixtures/looks";
 import { digest, observeRoundTrips, restore } from "./fixtures/workspace-observable";
@@ -37,7 +37,7 @@ import { contentDigest, recipeSchemaFixtures, withoutRecipeSchemas } from "./fix
 import { damagedWorkspaceV1, fixedId, glitterRecipe, largeWorkspaceV1, looseWorkspaceV1, opticsRecipe, recipe3,
   smallWorkspaceV1 } from "./fixtures/workspace-v1-fixtures";
 import { compilePreset, initialRecipe, raster, applyRecipeAction, freshWorkspace } from "./fixtures/eye-region";
-import { readRecipe as parseRecipe } from "../src/recipe-schema";
+import { readRecipe as parseRecipe } from "../src/legacy/eye-makeup/recipe-schema";
 import { preparePackageCollection } from "./fixtures/eye-exporter";
 
 const golden = (name: string) => JSON.parse(readFileSync(new URL(`./golden/${name}`, import.meta.url), "utf8"));
@@ -218,7 +218,7 @@ function legacyLibrary() {
 
 test("a pre-migration SQLite library lists and reads unchanged, and old rows are never rewritten", () => {
   const legacy = legacyLibrary();
-  const library = new CollectionLibrary(legacy.path, STUDIO_PARTS);
+  const file = openTestLibrary(legacy.path), library = file.collections;
   try {
     expect(library.list().map(({ updatedAt: _u, ...item }) => item)).toEqual(legacy.rows.list);
     // Every stored revision reads as looks whose eye-makeup view is the collection the old store returned.
@@ -232,12 +232,12 @@ test("a pre-migration SQLite library lists and reads unchanged, and old rows are
     for (const { collection } of revisions as { collection: LookCollection }[])
       for (const preset of eyeMakeupCollection(collection).presets) expect(preset.recipe.schema).toBe(recipeFile(preset.recipe)!.schema);
     expect(legacy.dump()).toEqual(legacy.rows.rows);
-  } finally { library.close(); legacy.cleanup(); }
+  } finally { file.close(); legacy.cleanup(); }
 });
 
 test("saving an unchanged collection adds no preset revision; a change adds exactly one; old rows stay byte-unchanged", () => {
   const legacy = legacyLibrary();
-  const library = new CollectionLibrary(legacy.path, STUDIO_PARTS);
+  const file = openTestLibrary(legacy.path), library = file.collections;
   try {
     const editorId = legacy.rows.list[1].id, latest = library.get(editorId);
     const versions = () => legacy.dump().collection_preset_versions.length;
@@ -262,19 +262,19 @@ test("saving an unchanged collection adds no preset revision; a change adds exac
     expect(JSON.parse(preset.preset_json as string)).toHaveProperty("recipe");
     expect(parseCollection(JSON.parse(newest.collection_json as string)).presets[2].recipe.layers[0].opacity).toBe(0.25);
     // Reopening compares canonically too.
-    library.close();
-    const reopened = new CollectionLibrary(legacy.path, STUDIO_PARTS);
+    file.close();
+    const reopenedFile = openTestLibrary(legacy.path), reopened = reopenedFile.collections;
     try {
       const again = reopened.save({ collection: reopened.get(editorId).collection, revision: saved.revision });
       expect(again.collection.presets.map(item => item.revision)).toEqual(saved.collection.presets.map(item => item.revision));
       expect(legacy.dump().collection_preset_versions).toHaveLength(before + 1);
-    } finally { reopened.close(); }
-  } finally { try { library.close(); } catch { /* already closed */ } legacy.cleanup(); }
+    } finally { reopenedFile.close(); }
+  } finally { file.close(); legacy.cleanup(); }
 });
 
 test("a look the legacy format cannot hold is saved as a collection-2 revision, and older rows are never rewritten", () => {
   const legacy = legacyLibrary();
-  const library = new CollectionLibrary(legacy.path, STUDIO_PARTS);
+  const file = openTestLibrary(legacy.path), library = file.collections;
   try {
     const current = library.get(legacy.rows.list[2].id), edited = structuredClone(current.collection);
     edited.presets[0].parts.hair = { schema: "xfs/hair-part-3", body: { strands: 3 } };
@@ -288,12 +288,12 @@ test("a look the legacy format cannot hold is saved as a collection-2 revision, 
     expect(JSON.parse(newest.collection_json as string).schema).toBe(COLLECTION_2);
     expect(library.get(current.collection.id).collection.presets[0].parts.hair).toEqual({ schema: "xfs/hair-part-3", body: { strands: 3 } });
     expect(library.list().find(item => item.id === current.collection.id)?.revision).toBe(saved.revision);
-  } finally { library.close(); legacy.cleanup(); }
+  } finally { file.close(); legacy.cleanup(); }
 });
 
 test("draft persistence compares canonically: a library revision read from collection-1 rows is clean until edited", async () => {
   const legacy = legacyLibrary();
-  const library = new CollectionLibrary(legacy.path, STUDIO_PARTS);
+  const file = openTestLibrary(legacy.path), library = file.collections;
   try {
     const id = legacy.rows.list[1].id;
     const transport: CollectionTransport = { list: async () => library.list(), get: async key => library.get(key),
@@ -310,7 +310,7 @@ test("draft persistence compares canonically: a library revision read from colle
     expect(service.persistence()).toMatchObject({ baseline: "known", dirty: false, dirtyPresets: [] });
     editor.recipe.layers[0].opacity = 0.123; revision++;
     expect(service.persistence()).toMatchObject({ dirty: true, dirtyPresets: [service.summary().draft!.presets[0].id] });
-  } finally { library.close(); legacy.cleanup(); }
+  } finally { file.close(); legacy.cleanup(); }
 });
 
 // ---- Portable files and the published alpha ----
@@ -392,11 +392,11 @@ test("apply is pure and matches the recipe service; the application dispatches t
   const core = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "preset-a" }, STUDIO_COMPOSITION);
   expect(core.app.dispatch({ kind: "glitter.selectModel", layerId: "pure-glit", model: "irregular" }).ok).toBe(true);
   expect(core.document.recipe).toEqual(selected.part);
-  expect(core.document.undoDepth).toBe(1);
+  expect(core.document.history.state().depth).toBe(1);
   expect(workspace.glitterChoices["preset-a/pure-glit"].classic).toBeDefined();
   expect(core.app.dispatch({ kind: "layer.edit", command: { kind: "duplicate", id: "pure-gloss" } }).ok).toBe(true);
   expect(core.document.recipe.layers).toHaveLength(5);
-  expect(core.document.undoDepth).toBe(2);
+  expect(core.document.history.state().depth).toBe(2);
 });
 
 // ---- Codec rules ----

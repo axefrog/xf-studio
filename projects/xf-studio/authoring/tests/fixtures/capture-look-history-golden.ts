@@ -5,7 +5,7 @@
  */
 import { writeFileSync } from "node:fs";
 import { STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
-import { encodeWorkspaceAt } from "../../src/workspace-budget";
+import { encodeWorkspaceAt } from "../../src/app/workspace/workspace-budget";
 import { observeHistories, observeStored, session } from "./look-history-parity";
 import { digest, restore } from "./workspace-observable";
 import { damagedWorkspaceV1, largeWorkspaceV1, looseWorkspaceV1, smallWorkspaceV1, withPreferences } from "./workspace-v1-fixtures";

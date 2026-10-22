@@ -1,6 +1,6 @@
 import { h, setAttr } from "../dom";
 import { icon, type IconName } from "../icons";
-import { previewColourMatrix, type PreviewTokens } from "../../choice-preview";
+import { previewColourMatrix, type PreviewTokens } from "../../character/choice-preview";
 
 /**
  * Choice preview tile (style guide "Choice preview"; choice-previews-design.md §3): a picture of a choice drawn in the UI's own palette,

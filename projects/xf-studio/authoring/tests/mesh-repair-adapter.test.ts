@@ -5,10 +5,10 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { archiveExportSource, GameAssetExportError } from "../src/game-asset-export";
-import { createWolvenKitMeshRepair, uncookArguments } from "../src/game-asset-export-wolvenkit";
-import type { JsonObject } from "../src/red-json";
-import { WolvenKitRunError, type runWolvenKit } from "../src/wolvenkit-cli";
+import { archiveExportSource, GameAssetExportError } from "../src/game/host/game-asset-export";
+import { createWolvenKitMeshRepair, uncookArguments } from "../src/game/host/game-asset-export-wolvenkit";
+import type { JsonObject } from "../src/game/red-json";
+import { WolvenKitRunError, type runWolvenKit } from "../src/host/wolvenkit-cli";
 
 const root = mkdtempSync(join(tmpdir(), "xfs-mesh-repair-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));

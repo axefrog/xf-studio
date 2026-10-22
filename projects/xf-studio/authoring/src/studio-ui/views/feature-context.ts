@@ -4,7 +4,7 @@
  * palette commands) generically. Only the shell imports this module; a feature's view sees only the
  * context's type (`feature-view.ts`).
  */
-import type { StudioAction } from "../../studio-application";
+import type { StudioAction } from "../../app/studio-application";
 import type { EasingId } from "../../platform/api/easing";
 import type { Command } from "../commands";
 import { ViewportInputHints } from "../input-hints";
@@ -13,7 +13,7 @@ import { Frame, type StudioRuntime } from "../runtime";
 import { readinessText } from "../readiness-text";
 import { contextItems, viewportMenu } from "../target-menus";
 import type { FacadeOf, FeatureMenuItem, FeaturePresetRequest, FeatureTargetMenu, FeatureViewBinding, FeatureViewContext, MenuTarget, ModuleViewContext } from "./feature-view";
-import type { PartPresetRequest } from "../../part-presets";
+import type { PartPresetRequest } from "../../library/part-presets";
 import { modInstallLabel, openModInstallSheet } from "../panels/mod-install-sheet";
 
 type Action = { kind: string };

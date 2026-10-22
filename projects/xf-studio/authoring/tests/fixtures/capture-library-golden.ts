@@ -9,8 +9,11 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CollectionLibrary } from "../../src/collection-store";
-import { LookLibrary } from "../../src/library-store";
+import { CollectionLibrary } from "../../src/library/host/collection-store";
+import { LookLibrary } from "../../src/library/host/library-store";
+import { LIBRARY_MIGRATIONS } from "../../src/library/host/library-migrations";
+import { hostClock } from "../../src/platform/core/clock";
+import { LibraryDatabase } from "../../src/platform/persistence/library-database";
 import { recipe3 } from "./workspace-v1-fixtures";
 import { STUDIO_PARTS } from "../../src/compose/studio-registry";
 
@@ -18,12 +21,14 @@ const experiments = new URL("../../../../../experiments/", import.meta.url);
 const read = (path: string) => JSON.parse(readFileSync(new URL(path, experiments), "utf8"));
 const dir = mkdtempSync(join(tmpdir(), "xfs-library-golden-")), path = join(dir, "library.sqlite");
 try {
-  const looks = new LookLibrary(path);
+  // A version-1 look library first, then the collection tables (the stores' steps in turn).
+  const open = (steps: number) => LibraryDatabase.open(path, { clock: hostClock(), migrations: LIBRARY_MIGRATIONS.slice(0, steps), backups: null });
+  const v1 = open(1), looks = new LookLibrary(v1);
   const first = looks.save({ name: "Legacy look", recipe: recipe3("legacy") });
   looks.save({ name: "Legacy look renamed", recipe: recipe3("legacy"), revision: first.revision }, first.id);
   looks.save({ name: "Second legacy look", recipe: read("005-preset-collection/collection.json").presets[0].recipe });
-  looks.close();
-  const library = new CollectionLibrary(path, STUDIO_PARTS);
+  v1.close();
+  const v2 = open(2), library = new CollectionLibrary(v2, STUDIO_PARTS);
   const editor = read("005-preset-collection/editor-collection.json");
   const saved = library.save({ collection: editor });
   const changed = structuredClone(saved.collection);
@@ -40,7 +45,7 @@ try {
     const { updatedAt: _u, ...stored } = library.get(item.id, i + 1);
     return stored;
   }));
-  library.close();
+  v2.close();
   const db = new Database(path, { readonly: true });
   const rows = Object.fromEntries(["looks", "look_revisions", "collections", "collection_revisions", "collection_preset_versions"]
     .map(table => [table, db.query(`SELECT * FROM ${table} ORDER BY rowid`).all()]));

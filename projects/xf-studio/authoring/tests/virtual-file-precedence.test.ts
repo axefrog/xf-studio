@@ -9,11 +9,11 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildMountPlan, visibleCopy, type ArchiveFile, type VirtualCopy } from "../src/archive-precedence";
-import { mo2ProviderFolders, parseMo2Modlist } from "../src/mo2-instance";
-import { discoverSources } from "../src/source-discovery";
-import { gameFileProviders } from "../src/saves-host-sources";
-import { defaultLocalSettings } from "../src/local-settings";
+import { buildMountPlan, visibleCopy, type ArchiveFile, type VirtualCopy } from "../src/game/archive-precedence";
+import { mo2ProviderFolders, parseMo2Modlist } from "../src/installation/mo2-instance";
+import { discoverSources } from "../src/game/host/source-discovery";
+import { gameFileProviders } from "../src/saves/host/saves-host-sources";
+import { defaultLocalSettings } from "../src/setup/local-settings";
 
 const copy = (id: string, extra: Partial<VirtualCopy> = {}): VirtualCopy =>
   ({ id, provider: "game", providerName: id, active: true, priority: null, ...extra });

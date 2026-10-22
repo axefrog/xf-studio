@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import type { WebView2Status } from "./webview2";
 import { entryLine, type DiagnosticEntry } from "../src/diagnostics/model";
 import { textRedactor } from "../src/diagnostics/redact";
-import { processPersonalRoots } from "../src/diagnostics/host-roots";
+import { processPersonalRoots } from "../src/diagnostics/host/host-roots";
 
 /** How long the host waits for the WebView to request the Studio page before explaining. */
 export const BLANK_WINDOW_TIMEOUT_MS = 20_000;

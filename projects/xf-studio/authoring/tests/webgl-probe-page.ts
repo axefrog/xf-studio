@@ -15,22 +15,22 @@
  * Results land in `window.probe` as plain data. Nothing here reads game files.
  */
 import * as THREE from "three";
-import { createDoubleDiffuseDecalMaterial } from "../src/brow-material";
-import { createEyeMaterial, createEyeShellMaterial, eyeParameters, gradientTexture, shellParameters } from "../src/eye-material";
-import { createFaceDecalMaterial, decalColourUnits, faceDecalParameters, forwardDecal, gbufferColour, type Rgb } from "../src/face-decal-material";
-import type { DecalKind } from "../src/render-templates";
-import { createLinearDisplay, linearTargetSupported } from "../src/linear-display";
+import { createDoubleDiffuseDecalMaterial } from "../src/materials/render/brow-material";
+import { createEyeMaterial, createEyeShellMaterial, eyeParameters, gradientTexture, shellParameters } from "../src/materials/render/eye-material";
+import { createFaceDecalMaterial, decalColourUnits, faceDecalParameters, forwardDecal, gbufferColour, type Rgb } from "../src/materials/render/face-decal-material";
+import type { DecalKind } from "../src/materials/render-templates";
+import { createLinearDisplay, linearTargetSupported } from "../src/preview/render/linear-display";
 import { flatSurface } from "../src/engines/layered-makeup/finish-export";
 import { type PlateUnderlay } from "../src/engines/layered-makeup/render/makeup-stack";
 import { accumulateComposite, EMPTY_COMPOSITE, plateSurface, type PlateComposite, type PlateTexel } from "../src/engines/layered-makeup/render/plate-blend";
 import { type Layer } from "../src/engines/layered-makeup/recipe";
 import { previewFacetChains } from "../src/engines/layered-makeup/route-mip-chains";
-import { createSkinMaterial, patchSkinLight, skinLightUniforms, skinParameters } from "../src/skin-material";
-import { stageBackdropPixels } from "../src/stage-backdrop";
-import { createStudioEnvironment } from "../src/studio-environment";
+import { createSkinMaterial, patchSkinLight, skinLightUniforms, skinParameters } from "../src/materials/render/skin-material";
+import { stageBackdropPixels } from "../src/preview/stage-backdrop";
+import { createStudioEnvironment } from "../src/preview/render/studio-environment";
 import { hideHalfFloatRendering } from "./webgl-harness-page";
-import { accumulateLayer, createLayeredMaterial, EMPTY_ACCUMULATOR, globalNormal, layerBakeParameters, layerMapUv, resolveSurface, type LayerAccumulator } from "../src/layered-material";
-import type { RenderLayer } from "../src/render-detail";
+import { accumulateLayer, createLayeredMaterial, EMPTY_ACCUMULATOR, globalNormal, layerBakeParameters, layerMapUv, resolveSurface, type LayerAccumulator } from "../src/materials/render/layered-material";
+import type { RenderLayer } from "../src/character/render-detail";
 import { initialRecipe } from "./fixtures/eye-region";
 import { createMakeupStack } from "./fixtures/eye-region";
 

@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
-import { CollectionService } from "../src/collection-service";
-import { collectionDraft } from "../src/collection-workspace";
-import { PreviewActions } from "../src/preview-actions";
-import { CharacterContextActions } from "../src/character-context-actions";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { ViewportAttachment } from "../src/viewport-attachment";
+import { CollectionService } from "../src/library/collection-service";
+import { collectionDraft } from "../src/app/workspace/collection-workspace";
+import { PreviewActions } from "../src/preview/preview-actions";
+import { CharacterContextActions } from "../src/character/character-context-actions";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { ViewportAttachment } from "../src/app/viewport-attachment";
 import { RECIPE_ACTION_KINDS } from "../src/engines/layered-makeup/recipe-actions";
-import { ACTION_DESCRIPTORS, type ActionDescriptor } from "../src/studio-action-descriptors";
+import { ACTION_DESCRIPTORS, type ActionDescriptor } from "../src/app/studio-action-descriptors";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 
@@ -31,7 +31,7 @@ test("facade discovers target-specific commands, validates at invocation and det
   const duplicate = choices.find(item => item.action.kind === "layer.edit" && item.action.command.kind === "duplicate")!;
   expect(app.dispatch(duplicate.action).ok).toBe(true);
   expect(document.recipe.layers).toHaveLength(5);
-  expect(document.undoDepth).toBe(1);
+  expect(document.history.state().depth).toBe(1);
   expect(app.dispatch({ kind: "layer.edit", command: { kind: "remove", id: "stale" } })).toMatchObject({ ok: false });
   expect(notifications).toBeGreaterThan(0);
   unsubscribe();
@@ -112,8 +112,9 @@ test("facade groups form changes and hides live gesture targets", () => {
   app.controlEdit("opacity", { kind: "layer.setOpacity", layerId: id, opacity: .5 });
   app.controlEdit("opacity", { kind: "layer.setOpacity", layerId: id, opacity: .6 });
   app.controlCommit("opacity");
-  expect(document.undoDepth).toBe(1);
-  expect(document.undoRecipe()?.layers[0].opacity).toBe(before);
+  expect(document.history.state().depth).toBe(1);
+  expect(document.history.undo()).toBe(true);
+  expect(document.recipe.layers[0].opacity).toBe(before);
   expect(app.canBeginGesture("uv", "stale")).toMatchObject({ available: false, code: "missing_target" });
   expect(app.beginGesture("uv", id)).toBe(true);
   expect(app.canBeginGesture("surface", id)).toMatchObject({ available: false, code: "busy" });

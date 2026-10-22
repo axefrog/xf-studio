@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { attachBrowserHead, type HeadAttachmentPorts, type HeadServices, type LayeredSurfaceWiring } from "../src/browser-head-attachment";
-import { createBrowserViewportDevice } from "../src/browser-viewport-device";
+import { attachBrowserHead, type HeadAttachmentPorts, type HeadServices, type LayeredSurfaceWiring } from "../src/preview/browser/browser-head-attachment";
+import { createBrowserViewportDevice } from "../src/preview/browser/browser-viewport-device";
 import type { createSceneHost } from "../src/platform/scene/scene-host";
-import type { createSurfaceEditor } from "../src/surface-editor";
+import type { createSurfaceEditor } from "../src/legacy/eye-makeup/browser/surface-editor";
 import { freshWorkspace, EYE_REGION } from "./fixtures/eye-region";
 
 // PREV-20: everything wired to a loaded head is released together when a later step fails, so

@@ -60,7 +60,7 @@ test("a set's mod renames from its button while the name is the default, with th
   expect(modButton().getAttribute("aria-haspopup")).toBeNull();
   // The value popover shows the hint while the name is accepted (the light DOM has no window: give it one for this call).
   const { openValuePopover } = await import("../src/studio-ui/components");
-  const { MOD_NAME_HINT } = await import("../src/mod-branding");
+  const { MOD_NAME_HINT } = await import("../src/legacy/eye-makeup/mod-branding");
   const globals = globalThis as { window?: unknown; requestAnimationFrame?: unknown };
   const had = { window: globals.window, raf: globals.requestAnimationFrame };
   globals.window = { innerWidth: 1200, innerHeight: 800 };

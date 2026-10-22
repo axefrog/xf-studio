@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import * as THREE from "three";
-import { decodeSrgbByte } from "../src/decal-underlay";
-import { gbufferColour, type Rgb } from "../src/face-decal-material";
+import { decodeSrgbByte } from "../src/materials/render/decal-underlay";
+import { gbufferColour, type Rgb } from "../src/materials/render/face-decal-material";
 import { flatSurface, planPresetExport } from "../src/engines/layered-makeup/finish-export";
 import { type PlateUnderlay } from "../src/engines/layered-makeup/render/makeup-stack";
 import { accumulateComposite, compositeTargetSize, createPlateLightMaterial, EMPTY_COMPOSITE, MODE1_FULL_TILT, patchPlateLightShader, plateBlendWindow,
@@ -12,7 +12,7 @@ import { previewFacetChains } from "../src/engines/layered-makeup/route-mip-chai
 import { mipDimensions } from "../src/engines/layered-makeup/flat-mip-chain";
 import { type GrainOptics } from "../src/engines/layered-makeup/shimmer-grain";
 import { defaultFlakes } from "../src/engines/layered-makeup/finish";
-import { skinParameters } from "../src/skin-material";
+import { skinParameters } from "../src/materials/render/skin-material";
 import { initialRecipe } from "./fixtures/eye-region";
 import { createMakeupStack } from "./fixtures/eye-region";
 

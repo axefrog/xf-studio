@@ -29,9 +29,12 @@ writeFileSync(resolve(output, "desktop-bootstrap.js"), await bootstrap.outputs[0
 // The bootstrap starts the shared composition root (`studio-startup`) with desktop host services;
 // the localhost entry (`studio-main`) is not shipped.
 const result = await Bun.build({
-  entrypoints: ["studio-startup.ts", "raster-worker.ts", "choice-preview-worker.ts"].map(name => resolve(authoring, "src", name)),
+  entrypoints: ["compose/studio-startup.ts", "legacy/eye-makeup/browser/raster-worker.ts", "character/browser/choice-preview-worker.ts"]
+    .map(path => resolve(authoring, "src", path)),
   outdir: resolve(output, "build"),
   target: "browser",
+  // The entries live in different folders; the page loads each as /build/<name>.js.
+  naming: "[name].[ext]",
 });
 if (!result.success) throw Error(result.logs.map(String).join("\n"));
 const check = await Bun.build({

@@ -5,15 +5,15 @@ import { basename, dirname, join } from "node:path";
 import {
   canonicalJson, EYE_PLATE_RECIPE, eyePlateCacheKey, eyePlateCacheName, idListSha256, parseEyePlateRecipe, selectedFaceIds,
   supportedEyePlateSource,
-} from "../src/eye-plate-recipe";
-import { cutMorphBlob, derivePlateDocuments, selectPlate } from "../src/eye-plate-cut";
-import { plateTopology, verifyEyePlate } from "../src/eye-plate-verify";
-import { contentFingerprint, EyePlateCache, eyePlateReadiness } from "../src/eye-plate-cache";
-import { cachedPlateReach, discardCachedPlate, EyePlateError, ensureEyePlate, eyePlateRouteKey, type EyePlateTools } from "../src/eye-plate-service";
+} from "../src/legacy/eye-makeup/plate/eye-plate-recipe";
+import { cutMorphBlob, derivePlateDocuments, selectPlate } from "../src/legacy/eye-makeup/plate/eye-plate-cut";
+import { plateTopology, verifyEyePlate } from "../src/legacy/eye-makeup/plate/eye-plate-verify";
+import { contentFingerprint, EyePlateCache, eyePlateReadiness } from "../src/legacy/eye-makeup/plate/host/eye-plate-cache";
+import { cachedPlateReach, discardCachedPlate, EyePlateError, ensureEyePlate, eyePlateRouteKey, type EyePlateTools } from "../src/legacy/eye-makeup/plate/host/eye-plate-service";
 import { plateUvFootprint } from "../src/engines/layered-makeup/plate-uv-window";
-import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/plate-uv-footprint-io";
-import { depotPathRegex } from "../src/eye-plate-wolvenkit";
-import { keptJsonDirectory, readKeptJson } from "../src/derived-cache";
+import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/legacy/eye-makeup/export/host/plate-uv-footprint-io";
+import { depotPathRegex } from "../src/legacy/eye-makeup/plate/host/eye-plate-wolvenkit";
+import { keptJsonDirectory, readKeptJson } from "../src/host/derived-cache";
 import { FIXTURE_DIFFS, fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe } from "./eye-plate-fixture";
 
 const withDirectory = async (run: (dir: string) => Promise<void> | void) => {
@@ -31,13 +31,13 @@ test("the shipped recipe is asset-free, audited and self-consistent", () => {
   expect(recipe.source.supported.map(item => item.label)).toEqual(["Cyberpunk 2077 2.31"]);
   expect(recipe.output.stem.startsWith("xfs_")).toBe(true);
   // Only IDs, ranges, hashes and names: no coordinates, buffers or base64 payloads.
-  const text = readFileSync(join(import.meta.dir, "../src/eye-plate-recipe.json"), "utf8");
+  const text = readFileSync(join(import.meta.dir, "../src/legacy/eye-makeup/plate/eye-plate-recipe.json"), "utf8");
   expect(text.length).toBeLessThan(8000);
   expect(text).not.toMatch(/Bytes|base64|\d+\.\d{3,}/);
 });
 
 test("recipe validation rejects drift, overlap and unknown fields", () => {
-  const base = JSON.parse(readFileSync(join(import.meta.dir, "../src/eye-plate-recipe.json"), "utf8"));
+  const base = JSON.parse(readFileSync(join(import.meta.dir, "../src/legacy/eye-makeup/plate/eye-plate-recipe.json"), "utf8"));
   expect(parseEyePlateRecipe(clone(base))).toEqual(EYE_PLATE_RECIPE);
   const variant = (edit: (value: any) => void) => { const value = clone(base); edit(value); return () => parseEyePlateRecipe(value); };
   expect(variant(value => { value.schema = "xfs/eye-plate-recipe-2"; })).toThrow("unsupported schema");

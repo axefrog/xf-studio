@@ -1,19 +1,19 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { HAIR_LOOK, hairCoverage, hairLookCoverage, resolveHairMaterial } from "../src/hair-colour-model";
-import { attachHairColor, attachStrandCoverage } from "../src/hair-shading";
-import { createLightingSetupStage } from "../src/lighting-setup-stage";
-import { PreviewActions, type PreviewPort } from "../src/preview-actions";
-import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
-import { createStudioViewGraph, DEFAULT_RENDERING, previewMirror, STUDIO_VIEW_GRAPH_RULES } from "../src/preview-view-graph";
+import { HAIR_LOOK, hairCoverage, hairLookCoverage, resolveHairMaterial } from "../src/materials/hair-colour-model";
+import { attachHairColor, attachStrandCoverage } from "../src/materials/render/hair-shading";
+import { createLightingSetupStage } from "../src/preview/render/lighting-setup-stage";
+import { PreviewActions, type PreviewPort } from "../src/preview/preview-actions";
+import { ACTION_DESCRIPTORS } from "../src/app/studio-action-descriptors";
+import { createStudioViewGraph, DEFAULT_RENDERING, previewMirror, STUDIO_VIEW_GRAPH_RULES } from "../src/preview/preview-view-graph";
 import { parseViewGraph } from "../src/platform/core/view-graph";
-import { createTrustedPreviewServices } from "../src/trusted-preview-services";
-import { parseWorkspace } from "../src/workspace-state";
+import { createTrustedPreviewServices } from "../src/app/trusted-preview-services";
+import { parseWorkspace } from "../src/app/workspace/workspace-state";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { storedWorkspace } from "./fixtures/looks";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { hairLookText, RENDERING_HELP } from "../src/studio-ui/panels/preview";
-import { ViewActions } from "../src/view-actions";
+import { ViewActions } from "../src/app/view-actions";
 
 /** A preview port that records the Rendering calls. */
 function port() {

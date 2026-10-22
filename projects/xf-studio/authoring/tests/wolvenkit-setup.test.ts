@@ -3,13 +3,13 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { USER_FACING_JARGON } from "../src/alpha-availability";
-import type { DotNetInstall } from "../src/dotnet-runtime";
-import { WolvenKitSetupHost, wolvenKitReadinessIssue, type WolvenKitSetupOptions } from "../src/wolvenkit-setup-host";
-import { createWolvenKitSetupHandler } from "../src/wolvenkit-setup-server";
-import { isWolvenKitSetupState, wolvenKitCard, wolvenKitConsent, wolvenKitLinkUrl, WolvenKitSetupActions, type WolvenKitSetupState } from "../src/wolvenkit-setup";
-import { WOLVENKIT_RELEASE, type ManagedToolRelease } from "../src/wolvenkit-release";
-import { WOLVENKIT_DESCRIPTORS } from "../src/studio-action-descriptors";
+import { USER_FACING_JARGON } from "../src/app/alpha-availability";
+import type { DotNetInstall } from "../src/setup/host/dotnet-runtime";
+import { WolvenKitSetupHost, wolvenKitReadinessIssue, type WolvenKitSetupOptions } from "../src/setup/host/wolvenkit-setup-host";
+import { createWolvenKitSetupHandler } from "../src/setup/host/wolvenkit-setup-server";
+import { isWolvenKitSetupState, wolvenKitCard, wolvenKitConsent, wolvenKitLinkUrl, WolvenKitSetupActions, type WolvenKitSetupState } from "../src/setup/wolvenkit-setup";
+import { WOLVENKIT_RELEASE, type ManagedToolRelease } from "../src/setup/wolvenkit-release";
+import { WOLVENKIT_DESCRIPTORS } from "../src/app/studio-action-descriptors";
 import { makeZip } from "./zip-fixture";
 
 // A stand-in release: the same shape as WolvenKit's console ZIP, served by a local fixture server.
@@ -251,7 +251,7 @@ test.skipIf(!process.env.XFS_TEST_WOLVENKIT_DOWNLOAD)("the real pinned WolvenKit
   expect(["ready", "needs-runtime"]).toContain(state.phase);
   expect(service.managedExecutable()).toBe(join(root, "wolvenkit", WOLVENKIT_RELEASE.version, "WolvenKit.CLI.exe"));
   if (state.phase === "ready") {
-    const { probeWolvenKitCli } = await import("../src/wolvenkit-cli");
+    const { probeWolvenKitCli } = await import("../src/host/wolvenkit-cli");
     expect(probeWolvenKitCli(service.usable()!)).toEqual({ ok: true, version: WOLVENKIT_RELEASE.version });
   }
 }, 600_000);

@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 import * as THREE from "three";
-import { IdleAnimation } from "../src/idle-animation";
-import { compileDeformationRig } from "../src/deformation-rig";
+import { IdleAnimation } from "../src/animation/render/idle-animation";
+import { compileDeformationRig } from "../src/animation/deformation-rig";
 
 test("facial movement composes before head rotation, with its own clock and exact restore", () => {
   const body = new THREE.Group(), head = new THREE.Bone(); head.name="Head";body.add(head);

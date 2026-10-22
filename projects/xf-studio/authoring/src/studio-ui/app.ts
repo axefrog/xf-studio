@@ -1,10 +1,11 @@
-import { allowsNativeTextMenu } from "../context-menu";
+import { viewCatalogue } from "./views/contribution";
+import { allowsNativeTextMenu } from "./context-menu";
 import { checkForUpdatesNow, startupUpdateCheck } from "./update-check";
 import { comingSoon, liveFeatures, plannedShown } from "./coming-soon";
-import type { StudioAction } from "../studio-application";
-import type { StudioFileAction } from "../studio-file-operations";
-import { effectiveTheme, type ThemePreference } from "../ui-preferences";
-import { shortcutLabel } from "../input-bindings";
+import type { StudioAction } from "../app/studio-application";
+import type { StudioFileAction } from "../app/studio-file-operations";
+import { effectiveTheme, type ThemePreference } from "../app/ui-preferences";
+import { shortcutLabel } from "../app/input-bindings";
 import { openInputReference, openPalette, type Command } from "./commands";
 import { studioShortcut } from "./shortcuts";
 import { applyCapability, badge, button, setButtonLabel } from "./controls";
@@ -53,7 +54,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   bindViewState(new PreferenceViewState(port.preferences));
   window.addEventListener("pagehide", flushScrollMemories, { capture: true });
   document.addEventListener("visibilitychange", () => { if (document.hidden) flushScrollMemories(); }, { capture: true });
-  const catalogue = views.catalogue;
+  const catalogue = { ...views.catalogue, panels: [...views.catalogue.panels], ids: [...views.catalogue.ids], meta: { ...views.catalogue.meta } };
   const rt = new StudioRuntime(port, feedback, catalogue);
   const theme = themeController(port, feedback);
   const view = viewPreferences(port, feedback);
@@ -64,7 +65,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   // Each part-less module's view gets one context over its own service (view-graph-design.md §5).
   const moduleViews = (views.modules ?? []).map(binding => ({ binding, ctx: moduleViewContext(rt, binding.owner) }));
   // Studio modules (view-graph-design.md §4): a panel belongs to the module presenting its view's feature; the shell's belong to none.
-  const modules = port.views.modules();
+  const modules = [...port.views.modules()];
   const moduleOfOwner = (owner: string) => modules.find(module => (module.feature ?? module.id) === owner);
   const moduleOfPanel = (panel: PanelId) => { const entry = catalogue.panels.find(item => item.id === panel); return entry ? moduleOfOwner(entry.owner) : undefined; };
   const panelsOf = (module: StudioModule) => catalogue.panels.filter(panel => moduleOfOwner(panel.owner)?.id === module.id).map(panel => panel.id);
@@ -186,6 +187,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   let placedModules = rt.shownModules().join(",");
   function placeModules() {
     const shown = rt.shownModules();
+    for (const registration of port.experiments?.registrations() ?? []) registration.visibility?.(shown.includes(registration.module.id));
     placedModules = shown.join(",");
     const { add, remove } = modulePanelChanges(modules, shown, panelsOf, panel => !!dock.panel(panel));
     if (!add.length && !remove.length) return;
@@ -250,8 +252,32 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   let queued = false, lastClass = dock.sizeClass, lastMessage = port.status.snapshot().message?.id ?? 0;
   let lastNotice = port.diagnostics.snapshot().notice?.id ?? 0;
   let setupRequests = port.previewSetup.snapshot().setupRequests;
+  let optionalKey = "";
+  function syncOptional() {
+    const optional = views.optional?.() ?? [], key = optional.map(item => item.contribution.owner).join(",");
+    if (key === optionalKey) return;
+    const owners = new Set(optional.map(item => item.contribution.owner));
+    const gone = panels.filter(panel => { const entry = catalogue.panels.find(item => item.id === panel.spec.id); return entry && !views.catalogue.ids.includes(entry.id) && !owners.has(entry.owner); });
+    for (const panel of gone) { panel.spec.visibility?.(false); byId.delete(panel.spec.id); panels.splice(panels.indexOf(panel), 1); }
+    if (gone.length) dock.removePanels(gone.map(panel => panel.spec.id));
+    const extra = viewCatalogue(optional.map(item => item.contribution));
+    catalogue.panels.splice(0, catalogue.panels.length, ...views.catalogue.panels, ...extra.panels);
+    catalogue.ids.splice(0, catalogue.ids.length, ...views.catalogue.ids, ...extra.ids);
+    for (const id of Object.keys(catalogue.meta)) if (!catalogue.ids.includes(id)) delete catalogue.meta[id];
+    Object.assign(catalogue.meta, extra.meta);
+    modules.splice(0, modules.length, ...port.views.modules());
+    for (const { contribution, binding } of optional) {
+      const ctx = moduleViewContext(rt, contribution.owner);
+      for (const entry of contribution.panels) if (!byId.has(entry.id)) {
+        const panel = (binding.panels[entry.id] as (ctx: ModuleViewContext) => PanelController)(ctx);
+        panels.push(panel); byId.set(entry.id, panel); rt.anchors.register(panelAnchor(entry.id), panel.spec.element);
+      }
+    }
+    optionalKey = key; withdrawnKey = ""; placeModules();
+  }
   const paint = () => {
     queued = false;
+    syncOptional();
     // A module shown or hidden through the port (a typed `modules.set`) places its panels as the Modules menu does (CORE-115).
     if (rt.shownModules().join(",") !== placedModules) placeModules();
     // The research preference may have changed: its tools are withdrawn or offered again before anything reads the tools.
@@ -487,8 +513,8 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
       const undoCap = port.authoring.capability({ kind: "history.undo" }), redoCap = port.authoring.capability({ kind: "history.redo" });
       const history = port.authoring.history();
       // Name what each would change, and keep the shortcut visible even while unavailable.
-      applyCapability(undo, undoCap); undo.title = historyCommandTitle("undo", undoCap, history.undo?.label, keys.undo);
-      applyCapability(redo, redoCap); redo.title = historyCommandTitle("redo", redoCap, history.redo?.label, keys.redo);
+      applyCapability(undo, undoCap); undo.title = historyCommandTitle("undo", undoCap, history.undo?.label, keys.undo, frame.history.documentLabel);
+      applyCapability(redo, redoCap); redo.title = historyCommandTitle("redo", redoCap, history.redo?.label, keys.redo, frame.history.documentLabel);
       setAttr(undo, "aria-label", historyCommandLabel("undo", undoCap, history.undo?.label));
       setAttr(redo, "aria-label", historyCommandLabel("redo", redoCap, history.redo?.label));
       const saveCap = port.authoring.requestCapability({ kind: "save" });

@@ -1,0 +1,5 @@
+{
+  "extends": "../../projects/xf-studio/authoring/tsconfig.json",
+  "compilerOptions": { "typeRoots": ["../../projects/xf-studio/authoring/node_modules/@types"] },
+  "include": ["prototype", "harness", "tools", "tests"]
+}

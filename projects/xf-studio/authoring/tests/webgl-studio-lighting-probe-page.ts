@@ -11,10 +11,10 @@
 import * as THREE from "three";
 import { type PlateUnderlay } from "../src/engines/layered-makeup/render/makeup-stack";
 import { type Layer } from "../src/engines/layered-makeup/recipe";
-import { skinParameters } from "../src/skin-material";
-import { createLightingSetupStage } from "../src/lighting-setup-stage";
-import { studioStageSetup } from "../src/lighting-setups";
-import { DEFAULT_STUDIO_LIGHTS, STUDIO_LIGHT_TARGET, type StudioLights } from "../src/studio-lighting";
+import { skinParameters } from "../src/materials/render/skin-material";
+import { createLightingSetupStage } from "../src/preview/render/lighting-setup-stage";
+import { studioStageSetup } from "../src/preview/lighting-setups";
+import { DEFAULT_STUDIO_LIGHTS, STUDIO_LIGHT_TARGET, type StudioLights } from "../src/preview/studio-lighting";
 import { hideHalfFloatRendering } from "./webgl-harness-page";
 import { initialRecipe } from "./fixtures/eye-region";
 import { createMakeupStack } from "./fixtures/eye-region";

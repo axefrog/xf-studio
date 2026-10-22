@@ -6,8 +6,8 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdtempSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { hairProfileStops } from "../src/character-detail-service";
-import { depotHash } from "../src/depot-path";
+import { hairProfileStops } from "../src/character/host/character-detail-service";
+import { depotHash } from "../src/game/depot-path";
 import { ArchiveChangedError, NativeArchive, NativeArchivePool } from "../src/native/archive-reader";
 import { Cr2wFile } from "../src/native/cr2w-file";
 import { compareDocuments, HASH_ONLY_PATH } from "../src/native/document-diff";
@@ -591,7 +591,7 @@ test("DESK-08: the worker loop trims by letting go of its archive indexes and co
 test("NATIVE-43: a decoder that can't answer now doesn't count earlier native answers as ready", async () => {
   const { NativeFirstFetcher } = await import("../src/native/native-fetch-port");
   const { decoder } = fakeDecoder({ startTimeoutMs: 20, restartDelayMs: 10_000 });
-  const archive = { id: "a.archive", name: "a.archive" } as import("../src/archive-precedence").MountedArchive;
+  const archive = { id: "a.archive", name: "a.archive" } as import("../src/game/archive-precedence").MountedArchive;
   const port = new NativeFirstFetcher(decoder, { fetch: async () => null }, { ledger: { has: () => true, add: () => {} } });
   try {
     expect(port.answeredNatively(archive, "1")).toBe(true);

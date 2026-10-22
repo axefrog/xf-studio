@@ -42,6 +42,11 @@ export type LocalPackageManifest2 = {
   /** The archive and its `.xl`, then any extra files (overlay archives, TweakXL files) sorted by path. */
   readonly files: readonly [ManifestFile, ManifestFile, ...ManifestFile[]];
   readonly verifiedUnpackedFiles: number;
+  /**
+   * Which writer made the archive's resources and the archive (PIPE-130): XF Studio's native writer (depot paths, and `archive`
+   * for the pack), or WolvenKit where the native writer refused an input, with its reason. Absent when WolvenKit wrote everything.
+   */
+  readonly resourceWriters?: { readonly native: readonly string[]; readonly wolvenkit: readonly { readonly path: string; readonly reason: string }[] };
   readonly installed: false; readonly gameRenderingVerified: false;
 };
 

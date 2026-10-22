@@ -1,7 +1,7 @@
 // Offline source-bound geometry check. Inputs remain in ignored local directories.
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { IdleAnimation } from "../../projects/xf-studio/authoring/src/idle-animation";
+import { IdleAnimation } from "../../projects/xf-studio/authoring/src/animation/render/idle-animation";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";

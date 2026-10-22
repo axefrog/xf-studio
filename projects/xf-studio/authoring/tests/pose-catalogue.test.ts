@@ -2,13 +2,13 @@
 // categories, clip lookup, badges, labels and diagnostics; plus the readers it rests on: TweakDB string arrays and Vector3 flats, ArchiveXL
 // `animations:` entries, and the puppet entity's own sets. No game data.
 import { describe, expect, test } from "bun:test";
-import { readArchiveXlConfig } from "../src/archivexl-config";
-import { depotHash } from "../src/depot-path";
-import { TextTable } from "../src/game-text";
-import { buildPoseCatalogue, findClip, type PoseSet } from "../src/pose-catalogue";
-import { entitySets } from "../src/pose-catalogue-host";
-import { TweakDbBlob, tweakDbId, type TweakValue } from "../src/tweakdb-flats";
-import { readTweakOverlay } from "../src/tweakxl-overlay";
+import { readArchiveXlConfig } from "../src/game/archivexl-config";
+import { depotHash } from "../src/game/depot-path";
+import { TextTable } from "../src/game/game-text";
+import { buildPoseCatalogue, findClip, type PoseSet } from "../src/animation/pose-catalogue";
+import { entitySets } from "../src/animation/host/pose-catalogue-host";
+import { TweakDbBlob, tweakDbId, type TweakValue } from "../src/game/tweakdb-flats";
+import { readTweakOverlay } from "../src/game/tweakxl-overlay";
 import { type BlobFlat, tweakDbBlob } from "./fixtures/tweakdb-blob";
 
 const vanilla: [string, BlobFlat][] = [

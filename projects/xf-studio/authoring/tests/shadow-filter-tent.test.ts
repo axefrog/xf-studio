@@ -1,10 +1,10 @@
 /**
- * The shadow filter's tent (src/shadow-filter.ts, PREV-136): simulated on the CPU as the GPU evaluates it, one axis at a time (the
+ * The shadow filter's tent (src/preview/render/shadow-filter.ts, PREV-136): simulated on the CPU as the GPU evaluates it, one axis at a time (the
  * weights are separable), with hardware bilinear comparison taps across a shadow edge.
  */
 import { expect, test } from "bun:test";
-import { creatorShadowMapSize, creatorShadowRadius } from "../src/creator-lighting";
-import { SHADOW_TENT_MAX, shadowTentSize, tentTaps } from "../src/shadow-filter";
+import { creatorShadowMapSize, creatorShadowRadius } from "../src/preview/creator-lighting";
+import { SHADOW_TENT_MAX, shadowTentSize, tentTaps } from "../src/preview/render/shadow-filter";
 
 /** A shadow map row lit left of `edge` (texel centres at i + 0.5), read by one hardware-filtered comparison at `x` (texels). */
 const bilinear = (x: number, edge: number) => {

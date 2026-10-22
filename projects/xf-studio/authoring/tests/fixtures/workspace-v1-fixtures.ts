@@ -9,7 +9,7 @@ import { defaultFlakes } from "../../src/engines/layered-makeup/finish";
 import { defaultStudioIrregularFlakes } from "../../src/engines/layered-makeup/flake-field";
 import { type Layer } from "../../src/engines/layered-makeup/recipe";
 import { initialRecipe, newLayerTemplate } from "./eye-region";
-import { type RecipeFile } from "../../src/recipe-schema";
+import { type RecipeFile } from "../../src/legacy/eye-makeup/recipe-schema";
 
 /** The startup recipe as earlier builds stored it (recipe-7, schema first). */
 export const storedInitialRecipe = (): RecipeFile => ({ schema: "xfs/recipe-7", ...initialRecipe() });

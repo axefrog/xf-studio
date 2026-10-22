@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { canvasResolution } from "../src/canvas-resolution";
-import { createUVEditor } from "../src/uv-editor";
+import { canvasResolution } from "../src/legacy/eye-makeup/browser/canvas-resolution";
+import { createUVEditor } from "../src/legacy/eye-makeup/browser/uv-editor";
 import { applyAdapterProposal } from "./gesture-test-adapter";
-import { defaultUVView, pixelToUV, uvToPixel } from "../src/uv-view";
+import { defaultUVView, pixelToUV, uvToPixel } from "../src/legacy/eye-makeup/uv-view";
 import { initialRecipe, EYE_REGION } from "./fixtures/eye-region";
 
 test("fractional CSS dimensions and DPR cover exactly the drawing rectangle", () => {

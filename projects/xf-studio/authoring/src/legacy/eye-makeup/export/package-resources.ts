@@ -1,0 +1,262 @@
+// Pure resource definitions for one packaged collection: the WolvenKit JSON form of the
+// plate mesh/morph rewrite, the .app, the character-customization resource and the
+// ArchiveXL declaration. No file or process access.
+//
+// TypeScript port of the resource half of experiments/005-preset-collection/build.py.
+// Field order and handle numbering follow that builder, so the converted resources are
+// byte-identical to the ones the Python oracle produces.
+import { createHash } from "node:crypto";
+import type { CollectionPlan } from "./preset-collection";
+import type { UvTransformConstants } from "../../../engines/layered-makeup/plate-uv-window";
+import { archiveXlText, type XlFragment } from "../../../platform/api";
+
+// WolvenKit JSON is untyped here; only the fields the rewrite touches are named.
+type Json = any; // eslint-disable-line @typescript-eslint/no-explicit-any
+
+export const cname = (value: string) => ({ $type: "CName", $storage: "string", $value: value });
+export const resourceRef = (path: string, soft = false) => ({
+  DepotPath: { $type: "ResourcePath", $storage: "string", $value: path.replaceAll("/", "\\") },
+  Flags: soft ? "Soft" : "Default",
+});
+const cr2wDocument = (root: Json) => ({
+  Header: { WolvenKitVersion: "8.17.4", WKitJsonVersion: "0.0.9", GameVersion: 2310, DataType: "CR2W" },
+  Data: { Version: 195, BuildVersion: 0, RootChunk: root, EmbeddedFiles: [] },
+});
+const FULL_CHUNK_MASK = "9223372036854775807";
+
+/** Handle IDs for new chunks; starts above the preserved mesh/morph buffer handles in the imported plate. */
+export class HandleCounter {
+  private next = 10000;
+  handle(data: Json) { return { HandleId: String(this.next++), Data: data }; }
+}
+
+/** Stable 64-bit component ID derived from its name (little-endian first 8 SHA-256 bytes; never 0). */
+export function componentId(component: string): string {
+  const digest = createHash("sha256").update("xfs:component:" + component, "utf8").digest();
+  const value = digest.readBigUInt64LE(0);
+  return String(value || 1n);
+}
+
+const floatValue = (name: string, value: number) => ({ $type: "Float", [name]: value });
+const colorValue = (name: string, c: { Red: number; Green: number; Blue: number; Alpha: number }) =>
+  ({ $type: "Color", [name]: { $type: "Color", Red: c.Red, Green: c.Green, Blue: c.Blue, Alpha: c.Alpha } });
+const WHITE = { Red: 255, Green: 255, Blue: 255, Alpha: 255 };
+const softTexture = (plan: CollectionPlan, parameter: string, channel: string) =>
+  ({ $type: "rRef:ITexture", [parameter]: resourceRef(`*${plan.depot}/textures/{material}_${channel}.xbm`, true) });
+const localInstance = (template: string, values: Json[]) => ({ $type: "CMaterialInstance", audioTag: cname("None"),
+  baseMaterial: resourceRef(template), cookingPlatform: "PLATFORM_PC", enableMask: 0, resourceVersion: 4, values });
+
+/** The plate-local window's UV transform, appended to a `mesh_decal` instance whose textures cover the window. */
+const windowValues = (uv: UvTransformConstants | undefined) => uv
+  ? (["UVScaleX", "UVOffsetX", "UVScaleY", "UVOffsetY"] as const).map(name => floatValue(name, uv[name])) : [];
+
+/** The flat `@preset` instance: the Experiment 005 layout plus, on the plate window, its UV transform; a diagnostic
+ * surface override replaces its scalars. */
+function flatMaterial(plan: CollectionPlan, surface: Record<string, number> = {}, uv?: UvTransformConstants) {
+  const values: Json[] = ([["DiffuseTexture", "diffuse"], ["RoughnessTexture", "roughness"], ["MetalnessTexture", "metalness"]] as const)
+    .map(([name, channel]) => softTexture(plan, name, channel));
+  for (const [name, value] of Object.entries({ DiffuseAlpha: 1, NormalAlpha: 0, RoughnessMetalnessAlpha: 1, AlphaMaskContrast: 0,
+    SecondaryMaskInfluence: 0, RoughnessScale: 1, MetalnessScale: 1, RoughnessBias: 0, MetalnessBias: 0 }))
+    values.push(floatValue(name, surface[name] ?? value));
+  values.push(colorValue("DiffuseColor", WHITE), ...windowValues(uv));
+  return localInstance("base/materials/mesh_decal.mt", values);
+}
+
+/** Entry bound to the plate chunks a preset does not use when the plate carries several lifts. */
+export const HIDDEN_CHUNK_ENTRY = "xfs_hidden";
+/** A decal instance that writes nothing: colour, normal and surface target alphas are all zero. */
+function hiddenMaterial() {
+  return localInstance("base/materials/mesh_decal.mt",
+    Object.entries({ DiffuseAlpha: 0, NormalAlpha: 0, RoughnessMetalnessAlpha: 0 }).map(([name, value]) => floatValue(name, value)));
+}
+
+/** `@faceted`: the flat instance plus a normal map composed with the skin normal (NormalsBlendingMode 1). */
+function facetedMaterial(plan: CollectionPlan, uv?: UvTransformConstants) {
+  const values: Json[] = ([["DiffuseTexture", "diffuse"], ["RoughnessTexture", "roughness"], ["MetalnessTexture", "metalness"],
+    ["NormalTexture", "normal"]] as const).map(([name, channel]) => softTexture(plan, name, channel));
+  for (const [name, value] of Object.entries({ DiffuseAlpha: 1, NormalAlpha: 1, UseNormalAlphaTex: 0, NormalsBlendingMode: 1,
+    RoughnessMetalnessAlpha: 1, AlphaMaskContrast: 0, SecondaryMaskInfluence: 0, RoughnessScale: 1, MetalnessScale: 1,
+    RoughnessBias: 0, MetalnessBias: 0 }))
+    values.push(floatValue(name, value));
+  values.push(colorValue("DiffuseColor", WHITE), ...windowValues(uv));
+  return localInstance("base/materials/mesh_decal.mt", values);
+}
+
+/** `@glitter` (diagnostic): the faceted layout plus the flake mask as `NormalAlphaTex`, on the plate window. */
+function glitterMaterial(plan: CollectionPlan, uv: UvTransformConstants) {
+  const values: Json[] = ([["DiffuseTexture", "diffuse"], ["RoughnessTexture", "roughness"], ["MetalnessTexture", "metalness"],
+    ["NormalTexture", "normal"], ["NormalAlphaTex", "flakes"]] as const).map(([name, channel]) => softTexture(plan, name, channel));
+  for (const [name, value] of Object.entries({ DiffuseAlpha: 1, NormalAlpha: 1, UseNormalAlphaTex: 1, NormalsBlendingMode: 1,
+    RoughnessMetalnessAlpha: 1, AlphaMaskContrast: 0, SecondaryMaskInfluence: 0, RoughnessScale: 1, MetalnessScale: 1, RoughnessBias: 0, MetalnessBias: 0 }))
+    values.push(floatValue(name, value));
+  values.push(colorValue("DiffuseColor", WHITE), ...windowValues(uv));
+  return localInstance("base/materials/mesh_decal.mt", values);
+}
+
+/** A glitter preset's emissive accent (diagnostic): its head-UV mask's red channel lights the flake colour. */
+function accentMaterialInstance(plan: CollectionPlan, preset: CollectionPlan["presets"][number]) {
+  const material = preset.accent;
+  if (!material) throw Error(`Preset ${preset.id} has no planned glitter accent.`);
+  return localInstance(ACCENT_TEMPLATE, [softTexture(plan, "EmissiveMask", "accent"),
+    { $type: "Vector4", EmissiveMaskChannel: { $type: "Vector4", ...material.EmissiveMaskChannel } },
+    colorValue("EmissiveColor", material.EmissiveColor), floatValue("EmissiveEV", material.EmissiveEV), floatValue("AlphaThreshold", material.AlphaThreshold)]);
+}
+
+/** One colour-shift preset's gradient-recolour instance: mask and base colour maps plus its shift constants. */
+function fresnelMaterialInstance(plan: CollectionPlan, preset: CollectionPlan["presets"][number]) {
+  const material = preset.fresnel;
+  if (!material) throw Error(`Colour-shift preset ${preset.id} has no planned Fresnel material.`);
+  const values: Json[] = ([["MaskTexture", "mask"], ["GradientMap", "gradient"]] as const)
+    .map(([name, channel]) => softTexture(plan, name, channel));
+  for (const [name, value] of Object.entries(material)) if (typeof value === "number") values.push(floatValue(name, value));
+  values.push(colorValue("FresnelColor", material.FresnelColor), colorValue("DiffuseColor", WHITE));
+  return localInstance(FRESNEL_TEMPLATE, values);
+}
+export const FRESNEL_TEMPLATE = "base/materials/mesh_decal_gradientmap_recolor_blendable.mt";
+/** Template of a diagnostic glitter accent: masks and constants only, no UV transform (its mask is on head UV). */
+export const ACCENT_TEMPLATE = "base/materials/mesh_decal_emissive_subsurface.mt";
+
+/**
+ * Replace the plate's appearances and materials. Each preset binds its route's template entry:
+ * `<appearance>@<entry>`, whose `{material}` prefix resolves that preset's textures. Presets that share
+ * the seed's template entry stay empty stubs, which ArchiveXL expands from the seed; any other preset
+ * names its entry explicitly. Entries of plate-window presets carry `uv`, the window's UV transform; head-UV
+ * entries (Fresnel, and flat or faceted presets a diagnostic keeps on head UV) have none.
+ */
+export function rewritePlateMesh(mesh: Json, plan: CollectionPlan, handles: HandleCounter, uv?: UvTransformConstants): Json {
+  const root = mesh.Data.RootChunk, seed = plan.presets[0];
+  const chunks = plan.plate.liftsMm.length, chunkCount = root.renderResourceBlob?.Data?.header?.renderChunkInfos?.length;
+  if (chunkCount !== undefined && chunkCount !== chunks) throw Error(`The plate has ${chunkCount} render chunks; the plan lifts ${chunks}.`);
+  const entries: string[] = [];
+  for (const preset of plan.presets) if (!entries.includes(preset.material)) entries.push(preset.material);
+  for (const preset of plan.presets) if (preset.accentMaterial) entries.push(preset.accentMaterial);
+  // Several chunks (a diagnostic depth comparison, or a glitter accent's chunk): every appearance names all chunks,
+  // its own with its material, the accent chunk with its accent material if it has one, and the others with the
+  // hidden entry. One chunk keeps the Experiment 005 stub layout.
+  const chunkEntry = (preset: CollectionPlan["presets"][number], chunk: number) => chunk === preset.plateChunk ? preset.appearance + preset.material
+    : chunk === plan.plate.accentChunk && preset.accentMaterial ? preset.appearance + preset.accentMaterial : HIDDEN_CHUNK_ENTRY;
+  const chunkMaterials = (preset: CollectionPlan["presets"][number], i: number) => chunks > 1
+    ? Array.from({ length: chunks }, (_, chunk) => cname(chunkEntry(preset, chunk)))
+    : i === 0 || preset.material !== seed.material || preset.route === "fresnel" ? [cname(preset.appearance + preset.material)] : [];
+  root.appearances = plan.presets.map((preset, i) => handles.handle({ $type: "meshMeshAppearance", name: cname(preset.appearance),
+    chunkMaterials: chunkMaterials(preset, i), tags: [] }));
+  if (chunks > 1) entries.push(HIDDEN_CHUNK_ENTRY);
+  root.materialEntries = entries.map((name, index) => ({ $type: "CMeshMaterialEntry", index, isLocalInstance: 1, name: cname(name) }));
+  root.localMaterialBuffer.materials = entries.map(name => {
+    if (name === HIDDEN_CHUNK_ENTRY) return hiddenMaterial();
+    const accent = plan.presets.find(p => p.accentMaterial === name);
+    if (accent) return accentMaterialInstance(plan, accent);
+    const preset = plan.presets.find(p => p.material === name)!;
+    const windowed = preset.uvSpace === "plate-window" ? uv : undefined;
+    if (preset.uvSpace === "plate-window" && !uv) throw Error(`Preset ${preset.id} needs the plate's UV window.`);
+    return preset.route === "flat" ? flatMaterial(plan, preset.diagnostics?.surface, windowed)
+      : preset.route === "faceted" ? facetedMaterial(plan, windowed)
+      : preset.route === "glitter" ? glitterMaterial(plan, windowed!) : fresnelMaterialInstance(plan, preset);
+  });
+  root.localMaterialBuffer.rawData = null;
+  root.localMaterialBuffer.rawDataHeaders = [];
+  return mesh;
+}
+
+/**
+ * One body's selector resources: the plan's own (feminine) paths, or its `masculine` block. The looks, names, materials
+ * and textures are shared; each body has its own customization resource, `.app` and plate.
+ */
+export type SelectorBody = { readonly body: "female" | "male"; readonly app: string; readonly customization: string; readonly mesh: string; readonly morph: string };
+/** The template's visual tag, as vanilla eye makeup tags each body's appearances (`hx_000__basehead_makeup_eyes_01.app`: pwa `Female`, pma `Male`). */
+export const SELECTOR_VISUAL_TAG = Object.freeze({ female: "Female", male: "Male" } as const);
+/**
+ * The option's creator order: right after teeth and before the vanilla eye makeup, in each creator (female: teeth 310, eye
+ * makeup 450; male: teeth 540, eye makeup 550, while 311 is his `beard_color5_0`). Two options with one index show only the first.
+ */
+export const SELECTOR_OPTION_INDEX = Object.freeze({ female: 311, male: 541 } as const);
+/** The bodies a plan builds a selector for: always the feminine V, and the masculine V when the plan includes him. */
+export function selectorBodies(plan: Pick<CollectionPlan, "app" | "customization" | "mesh" | "morph" | "masculine">): SelectorBody[] {
+  return [{ body: "female", app: plan.app, customization: plan.customization, mesh: plan.mesh, morph: plan.morph },
+    ...(plan.masculine ? [{ body: "male" as const, ...plan.masculine }] : [])];
+}
+const feminine = (plan: Pick<CollectionPlan, "app" | "customization" | "mesh" | "morph">): SelectorBody =>
+  ({ body: "female", app: plan.app, customization: plan.customization, mesh: plan.mesh, morph: plan.morph });
+
+/** Point the plate morph target at its body's mesh and the seed appearance. */
+export function rewritePlateMorph(morph: Json, plan: CollectionPlan, body: SelectorBody = feminine(plan)): Json {
+  const root = morph.Data.RootChunk;
+  root.baseMesh = resourceRef(body.mesh);
+  root.baseMeshAppearance = cname(plan.presets[0].appearance);
+  return morph;
+}
+
+/**
+ * A body's `.app` resource: an empty Off definition and one template whose component (bound to that body's plate) ArchiveXL
+ * expands per preset.
+ */
+export function appearanceResource(plan: CollectionPlan, handles: HandleCounter, body: SelectorBody = feminine(plan)): Json {
+  const seed = plan.presets[0].appearance;
+  const component = { $type: "entMorphTargetSkinnedMeshComponent", name: cname(plan.component), id: componentId(plan.component),
+    isEnabled: 1, version: 1, autoHideDistance: 50, chunkMask: FULL_CHUNK_MASK, forceLODLevel: -1,
+    meshAppearance: cname(seed), morphResource: resourceRef(body.morph),
+    parentTransform: handles.handle({ $type: "entHardTransformBinding", bindName: cname("root"), enabled: 1 }),
+    skinning: handles.handle({ $type: "entSkinningBinding", bindName: cname("root"), enabled: 1 }) };
+  const overrides = (items: Json[]) => [{ $type: "appearanceAppearancePartOverrides", componentsOverrides: items }];
+  const off = { $type: "appearanceAppearanceDefinition", name: cname(plan.offAppearance), components: [],
+    partsOverrides: overrides([]) };
+  const template = { $type: "appearanceAppearanceDefinition", name: cname(plan.templateAppearance), components: [component],
+    partsOverrides: overrides([{ $type: "appearancePartComponentOverrides", componentName: cname(plan.component),
+      meshAppearance: cname(seed), chunkMask: FULL_CHUNK_MASK, visualScale: { $type: "Vector3", X: 1, Y: 1, Z: 1 } }]),
+    resolvedDependencies: [resourceRef(body.morph, true)], visualTags: { $type: "redTagList", tags: [cname(SELECTOR_VISUAL_TAG[body.body])] } };
+  return cr2wDocument({ $type: "appearanceAppearanceResource", cookingPlatform: "PLATFORM_PC",
+    appearances: [handles.handle(off), handles.handle(template)] });
+}
+
+/** The selector label comes from the Studio's mod-branding module through the plan; never a local copy. */
+export function assertBrandedPlan(plan: { selectorLabel?: unknown }): void {
+  if (typeof plan.selectorLabel !== "string" || !/^XF(\s|$)/.test(plan.selectorLabel))
+    throw Error("Export plan lacks an XF-branded selectorLabel; rebake with the current Studio.");
+}
+
+/** Head groups the selector joins; ArchiveXL merges each into the vanilla group of the same name. */
+export const SELECTOR_GROUPS = Object.freeze(["character_customization", "face"] as const);
+
+/**
+ * A body's one head customization option: Off at index 0, then one definition per packaged preset. Each body's creator is
+ * its own resource, so both use the same selector name, groups and label.
+ */
+export function customizationResource(plan: CollectionPlan, handles: HandleCounter, body: SelectorBody = feminine(plan)): Json {
+  assertBrandedPlan(plan);
+  const definitions = [{ $type: "gameuiIndexedAppearanceDefinition", name: cname(plan.offAppearance), index: 0, localizedName: "Common-Off" },
+    ...plan.presets.map(preset => ({ $type: "gameuiIndexedAppearanceDefinition", name: cname(preset.appAppearance),
+      index: preset.index, localizedName: preset.name }))];
+  const option = { $type: "gameuiAppearanceInfo", name: cname(plan.selector), uiSlot: cname(plan.selector),
+    localizedName: plan.selectorLabel, enabled: 1, hidden: 0, index: SELECTOR_OPTION_INDEX[body.body], defaultIndex: 0,
+    editTags: ["NewGame", "HairDresser", "Ripperdoc"], randomizeCategory: "Makeup", useThumbnails: 0,
+    resource: resourceRef(body.app, true), definitions };
+  return cr2wDocument({ $type: "gameuiCharacterCustomizationInfoResource", cookingPlatform: "PLATFORM_PC",
+    headCustomizationOptions: [handles.handle(option)],
+    // Like vanilla eye makeup (`makeupEyes_NN`), the appearance option joins `character_customization` (the creator
+    // screen) and `face`, which the player entities' face controller reads in gameplay and photo mode.
+    headGroups: SELECTOR_GROUPS.map(group => ({ $type: "gameuiOptionsGroup", name: cname(group), options: [cname(plan.selector)] })) });
+}
+
+/**
+ * Eye makeup's part of its product's `.archive.xl`: its character-customization resource for each body it builds
+ * (ArchiveXL merges `female` into the feminine creator and `male` into the masculine one) and each body's `.app` in the
+ * player customization scope. A product holding only eye makeup declares exactly this.
+ */
+export function eyeMakeupXl(plan: Pick<CollectionPlan, "customization" | "app"> & { masculine?: { customization: string; app: string } }): XlFragment {
+  const male = plan.masculine;
+  return { customizations: { female: [plan.customization], ...(male ? { male: [male.customization] } : {}) },
+    scope: { "player_customization.app": [plan.app, ...(male ? [male.app] : [])] } };
+}
+
+/**
+ * The `.archive.xl` text of a product holding only eye makeup (`archiveXlText` of its fragment). CRLF line
+ * endings: the Python builder wrote this file in Windows text mode, so every candidate built so far has them.
+ */
+export function archiveXlDeclaration(plan: Pick<CollectionPlan, "customization" | "app"> & { masculine?: { customization: string; app: string } }): string {
+  return archiveXlText(eyeMakeupXl(plan));
+}
+
+/** Compact JSON with non-ASCII escaped, as the Python builder wrote it, plus a trailing newline. */
+export function resourceJson(value: unknown): string {
+  return JSON.stringify(value).replace(/[\u0080-￿]/g, c => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0")) + "\n";
+}

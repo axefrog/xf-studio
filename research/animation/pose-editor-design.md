@@ -63,7 +63,7 @@ Every left joint has a right twin whose name swaps `Left`↔`Right`, which is wh
 
 ### 3.4 Spaces and axes
 
-The game is Z-up and the Studio's scene is Y-up; the idle and pose library already convert game axes the same way [source: `src/idle-animation.ts`]. The editor edits **local** rotations (parent space) because that is what clips store; the gizmo presents local, parent or view axes. The sagittal (mirror) plane is derived from the rest pose: the model-space axis along which each Left/Right pair's rest positions differ in sign, not a hard-coded axis.
+The game is Z-up and the Studio's scene is Y-up; the idle and pose library already convert game axes the same way [source: `src/animation/render/idle-animation.ts`]. The editor edits **local** rotations (parent space) because that is what clips store; the gizmo presents local, parent or view axes. The sagittal (mirror) plane is derived from the rest pose: the model-space axis along which each Left/Right pair's rest positions differ in sign, not a hard-coded axis.
 
 ## 4. The editor
 
@@ -174,7 +174,7 @@ A **Pose** editor panel (dockable, floating, tabbable like every panel) beside t
 |---|---|---|
 | Engine (pure, `engines/body-rig/`) | rig vocabulary (names, parents, rest pose, mirror map, sagittal axis), pose math (local ↔ model space, sparse ↔ dense, float32 exactness), two-bone IK, grounding, mirroring, hand controls, soft limits | No Three and no host state; reused later by body customisation and animated poses |
 | Shared adapters | the pose library's `anim-set.ts` decoder and sampler; a clip **writer** to glTF (joint rotations to a 2-frame animation) | The writer mirrors the expression design's `clip.ts` |
-| Platform | the pose library's `BodyPosePort` gains an *authored* body source: `setBodySource({kind: "pose", joints, hips})` | One motion compositor owns the body bones, as `src/preview-motion.ts` arranges today |
+| Platform | the pose library's `BodyPosePort` gains an *authored* body source: `setBodySource({kind: "pose", joints, hips})` | One motion compositor owns the body bones, as `src/animation/render/preview-motion.ts` arranges today |
 | Feature `features/poses/` | part and editor codecs, actions, Undo, gesture sessions, catalogue contribution (the *Yours* group), exporter `poses/photo-mode-static-v1`, independent verifier | Registered as a feature module on the [platform](../authoring/feature-module-platform.md) |
 | View | Pose panel, outliner, gizmo and handle overlay, hand controls | Talks only through the feature's facade, snapshots and capabilities |
 | Live link (later) | a device port over the bridge client (`pose.live.apply` and friends, §7) | Session state, never in the document |

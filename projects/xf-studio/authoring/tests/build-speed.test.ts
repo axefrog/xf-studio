@@ -4,13 +4,13 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { keptJsonDirectory, publishKeptJson, readKeptJson } from "../src/derived-cache";
-import { concurrencyGate } from "../src/package-build-wolvenkit";
-import { runProcessTree } from "../src/process-tree";
+import { keptJsonDirectory, publishKeptJson, readKeptJson } from "../src/host/derived-cache";
+import { concurrencyGate } from "../src/legacy/eye-makeup/export/host/package-build-wolvenkit";
+import { runProcessTree } from "../src/host/process-tree";
 import { builderStage, PackageHostService, type PackageHostAdapter } from "../src/platform/export/product-host";
 import { runProductCommand, type ProductCommandOptions } from "../src/platform/export/product-builder";
 import { PACKAGE_PROGRESS_PREFIX, type PackageBuildProgress, type PackageBuildResult, type PackageBuildStage } from "../src/platform/api";
-import { packageBuildStageLine } from "../src/package-action";
+import { packageBuildStageLine } from "../src/legacy/eye-makeup/export/package-action";
 import { EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
 import { eyeEntry, fakeEyeVerifier, fakeTools, fakeVerifierTools, PLATE, writePlate } from "./fixtures/product-fixture";
 
@@ -69,6 +69,28 @@ test("at most the gate's limit of WolvenKit steps run at once, in the order they
   // A failure frees its place.
   await expect(gate(async () => { throw Error("boom"); })).rejects.toThrow("boom");
   expect(await task(6)).toBe(6);
+});
+
+test("a finishing task hands its slot to the first waiter: a caller arriving in between waits (PIPE-138)", async () => {
+  const gate = concurrencyGate(1);
+  let running = 0, most = 0, releaseA!: () => void;
+  const order: string[] = [];
+  const tracked = (name: string) => gate(async () => {
+    order.push(name); running++; most = Math.max(most, running);
+    await new Promise(done => setTimeout(done, 5));
+    running--;
+  });
+  const a = gate(() => { order.push("a"); running++; most = Math.max(most, running);
+    return new Promise<void>(done => { releaseA = () => { running--; done(); }; }); });
+  const b = tracked("b");
+  await Bun.sleep(1);
+  let c: Promise<void> | undefined;
+  // Released, then a new caller one microtask later: before the woken waiter has resumed.
+  releaseA();
+  queueMicrotask(() => { c = tracked("c"); });
+  await a; await b; await Bun.sleep(1); await c;
+  expect(most).toBe(1);
+  expect(order).toEqual(["a", "b", "c"]);
 });
 
 function build(identity: string | undefined, prepare?: (kept: ReturnType<typeof keptPlate>) => void) {
@@ -132,7 +154,7 @@ test("the builder's stage lines become the host's progress snapshot while the Bu
   const kept = keptPlate(), dir = kept.dir;
   const prepared = { builder: { directory: kept.plate, manifest: kept.manifestFile }, plan: null as unknown };
   const { manifestPlateReach } = await import("../src/features/eye-makeup/export/plate-input");
-  const { packagePlateRecord } = await import("../src/eye-plate-service");
+  const { packagePlateRecord } = await import("../src/legacy/eye-makeup/plate/host/eye-plate-service");
   prepared.plan = { ...manifestPlateReach(kept.manifestFile)!, record: packagePlateRecord(JSON.parse(readFileSync(kept.manifestFile, "utf8"))) };
   const staged: PackageHostAdapter = { ...adapter,
     prerequisites: { [EYE_PLATE_PREREQUISITE]: { cached: () => null, discard: () => {},

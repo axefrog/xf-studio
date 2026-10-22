@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { orbitDistanceLimits, SURFACE_CLEARANCE, type DistanceLimits, type Subject } from "../../camera-framing";
+import { orbitDistanceLimits, SURFACE_CLEARANCE, type DistanceLimits, type Subject } from "../../preview/camera-framing";
 
 /**
  * Orbit controls that bring their distance limits up to date before every update. The wheel's dolly updates inside its own event,

@@ -8,12 +8,7 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "allowImportingTsExtensions": true,
-    // XF Strata, the graph engine, is a local package; Studio code imports only its two entry points.
-    "paths": {
-      "strata": ["../../strata/index.ts"],
-      "strata/testing": ["../../strata/testing.ts"]
-    }
+    "allowImportingTsExtensions": true
   },
   "include": ["src", "tests", "server.ts", "browser-build.ts"]
 }

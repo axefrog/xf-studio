@@ -3,13 +3,13 @@ import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { readArchiveXlConfig, settleDepotAdditions, type XlDocument } from "../src/archivexl-config";
+import { readArchiveXlConfig, settleDepotAdditions, type XlDocument } from "../src/game/archivexl-config";
 import {
   applyHeadPatches, planHeadSource, plateRelevantProps, type HeadArchive, type HeadPatchSource, type HeadResourceSource,
   type HeadSourcePlan,
-} from "../src/eye-plate-head-source";
-import { parseEyePlateRecipe } from "../src/eye-plate-recipe";
-import { EyePlateError, ensureEyePlate, eyePlateHeadOverride, packagePlateRecord, type EyePlateTools } from "../src/eye-plate-service";
+} from "../src/legacy/eye-makeup/plate/eye-plate-head-source";
+import { parseEyePlateRecipe } from "../src/legacy/eye-makeup/plate/eye-plate-recipe";
+import { EyePlateError, ensureEyePlate, eyePlateHeadOverride, packagePlateRecord, type EyePlateTools } from "../src/legacy/eye-makeup/plate/host/eye-plate-service";
 import { fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe } from "./eye-plate-fixture";
 import { cr2w, fixtureInstallation } from "./resolver-fixtures";
 
@@ -239,7 +239,7 @@ test("an .xl render-blob patch is applied before the cut, and a patch that resha
 }));
 
 test("PIPE-26: an incomplete scan or an unread index the game searches before the head stops Build plainly", async () => {
-  const { incompleteHeadSource, INCOMPLETE_SCAN_MESSAGE } = await import("../src/eye-plate-head-resolver");
+  const { incompleteHeadSource, INCOMPLETE_SCAN_MESSAGE } = await import("../src/legacy/eye-makeup/plate/host/eye-plate-head-resolver");
   const content: HeadArchive = { name: "basegame_4_appearance.archive", group: "content", provider: "Installed game", file: "content" };
   const base = { mesh: resource("mesh", content), morph: resource("morph", content) };
   const plan = planOf(base.mesh, base.morph, base);

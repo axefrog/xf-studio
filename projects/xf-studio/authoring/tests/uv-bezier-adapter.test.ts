@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { convertToBezier, tangentEndpoint } from "../src/engines/layered-makeup/bezier-path";
-import { createUVEditor } from "../src/uv-editor";
+import { createUVEditor } from "../src/legacy/eye-makeup/browser/uv-editor";
 import { applyAdapterProposal } from "./gesture-test-adapter";
-import { defaultUVView, fitUVView, parseUVView, reflectUV, uvRegion, uvToPixel } from "../src/uv-view";
+import { defaultUVView, fitUVView, parseUVView, reflectUV, uvRegion, uvToPixel } from "../src/legacy/eye-makeup/uv-view";
 import { initialRecipe, EYE_REGION, EYE_MIRROR } from "./fixtures/eye-region";
 
 test("UV Fit includes all explicit tangents, including outside-atlas and mirrored endpoints", () => {

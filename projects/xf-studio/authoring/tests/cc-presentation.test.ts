@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { readArchiveXlConfig } from "../src/archivexl-config";
-import { CATEGORY_LIST_RECORD, iconKey, readCreatorPresentation } from "../src/cc-presentation";
-import { fnv1a64 } from "../src/depot-path";
-import { displayLabel, isTextKey, readableName, readOnscreenEntries, TextTable } from "../src/game-text";
-import { childId, crc32, TWEAKDB_MAGIC, TweakDbBlob, tweakDbId } from "../src/tweakdb-flats";
-import { readTweakOverlay } from "../src/tweakxl-overlay";
-import { depotHash } from "../src/depot-path";
+import { readArchiveXlConfig } from "../src/game/archivexl-config";
+import { CATEGORY_LIST_RECORD, iconKey, readCreatorPresentation } from "../src/character/cc-presentation";
+import { fnv1a64 } from "../src/game/depot-path";
+import { displayLabel, isTextKey, readableName, readOnscreenEntries, TextTable } from "../src/game/game-text";
+import { childId, crc32, TWEAKDB_MAGIC, TweakDbBlob, tweakDbId } from "../src/game/tweakdb-flats";
+import { readTweakOverlay } from "../src/game/tweakxl-overlay";
+import { depotHash } from "../src/game/depot-path";
 
 const bytes = (text: string) => new TextEncoder().encode(text);
 

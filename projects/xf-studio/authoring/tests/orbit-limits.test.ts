@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { BODY_SUBJECT, bodyCameraDistance, CAMERA_DISTANCE_RANGE, HEAD_SUBJECT, SURFACE_CLEARANCE, type Subject } from "../src/camera-framing";
+import { BODY_SUBJECT, bodyCameraDistance, CAMERA_DISTANCE_RANGE, HEAD_SUBJECT, SURFACE_CLEARANCE, type Subject } from "../src/preview/camera-framing";
 import { createOrbitLimits, SceneOrbitControls } from "../src/platform/scene/orbit-limits";
 
 /**

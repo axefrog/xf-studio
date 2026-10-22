@@ -1,8 +1,8 @@
 // Offline acceptance checks against local decoded assets, not a game-fidelity claim.
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { IdleAnimation } from "../src/idle-animation";
-import { extendSkin, restoreFirstWeights } from "../src/skin";
+import { IdleAnimation } from "../src/animation/render/idle-animation";
+import { extendSkin, restoreFirstWeights } from "../src/materials/render/skin";
 import { writeFileSync } from "node:fs";
 const asset = (name: string) => new URL(`../public/assets/${name}`,import.meta.url);
 const read = async (name: string) => new GLTFLoader().parseAsync(await Bun.file(asset(name)).arrayBuffer(),"");

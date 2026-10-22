@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { type Layer, type Recipe } from "../src/engines/layered-makeup/recipe";
-import { createSurfaceEditor } from "../src/surface-editor";
-import { createUVEditor } from "../src/uv-editor";
-import { defaultUVView, uvRegion, uvToPixel } from "../src/uv-view";
-import { ViewportAttachment, type ViewportAttachmentPort } from "../src/viewport-attachment";
-import type { EditorInputState } from "../src/input-bindings";
+import { createSurfaceEditor } from "../src/legacy/eye-makeup/browser/surface-editor";
+import { createUVEditor } from "../src/legacy/eye-makeup/browser/uv-editor";
+import { defaultUVView, uvRegion, uvToPixel } from "../src/legacy/eye-makeup/uv-view";
+import { ViewportAttachment, type ViewportAttachmentPort } from "../src/app/viewport-attachment";
+import type { EditorInputState } from "../src/app/input-bindings";
 import { applyAdapterProposal } from "./gesture-test-adapter";
 import { initialRecipe, EYE_REGION } from "./fixtures/eye-region";
 

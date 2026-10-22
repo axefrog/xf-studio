@@ -2,7 +2,7 @@
 // the latest Build result, reviews the host's plan, and sends consent only for that reviewed plan. A plan that no longer matches is
 // dropped so the view reviews again; a blocked plan refuses with its plain reason; nothing is sent where the host can't install.
 import { expect, test } from "bun:test";
-import { builtModsOf, ModInstallActions, type BuiltMod, type ModInstallPlan } from "../src/mod-install-actions";
+import { builtModsOf, ModInstallActions, type BuiltMod, type ModInstallPlan } from "../src/installation/mod-install-actions";
 
 const plan = (over: Partial<ModInstallPlan> = {}): ModInstallPlan => ({ schema: "xfs/mod-install-plan-1", candidateId: "c1", modName: "XF Eye Artistry",
   route: "mo2", place: "Mod Organizer 2 (profile “Main”)", changes: ["Add the mod …"], notes: [], blocked: null, next: null, replacing: false, token: "t1", ...over });

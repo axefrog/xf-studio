@@ -4,6 +4,8 @@ Last reviewed **29 September 2026** (finishes, runtime bridge, showroom and wait
 
 ## Summary
 
+**Hair Lab** (procedural hair, outside the 1.0 requirements) is developed on its own branch and is not part of `main` until the first beta has shipped; its design is in [Hair Lab design](../research/hair/hair-lab-design.md).
+
 XF Studio's eye-makeup editor builds a verified **XF Eye Artistry** mod from the player's own game. **`v0.1.0-alpha.2`**, the first published alpha, was released on 28 September 2026 as an unsigned Windows pre-release with checksums and a build-provenance attestation ([release](https://github.com/axefrog/xf-studio/releases/tag/v0.1.0-alpha.2)); `v0.1.0-alpha.1` stays an unpublished draft.
 
 The first public release will be a **beta** ([1.0 readiness bar](release-readiness.md)). Of the [readiness audit](../research/authoring/release-readiness-audit.md#6-ranked-closing-list)'s closing list, Tracks B, C and E are done (declutter to exportable first, the first run and library, beta framing: a Beta badge, the beta's What's new tour and an update check at start and on demand); Track D's copy, terminology and states half is done (items 15–18 and 20); Track A (speed) and Track D's layout item (19) are open.

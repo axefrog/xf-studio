@@ -16,14 +16,14 @@ import { EYE_MAKEUP, eyeMakeupPartCodec } from "../src/features/eye-makeup";
 import { isNewerData, NEWER_LOOK_MESSAGE, type PartCodec } from "../src/platform/api";
 import { PartRegistry } from "../src/platform/core/document";
 import { type Recipe } from "../src/engines/layered-makeup/recipe";
-import { EYE_MAKEUP_PART_1, parseEyeMakeupPart, recipeFile } from "../src/recipe-schema";
-import { WorkspacePersistence } from "../src/workspace-persistence";
+import { EYE_MAKEUP_PART_1, parseEyeMakeupPart, recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
+import { WorkspacePersistence } from "../src/app/workspace/workspace-persistence";
 import { loadWorkspace, NEWER_WORKSPACE_MESSAGE, parseWorkspace, serializeWorkspace, workspaceKeys,
-  type WorkspaceState } from "../src/workspace-state";
+  type WorkspaceState } from "../src/app/workspace/workspace-state";
 import { restore } from "./fixtures/workspace-observable";
 import { historyRecipes } from "./fixtures/looks";
 import { fixedId, smallWorkspaceV1 } from "./fixtures/workspace-v1-fixtures";
-import { EYE_MAKEUP_LAYER_MODELS, RecipeModelRegistry as LayerModelRegistry, readRecipe as parseRecipe } from "../src/recipe-schema";
+import { EYE_MAKEUP_LAYER_MODELS, RecipeModelRegistry as LayerModelRegistry, readRecipe as parseRecipe } from "../src/legacy/eye-makeup/recipe-schema";
 import { initialRecipe } from "./fixtures/eye-region";
 
 const EYE = "eye-makeup", NEWER_PART = "xfs/eye-makeup-part-9";

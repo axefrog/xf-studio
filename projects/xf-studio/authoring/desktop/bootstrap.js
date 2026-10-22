@@ -1,12 +1,12 @@
 // This device bootstrap is intentionally outside shared Studio presentation.
 // It adds the desktop first-run welcome, About (version, licences, updates; opened
 // from the Studio's Help panel and command palette), the host-owned workspace storage,
-// and then starts the shared Studio composition root (`src/studio-startup.ts`) with
+// and then starts the shared Studio composition root (`src/compose/studio-startup.ts`) with
 // those desktop host services. Settings have one form, the Studio's Settings panel (UI-03, UI-109).
-import { createBrowserLocalSetup, desktopFolderPicker } from "../src/browser-local-setup-device";
-import { createBrowserPreviewPreparation } from "../src/preview-preparation";
-import { createBrowserWolvenKitSetup } from "../src/wolvenkit-setup";
-import { EYE_MAKEUP_MOD } from "../src/mod-branding";
+import { createBrowserLocalSetup, desktopFolderPicker } from "../src/setup/browser/browser-local-setup-device";
+import { createBrowserPreviewPreparation } from "../src/preview/preview-preparation";
+import { createBrowserWolvenKitSetup } from "../src/setup/wolvenkit-setup";
+import { EYE_MAKEUP_MOD } from "../src/legacy/eye-makeup/mod-branding";
 const capabilities = await fetch("/api/desktop/capabilities").then(response => response.json());
 if (capabilities.schema !== "xfs/desktop-capabilities-1") throw Error("Desktop host capabilities are unavailable.");
 // The loopback port changes on each launch, so WebView localStorage alone does

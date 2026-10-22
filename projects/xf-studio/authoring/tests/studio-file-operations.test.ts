@@ -1,14 +1,14 @@
 import { expect, test } from "bun:test";
 import { eyeCheck } from "./fixtures/package-results";
-import { CollectionService, CollectionServiceError, type CollectionTransport } from "../src/collection-service";
-import { collectionDraft, emptyMemory } from "../src/collection-workspace";
+import { CollectionService, CollectionServiceError, type CollectionTransport } from "../src/library/collection-service";
+import { collectionDraft, emptyMemory } from "../src/app/workspace/collection-workspace";
 import { type Recipe } from "../src/engines/layered-makeup/recipe";
-import type { EditorSnapshot } from "../src/collection-session";
-import type { PresetCollection } from "../src/preset-collection";
+import type { EditorSnapshot } from "../src/library/collection-session";
+import type { PresetCollection } from "../src/legacy/eye-makeup/export/preset-collection";
 import { looks } from "./fixtures/looks";
-import { StudioFileOperations, type StudioPickedFile } from "../src/studio-file-operations";
-import { BUILD_NEEDS_SETUP, BUILD_TOOLS_CHECKING_REASON } from "../src/alpha-availability";
-import { recipeFile } from "../src/recipe-schema";
+import { StudioFileOperations, type StudioPickedFile } from "../src/app/studio-file-operations";
+import { BUILD_NEEDS_SETUP, BUILD_TOOLS_CHECKING_REASON } from "../src/app/alpha-availability";
+import { recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { initialRecipe } from "./fixtures/eye-region";
 

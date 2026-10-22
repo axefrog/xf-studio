@@ -3,9 +3,9 @@ import * as THREE from "three";
 import { accumulateLayer, bakeOrder, BAKE_SIZE, bakeSurface, colourMaskLevels, createLayeredMaterial, DEFAULT_MICROBLEND, EMPTY_ACCUMULATOR, globalNormal, layerBakeParameters,
   layeredBakeExtent, layeredBakeSize, layeredContextRestored, layeredGlobals, layerMapUv, levels, microblendContrastFactor, MIN_MICROBLEND_CONTRAST, NEUTRAL_BASE_COLOUR, reorientedNormal,
   resolveSurface, stackProblems, uvDomain,
-  type LayerAccumulator, type LayerBakeParameters, type LayerSamples } from "../src/layered-material";
-import { MAX_SETUP_LAYERS, MAX_TABLE_ENTRIES, readSetup, readTemplate } from "../src/layered-setup";
-import type { RenderLayer, RenderLayered, RenderTexture } from "../src/render-detail";
+  type LayerAccumulator, type LayerBakeParameters, type LayerSamples } from "../src/materials/render/layered-material";
+import { MAX_SETUP_LAYERS, MAX_TABLE_ENTRIES, readSetup, readTemplate } from "../src/game/layered-setup";
+import type { RenderLayer, RenderLayered, RenderTexture } from "../src/character/render-detail";
 
 // The layered bake's arithmetic against the decompiled 2.31 `multilayered` G-buffer program (knowledge/materials-and-shaders.md §4.6).
 // Values are the vanilla earring templates' own (silver_brushed_01_300, as serialized by WolvenKit 9.0.1) where the test says so.

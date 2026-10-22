@@ -8,6 +8,8 @@ This page covers hair cards, and lashes that use hair materials. How hair moves 
 
 ## 1. Inputs
 
+For generated preview geometry, copy template shading independently of the source mesh's skinning extension. The Hair Lab cap probe found that copying an eight-influence compile wrapper onto geometry with only four skin attributes hid otherwise valid geometry. The [material-copy adapter](../projects/xf-studio/authoring/src/materials/render/skin.ts) retains the base template hook, while the scene surface API prepares template attributes on the caller's geometry. This is an offline Studio finding; it does not change the decoded game shader model below.
+
 | Input | Meaning | Grade |
 |---|---|---|
 | `Strand_ID` (reg 0) | Greyscale per-strand identity; its **red** channel indexes the profile's ID gradient. Templates and the inspected textures are `isGamma=0`, so the value is linear. | [source] [resource] |
@@ -65,6 +67,16 @@ c   = DebugHairColor ≥ 0.5 ? 1 : c;   c ·= wetness factor (1 when dry)
 - **Roughness** = `saturate(RoughnessScale·Strand_ID.r + RoughnessBias)`, pulled toward `ShadowRoughness` by `(1−s)·ShadowStrength`. Each strand therefore gets its own roughness [source].
 - **Strand direction** = `max(FlowStrength·(2·flow.g − 2) + 1, 0.01)·bitangent + max(FlowStrength·(2·flow.r − 1), 0.01)·tangent`, where bitangent is `cross(N, T)·w` from the mesh [source]. `Flow` textures are `isGamma=1` [resource], which the Blender add-on also notes. For the MELUMINARY flow (163, 255, 105), the decoded red term clamps to 0.01, so the strand follows the bitangent. On those cards the bitangent runs along UV V, the long axis [resource geometry measurement].
 - **Scattering** scales a depth-difference thickness term written to GBuffer2.z [source]. Neither the sun nor the local-light hair path reads GBuffer2.z (the all-class light uses it only for Foliage), and the SSS passes skip Hair pixels, so `Scattering` has no effect on rasterised direct light [source] ([hair reference §6.3](../research/materials/shader-hair.md#63-what-the-light-does-not-read)). Ray-traced paths are not parsed.
+
+### Procedural strand maps
+
+At `FlowStrength=1`, both Flow coefficients above clamp positive. A mixed-sign UV tangent therefore lies outside the shader's representable cone; a signed normal-map encoding cannot fix that. Reversing the mesh tangent basis can cover the opposite lateral sign, but a single basis cannot cover both halves of an oscillating wave [source arithmetic]. A plain UV mirror that reflects both the silhouette and its tangent frame leaves relative direction error unchanged. Hair Lab's offline kernel exposes a `mirrored` basis flag and measures the quantised error for both choices [offline synthetic]; [the texture study](../research/hair/hair-lab-textures.md#flow-basis-and-scoped-shader-proposal) records the experiment and its limits.
+
+Generate alpha, constant strand ID, intrinsic root-to-tip distance and Flow from the same fibre sample. ID distributions affect colour, roughness and the light's random shift together. A lower-resolution scalar bake blends fibre IDs with the neutral background; a four-fibre sample need not produce only four visible ID values. Hair Lab's finite bake and monotone aggregate-distribution curve match the inspected atlas's ID histogram without independent pixel noise [offline calibrated, not a claim about the original authoring process].
+
+Atlas alpha mips need coverage measurements after filtering, cutoff and dither remapping; average alpha alone does not predict apparent density. The `standalone texture kernel` compensates safe shared-chart mips, while `isolated strip chains` preserve separate regions through 1×1 [offline synthetic]. A shared final texel cannot preserve different neighbouring densities. Full chains avoid assuming a distance-to-streaming policy; compressed/cooked coverage, arbitrary anisotropic filtering, temporal coverage and game appearance remain unproved. The [study and scoped adapter proposal](../research/hair/hair-lab-textures.md) document the CPU front/back comparison and future texture settings; no shared preview or export wiring changes are included.
+
+The inspected vanilla long-hair headers store Alpha as linear BC4 (`TCM_QualityR`), 1024² with 11 mips; ID/Gradient as linear BC4, 512² with 10 mips; Flow as sRGB BC7 (`TCM_QualityColor`, `isGamma=1`), 512² with 10 mips, all ending at 1×1 [resource, native-reader inspection]. These are reference settings, not proof that a future cooker preserves authored alpha mips. Decode compressed output and remeasure before claiming coverage preservation.
 
 ## 5. Deferred hair light
 
@@ -141,7 +153,7 @@ For the saved hair, `38_ash_brown` resolves to redacted-c01's `ash_brown.hp` thr
 
 ## 8. Browser preview mapping
 
-Code: `src/hair-colour-model.ts` (pure, tested), `src/hair-shading.ts` and `src/brow-material.ts` (Three adapters), selected per chunk by its template in `src/character-material-adapters.ts`; `src/stage-backdrop.ts` and `src/viewport-backdrop.ts` (the opaque stage). Since P0 the inputs are the resolved chunk's own: effective `hair.mt` scalars (instance chain, then template defaults), the winning `.hp`, and each texture with its `isGamma` flag, for any vanilla or CCXL hair, lash or brow choice.
+Code: `src/materials/hair-colour-model.ts` (pure, tested), `src/materials/render/hair-shading.ts` and `src/materials/render/brow-material.ts` (Three adapters), selected per chunk by its template in `src/materials/render/character-material-adapters.ts`; `src/preview/stage-backdrop.ts` and `src/preview/render/viewport-backdrop.ts` (the opaque stage). Since P0 the inputs are the resolved chunk's own: effective `hair.mt` scalars (instance chain, then template defaults), the winning `.hp`, and each texture with its `isGamma` flag, for any vanilla or CCXL hair, lash or brow choice.
 
 | Game step | Preview | Status |
 |---|---|---|
@@ -156,16 +168,16 @@ Code: `src/hair-colour-model.ts` (pure, tested), `src/hair-shading.ts` and `src/
 
 The engine's coverage (§2) is a shared per-pixel threshold, resolved over frames. The preview reproduces its two properties that matter for how dense hair looks:
 
-- **Nesting.** MSAA alpha-to-coverage (`STRAND_COVERAGE_MATERIAL` in `src/hair-shading.ts`) gives each fragment a sample mask that grows with its alpha, so overlapping layers cover about as much as the most opaque one, as in the game. Stochastic or hashed alpha with an independent threshold per layer would give `1 − Π(1−a)` and make hair denser than the game. Alpha blending also combines layers independently, and it is order-dependent as well.
+- **Nesting.** MSAA alpha-to-coverage (`STRAND_COVERAGE_MATERIAL` in `src/materials/render/hair-shading.ts`) gives each fragment a sample mask that grows with its alpha, so overlapping layers cover about as much as the most opaque one, as in the game. Stochastic or hashed alpha with an independent threshold per layer would give `1 − Π(1−a)` and make hair denser than the game. Alpha blending also combines layers independently, and it is order-dependent as well.
 - **Range.** The fragment alpha is `hairResolvedCoverage(remapped alpha)`, which stretches coverage over the dither range, so strands above about 0.84 are solid.
 
 Alpha-to-coverage is deterministic, so there is no grain to accumulate over frames and render-on-demand needs nothing extra. Its limits: four MSAA samples quantise coverage (the driver dithers the masks); colour within a pixel comes from whichever layer owns each sample, not from the alpha-weighted average of the three nearest layers; and TAA's temporal smoothing is not reproduced (the [Hair look](#hair-look) approximates it on request).
 
-**The canvas is opaque.** Three.js always creates its WebGL context with an alpha channel (its `alpha: false` only clears alpha to one), and alpha-to-coverage and the cap wrote their partial alpha into it. The page's CSS stage then showed through the hair, most of all where strands cross the scalp, so saved hair looked much lighter in the light UI theme than in the dark one. The Studio now creates the context with `alpha: false` and draws the theme's stage gradient itself (`src/viewport-backdrop.ts`). The gradient is an untone-mapped background that does not light the scene. After the fix, hair over the character measures the same in both themes ([coverage note](../research/eye-artistry/hair-coverage-2026-09-25.md)).
+**The canvas is opaque.** Three.js always creates its WebGL context with an alpha channel (its `alpha: false` only clears alpha to one), and alpha-to-coverage and the cap wrote their partial alpha into it. The page's CSS stage then showed through the hair, most of all where strands cross the scalp, so saved hair looked much lighter in the light UI theme than in the dark one. The Studio now creates the context with `alpha: false` and draws the theme's stage gradient itself (`src/preview/render/viewport-backdrop.ts`). The gradient is an untone-mapped background that does not light the scene. After the fix, hair over the character measures the same in both themes ([coverage note](../research/eye-artistry/hair-coverage-2026-09-25.md)).
 
 ### Hair look
 
-The preview's faithful coverage (above) draws strands thinner and crisper than the game shows them: the game's dithered coverage is smoothed over frames by TAA or DLSS, and may be boosted by the ×1.33 flag (§2), neither of which the preview reproduces. **Hair look** (Preview quality › Rendering) is a viewing preference from **Crisp** (0, the default: exactly the coverage above) to **Game-like** (1). It blends three terms linearly with the slider, all in the strand coverage shader (`STRAND_COVERAGE_GLSL` in `src/hair-shading.ts`, mirrored by `hairLookCoverage` in `src/hair-colour-model.ts`, constants `HAIR_LOOK`):
+The preview's faithful coverage (above) draws strands thinner and crisper than the game shows them: the game's dithered coverage is smoothed over frames by TAA or DLSS, and may be boosted by the ×1.33 flag (§2), neither of which the preview reproduces. **Hair look** (Preview quality › Rendering) is a viewing preference from **Crisp** (0, the default: exactly the coverage above) to **Game-like** (1). It blends three terms linearly with the slider, all in the strand coverage shader (`STRAND_COVERAGE_GLSL` in `src/materials/render/hair-shading.ts`, mirrored by `hairLookCoverage` in `src/materials/hair-colour-model.ts`, constants `HAIR_LOOK`):
 
 | Term | At Game-like | Grade |
 |---|---|---|
@@ -211,7 +223,7 @@ At the adopted calibration the preview's ash brown is 1.25 times the game's leve
 - **The missing light grows with albedo and is cool.** It is largest at the crown and on the lengths away from the key. It lifts the cool `steel_smoke` most and the warm `platinum_blonde` least, and no single term proportional to albedo fits all three colours.
 - **Candidates** [hypothesis]:
   - ray-traced diffuse light reaching the hair through its ambient path, which carries albedo twice (§5); the reference install runs ray-traced lighting at Ultra;
-  - the preview's Rim_Top fold, which under-lights the crown about twofold ([creator lighting §12.4](creator-lighting.md#124-what-remains));
+  - the preview's Rim_Top fold, which under-lit the crown about twofold; since 30 September the preview applies the linear falloff per fragment instead, so the next ladder capture tests how much of the shortfall that was ([creator lighting §12.4](creator-lighting.md#124-what-remains));
   - the TRT lobe's response to the cool rims;
   - the fills' calibrated gain (×0.35, [creator lighting §12.6](creator-lighting.md#126-refit-from-two-captures-28-september)), fitted on luminance over mostly skin regions: the game's hair is cooler than the preview's in every colour, which fits more cyan light on hair than that gain allows.
 

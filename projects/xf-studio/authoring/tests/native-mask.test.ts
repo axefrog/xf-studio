@@ -8,15 +8,17 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { depotHash } from "../src/depot-path";
-import { archiveExportSource, type ExportAnswer, type ExportRequest, type GameAssetExporter } from "../src/game-asset-export";
-import { createNativeFirstExporter, NATIVE_MASK_IDENTITY, type TextureDecoder } from "../src/native-texture-export";
+import { depotHash } from "../src/game/depot-path";
+import { archiveExportSource, type ExportAnswer, type ExportRequest, type GameAssetExporter } from "../src/game/host/game-asset-export";
+import { createNativeFirstExporter, NATIVE_MASK_IDENTITY, type TextureDecoder } from "../src/game/host/native-texture-export";
 import { NativeArchivePool } from "../src/native/archive-reader";
 import { decodeMaskAtlas, decodeMaskLayers, DEFAULT_MASK_LIMITS, maskLayers, type MaskLayout } from "../src/native/mlmask";
 import { InProcessDecoder, WorkerDecoder } from "../src/native/native-decode";
 import { decodeMaskFromPool } from "../src/native/texture-decode";
-import { decodePng } from "../src/png";
-import { evictPrepared, STALE_WORK_MS, sweepStaleWork } from "../src/prepared-files";
+import { decodePng } from "../src/formats/png";
+import { exportsSource, PreparedFiles, STALE_WORK_MS, sweepStaleWork } from "../src/host/prepared-files";
+import { hostClock } from "../src/platform/core/clock";
+import { createJobScheduler } from "../src/platform/core/jobs";
 import { fakeDecompress, syntheticArchive } from "./fixtures/native-archive";
 import { Cr2wBuilder, prop, v } from "./fixtures/native-cr2w";
 
@@ -264,7 +266,9 @@ test("work folders left over by a crash are swept once they are an hour old; new
   expect(readdirSync(exports)).toEqual([".work-recent"]);
   // The budget check sweeps them too, even under budget.
   mkdirSync(old); utimesSync(old, hourAgo, hourAgo);
-  await evictPrepared({ exports, resolver: tempRoot(), store: tempRoot(), manifests: tempRoot() }, Infinity);
+  const files = new PreparedFiles({ budget: Infinity, scheduler: createJobScheduler({ clock: hostClock(), quietMs: 0 }) });
+  files.partition({ name: "exports", evictable: [exportsSource(exports)] });
+  await files.evict();
   expect(readdirSync(exports)).toEqual([".work-recent"]);
 });
 

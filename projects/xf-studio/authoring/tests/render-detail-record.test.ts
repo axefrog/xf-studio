@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { CHARACTER_DETAIL_SCHEMA, DETAIL_SLOTS, parseCharacterDetail, parseCoreDetail, parseRenderDetail, RECORD_LIMITS, RENDER_DETAIL_SCHEMA, RenderDetailVersionError,
-  type CharacterDetail, UNCOVERED_BODY } from "../src/render-detail";
+  type CharacterDetail, UNCOVERED_BODY } from "../src/character/render-detail";
 
 const sha = (c: string) => c.repeat(64);
 const resource = (file: string, c = "a") => ({ file, sha256: sha(c), sources: [{ depotPath: "base\\x.mesh", archive: "basegame.archive", provider: "Installed game" }] });
@@ -214,12 +214,12 @@ describe("rendering boundary", () => {
   const renderers = () => [...walk("platform/scene"), ...["engines", "features"].flatMap(root =>
     readdirSync(new URL(`../src/${root}/`, import.meta.url), { withFileTypes: true }).filter(entry => entry.isDirectory())
       .flatMap(entry => { try { return walk(`${root}/${entry.name}/render`); } catch { return []; } }))];
-  const RENDERING_PATH = [...new Set([...renderers(), "platform/api/scene", "render-detail", "render-templates", "character-detail-plan", "character-detail-request",
-    "character-detail-service", "character-detail-host", "character-detail-server", "character-detail-loader", "character-detail-actions",
-    "character-material-adapters", "browser-character-detail-device", "brow-material", "hair-shading", "hair-colour-model",
-    "browser-head-attachment", "browser-scene-preview-ports", "material-template", "skin-material", "head-surface", "eye-material",
-    "scene-evidence", "detail-limits", "resource-graph", "character-resolver", "face-decal-material", "decal-underlay", "head-skin-placement",
-    "layered-setup", "layered-material", "game-asset-export", "trusted-preview-services", "preview-actions",
+  const RENDERING_PATH = [...new Set([...renderers(), "platform/api/scene", "character/render-detail", "materials/render-templates", "character/character-detail-plan", "character/character-detail-request",
+    "character/host/character-detail-service", "character/host/character-detail-host", "character/host/character-detail-server", "character/render/character-detail-loader", "character/character-detail-actions",
+    "materials/render/character-material-adapters", "character/browser/browser-character-detail-device", "materials/render/brow-material", "materials/render/hair-shading", "materials/hair-colour-model",
+    "preview/browser/browser-head-attachment", "preview/browser/browser-scene-preview-ports", "game/material-template", "materials/render/skin-material", "character/head-surface", "materials/render/eye-material",
+    "character/render/scene-evidence", "character/detail-limits", "game/resource-graph", "character/character-resolver", "materials/render/face-decal-material", "materials/render/decal-underlay", "character/render/head-skin-placement",
+    "game/layered-setup", "materials/render/layered-material", "game/host/game-asset-export", "app/trusted-preview-services", "preview/preview-actions",
     "studio-ui/panels/preview"])];
   test("the rendering path covers every renderer module on disk", () => {
     for (const name of ["platform/scene/scene-host", "platform/scene/character-renderer", "features/eye-makeup/render/index",
@@ -274,12 +274,12 @@ describe("rendering boundary", () => {
     for (const name of RENDERING_PATH) expect(readFileSync(new URL(`../src/${name}.ts`, import.meta.url), "utf8"))
       .not.toMatch(/local-(?:prc|vanilla)-piercings|\/assets\/(?:prc|piercings)\b|aggregatePrcStyle|prc_active_bank|prcError|prcAvailable|matchedPiercing/);
     for (const name of RENDERING_PATH)
-      for (const study of ["brow-study-fixture", "eye-study-fixture"]) expect(readFileSync(new URL(`../src/${name}.ts`, import.meta.url), "utf8")).not.toContain(study);
+      for (const study of ["studies/brow-study-fixture", "studies/eye-study-fixture"]) expect(readFileSync(new URL(`../src/${name}.ts`, import.meta.url), "utf8")).not.toContain(study);
   });
 });
 
 test("a slot label or message built from long mod names is cut with a note, never refusing the V (PIPE-56)", async () => {
-  const { clampedList, SLOT_LABEL_MAX } = await import("../src/render-detail");
+  const { clampedList, SLOT_LABEL_MAX } = await import("../src/character/render-detail");
   const record = character();
   const long = Array.from({ length: 30 }, (_, i) => `a very long mod supplied face detail name ${i}`);
   record.slots[0] = { slot: "skin", state: "shown", label: long.join(", ") };

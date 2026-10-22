@@ -2,14 +2,14 @@
 // default and stored per workspace, that asks the host for the body as the game draws it with nudity allowed. The plan's side is in
 // character-detail-plan.test.ts; this file covers the action, the workspace, the request and the creator rows' coverage.
 import { describe, expect, test } from "bun:test";
-import { CharacterContextActions, type CreatorPort } from "../src/character-context-actions";
-import { CHARACTER_REQUEST_SCHEMA, CharacterRequestVersionError, parseCharacterRequest, sameCharacter } from "../src/character-detail-request";
-import { censorshipOf } from "../src/character-detail-service";
-import { CC_PANEL_SCHEMA } from "../src/cc-panel";
-import { renderCoverage, UNDER_COVER, type CoverageInput } from "../src/cc-render-coverage";
+import { CharacterContextActions, type CreatorPort } from "../src/character/character-context-actions";
+import { CHARACTER_REQUEST_SCHEMA, CharacterRequestVersionError, parseCharacterRequest, sameCharacter } from "../src/character/character-detail-request";
+import { censorshipOf } from "../src/character/host/character-detail-service";
+import { CC_PANEL_SCHEMA } from "../src/character/cc-panel";
+import { renderCoverage, UNDER_COVER, type CoverageInput } from "../src/character/cc-render-coverage";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
-import { PreviewActions, type PreviewPort } from "../src/preview-actions";
-import { parseWorkspace, serializeWorkspace } from "../src/workspace-state";
+import { PreviewActions, type PreviewPort } from "../src/preview/preview-actions";
+import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
 import { freshWorkspace } from "./fixtures/eye-region";
 
 const port = (withBody = true) => ({ cameraState: () => ({ position: [0, 0, 1], target: [0, 0, 0], fov: 30 }), front: () => false, setFov: () => false,
@@ -54,7 +54,7 @@ describe("the request (xfs/character-request-7 `nudity`)", () => {
   const context = () => new CharacterContextActions({ creator: {} as CreatorPort, showSave: () => {} }, { save: undefined, stored: undefined });
 
   test("the character context asks for the uncensored body only while the setting is on and the body shown; the same V either way", () => {
-    expect(CHARACTER_REQUEST_SCHEMA).toBe("xfs/character-request-8");
+    expect(CHARACTER_REQUEST_SCHEMA).toBe("xfs/character-request-9");
     const ctx = context();
     let published = 0;
     ctx.subscribe(() => published++);
@@ -89,7 +89,7 @@ describe("the request (xfs/character-request-7 `nudity`)", () => {
     expect(v6).toEqual({ schema: CHARACTER_REQUEST_SCHEMA, source: "default", bodyGender: "female", body: false });
     expect(censorshipOf(v6)).toBe("censored");
     // A later page than this host is a version skew, said as such.
-    expect(() => parseCharacterRequest({ ...request, schema: "xfs/character-request-9" })).toThrow(CharacterRequestVersionError);
+    expect(() => parseCharacterRequest({ ...request, schema: "xfs/character-request-10" })).toThrow(CharacterRequestVersionError);
   });
 });
 

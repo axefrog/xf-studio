@@ -4,7 +4,7 @@
  * pose poses V; the camera stays where it is, and Frame V frames the posed body. Composed from the component library (SearchField,
  * TreeView, favouriteToggle); it acts only through its context's facade.
  */
-import { keyBinding } from "../../../input-bindings";
+import { keyBinding } from "../../../app/input-bindings";
 import { applyCapability, button, setButtonLabel, emptyState, favouriteToggle, note, SearchField, TreeView, type TreeGroupData, type TreeRowData } from "../../../studio-ui/components";
 import { h, setAttr, setText } from "../../../studio-ui/dom";
 import type { PanelController } from "../../../studio-ui/panels/collection";

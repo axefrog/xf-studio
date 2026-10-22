@@ -5,14 +5,14 @@ import { resolve } from "node:path";
 import { createDesktopServer, smokeMessage } from "../server";
 import { desktopVersionFromMetadata } from "../host";
 import { desktopPackageRequest } from "../package";
-import { LocalSettingsStore } from "../../src/local-settings-store";
-import { collectionDraft } from "../../src/collection-workspace";
-import { loadWorkspace, serializeWorkspace } from "../../src/workspace-state";
+import { LocalSettingsStore } from "../../src/setup/host/local-settings-store";
+import { collectionDraft } from "../../src/app/workspace/collection-workspace";
+import { loadWorkspace, serializeWorkspace } from "../../src/app/workspace/workspace-state";
 import { freshWorkspace } from "../../tests/fixtures/eye-region";
 import { STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
-import { createPackageHandler, localPackageAdapter, localPackageTools } from "../../src/package-server";
+import { createPackageHandler, localPackageAdapter, localPackageTools } from "../../src/host/package-server";
 import { STUDIO_EXPORTERS } from "../../src/compose/exporters";
-import { defaultLocalSettings } from "../../src/local-settings";
+import { defaultLocalSettings } from "../../src/setup/local-settings";
 
 const collectionFixture = JSON.parse(readFileSync(resolve(import.meta.dir,
   "../../../../../experiments/005-preset-collection/editor-collection.json"), "utf8"));
@@ -388,7 +388,7 @@ test("the desktop reports and prepares the derived 3D preview through its sessio
   const game = resolve(previewRoot, "game"), cli = resolve(previewRoot, "WolvenKit.CLI.exe");
   mkdirSync(resolve(game, "archive", "pc", "content"), { recursive: true });
   writeFileSync(cli, "");
-  const { createGameAssetExporter } = await import("../../src/game-asset-export");
+  const { createGameAssetExporter } = await import("../../src/game/host/game-asset-export");
   const exports: string[][] = [];
   const trial = createDesktopServer(staticRoot, resolve(previewRoot, "data"),
     { version: "0.0.1", channel: "dev", buildHash: "dev", metadataStatus: "ready" }, undefined, undefined, undefined, undefined,
@@ -400,7 +400,7 @@ test("the desktop reports and prepares the derived 3D preview through its sessio
     expect((await fetch(base + "/api/desktop/preview")).status).toBe(403);
     expect(await (await fetch(base + "/api/desktop/preview", { headers })).json()).toMatchObject({ phase: "needs-setup", needs: ["game", "wolvenkit"] });
     expect(await (await fetch(base + "/api/desktop/capabilities", { headers })).json()).toMatchObject({ previewAssets: "missing" });
-    new LocalSettingsStore(resolve(previewRoot, "data")).save({ ...(await import("../../src/local-settings")).defaultLocalSettings(),
+    new LocalSettingsStore(resolve(previewRoot, "data")).save({ ...(await import("../../src/setup/local-settings")).defaultLocalSettings(),
       gameRoot: game, wolvenKitCli: cli }, 0);
     const post = (body: unknown, origin = base) => fetch(base + "/api/desktop/preview", { method: "POST",
       headers: { ...headers, Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify(body) });

@@ -10,12 +10,12 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CollectionService, type CollectionTransport } from "../src/collection-service";
-import type { EditorSnapshot } from "../src/collection-session";
-import { CollectionLibrary } from "../src/collection-store";
-import { collectionDraft, emptyMemory } from "../src/collection-workspace";
+import { CollectionService, type CollectionTransport } from "../src/library/collection-service";
+import type { EditorSnapshot } from "../src/library/collection-session";
+import type { CollectionLibrary } from "../src/library/host/collection-store";
+import { collectionDraft, emptyMemory } from "../src/app/workspace/collection-workspace";
 import { STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
-import { LookLibrary } from "../src/library-store";
+import { openTestLibrary } from "./fixtures/library-file";
 import { COLLECTION_1, COLLECTION_2, type LookCollection } from "../src/platform/api";
 import { alpha2Unreadable } from "./fixtures/alpha-0.1.0-alpha.2/schemas";
 import { COLLECTION_FIXTURES, readFixture } from "./fixtures/capture-plan-golden";
@@ -23,8 +23,8 @@ import { recipeOf } from "./fixtures/looks";
 
 function library() {
   const dir = mkdtempSync(join(tmpdir(), "xfs-alpha-library-")), path = join(dir, "library.sqlite");
-  new LookLibrary(path).close();
-  return { path, cleanup: () => { try { rmSync(dir, { recursive: true, force: true }); } catch { /* WAL files may still be closing. */ } } };
+  const file = openTestLibrary(path);
+  return { path, store: file.collections, cleanup: () => { file.close();  try { rmSync(dir, { recursive: true, force: true }); } catch { /* WAL files may still be closing. */ } } };
 }
 
 /** Every collection revision row in the library, parsed. */
@@ -55,7 +55,7 @@ function serviceOver(store: CollectionLibrary, collection: LookCollection) {
 }
 
 test("ordinary eye-makeup collections still save as collection-1 rows, all of which 0.1.0-alpha.2 reads", () => {
-  const temp = library(), store = new CollectionLibrary(temp.path, STUDIO_PARTS);
+  const temp = library(), store = temp.store;
   try {
     const saved = COLLECTION_FIXTURES.map(path => store.save({ collection: STUDIO_PARTS.readCollection(readFixture(path)) }));
     // Edits (including one that no longer needs recipe-11) and a second revision stay collection-1.
@@ -69,11 +69,11 @@ test("ordinary eye-makeup collections still save as collection-1 rows, all of wh
       expect(alpha2Unreadable(row.json)).toEqual([]);
     }
     expect(store.list().find(item => item.id === saved[0].collection.id)?.revision).toBe(2);
-  } finally { store.close(); temp.cleanup(); }
+  } finally { temp.cleanup(); }
 });
 
 test("Save keeps a look with a tried expression: a collection-2 revision 0.1.0-alpha.2 reads, expression intact (CORE-123)", async () => {
-  const temp = library(), store = new CollectionLibrary(temp.path, STUDIO_PARTS);
+  const temp = library(), store = temp.store;
   try {
     const collection = STUDIO_PARTS.readCollection(readFixture(COLLECTION_FIXTURES[1]));
     collection.presets[0].parts.expressions = STUDIO_PARTS.readCollection({ schema: COLLECTION_2, id: collection.id, name: collection.name,
@@ -101,11 +101,11 @@ test("Save keeps a look with a tried expression: a collection-2 revision 0.1.0-a
     delete plain.presets[0].parts.expressions;
     store.save({ collection: plain, revision: again.revision });
     expect(rows(temp.path).filter(item => item.id === collection.id).map(item => item.json.schema)).toEqual([COLLECTION_2, COLLECTION_2, COLLECTION_1]);
-  } finally { store.close(); temp.cleanup(); }
+  } finally { temp.cleanup(); }
 });
 
 test("export saves first whenever the library takes the collection, expressions included; a look from a newer build is exported unsaved (CORE-38)", async () => {
-  const temp = library(), store = new CollectionLibrary(temp.path, STUDIO_PARTS);
+  const temp = library(), store = temp.store;
   try {
     const file = readFixture(COLLECTION_FIXTURES[1]);
     // A look made with a newer XF Studio: kept exactly as it came, locked, and never saved to the library.
@@ -157,5 +157,5 @@ test("export saves first whenever the library takes the collection, expressions 
     if (!plainExport.ok || plainExport.result.kind !== "export") throw Error(JSON.stringify(plainExport));
     expect(JSON.parse(plainExport.result.json).schema).toBe(COLLECTION_1);
     expect(store.list().find(item => item.id === plainFile.id)?.revision).toBe(1);
-  } finally { store.close(); temp.cleanup(); }
+  } finally { temp.cleanup(); }
 });

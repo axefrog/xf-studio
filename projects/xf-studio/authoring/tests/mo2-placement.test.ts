@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { applyMo2Placement, planMo2Placement } from "../src/mo2-placement";
-import { parseMo2Modlist } from "../src/mo2-instance";
-import { eyeMakeupRelatedEntries } from "../src/mod-branding";
+import { applyMo2Placement, planMo2Placement } from "../src/installation/mo2-placement";
+import { parseMo2Modlist } from "../src/installation/mo2-instance";
+import { eyeMakeupRelatedEntries } from "../src/legacy/eye-makeup/mod-branding";
 
 // File order is highest priority first; MO2's left pane shows it reversed, so the pane reads
 // (top to bottom): CORE, LIBS, FRAMEWORKS / ArchiveXL, TweakXL / LOOKS / Legacy, Hair / OVERWRITES / Patch.

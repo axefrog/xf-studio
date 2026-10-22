@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
-import { InstallDetectionActions, type InstallDetectionTransport } from "../src/install-detection-actions";
-import { createInstallDetectionHandler } from "../src/install-detection-server";
-import type { DetectionHostPort } from "../src/install-detection";
-import { DETECTION_DESCRIPTORS } from "../src/studio-action-descriptors";
-import type { FrameworkHostPort, FrameworkVersionCheck } from "../src/framework-versions";
+import { InstallDetectionActions, type InstallDetectionTransport } from "../src/installation/install-detection-actions";
+import { createInstallDetectionHandler } from "../src/installation/host/install-detection-server";
+import type { DetectionHostPort } from "../src/installation/install-detection";
+import { DETECTION_DESCRIPTORS } from "../src/app/studio-action-descriptors";
+import type { FrameworkHostPort, FrameworkVersionCheck } from "../src/installation/framework-versions";
 
 const games = { schema: "xfs/game-install-detection-1", supported: true, candidates: [], rejected: [], issues: [], limitations: [] };
 

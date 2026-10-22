@@ -1,64 +1,61 @@
+import { createReferenceCharacterRoutes } from "../src/character/host/reference-character-server";
 import { existsSync, mkdirSync, realpathSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { isBelow } from "../src/platform/api/path-containment";
 import { randomBytes } from "node:crypto";
-import { LookLibrary, libraryRequest } from "../src/library-store";
-import { CollectionLibrary, collectionRequest } from "../src/collection-store";
-import { PartPresetLibrary, partPresetRequest } from "../src/part-preset-store";
-// The graph (XF Strata): its store and backups in the library files, its host transport and inspector feed (profiles and
-// graph design, G1). Nothing in the page uses it yet; later slices move V, presets and profiles onto it.
-import { createGraphHandler, GraphLibrary } from "../src/platform/graph-adapters/graph-host";
-import { hostClock, hostRandom } from "../src/platform/graph-adapters/host-sources";
-import { LibraryDurability } from "../src/platform/graph-adapters/library-durability";
-import { STUDIO_GRAPH_RULES, STUDIO_GRAPH_TYPES } from "../src/compose/graph";
-import { createLocalSettingsHandler } from "../src/local-settings-server";
-import { FOLDER_FIELDS, type FolderField } from "../src/local-setup-actions";
-import { createInstallDetectionHandler, hostFrameworkCheck, profileFrameworkMods } from "../src/install-detection-server";
+// The library files: one owner per file, its stores, durability, daily backups and routes (src/library/host/library-files.ts).
+import { hostClock } from "../src/platform/core/clock";
+import { openLibraryFiles } from "../src/library/host/library-files";
+import { createLocalSettingsHandler } from "../src/setup/host/local-settings-server";
+import { FOLDER_FIELDS, type FolderField } from "../src/setup/local-setup-actions";
+import { createInstallDetectionHandler, hostFrameworkCheck, profileFrameworkMods } from "../src/installation/host/install-detection-server";
 import { createSavesHandler } from "../src/features/save-explorer/host/saves-server";
-import { savesFolderProbe, savesHostSources } from "../src/saves-host-sources";
+import { savesFolderProbe, savesHostSources } from "../src/saves/host/saves-host-sources";
 import { createModInstallHandler, installReceiptsRoot, ModInstallError, ModInstallHost, READ_ONLY_VERIFICATION, systemAnsiCodePage,
-  windowsRunningApps } from "../src/mod-install-host";
-import { verificationInstallReceipts, verificationSettingsDirectory } from "../src/host-state";
-import { LocalSettingsStore } from "../src/local-settings-store";
+  windowsRunningApps } from "../src/installation/host/mod-install-host";
+import { verificationInstallReceipts, verificationSettingsDirectory } from "../src/setup/host/host-state";
+import { LocalSettingsStore } from "../src/setup/host/local-settings-store";
 import { desktopCapabilities, type DesktopVersion } from "./host";
 import { desktopPackageProgress, desktopPackageRequest } from "./package";
 import { cachedBunProbe, cachedWolvenKitProbe, desktopBuildIssue, desktopPlateCache, PROBE_PENDING, probeBun, type WolvenKitProbe } from "./build";
-import { eyePlateReadiness } from "../src/eye-plate-cache";
-import { EYE_PLATE_RECIPE } from "../src/eye-plate-recipe";
+import { eyePlateReadiness } from "../src/legacy/eye-makeup/plate/host/eye-plate-cache";
+import { EYE_PLATE_RECIPE } from "../src/legacy/eye-makeup/plate/eye-plate-recipe";
 import { DesktopUpdateService, type NativeUpdater, type UpdateTrust } from "./update-service";
 import { DesktopWorkspaceStore, desktopWorkspaceRequest, desktopWorkspaceStartFresh } from "./workspace-store";
 // A composition root: the part registry and document model are built once and injected (CORE-29).
 import { STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
 import { DesktopWorkActivity } from "./work-activity";
 import { DesktopUpdateApplyGuard } from "./update-apply-guard";
-import { PreviewCoreHost } from "../src/preview-core-host";
-import { includeHostCode } from "../src/host-code-identity";
-import { createPreviewCoreHandler } from "../src/preview-core-server";
-import type { GameAssetExporter } from "../src/game-asset-export";
-import { PREVIEW_CORE_ASSET_NAMES } from "../src/preview-core-recipe";
-import { CharacterDetailHost, characterRoute, installationFingerprint } from "../src/character-detail-host";
-import { installations } from "../src/installation-registry";
-import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "../src/character-detail-server";
-import { CHOICE_PREVIEW_ENDPOINT, createChoicePreviewHandler } from "../src/choice-preview-server";
-import { CREATOR_ENDPOINT, createCreatorHandler } from "../src/cc-catalogue-server";
-import { createFacialHandler, FACIAL_ENDPOINT, FacialHost, locateFacialSolver } from "../src/facial-host";
-import { createPoseHandler, POSES_ENDPOINT } from "../src/pose-catalogue-server";
+import { PreviewCoreHost } from "../src/preview/host/preview-core-host";
+import { includeHostCode } from "../src/host/host-code-identity";
+import { createPreviewCoreHandler } from "../src/preview/host/preview-core-server";
+import type { GameAssetExporter } from "../src/game/host/game-asset-export";
+import { PREVIEW_CORE_ASSET_NAMES } from "../src/preview/preview-core-recipe";
+import { CharacterDetailHost, characterRoute, installationFingerprint } from "../src/character/host/character-detail-host";
+import { installations } from "../src/game/host/installation-registry";
+import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "../src/character/host/character-detail-server";
+import { CHOICE_PREVIEW_ENDPOINT, createChoicePreviewHandler } from "../src/character/host/choice-preview-server";
+import { CREATOR_ENDPOINT, createCreatorHandler } from "../src/character/host/cc-catalogue-server";
+import { createFacialHandler, FACIAL_ENDPOINT, FacialHost, locateFacialSolver } from "../src/animation/host/facial-host";
+import { createPoseHandler, POSES_ENDPOINT } from "../src/animation/host/pose-catalogue-server";
 import { createPosePreferencesHandler, PosePreferencesStore } from "../src/features/poses/host/preferences-store";
-import { POSE_PREFERENCES_ENDPOINT, VERIFICATION_POSE_PREFERENCES_ENDPOINT } from "../src/pose-endpoint";
-import { PoseCatalogueHost } from "../src/pose-catalogue-host";
-import { IdleHost, idlePrepared } from "../src/idle-host";
-import { createIdleHandler, IDLES_ENDPOINT } from "../src/idle-server";
-import { createGradingLutHandler, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT, GradingLutHost, serveGradingLut } from "../src/grading-lut-host";
-import { WolvenKitSetupHost, wolvenKitReadinessIssue, type WolvenKitSetupOptions } from "../src/wolvenkit-setup-host";
-import { createWolvenKitSetupHandler } from "../src/wolvenkit-setup-server";
-import { wolvenKitLinkUrl, type WolvenKitLink } from "../src/wolvenkit-setup";
-import { isProjectLink, PROJECT_LINKS } from "../src/project-links";
-import { UPDATE_CHECK_FILE, updateCheckEndpoints } from "../src/update-check-host";
-import { textFileAt } from "../src/derived-cache";
-import { gitHubReleases } from "../src/update-check-github";
-import type { LocalSettings } from "../src/local-settings";
-import { hostDiagnosticsAt, hostFailure, setProcessDiagnostics } from "../src/diagnostics/host-log";
-import { createDiagnosticsHandler, DIAGNOSTICS_PREFIX, withRequestDiagnostics } from "../src/diagnostics/host-endpoint";
+import { POSE_PREFERENCES_ENDPOINT, VERIFICATION_POSE_PREFERENCES_ENDPOINT } from "../src/animation/pose-endpoint";
+import { PoseCatalogueHost } from "../src/animation/host/pose-catalogue-host";
+import { IdleHost, idlePrepared } from "../src/animation/host/idle-host";
+import { hostJobs } from "../src/host/host-jobs";
+import { PreparedFiles } from "../src/host/prepared-files";
+import { createIdleHandler, IDLES_ENDPOINT } from "../src/animation/host/idle-server";
+import { createGradingLutHandler, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT, GradingLutHost, serveGradingLut } from "../src/preview/host/grading-lut-host";
+import { WolvenKitSetupHost, wolvenKitReadinessIssue, type WolvenKitSetupOptions } from "../src/setup/host/wolvenkit-setup-host";
+import { createWolvenKitSetupHandler } from "../src/setup/host/wolvenkit-setup-server";
+import { wolvenKitLinkUrl, type WolvenKitLink } from "../src/setup/wolvenkit-setup";
+import { isProjectLink, PROJECT_LINKS } from "../src/app/project-links";
+import { UPDATE_CHECK_FILE, updateCheckEndpoints } from "../src/setup/host/update-check-host";
+import { textFileAt } from "../src/host/derived-cache";
+import { gitHubReleases } from "../src/setup/host/update-check-github";
+import type { LocalSettings } from "../src/setup/local-settings";
+import { hostDiagnosticsAt, hostFailure, setProcessDiagnostics } from "../src/diagnostics/host/host-log";
+import { createDiagnosticsHandler, DIAGNOSTICS_PREFIX, withRequestDiagnostics } from "../src/diagnostics/host/host-endpoint";
 
 /** The derived 3D preview cache lives beside the plate cache in the app's private data folder. */
 export const desktopPreviewCache = (dataRoot: string) => resolve(dataRoot, "preview-cache");
@@ -130,26 +127,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     requestWorkspaceFlush(nonce: string): void; flushTimeoutMs?: number },
   previewExporter?: (cli: string | null) => GameAssetExporter, hostOptions: DesktopHostOptions = {}) {
   mkdirSync(dataRoot, { recursive: true });
-  const graphOptions = { types: STUDIO_GRAPH_TYPES, rules: STUDIO_GRAPH_RULES, clock: hostClock(), random: hostRandom() };
-  // Each library file's durability (library-durability.ts): commits don't wait for the disk, and a flush a few seconds after the last
-  // one makes them durable, so a power cut loses at most those seconds. Open until the app stops (`stop()`, on quit).
-  const libraryLife = new AbortController();
-  const durable = (file: string) => new LibraryDurability(resolve(dataRoot, file), { clock: graphOptions.clock, signal: libraryLife.signal,
-    report: error => hostFailure("library", "flush_failed", "The library couldn't be flushed to disk yet; it will try again.", error, "warn") });
-  const libraryFile = durable("library.sqlite"), verificationFile = durable("verification.sqlite");
-  const library = new LookLibrary(resolve(dataRoot, "library.sqlite"), libraryFile);
-  const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqlite"), verificationFile);
-  const collections = new CollectionLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS, libraryFile);
-  const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS, verificationFile);
-  // Named part presets (an expression today) in their own table of the same library files (part-preset-store.ts).
-  const partPresets = new PartPresetLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS, undefined, libraryFile);
-  const verificationPartPresets = new PartPresetLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS, undefined, verificationFile);
-  const graphLibrary = new GraphLibrary(resolve(dataRoot, "library.sqlite"), { ...graphOptions, writes: libraryFile });
-  const verificationGraphLibrary = new GraphLibrary(resolve(dataRoot, "verification.sqlite"), { ...graphOptions, writes: verificationFile });
-  const graphRequests = [["/api/graph", createGraphHandler(graphLibrary, "/api/graph")],
-    ["/api/verification/graph", createGraphHandler(verificationGraphLibrary, "/api/verification/graph")]] as const;
-  // The library's daily backup, a moment after starting.
-  const backupTimer = setTimeout(() => graphLibrary.dailyBackup(), 2000);
+  const clock = hostClock();
   // Desktop settings follow the Electrobun identity and channel. Never inherit
   // localhost's per-user default or developer XFS_PACKAGE_* environment paths.
   const settingsStore = new LocalSettingsStore(dataRoot);
@@ -167,6 +145,11 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   // One structured log and rolling detail window in <data>/diagnostics/ (docs/diagnostics.md). Host events go there by area;
   // `onReport` adds a listener (tests), it doesn't replace the log.
   const diagnostics = hostDiagnosticsAt(dataRoot);
+  // The library files (library.sqlite and verification.sqlite), each with one owner: migrations, transactions and durability (commits
+  // don't wait for the disk; a flush a few seconds after the last makes them durable, so a power cut loses at most those seconds), and the
+  // main file's daily backup. Open until the app stops (`stop()`, on quit).
+  const libraries = openLibraryFiles(dataRoot, { clock, parts: STUDIO_PARTS, isolated: false,
+    log: message => diagnostics.log.info("library", "legacy_import", message) });
   setProcessDiagnostics(diagnostics);
   // The resolver reads game files natively first, in a worker; the packaged app starts the built one.
   if (hostOptions.nativeDecodeWorker) {
@@ -233,7 +216,9 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const previewCoreRequest = createPreviewCoreHandler(previewCore);
   // Brows, lashes and hair: resolved from the launch route Build uses (MO2, manual or game folder) and
   // exported from the winning archives into the same private preview cache.
-  const characterDetails = new CharacterDetailHost({ cacheRoot: desktopPreviewCache(dataRoot), exporter: previewExporter,
+  const jobs = hostJobs();
+  const prepared = new PreparedFiles({ scheduler: jobs, log: logTo("character") });
+  const characterDetails = new CharacterDetailHost({ cacheRoot: desktopPreviewCache(dataRoot), exporter: previewExporter, jobs, prepared,
     settings: () => {
       const settings = savedSettings();
       return { gameRoot: settings?.gameRoot ?? null, launchRoute: settings?.launchRoute ?? "direct", mo2Root: settings?.mo2Root ?? null,
@@ -241,6 +226,10 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     },
     log: logTo("character"), trace: diagnostics.trace, nativeDecodeWorker: hostOptions.nativeDecodeWorker });
   const characterDetailRequest = createCharacterDetailHandler(characterDetails);
+  // The desktop host leaves Hair Lab out (localhost only for now), so baseline references stay off here.
+  const referenceCharacters = createReferenceCharacterRoutes({ cacheRoot: desktopPreviewCache(dataRoot), exporter: previewExporter, prepared,
+    enabled: () => false, settings: () => ({ gameRoot: savedSettings()?.gameRoot ?? null, launchRoute: "direct", mo2Root: null, mo2ProfileId: null,
+      manualModRoot: null, wolvenKitCli: wolvenKit.usable() }), log: logTo("reference-character"), nativeDecodeWorker: hostOptions.nativeDecodeWorker });
   const creatorRequest = createCreatorHandler(characterDetails.creator, { refresh: () => characterDetails.refresh(), prepared: characterDetails });
   const choicePreviewRequest = createChoicePreviewHandler(characterDetails);
   // Photo-mode poses (pose-library-design.md P1), from the same launch route and resolver cache as the creator options.
@@ -277,9 +266,9 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     solver: () => locateFacialSolver({ toolsRoot: resolve(dataRoot, "tools"), script: resolve(import.meta.dir, "facial_solver_server.py") }),
     log: logTo("facial") });
   const facialRequest = createFacialHandler(facial);
-  // "Clear prepared game files" clears the face data too, and the size counts it (CORE-102).
-  characterDetails.attachPrepared({ bytes: () => facial.preparedBytes(), clear: () => facial.clearPrepared() });
-  characterDetails.attachPrepared(idlePrepared(idles, resolve(desktopPreviewCache(dataRoot), "resolver")));
+  // "Clear prepared game files" clears the face data and the idles too, and the size counts them (CORE-102).
+  prepared.partition(facial.preparedPartition());
+  prepared.partition(idlePrepared(idles, resolve(desktopPreviewCache(dataRoot), "resolver")));
   // Diagnostics: the page's failures, diagnostic mode and "Report a problem" (nothing is sent anywhere).
   const diagnosticsRequest = createDiagnosticsHandler(diagnostics, {
     app: () => ({ version: version.version, commit: version.buildHash === "unavailable" ? null : version.buildHash,
@@ -288,6 +277,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     wolvenKit: () => { const state = wolvenKit.snapshot(); return { version: state.version, source: state.source, phase: state.phase }; },
     roots: () => [{ label: "<data>", path: dataRoot }, { label: "<build-tools>", path: toolsRoot }],
     resolverCache: resolve(desktopPreviewCache(dataRoot), "resolver"),
+    resources: (refs, progress) => characterDetails.reportResources(refs, progress),
     // XF Studio's own builds are named as such in a report (PIPE-116): the receipts folder below and the app's earlier one.
     installReceipts: () => [resolve(hostOptions.installReceipts ?? installReceiptsRoot(dataRoot)), installReceiptsRoot(dataRoot)],
     openExternal: hostOptions.openExternal,
@@ -343,6 +333,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       if (url.pathname.startsWith(DIAGNOSTICS_PREFIX)) return diagnosticsRequest(routedRequest);
       if (url.pathname === "/api/desktop/preview") return previewCoreRequest(routedRequest);
       if (url.pathname === CHARACTER_DETAIL_ENDPOINT) return characterDetailRequest(routedRequest);
+      if (referenceCharacters.accepts(url.pathname)) return referenceCharacters.handle(routedRequest);
       if (url.pathname === CHOICE_PREVIEW_ENDPOINT || url.pathname.startsWith(`${CHOICE_PREVIEW_ENDPOINT}/`)) return choicePreviewRequest(routedRequest);
       if (url.pathname === CREATOR_ENDPOINT) return creatorRequest(routedRequest);
       if (url.pathname === POSES_ENDPOINT) return poseRequest(routedRequest);
@@ -440,13 +431,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       if (url.pathname === "/api/install-detection") return installDetection(routedRequest);
       if (url.pathname === "/api/saves" || url.pathname.startsWith("/api/saves/")) return savesRequest(routedRequest);
       if (url.pathname === "/api/verification/saves" || url.pathname.startsWith("/api/verification/saves/")) return verificationSavesRequest(routedRequest);
-      for (const [prefix, store] of [["/api/collections", collections], ["/api/verification/collections", verificationCollections]] as const)
-        if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return collectionRequest(routedRequest, store, prefix);
-      for (const [prefix, store] of [["/api/part-presets", partPresets], ["/api/verification/part-presets", verificationPartPresets]] as const)
-        if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return partPresetRequest(routedRequest, store, prefix);
-      for (const [prefix, handle] of graphRequests) if (url.pathname.startsWith(prefix + "/")) return handle(routedRequest);
-      for (const [prefix, store] of [["/api/looks", library], ["/api/verification/looks", verificationLibrary]] as const)
-        if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return libraryRequest(routedRequest, store, prefix);
+      const libraryAnswer = libraries.handle(routedRequest, url);
+      if (libraryAnswer) return libraryAnswer;
       if (request.method !== "GET" && request.method !== "HEAD") return new Response("Method not allowed", { status: 405 });
       if (url.pathname === "/health") return Response.json({ app: "xf-studio-desktop" });
       let path: string;
@@ -497,6 +483,15 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     characterDetails,
     /** WolvenKit setup (tests and shutdown). */
     wolvenKit,
-    stop() { diagnostics.trace.flush(); shutdown.abort(); previewCore.cancel(); characterDetails.cancel(); wolvenKit.cancel(); server.stop(true); facial.dispose(); collections.close(); verificationCollections.close(); partPresets.close(); verificationPartPresets.close(); clearTimeout(backupTimer); graphLibrary.close(); verificationGraphLibrary.close(); library.close(); verificationLibrary.close(); libraryLife.abort(); },
+    stop() {
+      diagnostics.trace.flush();
+      shutdown.abort();
+      previewCore.cancel();
+      characterDetails.cancel();
+      wolvenKit.cancel();
+      server.stop(true);
+      facial.dispose();
+      libraries.close();
+    },
   };
 }

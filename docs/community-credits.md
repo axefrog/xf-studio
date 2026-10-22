@@ -12,9 +12,10 @@ Credit here acknowledges what we learned or used. It does not imply endorsement 
 4. [Libraries, runtimes and general tools](#libraries-runtimes-and-general-tools)
 5. [Documentation and community knowledge](#documentation-and-community-knowledge)
 6. [Mods and creators whose work we studied](#mods-and-creators-whose-work-we-studied)
-7. [Research papers](#research-papers)
-8. [Reference imagery](#reference-imagery)
-9. [Community members we are still identifying](#community-members-we-are-still-identifying)
+7. [Story and game design](#story-and-game-design)
+8. [Research papers](#research-papers)
+9. [Reference imagery](#reference-imagery)
+10. [Community members we are still identifying](#community-members-we-are-still-identifying)
 
 ## Game developer
 
@@ -76,7 +77,7 @@ By Black Tree Gaming Ltd. (Nexus Mods) and contributors. [GitHub](https://github
 
 ### WolvenKit
 
-By the WolvenKit team and contributors. [GitHub](https://github.com/WolvenKit/WolvenKit). WolvenKit is the backbone of our export pipeline: we use its CLI to extract, convert, serialize and pack resources, including extracting the head that XF Studio's built-in eye plate is cut from and exporting each user's own head, eyes, resolved materials and textures for the 3D preview, and its source taught us the game's save, archive, mesh, morph target, animation and compiled appearance formats, plus the material type definitions and shader-cache layout (its reader named the cache's regions, which we then decoded to the engine's lookup key), and its multilayer-mask exporter showed how the mask atlas and tile tables decode. Its animation importer showed that facial float tracks and additive clip types survive a glTF round trip, which the expression export plan relies on, and its compressed animation buffer reader and writer showed the key layout and rotation encoding that the XF Runtime Bridge's live-pose carrier and its in-game layout check follow. Its wardrobe and script-system save parsers showed where a save keeps V's clothing and how a save's object packages are laid out, which XF Studio's loadout reader follows, and its list of known resource paths located the game's cooked table of item visual tags. Its type definitions named the fields, class defaults and enumerations of the game's dangle simulation, and the lip-sync map, scene actor and dialogue-line fields that tie a spoken line to its facial clip. Its streaming-sector, node-data and instance-transform readers showed how the world's sectors store their nodes and placements. Its TweakDB reader showed the compiled TweakDB layout XF Studio reads for the character creator's categories and swatch icons. Its save writer, node writer and chunk compression showed how a save's chunks, node table and footer are rebuilt, the basis of XF Studio's save write-back design. Its save parsers for inventory, facts and the world's hash-keyed persistency data, and how it keeps unknown classes and nodes, shaped XF Studio's save editor study. Its archive and package writers also informed XF Studio's pre-pack path checks, and its CLI output is the reference XF Studio's native archive reader is checked against, byte for byte and document for document, and its PNG texture and layer-mask exports the reference for XF Studio's native texture and mask decoders, texel for texel; its rig and animation-graph serialization was the reference XF Studio's reader of the body's deformation rig was checked against, and its morph-target export with the game folder writes the fingertip skin of nails morph mods; its GLB mesh exports, whose conventions its mesh tools document, are the reference for XF Studio's native mesh reader, vertex for vertex; its animation exporter is the reference for XF Studio's native animation decoder, key for key. The same buffer layout lets the expression editor read a clip's float keys to start from any installed expression. Used as an external tool (GPL-3.0): XF Studio downloads the official WolvenKit CLI release only when a user agrees, and neither includes nor redistributes any WolvenKit code or binaries.
+By the WolvenKit team and contributors. [GitHub](https://github.com/WolvenKit/WolvenKit). WolvenKit is the backbone of our export pipeline: we use its CLI to extract, convert, serialize and pack resources, including extracting the head that XF Studio's built-in eye plate is cut from and exporting each user's own head, eyes, resolved materials and textures for the 3D preview, and its source taught us the game's save, archive, mesh, morph target, animation and compiled appearance formats, plus the material type definitions and shader-cache layout (its reader named the cache's regions, which we then decoded to the engine's lookup key), and its multilayer-mask exporter showed how the mask atlas and tile tables decode. Its animation importer showed that facial float tracks and additive clip types survive a glTF round trip, which the expression export plan relies on, and its compressed animation buffer reader and writer showed the key layout and rotation encoding that the XF Runtime Bridge's live-pose carrier and its in-game layout check follow. Its wardrobe and script-system save parsers showed where a save keeps V's clothing and how a save's object packages are laid out, which XF Studio's loadout reader follows, and its list of known resource paths located the game's cooked table of item visual tags. Its type definitions named the fields, class defaults and enumerations of the game's dangle simulation, and the lip-sync map, scene actor and dialogue-line fields that tie a spoken line to its facial clip. Its streaming-sector, node-data and instance-transform readers showed how the world's sectors store their nodes and placements. Its TweakDB reader showed the compiled TweakDB layout XF Studio reads for the character creator's categories and swatch icons. Its save writer, node writer and chunk compression showed how a save's chunks, node table and footer are rebuilt, the basis of XF Studio's save write-back design. Its save parsers for inventory, facts and the world's hash-keyed persistency data, and how it keeps unknown classes and nodes, shaped XF Studio's save editor study. Its archive and package writers also informed XF Studio's pre-pack path checks, and its CLI output is the reference XF Studio's native archive reader is checked against, byte for byte and document for document, and its PNG texture and layer-mask exports the reference for XF Studio's native texture and mask decoders, texel for texel; its rig and animation-graph serialization was the reference XF Studio's reader of the body's deformation rig was checked against, and its morph-target export with the game folder writes the fingertip skin of nails morph mods; its GLB mesh exports, whose conventions its mesh tools document, are the reference for XF Studio's native mesh reader, vertex for vertex; its animation exporter is the reference for XF Studio's native animation decoder, key for key. The same buffer layout lets the expression editor read a clip's float keys to start from any installed expression. Used as an external tool (GPL-3.0): XF Studio downloads the official WolvenKit CLI release only when a user agrees, and neither includes nor redistributes any WolvenKit code or binaries. WolvenKit is the backbone of our export pipeline: we use its CLI to extract, convert, serialize and pack resources, including extracting the head that XF Studio's built-in eye plate is cut from and exporting each user's own head, eyes, resolved materials and textures for the 3D preview, and its source taught us the game's save, archive, mesh, morph target, animation and compiled appearance formats, plus the material type definitions and shader-cache layout, and its multilayer-mask exporter showed how the mask atlas and tile tables decode. Its archive and package writers also informed XF Studio's pre-pack path checks. Its CLI output is the reference XF Studio's native resource writer is checked against, byte for byte for every resource and archive a Build writes, and the writer follows the write order, default values and serialize-default classes of its generated classes, read from its CLI's type library; its CLI output is also the reference XF Studio's native archive reader is checked against, byte for byte and document for document, and its PNG texture and layer-mask exports the reference for XF Studio's native texture and mask decoders, texel for texel; its rig and animation-graph serialization was the reference XF Studio's reader of the body's deformation rig was checked against, and its morph-target export with the game folder writes the fingertip skin of nails morph mods; its GLB mesh exports, whose conventions its mesh tools document, are the reference for XF Studio's native mesh reader, vertex for vertex; its animation exporter is the reference for XF Studio's native animation decoder, key for key.
 
 ## Libraries, runtimes and general tools
 
@@ -104,6 +105,10 @@ By the W3C CSS Working Group. [Specification](https://www.w3.org/TR/css-easing-1
 
 By Omar Cornut and contributors. [GitHub](https://github.com/ocornut/imgui). Its DirectX 12 and Win32 backends showed how an immediate-mode UI is fed input and drawn with its own descriptor heap, and how its dynamic font atlas uploads glyphs during drawing, which shaped the XF overlay host. The XF Runtime Bridge embeds it (dependency use, MIT; the notice ships with the plugin): its core and DirectX 12 renderer draw the bridge's overlay panel.
 
+### DirectXTex
+
+By Microsoft (Chuck Walbourn and contributors). [GitHub](https://github.com/microsoft/DirectXTex). XF Studio's texture compressor is built from its encoders: BC4 and BC5 on the CPU and BC7 with its DirectCompute encoder, the same code WolvenKit's texture import runs, so a Build's textures come out byte for byte as WolvenKit would make them. A dependency, MIT-licensed; XF Studio builds it from the official source release.
+
 ### dxil-spirv
 
 By Hans-Kristian Arntzen. [GitHub](https://github.com/HansKristian-Work/dxil-spirv). Translating the game's DXIL shader programs to SPIR-V made structured, decompiled listings of them possible in our shader research. Used as a research tool only; MIT-licensed.
@@ -114,7 +119,7 @@ By Andrey Sitnik and contributors. [Website](https://easings.net), [GitHub](http
 
 ### cyrb53
 
-By bryc. [cyrb53](https://github.com/bryc/code/blob/master/jshash/experimental/cyrb53.js), a public-domain 53-bit string hash. XF Strata derives stable identities from canonical data with it (conflict IDs, the seeds of its random streams).
+By bryc. [cyrb53](https://github.com/bryc/code/blob/master/jshash/experimental/cyrb53.js), a public-domain 53-bit string hash. XF Studio's chunk store uses it as a fast content address for cached data.
 
 ### Electrobun and Hutch
 
@@ -134,7 +139,7 @@ By Jordan Russell and Martijn Laan. [Website](https://jrsoftware.org/isinfo.php)
 
 ### JSON Schema
 
-The [JSON Schema](https://json-schema.org/) specification (draft 2020-12). XF Strata publishes its graph-model format as a JSON Schema, so scripts, tools and a second engine can check a declared subsystem before it is built.
+The [JSON Schema](https://json-schema.org/) specification (draft 2020-12). The XF Runtime Bridge's command catalogue is written as JSON Schema, so every frontend and tool can check a command's input before sending it.
 
 ### JSON for Modern C++
 
@@ -178,7 +183,7 @@ By NVIDIA. [GitHub](https://github.com/NVIDIA-RTX/Streamline). Its DLSS Frame Ge
 
 ### PractRand (sfc32)
 
-By Chris Doty-Humphrey. [PractRand](https://pracrand.sourceforge.net/) and its small fast counting generator, sfc32. XF Strata's named, seeded random streams use sfc32, which makes every simulation repeatable from its seed.
+By Chris Doty-Humphrey. [PractRand](https://pracrand.sourceforge.net/) and its small fast counting generator, sfc32. XF Studio's seeded random helper uses sfc32, which makes tests and simulations repeatable from a seed.
 
 ### Pillow
 
@@ -214,11 +219,11 @@ By the SQLite project. [sqlite.org](https://sqlite.org/). SQLite stores XF Studi
 
 ### Three.js
 
-By mrdoob and the three.js authors. [GitHub](https://github.com/mrdoob/three.js). Three.js renders the studio's entire browser preview: skinned head, materials, camera controls, ray casting and the glitter studies. One isolated glitter study adapts its physical-lighting shader structure, so that code carries the Three.js MIT notice, which must also accompany any distributed build. Its multiple-views examples (one renderer drawing several cameras into scissored regions of one canvas) framed how the planned view graph shares one GPU context across views.
+By mrdoob and the three.js authors. [GitHub](https://github.com/mrdoob/three.js). Three.js renders the studio's entire browser preview: skinned head, materials, camera controls, ray casting and the glitter studies. One isolated glitter study adapts its physical-lighting shader structure, so that code carries the Three.js MIT notice, which must also accompany any distributed build. Its multiple-views examples (one renderer drawing several cameras into scissored regions of one canvas) framed how the planned view graph shares one GPU context across views; its texture-upload implementation established how Hair Lab can supply complete manual mip chains and gamma-correct Flow inputs.
 
 ### WHATWG DOM Standard
 
-The [DOM Standard](https://dom.spec.whatwg.org/#aborting-ongoing-activities) (WHATWG). Its AbortController and AbortSignal define the cancellation XF Strata uses everywhere: its tokens follow their semantics (abort once with a reason, listeners called once, signals that follow a parent), stated in XF Strata's specification for other languages.
+The [DOM Standard](https://dom.spec.whatwg.org/#aborting-ongoing-activities) (WHATWG). Its AbortController and AbortSignal define the cancellation XF Studio uses everywhere: work is cancelled by aborting once with a reason, and a signal follows its parent.
 
 ### WebKit
 
@@ -252,7 +257,7 @@ These mods were studied from local installations. Where the private preview disp
 
 ### Appearance Menu Mod
 
-By MaximiliumM and contributors. [GitHub](https://github.com/MaximiliumM/appearancemenumod). Its Lua source showed how a mod sets time and weather, teleports, spawns a fixed camera, poses V and hides the HUD at runtime. Those techniques fill much of the capability matrix for agent-driven in-game tests. Its expression code showed a second facial route beside photo mode: resetting an NPC's reactions and applying a facial-reaction feature that selects one of the game's emotion idles. Its observer on the photo-mode setup is how we learned to catch the photo-mode puppet from Lua. Its cursor override showed how to hide the photo-mode mouse cursor for clean captures, its map markers (the mappin type and settings they use) are what the bridge's XF map pins copy, and its controllable lights, saved locations, NPC spawning through Codeware and friendly, immortal actors showed how a test session could light V, stand her in a fixed spot and keep a scene calm. Its decor presets and shareable location packs showed how players already save and exchange placed props and places. Its custom-pose collab files, small Lua tables naming a workspot entity and clips per body, showed the pose route that exists only inside AMM. Its look-at requests with weighted head and chest parts showed how a script can aim a character's eyes, head and chest, one of the channels the pose editor's live posing can use. Its gaze freeze through the global look-at option is one of the two routes the photo-mode snapshot design compares. Its re-teleporting of photo-mode stand-ins after menu changes showed when photo mode rewrites a stand-in's position, its workspot playback on the stand-in showed a pose route beyond the menu, and its makeup and earring switches showed how to hide a decal on V in photo mode. Its player teleport with a chosen facing and its free camera, a spawned camera entity moved by teleports while restriction effects hold V still, are the models for the bridge's planned teleport and free camera. Studied only.
+By MaximiliumM and contributors. [GitHub](https://github.com/MaximiliumM/appearancemenumod). Its Lua source showed how a mod sets time and weather, teleports, spawns a fixed camera, poses V and hides the HUD at runtime. Those techniques fill much of the capability matrix for agent-driven in-game tests. Its expression code showed a second facial route beside photo mode: resetting an NPC's reactions and applying a facial-reaction feature that selects one of the game's emotion idles. Its observer on the photo-mode setup is how we learned to catch the photo-mode puppet from Lua. Its cursor override showed how to hide the photo-mode mouse cursor for clean captures, its map markers (the mappin type and settings they use) are what the bridge's XF map pins copy, and its controllable lights, saved locations, NPC spawning through Codeware and friendly, immortal actors showed how a test session could light V, stand her in a fixed spot and keep a scene calm. Its decor presets and shareable location packs showed how players already save and exchange placed props and places. Its custom-pose collab files, small Lua tables naming a workspot entity and clips per body, showed the pose route that exists only inside AMM. Its look-at requests with weighted head and chest parts showed how a script can aim a character's eyes, head and chest, one of the channels the pose editor's live posing can use. Its gaze freeze through the global look-at option is one of the two routes the photo-mode snapshot design compares. Its re-teleporting of photo-mode stand-ins after menu changes showed when photo mode rewrites a stand-in's position, its workspot playback on the stand-in showed a pose route beyond the menu, and its makeup and earring switches showed how to hide a decal on V in photo mode. Its player teleport with a chosen facing and its free camera, a spawned camera entity moved by teleports while restriction effects hold V still, are the models for the bridge's planned teleport and free camera. Its Director, which scripts spawned actors through the game's AI commands (teleport, walk to a point, follow, turn), a voice trigger, a facial reaction, a look-at and a pose per step and cleans them up afterwards, is the model for the bridge's planned NPC direction commands. Studied only.
 
 ### Arkhe
 
@@ -280,7 +285,7 @@ By FreakaZ (+FlowerD), per its script headers. [Nexus](https://www.nexusmods.com
 
 ### Dark Future
 
-By DarkFortuneTeller. [GitHub](https://github.com/DarkFortuneTeller/DarkFuture), [Nexus](https://www.nexusmods.com/cyberpunk2077/mods/16300). Its source showed how a large persistent gameplay system is structured to stay robust: one lifecycle shared by every system, a start-up ordered after the HUD is ready, a check that holds story beats back during cinematics, as Johnny and after the point of no return, a small save footprint, and quest phases driven from script by a single fact that selects which scene to play. Its phone therapist showed how much story a branching text conversation can carry. Studied only; its CC BY-SA 4.0 licence would bind any reuse, and none is.
+By DarkFortuneTeller. [GitHub](https://github.com/DarkFortuneTeller/DarkFuture), [Nexus](https://www.nexusmods.com/cyberpunk2077/mods/16300). Its source showed how a large persistent gameplay system is structured to stay robust: one lifecycle shared by every system, a start-up ordered after the HUD is ready, a check that holds story beats back during cinematics, as Johnny and after the point of no return, a small save footprint, and quest phases driven from script by a single fact that selects which scene to play. Its phone therapist showed how much story a branching text conversation can carry. Its encounter spawns, made so they never reach a save, and its listener on the last dialogue choice informed the NPC direction design. Studied only; its CC BY-SA 4.0 licence would bind any reuse, and none is.
 
 ### dragonzkiller
 
@@ -288,7 +293,7 @@ By DarkFortuneTeller. [GitHub](https://github.com/DarkFortuneTeller/DarkFuture),
 
 ### eagul
 
-[PRC — Fully Modular Jewellery Framework](https://www.nexusmods.com/cyberpunk2077/mods/8590), [New Piercings Collection Vol. 1](https://www.nexusmods.com/cyberpunk2077/mods/8611) and [PRC Vanilla Piercing Mirrors](https://www.nexusmods.com/cyberpunk2077/mods/10236); the framework also credits Auska for morph-target import and manavortex for modding help. PRC showed a working route to morph-compatible modular jewellery and informs our future jewellery design; working out why it works in game (file replacement alone) is what let the preview draw it, and any similar framework, through its generic resolver. [Multicolored Hair](https://www.nexusmods.com/cyberpunk2077/mods/21613), its compatibility patch and its modder's resources showed how multicoloured hair works in game: a hairstyle cut into up to three parts, each with its own creator colour row under one new switcher, which set how XF hair colours should reach split hairstyles. Private local reference only; the PRC pages require the author's permission for reuse or modification, and Multicolored Hair's reuse terms have not been checked.
+[PRC — Fully Modular Jewellery Framework](https://www.nexusmods.com/cyberpunk2077/mods/8590), [New Piercings Collection Vol. 1](https://www.nexusmods.com/cyberpunk2077/mods/8611) and [PRC Vanilla Piercing Mirrors](https://www.nexusmods.com/cyberpunk2077/mods/10236) taught us morph-compatible modular jewellery and the file-replacement route that lets the preview draw such frameworks through its generic resolver; the framework also credits Auska for morph-target import and manavortex for modding help. [Multicolored Hair](https://www.nexusmods.com/cyberpunk2077/mods/21613), its compatibility patch and modder's resources showed how a hairstyle split into up to three parts gets separate creator colour rows under one switcher. Private local reference only; the PRC pages require the author's permission for reuse or modification, and Multicolored Hair's reuse terms have not been checked.
 
 ### Even More Brows for Cyberpunk
 
@@ -327,6 +332,10 @@ By Boe6, per its script headers. [Pachinko](https://www.nexusmods.com/cyberpunk2
 
 Published with a support link to cyberdrake on its [Nexus page](https://www.nexusmods.com/cyberpunk2077/mods/32203). Its scripts and plugins showed how the player state machine's own transform request turns V's body, how locomotion parameters make movement follow the camera, how a mod runs its own third-person camera component beside the first-person one, and that a plugin can swap the native handlers behind the state machine's input reads. Together they mapped what a script can and can't do to steer V. Studied only.
 
+### InteractionUI module
+
+By keanuWheeze, per the credit line in the scripts and Nexus description of [Immersive V Dialogue Expanded](https://www.nexusmods.com/cyberpunk2077/mods/24377), whose copy we read. This small Lua module adds a dialogue hub with its own text to the game's dialogue widget at run time and lets the player choose from it with the usual keys, which is how the bridge's planned NPC choices will ask V a question and hear the answer without authoring a scene. Immersive V Dialogue Expanded showed it in use for replies to Johnny. Studied only; no code is copied.
+
 ### Jack Humbert
 
 [Let There Be Flight](https://github.com/jackhumbert/let_there_be_flight), [Mod Settings](https://github.com/jackhumbert/mod_settings) and [Input Loader](https://github.com/jackhumbert/cyberpunk2077-input-loader). Their RED4ext plugins showed how to ship redscript through the plugin itself and declare its natives, and Let There Be Flight's player-attach wrapper is the pattern our bridge's redscript layer follows. Mod Settings' menu-scenario extensions showed that a mod can add its own event to the game's menu scenarios, which is how the bridge asks the idle menu to open the character creator. Input Loader's source showed how mods register new input actions, by merging input files that the game then reads through a configuration redirect, and that it fires none. [Let There Be Flight](https://github.com/jackhumbert/let_there_be_flight) and [Mod Settings](https://github.com/jackhumbert/mod_settings). Mod Settings' menu-scenario extensions showed that a mod can add its own event to the game's menu scenarios, which is how the bridge asks the idle menu to open the character creator, and its pause-menu items showed how a mod adds its own entry to the pause and main menus. Studied only.
@@ -361,7 +370,15 @@ By ArmanIII, per its script headers. [Nexus](https://www.nexusmods.com/cyberpunk
 
 ### MELUMINARY
 
-[MELUMINARY Long Length Pak Vol. 3 #011](https://www.nexusmods.com/cyberpunk2077/mods/27125). Supplies the saved character's hair geometry for the optional hair preview, and its maps taught us to check whether an apparently missing texture is genuinely constant. Its physics reuses the base game's long-hair dangle rig and simulation for both parts, which showed that modded hair physics is often a vanilla set transplanted whole. Private local reference only; its creator credits and permissions are still being confirmed.
+[MELUMINARY Long Length Pak Vol. 3 #011](https://www.nexusmods.com/cyberpunk2077/mods/27125) supplies the reference character's optional hair preview. Its maps taught us to check whether an apparently missing texture is constant, and its reused vanilla dangle rig showed how modded hair can inherit the game's simulation. Private local reference only; no assets are redistributed.
+
+### Hair modeling beginner tutorial — eagul and mana vortex
+
+The [beginner hair-modelling tutorial](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators-theory/3d-modelling/hair-modeling-beginner-tutorial), created by eagul and edited by mana vortex, taught us dense base coverage, progressively lighter outer cards, root reattachment and controlled tilt variation for Hair Lab. Studied as an artist workflow; no tutorial assets are reused.
+
+### ASH SIDESWEPT GLAM — MELUMINARY and Hamed Ghaeli
+
+[ASH SIDESWEPT GLAM](https://www.nexusmods.com/cyberpunk2077/mods/21898) names MELUMINARY as its creator and credits its hair modelling to Hamed Ghaeli. It supplies a private benchmark for side parting and swept-fringe flow. The page prohibits asset reuse; no assets are copied into the project or distributed.
 
 ### MisterChedda
 
@@ -373,7 +390,7 @@ By ArmanIII, per its script headers. [Nexus](https://www.nexusmods.com/cyberpunk
 
 ### Native Interactions Framework
 
-By keanuWheeze, per its script header. [GitHub](https://github.com/justarandomguyintheinternet/nativeInteractions), [Nexus](https://www.nexusmods.com/cyberpunk2077/mods/21422). Its editor camera, which pulls the first-person camera behind V and widens its limits, and its usable spots built as scene interactions showed which interactions only input can choose. Studied only; its licence asks for credit or permission before code is reused, and none is.
+By keanuWheeze, per its script header. [GitHub](https://github.com/justarandomguyintheinternet/nativeInteractions), [Nexus](https://www.nexusmods.com/cyberpunk2077/mods/21422). Its editor camera, which pulls the first-person camera behind V and widens its limits, and its usable spots built as scene interactions showed which interactions only input can choose. How it starts its scenes through one quest phase and a pair of facts, patches each scene as it loads (choice ids, node refs, option text) and hears a scene end through an event on the player is the route a later XF conversation scene would take. Studied only; its licence asks for credit or permission before code is reused, and none is.
 
 ### NightlyNow Core
 
@@ -443,6 +460,10 @@ Sun Moon And Stars Tattoo, Serpentine Heart and its Remix, Graceful Tattoo, Broo
 
 [Urmland Street Arcade](https://www.nexusmods.com/cyberpunk2077/mods/23908). Its world resources showed how a small location is added with ArchiveXL: the base game's own arcade, pachinko and vending devices placed in a new streaming block, a devices patch, and a few base-game nodes removed where it stands. Studied only; its author is still being confirmed.
 
+### Vendor and bartender dialogue mods
+
+[Immersive Food Vendors](https://www.nexusmods.com/cyberpunk2077/mods/7322) and [Immersive Bartenders](https://www.nexusmods.com/cyberpunk2077/mods/7203). Their packages showed that conversations with vendors are carried by scenes whose own text is registered through ArchiveXL's subtitle localisation, the route for custom choice text in a scene. Studied only; their authors are still being confirmed.
+
 ### Virtual Atelier, Virtual Atelier Delivery and Virtual Car Dealer
 
 By DJ_Kovrik (djkovrik), whose [GPL-3.0 repository](https://github.com/djkovrik/CP77Mods) publishes their source. [Virtual Atelier](https://www.nexusmods.com/cyberpunk2077/mods/2987) showed how other mods plug stores into one framework through a registration event, how it reuses the base game's vendor screen, and how a new tab joins a computer's menu (a technique its code credits to NexusGuy999). Virtual Atelier Delivery showed how a mod sends phone messages by rewriting pre-authored journal messages from script, spawns its own devices with new interactions, and adds billboards through TweakXL records; Virtual Car Dealer showed a browser page with its own controller and prices set when the tweak database loads. Virtual Atelier Delivery also showed a delivery clock kept in game time that pauses during braindances, while V is Johnny and in the time-skip menu, and map pins that come with a spawned drop-point device. Studied only.
@@ -467,13 +488,81 @@ World Objects Removed, Crunch Plaza Expanded, Japantown North Verticality Expand
 
 [Facial Customisation Rig Fix](https://www.nexusmods.com/cyberpunk2077/mods/7179) and [Photomode Facial Expression Mega Pack](https://www.nexusmods.com/cyberpunk2077/mods/7912), and [Photomode NPCs Extended](https://www.nexusmods.com/cyberpunk2077/mods/18837), whose records showed how any character becomes selectable in photo mode (with Photo Mode Ex), a route to a reference character beside V in tests. The expression pack showed the whole route by which photo mode gains expressions: new expression records, extra rows in the game's expression table, clips attached to the photo-mode face rig, and a face-graph change that lets animated expressions loop. It also showed that the table and graphs are files only one mod can own, which shapes the Studio's export plan. Its patch of the photo-mode face rig and its menu records, which name each face in plain text, showed what an expression mod's files contain, the shape XF Studio's expression export follows. The rig fix's alternative head morph reinforced the need to resolve each file's effective winner, and showed that a head fix can keep the geometry while renaming per-target bone names, which the built-in eye plate now carries over. That fix is also why we read morph targets' own joint binds as active at runtime, which the preview's blink now follows for each eye shape. Its `.xl` patches every feminine and masculine player entity, the always-on route the Studio's resolver does not follow yet. The Modding Docs' description of V Texture Kit showed a second overlay layout that keeps separate textures for each arm. Studied only.
 
+## Story and game design
+
+These games, books, essays and talks informed the design of the planned Story Engine, our research into generated gigs, quests and encounters. Nothing from them is implemented yet. They are credited for ideas only, and no text, content, code or assets are used.
+
+### Emily Short and Failbetter Games
+
+Emily Short, ["Beyond Branching: Quality-Based, Salience-Based, and Waypoint Narrative Structures"](https://emshort.blog/2016/04/12/beyond-branching-quality-based-and-salience-based-narrative-structures/) (2016), and [Fallen London](https://www.fallenlondon.com/), created by Alexis Kennedy and developed by Failbetter Games. Failbetter's quality-based narrative offers small pieces of story, called storylets, when the numbers that track a player's skills and progress (qualities) allow them, and Short's essay sets it beside other ways of choosing what happens next. It taught us to gate content by state rather than by branches.
+
+### Ben Sunshine-Hill
+
+By Ben Sunshine-Hill. ["Alibi Generation: Fooling All the Players All the Time"](https://www.gameaipro.com/GameAIPro/GameAIPro_Chapter37_Alibi_Generation_Fooling_All_the_Players_All_the_Time.pdf), chapter 37 of *Game AI Pro* (edited by Steve Rabin; CRC Press, 2013). Characters spawned around the player are given a backstory, goals and a state only when something makes that necessary, and the alibi must stay consistent with everything the player has already seen of them. It taught us how to invent detail on demand without contradicting what has been shown.
+
+### Kate Compton
+
+By Kate Compton. ["So you want to build a generator…"](https://galaxykate0.tumblr.com/post/139774965871/so-you-want-to-build-a-generator) (blog post, 2016). Her 10,000 bowls of oatmeal problem points out that thousands of bowls can all differ mathematically while the person looking sees only oatmeal. It taught us to measure variety by what people can tell apart, not by how many combinations exist.
+
+### Tynan Sylvester and Ludeon Studios
+
+By Tynan Sylvester. ["The Simulation Dream"](https://www.gamedeveloper.com/design/the-simulation-dream) (essay, 2013), and [RimWorld](https://rimworldgame.com/), developed by Ludeon Studios. The essay argues that a simulation adds value only as far as players can perceive and understand it, and RimWorld puts a storyteller in charge of when events arrive. We took from them that simulation nobody perceives is wasted, and that a director who paces events can shape a story.
+
+### Valve and Michael Booth
+
+[Left 4 Dead](https://store.steampowered.com/app/500/Left_4_Dead/) (Valve, 2008) and Michael Booth's [The AI Systems of Left 4 Dead](https://cdn.fastly.steamstatic.com/apps/valve/2009/ai_systems_of_l4d_mike_booth.pdf) (Valve's slides from his AIIDE 2009 invited talk). The AI Director estimates how intense each player's moment is, removes major threats for a while when intensity runs too high, and otherwise supplies them. It is our model for pacing intensity around the people playing.
+
+### Michael Mateas and Andrew Stern
+
+[Façade](https://www.interactivestory.net/) (Procedural Arts, 2005) and their paper ["Façade: An Experiment in Building a Fully-Realized Interactive Drama"](https://faculty.cc.gatech.edu/~isbell/classes/reading/papers/MateasSternGDC03.pdf) (Game Developers Conference, 2003). A drama manager chooses the next beat, the smallest unit of dramatic action, from a pool of about 200 authored beats, each marked with preconditions and effects on the story state. We took from it the beat as a unit of authored content and the manager that sequences beats.
+
+### Tarn and Zach Adams
+
+[Dwarf Fortress](https://www.bay12games.com/dwarves/) (Bay 12 Games, first released 2006). Each world's history is simulated before play, and Legends mode lets players read it back. It taught us that a simulated world history is a rich source of background for stories to draw on.
+
+### Worldwalker Games
+
+[Wildermyth](https://wildermyth.com/) (Worldwalker Games; released 2021) and the developer's [interview with Turn Based Lovers](https://turnbasedlovers.com/10-turns-interview/with-wildermyth-developer) (2019). Each authored event has roles to fill, like a play, and the game casts its generated heroes into them according to personality and the writers' requirements. We took from it the casting of characters into authored story fragments.
+
+### Vincent Baker and Meguey Baker
+
+[Apocalypse World](https://lumpley.games/), by D. Vincent Baker (Lumpley Games, first edition 2010), with Meguey Baker as co-designer of the second edition (2016). Its fronts group the threats around the characters, and a threat can carry a countdown clock that says when it will act, so threats keep their own momentum whatever the characters do. We took from it threats that sit above the scene and move on their own timetables.
+
+### John Harper
+
+[Blades in the Dark](https://bladesinthedark.com/) (Evil Hat Productions, 2017). Flashbacks let players settle their preparation at the moment it matters, for a cost, and faction clocks advance during downtime so the city changes without the crew. We took from it preparation that resolves late and a world that keeps moving on its own.
+
+### Justin Alexander (The Alexandrian)
+
+[Three Clue Rule](https://thealexandrian.net/wordpress/1118/roleplaying-games/three-clue-rule) (2008) and the nine-part series [Node-Based Scenario Design](https://thealexandrian.net/wordpress/8122/roleplaying-games/node-based-scenario-design-collectors-edition). The first says to give at least three clues for any conclusion the players must reach, because one may be missed, ignored or misread. The second builds a scenario from nodes that clues point to, so players can move through it in different orders. Together they taught us robust discovery, where no single missed clue stops the story.
+
+### Mike Shea (Sly Flourish)
+
+By Michael Shea, who writes as Sly Flourish. [Return of the Lazy Dungeon Master](https://shop.slyflourish.com/products/return-of-the-lazy-dungeon-master) (2018) and his post [Types of Secrets](https://slyflourish.com/types_of_secrets.html) (2021). Secrets and clues are short statements about the world or the story, kept apart from where they are found so they can be dropped in wherever they fit. It taught us to hold story information that is not tied to a place.
+
+### Keith Johnstone
+
+[Impro: Improvisation and the Theatre](https://www.taylorfrancis.com/books/9781136610462) (Faber and Faber, 1979; the link is the later Routledge edition). Johnstone's accounts of status, of accepting or blocking what a partner offers, and of reincorporating earlier material gave us a craft vocabulary for how characters and events respond to one another.
+
+### Christopher Alexander and colleagues
+
+[A Pattern Language](https://global.oup.com/academic/product/a-pattern-language-9780195019193) (Oxford University Press, 1977), by Christopher Alexander, Sara Ishikawa and Murray Silverstein, with Max Jacobson, Ingrid Fiksdahl-King and Shlomo Angel. Its 253 patterns run from whole regions down to construction details, and each points to related patterns above and below it in scale. It is the model for the Story Engine's design composite, a set of linked patterns at many scales.
+
+### Maxis
+
+[The Sims](https://en.wikipedia.org/wiki/The_Sims_%28video_game%29) (Maxis, 2000), designed by Will Wright. Each Sim has a small set of needs, such as hunger, comfort and social contact, which fall over time and which objects in the world can restore. It informed our draft catalogue of character drives.
+
+### Monolith Productions and Jeff Orkin
+
+F.E.A.R. (Monolith Productions, 2005) and Jeff Orkin's ["Three States and a Plan: The A.I. of F.E.A.R."](https://gdcvault.com/play/1013282/Three-States-and-a-Plan) (Game Developers Conference, 2006). Characters choose a goal, plan the actions that meet it with a search, and re-plan when the world changes. It grounds our reading of goal-oriented action planning.
+
+### Bethesda Game Studios
+
+The Radiant AI and Radiant Story systems of *The Elder Scrolls IV: Oblivion* (2006) and *The Elder Scrolls V: Skyrim* (2011), as described in Matt Bertz's [The Technology Behind The Elder Scrolls V: Skyrim](https://gameinformer.com/games/the_elder_scrolls_v_skyrim/b/pc/archive/2011/01/17/the-technology-behind-the-elder-scrolls-v-skyrim.aspx) (Game Informer, 2011). Radiant AI gives characters broad goals to work out for themselves, and Radiant Story fills reusable quest templates from a player's history and nearby characters. Bethesda took on both ideas early and at great scale, and we read them as a cautionary example: template quests need variety the player can feel, and free-running character simulation needs constraints to stay on the story.
+
 ## Research papers
 
 These papers informed our research. Unless an entry says otherwise, no algorithm from them was implemented.
-
-### Zeller and Hildebrandt (2002)
-
-Andreas Zeller and Ralf Hildebrandt, "Simplifying and Isolating Failure-Inducing Input" (IEEE Transactions on Software Engineering, 2002). Its delta debugging is the idea behind XF Strata's shrinker, which removes ever smaller chunks of a failing simulation's steps while the failure persists.
 
 ### Ottosson (2020)
 
@@ -571,6 +660,122 @@ Géry Casiez, Nicolas Roussel and Daniel Vogel, "1€ Filter: a simple speed-bas
 
 Zachary Fishman, Alex Kiss, Ronald M. Zuker, Jeffrey A. Fialkov and Cari M. Whyne, [Measuring 3D facial displacement of increasing smile expressions](https://doi.org/10.1016/j.bjps.2022.08.024) (*Journal of Plastic, Reconstructive & Aesthetic Surgery*, 2022), measured on the Binghamton University 3D Facial Expression database. Their cheek and mouth-corner displacements at four smile intensities are the real-face yardstick for how far V's cheeks can and should move.
 
+### Macklin, Müller and Chentanez
+
+Miles Macklin, Matthias Müller and Nuttapong Chentanez, [XPBD: Position-Based Simulation of Compliant Constrained Dynamics](https://matthias-research.github.io/pages/publications/XPBD.pdf). Their compliant-constraint formulation informs the implemented Hair Lab styling solver, including accumulated multipliers and time-step scaling. Studied as a numerical method; no implementation was copied.
+
+### Hair Tool — Bartosz Styperek
+
+[Hair Tool documentation](https://joseconseco.github.io/HairTool_3_Documentation/). Its separation of scalp input, deformation stages and profile/UV assignment helped frame Hair Lab's generation stages; its baking workflow taught us to derive opacity, random strand ID, root position and flow from one groom, with thinning and end trimming as explicit decisions. Studied as an artist workflow; no add-on code or assets are reused.
+
+### GS CurveTools
+
+[Curve attributes documentation](https://gs-curvetools.readthedocs.io/en/latest/attributes.html). Its separate controls for orientation, twist, taper and curvature subdivision informed the proposed procedural card decisions. Studied as an artist workflow; no plug-in code or assets are reused.
+
+### Polytricity
+
+[Hair Strand Designer](https://polytricity.artstation.com/store/j7PY/hair-strand-designer-v1-7-0-full-perpetual-license-free-demo-and-sample-set) taught us the artist controls for strand count, spacing, width, length, taper and fine waviness, and the value of seeded regeneration across related map outputs. Workflow study only; no application code, presets or textures are reused.
+
+### Eyosido Software
+
+[HairTG-Cards 2](https://eyosido.com/hairtg-cards) informed the procedural atlas's shared and per-region parameters, rows of designs, density progressions and separation of texturing from card geometry. Workflow study only; no product code, presets or assets are reused.
+
+### SideFX
+
+[Houdini's Bake Texture documentation](https://www.sidefx.com/docs/houdini/nodes/out/baketexture.html) explained producing multiple texture planes from the same source geometry in a receiving UV chart. This informed the Hair Lab atlas's shared fibre sample; no implementation is copied.
+
+### Epic Games
+
+[Unreal Engine's groom cards documentation](https://dev.epicgames.com/documentation/en-us/unreal-engine/setting-up-cards-and-meshes-for-grooms-in-unreal-engine) taught us how coverage, tangent, root coordinates and strand seeds are kept explicit in card texture layouts. Its layout was studied as a workflow reference; the Hair Lab atlas uses Cyberpunk's own shader encoding and includes no Unreal assets or code.
+
+### Pedro F. Felzenszwalb and Daniel P. Huttenlocher
+
+Their paper [Distance Transforms of Sampled Functions](https://cs.brown.edu/people/pfelzens/papers/dt-final.pdf) informed the separable Euclidean distance transform used in the Hair Lab collision-grid research. The transform is independently implemented from the mathematical construction; no reference source code is reused.
+
+### James Ryan (2018) and Ryan and Mateas (2017)
+
+James Ryan, [*Curating Simulated Storyworlds*](https://escholarship.org/uc/item/1340j5h2) (PhD thesis, University of California, Santa Cruz, 2018), and James Ryan and Michael Mateas, ["Simulating Character Knowledge Phenomena in Talk of the Town"](http://www.gameaipro.com/GameAIPro3/GameAIPro3_Chapter37_Simulating_Character_Knowledge_Phenomena_in_Talk_of_the_Town.pdf) (*Game AI Pro 3*, 2017). The thesis introduced story sifting, finding story-shaped patterns in a simulation's record of events, and argues that simulated worlds need curation to yield stories. Talk of the Town simulates a town whose characters each hold their own, fallible knowledge of what has happened.
+
+### Kreminski et al. (2019, 2021)
+
+Max Kreminski, Melanie Dickinson and Noah Wardrip-Fruin, ["Felt: A Simple Story Sifter"](https://doi.org/10.1007/978-3-030-33894-7_27) (*Interactive Storytelling*, ICIDS 2019), and Max Kreminski, Melanie Dickinson and Michael Mateas, ["Winnow: A Domain-Specific Language for Incremental Story Sifting"](https://ojs.aaai.org/index.php/AIIDE/article/view/18903) (AIIDE 2021). Felt writes sifting patterns as queries over a simulation's events, and Winnow runs such patterns incrementally, so a promising sequence can be flagged while it is still unfolding. They taught us sifting languages and incremental matching.
+
+### Kreminski and Wardrip-Fruin (2018)
+
+Max Kreminski and Noah Wardrip-Fruin, ["Sketching a Map of the Storylets Design Space"](https://doi.org/10.1007/978-3-030-04028-4_14) (*Interactive Storytelling*, ICIDS 2018). It defines the common parts of storylet-based narrative systems and sorts them along several dimensions. It gave us the storylet as the unit of authored content.
+
+### Grinblat and Bucklew (2017)
+
+Jason Grinblat and C. Brian Bucklew, ["Subverting historical cause & effect: generation of mythic biographies in Caves of Qud"](https://doi.org/10.1145/3102071.3110574) (Foundations of Digital Games, 2017). The game first decides that a historical event happens, then works out a cause from the states of the figures involved, instead of simulating the logic that would have produced it. It taught us to generate events first and justify their causes afterwards.
+
+### Meehan (1976)
+
+James R. Meehan, [*The Metanovel: Writing Stories by Computer*](https://apps.dtic.mil/sti/pdfs/ADA031625.pdf) (Yale University, 1976), the work behind the Tale-Spin story-writing program. Ryan's thesis cites Tale-Spin as a notable failure of the pure-simulation approach. We keep it in mind as the classic warning that simulating characters does not by itself give a story.
+
+### Doran and Parberry (2011)
+
+Jonathon Doran and Ian Parberry, ["A prototype quest generator based on a structural analysis of quests from four MMORPGs"](https://doi.org/10.1145/2000919.2000920) (Procedural Content Generation in Games workshop, 2011). They analysed over 750 quests and found nine underlying motivations of the characters who give them. It taught us that quests can derive from NPC motivations instead of being placed at random.
+
+### Lehnert (1981)
+
+Wendy Lehnert, ["Plot units and narrative summarization"](https://doi.org/10.1207/s15516709cog0504_1) (*Cognitive Science*, 1981). It describes a story as a graph of plot units whose overlaps encode the plot. It taught us to treat narrative as a graph of affect states.
+
+### Schank and Abelson (1977)
+
+Roger C. Schank and Robert P. Abelson, [*Scripts, Plans, Goals and Understanding*](https://www.routledge.com/Scripts-Plans-Goals-and-Understanding-An-Inquiry-Into-Human-Knowledge-Structures/Schank-Abelson/p/book/9780898591385) (Lawrence Erlbaum, 1977). Its scripts, stored chains of events for common situations, and its account of plans and goals show how expectation shapes understanding from the top down.
+
+### Forgy (1982)
+
+Charles Forgy, ["Rete: A fast algorithm for the many pattern/many object pattern match problem"](https://doi.org/10.1016/0004-3702(82)90020-0) (*Artificial Intelligence*, 1982). Rete matches many rules against changing facts by remembering partial matches instead of starting again each time. It taught us incremental matching of many rules against a changing set of facts.
+
+### Goodman et al. (2008)
+
+Noah D. Goodman and co-authors, ["Church: a language for generative models"](https://proceedings.mlr.press/r6/goodman08a.html) (Uncertainty in Artificial Intelligence, 2008). Its stochastic memoisation makes a random choice once and then remembers it, so a value drawn on demand stays the same whenever it is asked for again. It taught us lazy, consistent sampling.
+
+### Spivak and Kent (2012)
+
+David I. Spivak and Robert E. Kent, ["Ologs: a categorical framework for knowledge representation"](https://doi.org/10.1371/journal.pone.0024274) (*PLoS ONE*, 2012). An olog is a model of knowledge built on category theory that, like a database schema, can hold data but is meant to be easy to author and reconfigure. It informed how we think about holding design knowledge as a graph of typed relationships.
+
+### Rao and Georgeff (1995)
+
+Anand S. Rao and Michael P. Georgeff, ["BDI agents: from theory to practice"](https://apice.unibo.it/xwiki/bin/view/Publication/BdiIcmas95) (International Conference on Multi-Agent Systems, 1995). The belief, desire and intention model describes an agent by what it believes, what it wants and what it has committed to do. It grounds how we describe a character's state of mind.
+
+### Maslow (1943)
+
+Abraham Maslow, ["A theory of human motivation"](https://psychclassics.yorku.ca/Maslow/motivation.htm) (*Psychological Review*, 1943). Its hierarchy of needs orders human needs from the basic to the higher. It is one of the sources behind our draft catalogue of character drives.
+
+### Reiss (2004)
+
+Steven Reiss, ["Multifaceted nature of intrinsic motivation: the theory of 16 basic desires"](https://doi.org/10.1037/1089-2680.8.3.179) (*Review of General Psychology*, 2004). It proposes sixteen basic desires that motivate people and that differ in strength from person to person. It is one of the sources behind our draft catalogue of character drives.
+
+### Ryan and Deci (2000)
+
+Richard Ryan and Edward Deci, ["Self-determination theory and the facilitation of intrinsic motivation, social development, and well-being"](https://doi.org/10.1037/0003-066X.55.1.68) (*American Psychologist*, 2000). Self-determination theory builds motivation on the needs for autonomy, competence and relatedness. It is one of the sources behind our draft catalogue of character drives.
+
+### Schwartz (1992, 2012)
+
+Shalom Schwartz, ["Universals in the Content and Structure of Values: Theoretical Advances and Empirical Tests in 20 Countries"](https://doi.org/10.1016/S0065-2601(08)60281-6) (*Advances in Experimental Social Psychology*, 1992), and ["An Overview of the Schwartz Theory of Basic Values"](https://doi.org/10.9707/2307-0919.1116) (*Online Readings in Psychology and Culture*, 2012). The theory sets out a small set of basic values recognised across cultures and how they relate to one another. It is one of the sources behind our draft catalogue of character drives.
+
+### Heider (1958)
+
+Fritz Heider, [*The Psychology of Interpersonal Relations*](https://doi.org/10.1037/10628-000) (Wiley, 1958). It is the starting point of attribution theory, the study of how people explain what others do. It grounds how characters explain one another's actions.
+
+### Ross (1977)
+
+Lee Ross, ["The intuitive psychologist and his shortcomings: distortions in the attribution process"](https://doi.org/10.1016/S0065-2601(08)60357-3) (*Advances in Experimental Social Psychology*, volume 10, 1977), which named the fundamental attribution error: explaining other people's actions by their character rather than their circumstances. It tells us why characters' explanations of one another are sometimes wrong in predictable ways.
+
+### Goode (1960)
+
+William J. Goode, ["A theory of role strain"](https://doi.org/10.2307/2092933) (*American Sociological Review*, 1960). Role strain is the difficulty of meeting the demands of a role, or of several roles at once. It informed how we model what group memberships ask of a person.
+
+### Tajfel and Turner (1979)
+
+Henri Tajfel and John Turner, ["An integrative theory of intergroup conflict"](https://doi.org/10.1093/oso/9780199269464.003.0005) (in *The Social Psychology of Intergroup Relations*, edited by William Austin and Stephen Worchel, 1979; reprinted in *Organizational Identity*, Oxford University Press), the chapter that set out social identity theory. It treats part of a person's sense of who they are as drawn from the groups they belong to. It informed how we model group memberships.
+
+### Jensen and Meckling (1976)
+
+Michael Jensen and William Meckling, ["Theory of the firm: managerial behavior, agency costs and ownership structure"](https://doi.org/10.1016/0304-405X(76)90026-X) (*Journal of Financial Economics*, 1976). It describes the principal–agent relationship, in which one party acts for another whose interests may differ, and the costs of that gap. It informed how we model members whose interests differ from their group's.
+
 ## Reference imagery
 
 ### Jewellery form and fit references
@@ -584,6 +789,13 @@ Product and guide pages from [OPI](https://www.opi.com/collections/shimmer-nail-
 ### Duchenne de Boulogne's photographs
 
 Guillaume-Benjamin-Amand Duchenne (de Boulogne), photographs for *Mécanisme de la physionomie humaine* (about 1856–1862), Figures 7, 32, 45, 51 and 54 in the [Cleveland Museum of Art](https://clevelandart.org/art/2018.9)'s open-access collection (CC0), via Wikimedia Commons. His study of the smile is the origin of the Duchenne marker, and these photographs were real-face test inputs for the face-capture prototype. Used locally; not redistributed.
+
+### Hair style references
+
+- [Batik Machida](https://beauty.hotpepper.jp/slnH000137560/style/L000156790.html): Their salon photograph informed the Hair Lab regression reference for a diagonal side-swept fringe merging into long layers. The photograph is retained only as a private reference and is not distributed.
+- [Bamboo salon](https://ameblo.jp/momiji1013/entry-12385330289.html): Their rear-view bob photograph informed the shoulder-level tip line and inward-turning ends in the Hair Lab regression set. The photograph is a private visual reference, not a shipped asset.
+- [Jean & Jacqueline](https://jean-jacqueline-friseur.de/blog/simplie-haarverlaengerung-kassel): Their high-ponytail photograph shows scalp lengths gathered into a rear tie and a free tail. It informed the structural regression case; the photograph is retained privately.
+- [Visavis Friseur](https://visavis-friseur.de/damen/sidecut/): Their sidecut reference shows a distinct density boundary with the crown swept toward the long side. It informed the undercut regression case; no photograph is distributed.
 
 ## Community members we are still identifying
 

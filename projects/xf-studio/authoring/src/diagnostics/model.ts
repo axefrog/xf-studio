@@ -3,6 +3,7 @@
  * reference a notice shows, the bounds a forwarded page entry must fit, and which failure codes are expected refusals rather than
  * problems worth reporting. DOM-free and host-free: plain data and pure functions only.
  */
+import { setOwn } from "../platform/api/own-property";
 
 export const DIAGNOSTIC_ENTRY_SCHEMA = "xfs/diagnostic-entry-1" as const;
 export const DIAGNOSTIC_FORWARD_SCHEMA = "xfs/diagnostic-forward-1" as const;
@@ -207,9 +208,10 @@ export function boundJson(value: unknown, bounds: JsonBounds = TRACE_JSON_BOUNDS
   let count = 0;
   for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
     if (++count > bounds.items) { out["…"] = `${Object.keys(value as object).length - bounds.items} more keys`; break; }
-    if (bounds.drop?.test(key)) { out[key] = "(left out)"; continue; }
+    if (bounds.drop?.test(key)) { setOwn(out, key, "(left out)"); continue; }
     const bounded = boundJson(item, bounds, depth + 1);
-    if (bounded !== undefined) out[key] = bounded;
+    // A resource's own key (`__proto__` too) stays data in the copy, never its prototype.
+    if (bounded !== undefined) setOwn(out, key, bounded);
   }
   return out;
 }
