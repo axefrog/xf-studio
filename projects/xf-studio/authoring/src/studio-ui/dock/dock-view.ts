@@ -1,4 +1,4 @@
-import { keyBinding, panelModifiersHeld } from "../../input-bindings";
+import { keyBinding, panelModifiersHeld } from "../../app/input-bindings";
 import { button } from "../controls";
 import { clamp, h, setAttr } from "../dom";
 import { icon, type IconName } from "../icons";
@@ -28,6 +28,8 @@ export type PanelSpec = {
   visibility?(visible: boolean): void;
 };
 export type DockViewOptions = {
+  /** The dock's lifetime: aborting it cancels a drag, stops observing headers and scroll positions, and removes the dock. */
+  signal?: AbortSignal;
   panels: PanelSpec[];
   state: DockState;
   sizeClass(): SizeClass;
@@ -78,6 +80,11 @@ export class DockView {
     this.parking = h("div", { class: "dock-parking", hidden: true });
     this.element = h("div", { class: "dock" }, this.surface, this.floatingLayer, this.overlay, this.parking);
     for (const panel of options.panels) this.parking.append(panel.element);
+    options.signal?.addEventListener("abort", () => {
+      this.cancelDrag(); this.fitter.disconnect();
+      for (const memory of this.scrollMemories) memory.dispose();
+      this.scrollMemories = []; this.element.remove();
+    }, { once: true });
   }
   get sizeClass() { return this.options.sizeClass(); }
   get tree(): DockTree { return this.state[this.sizeClass]; }

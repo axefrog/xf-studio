@@ -11,7 +11,7 @@ import { readFileSync } from "node:fs";
 import { observeHistories, observeStored, session } from "./fixtures/look-history-parity";
 import { digest, restore } from "./fixtures/workspace-observable";
 import { damagedWorkspaceV1, largeWorkspaceV1, looseWorkspaceV1, smallWorkspaceV1, withPreferences } from "./fixtures/workspace-v1-fixtures";
-import { encodeWorkspaceAt } from "../src/workspace-budget";
+import { encodeWorkspaceAt } from "../src/app/workspace/workspace-budget";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 
 const golden = JSON.parse(readFileSync(new URL("./golden/look-history-parity.json", import.meta.url), "utf8"));

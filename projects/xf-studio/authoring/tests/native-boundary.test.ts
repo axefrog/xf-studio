@@ -25,8 +25,9 @@ const HOST_ADAPTERS = ["anim-decode", "archive-reader", "mesh-decode", "native-d
  * list (`rtti-type-source`, pure data) to the saves endpoint (saves-host-sources.ts), and the facial host's reading of the face skeleton,
  * facial setup, clips and morph targets through the route's decoder (facial-native.ts; types only, the decoding stays in the worker).
  */
-const ALLOWED_IMPORTERS: readonly string[] = ["clothing-host", "facial-native", "idle-host", "native-geometry-export", "native-texture-export", "pose-catalogue-host",
-  "resolver-host", "saves-host-sources"];
+const ALLOWED_IMPORTERS: readonly string[] = ["character/host/clothing-host", "animation/host/facial-native", "animation/host/idle-host",
+  "game/host/native-geometry-export", "legacy/eye-makeup/export/host/native-resource-tools", "game/host/native-texture-export",
+  "animation/host/pose-catalogue-host", "game/host/resolver-host", "saves/host/saves-host-sources"];
 /**
  * Host and page globals (code-scan.ts PAGE_GLOBALS, except that `document` is the red model's own word here, a decoded resource,
  * so only the DOM's members of it count).
@@ -78,4 +79,83 @@ test("nothing outside src/native imports the native reader, and page code never 
   };
   walk(SRC);
   expect(offenders).toEqual([]);
+});
+
+// PIPE-130: the native writer (src/native/write). Its format modules are pure; `bcn` alone loads native code (XF Studio's texture
+// compressor). Only the Build's tools adapter (native-resource-tools.ts) uses it, and no verifier can reach it.
+const WRITE = join(NATIVE, "write");
+const writeModules = readdirSync(WRITE).filter(file => file.endsWith(".ts")).map(file => file.slice(0, -3)).sort();
+
+test("the native writer's modules are pure except its texture-compressor adapter", () => {
+  expect(writeModules).toEqual(expect.arrayContaining(["bcn", "cr2w-writer", "package-writer", "rdar-writer", "red-encoder", "segments", "xbm-writer"]));
+  for (const name of writeModules) {
+    const text = read(join(WRITE, `${name}.ts`)), code = codeOnly(text);
+    const loadsNative = /import\.meta\.require\s*\(\s*["']bun:ffi/.test(text) || imports(text).includes("bun:ffi");
+    expect(loadsNative, `${name} loads native code`).toBe(name === "bcn");
+    if (name === "bcn") continue;
+    for (const dependency of imports(text)) expect(dependency, `${name} imports ${dependency}`).not.toMatch(HOST_IMPORTS);
+    expect(code.match(HOST_GLOBALS)?.[0] ?? null, `${name} reads host or page globals`).toBeNull();
+    expect(code, `${name} reaches the host`).not.toMatch(/Bun\s*\.\s*(?:spawn|spawnSync|file|write)|new\s+Worker/);
+  }
+});
+
+// NATIVE-76: the writer's boundary follows imports transitively, over src/ and tools/ alike, so a path from a verifier to the writer
+// through any number of modules is caught, and so is a tool importing the writer directly.
+const TOOLS = join(import.meta.dir, "..", "tools");
+const APP = join(import.meta.dir, "..");
+/** Every TypeScript module below `folder`: its name (relative to the authoring folder, forward slashes, no extension) and file. */
+function modulesBelow(folder: string): [string, string][] {
+  const out: [string, string][] = [];
+  for (const entry of readdirSync(folder, { withFileTypes: true, recursive: true })) {
+    if (!entry.isFile() || !/\.tsx?$/.test(entry.name) || /\.d\.ts$/.test(entry.name)) continue;
+    const file = join(entry.parentPath, entry.name);
+    out.push([relative(APP, file).split("\\").join("/").replace(/\.tsx?$/, ""), file]);
+  }
+  return out;
+}
+const MODULE_FILES = new Map([...modulesBelow(SRC), ...modulesBelow(TOOLS)]);
+const MODULES = new Set(MODULE_FILES.keys());
+/** A module's local imports, resolved to modules (`x`, `x/index`); packages and built-ins are left out. */
+function localImports(module: string): string[] {
+  const text = read(MODULE_FILES.get(module)!);
+  const base = module.split("/").slice(0, -1).join("/");
+  const out: string[] = [];
+  for (const dependency of imports(text)) {
+    if (!dependency.startsWith(".")) continue;
+    const parts: string[] = [];
+    for (const part of `${base}/${dependency}`.split("/")) { if (part === "..") parts.pop(); else if (part !== "." && part) parts.push(part); }
+    const target = parts.join("/").replace(/\.tsx?$/, "");
+    if (MODULES.has(target)) out.push(target); else if (MODULES.has(`${target}/index`)) out.push(`${target}/index`);
+  }
+  return out;
+}
+/** Every module `module` reaches through imports, with one path to each. */
+function reach(module: string): Map<string, string[]> {
+  const paths = new Map<string, string[]>([[module, [module]]]);
+  const queue = [module];
+  while (queue.length) {
+    const next = queue.shift()!;
+    for (const dependency of localImports(next)) if (!paths.has(dependency)) { paths.set(dependency, [...paths.get(next)!, dependency]); queue.push(dependency); }
+  }
+  return paths;
+}
+const isWriter = (module: string) => module.startsWith("src/native/write/") || module === "src/legacy/eye-makeup/export/host/native-resource-tools";
+
+test("only the Build's tools adapter and the writer's own tools import the native writer; no verifier reaches it through any path (NATIVE-76)", () => {
+  expect(MODULES.size).toBeGreaterThan(300);
+  // Direct importers, in src/ and tools/.
+  const DIRECT = ["src/legacy/eye-makeup/export/host/native-resource-tools", "tools/build-native-bcn", "tools/build_collection_package",
+    "tools/native-writer-host", "tools/native-writer-oracle"];
+  const direct = [...MODULES].filter(module => !isWriter(module) || module === "src/legacy/eye-makeup/export/host/native-resource-tools")
+    .filter(module => localImports(module).some(dependency => isWriter(dependency) && dependency !== module)).sort();
+  expect(direct).toEqual(DIRECT);
+  // Every verifier module (the product's, each feature's, the plate's, WolvenKit's adapter for them, the verifier tools), transitively.
+  const verifiers = [...MODULES].filter(module => /^src\/features\/[^/]+\/verify\//.test(module) || /^tools\/verify_/.test(module) ||
+    ["src/platform/export/product-verifier", "src/legacy/eye-makeup/export/host/verifier-wolvenkit",
+      "src/legacy/eye-makeup/plate/eye-plate-verify"].includes(module));
+  expect(verifiers.length).toBeGreaterThan(10);
+  const leaks = verifiers.flatMap(module => [...reach(module)].filter(([target]) => isWriter(target)).map(([, path]) => path.join(" -> ")));
+  expect(leaks).toEqual([]);
+  // The walk sees a path several modules long: the Build's CLI reaches the writer through the tools adapter.
+  expect(reach("tools/build_collection_package").get("src/native/write/red-encoder")?.length).toBeGreaterThan(2);
 });

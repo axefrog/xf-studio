@@ -1,5 +1,5 @@
-import { bindingReference, type ReferenceSection } from "../../input-bindings";
-import { EYE_MAKEUP_MOD } from "../../mod-branding";
+import { bindingReference, type ReferenceSection } from "../../app/input-bindings";
+import { EYE_MAKEUP_MOD } from "../../legacy/eye-makeup/mod-branding";
 import { plainText } from "./content";
 import { FINISH_EXPORT_TOKEN, withFinishText, type FinishSummary } from "./finish-text";
 import { WHATS_NEW_TOUR_ID } from "./tours";
@@ -22,9 +22,9 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     body: `Each layer has a colour, an opacity and a finish. ${FINISH_EXPORT_TOKEN}`,
     tours: ["onboarding", WHATS_NEW_TOUR_ID] },
   { id: "undo", title: "Undo, Redo and History", keywords: "undo redo history back step mistake",
-    body: "Every change can be undone. [[key:shell.undo]] undoes, and [[key:shell.redo]] redoes. The **History** panel lists your recent changes to the current preset; click any step to go back to it." },
+    body: "Every change can be undone. [[key:shell.undo]] undoes, and [[key:shell.redo]] redoes. Undo follows what you last edited: a preset or a V. View and lighting changes have their own Undo. The **History** panel names what you last edited and lists your recent changes to it; click any step to go back to it." },
   { id: "library", title: "Saving and your library", keywords: "save library version autosave draft export import backup share file",
-    body: "**Save** ([[key:shell.save]]) keeps your collection in the local library with its earlier versions. Your draft also saves itself between sessions.\n\nOpening another collection keeps the draft you had open under **Recent drafts** in the Library panel, where **Recover** brings it back.\n\nTo back up or share looks, export the collection as a file from the Library panel, and import it again on any computer.",
+    body: "Your work saves itself to your local library as you go. **Save version** ([[key:shell.save]]) keeps a version of your collection there, beside its earlier versions, that you can go back to.\n\nOpening or importing another collection never replaces the one you had open: it stays in your library, and **Undo open** shows it again. Collections never saved as a version are listed under **Recent drafts** in the Library panel, where **Recover** shows one.\n\nTo back up or share looks, export the collection as a file from the Library panel, and import it again on any computer.",
     tours: ["onboarding", WHATS_NEW_TOUR_ID] },
   { id: "package", title: "Making your mod: Check and Build", keywords: "mod package check build xf eye artistry archive install game",
     body: `Open **Mod package** when your looks are ready.\n\n- **Check** lists which presets and layers can become mod files, and names anything that would be left out and why. It needs no game files.\n- **Build** makes your own **${EYE_MAKEUP_MOD.modName}** mod files. Nothing goes into your game until you add it: see **Installing your mod**.`,

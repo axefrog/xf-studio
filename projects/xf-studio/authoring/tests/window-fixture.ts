@@ -2,7 +2,7 @@
 // synthetic plate, texel-to-UV mapping, the head-UV coverage reference and the stored BC4 level the
 // verifier decodes. Test-only use of the builder's window arithmetic (src/plate-uv-window.ts); the
 // verifier re-derives all of it independently.
-import { referenceCrop } from "../src/package-bake";
+import { referenceCrop } from "../src/legacy/eye-makeup/export/host/package-bake";
 import { plateUvBounds, plateUvWindow, uvTransformConstants, type UvWindow } from "../src/engines/layered-makeup/plate-uv-window";
 
 export const WINDOW_W = 2048, WINDOW_H = 512;

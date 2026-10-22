@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { createHeadSkinPlacement, headSurface, mergeSurfaces, placeHeadSkin } from "../src/head-skin-placement";
-import type { SkinTexels } from "../src/skin-material";
+import { createHeadSkinPlacement, headSurface, mergeSurfaces, placeHeadSkin } from "../src/character/render/head-skin-placement";
+import type { SkinTexels } from "../src/materials/render/skin-material";
 
 /**
  * A square patch of head: `n`×`n` vertices over 10 cm at depth `z`, UVs across it (mirrored in u when

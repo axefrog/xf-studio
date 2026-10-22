@@ -1,11 +1,11 @@
 /** Small helpers for tests written against the look/part model (feature-module platform §2). */
-import { liveMemory, type CollectionDraft } from "../../src/collection-workspace";
+import { liveMemory, type CollectionDraft } from "../../src/app/workspace/collection-workspace";
 import { LIVE_FEATURE, STUDIO_PARTS, STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
 import { LOOK_HISTORY_1, type Look, type LookHistoryData } from "../../src/platform/api";
 import { lookHistoryBodies } from "../../src/platform/core/look-history";
-import type { DocumentHistory } from "../../src/authoring-document";
+import type { DocumentHistory } from "../../src/app/authoring/authoring-document";
 import type { Recipe } from "../../src/engines/layered-makeup/recipe";
-import { serializeWorkspace, type WorkspaceState } from "../../src/workspace-state";
+import { serializeWorkspace, type WorkspaceState } from "../../src/app/workspace/workspace-state";
 
 /** A stored collection of either schema, as the in-memory look collection the library returns. */
 export const looks = (collection: unknown) => STUDIO_PARTS.readCollection(collection, true);

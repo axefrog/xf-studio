@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { browserBundleNames } from "../browser-build";
+import { browserBundleNames, retainBrowserChunks } from "../browser-build";
 
 test("every public page script under /build/ is produced by the shared browser build", () => {
   const publicDir = resolve(import.meta.dir, "..", "public");
@@ -13,4 +14,20 @@ test("every public page script under /build/ is produced by the shared browser b
 
 test("browser bundle names are unique after flattening", () => {
   expect(new Set(browserBundleNames).size).toBe(browserBundleNames.length);
+});
+
+test("lazy chunks survive one successful rebuild; unrelated files are never pruned", () => {
+  const dir = mkdtempSync(resolve(tmpdir(), "xfs-chunks-")), put = (name: string) => writeFileSync(resolve(dir, name), name);
+  try {
+    put("chunk-old.js"); put("worker.js"); retainBrowserChunks(dir, ["chunk-old.js"]);
+    put("chunk-next.js"); retainBrowserChunks(dir, ["chunk-next.js"]);
+    expect(existsSync(resolve(dir, "chunk-old.js"))).toBe(true);
+    put("chunk-latest.js"); retainBrowserChunks(dir, ["chunk-latest.js"]);
+    expect(existsSync(resolve(dir, "chunk-old.js"))).toBe(false);
+    expect(existsSync(resolve(dir, "chunk-next.js"))).toBe(true);
+    expect(existsSync(resolve(dir, "worker.js"))).toBe(true);
+  } finally {
+    if (!dir.startsWith(resolve(tmpdir(), "xfs-chunks-"))) throw Error("Unexpected test directory");
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

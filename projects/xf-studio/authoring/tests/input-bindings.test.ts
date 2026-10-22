@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { ACTION_DESCRIPTORS, REQUEST_DESCRIPTORS } from "../src/studio-action-descriptors";
+import { ACTION_DESCRIPTORS, REQUEST_DESCRIPTORS } from "../src/app/studio-action-descriptors";
 import { ALL_TARGETS, bindingReference, cancelsGesture, chordMatches, CURSOR_FALLBACK, cursorFor, GESTURE_BINDINGS, GESTURES, KEY_BINDINGS,
   keyBinding, MAKEUP_TARGETS, MODIFIER_KEYS, MODIFIER_SUMMARIES, modifierKey, modifiersOf, PANEL_POINTER_BINDINGS, POINTER_BINDINGS,
   pointerBinding, shortcutLabel, targetTip, viewportHints, type BindingAction, type CursorKind, type GestureKind, type HeldModifiers,
-  type ModifierKey, type PointerInput, type ViewportInputContext, type ViewportScope } from "../src/input-bindings";
+  type ModifierKey, type PointerInput, type ViewportInputContext, type ViewportScope } from "../src/app/input-bindings";
 import { SHELL_KEY_BINDINGS } from "../src/studio-ui/shortcuts";
 
 const held = (key: ModifierKey): HeldModifiers => ({ ctrl: key.includes("ctrl"), alt: key.includes("alt"), shift: key.includes("shift") });

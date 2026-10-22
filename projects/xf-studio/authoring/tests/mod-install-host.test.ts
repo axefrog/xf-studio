@@ -7,10 +7,10 @@ import { createHash } from "node:crypto";
 import { chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { defaultLocalSettings, type LocalSettings } from "../src/local-settings";
+import { defaultLocalSettings, type LocalSettings } from "../src/setup/local-settings";
 import { createModInstallHandler, installIssue, ModInstallError, ModInstallHost, READ_ONLY_VERIFICATION, windowsProcessImages, windowsRunningApps,
-  type RunningApps } from "../src/mod-install-host";
-import { EYE_MAKEUP_MOD } from "../src/mod-branding";
+  type RunningApps } from "../src/installation/host/mod-install-host";
+import { EYE_MAKEUP_MOD } from "../src/legacy/eye-makeup/mod-branding";
 
 const digest = (body: string | Buffer) => createHash("sha256").update(body).digest("hex");
 const MOD = EYE_MAKEUP_MOD.modName;
@@ -321,7 +321,7 @@ function interrupt(f: ReturnType<typeof fixture>, next: string, done: 0 | 1 | 2)
   for (const entry of prior.files) writeFileSync(join(backup, entry.path.split("/").at(-1)), readFileSync(join(f.target, entry.path.split("/").at(-1))));
   const files = JSON.parse(readFileSync(join(f.store, next, "manifest.json"), "utf8")).files as { path: string }[];
   const pending = { ...prior, candidateId: next, files, installedAt: new Date().toISOString(), rollback: { prior: { ...prior, rollback: null }, backup } };
-  writeFileSync(join(f.receipts, `${prior.targetId}.journal.json`), JSON.stringify({ schema: "xfs/install-journal-1", targetId: prior.targetId,
+  writeFileSync(join(f.receipts, name.replace(/\.json$/, ".journal.json")), JSON.stringify({ schema: "xfs/install-journal-1", targetId: prior.targetId,
     target: prior.target, names: files.map(x => x.path.split("/").at(-1)), next: files, prior, backup, pending }));
   for (const entry of files.slice(0, done)) writeFileSync(join(f.target, entry.path.split("/").at(-1)!), readFileSync(join(f.store, next, ...entry.path.split("/"))));
 }

@@ -5,9 +5,9 @@ import { expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ensureEyePlate } from "../src/eye-plate-service";
-import { EYE_PLATE_MASCULINE_RECIPE } from "../src/eye-plate-recipe";
-import { createWolvenKitEyePlateTools } from "../src/eye-plate-wolvenkit";
+import { ensureEyePlate } from "../src/legacy/eye-makeup/plate/host/eye-plate-service";
+import { EYE_PLATE_MASCULINE_RECIPE } from "../src/legacy/eye-makeup/plate/eye-plate-recipe";
+import { createWolvenKitEyePlateTools } from "../src/legacy/eye-makeup/plate/host/eye-plate-wolvenkit";
 import { oracleTest } from "./optional-oracles";
 
 const game = process.env.XFS_TEST_GAME_ROOT, wolvenkit = process.env.XFS_TEST_WOLVENKIT;

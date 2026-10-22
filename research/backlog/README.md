@@ -1,11 +1,99 @@
 # Research and work queue
 
-**Current as of 26 September 2026.** This is the single ranked queue for XF Studio (`projects/xf-studio`) and related research. Each row links to the owner document that holds the detailed requirements and open/done state. Tracks marked *parallel* are independent enough to run as separate subagents on their own `claude/` branches and worktrees; the coordinator reviews, merges and updates shared status.
+The single queue for XF Studio (`projects/xf-studio`) and related research. **The work queue below is the anchor:** the coordinator reads it before choosing what to start or delegate, updates it whenever something is added, started or finished, and reports from it at every milestone. The sections after it hold the detail, and each queue line links to its detail or owner document.
 
+## Work queue
 
-### 1.0 connective tissue: profiles, Vs, saves and presets (design revision 4, 29 September 2026)
+**Rules.**
+- **Every item sits in exactly one lane,** with the date it was added.
+- **Beta blockers** must be empty before the first public beta ships ([1.0 readiness](../../docs/release-readiness.md)).
+- **One agent slot always works the polish lane,** in batches, whenever capacity allows.
+- **R&D gets a slot only while the polish lane is moving.**
+- **Items older than two weeks** in the blocker or polish lanes are named in the next milestone report.
+- **New requests** go into a lane the day they arrive: bugs and polish on existing features into polish or blockers; new features into *after 1.0*.
 
-Part of 1.0 polish, not a new feature. One event-sourced graph of top-level nodes in the player's database (feature presets, looks, Vs, saves and save policies, mods, layouts, views, pointers, profiles), any number of each, with profiles as anchors that introduce nodes without owning them. Each node's data is a stream (value streams replace, delta streams change; entries are nodes), with snapshots as caches and compaction by reachability under reactive policy nodes, so undo, history and forking from any past point come free. Nodes share by reference, shallow fork, selective feed or deep clone, layered to any depth; several Vs can sit in one profile with a view each, and one change to a shared preset shows on all of them. The Save Explorer converges with loading a V; overwriting a save is opt-in per save (policy nodes with defaults), a new save is always offered; short export IDs replace UUID-derived names in a lossless migration; conflicts block only what they affect, with undoable fixes; a graph inspector panel. The graph core is a standalone, reusable engine package (working name Strata, importing nothing from the Studio) with deterministic simulation testing built in: every source of non-determinism is a swappable source node, and a seeded harness checks invariants after every step. The live game as a remote replica over the bridge is named as a future adapter. Nine slices (G1–G9), about 49 agent-days plus 4 gated; G1 is the engine (event logs, folds, snapshots and time windows, multiplicity, layering, sources and the harness, proved against a brute-force reference model), then the Studio's store on it. The seven open questions are recorded as reversible coordinator defaults. Nothing built: [profiles and graph design](../authoring/profiles-and-graph-design.md).
+### In flight
+- **Open High findings:** 1, CORE-03; feature merges run. The core review follows profiles phase 2. *22 Oct*
+- **Profiles phase 4a, scene runtimes** (the single primary focus, next): per-scene runtimes, prepared before switching, with progress, residency and leak-free disposal ([design §4.5](../authoring/profiles-views-layouts-design.md#45-scene-runtimes-and-switching-phase-4a)). It fixes the body-switch and first-draw bugs that the view-switch spike found. Phase 1 merged on 22 Oct (`35e3c5b6`): the lease, the outbox, the `profiles-1` migration, explicit targets with captures, the focus service and editing-context history. Each chunk went through Sol reviews; the design review was PASS WITH CONDITIONS, with UI-187..190 in the polish lane. *22 Oct*
+- **Polish batch 1** (`claude/polish-1`): thumbnail drag direction, repeated layer names, collection tie order, the flaky mottle test, Build wording, the masculine-plate warning. *21 Oct*
+
+### Beta blockers
+- **Profiles, views and layouts: the whole proposal is pre-beta** (decided 21 Oct; [design](../authoring/profiles-views-layouts-design.md)). Order:
+  1. core model, migration, autosave, conflicts, recovery, history;
+  2. tabs and contributed defaults;
+  3. binding selector, panel instances, panel picker, empty states;
+  4. simultaneous views;
+  5. several Vs and profiles;
+  6. tab duplication, reopen history, orphan handling.
+
+  Spikes S1–S3 come first. About 40–49 agent-days, re-estimated after the spikes. *21 Oct*
+- **Choice thumbnails turn the wrong way when dragged** ([small bugs](#small-bugs-and-friction)). *21 Oct*
+- **Speed budgets** ([performance](performance.md)), including:
+  - the restart to V (2 s budget; PREV-196);
+  - the first V after a code change (about 12 s; 26.7 s for a save V, with clothing through WolvenKit);
+  - first-run preparation;
+  - Build's verifier and first plate cut (PIPE-130). *29 Sep*
+- **Finish verdicts in game:** Glitter and Shimmer reworked offline, waiting for in-game sessions ([finishes](glitter-material.md)). *29 Sep*
+- **Body switch shows the wrong V and drops the request** (found by spike S2, 21 Oct; [experiment 039](../../experiments/039-view-switch-spike/README.md) on `claude/spike-views`). Switching the default V's body leaves the pane empty for 0.2–1.2 s with no message, the superseded V is shown and stays, and the newer request is refused ("The creator options are still loading.") and lost. Fixed properly by profiles phase 4a. Before that, the request must never be dropped and the old V should stay shown with progress. *21 Oct*
+- **First draw of a lighting preset freezes for up to 94 s** on a fresh browser profile: 40 shader programs link in one blocking task. A preset change pays the same, and a desktop first run would hit it. Prepare (compile) programs ahead in small steps, with the previous view kept on screen ([performance](performance.md)). *21 Oct*
+- **Make the Save Explorer worth having** (21 Oct). Today it's an early-access curiosity that lets you look inside a save, read-only ([save editor design](../save/save-editor-design.md)). When this comes up, an agent studies it and reports back:
+  - what players and modders would actually use it for;
+  - its gaps;
+  - which ideas are cheap to build and turn it into a real value-add for the first release, such as finding which mods a save depends on, explaining what changed between two saves, or checking a save before a mod update.
+
+  Then the maintainer decides: build the chosen ideas, or move the panel behind research tools for the beta, in line with the "exportable first" bar. *21 Oct*
+- **Consistency leftovers:** UI-142's build steps, and repeated layer names (CORE-125) ([readiness](../../docs/release-readiness.md)). *29 Sep*
+
+### Polish lane (before 1.0)
+- **Profiles phase 1 UI follow-ups** (from its design review; they don't block the merge):
+  - the workspace notice as a library component;
+  - "Save version" crowding the header crumbs at about 1,100 px;
+  - progress for Taking over, Waiting and Restoring, and a way back from Waiting;
+  - wording leftovers: the "Autosaved draft" chip, the "Draft" glossary entry, and three names for reopening a collection;
+  - "aren't protected" should say its consequence;
+  - save-toast and read-only-fade polish. *22 Oct*
+- **Tests leave temporary folders behind** (`xfs-part-2-library-*`, `xfs-locked-library-*`, `xfs-ui-data-*` and others pile up in the system temp folder). Every test removes what it creates. *22 Oct*
+- **Starter eye-makeup shapes** under the contributed-defaults convention ([small bugs](#small-bugs-and-friction)). *21 Oct*
+- **The rest of [Small bugs and friction](#small-bugs-and-friction):** Build Stop, two windows on one draft, collection tie order, the masculine plate warning, Build wording, receipt matching. *21 Oct*
+- **A check that pure engine code never reads the clock, randomness or timers** (`engines/layered-makeup/raster-processor.ts` does today). *21 Oct*
+- **Flaky tests:** the mottle raster budget under full-suite load, and "Recent drafts" ordering of saves in the same millisecond. *21 Oct*
+- **A Show in folder route for the workspace file** (desktop). *21 Oct*
+
+### Next tracks (ranked)
+1. **The rest of the job scheduler (F-2):** the facial, idle, pose, grading LUT, swatch, icon and preview-core hosts move onto the scheduler ([performance](performance.md)). *21 Oct*
+2. **Character detail completeness:** colours first, then every creator detail ([ranked tracks](#ranked-tracks), track 2). *25 Sep*
+3. **The eye-makeup editor and finish adapters** (track 6), and CORE-03's remaining steps (the [code-health ledger](../authoring/code-health.md)). *25 Sep*
+
+### R&D (runs only while the polish lane is moving)
+Research questions from any chat go to the meta-coordinator's [research queue](research-queue.md). This lane lists the R&D build tracks, each kept by the chat that owns it.
+
+- **Hair Lab** (its own chat and branch, off `main` until the beta). *16 Oct*
+- **In-game overlay and UI; custom material shaders** (below). *29 Sep*
+- **The runtime bridge** (its own chat, XF · Runtime bridge): 0.8.3 on `main`, proven in session 11; sessions 9–11 done. Next 0.8.4 (session 11's findings, the UI review's UI-180..184), then the XF Core plugin host, then the NPC and DM toolkit branches ([bridge autonomy](bridge-autonomy.md)). *22 Oct*
+- **Story Engine** (its own chat, XF · Story Engine): procedural gigs, quests and encounters over a level-of-detail world simulation ([hub](../story-engine/README.md)). It is R&D at its own pace, outside the finish-first rule, and is gated mainly on runtime bridge work. *22 Oct*
+
+### After 1.0 (banked)
+- **User-defined shortcuts**, **the Pattern finish**, and **the later features** below. *21 Oct and earlier*
+
+### Approved experiment: Hair Lab
+
+[Hair Lab](hair-lab.md) is an approved, optional prototype exception: generate hair on V through a strand-budget volume graph, behind an experimental preference. Its rough M2 slice now renders derived clumps, layered cards and scalp coverage through the existing hair shader. Visual fidelity and coarse latency remain active work before M3 styling. Broader hair features still wait for the current product to be finished and polished. In-Studio quality comes first; export is build-only stretch work.
+
+### Profiles and multiple Vs, after the beta
+
+Banked, not started; it waits for the current product to be finished and polished. The idea is one place in the player's database for the things that today live in separate places (the Save Explorer, loading a V for editing, the Character panel's V, the collection library, part presets, saved layouts and export identities), so that several Vs and profiles can share work. The decisions so far:
+
+- **Several Vs, one preset.** A profile can hold several Vs, each with its own 3D view, and one change to a shared preset shows on every V that uses it. To compare looks, give each V the same preset. There is no overlay of "the edited makeup" that follows a V switch.
+- **Profiles anchor, they do not own.** A profile points at Vs, looks, layouts and mods that exist once in the database; switching profile is navigation and edits nothing. A new profile references the existing items by default, so it starts as another way into the same work. Any one item can be made distinct later, by forking it (a variant that follows its source except where it differs) or by copying it outright.
+- **Variants follow, one piece at a time.** A variant of a preset can override one makeup layer and keep following the others, so later changes to the source still reach everything it hasn't overridden.
+- **Editing an inherited value overrides it locally.** The panel says where each value comes from and offers Reset, Override here and Edit the source; changing the source itself is always an explicit step, never a side effect of an ordinary edit.
+- **A default V as a constant starting point.** What the game presents by default, per body type, ships as a built-in starting point that new profiles start from. It holds no appearance data of its own and follows the player's game; Reset returns to it.
+- **Saves are overwritten only by opt-in, per save.** The choices are never overwrite (the default), ask me first, or overwrite without asking. Writing a new save is always offered, and every overwrite first keeps a restorable copy. The offline save writer stays behind its in-game session gate ([save write-back design](../character-customization/save-writeback-design.md)).
+- **Migrate, don't carry legacy.** Nothing is released beyond alphas, so existing presets, collections and export identities migrate once to short IDs, losslessly, rather than keeping long legacy names alive.
+- **One database for now,** backed up automatically each day. A copy taken before the one-time migration still needs building ([library durability](../authoring/library-durability.md#backups)).
+- **Problems block only what they affect.** Conflicts between presets or installed mods show as warnings, with undoable fix routes; deployment conflicts between mods never block looking.
+
+Owner documents when it starts: the [selectors design](../authoring/selectors-design.md), [feature-module platform](../authoring/feature-module-platform.md), [view graph design](../authoring/view-graph-design.md), [save editor design](../save/save-editor-design.md) and [library durability](../authoring/library-durability.md).
 
 ### Queued R&D: in-game overlay and UI (set 29 September 2026)
 
@@ -29,6 +117,15 @@ The classic glitter model's macro dot array reads less like glitter than like a 
 Working name options: Dot Matrix, Pixel, Polka Chrome, Sequin (the maintainer decides). Until then, the classic dots stay available behind the Studio's research tools.
 
 
+### Banked: user-defined shortcuts (21 October 2026; waits until the current product reaches 1.0)
+
+Shortcuts today are one fixed table (`input-bindings.ts`, the single source for dispatch, menus, the palette and the Keyboard & mouse reference), with no way for a person to change them. The plan:
+- a user layer of overrides (rebind, add or unbind a chord per binding), stored with the UI preferences;
+- conflicts shown at the moment of rebinding;
+- every default chord, Ctrl+P included, reassignable.
+
+The desktop app can capture chords a browser tab can't (Ctrl+W, Ctrl+T, Ctrl+N); the browser host lists those as unavailable.
+
 ### Queued R&D: custom material shaders in REDengine (29 September 2026)
 
 Goal: procedural finishes computed in the game's own material shader, the way the Studio preview's glint models already work (hashed flake cells with per-flake orientation, size and colour; view- and light-dependent sparkle; in-shader filtering so glitter becomes sheen at a distance), blended with skin's decal lighting so the plate still sits naturally on the face. That removes the baked-texture limits: mip blur, texture resolution and the decal mode's ~11.5° normal fade. Routes to research:
@@ -46,10 +143,6 @@ If route 1 or 2 works, it opens pearl interference colour, holographic and anima
 **Status (30 September 2026): step (a) done offline, step (b) designed.** The [pipeline trace](../materials/xf-shaders-pipeline-trace.md) follows a template from the shader cache to the D3D12 pipeline state in the 2.31 executable, with an address-library ID for every function (no pattern scanning needed). The cache's lookup key is reproduced for all 19,647 techniques: the template's *name* hash plus a permutation hash, so a renamed copy of a template finds no programs. Route 1's detour is the cache reader's find-technique and get-program calls: remap the renamed copy's key to the original's and serve our pixel program under our own GUID. Route 2 is a no-go natively (one fixed cache file, no mod path) but works as a plugin-read side cache in the same format. Next: build the read-only probe and run its one sitting ([probe plan](../materials/xf-shaders-probe-plan.md)); its last rows are step (c), the red tint.
 
 
-### Held: a public section for the graph engine (29 September 2026)
-
-A `/strata/` section of the Pages site (guide, API reference, examples, live widgets and a playground running the real engine) is built but held back from publication for now; its material is kept outside this repository until it is released.
-
 ## Ranked tracks
 
 | Priority | Track | Status | Owner doc |
@@ -66,7 +159,7 @@ The maintainer runs all game tests. | [Experiment 029](../../experiments/029-ses
 | 4 | **Materials system and shader reverse-engineering** — skin, hair, eye, decal/multilayered and related shaders | Reference phase complete (26 September): skin, hair, eye, decal and multilayered references and the shader fact index. Next: the ranked follow-ups in the track page, led by the glitter accent's `EmissiveEV`, Colour-shifting's metalness and a tilt-floor Shimmer. *Parallel*. | [Materials and shader RE](materials-shader-re.md) |
 | 5 | **Character-customisation file-chain study** — consolidate how CC files tie together, mining legacy xf-omega and the local wiki clone (text **and** images) | Consolidated 30 Sep: every category mapped, contradictions resolved, resolver gaps ranked; follow-ups are in-game checks and `.ent` patches. *Parallel* (read-only research). | [CC file chain](cc-file-chain.md) |
 | 6 | **Eye-makeup editor and remaining finish export adapters** (Shimmer, Glitter, Glossy, Colour-shifting) | Editor feature set largely done (see linked backlogs). Experimental Glossy, Shimmer and Colour-shifting adapters exist ([finish designs](../materials/finish-designs/README.md)); the [finish board](../../experiments/016-finish-board/README.md) awaits its game session. Glitter export stays guarded. **Vector extensions** (requested 27 September 2026; design ready, needs discussion): editable text the player types (font, size, spacing, alignment, point/box/path/slot layouts), compound shapes with holes and a shape library, gradient fills with colour and opacity stops (linear, radial, edge, along-path), strokes with per-point before/after widths and caps, alignment and feather, and an optional **mottle** that breaks up coverage with skin-scale noise, baked into the export and shown identically in the preview; shared with Nail Salon and later tattoos; phases V1–V4, about 21–26 days. | [Finishes and glitter](glitter-material.md), [vector engine extensions](../authoring/vector-engine-extensions.md), [path and falloff](path-and-falloff-controls.md), [viewport and editor](viewport-and-editor-controls.md), [authoring requests](eye-artistry-authoring.md) |
-| 7 | **UI follow-ups** | Opus overhaul delivered and merged 24 Sep; reviewed only cursorily so far. Open: in-depth review, API gaps. The legacy shell was retired 25 Sep. **View graph and Studio modules** (design ready 27 Sep, nothing built): several 3D views as a graph of shared or forked scene, camera, light, display and tool nodes (for example two views of V on one camera with different light rigs); combinable modules shown or hidden from a Modules menu, with parked layouts; viewport buttons derived from each view's content and modules; Poses and World as placeholder modules. Phases P1–P5 take about 18 agent-days; a ratchet test tracks the singleton assumptions. **Selectors** (design for discussion 27 Sep, nothing built): customisation organised around creator rows. A selector is a feature type on its own XF row or a vanilla row it adds choices to, with its looks, settings (name, "XF" shown, placement, export) and a generated identity; activating one switches the editing modules; per-type caps (eye makeup 1); today's collection migrates to one XF Eye Artistry selector byte-identically; products group selectors. Phases S1–S5 about 18 agent-days after view graph P2, plus 3 for vanilla-row emission; 15 questions and in-game checks G1–G4; proposes replacing the "One selector" rule. | [UI overhaul follow-ups](claude-ui-overhaul.md), [boundary assessment](../authoring/ui-architecture-boundary.md), [view graph design](../authoring/view-graph-design.md), [selectors design](../authoring/selectors-design.md) |
+| 7 | **UI follow-ups** | Opus overhaul delivered and merged 24 Sep; reviewed only cursorily so far. Open: in-depth review, API gaps. The legacy shell was retired 25 Sep. **View graph and Studio modules** (design ready 27 Sep, nothing built): several 3D views as a graph of shared or forked scene, camera, light, display and tool nodes (for example two views of V on one camera with different light rigs); combinable modules shown or hidden from a Modules menu, with parked layouts; viewport buttons derived from each view's content and modules; Poses and World as placeholder modules. Phases P1–P5 take about 18 agent-days; **Selectors** (design for discussion 27 Sep, nothing built): customisation organised around creator rows. A selector is a feature type on its own XF row or a vanilla row it adds choices to, with its looks, settings (name, "XF" shown, placement, export) and a generated identity; activating one switches the editing modules; per-type caps (eye makeup 1); today's collection migrates to one XF Eye Artistry selector byte-identically; products group selectors. Phases S1–S5 about 18 agent-days after view graph P2, plus 3 for vanilla-row emission; 15 questions and in-game checks G1–G4; proposes replacing the "One selector" rule. | [UI overhaul follow-ups](claude-ui-overhaul.md), [boundary assessment](../authoring/ui-architecture-boundary.md), [view graph design](../authoring/view-graph-design.md), [selectors design](../authoring/selectors-design.md) |
 | 8 | **CCXL character-creator capability study** | Queued explicit request (keep). Source/resource merge boundary mapped; runtime and UI probes remain. Feeds tracks 3 and 5. | [CCXL capabilities](ccxl-character-creator-capabilities.md) |
 | 9 | **Desktop app release and public site** — standing request: finish the desktop app build and keep a preliminary GitHub Pages site for it | Pages site **live** at https://axefrog.github.io/xf-studio/ (deployed from `main` by CI since 24 Sep; says no release/download yet). Electrobun Windows trial works in installed canaries (edit, library, intake, Check, Build, restart persistence). Open: signing and a real release channel, standard-user install, signed A→B updater, clean-machine first run, a download/release section on the site once a build is published. *Parallel*. | [Desktop packaging](../authoring/desktop-packaging.md), [desktop README](../../projects/xf-studio/authoring/desktop/README.md), [update gate](../authoring/desktop-update-ab-gate.md), [site README](../../projects/xf-studio/site/README.md) |
 
@@ -91,6 +184,7 @@ Later-domain research queue (below the body and appearance work): [world, termin
 - **Bringing V and the world to life** (standing direction, 27 September 2026): more idles, freer posing and animation, reactive expressions and skin, physics, and livelier surroundings. An idea register, not a schedule: [alive ideas](alive-ideas.md).
 - **Load time and responsiveness** (standing research track, 27 September 2026): the goal is that everything is ready the moment the interface appears and every change shows with no perceivable wait. Budgets, measurements and the ranked costs: [performance](performance.md).
 - **Runtime access baseline** (early mod R&D; baseline built and hardened after its security review, awaiting its first game session): heavily logged base mods per type (RED4ext C++, redscript, CET Lua, TweakXL data) and a local named-pipe bridge, read-only by default, in [`projects/xf-runtime-bridge`](../../projects/xf-runtime-bridge/README.md). Phase 2 (command catalogue, MCP server, CLI, session scripts, writes behind `allow_writes`) is built offline. Next: the [first session](../runtime/runtime-bridge-test-card.md), then session 2 through the bridge. See [runtime access baseline](runtime-access-baseline.md).
+- **Bridge 0.8: directing a simple NPC scenario** (R&D and design done 30 September 2026, nothing built; requested by the maintainer): spawn an XF actor that never reaches a save (Codeware dynamic entities, non-persistent), or pick a nearby unprotected NPC; walk, follow and turn it with the game's AI commands; have it speak in its own voice (voiceset triggers) or as subtitle, overhead or holocall-style text; give it a face, a gaze and a workspot gesture; and offer V two to four choices in the game's own dialogue widget, with the pick returned to `session.wait`. A new `npc` write class, undo and kill-switch restore for everything it holds, a declarative scenario runner, a first "stranger with a question" scenario and a planned session-9 card; about 9 agent-days. An XF conversation template `.scene` (camera, timed choices, voiced lines) is the phase after. Decisions for the maintainer are listed in the design: [NPC direction design](../runtime/npc-direction-design.md), [knowledge](../../knowledge/npc-direction.md).
 - **Runtime bridge autonomy** (R&D done, nothing built): ranked bridge features that remove the player's remaining steps in a test session — light on/off, hiding the photo-mode cursor, camera presets for repeatable framing, opening and leaving the creator from script, row labels that follow scripted changes, NPC hiding and a fixed studio spot, and the full photo mode via the player's key. Evidence in [photo mode](../../knowledge/photo-mode.md). See [bridge autonomy](bridge-autonomy.md).
 - **Lighting mirror: a Studio lighting setup in photo mode** (R&D, requested 27 September 2026; design and an offline mapping prototype, nothing in game): on demand, the bridge spawns the Studio setup's lights about V in photo mode, with every light field set (World Builder's route through Codeware: an empty XF light-host entity plus a light component built at assembly), follows V as CharLi does, and removes them on exit, clear and the kill switch; lights read back into the Studio. The creator rig travels in its native lumens, so mirroring the Character creator setup onto V in photo mode tests the approach against the creator screen. Phases L1 (read photo mode's own lights) and L2 (spawn and control) about 4.5–5.5 days in the bridge, L3 (Studio "Show in game") about 2 days after the lighting setups merge; one session with a ten-step card; nine questions for the maintainer. See the [lighting mirror design](../runtime/lighting-mirror-design.md) and [knowledge/photo-mode-lights.md](../../knowledge/photo-mode-lights.md).
   - **Banked: a bridge-applied photo-mode lighting rig that matches the Studio's lighting** (28 September 2026; waits until the current product reaches 1.0). The bridge sets up lights about V in photo mode that reproduce the Studio's lighting, so a look or expression authored in the Studio is seen in game under the same light. Session 4 showed why it matters: in game, faces and expressions read noticeably worse except under near-perfect lighting, where the Studio's render quality is the norm ([experiment 029](../../experiments/029-session-4/README.md#34-n13-cheek-check)).
@@ -113,7 +207,7 @@ Later-domain research queue (below the body and appearance work): [world, termin
 
 - **AI integration through MCP** (direction set 26 September): an optional, off-by-default MCP server so users can connect their own AI tools to the game (through the runtime bridge) and later to the Studio's typed actions. See [AI integration](ai-integration-mcp.md).
 
-- **Activity view: what's happening to bring each view up to date** (requested 27 September 2026). Every background job that feeds a view becomes a visible, live entry, which fits the reactive graph:
+- **Activity view: what's happening to bring each view up to date** (requested 27 September 2026). Every background job that feeds a view becomes a visible, live entry:
   - V preparations and their stages;
   - a hairstyle's export;
   - texture decodes;
@@ -207,6 +301,21 @@ In order:
 Existing brow, lash, hair and piercing *preview context* is not permission to build those editors.
 
 **Photo Mode Tools** remains an independent second project; its successor, XF Photo Mode (complete snapshots, the gaze freeze), is designed as the first XF Core plugin. See its project README.
+
+## Small bugs and friction
+
+Polish on existing features, not new work. Each is one line; the code-health ledger keeps only Medium and above.
+
+- **Starter eye-makeup shapes** (21 October 2026, polish before 1.0). A new look and a new layer start from a lopsided wing whose control points every design first drags back into place. Following the contributed-defaults convention (AGENTS.md, UX policy), eye makeup contributes several natural starter shapes as read-only choices: a soft lid wash along the upper lash line, a classic wing, a crease or smoky shape, and a lower-lash smudge. The person can save any layer's shape as their own starter, and choose which starter New layer and New look use. The current starter (`starterRecipe()` and the new-layer shape in `src/features/eye-makeup/region.ts`) stays intact for existing drafts. Check each starter on the default and the reference V, in both eye modes.
+- **Choice thumbnails turn the wrong way when dragged** (21 October 2026). Dragging a hairstyle thumbnail left or right turns it opposite to the hand. The drag sets `angle = start + dx·360/(width·1.5)` in `src/studio-ui/components/choice-preview.ts` (`PreviewSpin`, about line 238). Flip the sign so the surface under the pointer follows it, check the frame order in `turntableYaw` agrees, and keep the hover spin's direction consistent with the drag.
+- **Build has no Stop.** A Build runs for many seconds and can't be stopped from the Mod panel; the host already stops a Build whose request is dropped, so the panel only needs a Stop button.
+- **Two windows overwrite each other's draft.** Two Studio tabs or windows on one workspace each autosave over the other's draft; the second should see the first's changes, or at least warn.
+- **Collection order on a tie** (LIB-01): two saves in the same millisecond list in random order (`src/library/host/collection-store.ts` orders by `created_at`, then a random UUID); add a stable insertion tie-break.
+- **Repeated layer names** (CORE-125): a new layer is named `Layer <count+1>`, so it can repeat a name after a removal (`src/engines/layered-makeup/layer-stack.ts`); skip names in use, as presets already do.
+- **A damaged masculine plate blocks the feminine export** (PIPE-122): it reaches `refuse("invalid_collection")` in `src/features/eye-makeup/export/index.ts`; treat it as unavailable with a warning instead.
+- **Developer wording in localhost Build reasons** (PIPE-134): `src/host/package-server.ts` names `bun tools/setup-wolvenkit.ts`, `XFS_PACKAGE_*` overrides and "Game input".
+- **Install receipts matched on name and size** (CORE-118): an archive not hashed within the problem report's budget matches a receipt on name and size alone (`src/diagnostics/host/mod-identity.ts`).
+- **WebView2 runs with `--disable-web-security`** (DESK-09): Electrobun's native wrapper hard-codes the flag and no setting removes it; the CSP, session cookie and navigation rules still hold. Raise it upstream, or bundle CEF at the cost of a much larger installer.
 
 ## Working rules for this queue
 

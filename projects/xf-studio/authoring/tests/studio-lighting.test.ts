@@ -1,13 +1,13 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
-import { studioStageSetup, type LightingSource } from "../src/lighting-setups";
-import { PreviewActions, type PreviewPort } from "../src/preview-actions";
+import { studioStageSetup, type LightingSource } from "../src/preview/lighting-setups";
+import { PreviewActions, type PreviewPort } from "../src/preview/preview-actions";
 import { DEFAULT_KEY_ANGLE, DEFAULT_KEY_ELEVATION, DEFAULT_STUDIO_EXPOSURE, DEFAULT_STUDIO_LIGHTS, lightDirection, matchingStudioSetup,
-  STUDIO_SETUP_IDS, STUDIO_SETUPS, validStudioLights } from "../src/studio-lighting";
-import { createTrustedPreviewServices } from "../src/trusted-preview-services";
-import { WorkspaceComposer } from "../src/workspace-composer";
-import { parseWorkspace, serializeWorkspace } from "../src/workspace-state";
+  STUDIO_SETUP_IDS, STUDIO_SETUPS, validStudioLights } from "../src/preview/studio-lighting";
+import { createTrustedPreviewServices } from "../src/app/trusted-preview-services";
+import { WorkspaceComposer } from "../src/app/workspace/workspace-composer";
+import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
 import { storedWorkspace } from "./fixtures/looks";
 import { freshWorkspace } from "./fixtures/eye-region";
 
@@ -78,7 +78,7 @@ test("the workspace stores the rig only when adjusted, restores it, and older or
   const { port: p } = port();
   const actions = new PreviewActions(round.preview, p);
   expect(actions.lightingSetups().shown.label).toBe("Custom (from Key light)");
-  actions.dispatch({ kind: "preview.selectLightingSetup", setup: "soft" });
+  actions.dispatch({ kind: "preview.selectLightingSetup", view: "main", setup: "soft" });
   const composer = new WorkspaceComposer(round, { editor: () => ({ recipe: round.recipe, active: round.active, selected: round.selected,
     fieldSelection: round.fieldSelection, history: round.history }) as never, uvView: () => round.uvView, savedV: () => undefined,
   collections: () => undefined, quality: () => round.preview.textureSize, preview: () => actions.snapshot(), motion: () => undefined });

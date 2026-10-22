@@ -1,5 +1,5 @@
-import { shortcutLabel } from "../../input-bindings";
-import type { TourRecord } from "../../ui-preferences";
+import { shortcutLabel } from "../../app/input-bindings";
+import type { TourRecord } from "../../app/ui-preferences";
 import type { Command } from "../commands";
 import { isTextInput } from "../dom";
 import type { Frame, StudioRuntime } from "../runtime";
@@ -170,6 +170,8 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(): void }) 
    */
   function maybeOffer(frame: Frame, force = false) {
     if (offerState !== "waiting" || running) return;
+    // A read-only window (another one holds the workspace) offers nothing that would record a choice (t-read-only-window).
+    if (frame.status.lease && !frame.status.lease.writable) return;
     if (!force) {
       if (frame.status.verification || frame.preferences.tours?.[ONBOARDING_TOUR_ID]) { offerState = "done"; return; }
       const card = frame.previewSetup.card;

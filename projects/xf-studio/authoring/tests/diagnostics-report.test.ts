@@ -1,23 +1,23 @@
 // The diagnostics cleanup (code-health DIAG-01..04, 06..09, 12): what a saved report may hold, redaction of names the shared
 // patterns can't see the end of, a log that never throws, a V's resolution that survives its size, and the page's forwards.
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { inflateRawSync } from "node:zlib";
-import { personalDataIn } from "../src/private-data";
+import { personalDataIn } from "../src/app/private-data";
 import { redactText, redactValue, textRedactor } from "../src/diagnostics/redact";
-import { personalRoots, RedactionRoots } from "../src/diagnostics/host-roots";
+import { personalRoots, RedactionRoots } from "../src/diagnostics/host/host-roots";
 import { DIAGNOSTIC_FORWARD_SCHEMA, type DiagnosticEntry } from "../src/diagnostics/model";
-import { DiagnosticLog, hostDiagnosticsAt, hostFailure, withDiagnostics } from "../src/diagnostics/host-log";
-import { TraceWindow } from "../src/diagnostics/trace-window";
-import { createDiagnosticsHandler, modFileEntryName, withRequestDiagnostics } from "../src/diagnostics/host-endpoint";
-import { hideProfileName, resolutionResources } from "../src/diagnostics/host-report";
+import { DiagnosticLog, hostDiagnosticsAt, hostFailure, withDiagnostics } from "../src/diagnostics/host/host-log";
+import { TraceWindow } from "../src/diagnostics/host/trace-window";
+import { createDiagnosticsHandler, modFileEntryName, readReviewedFile, withRequestDiagnostics, type DiagnosticsHandlerOptions } from "../src/diagnostics/host/host-endpoint";
+import { hideProfileName, resolutionResources } from "../src/diagnostics/host/host-report";
 import { RESOLUTION_TRACE_OPTIONS, resolutionTrace } from "../src/diagnostics/resolution-trace";
-import { hashingSettled, involvedMods, readOwnInstalls } from "../src/diagnostics/mod-identity";
+import { hashingSettled, involvedMods, readOwnInstalls } from "../src/diagnostics/host/mod-identity";
 import type { ReportManifest } from "../src/diagnostics/report";
-import { defaultLocalSettings, type LocalSettings } from "../src/local-settings";
-import type { ResolvedCharacter } from "../src/character-resolver";
+import { defaultLocalSettings, type LocalSettings } from "../src/setup/local-settings";
+import type { ResolvedCharacter } from "../src/character/character-resolver";
 
 const root = mkdtempSync(resolve(tmpdir(), "xfs-diagnostics-report-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -39,7 +39,7 @@ function unzip(bytes: Uint8Array): Map<string, string> {
 }
 
 /** An endpoint over its own data folder and settings; `post` sends a Studio-origin JSON request. */
-function endpoint(name: string, settings: LocalSettings, extra: { openExternal?: (url: string) => boolean } = {}) {
+function endpoint(name: string, settings: LocalSettings, extra: Partial<Pick<DiagnosticsHandlerOptions, "openExternal" | "resources" | "resolverCache">> = {}) {
   const dataRoot = join(root, name);
   const diagnostics = hostDiagnosticsAt(dataRoot);
   const handler = createDiagnosticsHandler(diagnostics, { app: () => ({ version: "0.1.0", commit: null, channel: null, host: "localhost" }),
@@ -186,6 +186,49 @@ describe("profile names of any shape, encoded folders and identifier keys (DIAG-
   });
 });
 
+describe("resource tables come from the archive that wins them now (DIAG-08)", () => {
+  test("through the resolver's one lookup: never a cached file of another archive or an older copy, and a changed winner is said", async () => {
+    const cache = join(root, "stale-resolver-cache"), table = (note: string) => ({ Data: { RootChunk: { appearances: [{ name: note }] } } });
+    // An older answer for the same depot hash in the resolver's cache folder, from an archive that no longer wins.
+    mkdirSync(join(cache, "json"), { recursive: true });
+    writeFileSync(join(cache, "json", "1-oldarchive-oldtool.json"), JSON.stringify({ document: table("STALE-TABLE"), meta: {} }));
+    const asked: string[] = [];
+    const { diagnostics, post } = endpoint("winning-resources", defaultLocalSettings(), { resolverCache: cache, resources: async refs => {
+      asked.push(...refs.map(ref => ref.path ?? ref.hash));
+      return new Map([["1", { archive: "hair.archive", provider: "Hair Mod", reader: "native", document: table("CURRENT-TABLE") }],
+        ["2", { archive: "replacer.archive", provider: "Another Mod", reader: "native", document: table("OTHER-WINNER-TABLE") }]]);
+    } });
+    diagnostics.trace.event("character", "resolved", { resources: [
+      { ref: { hash: "1", path: "base\hair.app" }, status: "archive", archive: "hair.archive", provider: "Hair Mod", group: "mod", alternatives: [] },
+      { ref: { hash: "2", path: "base\hair.mesh" }, status: "archive", archive: "hair.archive", provider: "Hair Mod", group: "mod", alternatives: [] },
+      { ref: { hash: "3", path: "base\hair.xbm" }, status: "archive", archive: "hair.archive", provider: "Hair Mod", group: "mod", alternatives: [] }] },
+      RESOLUTION_TRACE_OPTIONS);
+    const manifest = await (await post("report", { ref: null })).json() as ReportManifest;
+    // Only the kinds whose tables a report shows are asked for.
+    expect(asked).toEqual(["base\hair.app", "base\hair.mesh"]);
+    const excerpts = (await (await post("item", { id: manifest.id, item: "excerpts" })).json() as { text: string }).text;
+    expect(excerpts).toContain("CURRENT-TABLE");
+    expect(excerpts).not.toContain("STALE-TABLE");
+    // The mesh now comes from another archive: said, and its table left out rather than shown as the winner's.
+    expect(excerpts).not.toContain("OTHER-WINNER-TABLE");
+    expect(excerpts).toContain("Your mods changed since this was prepared: it now comes from replacer.archive");
+    const full = (await (await post("item", { id: manifest.id, item: "resources-full" })).json() as { text: string }).text;
+    expect(full).toContain("CURRENT-TABLE");
+    expect(full).not.toContain("OTHER-WINNER-TABLE");
+  });
+
+  test("while the game setup isn't open, the report says so instead of guessing from the cache", async () => {
+    const { diagnostics, post } = endpoint("setup-closed", defaultLocalSettings(), { resources: async () => null });
+    diagnostics.trace.event("character", "resolved", { resources: [
+      { ref: { hash: "1", path: "base\hair.app" }, status: "archive", archive: "hair.archive", provider: "Hair Mod", group: "mod", alternatives: [] }] },
+      RESOLUTION_TRACE_OPTIONS);
+    const manifest = await (await post("report", { ref: null })).json() as ReportManifest;
+    const excerpts = (await (await post("item", { id: manifest.id, item: "excerpts" })).json() as { text: string }).text;
+    expect(excerpts).toContain("isn't open in XF Studio right now");
+    expect(manifest.items.some(item => item.id === "resources-full")).toBe(false);
+  });
+});
+
 describe("a V's resolution survives its size (DIAG-04)", () => {
   test("a realistically sized resolution is kept, one table of resources, and the report's resource parts fill in", async () => {
     const resolved = syntheticV(6, 10, 6);
@@ -276,6 +319,27 @@ describe("a saved report holds only what was ticked (DIAG-01, DIAG-06, DIAG-08, 
     expect((await refused.json()).code).toBe("sharing_not_confirmed");
     const confirmed = await post("bundle", { id: manifest.id, include: [offer.id], sharingConfirmed: true });
     expect([...unzip(new Uint8Array(await confirmed.arrayBuffer())).keys()]).toContain("optional/mod-files/Private Mod Name/private.archive");
+  });
+
+  test("a mod's file changed after the review is refused, never packaged as reviewed (DIAG-06)", async () => {
+    const file = join(mo2, "mods", "Private Mod Name", "archive", "pc", "mod", "private.archive"), reviewed = statSync(file);
+    const { manifest } = await prepare();
+    const offer = manifest.items.find(item => item.modFiles)!;
+    const save = async () => { const response = await post("bundle", { id: manifest.id, include: [offer.id], sharingConfirmed: true });
+      return { status: response.status, code: response.status === 200 ? null : (await response.json()).code }; };
+    try {
+      // Replaced by a larger file: past the size the review showed (and the limits it was offered under).
+      writeFileSync(file, "x".repeat(6 * 1024 * 1024));
+      expect(await save()).toEqual({ status: 409, code: "file_changed" });
+      // The same size and time, other bytes: the SHA-256 the review showed tells them apart.
+      writeFileSync(file, "PRIVATE BYTES");
+      utimesSync(file, reviewed.atime, reviewed.mtime);
+      expect(await save()).toEqual({ status: 409, code: "file_changed" });
+      // The bytes reviewed are saved.
+      writeFileSync(file, "private bytes");
+      utimesSync(file, reviewed.atime, reviewed.mtime);
+      expect(await save()).toEqual({ status: 200, code: null });
+    } finally { writeFileSync(file, "private bytes"); }
   });
 
   test("configured folders are redacted in page items, page facts, the description, the issue link, the log and the window (DIAG-06)", async () => {
@@ -516,4 +580,18 @@ describe("the game folder is not one mod, and hashing is bounded in time (DIAG-0
     const again = await involvedMods([{ archive: "late.archive", provider: "Installed game", group: "mod", alternatives: [] }], settings, none, { hashBudgetMs: 0 });
     expect(again[0]!.archives[0]).toMatchObject({ identifiedBy: "sha-256", sha256: new Bun.CryptoHasher("sha256").update(readFileSync(fresh)).digest("hex") });
   });
+});
+
+test("a mod file without a reviewed hash, written while it is read, is refused (DIAG-06)", async () => {
+  const file = join(root, "while-read.archive");
+  writeFileSync(file, "reviewed bytes");
+  const stat = statSync(file);
+  const reviewed = { path: file, bytes: stat.size, modified: new Date(stat.mtimeMs).toISOString(), sha256: null };
+  expect(new TextDecoder().decode(readReviewedFile(reviewed)!)).toBe("reviewed bytes");
+  // Rewritten during the read with bytes of the same size.
+  expect(readReviewedFile(reviewed, () => writeFileSync(file, "REVIEWED BYTES"))).toBeNull();
+  // ... and with its modification time put back: its change time still tells.
+  writeFileSync(file, "reviewed bytes"); utimesSync(file, stat.atime, stat.mtime);
+  await new Promise(resolve => setTimeout(resolve, 20));
+  expect(readReviewedFile(reviewed, () => { writeFileSync(file, "REVIEWED BYTES"); utimesSync(file, stat.atime, stat.mtime); })).toBeNull();
 });

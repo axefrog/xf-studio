@@ -18,10 +18,10 @@
  * writes nothing; screenshots stay private and are never committed.
  */
 import { readFileSync } from "node:fs";
-import { decodePng } from "../src/png";
-import { passMarks, patchMean, PATCH_UNITS, type PatchBox, type PatchMean, type PatchUnits, type Rgba8Image } from "../src/creator-calibration";
-import { DEFAULT_CREATOR_EXPOSURE } from "../src/creator-lighting";
-import { decodeGradingLutBinary, neutralGradingLut } from "../src/grading-lut";
+import { decodePng } from "../src/formats/png";
+import { passMarks, patchMean, PATCH_UNITS, type PatchBox, type PatchMean, type PatchUnits, type Rgba8Image } from "../src/preview/creator-calibration";
+import { DEFAULT_CREATOR_EXPOSURE } from "../src/preview/creator-lighting";
+import { decodeGradingLutBinary, neutralGradingLut } from "../src/preview/grading-lut";
 
 const args = new Map<string, string>();
 for (let i = 2; i < process.argv.length; i += 2) args.set(process.argv[i]!.replace(/^--/, ""), process.argv[i + 1] ?? "");

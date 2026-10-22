@@ -10,7 +10,7 @@
 import { writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { verifyBuild, VerificationError } from "../src/features/eye-makeup/verify/verify-build";
-import { createWolvenKitVerifierTools } from "../src/verifier-wolvenkit";
+import { createWolvenKitVerifierTools } from "../src/legacy/eye-makeup/export/host/verifier-wolvenkit";
 
 const args = process.argv.slice(2);
 const option = (name: string) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
@@ -21,7 +21,7 @@ if (!build || !wolvenkit || !gamepath || (morphTargets !== undefined && !/^\d+$/
   process.exit(2);
 }
 try {
-  const report = verifyBuild({ build, tools: createWolvenKitVerifierTools(resolve(wolvenkit), resolve(gamepath)), workDir: option("--work-dir"),
+  const report = await verifyBuild({ build, tools: createWolvenKitVerifierTools(resolve(wolvenkit), resolve(gamepath)), workDir: option("--work-dir"),
     morphTargets: morphTargets === undefined ? undefined : Number(morphTargets) });
   writeFileSync(resolve(option("--report") ?? join(build, "verification.json")), JSON.stringify(report, null, 2) + "\n", "utf8");
   const { resolvedDynamicPaths, decodedPixelChecks, limits, ...brief } = report;

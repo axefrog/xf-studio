@@ -1,17 +1,16 @@
 /**
- * CORE-28: whether the last package result still describes the draft is asked on every repaint.
- * It compares version keys (content counter, collection identity and revision, selected look, live
- * editor revision): no snapshot, no copy, and never a write of the live editor into the draft.
+ * CORE-28: whether the last package result still describes the collection is asked on every repaint. It compares version keys (the
+ * collection's structure, its looks' revisions, the shown look's editor revision): no snapshot, no copy, and never a write of the editor
+ * into the look.
  */
 import { expect, test } from "bun:test";
-import { eyeCheck } from "./fixtures/package-results";
-import { CollectionService, type CollectionTransport } from "../src/collection-service";
-import type { EditorSnapshot } from "../src/collection-session";
-import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
-import { eyeMakeupCollection, parseCollection } from "../src/preset-collection";
-import { StudioFileOperations } from "../src/studio-file-operations";
+import { eyeMakeupCollection, parseCollection } from "../src/legacy/eye-makeup/export/preset-collection";
 import { restore } from "./fixtures/workspace-observable";
 import { largeWorkspaceV1 } from "./fixtures/workspace-v1-fixtures";
+import { profileStudio } from "./fixtures/profile-studio";
+import { livePart } from "../src/app/workspace/collection-workspace";
+import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
+import { COLLECTION_2 } from "../src/platform/api";
 
 const median = (run: () => void, n = 21) => {
   const times: number[] = [];
@@ -19,52 +18,45 @@ const median = (run: () => void, n = 21) => {
   return times.sort((a, b) => a - b)[n >> 1];
 };
 
-function fixture() {
+/** The large workspace fixture's looks (16 layers each) as the shown collection. */
+async function fixture() {
   const state = restore(largeWorkspaceV1(16, 80)).state;
-  let editor: EditorSnapshot = { recipe: state.recipe, active: state.active, selected: state.selected, history: state.history,
-    fieldSelection: state.fieldSelection };
-  let revision = 0;
-  const check = (input: unknown) => { const collection = input as { id: string; presets: { id: string; revision: number }[] };
-    return eyeCheck(collection, { presets: collection.presets.map(p => ({ id: p.id, revision: p.revision, appearance: "xfs_test" })) }); };
-  const transport: CollectionTransport = { list: async () => [], get: async () => { throw Error("unused"); },
-    save: async () => { throw Error("unused"); }, package: async (_action, collection) => check(collection) };
-  const service = new CollectionService(STUDIO_DOCUMENTS, state.collections, state.library, () => editor,
-    value => { editor = value; revision++; }, transport, () => ({ recipe: editor.recipe, revision }));
-  const files = new StudioFileOperations({ pick: async () => undefined, download: () => {}, bakeMask: async () => new Blob() }, {
-    recipe: () => editor.recipe, selectedLayer: () => undefined, importRecipe: () => {}, hasSavedV: () => false,
-    savedV: () => undefined, loadSavedV: () => ({}), savedVReady: () => false,
-    executeCollection: request => service.execute(request), recoverCollection: () => {} });
-  files.attachCollection(service);
-  return { service, files, edit: () => { editor = { ...editor, recipe: { ...editor.recipe,
-    layers: editor.recipe.layers.map((layer, i) => i ? layer : { ...layer, opacity: 0.42 }) } }; revision++; } };
+  const looks = state.collections!.collection.presets.map(look => ({ name: look.name, recipe: livePart(look, STUDIO_DOCUMENTS)! }));
+  const studio = await profileStudio({ looks });
+  await studio.collection.initialize();
+  await studio.settle();
+  const edit = () => studio.app.dispatch({ kind: "layer.setOpacity", layerId: studio.document.recipe.layers[0]!.id, opacity: 0.42 });
+  return { ...studio, edit };
 }
 
 test("a package result's freshness costs a key comparison per repaint, not a snapshot (large fixture)", async () => {
-  const f = fixture();
+  const f = await fixture();
   expect((await f.files.execute({ kind: "package.check" })).ok).toBe(true);
   expect(f.files.snapshot().package?.freshness).toBe("current");
-  // What every repaint paid before: stash, snapshot and the package view of the whole draft.
-  const before = median(() => JSON.stringify(parseCollection(eyeMakeupCollection(f.service.snapshot()!.collection))), 7);
+  // What a comparison by content would pay every repaint: the package view of the whole collection.
+  const collection = () => STUDIO_DOCUMENTS.parts.readCollection({ schema: COLLECTION_2, id: f.shown()!, name: "Current",
+    presets: f.owner.looksOf(f.shown()!).map(look => ({ id: look.id, name: look.name, revision: 1, parts: look.parts })) });
+  const before = median(() => JSON.stringify(parseCollection(eyeMakeupCollection(collection()))), 7);
   const after = median(() => f.files.snapshot());
-  console.log(`package freshness per repaint: ${before.toFixed(1)} ms before, ${after.toFixed(3)} ms after (file snapshot included)`);
+  console.log(`package freshness per repaint: ${before.toFixed(1)} ms by content, ${after.toFixed(3)} ms by key (file snapshot included)`);
   expect(after).toBeLessThan(5);
   expect(after).toBeLessThan(before / 10);
 });
 
-test("an edit, a preset change or a new draft makes the result stale; a new Check makes it current; reads never stash", async () => {
-  const f = fixture();
+test("an edit, a preset change or a rename makes the result stale; a new Check makes it current; reads never write the look", async () => {
+  const f = await fixture();
   await f.files.execute({ kind: "package.check" });
-  const draft = JSON.stringify(f.service.view().draft);
   f.edit();
-  // Reading freshness never writes the live editor into the draft.
+  // The edit is recorded as it is made; reading freshness writes nothing more into the look.
+  const look = JSON.stringify(f.owner.look(f.scene.look()!));
   expect(f.files.snapshot().package?.freshness).toBe("stale");
-  expect(JSON.stringify(f.service.view().draft)).toBe(draft);
+  expect(JSON.stringify(f.owner.look(f.scene.look()!))).toBe(look);
   await f.files.execute({ kind: "package.check" });
   expect(f.files.snapshot().package?.freshness).toBe("current");
   const other = f.service.summary().draft!.presets.find(preset => preset.id !== f.service.summary().draft!.selected)!;
-  f.service.dispatch({ kind: "preset.select", id: other.id });
+  f.app.dispatch(f.choose(other.id));
   expect(f.files.snapshot().package?.freshness).toBe("stale");
   await f.files.execute({ kind: "package.check" });
-  f.service.dispatch({ kind: "collection.rename", name: "Renamed" });
+  f.service.dispatch({ kind: "collection.rename", collection: f.shown()!, name: "Renamed" });
   expect(f.files.snapshot().package?.freshness).toBe("stale");
 });

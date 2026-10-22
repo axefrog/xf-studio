@@ -38,7 +38,7 @@ The template [resource] (feminine SHA-256 `4f53133c…`, masculine `15d41cd2…`
 | Lights | two `entLightComponent`s, `L_Highlight_Cold` and `L_Main_Fake_GI`, both at intensity 0 |
 | Everything else | the ordinary NPC set: AI, stats, hit reactions, targeting, scanning, inventory and so on |
 
-With no mesh of its own, anything the entity draws comes through its controllers. The `face` group is the one XF Eye Artistry registers its selector in, because the player entities' face controller reads it in gameplay and photo mode ([`package-resources.ts`](../projects/xf-studio/authoring/src/package-resources.ts) `SELECTOR_GROUPS`; [CC file chain](cc-file-chain.md)). So a replica is expected to show V's current look: skin, face decals, makeup and the XF selector's preset alike. [hypothesis, strongly supported: the entity's composition, and the mod's own description that "the face in the tank is dynamic and personal to your V"]
+With no mesh of its own, anything the entity draws comes through its controllers. The `face` group is the one XF Eye Artistry registers its selector in, because the player entities' face controller reads it in gameplay and photo mode ([`package-resources.ts`](../projects/xf-studio/authoring/src/legacy/eye-makeup/export/package-resources.ts) `SELECTOR_GROUPS`; [CC file chain](cc-file-chain.md)). So a replica is expected to show V's current look: skin, face decals, makeup and the XF selector's preset alike. [hypothesis, strongly supported: the entity's composition, and the mod's own description that "the face in the tank is dynamic and personal to your V"]
 
 ### 1.2 How V's Faceplate (H10) places it
 
@@ -134,7 +134,7 @@ A showroom head beside V, both wearing the same preset under the same rig, tests
 
 ## Sources
 
-- Game 2.31 with Phantom Liberty: `tweakdb_ep1.bin`; `ep1_2_gamedata.archive` (the q304 templates); `basegame_4_gamedata.archive` (the shop mannequin); `basegame_4_appearance.archive` (the player head, eyes and head rig). Read with WolvenKit CLI 9.0.1 (`unbundle --hash`, `convert serialize`) and [`tweakdb-flats.ts`](../projects/xf-studio/authoring/src/tweakdb-flats.ts).
+- Game 2.31 with Phantom Liberty: `tweakdb_ep1.bin`; `ep1_2_gamedata.archive` (the q304 templates); `basegame_4_gamedata.archive` (the shop mannequin); `basegame_4_appearance.archive` (the player head, eyes and head rig). Read with WolvenKit CLI 9.0.1 (`unbundle --hash`, `convert serialize`) and [`tweakdb-flats.ts`](../projects/xf-studio/authoring/src/game/tweakdb-flats.ts).
 - V's Faceplate (H10) 1.1.0 (Nexus 24599, file 123152) in the reference MO2 instance, read only; its six resources converted to JSON in a private scratch folder.
 - Codeware `v1.20.4` (`613a1cb8`): `scripts/World/StaticEntitySpec.reds`, `StaticEntitySystem.reds`, `src/App/World/StaticEntitySystem.cpp`.
 - Who made each and what it taught us: [community credits](../docs/community-credits.md).

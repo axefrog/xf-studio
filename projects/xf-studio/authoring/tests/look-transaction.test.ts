@@ -5,22 +5,22 @@
  * step, and the collection and the workspace carry each look's hair part and editor memory.
  */
 import { expect, test } from "bun:test";
-import { STUDIO_COMPOSITION, STUDIO_OWNERS } from "../src/compose/studio-registry";
-import { CollectionSession } from "../src/collection-session";
-import { collectionDraft } from "../src/collection-workspace";
-import { COLLECTION_2, featureActionTable, featureId } from "../src/platform/api";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { parseWorkspace, serializeWorkspace } from "../src/workspace-state";
-import { PartRegistry } from "../src/platform/core/document";
-import { Registry } from "../src/platform/core/registry";
-import { hairCodec, withHair, type Hair } from "./fixtures/hair-feature";
+import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
+import { LookEditor } from "../src/library/look-editor";
+import { LookSessions } from "../src/library/look-sessions";
+import { collectionServiceOver } from "./fixtures/profile-studio";
+import { COLLECTION_2 } from "../src/platform/api";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
+import { withHair, withTint, type Hair } from "./fixtures/hair-feature";
 import { initialRecipe, freshWorkspace } from "./fixtures/eye-region";
 
+import { namedCore } from "./fixtures/named-targets";
 const RESET = { label: "Reset look", actionKind: "look.reset" };
 const ids = () => { let n = 0; return () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`; };
 
 function core(composition = withHair(), workspace = freshWorkspace()) {
-  return createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft", newId: ids() }, composition);
+  return namedCore(createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft", newId: ids() }, composition));
 }
 const hair = (c: ReturnType<typeof core>) => c.document.others?.read("hair") as Hair | undefined;
 const opacity = (c: ReturnType<typeof core>) => c.document.recipe.layers[0].opacity;
@@ -47,7 +47,7 @@ test("a feature without a handler of its own runs its registered capability and 
   // A selection records nothing.
   c.app.dispatch({ kind: "hair.addStrand", length: 2 } as never);
   expect(c.app.dispatch({ kind: "hair.selectStrand", index: 0 } as never)).toMatchObject({ ok: true });
-  expect(c.document.undoDepth).toBe(2);
+  expect(c.document.history.state().depth).toBe(2);
   // Undo restores the hair part only: eye makeup is not republished.
   expect(c.app.dispatch({ kind: "history.undo" })).toMatchObject({ ok: true });
   expect(hair(c)).toEqual({ colour: "#aa3300", strands: [] });
@@ -69,7 +69,7 @@ test("app.transaction records one look step over several parts; Undo and Redo mo
   });
   expect(outcome).toEqual({ ok: true, result: "done" });
   expect(c.app.historyTimeline().steps.map(step => step.label)).toEqual(["Opacity", "Reset look"]);
-  expect(c.document.undoDepth).toBe(2);
+  expect(c.document.history.state().depth).toBe(2);
   expect(c.app.dispatch({ kind: "history.undo" })).toMatchObject({ ok: true });
   expect([opacity(c), hair(c)]).toEqual([.25, undefined]);
   expect(c.app.dispatch({ kind: "history.redo" })).toMatchObject({ ok: true });
@@ -83,21 +83,21 @@ test("app.transaction records one look step over several parts; Undo and Redo mo
 test("a transaction that changes nothing leaves no step; one that fails is reverted without Redo", () => {
   const c = core();
   expect(c.app.transaction(RESET, ["eye-makeup", "hair"], () => setOpacity(c, opacity(c)))).toMatchObject({ ok: true });
-  expect(c.document.undoDepth).toBe(0);
+  expect(c.document.history.state().depth).toBe(0);
   const start = opacity(c);
   const thrown = c.app.transaction(RESET, ["eye-makeup", "hair"], () => {
     setOpacity(c, .1); c.app.dispatch({ kind: "hair.addStrand", length: 3 } as never);
     throw Error("The save could not be read.");
   });
   expect(thrown).toEqual({ ok: false, code: "invalid_value", message: "The save could not be read." });
-  expect([opacity(c), hair(c), c.document.undoDepth, c.app.history().redoDepth]).toEqual([start, undefined, 0, 0]);
+  expect([opacity(c), hair(c), c.document.history.state().depth, c.app.history().redoDepth]).toEqual([start, undefined, 0, 0]);
   // A failed dispatch inside reverts the whole transaction too.
   const failed = c.app.transaction(RESET, ["eye-makeup", "hair"], () => {
     setOpacity(c, .2);
     return c.app.dispatch({ kind: "hair.setColour", colour: "nope" } as never);
   });
   expect(failed).toMatchObject({ ok: false, code: "invalid_value", message: "Pick a colour." });
-  expect([opacity(c), c.document.undoDepth]).toEqual([start, 0]);
+  expect([opacity(c), c.document.history.state().depth]).toEqual([start, 0]);
 });
 
 test("inside a transaction only the named parts change; Undo, other owners and nested transactions are refused", () => {
@@ -105,7 +105,7 @@ test("inside a transaction only the named parts change; Undo, other owners and n
   c.app.transaction(RESET, ["hair"], () => {
     expect(c.app.capability({ kind: "history.undo" })).toMatchObject({ available: false, code: "busy" });
     expect(setOpacity(c, .3)).toMatchObject({ ok: false, code: "busy" });
-    expect(c.app.dispatch({ kind: "camera.front" })).toMatchObject({ ok: false, code: "busy" });
+    expect(c.app.dispatch({ kind: "camera.front", view: "main" })).toMatchObject({ ok: false, code: "busy" });
     expect(c.app.transaction(RESET, ["hair"], () => 1)).toMatchObject({ ok: false, code: "busy" });
     expect(c.app.controlBegin("opacity", c.document.recipe.layers[0].id)).toBe(false);
     expect(c.app.canBeginGesture("uv", c.document.recipe.layers[0].id)).toMatchObject({ available: false, code: "busy" });
@@ -120,35 +120,38 @@ test("inside a transaction only the named parts change; Undo, other owners and n
   c.app.controlCommit("opacity");
 });
 
-test("each look keeps its own hair part and editor memory through preset switches, and Undo continues after switching back", () => {
+test("each look keeps its own hair part and editor memory through preset switches, and Undo continues after switching back", async () => {
   const model = withHair().documents, c = core();
   const [a, b] = ["00000000-0000-4000-8000-00000000000a", "00000000-0000-4000-8000-00000000000b"];
-  const draft = collectionDraft({ schema: COLLECTION_2, id: "00000000-0000-4000-8000-0000000000cc", name: "Looks", presets: [
+  const f = await collectionServiceOver({ schema: COLLECTION_2, id: "00000000-0000-4000-8000-0000000000cc", name: "Looks", presets: [
     { id: a, name: "A", revision: 1, parts: { "eye-makeup": { schema: "xfs/eye-makeup-part-2", body: initialRecipe() },
       hair: { schema: "xfs/hair-part-1", body: { colour: "#111111", strands: [4, 5] } } } },
-    { id: b, name: "B", revision: 1, parts: { "eye-makeup": { schema: "xfs/eye-makeup-part-2", body: initialRecipe() } } }] }, model);
-  const session = new CollectionSession(model, draft, () => c.document.export(),
-    editor => c.document.restore({ ...editor, fieldSelection: editor.fieldSelection ?? {} }), ids());
-  session.display();
+    { id: b, name: "B", revision: 1, parts: { "eye-makeup": { schema: "xfs/eye-makeup-part-2", body: initialRecipe() } } }] }, { model });
+  // The editor shows the scene's look through its session, as the Studio wires it.
+  const editor = new LookEditor({ model, sessions: new LookSessions(f.owner, f.outbox), document: c.document });
+  editor.show(f.scene.look());
+  f.scene.subscribe(() => editor.show(f.scene.look()));
+  const select = (id: string) => f.scene.setLook({ collection: "00000000-0000-4000-8000-0000000000cc", look: id });
+  const stored = (id: string) => { editor.commit(); return f.owner.look({ collection: "00000000-0000-4000-8000-0000000000cc", look: id })!.parts; };
   expect(hair(c)).toEqual({ colour: "#111111", strands: [4, 5] });
   c.app.dispatch({ kind: "hair.selectStrand", index: 1 } as never);
   c.app.dispatch({ kind: "hair.addStrand", length: 6 } as never);
-  session.select(b);
+  select(b);
   expect(hair(c)).toBeUndefined();
-  expect(c.document.undoDepth).toBe(0);
+  expect(c.document.history.state().depth).toBe(0);
   // Look B gains hair only when it is edited; it had none.
-  expect(session.snapshot().collection.presets[1].parts.hair).toBeUndefined();
+  expect(stored(b).hair).toBeUndefined();
   c.app.dispatch({ kind: "hair.setColour", colour: "#222222" } as never);
-  expect(session.snapshot().collection.presets[1].parts.hair).toEqual({ schema: "xfs/hair-part-1", body: { colour: "#222222", strands: [] } });
-  session.select(a);
+  expect(stored(b).hair).toEqual({ schema: "xfs/hair-part-1", body: { colour: "#222222", strands: [] } });
+  select(a);
   expect(hair(c)).toEqual({ colour: "#111111", strands: [4, 5, 6] });
   expect(c.document.others!.document("hair")!.editor).toEqual({ strand: 2 });
   expect(c.app.dispatch({ kind: "history.undo" })).toMatchObject({ ok: true });
   expect(hair(c)).toEqual({ colour: "#111111", strands: [4, 5] });
   // Undo in look B takes its hair part away again: the look is sparse.
-  session.select(b);
+  select(b);
   c.app.dispatch({ kind: "history.undo" });
-  expect(session.snapshot().collection.presets[1].parts).not.toHaveProperty("hair");
+  expect(stored(b)).not.toHaveProperty("hair");
 });
 
 test("the stored workspace keeps the live hair part and editor memory, with a collection and as a loose look", () => {
@@ -165,31 +168,6 @@ test("the stored workspace keeps the live hair part and editor memory, with a co
   // A build without the hair feature carries the loose look's hair part verbatim.
   expect(parseWorkspace(stored, STUDIO_COMPOSITION.documents).otherFeatures?.parts?.hair).toEqual(stored.look.parts.hair);
 });
-
-/**
- * A feature with a content action that records no Undo step (`tint.try`, Undo policy `none`: a try-on value),
- * beside eye makeup, as the step-5 review's probe composed it.
- */
-function withTint() {
-  const input = (type: "string") => ({ type, required: true, from: "input" as const });
-  const TINT = Object.freeze({ owner: "feature", id: featureId("tint"), api: 1, label: "Tint", stage: "dev",
-    part: { ...hairCodec, current: "xfs/tint-1", accepts: ["xfs/tint-1"], serialize: (part: unknown) => ({ schema: "xfs/tint-1", body: part }) },
-    editor: { empty: () => ({}), parse: () => ({}), serialize: () => ({}) },
-    actions: featureActionTable(
-      { "tint.set": { scope: ["workspace"], effect: "content", undo: "part", payload: { colour: input("string") } },
-        "tint.try": { scope: ["workspace"], effect: "content", undo: "none", payload: { colour: input("string") } } } as never,
-      { "tint.set": true, "tint.try": true } as never, {
-        capability: () => ({ available: true }),
-        apply: (state: { part: Hair; editor: unknown }, action: { kind: string }) => {
-          const colour = (action as { kind: string; colour: string }).colour;
-          return { part: { ...state.part, colour }, editor: state.editor, changed: state.part.colour !== colour, effect: { kind: "content" } };
-        },
-        label: (action: { kind: string }) => ({ label: action.kind, actionKind: action.kind }),
-      }),
-  });
-  return { registry: new Registry([...STUDIO_OWNERS, TINT as never]),
-    documents: Object.freeze({ parts: new PartRegistry([...STUDIO_OWNERS.filter(owner => owner.owner === "feature"), TINT as never]), live: "eye-makeup" }), region: STUDIO_COMPOSITION.region };
-}
 
 test("a change that records no step hides Redo, which would overwrite it (CORE-46)", () => {
   const c = core(withTint() as never), tint = () => (c.document.others!.read("tint") as Hair | undefined)?.colour;
@@ -213,7 +191,7 @@ test("a change that records no step hides Redo, which would overwrite it (CORE-4
 });
 
 test("a transaction body that returns a promise is refused and reverted (CORE-48)", async () => {
-  const c = core(), before = c.document.undoDepth;
+  const c = core(), before = c.document.history.state().depth;
   let resumed = false;
   // @ts-expect-error: a look transaction's body can't be async (its awaited edits could not join the step).
   const outcome = c.app.transaction(RESET, ["hair"], async () => {
@@ -223,7 +201,7 @@ test("a transaction body that returns a promise is refused and reverted (CORE-48
   });
   expect(outcome).toMatchObject({ ok: false, code: "invalid_value" });
   // What ran before the first await is reverted with no step and no Redo; nothing else is open.
-  expect([hair(c), c.document.undoDepth, c.app.history().redoDepth]).toEqual([undefined, before, 0]);
+  expect([hair(c), c.document.history.state().depth, c.app.history().redoDepth]).toEqual([undefined, before, 0]);
   await Promise.resolve(); await Promise.resolve();
   expect(resumed).toBe(true);
   expect(c.app.transaction(RESET, ["hair"], () => c.app.dispatch({ kind: "hair.setColour", colour: "#aa3300" } as never))).toMatchObject({ ok: true });

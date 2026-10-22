@@ -5,21 +5,22 @@
 import { expect, test } from "bun:test";
 import { mottlePreset, mottleSeed, nextMottleSeed } from "../src/engines/layered-makeup/mottle";
 import type { Recipe } from "../src/engines/layered-makeup/recipe";
-import { recipeFile } from "../src/recipe-schema";
-import type { StudioAction } from "../src/studio-application";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
+import { recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
+import type { TestAction } from "./fixtures/named-targets";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { freshWorkspace, initialRecipe } from "./fixtures/eye-region";
-import { historyLabel } from "../src/history-labels";
+import { historyLabel } from "../src/legacy/eye-makeup/history-labels";
 
+import { namedCore } from "./fixtures/named-targets";
 function fixture(recipe: Recipe = initialRecipe()) {
-  const core = createTrustedAuthoringCore(freshWorkspace(recipe), { resetStack: () => {}, selectedCollection: () => "preset-a" }, STUDIO_COMPOSITION);
+  const core = namedCore(createTrustedAuthoringCore(freshWorkspace(recipe), { resetStack: () => {}, selectedCollection: () => "preset-a" }, STUDIO_COMPOSITION));
   const layer = () => core.document.recipe.layers[0];
-  const ok = (action: StudioAction) => {
+  const ok = (action: TestAction) => {
     expect(core.app.capability(action)).toMatchObject({ available: true });
     expect(core.app.dispatch(action)).toMatchObject({ ok: true });
   };
-  const refused = (action: StudioAction, reason: string) =>
+  const refused = (action: TestAction, reason: string) =>
     expect(core.app.capability(action)).toMatchObject({ available: false, reason });
   return { ...core, layer, ok, refused };
 }
@@ -32,9 +33,9 @@ test("turning mottle on starts from Powder with a seed from the layer ID; off re
   expect(recipeFile(f.document.recipe)!.schema).toBe("xfs/recipe-12");
   expect(f.app.history().undo).toMatchObject({ label: "Turn on mottle", actionKind: "effect.mottle.enable", layerId: id });
   // Turning it on again changes nothing and records nothing.
-  const depth = f.document.undoDepth;
+  const depth = f.document.history.state().depth;
   expect(f.app.dispatch({ kind: "effect.mottle.enable", layerId: id, enabled: true })).toMatchObject({ ok: true });
-  expect(f.document.undoDepth).toBe(depth);
+  expect(f.document.history.state().depth).toBe(depth);
   f.ok({ kind: "effect.mottle.enable", layerId: id, enabled: false });
   expect(JSON.stringify(f.layer())).toBe(before);
   expect(recipeFile(f.document.recipe)!.schema).toBe("xfs/recipe-7");
@@ -72,11 +73,11 @@ test("settings need mottle on; streak settings need streaks; values are range-ch
 test("a slider drag is one Undo step labelled by the setting", () => {
   const f = fixture(), id = f.layer().id;
   f.ok({ kind: "effect.mottle.enable", layerId: id, enabled: true });
-  const depth = f.document.undoDepth;
+  const depth = f.document.history.state().depth;
   expect(f.app.controlBegin("mottle-amount", id)).toBe(true);
   for (const value of [.5, .6, .7]) f.app.controlEdit("mottle-amount", { kind: "effect.mottle.set", layerId: id, key: "amount", value });
   f.app.controlCommit("mottle-amount");
-  expect(f.document.undoDepth).toBe(depth + 1);
+  expect(f.document.history.state().depth).toBe(depth + 1);
   expect(f.layer().effects!.mottle!.amount).toBe(.7);
   expect(f.app.history().undo).toMatchObject({ label: "Mottle amount", actionKind: "effect.mottle.set.amount" });
   expect(historyLabel({ kind: "effect.mottle.set", layerId: id, key: "seed", value: 3 }).label).toBe("Mottle pattern");

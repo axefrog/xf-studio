@@ -1,12 +1,13 @@
 import { expect, test } from "bun:test";
-import type { CollectionTransport } from "../src/collection-service";
-import { PreviewQualityActions } from "../src/preview-quality-actions";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { createTrustedStudioBootstrap } from "../src/trusted-studio-bootstrap";
-import { UIPreferenceActions } from "../src/ui-preferences";
-import { ViewportAttachment } from "../src/viewport-attachment";
+import { bootstrapCollections } from "./fixtures/profile-studio";
+import { PreviewQualityActions } from "../src/legacy/eye-makeup/preview/preview-quality-actions";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedStudioBootstrap } from "../src/app/trusted-studio-bootstrap";
+import { UIPreferenceActions } from "../src/app/ui-preferences";
+import { ViewportAttachment } from "../src/app/viewport-attachment";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
+import { fixtureTargets } from "./fixtures/named-targets";
 
 test("a presentation mounts from trusted services without any page controls", async () => {
   expect(typeof document).toBe("undefined");
@@ -22,20 +23,18 @@ test("a presentation mounts from trusted services without any page controls", as
     moveHost: () => {}, measure: () => ({ width: 400, height: 300 }), resize: () => {},
     cancelInput: () => {}, inputCapture: () => false, headView: () => undefined,
     uvView: () => workspace.uvView, uvCommand: () => true, hitAt: () => undefined,
-    queryContext: hit => core.app.contextQuery(hit),
+    queryContext: hit => core.app.contextQuery(hit, targets.named()),
   });
   viewport.setReady("uv");
-  const transport: CollectionTransport = {
-    list: async () => [], get: async () => { throw Error("No saved collection."); },
-    save: async () => { throw Error("No SQLite write."); },
-    package: async () => { throw Error("No package build."); },
-  };
+  const collections = bootstrapCollections(core.document, { looks: [{ name: "Look", recipe: workspace.recipe }] });
+  // The input layer the composition root gives the port (profiles design §3.6): what each action names.
+  const targets = fixtureTargets(core, { scene: collections.scene });
   const downloads: string[] = [];
-  const bootstrap = createTrustedStudioBootstrap({ workspace, core,
-    preferences: new UIPreferenceActions(workspace.uiPreferences), viewport, transport,
+  const bootstrap = createTrustedStudioBootstrap({ core, targets, focus: core.history.focus,
+    preferences: new UIPreferenceActions(workspace.uiPreferences), viewport, collections: collections.deps,
     previewReadiness: { readiness: () => ({ phase: "ready", size: 1024,
       pending: 0, waiting: false, estimatedBytes: 1024, layers: [] }), subscribe: () => () => {} },
-    onEditorRestored: () => { resets++; }, onRecipeImported: () => { imports++; },
+    onRecipeImported: () => { imports++; },
     savedAppearance: { has: () => false, read: () => undefined,
       load: () => { throw Error("No saved V device."); }, ready: () => false },
     fileDevice: { pick: async () => undefined,

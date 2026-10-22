@@ -6,11 +6,11 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { archiveExportSource, createGameAssetExporter, type GeometryRepair, type UncookRun } from "../src/game-asset-export";
-import { createWolvenKitMeshRepair, uncookArguments } from "../src/game-asset-export-wolvenkit";
-import { GARMENT_FLAG_BYTES, MESH_EXPORT_REPAIR_VERSION, repairMeshForExport } from "../src/mesh-export-repair";
-import type { JsonObject } from "../src/red-json";
-import type { runWolvenKit } from "../src/wolvenkit-cli";
+import { archiveExportSource, createGameAssetExporter, type GeometryRepair, type UncookRun } from "../src/game/host/game-asset-export";
+import { createWolvenKitMeshRepair, uncookArguments } from "../src/game/host/game-asset-export-wolvenkit";
+import { GARMENT_FLAG_BYTES, MESH_EXPORT_REPAIR_VERSION, repairMeshForExport } from "../src/game/mesh-export-repair";
+import type { JsonObject } from "../src/game/red-json";
+import type { runWolvenKit } from "../src/host/wolvenkit-cli";
 
 const root = mkdtempSync(join(tmpdir(), "xfs-substitution-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));

@@ -10,7 +10,7 @@
  * 60 MB at its peak.
  */
 import { createHash } from "node:crypto";
-import { depotHash } from "../depot-path";
+import { depotHash } from "../game/depot-path";
 import type { NativeArchivePool } from "./archive-reader";
 import { readCr2w } from "./cr2w-reader";
 import type { Decompress } from "./kark";

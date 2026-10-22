@@ -4,16 +4,17 @@
  * until it is killed, printing one line per committed save ("look <n>" after the commit returned).
  *   bun tests/fixtures/library-writer.ts <library.sqlite>
  */
-import { LookLibrary } from "../../src/library-store";
-import { LibraryDurability } from "../../src/platform/graph-adapters/library-durability";
-import { hostClock } from "../../src/platform/graph-adapters/host-sources";
+import { openLibraryDatabase } from "../../src/library/host/library-files";
+import { LookLibrary } from "../../src/library/host/library-store";
+import { hostClock } from "../../src/platform/core/clock";
 import { initialRecipe } from "./eye-region";
 
 const path = process.argv[2];
 if (!path) throw Error("Usage: bun tests/fixtures/library-writer.ts <library.sqlite>");
 const life = new AbortController();
-const durability = new LibraryDurability(path, { clock: hostClock(), signal: life.signal, timing: { quietMs: 20, maxMs: 50, retryMaxMs: 200 } });
-const library = new LookLibrary(path, durability);
+// The file's one owner, as the hosts open it, with a fast flush schedule so kills also land during checkpoints.
+const database = openLibraryDatabase(path, { clock: hostClock(), signal: life.signal, timing: { quietMs: 20, maxMs: 50, retryMaxMs: 200 } });
+const library = new LookLibrary(database);
 const recipe = initialRecipe();
 // Several layers make each commit span many pages, so a kill often lands mid-write.
 for (let i = 0; i < 6; i++) recipe.layers.push({ ...structuredClone(recipe.layers[0]), id: crypto.randomUUID() });

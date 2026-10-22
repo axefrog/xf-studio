@@ -3,10 +3,10 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { planRuntimeDiagnostic, stageRuntimeDiagnostic } from "../src/runtime-diagnostic-stage";
+import { planRuntimeDiagnostic, stageRuntimeDiagnostic } from "../src/installation/host/runtime-diagnostic-stage";
 import { planRuntimePromotion, promoteRuntimeDiagnostic, recoverRuntimePromotion,
-  rollbackRuntimePromotion } from "../src/runtime-diagnostic-promotion";
-import { EYE_MAKEUP_MOD } from "../src/mod-branding";
+  rollbackRuntimePromotion } from "../src/installation/host/runtime-diagnostic-promotion";
+import { EYE_MAKEUP_MOD } from "../src/legacy/eye-makeup/mod-branding";
 
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
 function fixture() {

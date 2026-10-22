@@ -9,7 +9,7 @@ import type { TreeProbe } from "./tree-view-probe-page";
  * The tree view laid out with the real studio.css (tests/tree-view-probe-page.ts, in headless Chrome): the empty message shows at the
  * top of the tree (UI-117); a tree grown taller draws every row in view without waiting for an update or a scroll (UI-118); the loading
  * status stays in the frame's corner however far the rows are scrolled (UI-123); and F on a focused Favourites row keeps focus in the
- * tree (UI-119). Needs a local Chrome; public CI has none and skips, and XFS_REQUIRE_ORACLES=1 turns the skip into a failure.
+ * tree (UI-119); a recursive branch's disclosure cell is a full-row target and swatch-less siblings line up. Needs a local Chrome; public CI has none and skips, and XFS_REQUIRE_ORACLES=1 turns the skip into a failure.
  */
 const PAGE = resolve(import.meta.dir, "tree-view-probe-page.ts");
 const css = readFileSync(resolve(import.meta.dir, "../public/studio.css"), "utf8");
@@ -45,5 +45,19 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
 
   test("F on a focused Favourites row keeps focus in the tree, on the row that took its place", () => {
     expect(probe.focus).toEqual({ before: "fav\u001fp1", after: "fav\u001fp2" });
+  });
+
+  test("a recursive branch's disclosure cell is a 24 px × full-row target, and a click outside its 10 px icon toggles the branch", () => {
+    const { cell, icon, hit, toggled } = probe.disclosure;
+    expect(cell.right - cell.left).toBeGreaterThanOrEqual(24);
+    expect(cell.bottom - cell.top).toBe(28);
+    expect(icon.right - icon.left).toBe(10);
+    expect(icon.left - cell.left).toBeGreaterThan(2);
+    expect(hit).toBe(true);
+    expect(toggled).toEqual(["front:true"]);
+  });
+
+  test("a swatch-less sibling's label lines up with its swatched siblings' labels", () => {
+    expect(probe.disclosure.labels.plain).toBe(probe.disclosure.labels.front);
   });
 });

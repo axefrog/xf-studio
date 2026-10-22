@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { BLINK_REPEAT_SECONDS, GAME_BLINK_DAMAGED, GAME_BLINK_MISSING, GAME_BLINK_NO_JOINTS, GAME_BLINK_OTHER_HEAD, GAME_BLINK_SCHEMA,
-  GameBlink, loadGameBlink, parseGameBlink, type BlinkTimer, type GameBlinkDescription } from "../src/game-blink";
-import { IdleAnimation } from "../src/idle-animation";
+  GameBlink, loadGameBlink, parseGameBlink, type BlinkTimer, type GameBlinkDescription } from "../src/animation/render/game-blink";
+import { IdleAnimation } from "../src/animation/render/idle-animation";
 import { FaceDriver } from "../src/platform/scene/face-driver";
-import { IDLE_FACE_MISSING, MotionActions, type MotionPort } from "../src/motion-actions";
-import { composePreviewMotion } from "../src/preview-motion";
-import { createRenderScheduler } from "../src/render-scheduler";
+import { IDLE_FACE_MISSING, MotionActions, type MotionPort } from "../src/animation/motion-actions";
+import { composePreviewMotion } from "../src/animation/render/preview-motion";
+import { createRenderScheduler } from "../src/preview/render/render-scheduler";
 import { blinkHelp, blinkNoteLine } from "../src/studio-ui/panels/preview";
 import { freshWorkspace } from "./fixtures/eye-region";
 
@@ -324,7 +324,7 @@ test("a saved Closure and Play blink come back on reload; the Motion note says w
   const playing = new MotionActions({ ...freshWorkspace().preview, blink: .7, blinkPlaying: true }, port);
   playing.restore();
   expect([blink.closure, blink.playing]).toEqual([.7, true]);
-  playing.dispatch({ kind: "motion.playBlink", playing: false });
+  playing.dispatch({ kind: "motion.playBlink", view: "main", playing: false });
   expect(world(head.bones[0]!).distanceTo(at70)).toBeLessThan(1e-12); // stopping returns to the saved closure
   // What the blink is lives in the Blink heading's help tip; the line under it is only for why it isn't available.
   expect(blinkHelp(playing.snapshot()).join(" ")).toContain("Play blink plays it at the game's speed, every 2.45 s.");
@@ -332,11 +332,11 @@ test("a saved Closure and Play blink come back on reload; the Motion note says w
   // Not prepared: the reason comes from one place, whatever the port left out.
   const missing = new MotionActions(freshWorkspace().preview, { ...port, blink: { available: false } });
   expect(missing.snapshot().blinkError).toBe(GAME_BLINK_MISSING);
-  expect(missing.capability({ kind: "motion.playBlink", playing: true }).reason).toBe(GAME_BLINK_MISSING);
+  expect(missing.capability({ kind: "motion.playBlink", view: "main", playing: true }).reason).toBe(GAME_BLINK_MISSING);
   // One plain line and nothing to do: the Motion panel hides the blink's controls (UI-86).
   expect(blinkNoteLine(missing.snapshot())).toBe(GAME_BLINK_MISSING);
   const damaged = new MotionActions(freshWorkspace().preview, { ...port, blink: { available: false, error: GAME_BLINK_DAMAGED } });
-  expect(damaged.capability({ kind: "motion.setBlink", value: .2 }).reason).toBe(GAME_BLINK_DAMAGED);
+  expect(damaged.capability({ kind: "motion.setBlink", view: "main", value: .2 }).reason).toBe(GAME_BLINK_DAMAGED);
 });
 
 test("an idle without face motion: the body plays, the face says why in plain words, and the blink claims nothing about the idle", () => {
@@ -351,16 +351,16 @@ test("an idle without face motion: the body plays, the face says why in plain wo
   // V can be masculine: no "her" or "his" for V.
   expect(IDLE_FACE_MISSING).not.toMatch(/(?:her|his|she|he)|body moves|version/i);
   // Without the idle playing the blink works; while it plays, the refusal gives the next step and doesn't claim the idle blinks.
-  expect(motion.capability({ kind: "motion.playBlink", playing: true }).available).toBe(true);
-  motion.dispatch({ kind: "motion.setIdle", enabled: true });
-  const refused = motion.capability({ kind: "motion.playBlink", playing: true }).reason!;
+  expect(motion.capability({ kind: "motion.playBlink", view: "main", playing: true }).available).toBe(true);
+  motion.dispatch({ kind: "motion.setIdle", view: "main", enabled: true });
+  const refused = motion.capability({ kind: "motion.playBlink", view: "main", playing: true }).reason!;
   expect(refused).toBe("Blink is off while the game idle plays; choose Still to use it.");
   expect(refused).not.toContain("blinks on its own");
   // With a face clip the idle blinks by itself, and says so.
   const withFace = new MotionActions(freshWorkspace().preview, { ...port, face: { available: true }, idle: { ...idle, enabled: true } });
   expect(withFace.snapshot()).toMatchObject({ faceAvailable: true });
   expect(withFace.snapshot().faceError).toBeUndefined();
-  expect(withFace.capability({ kind: "motion.playBlink", playing: true }).reason).toContain("the idle blinks on its own");
+  expect(withFace.capability({ kind: "motion.playBlink", view: "main", playing: true }).reason).toContain("the idle blinks on its own");
   // No idle at all: no face line either (the Body line says why once).
   const none = new MotionActions(freshWorkspace().preview, { ...port, available: false }).snapshot();
   expect([none.faceAvailable, none.faceError]).toEqual([false, undefined]);

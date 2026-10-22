@@ -2,27 +2,28 @@
 // (UI-67, UI-68, UI-70, CORE-70, CORE-71): choices update in place and keep keyboard focus, the listbox keys move focus without
 // choosing, same-named choices are marked by identity, the status line never adds or removes nodes, and the quick action dispatches.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { CatalogueIndex } from "../src/cc-catalogue";
-import { choicePage, panelProjection, searchChoices, type CcPanelChoice, type CreatorView } from "../src/cc-panel";
-import { catalogueCoverage } from "../src/cc-render-coverage";
-import { deriveCharacter } from "../src/character-context";
-import { CharacterContextActions, type CreatorPort } from "../src/character-context-actions";
-import { foldedKeys, UIPreferenceActions } from "../src/ui-preferences";
+import { CatalogueIndex } from "../src/character/cc-catalogue";
+import { choicePage, panelProjection, searchChoices, type CcPanelChoice, type CreatorView } from "../src/character/cc-panel";
+import { catalogueCoverage, PARTLY_SHOWN } from "../src/character/cc-render-coverage";
+import { deriveCharacter } from "../src/character/character-context";
+import { CharacterContextActions, type CharacterDocumentPort, type CreatorPort } from "../src/character/character-context-actions";
+import { foldedKeys, UIPreferenceActions } from "../src/app/ui-preferences";
 import { bindViewState, PreferenceViewState } from "../src/studio-ui/view-state";
 import { fixtureSource } from "./cc-fixtures";
 import { installLightDom, lightDocument, lightEvent, type LightElement, uninstallLightDom } from "./light-dom";
+import { vHistory } from "./fixtures/character-steps";
 
 beforeAll(() => installLightDom());
 afterAll(() => uninstallLightDom());
 const settle = (ms = 10) => new Promise(resolve => setTimeout(resolve, ms));
 
-async function harness(stored?: unknown) {
+async function harness(stored?: unknown, document?: CharacterDocumentPort) {
   const source = await fixtureSource(true);
   const { panel, mods } = panelProjection(source.catalogue, catalogueCoverage(source.catalogue), "fixture");
   const index = new CatalogueIndex(source.catalogue);
   // The fixture has no makeup category: its scars section stands in for it.
   const marked = { ...panel, sections: panel.sections.map(section => ({ ...section, makeup: section.id === "Scars" })) };
-  let failView = false, holdViews = false, updating = false;
+  let failView = false, holdViews = false, updating = false, details: unknown = undefined;
   const held: (() => void)[] = [];
   const prefetches: { option: string; positions: number[]; focus: number | null }[] = [], stops: true[] = [];
   const fetchStates = new Map<number, string>();
@@ -52,8 +53,10 @@ async function harness(stored?: unknown) {
     preparedFiles: async () => ({ bytes: 3 * 1024 ** 3 / 2 }),
     clearPrepared: async () => ({ freed: 3 * 1024 ** 3 / 2 }),
   };
-  const context = new CharacterContextActions({ creator: port, showSave: () => {} });
-  const dispatched: { kind: string }[] = [];
+  // The V's history (`character:v`): the panel's Undo and Redo name it (history.undo and history.redo, profiles design §3.7).
+  const steps = vHistory("v");
+  const context = new CharacterContextActions({ creator: port, showSave: () => {}, history: steps.home, ...(document ? { document } : {}) });
+  const dispatched: { kind: string; scope?: string }[] = [];
   // The workspace's preferences, as a reload would restore them (`stored`), behind the remembered view state.
   const preferences = new UIPreferenceActions(stored);
   bindViewState(new PreferenceViewState(preferences));
@@ -65,10 +68,17 @@ async function harness(stored?: unknown) {
         characterSwatches: (option: string) => context.swatches(option),
         characterPrefetch: (option: string, positions: number[], focus?: number | null) => context.prefetch(option, positions, focus ?? null),
         characterStopPrefetch: (option: string) => context.stopPrefetch(option),
-        capability: (action: { kind: string }) => action.kind.startsWith("character.") ? context.capability(action as never) : { available: true } },
+        capability: (action: { kind: string; scope?: string }) => action.kind.startsWith("character.") ? context.capability(action as never)
+          : action.kind === "history.undo" || action.kind === "history.redo" ? steps.capability(action.kind) : { available: true } },
       files: { capability: () => ({ available: true }) },
+      panels: { historyScope: (panel: string) => panel === "character" ? steps.scope : undefined },
     },
-    dispatch: (action: { kind: string }) => { dispatched.push(action); if (action.kind.startsWith("character.")) context.dispatch(action as never); return { ok: true }; },
+    dispatch: (action: { kind: string; scope?: string }) => {
+      dispatched.push(action);
+      if (action.kind.startsWith("character.")) context.dispatch(action as never);
+      else if (action.scope === steps.scope) { if (action.kind === "history.undo") steps.undo(); else if (action.kind === "history.redo") steps.redo(); }
+      return { ok: true };
+    },
     file: async () => {}, changed: () => {},
   };
   const { characterPanel } = await import("../src/studio-ui/panels/character");
@@ -76,13 +86,13 @@ async function harness(stored?: unknown) {
   const root = controller.spec.element as unknown as LightElement;
   lightDocument.body.append(root);
   const frame = () => ({ preferences: preferences.snapshot(), preview: { character: context.snapshot(), preview: undefined, savedV: {}, eyeShapeOptions: undefined },
-    status: { assets: { characterDetails: updating ? { phase: "ready", updating: true, drawn: [], slots: [] } : undefined } }, viewport: { head: { error: null, message: null } } }) as never;
+    status: { assets: { characterDetails: updating ? { phase: "ready", updating: true, drawn: [], slots: [] } : details } }, viewport: { head: { error: null, message: null } } }) as never;
   const paint = () => controller.update(frame());
   context.start(); await settle();
   paint(); await settle(); paint();
   return { context, root, paint, dispatched, preferences, controller, setFailView: (value: boolean) => { failView = value; }, prefetches, stops, fetchStates,
     holdViews: (value: boolean) => { holdViews = value; }, releaseViews: () => { while (held.length) held.shift()!(); },
-    setUpdating: (value: boolean) => { updating = value; } };
+    setUpdating: (value: boolean) => { updating = value; }, setDetails: (value: unknown) => { details = value; } };
 }
 const row = (root: LightElement, label: string) => root.querySelectorAll(".cc-row").find(element => element.querySelector(".cc-row-label")?.textContent === label)!;
 const items = (element: LightElement) => element.querySelectorAll(".cc-choice");
@@ -161,6 +171,41 @@ describe("the Character panel's DOM", () => {
     h.paint(); await settle(); h.paint();
     expect(status.querySelector(".cc-status-text")!.textContent).toContain("couldn't reach its preview host");
     expect(nodes()).toBe(shape);
+  });
+
+  test("a conflict shows first in Your V with Keep mine, Use theirs and Keep both; a version from elsewhere says Undo starts there (t-conflict)", async () => {
+    let conflict: { message: string; keepBoth: boolean; subject: string } | null = null;
+    const resolved: string[] = [];
+    const h = await harness(undefined, { conflict: () => conflict, resolve: keep => { resolved.push(keep); conflict = null; return { available: true }; } });
+    const notice = h.root.querySelector(".doc-conflict")!;
+    expect(notice.hidden).toBe(true);
+    conflict = { message: "You changed this V here too. Which version should it keep?", keepBoth: true, subject: "this V" };
+    h.context.documentChanged(); h.paint();
+    expect(notice.hidden).toBe(false);
+    expect(notice.textContent).toContain("Changed in another window. You changed this V here too.");
+    const buttons = notice.querySelectorAll("button");
+    expect(buttons.map(button => [button.textContent, button.hidden])).toEqual([["Keep mine", false], ["Use theirs", false], ["Keep both", false]]);
+    // Use theirs discards this window's changes, so it asks first, in place, naming the V (the popover places itself in a window).
+    const globals = globalThis as { window?: unknown }, had = globals.window;
+    globals.window = { innerWidth: 1200, innerHeight: 800, addEventListener() {} };
+    try {
+      buttons[1]!.click();
+      const popover = lightDocument.body.querySelector(".confirm-popover")!;
+      expect(popover.querySelector(".popover-message")!.textContent).toBe("Use the other window's version of this V? Your changes to it here are discarded.");
+      expect(resolved).toEqual([]);
+      popover.querySelectorAll("button")[0]!.click();
+      expect(lightDocument.body.querySelector(".confirm-popover")).toBeNull();
+    } finally { if (had === undefined) delete globals.window; else globals.window = had; }
+    // Keep both loses nothing: it acts at once.
+    buttons[2]!.click();
+    expect(resolved).toEqual(["both"]);
+    expect(h.dispatched.at(-1) as object).toEqual({ kind: "character.resolveConflict", keep: "both" });
+    // The other window's version replaces this one's: the status line says Undo starts here, in its reserved place.
+    h.context.replace({ origin: "default", bodyGender: "male", choices: [] }, undefined, "Changed in another window. Undo starts here.");
+    h.paint(); await settle(); h.paint();
+    expect(notice.hidden).toBe(true);
+    expect(h.root.querySelector(".cc-status-text")!.textContent).toBe("Changed in another window. Undo starts here.");
+    expect(h.context.snapshot().undo).toBeNull();
   });
 
   test("the V's own makeup is a switch that shows its state and changes at once both ways; Reset all dispatches; detail lines are reserved only where needed", async () => {
@@ -350,6 +395,32 @@ describe("folding and help in the Character panel", () => {
   });
 });
 
+describe("a conditional row settles from what the shown V draws of it (render gap plans §6)", () => {
+  test("drawn whole: no marker; drawn only in part: marked with its own words, not dimmed; not drawn: marked and dimmed", async () => {
+    const h = await harness();
+    h.context.dispatch({ kind: "character.setOption", part: "head", option: "scars", choice: "scar_01" });
+    h.paint(); await settle(); h.paint();
+    const scars = row(h.root, "Scars"), marker = () => scars.querySelector(".cc-row-not-shown")!;
+    const show = async (drawn: string[], partial: string[]) => {
+      h.setDetails({ phase: "ready", updating: false, drawn, partial, slots: [] });
+      h.paint(); await settle(); h.paint();
+    };
+    await show(["scars"], []);
+    expect(marker().classList.contains("on")).toBe(false);
+    expect(scars.classList.contains("not-shown")).toBe(false);
+    // A beard whose cards were left out: never read as drawn.
+    await show(["scars"], ["scars"]);
+    expect(marker().classList.contains("on")).toBe(true);
+    expect(marker().getAttribute("title")).toBe(PARTLY_SHOWN);
+    expect(scars.querySelector(".cc-row-main")!.getAttribute("aria-description")).toContain(PARTLY_SHOWN);
+    expect(scars.classList.contains("not-shown")).toBe(false);
+    await show([], []);
+    expect(marker().classList.contains("on")).toBe(true);
+    expect(marker().getAttribute("title")).toBe("Not shown in the 3D view yet.");
+    expect(scars.classList.contains("not-shown")).toBe(true);
+  });
+});
+
 describe("one Undo rule in the Character panel (UI-81)", () => {
   test("Ctrl+Z and Ctrl+Y step the panel's own changes whatever has focus there, except a text box", async () => {
     const h = await harness();
@@ -364,10 +435,12 @@ describe("one Undo rule in the Character panel (UI-81)", () => {
     const eyebrows = h.root.querySelectorAll("input").find(input => input.getAttribute("role") === "switch")!;
     const undone = key(eyebrows, {});
     expect(undone.defaultPrevented).toBe(true);
-    expect(h.dispatched.at(-1)).toEqual({ kind: "character.undo" });
+    expect(h.dispatched.at(-1)).toEqual({ kind: "history.undo", scope: "character:v" });
+    expect(h.context.snapshot().set).toBe(0);
     const list = h.root.querySelector(".choice-list")!;
     key(list, { key: "y" });
-    expect(h.dispatched.at(-1)).toEqual({ kind: "character.redo" });
+    expect(h.dispatched.at(-1)).toEqual({ kind: "history.redo", scope: "character:v" });
+    expect(h.context.snapshot().set).toBe(1);
     // The search box keeps its own text Undo.
     const search = h.root.querySelector(".cc-search")!;
     const count = h.dispatched.length;
@@ -375,7 +448,11 @@ describe("one Undo rule in the Character panel (UI-81)", () => {
     expect(h.dispatched.length).toBe(count);
     // The panel's Undo button names what it covers; Clothing has no Undo of its own.
     const undo = h.root.querySelectorAll("button").find(button => (button.getAttribute("aria-label") ?? "").startsWith("Undo in the Character panel"))!;
-    expect(undo.title).toContain("Covers creator options and Clothing");
+    expect(undo.title).toContain("Steps this V's changes (creator options and Clothing). The header's Undo follows what you last edited.");
+    h.paint();
+    expect(undo.disabled).toBe(false);
+    undo.click();
+    expect(h.dispatched.at(-1)).toEqual({ kind: "history.undo", scope: "character:v" });
     expect(h.root.querySelectorAll("button").some(button => button.getAttribute("aria-label") === "Undo clothing change")).toBe(false);
   });
 });

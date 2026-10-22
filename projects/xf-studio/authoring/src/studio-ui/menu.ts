@@ -60,7 +60,8 @@ type OpenMenu = { element: HTMLElement; parent?: OpenMenu; child?: OpenMenu; inv
 let root: OpenMenu | undefined;
 let layer: HTMLElement | undefined;
 function menuLayer() {
-  if (!layer) { layer = h("div", { class: "menu-layer" }); document.body.append(layer); }
+  // Made again if the page's body was replaced since (a test's fresh document), so a popover never opens out of the page.
+  if (!layer?.isConnected) { layer = h("div", { class: "menu-layer" }); document.body.append(layer); }
   return layer;
 }
 function place(element: HTMLElement, anchor: MenuAnchor, submenu = false) {
@@ -252,7 +253,9 @@ export function openValuePopover(field: ValueField, anchor: MenuAnchor, options:
   form.addEventListener("submit", event => { event.preventDefault(); if (!check()) return; close(false); options.commit(read(), switches.map(toggle => toggle.input.checked)); });
   form.addEventListener("keydown", event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); } });
   const outside = (event: PointerEvent) => { if (!event.composedPath().includes(form)) close(false); };
+  let closed = false;
   function close(restore: boolean) {
+    closed = true;
     document.removeEventListener("pointerdown", outside, { capture: true });
     form.remove();
     if (restore && invoker?.isConnected) invoker.focus();
@@ -261,7 +264,8 @@ export function openValuePopover(field: ValueField, anchor: MenuAnchor, options:
   place(form, anchor);
   check();
   requestAnimationFrame(() => { input.focus(); if (input instanceof HTMLInputElement && field.kind === "text") input.select(); });
-  setTimeout(() => document.addEventListener("pointerdown", outside, { capture: true }));
+  // Armed after the press that opened it, unless it was closed first (a listener left behind would outlive it).
+  setTimeout(() => { if (!closed) document.addEventListener("pointerdown", outside, { capture: true }); });
   return { close };
 }
 
@@ -284,7 +288,9 @@ export function openConfirmPopover(anchor: MenuAnchor, options: { title: string;
   form.addEventListener("submit", event => { event.preventDefault(); close(true); options.onConfirm(); });
   form.addEventListener("keydown", event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); } });
   const outside = (event: PointerEvent) => { if (!event.composedPath().includes(form)) close(false); };
+  let closed = false;
   function close(restore: boolean) {
+    closed = true;
     document.removeEventListener("pointerdown", outside, { capture: true });
     form.remove();
     if (restore && invoker?.isConnected) invoker.focus();
@@ -292,6 +298,7 @@ export function openConfirmPopover(anchor: MenuAnchor, options: { title: string;
   menuLayer().append(form);
   place(form, anchor);
   requestAnimationFrame(() => cancel.focus());
-  setTimeout(() => document.addEventListener("pointerdown", outside, { capture: true }));
+  // Armed after the press that opened it, unless it was closed first (a listener left behind would outlive it).
+  setTimeout(() => { if (!closed) document.addEventListener("pointerdown", outside, { capture: true }); });
   return { close };
 }

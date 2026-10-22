@@ -2,17 +2,19 @@
  * The view graph service (research/authoring/view-graph-design.md §3, phase P1): nodes, sharing, link, fork and collect, validation
  * against scene kinds, the default one-view graph from the workspace's preview, persistence and the View and lighting history.
  */
+import { NOT_DRAWN } from "../src/animation/motion-actions";
 import { expect, test } from "bun:test";
 import { MAIN_VIEW, validViewId, viewPanelId, type ViewGraphChange } from "../src/platform/api/view-graph";
-import { parseViewGraph, ViewGraph } from "../src/platform/core/view-graph";
+import { parseViewGraph, VIEW_HISTORY_STRUCTURE, ViewGraph } from "../src/platform/core/view-graph";
+import { createHistoryService, LOCAL_VIEW_SCOPE } from "../src/platform/core/history-service";
 import { createStudioViewGraph, defaultViewGraph, isDefaultViewGraph, previewMirror, storedViewGraph, STUDIO_VIEW_GRAPH_RULES,
-  workspaceViewGraph } from "../src/preview-view-graph";
-import { PreviewActions, type PreviewPort } from "../src/preview-actions";
-import { parseWorkspace, serializeWorkspace } from "../src/workspace-state";
-import { WorkspaceComposer } from "../src/workspace-composer";
+  workspaceViewGraph } from "../src/preview/preview-view-graph";
+import { PreviewActions, type PreviewPort } from "../src/preview/preview-actions";
+import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
+import { WorkspaceComposer } from "../src/app/workspace/workspace-composer";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
-import { DEFAULT_CREATOR_LIGHTING } from "../src/creator-lighting";
+import { DEFAULT_CREATOR_LIGHTING } from "../src/preview/creator-lighting";
 
 /** A lights-node edit: the creator calibration's exposure (the node's own values; its studio mirror is derived from the setups). */
 const calibrated = (exposure: unknown) => ({ state: { creatorLighting: { ...DEFAULT_CREATOR_LIGHTING, exposure } } });
@@ -204,7 +206,7 @@ test("preview actions edit the graph node of the view they name, and the device 
     setHair: enabled => calls.push(`hair:${enabled}`), setEyeShape: () => {}, setPiercings: () => {}, setDetail: () => {} };
   const workspace = freshWorkspace(), views = createStudioViewGraph(workspace.preview);
   const actions = new PreviewActions(workspace.preview, port, views);
-  actions.dispatch({ kind: "preview.setExposure", value: 2 });
+  actions.dispatch({ kind: "preview.setExposure", view: "main", value: 2 });
   expect(calls).toEqual(["exposure:2"]);
   expect(views.history().undo).toBe("Exposure");
   // Undo in the View and lighting history: the device follows the graph.
@@ -218,18 +220,18 @@ test("preview actions edit the graph node of the view they name, and the device 
   actions.dispatch({ kind: "preview.setHair", enabled: false, view: v2 });
   expect(calls).toEqual(["exposure:3"]);
   expect(actions.snapshot().hair).toBe(true);
-  expect(actions.capability({ kind: "camera.front", view: v2 })).toMatchObject({ available: false, reason: "That view isn't shown." });
+  expect(actions.capability({ kind: "camera.front", view: v2 })).toMatchObject({ available: false, reason: NOT_DRAWN });
   expect(actions.capability({ kind: "preview.setHair", enabled: true, view: "gone" })).toMatchObject({ available: false });
   // A camera jump: the device computes it, the graph records it, Undo moves the device back.
   calls.length = 0;
-  actions.dispatch({ kind: "camera.front" });
+  actions.dispatch({ kind: "camera.front", view: "main" });
   expect(calls).toEqual(["front"]);
   expect(views.cameraTrail(MAIN_VIEW).back).toBe(1);
   views.undo();
   expect(calls).toEqual(["front", "restore"]);
   expect(camera.position).toEqual([0, 1.6, -0.6]);
   // Tools record nothing; a released head stops following the graph.
-  actions.dispatch({ kind: "preview.setSurfaceControls", enabled: false });
+  actions.dispatch({ kind: "preview.setSurfaceControls", view: "main", enabled: false });
   expect(calls.at(-1)).toBe("surface:false");
   actions.dispose();
   calls.length = 0;
@@ -238,7 +240,7 @@ test("preview actions edit the graph node of the view they name, and the device 
 });
 
 test("every structure edit records a step, an unrecorded one clears the history it would break, and a replay is checked first (CORE-94)", () => {
-  const { graph: views } = graph();
+  const history = createHistoryService(), views = createStudioViewGraph(freshWorkspace().preview, undefined, history);
   const v2 = views.addView(MAIN_VIEW, { scene: true });
   expect(views.history()).toMatchObject({ undo: "New view", depth: 1 });
   expect(views.unlink(v2, "scene")).toBe(true);
@@ -252,7 +254,7 @@ test("every structure edit records a step, an unrecorded one clears the history 
   // The check itself: a step whose views would name a missing node is dropped with the steps behind it, and nothing changes.
   views.edit(MAIN_VIEW, "lights", calibrated(2), { label: "Exposure" });
   const broken = { views: [{ id: MAIN_VIEW, kind: "3d", scene: "s1", camera: "gone", lights: "l1", display: "d1", tools: "t1" }], focused: MAIN_VIEW };
-  (views as unknown as { undoSteps: unknown[] }).undoSteps.push({ label: "Broken", nodes: new Map(), structure: { before: broken, after: broken } });
+  history.scope(LOCAL_VIEW_SCOPE)!.checkpoint([VIEW_HISTORY_STRUCTURE], { label: "Broken", actionKind: "view.edit" }, { read: () => broken });
   const changes: ViewGraphChange[] = [];
   views.subscribe(change => changes.push(change));
   expect(views.undo()).toBe(false);

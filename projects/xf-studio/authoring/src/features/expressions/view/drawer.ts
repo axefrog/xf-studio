@@ -39,7 +39,7 @@ import { EASING_ICONS } from "../../../studio-ui/icons";
 import { h, setText } from "../../../studio-ui/dom";
 import type { PanelController } from "../../../studio-ui/panels/collection";
 import type { FeatureViewContext } from "../../../studio-ui/views/feature-view";
-import type { GenericFeatureFacade } from "../../../studio-presentation";
+import type { GenericFeatureFacade } from "../../../app/studio-presentation";
 import type { FacialAxisControl, FacialControl, FacialPreviewSnapshot, FacialStartPoint } from "../../../platform/api/facial";
 import type { ExpressionPart } from "../part";
 import type { ExpressionAction } from "../core";

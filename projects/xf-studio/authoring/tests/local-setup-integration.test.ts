@@ -2,11 +2,11 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { defaultLocalSettings } from "../src/local-settings";
-import { LocalSettingsStore } from "../src/local-settings-store";
-import { createLocalSettingsHandler } from "../src/local-settings-server";
-import { LocalSetupActions } from "../src/local-setup-actions";
-import { localPackageTools } from "../src/package-server";
+import { defaultLocalSettings } from "../src/setup/local-settings";
+import { LocalSettingsStore } from "../src/setup/host/local-settings-store";
+import { createLocalSettingsHandler } from "../src/setup/host/local-settings-server";
+import { LocalSetupActions } from "../src/setup/local-setup-actions";
+import { localPackageTools } from "../src/host/package-server";
 
 test("local setup edits control package paths without accepting paths in package requests", async () => {
   const dir = mkdtempSync(join(tmpdir(), "xfs-setup-integration-"));

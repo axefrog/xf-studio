@@ -4,7 +4,7 @@
 //   bun experiments/017-plate-depth/make-candidate.ts
 //
 // It uses the finish board's patch layout (experiments/016-finish-board/make-board.ts) and adds the
-// diagnostic-only `diagnostics` knobs (projects/xf-studio/authoring/src/export-diagnostics.ts):
+// diagnostic-only `diagnostics` knobs (projects/xf-studio/authoring/src/legacy/eye-makeup/export/export-diagnostics.ts):
 // a per-preset plate lift, and flat-material surface overrides. Presets without a knob use the
 // production lift (0.4 mm) and the production finish values.
 import { writeFileSync } from "node:fs";

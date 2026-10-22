@@ -13,7 +13,7 @@ import { libraryPanel, packagePanel, presetsPanel } from "../panels/collection";
 import { historyPanel } from "../panels/history";
 import { headPanel } from "../panels/viewports";
 import { settingsPanel } from "../panels/settings";
-import type { ThemePreference } from "../../ui-preferences";
+import type { ThemePreference } from "../../app/ui-preferences";
 import { helpPanel, type HelpGuidance } from "../guidance/help-panel";
 import type { StudioRuntime } from "../runtime";
 import type { ViewCatalogue } from "./contribution";
@@ -54,6 +54,8 @@ export const SHELL_PANELS: PanelFactories<typeof SHELL_VIEW> = {
  * commands) and each part-less module's bound view.
  */
 export type ViewComposition = {
+  /** Optional views are already loaded by the experiment driver; the shell never imports them. */
+  optional?: () => readonly { contribution: import("./contribution").ViewContribution; binding: ModuleViewBinding }[];
   readonly catalogue: ViewCatalogue;
   readonly shell: Readonly<Record<string, PanelFactory>>;
   readonly features: readonly FeatureViewBinding[];

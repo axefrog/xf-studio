@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { defaultIrregularFlakes, FLAKE_LIMITS } from "../src/engines/layered-makeup/flake-field";
-import { GlitterMeasurements } from "../src/glitter-measurements";
+import { GlitterMeasurements } from "../src/legacy/eye-makeup/glitter-measurements";
 import type { GlitterStats } from "../src/engines/layered-makeup/raster-processor";
 import { type Layer } from "../src/engines/layered-makeup/recipe";
 import { initialRecipe, EYE_FINE_GLITTER } from "./fixtures/eye-region";

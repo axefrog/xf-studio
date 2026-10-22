@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { defaultLocalSettings } from "../src/local-settings";
-import { discoverSources } from "../src/source-discovery";
+import { defaultLocalSettings } from "../src/setup/local-settings";
+import { discoverSources } from "../src/game/host/source-discovery";
 
 const fixture = (run: (base: string) => void) => {
   const base = mkdtempSync(join(tmpdir(), "xfs-source-test-"));
@@ -153,4 +153,34 @@ test("TweakXL files under r6/tweaks are found in the game folder and in MO2 mods
   put(join(game, "r6", "tweaks", "base.yml"), "a: 1");
   const withGame = discoverSources({ ...defaultLocalSettings(), gameRoot: game, launchRoute: "mo2", mo2Root: mo2, mo2ProfileId: "Profile" });
   expect(withGame.candidates.find(x => x.kind === "tweak" && x.provider === "game")?.virtualPath).toBe("r6/tweaks/base.yml");
+}));
+
+test("ArchiveXL's bundle: its archives directly in the folder, its .xl declarations at any depth, through the bounded scan (PIPE-142)", () => fixture(base => {
+  const game = join(base, "game"), bundle = join(game, "red4ext", "plugins", "ArchiveXL", "Bundle");
+  mkdirSync(join(game, "archive", "pc", "content"), { recursive: true });
+  put(join(bundle, "ArchiveXL.archive"));
+  put(join(bundle, "PlayerCustomizationBrows.xl"));
+  put(join(bundle, "Fixes", "Nested", "VisualTags.xl"));
+  // ArchiveXL loads archives only from the folder itself; other files are no sources.
+  put(join(bundle, "Fixes", "Nested.archive"));
+  put(join(bundle, "readme.txt"));
+  const settings = { ...defaultLocalSettings(), gameRoot: game, launchRoute: "direct" as const };
+  const result = discoverSources(settings);
+  expect(result.complete).toBe(true);
+  expect(result.candidates.map(x => [x.virtualPath, x.kind, x.provider])).toEqual([
+    ["red4ext/plugins/ArchiveXL/Bundle/ArchiveXL.archive", "archive", "game"],
+    ["red4ext/plugins/ArchiveXL/Bundle/Fixes/Nested/VisualTags.xl", "archive-xl", "game"],
+    ["red4ext/plugins/ArchiveXL/Bundle/PlayerCustomizationBrows.xl", "archive-xl", "game"],
+  ]);
+  // Every folder walked is watched, so a declaration added in a subfolder reopens the installation.
+  expect(result.watched.some(x => x.path === join(bundle, "Fixes", "Nested"))).toBe(true);
+  // The scan's limits bound it: a bundle deeper than the depth limit is a gap, never silently short.
+  const shallow = discoverSources(settings, { maxDepth: 1 });
+  expect(shallow.complete).toBe(false);
+  expect(shallow.issues.some(x => x.code === "scan_depth_exceeded")).toBe(true);
+  // Without the bundle folder nothing is missing, and its absence is watched.
+  rmSync(join(game, "red4ext"), { recursive: true });
+  const none = discoverSources(settings);
+  expect([none.complete, none.candidates.length]).toEqual([true, 0]);
+  expect(none.watched.some(x => x.path === bundle)).toBe(true);
 }));

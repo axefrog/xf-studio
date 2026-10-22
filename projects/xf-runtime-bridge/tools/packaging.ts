@@ -101,7 +101,8 @@ export const WRITES_CLASSES = (options: { allowInventory?: boolean } = {}) =>
 const BRIDGE_ENABLED = (on: boolean) => new RegExp(`^\\[bridge\\]\\n(?:;.*\\n)*enabled = ${on}$`, "m");
 
 export function variantConfig(base: string, variant: Variant, options: { allowInventory?: boolean } = {}): string {
-  let config = base;
+  // A Windows checkout gives the file CRLF (text=auto, core.eol native); the checks and the package use LF either way.
+  let config = base.replace(/\r\n/g, "\n");
   if (/^allow_writes = true$/m.test(config)) throw new Error("native/config/config.ini must keep allow_writes = false");
   if (/^allow_creator_leave = true$/m.test(config)) throw new Error("native/config/config.ini must keep allow_creator_leave = false");
   if (!/^allow_live_pose = false$/m.test(config)) throw new Error("native/config/config.ini must keep allow_live_pose = false");

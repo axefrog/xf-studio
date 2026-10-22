@@ -4,19 +4,19 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CreatorCatalogueHost } from "../src/cc-catalogue-service";
-import { createCreatorHandler } from "../src/cc-catalogue-server";
-import { gameSettingsPath } from "../src/cc-catalogue-host";
-import { CC_PRESET_SCHEMA } from "../src/cc-preset";
-import { CHARACTER_REQUEST_SCHEMA, DEFAULT_CHARACTER, type CharacterRequest } from "../src/character-detail-request";
-import { CharacterDetailHost, type CharacterDetailSettings } from "../src/character-detail-host";
-import { CharacterPreparationCache, prepareCharacterDetails } from "../src/character-detail-service";
-import { depotHash, fnv1a64 } from "../src/depot-path";
-import type { ExportedGeometry, ExportedMask, ExportedTexture, GameAssetExporter } from "../src/game-asset-export";
-import { fnv1a32, gameLanguageOf, TextTable, textPlan } from "../src/game-text";
-import { personalDataIn } from "../src/private-data";
-import { encodePng } from "../src/png";
-import { TweakDbBlob, TWEAKDB_MAGIC, tweakDbId } from "../src/tweakdb-flats";
+import { CreatorCatalogueHost } from "../src/character/host/cc-catalogue-service";
+import { createCreatorHandler } from "../src/character/host/cc-catalogue-server";
+import { gameSettingsPath } from "../src/character/host/cc-catalogue-host";
+import { CC_PRESET_SCHEMA } from "../src/character/cc-preset";
+import { CHARACTER_REQUEST_SCHEMA, DEFAULT_CHARACTER, type CharacterRequest } from "../src/character/character-detail-request";
+import { CharacterDetailHost, type CharacterDetailSettings } from "../src/character/host/character-detail-host";
+import { CharacterPreparationCache, prepareCharacterDetails } from "../src/character/host/character-detail-service";
+import { depotHash, fnv1a64 } from "../src/game/depot-path";
+import type { ExportedGeometry, ExportedMask, ExportedTexture, GameAssetExporter } from "../src/game/host/game-asset-export";
+import { fnv1a32, gameLanguageOf, TextTable, textPlan } from "../src/game/game-text";
+import { personalDataIn } from "../src/app/private-data";
+import { encodePng } from "../src/formats/png";
+import { TweakDbBlob, TWEAKDB_MAGIC, tweakDbId } from "../src/game/tweakdb-flats";
 import { fixtureSource, MOD_NAME } from "./cc-fixtures";
 import { detailFixture, REQUEST_A } from "./character-detail-fixtures";
 import PRIVATE from "../../../../tools/private-data.json";
@@ -60,7 +60,7 @@ describe("the creator catalogue service", () => {
     // Served by the endpoint, and read back by the page's reader.
     const handler = createCreatorHandler(host);
     const response = await handler(new Request("http://127.0.0.1/api/preview-character/creator?gender=female&swatches=head%2Feyes_color"));
-    const { readSwatches } = await import("../src/cc-panel");
+    const { readSwatches } = await import("../src/character/cc-panel");
     expect(readSwatches(await response.json()).sheets[0]!.key).toBe("0123456789abcdef");
     const png = await handler(new Request("http://127.0.0.1/api/preview-character/creator?gender=female&sheet=0&key=0123456789abcdef"));
     expect(png.headers.get("Content-Type")).toBe("image/png");
@@ -137,10 +137,10 @@ describe("the creator catalogue service", () => {
     const preset = await (await post({ kind: "preset", name: "Mine", request: { ...DEFAULT_CHARACTER, choices: [{ part: "head", option: "eyes_color", choice: "he__02_blue" }] },
       kept: { schema: CC_PRESET_SCHEMA, bodyGender: "female", values: [] } })).json();
     expect(JSON.parse(preset.text)).toMatchObject({ schema: CC_PRESET_SCHEMA, name: "Mine" });
-    expect((await post({ kind: "view", request: { schema: "xfs/character-request-9", source: "default", bodyGender: "female" } })).status).toBe(409);
+    expect((await post({ kind: "view", request: { schema: "xfs/character-request-10", source: "default", bodyGender: "female" } })).status).toBe(409);
     expect((await post({ kind: "view", request: { ...DEFAULT_CHARACTER, choices: [{ part: "head" }] } })).status).toBe(400);
     expect((await post({ kind: "view", request: DEFAULT_CHARACTER }, "http://evil.example")).status).toBe(403);
-    expect(CHARACTER_REQUEST_SCHEMA).toBe("xfs/character-request-8");
+    expect(CHARACTER_REQUEST_SCHEMA).toBe("xfs/character-request-9");
   });
 });
 

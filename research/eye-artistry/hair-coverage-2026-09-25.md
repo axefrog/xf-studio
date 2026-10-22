@@ -26,13 +26,13 @@ Consequences, derived from that arithmetic:
 
 - **Layers are nested, not independent.** All layers in a pixel meet the same `t`. `gbuffer_solid` then writes only the most opaque of the two front k-buffer entries, and that entry has already survived. A pixel is covered when `max a > t`. That fraction is lower than `1 − Π(1−a)`, which is what independent (hashed) thresholds or alpha blending give.
 - **Coverage is stretched.** Averaged over the cycle (TAA/DLSS), the covered fraction is `saturate((max a − 0.0088)/0.8268)`. At `a = 0.5` that is 0.59, and from `a ≈ 0.84` a layer is solid.
-- The model is `HAIR_DITHER`, `hairDitherThreshold`, `hairResolvedCoverage` and `hairPixelCoverage` in `src/hair-colour-model.ts`. Its tests check the threshold range, the five-frame cycle, the pass rate against the resolved formula, and that two layers of 0.5 cover exactly as much as one.
+- The model is `HAIR_DITHER`, `hairDitherThreshold`, `hairResolvedCoverage` and `hairPixelCoverage` in `src/materials/hair-colour-model.ts`. Its tests check the threshold range, the five-frame cycle, the pass rate against the resolved formula, and that two layers of 0.5 cover exactly as much as one.
 
 ## 3. Changes
 
 - `src/platform/scene/scene-host.ts` creates the WebGL 2 context itself with `alpha: false`, so the canvas is opaque whatever alpha the fragments write.
-- `src/stage-backdrop.ts` (pure) and `src/viewport-backdrop.ts` (Three adapter) draw the `--stage` radial gradient as the scene background. Its colours are interpolated in OKLab, as CSS does for `oklch()` stops. It is an sRGB texture, so Three draws it without tone mapping. `scene.environment` is unchanged, so lighting does not depend on the theme. A test keeps the token values in step with `public/studio.css`.
-- `src/stage-theme-binding.ts` resolves the UI theme preference (with the OS scheme for "system") and passes it to the renderer's typed `setStage` input. `studio-main.ts` wires it.
+- `src/preview/stage-backdrop.ts` (pure) and `src/preview/render/viewport-backdrop.ts` (Three adapter) draw the `--stage` radial gradient as the scene background. Its colours are interpolated in OKLab, as CSS does for `oklch()` stops. It is an sRGB texture, so Three draws it without tone mapping. `scene.environment` is unchanged, so lighting does not depend on the theme. A test keeps the token values in step with `public/studio.css`.
+- `src/preview/browser/stage-theme-binding.ts` resolves the UI theme preference (with the OS scheme for "system") and passes it to the renderer's typed `setStage` input. `studio-main.ts` wires it.
 - **Strands and saved lashes** use `STRAND_COVERAGE_MATERIAL`: opaque, depth-writing, alpha-to-coverage, no alpha test. Their alpha is `hairResolvedCoverage(remapped Strand_Alpha)`. The lashes had been alpha-blended; they are `hair.mt` in game, so they now share the hair coverage. They stay in Three's transparent queue without blending (`STRAND_COVERAGE_OVER_MAKEUP_MATERIAL`), so they still draw after the editable makeup layers, as before. As fully opaque objects, the makeup plate painted over lash roots behind its surface.
 - **The cap** uses `HAIR_CAP_DECAL_MATERIAL`, a mask-blended decal with no depth write, as `mesh_decal_gradientmap_recolor.mt` is in game.
 

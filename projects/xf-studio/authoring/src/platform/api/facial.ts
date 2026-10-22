@@ -1,7 +1,7 @@
 /**
  * The facial preview's shared contract (research/animation/expression-editor-design.md §4, §5): what the host answers about the
  * player's face rig, the external solver and the installed photo-mode expressions, and what a solve request and answer hold. Types
- * and constants only; the host (src/facial-host.ts), the browser device and the preview service import it, and a feature view reads
+ * and constants only; the host (src/animation/host/facial-host.ts), the browser device and the preview service import it, and a feature view reads
  * the service's snapshot (`FacialPreviewSnapshot`) through its view context.
  */
 
@@ -25,6 +25,11 @@ export type FaceMotionRest = {
   readonly parents: readonly number[];
   /** Per joint: translation (3), rotation x y z w (4), scale (3). */
   readonly local: string;
+  /**
+   * The facial setup's region per joint (`bakedData.Data.JointRegions`: 0 eyes, 1 nose, 2 mouth, 3 jaw, 4 ear, 255 none), where the host
+   * read them: the page finds the lip joints by them (mouth-aperture.ts). Optional: an older record has none.
+   */
+  readonly regions?: readonly number[];
 };
 /** One clip: its times (seconds, or the blink closure 0–1), the moving joints (names) and per frame and joint translation (3) then rotation (4). */
 export type FaceMotionClip = { readonly name: string; readonly times: string; readonly joints: readonly string[]; readonly local: string };
@@ -90,7 +95,7 @@ export type FacialAxisControl = FacialAxisPair & { readonly key: string; readonl
   /** Its symmetry: the link keys of its two ends, its counterpart axis (by key) and whether it starts linked; absent for a centre axis. */
   readonly link?: { readonly keys: readonly string[]; readonly counterpart: string; readonly byDefault: boolean } };
 
-/** A built-in starting point: an expression XF Studio ships (src/expression-samples.ts), started from with its own links. */
+/** A built-in starting point: an expression XF Studio ships (src/animation/expression-samples.ts), started from with its own links. */
 export type FacialSample = {
   /** `xf-sample:<file>`: the preset id its origin records. */
   readonly id: string;

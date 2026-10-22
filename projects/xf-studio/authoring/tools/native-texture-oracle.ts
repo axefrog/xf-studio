@@ -15,9 +15,9 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { depotHash } from "../src/depot-path";
-import { depotPathRegex } from "../src/eye-plate-wolvenkit";
-import { decodePng } from "../src/png";
+import { depotHash } from "../src/game/depot-path";
+import { depotPathRegex } from "../src/legacy/eye-makeup/plate/host/eye-plate-wolvenkit";
+import { decodePng } from "../src/formats/png";
 import { NativeArchivePool } from "../src/native/archive-reader";
 import { readCr2w } from "../src/native/cr2w-reader";
 import { DecodeSession } from "../src/native/limits";

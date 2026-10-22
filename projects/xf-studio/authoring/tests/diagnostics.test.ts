@@ -3,17 +3,17 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, wri
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { inflateRawSync } from "node:zlib";
-import { personalDataIn, redactPersonalData } from "../src/private-data";
+import { personalDataIn, redactPersonalData } from "../src/app/private-data";
 import { redactKnownRoots, redactSaveNames, redactText } from "../src/diagnostics/redact";
 import { boundJson, DIAGNOSTIC_FORWARD_SCHEMA, DIAGNOSTIC_LIMITS, isErrorRef, isExpectedFailure, newErrorRef, parseForward } from "../src/diagnostics/model";
-import { DiagnosticLog, hostDiagnosticsAt, hostFailure, hostTrace, withDiagnostics } from "../src/diagnostics/host-log";
-import { TRACE_BOUNDS, TraceWindow } from "../src/diagnostics/trace-window";
-import { createDiagnosticsHandler, ERROR_REF_HEADER, withRequestDiagnostics } from "../src/diagnostics/host-endpoint";
+import { DiagnosticLog, hostDiagnosticsAt, hostFailure, hostTrace, withDiagnostics } from "../src/diagnostics/host/host-log";
+import { TRACE_BOUNDS, TraceWindow } from "../src/diagnostics/host/trace-window";
+import { createDiagnosticsHandler, ERROR_REF_HEADER, withRequestDiagnostics } from "../src/diagnostics/host/host-endpoint";
 import { ISSUE_URL_LIMIT, issueUrl, reportLeaks, type ReportManifest } from "../src/diagnostics/report";
 import { DiagnosticsActions, type DiagnosticsDevice } from "../src/diagnostics/actions";
-import { involvedMods } from "../src/diagnostics/mod-identity";
-import { crc32, zip } from "../src/diagnostics/zip";
-import { defaultLocalSettings } from "../src/local-settings";
+import { involvedMods } from "../src/diagnostics/host/mod-identity";
+import { crc32, zip } from "../src/diagnostics/host/zip";
+import { defaultLocalSettings } from "../src/setup/local-settings";
 
 const vectors = JSON.parse(readFileSync(resolve(import.meta.dir, "../../../../tools/private-data.json"), "utf8")).vectors as
   { userPath: string[]; email: string[]; clean: string[] };
@@ -328,4 +328,11 @@ test("the ZIP writer's CRC and layout", () => {
   expect(new TextDecoder().decode(files.get("a/b.txt"))).toBe("hello ".repeat(100));
   expect([...files.get("c.bin")!]).toEqual([1, 2, 3]);
   expect(() => zip([{ name: "../x", data: "" }])).toThrow();
+});
+
+test("a bounded copy keeps a __proto__ key as data, never as the copy's prototype", () => {
+  const copy = boundJson(JSON.parse('{"__proto__":{"polluted":1},"constructor":"c"}')) as Record<string, unknown>;
+  expect(Object.getPrototypeOf(copy)).toBe(Object.prototype);
+  expect(Object.getOwnPropertyDescriptor(copy, "__proto__")!.value).toEqual({ polluted: 1 });
+  expect([copy.polluted, copy.constructor]).toEqual([undefined, "c"]);
 });

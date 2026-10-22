@@ -2,10 +2,10 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { fitExposure, oklab, hueDegrees, passMarks, patchMean, type Rgba8Image } from "../src/creator-calibration";
-import { displayTransform, encodeGradingLut, neutralGradingLut, type GradingLut } from "../src/grading-lut";
-import { encodePng } from "../src/png";
-import { DEFAULT_CREATOR_EXPOSURE } from "../src/creator-lighting";
+import { fitExposure, oklab, hueDegrees, passMarks, patchMean, type Rgba8Image } from "../src/preview/creator-calibration";
+import { displayTransform, encodeGradingLut, neutralGradingLut, type GradingLut } from "../src/preview/grading-lut";
+import { encodePng } from "../src/formats/png";
+import { DEFAULT_CREATOR_EXPOSURE } from "../src/preview/creator-lighting";
 
 /** A warm, darkening LUT (like the vanilla grade's cast) so the fit is not trivially neutral. */
 function warmLut(): GradingLut {

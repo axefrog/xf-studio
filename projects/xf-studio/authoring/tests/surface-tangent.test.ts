@@ -1,7 +1,7 @@
 import {expect,test} from "bun:test";
 import * as THREE from "three";
-import {tangentFrame,tangentRayUV,tangentWorld} from "../src/surface-tangent";
-import type {Anchor} from "../src/surface-map";
+import {tangentFrame,tangentRayUV,tangentWorld} from "../src/legacy/eye-makeup/browser/surface-tangent";
+import type {Anchor} from "../src/legacy/eye-makeup/browser/surface-map";
 
 function fixture(reflected=false){
   const geometry=new THREE.BufferGeometry();

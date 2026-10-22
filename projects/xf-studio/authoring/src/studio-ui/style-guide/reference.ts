@@ -1,4 +1,4 @@
-import { bindingReference } from "../../input-bindings";
+import { bindingReference } from "../../app/input-bindings";
 import { code, esc, pattern, section } from "./kit";
 
 export type PanelInfo = { id: string; title: string; description: string };
@@ -29,7 +29,7 @@ export function reference(panels: readonly PanelInfo[]) {
     ["Layer", "One shape with colour, opacity and finish inside a preset. Top of the list = front."],
     ["Finish", "Matte, Satin, Metallic, Shimmer, Glitter, Glossy, Colour-shifting: one name each, everywhere. Other names (foil, pearl, wet look, duochrome) only in tooltips and search. Satin is shown for the internal “regular”."],
     ["Draft", "The working collection, autosaved on this computer."],
-    ["Library · version", "Explicit, immutable saves in your library (version 1, 2…; internally revisions). “Save to library”, never just “Save file”."],
+    ["Library · version", "Explicit, immutable saves in your library (version 1, 2…; internally revisions). “Save version”, never just “Save file”; work itself saves to the library as you go."],
     ["Collection file · recipe file · build plan", "Portable editable data; a build plan is compiler input — none is a mod."],
     ["Mod package · Check · Build", "Check lists what can be packaged (no files). Build creates your own mod files and checks them; the result says plainly that they are not tested in game and not installed."],
     ["Preview only", "A browser look that Build cannot turn into mod files yet."],
@@ -48,7 +48,7 @@ export function reference(panels: readonly PanelInfo[]) {
     pattern({ id: "r-keys", title: "Keyboard map", status: "implemented",
       specimen: keys.map(group => `<section class="reference-section"><h3>${esc(group.title)}</h3>${group.detail ? `<p class="muted small">${esc(group.detail)}</p>` : ""}<dl class="shortcut-list wide">${group.rows.map(row =>
         `<dt><kbd>${esc(row.input)}</kbd></dt><dd>${esc(row.label)}${row.where ? `<span class="reference-where"> · ${esc(row.where)}</span>` : ""}</dd>`).join("")}</dl></section>`).join(""),
-      what: "Every keyboard and mouse binding, grouped by context, generated from the input binding catalogue (src/input-bindings.ts). Menus, sliders, popovers and dialogs also close with Esc. Every pointer-only operation has a keyboard path.",
+      what: "Every keyboard and mouse binding, grouped by context, generated from the input binding catalogue (src/app/input-bindings.ts). Menus, sliders, popovers and dialogs also close with Esc. Every pointer-only operation has a keyboard path.",
       when: "The ? Keyboard & mouse dialog renders the same list; a test fails if any binding lacks a label or any hint names a missing binding." }),
     pattern({ id: "r-terms", title: "Terminology", status: "rule",
       specimen: `<dl class="facts">${terms.map(([t, d]) => `<dt>${t}</dt><dd>${d}</dd>`).join("")}</dl>`,

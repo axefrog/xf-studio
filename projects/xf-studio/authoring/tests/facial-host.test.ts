@@ -9,12 +9,12 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, wr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createFacialHandler, facialSetupSource, FacialHost, IN_APP_SOLVER, locateFacialSolver, MAX_RESTARTS, PREPARE_RETRY_MS, RESTART_WINDOW_MS, SOLVER_MISSING, SOLVER_NOT_SET_UP, spawnFacialSolver, type FacialExtractor,
-  type FacialSolverProcess, type FacialSolverSpawner } from "../src/facial-host";
-import { EXPRESSION_TABLE, FACE_SETUP, FACE_SKELETON, FACIAL_ADDITIVES, PHOTO_MODE_FACE_RIG, readFaceRigSetup } from "../src/facial-catalogue";
+  type FacialSolverProcess, type FacialSolverSpawner } from "../src/animation/host/facial-host";
+import { EXPRESSION_TABLE, FACE_SETUP, FACE_SKELETON, FACIAL_ADDITIVES, PHOTO_MODE_FACE_RIG, readFaceRigSetup } from "../src/animation/facial-catalogue";
 import { ENVELOPE_NAMES } from "../src/engines/facial-rig/solver";
 import { FACE_MOTION_SCHEMA, type FaceMotionClip } from "../src/platform/api/facial";
-import { depotHash } from "../src/depot-path";
-import type { Installation } from "../src/resolver-host";
+import { depotHash } from "../src/game/depot-path";
+import type { Installation } from "../src/game/host/resolver-host";
 import { cn, cr2w, fixtureInstallation, handle, rh } from "./resolver-fixtures";
 
 const SET = "base\\animations\\ui\\photomode\\test_faces.anims";

@@ -5,8 +5,8 @@ import { resolve } from "node:path";
 import { createDesktopServer } from "./server";
 import { useBuilderBun } from "./build";
 import { desktopVersionFromMetadata } from "./host";
-import { defaultLocalSettings } from "../src/local-settings";
-import { LocalSettingsStore } from "../src/local-settings-store";
+import { defaultLocalSettings } from "../src/setup/local-settings";
+import { LocalSettingsStore } from "../src/setup/host/local-settings-store";
 
 const dataRoot = Utils.paths.userData;
 const reportPath = resolve(dataRoot, "trial-build-report.json");

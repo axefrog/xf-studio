@@ -306,7 +306,7 @@ describe("0.8.3 G1: the staged showroom found by itself", () => {
   test("this checkout's dist and the primary checkout's are both searched (session 10 ran the tools from a worktree)", () => {
     const dists = showroomDists();
     expect(dists.every((d) => d.endsWith(join("projects", "xf-studio", "dist")) || process.env.XFS_SHOWROOM_DIST)).toBe(true);
-  });
+  }, 30_000); // a git call into the primary checkout, which can take seconds on a slow drive under a full run
 
   test("showroom.staged's answer drives the discovery; a bridge without the method falls back (unknown_method is null)", async () => {
     const context = (result: BridgeResponse) => ({ cid: "t", api: { callBridge: async () => (result.ok ? { ok: true, result: result.result } : { ok: false, error: result.error }) } }) as unknown as CommandContext;

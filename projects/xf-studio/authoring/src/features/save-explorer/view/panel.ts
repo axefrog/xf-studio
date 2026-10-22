@@ -7,7 +7,7 @@
  * The reference composition of the layout primitives (style guide "Layout primitives"): a page header (back, title and view switch, meta
  * line), a split view between the tree and the inspector, block sections for a node and an object, property lists and code blocks.
  */
-import { chordsLabel, keyBinding, keyBindingById } from "../../../input-bindings";
+import { chordsLabel, keyBinding, keyBindingById } from "../../../app/input-bindings";
 import { applyCapability, badge, blockSection, button, codeBlock, emptyState, helpTip, note, PageHeader, propertyList, rowWords, Segmented, SizeBar, snapHeight, SplitView, stack }
   from "../../../studio-ui/components";
 import { h, setAttr, setText } from "../../../studio-ui/dom";
@@ -15,8 +15,12 @@ import type { PanelController } from "../../../studio-ui/panels/collection";
 import type { ModuleViewContext } from "../../../studio-ui/views/feature-view";
 import type { InspectField, NodeInspection, ObjectInspection, ObjectRef, TreeRow } from "../explorer";
 import type { SaveExplorerFacade } from "../facade";
+import type { SaveExplorerAction } from "../actions";
 import type { SaveListing } from "../listing";
-import { SAVE_EXPLORER_PANEL_META } from "./contribution";
+import { SAVE_EXPLORER_PANEL_META, SAVE_EXPLORER_VIEW } from "./contribution";
+
+/** The explorer panel's ID (its instances are `<id>--<base36>`). */
+const PANEL_ID = SAVE_EXPLORER_VIEW.panels[0].id;
 
 /** A node row's height in the save tree (studio.css `.save-tree-row`). */
 const SAVE_ROW = 26;
@@ -37,11 +41,19 @@ const bytes = (value: number) => value < 1024 ? `${value} B` : value < 1024 * 10
 const when = (iso: string) => { const date = new Date(iso); return Number.isNaN(date.getTime()) ? "" : date.toLocaleString(); };
 
 export function explorerPanel(ctx: Ctx): PanelController {
-  const facade = ctx.facade;
+  // This panel instance's own session in the module's service (profiles design §7): every action and read names it.
+  const instance = ctx.instance(PANEL_ID), service = ctx.facade;
+  const facade = {
+    snapshot: () => service.snapshot(instance), capability: (action: SaveExplorerAction) => service.capability({ ...action, instance }),
+    tree: () => service.tree(instance), node: (id: number) => service.node(instance, id), modData: () => service.modData(instance),
+    entries: (offset: number, limit: number, filter?: string) => service.entries(instance, offset, limit, filter),
+    object: (ref: ObjectRef) => service.object(instance, ref), thumbnail: (folder: string) => service.thumbnail(instance, folder),
+  };
+  const dispatch = (action: SaveExplorerAction, options?: Parameters<Ctx["dispatch"]>[1]) => ctx.dispatch({ ...action, instance }, options);
   // ---- The saves list ----
-  const refresh = button({ label: "Refresh", icon: "refresh", small: true, variant: "quiet", onClick: () => { void ctx.dispatch({ kind: "saves.refresh" }); } });
+  const refresh = button({ label: "Refresh", icon: "refresh", small: true, variant: "quiet", onClick: () => { void dispatch({ kind: "saves.refresh" }); } });
   const openFile = button({ label: "Open a save file…", icon: "folder", small: true, variant: "quiet",
-    onClick: () => { void ctx.dispatch({ kind: "saves.openFile" }, { success: "Save opened." }); } });
+    onClick: () => { void dispatch({ kind: "saves.openFile" }, { success: "Save opened." }); } });
   const listCount = h("span", { class: "count" });
   const listNote = note("", "info");
   const saveList = h("ul", { class: "save-list", "aria-label": "Your saves, newest first" });
@@ -58,8 +70,8 @@ export function explorerPanel(ctx: Ctx): PanelController {
   // ---- One open save ----
   const namesNote = note("", "info");
   const tabs = new Segmented<"nodes" | "mods">({ label: "Show", options: [{ value: "nodes", label: "Nodes" }, { value: "mods", label: "Mod data" }],
-    onSelect: view => { void ctx.dispatch({ kind: "saves.setView", view }, { quiet: true }); }, compact: true, showLabel: false });
-  const header = new PageHeader({ back: { label: "All saves", onClick: () => { void ctx.dispatch({ kind: "saves.close" }); } }, titleClass: "save-title",
+    onSelect: view => { void dispatch({ kind: "saves.setView", view }, { quiet: true }); }, compact: true, showLabel: false });
+  const header = new PageHeader({ back: { label: "All saves", onClick: () => { void dispatch({ kind: "saves.close" }); } }, titleClass: "save-title",
     actions: [tabs.element], className: "save-header" });
   const tree = h("ul", { class: "save-tree", role: "tree", "aria-label": "Nodes of this save" });
   // Its height is the person's, with the bar under it: it fits its rows up to that (60 % of the window by default), kept across reloads.
@@ -86,8 +98,8 @@ export function explorerPanel(ctx: Ctx): PanelController {
   let rowsCache: { revision: number; rows: readonly TreeRow[] } = { revision: -1, rows: [] };
   const treeRows = (revision: number) => { if (rowsCache.revision !== revision) rowsCache = { revision, rows: facade.tree() }; return rowsCache.rows; };
 
-  const select = (node: number) => { void ctx.dispatch({ kind: "saves.selectNode", node }, { quiet: true }); };
-  const inspect = (ref: ObjectRef | null) => { void ctx.dispatch({ kind: "saves.inspect", ref }, { quiet: true }); };
+  const select = (node: number) => { void dispatch({ kind: "saves.selectNode", node }, { quiet: true }); };
+  const inspect = (ref: ObjectRef | null) => { void dispatch({ kind: "saves.inspect", ref }, { quiet: true }); };
 
   // ---- The tree ----
   const visibleRows = (rows: readonly TreeRow[]) => {
@@ -244,7 +256,7 @@ export function explorerPanel(ctx: Ctx): PanelController {
         h("span", { class: "muted small", text: ` ${number(item.objects.length)} object${item.objects.length === 1 ? "" : "s"}` }),
         item.defined === false ? h("span", { class: "muted small", text: " · not defined by your installed scripts" }) : null,
         h("ul", { class: "save-links" }, item.objects.slice(0, 12).map((ref, i) => h("li", {}, h("button", { class: "link-button", type: "button",
-          onclick: () => { void ctx.dispatch({ kind: "saves.setView", view: "nodes" }, { quiet: true }).then(() => { select(ref.node); inspect(ref); }); } },
+          onclick: () => { void dispatch({ kind: "saves.setView", view: "nodes" }, { quiet: true }).then(() => { select(ref.node); inspect(ref); }); } },
           `Open ${i + 1}`)))))))))));
   };
 
@@ -255,7 +267,7 @@ export function explorerPanel(ctx: Ctx): PanelController {
       const meta = [KIND_LABELS[save.kind], when(save.savedAt), save.gameVersion ? `patch ${save.gameVersion}` : "", save.level !== null ? `level ${save.level}` : "",
         save.lifePath ?? ""].filter(Boolean).join(" · ");
       const main = h("button", { class: "save-row", type: "button", "aria-label": `${save.location ?? save.folder}, ${meta}`,
-        onclick: () => { void ctx.dispatch({ kind: "saves.open", folder: save.folder }); } },
+        onclick: () => { void dispatch({ kind: "saves.open", folder: save.folder }); } },
         thumb ? h("img", { class: "save-thumb", src: thumb, alt: "", loading: "lazy", width: 96, height: 54 }) : h("span", { class: "save-thumb empty", "aria-hidden": "true" }),
         h("span", { class: "save-row-text" }, h("span", { class: "save-row-title", text: save.location ?? save.folder }),
           h("span", { class: "save-row-meta", text: meta }), h("span", { class: "save-row-folder", text: save.folder })));
@@ -267,7 +279,9 @@ export function explorerPanel(ctx: Ctx): PanelController {
   return {
     spec: { id: "save-explorer.explorer", ...SAVE_EXPLORER_PANEL_META["save-explorer.explorer"], element,
       // The list is read when the panel is first shown, never at startup.
-      visibility: visible => { if (visible && !refreshed) { refreshed = true; void ctx.dispatch({ kind: "saves.refresh" }, { quiet: true }); } } },
+      visibility: visible => { if (visible && !refreshed) { refreshed = true; void dispatch({ kind: "saves.refresh" }, { quiet: true }); } } },
+    // The panel is gone (its module hidden): its session, and any open save, go with it.
+    dispose: () => service.release(instance),
     update() {
       const state = facade.snapshot(), open = state.open;
       const isOpen = open.phase !== "none";
@@ -307,7 +321,7 @@ export function explorerPanel(ctx: Ctx): PanelController {
       setText(namesNote, namesText || ""); namesNote.hidden = !namesText;
       setText(loading, open.phase === "loading" ? "Opening the save…" : open.checking ? "Checking each node…" : ""); loading.hidden = !(open.phase === "loading" || open.checking);
       failed.hidden = open.phase !== "failed";
-      failed.replaceChildren(...(open.phase === "failed" ? [emptyState("This save couldn't be opened", open.message ?? "", button({ label: "All saves", onClick: () => { void ctx.dispatch({ kind: "saves.close" }); } }))] : []));
+      failed.replaceChildren(...(open.phase === "failed" ? [emptyState("This save couldn't be opened", open.message ?? "", button({ label: "All saves", onClick: () => { void dispatch({ kind: "saves.close" }); } }))] : []));
       const ready = open.phase === "ready";
       tabs.element.hidden = !ready;
       tabs.update(state.selection.view);

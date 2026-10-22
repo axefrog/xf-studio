@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test";
-import { CollectionServiceError } from "../src/collection-service";
-import { PreviewQualityActions } from "../src/preview-quality-actions";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
+import { CollectionServiceError } from "../src/library/collection-service";
+import { PreviewQualityActions } from "../src/legacy/eye-makeup/preview/preview-quality-actions";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 
-const makeCore = () => createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+import { namedCore } from "./fixtures/named-targets";
+const makeCore = () => namedCore(createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
 
 test("capability applies descriptor payload ranges to every entry point, not only context menus", () => {
   const { app, document } = makeCore(), id = document.recipe.layers[0].id;
@@ -31,7 +32,7 @@ test("controlEdit validates like dispatch, returns typed results and never opens
   const refused = app.controlEdit("opacity", { kind: "layer.setOpacity", layerId: id, opacity: 7 });
   expect(refused).toMatchObject({ ok: false, code: "limit" });
   expect(app.snapshot().control).toBeUndefined();
-  expect(document.undoDepth).toBe(0);
+  expect(document.history.state().depth).toBe(0);
   expect(app.controlEdit("opacity", { kind: "layer.setOpacity", layerId: "missing", opacity: .5 }))
     .toMatchObject({ ok: false, code: "missing_target" });
   expect(app.controlEdit("opacity", { kind: "layer.select", layerId: id })).toMatchObject({ ok: false, code: "invalid_value" });
@@ -46,18 +47,19 @@ test("controlEdit validates like dispatch, returns typed results and never opens
   expect(app.controlEdit("opacity", { kind: "layer.setOpacity", layerId: id, opacity: .4 })).toEqual({ ok: true, result: false });
   app.controlCommit("opacity");
   expect(app.snapshot().control).toBeUndefined();
-  expect(document.undoDepth).toBe(1);
-  expect(document.undoRecipe()?.layers[0].opacity).toBe(before);
+  expect(document.history.state().depth).toBe(1);
+  expect(document.history.undo()).toBe(true);
+  expect(document.recipe.layers[0].opacity).toBe(before);
 });
 
 test("controlEdit reports a domain rejection thrown after validation and closes an implicit transaction", () => {
   const { app, document } = makeCore(), id = document.recipe.layers[0].id;
-  const depth = document.undoDepth;
+  const depth = document.history.state().depth;
   // Passes the descriptor (a string) but the recipe parser rejects it.
   const outcome = app.controlEdit("color", { kind: "layer.setColor", layerId: id, color: "not a colour" });
   expect(outcome).toMatchObject({ ok: false, code: "invalid_value" });
   expect(app.snapshot().control).toBeUndefined();
-  expect(document.undoDepth).toBe(depth);
+  expect(document.history.state().depth).toBe(depth);
 });
 
 test("controlEdit refuses while a pointer gesture owns the Undo transaction", () => {

@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { chunkOfMesh, releaseDetailObject, textureLedgerKey } from "../src/character-detail-loader";
-import { materialAdapter, MATERIAL_ADAPTERS, textureColourSpace, type AdapterContext, type ChunkTextures } from "../src/character-material-adapters";
-import { hairMaterialFromScalars, HAIR_TEMPLATE_DEFAULTS } from "../src/hair-colour-model";
-import type { RenderChunkMaterial, RenderTexture } from "../src/render-detail";
-import { RENDER_TEMPLATES } from "../src/render-templates";
+import { chunkOfMesh, releaseDetailObject, textureLedgerKey } from "../src/character/render/character-detail-loader";
+import { materialAdapter, MATERIAL_ADAPTERS, textureColourSpace, type AdapterContext, type ChunkTextures } from "../src/materials/render/character-material-adapters";
+import { hairMaterialFromScalars, HAIR_TEMPLATE_DEFAULTS } from "../src/materials/hair-colour-model";
+import type { RenderChunkMaterial, RenderTexture } from "../src/character/render-detail";
+import { RENDER_TEMPLATES } from "../src/materials/render-templates";
 
 const texture = (depotPath: string, isGamma = false): RenderTexture =>
   ({ file: `${"a".repeat(64)}.png`, sha256: "a".repeat(64), sources: [], depotPath, width: 4, height: 4, isGamma });
@@ -104,6 +104,7 @@ test("exported chunk meshes map back to their render chunk", () => {
   expect(chunkOfMesh("submesh_00_LOD_1")).toBe(0);
   expect(chunkOfMesh("submesh_07_LOD_1")).toBe(7);
   expect(chunkOfMesh("submesh_00_LOD_1_doubled")).toBe(0);
+  expect(chunkOfMesh("detail_hair_submesh_02_LOD_1")).toBeNull();
   expect(chunkOfMesh("Armature")).toBeNull();
 });
 

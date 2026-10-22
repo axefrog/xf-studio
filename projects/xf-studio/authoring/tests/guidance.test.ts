@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { bindingReference, KEY_BINDINGS } from "../src/input-bindings";
-import { ACTION_DESCRIPTORS, FILE_DESCRIPTORS, PREVIEW_SETUP_DESCRIPTORS } from "../src/studio-action-descriptors";
-import { isProjectLink } from "../src/project-links";
-import { parseUIPreferences, UIPreferenceActions } from "../src/ui-preferences";
+import { bindingReference, KEY_BINDINGS } from "../src/app/input-bindings";
+import { ACTION_DESCRIPTORS, FILE_DESCRIPTORS, PREVIEW_SETUP_DESCRIPTORS } from "../src/app/studio-action-descriptors";
+import { isProjectLink } from "../src/app/project-links";
+import { parseUIPreferences, UIPreferenceActions } from "../src/app/ui-preferences";
 import { AnchorRegistry, anchorCatalogue, anchorInfo, CONTROL_ANCHORS, isAnchorId, type AnchorId, type AnchorState } from "../src/studio-ui/guidance/anchors";
 import { keyTokens, parseHelp, plainText } from "../src/studio-ui/guidance/content";
 import { conditionHolds, eventHappened, GUIDANCE_DESCRIPTORS, GuidanceService, type GuidanceEnvironment } from "../src/studio-ui/guidance/engine";
@@ -275,8 +275,8 @@ test("tour progress is a bounded, validated UI preference", () => {
 // ---------- Boundaries ----------
 
 test("guidance modules stay presentation: no domain internals, and the runner and data are DOM-free", () => {
-  const allowedValues = new Map([["input-bindings", ["bindingReference", "chordsLabel", "KEY_BINDINGS", "keyBinding", "shortcutLabel"]],
-    ["mod-branding", ["EYE_MAKEUP_MOD"]]]);
+  const allowedValues = new Map([["app/input-bindings", ["bindingReference", "chordsLabel", "KEY_BINDINGS", "keyBinding", "shortcutLabel"]],
+    ["legacy/eye-makeup/mod-branding", ["EYE_MAKEUP_MOD"]]]);
   const problems: string[] = [];
   for (const file of files(guidanceDir)) {
     const source = readFileSync(file, "utf8"), name = relative(guidanceDir, file);

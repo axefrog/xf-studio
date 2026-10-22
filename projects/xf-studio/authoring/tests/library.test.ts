@@ -2,14 +2,18 @@ import { test, expect } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { LookLibrary, libraryRequest } from "../src/library-store";
+import { libraryRequest } from "../src/library/host/library-store";
+import { openTestLibrary } from "./fixtures/library-file";
 import { Database } from "bun:sqlite";
 import { initialRecipe } from "./fixtures/eye-region";
-import { readRecipe as parseRecipe, parseRecipeFile } from "../src/recipe-schema";
+import { readRecipe as parseRecipe, parseRecipeFile } from "../src/legacy/eye-makeup/recipe-schema";
+
+/** A library file's look store, closed with its file. */
+function lookLibrary(path: string) { const file = openTestLibrary(path); return Object.assign(file.looks, { close: () => file.close() }); }
 
 test("legacy SQLite revisions stay byte-identical while empty and expanded recipes survive reopening", () => {
   const dir = mkdtempSync(join(tmpdir(), "xfs-variable-library-")), path = join(dir, "library.sqlite");
-  let db = new LookLibrary(path);
+  let db = lookLibrary(path);
   try {
     const recipe = initialRecipe(), original = db.save({ name: "Legacy", recipe });
     db.close();
@@ -17,7 +21,7 @@ test("legacy SQLite revisions stay byte-identical while empty and expanded recip
       layers: recipe.layers.map(({ fields, strength: _strength, pathMode: _pathMode, softness: _softness, points, ...l }) => ({ ...l, points: points.map(({ handles: _handles, feather: _feather, ...point }) => point), field: fields[0] })) });
     const raw = new Database(path);
     raw.query("UPDATE look_revisions SET recipe_json=? WHERE look_id=?").run(legacy, original.id); raw.close();
-    db = new LookLibrary(path);
+    db = lookLibrary(path);
     expect(parseRecipeFile(JSON.parse(legacy)).schema).toBe("xfs/recipe-7");
     expect(db.get(original.id).recipe).toEqual(parseRecipe(JSON.parse(legacy)));
     const empty = { ...recipe, layers: [] };
@@ -25,7 +29,7 @@ test("legacy SQLite revisions stay byte-identical while empty and expanded recip
     const expanded = structuredClone(recipe);
     expanded.layers.push({ ...structuredClone(recipe.layers[0]), id: crypto.randomUUID() });
     db.save({ name: "Five layers", recipe: expanded, revision: 2 }, original.id);
-    db.close(); db = new LookLibrary(path);
+    db.close(); db = lookLibrary(path);
     expect(db.get(original.id, 2).recipe).toEqual(empty);
     expect(db.get(original.id).recipe).toEqual(expanded);
     const verify = new Database(path, { readonly: true });
@@ -37,7 +41,7 @@ test("legacy SQLite revisions stay byte-identical while empty and expanded recip
 
 test("library persists editable revisions and rejects stale or invalid writes atomically", () => {
   const dir = mkdtempSync(join(tmpdir(), "xfas-library-")), path = join(dir, "library.sqlite");
-  let db = new LookLibrary(path);
+  let db = lookLibrary(path);
   try {
     const recipe = initialRecipe();
     const first = db.save({ name: "Evening ✨", recipe });
@@ -50,7 +54,7 @@ test("library persists editable revisions and rejects stale or invalid writes at
     expect(db.list()).toHaveLength(1);
     expect(db.get(first.id)).toEqual(second);
     db.close();
-    db = new LookLibrary(path);
+    db = lookLibrary(path);
     expect(db.get(first.id)).toEqual(second);
     const copy = db.save({ name: second.name, recipe });
     expect(copy.id).not.toBe(first.id);
@@ -59,7 +63,7 @@ test("library persists editable revisions and rejects stale or invalid writes at
 });
 
 test("library API validates local writes, preserves conflicts, and separates verification data", async () => {
-  const real = new LookLibrary(":memory:"), verification = new LookLibrary(":memory:");
+  const real = lookLibrary(":memory:"), verification = lookLibrary(":memory:");
   const origin = "http://127.0.0.1:4317", prefix = "/api/looks";
   const request = (suffix = "", method = "GET", body?: unknown, source = origin) => new Request(origin + prefix + suffix, {
     method, headers: { Origin: source, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined,

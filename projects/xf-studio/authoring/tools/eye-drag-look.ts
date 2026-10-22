@@ -15,9 +15,9 @@ import { resolve } from "node:path";
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { launch, startServer } from "./cdp";
-import { uvHoleBridges } from "../src/surface-map";
+import { uvHoleBridges } from "../src/legacy/eye-makeup/browser/surface-map";
 import { initialRecipe } from "../src/features/eye-makeup/region";
-import { portableRecipe } from "../src/recipe-schema";
+import { portableRecipe } from "../src/legacy/eye-makeup/recipe-schema";
 import type { Layer } from "../src/engines/layered-makeup/recipe";
 
 const [outArg, portArg = "4391"] = process.argv.slice(2);

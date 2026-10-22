@@ -1,0 +1,1261 @@
+import type { AuthoringDocument } from "./authoring/authoring-document";
+import type { AuthoringControlEdits } from "./authoring/authoring-control-edits";
+import { fromView3d, gestureSource, type AuthoringGestures, type GestureOrigin, type GestureSource } from "./authoring/authoring-gestures";
+import type { HistoryCommand as HistoryAction, HistoryMove, HistorySnapshot, HistoryState } from "../platform/api/history";
+import { missingTarget as missingNamedTarget, nameTargets, NO_TARGET, type NamedTargets, type Naming, type Unnamed } from "./action-targets";
+import { nameIssue } from "../platform/api/validation-issues";
+import { consequenceOf, type Consequence, type ConsequenceSubject } from "./action-consequences";
+import { RECIPE_HISTORY_LIMIT } from "../legacy/eye-makeup/editor-actions";
+import { REMOVED_PRESET_LIMIT } from "./workspace/collection-workspace";
+import { CollectionServiceError, type CollectionRequest, type CollectionService } from "../library/collection-service";
+import type { CollectionStudioAction } from "../library/collection-actions";
+import type { CharacterDetailActions } from "../character/character-detail-actions";
+import type { CharacterContextAction } from "../character/character-context";
+import type { CharacterContextActions } from "../character/character-context-actions";
+import type { MotionAction, MotionActions } from "../animation/motion-actions";
+import type { PreviewAction, PreviewActions } from "../preview/preview-actions";
+import type { PreviewQualityActions, QualityAction } from "../legacy/eye-makeup/preview/preview-quality-actions";
+import type { TransitionAction, TransitionSettings } from "../platform/core/transition-settings";
+import { type ViewId, viewTitles } from "../platform/api/view-graph";
+import type { ViewGraph } from "../platform/core/view-graph";
+import type { ViewAction, ViewActions } from "./view-actions";
+import type { SceneAction, SceneCommands } from "./profiles/scene-commands";
+import type { LookRef } from "../library/collection-documents";
+import { isLookScope as lookScoped, lookScope } from "../platform/core/history-service";
+import { plannedModules, type PlannedModule, type StudioModule, type ViewSummaryContribution, type ViewToolContribution, type ViewToolFilter } from "../platform/api";
+import type { Layer, Point, Recipe, WarpField } from "../engines/layered-makeup/recipe";
+import { RECIPE_ACTION_KINDS, type GestureEdit, type RecipeAction } from "../engines/layered-makeup/recipe-actions";
+import type { EyeMakeupPort, EyeMakeupSpec } from "../legacy/eye-makeup/authoring-eye-makeup";
+import type { EyeMakeupAction } from "../legacy/eye-makeup/eye-makeup-model";
+import type { SavedAppearanceAction, SavedAppearanceActions, SavedAppearanceState } from "../character/saved-appearance-actions";
+import { actionRegistry, type ActionDescriptor, type FileDescriptor, type RequestDescriptor,
+  type ValueSchema } from "./studio-action-descriptors";
+import { coded, refusal, undoPolicyOf, type ActionDescriptor as PlatformDescriptor, type ActionHandler, type AsyncActionHandler,
+  type Capability, type FeatureActionSpec, type PartEnvelope, type FeatureModule, type FieldLimit, inputLimits, type FeatureState, type HistoryEntryId, type HistoryLabel, type ReasonCode, type UndoPolicy,
+  type ValidationIssue } from "../platform/api";
+import type { AnyOwner, Registry } from "../platform/core/registry";
+import { CONTROL_TRANSACTION, type HistoryTransaction } from "../platform/core/history-transaction";
+import { isLookScope, type HistoryScope, type HistoryService } from "../platform/core/history-service";
+import type { StudioFileAction, StudioFileOperations, StudioFileOutcome } from "./studio-file-operations";
+import type { PartPresetList, PartPresetOutcome, PartPresetRequest, PartPresetService, PartPresetSetList, SetExportState } from "../library/part-presets";
+import type { FacialPreview } from "../animation/facial-preview";
+import type { FacialPreviewSnapshot } from "../platform/api/facial";
+import { contextCandidates, contextScope, geometryHit,
+  type StudioBoundContext, type StudioContextHit } from "./studio-context-targets";
+import { finishCatalogue, glitterModelCatalogue } from "../engines/layered-makeup/finish-catalogue";
+import { mottleCatalogue } from "../engines/layered-makeup/mottle";
+import { layerExport, planPresetExport, type LayerExport } from "../engines/layered-makeup/finish-export";
+import { layerEdgeReach, type SurfaceOutline } from "../engines/layered-makeup/surface-edge";
+
+/** Undo and Redo with no editing context (profiles design §3.7). */
+export const NOTHING_TO_UNDO = "Nothing to undo here yet.";
+/**
+ * Each owner this application binds a handler for, with its action union, keyed by owner ID. The
+ * composition list (`compose/studio-registry.ts`) must register exactly these owners: it checks
+ * this map at compile time, and the constructor checks the injected registry at run time.
+ */
+export type StudioOwnerActions = {
+  history: HistoryAction;
+  "eye-makeup": Naming<EyeMakeupAction, { look: LookRef }>;
+  collection: CollectionStudioAction;
+  preview: PreviewAction;
+  motion: MotionAction;
+  transitions: TransitionAction;
+  quality: QualityAction;
+  savedV: Naming<SavedAppearanceAction, { character: string }>;
+  scenes: SceneAction;
+  characterContext: Naming<CharacterContextAction, { character: string }>;
+  views: ViewAction;
+};
+export type StudioOwnerId = keyof StudioOwnerActions;
+/**
+ * Each asynchronous family this application binds a handler for (CORE-36): the collection library's
+ * requests and the file workflows. The composition list registers exactly these beside the owners above.
+ */
+export type StudioOwnerRequests = {
+  library: CollectionRequest;
+  files: StudioFileAction;
+  presets: PartPresetRequest;
+};
+export type StudioRequestOwnerId = keyof StudioOwnerRequests;
+/** Every action a presentation may dispatch: the union of the registered owners' actions. */
+export type StudioAction = StudioOwnerActions[StudioOwnerId];
+/** A layer's export status within its preset. `blockedBy` says whether its own finish ("layer")
+ * or the rest of the preset ("preset") keeps it out of the mod. */
+export type LayerExportStatus = Extract<LayerExport, { exportable: true }> |
+  { exportable: false; reason: string; blockedBy: "layer" | "preset" };
+export type StudioTarget = { kind: "collection" } | { kind: "preset"; id: string } |
+  { kind: "layer"; id: string } | { kind: "point"; layerId: string; index: number } |
+  { kind: "field"; layerId: string; id: string } | { kind: "viewport"; view?: ViewId } | { kind: "file" } | { kind: "workspace" };
+/**
+ * One tool of one view, ready to render (view-graph-design.md §3.9): the contribution, whether it shows (Idle hides without an idle),
+ * whether it is on, the action it dispatches now and that action's capability. `label` may name its next step ("Pause idle").
+ */
+export type ViewToolEntry = ViewToolContribution & { shown: boolean; on?: boolean; action: StudioAction; capability: StudioCapability };
+/** The platform's reason codes and capability shape (`platform/api`). */
+export type StudioReasonCode = ReasonCode;
+export type StudioCapability = Capability;
+/** Every synchronous action entry point (dispatch, context dispatch, form control edits) returns this. */
+export type StudioDispatchResult = { ok: true; result?: unknown } | { ok: false; code: string; message: string };
+export type StudioActionInfo = { action: StudioAction; capability: StudioCapability;
+  undo: UndoPolicy; async: false };
+export type StudioGestureProposal =
+  | { kind: "shape.replace"; next: Layer }
+  | { kind: "point.replace"; index: number; next: Partial<Point> }
+  | { kind: "field.replace"; fieldId: string; next: Partial<WarpField> }
+  | { kind: "path.replacePoints"; points: Point[] };
+
+type Handlers = { readonly [O in StudioOwnerId]: ActionHandler<StudioOwnerActions[O]> };
+type AsyncHandlers = {
+  readonly library: AsyncActionHandler<CollectionRequest, Awaited<ReturnType<CollectionService["execute"]>>>;
+  readonly files: AsyncActionHandler<StudioFileAction, StudioFileOutcome>;
+  readonly presets: AsyncActionHandler<PartPresetRequest, PartPresetOutcome>;
+};
+type Services = { document: AuthoringDocument;
+  /** Eye makeup's live part and editor state, and where its pure action results are published. */
+  eyeMakeup: EyeMakeupPort;
+  /** Where new items' IDs come from for the other features' actions (default: random UUIDs). */
+  newId?: () => string;
+  /** The session's history service: Undo and Redo act on the scope they name (the look's, a V's, or an experiment's document). */
+  history: HistoryService;
+  /**
+   * The session's scenes (profiles design §1.1): each scene's `gen` (which a view action that edits the scene names) and `scene.setLook`
+   * and `scene.setSubject`.
+   */
+  scenes?: Pick<SceneCommands, "gen" | "capability" | "dispatch">;
+  /**
+   * Whether the view, scene and `gen` an action names are still what they were resolved to (the target resolver's check, the same rule as
+   * its captures', profiles design §3.3). Without it (a core no session holds) an action naming a scene's `gen` can't be checked, and is refused.
+   */
+  targetCheck?: { check(named: { view?: string; scene?: string; sceneGen?: number }): StudioCapability };
+  gestures: AuthoringGestures; controls: AuthoringControlEdits;
+  collection?: CollectionService; files?: StudioFileOperations; preview?: PreviewActions; motion?: MotionActions;
+  /** How a held expression's changes animate (platform/core/transition-settings.ts); the composition root attaches it at start. */
+  transitions?: TransitionSettings;
+  quality?: PreviewQualityActions; savedV?: SavedAppearanceActions;
+  /** The shown V's resolved details (character-detail-actions.ts). */
+  characterDetails?: CharacterDetailActions;
+  /** Which V the makeup is shown on and every creator choice set on it (character-context-actions.ts). */
+  characterContext?: CharacterContextActions;
+  /** The view graph (view-graph-design.md §3.3): which views exist, for actions that name one. */
+  views?: ViewGraph;
+  /** The views family over the graph and the composition's modules and view tools (view-actions.ts). */
+  viewActions?: ViewActions;
+  /** Part presets in the library (part-presets.ts), for every feature's favourites. */
+  presets?: PartPresetService;
+  /** The live facial preview (facial-preview.ts): the held expression on the head, and what a feature's drawer shows. */
+  facial?: FacialPreview;
+  /** The edited layered surface's outer boundary in UV, once the head is loaded (surface-edge.ts). */
+  surfaceOutline?: SurfaceOutline;
+  /**
+   * Whether this page may change its workspace (the workspace lease, profiles design §2.3): while another page holds it,
+   * every action, request, control and gesture is refused with its `unavailable` refusal. Reads stay available.
+   */
+  access?: { refusal(): (StudioCapability & { available: false }) | undefined } };
+
+/** One read-only, target-aware entry point for a replaceable presentation. */
+export class StudioApplication {
+  private services: Services;
+  private listeners = new Set<() => void>();
+  private unsubs: (() => void)[] = [];
+  private collectionRevision = 0;
+  private seenContent?: number;
+  private previewUnavailable?: string;
+  /** The open gesture: its source, the look it edits (its capture, profiles design §3.3) and the layer and controls it started on. */
+  private gesture?: { source: GestureSource; scope: string; layer: Layer; points: Point[]; fields: Map<string, WarpField> };
+  /** The action registry: owners, descriptors, Undo policy and routes. */
+  private readonly routes: Registry<AnyOwner>;
+  /** One handler per registered owner: the compiler requires every owner in the composition list. */
+  private readonly handlers: Handlers;
+  /** One handler per asynchronous family (library requests, file workflows). */
+  private readonly asyncHandlers: AsyncHandlers;
+  /**
+   * The other registered features' handlers: their pure capability and apply over their live
+   * documents (`document.others`), bound generically, so a feature module needs no handler of its own.
+   */
+  private readonly featureHandlers = new Map<string, ActionHandler<{ kind: string }>>();
+  /** The open generic feature control (`featureControlBegin`): one Undo step over its feature's part for a run of edits. */
+  private featureControl?: { feature: string; id: string; transaction: HistoryTransaction<HistoryEntryId> };
+  /** Control runs a replacement of the document's content ended: their continuations are refused until they begin again. */
+  private readonly ended = new Set<string>();
+  /** The open look transaction (`transaction`): its actions record no steps of their own. */
+  private look?: { features: readonly string[] };
+  /** `registry` is the composition's action registry, injected by the composition roots (CORE-29). */
+  constructor(services: Services, registry: Registry<AnyOwner>) {
+    this.services = services; this.routes = registry; this.handlers = this.bindHandlers();
+    // A gesture or control run belongs to the content it began on: it settles (commits) before the document shows other content, another
+    // look's or the same look's replaced from elsewhere, and is over. A gesture ends with its session; a control run's later edits are
+    // refused until the control begins again (`ended`).
+    services.document.onReplacing(() => {
+      const control = this.services.controls.snapshot();
+      if (control) this.ended.add(`control:${control.id}`);
+      if (this.featureControl) this.ended.add(`feature:${this.featureControl.id}`);
+      this.settleEdits();
+    });
+    this.asyncHandlers = this.bindAsyncHandlers();
+    for (const owner of registry.owners())
+      if (owner.owner === "feature" && !(owner.id in this.handlers)) {
+        // A document with live documents must have one per feature; a bare single-feature document (fixtures, tools) binds the
+        // feature anyway and its capability refuses with `not_ready`.
+        if (services.document.others && !services.document.others.has(owner.id)) throw Error(`Feature ${owner.id} has no live document.`);
+        this.featureHandlers.set(owner.id, this.featureHandler(owner.id));
+      }
+    // Exhaustive at run time too: an owner without a handler, or a handler without an owner, is a composition error.
+    const owners = registry.owners().map(owner => owner.id).sort(),
+      bound = [...Object.keys(this.handlers), ...Object.keys(this.asyncHandlers), ...this.featureHandlers.keys()].sort();
+    if (owners.join() !== bound.join())
+      throw Error(`Registered owners (${owners.join(", ")}) do not match the application's handlers (${bound.join(", ")}).`);
+    this.subscribeSources();
+  }
+  attach(next: Partial<Omit<Services, "document" | "eyeMakeup" | "gestures" | "controls">>) {
+    if (next.collection && next.collection !== this.services.collection) this.collectionRevision++;
+    this.services = { ...this.services, ...next }; this.subscribeSources(); this.notify();
+  }
+  /** A device failure is terminal for this page load; edits and mask work remain available. */
+  setPreviewUnavailable(reason: string) { this.previewUnavailable = reason; this.notify(); }
+  private notify() { for (const listener of this.listeners) listener(); }
+  private subscribeSources() {
+    for (const unsub of this.unsubs) unsub();
+    const s = this.services;
+    this.unsubs = [s.document.subscribe(() => this.notify())];
+    this.seenContent = s.collection?.contentVersion();
+    // Save progress, busy flags and list refreshes must not invalidate an open menu (audit A-14).
+    if (s.collection) this.unsubs.push(s.collection.subscribe(() => {
+      const content = s.collection!.contentVersion();
+      if (content !== this.seenContent) { this.seenContent = content; this.collectionRevision++; }
+      this.notify();
+    }));
+    for (const source of [s.preview, s.motion, s.transitions, s.quality, s.savedV, s.characterDetails, s.characterContext, s.viewActions, s.presets, s.facial,
+      s.access as { subscribe?(listener: () => void): () => void } | undefined])
+      if (source?.subscribe) this.unsubs.push(source.subscribe(() => this.notify()));
+  }
+  subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
+  /** Exact command IDs; nested preset/layer command variants retain their typed payloads. */
+  actionKinds() { return [...this.routes.kinds()] as StudioAction["kind"][]; }
+  /** Library request kinds (the registered `library` family). */
+  requestKinds() { return [...this.routes.kinds("library")] as CollectionRequest["kind"][]; }
+  actionDescriptors() { return structuredClone(this.routes.descriptors()) as Record<StudioAction["kind"], ActionDescriptor>; }
+  requestDescriptors() {
+    return structuredClone(this.routes.asyncDescriptors("library")) as Record<CollectionRequest["kind"], RequestDescriptor>;
+  }
+  /** Gesture proposals: eye makeup's registered gestures (the session and its Undo transaction are the platform's). */
+  gestureDescriptors() {
+    const owner = this.routes.owner("eye-makeup") as FeatureModule | undefined;
+    return structuredClone(owner?.gestures?.descriptors ?? {}) as Record<StudioGestureProposal["kind"], ActionDescriptor>;
+  }
+  /** File workflow IDs (the registered `files` family, run by `StudioFileOperations`). */
+  fileKinds() { return [...this.routes.kinds("files")] as StudioFileAction["kind"][]; }
+  fileDescriptors() {
+    return structuredClone(this.routes.asyncDescriptors("files")) as Record<StudioFileAction["kind"], FileDescriptor>;
+  }
+  /** Every action, request, gesture proposal and file workflow ID with its family, scope and Undo policy. */
+  registry() {
+    return actionRegistry(this.routes.descriptors() as Record<string, ActionDescriptor>, { requests: this.routes.asyncDescriptors("library"),
+      gestures: this.gestureDescriptors(), files: this.routes.asyncDescriptors("files") });
+  }
+  /** The registered feature modules in catalogue order, for the presentation's feature facades (step 5). */
+  features(): { id: string; label: string; stage: FeatureModule["stage"] }[] {
+    return this.routes.owners().flatMap(owner => owner.owner === "feature"
+      ? [{ id: owner.id as string, label: owner.label, stage: (owner as FeatureModule).stage }] : []);
+  }
+  /** The owner of a synchronous action kind (a family or feature ID), or undefined for an unknown kind. */
+  ownerOf(kind: string): string | undefined {
+    const route = this.routes.route(kind);
+    return route.ok ? route.owner.id : undefined;
+  }
+  /**
+   * Whether a feature can be edited in the selected look: not when the look holds a newer build's data (it
+   * is kept exactly as it came), nor while no preset owns the editor. The refusal says why in plain words.
+   */
+  featureEditable(feature: string): StudioCapability {
+    const owner = this.routes.owner(feature);
+    if (owner?.owner !== "feature") return unknownCommand();
+    if (this.unowned()) return { available: false, code: "missing_target", reason: NO_PRESET };
+    const locked = this.services.document.locked;
+    return locked ? refusal("unavailable", locked) : { available: true };
+  }
+  /**
+   * Why the selected look's part of this feature can't be edited because the look was made with a newer version
+   * of XF Studio (the plain reason), or undefined when it isn't locked (UI-53). Views read this rather than
+   * inferring it from an `unavailable` refusal, which other reasons may share.
+   */
+  featureLocked(feature: string): string | undefined {
+    if (this.routes.owner(feature)?.owner !== "feature" || this.unowned()) return undefined;
+    return this.services.document.locked;
+  }
+  /** A feature's live part and editor state for the selected look, detached (features beside the editor document). */
+  featureState(feature: string): { part?: unknown; editor?: unknown } | undefined {
+    return this.services.document.others?.document(feature)?.export();
+  }
+  /** The pure state a feature's specs read: eye makeup's from its port, any other feature's from its live document. */
+  private featureStateOf(feature: string): FeatureState<unknown, unknown> | undefined {
+    // The feature the editor document edits reads through its port; every other one through its live document.
+    if (feature === this.services.document.feature) return this.services.eyeMakeup.state();
+    return this.services.document.others?.document(feature)?.state();
+  }
+  /** Full scope listing; payload-required entries must still be checked with capability(actualAction). */
+  descriptorsFor(target: StudioTarget) {
+    const targetCapability = this.targetCapability(target);
+    return Object.entries(this.routes.descriptors() as Record<string, ActionDescriptor>).filter(([, descriptor]) =>
+      (descriptor.scope as readonly string[]).includes(target.kind)).map(([id, descriptor]) => ({
+      id: id as StudioAction["kind"], ...structuredClone(descriptor),
+      targetCapability, requiresInput: Object.values(descriptor.payload).some(field => field.from === "input"),
+    }));
+  }
+  targetCapability(target: StudioTarget): StudioCapability {
+    const s = this.services, recipe = s.document.recipe;
+    if (target.kind === "layer" && !recipe.layers.some(layer => layer.id === target.id))
+      return missingTarget("That layer no longer exists.");
+    if (target.kind === "point" && !recipe.layers.find(layer => layer.id === target.layerId)?.points[target.index])
+      return missingTarget("That control point no longer exists.");
+    if (target.kind === "field" && !recipe.layers.find(layer => layer.id === target.layerId)?.fields.some(field => field.id === target.id))
+      return missingTarget("That warp no longer exists.");
+    // Cheap reads: target checks never clone the draft (CORE-05).
+    if (target.kind === "preset" && !s.collection?.hasPreset(target.id))
+      return s.collection ? missingTarget("That preset no longer exists.") : missing("Collection is still loading.");
+    if (target.kind === "collection" && !s.collection?.draftIdentity()) return missing("Collection is still loading.");
+    if ((target.kind === "collection" || target.kind === "preset") && s.collection?.isBusy())
+      return { available: false, code: "busy", reason: "A collection request is in progress." };
+    return { available: true };
+  }
+  /** Validate a concrete target/payload pair before a menu, shortcut or form dispatches it. */
+  contextCapability(target: StudioTarget, action: StudioAction): StudioCapability {
+    const descriptor = this.routes.descriptor(action.kind);
+    if (!descriptor) return unknownCommand();
+    if (!(descriptor.scope as readonly string[]).includes(target.kind))
+      return { available: false, code: "invalid_value", reason: "This command does not apply to that target." };
+    const exists = this.targetCapability(target);
+    if (!exists.available) return exists;
+    const payload = action as unknown as Record<string, unknown>;
+    const command = payload.command && typeof payload.command === "object"
+      ? payload.command as Record<string, unknown> : undefined;
+    const flattened = { ...payload, ...command };
+    const targetId = target.kind === "layer" ? target.id : target.kind === "point" || target.kind === "field"
+      ? target.layerId : target.kind === "preset" ? target.id : undefined;
+    if (targetId && (typeof flattened.layerId === "string" && flattened.layerId !== targetId ||
+      typeof flattened.id === "string" && flattened.id !== (target.kind === "field" ? target.id : targetId) ||
+      typeof flattened.fieldId === "string" && target.kind === "field" && flattened.fieldId !== target.id ||
+      typeof flattened.index === "number" && target.kind === "point" && flattened.index !== target.index))
+      return { available: false, code: "missing_target", reason: "The command targets a different item." };
+    // Payload types and ranges are checked by capability(), the same gate dispatch uses.
+    return this.capability(action);
+  }
+  /** Current static and state-dependent input limits for an action on a concrete target (audit A-7). */
+  limitsFor(target: StudioTarget, kind: StudioAction["kind"], variant?: string): Record<string, FieldLimit> {
+    const route = this.routes.route(kind);
+    if (!route.ok) return {};
+    // The spec's static limits and units, then the owning feature's state-dependent refinement.
+    let limits = inputLimits(route.spec.descriptor, route.spec.units, variant);
+    const spec = route.spec as Partial<FeatureActionSpec<unknown, unknown>>, state = this.featureStateOf(route.owner.id);
+    if (spec.limits && state) limits = spec.limits(state, target, variant, limits);
+    const presets = this.services.collection?.summary().draft?.presets.length;
+    if (kind === "preset.edit" && variant === "move" && limits.to && presets !== undefined)
+      limits.to = { ...limits.to, min: 0, max: Math.max(0, presets - 1) };
+    return limits;
+  }
+  /**
+   * An action with the targets `named` holds filled in where it leaves them out (profiles design §3.6): the input layer (the presentation
+   * port) resolves `named`; nothing here does.
+   */
+  private withTargets<A extends { kind: string }>(action: A, named: NamedTargets | undefined): A {
+    return named ? nameTargets(action, this.routes.descriptor(action.kind), named) : action;
+  }
+  /** A synchronous action's descriptor (shared and frozen), for an input layer naming its targets. */
+  descriptor(kind: string): Readonly<PlatformDescriptor> | undefined { return this.routes.descriptor(kind); }
+  /** Enumerated values and their live capability for a concrete target; `named`: the targets the input layer resolved. */
+  choicesFor(target: StudioTarget, kind: StudioAction["kind"], field: string,
+    base: Record<string, unknown> = {}, named?: NamedTargets) {
+    const schema = this.routes.descriptor(kind)?.payload[field];
+    if (!schema?.values) return [];
+    const targetPayload = target.kind === "layer" ? { layerId: target.id, id: target.id } :
+      target.kind === "point" ? { layerId: target.layerId, index: target.index } :
+      target.kind === "field" ? { layerId: target.layerId, fieldId: target.id } :
+      target.kind === "preset" ? { id: target.id } : {};
+    return schema.values.map(value => {
+      const action = this.withTargets({ kind, ...targetPayload, ...base, [field]: value } as StudioAction, named);
+      return { value, action, capability: this.contextCapability(target, action) };
+    });
+  }
+  /**
+   * Bind an adapter's hit to this draft/geometry before offering existing commands. `named`: the targets the input layer resolved when the
+   * menu opened (the look, the collection), frozen with it: its commands name them, and are refused once they changed.
+   */
+  contextFor(hit: StudioContextHit, named: NamedTargets = {}): StudioBoundContext {
+    const draft = this.services.collection?.draftIdentity();
+    return Object.freeze({ hit: Object.freeze(structuredClone(hit)), named: Object.freeze({ ...named }), collectionId: draft?.collectionId,
+      selectedPresetId: draft?.selected,
+      collectionRevision: this.collectionRevision,
+      geometryRevision: this.services.document.geometryVersion.revision });
+  }
+  private boundContextCapability(context: StudioBoundContext): StudioCapability {
+    const draft = this.services.collection?.draftIdentity();
+    if (context.collectionRevision !== this.collectionRevision)
+      return missingTarget("The collection changed after this menu opened.");
+    if (context.collectionId !== draft?.collectionId)
+      return missingTarget("The collection changed after this menu opened.");
+    if (context.hit.kind !== "collection" && context.hit.kind !== "preset" &&
+      context.selectedPresetId !== draft?.selected)
+      return missingTarget("The selected preset changed after this menu opened.");
+    if (geometryHit(context.hit) && context.geometryRevision !== this.services.document.geometryVersion.revision)
+      return missingTarget("The shape changed after this menu opened.");
+    if (context.hit.kind === "tangent") {
+      const hit = context.hit;
+      const layer = this.services.document.recipe.layers.find(item => item.id === hit.layerId);
+      if (layer?.pathMode !== "bezier" || !layer.points[hit.index]?.handles)
+        return missingTarget("That Bézier tangent no longer exists.");
+    }
+    const target = contextScope(context.hit);
+    if (!target) return { available: true };
+    return this.targetCapability(target);
+  }
+  /** Input candidates carry an applicable/disabled reason but no forged placeholder action. */
+  contextOptionsFor(context: StudioBoundContext) {
+    const bound = this.boundContextCapability(context), target = contextScope(context.hit), hit = context.hit;
+    return contextCandidates(context.hit, this.services.document.recipe, context.named.collection).map(candidate => {
+      if ("action" in candidate) {
+        const action = this.withTargets(candidate.action as StudioAction, context.named);
+        return { ...candidate, action, requiresInput: false as const,
+          capability: bound.available && target ? this.contextCapability(target, action) : bound, undo: this.routes.undoPolicy(action) };
+      }
+      let capability = bound;
+      if (capability.available && (hit.kind === "point" || hit.kind === "tangent")) {
+        if (candidate.id === "point.softness" &&
+          this.services.document.recipe.layers.find(layer => layer.id === hit.layerId)?.softness.mode !== "boundary")
+          capability = { available: false, code: "incompatible_mode",
+            reason: "Turn on Per-point edge softness before editing one point's edge." };
+      }
+      // The Undo policy of the variant the option edits, as dispatch records it (CORE-32).
+      const variant = { kind: candidate.actionKind, command: { kind: candidate.variant } } as { kind: string };
+      return { ...candidate, capability, undo: undoPolicyOf(this.routes.descriptor(candidate.actionKind)!, variant) };
+    });
+  }
+  contextQuery(hit: StudioContextHit, named: NamedTargets = {}) {
+    const context = this.contextFor(hit, named);
+    return { context, targetCapability: this.boundContextCapability(context),
+      options: this.contextOptionsFor(context) };
+  }
+  /** Query a completed input action, then recheck the same binding at invocation (it names what the menu named when it opened). */
+  boundActionCapability(context: StudioBoundContext, unnamed: Unnamed<StudioAction>): StudioCapability {
+    const action = this.withTargets(unnamed as StudioAction, context.named);
+    const bound = this.boundContextCapability(context);
+    if (!bound.available) return bound;
+    const target = contextScope(context.hit);
+    if (!target) return { available: false, code: "invalid_value",
+      reason: "No standalone edit command applies off the makeup." };
+    const variant = "command" in action && action.command && typeof action.command === "object" &&
+      "kind" in action.command ? action.command.kind : undefined;
+    const candidate = contextCandidates(context.hit, this.services.document.recipe, context.named.collection).find(item =>
+      "action" in item ? item.action.kind === action.kind &&
+        ("command" in item.action && item.action.command && typeof item.action.command === "object" &&
+          "kind" in item.action.command ? item.action.command.kind : undefined) === variant :
+        item.actionKind === action.kind && item.variant === variant);
+    if (!candidate) return { available: false, code: "invalid_value",
+      reason: "This command is not offered for that hit target." };
+    return this.contextCapability(target, action);
+  }
+  dispatchContext(context: StudioBoundContext, unnamed: Unnamed<StudioAction>): StudioDispatchResult {
+    const action = this.withTargets(unnamed as StudioAction, context.named);
+    const allowed = this.boundActionCapability(context, action);
+    return allowed.available ? this.dispatch(action) : { ok: false as const,
+      code: allowed.code ?? "unavailable", message: allowed.reason ?? "Action unavailable." };
+  }
+  snapshot() {
+    const s = this.services;
+    return structuredClone({ document: s.document.snapshot(), collection: s.collection?.view(),
+      preview: s.preview?.snapshot(), character: s.characterContext?.snapshot(),
+      eyeShapeOptions: s.preview?.eyeShapeOptions(), lighting: s.preview?.lightingStatus() ?? null,
+      lightingSetups: s.preview?.lightingSetups() ?? null, motion: s.motion?.snapshot(),
+      quality: s.quality?.snapshot(), savedV: s.savedV?.snapshot(),
+      gesture: s.gestures.snapshot(), control: s.controls.snapshot() });
+  }
+  /**
+   * Preview/motion/quality/saved-V state without the document or collection draft.
+   * `snapshot()` clones every Undo history; repainting views should use this instead.
+   */
+  previewState() {
+    const s = this.services, saved = s.savedV?.snapshot();
+    return structuredClone({ preview: s.preview?.snapshot(), character: s.characterContext?.snapshot(),
+      eyeShapeOptions: s.preview?.eyeShapeOptions(), lighting: s.preview?.lightingStatus() ?? null,
+      lightingSetups: s.preview?.lightingSetups() ?? null, motion: s.motion?.snapshot(), quality: s.quality?.snapshot(),
+      savedV: { loaded: !!saved?.savedV, gameVersion: saved?.savedV?.gameVersion,
+        result: saved?.result, suggestedEyeShape: saved?.suggestedEyeShape },
+      gesture: s.gestures.snapshot(), control: s.controls.snapshot() });
+  }
+  /**
+   * The Character panel's large, read-only reads (character-context-actions.ts): the installed creator options, the view of the
+   * shown V's current choices, and an option's choices loaded so far (asking starts loading more). Frozen and shared, never copied
+   * per paint; undefined until the 3D preview is ready.
+   */
+  characterPanel() { return this.services.characterContext?.panel() ?? null; }
+  characterView() { return this.services.characterContext?.view() ?? null; }
+  characterChoices(option: string, want?: number, query?: string) { return this.services.characterContext?.choices(option, want, query) ?? null; }
+  /** A colour row's swatches and icons derived from what wins for each choice (asking loads them); null until they arrive. */
+  characterSwatches(option: string) { return this.services.characterContext?.swatches(option) ?? null; }
+  /** The creator options with a choice matching a search (the host searches every choice; UI-72); null before the 3D preview is ready. */
+  characterSearch(query: string) { return this.services.characterContext?.search(query) ?? null; }
+  /** A row's choices prepared ahead (visible ones first, `focus` first of all), and their states; `characterStopPrefetch` when it closes. */
+  characterPrefetch(option: string, positions: readonly number[], focus?: number | null) { return this.services.characterContext?.prefetch(option, positions, focus ?? null) ?? null; }
+  characterStopPrefetch(option: string) { this.services.characterContext?.stopPrefetch(option); }
+  /**
+   * A shape row's choice pictures (the chosen one and `focus` first, then `positions` in view order), and `spin`'s turntable; null when the
+   * row has none.
+   */
+  characterPreviews(option: string, positions: readonly number[], selected: number | null, focus?: number | null, spin?: number | null) {
+    return this.services.characterContext?.previews(option, positions, selected, focus ?? null, spin ?? null) ?? null;
+  }
+  /** Why a character preset can't be loaded (`import`) or saved (`export`) now, or undefined (the files family's check). */
+  characterPresetUnavailable(kind: "import" | "export"): string | undefined {
+    const context = this.services.characterContext;
+    if (!context) return "Character presets are available once the 3D view is ready.";
+    const snapshot = context.snapshot();
+    if (snapshot.phase !== "ready") return snapshot.phase === "failed" ? snapshot.message || "The creator options couldn't be read." : "The creator options are still loading.";
+    if (kind === "export" && !snapshot.set) return "Change at least one creator option first; a preset holds the choices you set.";
+    return undefined;
+  }
+  /** The shown V's choices as a portable preset file (named after the preset it came from, if any). */
+  async characterPresetFile() {
+    const context = this.services.characterContext;
+    if (!context) throw Error("Character presets are available once the 3D view is ready.");
+    const origin = context.snapshot().origin, name = origin.kind === "preset" ? origin.name : null;
+    const saved = await context.exportPreset(name);
+    const file = (name ?? "character").replace(/[^A-Za-z0-9 _-]+/g, "").trim().replace(/\s+/g, "-").slice(0, 60) || "character";
+    return { ...saved, name: `${file}.xfs-character.json` };
+  }
+  /** What an action, file workflow or library request replaces, writes or discards, and how to recover. */
+  consequences(subject: ConsequenceSubject): Consequence {
+    const look = this.services.document.history;
+    const jump = "action" in subject && subject.action.kind === "history.jumpTo" ? this.historyScope(subject.action.scope)?.plan(subject.action.entryId) : undefined;
+    // An action's own consequence: the generic rule from its descriptor, with its spec's override.
+    const route = "action" in subject ? this.routes.route(subject.action.kind) : undefined;
+    const own = route?.ok ? { effect: route.spec.descriptor.effect,
+      override: (route.spec as Partial<FeatureActionSpec<unknown, unknown>>).consequence?.((subject as { action: StudioAction }).action) } : undefined;
+    return consequenceOf(subject, { draft: this.services.collection?.summary().draft, history: look.state(),
+      undoLimit: RECIPE_HISTORY_LIMIT, removedLimit: REMOVED_PRESET_LIMIT, jump, ...(own ? { action: own } : {}) });
+  }
+  /**
+   * What Undo and Redo would change next in a history scope (profiles design §3.7; labels are session-only, restored history reads
+   * "Earlier change"); with no scope (no editing context yet) or one that can't act now, nothing.
+   */
+  history(scope?: string): HistoryState { return this.historyScope(scope)?.state() ?? { depth: 0, redoDepth: 0 }; }
+  /** The scope a history command names, while it can act: an open scope, or a document its experiment offers. */
+  private historyScope(scope: string | undefined): HistoryScope | undefined {
+    return scope === undefined ? undefined : this.services.history.acting([scope]) ?? undefined;
+  }
+  /**
+   * Read-only timeline of a history scope (oldest first, redo-able steps after the current one) for a history list. Labels and times are
+   * session-only; steps restored from a saved workspace read "Earlier change". It exposes no recipes.
+   */
+  historyTimeline(scope?: string): HistorySnapshot {
+    return this.historyScope(scope)?.timeline() ?? { startId: "start", steps: [], current: -1, redoCount: 0, trimmed: false };
+  }
+  /** Static finish and Glitter-model descriptors, including the compiler's export gate. */
+  finishCatalogue() { return finishCatalogue(this.services.eyeMakeup.region.wording); }
+  /**
+   * Game-export status of one layer in the current preset, from the same preset-level plan
+   * Check uses: a layer whose finish exports on its own can still be left out because of the
+   * other layers (a Colour-shifting layer beside Matte). A hidden layer is judged as if shown.
+   */
+  layerExport(layerId: string): LayerExportStatus | undefined {
+    const layers = this.services.document.recipe.layers, layer = layers.find(item => item.id === layerId);
+    if (!layer) return undefined;
+    const alone = layerExport(layer);
+    if (!alone.exportable) return { ...alone, blockedBy: "layer" };
+    const shown: Layer = { ...layer, enabled: true, opacity: layer.opacity > 0 ? layer.opacity : 1 };
+    const plan = planPresetExport({ layers: layers.map(item => item === layer ? shown : item) });
+    const excluded = plan.excluded.find(item => item.layer === shown);
+    return excluded ? { exportable: false, reason: excluded.reason, blockedBy: "preset" } : alone;
+  }
+  /**
+   * Where one layer of the current preset is cut off by the edge of the surface it is drawn on (PREV-146): the outer-boundary segments
+   * (`u0, v0, u1, v1` each) at which it still has coverage, judged as if shown; empty when it fades out inside the surface, and undefined
+   * before the head is loaded or for an unknown layer. Output is unchanged: this only lets the editor say so.
+   */
+  layerSurfaceEdge(layerId: string): Float64Array | undefined {
+    const outline = this.services.surfaceOutline, layer = this.services.document.recipe.layers.find(item => item.id === layerId);
+    return outline && layer ? layerEdgeReach(layer, outline, this.services.eyeMakeup.region.mirror) : undefined;
+  }
+  /** The edited surface's outline and the cut segments of one layer (none without it), for the UV editor's overlay; undefined before the head. */
+  surfaceEdge(layerId: string | undefined): { outline: Float64Array; cut: Float64Array } | undefined {
+    const outline = this.services.surfaceOutline;
+    return outline ? { outline: outline.segments, cut: (layerId && this.layerSurfaceEdge(layerId)) || new Float64Array() } : undefined;
+  }
+  glitterModelCatalogue() { return glitterModelCatalogue(this.services.eyeMakeup.region.wording); }
+  /** Mottle's presets (ID, label and every setting but the seed): the inspector's preset row and which one a layer matches. */
+  mottleCatalogue() { return mottleCatalogue(); }
+  /** The registered Studio modules in catalogue order (the Modules menu's rows; visibility is the presentation's). */
+  modules(): readonly StudioModule[] { return structuredClone(this.services.viewActions?.registration.modules ?? []); }
+  /** The planned modules still to come (listed as Planned in the Modules menu; never shown). */
+  plannedModules(): readonly PlannedModule[] { const registration = this.services.viewActions?.registration; return registration ? structuredClone(plannedModules(registration)) : []; }
+  /** The views, what each shares, the focus and the View and lighting history (view-graph-design.md §3). Detached. */
+  views() { return this.services.viewActions?.snapshot() ?? null; }
+  /**
+   * Each view's title and what it shows, for its panel's tab (view-graph.ts `viewTitles`): the view's own name, else "3D view",
+   * numbered when there are several; its scene's subject (for the character scene, which V: "V (your saved V)") as context.
+   */
+  viewTitles(): { view: string; panel: string; title: string; subject: string }[] {
+    const snapshot = this.services.viewActions?.snapshot();
+    if (!snapshot) return [];
+    const titles = viewTitles(snapshot.views), origin = this.services.characterContext?.snapshot().origin;
+    const who = origin?.kind === "save" ? "your saved V" : origin?.kind === "preset" ? origin.name ? `the preset "${origin.name}"` : "a preset"
+      : "the character creator's default V";
+    return snapshot.views.map((view, index) => ({ view: view.id, panel: view.panel, title: titles[index]!,
+      subject: view.sceneKind === "character" ? `V (${who})` : "" }));
+  }
+  /**
+   * A view's tools (design §3.9): the platform's and the shown modules' tools for its scene kind, each with its current state, the
+   * action it dispatches and that action's capability. `filter` is the presentation's module visibility and research preference,
+   * which the application is given, never reads. Every toolbar, view menu, palette entry and Display toggle renders this one list.
+   */
+  viewTools(view: ViewId, filter: ViewToolFilter): ViewToolEntry[] {
+    const actions = this.services.viewActions, graph = this.services.views;
+    if (!actions || !graph?.has(view)) return [];
+    return actions.tools(view, filter).map(tool => this.resolveTool(view, tool));
+  }
+  /** The shown modules' summaries for a view's scene kind (its crumb after the preset), in module order. */
+  viewSummaries(view: ViewId, filter: Pick<ViewToolFilter, "modules">): ViewSummaryContribution[] {
+    return structuredClone(this.services.viewActions?.summaries(view, filter) ?? []);
+  }
+  /**
+   * A tool's current state and the action it dispatches on a view, from the action kind it names (`dispatches`), never its ID: any
+   * tool naming the same action resolves the same way.
+   */
+  private resolveTool(view: string, tool: ViewToolContribution): ViewToolEntry {
+    // The action names this view, and the scene it shows now with its `gen` when it edits that scene: it never edits a replacement.
+    const scene = this.services.views!.node(view, "scene").id, gen = this.services.scenes?.gen(scene);
+    const entry = (unnamed: StudioAction, extra: Partial<ViewToolEntry> = {}): ViewToolEntry => {
+      const action = this.withTargets(unnamed, { view, scene, ...(gen === undefined ? {} : { sceneGen: gen }) });
+      return { ...structuredClone(tool), shown: true, action, capability: this.capability(action), ...extra };
+    };
+    switch (tool.dispatches) {
+      // A toggle held in the view's tools node.
+      case "view.setTool": {
+        const on = this.services.viewActions!.toolOn(view, tool.id);
+        return entry({ kind: "view.setTool", view, tool: tool.id, enabled: !on }, { on });
+      }
+      // The subject's motion: play the idle, then pause and resume it; hidden where the head has no idle.
+      case "motion.setIdle": {
+        const motion = this.services.motion?.snapshot();
+        const playing = !!motion?.idle && !motion.idlePaused;
+        return entry(!motion?.idle ? { kind: "motion.setIdle", enabled: true, view } : { kind: "motion.setPaused", paused: !motion.idlePaused, view },
+          { on: playing, shown: !!motion?.available, icon: playing ? "pause" : "play", label: !motion?.idle ? "Play the game idle" : motion.idlePaused ? "Resume idle" : "Pause idle" });
+      }
+      // A command on the view (a camera framing): the action it names, on this view.
+      default: return entry({ kind: tool.dispatches, view } as StudioAction);
+    }
+  }
+  /**
+   * Withdraw the tools the presentation no longer offers (UI-102; `ViewActions.withdraw`): their state is kept, and no device acts
+   * on them until they are offered again. Given tool IDs, never module visibility (design §6.3 rule 6).
+   */
+  withdrawViewTools(tools: readonly string[]) { this.services.viewActions?.withdraw(tools); }
+  /** The view settings offered under `filter` (research-only Rendering options, UI-163); the presentation withdraws the rest. */
+  viewSettings(filter: Pick<ViewToolFilter, "research">): readonly string[] { return [...this.services.viewActions?.settings(filter) ?? []]; }
+  /** A saved-V adapter has already applied the morph; synchronize only the selector. */
+  recordAppliedSavedAppearance(result: Readonly<Pick<SavedAppearanceState, "suggestedEyeShape">>) {
+    if (result.suggestedEyeShape !== undefined) this.services.preview?.rememberEyeShape(result.suggestedEyeShape);
+  }
+  /** The workspace lease's refusal while another page holds this workspace; undefined while this page may write. */
+  private denied() { return this.services.access?.refusal(); }
+  /** A request that only reads (the library list) stays available in a read-only page; `open` replaces the draft, so it doesn't. */
+  private readOnlyRequest(kind: string) {
+    const route = this.routes.routeAsync(kind);
+    return kind !== "open" && route.ok && (route.descriptor as { effect?: string }).effect === "read";
+  }
+  capability(action: StudioAction): StudioCapability {
+    const s = this.services, route = this.routes.route(action.kind);
+    if (!route.ok) return unknownCommand();
+    const denied = this.denied();
+    if (denied) return denied;
+    // With a loaded collection but no selected preset the editor shows an empty recipe no
+    // preset owns; content written there would be discarded at the next preset switch.
+    if (route.spec.descriptor.effect === "content" && this.unowned())
+      return { available: false, code: "missing_target", reason: NO_PRESET };
+    if (this.previewUnavailable && route.owner.owner === "system" && route.owner.needsScene)
+      return { available: false, code: "asset_unavailable", reason: this.previewUnavailable };
+    if (route.owner.id === "history" && (s.gestures.snapshot() || s.controls.snapshot() || this.featureControl))
+      return { available: false, code: "busy", reason: "Finish or cancel the current adjustment first (Esc)." };
+    // A look holding a newer build's data is kept exactly as it came: no feature edits it here (step 5).
+    if (route.owner.owner === "feature" && s.document.locked) return refusal("unavailable", s.document.locked);
+    // A look transaction records the parts it names: nothing else may change while it runs.
+    if (this.look && !this.look.features.includes(route.owner.id))
+      return { available: false, code: "busy", reason: "Only the parts this change names can be edited while it is applied." };
+    // What the action names (profiles design §3.6): every target its descriptor needs, each still what it was when it was resolved.
+    const named = this.namedTargetIssue(route.spec.descriptor, action);
+    if (named) return named;
+    // Descriptor payload types and ranges gate every entry point, not only context menus.
+    const payload = payloadIssue(route.spec.descriptor, action);
+    if (payload && payload.code !== "limit") return payload;
+    // The owning module decides, with a structured code (CORE-15).
+    const domain = coded(this.handler(route.owner.id).capability(action));
+    // A range limit is generic; when the domain can say why in the user's terms
+    // (for example "already at the front"), show that instead.
+    if (!domain.available) return domain;
+    return payload ?? domain;
+  }
+  /**
+   * The named targets an action carries (profiles design §3.6), checked where they arrive: a required one left out is refused, a view must
+   * exist, and a `sceneGen` must still be its scene's (the scene shows what it showed when the action was resolved).
+   */
+  private namedTargetIssue(descriptor: PlatformDescriptor, action: StudioAction): StudioCapability | undefined {
+    const absent = missingNamedTarget(descriptor, action);
+    if (absent) return refusal("missing_target", NO_TARGET[absent]);
+    const { view, scene, sceneGen, look } = action as { view?: unknown; scene?: unknown; sceneGen?: unknown; look?: unknown };
+    // A feature's action edits the look the editor shows (phase 1 edits one look at a time): another look is refused, never edited in its place.
+    if (look !== undefined && this.routes.route(action.kind).ok && (this.routes.route(action.kind) as { owner: { owner: string } }).owner.owner === "feature"
+      && !this.editsLook(look)) return refusal("missing_target", OTHER_LOOK);
+    const views = this.services.views;
+    if (typeof view === "string" && views && !views.has(view)) return refusal("missing_target", "That view no longer exists.");
+    if (typeof scene !== "string" && typeof sceneGen !== "number") return undefined;
+    // The view still shows the scene the action names, at its `gen`: one rule with captures (`TargetResolver.check`).
+    const check = this.services.targetCheck;
+    if (!check) return refusal("missing_target", "What this view shows can't be checked here.");
+    const current = check.check({ ...(typeof view === "string" ? { view } : {}), ...(typeof scene === "string" ? { scene } : {}),
+      ...(typeof sceneGen === "number" ? { sceneGen } : {}) });
+    return current.available ? undefined : current;
+  }
+  /**
+   * Why a V an action names can't be acted on here (undefined: it can): its context is the one a 3D view shows (phase 1 draws one view),
+   * so another V is refused, never acted on in its place.
+   */
+  private shownCharacter(character: string): StudioCapability | undefined {
+    const context = this.services.characterContext;
+    if (!context) return missing("The creator options are still loading.");
+    return context.character() === character ? undefined : missingTarget("That V isn't shown in a 3D view here. Show it to change it.");
+  }
+  /** Whether `look` names the look the editor document shows. */
+  private editsLook(look: unknown): boolean {
+    const ref = look as Partial<LookRef> | null;
+    return !!ref && typeof ref.collection === "string" && typeof ref.look === "string"
+      && lookScoped(this.services.document.scopeId) && lookScope(ref as LookRef) === this.services.document.scopeId;
+  }
+  private handler(owner: string) {
+    return (this.handlers[owner as StudioOwnerId] ?? this.featureHandlers.get(owner)) as ActionHandler<StudioAction>;
+  }
+  /**
+   * A registered feature's handler over its live document: the spec's pure capability, then assign
+   * IDs, apply, record one `part` step when the action's Undo policy asks for one (not inside a look
+   * transaction, which records its own), and publish the result.
+   */
+  private featureHandler(feature: string): ActionHandler<{ kind: string }> {
+    const app = this;
+    const live = () => app.services.document.others?.document(feature);
+    const specOf = (action: { kind: string }) => {
+      const route = app.routes.route(action.kind);
+      if (!route.ok || route.owner.id !== feature) throw Error(`${action.kind} is not an action of ${feature}.`);
+      return route.spec as FeatureActionSpec<unknown, unknown, { kind: string }>;
+    };
+    return {
+      capability: action => {
+        const document = live();
+        return document ? specOf(action).capability(document.state(), action) : refusal("not_ready", "This feature is still loading.");
+      },
+      dispatch: action => {
+        const document = live()!, spec = specOf(action);
+        const concrete = spec.assignIds?.(action, app.services.newId ?? (() => crypto.randomUUID())) ?? action;
+        const result = spec.apply(document.state(), concrete);
+        if (!result.changed) return result.effect;
+        if (!app.look && app.routes.undoPolicy(concrete) !== "none") app.services.document.history.checkpoint([feature], spec.label(concrete));
+        document.set(result.part, result.editor);
+        app.services.document.partChanged();
+        return result.effect;
+      },
+    };
+  }
+  /**
+   * One Undo step over several parts of the look (feature-module platform §3): `fn` dispatches the
+   * features' actions, which record no steps of their own, and the look history records one `look` step
+   * named `label` for everything they changed. A transaction that changed nothing leaves no step; one
+   * whose `fn` throws or reports a failure is reverted to its start without Redo. Refused inside a
+   * gesture, a form-control adjustment or another transaction, and while no preset owns the editor.
+   * `fn` runs synchronously: a body that returns a promise (or any thenable) is refused and reverted
+   * (CORE-48), since its awaited edits would run after the step closed and record steps of their own.
+   */
+  transaction<T>(label: HistoryLabel, features: readonly string[], fn: () => NotThenable<T>): StudioDispatchResult {
+    const s = this.services;
+    if (this.look || this.gesture || s.controls.snapshot() || this.featureControl)
+      return { ok: false, code: "busy", message: "Finish or cancel the current adjustment first (Esc)." };
+    if (this.unowned()) return { ok: false, code: "missing_target", message: NO_PRESET };
+    if (s.document.locked) return { ok: false, code: "unavailable", message: s.document.locked };
+    const unknown = features.filter(feature => feature !== s.document.feature && !s.document.others?.has(feature));
+    if (!features.length || unknown.length)
+      return { ok: false, code: "invalid_value", message: `These parts can't be changed together here: ${unknown.join(", ") || "none named"}.` };
+    // One `look` step over the named parts, with the form-control policy: empty when the content is back at its start.
+    const transaction = s.document.history.begin(features, CONTROL_TRANSACTION, { label, scope: "look" });
+    this.look = { features };
+    let result: NotThenable<T>;
+    try { result = fn(); }
+    catch (error) {
+      this.look = undefined; transaction.cancel(); this.notify();
+      return { ok: false, ...failure(undefined, error) };
+    }
+    this.look = undefined;
+    if (isThenable(result)) {
+      // Nothing awaited can join this step: revert what ran synchronously and say why. The body's own rejection is its caller's.
+      result.then(undefined, () => {});
+      transaction.cancel(); this.notify();
+      return { ok: false, code: "invalid_value", message: "A look change must be applied in one go; this one tried to wait part way through." };
+    }
+    const failed = result && typeof result === "object" && (result as { ok?: unknown }).ok === false
+      ? result as unknown as { code?: string; message?: string } : undefined;
+    if (failed) { transaction.cancel(); this.notify();
+      return { ok: false, code: failed.code ?? "invalid_value", message: failed.message ?? "The change could not be applied." }; }
+    // A step the checkpoint could not add (the top step already held the start) takes the name when the change is kept.
+    transaction.applied(true, () => label);
+    transaction.commit(); this.notify();
+    return { ok: true, result };
+  }
+  /** Eye makeup's registered spec for one of its actions: the module's pure capability and apply. */
+  private eyeMakeupSpec(action: EyeMakeupAction) {
+    const route = this.routes.route(action.kind);
+    if (!route.ok || route.owner.owner !== "feature") throw Error(`${action.kind} is not a feature action.`);
+    return route.spec as EyeMakeupSpec;
+  }
+  /**
+   * Each owner's live behaviour. Eye makeup's is its module's pure capability and apply over
+   * the live document's part and editor state, published through the document port; the
+   * system families still bind their services. No kind falls through to another owner.
+   */
+  private bindHandlers(): Handlers {
+    const app = this;
+    // An action records an Undo entry by its Undo policy (its variant's first), never by its effect (CORE-32).
+    // Inside a look transaction the transaction records the one step.
+    const recorded = (action: StudioAction) => !this.look && this.routes.undoPolicy(action) !== "none";
+    return {
+      // Undo, Redo and jumps act on the history scope they name, which decides what is available.
+      history: {
+        capability: action => app.historyScope(action.scope)?.capability(moveOf(action)) ?? refusal("unavailable", NOTHING_TO_UNDO),
+        // A document's move (through its experiment) has no result of its own; a look's says whether it moved.
+        dispatch: action => {
+          const scope = app.historyScope(action.scope);
+          if (!scope) return undefined;
+          const moved = scope.command(moveOf(action));
+          return isLookScope(scope.id) ? moved : undefined;
+        },
+      },
+      "eye-makeup": {
+        capability: action => app.eyeMakeupSpec(action).capability(app.services.eyeMakeup.state(), action),
+        dispatch: action => {
+          const s = app.services, spec = app.eyeMakeupSpec(action);
+          // The step is named by the registered spec (feature-module platform §3).
+          s.document.withHistoryLabel(spec.label(action), () => s.eyeMakeup.apply(spec, action, recorded(action)));
+          return undefined;
+        },
+      },
+      collection: {
+        capability: action => app.services.collection?.actionCapability(action) ?? missing("Collection is still loading."),
+        dispatch: action => { app.services.collection!.dispatch(action); return undefined; },
+      },
+      preview: {
+        capability: action => app.services.preview?.check(action) ?? missing("Preview is still loading."),
+        dispatch: action => app.services.preview!.dispatch(action),
+      },
+      motion: {
+        capability: action => app.services.motion?.capability(action) ?? missing("Motion preview is still loading."),
+        dispatch: action => app.services.motion!.dispatch(action),
+      },
+      transitions: {
+        capability: action => app.services.transitions?.capability(action) ?? missing("Animated changes aren't available here."),
+        dispatch: action => app.services.transitions!.dispatch(action),
+      },
+      quality: {
+        capability: action => app.services.quality?.capability(action) ?? missing("Preview quality is still loading."),
+        dispatch: action => app.services.quality!.dispatch(action),
+      },
+      scenes: {
+        capability: action => app.services.scenes?.capability(action) ?? missing("The scenes are still loading."),
+        dispatch: action => app.services.scenes!.dispatch(action),
+      },
+      savedV: {
+        capability: action => app.shownCharacter(action.character) ?? app.services.savedV?.capability(action) ?? missing("Saved appearance preview is still loading."),
+        dispatch: action => app.services.savedV!.dispatch(action),
+      },
+      views: {
+        // A tool's state reaches the 3D view only once it is ready: before that a toggle would show nowhere and not be saved (UI-106).
+        capability: action => action.kind === "view.setTool" && !app.services.preview ? missing("The 3D view is still loading.")
+          : app.services.viewActions?.capability(action) ?? missing("Views are still loading."),
+        dispatch: action => app.services.viewActions!.dispatch(action),
+      },
+      // Before the 3D preview is ready there is no context yet: a creator change is refused as `not_ready` (CORE-64).
+      characterContext: {
+        capability: action => app.shownCharacter(action.character) ?? app.services.characterContext?.capability(action) ?? missing("The creator options are still loading."),
+        dispatch: action => app.services.characterContext!.dispatch(action),
+      },
+    };
+  }
+  /**
+   * The asynchronous families' live behaviour: library requests run on the collection service and file
+   * workflows on the file operations, each attached by the composition root when it exists.
+   */
+  private bindAsyncHandlers(): AsyncHandlers {
+    const app = this;
+    return {
+      library: {
+        capability: request => coded(app.services.collection?.capability(request) ?? missing("Collection is still loading.")),
+        execute: async request => app.services.collection?.execute(request)
+          ?? { ok: false as const, code: "unavailable", message: "Collection is still loading." },
+      },
+      presets: {
+        capability: request => coded(app.services.presets?.capability(request) ?? missing("Saved presets are still loading.")),
+        execute: async request => app.services.presets?.execute(request)
+          ?? { ok: false as const, code: "unavailable", message: "Saved presets are still loading." },
+      },
+      files: {
+        capability: action => app.lockedExport(action) ?? app.services.files?.capability(action) ?? missing("Files are still loading."),
+        execute: async action => {
+          const locked = app.lockedExport(action);
+          if (locked) return { ok: false as const, code: "unavailable", message: locked.reason! };
+          return app.services.files?.execute(action) ?? { ok: false as const, code: "unavailable", message: "Files are still loading." };
+        },
+      },
+    };
+  }
+  /** A locked look's recipe and masks are not exported as if it were empty: this build cannot read them. */
+  private lockedExport(action: StudioFileAction): StudioCapability | undefined {
+    const locked = this.services.document.locked;
+    return locked && (action.kind === "recipe.export" || action.kind === "mask.export") ? refusal("unavailable", locked) : undefined;
+  }
+  /** The async family that owns `kind`, when it is `family`. */
+  private ownsAsync(family: StudioRequestOwnerId, kind: string) {
+    const route = this.routes.routeAsync(kind);
+    return route.ok && route.owner.id === family;
+  }
+  /** Candidate actions use the hit target, never the currently selected row; `named`: the targets the input layer resolved. */
+  actionsFor(target: StudioTarget, named?: NamedTargets): StudioActionInfo[] {
+    const s = this.services, recipe = s.document.snapshot().recipe;
+    let actions: Unnamed<StudioAction>[] = [];
+    if (target.kind === "workspace") actions = [{ kind: "history.undo" }];
+    if (target.kind === "collection") actions = [
+      { kind: "preset.edit", command: { kind: "add" } }, { kind: "preset.edit", command: { kind: "restore" } },
+      { kind: "collection.undoOpen" }];
+    if (target.kind === "preset") actions = [
+      ...(named?.collection ? [{ kind: "scene.setLook" as const, look: { collection: named.collection, look: target.id } }] : []),
+      { kind: "preset.edit", command: { kind: "copy", id: target.id } },
+      { kind: "preset.edit", command: { kind: "remove", id: target.id } }];
+    if (target.kind === "layer") actions = [
+      { kind: "layer.select", layerId: target.id },
+      { kind: "layer.edit", command: { kind: "duplicate", id: target.id } },
+      { kind: "layer.edit", command: { kind: "remove", id: target.id } },
+      { kind: "layer.setEnabled", id: target.id,
+        enabled: !recipe.layers.find(layer => layer.id === target.id)?.enabled }];
+    if (target.kind === "point") actions = [
+      { kind: "point.select", layerId: target.layerId, index: target.index },
+      { kind: "point.remove", layerId: target.layerId, index: target.index }];
+    if (target.kind === "field") actions = [
+      { kind: "field.select", layerId: target.layerId, fieldId: target.id },
+      { kind: "field.clear", layerId: target.layerId, fieldId: target.id },
+      { kind: "field.remove", layerId: target.layerId, fieldId: target.id }];
+    if (target.kind === "viewport") {
+      const view = target.view === undefined ? {} : { view: target.view };
+      actions = [{ kind: "camera.front", ...view }, { kind: "camera.body", ...view }, { kind: "quality.rebuild" }];
+    }
+    return actions.map(unnamed => {
+      const action = this.withTargets(unnamed as StudioAction, named);
+      return { action, capability: this.capability(action), undo: this.routes.undoPolicy(action), async: false as const };
+    });
+  }
+  dispatch(action: StudioAction): StudioDispatchResult {
+    const allowed = this.capability(action);
+    if (!allowed.available) return { ok: false, code: allowed.code ?? "unavailable", message: allowed.reason ?? "Action unavailable." };
+    // capability() refuses unknown kinds, so the route is known here.
+    const route = this.routes.route(action.kind);
+    if (!route.ok) return { ok: false, code: "invalid_value", message: "Unknown command." };
+    try { return { ok: true, result: this.handler(route.owner.id).dispatch(action) }; }
+    catch (error) { return { ok: false, ...failure(route.owner.owner === "system" ? route.owner.thrown : undefined, error) }; }
+  }
+  /**
+   * A pointer gesture owns the Undo transaction while it runs; a form control cannot start inside it. `look` is the look the run captured
+   * when it began (profiles design §3.3): the editor must show it, and its edits name it.
+   */
+  controlBegin(id: string, layerId: string, look?: LookRef) {
+    if (!look || !this.editsLook(look)) return false;
+    if (this.denied() || this.gesture || this.look || this.featureControl || this.unowned() || this.services.document.locked) return false;
+    const begun = this.services.controls.begin(id, layerId);
+    if (begun) { this.ended.delete(`control:${id}`); this.notify(); }
+    return begun;
+  }
+  /**
+   * One continuous form edit inside the control's Undo transaction. It passes the same
+   * capability gate as dispatch (target, payload ranges, domain rules) and returns a typed
+   * result instead of throwing. A refused edit never opens a transaction; a failed edit
+   * inside an open one leaves the recipe unchanged, and the control still commits or
+   * cancels that transaction as usual.
+   */
+  controlEdit(id: string, action: Naming<RecipeAction, { look: LookRef }>): StudioDispatchResult {
+    if (this.gesture) return { ok: false, code: "busy", message: "Finish or cancel the current gesture first (Esc)." };
+    if (this.ended.has(`control:${id}`)) return { ok: false, code: "missing_target", message: RUN_ENDED };
+    // Form controls adjust recipe content through AuthoringControlEdits, which takes recipe actions only.
+    if (!RECIPE_ACTION_KINDS.has(action.kind) || this.routes.descriptor(action.kind)?.effect !== "content")
+      return { ok: false, code: "invalid_value", message: "That command cannot be adjusted by a form control." };
+    const allowed = this.capability(action);
+    if (!allowed.available) return { ok: false, code: allowed.code ?? "unavailable", message: allowed.reason ?? "Action unavailable." };
+    try {
+      const outcome = this.services.controls.edit(id, action.layerId, action);
+      if (outcome === "stale") return { ok: false, code: "missing_target",
+        message: "That layer changed while you were adjusting it; the edit was not applied." };
+      return { ok: true, result: outcome === "changed" };
+    } catch (error) { return { ok: false, ...failure(undefined, error) }; }
+  }
+  controlCommit(id: string) { this.services.controls.commit(id); this.notify(); }
+  /**
+   * Ends any open pointer gesture or form-control run, committing it as releasing the pointer or finishing the drag would: one Undo
+   * step each, as usual. The workspace lease's release runs it first, so the page's last write holds the edit whole (profiles §2.3).
+   */
+  settleEdits() {
+    if (this.gesture) this.endGesture(this.gesture.source);
+    const control = this.services.controls.snapshot();
+    if (control) this.controlCommit(control.id);
+    if (this.featureControl) this.featureControlCommit(this.featureControl.id);
+  }
+  controlCancel(id: string) { this.services.controls.cancel(id); this.notify(); }
+  /**
+   * A form control's run of edits on a feature bound by the generic handler (a slider drag), as one Undo step (feature-module platform
+   * section 3): the platform's `HistoryTransaction` with the form-control policy over that feature's part. Refused inside a gesture,
+   * another control or a look transaction. Its edits pass the same capability gate as dispatch; `featureControlCancel` (Escape)
+   * restores the start.
+   */
+  featureControlBegin(feature: string, id: string, look?: LookRef): boolean {
+    if (!look || !this.editsLook(look)) return false;
+    const open = this.featureControl;
+    if (open?.feature === feature && open.id === id) return true;
+    if (open) this.featureControlCommit(open.id);
+    if (this.denied() || this.gesture || this.look || this.services.controls.snapshot() || this.unowned() || this.services.document.locked
+      || !this.featureHandlers.has(feature)) return false;
+    this.featureControl = { feature, id, transaction: this.services.document.history.begin([feature], CONTROL_TRANSACTION) };
+    this.ended.delete(`feature:${id}`);
+    this.notify();
+    return true;
+  }
+  featureControlEdit(feature: string, id: string, action: { kind: string }): StudioDispatchResult {
+    if (this.gesture) return { ok: false, code: "busy", message: "Finish or cancel the current gesture first (Esc)." };
+    if (this.ended.has(`feature:${id}`)) return { ok: false, code: "missing_target", message: RUN_ENDED };
+    if (this.ownerOf(action.kind) !== feature) return { ok: false, code: "invalid_value", message: "That command belongs to another part of the look." };
+    const allowed = this.capability(action as StudioAction);
+    if (!allowed.available) return { ok: false, code: allowed.code ?? "unavailable", message: allowed.reason ?? "Action unavailable." };
+    const owned = this.featureControl?.feature === feature && this.featureControl.id === id;
+    if (!owned && !this.featureControlBegin(feature, id, (action as { look?: LookRef }).look)) return { ok: false, code: "busy", message: "Finish or cancel the current adjustment first (Esc)." };
+    const control = this.featureControl!;
+    const before = this.services.document.contentKey([feature]);
+    // Inside the transaction the action records no step of its own (the transaction's checkpoint is the step).
+    this.look = { features: [feature] };
+    try {
+      this.featureHandlers.get(feature)!.dispatch(action);
+      const changed = this.services.document.contentKey([feature]) !== before;
+      const route = this.routes.route(action.kind);
+      control.transaction.applied(changed, () => route.ok ? (route.spec as FeatureActionSpec<unknown, unknown>).label(action)
+        : { label: action.kind, actionKind: action.kind });
+      return { ok: true, result: changed };
+    } catch (error) { return { ok: false, ...failure(undefined, error) }; }
+    finally {
+      this.look = undefined;
+      if (!owned) this.featureControlCommit(id);
+      this.notify();
+    }
+  }
+  featureControlCommit(id: string) {
+    if (this.featureControl?.id !== id) return;
+    const control = this.featureControl; this.featureControl = undefined;
+    control.transaction.commit(); this.notify();
+  }
+  featureControlCancel(id: string) {
+    if (this.featureControl?.id !== id) return;
+    const control = this.featureControl; this.featureControl = undefined;
+    control.transaction.cancel(); this.notify();
+  }
+  /** The open generic feature control, if any. */
+  featureControlSnapshot() { return this.featureControl ? { feature: this.featureControl.feature, id: this.featureControl.id } : undefined; }
+  /** A part preset request's capability, routed by the registry to the `presets` family. */
+  presetCapability(request: PartPresetRequest): StudioCapability {
+    const denied = this.readOnlyRequest(request.kind) ? undefined : this.denied();
+    if (denied) return denied;
+    return this.ownsAsync("presets", request.kind) ? this.asyncHandlers.presets.capability(request) : unknownCommand();
+  }
+  async executePreset(request: PartPresetRequest): Promise<PartPresetOutcome> {
+    const denied = this.readOnlyRequest(request.kind) ? undefined : this.denied();
+    if (denied) return { ok: false, code: denied.code!, message: denied.reason! };
+    return this.ownsAsync("presets", request.kind) ? this.asyncHandlers.presets.execute(request)
+      : { ok: false, code: "invalid_value", message: "Unknown command." };
+  }
+  /** A feature's live part in its current schema (its empty part when the look lacks it), for saving it as a preset. */
+  featureEnvelope(feature: string): PartEnvelope | undefined {
+    const document = this.services.document.others?.document(feature);
+    return document ? document.module.part.serialize(document.part ?? document.module.part.empty()) : undefined;
+  }
+  /** A feature's saved presets (loaded on first ask). */
+  presetList(feature: string): PartPresetList { return this.services.presets?.snapshot(feature) ?? { phase: "loading", items: [] }; }
+  /** A feature's sets of saved presets (loaded on first ask). */
+  presetSets(feature: string): PartPresetSetList { return this.services.presets?.sets(feature) ?? { phase: "loading", items: [] }; }
+  /** Each set's latest Check or Build, and what runs now. */
+  presetExports(): SetExportState { return this.services.presets?.exportState() ?? { busy: null, results: {} }; }
+  /** The facial preview as a feature's drawer shows it (undefined until the root connects one). */
+  facialPreview(): FacialPreviewSnapshot | undefined { return this.services.facial?.snapshot(); }
+  facialRetry() { this.services.facial?.retry(); }
+  /** The Expressions view is showing: the installed expressions are read (facial-preview.ts `installed`). */
+  facialInstalled() { this.services.facial?.installed(); }
+  /** A library request's capability, routed by the registry to the `library` family. */
+  requestCapability(request: CollectionRequest): StudioCapability {
+    const denied = this.readOnlyRequest(request.kind) ? undefined : this.denied();
+    if (denied) return denied;
+    return this.ownsAsync("library", request.kind) ? this.asyncHandlers.library.capability(request) : unknownCommand();
+  }
+  async execute(request: CollectionRequest) {
+    const denied = this.readOnlyRequest(request.kind) ? undefined : this.denied();
+    if (denied) return { ok: false as const, code: denied.code!, message: denied.reason! };
+    return this.ownsAsync("library", request.kind) ? this.asyncHandlers.library.execute(request)
+      : { ok: false as const, code: "invalid_value", message: "Unknown command." };
+  }
+  /** A file workflow's descriptor (shared and frozen), for an input layer naming its targets. */
+  fileDescriptor(kind: string) { return this.routes.asyncDescriptors("files")[kind] as FileDescriptor | undefined; }
+  /** A file workflow's capability, routed by the registry to the `files` family (the workflow's own answer). */
+  fileCapability(action: StudioFileAction): { available: boolean; reason?: string; code?: ReasonCode } {
+    const denied = this.denied();
+    if (denied) return denied;
+    return this.ownsAsync("files", action.kind) ? this.asyncHandlers.files.capability(action) : unknownCommand();
+  }
+  executeFile(action: StudioFileAction): Promise<StudioFileOutcome> {
+    const denied = this.denied();
+    if (denied) return Promise.resolve({ ok: false, code: denied.code!, message: denied.reason! });
+    return this.ownsAsync("files", action.kind) ? this.asyncHandlers.files.execute(action)
+      : Promise.resolve({ ok: false, code: "invalid_value", message: "Unknown command." });
+  }
+  /** True when a collection is loaded and no preset owns the editor recipe. */
+  private unowned() {
+    const owner = this.services.collection?.selectedPreset();
+    return !!owner?.loaded && !owner.id;
+  }
+  /** Whether a gesture can begin on `layerId` of `look` (the look it captures: the editor must show it). */
+  canBeginGesture(source: GestureOrigin, layerId: string, look?: LookRef): StudioCapability {
+    const denied = this.denied();
+    if (denied) return denied;
+    if (!look) return refusal("missing_target", NO_TARGET.look);
+    if (!this.editsLook(look)) return refusal("missing_target", OTHER_LOOK);
+    if (this.unowned()) return { available: false, code: "missing_target", reason: NO_PRESET };
+    if (this.services.document.locked) return refusal("unavailable", this.services.document.locked);
+    if (fromView3d(source) && this.previewUnavailable)
+      return { available: false, code: "asset_unavailable", reason: this.previewUnavailable };
+    if (this.gesture || this.look) return { available: false, code: "busy", reason: "Another gesture is active." };
+    return this.targetCapability({ kind: "layer", id: layerId });
+  }
+  gestureCapability(source: GestureOrigin, target: { kind: "shape" | "path" } |
+    { kind: "point"; index: number } | { kind: "field"; fieldId: string }): StudioCapability {
+    const session = this.gesture;
+    if (!session || session.source.view !== gestureSource(source).view) return { available: false, code: "not_ready",
+      reason: "Begin a gesture on the target layer first." };
+    // The capture: the editor still shows the look the gesture began on.
+    if (this.services.document.scopeId !== session.scope) return missingTarget("This view now shows another look.");
+    if (!this.services.document.recipe.layers.includes(session.layer))
+      return missingTarget("That gesture layer was replaced.");
+    if (target.kind === "point" && (!session.points[target.index] ||
+      session.layer.points[target.index] !== session.points[target.index]))
+      return missingTarget("That control point was replaced.");
+    if (target.kind === "field" && (!session.fields.has(target.fieldId) ||
+      session.layer.fields.find(field => field.id === target.fieldId) !==
+      session.fields.get(target.fieldId))) return missingTarget("That warp control was replaced.");
+    return { available: true };
+  }
+  beginGesture(source: GestureOrigin, layerId: string, look?: LookRef) {
+    if (!this.canBeginGesture(source, layerId, look).available) return false;
+    const layer = this.services.document.recipe.layers.find(item => item.id === layerId);
+    if (!layer) return false;
+    // Finish an open form transaction first, so its later Escape cannot revert this gesture.
+    const control = this.services.controls.snapshot();
+    if (control) this.services.controls.commit(control.id);
+    if (!this.services.gestures.begin(source, layer)) return false;
+    this.gesture = { source: gestureSource(source), scope: this.services.document.scopeId, layer, points: [...layer.points],
+      fields: new Map(layer.fields.map(field => [field.id, field])) }; this.notify(); return true;
+  }
+  applyGesture(source: GestureOrigin, proposal: StudioGestureProposal) {
+    const session = this.gesture;
+    if (!session || session.source.view !== gestureSource(source).view) return false;
+    const target = proposal.kind === "point.replace" ? { kind: "point" as const, index: proposal.index } :
+      proposal.kind === "field.replace" ? { kind: "field" as const, fieldId: proposal.fieldId } :
+      proposal.kind === "path.replacePoints" ? { kind: "path" as const } : { kind: "shape" as const };
+    if (!this.gestureCapability(source, target).available) return false;
+    const base = { layerId: session.layer.id, expectedLayer: session.layer };
+    const action: GestureEdit = proposal.kind === "shape.replace" ? { ...base, ...proposal } :
+      proposal.kind === "point.replace" ? { ...base, ...proposal,
+        expectedPoint: session.points[proposal.index] } :
+      proposal.kind === "field.replace" ? { ...base, ...proposal,
+        expectedField: session.fields.get(proposal.fieldId)! } : { ...base, ...proposal };
+    if (proposal.kind === "point.replace" && !session.points[proposal.index] ||
+      proposal.kind === "field.replace" && !session.fields.has(proposal.fieldId)) return false;
+    return this.services.gestures.apply(source, action);
+  }
+  endGesture(source: GestureOrigin, cancel = false) {
+    if (this.gesture?.source.view !== gestureSource(source).view) return;
+    if (cancel) this.services.gestures.cancel(source); else this.services.gestures.commit(source);
+    this.gesture = undefined; this.notify();
+  }
+}
+/** Descriptor payload check for a concrete action: top-level fields, then its command/key variant. */
+function payloadIssue(descriptor: PlatformDescriptor, action: StudioAction): StudioCapability | undefined {
+  const payload = action as unknown as Record<string, unknown>;
+  const command = payload.command && typeof payload.command === "object"
+    ? payload.command as Record<string, unknown> : undefined;
+  const flattened = { ...payload, ...command };
+  for (const [name, schema] of Object.entries(descriptor.payload)) {
+    const issue = fieldIssue(flattened[name], schema, name);
+    if (issue) return issue;
+  }
+  const variant = command?.kind ?? (typeof payload.key === "string" ? payload.key : undefined);
+  const variantFields = variant !== undefined ? descriptor.variants?.[String(variant)]?.payload : undefined;
+  if (variantFields) for (const [name, schema] of Object.entries(variantFields)) {
+    const issue = fieldIssue(flattened[name], schema, name);
+    if (issue) return issue;
+  }
+}
+/**
+ * Classify an exception thrown after the capability gate passed, by where it came from:
+ * a collection service error keeps its own code; a programming fault is "internal"; a
+ * device-backed family (preview, camera, motion, quality) reports its declared `thrown`
+ * code, "unavailable"; anything else is the domain rejecting the resulting content ("invalid_value").
+ */
+function failure(thrown: ReasonCode | undefined, error: unknown): { code: string; message: string } {
+  const message = error instanceof Error ? error.message : String(error);
+  if (error instanceof CollectionServiceError) return { code: error.code, message };
+  if (error instanceof TypeError || error instanceof ReferenceError)
+    return { code: "internal", message: `That change could not be applied because of an internal error (${message}). Nothing was changed.` };
+  return { code: thrown ?? "invalid_value", message };
+}
+function fieldIssue(value: unknown, schema: ValueSchema, field: string): StudioCapability | undefined {
+  const refused = (code: StudioReasonCode, issue: ValidationIssue): StudioCapability =>
+    ({ available: false, code, reason: issue.message, issue });
+  if (value === undefined || value === null) return schema.required
+    ? refused("needs_input", { code: "required", field, message: "This command needs a value." }) : undefined;
+  const good = schema.type === "enum" ? schema.values?.includes(value as string | number) :
+    schema.type === "integer" ? Number.isInteger(value) :
+    schema.type === "number" ? typeof value === "number" && Number.isFinite(value) :
+    schema.type === "number|string" ? typeof value === "string" || typeof value === "number" && Number.isFinite(value) :
+    schema.type === "string" ? typeof value === "string" :
+    schema.type === "boolean" ? typeof value === "boolean" :
+    schema.type === "bytes" ? value instanceof Uint8Array || value instanceof ArrayBuffer :
+    typeof value === "object";
+  if (!good) return refused("invalid_value", { code: "format", field, message: "The value has the wrong type or choice." });
+  if (typeof value === "number" && (schema.min !== undefined && value < schema.min ||
+    schema.max !== undefined && value > schema.max))
+    return refused("limit", { code: "range", field, message: "The value is outside the supported range." });
+  if (typeof value === "string" && field === "name") {
+    const issue = nameIssue(value, schema.maxLength ?? Number.POSITIVE_INFINITY, field);
+    if (issue) return refused("invalid_value", issue);
+  }
+  if (typeof value === "string" && (schema.minLength !== undefined && value.length < schema.minLength ||
+    schema.maxLength !== undefined && value.length > schema.maxLength))
+    return refused("limit", { code: "range", field, message: "The text length is outside the supported range." });
+}
+const NO_PRESET = "Add or select a preset first; layers belong to a preset.";
+/** A control's edit after the content it began on was replaced (another look shown, or this one changed elsewhere). */
+const RUN_ENDED = "What you were adjusting changed meanwhile, so this adjustment ended. Start it again.";
+/** A feature's action, gesture or menu naming a look the editor doesn't show (profiles design §3.6). */
+const OTHER_LOOK = "That look isn't the one being edited here. Show it to change it.";
+function missing(reason: string): StudioCapability { return { available: false, code: "not_ready", reason }; }
+function missingTarget(reason: string): StudioCapability { return { available: false, code: "missing_target", reason }; }
+function unknownCommand(): StudioCapability { return { available: false, code: "invalid_value", reason: "Unknown command." }; }
+/** A transaction body's result: anything but a promise or other thenable (its awaited edits could not join the step). */
+export type NotThenable<T> = T extends PromiseLike<unknown> ? never : T;
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return (typeof value === "object" || typeof value === "function") && value !== null && typeof (value as { then?: unknown }).then === "function";
+}
+
+/** The move a scope carries out: the scope it named is already chosen. */
+function moveOf(action: HistoryAction): HistoryMove {
+  return action.kind === "history.jumpTo" ? { kind: action.kind, entryId: action.entryId } : { kind: action.kind };
+}

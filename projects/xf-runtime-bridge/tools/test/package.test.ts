@@ -122,7 +122,8 @@ describe("packages", () => {
   });
 
   test("the project's own config.ini must keep every switch off", () => {
-    const base = readFileSync(join(projectDir, "native", "config", "config.ini"), "utf8");
+    // LF as variantConfig reads it (a Windows checkout gives the file CRLF).
+    const base = readFileSync(join(projectDir, "native", "config", "config.ini"), "utf8").replace(/\r\n/g, "\n");
     expect(() => variantConfig(base.replace("allow_creator_leave = false", "allow_creator_leave = true"), "default")).toThrow(/allow_creator_leave/);
     expect(() => variantConfig(base.replace("allow_writes = false", "allow_writes = true"), "default")).toThrow(/allow_writes/);
     expect(() => variantConfig(base.replace("enabled = false", "enabled = true"), "default")).toThrow(/enabled/);

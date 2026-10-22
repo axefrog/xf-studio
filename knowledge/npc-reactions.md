@@ -182,4 +182,4 @@ Not scheduled; for a later session once a prototype exists: walk into a Japantow
 
 ## Related pages
 
-[Facial expressions](facial-expressions.md) · [Worn clothing](clothing.md) · [Photo-mode poses](poses.md) · [Runtime access](runtime-access.md) · [World and streaming](world-and-streaming.md) · [Alive ideas](../research/backlog/alive-ideas.md)
+[NPC direction](npc-direction.md) · [Facial expressions](facial-expressions.md) · [Worn clothing](clothing.md) · [Photo-mode poses](poses.md) · [Runtime access](runtime-access.md) · [World and streaming](world-and-streaming.md) · [Alive ideas](../research/backlog/alive-ideas.md)

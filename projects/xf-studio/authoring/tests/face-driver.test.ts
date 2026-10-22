@@ -6,7 +6,7 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { FACE_MASCULINE, FACE_OTHER_HEAD, FaceDriver } from "../src/platform/scene/face-driver";
-import { composePreviewMotion, type ComposedBlink, type ComposedIdle } from "../src/preview-motion";
+import { composePreviewMotion, type ComposedBlink, type ComposedIdle } from "../src/animation/render/preview-motion";
 
 const JOINTS = [{ name: "face_root", parent: -1, t: [0, 1.6, 0], r: [0, 0, 0, 1], s: [1, 1, 1] },
   { name: "jaw", parent: 0, t: [0, -0.05, 0.02], r: [0, 0, 0, 1], s: [1, 1, 1] },

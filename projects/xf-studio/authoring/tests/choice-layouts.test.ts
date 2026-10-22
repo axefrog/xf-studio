@@ -2,8 +2,8 @@
 // with its large picture), which choice's turntable the list wants, the turntable's hover and drag (a drag never chooses, a click still
 // does at once), and the listbox's PageUp/PageDown and type-ahead.
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
-import type { CcPanelChoice } from "../src/cc-panel";
-import type { ChoicePreviewRow } from "../src/choice-preview-service";
+import type { CcPanelChoice } from "../src/character/cc-panel";
+import type { ChoicePreviewRow } from "../src/character/choice-preview-service";
 import { installLightDom, lightDocument, lightEvent, type LightElement, uninstallLightDom } from "./light-dom";
 
 beforeAll(() => installLightDom());
@@ -53,7 +53,7 @@ describe("layouts", () => {
 
   test("a row's source shows only where its heading doesn't say it: the pooled 'Other mods', not under its maker's own heading", async () => {
     const { ChoiceList } = await import("../src/studio-ui/panels/character-choices");
-    const { BASE_GAME_GROUP } = await import("../src/cc-panel");
+    const { BASE_GAME_GROUP } = await import("../src/character/cc-panel");
     const view = new ChoiceList("g", () => {});
     lightDocument.body.append(view.element as unknown as LightElement);
     const grouped = { list: [BASE_GAME_GROUP, { label: "Sample Hair Pack", kind: "mod" as const }, { label: "Other Pack", kind: "mod" as const }], modGroups: [1, 2], pooled: [2] };

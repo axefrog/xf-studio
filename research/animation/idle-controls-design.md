@@ -13,7 +13,7 @@ Use “Head movement” as the accessible UI term, but describe it internally as
 
 ## What local evidence establishes
 
-The current [adapter](../../projects/xf-studio/authoring/src/idle-animation.ts) already composes two independently looped sources. Its elapsed time is shared, but the body and facial mixers sample `elapsed % theirOwnDuration`. Each target bone receives:
+The current [adapter](../../projects/xf-studio/authoring/src/animation/render/idle-animation.ts) already composes two independently looped sources. Its elapsed time is shared, but the body and facial mixers sample `elapsed % theirOwnDuration`. Each target bone receives:
 
 `bodyWorldDelta × facialWorldDelta × targetWorldBind`
 

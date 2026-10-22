@@ -4,11 +4,11 @@
  * rendered by the shell with the same entries, labels, order, icons, checked states and availability.
  */
 import { expect, test } from "bun:test";
-import type { EyeMakeupAction } from "../src/eye-makeup-model";
+import type { EyeMakeupAction } from "../src/legacy/eye-makeup/eye-makeup-model";
 import { EYE_MAKEUP_VIEW_BINDING } from "../src/features/eye-makeup/view";
 import { layerSections } from "../src/features/eye-makeup/view/layer-menu";
-import { chordLabel, keyBindingById, shortcutLabel } from "../src/input-bindings";
-import type { StudioTarget } from "../src/studio-application";
+import { chordLabel, keyBindingById, shortcutLabel } from "../src/app/input-bindings";
+import type { StudioTarget } from "../src/app/studio-application";
 import type { Feedback } from "../src/studio-ui/feedback";
 import type { MenuItem } from "../src/studio-ui/menu";
 import { StudioRuntime, type Port } from "../src/studio-ui/runtime";

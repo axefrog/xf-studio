@@ -19,8 +19,8 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { depotHash } from "../src/depot-path";
-import { parseGlb, readAccessor, accessorFloats, type Glb } from "../src/glb";
+import { depotHash } from "../src/game/depot-path";
+import { parseGlb, readAccessor, accessorFloats, type Glb } from "../src/formats/glb";
 import { NativeArchivePool } from "../src/native/archive-reader";
 import { readCr2w } from "../src/native/cr2w-reader";
 import { DecodeSession } from "../src/native/limits";
@@ -38,7 +38,7 @@ const filter = option("filter") ? new RegExp(option("filter")!, "i") : null, lim
 if (game && option("fresh")) {
   const archive = option("fresh")!, out = option("out"), cli = option("wolvenkit") ?? process.env.XFS_WOLVENKIT_CLI, list = option("paths");
   if (!out || !cli || !list) { console.error("--fresh needs --out, --paths and --wolvenkit"); process.exit(2); }
-  const { uncookArguments } = await import("../src/game-asset-export-wolvenkit");
+  const { uncookArguments } = await import("../src/game/host/game-asset-export-wolvenkit");
   const { mkdirSync, copyFileSync } = await import("node:fs");
   const paths = readFileSync(list, "utf8").split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   const uncooked = join(out, "uncooked");

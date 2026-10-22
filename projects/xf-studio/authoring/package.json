@@ -6,7 +6,7 @@
   "scripts": {
     "start": "bun server.ts",
     "test": "bun test",
-    "check": "tsc --noEmit && tsc -p tools && tsc -p tsconfig.experiments.json",
+    "check": "tsc --noEmit && tsc -p tools && tsc -p tsconfig.experiments.json && tsc -p ../../../experiments/038-profiles-spikes",
     "build": "bun browser-build.ts",
     "smoke:render": "bun tools/render-smoke.ts"
   },

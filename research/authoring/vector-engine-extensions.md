@@ -343,7 +343,7 @@ New typed actions, each with a capability check, one Undo entry per gesture, and
 | Text | `text.setContent`, `text.setFont`, `text.setMetrics` (size, tracking, leading), `text.setAlign`, `text.setLayout`, `text.nudgeGlyph` |
 | Paint | `fill.set`, `gradient.setShape`, `gradient.addStop`/`moveStop`/`removeStop`/`setStop` (colour and opacity rows) |
 | Stroke | `stroke.set`, `point.setStroke` (before or after: width, visibility, cap), `stroke.split` |
-| Effects | `effect.mottle.enable` (on or off: a boolean has its own action because the key/value payload is a number or text), `effect.mottle.set`, `effect.mottle.shuffle` (the next seed, decided by the domain so replay is deterministic), `effect.mottle.preset`, and the facade's `mottleCatalogue()` for the presets (built; [action catalogue](ui-action-catalogue.md#exact-commands-layer-structure-and-recipe-editing)) |
+| Effects | `effect.mottle.enable` (on or off: a boolean has its own action because the key/value payload is a number or text), `effect.mottle.set`, `effect.mottle.shuffle` (the next seed, decided by the domain so replay is deterministic), `effect.mottle.preset`, and the facade's `mottleCatalogue()` for the presets (built; [action catalogue](ui-action-catalogue.md#eye-makeup-eye-makeup-feature-module)) |
 | Operations | `layer.setClip` |
 
 Refusals are plain: "This font isn't on this computer", "Text is limited to 256 characters", "A layer can hold up to 512 points".

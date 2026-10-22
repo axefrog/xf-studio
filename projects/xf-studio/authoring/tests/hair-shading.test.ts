@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import * as THREE from "three";
-import { HAIR_LIGHTING_VANILLA, resolveHairMaterial, sampleStopsEncoded } from "../src/hair-colour-model";
-import { attachHairColor, attachHairLighting, HAIR_LOCAL_LIGHT, sampleHairGradient } from "../src/hair-shading";
+import { HAIR_LIGHTING_VANILLA, resolveHairMaterial, sampleStopsEncoded } from "../src/materials/hair-colour-model";
+import { attachHairColor, attachHairLighting, HAIR_LOCAL_LIGHT, sampleHairGradient } from "../src/materials/render/hair-shading";
 
 /** Run a material's shader patch over Three's physical shaders, as the renderer would before compiling. */
 function patched(material: THREE.MeshPhysicalMaterial) {

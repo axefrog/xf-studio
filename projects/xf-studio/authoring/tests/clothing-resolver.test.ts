@@ -1,11 +1,11 @@
 // The clothing resolver on a synthetic installation (asset-free): item records → factory → root appearance by suffix → `.app` → garment
 // components, the game's hiding rules, ArchiveXL's tag rules and entity-wide parts overrides onto V's body, feet state and layer scores.
 import { describe, expect, test } from "bun:test";
-import { tagRuleOf } from "../src/archivexl-config";
-import { componentPrefix, NO_OVERRIDES, overriddenMask, overridesKey, resolveCharacter } from "../src/character-resolver";
-import { BASE_BODY, itemWords, layerScore, pickRootAppearance, PLAYER_ENTITIES, playerBodyType, resolveClothing, SLOT_TAGS, type ItemRecord } from "../src/clothing-resolver";
-import { depotHash } from "../src/depot-path";
-import type { ClothingArea, WornArea } from "../src/save-loadout";
+import { tagRuleOf } from "../src/game/archivexl-config";
+import { componentPrefix, NO_OVERRIDES, overriddenMask, overridesKey, resolveCharacter } from "../src/character/character-resolver";
+import { BASE_BODY, itemWords, layerScore, pickRootAppearance, PLAYER_ENTITIES, playerBodyType, resolveClothing, SLOT_TAGS, type ItemRecord } from "../src/character/clothing-resolver";
+import { depotHash } from "../src/game/depot-path";
+import type { ClothingArea, WornArea } from "../src/saves/save-loadout";
 import { ALL_CHUNKS, cn, cr2w, fixtureInstallation, handle, mesh, rp } from "./resolver-fixtures";
 
 const tags = (...names: string[]) => ({ $type: "redTagList", tags: names.map(cn) });

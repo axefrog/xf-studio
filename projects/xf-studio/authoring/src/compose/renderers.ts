@@ -12,9 +12,9 @@ import { EXPRESSIONS_ID, expressionPose } from "../features/expressions";
 export const STUDIO_RENDERERS: readonly FeatureRendererFactory[] = Object.freeze([EYE_MAKEUP_RENDERER]);
 
 /**
- * The composed renderers that draw a layered-makeup surface, by feature (UI-76): the root wires a preview device and the on-head editor
- * to the one for the live feature (the feature the authoring document edits), and names no feature itself. A second layered feature
- * adds its renderer here and in `STUDIO_RENDERERS`.
+ * The composed renderers that draw a layered-makeup surface, by feature (UI-76): the root registers them all, and each scene connects
+ * those its look editor edits (preview/browser/scene-surfaces.ts); neither names a feature. A second layered feature adds its renderer
+ * here and in `STUDIO_RENDERERS`.
  */
 export const STUDIO_LAYERED_SURFACES: ReadonlyMap<string, FeatureRendererFactory<LayeredSurfaceRenderer>> =
   new Map<string, FeatureRendererFactory<LayeredSurfaceRenderer>>([[EYE_MAKEUP_RENDERER.feature, EYE_MAKEUP_RENDERER]]);

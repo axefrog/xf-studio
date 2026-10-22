@@ -105,7 +105,8 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 }
 
 /* ---------- Boot ---------- */
-.studio { height: 100vh; display: grid; grid-template-rows: var(--header-h) minmax(0, 1fr) var(--status-h); }
+.studio { height: 100vh; display: grid; grid-template-rows: var(--header-h) auto minmax(0, 1fr) var(--status-h); }
+.studio > .shell-header { grid-row: 1; } .studio > .workspace-notice { grid-row: 2; } .studio > .workspace { grid-row: 3; } .studio > .status-bar { grid-row: 4; }
 .boot { display: grid; place-content: center; gap: var(--sp-5); justify-items: center; grid-row: 1 / -1; color: var(--text-muted); font-family: var(--font-display); letter-spacing: .12em; text-transform: uppercase; font-size: var(--fs-sm); }
 .boot-error { padding: var(--sp-8); color: var(--danger); }
 .device-parking { position: absolute; width: 0; height: 0; overflow: hidden; }
@@ -481,16 +482,29 @@ span.category { border-color: transparent; background: transparent; padding-left
 .tree-item:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .tree-group { font-weight: 600; }
 .tree-row { padding-left: calc(var(--sp-4) + 10px + var(--sp-3)); }
-.tree-row.current { background: var(--signal-bg); box-shadow: inset 2px 0 0 var(--signal); }
-.tree-row.disabled { color: var(--text-faint); cursor: not-allowed; }
+.tree-row.current, .tree-node.current { background: var(--signal-bg); box-shadow: inset 2px 0 0 var(--signal); }
+.tree-row.disabled, .tree-node.disabled { color: var(--text-faint); cursor: not-allowed; }
+.tree-node { padding-left: calc(var(--sp-4) + var(--tree-depth, 0) * (10px + var(--sp-3))); }
+.tree-node.tree-branch { font-weight: 600; }
+.tree-item .tree-swatch, .tree-swatch-slot { flex: none; width: 12px; height: 12px; }
 .tree-chevron { flex: none; display: inline-grid; width: 10px; color: var(--text-muted); transition: rotate var(--dur) var(--ease); }
 .tree-chevron .icon { width: 10px; height: 10px; stroke-width: 1.8; }
 .tree-group[aria-expanded="true"] .tree-chevron { rotate: 90deg; }
+/* A recursive branch's disclosure cell: a 24 px × full-row target (padding, cancelled by a matching negative margin, so the 10 px
+   column and the label don't move) with its own hover fill. The icon turns, not the cell, so the fill keeps its shape. */
+.tree-node .tree-chevron[data-tree-disclosure] { box-sizing: content-box; height: 28px; padding: 0 7px; margin: 0 -7px; place-items: center;
+  cursor: pointer; transition: none; }
+.tree-node .tree-chevron[data-tree-disclosure]:hover { background: var(--bg-active); color: var(--text); }
+.tree-node .tree-chevron .icon { transition: rotate var(--dur) var(--ease); }
+.tree-node[aria-expanded="true"] .tree-chevron .icon { rotate: 90deg; }
 /* The label keeps priority: the secondary text takes only the room the label leaves (basis 0), and hides in a narrow tree. */
 .tree-label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tree-label mark { background: var(--accent-bg, color-mix(in oklab, var(--accent) 35%, transparent)); color: inherit; }
 .tree-secondary { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-weight: 400; font-size: var(--fs-xs); }
 @container (max-width: 320px) { .tree-secondary { display: none; } }
+/* Recursive rows keep short metadata visible at narrow widths (left-aligned after the label, as grouped rows); the full label and
+   metadata remain in their tooltip. */
+.tree-node .tree-secondary { display: block; }
 .tree-count { margin-left: auto; font: var(--fs-2xs) var(--font-mono); color: var(--text-muted); }
 .tree-trailing { margin-left: auto; display: inline-flex; flex: none; }
 /* Pinned to the frame (it never scrolls with the rows), clear of the tree's thin scrollbar. */
@@ -500,7 +514,7 @@ span.category { border-color: transparent; background: transparent; padding-left
 .tree-row .favourite-toggle[aria-pressed="false"] { opacity: 0; }
 .tree-row:hover .favourite-toggle, .tree-row:focus .favourite-toggle, .tree-row:focus-within .favourite-toggle { opacity: 1; }
 .favourite-toggle[aria-pressed="true"] { color: var(--accent-text); }
-@media (prefers-reduced-motion: reduce) { .tree-chevron { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .tree-chevron, .tree-chevron .icon { transition: none; } }
 
 /* ---------- Workspace & dock ---------- */
 .workspace { position: relative; min-height: 0; min-width: 0; padding: var(--sp-2); }
@@ -1092,8 +1106,12 @@ span.category { border-color: transparent; background: transparent; padding-left
 .activity-item strong { font-weight: 600; white-space: nowrap; }
 .activity-item.success { border-color: var(--success); } .activity-item.warning { border-color: var(--warning); } .activity-item.error { border-color: var(--danger); }
 
-/* History: the current preset's steps, oldest first, on one timeline */
+/* History: the editing context's steps (a preset or a V), oldest first, on one timeline, under a summary naming it */
 .history-panel .list-head { flex-wrap: wrap; row-gap: var(--sp-3); }
+.history-head { flex: 1 1 auto; }
+.history-context { min-width: 0; gap: var(--sp-2); }
+.history-context-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-context .count { flex: none; white-space: nowrap; }
 .history-trimmed { display: flex; align-items: center; gap: var(--sp-3); }
 .history-trimmed .icon { flex: none; }
 .history-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; background: var(--bg-panel); border: 1px solid var(--line); container-type: inline-size; }
@@ -1188,7 +1206,7 @@ span.category { border-color: transparent; background: transparent; padding-left
 .uv-warning { font-size: var(--fs-xs); line-height: 1.35; color: var(--stage-warning); background: var(--stage-chip-strong); padding: 4px 8px; border-left: 2px solid var(--stage-warning); }
 
 /* ---------- Input hints, target tooltips and gesture cursors ----------
- * Derived from the input binding catalogue (src/input-bindings.ts): the strip lists what the
+ * Derived from the input binding catalogue (src/app/input-bindings.ts): the strip lists what the
  * pointer and held keys do here; cursors come from the same bindings. Never interactive. */
 .input-hints { display: flex; flex-wrap: wrap; align-items: center; gap: 3px var(--sp-5); font-size: var(--fs-xs); line-height: 1.35; pointer-events: none; min-width: 0; }
 /* Vertical spacing is a transparent border, not padding: overflow clips at the padding edge, so a third row
@@ -1287,6 +1305,24 @@ span.category { border-color: transparent; background: transparent; padding-left
 .status-item { overflow: hidden; text-overflow: ellipsis; }
 .status-item[data-tone="saved"] { color: var(--text-muted); }
 .status-item[data-tone="protected"], .status-item[data-tone="unavailable"] { color: var(--danger); font-weight: 600; }
+/* The workspace notice (style guide t-read-only-window, t-unprotected, t-recovering): the full-width band under the header, open only
+   for a state the person must act on or wait out. One layout at every width: the message, whole (it wraps, never ends in an ellipsis),
+   then its labelled buttons, beside it where they fit and on the row under it where they don't (narrower than 720 px, always), wrapping
+   and never shrinking to icons. Restoring's first seconds take the status bar's fixed line instead, so nothing transient moves the dock. */
+.workspace-notice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4); min-width: 0; box-sizing: border-box;
+  min-height: calc(var(--control-h-sm) + 2 * var(--sp-2) + 1px); padding-block: var(--sp-2); border-bottom: 1px solid var(--line); container-type: inline-size; }
+.workspace-notice-text { flex: 1 1 14em; min-width: 0; font-weight: 600; line-height: 1.3; }
+.workspace-notice-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-3); }
+@container (max-width: 720px) {
+  .workspace-notice-text { flex-basis: 100%; }
+}
+/* Changed in another window (style guide t-conflict): first in the owning section, the warning state line holding a lead-in sentence and
+   the three ways out on one row of small buttons. */
+.doc-conflict { display: grid; gap: var(--sp-3); margin-bottom: var(--sp-3); }
+.doc-conflict[hidden] { display: none; }
+.doc-conflict-text { margin: 0; }
+.studio[data-workspace="read-only"] .dock-body [aria-disabled="true"]:is(button, [role="radio"], [role="option"], [role="switch"], [role="checkbox"]),
+.studio[data-workspace="read-only"] .dock-body :is(input, select, textarea):disabled { opacity: .45; cursor: not-allowed; }
 .status-message { border: 0; background: transparent; padding: 2px 4px; max-width: 55vw; text-align: left; color: var(--text-muted); }
 .status-message:hover { color: var(--text); background: var(--bg-hover); }
 .status-message[data-tone="error"] { color: var(--danger); } .status-message[data-tone="warning"] { color: var(--warning); } .status-message[data-tone="progress"] { color: var(--signal); }

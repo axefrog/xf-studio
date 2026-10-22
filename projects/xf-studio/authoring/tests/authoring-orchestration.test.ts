@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
-import { AuthoringDocument } from "../src/authoring-document";
-import { AuthoringGestures } from "../src/authoring-gestures";
-import { AuthoringRenderScheduler } from "../src/authoring-render-scheduler";
+import { AuthoringDocument } from "../src/app/authoring/authoring-document";
+import { AuthoringGestures } from "../src/app/authoring/authoring-gestures";
+import { AuthoringRenderScheduler } from "../src/legacy/eye-makeup/preview/authoring-render-scheduler";
 import { registeredEditing } from "./gesture-test-adapter";
-import { RecipeActions } from "../src/authoring-eye-makeup";
+import { RecipeActions } from "../src/legacy/eye-makeup/authoring-eye-makeup";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { eyeMakeupPort } from "./fixtures/eye-region";
 
@@ -42,22 +42,19 @@ test("document effects route immediate, deferred, selection and gesture renderin
 });
 
 test("gesture service owns one checkpoint, commit and Escape restoration without stale-target Undo", () => {
-  const document = new AuthoringDocument(freshWorkspace());
+  // A cancelled gesture restores its start through the look scope, which resets the preview's layers once per restore.
+  let restores = 0;
+  const document = new AuthoringDocument(freshWorkspace(), undefined, { resetStack: () => restores++ });
   const actions = new RecipeActions(() => ({ recipe: document.recipe, active: document.active,
     selected: document.selected, fieldSelection: document.fieldSelection }),
   (next, effect) => document.applyActionState(next, effect), document, {}, () => "draft",
   index => document.gestureChanged(index));
-  let restores = 0;
-  const gestures = new AuthoringGestures(document, registeredEditing(eyeMakeupPort(document, actions)).gestures, () => {
-    restores++;
-    const prior = document.undoRecipe();
-    if (prior) document.recipe = prior;
-  });
+  const gestures = new AuthoringGestures(document, registeredEditing(eyeMakeupPort(document, actions)).gestures);
   const layer = document.recipe.layers[0], point = layer.points[0], original = point.u;
-  const emptyDepth = document.undoDepth;
+  const emptyDepth = document.history.state().depth;
   expect(gestures.begin("uv", layer)).toBe(true);
   gestures.commit("uv");
-  expect(document.undoDepth).toBe(emptyDepth);
+  expect(document.history.state().depth).toBe(emptyDepth);
   expect(gestures.begin("uv", layer)).toBe(true);
   expect(gestures.apply("uv", { kind: "point.replace", layerId: layer.id, expectedLayer: layer,
     index: 0, expectedPoint: point, next: { u: original + .005 } })).toBe(true);
@@ -66,7 +63,7 @@ test("gesture service owns one checkpoint, commit and Escape restoration without
   gestures.cancel("uv");
   expect(restores).toBe(1);
   expect(document.recipe.layers[0].points[0].u).toBe(original);
-  expect(document.canUndo).toBe(false);
+  expect(document.history.canUndo()).toBe(false);
 
   const later = document.recipe.layers[0], target = later.points[0];
   gestures.begin("surface", later);
@@ -75,7 +72,7 @@ test("gesture service owns one checkpoint, commit and Escape restoration without
   gestures.commit("surface");
   gestures.cancel("surface");
   expect(restores).toBe(1);
-  expect(document.canUndo).toBe(true);
+  expect(document.history.canUndo()).toBe(true);
   const stale = document.recipe.layers[0];
   gestures.begin("uv", stale);
   document.recipe = structuredClone(document.recipe);

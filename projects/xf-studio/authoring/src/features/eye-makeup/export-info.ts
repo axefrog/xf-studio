@@ -4,7 +4,7 @@
  * Check. Pure: the core, the exporter (`export/`) and the independent verifier (`verify/`) all read it.
  */
 import type { ExportInfo } from "../../platform/api";
-import { EYE_MAKEUP_MOD } from "../../mod-branding";
+import { EYE_MAKEUP_MOD } from "../../legacy/eye-makeup/mod-branding";
 
 /**
  * The exporter's ID. Its routes (flat, faceted, Fresnel and the diagnostic Glitter route) are one exporter:

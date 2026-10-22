@@ -1,8 +1,8 @@
 // Sample every baked facial frame for the plate contact study. Writes only ignored research data.
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { IdleAnimation } from "../src/idle-animation";
-import { extendSkin, restoreFirstWeights, skinSets } from "../src/skin";
+import { IdleAnimation } from "../src/animation/render/idle-animation";
+import { extendSkin, restoreFirstWeights, skinSets } from "../src/materials/render/skin";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 

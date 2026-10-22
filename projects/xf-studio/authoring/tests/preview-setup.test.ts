@@ -1,17 +1,17 @@
 import { expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { USER_FACING_JARGON } from "../src/alpha-availability";
-import { HeadLoadError, headLoadFailureCode } from "../src/head-load-error";
-import { PolledHostState } from "../src/host-state-poller";
-import type { InstallDetectionActions } from "../src/install-detection-actions";
-import { XBOX_UNSUPPORTED_MESSAGE } from "../src/install-detection";
-import type { LocalSetupFields, LocalSetupView } from "../src/local-settings-server";
-import { LocalSetupActions } from "../src/local-setup-actions";
-import { PreviewPreparationActions, type PreviewState } from "../src/preview-preparation";
-import { PreviewSetupActions, type PreviewSetupSnapshot } from "../src/preview-setup";
-import { PREVIEW_SETUP_DESCRIPTORS } from "../src/studio-action-descriptors";
-import { WolvenKitSetupActions, type WolvenKitSetupState } from "../src/wolvenkit-setup";
+import { USER_FACING_JARGON } from "../src/app/alpha-availability";
+import { HeadLoadError, headLoadFailureCode } from "../src/preview/head-load-error";
+import { PolledHostState } from "../src/app/host-state-poller";
+import type { InstallDetectionActions } from "../src/installation/install-detection-actions";
+import { XBOX_UNSUPPORTED_MESSAGE } from "../src/installation/install-detection";
+import type { LocalSetupFields, LocalSetupView } from "../src/setup/local-settings";
+import { LocalSetupActions } from "../src/setup/local-setup-actions";
+import { PreviewPreparationActions, type PreviewState } from "../src/preview/preview-preparation";
+import { PreviewSetupActions, type PreviewSetupSnapshot } from "../src/preview/preview-setup";
+import { PREVIEW_SETUP_DESCRIPTORS } from "../src/app/studio-action-descriptors";
+import { WolvenKitSetupActions, type WolvenKitSetupState } from "../src/setup/wolvenkit-setup";
 
 // Behaviour of the 3D preview first run as the presentation sees it through `port.previewSetup`:
 // the card can always be brought back, lost contact is retried and shown, a head that fails to load

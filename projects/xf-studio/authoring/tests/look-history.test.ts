@@ -6,21 +6,22 @@
 import { expect, test } from "bun:test";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS, STUDIO_PARTS, STUDIO_REGISTRY } from "../src/compose/studio-registry";
 import { EYE_MAKEUP } from "../src/features/eye-makeup";
-import { collectionDraft, withLiveMemory, type CollectionWorkspace, type DocumentModel } from "../src/collection-workspace";
+import { collectionDraft, withLiveMemory, type CollectionWorkspace, type DocumentModel } from "../src/app/workspace/collection-workspace";
 import { featureId, isNewerData, LOOK_HISTORY_1, LOOK_MEMORY, type AnyFeatureModule, type LookHistoryData, type PartCodec } from "../src/platform/api";
 import { ChunkStore } from "../src/platform/core/chunk-store";
 import { PartRegistry } from "../src/platform/core/document";
 import { CONTROL_TRANSACTION, GESTURE_TRANSACTION, HistoryTransaction, type TransactionHost } from "../src/platform/core/history-transaction";
 import { LookHistory, lookHistoryBodies, trimLookHistory } from "../src/platform/core/look-history";
 import { MAX_LAYERS, type Recipe } from "../src/engines/layered-makeup/recipe";
-import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { encodeWorkspacePlan, fitWorkspace, MIN_SELECTED_HISTORY, PERSISTED_BACKGROUND_HISTORY, STANDARD_PLAN, WORKSPACE_STORAGE_BUDGET } from "../src/workspace-budget";
-import { WorkspacePersistence } from "../src/workspace-persistence";
-import { loadWorkspace, parseWorkspace, type WorkspaceState } from "../src/workspace-state";
+import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { encodeWorkspacePlan, fitWorkspace, MIN_SELECTED_HISTORY, PERSISTED_BACKGROUND_HISTORY, STANDARD_PLAN, WORKSPACE_STORAGE_BUDGET } from "../src/app/workspace/workspace-budget";
+import { WorkspacePersistence } from "../src/app/workspace/workspace-persistence";
+import { loadWorkspace, parseWorkspace, type WorkspaceState } from "../src/app/workspace/workspace-state";
 import { historyRecipes, memoryOf } from "./fixtures/looks";
 import { PartRegistry as PreStep4Registry } from "./fixtures/pre-step4/platform/core/document";
 import { editLayers, initialRecipe, freshWorkspace } from "./fixtures/eye-region";
 
+import { namedCore } from "./fixtures/named-targets";
 const EYE = "eye-makeup";
 
 /** A second, synthetic feature: a hair part of strands, one chunk per strand. */
@@ -73,7 +74,7 @@ test("the chunk store keeps equal text once, counts references and never lets a 
 
 test("a gesture on one layer of a 32-layer look stores one layer chunk per step", () => {
   const workspace = freshWorkspace(wideRecipe(MAX_LAYERS));
-  const { app, document } = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  const { app, document } = namedCore(createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
   const id = document.recipe.layers[5].id;
   const drag = (du: number) => {
     expect(app.beginGesture("uv", id)).toBe(true);
@@ -86,7 +87,7 @@ test("a gesture on one layer of a 32-layer look stores one layer chunk per step"
   expect(first.chunks).toBe(MAX_LAYERS + 1);   // the header and every layer, once
   drag(.001); drag(.001);
   expect(document.historyStats().chunks).toBe(first.chunks + 2);
-  expect(document.undoDepth).toBe(3);
+  expect(document.history.state().depth).toBe(3);
 });
 
 test("look steps record several parts at once; Undo and Redo restore them together with their identity", () => {
@@ -249,7 +250,7 @@ test("the platform transaction: one step named by the first change, empty ones l
 });
 
 test("a gesture moved and back, then an opacity edit, then an Escape-cancelled gesture: steps keep their names and Escape removes none (CORE-42)", () => {
-  const { app, document } = createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  const { app, document } = namedCore(createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
   const layerId = document.recipe.layers[0].id, u0 = document.recipe.layers[0].points[0].u, start = JSON.stringify(document.recipe);
   const steps = () => app.historyTimeline().steps.map(step => `${step.label}:${step.state}`);
   const gesture = (moves: number[], cancel = false) => {
@@ -391,7 +392,7 @@ test("a reload under budget pressure keeps at least 10 Undo steps of the selecte
   expect(writer.storedSize()).toBeLessThanOrEqual(budget);
   const loaded = loadWorkspace({ getItem: key => storage.get(key === "xfas.workspace.v1" ? "k" : "none") ?? null }, false, STUDIO_DOCUMENTS);
   expect(loaded.writable).toBe(true);
-  const { app } = createTrustedAuthoringCore(loaded.state, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  const { app } = namedCore(createTrustedAuthoringCore(loaded.state, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
   const timeline = app.historyTimeline();
   expect(timeline.steps.length).toBeGreaterThanOrEqual(MIN_SELECTED_HISTORY);
   expect(timeline.trimmed).toBe(true);
@@ -420,7 +421,7 @@ test("library requests and file workflows are registered families routed by owne
   expect(STUDIO_REGISTRY.routeAsync("package.build")).toMatchObject({ ok: true, qualified: "files/package.build" });
   expect(STUDIO_REGISTRY.route("save")).toMatchObject({ ok: false, code: "unknown_action" });
   expect(STUDIO_REGISTRY.routeAsync("layer.setColor")).toMatchObject({ ok: false });
-  const { app } = createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  const { app } = namedCore(createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
   // Before a library and files exist, both answer as their services would ("still loading").
   expect(app.requestCapability({ kind: "save" })).toMatchObject({ available: false, code: "not_ready" });
   expect(app.fileCapability({ kind: "recipe.export" })).toMatchObject({ available: false, code: "not_ready" });

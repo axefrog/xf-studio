@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import { compareVersions, emptyUpdateCheckMemory, newestRelease, parseVersion, UPDATE_RECHECK_MS, UpdateCheckService,
-  type ReleaseList, type UpdateCheckMemory } from "../src/update-check";
-import { gitHubReleases, RELEASES_API, releasesFromGitHub, simulatedReleases } from "../src/update-check-github";
-import { createUpdateCheckHandler, UpdateCheckJsonStore } from "../src/update-check-host";
-import { UpdateCheckActions } from "../src/update-check-actions";
-import { UPDATE_CHECK_DESCRIPTORS } from "../src/studio-action-descriptors";
+  type ReleaseList, type UpdateCheckMemory } from "../src/setup/update-check";
+import { gitHubReleases, RELEASES_API, releasesFromGitHub, simulatedReleases } from "../src/setup/host/update-check-github";
+import { createUpdateCheckHandler, UpdateCheckJsonStore } from "../src/setup/host/update-check-host";
+import { UpdateCheckActions } from "../src/setup/update-check-actions";
+import { UPDATE_CHECK_DESCRIPTORS } from "../src/app/studio-action-descriptors";
 import { checkForUpdatesNow, checkingForUpdates, updateCheckLine } from "../src/studio-ui/update-check";
 
 const v = (text: string) => parseVersion(text)!;
@@ -365,4 +365,20 @@ test("the palette's check says it's checking at once, closes that notice before 
   expect((await run("offline")).slice(1))
     .toEqual(["closed: Checking for updates…", "info: XF Studio couldn't check for updates just now. New versions are always on the releases page."]);
   expect((await run("newer")).slice(1)).toEqual(["closed: Checking for updates…", "info: XF Studio 0.2.0-beta.1 is available. You have 0.1.0-alpha.2."]);
+});
+
+test("a check made just after every check of a run was aborted asks again instead of joining the aborting run (UPD-05)", async () => {
+  const held = heldSource(), service = heldService(held);
+  const reload = new AbortController();
+  const before = service.check(reload.signal);
+  expect(held.pending.length).toBe(1);
+  // The page reloads mid-check (its request aborts), and the new page checks at once, before the old run has wound down.
+  reload.abort();
+  const after = service.check(new AbortController().signal);
+  expect(await before).toMatchObject({ result: "failed", reason: "unavailable" });
+  await flush();
+  expect(held.pending.length).toBe(1);
+  expect(held.pending[0]!.signal.aborted).toBe(false);
+  held.answer();
+  expect(await after).toMatchObject({ result: "newer", latest: { version: "0.1.0-beta.1" } });
 });

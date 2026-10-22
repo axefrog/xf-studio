@@ -4,18 +4,15 @@
  * Check, Build and the manifest, never dropped silently.
  */
 import { expect, test } from "bun:test";
-import { CollectionService, type CollectionTransport } from "../src/collection-service";
-import type { EditorSnapshot } from "../src/collection-session";
-import { collectionDraft } from "../src/collection-workspace";
-import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
-import { describePackageCheck, originalPresetCount } from "../src/package-filter";
+import { collectionServiceOver } from "./fixtures/profile-studio";
+import { describePackageCheck, originalPresetCount } from "../src/legacy/eye-makeup/export/package-filter";
 import { COLLECTION_2, NOTHING_PACKAGED_REASON } from "../src/platform/api";
 import { emptyRecipe } from "../src/engines/layered-makeup/recipe";
-import { NO_EXPORTER_REASON, parseCollection } from "../src/preset-collection";
-import { EYE_MAKEUP_PART_2 } from "../src/recipe-schema";
+import { NO_EXPORTER_REASON, parseCollection } from "../src/legacy/eye-makeup/export/preset-collection";
+import { EYE_MAKEUP_PART_2 } from "../src/legacy/eye-makeup/recipe-schema";
 import { fixedId } from "./fixtures/workspace-v1-fixtures";
 import { initialRecipe } from "./fixtures/eye-region";
-import { readRecipe as parseRecipe } from "../src/recipe-schema";
+import { readRecipe as parseRecipe } from "../src/legacy/eye-makeup/recipe-schema";
 import { preparePackageCollection } from "./fixtures/eye-exporter";
 import { realCheck } from "./fixtures/package-results";
 
@@ -28,20 +25,14 @@ const collection = () => ({ schema: COLLECTION_2, id: fixedId(50), name: "Mixed"
   { id: fixedId(53), name: "Hair only", revision: 1, parts: { hair } },
 ] });
 
-function service(value: unknown, recipe = parseRecipe(initialRecipe())) {
-  let editor: EditorSnapshot = { recipe, active: 0, selected: 0, history: [] };
+async function service(value: unknown, recipe = parseRecipe(initialRecipe())) {
   let sent: unknown;
-  const transport: CollectionTransport = { list: async () => [], get: async () => { throw Error("unused"); },
-    save: async () => { throw Error("unused"); },
-    package: async (_action, input) => { sent = input; return realCheck(JSON.parse(JSON.stringify(input))); } };
-  const draft = collectionDraft(value, STUDIO_DOCUMENTS);
-  const svc = new CollectionService(STUDIO_DOCUMENTS, draft, { selected: "", name: "" }, () => editor, next => editor = next, transport,
-    () => ({ recipe: editor.recipe, revision: 0 }));
-  return { svc, sent: () => sent };
+  const f = await collectionServiceOver(value, { recipe, package: async (_action, input) => { sent = input; return realCheck(JSON.parse(JSON.stringify(input))); } });
+  return { svc: f.svc, sent: () => sent };
 }
 
 test("Check, Build and the manifest report looks without eye makeup and other features' parts", async () => {
-  const f = service(collection());
+  const f = await service(collection());
   const outcome = await f.svc.execute({ kind: "package", action: "check" });
   expect(outcome.ok).toBe(true);
   // The Studio sends the whole draft in its stored form; each exporter on the host reads its own part.
@@ -81,13 +72,13 @@ test("a collection-2 file read directly lists what it leaves out; the list valid
   expect(parseCollection(only)).not.toHaveProperty("omitted");
 });
 
-test("package and build-plan capability need a look with eye makeup; a collection export does not", () => {
+test("package and build-plan capability need a look with eye makeup; a collection export does not", async () => {
   const hairOnly = { ...collection(), presets: [collection().presets[2]] };
-  const empty = service(hairOnly, emptyRecipe());
+  const empty = await service(hairOnly, emptyRecipe());
   for (const kind of ["package", "exportPlan"] as const)
     expect(empty.svc.capability(kind === "package" ? { kind, action: "check" } : { kind }))
       .toMatchObject({ available: false, code: "invalid_value", reason: expect.stringContaining("eye makeup") });
   expect(empty.svc.capability({ kind: "exportCollection" })).toEqual({ available: true });
-  // The live editor's layers count for the selected look: stashing them gives it an eye-makeup part.
-  expect(service(hairOnly).svc.capability({ kind: "package", action: "check" })).toEqual({ available: true });
+  // The live editor's layers count for the shown look: writing them gives it an eye-makeup part.
+  expect((await service(hairOnly)).svc.capability({ kind: "package", action: "check" })).toEqual({ available: true });
 });

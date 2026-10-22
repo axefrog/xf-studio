@@ -1,4 +1,4 @@
-import { keyBinding, shortcutLabel } from "../../../input-bindings";
+import { keyBinding, shortcutLabel } from "../../../app/input-bindings";
 import { applyCapability, button, Segmented } from "../../../studio-ui/controls";
 import { h } from "../../../studio-ui/dom";
 import type { PanelController } from "../../../studio-ui/panels/collection";
@@ -24,7 +24,8 @@ export function uvPanel(ctx: EyeMakeupViewContext): PanelController {
   // hint change can never resize the canvas (the stage's --uv-safe-* insets keep Fit clear of them).
   const stage = h("div", { class: "uv-stage" }, slot,
     h("div", { class: "viewport-top" }, warning), h("div", { class: "viewport-bottom" }, hints.strip));
-  element.append(h("div", { class: "uv-toolbar" }, modes.element, other, fit), stage, hints.tip);
+  // The view buttons change only this window's view of the map, so a read-only window keeps them (t-read-only-window).
+  element.append(h("div", { class: "uv-toolbar", "data-read-safe": "" }, modes.element, other, fit), stage, hints.tip);
   uv.attach(slot);
   ctx.anchors.register("uv.canvas", stage);
   let hintsShown: boolean | undefined;

@@ -5,16 +5,16 @@ import { FRESNEL_PRESET_RULE, fresnelConstants, layerExport, planPresetExport } 
 import { facetedMipChain, maskMipChain } from "../src/engines/layered-makeup/route-mip-chains";
 import { flatMipChain } from "../src/engines/layered-makeup/flat-mip-chain";
 import { GRADIENT_SIZE, UnsupportedMaterialError } from "../src/engines/layered-makeup/preset-compiler";
-import { describePackageExperimental } from "../src/package-filter";
-import { planCollection } from "../src/preset-collection";
-import { HandleCounter, rewritePlateMesh } from "../src/package-resources";
+import { describePackageExperimental } from "../src/legacy/eye-makeup/export/package-filter";
+import { planCollection } from "../src/legacy/eye-makeup/export/preset-collection";
+import { HandleCounter, rewritePlateMesh } from "../src/legacy/eye-makeup/export/package-resources";
 import { plateUvWindow, uvTransformConstants } from "../src/engines/layered-makeup/plate-uv-window";
 import { type Layer, type Recipe } from "../src/engines/layered-makeup/recipe";
-import { recipeFile } from "../src/recipe-schema";
+import { recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
 import { facetedReference, maskReference } from "../src/features/eye-makeup/verify/texture-checks";
 import { expectedMaterialValues, fresnelColourIssue, fresnelColourTarget } from "../src/features/eye-makeup/verify/resource-checks";
 import { compileFacetedPreset, compileFlatPreset, compileFresnelPreset, compilePreset, initialRecipe, raster, rasterWindow } from "./fixtures/eye-region";
-import { readRecipe as parseRecipe, parseRecipeFile } from "../src/recipe-schema";
+import { readRecipe as parseRecipe, parseRecipeFile } from "../src/legacy/eye-makeup/recipe-schema";
 import { preparePackageCollection } from "./fixtures/eye-exporter";
 
 const board = JSON.parse(readFileSync(resolve(import.meta.dir, "../../../../experiments/016-finish-board/finish-board.collection.json"), "utf8"));
@@ -233,7 +233,7 @@ test("choosing a finish uses its game-matched model; earlier layers switch only 
 test("CORE-20/CORE-08: one finish table feeds game optics, surfaces, the catalogue and the setFinish choices", async () => {
   const { FINISH_EXPORT, finishExportSummary, flatSurface, hasGameOptics } = await import("../src/engines/layered-makeup/finish-export");
   const { finishCatalogue } = await import("./fixtures/eye-region");
-  const { ACTION_DESCRIPTORS } = await import("../src/studio-action-descriptors");
+  const { ACTION_DESCRIPTORS } = await import("../src/app/studio-action-descriptors");
   const ids = finishCatalogue().map(item => item.id);
   expect([...ACTION_DESCRIPTORS["layer.setFinish"].payload.finish.values!]).toEqual([...ids, "satin"]);
   expect(new Set<string>(ids)).toEqual(new Set(Object.keys(FINISH_EXPORT)));

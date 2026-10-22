@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { closeSync, copyFileSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
-import type { DocumentModel } from "../src/collection-workspace";
+import type { DocumentModel } from "../src/app/workspace/collection-workspace";
 import { isNewerData } from "../src/platform/api";
-import { parseWorkspace, serializeWorkspace, storesLookLevelHistory, WORKSPACE_1, WORKSPACE_2 } from "../src/workspace-state";
+import { parseWorkspace, serializeWorkspace, storesLookLevelHistory, WORKSPACE_1, WORKSPACE_2 } from "../src/app/workspace/workspace-state";
 
 const maxWorkspaceBytes = 16_000_000;
 
@@ -112,7 +112,12 @@ export class DesktopWorkspaceStore {
   }
 }
 
-export async function desktopWorkspaceRequest(request: Request, store: DesktopWorkspaceStore, verification: boolean): Promise<Response> {
+/**
+ * The workspace route. `fence`, when given, answers a refusal for a write whose lease isn't the holder's; it is asked again right
+ * before the synchronous save, after the body has arrived, so a write that stalled while another page was granted the lease can't land.
+ */
+export async function desktopWorkspaceRequest(request: Request, store: DesktopWorkspaceStore, verification: boolean,
+  fence?: () => Response | null): Promise<Response> {
   if (request.method === "GET") {
     try { return Response.json({ schema: "xfs/desktop-workspace-1", workspace: store.load(verification) },
       { headers: { "Cache-Control": "no-store" } }); }
@@ -125,6 +130,8 @@ export async function desktopWorkspaceRequest(request: Request, store: DesktopWo
   try {
     const value = await request.json() as { workspace?: unknown };
     if (typeof value?.workspace !== "string") return new Response("Invalid workspace", { status: 400 });
+    const refused = fence?.();
+    if (refused) return refused;
     store.save(verification, value.workspace);
     return new Response(null, { status: 204 });
   } catch {

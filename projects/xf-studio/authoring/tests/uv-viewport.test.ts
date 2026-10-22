@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { canvasResolution } from "../src/canvas-resolution";
+import { canvasResolution } from "../src/legacy/eye-makeup/browser/canvas-resolution";
 import { defaultUVView, fitUVView, frameAspect, MAX_UV_VIEW_SPAN, MIN_UV_VIEW_SPAN, panUVView, parseUVView, pixelToUV, reflectUV,
-  uvAspect, uvToPixel, uvViewRegion, uvViewScale, zoomUVView, type UVInsets, type UVView } from "../src/uv-view";
+  uvAspect, uvToPixel, uvViewRegion, uvViewScale, zoomUVView, type UVInsets, type UVView } from "../src/legacy/eye-makeup/uv-view";
 import { initialRecipe, EYE_MIRROR } from "./fixtures/eye-region";
 
 // The UV viewport fills its whole pane; these are the pane shapes it must handle: docked narrow and

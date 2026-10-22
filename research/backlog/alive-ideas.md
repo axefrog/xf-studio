@@ -60,11 +60,13 @@
   - *Next step after that:* voiced reuse of vanilla lines in the NPC's own voice by adding XF entry points to voiceset scenes at load, pointing only at that voice's fitting lines (needs a game test that new entry names are accepted); an offline tagging pass over all 14,003 voiceset lines; car and district reads.
   - *Risks:* conflicts with mods that replace the same `ReactionManagerComponent` methods (Responsive NPCs replaces several); spamming (the vanilla cooldowns must stay); players who turn chatter off see no text; sensitivity of nudity and body-based comments (Street Sense makes reactions depend on V's gender; ours should be the maintainer's call and configurable); game patches renaming private methods.
   - *Questions for the maintainer:* text-only first, or wait for voiced reuse? Should reactions depend on V's gender or body at all? Ship as its own XF mod or as part of a larger "alive" mod? How should it coexist with Street Sense and Responsive NPCs if both are installed (detect and step aside, or layer)?
-- **Ambient life:** new ambient NPC behaviours and scenes at chosen places (workspots, community spawns), authored in the Studio's world tools (phases W4–W5 in [world ideas](world-and-interactive-ideas.md)).
+- **Ambient life:** new ambient NPC behaviours and scenes at chosen places (workspots, community spawns), authored in the Studio's world tools (phases W4–W5 in [world ideas](world-and-interactive-ideas.md)). The runtime building blocks (spawn, walk, speak, gesture, dialogue choices with V) are designed as bridge 0.8 in [NPC direction](../runtime/npc-direction-design.md); a scripted scenario there is the smallest directed scene.
 - **Reactive surroundings:** NPCs noticing V's look, weather-reactive crowds, and time-of-day routines.
 - **Places that remember:** persistent, player-driven changes to locations (decor, props left behind), stored in the save generically, as the [save editor study](../save/save-editor-design.md) shows the save can describe mod data.
 
 - **Sit anywhere, done properly** (banked until after 1.0): V can sit on any bench, ledge or chair through the game's own workspot system, which today works only where the story placed a prompt. The existing community approach offers seats targeted through walls and then clips V through the wall to reach them; the sit itself works. Ours would offer a seat only when a sight-line ray from V reaches it, a navmesh path leads there and the seat's space is free, using the checks the bridge's scene report already runs.
+
+- **Procedural gigs, quests and encounters over a level-of-detail world simulation:** now an active R&D vertical, the [Story Engine](../story-engine/README.md), raised and started on 22 October 2026. Its hub holds the [plan](../story-engine/plan.md), the [design seeds](../story-engine/design-seeds.md) and the [runtime requirements](../story-engine/runtime-requirements.md).
 
 ## Related
 

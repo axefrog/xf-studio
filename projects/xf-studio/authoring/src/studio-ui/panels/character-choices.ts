@@ -40,8 +40,8 @@
  *   shows), so only that choice's strip is drawn.
  * - **PageUp and PageDown** move focus by a screenful, and **typing** a label's first letters moves to it (components/listbox-keys.ts).
  */
-import { type CcChoiceGroup, type CcPanelChoice, choiceGroup, compareGroups, OTHER_MODS_GROUP, OTHER_MODS_INDEX } from "../../cc-panel";
-import type { CharacterSwatchState, ChoiceFetch } from "../../character-context-actions";
+import { type CcChoiceGroup, type CcPanelChoice, choiceGroup, compareGroups, OTHER_MODS_GROUP, OTHER_MODS_INDEX } from "../../character/cc-panel";
+import type { CharacterSwatchState, ChoiceFetch } from "../../character/character-context-actions";
 import { h, setAttr, setText } from "../dom";
 import { expander, expanderLabel, setExpanded } from "../expander";
 import { viewState } from "../view-state";
@@ -49,8 +49,8 @@ import { holdScroll, revealInView } from "../scroll-anchor";
 import { choiceItem } from "../components/choice-list";
 import { previewStage, previewTile, type PreviewStage, type PreviewTile } from "../components/choice-preview";
 import { pageStep, TypeAhead } from "../components/listbox-keys";
-import type { ChoicePreviewRow } from "../../choice-preview-service";
-import type { ChoiceLayout, ChoiceSize } from "../../ui-preferences";
+import type { ChoicePreviewRow } from "../../character/choice-preview-service";
+import type { ChoiceLayout, ChoiceSize } from "../../app/ui-preferences";
 
 export type ChoiceListInput = {
   /** The option shown (its ID) and the search the list is limited to: another of either rebuilds the list. */

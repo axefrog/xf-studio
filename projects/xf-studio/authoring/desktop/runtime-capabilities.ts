@@ -16,7 +16,6 @@ import { dirname, resolve } from "node:path";
 
 const desktopRoot = import.meta.dir;
 const authoringRoot = resolve(desktopRoot, "..");
-const strataRoot = resolve(authoringRoot, "..", "..", "strata");
 
 /** Every program the packaged host runs on its runtime: the main process, its two Bun workers and the Build tool. */
 export const HOST_ENTRIES = [
@@ -56,8 +55,6 @@ const code = /\.(m?[jt]sx?)$/;
 const moduleLiteral = /["']((?:bun|node):[a-z0-9_/]+)["']/g;
 
 function resolveImport(specifier: string, from: string): string | null {
-  if (specifier === "strata" || specifier.startsWith("strata/"))
-    return resolve(strataRoot, specifier === "strata" ? "index.ts" : `${specifier.slice("strata/".length)}.ts`);
   // The Electrobun SDK comes from the Hutch devkit and uses the runtime through its own imports, which the bundle scan sees.
   if (specifier.startsWith("electrobun")) return null;
   return Bun.resolveSync(specifier, dirname(from));

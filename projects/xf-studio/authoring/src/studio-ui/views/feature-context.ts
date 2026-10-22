@@ -4,7 +4,7 @@
  * palette commands) generically. Only the shell imports this module; a feature's view sees only the
  * context's type (`feature-view.ts`).
  */
-import type { StudioAction } from "../../studio-application";
+import type { PresentationAction } from "../../app/studio-presentation";
 import type { EasingId } from "../../platform/api/easing";
 import type { Command } from "../commands";
 import { ViewportInputHints } from "../input-hints";
@@ -13,7 +13,7 @@ import { Frame, type StudioRuntime } from "../runtime";
 import { readinessText } from "../readiness-text";
 import { contextItems, viewportMenu } from "../target-menus";
 import type { FacadeOf, FeatureMenuItem, FeaturePresetRequest, FeatureTargetMenu, FeatureViewBinding, FeatureViewContext, MenuTarget, ModuleViewContext } from "./feature-view";
-import type { PartPresetRequest } from "../../part-presets";
+import type { PartPresetRequest } from "../../library/part-presets";
 import { modInstallLabel, openModInstallSheet } from "../panels/mod-install-sheet";
 
 type Action = { kind: string };
@@ -43,7 +43,7 @@ function context(rt: StudioRuntime, owner: string): FeatureViewContext {
   return Object.freeze({
     facade,
     dispatch,
-    range: (kind, field, variant) => rt.range(kind as StudioAction["kind"], field, variant),
+    range: (kind, field, variant) => rt.range(kind as PresentationAction["kind"], field, variant),
     platform: (action, options) => featureKinds.has(action.kind)
       ? rt.report(action.kind, { ok: false, code: "invalid_value", message: "That command belongs to a feature's own controls." }, options)
       : rt.dispatch(action, options),
@@ -116,6 +116,8 @@ export function moduleViewContext(rt: StudioRuntime, owner: string): ModuleViewC
   if (!facade) throw Error(`The ${owner} view has no registered module service.`);
   return Object.freeze({
     facade,
+    instance: (panel: string) => rt.port.panels.instance(panel),
+    targets: () => rt.port.focus.targets(),
     dispatch: async (action: { kind: string }, options?: Parameters<StudioRuntime["report"]>[2]) => {
       let outcome: Awaited<ReturnType<typeof facade.dispatch>>;
       try { outcome = await facade.dispatch(action); }

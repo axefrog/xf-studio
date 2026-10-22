@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { createBrowserCharacterDetailDevice } from "../src/browser-character-detail-device";
-import { DEFAULT_CHARACTER } from "../src/character-detail-request";
-import { CHARACTER_DETAIL_SCHEMA, DETAIL_SLOTS } from "../src/render-detail";
+import { createBrowserCharacterDetailDevice } from "../src/character/browser/browser-character-detail-device";
+import { DEFAULT_CHARACTER } from "../src/character/character-detail-request";
+import { CHARACTER_DETAIL_SCHEMA, DETAIL_SLOTS } from "../src/character/render-detail";
 
 // Loading a prepared choice's parts ahead (PREV-189): the page asks the host as another page (never superseding the person's own V),
 // loads and prepares the new parts, then lets them go to the part pool without showing them; the person's own change stops it.
@@ -90,7 +90,7 @@ test("a change made while a load ahead is preparing waits for its parts to reach
 
 test("a map's first upload comes from its decoded bitmap; the texture keeps its image, and the bitmap closes when no texture waits on it", async () => {
   const THREE = await import("three");
-  const { hasUploadSource, offerUploadSource, uploadTexture } = await import("../src/character-detail-loader");
+  const { hasUploadSource, offerUploadSource, uploadTexture } = await import("../src/character/render/character-detail-loader");
   let closed = 0;
   const bitmap = { width: 4, height: 4, close() { closed++; } } as unknown as ImageBitmap;
   const element = { width: 4, height: 4 };
@@ -113,7 +113,7 @@ test("a map's first upload comes from its decoded bitmap; the texture keeps its 
 
 test("a map released before it was ever uploaded lets its bitmap go", async () => {
   const THREE = await import("three");
-  const { hasUploadSource, offerUploadSource } = await import("../src/character-detail-loader");
+  const { hasUploadSource, offerUploadSource } = await import("../src/character/render/character-detail-loader");
   let closed = 0;
   const bitmap = { width: 4, height: 4, close() { closed++; } } as unknown as ImageBitmap;
   const texture = new THREE.Texture({ width: 4, height: 4 });
@@ -125,7 +125,7 @@ test("a map released before it was ever uploaded lets its bitmap go", async () =
 
 test("a map uploaded by the renderer itself lets its bitmap go too (PREV-193)", async () => {
   const THREE = await import("three");
-  const { hasUploadSource, offerUploadSource } = await import("../src/character-detail-loader");
+  const { hasUploadSource, offerUploadSource } = await import("../src/character/render/character-detail-loader");
   let closed = 0, earlier = 0;
   const bitmap = { width: 4, height: 4, close() { closed++; } } as unknown as ImageBitmap;
   const texture = new THREE.Texture({ width: 4, height: 4 });
@@ -138,7 +138,7 @@ test("a map uploaded by the renderer itself lets its bitmap go too (PREV-193)", 
 });
 
 test("a map's PNG reaches every decode without the chunks that would convert its colours (PREV-193)", async () => {
-  const { withoutColourChunks } = await import("../src/character-detail-loader");
+  const { withoutColourChunks } = await import("../src/character/render/character-detail-loader");
   const chunk = (type: string, body: number[]) => {
     const out = new Uint8Array(12 + body.length), view = new DataView(out.buffer);
     view.setUint32(0, body.length);

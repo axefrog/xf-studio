@@ -8,9 +8,9 @@ import { afterAll, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileSha256 } from "../src/derived-cache";
-import { depotHash } from "../src/depot-path";
-import { archiveExportSource, GAME_ASSET_EXPORT_VERSION, GameAssetExportCache } from "../src/game-asset-export";
+import { fileSha256 } from "../src/host/derived-cache";
+import { depotHash } from "../src/game/depot-path";
+import { archiveExportSource, GAME_ASSET_EXPORT_VERSION, GameAssetExportCache } from "../src/game/host/game-asset-export";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });

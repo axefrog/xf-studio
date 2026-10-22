@@ -1,5 +1,5 @@
 /** Offline first-game diagnostic. Dry-run is the default and writes nothing. */
-import { planRuntimeDiagnostic, stageRuntimeDiagnostic, type RuntimeDiagnosticOptions } from "../src/runtime-diagnostic-stage";
+import { planRuntimeDiagnostic, stageRuntimeDiagnostic, type RuntimeDiagnosticOptions } from "../src/installation/host/runtime-diagnostic-stage";
 
 function usage(): never {
   throw Error("Usage: bun tools/runtime-diagnostic.ts --candidate-store <absolute> --candidate-id <id> --game-root <absolute> --mo2-root <absolute> --profile <name> --staging-root <new absolute directory> [--stage]");

@@ -112,19 +112,19 @@ Audit of `projects/xf-studio/authoring` at `4193fcb` (26 September 2026). Line n
 
 | Where | What it assumes | Change needed |
 |---|---|---|
-| `src/preview-core-recipe.ts` 49–60 | One core recipe `xfs-preview-core-female-average`: the feminine eye mesh and morph paths, `gradient_brown`, eyeball **chunk 1** / `submesh_01_LOD_1` | A recipe per body gender (masculine eye chunk 2), chosen by the shown V; or retire the core eye in favour of the resolved eye, as the eye plan already does |
-| `src/eye-plate-recipe.json` (`source`, `selection`) | The plate's source is the feminine head (audited 2.31 hashes), with feminine face ranges and `morphTargetCount` 105 | A second, audited masculine recipe (§4.1). `eye-plate-cut.ts` 147/227 and `eye-plate-verify.ts` 150 read the count from the recipe, so they need nothing |
-| `src/preview-core-service.ts` 126–147, `src/eye-plate-service.ts` 254 | Default to the single recipe pair | Take the recipe pair from the body gender |
-| `src/character-context-actions.ts` 262, 332, 486 | Prefetch, the detail request and legacy migration are feminine only; **a masculine V's detail request is the feminine default V** | Remove the gates once a masculine core exists |
-| `src/character-detail-request.ts` 34, 89, 110 | `DEFAULT_CHARACTER` is feminine; `characterRequestFor` shows the feminine default for a masculine save | Default by the shown body; keep the version gate for older hosts |
-| `src/character-follow.ts` 25 | Face shape follows only a feminine view | Follow either |
+| `src/preview/preview-core-recipe.ts` 49–60 | One core recipe `xfs-preview-core-female-average`: the feminine eye mesh and morph paths, `gradient_brown`, eyeball **chunk 1** / `submesh_01_LOD_1` | A recipe per body gender (masculine eye chunk 2), chosen by the shown V; or retire the core eye in favour of the resolved eye, as the eye plan already does |
+| `src/legacy/eye-makeup/plate/eye-plate-recipe.json` (`source`, `selection`) | The plate's source is the feminine head (audited 2.31 hashes), with feminine face ranges and `morphTargetCount` 105 | A second, audited masculine recipe (§4.1). `eye-plate-cut.ts` 147/227 and `eye-plate-verify.ts` 150 read the count from the recipe, so they need nothing |
+| `src/preview/host/preview-core-service.ts` 126–147, `src/legacy/eye-makeup/plate/host/eye-plate-service.ts` 254 | Default to the single recipe pair | Take the recipe pair from the body gender |
+| `src/character/character-context-actions.ts` 262, 332, 486 | Prefetch, the detail request and legacy migration are feminine only; **a masculine V's detail request is the feminine default V** | Remove the gates once a masculine core exists |
+| `src/character/character-detail-request.ts` 34, 89, 110 | `DEFAULT_CHARACTER` is feminine; `characterRequestFor` shows the feminine default for a masculine save | Default by the shown body; keep the version gate for older hosts |
+| `src/character/character-follow.ts` 25 | Face shape follows only a feminine view | Follow either |
 | `src/platform/scene/head-rig.ts` 221–224 | `applySavedV` throws for a masculine save | Load the masculine core; the checks below it are generic |
-| `src/saved-appearance-actions.ts` 47, `src/lighting-setup-stage.ts` (`setBodySex`) | Clearing a save returns to the feminine rig | Follow the context's default body |
+| `src/character/saved-appearance-actions.ts` 47, `src/preview/render/lighting-setup-stage.ts` (`setBodySex`) | Clearing a save returns to the feminine rig | Follow the context's default body |
 | `src/studio-ui/panels/character.ts` 73, 324 | **Default V** is always the feminine default | Offer both (the action already takes `bodyGender`) |
-| `src/cc-render-coverage.ts` 64, 73, 96, 104, 112 | Every masculine option reads "not drawn" | Drop the masculine branches as parts land |
-| `src/character-detail-plan.ts` 299 | Feet state names `flat_feet`/`lifted_feet` | Harmless for a masculine V (no such group, so nothing is added) but should be documented |
+| `src/character/cc-render-coverage.ts` 64, 73, 96, 104, 112 | Every masculine option reads "not drawn" | Drop the masculine branches as parts land |
+| `src/character/character-detail-plan.ts` 299 | Feet state names `flat_feet`/`lifted_feet` | Harmless for a masculine V (no such group, so nothing is added) but should be documented |
 | `tools/prepare_idle.py` 33–40, `tools/bake_idle_face.py` 64–65, `tools/bake_game_blink.py` 177–236 | Feminine clips, skeleton, setup and morph targets | Parameterise by body gender (the blink bake already infers it from the rig name, line 183) |
-| `src/package-resources.ts` 183, 197–219 | The template's `visualTags` is `Female`; one feminine customization option; `eyeMakeupXl` declares only `female:` | Per-gender resources (§4.3). **Done in phase 6** |
+| `src/legacy/eye-makeup/export/package-resources.ts` 183, 197–219 | The template's `visualTags` is `Female`; one feminine customization option; `eyeMakeupXl` declares only `female:` | Per-gender resources (§4.3). **Done in phase 6** |
 | `src/features/eye-makeup/verify/resource-checks.ts` 657–680 | "customizations must declare only the female list"; one plate | A verifier plan per gender (§4.4). **Done in phase 6** |
 
 ### 3.3 What each preview device assumes
@@ -155,7 +155,7 @@ The masculine cut is well defined by the feminine one:
 | Plate faces matched triangle for triangle by corner UVs | 2,458 exactly, 22 ambiguous, 530 differently triangulated |
 | The same face indices on the masculine head | Land elsewhere (UV shift up to 0.49), so face ranges do not transfer |
 
-The rule for the masculine recipe: **the masculine chunk-0 triangles whose corner UVs all belong to the feminine plate's vertex UVs**, stored as the masculine recipe's own face ranges and topology ([`eye-plate-recipe-pma.json`](../../projects/xf-studio/authoring/src/eye-plate-recipe-pma.json), revision 2), audited against the 2.31 masculine hashes.
+The rule for the masculine recipe: **the masculine chunk-0 triangles whose corner UVs all belong to the feminine plate's vertex UVs**, stored as the masculine recipe's own face ranges and topology ([`eye-plate-recipe-pma.json`](../../projects/xf-studio/authoring/src/legacy/eye-makeup/plate/eye-plate-recipe-pma.json), revision 2), audited against the 2.31 masculine hashes.
 
 **Audit (phase 5, 28 September 2026).** The feminine plate's gates, run on the masculine cut:
 
@@ -250,7 +250,7 @@ Phases 1 and 5 can start at once in separate worktrees. Phase 1 touches the prev
 - **Default V for both.** The Character panel offers **Default V (feminine)** and **Default V (masculine)** (the existing `character.useDefault` action with its `bodyGender`), and so does the command palette. The masculine default V is always stored, so a reload shows him again.
 - **Drawn on a masculine V** [offline, the maintainer's install, the default masculine V]: head and skin on his core head (the resolved skin matches its surface and draws on it), eyes (None + 20 eye shapes, the eyes following), brows, lashes, hair, teeth, face decals (the personal link, the stubble), the eye makeup on his preview plate, and the body. The screenshots are private renders (the worktree's ignored `evidence/screenshots/male-v-core/`).
 
-**The masculine plate recipe** (`src/eye-plate-recipe-pma.json`, derived by `tools/derive-plate-selection.ts` by the §4.1 rule from WolvenKit 9.0.1 GLB exports of both heads; the tool now also prints the `seams` block) is the one the preview assembles for his core head and the one Build cuts; its audit is in §4.1. Changing it to revision 2 changed the masculine preview core's identity, so his preview head is prepared once more (about a minute) the first time he is shown.
+**The masculine plate recipe** (`src/legacy/eye-makeup/plate/eye-plate-recipe-pma.json`, derived by `tools/derive-plate-selection.ts` by the §4.1 rule from WolvenKit 9.0.1 GLB exports of both heads; the tool now also prints the `seams` block) is the one the preview assembles for his core head and the one Build cuts; its audit is in §4.1. Changing it to revision 2 changed the masculine preview core's identity, so his preview head is prepared once more (about a minute) the first time he is shown.
 
 **What phase 6 built.**
 
@@ -305,7 +305,7 @@ The prepared sitting, with the save needed and a staging checklist, is [N12 in t
   | `…\player_female_average\h0_000_pwa_c__basehead\h0_000_pwa_c__basehead.mesh` | `e877b91a7b3f6bd678f0365d484a0dd32f7d7d4d6c13b213d2a7e73fcce874c6` (the plate recipe's audited 2.31 source) |
   | `…\player_female_average\h0_000_pwa__morphs.morphtarget` | `3e10c3f75fbefb0a9ddcf907a6275ca8a30aad915ad34acadb817ae4c9297b9e` (likewise) |
 
-- **Masculine plate selection** (phases 1 and 5): `bun tools/derive-plate-selection.ts --reference <pwa morphs GLB> --target <pma morphs GLB>` over the same two GLB exports prints the selection block of `src/eye-plate-recipe-pma.json` (1,627 vertices, 11 boundary loops, one pinched boundary vertex) and its `seams` block (23 welded vertices, welded 802 + 802, 198 edges, 4 loops). The seam analysis (which loop edges the whole head uses once, and which coincident copies have identical attributes and morph deltas) ran as an uncommitted script over the same inputs under `tools/memory_guard.py` (peak 0.2 GB).
+- **Masculine plate selection** (phases 1 and 5): `bun tools/derive-plate-selection.ts --reference <pwa morphs GLB> --target <pma morphs GLB>` over the same two GLB exports prints the selection block of `src/legacy/eye-makeup/plate/eye-plate-recipe-pma.json` (1,627 vertices, 11 boundary loops, one pinched boundary vertex) and its `seams` block (23 welded vertices, welded 802 + 802, 198 edges, 4 loops). The seam analysis (which loop edges the whole head uses once, and which coincident copies have identical attributes and morph deltas) ran as an uncommitted script over the same inputs under `tools/memory_guard.py` (peak 0.2 GB).
 - **Masculine plate derivation** (phase 5): `ensureEyePlate` with `EYE_PLATE_MASCULINE_RECIPE` against the reference installation's base-game content (game 2.31), WolvenKit CLI 9.0.1 and 8.17.4, private cache outside the repository, 24 s: mesh `7e8975c2d2a5f429560096d8f5b78406e391e50322479a396240e34ccad9aedc` (145,185 bytes), morph `4397f3aa4899cce4042bc3335b6c9e4f2b3c0de3710346789bf23f48b1c7c449` (6,769,933 bytes), from the audited source hashes above. Reproduced by the opt-in `tests/eye-plate-game.test.ts` (`XFS_TEST_GAME_ROOT`, `XFS_TEST_WOLVENKIT`).
 - **Creator option indices** (§4.3): `female_cco_ep1` and `male_cco_ep1` as above; feminine teeth 310, eye makeup 450, 311 free; masculine teeth 540, eye makeup 550, 541 free, 311 = `beard_color5_0`.
 - **Vanilla visual tags** (§4.3): `hx_000__basehead_makeup_eyes_01.app` in the same serialized folder: 14 `pwa` appearances tagged `Female`, 14 `pma` tagged `Male`.

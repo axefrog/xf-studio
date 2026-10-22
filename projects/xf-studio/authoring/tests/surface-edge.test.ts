@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { layerEdgeReach, surfaceOutline } from "../src/engines/layered-makeup/surface-edge";
-import { parseRecipePart } from "../src/recipe-schema";
+import { parseRecipePart } from "../src/legacy/eye-makeup/recipe-schema";
 
 /** A flat plate over UV [0.3, 0.7] × [0.18, 0.32] (z = 0), `n × m` quads, with the quads in `holes` left out (an eye opening). */
 function plate(n: number, m: number, holes: (i: number, j: number) => boolean) {

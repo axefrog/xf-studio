@@ -5,6 +5,7 @@
 /** cause (0.8.1): for a superseded command, the code it stopped with. */
 export type PlainError = { code: string; message: string; detail?: string; cause?: string };
 
+/** The shared plain wording per refusal code (also published in docs/mcp-reference.md). */
 export const BRIDGE_MESSAGES: Readonly<Record<string, string>> = {
   bad_request: "The game bridge didn't understand the request. This is a bug in the tool that sent it.",
   bad_params: "Some of the values given aren't valid for this action.",

@@ -13,9 +13,9 @@
 // between them, which the raw topology counts as extra boundary loops or a pinched vertex; the `seams` block is the
 // topology with those welded (male V plan §4.1, phase 5). The plate verifier re-derives both from the native bytes.
 import { readFileSync } from "node:fs";
-import { parseGlb, readAccessor, type Glb, type GltfJson } from "../src/glb";
-import { EYE_PLATE_RECIPE, idListSha256, selectedFaceIds } from "../src/eye-plate-recipe";
-import { plateTopology, weldedSeams } from "../src/eye-plate-verify";
+import { parseGlb, readAccessor, type Glb, type GltfJson } from "../src/formats/glb";
+import { EYE_PLATE_RECIPE, idListSha256, selectedFaceIds } from "../src/legacy/eye-makeup/plate/eye-plate-recipe";
+import { plateTopology, weldedSeams } from "../src/legacy/eye-makeup/plate/eye-plate-verify";
 
 const args = new Map<string, string>();
 for (let index = 2; index < process.argv.length; index += 2) args.set(process.argv[index]!, process.argv[index + 1]!);
