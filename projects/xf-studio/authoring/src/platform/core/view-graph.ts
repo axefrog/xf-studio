@@ -411,12 +411,20 @@ export class ViewGraph {
     for (const id of ids) { const value = values[id] as NodeEntry | undefined; if (value) nodes.set(id, value); else nodes.delete(id); }
     if (!this.consistent(views, nodes)) { this.emit([], false, "history", false); return false; }
     if (structure) this.views = clone(structure.views);
-    for (const id of ids) { const value = values[id] as NodeEntry | undefined; if (value) this.nodes.set(id, clone(value)); else this.nodes.delete(id); }
+    for (const id of ids) { const value = values[id] as NodeEntry | undefined; if (value) this.nodes.set(id, this.keepUnrecorded(value)); else this.nodes.delete(id); }
     const touched = [...ids];
     this.collect(touched);
     // Published once the scope has settled (`publishHistory`), so subscribers read the history as it stands (Redo included).
     this.settling = { touched, structure: !!structure };
     return true;
+  }
+  /** A node as a step holds it, with its codec's unrecorded fields as the node has them now (they never go back with a step). */
+  private keepUnrecorded(value: NodeEntry): NodeEntry {
+    const fields = this.rules.codecs[value.slot].unrecorded, current = this.nodes.get(value.id);
+    if (!fields?.length || !current) return clone(value);
+    const state = clone(value.state);
+    for (const field of fields) { if (field in current.state) state[field] = clone(current.state[field]); else delete state[field]; }
+    return { ...clone(value), state };
   }
   /** Publish what the last Undo or Redo changed, now that the View and lighting history has settled. */
   private publishHistory() {

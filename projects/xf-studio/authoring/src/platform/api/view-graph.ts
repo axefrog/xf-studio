@@ -61,6 +61,11 @@ export type NodeCodec = {
   /** The kinds this slot's nodes may have; absent means the slot has no kinds (display, tools). */
   readonly kinds?: readonly string[];
   parse(state: Readonly<Record<string, unknown>>, kind: string | undefined): Record<string, unknown> | undefined;
+  /**
+   * State fields the View and lighting history never holds (a scene's motion: the subject's live state, like camera navigation). They
+   * record nothing, and an Undo or Redo of another setting of the node leaves them as they are now.
+   */
+  readonly unrecorded?: readonly string[];
 };
 export type SceneKindRule = { readonly kind: SceneKind; readonly cameras: readonly CameraKind[]; readonly rigs: readonly RigKind[] };
 export type ViewGraphRules = { readonly codecs: { readonly [S in ViewSlot]: NodeCodec }; readonly scenes: readonly SceneKindRule[] };

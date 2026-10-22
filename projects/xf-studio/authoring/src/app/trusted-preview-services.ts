@@ -3,15 +3,31 @@ import { PreviewActions, type PreviewPort } from "../preview/preview-actions";
 import { SavedAppearanceActions, type SavedAppearancePort } from "../character/saved-appearance-actions";
 import type { WorkspaceState } from "./workspace/workspace-state";
 import type { ViewGraph } from "../platform/core/view-graph";
-import { MAIN_VIEW } from "../platform/api/view-graph";
-import { previewLights, previewMirror } from "../preview/preview-view-graph";
+import { MAIN_VIEW, type ViewId } from "../platform/api/view-graph";
+import { createStudioViewGraph, previewLights, previewMirror, type SceneState } from "../preview/preview-view-graph";
 import { lightingSource } from "../preview/lighting-setups";
+import { DEFAULT_MOTION, type MotionScene } from "../animation/scene-motion";
+
+/**
+ * The motion service's scene (scene-motion.ts): the motion settings in the scene node of the view the device draws, edited as the device
+ * already shows them (no View and lighting step); hair physics and whether a view shows the drawn scene through the preview service.
+ */
+export function graphMotionScene(graph: ViewGraph, preview: () => PreviewActions | undefined, shown: ViewId = MAIN_VIEW): MotionScene {
+  return {
+    motion: () => structuredClone(graph.state<SceneState>(shown, "scene").motion ?? DEFAULT_MOTION),
+    setMotion: (motion, options) => { graph.edit(shown, "scene", { state: { motion } }, { applied: true, ...(options?.seed ? { seed: true } : {}) }); },
+    physics: view => preview()?.scenePhysics(view) ?? graph.state<SceneState>(shown, "scene").physics === true,
+    setPhysics: (enabled, view) => preview()?.setScenePhysics(enabled, view),
+    draws: view => preview()?.drawsScene(view) ?? view === shown,
+  };
+}
 
 /**
  * Restore the preview from workspace data without reading presentation controls. `graph` is the workspace's view graph (the
  * composition root's, which outlives any one head); the loaded head's fallbacks (an unavailable detail, an eye shape it lacks, no
- * creator rig) are written into its main view as restore-time state that records no View and lighting step. Without one (fixtures)
- * the preview actions keep a private one-view graph over the restored preview.
+ * creator rig, an idle it can't play) are written into its main view as restore-time state that records no View and lighting step.
+ * The motion is the main view's scene's (its node's `motion`). Without a graph (fixtures) the services keep a private one-view graph
+ * over the restored preview.
  */
 export function createTrustedPreviewServices(workspace: WorkspaceState, ports: {
   savedAppearance: SavedAppearancePort;
@@ -60,18 +76,18 @@ export function createTrustedPreviewServices(workspace: WorkspaceState, ports: {
     /** Call after the surface editor exists. Motion restores before neutral-space camera state. */
     finish() {
       ports.preview.setSurfaceControls(initial.surface);
-      // Motion's scene settings (hair physics) live in the view graph's scene node, which the preview service edits.
+      const views = graph ?? createStudioViewGraph(initial);
+      // The motion lives in the main view's scene node, and its scene settings (hair physics) through the preview service.
       let preview: PreviewActions | undefined;
-      const motion = new MotionActions(initial, ports.motion, { physics: view => preview?.scenePhysics(view) ?? initial.physics === true,
-        setPhysics: (enabled, view) => preview?.setScenePhysics(enabled, view), draws: view => preview?.drawsScene(view) ?? view === MAIN_VIEW });
+      const motion = new MotionActions(ports.motion, graphMotionScene(views, () => preview));
       motion.restore();
       // The head shows the restored state now: the graph's main view learns the fallbacks it needed.
-      graph?.withoutHistory(() => {
+      views.withoutHistory(() => {
         const seed = { applied: true, seed: true } as const;
-        graph.edit(MAIN_VIEW, "display", { state: { brows: initial.brows, lashes: initial.lashes } }, seed);
-        graph.edit(MAIN_VIEW, "scene", { state: { eyeShape: initial.eyeShape } }, seed);
+        views.edit(MAIN_VIEW, "display", { state: { brows: initial.brows, lashes: initial.lashes } }, seed);
+        views.edit(MAIN_VIEW, "scene", { state: { eyeShape: initial.eyeShape } }, seed);
       });
-      preview = new PreviewActions(initial, ports.preview, graph);
+      preview = new PreviewActions(initial, ports.preview, views);
       ports.preview.setPiercings(initial.piercings);
       ports.preview.setBody?.(initial.body ?? true);
       // A saved camera is where the workspace left it, not a jump: no View and lighting step, no Back trail entry.

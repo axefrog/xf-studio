@@ -39,7 +39,7 @@ test("workspace browser adapter keeps verification storage isolated and captures
     capture: { editor: () => ({ recipe: workspace.recipe, active: 0, selected: 0, history: [], fieldSelection: {} }),
       uvView: () => workspace.uvView, savedV: () => undefined, collections: () => undefined,
       quality: () => 512, preview: () => ({ ...workspace.preview, wire: true,
-        camera: { position: [0, 0, 1], target: [0, 0, 0], fov: 42 } }), motion: () => undefined },
+        camera: { position: [0, 0, 1], target: [0, 0, 0], fov: 42 } }) },
     sources: [], window: windowEvents, document: documentEvents, onStatus: s => statuses.push(s.kind), model: STUDIO_DOCUMENTS,
   });
   documentEvents.dispatchEvent(new Event("input")); session.flush();

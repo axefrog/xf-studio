@@ -299,7 +299,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       savedV: () => workspace.savedV,
       collections: () => workspace.collections,
       quality: () => previewDevice?.coordinator.quality.snapshot().size ?? workspace.preview.textureSize,
-      preview: () => head?.preview.snapshot(), motion: () => head?.motion.snapshot(), views: () => workspace.views,
+      preview: () => head?.preview.snapshot(), views: () => workspace.views,
       uiPreferences: () => { const { layout: _live, ...rest } = preferences.snapshot(); return { ...rest, ...(legacyLayout ? { layout: legacyLayout } : {}) }; },
       previewSetup: () => ({ autostart, ...(declined ? { declined: true as const } : {}) }),
       transitions: () => transitions.stored(),

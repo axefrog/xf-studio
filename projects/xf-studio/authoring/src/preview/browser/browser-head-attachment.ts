@@ -181,6 +181,8 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     }
     const { preview, motion } = services.finish();
     releases.push(() => preview.dispose());
+    // The idle's phase goes back to the scene before the head does, so the scene's next head starts where this one was.
+    releases.push(() => motion.release());
     ports.attach({ preview, motion });
     releases.push(() => ports.attach({ preview: undefined, motion: undefined }));
     releases.push(preview.subscribe(ports.persist), motion.subscribe(ports.persist), preview.subscribe(ports.changed));

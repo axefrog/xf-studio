@@ -114,7 +114,7 @@ test("reason codes are structured where refusals are decided, not read from mess
   expect(source).not.toMatch(/reason(?:\?)?\.includes\(|function reasonCode|startsWith\("(?:preview|camera|motion|quality|savedV)\./);
   // A device error whose text never says "unavailable" is still an unavailable asset.
   const { app } = fixture();
-  const motion = new MotionActions(freshWorkspace().preview, { available: false, error: "Idle clip failed to decode.", blink: { available: false },
+  const motion = new MotionActions({ available: false, error: "Idle clip failed to decode.", blink: { available: false },
     setIdle() {}, setIdlePaused() {}, setIdleContributions() {}, setBlink() {}, animateBlink() {} });
   app.attach({ motion });
   // The rig's own error goes to the diagnostics log; the refusal is plain (UI-88).

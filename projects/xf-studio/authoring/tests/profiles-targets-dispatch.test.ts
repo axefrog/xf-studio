@@ -15,6 +15,7 @@ import { STUDIO_COMPOSITION, STUDIO_REGISTRY } from "../src/compose/studio-regis
 import { MAIN_VIEW } from "../src/platform/api/view-graph";
 import { MotionActions, NOT_DRAWN, type MotionPort } from "../src/animation/motion-actions";
 import { PreviewActions, type PreviewPort } from "../src/preview/preview-actions";
+import { graphMotionScene } from "../src/app/trusted-preview-services";
 import { createStudioViewGraph } from "../src/preview/preview-view-graph";
 import { freshWorkspace, initialRecipe } from "./fixtures/eye-region";
 import { namedCore } from "./fixtures/named-targets";
@@ -136,8 +137,7 @@ describe("view actions backed by the drawn head", () => {
       idle: { enabled: false, time: 0, paused: false, bodyEnabled: true, faceEnabled: true, seek() {} },
       setIdle: value => calls.push(`idle.${value}`), setIdlePaused: () => calls.push("paused"), setIdleContributions: () => calls.push("contributions"),
       setBlink: () => calls.push("blink"), animateBlink: () => calls.push("animateBlink") };
-    const motion = new MotionActions(workspace.preview, motionPort, { physics: view => preview.scenePhysics(view),
-      setPhysics: (enabled, view) => preview.setScenePhysics(enabled, view), draws: view => preview.drawsScene(view) });
+    const motion = new MotionActions(motionPort, graphMotionScene(graph, () => preview));
     calls.length = 0;
     return { graph, second, preview, motion, calls };
   }

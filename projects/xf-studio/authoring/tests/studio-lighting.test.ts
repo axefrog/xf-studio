@@ -81,7 +81,7 @@ test("the workspace stores the rig only when adjusted, restores it, and older or
   actions.dispatch({ kind: "preview.selectLightingSetup", view: "main", setup: "soft" });
   const composer = new WorkspaceComposer(round, { editor: () => ({ recipe: round.recipe, active: round.active, selected: round.selected,
     fieldSelection: round.fieldSelection, history: round.history }) as never, uvView: () => round.uvView, savedV: () => undefined,
-  collections: () => undefined, quality: () => round.preview.textureSize, preview: () => actions.snapshot(), motion: () => undefined });
+  collections: () => undefined, quality: () => round.preview.textureSize, preview: () => actions.snapshot() });
   composer.setPreviewReady();
   expect("studioLights" in serializeWorkspace(composer.capture(), STUDIO_DOCUMENTS).preview).toBe(false);
 });

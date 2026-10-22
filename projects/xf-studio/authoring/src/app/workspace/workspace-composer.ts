@@ -1,5 +1,4 @@
 import type { DocumentState } from "../authoring/authoring-document";
-import type { MotionActions } from "../../animation/motion-actions";
 import type { PreviewActions } from "../../preview/preview-actions";
 import type { WorkspaceState } from "./workspace-state";
 import { parseUIPreferences } from "../ui-preferences";
@@ -11,7 +10,6 @@ export type WorkspaceCapturePorts = {
   collections(): WorkspaceState["collections"];
   quality(): WorkspaceState["preview"]["textureSize"];
   preview(): ReturnType<PreviewActions["snapshot"]> | undefined;
-  motion(): ReturnType<MotionActions["snapshot"]> | undefined;
   /**
    * The character context's stored form (character-context-actions.ts `stored`): undefined while the context isn't attached (the
    * workspace's is kept), null when nothing needs storing.
@@ -30,7 +28,11 @@ export type WorkspaceCapturePorts = {
   profiles?(): Pick<WorkspaceState, "migration" | "profiles">;
 };
 
-/** Composes durable workspace state from typed ports; the dock layout arrives with the UI preferences. */
+/**
+ * Composes durable workspace state from typed ports; the dock layout arrives with the UI preferences. The `preview` block's motion fields
+ * (idle, blink, the idle played, the pose) are written back as they were read: the motion lives in the view graph's scene nodes
+ * (animation/scene-motion.ts), stored with the profile session, so those fields only keep what a build before the move reads.
+ */
 export class WorkspaceComposer {
   private previewReady = false;
   constructor(private initial: WorkspaceState, private ports: WorkspaceCapturePorts) {}
@@ -56,22 +58,10 @@ export class WorkspaceComposer {
     }
     if (!this.previewReady) return structuredClone({ ...base, ...editing,
       preview: this.withTransitions({ ...this.initial.preview, textureSize: quality }) });
-    const config = this.ports.preview(), motion = this.ports.motion(), original = this.initial.preview;
-    const preview: WorkspaceState["preview"] = { ...original, ...config, textureSize: quality,
-      blink: motion?.blink ?? original.blink, blinkPlaying: motion?.blinkPlaying ?? original.blinkPlaying,
-      idle: motion?.idle ?? original.idle, idleTime: motion?.idleTime ?? original.idleTime,
-      idlePaused: motion?.idlePaused ?? original.idlePaused,
-      idleBody: motion?.idleBody ?? original.idleBody, idleFace: motion?.idleFace ?? original.idleFace };
+    const config = this.ports.preview(), original = this.initial.preview;
+    const preview: WorkspaceState["preview"] = { ...original, ...config, textureSize: quality };
     // The person's own lighting setups are stored only while there are any (the preview's mirror has them then).
     if (config) { delete preview.lightingSetups; if (config.lightingSetups) preview.lightingSetups = config.lightingSetups; }
-    // The chosen idle is stored only when it isn't the default (the close-up), so a workspace that never chooses keeps its bytes.
-    const idleClip = motion ? motion.idleClip : original.idleClip;
-    delete preview.idleClip;
-    if (idleClip && idleClip !== "closeup") preview.idleClip = idleClip;
-    // The held pose is view state: stored only while one is the body source.
-    const pose = motion ? motion.pose : original.pose;
-    delete preview.pose;
-    if (pose) preview.pose = { id: pose.id, label: pose.label };
     // The context owns every creator choice (CORE-58) and is stored only when something was set. The retired tried piercing style is
     // written back as read until the context stores choices (it migrates the style into them once its catalogue is ready, CORE-74);
     // then it is written empty.

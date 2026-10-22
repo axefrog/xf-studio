@@ -1,6 +1,6 @@
 # Experiment 043: scene runtimes (profiles phase 4a)
 
-**Status:** gap map and chunk plan, approved 22 October 2026 with decisions D1–D4 at their defaults (§4). Chunks 4a-i (§7) and 4a-ii (§8) are built on `claude/profiles-4a`. This is the working record for [profiles design §4.5](../../research/authoring/profiles-views-layouts-design.md#45-scene-runtimes-and-switching-phase-4a) and its phase 4a row in §9.2. It builds on spike S2 ([experiment 039](../039-view-switch-spike/README.md), prototype on branch `claude/spike-views`).
+**Status:** gap map and chunk plan, approved 22 October 2026 with decisions D1–D4 at their defaults (§4). Chunks 4a-i (§7), 4a-ii (§8) and 4a-iii (§9) are built on `claude/profiles-4a`. This is the working record for [profiles design §4.5](../../research/authoring/profiles-views-layouts-design.md#45-scene-runtimes-and-switching-phase-4a) and its phase 4a row in §9.2. It builds on spike S2 ([experiment 039](../039-view-switch-spike/README.md), prototype on branch `claude/spike-views`).
 
 Source paths are relative to `projects/xf-studio/authoring/src/`, and line numbers are at `72369156` (phase 1 merged). Tests are in `projects/xf-studio/authoring/tests/`.
 
@@ -94,7 +94,7 @@ Effort is in the design's units. Each chunk leaves `main` green (suite, typechec
 |---|---|---|---|---|
 | **4a-i: Leak-free disposal and GPU accounting** | Every runtime-made GPU resource is disposed without context loss: core textures, geometry and skin material, the rig's motion resources, frame targets, PMREM, shadow maps, and the character and feature renderers. A GL-object counter for probes. `createSceneHost` takes an optional injected renderer (default unchanged). | T2: open and close a host on one renderer ×5, synthetic head. GL objects, `renderer.info` and program count are back at baseline. Existing WebGL probes unchanged. | 1–1.5 | — |
 | **4a-ii: Renderer device and hidden runtimes** | `platform/scene/renderer-device.ts`: canvas, renderer, scheduler, resize and DPR, context events, and drawing only the shown runtime. `SceneRuntime` is today's host minus those, built hidden, with an `AbortSignal` through core, rig, motion and features. Per-draw renderer-state record. Controls attached only while drawn, with the camera pose from and to the camera node. One runtime in production, behaviour unchanged. The root's head variables move to the viewport device. | T1: renderer-state contract. T2: a runtime built while another shows draws 0 frames and leaves the canvas checksum unchanged; A-B-A pixels byte-identical; abort at each build step releases everything (GL counts at baseline). G1: scene parity byte-identical. | 2–2.5 | 4a-i |
-| **4a-iii: Motion settings into the scene node** | Idle, clip, pause, contributions, blink and pose become scene-node state in the graph, with View and lighting history as today. `MotionActions` reads and edits the node. The legacy `preview` mirror stays for older builds. | T1: workspace fixtures round-trip byte-identical when nothing changed; an older-build reader test; restore order unchanged. | 0.75–1 | — (alongside 4a-ii) |
+| **4a-iii: Motion settings into the scene node** | Idle, clip, pause, contributions, blink and pose become scene-node state in the graph, with View and lighting history as today. `MotionActions` reads and edits the node. The legacy `preview` fields are read once and written back as read, for older builds (§9). | T1: workspace fixtures round-trip byte-identical when nothing changed; an older-build reader test; restore order unchanged. | 0.75–1 | — (alongside 4a-ii) |
 | **4a-iv: Residency and the superseding subject change** | A DOM-free residency owner: per scene, a wanted (subject, body); runtimes moving through building, preparing, ready, shown, warm and disposed; N warm (default 1, tunable); least recently shown evicted first; supersession by `AbortController`, with a generation check so no late result is shown. The character context outlives runtimes, and its scene ports follow the shown runtime (`CharacterService.detach` goes). Warm runtimes stop following and catch up on show. **`reloadHead`, `headWorkspace` and the `not_ready` refusal are removed.** `PreviewSetupActions` keeps only first-run setup. `ensureBody` takes a signal. | T1 (model-based, seeded): random body and V changes with cancels, where the last choice is always shown, nothing superseded is shown, cancel is ≤ 100 ms on the injected clock, the warm runtime is reused, and eviction and close dispose. T2: female, male, then female 150 ms later shows female; closing a subject returns GL counts. | 2 | 4a-ii, 4a-iii |
 | **4a-v: Prepare before switching, with progress** | `runtime.prepare(view, signal)`: async compile of the whole scene for each lighting setup its views show (main, scatter, contact and shadow variants), core and detail textures uploaded a few per frame, then one hidden warm-up draw into a small offscreen target. A typed preparation state. The head pane keeps the previous V drawn and shows progress in its existing quiet overlay (`studio-ui/panels/viewports.ts:111–115`), with no new component expected. `device.show(view)` with the same rule, for phase 2's tabs. | T2: warm switch ≤ 100 ms to the first presented frame; no main-thread task over 50 ms from the request to 1 s after the switch; programs and uploads during the shown frame are 0. G2: the same on real data with a fresh Chrome profile (cold program cache). UI review PASS. | 1.5–2 | 4a-ii (the API); 4a-iv (wiring) |
 | **4a-vi: Routing by named view, exception 17, gates and records** | View actions routed to the named view's runtime, with the `NOT_DRAWN` refusals, `drawsScene` and the `MAIN_VIEW` seeds removed. Editors bound per view (`preview/browser/scene-editors.ts`). Loaders through `character.setSource` with readiness per scene. Exception 17 removed. `tests/webgl-scene-runtimes.test.ts` (T2), and `measure.ts` in this folder (T3). Records: design §4.5 "Built in phase 4a", view graph status, boundary record, action catalogue, and a knowledge page on program linking and residency in WebGL. | T1 in CI. T2 and T3 as release oracles. The no-default boundary test and the view-graph ratchet updated (the scene-host importer list shrinks). G3: the full S2 gate table, on real data. | 1.5–2 | 4a-iv, 4a-v |
@@ -259,4 +259,68 @@ G1 (scene parity on a real V) has not run.
 - **The surface editor binds once, to the drawn runtime,** and its listeners sit on the device's canvas. A swap must settle any open gesture and rebind it (§2.5), with the layered surfaces.
 - **Context restore** reaches every runtime on the device. 4a-iv's residency drops the warm ones first instead.
 - **Supersession.** The viewport device's controller is the seed of the per-scene want. 4a-iv replaces "release, then build" with "build hidden while the previous one stays shown", which the device already allows, and adds the signal to `ensureBody`.
-- **Motion** still lives in `MotionActions` and the workspace's `preview` block (4a-iii); nothing here moved it.
+- **Motion** was still `MotionActions` state in the workspace's `preview` block after this chunk; 4a-iii moved it into the scene node (§9).
+
+## 9. Chunk 4a-iii: motion settings in the scene node (built)
+
+**What changed.**
+
+- **The motion is scene data** (`animation/scene-motion.ts`). `SceneMotion` holds the idle's on/off, phase (`idleTime`), pause and contributions, the game's preview idle that plays (`idleClip`, absent for the close-up), the closure and Play blink, and the held pose. It is plain, validated and normalised data, under the rules the workspace reader always applied: while the idle plays the blink is open and still; while it doesn't, it isn't paused. It lives in the view graph's scene node as `SceneState.motion` (`preview/preview-view-graph.ts`), so it is stored with the profile session's graph.
+- **Motion records nothing in View and lighting.** `NodeCodec` gained `unrecorded` (`platform/api/view-graph.ts`), and the scene codec lists `motion` there. A motion edit carries no label, so it records no step. An Undo or Redo of another scene setting (eye shape, hair physics) restores the node with its unrecorded fields as they are now (`ViewGraph.keepUnrecorded`). Without this, undoing an eye-shape change would also have put back the idle as it was then.
+- **`MotionActions` holds no settings** (`animation/motion-actions.ts`). It is `new MotionActions(port, scene)`, where the `MotionScene` port reads and stores the drawn scene's motion. In the Studio that port is `graphMotionScene(graph, preview, view)` in `app/trusted-preview-services.ts`; fixtures use `localMotionScene()`. The service keeps only what the device is doing now: an idle loading, a pose loading or playing. Changes behave as follows:
+  - Every dispatch stores the changed settings, with the device's idle state and phase at that moment, as an applied, unrecorded edit.
+  - `restore()` applies the node's motion to a head built for the scene. The order is unchanged: contributions, the idle's clip, the idle, then its phase and pause, else the blink. What the device couldn't take is stored back as restore-time state (`seed`), as the workspace used to save it: an idle or blink not prepared on this computer, or an idle it doesn't have.
+  - `release()` stores the idle's phase. The head attachment calls it before the scene goes (`preview/browser/browser-head-attachment.ts`), so the scene's next head starts where this one was.
+- **The workspace no longer carries motion.** `WorkspaceComposer` lost its `motion` port. The `preview` block's motion fields are written back exactly as they were read, and the root no longer passes the motion snapshot to the workspace session (`compose/studio-startup.ts`; one capture line removed). `parseWorkspace` reads the legacy idle and pose with the node's validators (`validIdleClip`, `storedPoseOf`).
+- **Reduced:**
+  - `MotionActions`' `initial`, `blink`, `blinkPlaying`, `clip` and `pending` fields;
+  - its physics refusal for a service with no scene;
+  - the composer's motion overlay and its idle and pose rules.
+
+**How existing workspaces migrate.** The main view's scene node takes its motion from the workspace's legacy `preview` fields once, whenever it holds none (`workspaceViewGraph`):
+
+- A workspace the profiles migration hasn't run on yet, or ran on before this chunk, has scene nodes without motion. Its main scene takes the legacy fields' motion when the graph is built.
+- The window's next save writes the session with the motion in the node. From then on the node wins, and the legacy fields are never read for motion again.
+- A session made by the profiles migration from now on takes the motion when it is made (`sessionOfWorkspace`).
+- Other scenes without motion start at the default motion.
+- The legacy fields stay as they were at the upgrade (profiles design §2.4's rule for legacy fields), so a build before this chunk opens the motion as it was then. That build's scene codec drops the node's `motion` when it saves and writes its own motion into the legacy fields, so this build reads that motion again. This is the documented reset on downgrade, and the round trip loses nothing the older build showed.
+- A window whose session isn't stored yet (the migration hasn't finished) keeps motion changes for the page only. The tab arrangement already works this way.
+
+**Gates.**
+
+- **T1** (`tests/scene-motion.test.ts`, 7 tests):
+  - an upgraded workspace's motion comes through unchanged (read once, then only the node is written, and the node wins on the next read);
+  - a workspace round-trips byte-identically when nothing changed; an upgraded one gains only its main scene's `motion`, once;
+  - an older-build reader: the scene codec at `d9f88a33` reads every stored scene node, the legacy fields hold the upgrade's motion, and the downgrade round trip reads the older build's motion again;
+  - the codec validates and normalises, and refuses a damaged motion;
+  - motion records no step, and Undo and Redo of eye shape and hair physics leave it as it is now (fails with `keepUnrecorded` removed);
+  - a new head of the same scene restores the node's motion from the phase the previous head left, whatever the workspace snapshot says;
+  - a device's fallbacks are stored as restore-time state that records nothing.
+- **Restore order:** `tests/trusted-preview-services.test.ts` and `tests/preview-service.test.ts` are unchanged and pass.
+- **History parity:** `tests/golden/history-parity.json` is unchanged. The View and lighting session's data digest now leaves out the scenes' `motion` (`tests/fixtures/history-parity.ts`), and every step, label, event and Undo or Redo state matches.
+- **Tests that built `MotionActions` from a `preview` block** now pass the motion to a scene. The composer and idle-choice persistence tests now check the node and the session.
+
+**Results** (22 October 2026; under the 3 GB guard):
+
+| Run | Result |
+|---|---|
+| Motion, idle, pose, blink, view-graph, history, parity, workspace, profiles, boundary, lighting, preview-service and scene tests | 96 files, 974 pass, 0 fail (peak 1.5 GB) |
+| Every other test file importing a changed module | 18 files, 138 pass, 0 fail |
+| `tests/scene-motion.test.ts` | 7 of 7 pass |
+| WebGL probes whose tests touch motion | scene host 7 of 7, renderer device 7 of 7 (peaks 1.1 and 1.2 GB) |
+| WebGL disposal gate (its page plays the idle) | not run: the guard stopped it when the machine's free memory fell to 15.9 GB (the game was running); this chunk changes no scene, rig or render code |
+| `bun run check` | passes |
+
+**Decisions and caveats.**
+
+- **The legacy fields are frozen, not mirrored.** The plan's row said the mirror stays. The brief said to write only the new place, and profiles design §2.4 freezes legacy fields, so they are written back as read.
+- **The idle's phase while it plays.** The node holds the phase as of the last motion change or head release, not the live clock. The workspace used to read the clock at every save. A page reload therefore resumes a playing idle from the last stored phase. A paused idle's phase is exact.
+- **Fallbacks are stored, as before.** A head that can't play the idle stores it off, and a missing idle choice falls back to the default. This matches what the workspace used to save, so behaviour is unchanged. Under 4a-iv's residency, though, a masculine runtime (idle `IDLE_MASCULINE`) would write the idle off into a scene a feminine runtime shares. Whether the node should keep the person's choice while a device can't play it is a 4a-iv decision.
+- **Layout fragments carry the motion.** `layoutFragment` copies node state, so a default made from a scene now holds its whole motion (phase, blink, pose), not only the idle choice that design §4.2 names. Phase 2 may trim it.
+- **`storedViewGraph` and `isDefaultViewGraph`** have written nothing in production since phase 1 froze `views`. Their rule ("the default graph's state is the mirrored `preview`") no longer covers motion. They are candidates for removal.
+
+**What 4a-iv needs from this.**
+
+- **A new runtime reads motion from the graph.** `headWorkspace` no longer carries motion, so dropping the snapshot loses no motion. It still carries the live camera pose (an orbit doesn't write the camera node, §8), so the camera's write-on-hide comes first.
+- **Apply on show, not on build.** A runtime built hidden while another shows should apply the scene's motion when it is shown: release the shown runtime's motion (`release()`, which stores its phase), then `restore()` the new one. With one runtime, build and show are the same moment.
+- **One motion service per runtime, over the same node.** `graphMotionScene` takes the view whose scene the runtime draws, so runtimes of one scene share the node. The decision on stored fallbacks (above) belongs with residency.

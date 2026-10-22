@@ -15,6 +15,8 @@ import { DEFAULT_PREVIEW_TEXTURE_SIZE, parsePreviewTextureSize, type PreviewText
 import {parseGlitterChoices, type GlitterChoices} from "../../engines/layered-makeup/glitter-model";
 import { defaultUIPreferences, parseUIPreferences, type UIPreferences } from "../ui-preferences";
 import { isCreatorName } from "../../character/creator-names";
+import { storedPoseOf, validIdleClip } from "../../animation/scene-motion";
+import { DEFAULT_IDLE } from "../../animation/idle-catalogue";
 import { migrationMarkOf, workspaceProfilesOf, type MigrationMark, type WorkspaceProfiles } from "../profiles/profile-session";
 import { storedCharacterOf, type StoredCharacter } from "../../character/character-context-actions";
 import { DEFAULT_CREATOR_LIGHTING, DEFAULT_LIGHTING_PRESET, LIGHTING_PRESETS, readCreatorLighting, storedCreatorLighting, type CreatorLightingOptions,
@@ -94,16 +96,16 @@ export type PreviewState = {
    * bytes. When present it decides the lighting, and the legacy fields are its approximation for builds before setups.
    */
   lightingSetups?: SetupLibrary;
+  /**
+   * The legacy motion fields: `blink` and `blinkPlaying` above, the idle's on/off, phase, pause and contributions, `idleClip` and `pose`.
+   * The motion lives in the view graph's scene nodes (animation/scene-motion.ts). These are read once, into the main view's scene when its
+   * node holds no motion (a workspace saved before the move), and written back exactly as read, so a build before the move opens the
+   * motion as it was at the upgrade.
+   */
   idle: boolean; idleTime: number; idlePaused: boolean; idleBody: boolean; idleFace: boolean;
-  /**
-   * Which of the game's preview idles plays while the idle is on (idle-catalogue.ts); absent: the default, the creator's close-up. Stored
-   * only when another is chosen, so a workspace that never chooses keeps its bytes.
-   */
+  /** Which of the game's preview idles played (idle-catalogue.ts); absent: the default, the creator's close-up. */
   idleClip?: string;
-  /**
-   * The photo-mode pose V holds (pose-library-design.md decision Q9: view state, like the camera; never in looks, Undo or exports): its
-   * TweakDB record and label. Present only while a pose is the body source.
-   */
+  /** The photo-mode pose V held (pose-library-design.md decision Q9): its TweakDB record and label. */
   pose?: { id: string; label: string };
   /**
    * How a held expression's changes animate (platform/core/transition-settings.ts, `transition.set`): per source, on or off, the
@@ -237,10 +239,10 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
     if (typeof p.skinScatter === "boolean") state.preview.skinScatter = p.skinScatter;
     if (typeof p.faceShadows === "boolean") state.preview.faceShadows = p.faceShadows;
     if (inRange(p.hairLook, HAIR_LOOK_RANGE.min, HAIR_LOOK_RANGE.max)) state.preview.hairLook = p.hairLook;
-    if (typeof p.idleClip === "string" && /^[a-z0-9][a-z0-9-]{0,39}$/.test(p.idleClip) && p.idleClip !== "closeup") state.preview.idleClip = p.idleClip;
-    const pose = p.pose as { id?: unknown; label?: unknown } | undefined;
-    if (pose && typeof pose === "object" && typeof pose.id === "string" && pose.id.length <= 512 && /^[A-Za-z0-9_.\-$#]+$/.test(pose.id) &&
-      typeof pose.label === "string" && pose.label.length <= 200 && !/[\u0000-\u001f]/.test(pose.label)) state.preview.pose = { id: pose.id, label: pose.label };
+    // The legacy motion fields (read once into the main scene's node while it holds none: animation/scene-motion.ts), by the node's rules.
+    if (validIdleClip(p.idleClip) && p.idleClip !== DEFAULT_IDLE) state.preview.idleClip = p.idleClip;
+    const pose = storedPoseOf(p.pose);
+    if (pose) state.preview.pose = pose;
     // The retired tried piercing style (the shared creator name rule): written back unchanged, and migrated by the character context.
     if (isCreatorName(p.piercingStyle, true) && isCreatorName(p.piercingDefinition, true)) {
       state.preview.piercingStyle = p.piercingStyle; state.preview.piercingDefinition = p.piercingDefinition;

@@ -153,7 +153,7 @@ test("the setting persists with the workspace (before the head loads too) and a 
   const settings = new TransitionSettings();
   const capture = () => new WorkspaceComposer(workspace, { editor: () => ({ recipe: workspace.recipe, active: 0, selected: 0, history: workspace.history, historyTrimmed: false,
     fieldSelection: {} }) as never, uvView: () => workspace.uvView, savedV: () => undefined, collections: () => undefined, quality: () => workspace.preview.textureSize,
-    preview: () => undefined, motion: () => undefined, transitions: () => settings.stored() }).capture();
+    preview: () => undefined, transitions: () => settings.stored() }).capture();
   expect(capture().preview.transitions).toBeUndefined();
   settings.dispatch({ kind: "transition.set", source: "expression", enabled: true, easing: "outStrong" });
   const captured = capture();
