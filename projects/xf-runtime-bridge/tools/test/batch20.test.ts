@@ -221,6 +221,47 @@ describe("0.8.6 the panel inside photo mode's menu (knowledge/photo-mode.md §15
     expect(reds).toContain('"killed"');
   });
 
+  // The Sol review of 0.8.6: teardown asks nothing of the game while the scripts' gate is shut, and a pop belongs to its session.
+  test("Sol review 1: game input goes back only while the scripts are live, a push is popped only in its own session, and owed input is settled later", () => {
+    const panel = read("redscript", "XFRuntimeBridgePhotoPanel.reds");
+    const settle = panel.slice(panel.indexOf("private func Settle() -> Void {"), panel.indexOf("private func ClearPress()"));
+    // The gate first, before anything that reaches the game.
+    expect(settle.indexOf("if !XFBridge_Live() {")).toBeGreaterThan(0);
+    expect(settle.indexOf("if !XFBridge_Live() {")).toBeLessThan(settle.indexOf("XFBridgeRegistry.Get()"));
+    expect(settle).toMatch(/owner == now \{\s+this\.SetModal\(false\);\s+\} else \{\s+this\.m_modalPushed = false;/);
+    const setModal = panel.slice(panel.indexOf("private func SetModal(on: Bool) -> Void {"), panel.indexOf("private func Pointer("));
+    expect(setModal.indexOf("!XFBridge_Live()")).toBeLessThan(setModal.indexOf("GameInstance.GetUISystem"));
+    const release = panel.slice(panel.indexOf("public func Release(why: String) -> Void {"), panel.indexOf("private func Settle()"));
+    expect(release).not.toContain("SetModal(");
+    expect(release).not.toContain("Block(");
+    const update = panel.slice(panel.indexOf("public func Update(timeDelta: Float) -> Void {"), panel.indexOf("private func Apply("));
+    expect(update).toMatch(/if !this\.m_open \{\s+\/\/[^\n]*\n\s+this\.Settle\(\);/);
+    expect(update.indexOf('this.Hide("scripts_not_live")')).toBeLessThan(update.indexOf("XFPhoto.Active()"));
+    const show = panel.slice(panel.indexOf("public func Show("), panel.indexOf("public func Hide("));
+    expect(show.indexOf("this.Settle();")).toBeLessThan(show.indexOf("this.Ensure(root)"));
+  });
+
+  test("Sol review 2: an answer takes a click only as a press and a release on it, the press made while the panel holds the mouse", () => {
+    const panel = read("redscript", "XFRuntimeBridgePhotoPanel.reds");
+    expect(panel).toContain('chip.RegisterToCallback(n"OnPress", this, n"OnXFChipPress");');
+    const press = panel.slice(panel.indexOf("protected cb func OnXFChipPress"), panel.indexOf("protected cb func OnXFChipRelease"));
+    expect(press).toContain("!this.m_hoverTaken");
+    expect(press).toContain("this.m_pressAsk = frame.askId;");
+    const release = panel.slice(panel.indexOf("protected cb func OnXFChipRelease"), panel.indexOf("// ---- What the agent sees"));
+    expect(release.indexOf("if pressAsk != frame.askId || pressChoice != choice {")).toBeLessThan(release.indexOf("XFBridge_Answer("));
+    // Cleared on leaving the answer, the panel, a release, a hide or stop (Release) and a new question.
+    const chipOut = panel.slice(panel.indexOf("protected cb func OnXFChipHoverOut"), panel.indexOf("protected cb func OnXFChipPress"));
+    expect(chipOut).toContain("this.ClearPress();");
+    expect(panel.slice(panel.indexOf("public func Release("), panel.indexOf("private func Settle()"))).toContain("this.ClearPress();");
+    expect(panel).toMatch(/if this\.m_pressAsk > 0 && frame\.askId != this\.m_pressAsk \{\s+this\.ClearPress\(\);/);
+  });
+
+  test("Sol review 3: every choice shows, those beyond the answer keys without a key", () => {
+    const ink = read("redscript", "XFRuntimeBridgeInk.reds");
+    expect(ink).toContain('let keyed = keys && NotEquals(frame.askKeys[k], "-") && NotEquals(frame.askKeys[k], "");');
+    expect(read("native", "src", "core", "InkUi.cpp")).toContain("for (size_t i = 0; i < pending.choices.size(); ++i)");
+  });
+
   test("natives: XFBridge_InkEvent and XFBridge_MouseHeld are declared as the plugin registers them", () => {
     expect(natives).toContain("public static native func XFBridge_InkEvent(kind: String, text: String, data: String) -> Bool");
     expect(natives).toContain("public static native func XFBridge_MouseHeld() -> Bool");

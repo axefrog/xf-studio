@@ -169,10 +169,14 @@ struct MessageLine
 // 0.8: "answered<TAB>id<TAB>label" once the player has answered (the ink panel draws "Answered: <label>" where the keys
 // were, until the next message), and "inkask<TAB>id" while the ink panel reports drawing that question on screen
 // (XFBridge_InkDrawn), which tells the CET label to show only the status and the answer keys.
+// 0.8.6 (the Sol review: with answer_keys = IK_F6 a two-answer question showed one answer to click): the frame carries every
+// choice, and one beyond the configured keys has this key, which no key press matches; the panels show its label alone.
+inline constexpr const char* kNoKey = "-";
+
 struct AskView
 {
     uint64_t id = 0;
-    std::vector<std::pair<std::string, std::string>> keyed; // (key, label) per choice
+    std::vector<std::pair<std::string, std::string>> keyed; // (key, label) per choice; 0.8.6: every choice, kNoKey without a key
     uint64_t answeredId = 0;
     std::string answeredLabel;
     uint64_t inkShown = 0;

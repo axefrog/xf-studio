@@ -4998,6 +4998,16 @@ void Bridge086Tests()
               !k::InkEventKindOk("write") && !k::InkEventKindOk("kill") && !k::InkEventKindOk("") && data["created"] == true &&
               data["children"][0]["name"] == "options_panel" && raw["raw"] == "not json" && k::InkEventData("").is_null(),
           data.dump() + " " + raw.dump());
+    {
+        // The Sol review of 0.8.6: every choice is in the frame, with a key only where answer_keys gives one.
+        xfb::MessageBoard asks;
+        asks.Post({"Which?", 60, "ask", false, {"Yes", "No", "Maybe"}});
+        const auto one = k::ParseFrame(k::BuildFrame(k::HudSettings{}, view, asks, {"IK_F6"}, 0));
+        Check("0.8.6 (Sol review) the frame carries every choice; one beyond the answer keys has the key -, which no key press matches",
+              one["ask"]["choices"].size() == 3 && one["ask"]["choices"][0]["key"] == "IK_F6" && one["ask"]["choices"][1]["key"] == "-" &&
+                  one["ask"]["choices"][2]["label"] == "Maybe" && std::string(k::kNoKey) == "-",
+              one.dump());
+    }
     const auto config = xfb::ParseConfig("");
     const auto hud = xfb::ParseConfig("[ui]\nlayer = hud\n");
     const auto bad = xfb::ParseConfig("[ui]\nlayer = photo\n");

@@ -658,9 +658,11 @@ std::string BuildFrame(const HudSettings& aSettings, const BridgeView& aView, Me
         if (aBoard.Pending(pending))
         {
             ask.id = pending.id;
-            for (size_t i = 0; i < pending.choices.size() && i < aAnswerKeys.size(); ++i)
+            // 0.8.6 (the Sol review): every choice, with its key where [ui] answer_keys gives one, kNoKey where it doesn't, so a
+            // panel that can be clicked shows them all whatever the keys.
+            for (size_t i = 0; i < pending.choices.size(); ++i)
             {
-                ask.keyed.emplace_back(aAnswerKeys[i], pending.choices[i]);
+                ask.keyed.emplace_back(i < aAnswerKeys.size() ? aAnswerKeys[i] : std::string(kNoKey), pending.choices[i]);
             }
             ask.inkShown = aInkShownAsk == pending.id ? aInkShownAsk : 0;
             ask.keysArmed = aKeysAsk == pending.id;

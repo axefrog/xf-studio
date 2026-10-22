@@ -670,8 +670,11 @@ public class XFInkPanel {
     while k < ArraySize(this.m_chips) {
       let chip = this.m_chips[k];
       if k < count {
+        // 0.8.6 (the Sol review): every choice is in the frame; one beyond the configured keys has the key "-" and shows its label
+        // alone (on the HUD it is answered in the XF Runtime Bridge window, in photo mode by a click).
         let key = StrBeginsWith(frame.askKeys[k], "IK_") ? StrAfterFirst(frame.askKeys[k], "IK_") : frame.askKeys[k];
-        chip.SetText(keys ? "[" + key + "] " + frame.askLabels[k] : frame.askLabels[k]);
+        let keyed = keys && NotEquals(frame.askKeys[k], "-") && NotEquals(frame.askKeys[k], "");
+        chip.SetText(keyed ? "[" + key + "] " + frame.askLabels[k] : frame.askLabels[k]);
         chip.SetVisible(true);
       } else {
         chip.SetVisible(false);

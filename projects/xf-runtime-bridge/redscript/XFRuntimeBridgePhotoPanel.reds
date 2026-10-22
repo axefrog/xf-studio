@@ -63,6 +63,13 @@ public class XFPhotoMenuPanel {
   private let m_hoverWaiting: Bool;
   private let m_menuHovered: Bool; // photo mode's own menu area is hovered (its own hover block)
   private let m_modalPushed: Bool;
+  // The Sol review of 0.8.6: the session whose UI system took the ModalPopup push (the bridge's registry, one per game
+  // session), so it is popped only in that session, and dropped, never popped against another, once that session has ended.
+  private let m_modalSession: wref<XFBridgeRegistry>;
+  // The Sol review: a press the panel accepted on an answer (the question's id and the answer), which only a release on that
+  // same answer completes; cleared on leaving the answer, on hide, on a stop and when the question changes.
+  private let m_pressAsk: Int32;
+  private let m_pressChoice: Int32;
   private let m_pushes: Int32;
   private let m_pops: Int32;
   private let m_reported: Bool;
@@ -123,6 +130,8 @@ public class XFPhotoMenuPanel {
       XFBridgeLog.Warn("ink", "photo-menu panel: photo mode's menu has no root widget; the XF box stays the status surface");
       return;
     }
+    // Input still owed from an earlier open (one that ended while the scripts' gate was shut) goes back first.
+    this.Settle();
     let created = this.Ensure(root);
     let index = this.Front(root);
     this.m_open = true;
@@ -132,6 +141,7 @@ public class XFPhotoMenuPanel {
     this.m_hoverCount = 0;
     this.m_hoverWaiting = false;
     this.m_menuHovered = false;
+    this.ClearPress();
     let frame = XFHudFrame.Parse(XFBridge_Hud());
     if frame.valid {
       this.Apply(frame);
@@ -145,7 +155,8 @@ public class XFPhotoMenuPanel {
     }
   }
 
-  // OnHide, or photo mode found closed: everything the panel holds goes back, and the layer hides.
+  // OnHide, photo mode found closed, or the scripts' gate shut (a load): the layer hides and the panel stops answering at once;
+  // the game input it holds goes back now if its session is live, else as soon as it is (Settle).
   public func Hide(why: String) -> Void {
     if !this.m_open {
       return;
@@ -162,24 +173,54 @@ public class XFPhotoMenuPanel {
     }
   }
 
-  // The camera's mouse and the ModalPopup context given back; the answers stop answering clicks.
+  // The answers stop answering clicks (owned widgets and bookkeeping, always), and the camera's mouse and the ModalPopup context
+  // go back (Settle: only while the owning session is live; otherwise they stay owed and Update or the next Show settles them).
   public func Release(why: String) -> Void {
     let hover = this.m_hoverTaken;
-    if this.m_hoverTaken {
-      this.Block(false);
-    }
-    let popped = this.m_modalPushed;
-    if this.m_modalPushed {
-      this.SetModal(false);
-    }
+    let modal = this.m_modalPushed;
+    this.ClearPress();
     this.m_hoverCount = 0;
     this.m_hoverWaiting = false;
     this.Interactive(false);
-    if hover || popped || NotEquals(why, "hidden") {
+    this.Settle();
+    if hover || modal || NotEquals(why, "hidden") {
       XFBridge_InkEvent("ink_input", "photo-menu panel released (" + why + ")",
-        "{\"why\":" + XFJson.Str(why) + ",\"hover_released\":" + XFJson.Flag(hover) + ",\"modal_popped\":" + XFJson.Flag(popped)
-        + ",\"pushes\":" + IntToString(this.m_pushes) + ",\"pops\":" + IntToString(this.m_pops) + "}");
+        "{\"why\":" + XFJson.Str(why) + ",\"hover_released\":" + XFJson.Flag(hover && !this.m_hoverTaken) + ",\"modal_popped\":" + XFJson.Flag(modal && !this.m_modalPushed)
+        + ",\"owed\":" + XFJson.Flag(this.m_hoverTaken || this.m_modalPushed) + ",\"pushes\":" + IntToString(this.m_pushes) + ",\"pops\":" + IntToString(this.m_pops) + "}");
     }
+  }
+
+  // Gives back the game input the panel holds, only while the game's scripts are live (the live guard): the hover block on its
+  // controller, and the ModalPopup push in the session that took it. A push whose session has ended went with that session's
+  // context stack, so it is dropped, never popped against the session now running. With the gate shut nothing is asked of the
+  // game; the input stays owed.
+  private func Settle() -> Void {
+    if !this.m_hoverTaken && !this.m_modalPushed {
+      return;
+    }
+    if !XFBridge_Live() {
+      return;
+    }
+    if this.m_modalPushed {
+      let owner: ref<XFBridgeRegistry> = this.m_modalSession;
+      let now = XFBridgeRegistry.Get();
+      if IsDefined(owner) && IsDefined(now) && owner == now {
+        this.SetModal(false);
+      } else {
+        this.m_modalPushed = false;
+        this.m_modalSession = null;
+        XFBridge_InkEvent("ink_input", "photo-menu panel dropped a ModalPopup push whose session had ended",
+          "{\"modal\":false,\"dropped\":true,\"pushes\":" + IntToString(this.m_pushes) + ",\"pops\":" + IntToString(this.m_pops) + "}");
+      }
+    }
+    if this.m_hoverTaken {
+      this.Block(false);
+    }
+  }
+
+  private func ClearPress() -> Void {
+    this.m_pressAsk = 0;
+    this.m_pressChoice = -1;
   }
 
   // The layer under the root, found by name or built: answers whether it was built now.
@@ -218,6 +259,7 @@ public class XFPhotoMenuPanel {
       let chip = this.m_view.Chip(i);
       chip.RegisterToCallback(n"OnHoverOver", this, n"OnXFChipHoverOver");
       chip.RegisterToCallback(n"OnHoverOut", this, n"OnXFChipHoverOut");
+      chip.RegisterToCallback(n"OnPress", this, n"OnXFChipPress");
       chip.RegisterToCallback(n"OnRelease", this, n"OnXFChipRelease");
       i += 1;
     }
@@ -261,12 +303,22 @@ public class XFPhotoMenuPanel {
   // ---- Every frame (the controller's OnUpdate) -------------------------------------------------------------------------------
 
   public func Update(timeDelta: Float) -> Void {
-    if !this.m_open || !IsDefined(this.m_layer) {
+    if !this.m_open {
+      // Input owed since a close while the gate was shut goes back once it is live again.
+      this.Settle();
       return;
     }
-    // The live guard: nothing asked of the game once its scripts' gate is shut (a load), or once photo mode has closed without
-    // OnHide reaching here.
-    if !XFBridge_Live() || !XFPhoto.Active() {
+    if !IsDefined(this.m_layer) {
+      return;
+    }
+    // The live guard: nothing asked of the game once its scripts' gate is shut (a load): only the panel's own widgets and
+    // bookkeeping are touched, and the input it holds stays owed (Settle).
+    if !XFBridge_Live() {
+      this.Hide("scripts_not_live");
+      return;
+    }
+    // Photo mode closed without OnHide reaching here.
+    if !XFPhoto.Active() {
       this.Hide("photo_mode_closed");
       return;
     }
@@ -301,6 +353,10 @@ public class XFPhotoMenuPanel {
     }
     this.m_showing = wanted;
     this.m_layer.SetVisible(wanted);
+    // A press on an answer belongs to the question it was made on.
+    if this.m_pressAsk > 0 && frame.askId != this.m_pressAsk {
+      this.ClearPress();
+    }
     if wanted {
       let root = this.m_controller.GetRootCompoundWidget();
       let size = root.GetSize();
@@ -323,7 +379,13 @@ public class XFPhotoMenuPanel {
       this.m_view.Apply(frame, XFInkHost.Available());
       this.Interactive(!killed);
     }
-    this.SetModal(wanted && frame.modal && !killed);
+    if wanted && frame.modal && !killed {
+      this.SetModal(true);
+    } else {
+      if this.m_modalPushed {
+        this.Settle();
+      }
+    }
     this.Report(frame, wanted);
   }
 
@@ -400,9 +462,10 @@ public class XFPhotoMenuPanel {
     }
   }
 
-  // ui.hud's modal: one ModalPopup push at most, popped by exactly one pop.
+  // ui.hud's modal: one ModalPopup push at most, popped by exactly one pop, in the session that pushed it (Settle decides a
+  // pop), and only while the scripts are live.
   private func SetModal(on: Bool) -> Void {
-    if Equals(on, this.m_modalPushed) {
+    if Equals(on, this.m_modalPushed) || !XFBridge_Live() {
       return;
     }
     let ui = GameInstance.GetUISystem(GetGameInstance());
@@ -417,6 +480,11 @@ public class XFPhotoMenuPanel {
       this.m_pops += 1;
     }
     this.m_modalPushed = on;
+    if on {
+      this.m_modalSession = XFBridgeRegistry.Get();
+    } else {
+      this.m_modalSession = null;
+    }
     XFBridge_InkEvent("ink_input", on ? "photo-menu panel pushed ModalPopup" : "photo-menu panel popped ModalPopup",
       "{\"modal\":" + XFJson.Flag(on) + ",\"pushes\":" + IntToString(this.m_pushes) + ",\"pops\":" + IntToString(this.m_pops) + "}");
   }
@@ -447,6 +515,9 @@ public class XFPhotoMenuPanel {
 
   protected cb func OnXFHoverOut(e: ref<inkPointerEvent>) -> Bool {
     this.m_hoverCount = Max(0, this.m_hoverCount - 1);
+    if this.m_hoverCount == 0 {
+      this.ClearPress();
+    }
     return false;
   }
 
@@ -460,20 +531,46 @@ public class XFPhotoMenuPanel {
 
   protected cb func OnXFChipHoverOut(e: ref<inkPointerEvent>) -> Bool {
     this.m_hoverCount = Max(0, this.m_hoverCount - 1);
+    this.ClearPress(); // leaving the answer pressed abandons the click
     if IsDefined(this.m_view) {
       this.m_view.SetHovered(-1);
     }
     return false;
   }
 
+  // The Sol review of 0.8.6: a click is a press and a release on the same answer. A press counts only on an answer of the
+  // question shown while the panel holds the camera's mouse (so the pointer isn't driving the camera); a release that ends a
+  // camera drag over an answer has no press of the panel's and does nothing.
+  protected cb func OnXFChipPress(e: ref<inkPointerEvent>) -> Bool {
+    this.ClearPress();
+    if !e.IsAction(n"click") || !this.m_open || this.m_killed || !this.m_hoverTaken || !IsDefined(this.m_view) {
+      return false;
+    }
+    let choice = this.m_view.ChipIndex(e.GetCurrentTarget());
+    let frame = this.m_view.drawn;
+    if choice < 0 || !IsDefined(frame) || frame.askId <= 0 {
+      return false;
+    }
+    this.m_pressAsk = frame.askId;
+    this.m_pressChoice = choice;
+    return false;
+  }
+
   // A click on an answer answers the question this panel shows (as the CET buttons answer the one their window shows).
   protected cb func OnXFChipRelease(e: ref<inkPointerEvent>) -> Bool {
+    let pressAsk = this.m_pressAsk;
+    let pressChoice = this.m_pressChoice;
+    this.ClearPress();
     if !e.IsAction(n"click") || !this.m_open || this.m_killed || !IsDefined(this.m_view) {
       return false;
     }
     let choice = this.m_view.ChipIndex(e.GetCurrentTarget());
     let frame = this.m_view.drawn;
     if choice < 0 || !IsDefined(frame) || frame.askId <= 0 {
+      return false;
+    }
+    if pressAsk != frame.askId || pressChoice != choice {
+      this.PointerAt("release_ignored", e, choice, ",\"ask\":" + IntToString(frame.askId) + ",\"why\":\"no press of the panel's on this answer\"");
       return false;
     }
     e.Handle();
