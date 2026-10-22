@@ -34,8 +34,11 @@ export type RigMotionAssets = { idle?: IdleAnimation; idleError: string;
   blink?: GameBlink; blinkError: string;
   /** The game's preview idles prepared on this computer (idle-catalogue.ts); the built-in close-up entry when no catalogue was prepared. */
   idles?: IdleCatalogue;
-  /** Load and play one of them (its body clip and baked face) on the idle's rigs; rejects with a plain reason when its files aren't there. */
-  selectIdle?(id: string): Promise<void>;
+  /**
+   * Load and play one of them (its body clip and baked face) on the idle's rigs; rejects with a plain reason when its files aren't there.
+   * Once `signal` has aborted, nothing is played and it rejects with the signal's reason (a superseded load never replaces the clips).
+   */
+  selectIdle?(id: string, signal?: AbortSignal): Promise<void>;
   /**
    * Play a photo-mode pose's body clip on the idle's rigs (pose-clip.ts), keeping the idle's face clip; null plays the chosen idle's own
    * clips again. It changes clips only: turning the rig on is the motion rules' (preview-motion.ts `poseChanged`).
@@ -165,10 +168,12 @@ export const loadGameMotion: MotionLoader = async (scene, eye, body = "female", 
   let idleId = source?.first.id ?? DEFAULT_IDLE;
   /** An idle's face: its own, else the close-up's face loop (the default idle's), where one was prepared. */
   const faceFor = async (entry: IdleEntry) => (await source!.face(entry)) ?? (entry.id === source!.first.id ? null : await source!.face(source!.first));
-  const selectIdle = async (id: string) => {
+  const selectIdle = async (id: string, signal?: AbortSignal) => {
     const entry = catalogue().idles.find(item => item.id === id);
     if (!idle || !entry || !source) throw Error("That idle isn't one of the game's idles on this computer.");
     const [bodyClip, face] = await Promise.all([bodyOf(entry), idle.facial ? faceFor(entry) : Promise.resolve(null)]);
+    // Checked after the load and before the clips change: a load superseded meanwhile plays nothing.
+    signal?.throwIfAborted();
     idle.setClips(bodyClip, face?.clip, face?.loopFrom);
     idleId = id;
   };

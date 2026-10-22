@@ -59,7 +59,12 @@ const isFile = (path: string | null) => { try { return !!path && existsSync(path
 const isGame = (path: string | null) => { try { return !!path && existsSync(join(path, "archive", "pc", "content")); } catch { return false; } };
 
 export class PreviewCoreHost {
-  private running: { controller: AbortController; promise: Promise<void>; body: CoreBody } | null = null;
+  /**
+   * The running preparation. `leases`: the requesters that asked for it on demand (a page that needs the masculine head: profiles
+   * phase 4a-iv); it stops when the last of them withdraws. Null: someone asked for it outright (the setup card's Prepare, a rebuild),
+   * so only a Cancel stops it.
+   */
+  private running: { controller: AbortController; promise: Promise<void>; body: CoreBody; leases: Set<string> | null } | null = null;
   private progress: PreviewCoreState["progress"] = null;
   private lastFailure: Partial<Record<CoreBody, { code: string; message: string; gameRoot: string | null }>> = {};
   private lastDurationSeconds: number | null = null;
@@ -106,8 +111,17 @@ export class PreviewCoreHost {
       canPrepare: true, canCancel: false };
   }
 
-  /** Start preparing in the background; returns the snapshot. Refused (unchanged snapshot) unless `canPrepare`. */
-  prepare(body: CoreBody = "female"): PreviewCoreState {
+  /**
+   * Start preparing in the background; returns the snapshot. Refused (unchanged snapshot) unless `canPrepare`. With a `lease` the
+   * requester asks on demand and can withdraw (`withdraw`); asked for the body already being prepared, the requester joins that
+   * preparation (with a lease, as one more holder; without one, it is then wanted outright).
+   */
+  prepare(body: CoreBody = "female", lease?: string): PreviewCoreState {
+    if (this.running?.body === body) {
+      if (!lease) this.running.leases = null;
+      else this.running.leases?.add(lease);
+      return this.snapshot(body);
+    }
     const state = this.snapshot(body);
     if (!state.canPrepare) return state;
     const settings = this.options.settings();
@@ -131,7 +145,7 @@ export class PreviewCoreHost {
         if (code !== "preview_cancelled") hostFailure("preview", code, message, error);
       })
       .finally(() => { this.running = null; this.progress = null; this.forget(); });
-    this.running = { controller, promise, body };
+    this.running = { controller, promise, body, leases: lease ? new Set([lease]) : null };
     return this.snapshot(body);
   }
 
@@ -159,6 +173,16 @@ export class PreviewCoreHost {
   /** Cancel that body's running preparation (any running one without a body, e.g. at shutdown). */
   cancel(body?: CoreBody): PreviewCoreState {
     if (!body || this.running?.body === body) this.running?.controller.abort();
+    return this.snapshot(body);
+  }
+
+  /**
+   * A requester no longer needs that body's preparation (a newer change superseded its want): its lease goes, and the preparation stops
+   * once no requester holds one. A preparation someone asked for outright, or that other requesters still hold, goes on.
+   */
+  withdraw(body: CoreBody, lease: string): PreviewCoreState {
+    const running = this.running;
+    if (running?.body === body && running.leases?.delete(lease) && running.leases.size === 0) running.controller.abort();
     return this.snapshot(body);
   }
 

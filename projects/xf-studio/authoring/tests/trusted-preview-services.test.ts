@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { createTrustedPreviewServices } from "../src/app/trusted-preview-services";
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
-import type { PreviewPort } from "../src/preview/preview-actions";
+import { EYE_SHAPE_FALLBACK, type PreviewPort } from "../src/preview/preview-actions";
 import type { MotionPort } from "../src/animation/motion-actions";
 import type { SavedV } from "../src/saves/save-reader";
 import { bodySexOf, SavedAppearanceActions } from "../src/character/saved-appearance-actions";
@@ -200,9 +200,20 @@ test("a head that lacks the scene's eye shape shows its base shape and leaves th
   const preview: PreviewPort = { cameraState: () => ({ position: [0, 0, 1], target: [0, 0, 0], fov: 30 }), front: () => false, setFov: () => false,
     endFovGesture: noop, restoreCamera: noop, setSurfaceControls: noop, setWire: noop, setNormals: noop, setEyeOptics: noop, setHair: noop,
     setEyeShape: index => shapes.push(index), setPiercings: noop, setDetail: noop,
-    eyeShapeOptions: () => ({ choices: [{ index: 0, label: "Base" }], eyesFollow: false, eyeSource: null }) };
+    eyeShapeOptions: () => ({ choices: [{ index: 0, label: "Base" } as never], eyesFollow: false, eyeSource: null }) };
   const motion: MotionPort = { available: false, blink: { available: false }, setIdle: noop, setIdlePaused: noop, setIdleContributions: noop, setBlink: noop, animateBlink: noop };
-  createTrustedPreviewServices(workspace, { savedAppearance: { apply: () => applied }, preview, motion }, graph).finish().show();
+  const head = createTrustedPreviewServices(workspace, { savedAppearance: { apply: () => applied }, preview, motion }, graph).finish();
+  head.show();
   expect(shapes).toEqual([0]);
   expect(graph.state<{ eyeShape: number }>("main", "scene").eyeShape).toBe(5);
+  // The status says what the head shows and why; the scene's choice is still the one stored (and mirrored).
+  expect(head.preview.eyeShapeOptions()).toMatchObject({ shown: 0, fallback: EYE_SHAPE_FALLBACK });
+  expect(head.preview.snapshot().eyeShape).toBe(5);
+  // Another runtime of the scene choosing a shape this head lacks: this head shows its base shape again, never the missing one.
+  graph.edit("main", "scene", { state: { eyeShape: 7 } }, { label: "Eye shape" });
+  expect(shapes).toEqual([0, 0]);
+  // A shape it has: shown, with no fallback.
+  graph.edit("main", "scene", { state: { eyeShape: 0 } }, { label: "Eye shape" });
+  expect(head.preview.eyeShapeOptions()).toMatchObject({ shown: 0 });
+  expect(head.preview.eyeShapeOptions().fallback).toBeUndefined();
 });

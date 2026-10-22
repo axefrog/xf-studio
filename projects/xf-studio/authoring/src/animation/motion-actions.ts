@@ -76,7 +76,12 @@ export type MotionPort = {
   blink: { available: boolean; error?: string; repeatSeconds?: number };
   idle?: { enabled: boolean; time: number; paused: boolean; bodyEnabled: boolean; faceEnabled: boolean; seek(time: number): void };
   /** The game's preview idles prepared on this computer, and how to play one (absent: the close-up idle alone). */
-  idles?: readonly IdleEntry[]; selectIdle?(id: string): Promise<void>;
+  idles?: readonly IdleEntry[];
+  /**
+   * Play one of them: its clips load, then replace what plays. Once `signal` has aborted (a newer choice, or the runtime was hidden), the
+   * device applies nothing more and rejects with its reason, so a superseded load never changes what plays.
+   */
+  selectIdle?(id: string, signal?: AbortSignal): Promise<void>;
   setIdle(enabled: boolean): void; setIdlePaused(paused: boolean): void;
   setIdleContributions(body: boolean, face: boolean): void;
   setBlink(value: number): void; animateBlink(playing: boolean): void;
@@ -119,6 +124,10 @@ export class MotionActions {
    */
   private released = false;
   private epoch = 0;
+  /** The idle load in flight on the device: a newer one, or a release, aborts it before it can change what plays. */
+  private selecting: AbortController | null = null;
+  /** The idle the device plays (undefined: the one it was built with, the default). */
+  private deviceClip: string | undefined;
   /** Idles whose clip couldn't be played on this device: the default plays instead, and the node keeps the choice. */
   private readonly unplayable = new Set<string>();
   /** `scene`: where the settings live (the drawn view's scene node); without one, a private store at the default motion. */
@@ -155,17 +164,32 @@ export class MotionActions {
   }
   /** The chosen idle's catalogue entry (undefined without a catalogue). */
   idleEntry(): IdleEntry | undefined { return this.idleEntries().find(entry => entry.id === this.clip); }
+  /** The idle the device plays now. */
+  private get playing(): string { return this.deviceClip ?? this.defaultClip(); }
   /**
-   * Play an idle: shown at once, loaded behind. A load that fails says why once: the person's choice (`rollbackTo` given) puts the previous
-   * one back; the scene's own choice applied by `restore` (`rollbackTo` null) stays in the node, and this device plays the default.
+   * Play an idle: shown at once, loaded behind, after `after` (a pose being let go). The load carries a signal: a newer load or a release
+   * aborts it, and the device then applies nothing of it (`MotionPort.selectIdle`). A load that fails says why once: the person's choice
+   * (`rollbackTo` given) puts the previous one back; the scene's own choice applied by `restore` (`rollbackTo` null) stays in the node,
+   * and this device keeps playing what it played.
    */
-  private select(id: string, rollbackTo: string | null) {
+  private select(id: string, rollbackTo: string | null, after?: Promise<unknown>) {
     this.unplayable.delete(id);
     if (rollbackTo !== null) this.store({ idleClip: id });
-    const epoch = this.epoch, load = this.port.selectIdle ? this.port.selectIdle(id) : Promise.resolve();
-    const pending = this.loading = load.then(() => { if (epoch !== this.epoch) return; if (this.loading === pending) this.loading = null; this.notify(); }, error => {
-      // A load the released device still had under way: the runtime shown now decides what plays.
-      if (epoch !== this.epoch) return;
+    this.selecting?.abort();
+    const controller = this.selecting = new AbortController(), signal = controller.signal, epoch = this.epoch;
+    const start = () => { signal.throwIfAborted(); return this.port.selectIdle ? this.port.selectIdle(id, signal) : Promise.resolve(); };
+    const load = after ? after.then(start) : start();
+    const stale = () => signal.aborted || epoch !== this.epoch;
+    const pending = this.loading = load.then(() => {
+      if (stale()) return;
+      this.deviceClip = id;
+      if (this.selecting === controller) this.selecting = null;
+      if (this.loading === pending) this.loading = null;
+      this.notify();
+    }, error => {
+      // A load superseded, or the released device's: the runtime and the choice shown now decide what plays.
+      if (stale()) return;
+      if (this.selecting === controller) this.selecting = null;
       if (this.loading === pending) this.loading = null;
       // (The device keeps playing what it played before the load.)
       if (rollbackTo === null) this.unplayable.add(id);
@@ -256,11 +280,16 @@ export class MotionActions {
   restore() {
     this.released = false;
     const initial = this.stored();
-    // A pose this device still holds from before it was released, which the scene no longer holds, goes first.
-    if (this.posePlaying && !initial.pose) this.leavePose();
+    // A pose this device still plays from before it was released, which the scene no longer holds, goes first: the device plays its own
+    // idle again (the one it played before the pose), and the scene's idle follows once it has.
+    let cleared: Promise<unknown> | undefined;
+    if (this.posePlaying && !initial.pose) {
+      this.posePlaying = false;
+      cleared = this.port.setPose?.(null).catch(error => pageFailure("preview", "pose_release_failed", "V couldn't return from her pose.", error, { level: "warn" }));
+    }
     this.port.setIdleContributions(initial.idleBody, initial.idleFace);
-    // The scene's idle first (its clip loads behind; the default plays until it arrives).
-    if (this.port.available && this.clip !== this.defaultClip()) this.select(this.clip, null);
+    // The scene's idle first, whichever the device plays now (a warm one may play another; its clip loads behind).
+    if (this.port.available && this.clip !== this.playing) this.select(this.clip, null, cleared);
     this.port.setIdle(initial.idle && this.port.available);
     if (this.port.idle?.enabled) {
       this.port.idle.seek(initial.idleTime);
@@ -280,6 +309,7 @@ export class MotionActions {
     if (this.released) return;
     this.sample(true);
     this.released = true; this.epoch++; this.loading = null; this.poseGeneration++; this.poseBusy = false; this.pose = null;
+    this.selecting?.abort(); this.selecting = null;
   }
   /**
    * The playing idle's phase now, read into the scene: before a save (the workspace session calls it before it captures; records nothing

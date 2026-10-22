@@ -19,6 +19,7 @@ import type { CoreBody } from "../../character/render-detail";
 import { createBrowserChoicePreviewDevice } from "../../character/browser/browser-choice-preview-device";
 import { pageFailure } from "../../diagnostics/page-sink";
 import { SceneResidency, type ResidencySnapshot, type ResidencyWant } from "../scene-residency";
+import { suspendablePreviews, type SuspendablePreviews } from "../../character/choice-preview-suspension";
 import { buildBrowserHead, type AttachedHead, type HeadAttachmentPorts } from "./browser-head-attachment";
 
 /** What the drawn scene wants shown: its V and the V's body. */
@@ -46,7 +47,10 @@ export type SceneHeadsPorts = {
   shown(head: AttachedHead | undefined): void;
   /** Hear the pane's WebGL context being lost and restored. */
   onContext?(listener: (event: "lost" | "restored") => void): () => void;
-  /** Choice previews for a V's context (default: a page worker per context; null: none, for fixtures). */
+  /**
+   * Choice previews for a V's context (default: a page worker per context, made when first used and suspended while no resident head
+   * shows the V; null: none, for fixtures).
+   */
   previews?: (() => CharacterScenePorts["previews"]) | null;
   /** How many heads stay warm beside the shown one (default 1). */
   warm?: number;
@@ -56,10 +60,8 @@ const NOT_SHOWN = "Your V couldn't be shown in the 3D view, so the V shown befor
 const isAbort = (error: unknown) => (error as { name?: string })?.name === "AbortError";
 
 export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
-  /** Each V's context as last handed over by its owner, with what this module connected to it. */
-  const contexts = new Map<string, { context: CharacterContextActions; release: () => void }>();
-  /** Scene ports ready for a V's next context (its owner takes them only when it makes one: they hold a choice-preview device). */
-  const unused = new Map<string, CharacterScenePorts>();
+  /** Each V's context as last handed over by its owner, with what this module connected to it and its choice-preview device. */
+  const contexts = new Map<string, { context: CharacterContextActions; release: () => void; previews: SuspendablePreviews | undefined }>();
   let started = false, disposed = false, scheduled = false;
   /** Whether the want being built has told the person it is preparing (once per want, while another head is shown). */
   let told = "";
@@ -73,9 +75,10 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
       // The V's context stays attached while heads swap: creator changes are never refused for a reload (the old `not_ready`).
       ports.head.attach({ characterContext: head.characterContext });
       ports.shown(head);
+      suspendPreviews();
     },
     hide: head => { head.hide(); ports.shown(undefined); },
-    dispose: head => head.dispose(),
+    dispose: head => { head.dispose(); suspendPreviews(); },
   }, { warm: ports.warm });
   const offContext = ports.onContext?.(event => { if (event === "lost") residency.contextLost(); });
   const offScenes = ports.scenes.subscribe(() => schedule());
@@ -91,26 +94,36 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
     const save = contextOf(character).shownSave();
     return save ? { save } : {};
   }
+  /**
+   * The budget bounds preview workers too: a V no resident head shows keeps its context (its choices, its history), but its
+   * choice-preview device (a worker with its own WebGL context) is suspended until it is used again.
+   */
+  function suspendPreviews() {
+    const resident = new Set(residency.wants().map(want => want.character));
+    for (const [character, entry] of contexts) if (!resident.has(character)) entry.previews?.suspend();
+  }
   /** The head showing `character` now, if any. */
   function showing(character: string): AttachedHead | undefined {
     return residency.shownWant()?.character === character ? residency.shown() : undefined;
   }
   /** The V's one context (made by its owner the first time), with its scene ports bound late to the head that shows it. */
   function contextOf(character: string): CharacterContextActions {
-    const offered = unused.get(character) ?? scenePorts(character);
+    // The ports are taken only when the owner makes the context (their preview device is made only once it is used).
+    const offered = scenePorts(character);
     const made = ports.characters.context(character, offered);
     const known = contexts.get(character);
-    if (known?.context === made) { unused.set(character, offered); return made; }
-    unused.delete(character);
+    if (known?.context === made) return made;
     known?.release();
     // A changed body is a new want; every change asks for an autosave and tells the presentation.
     const releases = [made.subscribe(() => schedule()), made.subscribe(ports.head.changed), made.subscribe(ports.head.persist)];
-    contexts.set(character, { context: made, release: () => { for (const release of releases.splice(0)) release(); } });
+    contexts.set(character, { context: made, previews: offered.previews as SuspendablePreviews | undefined,
+      release: () => { for (const release of releases.splice(0)) release(); } });
     made.start();
     return made;
   }
   function scenePorts(character: string): CharacterScenePorts {
-    const previews = ports.previews === null ? undefined : (ports.previews ?? createBrowserChoicePreviewDevice)();
+    const make = ports.previews === null ? undefined : ports.previews ?? createBrowserChoicePreviewDevice;
+    const previews = make ? suspendablePreviews(() => make()!) : undefined;
     return {
       // A save shown on the head of its own body only; another body's head shows it once built (it catches up when shown).
       showSave: save => {

@@ -76,7 +76,14 @@ type PreviewActionBody =
 export type PreviewActionResult = { limited?: boolean };
 export type PreviewCapability = { available: boolean; reason?: string };
 /** Eye-shape choices as the loaded head carries them, and whether the eyeballs follow them. */
-export type EyeShapeOptions = { choices: FaceMorphChoice[]; eyesFollow: boolean; eyeSource: string | null };
+export type EyeShapeOptions = { choices: FaceMorphChoice[]; eyesFollow: boolean; eyeSource: string | null;
+  /**
+   * The eye shape the head shows (`PreviewActions.eyeShapeOptions`): the scene's choice when this head has it, else its base shape, with
+   * `fallback`, the plain reason. The scene keeps the choice either way (a head of the other body may have it: experiment 043 §10).
+   */
+  shown?: number; fallback?: string };
+/** Why a head shows its base eye shape instead of the scene's choice. */
+export const EYE_SHAPE_FALLBACK = "This head doesn't have the eye shape you chose, so it shows its base shape. Your choice stays for a head that has it.";
 /** The lighting device's read-only report: which rig is shown and where its colour grading came from. */
 export type LightingStatus = { preset: LightingPreset; sex: BodySex; defaultExposure: number;
   lut: { phase: "idle" | "loading" | "ready"; source: GradingLutSource | null } };
@@ -187,7 +194,7 @@ export class PreviewActions {
     const lighting = (f: Shown) => lightingSource({ setup: f.lights.setup, setups: f.lights.setups }, f.lights.creatorLighting);
     const source = lighting(next);
     if (changed(source, lighting(was))) port.setLighting?.(source);
-    if (next.scene.eyeShape !== was.scene.eyeShape) port.setEyeShape(next.scene.eyeShape);
+    if (next.scene.eyeShape !== was.scene.eyeShape) port.setEyeShape(this.shownEyeShape(next.scene.eyeShape));
     if (next.scene.normals !== was.scene.normals) port.setNormals(next.scene.normals);
     if (next.scene.eyeOwnRoughness !== was.scene.eyeOwnRoughness) port.setEyeOptics(next.scene.eyeOwnRoughness ?? true);
     if ((next.scene.physics ?? false) !== (was.scene.physics ?? false)) port.setPhysics?.(next.scene.physics ?? false);
@@ -211,8 +218,16 @@ export class PreviewActions {
   }
   /** The view a read is about: the one it names, else the one this device draws (never "the focused one": nothing here reads focus). */
   private fields(view?: ViewId) { return previewFields(this.graph, view !== undefined && this.graph.has(view) ? view : this.shown); }
+  /** The head's eye shapes, and the one it shows for the drawn scene's choice (with the reason when that is its base shape instead). */
   eyeShapeOptions(): Readonly<EyeShapeOptions> {
-    return structuredClone(this.port.eyeShapeOptions?.() ?? { choices: [], eyesFollow: false, eyeSource: null });
+    const options = this.port.eyeShapeOptions?.() ?? { choices: [], eyesFollow: false, eyeSource: null };
+    const chosen = this.fields().scene.eyeShape, shown = this.shownEyeShape(chosen);
+    return structuredClone({ ...options, shown, ...(shown !== chosen ? { fallback: EYE_SHAPE_FALLBACK } : {}) });
+  }
+  /** The eye shape this head shows for a scene's choice: the choice when the head has it, else its base shape. */
+  private shownEyeShape(index: number): number {
+    const choices = this.port.eyeShapeOptions?.().choices;
+    return choices && !choices.some(choice => choice.index === index) ? 0 : index;
   }
   private validEyeShape(index: number) {
     const choices = this.port.eyeShapeOptions?.().choices;

@@ -6,6 +6,8 @@
  * applies the node's motion, with the phase its previous head left.
  */
 import { describe, expect, test } from "bun:test";
+import * as THREE from "three";
+import { IdleAnimation } from "../src/animation/render/idle-animation";
 import { IDLE_MASCULINE, MotionActions, RELEASED, type MotionPort } from "../src/animation/motion-actions";
 import { DEFAULT_MOTION, previewMotion, recoverSceneMotion, sceneMotionOf, type SceneMotion } from "../src/animation/scene-motion";
 import { graphMotionScene, createTrustedPreviewServices } from "../src/app/trusted-preview-services";
@@ -390,5 +392,99 @@ describe("a runtime applies its scene's motion", () => {
     expect(sceneMotion(graph)).toMatchObject({ idle: true, idleTime: 9.5, idleClip: "inventory" });
     expect(a.motion.snapshot()).toMatchObject({ idleClip: "inventory", idleLoading: true });
     expect(a.motion.capability({ kind: "motion.setIdle", view: MAIN_VIEW, enabled: false })).toEqual({ available: true });
+  });
+});
+
+/**
+ * A device over the real idle rig (`IdleAnimation`), playing clips as head-rig.ts does: a load applies its clips only when its signal
+ * hasn't aborted by then, a pose plays on the same rig, and letting the pose go plays the idle the rig played before it.
+ */
+function rigDevice() {
+  const source = new THREE.Group(), hips = Object.assign(new THREE.Bone(), { name: "Hips" });
+  source.add(hips);
+  const target = Object.assign(new THREE.Bone(), { name: "Hips" }), preview = new THREE.Group();
+  preview.add(target); preview.updateMatrixWorld(true);
+  const clip = (name: string) => new THREE.AnimationClip(name, 2, [new THREE.VectorKeyframeTrack("Hips.position", [0, 2], [0, 1, 0, 0, 1.01, 0])]);
+  const idle = new IdleAnimation(source, clip("closeup"), [target], {});
+  let idleId = "closeup";
+  const loads: { id: string; resolve: () => void }[] = [];
+  const port: MotionPort = { available: true, blink: { available: true }, idle, idles: ["closeup", "inventory"].map(entry),
+    selectIdle: async (id, signal) => {
+      await new Promise<void>(resolve => loads.push({ id, resolve }));
+      signal?.throwIfAborted();
+      idle.setClips(clip(id)); idleId = id;
+    },
+    setPose: async pose => {
+      if (pose) idle.setClips(clip("pose"), undefined, undefined, { pose: true, moves: false });
+      else if (idle.posing) idle.setClips(clip(idleId));
+    },
+    setIdle: enabled => idle.setEnabled(enabled), setIdlePaused: paused => idle.setPaused(paused),
+    setIdleContributions: (body, face) => idle.setContributions({ body, face }), setBlink: () => {}, animateBlink: () => {} };
+  return { idle, port, loads, playing: () => idle.clip.name, finish: async () => { for (const load of loads.splice(0)) load.resolve(); await Bun.sleep(0); } };
+}
+
+describe("a warm runtime's device follows the scene when shown again (4a-iv review)", () => {
+  const scene = () => { const graph = createStudioViewGraph(freshWorkspace().preview); return { graph, motion: () => graphMotionScene(graph, () => undefined) }; };
+
+  test("an idle load that succeeds after its runtime was hidden and shown again never replaces the clip the scene now plays", async () => {
+    const { graph, motion } = scene();
+    const a = rigDevice(), actionsA = new MotionActions(a.port, motion());
+    actionsA.restore();
+    actionsA.dispatch({ kind: "motion.setIdle", view: MAIN_VIEW, enabled: true });
+    actionsA.dispatch({ kind: "motion.setIdleClip", view: MAIN_VIEW, clip: "inventory" });
+    // Hidden while Inventory still loads; another runtime chooses the close-up.
+    actionsA.release();
+    const b = new MotionActions(motionPort([], ["closeup", "inventory"]), motion());
+    b.restore();
+    b.dispatch({ kind: "motion.setIdleClip", view: MAIN_VIEW, clip: "closeup" });
+    b.release();
+    expect(sceneMotion(graph)?.idleClip).toBeUndefined();
+    actionsA.restore();
+    // The old load succeeds now: its signal aborted at the release, so the rig plays nothing of it.
+    await a.finish();
+    expect(a.playing()).toBe("closeup");
+    expect(actionsA.snapshot().idleClip).toBe("closeup");
+  });
+
+  test("a warm runtime shown again plays the scene's idle even when that is the default (Inventory, then Close-up chosen elsewhere)", async () => {
+    const { motion } = scene();
+    const a = rigDevice(), actionsA = new MotionActions(a.port, motion());
+    actionsA.restore();
+    actionsA.dispatch({ kind: "motion.setIdle", view: MAIN_VIEW, enabled: true });
+    actionsA.dispatch({ kind: "motion.setIdleClip", view: MAIN_VIEW, clip: "inventory" });
+    await a.finish();
+    expect(a.playing()).toBe("inventory");
+    actionsA.release();
+    const b = new MotionActions(motionPort([], ["closeup", "inventory"]), motion());
+    b.restore();
+    b.dispatch({ kind: "motion.setIdleClip", view: MAIN_VIEW, clip: "closeup" });
+    b.release();
+    actionsA.restore();
+    await a.finish();
+    expect(a.playing()).toBe("closeup");
+    expect(actionsA.snapshot().idleClip).toBe("closeup");
+  });
+
+  test("a pose another runtime let go is let go on a warm rig shown again, which then plays the scene's idle", async () => {
+    const { graph, motion } = scene();
+    const a = rigDevice(), actionsA = new MotionActions(a.port, motion());
+    actionsA.restore();
+    actionsA.dispatch({ kind: "motion.setIdle", view: MAIN_VIEW, enabled: true });
+    expect(await actionsA.holdPose({ id: "PhotoModePoses.lean", label: "Lean", moves: false }, Promise.resolve({} as never))).toBe(true);
+    expect(a.idle.posing).toBe(true);
+    actionsA.release();
+    // Another runtime of the scene chooses Inventory: the pose goes from the scene.
+    const b = new MotionActions(motionPort([], ["closeup", "inventory"]), motion());
+    b.restore();
+    b.dispatch({ kind: "motion.setIdleClip", view: MAIN_VIEW, clip: "inventory" });
+    b.release();
+    expect(sceneMotion(graph)).not.toHaveProperty("pose");
+    // A shown again: its rig leaves the pose, then plays Inventory.
+    actionsA.restore();
+    await Bun.sleep(0);
+    expect(a.idle.posing).toBe(false);
+    await a.finish();
+    expect(a.playing()).toBe("inventory");
+    expect(actionsA.snapshot()).toMatchObject({ pose: null, idleClip: "inventory" });
   });
 });

@@ -80,6 +80,8 @@ export class SceneResidency<W extends ResidencyWant, R> {
   shown(): R | undefined { return this.shownResident()?.runtime; }
   /** The want shown now. */
   shownWant(): W | undefined { return this.shownResident()?.want; }
+  /** The wants of the resident runtimes (shown and warm). */
+  wants(): readonly W[] { return [...this.residents.values()].map(resident => resident.want); }
   /** The want being built, if any. */
   pending(): W | undefined { return this.building?.want; }
   snapshot(): ResidencySnapshot {

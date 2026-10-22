@@ -454,9 +454,9 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
     /** Listen for the idle's face arriving after the scene started (`evidence.idle` has changed); returns the unsubscribe. */
     onIdleFaceChange: (listener: () => void) => { faceChanged.add(listener); return () => { faceChanged.delete(listener); }; },
     /** Play another of them; the framing follows the new clip's head, as enabling the idle does. */
-    selectIdle: async (id: string) => {
+    selectIdle: async (id: string, signal?: AbortSignal) => {
       if (!motion.selectIdle) throw Error("The game's other idles aren't prepared on this computer.");
-      await motion.selectIdle(id);
+      await motion.selectIdle(id, signal);
       frameIdle();
     },
     /**

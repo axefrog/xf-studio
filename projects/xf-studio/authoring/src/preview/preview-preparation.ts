@@ -27,7 +27,11 @@ export type PreviewState = {
 /** `preview.rebuild` discards the prepared files and prepares them again (a damaged preview). */
 export type PreviewAction = { kind: "preview.refresh" } | { kind: "preview.prepare" } | { kind: "preview.cancel" } | { kind: "preview.rebuild" };
 /** `body` names another body's core (the masculine V's); without it the feminine core, which the rest of this module follows. */
-export type PreviewTransport = (action: "refresh" | "prepare" | "cancel" | "rebuild", body?: CoreBody) => Promise<{ ok: boolean; data: unknown }>;
+export type PreviewTransport = (action: PreviewTransportAction, body?: CoreBody, options?: PreviewTransportOptions) => Promise<{ ok: boolean; data: unknown }>;
+/** `withdraw` gives back a requester's lease on a preparation (preview-core-host.ts). */
+export type PreviewTransportAction = "refresh" | "prepare" | "cancel" | "rebuild" | "withdraw";
+/** `lease`: the requester asking on demand (with `prepare` and `withdraw`); `signal` cuts the request off. */
+export type PreviewTransportOptions = { lease?: string; signal?: AbortSignal };
 export type PreviewOutcome = { ok: true } | { ok: false; message: string };
 
 export function isPreviewState(value: unknown): value is PreviewState {
@@ -149,9 +153,11 @@ export class PreviewPreparationActions {
    * Rejects with a `HeadLoadError` (`body_unavailable`) when the host can't prepare it (a game version it doesn't support,
    * a failed or cancelled preparation, or lost contact), so the caller can show the feminine head instead.
    *
-   * `signal`: the page no longer wants this body (a newer subject or body change superseded it; experiment 043 decision D1). Polling
-   * stops at once and the call rejects with the signal's reason; a preparation this call started is cancelled on the host, since nothing
-   * else asked for it (the next request for the body starts it again). A preparation someone else started is left running.
+   * `signal`: the page no longer wants this body (a newer subject or body change superseded it; experiment 043 decision D1). A request
+   * in flight is cut off, polling stops at once, and the call rejects with the signal's reason. This call holds a lease on the body's
+   * preparation from the moment it asks for it or finds it running (`prepare` with its lease joins that preparation), and withdraws it
+   * on abort: the host stops the preparation only when no requester holds it any more and nobody asked for it outright, so another
+   * window waiting for the same head is never left without it.
    */
   async ensureBody(body: CoreBody, pending: (message: string, progress: number | null) => void = () => {}, signal?: AbortSignal): Promise<void> {
     signal?.throwIfAborted();
@@ -163,10 +169,12 @@ export class PreviewPreparationActions {
       function early() { timers.clear(handle); finish(); }
       signal?.addEventListener("abort", early, { once: true });
     });
-    let asked = false;
+    const lease = globalThis.crypto.randomUUID();
+    /** `asked`: this call asked for a preparation (once); `holding`: the host knows this call's lease. */
+    let asked = false, holding = false;
     const read = async (action: "refresh" | "prepare") => {
       let reply: { ok: boolean; data: unknown };
-      try { reply = await this.transport(action, body); }
+      try { reply = await this.transport(action, body, { ...(action === "prepare" ? { lease } : {}), ...(signal ? { signal } : {}) }); }
       catch (error) { signal?.throwIfAborted(); throw new HeadLoadError("body_unavailable", "XF Studio couldn't reach its 3D view service.", { cause: error }); }
       signal?.throwIfAborted();
       if (!isPreviewState(reply.data)) throw new HeadLoadError("body_unavailable", "The 3D view state is unavailable.");
@@ -176,6 +184,8 @@ export class PreviewPreparationActions {
       let state = await read("refresh");
       for (let polls = 0; polls < 2000; polls++) {
         if (state.phase === "ready") return;
+        // This body is being prepared for someone else: hold a lease on it too, so their withdrawing never stops it while this page waits.
+        if (state.phase === "preparing" && !holding) { holding = true; state = await read("prepare"); continue; }
         if (state.phase === "preparing" || (!state.canPrepare && !asked && state.phase === "idle")) {
           // Preparing this body, or waiting for another body's preparation to finish.
           const progress = state.progress ? Math.min(1, Math.max(0, (state.progress.index + 0.5) / state.progress.total)) : null;
@@ -187,15 +197,15 @@ export class PreviewPreparationActions {
         }
         // A first ask prepares it; an earlier failure in this session is tried once more (as the card's Try again would).
         if ((state.phase === "idle" || state.phase === "failed" || state.phase === "blocked") && state.canPrepare && !asked) {
-          asked = true; state = await read("prepare"); continue;
+          asked = true; holding = true; state = await read("prepare"); continue;
         }
         throw new HeadLoadError("body_unavailable", state.message);
       }
       throw new HeadLoadError("body_unavailable", "Preparing the head took too long.");
     } catch (error) {
-      // Superseded: the preparation this call asked for is work nothing wants any more (D1).
+      // Superseded: this page's lease goes at once; the host stops the preparation only if no one else holds it (D1).
       if (signal?.aborted) {
-        if (asked) void this.transport("cancel", body).catch(() => { /* The host may already have finished or stopped it. */ });
+        if (holding) void this.transport("withdraw", body, { lease }).catch(() => { /* The host may already have finished or stopped it. */ });
         throw signal.reason;
       }
       throw error;
@@ -205,10 +215,11 @@ export class PreviewPreparationActions {
 
 /** `endpoint` is the host's preparation service: `/api/preview-core` on localhost, `/api/desktop/preview` on desktop. */
 export function createBrowserPreviewPreparation(endpoint: string) {
-  return new PreviewPreparationActions(async (action, body) => {
-    const response = action === "refresh" ? await fetch(body ? `${endpoint}?body=${body}` : endpoint, { cache: "no-store" }) : await fetch(endpoint, {
-      method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body ? { action, body } : { action }) });
+  return new PreviewPreparationActions(async (action, body, options = {}) => {
+    const signal = options.signal;
+    const response = action === "refresh" ? await fetch(body ? `${endpoint}?body=${body}` : endpoint, { cache: "no-store", ...(signal ? { signal } : {}) })
+      : await fetch(endpoint, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, ...(signal ? { signal } : {}),
+        body: JSON.stringify({ action, ...(body ? { body } : {}), ...(options.lease ? { lease: options.lease } : {}) }) });
     return { ok: response.ok, data: await response.json() };
   });
 }

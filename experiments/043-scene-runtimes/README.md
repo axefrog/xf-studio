@@ -330,6 +330,18 @@ G1 (scene parity on a real V) has not run.
 
 ## 10. Chunk 4a-iv: residency and the superseding subject change (built)
 
+Sol's review answered MERGE AFTER FIXES, with six Medium findings and one Low. All seven are fixed at the root and described below as current truth:
+
+- preparation leases;
+- the abort reaching the transport;
+- preview workers bounded by residency;
+- the stale idle load stopped in the device;
+- the warm clip reconciled;
+- the warm pose let go;
+- the eye-shape status.
+
+Each fix has its regression test.
+
 **What changed.**
 
 - **Residency is one DOM-free owner** (`preview/scene-residency.ts`, `SceneResidency`). The drawn scene wants one runtime, named by its (scene, subject, body) key. Phase 4a draws one view, so the drawn scene's want is the only one; with several drawn views (4b) wants become per view.
@@ -343,6 +355,7 @@ G1 (scene parity on a real V) has not run.
   - **A subject or body change is a new want.** It follows the session's scenes (the scene's V) and the V's context (its body: a save, a preset, the other Default V, Undo), once the change that asked for it has finished (a microtask).
   - **Nothing is refused meanwhile.** The V's context stays attached while heads swap, so a creator change during a body switch lands at once. The old `not_ready` refusal ("The creator options are still loading.") came from the context being detached for the reload, and is gone.
   - **The V's context outlives heads.** The character's owner makes it once per V. Its scene ports are bound late: `showSave`, `details` and the previews reach the head showing that V now, and do nothing while none does. A save of the other body is shown only on a head of its body; the new head is built with it and catches up on show. `CharacterService.detach` is gone, and contexts live for the page.
+  - **The budget bounds preview workers too.** Each V's choice-preview device (a worker with its own WebGL context) is made only when its Character panel first draws a preview (`character/choice-preview-suspension.ts`). Whenever the residents change, the devices of Vs that no resident head shows are suspended. The context, its choices and its history stay. A suspended device starts again when it is next asked, loading its subject head first.
   - **`load()` is the preview setup's first load** and its Try again. It resolves once a head of the drawn scene is shown. A want superseded during the first load waits for the one that replaced it.
   - **A later head that can't be built leaves the V shown before**, with one plain notice ("Your V couldn't be shown in the 3D view, so the V shown before stays. Change the V again to try once more.") and a diagnostics entry. The next change builds again.
   - **Core preparation progress.** While nothing is shown it goes to the head pane, as before. While another V is shown, the person gets one plain notice per want ("… The V shown now stays until it's ready."). Progress in the pane's quiet overlay is 4a-v's.
@@ -351,12 +364,18 @@ G1 (scene parity on a real V) has not run.
   - *Shown:* drawn on the device, its services attached, its layered surfaces connected and the on-head editor mounted, its save caught up with the V's, the scene's motion restored and the view's camera read. It follows the V's context (details, facial shape, makeup, body switch, puppet).
   - *Hidden:* the camera pose goes to the view's camera node, the motion is released, then everything `show` connected is let go, newest first. The on-head editor goes with it. Detaching settles any open gesture (it is cancelled), and the next head shown mounts its own editor. A hidden head is warm: it stops following its V and catches up when shown again.
 - **The camera pose round-trips through hide and show** (decision D3's second half). `PreviewActions.storeCamera` writes the device's pose to the drawn view's camera node, unrecorded. `storedCamera` reads it back, and the next head shown restores it without a step or a trail entry. An orbit still writes nothing while it moves.
-- **Motion is released on hide and restored on show** (`MotionActions`). `release` stores the playing idle's phase and stops anything under way from reaching the device or the scene. `restore` takes the service back, applies the node's motion and drops a pose the scene no longer holds. An epoch counts releases, so an idle load begun before a release never lands after a later restore. `createTrustedPreviewServices(...).finish()` builds without applying motion or camera; its `show` applies the motion, then the camera, and its `hide` stores the camera, then releases the motion.
+- **Motion is released on hide and restored on show** (`MotionActions`). `release` stores the playing idle's phase and stops anything under way from reaching the device or the scene. `restore` takes the service back and applies the node's motion:
+  - **The clip is reconciled every time.** The service knows which idle the device plays; when that isn't the scene's idle, the scene's is loaded, the default included.
+  - **A pose the scene no longer holds is let go first**, judged by what the device plays. The rig then plays its own idle again, and the scene's idle follows once it has.
+  - **A load carries an `AbortSignal` into the device** (`MotionPort.selectIdle(id, signal)`, the scene runtime's `selectIdle` and the rig's in `platform/scene/head-rig.ts`). A newer load or a release aborts it, and the rig checks the signal after loading and before it changes clips, so a stale load never changes what plays, even when it succeeds. An epoch also keeps its bookkeeping out.
+  - `createTrustedPreviewServices(...).finish()` builds without applying motion or camera; its `show` applies the motion, then the camera, and its `hide` stores the camera, then releases the motion.
 - **Intent stays in the node** (the coordinator's decision). The scene node keeps the person's choice when a runtime can't honour it. The runtime shows its fallback as status and writes nothing:
   - **Motion.** The idle on a masculine head (`IDLE_MASCULINE`), an idle not prepared on this computer, or one whose clip failed to load (kept per device as unplayable): the device plays its own fallback, and `snapshot` shows it (idle off, the close-up, eyes open on a device without the blink). Only the person's own changes and the playing idle's phase are stored. A blink change on a head that can't play the idle stores the idle off too, because the person chose it on what they see.
-  - **Eye shape.** A head lacking the chosen eye shape shows its base shape; the scene node keeps the choice.
+  - **Eye shape.** A head lacking the chosen eye shape shows its base shape; the scene node keeps the choice (and the legacy mirror with it). `PreviewActions.eyeShapeOptions()` says what the head shows (`shown`) and why (`fallback`, a plain line). A shape another runtime chooses that this head lacks is also shown as its base shape. The Character panel selects the shape shown and puts the line in its eye-shape note.
   - The display's restore-time fallback for brows and lashes stays: it is per view, and no browser host reports it.
-- **`ensureBody` takes the signal** (decision D1). An abort stops polling at once and rejects with the signal's reason. A preparation this call started is cancelled on the host (`cancel` for that body), because nothing else asked for it. One another window started is left running.
+- **`ensureBody` takes the signal** (decision D1). An abort cuts off a Refresh or Prepare in flight (the transport and `fetch` carry the signal), stops polling and rejects with the signal's reason. Cancellation is scoped to each requester:
+  - **Requester leases.** Each call holds a lease (a random ID) on the body's preparation, from the moment it asks for it or finds it running: a `prepare` with the lease joins a running preparation. On abort it sends `withdraw` with its lease.
+  - **The host stops the preparation only when the last lease is withdrawn** (`PreviewCoreHost.withdraw`). A preparation someone asked for outright (the setup card's Prepare, a rebuild) has no leases, so only Cancel stops it. Two windows waiting for the masculine head never stop it for each other.
 - **The viewport device holds several heads.** `buildHead(body, signal)`, `showHead`, `hideHead` and `disposeHead` replace `loadHead` and `unloadHead`. `onContext` lets the runtime owner hear a lost context.
 - **The composition root keeps only wiring.** `head`, `scene`, `headWorkspace`, `attachHead` and `releaseHead` are gone. The root makes the scene runtime owner with its ports, connects the shown head's followers (the live face, the poses stage, prefetching, readiness) in one `shown` hook, and reads the shown head through `heads.shown()`. The developer evidence (`xfStudioSceneEvidence`) adds `residency`.
 
@@ -392,11 +411,18 @@ G1 (scene parity on a real V) has not run.
   - surfaces connect on show and go on hide;
   - an aborted masculine preparation rejects with the abort rather than falling back to the feminine head;
   - **the camera pose round-trips through hide and show.**
+- **Motion on a warm rig** (`tests/scene-motion.test.ts`, a device over the real `IdleAnimation` that loads as the rig does; each fails on the code before the review fixes):
+  - an idle load that *succeeds* after its runtime was hidden and shown again never replaces the clip the scene now plays;
+  - a warm runtime shown again plays the scene's idle when that is the default (Inventory, then Close-up chosen on the other runtime);
+  - a pose the other runtime let go is let go on the warm rig, which then plays the scene's idle.
+- **Preview workers** (`tests/browser-scene-heads.test.ts`): four Vs with previews open leave only the two resident Vs' devices alive; a suspended V's previews start again when asked.
 - **Motion** (`tests/scene-motion.test.ts`):
   - **a runtime that can't honour the node's motion leaves the node unchanged** (a masculine head with the idle on, a clip and a phase; a device without the blink or a catalogue). It shows its fallback, and the feminine head shown next plays the chosen idle from the stored phase;
   - **motion is released and restored across a swap:** a warm head shown again plays from the phase the other head left, and its load from before it was hidden failing later changes nothing.
-- **D1** (`tests/masculine-core.test.ts`): a superseded masculine preparation stops polling at once and cancels the preparation it started; one another window started is left alone.
-- **Eye shape** (`tests/trusted-preview-services.test.ts`): a head lacking the scene's eye shape shows its base shape and leaves the node's choice. Restore order is unchanged: saved V, optics, eye shape and details when built; motion, then camera, when shown.
+- **D1** (`tests/masculine-core.test.ts`):
+  - two windows on a real host through its endpoint hold separate leases on one masculine preparation. The first withdrawing leaves it running; the second withdrawing stops it. No `cancel` is ever sent. A preparation asked for outright survives a withdrawal, and the endpoint takes a lease only with prepare and withdraw;
+  - an abort cuts off a held Refresh and a held Prepare in under 200 ms, and a Prepare cut off still withdraws its lease.
+- **Eye shape** (`tests/trusted-preview-services.test.ts`): a head lacking the scene's eye shape shows its base shape and leaves the node's choice; its status reports the shape shown and the reason; a missing shape chosen elsewhere is shown as the base shape. Restore order is unchanged: saved V, optics, eye shape and details when built; motion, then camera, when shown.
 - **T2, the renderer device probe** (`tests/webgl-renderer-device.test.ts`, section 7 of its page): real runtimes on one counted context, under `SceneResidency`.
   - Female shown; male wanted, his core taking 600 ms; female again 150 ms later. Female stays shown, the male build rejects with `AbortError`, no male runtime is ever built, and the canvas is byte-identical.
   - Male is then built and shown, with female warm. A second feminine V evicts the least recently shown (female v1). Closing everything returns the GL objects and Three's programs to where they were.
@@ -406,15 +432,17 @@ G1 (scene parity on a real V) has not run.
 | Run | Result |
 |---|---|
 | T1 residency | 12 of 12 pass |
-| Scene runtime owner, head attachment, motion, D1, eye shape | 6, 5, 13, 1 and 7 tests: all pass |
+| Scene runtime owner, head attachment, motion, D1, eye shape (after the review fixes) | 7, 5, 16, 2 and 6 tests: all pass |
 | T2 renderer device probe | 9 of 9 pass (peak 1.1 GB). Superseded build: `AbortError`, 0.2 ms from the superseding want to the build's rejection, canvas unchanged, only `s1\|v1\|female` built. Eviction: `s1\|v1\|female` evicted, `s1\|v1\|male` warm, `s1\|v2\|female` shown. After closing: 12 textures, 6 buffers, 6 framebuffers, 2 programs and 2 vertex arrays, as before the section, with only `BackgroundMaterial` used once. (The section runs after section 6's context loss, whose dead objects the counter still lists.) |
 | WebGL scene host, disposal gate | 7 of 7, 4 of 4 (peaks 1.1 and 1.2 GB) |
-| Scene, view, preview, character, viewport, motion, history, parity, profiles, boundary, lighting, workspace and setup tests, and every other test file importing a changed module | 139 files, 1,321 pass, 10 skip (real-game oracles), 0 fail (peak 1.8 GB) |
+| Scene, view, preview, character, viewport, motion, history, parity, profiles, boundary, lighting, workspace and setup tests, and every other test file importing a changed module | After the review fixes, with the preview-core, choice-preview and desktop server tests added: 146 files, 1,419 pass, 10 skip (real-game oracles), 0 fail (peak 1.7 GB) |
 | `bun run check` | passes |
 
 **Decisions and caveats.**
 
 - **Ready means built.** "The previous V stays drawn until the new one is ready" holds for the runtime: the new head is shown once it is built, then its V's details fill in as before. Preparing details, programs and textures while hidden, with progress, is 4a-v. The details aren't prepared while hidden in this chunk, because a hidden runtime draws no frames and the detail uploads are paced per frame.
+- **A non-resident V's panel can start its preview device again.** A suspended device restarts when asked, and is suspended again at the next change of residents. The bound holds whenever the residents change, not continuously.
+- **The Character panel's eye-shape note** gained the fallback line, and the selection follows the shape shown. This is a copy and wiring change in `studio-ui/panels/character.ts` with no new control, and it needs the UI review.
 - **Contexts live for the page.** A V no scene shows keeps its context. Releasing one (`CharacterService.release`, after its changes are in the library) when no resident head shows it is a follow-up: an async release racing a switch back would hand the owner a disposed context.
 - **The save loader's answer.** `savedAppearance.load` returns the shown head's saved-V snapshot. For a save of the other body that is the head shown before the switch, so its suggested eye shape is the old head's. This was already approximate before, when the old head applied the other body's save first.
 - **No per-runtime byte estimate yet.** D2 asks for each runtime's estimated bytes as evidence. The snapshot carries the residents and their states; the bytes wait for G3's measurements and a port to report them.

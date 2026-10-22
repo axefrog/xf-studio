@@ -164,34 +164,100 @@ test("before a masculine head loads, the page has his core prepared (with progre
   expect(await offline.ensureBody("male").catch(caught => caught.code)).toBe("body_unavailable");
 });
 
-test("a superseded masculine preparation stops: polling ends at once, the preparation this page started is cancelled, one it didn't start is left (D1)", async () => {
-  // Polling every 60 s: only the abort can end the wait.
+test("a superseded masculine preparation stops only when no requester holds it: each window's lease is its own (D1)", async () => {
+  // A real host through its endpoint; the export waits on a gate, so the preparation runs until a lease or Cancel stops it.
+  const { game, cli, cacheRoot } = setup();
+  let release!: () => void;
+  const gate = new Promise<void>(done => { release = done; });
+  const host = new PreviewCoreHost({ cacheRoot, settings: () => ({ gameRoot: game, wolvenKitCli: cli }),
+    exporter: () => createGameAssetExporter(join(cacheRoot, "exports"), async () => { await gate; }, { contains: () => new Set() }) });
+  const handler = createPreviewCoreHandler(host), url = "http://127.0.0.1:4317/api/preview-core";
+  const posted: unknown[] = [];
+  const transport = async (action: string, body?: string, options: { lease?: string; signal?: AbortSignal } = {}) => {
+    options.signal?.throwIfAborted();
+    if (action === "refresh") return { ok: true, data: await (await handler(new Request(`${url}?body=${body ?? "female"}`))).json() };
+    const sent = { action, ...(body ? { body } : {}), ...(options.lease ? { lease: options.lease } : {}) };
+    posted.push(sent);
+    const response = await handler(new Request(url, { method: "POST", headers: { Origin: "http://127.0.0.1:4317", "Content-Type": "application/json" }, body: JSON.stringify(sent) }));
+    return { ok: response.ok, data: await response.json() };
+  };
+  // Polling every 60 s: only an abort ends a wait.
   const slow = { set: (run: () => void, ms: number) => setTimeout(run, ms * 60_000), clear: (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>) };
-  const preparing = state({ body: "male", phase: "preparing", canPrepare: false, canCancel: true, message: "Preparing his head…" });
-  const calls: string[] = [];
-  const replies = [state({ body: "male" }), preparing, preparing];
-  const actions = new PreviewPreparationActions(async (action, body) => { calls.push(`${action}:${body ?? "-"}`); return { ok: true, data: replies.shift() ?? preparing }; }, 1, slow);
-  const controller = new AbortController(), started = performance.now();
-  const waiting = actions.ensureBody("male", () => {}, controller.signal).catch(caught => caught);
+  const windowA = new PreviewPreparationActions(transport as never, 1, slow), windowB = new PreviewPreparationActions(transport as never, 1, slow);
+  const a = new AbortController(), b = new AbortController();
+  const waitingA = windowA.ensureBody("male", () => {}, a.signal).catch(caught => caught);
   await Bun.sleep(5);
-  controller.abort();
-  const error = await waiting;
-  expect(error).toMatchObject({ name: "AbortError" });
+  expect(host.snapshot("male").phase).toBe("preparing");
+  // Window B finds his head being prepared and holds a lease on it too.
+  const waitingB = windowB.ensureBody("male", () => {}, b.signal).catch(caught => caught);
+  await Bun.sleep(5);
+  const leases = posted.filter(item => (item as { action: string }).action === "prepare").map(item => (item as { lease: string }).lease);
+  expect(leases).toHaveLength(2);
+  expect(new Set(leases).size).toBe(2);
+  // A is superseded: its lease goes, and the preparation goes on for B.
+  const started = performance.now();
+  a.abort();
+  expect(await waitingA).toMatchObject({ name: "AbortError" });
   expect(performance.now() - started).toBeLessThan(1000);
-  await Bun.sleep(0);
-  expect(calls).toEqual(["refresh:male", "prepare:male", "cancel:male"]);
-  // Waiting for a preparation another window started: the page stops asking, and leaves that preparation alone.
-  const theirs: string[] = [];
-  const other = new PreviewPreparationActions(async (action, body) => { theirs.push(`${action}:${body ?? "-"}`); return { ok: true, data: preparing }; }, 1, slow);
-  const second = new AbortController();
-  const stopped = other.ensureBody("male", () => {}, second.signal).catch(caught => caught);
   await Bun.sleep(5);
-  second.abort();
-  expect(await stopped).toMatchObject({ name: "AbortError" });
-  expect(theirs).toEqual(["refresh:male"]);
+  expect(host.snapshot("male").phase).toBe("preparing");
+  // B is superseded too: nobody holds it, so it stops.
+  b.abort();
+  expect(await waitingB).toMatchObject({ name: "AbortError" });
+  await Bun.sleep(5);
+  release();
+  await host.settled();
+  expect(host.snapshot("male")).toMatchObject({ phase: "failed", code: "preview_cancelled" });
+  expect(posted.filter(item => (item as { action: string }).action === "withdraw")).toHaveLength(2);
+  expect(posted.some(item => (item as { action: string }).action === "cancel")).toBe(false);
+
+  // A preparation asked for outright (the setup card's Prepare, no lease) is never stopped by a lease withdrawing.
+  const outright = setup();
+  let open!: () => void;
+  const held = new Promise<void>(done => { open = done; });
+  const second = new PreviewCoreHost({ cacheRoot: outright.cacheRoot, settings: () => ({ gameRoot: outright.game, wolvenKitCli: outright.cli }),
+    exporter: () => createGameAssetExporter(join(outright.cacheRoot, "exports"), async () => { await held; }, { contains: () => new Set() }) });
+  second.prepare("male", "lease-0001");
+  second.prepare("male");
+  expect(second.withdraw("male", "lease-0001").phase).toBe("preparing");
+  // An unknown lease changes nothing; Cancel still stops it.
+  expect(second.withdraw("male", "lease-9999").phase).toBe("preparing");
+  second.cancel("male");
+  open();
+  await second.settled();
+  expect(second.snapshot("male").code).toBe("preview_cancelled");
+  // The endpoint takes a lease only with prepare or withdraw, and a withdraw only with one.
+  const secondHandler = createPreviewCoreHandler(second);
+  const post = (body: unknown) => secondHandler(new Request(url, { method: "POST", headers: { Origin: "http://127.0.0.1:4317", "Content-Type": "application/json" }, body: JSON.stringify(body) }));
+  expect((await post({ action: "withdraw", body: "male" })).status).toBe(400);
+  expect((await post({ action: "cancel", body: "male", lease: "lease-0001" })).status).toBe(400);
+  expect((await post({ action: "prepare", body: "male", lease: "no spaces allowed" })).status).toBe(400);
+  expect((await post({ action: "withdraw", body: "male", lease: "lease-0001" })).status).toBe(200);
+});
+
+test("an abort cuts off a request in flight: a held Refresh or Prepare never keeps a superseded page waiting", async () => {
+  for (const held of ["refresh", "prepare"]) {
+    const calls: string[] = [];
+    const actions = new PreviewPreparationActions(async (action, body, options = {}) => {
+      calls.push(`${action}:${body ?? "-"}`);
+      if (action === held) return await new Promise((_resolve, reject) => options.signal?.addEventListener("abort", () => reject(options.signal!.reason), { once: true }));
+      return { ok: true, data: state({ body: "male" }) };
+    }, 1, instant);
+    const controller = new AbortController(), started = performance.now();
+    const waiting = actions.ensureBody("male", () => {}, controller.signal).catch(caught => caught);
+    await Bun.sleep(5);
+    controller.abort();
+    expect(await waiting).toMatchObject({ name: "AbortError" });
+    expect(performance.now() - started).toBeLessThan(200);
+    await Bun.sleep(0);
+    // A Prepare cut off may still have reached the host: its lease is withdrawn.
+    expect(calls).toEqual(held === "refresh" ? ["refresh:male"] : ["refresh:male", "prepare:male", "withdraw:male"]);
+  }
   // Aborted before it starts: nothing is asked.
-  expect(await other.ensureBody("male", () => {}, AbortSignal.abort()).catch(caught => caught.name)).toBe("AbortError");
-  expect(theirs).toEqual(["refresh:male"]);
+  const none: string[] = [];
+  const idle = new PreviewPreparationActions(async action => { none.push(action); return { ok: true, data: state({}) }; }, 1, instant);
+  expect(await idle.ensureBody("male", () => {}, AbortSignal.abort()).catch(caught => caught.name)).toBe("AbortError");
+  expect(none).toEqual([]);
 });
 
 test("a head follows only its own body's V: another body's details and facial shape wait for that body's head", async () => {

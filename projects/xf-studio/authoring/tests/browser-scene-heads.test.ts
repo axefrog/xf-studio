@@ -8,6 +8,7 @@ import { expect, test } from "bun:test";
 import { createBrowserSceneHeads, type SceneHeadsPorts } from "../src/preview/browser/browser-scene-heads";
 import type { CharacterScenePorts } from "../src/character/character-service";
 import { CharacterContextActions } from "../src/character/character-context-actions";
+import type { ChoicePreviewPort } from "../src/character/choice-preview-service";
 import type { AttachedHead } from "../src/preview/browser/browser-head-attachment";
 import { vHistory } from "./fixtures/character-steps";
 import { creator, harness } from "./fixtures/fake-heads";
@@ -44,7 +45,7 @@ function gates() {
   };
 }
 
-function owner(bodies: Record<string, "female" | "male">, failBuild: number[] = []) {
+function owner(bodies: Record<string, "female" | "male">, failBuild: number[] = [], previews: SceneHeadsPorts["previews"] = null) {
   const scene = { subject: Object.keys(bodies)[0]! };
   const gate = gates(), h = harness({ build: gate.build, failBuild }), people = characterOwner(bodies);
   const listeners = new Set<() => void>(), shown: (AttachedHead | undefined)[] = [], notices: string[] = [], pending: string[] = [];
@@ -58,7 +59,7 @@ function owner(bodies: Record<string, "female" | "male">, failBuild: number[] = 
     characters: people.port,
     prepareCore: (body, _pending, signal) => { prepared.push({ body, signal }); return prepare(body, signal); },
     pending: message => pending.push(message), notice: text => notices.push(text),
-    shown: head => shown.push(head), previews: null,
+    shown: head => shown.push(head), previews,
     onContext: listener => { contextListeners.add(listener); return () => { contextListeners.delete(listener); }; },
   });
   return { h, gate, people, heads, shown, notices, pending, prepared, scene, listeners,
@@ -220,4 +221,33 @@ test("a later head that can't be built leaves the V shown before, with a plain n
   await settle();
   expect(o.heads.shown()!.body).toBe("male");
   o.heads.dispose();
+});
+
+test("residency bounds the choice-preview devices too: four Vs with previews open leave only the resident Vs' devices alive", async () => {
+  const devices: { made: number; disposed: number }[] = [];
+  const device = (): ChoicePreviewPort => {
+    const counts = { made: devices.length + 1, disposed: 0 };
+    devices.push(counts);
+    return { sources: async () => [], subject: async body => body, stored: async () => null, render: async () => ({ url: "u" }), dispose: () => { counts.disposed++; } };
+  };
+  const o = owner({ v1: "female", v2: "female", v3: "female", v4: "female" }, [], device);
+  await o.heads.load();
+  const alive = () => devices.filter(item => !item.disposed).length;
+  for (const subject of ["v1", "v2", "v3", "v4"]) {
+    o.scene.subject = subject;
+    o.changeScene();
+    await settle();
+    // The V's Character panel draws a preview: its device starts.
+    await o.people.offered.at(-1)!.previews!.subject("female");
+    expect(alive()).toBeLessThanOrEqual(2);
+  }
+  // Four devices were made over time; only the shown V's and the warm V's are alive.
+  expect(devices).toHaveLength(4);
+  expect(alive()).toBe(2);
+  // A suspended V's previews start again when asked, loading its subject head first; its context and choices stayed.
+  const first = o.people.offered[0]!.previews!;
+  expect(await first.stored("k")).toBeNull();
+  expect(devices).toHaveLength(5);
+  o.heads.dispose();
+  expect(alive()).toBe(0);
 });
