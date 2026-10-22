@@ -101,6 +101,8 @@ export class Beliefs {
   private history: Belief[] = [];
   policy: BeliefPolicy = STUB_POLICY;
   private tickList = new Worklist<{ believer: Id; boundary: number; at: GameTime }>();
+  /** A run of hooks stopped part-way through a boundary's list (the budget ran out) and has not finished. */
+  private hooksStopped = false;
 
   /**
    * Boundary `boundary` (at game time `at`) was processed: every believer is due its `onTick` for it
@@ -115,12 +117,23 @@ export class Beliefs {
     return this.tickList.length;
   }
 
+  /**
+   * Whether the hooks of a boundary have begun and not finished. The kernel then resumes them before any
+   * frame or dispatch work (SPEC-NOTES 56), so what the later hooks of a boundary see does not depend on
+   * where a budget stopped the run.
+   */
+  get hooksUnderway(): boolean {
+    return this.hooksStopped && this.tickList.length > 0;
+  }
+
   /** Call the policy's `onTick` for each believer due, one unit each, resumable. */
   runTicks(budget: Budget): number {
-    return this.tickList.run(budget, (item) => {
+    const steps = this.tickList.run(budget, (item) => {
       this.policy.onTick(this.k, item.believer, item.at);
       return { cost: 1, done: true };
     });
+    this.hooksStopped = steps > 0 && this.tickList.length > 0;
+    return steps;
   }
 
   constructor(private readonly k: Kernel) {}
@@ -223,6 +236,7 @@ export class Beliefs {
     this.history.length = 0;
     // Work queued for believers of the discarded branch goes with it (spec 14.3).
     this.tickList.clear();
+    this.hooksStopped = false;
   }
 
   /** An observer witnesses an event: the policy's beliefs are set (spec 11.2). */

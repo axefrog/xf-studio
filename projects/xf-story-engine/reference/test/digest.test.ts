@@ -17,6 +17,7 @@ import { Beliefs } from '../src/beliefs.ts';
 import { Evolution } from '../src/evolution.ts';
 import { ln } from '../src/fdlibm-log.ts';
 import { Frames } from '../src/frames.ts';
+import { Groups } from '../src/groups.ts';
 import { Persistence } from '../src/persistence.ts';
 import { Summaries } from '../src/summary.ts';
 import { H, bytesToHex, f, f64Bytes, i, id, rand, s, toUnit, val } from '../src/id.ts';
@@ -123,6 +124,29 @@ describe('the determinism digest', () => {
     // A group whose decisions never raise a dilemma.
     expect(digestWith(Frames.prototype, 'checkDilemmas', () => 1)).not.toBe(base);
     // And with every patch undone the digest is back.
+    expect(run().digest).toBe(base);
+  });
+
+  test('SR2-08: the digest moves when a group decision or an order changes its resulting frame state directly', () => {
+    const base = run().digest;
+    // A weight decision that always sets weight zero.
+    const setWeight = Frames.prototype.setWeight;
+    expect(digestWith(Frames.prototype, 'setWeight', function (this: Frames, id, _weight, cause) {
+      return setWeight.call(this, id, 0, cause);
+    })).not.toBe(base);
+    // A status decision that always reactivates, and an interests decision that always clears what it was given.
+    const decide = Groups.prototype.decide;
+    expect(digestWith(Groups.prototype, 'decide', function (this: Groups, leader, group, decision) {
+      return decide.call(this, leader, group, decision.op === 'status' ? { ...decision, status: 'active' } : decision);
+    })).not.toBe(base);
+    expect(digestWith(Groups.prototype, 'decide', function (this: Groups, leader, group, decision) {
+      return decide.call(this, leader, group, decision.op === 'interests' ? { ...decision, own: {} } : decision);
+    })).not.toBe(base);
+    // An order issued at half its pressure.
+    const issueOrder = Groups.prototype.issueOrder;
+    expect(digestWith(Groups.prototype, 'issueOrder', function (this: Groups, opts) {
+      return issueOrder.call(this, { ...opts, pressure: opts.pressure / 2 });
+    })).not.toBe(base);
     expect(run().digest).toBe(base);
   });
 

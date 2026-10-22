@@ -98,7 +98,9 @@ export class Groups {
    * A load restores the clock to the time of the save and puts frames back as they were saved. A
    * membership may have crossed its validity since the frames were last synced (a save can be made
    * between a clock change and the next tick, and an expired membership is not saved), so every actor
-   * with a frame or a membership re-syncs in the frame worklist.
+   * with a frame or a membership is queued to re-sync. The load runs that work at once, with the clock at
+   * `t`, so the memberships it reads are the ones in force when the save was made; crossings after `t`
+   * are then handled boundary by boundary by `crossTo`.
    */
   restoreAt(t: GameTime): void {
     this.crossedUntil = t;

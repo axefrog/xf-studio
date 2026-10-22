@@ -489,6 +489,10 @@ export class Persistence {
     let report: LoadReport = { saveKey, readOnly: false, epoch: k.epoch, missingPacks, replayed };
     k.now = rec.meta.time;
     k.groups.restoreAt(rec.meta.time);
+    // The frames come back as saved. What the clock did to them between the last tick and the save is settled
+    // now, at the saved time and before the game's time is adopted below, so no membership is read at a time
+    // the catch-up has not reached (SPEC-NOTES 56). The catch-up then keeps inheritance right boundary by boundary.
+    k.frames.settle();
     k.bump();
 
     // 3. Reconcile with the game: the mirrored state becomes `game` readings at the current time.

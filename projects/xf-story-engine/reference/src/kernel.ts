@@ -577,12 +577,24 @@ export class Kernel {
     const adv: AdvanceReport = { done: true, boundaries: 0, runs: 0, applied: 0 };
     let frameSteps = 0;
     let dispatchSteps = 0;
-    /** Do the work that waits (from writes, earlier ticks and the last boundary). True when none is left. */
+    /**
+     * Do the work that waits (from writes, earlier ticks and the last boundary), in phases: the frame
+     * worklist and relevance dispatch first, then the belief hooks, then whatever the hooks queued. The
+     * order does not depend on the budget. A budget that runs out stops inside a phase and the next call
+     * resumes that phase: hooks that have begun finish before any frame or dispatch work starts again, and
+     * hooks never start while frame work or dispatch is pending (SPEC-NOTES 56). True when nothing is left.
+     */
     const drainWork = (): boolean => {
-      frameSteps += this.frames.runWorklist(budget);
-      dispatchSteps += this.dispatcher.run(budget);
-      this.beliefs.runTicks(budget);
-      return this.frames.worklist.isEmpty && this.dispatcher.idle && this.beliefs.pendingTicks === 0;
+      for (;;) {
+        if (!this.beliefs.hooksUnderway) {
+          frameSteps += this.frames.runWorklist(budget);
+          dispatchSteps += this.dispatcher.run(budget);
+          if (!this.frames.worklist.isEmpty || !this.dispatcher.idle) return false;
+          if (this.beliefs.pendingTicks === 0) return true;
+        }
+        this.beliefs.runTicks(budget);
+        if (this.beliefs.pendingTicks > 0) return false;
+      }
     };
     let settled = drainWork();
     while (settled && this.evolution.nextBoundary(to) !== undefined) {

@@ -533,6 +533,11 @@ export class Frames {
     });
   }
 
+  /** Run the frame worklist to its end, with no budget. A load does this at the saved time, before the clock moves on (SPEC-NOTES 56). */
+  settle(): number {
+    return this.runWorklist(new Budget(Number.POSITIVE_INFINITY));
+  }
+
   // ---- cross-pressure (spec 10.8) ----
 
   private targetsOf(on: Id | Selector): Id[] {
