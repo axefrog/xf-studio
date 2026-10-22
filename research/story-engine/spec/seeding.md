@@ -2733,7 +2733,7 @@ The parameters for the [P4 §5](../p4-seeding-layer.md#5-reference-scenario-r1-i
 - **`rungs`:** acquainted, confided, close, partner;
 - **`pacing`:** one shared activity per rung;
 - **`lapseAfter`:** 14 game days;
-- **`absence`:** after 7 game days, a reunion;
+- **`absence`:** after 7 game days, a reunion. This is a later capability; the core doesn't expand it (§A.2 step 4);
 - **`intimate`:** set, with tag `romance-intimate`.
 
 **The window:**
@@ -2754,7 +2754,77 @@ The parameters for the [P4 §5](../p4-seeding-layer.md#5-reference-scenario-r1-i
 Expanding with §A.2 gives these beats:
 - `offer-1` to `offer-3`;
 - `exit-decline`, `exit-stay` and `exit-lapse`;
-- `reunion`;
 - `intimate`.
 
-SF-7 and SF-8 run on this expansion.
+SF-7, SF-8, SF-46 and SF-64 run on this expansion, written out in full in §A.4.
+
+### A.4 R1, expanded
+
+This is the document the core compiles from R1, after profile expansion. It is the reference for the fixtures. Content references (`pack:…`) are the fixture pack's; `<…>` marks a registered read the fixture pack defines.
+
+```yaml
+id: xf.example:takemura-quiet-hour
+version: 1
+maturity: ready
+level: arc
+turns: [ { level: concern, who: takemura, kind: tie, what: { seedFact: rung, op: gt, value: 0 } } ]
+purpose: { tags: [bond, aftermath, loyalty], sentence: "Two people who survived the same betrayal find out what they are to each other." }
+context: { all: [ { fact: q115_point_of_no_return, op: eq, value: 0 }, { role: takemura, p: <in Night City> } ] }
+intent: { prohibitions: [], tone: [restraint, grief] }
+roles:
+  takemura: { kind: core:person, identity: game:takemura, anchor: true, onLost: withdraw, onUnfilled: [wait, withdraw],
+              must: [ <alive> ], textAttrs: [name] }
+  place:    { kind: core:place, prefer: [ { p: <quiet>, strength: 2 }, { p: <in Japantown>, strength: 2 } ],
+              onUnfilled: [wait, withdraw] }
+facts:
+  rung: { route: { consumers: [offer-2, offer-3, intimate, end] }, initial: 0 }      # lasting
+  exit: { route: { consumers: [exit-decline, exit-stay, exit-lapse, end] }, initial: 0 }   # 1 decline, 2 stay, 3 lapse
+windows:
+  - id: main
+    opens:  { all: [ { decided: q112_takemura_dead }, { fact: q112_takemura_dead, op: eq, value: 0 },
+                     { fact: q112_done, op: eq, value: 1 }, { role: takemura, p: <allied with V> } ] }
+    closes: { fact: q115_point_of_no_return, op: eq, value: 1 }
+    lead: preferred
+    onClose: coda
+    closeContent: pack:quiet-hour-coda
+start: [offer-1]
+beats:
+  offer-1: { play: pack:qh-offer-acquainted }
+  offer-2: { play: pack:qh-offer-confided, links: [ { because: offer-1, on: { all: [ { seedFact: rung, op: eq, value: 1 },
+             { count: { kind: shared-activity, participant: takemura }, since: { beat: offer-1 }, op: ge, value: 1 } ] } } ],
+             reoffer: { when: { count: { kind: shared-activity, participant: takemura }, since: { beat: offer-2 }, op: ge, value: 1 }, max: 3 } }
+  offer-3: { play: pack:qh-offer-close, links: [ { because: offer-2, on: { all: [ { seedFact: rung, op: eq, value: 2 },
+             { count: { kind: shared-activity, participant: takemura }, since: { beat: offer-2 }, op: ge, value: 1 } ] } } ],
+             reoffer: { when: { count: { kind: shared-activity, participant: takemura }, since: { beat: offer-3 }, op: ge, value: 1 }, max: 3 } }
+  exit-decline: { kind: exit, play: pack:qh-exit-decline, join: any, leaves: [ { fact: exit, set: 1 } ],
+                  links: [ { because: offer-1, on: { response: offer-1, is: [decline] } },
+                           { because: offer-2, on: { response: offer-2, is: [decline] } },
+                           { because: offer-3, on: { response: offer-3, is: [decline] } },
+                           { obstructedBy: exit-stay }, { obstructedBy: exit-lapse } ] }
+  exit-stay:    { kind: exit, play: pack:qh-exit-stay, join: any, leaves: [ { fact: exit, set: 2 } ],
+                  links: [ { because: offer-1, on: { response: offer-1, is: [action:stay] } },
+                           { because: offer-2, on: { response: offer-2, is: [action:stay] } },
+                           { because: offer-3, on: { response: offer-3, is: [action:stay] } },
+                           { obstructedBy: exit-decline }, { obstructedBy: exit-lapse } ] }
+  exit-lapse:   { kind: exit, play: pack:qh-exit-lapse, leaves: [ { fact: exit, set: 3 } ],
+                  needs: { all: [ { since: { beat: offer-1 }, atLeast: { clock: game, s: 1209600 } },
+                                  { count: { kind: shared-activity, participant: takemura }, since: { beat: offer-1 }, op: eq, value: 0 } ] },
+                  links: [ { obstructedBy: exit-decline }, { obstructedBy: exit-stay } ] }
+  intimate:     { play: { alternates: [ pack:qh-intimate-scene, pack:qh-intimate-fade ] },
+                  links: [ { because: offer-3, on: { seedFact: rung, op: eq, value: 3 } } ] }
+end: { any: [ { all: [ { seedFact: rung, op: eq, value: 3 }, { beat: intimate, state: [done, skipped] } ] },
+              { seedFact: exit, op: gt, value: 0 } ] }
+unattended: { after: { clock: game, s: 1209600 }, outcome: [ { fact: exit, set: 3 } ] }
+closing: pack:quiet-hour-closing
+```
+
+**Each offer fragment** `pack:qh-offer-<rung>` has the `OfferSpec`:
+- `actions`: `accept` (writes `rung` to the rung's index, 1 to 3) and `stay` (stance `help`; writes `exit = 2`);
+- `decline`: `decline`, whose response is `pack:qh-exit-decline`;
+- `nullPath`: "not now", with no writes;
+- `lapse`: `{ after: { clock: play, s: 1800 }, then: reoffer }`;
+- `choice`: `consequential`.
+
+**The intimacy alternates.** `pack:qh-intimate-scene` is in the authored-source class `sex.explicit` (§2.19). It has `authored: 'human'` and a named author, applies when the player's ceiling for `sex.explicit` allows it, and leaves the same facts as `pack:qh-intimate-fade`. In fixtures, it is a labelled stand-in that implies rather than shows.
+
+**Two simplifications.** The `exit-lapse` window is measured from `offer-1`. A fuller version would measure from the last done offer, which needs a "since the latest of" atom: a later capability. Takemura's own frames and beliefs belong to S1. The seed reads them only through registered reads.
