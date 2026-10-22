@@ -221,7 +221,11 @@ export class LookEditor {
    * recorded with the next change.
    */
   commit(): boolean {
-    const ok = !this.unrecorded || this.record();
+    // A change of the Undo history alone still waiting for the end of the turn (a settled run's discarded checkpoint) is recorded now,
+    // with the look it belongs to, before another look is shown.
+    const pending = this.unrecorded || this.historyWaits;
+    this.historyWaits = false;
+    const ok = !pending || this.record();
     this.deps.store?.();
     return ok;
   }

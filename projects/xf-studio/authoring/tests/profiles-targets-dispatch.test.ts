@@ -61,6 +61,49 @@ describe("control runs", () => {
   });
 });
 
+describe("control runs over a replaced look", () => {
+  test("a run whose look was replaced from elsewhere is over: its continuation is refused until it begins again (Sol's same-look case)", async () => {
+    const a = await profileStudio({ looks: [{ name: "A", recipe: initialRecipe() }] });
+    await a.collection.initialize();
+    const port = createStudioPresentation({ authoring: a.core.app, targets: a.targets, library: a.collection, files: a.files,
+      viewport: {} as never, preferences: {} as never, previewReadiness: { readiness: () => ({}) as never, subscribe: () => () => {} } });
+    const expressions = port.feature("expressions") as GenericFeatureFacade;
+    expect(expressions.controlBegin("drag")).toBe(true);
+    expect(expressions.controlEdit("drag", set(0.5))).toMatchObject({ ok: true });
+    expect(await a.settle()).toBe(true);
+    // Another window changes the same look; this one takes the change, and the run it replaced settles.
+    const b = await profileStudio({ library: a.library, show: a.scene.look() });
+    expect(b.app.dispatch(set(0.8) as never)).toMatchObject({ ok: true });
+    expect(await b.settle()).toBe(true);
+    await a.outbox.check(); await a.outbox.settle();
+    expect(jaw(a.app.featureState("expressions"))).toBe(Math.fround(0.8));
+    // The old drag going on is refused: it never writes over the replacement.
+    expect(expressions.controlEdit("drag", set(0.6))).toMatchObject({ ok: false, code: "missing_target" });
+    expect(jaw(a.app.featureState("expressions"))).toBe(Math.fround(0.8));
+    expressions.controlCancel("drag");
+    // A new drag begins on what the look holds now.
+    expect(expressions.controlBegin("drag")).toBe(true);
+    expect(expressions.controlEdit("drag", set(0.6))).toMatchObject({ ok: true });
+    expressions.controlCommit("drag");
+    expect(jaw(a.app.featureState("expressions"))).toBe(Math.fround(0.6));
+  });
+
+  test("a run that changed nothing, settled by a look switch, leaves no step behind in its look (Sol's phantom Undo)", async () => {
+    const studio = await profileStudio({ looks: [{ name: "A", recipe: initialRecipe() }, { name: "B", recipe: initialRecipe() }] });
+    await studio.collection.initialize();
+    const [a, b] = studio.owner.looksOf(studio.shown()!).map(look => look.id);
+    const layer = studio.document.recipe.layers[0]!.id, start = studio.document.recipe.layers[0]!.opacity;
+    expect(studio.app.history()).toMatchObject({ depth: 0 });
+    expect(studio.app.controlBegin("opacity", layer)).toBe(true);
+    expect(studio.app.controlEdit("opacity", { kind: "layer.setOpacity", layerId: layer, opacity: 0.3 })).toMatchObject({ ok: true });
+    expect(studio.app.controlEdit("opacity", { kind: "layer.setOpacity", layerId: layer, opacity: start })).toMatchObject({ ok: true });
+    expect(studio.app.dispatch(studio.choose(b!))).toMatchObject({ ok: true });
+    expect(studio.app.dispatch(studio.choose(a!))).toMatchObject({ ok: true });
+    expect(studio.app.history()).toMatchObject({ depth: 0 });
+    expect(studio.app.capability({ kind: "history.undo" })).toMatchObject({ available: false });
+  });
+});
+
 describe("scenes", () => {
   test("a scene-editing view action names its scene: a view relinked to another scene at the same gen is refused", () => {
     const core = namedCore(createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));

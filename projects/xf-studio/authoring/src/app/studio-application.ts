@@ -176,13 +176,22 @@ export class StudioApplication {
   private readonly featureHandlers = new Map<string, ActionHandler<{ kind: string }>>();
   /** The open generic feature control (`featureControlBegin`): one Undo step over its feature's part for a run of edits. */
   private featureControl?: { feature: string; id: string; transaction: HistoryTransaction<HistoryEntryId> };
+  /** Control runs a replacement of the document's content ended: their continuations are refused until they begin again. */
+  private readonly ended = new Set<string>();
   /** The open look transaction (`transaction`): its actions record no steps of their own. */
   private look?: { features: readonly string[] };
   /** `registry` is the composition's action registry, injected by the composition roots (CORE-29). */
   constructor(services: Services, registry: Registry<AnyOwner>) {
     this.services = services; this.routes = registry; this.handlers = this.bindHandlers();
-    // A gesture or control run belongs to the look it began on: it settles (commits) before the document shows other content.
-    services.document.onReplacing(() => this.settleEdits());
+    // A gesture or control run belongs to the content it began on: it settles (commits) before the document shows other content, another
+    // look's or the same look's replaced from elsewhere, and is over. A gesture ends with its session; a control run's later edits are
+    // refused until the control begins again (`ended`).
+    services.document.onReplacing(() => {
+      const control = this.services.controls.snapshot();
+      if (control) this.ended.add(`control:${control.id}`);
+      if (this.featureControl) this.ended.add(`feature:${this.featureControl.id}`);
+      this.settleEdits();
+    });
     this.asyncHandlers = this.bindAsyncHandlers();
     for (const owner of registry.owners())
       if (owner.owner === "feature" && !(owner.id in this.handlers)) {
@@ -960,7 +969,9 @@ export class StudioApplication {
   controlBegin(id: string, layerId: string, look?: LookRef) {
     if (!look || !this.editsLook(look)) return false;
     if (this.denied() || this.gesture || this.look || this.featureControl || this.unowned() || this.services.document.locked) return false;
-    const begun = this.services.controls.begin(id, layerId); if (begun) this.notify(); return begun;
+    const begun = this.services.controls.begin(id, layerId);
+    if (begun) { this.ended.delete(`control:${id}`); this.notify(); }
+    return begun;
   }
   /**
    * One continuous form edit inside the control's Undo transaction. It passes the same
@@ -971,6 +982,7 @@ export class StudioApplication {
    */
   controlEdit(id: string, action: Naming<RecipeAction, { look: LookRef }>): StudioDispatchResult {
     if (this.gesture) return { ok: false, code: "busy", message: "Finish or cancel the current gesture first (Esc)." };
+    if (this.ended.has(`control:${id}`)) return { ok: false, code: "missing_target", message: RUN_ENDED };
     // Form controls adjust recipe content through AuthoringControlEdits, which takes recipe actions only.
     if (!RECIPE_ACTION_KINDS.has(action.kind) || this.routes.descriptor(action.kind)?.effect !== "content")
       return { ok: false, code: "invalid_value", message: "That command cannot be adjusted by a form control." };
@@ -1009,11 +1021,13 @@ export class StudioApplication {
     if (this.denied() || this.gesture || this.look || this.services.controls.snapshot() || this.unowned() || this.services.document.locked
       || !this.featureHandlers.has(feature)) return false;
     this.featureControl = { feature, id, transaction: this.services.document.history.begin([feature], CONTROL_TRANSACTION) };
+    this.ended.delete(`feature:${id}`);
     this.notify();
     return true;
   }
   featureControlEdit(feature: string, id: string, action: { kind: string }): StudioDispatchResult {
     if (this.gesture) return { ok: false, code: "busy", message: "Finish or cancel the current gesture first (Esc)." };
+    if (this.ended.has(`feature:${id}`)) return { ok: false, code: "missing_target", message: RUN_ENDED };
     if (this.ownerOf(action.kind) !== feature) return { ok: false, code: "invalid_value", message: "That command belongs to another part of the look." };
     const allowed = this.capability(action as StudioAction);
     if (!allowed.available) return { ok: false, code: allowed.code ?? "unavailable", message: allowed.reason ?? "Action unavailable." };
@@ -1228,6 +1242,8 @@ function fieldIssue(value: unknown, schema: ValueSchema, field: string): StudioC
     return refused("limit", { code: "range", field, message: "The text length is outside the supported range." });
 }
 const NO_PRESET = "Add or select a preset first; layers belong to a preset.";
+/** A control's edit after the content it began on was replaced (another look shown, or this one changed elsewhere). */
+const RUN_ENDED = "What you were adjusting changed meanwhile, so this adjustment ended. Start it again.";
 /** A feature's action, gesture or menu naming a look the editor doesn't show (profiles design §3.6). */
 const OTHER_LOOK = "That look isn't the one being edited here. Show it to change it.";
 function missing(reason: string): StudioCapability { return { available: false, code: "not_ready", reason }; }
