@@ -2,7 +2,7 @@
  * The document store: typed, versioned documents in the library file, beside the released tables (user_version untouched),
  * reloaded from the same file, reached by the page over `/api/documents`, and held by the page as saved documents.
  */
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, setSystemTime, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -67,7 +67,14 @@ test("documents reload from the same file, and each committed write (only) is re
 test("a library with the documents table still opens in earlier XF Studio stores, user_version stays 2, and collections list as before", () => {
   const path = library();
   const file = openTestLibrary(path);
-  for (const fixture of COLLECTION_FIXTURES) file.collections.save({ collection: STUDIO_PARTS.readCollection(readFixture(fixture)) });
+  // Each collection is made at its own instant. Collections made in the same millisecond are ordered by when they were made here (their
+  // rowid, LIB-01) and by their ID in 0.1.0-alpha.1, a released build that can't change: a tie has no order both builds share.
+  try {
+    COLLECTION_FIXTURES.forEach((fixture, index) => {
+      setSystemTime(new Date(Date.UTC(2026, 9, 22, 12, 0, 0, index)));
+      file.collections.save({ collection: STUDIO_PARTS.readCollection(readFixture(fixture)) });
+    });
+  } finally { setSystemTime(); }
   const before = file.collections.list();
   file.documents.put("experiment-flags", "preferences", { flags: {} }, 0);
   file.close();
