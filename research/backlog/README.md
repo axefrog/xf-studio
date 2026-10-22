@@ -72,14 +72,7 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
   - The V captures (UI-190) and a read-only capture showing the Character and Settings panels; check the Opacity slider there.
 
   *22 Oct*
-- **Profiles phase 1 UI follow-ups** (from its design review; they don't block the merge):
-  - the workspace notice as a library component;
-  - "Save version" crowding the header crumbs at about 1,100 px;
-  - progress for Taking over, Waiting and Restoring, and a way back from Waiting;
-  - wording leftovers: the "Autosaved draft" chip, the "Draft" glossary entry, and three names for reopening a collection;
-  - "aren't protected" should say its consequence;
-  - save-toast and read-only-fade polish. *22 Oct*
-- **Tests leave temporary folders behind** (`xfs-part-2-library-*`, `xfs-locked-library-*`, `xfs-ui-data-*` and others pile up in the system temp folder). Every test removes what it creates. *22 Oct*
+- **Profiles phase 1 UI follow-ups** (from its design review): progress for Taking over, Waiting and Restoring, and a way back from Waiting (a Cancel that leaves the window read-only). Polish batch 2 (`claude/polish-2`) did the rest: the header keeps the names readable, the workspace notice is a library component, the wording leftovers, "couldn't be backed up", and the save-toast, open-row, "Use other window's", read-only-fade and Interface guide polish; its design review passed with conditions (the follow-ups above). *22 Oct*
 - **Starter eye-makeup shapes** under the contributed-defaults convention ([small bugs](#small-bugs-and-friction)). *21 Oct*
 - **The rest of [Small bugs and friction](#small-bugs-and-friction):** Build Stop, two windows on one draft, receipt matching. *21 Oct*
 - **A check that pure engine code never reads the clock, randomness or timers** (`engines/layered-makeup/raster-processor.ts` does today). *21 Oct*

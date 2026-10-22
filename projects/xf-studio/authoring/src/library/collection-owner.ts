@@ -68,7 +68,7 @@ export type CollectionOwnerDeps = {
 };
 
 const NOT_FLUSHED = "Your latest changes are still on their way to the library. Try Save version again in a moment.";
-const PURGED = "A look your version lists was deleted for good, so your version can't be kept as it is. Use theirs, or keep both.";
+const PURGED = "A look your version lists was deleted for good, so your version can't be kept as it is. Choose Use other window's or Keep both.";
 const CANCELLED = "Cancelled. Your changes are still being saved.";
 export const INCOMPLETE = "This collection lists a look that isn't there any more, so it can't be saved or exported as it is. Open it to see what's missing.";
 /** The most looks a collection is made with in one command (each look is a document; one host transaction writes at most 64). */
@@ -489,6 +489,22 @@ export class CollectionOwner {
       refs = [refs[0]!, ...wanted];
     }
     return refusal("stale", "This collection keeps changing in another window. Try again in a moment.");
+  }
+  /**
+   * This window's own copy of a collection, as it shows it now: the library's acknowledged values with every change still waiting here on
+   * top (the documents' visible values), and nothing read or written. The recovery export (style guide t-read-only-window, t-recovering):
+   * it works when the library can't take this window's changes, which is exactly when a snapshot can't be made. `revisions` are the
+   * acknowledged revisions the copy builds on.
+   */
+  windowCopy(collection: string): CollectionSnapshot | Capability {
+    const doc = this.collection(collection);
+    if (!doc) return refusal("missing_target", "That collection doesn't exist any more.");
+    const looks = doc.looks.map(look => this.look({ collection, look }));
+    // Never a copy with a listed look left out (as a snapshot): a listed look this window doesn't hold live can't be exported as it shows.
+    if (looks.some(look => look?.state !== "live")) return refusal("invalid_value", INCOMPLETE);
+    const refs = this.refsOf(collection);
+    return { collection: stripView(doc), looks: looks.map(look => stripLook(look!)),
+      revisions: Object.fromEntries(refs.map(ref => [documentKey(ref), this.deps.outbox.document(ref)?.version ?? 0])) };
   }
   /**
    * Save version (Ctrl+S): flush, then the host writes a named version older builds read (the released tables) from its own snapshot of

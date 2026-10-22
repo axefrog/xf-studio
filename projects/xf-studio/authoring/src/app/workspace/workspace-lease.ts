@@ -26,7 +26,7 @@ export const LEASE_MESSAGES = {
   waiting: "Waiting for the other window to finish saving. Close the other window to continue.",
   releasing: "Handing this workspace to another window…",
   starting: "Opening the workspace…",
-  releaseFailed: "Your latest changes couldn't be saved, so this window kept the workspace. Try again, or export your collection to keep them.",
+  releaseFailed: "Your latest changes couldn't be saved, so this window kept the workspace. Try again, or export this window's copy to keep them.",
   disconnected: "This window lost its connection to XF Studio, so it can't save here. Reload the window to continue.",
   reconciling: "Checking whether the other window has the workspace now…",
   /** The refusal every dispatch gets while this page doesn't hold the workspace. */

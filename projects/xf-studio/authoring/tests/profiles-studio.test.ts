@@ -175,6 +175,19 @@ describe("conflicts on presets and collections", () => {
     expect(a.collection.service.capability({ kind: "resolveConflict", conflict: "nope", keep: "mine" })).toMatchObject({ available: false, code: "missing_target" });
   });
 
+  test("a name changed in the other window is said after a colon, never in nested brackets (UI review condition 4)", async () => {
+    const a = await profileStudio({ looks: [{ name: "Smoky", recipe: initialRecipe() }] });
+    await a.collection.initialize(); await a.settle();
+    const ref = a.scene.look()!;
+    const b = await profileStudio({ library: a.library, show: ref });
+    dispatch(a, { kind: "layer.setOpacity", layerId: layerId(a), opacity: 0.23 });
+    dispatch(b, { kind: "preset.edit", command: { kind: "rename", id: ref.look, name: "Smoky glow" } });
+    await b.settle();
+    await a.outbox.check(); await a.outbox.settle();
+    const [conflict] = a.collection.summary().draft!.conflicts;
+    expect(conflict?.message).toBe("You changed the preset “Smoky” here too (its name: “Smoky glow” there, its makeup). Which version should it keep?");
+  });
+
   test("Keep mine writes this window's version; Use theirs shows the other's; Keep both keeps mine as a copy beside theirs", async () => {
     {
       const { a, ref } = await lookConflict();
@@ -409,5 +422,57 @@ describe("opening, importing and copies", () => {
     const json = JSON.parse((outcome as { result: { json: string } }).result.json);
     expect(json.id).toBe(studio.shown());
     expect(studio.library.collections.list()).toMatchObject([{ revision: 1 }]);
+  });
+});
+
+describe("the recovery export (the workspace notice's Export this window's copy)", () => {
+  test("when the library can't take this window's changes, the ordinary export refuses but this window's copy still downloads, with the change", async () => {
+    const studio = await profileStudio({ looks: [{ name: "Smoky", recipe: initialRecipe() }] });
+    await studio.collection.initialize(); await studio.settle();
+    // From here every library write fails: the drain a handover makes first (and Save version, and the ordinary export) can't succeed.
+    const store = studio.library.documents as { transact: (...args: unknown[]) => unknown };
+    store.transact = () => { throw Error("The library can't be written right now."); };
+    dispatch(studio, { kind: "layer.setOpacity", layerId: layerId(studio), opacity: 0.37 });
+    const ref = studio.scene.look()!;
+    expect(await studio.outbox.settle([lookRef(ref)])).toBe(false);
+    // Export collection saves a version first, so it refuses and writes nothing (the dead end the design review found).
+    expect(await studio.files.execute({ kind: "collection.export" })).toMatchObject({ ok: false });
+    await new Promise(resolve => setTimeout(resolve, 5));
+    expect(studio.downloads).toEqual([]);
+    // This window's copy needs nothing from the library: it downloads, and holds the change the library never got.
+    expect(studio.files.capability({ kind: "collection.exportWindowCopy" })).toMatchObject({ available: true });
+    const outcome = await studio.files.execute({ kind: "collection.exportWindowCopy" });
+    expect(outcome).toMatchObject({ ok: true, message: "Exported this window's copy of “Current”, with the changes your library doesn't have yet. It wasn't saved to your library." });
+    await new Promise(resolve => setTimeout(resolve, 5));
+    expect(studio.downloads.map(file => file.name)).toEqual(["xfs.collection.json"]);
+    const exported = JSON.parse(studio.downloads[0]!.text) as { name: string; presets: { id: string; name: string }[] };
+    expect(exported).toMatchObject({ name: "Current", presets: [{ id: ref.look, name: "Smoky" }] });
+    expect(studio.downloads[0]!.text.replace(/\s/g, "")).toContain("\"opacity\":0.37");
+    // The library still has the value from before: nothing was written by the export.
+    expect(JSON.stringify(studio.library.documents.read([lookRef(ref)]))).not.toContain("\"opacity\":0.37");
+  });
+});
+
+describe("the library chip's comparison with the last version", () => {
+  test("Working… only while the version is read back; a failed read is unavailable (no claim), and the next refresh reads it again", async () => {
+    const first = await profileStudio({ looks: [{ name: "Smoky", recipe: initialRecipe() }] });
+    await first.collection.initialize(); await first.settle();
+    expect(await first.collection.service.execute({ kind: "save" })).toMatchObject({ ok: true });
+    await first.settle();
+    // Another window opens on the same library; reading the saved version back fails.
+    const second = await profileStudio({ library: first.library, show: first.scene.look() });
+    const get = second.transport.get;
+    second.transport.get = async () => { throw Error("The library couldn't be read."); };
+    await second.collection.initialize();
+    expect(second.collection.service.isBusy()).toBe(false);
+    expect(second.collection.service.persistence()).toMatchObject({ baseline: "unavailable", savedRevision: 1 });
+    // While a read is pending the comparison is in progress; once it lands the chip can say Saved.
+    let answer!: () => void;
+    second.transport.get = id => new Promise(resolve => { answer = () => resolve(get(id) as never); });
+    expect(await second.collection.service.execute({ kind: "refresh" })).toMatchObject({ ok: true });
+    expect(second.collection.service.persistence()).toMatchObject({ baseline: "unknown" });
+    answer();
+    await new Promise(resolve => setTimeout(resolve, 5));
+    expect(second.collection.service.persistence()).toMatchObject({ baseline: "known", dirty: false });
   });
 });
