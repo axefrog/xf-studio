@@ -992,7 +992,19 @@ Afterwards, record outcomes in the [design page](runtime-bridge-design.md) (unve
 
 ## Build record (bridge 0.8.5, branch build, not staged)
 
-Built from this commit by a clean build and `bun tools/package.ts`; the hashes follow in the next commit.
+Built 22 October 2026 on `claude/bridge-080a` at `060deaffd164`, clean tree (`main` merged first, a fast-forward to `8c065ffe`), from a clean build (`cmake --build build --config Release --clean-first`; manifest `"commit": "060deaffd164dc53e55fe12c5cf271d4827f01a1"`, `"source_tree_clean": true`), by `bun tools/package.ts`, then `bun tools/package.ts --allow-inventory` (the first run's -writes zip renamed to -writes-no-inventory; the second rewrote the default and diagnostic zips, whose hashes below are the files it left): version 0.8.5, session 12's findings and the UI review of 0.8.4 ([design §3.13](runtime-bridge-design.md#313-bridge-085-session-12s-findings-and-the-ui-review-of-084)). On that commit: `xfb_selftest --unit` UNIT OK (593 checks) in three runs, the first straight after the clean build; self-test 660 of 660; `bun test tools` 410 pass and 4 skipped (the opt-in on-screen capture tests; `tools/test/batch19.test.ts` runs the window's Lua under fengari 0.1.5 for N1, N3, N4 and fix 8, and checks the copy, the CET line and the question sound's wiring); typecheck; the Lua lint, the world-object lint and the theme tables against XF Studio's tokens; the redscript lint without Codeware, with Codeware `v1.20.4`'s scripts, and with Codeware, the Equipment-EX stub and TweakXL `v1.11.4`'s scripts, each against a copy of the installed 2.31 `final.redscripts` (SHA-256 `2119046f…ee86`). Every run under `tools/memory_guard.py --limit 4` (peak 1.0 GB, the build).
+
+No new native or method; `bridge_info` gains `question_sound`, `XFBridge_KillKey`'s answer gains `backup`, `backup_folder` and `temp_beside`, and the scripts gain `XFBridgeSound.Question`, which the plugin calls, so the DLL, the scripts and the CET layer must be staged together, as the zip does. `config.ini` gains `[ui] question_sound = true`. Changing the stop key now keeps the old `config.ini` in `%LOCALAPPDATA%\XFStudio\runtime-bridge\settings-backups` (the newest 3) and writes nothing new beside it unless the runtime folder is on another volume (then only the temporary file, renamed away at once). Stage the -writes zip only into the `XF Studio diagnostic` profile. A rebuild after merging gives new hashes.
+
+| File | SHA-256 |
+|---|---|
+| `xf-runtime-bridge-0.8.5.zip` (bridge off) | `2b53fc7f588fef1cec758ba8a5eeee4851eceb706d53af55e154bf91e789af9f` |
+| `xf-runtime-bridge-0.8.5-diagnostic.zip` (read-only) | `dae4080617641e033025ea279a563303d2ec9678b2f18e578e4b16d3c78fee6e` |
+| `xf-runtime-bridge-0.8.5-writes-no-inventory.zip` (writes, no inventory class) | `92e3af3b7ad9deae11e6f436da8a4b9733fa05785904f5fe74ecdf616610e0e2` |
+| `xf-runtime-bridge-0.8.5-writes.zip` (writes with the inventory class: session 13's zip) | `411a2d957089ab77996f2de0abd958c006e81107abf1d27d56eee57c1171d860` |
+| (`XFRuntimeBridge.dll` inside each) | `f1f9e2029a8ac51d28335665f63aae6aad35101eabfaad822d8d652a36f565bb` |
+
+**Watch in the session:** `plugin_version` 0.8.5 and `question_sound` in `bridge_info` (Z1); `ui.question_sound id=… event=ui_messenger_recieved` once per question and never for an info line (S1, S2), or `ui.question_sound_failed`; `bridge.kill_key_changed … backup=config.ini.<time>.bak temp=runtime|beside` (K3, K4); nothing new in MO2's overwrite folder (K4).
 
 ## Build record (bridge 0.8.4, branch build, not staged)
 
