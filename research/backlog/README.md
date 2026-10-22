@@ -45,6 +45,7 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 - **Consistency leftovers:** UI-142's build steps, and repeated layer names (CORE-125) ([readiness](../../docs/release-readiness.md)). *29 Sep*
 
 ### Polish lane (before 1.0)
+- **In-game styling spec for the bridge surfaces** (the XF Runtime Bridge window, the XF box and the CET line). A coat of slickness, with CharLi's CET plugin as the reference: dense ImGui theming, type hierarchy through font scale, styled value bars, child panels and subtle pulses. It never comes ahead of function. The UI track writes the spec in the style guide for the in-game theme generator (`projects/xf-runtime-bridge/tools/overlay/theme.ts`), and XF · Runtime bridge builds it. CharLi is credited if we borrow ideas. The XF box's text size stays, since it matches other CET windows. *22 Oct*
 - **Profiles phase 1 UI follow-ups** (from its design review; they don't block the merge):
   - the workspace notice as a library component;
   - "Save version" crowding the header crumbs at about 1,100 px;
