@@ -1,6 +1,6 @@
 # S2. Seed language and seeding layer specification
 
-**Status:** v1.1, 23 October 2026. v1.1 adds what layer 3's specification ([S3](procedural.md)) needs: sowing requests, source withdrawal, a read API, the core hooks typed, and corrections to the fit hook and hook inputs.
+**Status:** v1.2, 23 October 2026. v1.2 answers GPT-6 Astra's review of S3 where it touches S2: overlays can't erase fixed identities, director-sown casting filters, and a fuller read API. v1.1 added what layer 3's specification ([S3](procedural.md)) needs: sowing requests, source withdrawal, a read API, the core hooks typed, and corrections to the fit hook and hook inputs.
 - **Reviews.** Two reviews by GPT-6 Astra: of v0.1 (25 findings) and of v0.16 (23 findings), all adopted (§16).
 - **The core.** v1.0 defines the core: the subset the first implementation builds (§0.3). Everything else on this page is a **later capability**, which the first implementation rejects plainly rather than accepting with partial behaviour.
 - **The research.** Versions v0.1 to v0.16 folded in the requirements of dossiers 8 and 10 to 23. §15 traces each dossier's list; git history has the version steps.
@@ -170,7 +170,13 @@ type SowResult = { ok: true; instance: Id; existing: boolean } | { ok: false; fi
 1. Layer 2 merges it over the expanded template, after profile expansion and the variant merge, and before the lint (§3.1).
 2. Each `roles[k].identity` replaces that role's identity with a fixed part. `growsFrom` and `stakeScale` replace the template's. Nothing else can be overlaid.
 3. An overlay that names a role the template lacks, or a node the role's kind doesn't accept, is refused.
-4. The lint runs on the merged document; an error refuses the request, with its findings.
+4. **An overlay never erases an author's promise.** It is compared with the document before the overlay:
+   - it may bind a role whose identity is absent, open or preferred;
+   - it may name a fixed identity only if it is the same node;
+   - parts a profile fixed stay fixed.
+
+   Any other replacement is refused with a specific finding.
+5. The lint runs on the merged document; an error refuses the request, with its findings.
 
 The instance's `source` records the `decision`.
 
@@ -1552,12 +1558,17 @@ Roles are cast in **topological order** of their role references. A cycle is a l
    - `limit: 'all'`.
 
    A preferred identity is added to the candidates if it satisfies the effective `must`.
-4. **Claims.** Apply claim priority (§9.2) to candidates another live seed holds. A candidate stays if this seed would win the claim. It is removed if this seed would lose.
-5. **Choose** by the layer-2 draw (§3.4), with `w(o) = 1`. These add to a candidate's score:
+4. **Source filters.** For an instance the director sowed, every role's candidates exclude:
+   - main-story (spine) characters;
+   - NPCs on the player's exclusion lists.
+
+   This holds at casting, at re-casting and at preparation (§8.4). These filters are not author requirements, so ladders can't relax them. Authored seeds are unaffected.
+5. **Claims.** Apply claim priority (§9.2) to candidates another live seed holds. A candidate stays if this seed would win the claim. It is removed if this seed would lose.
+6. **Choose** by the layer-2 draw (§3.4), with `w(o) = 1`. These add to a candidate's score:
    - `strength · ln K` for a preferred identity;
    - `strength · ln K` for each preference that holds;
    - `ln K` for each `repertoire` fragment S1 lists for it.
-6. **Results:**
+7. **Results:**
    - an empty set means the role is **unfilled**;
    - a query that returns `failed` means **unfilled**, with reason `too-broad`;
    - otherwise the choice is the role's **tentative cast**.
@@ -2139,9 +2150,15 @@ Layer 2 exposes a read-only `Layer2View` (S3 §1.2) to layer 3 and to tools:
 - `instances()`, `instance(id)`, `sownBy(decision)`;
 - `global()`;
 - `exposedNode(node, atLeast)`;
-- `playTotal()`.
+- `playTotal()`: the **current** cumulative play time in this branch, not the value last saved.
 
-Its views are projections of the instance state (§12.1) and the record. Each delivery appears once, with its highest grade and the `playTotal` at which it reached it; this survives in the receipts after a seed ends. Each loose end carries its stable `n`, a `kind` (`fact`, `cast`, `promise` or `turn`) and its node.
+Its views are projections of the instance state (§12.1) and the record. Each delivery appears once, with its highest grade and the `playTotal` at which it reached it; this survives in the receipts after a seed ends. Each loose end carries its stable `n`, a `kind` (`fact`, `cast`, `promise`, `unreadTurn` or `change`) and its node. Each instance view also gives:
+- its claims, with spans and sharing, and the roles each live beat binds;
+- a `sowSeq`: an immutable order of sowing;
+- the `playTotal` at closure, beside the game time;
+- each delivery's wait as play seconds (`maxWaitPlay`), with `Duration`s normalised.
+
+A shared `claimConflict(node, span)` read answers whether a node is held.
 
 ### 10.2 The exposure ledger
 
@@ -2403,7 +2420,8 @@ There is one record per instance, and one **layer-2 global** record with the id 
 // SeedRecord.state for an instance
 interface InstanceState {
   template: { pack?: string; id: TemplateId; version: number };
-  source: { by: 'pack' | 'director' | 'plugin'; layer: Layer };
+  source: { by: 'pack' | 'director' | 'plugin'; layer: Layer; decision?: Id };
+  sowSeq: number;                      // immutable order of sowing in this branch
   document: Seed;                      // the expanded document (§1.2)
   state: SeedStateName; since: GameTime;
   releaseWindow?: string; form?: string;

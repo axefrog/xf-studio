@@ -1,6 +1,7 @@
 # S0. Kernel specification
 
-**Status:** v4.7, 23 October 2026.
+**Status:** v4.8, 23 October 2026.
+- v4.8: an event-kind registry; occurrence ids and times on delivered envelopes; `tempo` in settings (V4-32 to V4-34).
 - v4.7 clarifies pattern frames for layer 3 (V4-31).
 - v4.6 adds staged batches, widens relevance routing to layer 2, tightens the production gate, fixes recall to once per encounter, and defers the memory machinery and implicit edges from the first version, after GPT-6 Astra's second review of S2 (V4-26 to V4-30 in §20).
 - v4.5 adds the `coarseFine` declaration on processes and the property-test plan, from [dossier 23](../craft/d23-evaluation-testing.md) (V4-24 and V4-25 in §20).
@@ -854,6 +855,11 @@ An interest selector `σ` matches change `x` if **one binding** satisfies all of
 - a `Relevance` emission carries the change payload itself, not only its id;
 - a root actor's frames may be opened and closed as packs load and unload.
 
+**Event kinds and envelopes** (v4.8):
+- **The registry.** An event's kind is the `kind` slot of `core:event` (§9.2). Packs register event kinds, with their tags and producers, in an **event-kind registry**. Selectors and patterns match kinds through `where` predicates on that slot, never through `KindId`s. The registry also holds the inert `meta:` kinds layer 3 mints.
+- **Envelopes.** Every delivered relevance emission and dilemma carries a stable **occurrence id** (the event's `Id`, or the change's own id) and the occurrence's **game time**.
+- **Soft exclusions** live in `SettingsSet.content.softExclusions` (V4-21).
+
 ### 10.6 Demand and tiers
 
 A node's demand tier is the highest `focus.tier` among active or blocked frames focusing on it or its owner chain. A frame's claim weighs `pull × w_actor`, where `w_actor` is **[tunable 4.0]** for demand roots and 1 otherwise. Slots normally open when the node's demand tier reaches the slot's `tier`. Queries, seeds and preimages may open finer slots.
@@ -1033,7 +1039,7 @@ Each save has a record `{ saveKey, parent, ops }`, where `parent` is the record 
 - `EventCanon`;
 - `SummarySet`;
 - `FrameState`, `SeedState`, `ProcessState`;
-- `SettingsSet { memoryScale, resetScale, noticing, exclusions, modelFloor, cityScale, classExclusions, content, at }` (v4.1; city settings v4.2; `content` v4.3, typed in v4.4 as `{ preset, ceiling per class 0..3, notice per class, softExclusions }`, marked sensitive and dropped from exports and bug reports by default, like the director's beliefs about V): every player setting that changes what is offered or remembered, in force from `at`. `noticing`, `exclusions` and `modelFloor` are the director's model settings ([S2 §8.8](seeding.md#88-the-player-models-boundary)). The lineage root records the initial settings. Replays and the harness use the settings in force at each op. Settings that change only presentation are not recorded.
+- `SettingsSet { memoryScale, resetScale, noticing, exclusions, modelFloor, cityScale, classExclusions, content, tempo, at }` (v4.1; city settings v4.2; `content` v4.3, typed in v4.4 as `{ preset, ceiling per class 0..3, notice per class, softExclusions }`, marked sensitive and dropped from exports and bug reports by default, like the director's beliefs about V): every player setting that changes what is offered or remembered, in force from `at`. `noticing`, `exclusions` and `modelFloor` are the director's model settings ([S2 §8.8](seeding.md#88-the-player-models-boundary)). The lineage root records the initial settings. Replays and the harness use the settings in force at each op. Settings that change only presentation are not recorded.
 
 Snapshots are written every **[tunable 10,000]** ops. Ops carry complete data.
 
@@ -1277,6 +1283,9 @@ v4 adds what the seeding layer and sifting need. None of the additions changes a
 | V4-29 | Recall once per (belief, encounter) | §11.2 | C-20 | With V4-11, deferred |
 | V4-30 | The memory machinery (V4-9 to V4-11) and implicit edges (V4-18) are deferred from the first version | §0.2 | Astra's core set | Deferred |
 | V4-31 | Pattern frames: many interests per frame, emissions carry the change, frames come and go with packs | §10.5 | S3's sifter | A clarification |
+| V4-32 | The event-kind registry; kinds matched through the `kind` slot | §9.2, §10.5 | S3's sifter (Astra's S3 review, D-16) | A clarification and a small registry |
+| V4-33 | Occurrence id and game time on delivered emissions and dilemmas | §10.5, §10.8 | D-16 | Delivery only |
+| V4-34 | `tempo` in `SettingsSet` | §14.2 | D-16 | With V4-12 |
 
 **Dossier 11's other kernel requirements:**
 - **S1 policies:**
