@@ -67,10 +67,11 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 ### R&D (runs only while the polish lane is moving)
 - **Hair Lab** (its own chat and branch, off `main` until the beta). *16 Oct*
 - **In-game overlay and UI; custom material shaders** (below). *29 Sep*
-- **The runtime bridge:** 0.8.0 staged for session 9, then the NPC and DM toolkit branches ([bridge autonomy](bridge-autonomy.md)). *30 Sep*
+- **The runtime bridge** (its own chat, XF · Runtime bridge): 0.8.2 staged after session 10, with 0.8.3 next, then the NPC and DM toolkit branches ([bridge autonomy](bridge-autonomy.md)). *30 Sep*
+- **Story Engine** (its own chat, XF · Story Engine): procedural gigs, quests and encounters over a level-of-detail world simulation ([hub](../story-engine/README.md)). It is R&D at its own pace, outside the finish-first rule, and is gated mainly on runtime bridge work. *22 Oct*
 
 ### After 1.0 (banked)
-- **User-defined shortcuts**, **the Pattern finish**, **profiles phases 5–6** (several views at once, several profiles and Vs), and **the later features** below. *21 Oct and earlier*
+- **User-defined shortcuts**, **the Pattern finish**, and **the later features** below. *21 Oct and earlier*
 
 ### Approved experiment: Hair Lab
 
