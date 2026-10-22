@@ -193,7 +193,7 @@ flowchart TB
 
 **Built in phase 1c-ii.**
 
-- **Ownership.** Collections and looks are owned by `CollectionOwner` (owner commands) and `LookSessions` (keyed by `LookRef`), as `collection-working` and `look-working` documents. The old `CollectionService` folds into them in phase 1d.
+- **Ownership.** Collections and looks are owned by `CollectionOwner` (owner commands) and `LookSessions` (keyed by `LookRef`), as `collection-working` and `look-working` documents. The old `CollectionService` folded into them in phase 1d-ii.
 - **Snapshots.** `DocumentStore.read(refs)` is the one-transaction snapshot.
 - **Save version.** It flushes, refuses if anything is in conflict or unsent, and then calls the host route `/api/collection-versions`, which writes the released tables from its own snapshot in the same transaction. The window records `saved` afterwards.
 - **Retention.**
@@ -364,6 +364,30 @@ Key bindings and palette commands resolve targets in the input layer, then dispa
 - **The History panel** shows the editing context's scope, with a list of the other recent scopes to switch to. It can't target itself.
 - **`history-service.ts`'s unqualified `look` scope and its fallback are removed.** With no editing context, Undo is unavailable, with the reason "Nothing to undo here yet".
 - **External changes clear a scope** (§2.2).
+
+**Built in phase 1e.**
+
+- **Focus.** `FocusService` (`platform/core/focus.ts`) owns the view order, the focused panel and the editing context. The history service records into it, and the session stores and restores it. The view graph holds no focus. `HistoryService.acting(scopes)` picks the first scope that can act.
+- **Targets.**
+  - Every action family names its target (§3.6), and the action registry adds `look` to feature actions. `preset.select` became `scene.setLook`.
+  - Scene-editing view actions name `scene` together with `sceneGen`.
+  - The presentation port is the input layer: it fills targets the UI leaves out. `StudioApplication` validates every named target in one place and refuses a stale one with `missing_target`. Dispatch and captures share one currency check (`TargetResolver.check()` and `current()`).
+  - Base revisions travel in captures, not on every immediate action.
+  - View actions that act through the drawn head (camera, motion, and preview's eye shape, detail and hair) refuse any view that doesn't show the drawn scene, until phase 4a's runtimes.
+- **Resolution and captures.**
+  - Resolution is pure (`app/profiles/bindings.ts`), and panel contributions declare their `context` (§5).
+  - Context menus capture their targets when they open.
+  - Gestures and continuous controls capture their look when they begin, and refuse to continue once the editor shows another look. An open gesture or control run is settled before the document shows other content.
+  - File pickers name their target when they are asked.
+- **History.** The View and lighting scope is `view:<profile>`. Undo acts only on the scope it names; with no editing context it reads "Nothing to undo here yet". The Undo and Redo tooltips and the History list say "Changes to <name>".
+- **Session data** (§4.1). Reading a session validates tab IDs, instance IDs (duplicates are dropped), bindings, scene references and generations, and focus.
+- **Boundary test.** It lists no family that still defaults a target. It also forbids reading focus below the input layer, naming `sceneGen` without `scene`, and naming the live feature in the root. The `liveSurface` row of §7 is built as `preview/browser/scene-surfaces.ts`.
+- **Deferred.**
+  - `character.undo` and `character.redo` duplicate `history.undo` scoped to the character, and will be retired.
+  - The History panel's list of other recent scopes waits for a UI decision (phase 3).
+  - `layout.set` gives way to phase 2's `tabs.*`.
+  - Shell menus other than context menus get captures in phase 3.
+  - The root's editor hooks and save loaders are UI-boundary exception 17, until phase 4a.
 
 ## 4. Layouts
 
@@ -616,7 +640,18 @@ No schema migration: every record is a `documents` row, and `user_version` stays
   - Panel IDs, parked places and `lastPlace` keys, groups and anchors are all rewritten to instance IDs.
   - A tab's `dock` may be null, meaning the default arrangement.
   - Own defaults are `layout-default` documents holding a graph fragment with slots `v1` and `look1`.
-- **Start trigger.** The migration's start trigger (`PROFILES_MIGRATION_ENABLED`) stays off until the phase 1d-ii switch-over, so migrated documents never go stale.
+- **Start trigger.** `PROFILES_MIGRATION_ENABLED` is on since the phase 1d-ii switch-over: every start migrates (or resumes) before the Studio builds its session.
+
+**Built in phase 1d-ii (the switch-over).** The Studio now runs on the profile services.
+
+- **One collection owner.** The old `CollectionService` folded into `CollectionOwner` and `LookSessions`. The session is the source of the V and the look shown, and the V comes from its `CharacterService` owner.
+- **Edits are recorded as they are made.** A look edit is written to the outbox synchronously, and only the store to the library waits (250 ms). Another window's version met during that delay becomes a conflict, never a silent replacement. Whenever the outbox stops (release, lease loss, a superseded answer), it first stores what was waiting, then sends nothing more.
+- **Conflicts.** A conflict on a look or a collection shows the `ConflictNotice` (`t-conflict`) in the Presets panel, with typed resolution requests. Save version, Check and Build wait until it is resolved.
+- **Collections.** Removing the last preset keeps the collection, across a restart. A new collection created with its profile membership stays within the 64-write limit. Restore puts a look back where it stood.
+- **History.** Each look has its own history scope, and the look shown is the editing context until something else is edited; there is no unqualified look scope and no fallback. Ctrl+Z in a 3D view undoes the look that view shows (§3.7). The V's own scope replaced the history carry between heads.
+- **Save Explorer.** One session per panel instance; `saves.*` actions name their instance, and a released session ends with its panel.
+- **Wording.** The header button reads **Save version**.
+- **Gates.** A differential parity test replays each workspace fixture's scripted session before and after the switch-over, step by step. An edit-latency gate (16 layers, 80 Undo steps) keeps p95 under 4 ms. A start-to-restart test runs on a real-shaped workspace.
 
 ## 9. Phases
 

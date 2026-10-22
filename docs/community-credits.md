@@ -12,9 +12,10 @@ Credit here acknowledges what we learned or used. It does not imply endorsement 
 4. [Libraries, runtimes and general tools](#libraries-runtimes-and-general-tools)
 5. [Documentation and community knowledge](#documentation-and-community-knowledge)
 6. [Mods and creators whose work we studied](#mods-and-creators-whose-work-we-studied)
-7. [Research papers](#research-papers)
-8. [Reference imagery](#reference-imagery)
-9. [Community members we are still identifying](#community-members-we-are-still-identifying)
+7. [Story and game design](#story-and-game-design)
+8. [Research papers](#research-papers)
+9. [Reference imagery](#reference-imagery)
+10. [Community members we are still identifying](#community-members-we-are-still-identifying)
 
 ## Game developer
 
@@ -478,6 +479,78 @@ World Objects Removed, Crunch Plaza Expanded, Japantown North Verticality Expand
 
 [Facial Customisation Rig Fix](https://www.nexusmods.com/cyberpunk2077/mods/7179) and [Photomode Facial Expression Mega Pack](https://www.nexusmods.com/cyberpunk2077/mods/7912), and [Photomode NPCs Extended](https://www.nexusmods.com/cyberpunk2077/mods/18837), whose records showed how any character becomes selectable in photo mode (with Photo Mode Ex), a route to a reference character beside V in tests. The expression pack showed the whole route by which photo mode gains expressions: new expression records, extra rows in the game's expression table, clips attached to the photo-mode face rig, and a face-graph change that lets animated expressions loop. It also showed that the table and graphs are files only one mod can own, which shapes the Studio's export plan. Its patch of the photo-mode face rig and its menu records, which name each face in plain text, showed what an expression mod's files contain, the shape XF Studio's expression export follows. The rig fix's alternative head morph reinforced the need to resolve each file's effective winner, and showed that a head fix can keep the geometry while renaming per-target bone names, which the built-in eye plate now carries over. That fix is also why we read morph targets' own joint binds as active at runtime, which the preview's blink now follows for each eye shape. Its `.xl` patches every feminine and masculine player entity, the always-on route the Studio's resolver does not follow yet. The Modding Docs' description of V Texture Kit showed a second overlay layout that keeps separate textures for each arm. Studied only.
 
+## Story and game design
+
+These games, books, essays and talks informed the design of the planned Story Engine, our research into generated gigs, quests and encounters. Nothing from them is implemented yet. They are credited for ideas only, and no text, content, code or assets are used.
+
+### Emily Short and Failbetter Games
+
+Emily Short, ["Beyond Branching: Quality-Based, Salience-Based, and Waypoint Narrative Structures"](https://emshort.blog/2016/04/12/beyond-branching-quality-based-and-salience-based-narrative-structures/) (2016), and [Fallen London](https://www.fallenlondon.com/), created by Alexis Kennedy and developed by Failbetter Games. Failbetter's quality-based narrative offers small pieces of story, called storylets, when the numbers that track a player's skills and progress (qualities) allow them, and Short's essay sets it beside other ways of choosing what happens next. It taught us to gate content by state rather than by branches.
+
+### Ben Sunshine-Hill
+
+By Ben Sunshine-Hill. ["Alibi Generation: Fooling All the Players All the Time"](https://www.gameaipro.com/GameAIPro/GameAIPro_Chapter37_Alibi_Generation_Fooling_All_the_Players_All_the_Time.pdf), chapter 37 of *Game AI Pro* (edited by Steve Rabin; CRC Press, 2013). Characters spawned around the player are given a backstory, goals and a state only when something makes that necessary, and the alibi must stay consistent with everything the player has already seen of them. It taught us how to invent detail on demand without contradicting what has been shown.
+
+### Kate Compton
+
+By Kate Compton. ["So you want to build a generator…"](https://galaxykate0.tumblr.com/post/139774965871/so-you-want-to-build-a-generator) (blog post, 2016). Her 10,000 bowls of oatmeal problem points out that thousands of bowls can all differ mathematically while the person looking sees only oatmeal. It taught us to measure variety by what people can tell apart, not by how many combinations exist.
+
+### Tynan Sylvester and Ludeon Studios
+
+By Tynan Sylvester. ["The Simulation Dream"](https://www.gamedeveloper.com/design/the-simulation-dream) (essay, 2013), and [RimWorld](https://rimworldgame.com/), developed by Ludeon Studios. The essay argues that a simulation adds value only as far as players can perceive and understand it, and RimWorld puts a storyteller in charge of when events arrive. We took from them that simulation nobody perceives is wasted, and that a director who paces events can shape a story.
+
+### Valve and Michael Booth
+
+[Left 4 Dead](https://store.steampowered.com/app/500/Left_4_Dead/) (Valve, 2008) and Michael Booth's [The AI Systems of Left 4 Dead](https://cdn.fastly.steamstatic.com/apps/valve/2009/ai_systems_of_l4d_mike_booth.pdf) (Valve's slides from his AIIDE 2009 invited talk). The AI Director estimates how intense each player's moment is, removes major threats for a while when intensity runs too high, and otherwise supplies them. It is our model for pacing intensity around the people playing.
+
+### Michael Mateas and Andrew Stern
+
+[Façade](https://www.interactivestory.net/) (Procedural Arts, 2005) and their paper ["Façade: An Experiment in Building a Fully-Realized Interactive Drama"](https://faculty.cc.gatech.edu/~isbell/classes/reading/papers/MateasSternGDC03.pdf) (Game Developers Conference, 2003). A drama manager chooses the next beat, the smallest unit of dramatic action, from a pool of about 200 authored beats, each marked with preconditions and effects on the story state. We took from it the beat as a unit of authored content and the manager that sequences beats.
+
+### Tarn and Zach Adams
+
+[Dwarf Fortress](https://www.bay12games.com/dwarves/) (Bay 12 Games, first released 2006). Each world's history is simulated before play, and Legends mode lets players read it back. It taught us that a simulated world history is a rich source of background for stories to draw on.
+
+### Worldwalker Games
+
+[Wildermyth](https://wildermyth.com/) (Worldwalker Games; released 2021) and the developer's [interview with Turn Based Lovers](https://turnbasedlovers.com/10-turns-interview/with-wildermyth-developer) (2019). Each authored event has roles to fill, like a play, and the game casts its generated heroes into them according to personality and the writers' requirements. We took from it the casting of characters into authored story fragments.
+
+### Vincent Baker and Meguey Baker
+
+[Apocalypse World](https://lumpley.games/), by D. Vincent Baker (Lumpley Games, first edition 2010), with Meguey Baker as co-designer of the second edition (2016). Its fronts group the threats around the characters, and a threat can carry a countdown clock that says when it will act, so threats keep their own momentum whatever the characters do. We took from it threats that sit above the scene and move on their own timetables.
+
+### John Harper
+
+[Blades in the Dark](https://bladesinthedark.com/) (Evil Hat Productions, 2017). Flashbacks let players settle their preparation at the moment it matters, for a cost, and faction clocks advance during downtime so the city changes without the crew. We took from it preparation that resolves late and a world that keeps moving on its own.
+
+### Justin Alexander (The Alexandrian)
+
+[Three Clue Rule](https://thealexandrian.net/wordpress/1118/roleplaying-games/three-clue-rule) (2008) and the nine-part series [Node-Based Scenario Design](https://thealexandrian.net/wordpress/8122/roleplaying-games/node-based-scenario-design-collectors-edition). The first says to give at least three clues for any conclusion the players must reach, because one may be missed, ignored or misread. The second builds a scenario from nodes that clues point to, so players can move through it in different orders. Together they taught us robust discovery, where no single missed clue stops the story.
+
+### Mike Shea (Sly Flourish)
+
+By Michael Shea, who writes as Sly Flourish. [Return of the Lazy Dungeon Master](https://shop.slyflourish.com/products/return-of-the-lazy-dungeon-master) (2018) and his post [Types of Secrets](https://slyflourish.com/types_of_secrets.html) (2021). Secrets and clues are short statements about the world or the story, kept apart from where they are found so they can be dropped in wherever they fit. It taught us to hold story information that is not tied to a place.
+
+### Keith Johnstone
+
+[Impro: Improvisation and the Theatre](https://www.taylorfrancis.com/books/9781136610462) (Faber and Faber, 1979; the link is the later Routledge edition). Johnstone's accounts of status, of accepting or blocking what a partner offers, and of reincorporating earlier material gave us a craft vocabulary for how characters and events respond to one another.
+
+### Christopher Alexander and colleagues
+
+[A Pattern Language](https://global.oup.com/academic/product/a-pattern-language-9780195019193) (Oxford University Press, 1977), by Christopher Alexander, Sara Ishikawa and Murray Silverstein, with Max Jacobson, Ingrid Fiksdahl-King and Shlomo Angel. Its 253 patterns run from whole regions down to construction details, and each points to related patterns above and below it in scale. It is the model for the Story Engine's design composite, a set of linked patterns at many scales.
+
+### Maxis
+
+[The Sims](https://en.wikipedia.org/wiki/The_Sims_%28video_game%29) (Maxis, 2000), designed by Will Wright. Each Sim has a small set of needs, such as hunger, comfort and social contact, which fall over time and which objects in the world can restore. It informed our draft catalogue of character drives.
+
+### Monolith Productions and Jeff Orkin
+
+F.E.A.R. (Monolith Productions, 2005) and Jeff Orkin's ["Three States and a Plan: The A.I. of F.E.A.R."](https://gdcvault.com/play/1013282/Three-States-and-a-Plan) (Game Developers Conference, 2006). Characters choose a goal, plan the actions that meet it with a search, and re-plan when the world changes. It grounds our reading of goal-oriented action planning.
+
+### Bethesda Game Studios
+
+The Radiant AI and Radiant Story systems of *The Elder Scrolls IV: Oblivion* (2006) and *The Elder Scrolls V: Skyrim* (2011), as described in Matt Bertz's [The Technology Behind The Elder Scrolls V: Skyrim](https://gameinformer.com/games/the_elder_scrolls_v_skyrim/b/pc/archive/2011/01/17/the-technology-behind-the-elder-scrolls-v-skyrim.aspx) (Game Informer, 2011). Radiant AI gives characters broad goals to work out for themselves, and Radiant Story fills reusable quest templates from a player's history and nearby characters. Bethesda took on both ideas early and at great scale, and we read them as a cautionary example: template quests need variety the player can feel, and free-running character simulation needs constraints to stay on the story.
+
 ## Research papers
 
 These papers informed our research. Unless an entry says otherwise, no algorithm from them was implemented.
@@ -609,6 +682,90 @@ Miles Macklin, Matthias Müller and Nuttapong Chentanez, [XPBD: Position-Based S
 ### Pedro F. Felzenszwalb and Daniel P. Huttenlocher
 
 Their paper [Distance Transforms of Sampled Functions](https://cs.brown.edu/people/pfelzens/papers/dt-final.pdf) informed the separable Euclidean distance transform used in the Hair Lab collision-grid research. The transform is independently implemented from the mathematical construction; no reference source code is reused.
+
+### James Ryan (2018) and Ryan and Mateas (2017)
+
+James Ryan, [*Curating Simulated Storyworlds*](https://escholarship.org/uc/item/1340j5h2) (PhD thesis, University of California, Santa Cruz, 2018), and James Ryan and Michael Mateas, ["Simulating Character Knowledge Phenomena in Talk of the Town"](http://www.gameaipro.com/GameAIPro3/GameAIPro3_Chapter37_Simulating_Character_Knowledge_Phenomena_in_Talk_of_the_Town.pdf) (*Game AI Pro 3*, 2017). The thesis introduced story sifting, finding story-shaped patterns in a simulation's record of events, and argues that simulated worlds need curation to yield stories. Talk of the Town simulates a town whose characters each hold their own, fallible knowledge of what has happened.
+
+### Kreminski et al. (2019, 2021)
+
+Max Kreminski, Melanie Dickinson and Noah Wardrip-Fruin, ["Felt: A Simple Story Sifter"](https://doi.org/10.1007/978-3-030-33894-7_27) (*Interactive Storytelling*, ICIDS 2019), and Max Kreminski, Melanie Dickinson and Michael Mateas, ["Winnow: A Domain-Specific Language for Incremental Story Sifting"](https://ojs.aaai.org/index.php/AIIDE/article/view/18903) (AIIDE 2021). Felt writes sifting patterns as queries over a simulation's events, and Winnow runs such patterns incrementally, so a promising sequence can be flagged while it is still unfolding. They taught us sifting languages and incremental matching.
+
+### Kreminski and Wardrip-Fruin (2018)
+
+Max Kreminski and Noah Wardrip-Fruin, ["Sketching a Map of the Storylets Design Space"](https://doi.org/10.1007/978-3-030-04028-4_14) (*Interactive Storytelling*, ICIDS 2018). It defines the common parts of storylet-based narrative systems and sorts them along several dimensions. It gave us the storylet as the unit of authored content.
+
+### Grinblat and Bucklew (2017)
+
+Jason Grinblat and C. Brian Bucklew, ["Subverting historical cause & effect: generation of mythic biographies in Caves of Qud"](https://doi.org/10.1145/3102071.3110574) (Foundations of Digital Games, 2017). The game first decides that a historical event happens, then works out a cause from the states of the figures involved, instead of simulating the logic that would have produced it. It taught us to generate events first and justify their causes afterwards.
+
+### Meehan (1976)
+
+James R. Meehan, [*The Metanovel: Writing Stories by Computer*](https://apps.dtic.mil/sti/pdfs/ADA031625.pdf) (Yale University, 1976), the work behind the Tale-Spin story-writing program. Ryan's thesis cites Tale-Spin as a notable failure of the pure-simulation approach. We keep it in mind as the classic warning that simulating characters does not by itself give a story.
+
+### Doran and Parberry (2011)
+
+Jonathon Doran and Ian Parberry, ["A prototype quest generator based on a structural analysis of quests from four MMORPGs"](https://doi.org/10.1145/2000919.2000920) (Procedural Content Generation in Games workshop, 2011). They analysed over 750 quests and found nine underlying motivations of the characters who give them. It taught us that quests can derive from NPC motivations instead of being placed at random.
+
+### Lehnert (1981)
+
+Wendy Lehnert, ["Plot units and narrative summarization"](https://doi.org/10.1207/s15516709cog0504_1) (*Cognitive Science*, 1981). It describes a story as a graph of plot units whose overlaps encode the plot. It taught us to treat narrative as a graph of affect states.
+
+### Schank and Abelson (1977)
+
+Roger C. Schank and Robert P. Abelson, [*Scripts, Plans, Goals and Understanding*](https://www.routledge.com/Scripts-Plans-Goals-and-Understanding-An-Inquiry-Into-Human-Knowledge-Structures/Schank-Abelson/p/book/9780898591385) (Lawrence Erlbaum, 1977). Its scripts, stored chains of events for common situations, and its account of plans and goals show how expectation shapes understanding from the top down.
+
+### Forgy (1982)
+
+Charles Forgy, ["Rete: A fast algorithm for the many pattern/many object pattern match problem"](https://doi.org/10.1016/0004-3702(82)90020-0) (*Artificial Intelligence*, 1982). Rete matches many rules against changing facts by remembering partial matches instead of starting again each time. It taught us incremental matching of many rules against a changing set of facts.
+
+### Goodman et al. (2008)
+
+Noah D. Goodman and co-authors, ["Church: a language for generative models"](https://proceedings.mlr.press/r6/goodman08a.html) (Uncertainty in Artificial Intelligence, 2008). Its stochastic memoisation makes a random choice once and then remembers it, so a value drawn on demand stays the same whenever it is asked for again. It taught us lazy, consistent sampling.
+
+### Spivak and Kent (2012)
+
+David I. Spivak and Robert E. Kent, ["Ologs: a categorical framework for knowledge representation"](https://doi.org/10.1371/journal.pone.0024274) (*PLoS ONE*, 2012). An olog is a model of knowledge built on category theory that, like a database schema, can hold data but is meant to be easy to author and reconfigure. It informed how we think about holding design knowledge as a graph of typed relationships.
+
+### Rao and Georgeff (1995)
+
+Anand S. Rao and Michael P. Georgeff, ["BDI agents: from theory to practice"](https://apice.unibo.it/xwiki/bin/view/Publication/BdiIcmas95) (International Conference on Multi-Agent Systems, 1995). The belief, desire and intention model describes an agent by what it believes, what it wants and what it has committed to do. It grounds how we describe a character's state of mind.
+
+### Maslow (1943)
+
+Abraham Maslow, ["A theory of human motivation"](https://psychclassics.yorku.ca/Maslow/motivation.htm) (*Psychological Review*, 1943). Its hierarchy of needs orders human needs from the basic to the higher. It is one of the sources behind our draft catalogue of character drives.
+
+### Reiss (2004)
+
+Steven Reiss, ["Multifaceted nature of intrinsic motivation: the theory of 16 basic desires"](https://doi.org/10.1037/1089-2680.8.3.179) (*Review of General Psychology*, 2004). It proposes sixteen basic desires that motivate people and that differ in strength from person to person. It is one of the sources behind our draft catalogue of character drives.
+
+### Ryan and Deci (2000)
+
+Richard Ryan and Edward Deci, ["Self-determination theory and the facilitation of intrinsic motivation, social development, and well-being"](https://doi.org/10.1037/0003-066X.55.1.68) (*American Psychologist*, 2000). Self-determination theory builds motivation on the needs for autonomy, competence and relatedness. It is one of the sources behind our draft catalogue of character drives.
+
+### Schwartz (1992, 2012)
+
+Shalom Schwartz, ["Universals in the Content and Structure of Values: Theoretical Advances and Empirical Tests in 20 Countries"](https://doi.org/10.1016/S0065-2601(08)60281-6) (*Advances in Experimental Social Psychology*, 1992), and ["An Overview of the Schwartz Theory of Basic Values"](https://doi.org/10.9707/2307-0919.1116) (*Online Readings in Psychology and Culture*, 2012). The theory sets out a small set of basic values recognised across cultures and how they relate to one another. It is one of the sources behind our draft catalogue of character drives.
+
+### Heider (1958)
+
+Fritz Heider, [*The Psychology of Interpersonal Relations*](https://doi.org/10.1037/10628-000) (Wiley, 1958). It is the starting point of attribution theory, the study of how people explain what others do. It grounds how characters explain one another's actions.
+
+### Ross (1977)
+
+Lee Ross, ["The intuitive psychologist and his shortcomings: distortions in the attribution process"](https://doi.org/10.1016/S0065-2601(08)60357-3) (*Advances in Experimental Social Psychology*, volume 10, 1977), which named the fundamental attribution error: explaining other people's actions by their character rather than their circumstances. It tells us why characters' explanations of one another are sometimes wrong in predictable ways.
+
+### Goode (1960)
+
+William J. Goode, ["A theory of role strain"](https://doi.org/10.2307/2092933) (*American Sociological Review*, 1960). Role strain is the difficulty of meeting the demands of a role, or of several roles at once. It informed how we model what group memberships ask of a person.
+
+### Tajfel and Turner (1979)
+
+Henri Tajfel and John Turner, ["An integrative theory of intergroup conflict"](https://doi.org/10.1093/oso/9780199269464.003.0005) (in *The Social Psychology of Intergroup Relations*, edited by William Austin and Stephen Worchel, 1979; reprinted in *Organizational Identity*, Oxford University Press), the chapter that set out social identity theory. It treats part of a person's sense of who they are as drawn from the groups they belong to. It informed how we model group memberships.
+
+### Jensen and Meckling (1976)
+
+Michael Jensen and William Meckling, ["Theory of the firm: managerial behavior, agency costs and ownership structure"](https://doi.org/10.1016/0304-405X(76)90026-X) (*Journal of Financial Economics*, 1976). It describes the principal–agent relationship, in which one party acts for another whose interests may differ, and the costs of that gap. It informed how we model members whose interests differ from their group's.
 
 ## Reference imagery
 

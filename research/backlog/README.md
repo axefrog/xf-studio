@@ -13,14 +13,14 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 - **New requests** go into a lane the day they arrive: bugs and polish on existing features into polish or blockers; new features into *after 1.0*.
 
 ### In flight
-- **Wave-4 review fixes** (7 open High, so feature merges are paused): `claude/fix-export` (NATIVE-80, PIPE-140/141, PREV-202), `claude/fix-install` (INSTALL-05..07, PIPE-139/142, DIAG-06..08), and bridge 0.8.1 (RB-119..128) now owned by XF · Runtime bridge. The core review follows profiles phase 2. *21 Oct*
+- **Open High findings** (4, so feature merges stay paused): CORE-03, and RB-119..121, fixed on the bridge branches (now 0.8.2, owned by XF · Runtime bridge) and closed when those merge. The export and install fixes have landed. The core review follows profiles phase 2. *21 Oct*
 - **Profiles phase 1** (the single primary focus; `claude/profiles-p1`). The design is approved, with the four defaults confirmed. Chunks run one at a time:
   1. 1a: lease, takeover and fencing (done: harness 34/34, three Sol rounds);
   2. 1b: profile model and character service (done; its remaining sync races move to the outbox);
   3. 1c-i: generic outbox, idempotent transactions, characters on the outbox, conflict UI (done: model-based specification test, about 480k random steps; four Sol rounds); 1c-ii: collection and look working copies, snapshots, Save version, tombstones, checkpoint tuning, workspace-aware receipts (done; four Sol rounds, spec test about 485k steps);
-  4. 1d-i: the `profiles-1` migration and its crash harness (running); 1d-ii: the running Studio switched onto the new services, with parity gates;
-  5. 1e: IDs, focus, history, data contracts, de-singletoning;
-  6. 1f: gate runs.
+  4. 1d-i: the `profiles-1` migration and its crash harness (done; three Sol rounds); 1d-ii: the running Studio switched onto the new services, with parity gates (done; three Sol rounds, the last Medium fixed after them and checked in phase 1's final review);
+  5. 1e: IDs, focus, history, data contracts, de-singletoning (done; three Sol rounds);
+  6. 1f: gate runs, `character.undo` retired, captures for the UI review (running).
 
   It merges once the open High findings are 3 or fewer (bridge 0.8.1). *21 Oct*
 - **Polish batch 1** (`claude/polish-1`): thumbnail drag direction, repeated layer names, collection tie order, the flaky mottle test, Build wording, the masculine-plate warning. *21 Oct*
@@ -65,12 +65,15 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 3. **The eye-makeup editor and finish adapters** (track 6), and CORE-03's remaining steps (the [code-health ledger](../authoring/code-health.md)). *25 Sep*
 
 ### R&D (runs only while the polish lane is moving)
+Research questions from any chat go to the meta-coordinator's [research queue](research-queue.md). This lane lists the R&D build tracks, each kept by the chat that owns it.
+
 - **Hair Lab** (its own chat and branch, off `main` until the beta). *16 Oct*
 - **In-game overlay and UI; custom material shaders** (below). *29 Sep*
-- **The runtime bridge:** 0.8.0 staged for session 9, then the NPC and DM toolkit branches ([bridge autonomy](bridge-autonomy.md)). *30 Sep*
+- **The runtime bridge** (its own chat, XF · Runtime bridge): 0.8.2 staged after session 10, with 0.8.3 next, then the NPC and DM toolkit branches ([bridge autonomy](bridge-autonomy.md)). *30 Sep*
+- **Story Engine** (its own chat, XF · Story Engine): procedural gigs, quests and encounters over a level-of-detail world simulation ([hub](../story-engine/README.md)). It is R&D at its own pace, outside the finish-first rule, and is gated mainly on runtime bridge work. *22 Oct*
 
 ### After 1.0 (banked)
-- **User-defined shortcuts**, **the Pattern finish**, **profiles phases 5–6** (several views at once, several profiles and Vs), and **the later features** below. *21 Oct and earlier*
+- **User-defined shortcuts**, **the Pattern finish**, and **the later features** below. *21 Oct and earlier*
 
 ### Approved experiment: Hair Lab
 
