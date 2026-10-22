@@ -29,6 +29,8 @@ The quality bar, as statements the evaluation workstream (§3, WS7) will turn in
 
 ## 2. The system at first level
 
+Everything here rests on the [foundation](foundation.md), the dimensional model that anchors every design: one uniform structure of dimensions, localities and contributions, the same at every scale. The layers below are ownership boundaries over that one model.
+
 Four layers sit above the game. Each layer uses only the one below it, through a small typed interface. All four are plain data and deterministic code: content is data, and the engine interprets it.
 
 | Layer | What it is | Holds |
@@ -101,6 +103,7 @@ Written roughly in this order. Each one names the design seeds it absorbs.
 
 | Plan | Covers | When |
 |---|---|---|
+| **F. [Foundation](foundation.md)** | The anchoring theory: dimensions, localities, bundles, contributions, the operations and rules, story in the same space, the reference model and the compromise ledger. Every plan below maps onto it | Drafted (v0) |
 | **P1. [Research method](p1-research-method.md)** | WS1: how disciplines are found (several independent lenses), the dossier template, evidence grades for craft knowledge, the composite's schema, the adversarial loop, credits | Drafted |
 | **P2. Game substrate research** | WS2: the main story's progression as facts and phases (so authored seeds can name windows such as "after the parade" and fitting can test them), the quest file chain, facts, journal and its limits, phone, map pins, communities and spawners, workspots and AI spots, the scanner, the open-world activities and the fixers' gig structure, save data; the corpus extraction | Next |
 | **P3. Simulation layer** | Layer 1: the world as sampled fields over dimensions ([DS-47](design-seeds.md) to [DS-51](design-seeds.md)), entities, facts, provenance, beliefs, the detail tiers and how a fact is refined between them, mirroring what the game owns, canon, forgetting, persistence and save branching, determinism | M2 |
@@ -114,6 +117,7 @@ Written roughly in this order. Each one names the design seeds it absorbs.
 
 ## 6. Principles at every level
 
+- **The foundation anchors everything.** Each design states how it realises the [dimensional model](foundation.md). A pragmatic departure goes in the compromise ledger with a revisit trigger, so a compromise that stops serving us is replaced by something closer to the model, not by a new special case. A slow generic reference model is the oracle that faster implementations must agree with.
 - **Want first.** Decide what the system needs, then work out what the bridge, XF Core or a standalone mod must provide.
 - **Follow the [architecture contract](../authoring/architecture-contract.md):**
   - plain, versioned data with explicit state transitions;

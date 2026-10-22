@@ -44,6 +44,7 @@ Work happens on the `claude/story-engine` branch in a worktree under `%USERPROFI
 
 | Document | What it holds |
 |---|---|
+| [Foundation](foundation.md) | The anchoring theory: the dimensional model every design maps onto, and the compromise ledger |
 | [First-level plan](plan.md) | Quality bar, subsystems, workstreams, milestones and the second-level plans |
 | [P1. Research method](p1-research-method.md) | How the craft research finds every relevant discipline and merges it into the composite |
 | [Design seeds](design-seeds.md) | Fine-grained design points, each waiting for the plan that will absorb it |

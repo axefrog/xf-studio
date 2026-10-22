@@ -1,0 +1,126 @@
+# Foundation: the dimensional model
+
+**Status:** v0 draft, 22 October 2026. This is the anchoring theory for the whole Story Engine. Every design states how it realises this model. Every pragmatic departure goes in the [compromise ledger](#8-the-reference-model-and-the-compromise-ledger), with a trigger for revisiting it. When a compromise stops serving us, the fix is to move closer to this model, not to bolt something on beside it.
+
+## 1. The idea
+
+Everything the engine knows, or could know, is a **locality in a dimension**, and every locality can itself be opened into further dimensions.
+
+- **People.** An NPC is a locality of the people dimension. Opened, that NPC is a bundle of dimensions: behaviour program, dialogue, appearance, body, name, routine, concerns, beliefs. Each of those can be opened again.
+- **Constants.** A dimension with a single locality (a name that is already settled) is still a dimension; it has simply been reduced to one point.
+- **Level of detail** is how far the opening has gone.
+
+The structure is the same at every scale, from the city down to the words on a bag. It is also the same for story as for the world.
+
+## 2. Primitives
+
+| Term | Meaning | Example |
+|---|---|---|
+| **Dimension** | A space of possibilities. It is defined by a rule, not by a list, so it can be huge or infinite, and only what is sampled is ever enumerated. It may have structure: unordered, ordered, metric, cyclic, a graph, or a continuous range | Every possible NPC name; Night City's geography (metric); time of day (cyclic); social ties (a graph) |
+| **Locality** | A point or region of a dimension | "Kabuki"; "raining"; one particular name |
+| **Bundle** | A locality opened into the dimensions that describe it | The vendor at stall 7 opened into name, appearance, routine, concerns and beliefs |
+| **Address** | The path to a locality through bundles. It is stable and hashable, and it is what seeds, persistence and determinism refer to | `city/watson/kabuki/market/stall-7/vendor/concerns/0` |
+| **Map** | A relation between dimensions that respects their structure:<br>- projection: a stall lies in Kabuki;<br>- embedding: a person's home is a place;<br>- aggregation: a district's crime comes from its streets;<br>- derivation: crime pressure from wealth, policing and gang presence.<br>Maps compose | `stall → district`, `person → home → place` |
+| **Contribution** | Anything that says which localities are possible or likely: a constant, a set, a distribution, a field with falloff, diffusion over a graph, a rule, an authored constraint, or the game's own state. A contribution carries provenance, priority and scope, and contributions combine by explicit rules | Tyger Claw influence as control points with falloff; "this NPC is Takemura", pinned by an author |
+| **Resolution state** | For each address, what is known:<br>- **open:** only contributions;<br>- **narrowed:** a region;<br>- **pinned:** one locality.<br>Every pin carries a reason: observed by V, committed by a seed, mirrored from the game, or fixed by an author | The vendor's name is open until V scans them; then it is pinned, as observed |
+
+## 3. Operations
+
+| Operation | Meaning |
+|---|---|
+| **Sample** | Evaluate the contributions at an address and resolve it, deterministically ([§4](#4-rules)) |
+| **Query** | The inverse: find the addresses whose localities satisfy given constraints. Contributions give conservative bounds per region, so whole branches are ruled out at once ([DS-49](design-seeds.md)) |
+| **Open** | Open a locality's bundle to a finer level |
+| **Close** | Fold a bundle back into a summary when nothing needs it, keeping its pins |
+| **Pin** | Fix an address to a locality, with a reason |
+| **Forget** | Drop resolved but unpinned state. It regenerates identically from the seed and the contributions ([DS-48](design-seeds.md)) |
+| **Evolve** | Time is a dimension; simulation is contributions that relate one time to the next |
+| **Contribute** | Add a contribution, with provenance and priority. With Pin, this is the only kind of write |
+
+## 4. Rules
+
+1. **Determinism.** An unpinned address resolves as a pure function of the world seed, the address and the contributions in effect. The same inputs always give the same world.
+2. **Consistency.** Finer resolution agrees with coarser resolution, and neighbours agree where they overlap (the sheaf condition). Pins are hard constraints.
+3. **Canon.** What V has observed is pinned. The base can always be regenerated, so only pins and contributions need storing.
+4. **Laziness.** Nothing is resolved until something samples it. Detail is spent where perception or a query needs it ([DS-15](design-seeds.md)).
+5. **Uniformity.** No kind of thing gets a separate model. People, places, events, beliefs, seeds and quests are all addresses in bundles.
+6. **Provenance.** Every pin and contribution records where it came from, so any locality can be explained by tracing them ([DS-26](design-seeds.md)).
+
+## 5. Story in the same space
+
+- **An event** is a locality in a bundle of time, place, participants, kind, causes and effects.
+- **A quest** is a bundle of roles, beats, stakes, windows, channels and outcomes. A particular quest is a locality in the space of possible quests.
+- **A seed** is a partly resolved quest: some addresses pinned, some constrained, some open, together with its contributions.
+- **Author priorities map directly** ([DS-42](design-seeds.md)):
+  - *fixed* is a pin;
+  - *preferred* is a weighted contribution;
+  - *open* is left open for fitting.
+- **The narrative operations are the model's operations:**
+  - casting is query, then pin;
+  - fitting is query, sample, and contributions of connecting material;
+  - materialising is opening and sampling near V;
+  - perception pins.
+- **Beliefs** are a bundle inside a person: that person's own view of other addresses, which can differ from what is pinned ([DS-07](design-seeds.md)).
+
+## 6. How the layers map onto it
+
+The [four layers](plan.md#2-the-system-at-first-level) stay as ownership boundaries. The model gives them one shared data model.
+
+| Layer | Role in the model |
+|---|---|
+| 1. Simulation | Owns the space and resolution, evolution, and the persistence of pins and contributions. Mirrors the game: what the game owns arrives as pins and contributions with the game as their source ([DS-34](design-seeds.md)) |
+| 2. Seeding | The write gate: the only way anything outside layer 1 contributes or pins. Enforces provenance and priority, and schedules |
+| 3. Procedural engine | An actor that queries and contributes: sowing on its own, fitting for authors |
+| 4. Authored content | Contributions and pins, as data, in packs |
+| Tooling | Explanation is tracing provenance |
+
+## 7. Formal grounding
+
+To be researched in P3, so the model stays honest. We implement a small toolkit, not a general prover.
+
+- **Structure: applied category theory.**
+  - Dimensions are objects and maps are morphisms.
+  - Ologs are a way of writing down knowledge.
+  - Sheaves capture consistency between local resolutions ([DS-51](design-seeds.md)).
+- **Computation: probabilistic programming.**
+  - Open addresses are random variables and contributions are factors.
+  - Sampling is lazy and memoised by address, as in Church's stochastic memoisation.
+  - Canon is conditioning on observations.
+- **Search:** constraint satisfaction, interval bounds and hierarchical spatial indexing for queries.
+
+## 8. The reference model and the compromise ledger
+
+**The reference model** is a small, slow, fully generic implementation of §2–§4 in TypeScript: the oracle. Every optimised or specialised implementation must agree with it on shared tests. That covers the native core ([DS-53](design-seeds.md)) and any dimension given special handling for speed. The project already works this way for native code checked against TypeScript oracles.
+
+**The compromise ledger** records each departure from the model:
+- what the model says;
+- what we do instead, and why;
+- when to revisit it.
+
+| # | The model says | We do instead | Why | Revisit when |
+|---|---|---|---|---|
+| C-01 | Canon conditions the whole world's distribution on what V observed | Generate, then justify: construct causes consistent with the pins ([DS-29](design-seeds.md)) | Inference over the whole world is far too expensive | Constructed causes contradict each other or read as implausible |
+
+## 9. Worked example: one vendor
+
+1. **Opening down to the vendor.** `city → watson → kabuki → market → stall-7` is opened as V walks in, and the stall's vendor is a locality of the people dimension. Opened, the vendor's bundle has:
+   - **name:** open. Contributions: the names dimension, weighted by the district's demographics.
+   - **appearance:** constrained by the game's models for the stall's archetype.
+   - **routine:** pinned by the game, which places the vendor at the stall's workspot.
+   - **concerns:** open. Contributions: rent pressure from the economy field, Tyger Claw protection from the influence field, and a personal history.
+   - **beliefs:** open.
+2. **V scans the vendor.** The scanner text samples the name and one concern, and both are pinned as observed.
+3. **V walks away.** The bundle closes. The pins persist and the rest is forgotten.
+4. **V comes back a week later.**
+   - The same vendor resolves with the same name and concern. The unpinned details regenerate identically, unless their contributions changed.
+   - If the Tyger Claws have lost the market in the meantime, the derived concern can change.
+   - That change is explainable by tracing the influence contribution, and it never contradicts the pinned concern, which is now part of the vendor's history.
+
+**In scenario R1** ([plan §2](plan.md#2-the-system-at-first-level)), the author pins Takemura, the romance and their scenes, adds weighted contributions for the moment and district they prefer, and leaves the rest open. Fitting queries for windows and places where the pins and contributions hold, samples one, and contributes the hook.
+
+## 10. Open questions
+
+1. What is the smallest set of rules for combining contributions: override, blend, intersect, and what else?
+2. Is time an ordinary dimension, or does evolution need a special operator?
+3. How does identity survive closing and reopening, and what happens when an address's parent changes (a vendor who moves)?
+4. How literal should the probabilistic semantics be (distributions) versus constraint regions?
