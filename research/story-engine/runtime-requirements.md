@@ -83,7 +83,7 @@ Refreshed whenever the bridge reaches a milestone; last refreshed 22 October 202
 
 | ID | Requirement | Needed by | Status |
 |---|---|---|---|
-| P1 | **A store keyed to the save:** the save's identity and its parent, so the world record branches with saves ([DS-08](design-seeds.md)) | M6 | **planned (C3), partly:** a save-node fact gives identity and parent; the branching op log needs the review's segmented node store |
+| P1 | **A store keyed to the save:** the save's identity and its parent, so the world record branches with saves ([DS-08](design-seeds.md)) | M6 | **designed, pending a session card:** [save identity](../../knowledge/save-identity.md) proposes an append-only branching ledger in XF Core's store, with a five-fact pin written at commit time. A known pin rebuilds at its entry, later entries fork, and an unknown pin marks the lineage unknown. To be settled with the bridge in C3, together with the review's segmented node store (SE-B1) |
 | P2 | **Restage after load:** bring back whatever should be present | M5 | **planned (C3):** restage hooks; an asynchronous restaging state is a review item |
 | P3 | **A store quota sized for a world record** (megabytes, compressed) | M6 | **planned (C3):** save-scope store with quotas; large records need streaming |
 | P4 | **Story writes without the save lock:** a save-safe route for everything the Story Engine changes ([DS-39](design-seeds.md)) | M5 | **planned (C3):** play mode takes no save lock |
