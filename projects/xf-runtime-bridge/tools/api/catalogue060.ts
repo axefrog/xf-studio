@@ -20,15 +20,30 @@ const planError = (code: string, message: string, detail?: unknown) =>
   Object.assign(new Error(message), { plain: { code, message, ...(detail !== undefined ? { detail: typeof detail === "string" ? detail : JSON.stringify(detail) } : {}) } });
 
 async function call(context: CommandContext, method: string, params: Record<string, unknown>, timeoutMs?: number): Promise<Json> {
-  const response = await context.api.callBridge(method, params, context.cid, timeoutMs);
+  const response = await context.api.callBridge(method, params, context.cid, timeoutMs, context.signal);
   if (!response.ok) throw Object.assign(new Error(response.error.message), { plain: response.error });
   return response.result as Json;
 }
 
-/** A bridge call that may fail without failing the command: the answer, or {error}. */
+/** A bridge call that may fail without failing the command: the answer, or {error}. Sent even after a cancellation (cleanup). */
 async function attempt(context: CommandContext, method: string, params: Record<string, unknown>): Promise<Json> {
   const response = await context.api.callBridge(method, params, context.cid);
   return response.ok ? (response.result as Json) : { error: response.error };
+}
+
+/**
+ * 0.8.2 (the re-check's fifth finding): a forward step that may fail without failing the command, sent only while the command
+ * hasn't been cancelled (an emergency control's signal); attempt() stays for the steps that put things back.
+ */
+async function forward(context: CommandContext, method: string, params: Record<string, unknown>): Promise<Json> {
+  const response = await context.api.callBridge(method, params, context.cid, undefined, context.signal);
+  return response.ok ? (response.result as Json) : { error: response.error };
+}
+
+/** Throws the plain "interrupted" error once the command's signal has fired (0.8.2): no further capture is taken. */
+export function stopIfCancelled(context: CommandContext, what: string): void {
+  if (!context.signal?.aborted) return;
+  throw planError("interrupted", `Stopped before ${what}: an emergency control (or Ctrl+C) cancelled this command. Nothing more was captured.`);
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -39,18 +54,40 @@ export const point3 = (description: string): JsonSchema => ({ type: "array", des
 /**
  * Runs a capture with the bridge's own overlay out of the picture (0.6, session 6's friction): the coordinator's ui.message
  * lines are cleared and the ink HUD panel and the CET label are switched off for the moment of the capture, then the panel
- * comes back as it was. Without a bridge (or a bridge too old for ui.hud) the capture just runs.
+ * comes back as it was. A question still waiting for the player's answer stays on the board (RB-103: the clear used to take
+ * it away, ending the player's chance to answer); the panel is hidden, so it isn't in the picture either way. Without a
+ * bridge (or a bridge too old for ui.hud) the capture just runs.
  */
-export async function withOverlayCleared<T>(context: CommandContext, run: () => T | Promise<T>): Promise<{ value: T; overlay: Json }> {
-  if (!context.api.session()) return { value: await run(), overlay: { cleared: false, why: "the game bridge isn't running" } };
-  const cleared = await attempt(context, "ui.message", { clear: true });
-  const hud = await attempt(context, "ui.hud", { show: false, cet_label: false });
+export async function withOverlayCleared<T>(context: CommandContext, run: () => T | Promise<T>, hideMs = 5000): Promise<{ value: T; overlay: Json }> {
+  if (!context.api.session()) {
+    stopIfCancelled(context, "the capture");
+    return { value: await run(), overlay: { cleared: false, why: "the game bridge isn't running" } };
+  }
+  // 0.8.2: the preparation is forward work, so a cancelled command sends none of it; only the put-back below always runs.
+  const cleared = await forward(context, "ui.message", { clear: true, keep_asks: true });
+  const hud = await forward(context, "ui.hud", { show: false, cet_label: false });
+  // 0.7: the XF ImGui overlay too (it lapses by itself after hideMs, 5 s by default and at most 10 s), and whether Cyber
+  // Engine Tweaks' overlay is open (its windows would be in the picture: session 4's teeth frames were lost to it).
+  const host = await forward(context, "overlay.hide", { hidden: true, ms: Math.max(1000, Math.min(10000, Math.round(hideMs))) });
+  const ui = await forward(context, "ui.state", {});
   const restore = hud.error ? null : ((hud.undo as Json | undefined)?.params as Json | undefined) ?? null;
-  if (!hud.error) await sleep(120); // the panel's next frames (the overlay pulls every sixth tick)
+  if (!hud.error || !host.error) await sleep(120); // the panel's next frames (the overlay pulls every sixth tick)
   try {
-    return { value: await run(), overlay: { cleared: !cleared.error, messages_cleared: cleared.cleared ?? null, panel_hidden: !hud.error } };
+    stopIfCancelled(context, "the capture");
+    return {
+      value: await run(),
+      overlay: {
+        cleared: !cleared.error,
+        messages_cleared: cleared.cleared ?? null,
+        panel_hidden: !hud.error,
+        overlay_host_hidden: host.error ? null : host.hidden_for_capture === true,
+        ...(ui.error ? {} : { cet_overlay_open: ui.cet_overlay ?? null }),
+        ...(ui.cet_overlay === true ? { warning: "Cyber Engine Tweaks' overlay was open: its windows may be in the picture. Close it (its key) and capture again." } : {}),
+      },
+    };
   } finally {
     if (restore) await attempt(context, "ui.hud", restore);
+    if (!host.error) await attempt(context, "overlay.hide", { hidden: false });
   }
 }
 
@@ -177,10 +214,19 @@ async function runHandover(input: Json, context: CommandContext): Promise<Comman
   if (input.restore_ui !== false && status.phase === "photo_mode" && (status.photo_ui_hidden === true || status.cursor_hidden === true)) {
     await step("show photo mode's menu and cursor", "photo.hud.hide", { hidden: false, cursor: true });
   }
-  if (input.lights === "clear") await step("clear the showroom's rigs", "showroom.clear", { what: "lights" });
   // bridge.handover also gives V back (RB-82): the effects the bridge put on her lifted and any look ended, as player_stop
-  // does, in the same step that starts refusing writes.
-  const handed = await call(context, "bridge.handover", { on: true, ...(input.note ? { note: input.note } : {}) });
+  // does, in the same step that starts refusing writes. 0.8.2 (the re-check's third finding): the showroom's rigs are cleared
+  // inside that same step too, after the write gate has closed, so a showroom.lights still on its way can't add a rig after
+  // the clear.
+  const handed = await call(context, "bridge.handover", { on: true, ...(input.lights === "clear" ? { lights: "clear" } : {}), ...(input.note ? { note: input.note } : {}) });
+  const lights = handed.lights_cleared as Json | null | undefined;
+  if (input.lights === "clear") {
+    steps.push({
+      step: "clear the showroom's rigs",
+      ok: !!lights && !lights.error,
+      ...(lights && lights.error ? { why: lights.error } : {}),
+    });
+  }
   const released = handed.player_released as Json | null | undefined;
   if (released !== undefined) {
     steps.push({
@@ -201,8 +247,23 @@ async function runResume(input: Json, context: CommandContext): Promise<CommandR
 
 // --- capture.sheet -------------------------------------------------------------------------------
 
+/**
+ * 0.7 (session 7): showroom_rotate's sweep answer (or its frames) as sheet cells, labelled by angle, each the frame's
+ * full-resolution capture where it has one, else its viewing copy.
+ */
+export function sweepCells(sweep: Json | undefined): { label: string; path?: string }[] {
+  const frames = (Array.isArray(sweep) ? sweep : (sweep?.frames as Json[] | undefined)) ?? [];
+  return frames
+    .filter((f) => f && f.capture && (typeof f.capture.full === "string" || typeof f.capture.view === "string"))
+    .map((f) => ({ label: typeof f.angle_deg === "number" ? `${Math.round(f.angle_deg * 10) / 10} deg` : `step ${f.step ?? "?"}`, path: (f.capture.full ?? f.capture.view) as string }));
+}
+
 async function runCaptureSheet(input: Json, context: CommandContext): Promise<CommandResult> {
-  const cellsIn = input.cells as { label: string; path?: string }[];
+  const fromSweep = input.sweep !== undefined ? sweepCells(input.sweep as Json) : [];
+  if (input.sweep !== undefined && !fromSweep.length) throw planError("bad_input", "The sweep has no captured frames: run showroom_rotate with sweep.capture true, then pass its answer as sweep.");
+  const cellsIn = [...((input.cells as { label: string; path?: string }[] | undefined) ?? []), ...fromSweep];
+  if (!cellsIn.length) throw planError("bad_input", "Give cells, or sweep (showroom_rotate's answer with captured frames).");
+  if (cellsIn.length > 48) throw planError("bad_input", "A sheet holds at most 48 cells.");
   const root = context.captureRoot ?? DEFAULT_CAPTURE_ROOT;
   mkdirSync(root, { recursive: true });
   const cells: SheetCell[] = [];
@@ -211,14 +272,19 @@ async function runCaptureSheet(input: Json, context: CommandContext): Promise<Co
   const widest = maxCellWidth(cellsIn.length, { columns: input.columns as number | undefined, maxWidth: (input.max_width as number | undefined) ?? 2400 });
   try {
     for (const [i, cell] of cellsIn.entries()) {
+      // 0.8.2: a kill or a handover during a sheet stops it before the next picture, not after all of them.
+      if (!cell.path && context.signal?.aborted) {
+        throw planError("interrupted", `Stopped after ${cells.length} of ${cellsIn.length} cells: an emergency control (or Ctrl+C) cancelled the sheet, so no further picture was taken.`);
+      }
       if (cell.path) {
         cells.push(readCell(checkedCapturePath(root, cell.path), cell.label, widest));
         continue;
       }
       // No path: take the picture now (the XF overlay out of it).
-      const shot = await withOverlayCleared(context, () =>
-        captureWindow({ target: context.api.captureTarget(), region: input.region ? ({ name: input.region } as never) : undefined, name: `${(input.name as string | undefined) ?? "sheet"}-${String(i + 1).padStart(2, "0")}`, outDir: root, route: "auto" }),
-      );
+      const shot = await withOverlayCleared(context, () => {
+        stopIfCancelled(context, "the sheet's next picture");
+        return captureWindow({ target: context.api.captureTarget(), region: input.region ? ({ name: input.region } as never) : undefined, name: `${(input.name as string | undefined) ?? "sheet"}-${String(i + 1).padStart(2, "0")}`, outDir: root, route: "auto" });
+      });
       overlay = shot.overlay;
       cells.push({ label: cell.label, pixels: shrinkCell(decodePng(new Uint8Array(readFileSync(shot.value.full.path))), widest), source: shot.value.full.path });
     }
@@ -344,7 +410,7 @@ export const SCENE_COMMANDS: CommandDef[] = [
     name: "capture.sheet",
     title: "Make a labelled contact sheet",
     description:
-      "Puts named captures side by side in one labelled grid and writes it to disk with a manifest (which file is in which cell): each cell is an earlier capture (path: its .full.png or viewing copy in the capture folder) or, without a path, a screenshot taken now (region, with the XF overlay out of the picture). For comparisons such as finish close-ups or a highlight sweep.",
+      "Puts named captures side by side in one labelled grid and writes it to disk with a manifest (which file is in which cell): each cell is an earlier capture (path: its .full.png or viewing copy in the capture folder) or, without a path, a screenshot taken now (region, with the XF overlay out of the picture). For comparisons such as finish close-ups or a highlight sweep: sweep takes showroom_rotate's answer as it came, one cell per captured step labelled with its angle. Give cells, sweep or both.",
     permission: "read",
     input: obj(
       {
@@ -355,13 +421,48 @@ export const SCENE_COMMANDS: CommandDef[] = [
           minItems: 1,
           maxItems: 48,
         },
+        sweep: {
+          description: "0.7: showroom_rotate's answer from a sweep with capture: true, passed as it came (or only its frames): each captured step becomes a cell labelled with its angle, after any cells given.",
+          ...obj(
+            {
+              frames: {
+                type: "array",
+                description: "The sweep's steps.",
+                items: {
+                  description: "One step.",
+                  ...obj(
+                    {
+                      step: int("The step's number.", 1, 1000),
+                      angle_deg: num("The heads' angle at this step.", -360, 360),
+                      capture: { description: "The step's capture.", ...obj({ full: str("The full-resolution file.", { maxLength: 1024 }), view: str("The viewing copy.", { maxLength: 1024 }) }) },
+                    },
+                  ),
+                },
+                minItems: 1,
+                maxItems: 48,
+              },
+              swept: { type: "array", description: "The heads swept (as showroom_rotate answers).", items: int("A head's index.", 0, 64), maxItems: 64 },
+              from_deg: num("The sweep's first angle.", -360, 360),
+              to_deg: num("The sweep's last angle.", -360, 360),
+              steps: int("The number of steps.", 1, 1000),
+              returned: bool("Whether the heads were turned back."),
+              undo: {
+                description: "showroom_rotate's undo (ignored here).",
+                ...obj({
+                  method: str("The undo's method.", { maxLength: 64 }),
+                  params: { description: "The undo's parameters.", ...obj({ turns: { type: "array", description: "Head yaws.", items: { description: "One head.", ...obj({ index: int("A head's index.", 0, 64), yaw: num("Its yaw.", -720, 720) }) }, maxItems: 64 } }) },
+                }),
+              },
+            },
+            ["frames"],
+          ),
+        },
         title: str("A title across the top.", { maxLength: 120 }),
         columns: int("Cells per row, 1 to 8. Default up to 4.", 1, 8),
         region: oneOf("For cells taken now: the area to keep (as capture_screenshot).", Object.keys(NAMED_REGIONS)),
         max_width: int("The sheet's width at most, 320 to 8000 px. Default 2400.", 320, 8000),
         name: str("Short label for the files (letters, digits, '.', '_', '-').", { pattern: "^[A-Za-z0-9._-]{1,60}$", maxLength: 60 }),
       },
-      ["cells"],
     ),
     local: runCaptureSheet,
   },
@@ -495,7 +596,7 @@ export const PLAYER_COMMANDS: CommandDef[] = [
     name: "player.look",
     title: "Turn V's view",
     description:
-      `Turns V's view to yaw and pitch (degrees; relative adds them to the current view) or towards a world point (at): instant (her facing by a teleport in place, the pitch by a very short look-at) or smooth over duration_s (the game's own look-at, which the player's mouse or stick breaks). Answers the angles reached and whether they are within 2 degrees. Normal play only. ${playerBusyNote}`,
+      `Turns V's view to yaw and pitch (degrees; relative adds them to the current view) or towards a world point (at): instant (her facing by a teleport in place, the pitch by a very short look-at) or smooth over duration_s (along the shortest arc, eased in and out, in short steps of the game's own look-at, so it takes duration_s; the player's mouse or stick ends it, took_over camera_drift). Answers the angles reached, whether they are within 2 degrees, took_s and whether player_stop stopped it. Normal play only. ${playerBusyNote}`,
     permission: "write-player",
     input: obj({
       yaw: num("Yaw, degrees (0 along the world's +Y, counter-clockwise).", -360, 360),
@@ -506,7 +607,8 @@ export const PLAYER_COMMANDS: CommandDef[] = [
       duration_s: num("A smooth look's time, 0.05 to 5 s. Default 1.", 0.05, 5),
     }),
     undo: "The result's undo turns the view back to the earlier angles.",
-    bridge: { method: "player.look", timeoutMs: () => 8000 },
+    // 0.8.3: a smooth look now takes its duration_s (up to 5 s), plus a moment to confirm.
+    bridge: { method: "player.look", timeoutMs: (p) => 5000 + 1000 * ((p.mode === "smooth" ? (p.duration_s as number | undefined) ?? 1 : 0)) },
   },
   {
     name: "player.look.stop",
@@ -538,11 +640,11 @@ export const PLAYER_COMMANDS: CommandDef[] = [
     name: "player.action",
     title: "Do a system-driven action",
     description:
-      `One of the actions the game's systems can do without input: crouch and stand (the game's own forced crouch, as a sniper nest uses it; only the bridge's own is lifted), weapon.draw, weapon.holster and weapon.slot (1-3) through the equipment system's own requests, menu.open (inventory, map, journal, perks, crafting, or the wardrobe screen) and menu.close. Jumping, sprinting and dodging need an input channel (research). ${playerBusyNote}`,
+      `One of the actions the game's systems can do without input: crouch and stand (the game's own forced crouch, as a sniper nest uses it; only the bridge's own is lifted), weapon.draw, weapon.arms (0.7: the arm cyberware's weapon, such as Mantis Blades, drawn), weapon.holster and weapon.slot (1-3) through the equipment system's own requests, menu.open (inventory, map, journal, perks, crafting, or the wardrobe screen) and menu.close. Jumping, sprinting and dodging need an input channel (research). ${playerBusyNote}`,
     permission: "write-player",
     input: obj(
       {
-        name: oneOf("The action.", ["crouch", "stand", "weapon.draw", "weapon.holster", "weapon.slot", "menu.open", "menu.close"]),
+        name: oneOf("The action.", ["crouch", "stand", "weapon.draw", "weapon.arms", "weapon.holster", "weapon.slot", "menu.open", "menu.close"]),
         slot: int("With weapon.slot: the weapon slot 1-3.", 1, 3),
         menu: oneOf("With menu.open: which menu.", ["inventory", "map", "journal", "perks", "crafting", "wardrobe"]),
       },

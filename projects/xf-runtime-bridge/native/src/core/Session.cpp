@@ -1,6 +1,12 @@
 #include "core/Session.hpp"
+#include "core/LayoutGuard.hpp"
 
 #include <Windows.h>
+
+#include <fstream>
+#include <iterator>
+
+#include <nlohmann/json.hpp>
 
 #include "core/Win32.hpp"
 
@@ -42,5 +48,57 @@ bool KillFilePresent(const Session& aSession)
 {
     const auto attributes = GetFileAttributesW(aSession.KillFile().c_str());
     return attributes != INVALID_FILE_ATTRIBUTES;
+}
+
+bool SessionRunnerActive(const Session& aSession)
+{
+    if (aSession.runtimeDir.empty())
+    {
+        return false;
+    }
+    try
+    {
+        std::ifstream in(aSession.runtimeDir / L"session-runner.lock", std::ios::binary);
+        if (!in)
+        {
+            return false;
+        }
+        std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        if (text.size() > 4096)
+        {
+            return false;
+        }
+        const auto lock = nlohmann::json::parse(text, nullptr, false);
+        if (!lock.is_object() || !lock.contains("pid") || !lock["pid"].is_number_unsigned())
+        {
+            return false;
+        }
+        const auto pid = lock["pid"].get<uint64_t>();
+        if (pid == 0 || pid > 0xFFFFFFFFull)
+        {
+            return false;
+        }
+        const auto process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, static_cast<DWORD>(pid));
+        if (!process)
+        {
+            return false;
+        }
+        DWORD code = 0;
+        bool alive = GetExitCodeProcess(process, &code) && code == STILL_ACTIVE;
+        // 0.8.2 (the review): the same process, not a later one given the same PID: its creation time (a decimal FILETIME)
+        // must match the lock's process_started when the lock has one, as tools/session-lock.ts judges it.
+        if (alive && lock.contains("process_started") && lock["process_started"].is_string())
+        {
+            FILETIME created{}, exited{}, kernel{}, user{};
+            alive = GetProcessTimes(process, &created, &exited, &kernel, &user) &&
+                    std::to_string((static_cast<uint64_t>(created.dwHighDateTime) << 32) | created.dwLowDateTime) == lock["process_started"].get<std::string>();
+        }
+        CloseHandle(process);
+        return alive;
+    }
+    catch (...)
+    {
+        return false;
+    }
 }
 } // namespace xfb

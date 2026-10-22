@@ -1,4 +1,5 @@
 #include "core/Win32.hpp"
+#include "core/LayoutGuard.hpp"
 
 #include <Windows.h>
 #include <bcrypt.h>
@@ -6,6 +7,7 @@
 
 #include <chrono>
 #include <cstdio>
+#include <exception>
 #include <vector>
 
 namespace xfb::win32
@@ -105,6 +107,105 @@ std::filesystem::path ModuleDirectory(const void* aAddressInModule)
         buffer.resize(buffer.size() * 2);
     }
     return std::filesystem::path(buffer).parent_path();
+}
+
+bool FileSha256(const std::filesystem::path& aPath, std::string& aHex, std::string& aError, uint64_t aMaxBytes,
+                const std::function<bool()>& aCancelled)
+{
+    std::error_code ec;
+    const auto size = std::filesystem::file_size(aPath, ec);
+    if (ec)
+    {
+        aError = "unreadable";
+        return false;
+    }
+    if (size > aMaxBytes)
+    {
+        aError = "too large";
+        return false;
+    }
+    BCRYPT_ALG_HANDLE algorithm = nullptr;
+    BCRYPT_HASH_HANDLE hash = nullptr;
+    if (BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0) < 0)
+    {
+        aError = "BCryptOpenAlgorithmProvider failed";
+        return false;
+    }
+    bool ok = BCryptCreateHash(algorithm, &hash, nullptr, 0, nullptr, 0, 0) >= 0;
+    const auto handle = CreateFileW(aPath.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+                                    FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+    if (handle == INVALID_HANDLE_VALUE)
+    {
+        aError = "unreadable";
+        ok = false;
+    }
+    std::vector<unsigned char> buffer(1024 * 1024);
+    std::exception_ptr thrown;
+    while (ok)
+    {
+        try
+        {
+            if (aCancelled && aCancelled())
+            {
+                aError = "cancelled";
+                ok = false;
+                break;
+            }
+        }
+        catch (...)
+        {
+            thrown = std::current_exception();
+            aError = "cancelled";
+            ok = false;
+            break;
+        }
+        DWORD read = 0;
+        if (!ReadFile(handle, buffer.data(), static_cast<DWORD>(buffer.size()), &read, nullptr))
+        {
+            aError = "read failed";
+            ok = false;
+            break;
+        }
+        if (read == 0)
+        {
+            break;
+        }
+        ok = BCryptHashData(hash, buffer.data(), read, 0) >= 0;
+    }
+    unsigned char digest[32]{};
+    if (ok)
+    {
+        ok = BCryptFinishHash(hash, digest, sizeof(digest), 0) >= 0;
+    }
+    if (handle != INVALID_HANDLE_VALUE)
+    {
+        CloseHandle(handle);
+    }
+    if (hash)
+    {
+        BCryptDestroyHash(hash);
+    }
+    BCryptCloseAlgorithmProvider(algorithm, 0);
+    if (thrown)
+    {
+        std::rethrow_exception(thrown);
+    }
+    if (!ok)
+    {
+        if (aError.empty())
+        {
+            aError = "hash failed";
+        }
+        return false;
+    }
+    static const char* hex = "0123456789abcdef";
+    aHex.clear();
+    for (const auto byte : digest)
+    {
+        aHex.push_back(hex[byte >> 4]);
+        aHex.push_back(hex[byte & 15]);
+    }
+    return true;
 }
 
 std::filesystem::path ProcessImagePath()

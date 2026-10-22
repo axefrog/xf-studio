@@ -16,6 +16,7 @@ import { NO_BRIDGE, connectError, plainBridgeError, type PlainError } from "./er
 import { validate } from "./schema.ts";
 import { sendKeyToWindow, type KeySender } from "../input/photo-key.ts";
 import { describeWindow, mainWindowOf } from "../capture/win32.ts";
+import { withHandoverLock, type HandoverBusyError } from "../handover-lock.ts";
 
 export type CommandOutcome =
   | { ok: true; command: string; cid: string; result: unknown; images?: ImageRef[]; undo?: string }
@@ -32,7 +33,11 @@ export interface BridgeTransport {
   call(method: string, params: Record<string, unknown>, cid: string, timeoutMs?: number): Promise<BridgeResponse>;
   close(): void;
 }
-export type TransportFactory = (session: BridgeSession) => Promise<BridgeTransport>;
+/**
+ * Opens a connection. busyWaitMs (0.8.2): how long a pipe another client holds is tried again, asynchronously (0: once, so a
+ * kill falls back to the KILL file at once); the default is the client's timeout.
+ */
+export type TransportFactory = (session: BridgeSession, options?: { busyWaitMs?: number }) => Promise<BridgeTransport>;
 
 export type CommandApiOptions = {
   /** Runtime folder holding session.json; the default is the one the plugin uses. Tests pass their own. */
@@ -41,6 +46,12 @@ export type CommandApiOptions = {
   captureRoot?: string;
   auditDir?: string;
   transport?: TransportFactory;
+  /**
+   * The control pipe's connection (0.8.1, RB-121; tests pass a fake): the emergency controls go there, beside a request the
+   * main pipe is still serving. The default opens session.json's control_pipe for each call, and when the bridge has none
+   * (an older build) they go on the main pipe.
+   */
+  controlTransport?: TransportFactory;
   /** Capture target override (tests); the default is the game process named by session.json. */
   captureTarget?: CaptureTarget;
   /** Close the pipe after this long without a command, so other XF tools can connect. */
@@ -96,16 +107,38 @@ export function rateLimitWaits(patienceMs: number): number[] {
 
 const pipeTransport =
   (timeoutMs: number): TransportFactory =>
-  async (session) => {
+  async (session, options = {}) => {
     const client = new BridgeClient(session, timeoutMs);
-    await client.connect();
+    await client.connect({ busyWaitMs: options.busyWaitMs });
     return { call: (method, params, cid, timeoutMs) => client.call(method, params, cid, {}, timeoutMs), close: () => client.close() };
   };
+
+/** The control pipe (RB-121): the same client, aimed at session.json's control_pipe. */
+const controlPipeTransport =
+  (timeoutMs: number): TransportFactory =>
+  async (session, options = {}) => {
+    if (!session.control_pipe) throw new PipeConnectError("this bridge has no control pipe", "not_found");
+    return pipeTransport(timeoutMs)({ ...session, pipe: session.control_pipe }, options);
+  };
+
+type BridgeAnswer = { ok: true; result: unknown } | { ok: false; error: PlainError };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 let cidCounter = 0;
 const nextCid = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${++cidCounter}`;
+
+/**
+ * Emergency controls (0.8.1, RB-121): answered at once on a path of their own, never behind the serial queue, where a
+ * game.wait could hold them for up to ten minutes while behaviours went on running in the game. 0.8.3 (session 10's L2c):
+ * session.resume too, so taking the game back never waits behind another process's polling on the main pipe; its steps
+ * (bridge.handover {on: false}, ui.message) are on the control route.
+ */
+export const EMERGENCY_COMMANDS: ReadonlySet<string> = new Set(["bridge.kill", "behave.stop", "player.stop", "session.handover", "session.resume"]);
+/** Of those, the ones that supersede everything sent before them: queued commands are cancelled and running ones aborted. */
+export const SUPERSEDING_COMMANDS: ReadonlySet<string> = new Set(["bridge.kill", "session.handover"]);
+
+const SUPERSEDED_BY: Readonly<Record<string, string>> = { "bridge.kill": "bridge_kill", "session.handover": "session_handover" };
 
 export class CommandApi {
   readonly runtimeDir: string;
@@ -114,10 +147,30 @@ export class CommandApi {
   private readonly transportFactory: TransportFactory;
   private readonly idleCloseMs: number;
   private connection: { transport: BridgeTransport; sid: string } | null = null;
+  private connecting: Promise<void> | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   /** Bridge calls waiting for an answer; the idle timer runs only when this is 0 (RB-62). */
   private inFlight = 0;
   private queue: Promise<unknown> = Promise.resolve();
+  /**
+   * Aborted by an emergency control that supersedes earlier work (RB-121); every ordinary command runs under the
+   * controller current when it was sent, so one abort cancels whatever was queued or running before that control.
+   */
+  private epoch = new AbortController();
+  /**
+   * The emergency operations still running (RB-121): an ordinary command sent after one waits until it has finished, so a
+   * session.resume sent right after a session.handover can't land first and leave the session handed over.
+   */
+  private barrier: Promise<void> = Promise.resolve();
+  /** 0.8.3: the emergency controls still running, in the order they were sent (the kill doesn't wait for them). */
+  private emergencies: Promise<void> = Promise.resolve();
+  /**
+   * 0.8.2 (the re-check's first finding): this API's control-pipe calls, one after another. The pipe takes one client at a
+   * time, so a behave.stop sent right after a player.stop waits here (asynchronously) for the first to close its connection,
+   * instead of both racing for the pipe. bridge.kill never waits: it tries the pipe once and falls back to the KILL file.
+   */
+  private controlChain: Promise<unknown> = Promise.resolve();
+  private readonly controlFactory: TransportFactory | null;
   private readonly pacer: RequestPacer;
   private readonly rateLimitPatienceMs: number;
   /** Bridge requests refused rate_limited and retried since this API started (tests and logs). */
@@ -128,6 +181,8 @@ export class CommandApi {
     this.captureRoot = resolve(options.captureRoot ?? DEFAULT_CAPTURE_ROOT);
     this.auditDir = resolve(options.auditDir ?? join(this.captureRoot, "..", "logs"));
     this.transportFactory = options.transport ?? pipeTransport(options.clientTimeoutMs ?? 8000);
+    // With a fake main transport and no fake control one (tests), everything goes on the main one.
+    this.controlFactory = options.controlTransport ?? (options.transport ? null : controlPipeTransport(options.clientTimeoutMs ?? 8000));
     this.idleCloseMs = options.idleCloseMs ?? 3000;
     this.pacer = new RequestPacer(Math.max(1, options.requestsPerSecond ?? 18));
     this.rateLimitPatienceMs = options.rateLimitPatienceMs ?? 4000;
@@ -173,15 +228,95 @@ export class CommandApi {
     return session ? { pid: session.pid } : { processName: "Cyberpunk2077.exe" };
   }
 
-  /** Runs one command. Never throws: every failure comes back as a plain-language error. */
+  /**
+   * Runs one command. Never throws: every failure comes back as a plain-language error. name is the catalogue's name or the
+   * MCP tool's (session_handover); 0.8.3 (session 10's L2c): either way the command is recognised for what it is, so an
+   * emergency control typed with underscores on the command line still goes on the control pipe at once (before, only
+   * the dotted name did, and session_handover from a second process waited behind the first one's game_wait).
+   */
   run(name: string, input: unknown = {}, options: RunOptions = {}): Promise<CommandOutcome> {
-    // One command at a time: the pipe carries one conversation, and ordering matters for scripts.
-    const next = this.queue.then(() => this.runNow(name, input ?? {}, options));
+    name = findCommand(name)?.name ?? name;
+    // Emergency controls go now, beside whatever is running (RB-121); kill and handover first cancel everything sent
+    // before them (queued commands never start; a running one sees its signal abort and stops at its next step).
+    if (EMERGENCY_COMMANDS.has(name)) {
+      if (SUPERSEDING_COMMANDS.has(name)) {
+        this.epoch.abort(SUPERSEDED_BY[name]);
+        this.epoch = new AbortController();
+      }
+      // Through the bridge's control pipe (beside whatever the main pipe serves), and a barrier for what comes after it.
+      // 0.8.3: in the order they were sent: an emergency control other than the kill waits for the emergency controls sent
+      // before it (short: each is a few control-pipe calls), so a session.resume sent right after a session.handover can't
+      // interleave its steps with the handover's. The kill never waits.
+      // 0.8.3 (the review): a handover and a resume each run whole under the handover lock, which other processes' XF tools
+      // take too, so a resume from another process can't land between a handover's steps; a resume cancelled while it waits
+      // sends nothing.
+      const earlier = this.emergencies;
+      const whole = name === "session.handover" || name === "session.resume";
+      const operation =
+        name === "bridge.kill"
+          ? this.runNow(name, input ?? {}, options, true)
+          : earlier.then(() => (whole ? this.runWhole(name, input ?? {}, options) : this.runNow(name, input ?? {}, options, true)));
+      this.emergencies = operation.then(
+        () => undefined,
+        () => undefined,
+      );
+      const settled = operation.then(
+        () => undefined,
+        () => undefined,
+      );
+      const before = this.barrier;
+      this.barrier = Promise.all([before, settled]).then(() => undefined);
+      return operation;
+    }
+    // Everything else one at a time: the pipe carries one conversation, and ordering matters for scripts. A command waits
+    // for the emergency operations sent before it (the barrier as it is now).
+    const epoch = this.epoch.signal;
+    const barrier = this.barrier;
+    const signal = options.signal ? AbortSignal.any([options.signal, epoch]) : epoch;
+    const next = this.queue.then(async (): Promise<CommandOutcome> => {
+      await barrier;
+      if (epoch.aborted) return this.superseded(name, options.cid, epoch);
+      const outcome = await this.runNow(name, input ?? {}, { ...options, signal });
+      // A command cut short by the emergency control says so, rather than a bare interruption.
+      return !outcome.ok && epoch.aborted ? this.superseded(name, outcome.cid, epoch, outcome.error) : outcome;
+    });
     this.queue = next.catch(() => undefined);
     return next;
   }
 
-  private async runNow(name: string, input: unknown, options: RunOptions): Promise<CommandOutcome> {
+  /** 0.8.3: a handover or resume under the handover lock (in this process and across processes), refused plainly when it can't run. */
+  private async runWhole(name: string, input: unknown, options: RunOptions): Promise<CommandOutcome> {
+    const cid = options.cid ?? nextCid(options.source ?? "api");
+    const interrupted: CommandOutcome = { ok: false, command: name, cid, error: { code: "interrupted", message: "Stopped before it was sent to the game; nothing changed." } };
+    if (options.signal?.aborted) return interrupted;
+    try {
+      return await withHandoverLock(
+        this.runtimeDir,
+        async () => (options.signal?.aborted ? interrupted : this.runNow(name, input, { ...options, cid }, true)),
+        { signal: options.signal },
+      );
+    } catch (error) {
+      const plain = (error as HandoverBusyError).plain ?? { code: "failed", message: (error as Error).message };
+      return { ok: false, command: name, cid, error: plain };
+    }
+  }
+
+  private superseded(name: string, cid: string | undefined, epoch: AbortSignal, cut?: PlainError): CommandOutcome {
+    const by = String(epoch.reason ?? "an emergency control");
+    const message = cut
+      ? `${by} came while this was running, so it stopped at its next step (what it had already done stays done): ${cut.message}`
+      : `${by} came first, so this command was cancelled before it started; nothing of it ran.`;
+    // RB-121 review: what the command found on its way out (an undo, a restore that failed) stays with the answer.
+    const error: PlainError = {
+      ...(cut ?? {}),
+      code: "superseded",
+      message: `${message} Check the game's state, then send it again if it is still wanted.`,
+      ...(cut ? { cause: cut.code, ...(cut.detail !== undefined ? { detail: cut.detail } : {}) } : {}),
+    };
+    return { ok: false, command: name, cid: cid ?? nextCid("api"), error };
+  }
+
+  private async runNow(name: string, input: unknown, options: RunOptions, control = false): Promise<CommandOutcome> {
     const cid = options.cid ?? nextCid(options.source ?? "api");
     const command = findCommand(name);
     if (!command) {
@@ -196,17 +331,25 @@ export class CommandApi {
     try {
       let result: CommandResult;
       if (command.local) {
-        result = await command.local(params, { api: this, cid, captureRoot: resolve(options.captureRoot ?? this.captureRoot), signal: options.signal });
+        // An emergency command's own bridge calls (session.handover's steps) go on the control pipe too.
+        const api = control ? this.controlView() : this;
+        result = await command.local(params, { api, cid, captureRoot: resolve(options.captureRoot ?? this.captureRoot), signal: options.signal });
       } else {
         const bridgeParams = command.bridge!.params ? command.bridge!.params(params) : params;
-        let response = await this.callBridge(command.bridge!.method, bridgeParams, cid, command.bridge!.timeoutMs?.(params));
+        let response: BridgeAnswer;
+        if (control) {
+          // RB-121: the control pipe is read at once, beside a request the main pipe still serves.
+          response = await this.callControl(command.bridge!.method, bridgeParams, cid, command.bridge!.timeoutMs?.(params));
+        } else {
+          response = await this.callBridge(command.bridge!.method, bridgeParams, cid, command.bridge!.timeoutMs?.(params), options.signal);
+        }
         if (!response.ok && command.name === "bridge.kill" && response.error.code === "bridge_busy") response = this.killByFile();
         if (!response.ok) {
           const error = "error" in response ? response.error : plainBridgeError("failed");
           if (command.permission !== "read") this.audit({ event: "refused", command: name, cid, code: error.code });
           return { ok: false, command: name, cid, error };
         }
-        result = { value: response.result };
+        result = { value: command.bridge!.result ? command.bridge!.result(response.result, params) : response.result };
       }
       if (command.permission !== "read") this.audit({ event: "done", command: name, cid, result: result.value });
       return {
@@ -227,8 +370,85 @@ export class CommandApi {
     }
   }
 
-  /** Sends one bridge method; reconnects when the game restarted (new session id). */
-  async callBridge(method: string, params: Record<string, unknown>, cid: string, timeoutMs?: number): Promise<{ ok: true; result: unknown } | { ok: false; error: PlainError }> {
+  /**
+   * This API with its bridge calls sent on the control pipe (RB-121), for an emergency command's local handler
+   * (session.handover's steps). Everything else is the API itself.
+   */
+  private controlView(): CommandApi {
+    // 0.8.3 (the review): the step's AbortSignal goes along, so a cancelled resume sends nothing.
+    const control = (method: string, params: Record<string, unknown>, cid: string, timeoutMs?: number, signal?: AbortSignal) =>
+      this.callControl(method, params, cid, timeoutMs, signal);
+    return new Proxy(this, {
+      get(target, prop) {
+        if (prop === "callBridge") return control;
+        const value = Reflect.get(target, prop, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  }
+
+  /**
+   * Sends one method on the bridge's control pipe (RB-121): bridge.kill, behave.stop, player.stop and a handover's steps,
+   * read at once beside a request the main pipe is still serving (a five-second look). A connection per call, so it never
+   * holds the control pipe. Without a control pipe (an older bridge) the call goes on the main pipe; the kill then uses the
+   * KILL file while a request is still waiting there, as it does when the control pipe can't be reached.
+   */
+  async callControl(method: string, params: Record<string, unknown>, cid: string, timeoutMs?: number, signal?: AbortSignal): Promise<BridgeAnswer> {
+    if (signal?.aborted) return { ok: false, error: { code: "interrupted", message: "Stopped before this step was sent to the game." } };
+    const session = readSession(this.runtimeDir);
+    if (!session) return { ok: false, error: NO_BRIDGE };
+    const kill = method === "bridge.kill";
+    if (!this.controlFactory || (!session.control_pipe && !this.options.controlTransport)) {
+      if (kill && this.inFlight > 0) return this.killByFile("A request was still waiting for the game's answer");
+      const answer = await this.callBridge(method, params, cid, timeoutMs, signal);
+      return !answer.ok && kill && answer.error.code === "bridge_busy" ? this.killByFile() : answer;
+    }
+    if (kill) return this.controlOnce(session, method, params, cid, timeoutMs, true);
+    const turn = this.controlChain.then(() => this.controlOnce(session, method, params, cid, timeoutMs, false, signal));
+    this.controlChain = turn.catch(() => undefined);
+    return turn;
+  }
+
+  /** One control-pipe call on its own connection (RB-121), closed as soon as it is answered. */
+  private async controlOnce(session: BridgeSession, method: string, params: Record<string, unknown>, cid: string, timeoutMs: number | undefined, kill: boolean, signal?: AbortSignal): Promise<BridgeAnswer> {
+    if (signal?.aborted) return { ok: false, error: { code: "interrupted", message: "Stopped before this step was sent to the game." } };
+    let transport: BridgeTransport;
+    try {
+      // A kill tries once: while the control pipe is busy (another emergency control, another tool) the KILL file stops the
+      // bridge within half a second, sooner than waiting for the pipe.
+      transport = await this.controlFactory!(session, kill ? { busyWaitMs: 0 } : {});
+    } catch (error) {
+      if (kill) return this.killByFile(error instanceof PipeConnectError && error.code === "busy" ? "The bridge's control pipe was busy" : "The bridge's control pipe couldn't be reached");
+      const kind = error instanceof PipeConnectError ? error.code : "failed";
+      return { ok: false, error: connectError(kind, (error as Error).message) };
+    }
+    let response: BridgeResponse;
+    try {
+      const wait = this.pacer.take();
+      if (wait > 0) await sleep(wait);
+      // Checked again right before sending (the connection or the pace may have taken a moment).
+      if (signal?.aborted) {
+        response = { v: 1, id: 0, cid, ok: false, error: { code: "interrupted", message: "Stopped before this step was sent to the game." } };
+      } else {
+        response = await transport.call(method, params, cid, timeoutMs);
+      }
+    } catch (error) {
+      response = { v: 1, id: 0, cid, ok: false, error: { code: "disconnected", message: (error as Error)?.message ?? String(error) } };
+    } finally {
+      transport.close();
+    }
+    // A kill's reply can be lost as the bridge drops its clients; the bridge is off either way.
+    if (kill && !response.ok && response.error?.code === "disconnected") return this.killByFile("The control pipe closed before the kill's answer came");
+    if (response.ok) return { ok: true, result: response.result };
+    return { ok: false, error: plainBridgeError(response.error?.code, response.error?.message) };
+  }
+
+  /**
+   * Sends one bridge method; reconnects when the game restarted (new session id). signal (RB-121): a step of a command that
+   * an emergency control (or the session runner's Ctrl+C) has cancelled isn't sent; cleanup steps pass none.
+   */
+  async callBridge(method: string, params: Record<string, unknown>, cid: string, timeoutMs?: number, signal?: AbortSignal): Promise<BridgeAnswer> {
+    if (signal?.aborted) return { ok: false, error: { code: "interrupted", message: "Stopped before this step was sent to the game." } };
     const session = readSession(this.runtimeDir);
     if (!session) {
       this.disconnect();
@@ -236,12 +456,21 @@ export class CommandApi {
     }
     if (this.connection && this.connection.sid !== session.sid) this.disconnect();
     if (!this.connection) {
+      // One connection attempt at a time: an emergency control (RB-121) may call while a queued command is connecting.
+      this.connecting ??= this.transportFactory(session)
+        .then((transport) => {
+          this.connection = { transport, sid: session.sid };
+        })
+        .finally(() => {
+          this.connecting = null;
+        });
       try {
-        this.connection = { transport: await this.transportFactory(session), sid: session.sid };
+        await this.connecting;
       } catch (error) {
         const kind = error instanceof PipeConnectError ? error.code : "failed";
         return { ok: false, error: connectError(kind, (error as Error).message) };
       }
+      if (!this.connection) return { ok: false, error: connectError("failed", "the connection closed while it was opening") };
     }
     // No idle close while any call is in flight (RB-62): a single call can take longer than the idle time
     // (game.save waits up to 20 s for the game), and closing the pipe under it would cut the answer off.
@@ -258,6 +487,10 @@ export class CommandApi {
       for (let attempt = 0; ; attempt++) {
         const wait = this.pacer.take();
         if (wait > 0) await sleep(wait);
+        if (signal?.aborted) {
+          response = { v: 1, id: 0, cid, ok: false, error: { code: "interrupted", message: "Stopped before this step was sent to the game." } };
+          break;
+        }
         try {
           response = await connection.transport.call(method, params, cid, timeoutMs);
         } catch (error) {
@@ -280,7 +513,7 @@ export class CommandApi {
    * The kill switch when another client (a scripted session) holds the pipe: the plugin also
    * watches for a KILL file beside session.json and stops within about half a second.
    */
-  private killByFile(): { ok: true; result: unknown } | { ok: false; error: PlainError } {
+  private killByFile(why = "Another XF tool held the connection"): { ok: true; result: unknown } | { ok: false; error: PlainError } {
     const file = join(this.runtimeDir, "KILL");
     try {
       writeFileSync(file, `killed by an XF tool at ${new Date().toISOString()}
@@ -288,7 +521,7 @@ export class CommandApi {
     } catch (error) {
       return { ok: false, error: { code: "failed", message: `Couldn't switch the bridge off: the KILL file couldn't be written (${(error as Error).message}). Use the CET hotkey instead.` } };
     }
-    return { ok: true, result: { killed: true, route: "kill_file", note: "Another XF tool held the connection, so the bridge was switched off through its KILL file; it stops within about half a second.", file } };
+    return { ok: true, result: { killed: true, route: "kill_file", note: `${why}, so the bridge was switched off through its KILL file; it stops within about half a second.`, file } };
   }
 
   private touch() {

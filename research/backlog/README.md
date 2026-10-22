@@ -13,16 +13,16 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 - **New requests** go into a lane the day they arrive: bugs and polish on existing features into polish or blockers; new features into *after 1.0*.
 
 ### In flight
-- **Open High findings** (4, so feature merges stay paused): CORE-03, and RB-119..121, fixed on the bridge branches (now 0.8.2, owned by XF · Runtime bridge) and closed when those merge. The export and install fixes have landed. The core review follows profiles phase 2. *21 Oct*
+- **Open High findings** (1 once bridge 0.8.3 lands, so feature merges resume): CORE-03. RB-119..121 are fixed in bridge 0.8.3 (`claude/bridge-merge`) and leave the ledger with it. The export and install fixes have landed. The core review follows profiles phase 2. *22 Oct*
 - **Profiles phase 1** (the single primary focus; `claude/profiles-p1`). The design is approved, with the four defaults confirmed. Chunks run one at a time:
   1. 1a: lease, takeover and fencing (done: harness 34/34, three Sol rounds);
   2. 1b: profile model and character service (done; its remaining sync races move to the outbox);
   3. 1c-i: generic outbox, idempotent transactions, characters on the outbox, conflict UI (done: model-based specification test, about 480k random steps; four Sol rounds); 1c-ii: collection and look working copies, snapshots, Save version, tombstones, checkpoint tuning, workspace-aware receipts (done; four Sol rounds, spec test about 485k steps);
   4. 1d-i: the `profiles-1` migration and its crash harness (done; three Sol rounds); 1d-ii: the running Studio switched onto the new services, with parity gates (done; three Sol rounds, the last Medium fixed after them and checked in phase 1's final review);
   5. 1e: IDs, focus, history, data contracts, de-singletoning (done; three Sol rounds);
-  6. 1f: gate runs, `character.undo` retired, captures for the UI review (running).
+  6. 1f: gate runs, `character.undo` retired, captures for the UI review (done; two Sol rounds, UI copy review).
 
-  It merges once the open High findings are 3 or fewer (bridge 0.8.1). *21 Oct*
+  Phase 1 is complete at `244755bb` (full suite 3,474 pass, 0 fail). Bridge 0.8.3 has landed, closing RB-119..121 (open High findings are back to 1), so it can merge. *22 Oct*
 - **Polish batch 1** (`claude/polish-1`): thumbnail drag direction, repeated layer names, collection tie order, the flaky mottle test, Build wording, the masculine-plate warning. *21 Oct*
 
 ### Beta blockers
@@ -69,7 +69,7 @@ Research questions from any chat go to the meta-coordinator's [research queue](r
 
 - **Hair Lab** (its own chat and branch, off `main` until the beta). *16 Oct*
 - **In-game overlay and UI; custom material shaders** (below). *29 Sep*
-- **The runtime bridge** (its own chat, XF · Runtime bridge): 0.8.2 staged after session 10, with 0.8.3 next, then the NPC and DM toolkit branches ([bridge autonomy](bridge-autonomy.md)). *30 Sep*
+- **The runtime bridge** (its own chat, XF · Runtime bridge): 0.8.3 on `main`, proven in session 11; sessions 9–11 done. Next 0.8.4 (session 11's findings, the UI review's UI-180..184), then the XF Core plugin host, then the NPC and DM toolkit branches ([bridge autonomy](bridge-autonomy.md)). *22 Oct*
 - **Story Engine** (its own chat, XF · Story Engine): procedural gigs, quests and encounters over a level-of-detail world simulation ([hub](../story-engine/README.md)). It is R&D at its own pace, outside the finish-first rule, and is gated mainly on runtime bridge work. *22 Oct*
 
 ### After 1.0 (banked)

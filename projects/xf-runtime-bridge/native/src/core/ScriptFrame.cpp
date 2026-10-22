@@ -1,4 +1,5 @@
 #include "core/ScriptFrame.hpp"
+#include "core/LayoutGuard.hpp"
 
 #include <cstring>
 

@@ -13,7 +13,7 @@ public static native func XFBridge_Kill(reason: String) -> Bool
 // The CET layer answers game.options.read's render options through these two (core/OptionsExchange.hpp).
 public static native func XFBridge_OptionsWanted() -> String
 public static native func XFBridge_OptionsReport(values: String) -> Bool
-// The CET layer draws ui.message's lines under the status label from this one (core/Messages.hpp).
+// The CET layer draws ui.message's lines under the CET line from this one (core/Messages.hpp).
 public static native func XFBridge_Messages() -> String
 // cc.open's pause-menu redirect asks the plugin what to do (core/Writes.hpp CreatorRedirect): "redirect",
 // "foreign", "expired", "refused", "withdrawn", "none", or "" when it can't say (the pause menu then opens).
@@ -32,3 +32,13 @@ public static native func XFBridge_Note(level: String, text: String) -> Bool
 // Bridge 0.6.1 (RB-86): whether the game's scripts are live now (the script gate alone), for the ink overlay's check on every
 // tick before it queries the world.
 public static native func XFBridge_Live() -> Bool
+// Bridge 0.7 (session 7, in-game driving): the player answers the pending ask (id 0) or a given one with choice n (0-based),
+// from the ink panel's keys or the CET window's buttons; answers {ok, message_id, choice, label} or {ok: false, why}.
+public static native func XFBridge_Answer(id: Int32, choice: Int32, source: String) -> String
+// A comment from the player into the session's event stream (the CET window's commentary box).
+public static native func XFBridge_Comment(text: String) -> Bool
+// The CET layer reports its overlay opening and closing (ui.state, the capture pre-check, the overlay host's yield rule).
+public static native func XFBridge_CetOverlay(open: Bool) -> Bool
+// Bridge 0.8 (the UI review): the ink panel reports the question it draws and whether it is on screen now, about five times a
+// second, so the CET label shows only the status and the answer keys instead of the question a third time.
+public static native func XFBridge_InkDrawn(id: Int32, shown: Bool) -> Bool

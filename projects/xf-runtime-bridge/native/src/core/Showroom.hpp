@@ -10,6 +10,7 @@
 // Nothing persists: static entities have no persistence, the kill switch clears them, and loading a save removes them.
 
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <string>
 #include <vector>
@@ -62,6 +63,9 @@ std::vector<Turn> ParseTurn(const json& aParams);
 
 // showroom.clear: {what: "all" (default), "pieces" or "lights"}.
 std::string ParseClear(const json& aParams);
+// 0.8.2: showroom.anchor's archives: up to 16 showroom archive names (xfs_showroom_<32 hex>, no extension) whose presence in
+// the game the answer reports, so the tools can find the staged showroom build without a manifest. Empty without the key.
+std::vector<std::string> ParseAnchorArchives(const json& aParams);
 
 // The XF Finish Showroom's templates and appearance names; nothing else can be spawned.
 bool TemplateOk(Kind aKind, const std::string& aPath);
@@ -92,4 +96,25 @@ json Place(const PlaceRequest& aRequest, const Ops& aOps);
 json TurnPieces(const std::vector<Turn>& aTurns, const Ops& aOps);
 // showroom.clear.
 json Clear(const std::string& aWhat, const Ops& aOps);
+
+// 0.8.3, showroom.staged (read; session 10's G1: discovery looked only for local build manifests, and a worktree has none):
+// the XF Finish Showroom archives the game itself sees in its archive/pc/mod folder (the game process's own view of it,
+// which is MO2's virtual folder when MO2 launched the game, so exactly the staged and enabled mods), each with its size and
+// SHA-256 (so the tools can match it to a build), and the manifest a self-describing build ships beside it
+// (xfs_showroom_<32 hex>.showroom.json, schema xfs/showroom-package-1, at most kMaxManifestBytes), when there is one. At most
+// kMaxStagedArchives archives; no paths outside that folder are named.
+inline constexpr size_t kMaxStagedArchives = 16;
+inline constexpr uintmax_t kMaxManifestBytes = 2 * 1024 * 1024;
+inline constexpr const char* kManifestSuffix = ".showroom.json";
+// 0.8.3 (the review): the listing is bounded and can be cancelled. At most kMaxFolderEntries names of the folder are looked
+// at, at most kMaxHashBytes are hashed in all and at most kMaxHashBytesPerArchive per archive (an archive past either is
+// listed with sha256 null and the reason), and the whole listing gives up after kMaxStagedMs. aCancelled is asked between
+// names and between each megabyte hashed (the plugin passes "the bridge is stopping or killed": its queue is closed), and a
+// cancelled listing throws MethodError "interrupted". A sidecar is read only within kMaxManifestBytes and kMaxJsonDepth
+// levels and with the schema's fields of the right types; anything else fails that archive's entry alone (manifest_error).
+inline constexpr size_t kMaxFolderEntries = 20000;
+inline constexpr uintmax_t kMaxHashBytes = 256ull * 1024 * 1024;
+inline constexpr uintmax_t kMaxHashBytesPerArchive = 128ull * 1024 * 1024;
+inline constexpr int64_t kMaxStagedMs = 5000;
+json StagedShowrooms(const std::filesystem::path& aModFolder, const std::function<bool()>& aCancelled = {}, uintmax_t aMaxHashBytes = kMaxHashBytes);
 } // namespace xfb::showroom

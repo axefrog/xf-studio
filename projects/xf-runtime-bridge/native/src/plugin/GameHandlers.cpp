@@ -34,6 +34,7 @@
 #include "core/OptionsExchange.hpp"
 #include "core/Params.hpp"
 #include "core/Showroom.hpp"
+#include "core/Win32.hpp"
 #include "core/Writes.hpp"
 #include "plugin/GameHandlers.hpp"
 #include "plugin/LivePoseMemory.hpp"
@@ -399,6 +400,19 @@ std::chrono::milliseconds Timeout()
     return std::chrono::milliseconds(Get().config.requestTimeoutMs);
 }
 
+// RB-122 (0.8.1): one game-thread step that changes the game: checked against the kill switch, the pause and a handover
+// on the game thread right before it runs (Dispatcher::RunWrite). Reads use RunGameTask; steps that put something back
+// run inside a RestoreScope (core/Writes.cpp), which RunWrite lets through.
+json WriteStep(const std::function<json()>& aTask, const std::string& aLabel)
+{
+    auto& state = Get();
+    if (!state.bridge)
+    {
+        throw MethodError("killed", "the bridge isn't running");
+    }
+    return state.bridge->GetDispatcher().RunWrite(Timeout(), aTask, aLabel);
+}
+
 RED4ext::CBaseFunction* FindScriptFunction(const std::string& aClass, const char* aFunction,
                                            const Signature& aSignature, const std::string& aCid)
 {
@@ -685,7 +699,7 @@ json PhotoEnter(const MethodContext& aContext)
 {
     params::ParsePhotoEnter(aContext.params);
     const auto cid = aContext.cid;
-    auto result = RunGameTask(Get().queue, Timeout(), [cid] { return PhotoEnterOnGameThread(cid); }, "photo.enter");
+    auto result = WriteStep([cid] { return PhotoEnterOnGameThread(cid); }, "photo.enter");
     if (result.value("changed", false))
     {
         result["active"] = WaitForPhotoMode(true, 3000, cid);
@@ -705,8 +719,7 @@ json PhotoExit(const MethodContext& aContext)
 {
     params::RequireOnly(aContext.params, {});
     const auto cid = aContext.cid;
-    auto result = RunGameTask(
-        Get().queue, Timeout(), [cid] { return CallScript("XFPhoto", "Exit", {}, {}, cid); }, "photo.exit");
+    auto result = WriteStep([cid] { return CallScript("XFPhoto", "Exit", {}, {}, cid); }, "photo.exit");
     if (result.value("changed", false))
     {
         result["active"] = !WaitForPhotoMode(false, 3000, cid);
@@ -747,7 +760,7 @@ json PhotoLightSet(const MethodContext& aContext)
     auto& queue = Get().queue;
     writes::LightOps ops;
     ops.set = [&queue, cid](int32_t aKey, float aValue) {
-        return RunGameTask(queue, Timeout(), [cid, aKey, aValue] { return SetPhotoAttribute(aKey, aValue, cid); },
+        return WriteStep([cid, aKey, aValue] { return SetPhotoAttribute(aKey, aValue, cid); },
                            aKey == params::key::kLightSelect ? "photo.light.select" : "photo.light.set");
     };
     ops.settle = [&queue] {
@@ -758,8 +771,7 @@ json PhotoLightSet(const MethodContext& aContext)
     };
     // Moving a light's entity (research): XFPhoto.PlaceLight, then XFPhoto.LightPosition a few ticks later.
     ops.place = [&queue, cid](int32_t aLight, const params::LightPlacement& aPlacement) {
-        return RunGameTask(
-            queue, Timeout(),
+        return WriteStep(
             [cid, aLight, aPlacement] {
                 int32_t light = aLight;
                 int32_t mode = aPlacement.kind == params::LightPlacement::Kind::World ? 2 : 1;
@@ -788,7 +800,7 @@ json UiMessage(const MethodContext& aContext)
 {
     const auto request = params::ParseMessage(aContext.params);
     auto out = Get().messages.Post(request);
-    out["undo"] = {{"method", "ui.message"}, {"params", {{"clear", true}}}};
+    out["undo"] = UiMessageUndo(out);
     out["undo_note"] = "messages also disappear by themselves after their seconds, and the kill switch clears them";
     if (!Get().layers.Has("cet"))
     {
@@ -827,6 +839,9 @@ json WorldPin(const MethodContext& aContext)
                           {&target, &x, &y, &z, &piece, &label, &variant, &lift}, aContext.cid);
     out["undo"] = {{"method", "world.pin.clear"}, {"params", {{"id", out.value("id", 0)}}}};
     out["temporary_test_feature"] = true;
+    // 0.8.2 (session 9's F1): the views draw a pin a moment after it is placed, so this answer's drawn_by is usually empty.
+    out["drawn_by_note"] = "drawn_by fills in as each view first draws the pin, a moment after it is placed (world, minimap, world_map, "
+                           "xf_overlay for the bridge's own mark in the world); ui_state's pins read it later";
     return out;
 }
 
@@ -847,19 +862,19 @@ writes::InventoryOps InventoryOpsFor(const std::string& aCid)
 {
     auto& queue = Get().queue;
     writes::InventoryOps ops;
-    ops.slot = [&queue, aCid](const std::string& aSlot, const std::string& aItem) {
+    ops.slot = [&queue, aCid](const std::string& aSlot, const std::string& aItem, const std::string& aId) {
         return RunGameTask(
             queue, Timeout(),
-            [aCid, aSlot, aItem] {
+            [aCid, aSlot, aItem, aId] {
                 RED4ext::CString slot(aSlot.c_str());
                 RED4ext::CString item(aItem.c_str());
-                return CallScript("XFInventory", "Slot", {"String", "String"}, {&slot, &item}, aCid);
+                RED4ext::CString hash(aId.c_str()); // RB-125: the exact copy ("" for any copy of the record)
+                return CallScript("XFInventory", "Slot", {"String", "String", "String"}, {&slot, &item, &hash}, aCid);
             },
             "inventory.slot");
     };
     ops.removeAdded = [&queue, aCid](const std::string& aItem) {
-        return RunGameTask(
-            queue, Timeout(),
+        return WriteStep(
             [aCid, aItem] {
                 RED4ext::CString item(aItem.c_str());
                 return CallScript("XFInventory", "RemoveAdded", {"String"}, {&item}, aCid);
@@ -881,13 +896,13 @@ json InventoryEquipMethod(const MethodContext& aContext)
     const auto cid = aContext.cid;
     auto ops = InventoryOpsFor(cid);
     ops.equip = [cid, request] {
-        return RunGameTask(
-            Get().queue, Timeout(),
+        return WriteStep(
             [cid, request] {
                 RED4ext::CString item(request.item.c_str());
                 RED4ext::CString slot(request.slot.c_str());
+                RED4ext::CString hash(request.id.c_str()); // RB-125: the exact copy an undo names ("" for any copy)
                 bool add = request.addIfMissing;
-                return CallScript("XFInventory", "Equip", {"String", "String", "Bool"}, {&item, &slot, &add}, cid);
+                return CallScript("XFInventory", "Equip", {"String", "String", "String", "Bool"}, {&item, &slot, &hash, &add}, cid);
             },
             "inventory.equip");
     };
@@ -900,8 +915,7 @@ json InventoryUnequipMethod(const MethodContext& aContext)
     const auto cid = aContext.cid;
     auto ops = InventoryOpsFor(cid);
     ops.unequip = [cid, request] {
-        return RunGameTask(
-            Get().queue, Timeout(),
+        return WriteStep(
             [cid, request] {
                 RED4ext::CString slot(request.slot.c_str());
                 RED4ext::CString item(request.item.c_str());
@@ -921,8 +935,7 @@ json PhotoCameraPlace(const MethodContext& aContext)
     const auto request = params::ParseCameraPlace(aContext.params);
     const auto cid = aContext.cid;
     auto& queue = Get().queue;
-    auto step = RunGameTask(
-        queue, Timeout(),
+    auto step = WriteStep(
         [cid, request] {
             float x = static_cast<float>(request.position[0]), y = static_cast<float>(request.position[1]), z = static_cast<float>(request.position[2]);
             float tx = static_cast<float>(request.lookAt[0]), ty = static_cast<float>(request.lookAt[1]), tz = static_cast<float>(request.lookAt[2]);
@@ -935,6 +948,15 @@ json PhotoCameraPlace(const MethodContext& aContext)
     }
     const auto reading = RunGameTask(queue, Timeout(), [cid] { return CallScript("XFPhoto", "CameraReading", {}, {}, cid); }, "photo.camera.read");
     return writes::CameraPlaceResult(request, step, reading);
+}
+
+// inventory.list (0.8.3, read): the clothing V owns, each copy with its exact identity (redscript XFInventory.List).
+json InventoryList(const MethodContext& aContext)
+{
+    const auto request = params::ParseInventoryList(aContext.params);
+    RED4ext::CString slot(request.slot.c_str());
+    int32_t limit = request.limit;
+    return CallScript("XFInventory", "List", {"String", "Int32"}, {&slot, &limit}, aContext.cid);
 }
 
 // wardrobe.state (0.5.2): the active outfit and what each clothing area shows.
@@ -953,8 +975,7 @@ json WardrobeEquipMethod(const MethodContext& aContext)
     auto& queue = Get().queue;
     writes::WardrobeOps ops;
     ops.change = [&queue, cid, request] {
-        return RunGameTask(
-            queue, Timeout(),
+        return WriteStep(
             [cid, request] {
                 if (request.mode == "restore")
                 {
@@ -1020,8 +1041,7 @@ json GameSaveMethod(const MethodContext& aContext)
     auto& queue = Get().queue;
     writes::SaveOps ops;
     ops.prepare = [&queue, cid, request] {
-        return RunGameTask(
-            queue, Timeout(),
+        return WriteStep(
             [cid, request] {
                 bool override = request.overrideLock;
                 return CallScript("XFGame", "SavePrepare", {"Bool"}, {&override}, cid);
@@ -1032,9 +1052,24 @@ json GameSaveMethod(const MethodContext& aContext)
         return RunGameTask(queue, Timeout(), [cid] { return CallScript("XFGame", "SavingLocked", {}, {}, cid); }, "game.save.status");
     };
     ops.save = [&queue, cid, request] {
-        return RunGameTask(
-            queue, Timeout(),
+        return WriteStep(
             [cid, request] {
+                // RB-94 (0.7): the holds are read again in the same game-thread step as the save, so a behaviour started or an
+                // effect put on V by another client after the first check (which runs before prepare) can't reach the save.
+                auto held = CallScript("XFGame", "BridgeHolds", {}, {}, cid).value("holds", json::array());
+                if (!held.is_array())
+                {
+                    held = json::array();
+                }
+                if (Get().behaviours.Active())
+                {
+                    held.push_back("behaviours running (behave_list)");
+                }
+                if (!held.empty())
+                {
+                    throw MethodError("bridge_effects_active", "something the bridge holds on V started while the save was being prepared (" + held.dump() +
+                                                                   "); nothing was saved and the bridge's lock is back on. player_stop lifts it, then save again");
+                }
                 RED4ext::CString label(request.name.c_str());
                 return CallScript("XFGame", "Save", {"String"}, {&label}, cid);
             },
@@ -1084,8 +1119,7 @@ json GameLoadMethod(const MethodContext& aContext)
     auto& queue = Get().queue;
     writes::LoadOps ops;
     ops.latest = [&queue, cid] {
-        return RunGameTask(
-            queue, Timeout(),
+        return WriteStep(
             [cid] {
                 auto result = CallScript("XFGame", "LoadLatest", {}, {}, cid);
                 // In the same game-thread step (RB-76): no script call until the loaded session is ready.
@@ -1101,8 +1135,7 @@ json GameLoadMethod(const MethodContext& aContext)
         return RunGameTask(queue, Timeout(), [cid] { return CallScript("XFGame", "Saves", {}, {}, cid); }, "game.load.saves");
     };
     ops.load = [&queue, cid](const std::string& aName) {
-        return RunGameTask(
-            queue, Timeout(),
+        return WriteStep(
             [cid, aName] {
                 RED4ext::CString name(aName.c_str());
                 auto result = CallScript("XFGame", "LoadNamed", {"String"}, {&name}, cid);
@@ -1384,8 +1417,7 @@ json CreatorOpenMethod(const MethodContext& aContext)
     auto& queue = Get().queue;
     writes::CreatorOpenOps ops;
     ops.prepare = [&queue, cid, mode] {
-        return RunGameTask(
-            queue, Timeout(),
+        return WriteStep(
             [cid, mode] {
                 int32_t m = mode;
                 return CallScript("XFCharacter", "OpenPrepare", {"Int32"}, {&m}, cid);
@@ -1399,8 +1431,7 @@ json CreatorOpenMethod(const MethodContext& aContext)
         }
     };
     ops.open = [&queue, cid, mode] {
-        return RunGameTask(
-            queue, Timeout(),
+        return WriteStep(
             [cid, mode] {
                 int32_t m = mode;
                 return CallScript("XFCharacter", "Open", {"Int32"}, {&m}, cid);
@@ -1550,8 +1581,7 @@ json PhotoPoseSet(const MethodContext& aContext)
     auto resolvedPose = std::make_shared<std::string>(request.pose);
     writes::PoseSetOps ops;
     ops.category = [&queue, cid, request, resolvedPose] {
-        auto result = RunGameTask(
-            queue, Timeout(),
+        auto result = WriteStep(
             [cid, request] {
                 RED4ext::CString record(request.record.c_str());
                 RED4ext::CString category(request.category.c_str());
@@ -1572,8 +1602,7 @@ json PhotoPoseSet(const MethodContext& aContext)
         }
     };
     ops.pose = [&queue, cid, request, resolvedPose] {
-        return RunGameTask(
-            queue, Timeout(),
+        return WriteStep(
             [cid, request, resolvedPose] {
                 RED4ext::CString pose(resolvedPose->c_str());
                 int32_t value = request.poseValue;
@@ -1582,8 +1611,7 @@ json PhotoPoseSet(const MethodContext& aContext)
             "photo.pose.pose");
     };
     ops.restoreCategory = [&queue, cid](int32_t aValue) {
-        RunGameTask(
-            queue, Timeout(), [cid, aValue] { return SetPhotoAttribute(5, static_cast<float>(aValue), cid); },
+        WriteStep([cid, aValue] { return SetPhotoAttribute(5, static_cast<float>(aValue), cid); },
             "photo.pose.restore");
     };
     return writes::PoseSet(ops);
@@ -1633,8 +1661,7 @@ showroom::Ops ShowroomOpsFor(const std::string& aCid)
         }
     };
     ops.spawn = [&queue, aCid](showroom::Kind aKind, const showroom::Placement& aItem) {
-        return RunGameTask(
-            queue, Timeout(),
+        return WriteStep(
             [aCid, aKind, aItem] {
                 RED4ext::CString kind(showroom::KindName(aKind));
                 // A ResRef is the path's hash (RaRef<CResource>); redscript has no string-to-ResRef conversion at run time.
@@ -1652,8 +1679,7 @@ showroom::Ops ShowroomOpsFor(const std::string& aCid)
             "showroom.spawn");
     };
     ops.clear = [&queue, aCid](const std::string& aWhat) {
-        return RunGameTask(
-            queue, Timeout(),
+        return WriteStep(
             [aCid, aWhat] {
                 RED4ext::CString what(aWhat.c_str());
                 return CallScript("XFShowroom", "Clear", {"String"}, {&what}, aCid);
@@ -1661,8 +1687,7 @@ showroom::Ops ShowroomOpsFor(const std::string& aCid)
             "showroom.clear");
     };
     ops.turn = [&queue, aCid](int32_t aIndex, double aYaw) {
-        return RunGameTask(
-            queue, Timeout(),
+        return WriteStep(
             [aCid, aIndex, aYaw] {
                 int32_t index = aIndex;
                 float yaw = static_cast<float>(aYaw);
@@ -1684,8 +1709,20 @@ showroom::Ops ShowroomOpsFor(const std::string& aCid)
 
 json ShowroomAnchor(const MethodContext& aContext)
 {
-    params::RequireOnly(aContext.params, {});
-    return CallScript("XFShowroom", "Anchor", {}, {}, aContext.cid);
+    const auto archives = showroom::ParseAnchorArchives(aContext.params);
+    auto out = CallScript("XFShowroom", "Anchor", {}, {}, aContext.cid);
+    if (!archives.empty())
+    {
+        // 0.8.2: which of these showroom archives the game loaded (Codeware's ResourceDepot.ArchiveExists).
+        std::string joined;
+        for (const auto& name : archives)
+        {
+            joined += (joined.empty() ? "" : ",") + name;
+        }
+        RED4ext::CString names(joined.c_str());
+        out["archives"] = CallScript("XFShowroom", "Archives", {"String"}, {&names}, aContext.cid).value("archives", json::object());
+    }
+    return out;
 }
 
 json ShowroomState(const MethodContext& aContext)
@@ -1750,6 +1787,13 @@ MethodSpec MarkedWrite(std::string aName, Access aAccess, RunOn aRunOn, std::str
                           aContext.cid);
                 return result;
             }};
+}
+
+json ClearShowroomForHandover(const std::string& aWhat, const std::string& aCid)
+{
+    auto out = ShowroomOpsFor(aCid).clear(aWhat);
+    out["what"] = aWhat;
+    return out;
 }
 
 void RestoreAfterKill()
@@ -1820,6 +1864,7 @@ void ReleaseCursorAfterIdle()
 void RegisterMethods(Dispatcher& aDispatcher)
 {
     RegisterMethods060(aDispatcher);
+    RegisterMethods070(aDispatcher);
     auto& state = Get();
 
     aDispatcher.Register({"bridge.info", Access::Read, RunOn::BridgeThread,
@@ -1938,6 +1983,9 @@ void RegisterMethods(Dispatcher& aDispatcher)
                                      &InventoryEquipMethod));
     aDispatcher.Register(WriteMethod("inventory.unequip", Access::WriteInventory, RunOn::BridgeThread,
                                      "Unequips a clothing slot (and removes an item the bridge added, if asked).", &InventoryUnequipMethod));
+    // 0.8.3: what clothing V owns (read; the inventory class isn't needed to list it).
+    aDispatcher.Register({"inventory.list", Access::Read, RunOn::GameThread,
+                          "Lists the clothing V owns, each copy with its exact identity (read only).", &InventoryList});
     // Bridge 0.5.2: the wardrobe (outfits decide what each clothing area shows), in the inventory write class.
     aDispatcher.Register({"wardrobe.state", Access::Read, RunOn::GameThread,
                           "The active wardrobe outfit, what each clothing area shows, and the stored outfits.", &WardrobeState});
@@ -1953,6 +2001,16 @@ void RegisterMethods(Dispatcher& aDispatcher)
     aDispatcher.Register({"showroom.anchor", Access::Read, RunOn::GameThread,
                           "Where V and the camera are and which way they face, and whether Codeware is loaded (for placing the showroom).",
                           &ShowroomAnchor});
+    // 0.8.3: the staged showroom builds as the game itself sees them (core/Showroom.cpp StagedShowrooms); files only, no game
+    // objects, so on the pipe's thread.
+    aDispatcher.Register({"showroom.staged", Access::Read, RunOn::BridgeThread,
+                          "Lists the XF Finish Showroom archives the game sees in its archive/pc/mod folder, with each build's own manifest where it ships one.",
+                          [](const MethodContext& aContext) {
+                              params::RequireOnly(aContext.params, {});
+                              const auto game = win32::ProcessImagePath().parent_path().parent_path().parent_path();
+                              // 0.8.3 (the review): stops as soon as the bridge stops or is killed (both close its queue).
+                              return showroom::StagedShowrooms(game / L"archive" / L"pc" / L"mod", [] { return Get().queue.IsClosed(); });
+                          }});
     aDispatcher.Register({"showroom.state", Access::Read, RunOn::GameThread,
                           "The XF Finish Showroom heads and light rigs the bridge spawned, where they are and whether they are in.", &ShowroomState});
     aDispatcher.Register(WriteMethod("showroom.place", Access::WriteShowroom, RunOn::BridgeThread,

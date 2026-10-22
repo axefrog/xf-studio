@@ -37,6 +37,7 @@
 #include "core/Win32.hpp"
 #include "core/Writes.hpp"
 #include "selftest/Sim060.hpp"
+#include "selftest/Sim070.hpp"
 
 #include <functional>
 #include <limits>
@@ -44,6 +45,8 @@
 #include <mutex>
 
 int RunUnitTests();
+int RunPipeStress(int aRounds);
+int RunLayoutRepro();
 
 namespace
 {
@@ -60,6 +63,23 @@ public:
 };
 
 std::atomic<bool> gStop{false};
+
+// A simulated item copy (RB-125): an inventory entry is the record name, or "<record>#<n>" for a further copy of the same
+// record (selftest.give); its identity, digits like XFInventory.Hash's, is FNV-1a over the whole entry.
+std::string SimRecord(const std::string& aEntry)
+{
+    return aEntry.substr(0, aEntry.find('#'));
+}
+
+std::string SimItemId(const std::string& aItem)
+{
+    uint64_t hash = 1469598103934665603ull;
+    for (const unsigned char c : aItem)
+    {
+        hash = (hash ^ c) * 1099511628211ull;
+    }
+    return std::to_string(hash);
+}
 
 // The simulated creator option's value names (player.appearance and cc.apply agree on them): internal names
 // xfs_value_00..12, except "hairstyle", which carries session 4's kind of names (CCXL hair).
@@ -128,12 +148,23 @@ int wmain(int argc, wchar_t** argv)
     bool allowLivePose = false;
     int rearmAfterMs = -1;
     bool codeware = true;
+    std::wstring modDir; // 0.8.3: the folder showroom.staged reads as the game's archive/pc/mod (tests pass their own)
     for (int i = 1; i < argc; ++i)
     {
         const std::wstring arg = argv[i];
         if (arg == L"--unit")
         {
             return RunUnitTests();
+        }
+        // 0.8.2: the crash investigation's checks (run them under AddressSanitizer): both pipes started and stopped over and
+        // over with clients racing them, and 0.8.1's stale allocation reproduced.
+        if (arg == L"--pipe-stress" && i + 1 < argc)
+        {
+            return RunPipeStress(std::max(1, _wtoi(argv[i + 1])));
+        }
+        if (arg == L"--layout-repro")
+        {
+            return RunLayoutRepro();
         }
         if (arg == L"--runtime-dir" && i + 1 < argc)
         {
@@ -170,6 +201,10 @@ int wmain(int argc, wchar_t** argv)
         else if (arg == L"--no-codeware")
         {
             codeware = false;
+        }
+        else if (arg == L"--mod-dir" && i + 1 < argc)
+        {
+            modDir = argv[++i];
         }
         else if (arg == L"--no-cet")
         {
@@ -282,6 +317,14 @@ int wmain(int argc, wchar_t** argv)
                              std::this_thread::sleep_for(std::chrono::milliseconds(ms));
                              xfb::log::Info("selftest.slow_done", "ms=" + std::to_string(ms), aContext.cid);
                              return json{{"slept_ms", ms}};
+                         }});
+    // RB-121: holds the pipe's own thread for params.ms with the game thread free, as player.look's smooth wait does.
+    dispatcher.Register({"selftest.hold", xfb::Access::Read, xfb::RunOn::BridgeThread,
+                         "Holds the pipe thread for params.ms (the game thread stays free).",
+                         [](const xfb::MethodContext& aContext) {
+                             const auto ms = std::clamp(aContext.params.value("ms", 0), 0, 10000);
+                             std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+                             return json{{"held_ms", ms}};
                          }});
     // Returns text that is not valid UTF-8, as raw game strings can be.
     dispatcher.Register({"selftest.bad_utf8", xfb::Access::Read, xfb::RunOn::BridgeThread,
@@ -531,7 +574,7 @@ int wmain(int argc, wchar_t** argv)
                              return json{{"writes_paused", dispatcher.WritesPaused()}};
                          }});
     dispatcher.Register({"selftest.script_layer", xfb::Access::Read, xfb::RunOn::BridgeThread,
-                         "Moves the simulated script layer (attach, player_attach, detach, detach_before_next_task, load_requested; self-test only).",
+                         "Moves the simulated script layer (attach, puppet, player_attach, detach, detach_before_next_task, load_requested; self-test only).",
                          [](const xfb::MethodContext& aContext) {
                              const auto event = aContext.params.value("event", std::string());
                              if (event == "detach_before_next_task")
@@ -544,7 +587,7 @@ int wmain(int argc, wchar_t** argv)
                              }
                              else if (!simLayer.OnEvent(event))
                              {
-                                 throw xfb::MethodError("bad_params", "event must be attach, player_attach, detach, detach_before_next_task or load_requested");
+                                 throw xfb::MethodError("bad_params", "event must be attach, puppet, player_attach, detach, detach_before_next_task or load_requested");
                              }
                              return simLayer.Describe();
                          }});
@@ -812,11 +855,12 @@ int wmain(int argc, wchar_t** argv)
     // set) at aspect 2.4. Enough to drive tools/api/framing.ts end to end offline.
     // photo.camera.place (0.5.2), simulated: the camera entity moves, and photo mode keeps it there only with camera_holds.
     dispatcher.Register(simWrite("photo.camera.place", xfb::Access::WritePhoto, xfb::RunOn::BridgeThread, "Camera placement (simulated).",
-                                 [&queue](const xfb::MethodContext& aContext) {
+                                 [&queue, &dispatcher](const xfb::MethodContext& aContext) {
                                      const auto request = p::ParseCameraPlace(aContext.params);
                                      const auto vec = [](const std::array<double, 3>& aV) { return json{{"x", aV[0]}, {"y", aV[1]}, {"z", aV[2]}}; };
-                                     const auto step = xfb::RunGameTask(
-                                         queue, std::chrono::milliseconds(1000),
+                                     // As the plugin: a changing step passes the write gate on the game thread (RB-122).
+                                     const auto step = dispatcher.RunWrite(
+                                         std::chrono::milliseconds(1000),
                                          [&request, vec] {
                                              std::scoped_lock _(sim.mutex);
                                              if (sim.phase != "photo_mode")
@@ -1438,12 +1482,24 @@ int wmain(int argc, wchar_t** argv)
                          [](const xfb::MethodContext& aContext) {
                              auto out = messages.Post(p::ParseMessage(aContext.params));
                              out["simulated"] = true;
-                             out["undo"] = {{"method", "ui.message"}, {"params", {{"clear", true}}}};
+                             out["undo"] = xfb::UiMessageUndo(out);
                              return out;
                          }});
+    dispatcher.Register({"ui.ask.state", xfb::Access::Read, xfb::RunOn::BridgeThread, "What became of a question (simulated CET layer).",
+                         [](const xfb::MethodContext& aContext) {
+                             p::RequireOnly(aContext.params, {"id"});
+                             const auto id = static_cast<uint64_t>(p::CheckInteger(aContext.params, "id", 1, 1000000000).value_or(0));
+                             if (id == 0)
+                             {
+                                 throw xfb::MethodError("bad_params", "give id");
+                             }
+                             return xfb::AskStateJson(id, messages.StateOf(id));
+                         }});
     dispatcher.Register({"selftest.messages", xfb::Access::Read, xfb::RunOn::BridgeThread, "The message lines the CET layer would draw (self-test only).",
-                         [](const xfb::MethodContext&) {
-                             const auto text = messages.Snapshot();
+                         [](const xfb::MethodContext& aContext) {
+                             // 0.8: surface "cet" answers the CET layer's Latin-1 copy, as XFBridge_Messages does.
+                             const bool cet = aContext.params.is_object() && aContext.params.value("surface", std::string()) == "cet";
+                             const auto text = cet ? messages.Snapshot(xfb::MessageBoard::Clock::now(), &xfb::inkui::ForCet) : messages.Snapshot();
                              return text.empty() ? json{{"messages", json::array()}} : json::parse(text);
                          }});
     // Bridge 0.5.3, TEMPORARY TEST FEATURES (the ink UI demos): ui.hud with the plugin's own panel settings, selftest.hud
@@ -1458,6 +1514,19 @@ int wmain(int argc, wchar_t** argv)
                              out["panel_attached"] = true;
                              return out;
                          }});
+    // 0.8: what the ink panel last reported drawing (XFBridge_InkDrawn in the plugin): selftest.ink_drawn {id, shown}.
+    static uint64_t inkShown = 0;
+    static bool inkVisible = false; // 0.8.2: the ink panel's own report of being on screen
+    static uint64_t inkKeys = 0;    // 0.8.2: the question its keys answer, shown or not
+    dispatcher.Register({"selftest.ink_drawn", xfb::Access::Read, xfb::RunOn::BridgeThread, "The ink panel reports the question it draws (self-test only).",
+                         [](const xfb::MethodContext& aContext) {
+                             const auto& p = aContext.params;
+                             const auto id = p.is_object() ? p.value("id", 0ll) : 0ll;
+                             inkShown = p.is_object() && p.value("shown", false) && id > 0 ? static_cast<uint64_t>(id) : 0;
+                             inkVisible = p.is_object() && p.value("shown", false);
+                             inkKeys = id > 0 ? static_cast<uint64_t>(id) : 0;
+                             return json{{"ok", true}, {"ink_shown", inkShown}};
+                         }});
     dispatcher.Register({"selftest.hud", xfb::Access::Read, xfb::RunOn::BridgeThread, "The frame the ink HUD panel would draw (self-test only).",
                          [&bridge, &config](const xfb::MethodContext&) {
                              xfb::inkui::BridgeView view;
@@ -1467,16 +1536,50 @@ int wmain(int argc, wchar_t** argv)
                              view.writesPaused = bridge.GetDispatcher().WritesPaused();
                              view.listening = bridge.IsListening();
                              view.hasClient = bridge.HasClient();
+                             view.inSession = bridge.InSession();
                              view.scriptReady = simLayer.Ready();
-                             std::vector<xfb::inkui::MessageLine> lines;
-                             for (auto& [level, text] : messages.Lines())
-                             {
-                                 lines.push_back({level, text});
-                             }
-                             const auto frame = xfb::inkui::Frame(hud.Current(), view, lines);
+                             // 0.8: the plugin's own frame builder (core BuildFrame), and the status every surface shows.
+                             const auto surface = xfb::inkui::ChooseStatusSurface({inkVisible, false, simLayer.Ready()});
+                             const auto frame = xfb::inkui::BuildFrame(hud.Current(), view, messages, config.answerKeys, inkShown, surface, inkKeys);
                              auto out = xfb::inkui::ParseFrame(frame);
                              out["frame"] = frame;
+                             out["status_all"] = xfb::inkui::StatusJson(view);
                              return out;
+                         }});
+    // 0.7 (session 7, in-game driving): what XFBridge_Answer and XFBridge_Comment do in the plugin, for the tests: the player
+    // answers the pending ask (or a given one) or sends a comment, and the event goes into the session's stream.
+    dispatcher.Register({"selftest.answer", xfb::Access::Read, xfb::RunOn::BridgeThread, "The player answers an ask or comments (self-test only).",
+                         [&bridge](const xfb::MethodContext& aContext) {
+                             if (!sim060)
+                             {
+                                 throw xfb::MethodError("unavailable", "simulated: no event stream");
+                             }
+                             const auto& p = aContext.params;
+                             if (p.contains("note"))
+                             {
+                                 // A note from the game (XFBridge_Note: Mark this moment), source game (RB-115).
+                                 const auto text = p.value("note", std::string());
+                                 return json{{"ok", true}, {"seq", sim060->Events().Push("note", "info", "game", text, json{{"text", text}})}};
+                             }
+                             if (p.contains("comment"))
+                             {
+                                 const auto text = p.value("comment", std::string());
+                                 const auto seq = sim060->Events().Push("comment", "info", "game", text, json{{"text", text}});
+                                 return json{{"ok", true}, {"seq", seq}};
+                             }
+                             if (bridge.GetDispatcher().IsKilled())
+                             {
+                                 return json{{"ok", false}, {"why", "the bridge is stopped"}};
+                             }
+                             auto answer = messages.Answer(p.value("id", 0ull), p.value("choice", 0));
+                             if (answer.value("ok", false))
+                             {
+                                 const auto label = answer.value("label", std::string());
+                                 answer["seq"] = sim060->Events().Push("answer", "done", "game", "The player answered " + label,
+                                                                       json{{"message_id", answer["message_id"]}, {"choice", answer["choice"]}, {"label", label},
+                                                                            {"question", answer.value("text", std::string())}, {"via", p.value("via", std::string("selftest"))}});
+                             }
+                             return answer;
                          }});
     const auto pinsJson = [] {
         json list = json::array();
@@ -1542,7 +1645,7 @@ int wmain(int argc, wchar_t** argv)
                                      sim.pins.push_back(pin);
                                      sim.gameSaveLock = true;
                                      return json{{"simulated", true}, {"id", pin.id}, {"label", pin.label}, {"variant", pin.variant},
-                                                 {"target", pin.target}, {"bound", pin.piece >= 0 ? "object" : "position"},
+                                                 {"target", pin.target}, {"bound", "position"} /* 0.7: every pin is placed at a point (session 7) */,
                                                  {"position", {pin.x, pin.y, pin.z}}, {"pins", pinsJson()},
                                                  {"undo", {{"method", "world.pin.clear"}, {"params", {{"id", pin.id}}}}},
                                                  {"temporary_test_feature", true}};
@@ -1591,11 +1694,14 @@ int wmain(int argc, wchar_t** argv)
     };
     const auto inventoryOps = [&queue, slotOf] {
         w::InventoryOps ops;
-        ops.slot = [slotOf](const std::string& aSlot, const std::string& aItem) {
+        ops.slot = [slotOf](const std::string& aSlot, const std::string& aItem, const std::string& aId) {
             std::scoped_lock _(sim.mutex);
             const auto slot = aItem.empty() ? aSlot : slotOf(aItem);
-            const auto item = sim.worn.count(slot) ? sim.worn[slot] : std::string();
-            return json{{"slot", slot}, {"item", item}, {"empty", item.empty()}, {"matches", !aItem.empty() && item == aItem}};
+            const auto entry = sim.worn.count(slot) ? sim.worn[slot] : std::string();
+            // As XFInventory.Slot: the record, and with an id the exact copy too (RB-125).
+            const bool matches = !aItem.empty() && !entry.empty() && SimRecord(entry) == aItem && (aId.empty() || SimItemId(entry) == aId);
+            return json{{"slot", slot}, {"item", SimRecord(entry)}, {"item_id", entry.empty() ? std::string() : SimItemId(entry)},
+                        {"empty", entry.empty()}, {"matches", matches}};
         };
         ops.removeAdded = [](const std::string& aItem) {
             std::scoped_lock _(sim.mutex);
@@ -1903,7 +2009,25 @@ int wmain(int argc, wchar_t** argv)
                                              throw xfb::MethodError("bad_params", "simulated: '" + request.item + "' goes in the " + slot + " slot");
                                          }
                                          bool added = false;
-                                         if (std::find(sim.inventory.begin(), sim.inventory.end(), request.item) == sim.inventory.end())
+                                         // The copy to equip (RB-125): the exact one asked for by id, else the first copy of the record.
+                                         std::string chosen;
+                                         bool exact = false;
+                                         for (const auto& entry : sim.inventory)
+                                         {
+                                             if (!request.id.empty() && SimItemId(entry) == request.id && SimRecord(entry) == request.item)
+                                             {
+                                                 chosen = entry;
+                                                 exact = true;
+                                                 break;
+                                             }
+                                         }
+                                         if (chosen.empty())
+                                         {
+                                             const auto first = std::find_if(sim.inventory.begin(), sim.inventory.end(),
+                                                                             [&](const std::string& aEntry) { return SimRecord(aEntry) == request.item; });
+                                             chosen = first == sim.inventory.end() ? std::string() : *first;
+                                         }
+                                         if (chosen.empty())
                                          {
                                              if (!request.addIfMissing)
                                              {
@@ -1911,18 +2035,26 @@ int wmain(int argc, wchar_t** argv)
                                              }
                                              sim.inventory.push_back(request.item);
                                              sim.added.push_back(request.item);
+                                             chosen = request.item;
                                              added = true;
                                          }
-                                         const auto previous = sim.worn.count(slot) ? sim.worn[slot] : std::string();
-                                         const bool already = previous == request.item;
+                                         const auto wornEntry = sim.worn.count(slot) ? sim.worn[slot] : std::string();
+                                         const auto previous = SimRecord(wornEntry);
+                                         const bool already = wornEntry == chosen;
                                          if (!already)
                                          {
                                              sim.pendingSlot = slot;
-                                             sim.pendingItem = request.item;
+                                             sim.pendingItem = chosen;
                                              sim.pendingTicks = 2;
                                          }
                                          sim.gameSaveLock = true;
-                                         json step{{"item", request.item}, {"slot", slot}, {"added", added}, {"already_equipped", already}, {"previous", previous}};
+                                         // RB-125: each simulated copy's identity, as XFInventory.Hash gives it (digits).
+                                         json step{{"item", request.item}, {"slot", slot}, {"added", added}, {"already_equipped", already}, {"previous", previous},
+                                                   {"previous_id", wornEntry.empty() ? std::string() : SimItemId(wornEntry)}, {"id", SimItemId(chosen)}};
+                                         if (!request.id.empty())
+                                         {
+                                             step["exact"] = exact;
+                                         }
                                          // As XFWardrobe.AreaNote: an active outfit (or a hidden area) decides what the area shows.
                                          const auto& area = sim.wardrobeAreas[slot];
                                          if (area.hidden || (sim.wardrobeSet > 0 && !area.item.empty()))
@@ -1951,7 +2083,8 @@ int wmain(int argc, wchar_t** argv)
                                              throw xfb::MethodError("not_in_gameplay", "simulated: the game is in '" + sim.phase + "'");
                                          }
                                          const auto slot = request.item.empty() ? request.slot : slotOf(request.item);
-                                         const auto previous = sim.worn.count(slot) ? sim.worn[slot] : std::string();
+                                         const auto wornEntry = sim.worn.count(slot) ? sim.worn[slot] : std::string();
+                                         const auto previous = SimRecord(wornEntry);
                                          if (!request.item.empty() && !previous.empty() && previous != request.item)
                                          {
                                              throw xfb::MethodError("bad_params", "simulated: the slot holds '" + previous + "'");
@@ -1962,7 +2095,8 @@ int wmain(int argc, wchar_t** argv)
                                              sim.pendingItem.clear();
                                              sim.pendingTicks = 2;
                                          }
-                                         return json{{"slot", slot}, {"previous", previous}, {"was_empty", previous.empty()}};
+                                         return json{{"slot", slot}, {"previous", previous}, {"previous_id", wornEntry.empty() ? std::string() : SimItemId(wornEntry)},
+                                                     {"was_empty", previous.empty()}};
                                      };
                                      auto out = w::InventoryUnequip(request, ops);
                                      out["simulated"] = true;
@@ -1975,6 +2109,10 @@ int wmain(int argc, wchar_t** argv)
                                      ops.guard = [&dispatcher] { dispatcher.RequireWritesOpen(); };
                                      ops.holds = [] {
                                          auto held = sim060 ? sim060->Holds() : json::array();
+                                         for (const auto& hold : xfb::selftest::Sim070Holds())
+                                         {
+                                             held.push_back(hold);
+                                         }
                                          std::scoped_lock _(sim.mutex);
                                          if (sim.wardrobeSuspended)
                                          {
@@ -2010,7 +2148,27 @@ int wmain(int argc, wchar_t** argv)
                                              "game.save.status");
                                      };
                                      ops.save = [&request] {
+                                         // RB-94 (0.7): the holds again, in the save's own step, as the plugin reads them. The
+                                         // name "hold arrives" simulates another client putting something on V after prepare.
+                                         auto held = sim060 ? sim060->Holds() : json::array();
+                                         for (const auto& hold : xfb::selftest::Sim070Holds())
+                                         {
+                                             held.push_back(hold);
+                                         }
                                          std::scoped_lock _(sim.mutex);
+                                         if (sim.wardrobeSuspended)
+                                         {
+                                             held.push_back("outfit suspended by the bridge");
+                                         }
+                                         if (request.name == "hold arrives")
+                                         {
+                                             held.push_back("GameplayRestriction.ForceCrouch (simulated: started after prepare)");
+                                         }
+                                         if (!held.empty())
+                                         {
+                                             throw xfb::MethodError("bridge_effects_active", "simulated: something the bridge holds on V started while the save was being prepared (" +
+                                                                                                held.dump() + "); nothing was saved");
+                                         }
                                          if (sim.gameSaveLock || sim.saveLock)
                                          {
                                              throw xfb::MethodError("saving_locked", "simulated: saving is locked");
@@ -2020,7 +2178,12 @@ int wmain(int argc, wchar_t** argv)
                                          return json{{"requested", true}};
                                      };
                                      ops.relock = [] {
+                                         // As XFGame.Retake (RB-119): only a lock prepare released is taken back.
                                          std::scoped_lock _(sim.mutex);
+                                         if (!sim.relockAfterSave)
+                                         {
+                                             return;
+                                         }
                                          sim.gameSaveLock = true;
                                          sim.relockAfterSave = false;
                                          sim.unlockTicks = -1;
@@ -2108,9 +2271,10 @@ int wmain(int argc, wchar_t** argv)
         }
         return json{{"simulated", true}, {"codeware", sim.codeware}, {"pieces", pieces}, {"lights", lights}, {"pending", pending}};
     };
-    const auto showroomOps = [&queue, showroomRefusal, showroomStatus] {
+    const auto showroomOps = [&queue, &dispatcher, showroomRefusal, showroomStatus] {
         xfb::showroom::Ops ops;
-        ops.guard = [] {};
+        // 0.8.2: as the plugin's (RequireWritesOpen before each spawn), so a handover or a pause during a placement stops it.
+        ops.guard = [&dispatcher] { dispatcher.RequireWritesOpen(); };
         ops.spawn = [showroomRefusal](xfb::showroom::Kind aKind, const xfb::showroom::Placement& aItem) {
             std::scoped_lock _(sim.mutex);
             showroomRefusal();
@@ -2182,12 +2346,50 @@ int wmain(int argc, wchar_t** argv)
         };
         return ops;
     };
+    // 0.8.3: the plugin's own listing (core StagedShowrooms) of the folder --mod-dir names, standing in for archive/pc/mod.
+    dispatcher.Register({"showroom.staged", xfb::Access::Read, xfb::RunOn::BridgeThread, "The staged showroom builds (the --mod-dir folder).",
+                         [modDir](const xfb::MethodContext& aContext) {
+                             p::RequireOnly(aContext.params, {});
+                             return xfb::showroom::StagedShowrooms(modDir.empty() ? std::filesystem::path(L"Z:\xfb-no-mod-dir") : std::filesystem::path(modDir));
+                         }});
+    // 0.8.3: inventory.list (simulated: two jackets, one worn, and a cap).
+    dispatcher.Register({"inventory.list", xfb::Access::Read, xfb::RunOn::GameThread, "V's clothing (simulated).",
+                         [](const xfb::MethodContext& aContext) {
+                             const auto request = p::ParseInventoryList(aContext.params);
+                             const json all = json::array({json{{"item", "Items.Jacket_01_basic_01"}, {"slot", "OuterChest"}, {"id", "1111"}, {"name", "Jacket"}, {"worn", true}},
+                                                           json{{"item", "Items.Jacket_02_basic_01"}, {"slot", "OuterChest"}, {"id", "2222"}, {"name", "Other jacket"}, {"worn", false}},
+                                                           json{{"item", "Items.Cap_01"}, {"slot", "Head"}, {"id", "3333"}, {"name", "Cap"}, {"worn", false}}});
+                             json items = json::array();
+                             int count = 0;
+                             for (const auto& item : all)
+                             {
+                                 if (request.slot.empty() || item["slot"] == request.slot)
+                                 {
+                                     ++count;
+                                     if (static_cast<int>(items.size()) < request.limit)
+                                     {
+                                         items.push_back(item);
+                                     }
+                                 }
+                             }
+                             return json{{"ok", true}, {"simulated", true}, {"count", count}, {"listed", items.size()}, {"items", items}};
+                         }});
     dispatcher.Register({"showroom.anchor", xfb::Access::Read, xfb::RunOn::GameThread, "Where V and the camera are (simulated).",
                          [](const xfb::MethodContext& aContext) {
-                             p::RequireOnly(aContext.params, {});
+                             const auto archives = xfb::showroom::ParseAnchorArchives(aContext.params);
                              std::scoped_lock _(sim.mutex);
                              json out{{"simulated", true}, {"codeware", sim.codeware}, {"phase", sim.phase},
                                       {"v", {{"position", {100.0, 200.0, 10.0}}, {"forward", {0.0, 1.0, 0.0}}}}};
+                             if (!archives.empty())
+                             {
+                                 // 0.8.2: the simulated game loaded every showroom archive whose key starts with a digit.
+                                 json loaded = json::object();
+                                 for (const auto& name : archives)
+                                 {
+                                     loaded[name] = sim.codeware && name[13] >= '0' && name[13] <= '9';
+                                 }
+                                 out["archives"] = loaded;
+                             }
                              if (sim.codeware)
                              {
                                  out["codeware_version"] = "1.20.5";
@@ -2244,6 +2446,20 @@ int wmain(int argc, wchar_t** argv)
                                  }));
 
     // What the simulated save and inventory state looks like (self-test only).
+    // RB-125: another copy of a record V has, as a differently rolled copy in the game (entry "<item>#<copy>").
+    dispatcher.Register({"selftest.give", xfb::Access::Read, xfb::RunOn::BridgeThread, "Gives V another copy of an item (self-test only).",
+                         [](const xfb::MethodContext& aContext) {
+                             const auto item = aContext.params.value("item", std::string());
+                             const auto copy = aContext.params.value("copy", 2);
+                             if (item.empty() || copy < 2 || copy > 9)
+                             {
+                                 throw xfb::MethodError("bad_params", "selftest.give takes item and copy (2-9)");
+                             }
+                             std::scoped_lock _(sim.mutex);
+                             const auto entry = item + "#" + std::to_string(copy);
+                             sim.inventory.push_back(entry);
+                             return json{{"entry", entry}, {"id", SimItemId(entry)}};
+                         }});
     dispatcher.Register({"selftest.state", xfb::Access::Read, xfb::RunOn::BridgeThread, "Simulated clothing, saves and lights (self-test only).",
                          [](const xfb::MethodContext&) {
                              std::scoped_lock _(sim.mutex);
@@ -2332,6 +2548,7 @@ int wmain(int argc, wchar_t** argv)
             out["wardrobe_restored"] = snapshot;
             sim.wardrobeSnapshot = nullptr;
         }
+        xfb::selftest::Sim070RestoreAfterKill(out); // 0.7: a weather the bridge held
         sim.creatorOpenTicks = -1;
         sim.frozen = false;
         sim.hudHidden = false;
@@ -2394,8 +2611,33 @@ int wmain(int argc, wchar_t** argv)
             std::scoped_lock _(sim.mutex);
             sim.gameSaveLock = true;
         };
+        hooks.clearShowroom = [showroomOps](const std::string& aWhat) {
+            auto out = showroomOps().clear(aWhat);
+            out["what"] = aWhat;
+            return out;
+        };
         sim060 = std::make_unique<xfb::selftest::Sim060>(dispatcher, queue, config, std::move(hooks));
         sim060->Register();
+    }
+    {
+        // Bridge 0.7's methods against a simulated world (selftest/Sim070.cpp).
+        xfb::selftest::Sim070Hooks hooks070;
+        hooks070.phase = [] {
+            std::scoped_lock _(sim.mutex);
+            return sim.phase;
+        };
+        hooks070.markWrite = [] { restore.MarkWrite(); };
+        hooks070.takeSaveLock = [] {
+            std::scoped_lock _(sim.mutex);
+            sim.gameSaveLock = true;
+        };
+        hooks070.pendingAsk = [] {
+            xfb::PendingAsk ask;
+            return messages.Pending(ask) ? json{{"id", ask.id}, {"text", ask.text}, {"choices", ask.choices}} : json(nullptr);
+        };
+        hooks070.killed = [&bridge] { return bridge.GetDispatcher().IsKilled(); };
+        hooks070.weaponDrawn = [] { return sim060 && sim060->WeaponDrawn(); };
+        xfb::selftest::RegisterSim070(dispatcher, queue, config, std::move(hooks070));
     }
 
     if (!bridge.Start(error))
@@ -2422,6 +2664,7 @@ int wmain(int argc, wchar_t** argv)
             const bool due = std::chrono::steady_clock::now() - killedAt >= std::chrono::milliseconds(rearmAfterMs);
             if (pump)
             {
+                queue.DrainCleanup(4); // 0.8.2: put-back steps posted after the kill, before the restore (as the plugin)
                 restore.Tick(bridge.RestoreReady(), simulatedRestore, restoreFailed);
             }
             if (due && bridge.RearmRefusal().empty() && !restore.Pending())
@@ -2449,6 +2692,7 @@ int wmain(int argc, wchar_t** argv)
         if (pump)
         {
             queue.Drain(4); // the plugin does this once per engine tick
+            queue.DrainCleanup(4); // 0.8.2: and the kill switch's cleanup lane
             {
                 // Bridge 0.6: the simulated look-at and the behaviours, at tick rate (the plugin's TickBehaviours).
                 static auto last = std::chrono::steady_clock::now();
@@ -2510,6 +2754,7 @@ int wmain(int argc, wchar_t** argv)
                 else if (sim.loadTicks == 2)
                 {
                     simLayer.OnAttach();
+                    simLayer.OnEvent("puppet"); // 0.8.2: the press-any-key screen, until the player attaches
                 }
                 if (sim.loadTicks > 0 && --sim.loadTicks == 0)
                 {

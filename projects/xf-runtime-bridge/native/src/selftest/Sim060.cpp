@@ -138,6 +138,7 @@ struct Sim060::State
     std::vector<std::string> effects;
     // The player's own input (selftest.player {input}), seen by a glide's watch only while its movement hold is on (RB-81).
     std::string input;
+    bool watching = false; // 0.7: a look's input watch
     // A look-at in progress: the camera turns towards the point over the duration.
     bool looking = false;
     double lookFromYaw = 0, lookFromPitch = 0, lookToYaw = 0, lookToPitch = 0, lookT = 0, lookDuration = 1;
@@ -261,7 +262,7 @@ void Sim060::Register()
                                        }
                                        auto o = subject(npc.at, npc.yaw, request.occlusion);
                                        o["id"] = std::string("sim:") + npc.name;
-                                       o["name"] = npc.name;
+                                       o["record"] = std::string("Character.") + npc.name; // 0.7: the record, not a display name (the world-object rule)
                                        o["class"] = "NPCPuppet";
                                        o["distance"] = distance;
                                        o["dead"] = false;
@@ -334,17 +335,26 @@ void Sim060::Register()
 
     // The handover.
     m_dispatcher.Register({"bridge.handover", Access::Control, RunOn::BridgeThread, "Hands over or resumes (simulated).", [self](const MethodContext& aContext) {
-                               params::RequireOnly(aContext.params, {"on", "note"});
+                               params::RequireOnly(aContext.params, {"on", "note", "lights"});
                                const auto on = params::CheckBoolean(aContext.params, "on");
                                if (!on)
                                {
                                    params::CheckFail("'on' is required: true hands the session over to the player, false resumes it");
                                }
                                const auto note = params::CheckText(aContext.params, "note", 200).value_or("");
+                               const auto lights = params::CheckText(aContext.params, "lights", 16).value_or("");
+                               if (!lights.empty() && (lights != "clear" || !*on))
+                               {
+                                   params::CheckFail("'lights' takes only \"clear\", with on: true (the showroom's rigs cleared once the handover refuses writes)");
+                               }
                                const bool was = self->m_dispatcher.HandedOver();
                                if (*on)
                                {
                                    self->m_behaviours.StopAll("handed_over");
+                               }
+                               if (*on)
+                               {
+                                   self->m_playerStops.Stop();
                                }
                                self->m_dispatcher.SetHandover(*on, note);
                                json released = nullptr;
@@ -364,7 +374,15 @@ void Sim060::Register()
                                        },
                                        "bridge.handover.player_stop");
                                }
+                               // 0.8.2: as the plugin, the rigs go after the write gate closed, in this same request.
+                               json lightsCleared = nullptr;
+                               if (lights == "clear" && self->m_hooks.clearShowroom)
+                               {
+                                   RestoreScope restoring;
+                                   lightsCleared = self->m_hooks.clearShowroom("lights");
+                               }
                                return json{{"simulated", true}, {"handed_over", *on}, {"was", was}, {"behaviours_stopped", *on}, {"player_released", released},
+                                           {"lights_cleared", lightsCleared},
                                            {"undo", {{"method", "bridge.handover"}, {"params", {{"on", !*on}}}}}};
                            }});
 
@@ -384,7 +402,16 @@ void Sim060::Register()
     m_ops.player = [self, busyNow, holding] {
         std::scoped_lock _(self->m_state->mutex);
         return json{{"position", Arr(self->m_state->position)}, {"yaw", self->m_state->yaw}, {"busy", busyNow()},
-                    {"took_over", holding() ? self->m_state->input : std::string()}};
+                    {"took_over", holding() || self->m_state->watching ? self->m_state->input : std::string()}};
+    };
+    // 0.7: a look's input watch without a hold (as XFPlayer.WatchInput).
+    m_ops.watchInput = [self](bool aOn) {
+        std::scoped_lock _(self->m_state->mutex);
+        self->m_state->watching = aOn;
+        if (aOn)
+        {
+            self->m_state->input.clear();
+        }
     };
     // As XFPlayer.Step: the player's own input or a busy state refuses the step (RB-79, RB-81).
     m_ops.teleportPlayer = [self, busyNow, holding](const Vec3& aPosition, double aYaw) {
@@ -491,7 +518,7 @@ void Sim060::Register()
                                return json{{"simulated", true}, {"phase", phase}, {"position", Arr(s.position)}, {"yaw", s.yaw},
                                            {"camera", cameraJson(camera(), phase)}, {"psm", {{"locomotion", s.crouched ? 1 : 0}, {"locomotion_name", s.crouched ? "Crouch" : "Default"}, {"high_level", 2}, {"high_level_name", "SceneTier2"}}},
                                            {"in_combat", false}, {"in_vehicle", false}, {"in_scene", false}, {"in_dialogue", false}, {"busy", busyNow()},
-                                           {"look_at", {{"id", "sim:door"}, {"class", "Door"}, {"name", "Door"}, {"distance", 1.2}, {"interaction_target", true}}},
+                                           {"look_at", {{"id", "sim:door"}, {"class", "Door"}, {"distance", 1.2}}}, {"hud_prompt", {{"active", true}, {"title", "Door"}, {"choices", 1}}}, {"tier", "full"},
                                            {"bridge_effects", s.effects}, {"behaviours", self->m_behaviours.List()["behaviours"]}, {"perspective", "fpp"},
                                            {"weapon_drawn", s.weaponDrawn}, {"menu", s.menu}};
                            }});
@@ -507,8 +534,9 @@ void Sim060::Register()
     m_dispatcher.Register(marked("player.teleport", Access::WritePlayer, RunOn::BridgeThread, "Teleports V (simulated).", [self, busyNow](const MethodContext& aContext) {
         const auto request = player::ParseTeleport(aContext.params);
         pacer.Take();
-        return RunGameTask(
-            self->m_queue, std::chrono::milliseconds(1000),
+        // As the plugin: a changing step passes the write gate on the game thread (RB-122).
+        return self->m_dispatcher.RunWrite(
+            std::chrono::milliseconds(1000),
             [self, request, busyNow] {
                 std::scoped_lock _(self->m_state->mutex);
                 auto& s = *self->m_state;
@@ -552,7 +580,7 @@ void Sim060::Register()
                 }
                 return json{{"before", {{"position", Arr(before)}, {"yaw", yawBefore}}}, {"target", Arr(to)}, {"yaw", s.yaw}, {"snapped", snapped}, {"now", Arr(s.position)},
                             {"off_m", 0.0}, {"held", true},
-                            {"undo", {{"method", "player.teleport"}, {"params", {{"position", Arr(before)}, {"yaw", yawBefore}, {"ground", "exact"}}}}},
+                            {"undo", player::TeleportUndo(before, yawBefore, s.position)},
                             {"undo_note", "teleports V back to where she stood, facing the same way (loading the save undoes it too)"}};
             },
             "player.teleport");
@@ -561,6 +589,8 @@ void Sim060::Register()
         const auto request = player::ParseLook(aContext.params);
         json before;
         player::LookTarget target{};
+        // 0.8.2: as the plugin, a player.stop from here on ends the look at its next step.
+        const auto seen = self->m_playerStops.Current();
         RunGameTask(
             self->m_queue, std::chrono::milliseconds(1000),
             [&] {
@@ -570,6 +600,15 @@ void Sim060::Register()
                 const auto cam = camera();
                 before = {{"yaw", s.yaw}, {"pitch", s.pitch}};
                 target = player::LookTargetFor(request, cam.position, s.yaw, s.pitch);
+                return json();
+            },
+            "player.look.read");
+        w::WaitTicks(self->m_queue, 1, std::chrono::milliseconds(1000)); // the plugin's tick between its turn and its look-at
+        self->m_dispatcher.RunWrite(
+            std::chrono::milliseconds(1000),
+            [&] {
+                self->m_playerStops.Require(seen, "player.look");
+                std::scoped_lock _(self->m_state->mutex);
                 self->m_hooks.takeSaveLock();
                 lookAt(target.point, request.smooth || request.at ? request.duration : 0.05);
                 return json();
@@ -577,20 +616,22 @@ void Sim060::Register()
             "player.look");
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(static_cast<int>(request.duration * 1000.0) + 700);
         json reached;
+        bool stopped = false;
         for (;;)
         {
             w::WaitTicks(self->m_queue, 3, std::chrono::milliseconds(1000));
+            stopped = stopped || self->m_playerStops.StoppedSince(seen);
             {
                 std::scoped_lock _(self->m_state->mutex);
                 reached = {{"yaw", self->m_state->yaw}, {"pitch", self->m_state->pitch}};
-                if (!self->m_state->looking || std::chrono::steady_clock::now() > deadline)
+                if (stopped || !self->m_state->looking || std::chrono::steady_clock::now() > deadline)
                 {
                     break;
                 }
             }
         }
         const double ey = std::remainder(reached.value("yaw", 0.0) - target.yaw, 360.0), ep = reached.value("pitch", 0.0) - target.pitch;
-        return json{{"mode", request.smooth ? "smooth" : "instant"}, {"wanted", {{"yaw", target.yaw}, {"pitch", target.pitch}}}, {"reached", reached},
+        return json{{"mode", request.smooth ? "smooth" : "instant"}, {"wanted", {{"yaw", target.yaw}, {"pitch", target.pitch}}}, {"reached", reached}, {"stopped", stopped},
                     {"error_deg", {{"yaw", ey}, {"pitch", ep}}}, {"within_2_deg", std::abs(ey) <= 2.0 && std::abs(ep) <= 2.0},
                     {"undo", {{"method", "player.look"}, {"params", {{"yaw", before["yaw"]}, {"pitch", before["pitch"]}, {"mode", "instant"}}}}}};
     }));
@@ -602,6 +643,7 @@ void Sim060::Register()
     }));
     m_dispatcher.Register({"player.stop", Access::Control, RunOn::BridgeThread, "Stops every motion (simulated).", [self](const MethodContext& aContext) {
                                params::RequireOnly(aContext.params, {});
+                               self->m_playerStops.Stop();
                                self->m_behaviours.StopAll("player_stop");
                                return RunGameTask(
                                    self->m_queue, std::chrono::milliseconds(1000),
@@ -650,7 +692,7 @@ void Sim060::Register()
                                    s.crouched = false;
                                    s.effects.erase(std::remove(s.effects.begin(), s.effects.end(), crouch), s.effects.end());
                                }
-                               else if (request.name == "weapon.draw" || request.name == "weapon.slot")
+                               else if (request.name == "weapon.draw" || request.name == "weapon.slot" || request.name == "weapon.arms")
                                {
                                    s.weaponDrawn = true;
                                }
@@ -804,6 +846,12 @@ void Sim060::OnDetach()
     m_state->effects.clear();
     m_state->crouched = false;
     m_state->looking = false;
+}
+
+bool Sim060::WeaponDrawn()
+{
+    std::scoped_lock _(m_state->mutex);
+    return m_state->weaponDrawn;
 }
 
 json Sim060::Holds()

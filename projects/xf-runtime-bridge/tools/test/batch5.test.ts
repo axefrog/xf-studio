@@ -36,11 +36,16 @@ describe("ui.message and the session runner's echo", () => {
   test("a message shows (one clean line), at most four at once, and clear removes them", async () => {
     const shown = await api.run("ui.message", { text: "Open the\ncreator please", level: "ask", seconds: 30 });
     expect(shown.ok, JSON.stringify(shown)).toBe(true);
-    if (shown.ok) expect(shown.result).toMatchObject({ shown: true, text: "Open the creator please", undo: { method: "ui.message", params: { clear: true } } });
+    if (shown.ok) expect(shown.result).toMatchObject({ shown: true, text: "Open the creator please", undo: { method: "ui.message", params: { withdraw: (shown.result as { id: number }).id } } });
     for (let i = 1; i <= 4; i++) await api.run("ui.message", { text: `note ${i}` });
-    expect(await texts(api)).toEqual(["info:note 1", "info:note 2", "info:note 3", "info:note 4"]);
-    const cleared = await api.run("ui.message", { clear: true });
+    // 0.7: the unanswered question stays pinned; the oldest other line made room.
+    expect(await texts(api)).toEqual(["ask:Open the creator please", "info:note 2", "info:note 3", "info:note 4"]);
+    // RB-103: a capture's clear (keep_asks) keeps the question that still waits for its answer; 0.8.2 (session 9's B6): a
+    // plain clear takes it down too.
+    const cleared = await api.run("ui.message", { clear: true, keep_asks: true });
     expect(cleared.ok).toBe(true);
+    expect(await texts(api)).toEqual(["ask:Open the creator please"]);
+    await api.run("ui.message", { clear: true });
     expect(await texts(api)).toEqual([]);
     const refused = await api.run("ui.message", { text: "x", level: "shout" });
     expect(!refused.ok && refused.error.code).toBe("bad_input");

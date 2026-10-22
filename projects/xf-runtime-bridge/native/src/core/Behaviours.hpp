@@ -42,6 +42,13 @@ inline constexpr size_t kMaxBehaviours = 4;
 inline constexpr double kMaxSeconds = 600.0;
 // A glide's own cap (player-control design §4.3: a motion lasts at most 30 s).
 inline constexpr double kMaxGlideSeconds = 30.0;
+// 0.8 (session 8's D4): a look ends user_took_over when the camera turns this much further from its point than the
+// closest it came, after the first kLookDriftGraceS seconds (the game's look-at only ever turns the camera towards it).
+inline constexpr double kLookDriftDeg = 4.0;
+inline constexpr double kLookDriftGraceS = 0.25;
+// 0.8.2 (session 9: a 4 s look ran in 1.2 s): a look steers along its arc, a short look-at to the next place every
+// kLookStepS, so it takes its duration_s whatever pace the game's own look-at keeps.
+inline constexpr double kLookStepS = 0.1;
 
 // The game-side steps a behaviour may take. Each throws MethodError on a refusal (the behaviour stops with that code).
 struct Ops
@@ -62,6 +69,9 @@ struct Ops
     std::function<std::vector<Vec3>(const Vec3& aFrom, const Vec3& aTo)> path;
     // A movement restriction on V (the status effect GameplayRestriction.NoMovement) on or off.
     std::function<void(bool aOn)> holdMovement;
+    // 0.7 (session 7: a look wasn't broken by the player's mouse): watch the player's own input without holding V; player()
+    // then reports it as took_over. Optional (older hosts leave it empty).
+    std::function<void(bool aOn)> watchInput;
     // photo.subject's reading of V's face in photo mode (keep_framed v).
     std::function<json()> subject;
     // A photo-mode attribute (V's placement for keep_framed v): returns the value the game took.

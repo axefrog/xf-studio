@@ -92,6 +92,27 @@ public abstract class XFInventory {
     return type;
   }
 
+  // V's copy of this record whose identity (XFInventory.Hash) is `hash`, or an invalid ItemID (RB-125: an undo names the
+  // exact copy that was worn, not the first one of the record V has).
+  public static func FindExact(player: ref<PlayerPuppet>, tdbid: TweakDBID, hash: String) -> ItemID {
+    let none: ItemID;
+    if StrLen(hash) == 0 {
+      return none;
+    }
+    let items: array<wref<gameItemData>>;
+    if !GameInstance.GetTransactionSystem(GetGameInstance()).GetItemList(player, items) {
+      return none;
+    }
+    let i = 0;
+    while i < ArraySize(items) {
+      if IsDefined(items[i]) && ItemID.GetTDBID(items[i].GetID()) == tdbid && Equals(XFInventory.Hash(items[i].GetID()), hash) {
+        return items[i].GetID();
+      }
+      i += 1;
+    }
+    return none;
+  }
+
   // V's first inventory item made from this record, or an invalid ItemID.
   public static func FindItem(player: ref<PlayerPuppet>, tdbid: TweakDBID) -> ItemID {
     let items: array<wref<gameItemData>>;
@@ -171,8 +192,10 @@ public abstract class XFInventory {
     return "";
   }
 
-  // Step 1 of inventory.equip: checks, adds the item if asked, queues the equip request.
-  public static func Equip(cid: String, item: String, area: String, addIfMissing: Bool) -> String {
+  // Step 1 of inventory.equip: checks, adds the item if asked, queues the equip request. hash: the exact copy to equip
+  // (an undo's `id`, RB-125); "" for any copy of the record. The answer names the earlier item's copy (previous_id) so
+  // the undo can put that same copy back, and says whether a requested copy was found (exact).
+  public static func Equip(cid: String, item: String, area: String, hash: String, addIfMissing: Bool) -> String {
     let refusal = XFInventory.Refusal();
     if StrLen(refusal) > 0 {
       return refusal;
@@ -187,7 +210,11 @@ public abstract class XFInventory {
       return XFJson.Fail("bad_params", "'" + item + "' goes in the " + XFInventory.AreaName(itemArea) + " slot, not " + area);
     }
     let system = GameInstance.GetTransactionSystem(GetGameInstance());
-    let id = XFInventory.FindItem(player, tdbid);
+    let id = XFInventory.FindExact(player, tdbid, hash);
+    let exact = ItemID.IsValid(id);
+    if !exact {
+      id = XFInventory.FindItem(player, tdbid);
+    }
     let added = false;
     if !ItemID.IsValid(id) {
       if !addIfMissing {
@@ -217,11 +244,13 @@ public abstract class XFInventory {
     }
     XFBridgeLog.Info(cid, "inventory.equip " + item + " in " + XFInventory.AreaName(itemArea) + " (added=" + XFJson.Flag(added) + ", before '" + XFInventory.ItemName(previous) + "'); undo: equip the earlier item, or unequip, and remove an added item");
     // 0.5.2: an active wardrobe outfit (or a hidden area) decides what the area shows, whatever is equipped there.
-    return "{\"ok\":true,\"item\":" + XFJson.Str(item) + ",\"slot\":" + XFJson.Str(XFInventory.AreaName(itemArea)) + ",\"added\":" + XFJson.Flag(added) + ",\"already_equipped\":" + XFJson.Flag(already) + ",\"previous\":" + XFJson.Str(XFInventory.ItemName(previous)) + XFWardrobe.AreaNote(player, itemArea) + "}";
+    let exactField = StrLen(hash) > 0 ? ",\"exact\":" + XFJson.Flag(exact) : "";
+    return "{\"ok\":true,\"item\":" + XFJson.Str(item) + ",\"slot\":" + XFJson.Str(XFInventory.AreaName(itemArea)) + ",\"added\":" + XFJson.Flag(added) + ",\"already_equipped\":" + XFJson.Flag(already) + ",\"previous\":" + XFJson.Str(XFInventory.ItemName(previous)) + ",\"previous_id\":" + XFJson.Str(XFInventory.Hash(previous)) + ",\"id\":" + XFJson.Str(XFInventory.Hash(id)) + exactField + XFWardrobe.AreaNote(player, itemArea) + "}";
   }
 
-  // What a slot holds now (the second step reads it a few frames after the request).
-  public static func Slot(cid: String, area: String, item: String) -> String {
+  // What a slot holds now (the second step reads it a few frames after the request). hash: the exact copy the equip step
+  // chose (0.8.1, RB-125), so another copy of the same record doesn't count as it; "" for any copy.
+  public static func Slot(cid: String, area: String, item: String, hash: String) -> String {
     let player = XFInventory.Player();
     if !IsDefined(player) {
       return XFJson.Fail("not_in_gameplay", "V isn't in the world");
@@ -236,8 +265,8 @@ public abstract class XFInventory {
     let now = XFInventory.Equipped(player, type);
     // Whether the slot holds the item asked about, compared by record ID here rather than by debug name in
     // the plugin (RB-63).
-    let matches = StrLen(item) > 0 && ItemID.IsValid(now) && ItemID.GetTDBID(now) == TDBID.Create(item);
-    return "{\"ok\":true,\"slot\":" + XFJson.Str(XFInventory.AreaName(type)) + ",\"item\":" + XFJson.Str(XFInventory.ItemName(now)) + ",\"empty\":" + XFJson.Flag(!ItemID.IsValid(now)) + ",\"matches\":" + XFJson.Flag(matches) + "}";
+    let matches = StrLen(item) > 0 && ItemID.IsValid(now) && ItemID.GetTDBID(now) == TDBID.Create(item) && (StrLen(hash) == 0 || Equals(XFInventory.Hash(now), hash));
+    return "{\"ok\":true,\"slot\":" + XFJson.Str(XFInventory.AreaName(type)) + ",\"item\":" + XFJson.Str(XFInventory.ItemName(now)) + ",\"item_id\":" + XFJson.Str(XFInventory.Hash(now)) + ",\"empty\":" + XFJson.Flag(!ItemID.IsValid(now)) + ",\"matches\":" + XFJson.Flag(matches) + "}";
   }
 
   // Step 1 of inventory.unequip: the slot by name, or the slot the item's record uses.
@@ -270,7 +299,7 @@ public abstract class XFInventory {
       EquipmentSystem.GetInstance(player).QueueRequest(request);
     }
     XFBridgeLog.Info(cid, "inventory.unequip " + XFInventory.AreaName(type) + " (held '" + XFInventory.ItemName(before) + "'); undo: equip it again");
-    return "{\"ok\":true,\"slot\":" + XFJson.Str(XFInventory.AreaName(type)) + ",\"previous\":" + XFJson.Str(XFInventory.ItemName(before)) + ",\"was_empty\":" + XFJson.Flag(!ItemID.IsValid(before)) + "}";
+    return "{\"ok\":true,\"slot\":" + XFJson.Str(XFInventory.AreaName(type)) + ",\"previous\":" + XFJson.Str(XFInventory.ItemName(before)) + ",\"previous_id\":" + XFJson.Str(XFInventory.Hash(before)) + ",\"was_empty\":" + XFJson.Flag(!ItemID.IsValid(before)) + "}";
   }
 
   // Removes an item from V's inventory, only the copy the bridge itself added this session (its own ItemID,
@@ -302,6 +331,47 @@ public abstract class XFInventory {
     }
     XFBridgeLog.Info(cid, "inventory: removed the item the bridge added, '" + item + "': " + XFJson.Flag(removed));
     return "{\"ok\":true,\"removed\":" + XFJson.Flag(removed) + "}";
+  }
+
+  // inventory.list (0.8.3, read only; session 10's L1 and L4 had no way to name a jacket V owns): the clothing in V's own
+  // inventory (the transaction system's item list, as FindItem reads it), one entry per copy: its record (inventory_equip's
+  // item), clothing slot, exact identity (inventory_equip's id), its name in the game's language and whether V wears it now.
+  // slot "" lists every clothing slot. Nothing is changed.
+  public static func List(cid: String, slot: String, limit: Int32) -> String {
+    let player = XFInventory.Player();
+    if !IsDefined(player) || !player.IsAttached() {
+      return XFJson.Fail("unavailable", "V isn't in the world; load a save first");
+    }
+    let wanted = StrLen(slot) > 0 ? XFInventory.AreaByName(slot) : gamedataEquipmentArea.Invalid;
+    let items: array<wref<gameItemData>>;
+    if !GameInstance.GetTransactionSystem(GetGameInstance()).GetItemList(player, items) {
+      return XFJson.Fail("unavailable", "the game didn't list V's inventory");
+    }
+    let out = "";
+    let listed = 0;
+    let total = 0;
+    let i = 0;
+    while i < ArraySize(items) {
+      if IsDefined(items[i]) {
+        let id = items[i].GetID();
+        let tdbid = ItemID.GetTDBID(id);
+        let area = XFInventory.ItemArea(tdbid);
+        if NotEquals(area, gamedataEquipmentArea.Invalid) && (Equals(wanted, gamedataEquipmentArea.Invalid) || Equals(area, wanted)) {
+          total += 1;
+          if listed < limit {
+            let record = TweakDBInterface.GetItemRecord(tdbid);
+            let name = IsDefined(record) ? GetLocalizedTextByKey(record.DisplayName()) : "";
+            let worn = Equals(XFInventory.Hash(XFInventory.Equipped(player, area)), XFInventory.Hash(id));
+            out += (listed > 0 ? "," : "") + "{\"item\":" + XFJson.Str(XFInventory.ItemName(id)) + ",\"slot\":" + XFJson.Str(XFInventory.AreaName(area))
+              + ",\"id\":" + XFJson.Str(XFInventory.Hash(id)) + ",\"name\":" + XFJson.Str(name) + ",\"worn\":" + XFJson.Flag(worn) + "}";
+            listed += 1;
+          }
+        }
+      }
+      i += 1;
+    }
+    XFBridgeLog.Debug(cid, "inventory.list slot=" + slot + " count=" + IntToString(total) + " listed=" + IntToString(listed));
+    return "{\"ok\":true,\"count\":" + IntToString(total) + ",\"listed\":" + IntToString(listed) + ",\"items\":[" + out + "]}";
   }
 }
 
@@ -369,7 +439,8 @@ public abstract class XFGame {
   }
 
   // What the bridge holds on V that a save would keep (RB-83, game.save refuses while anything is listed): the status
-  // effects it applied (a glide's movement hold, a forced crouch) and an outfit it suspended with the story's request.
+  // effects it applied (a glide's movement hold, a forced crouch), an outfit it suspended with the story's request, and
+  // (RB-102) a weather it holds and cyberware it changed or added.
   public static func BridgeHolds(cid: String) -> String {
     let registry = XFBridgeRegistry.Get();
     if !IsDefined(registry) {
@@ -379,6 +450,14 @@ public abstract class XFGame {
     let out = StrMid(effects, 1, StrLen(effects) - 2);
     if registry.IsWardrobeSuspended() {
       out += (StrLen(out) > 0 ? "," : "") + "\"outfit suspended by the bridge\"";
+    }
+    let weather = XFWeather.HeldByBridge();
+    if weather {
+      out += (StrLen(out) > 0 ? "," : "") + "\"weather held by the bridge\"";
+    }
+    let cyberware = XFCyberware.Changed();
+    if cyberware {
+      out += (StrLen(out) > 0 ? "," : "") + "\"cyberware changed by the bridge\"";
     }
     return "{\"ok\":true,\"holds\":[" + out + "]}";
   }
@@ -421,32 +500,62 @@ public abstract class XFGame {
     }
   }
 
-  // The plugin's last step of every game.save that released the lock, whatever happened (RB-52): takes the
-  // bridge's save lock back now (nothing to do when the save's completion already did) and cancels the
-  // pending relock, so a save finishing later doesn't ask for it twice.
+  // The plugin's last step of every game.save with override_lock, whatever happened (RB-52): takes the
+  // bridge's save lock back now when SavePrepare released it and nothing has taken it back yet (the save's
+  // completion, Relock, the kill switch), and cancels the pending relock, so a save finishing later doesn't
+  // ask for it twice. RB-119 (0.8.1): the plugin also calls this after a prepare whose answer it lost, so it
+  // acts only on the relock flag SavePrepare set; with the flag clear (nothing released, or already retaken)
+  // it changes nothing and never adds a lock the bridge didn't hold.
   public static func Retake(cid: String) -> String {
     let registry = XFBridgeRegistry.Get();
     if !IsDefined(registry) {
       return XFJson.Fail("game_not_ready", "no game session yet");
     }
-    registry.SetRelockAfterSave(false);
-    XFBridgeActions.EnsureSaveLock(cid);
-    return "{\"ok\":true,\"save_lock_held\":" + XFJson.Flag(registry.IsSaveLockHeld()) + "}";
+    let owed = registry.RelockAfterSave();
+    if owed {
+      registry.SetRelockAfterSave(false);
+      XFBridgeActions.EnsureSaveLock(cid);
+    }
+    return "{\"ok\":true,\"retaken\":" + XFJson.Flag(owed) + ",\"save_lock_held\":" + XFJson.Flag(registry.IsSaveLockHeld()) + "}";
   }
 
   public static func LoadRefusal() -> String {
     let phase = XFBridgeActions.Phase();
-    if Equals(phase, "gameplay") || Equals(phase, "menu") || Equals(phase, "paused") {
+    // 0.8: the main menu too (its own Continue and Load paths).
+    if Equals(phase, "gameplay") || Equals(phase, "menu") || Equals(phase, "paused") || Equals(phase, "main_menu") {
       return "";
     }
-    return XFJson.Fail("not_in_gameplay", "a save is loaded from normal play or the pause menu; the game is in '" + phase + "' (leave photo mode or the appearance screen first)");
+    return XFJson.Fail("not_in_gameplay", "a save is loaded from normal play, the pause menu or the main menu; the game is in '" + phase + "' (leave photo mode or the appearance screen first)");
   }
 
-  // game.load latest: the game's quick-load path (the most recent save of this playthrough).
+  // 0.8: the main menu's controller while it is on screen, or null.
+  public static func MainMenu() -> wref<SingleplayerMenuGameController> {
+    let registry = XFBridgeRegistry.Get();
+    return IsDefined(registry) ? registry.MainMenu() : null;
+  }
+
+  public static func MainMenuMissing() -> String {
+    return XFJson.Fail("unavailable", "the main menu isn't ready yet (its list of choices hasn't appeared); try again in a moment");
+  }
+
+  // game.load latest: the game's quick-load path (the most recent save of this playthrough); 0.8: at the main menu, the
+  // menu's own Continue.
   public static func LoadLatest(cid: String) -> String {
     let refusal = XFGame.LoadRefusal();
     if StrLen(refusal) > 0 {
       return refusal;
+    }
+    if Equals(XFBridgeActions.Phase(), "main_menu") {
+      let menu = XFGame.MainMenu();
+      if !IsDefined(menu) {
+        return XFGame.MainMenuMissing();
+      }
+      let route = menu.XFBridgeContinue();
+      if Equals(route, "none") {
+        return XFJson.Fail("unavailable", "the game has no save to continue from");
+      }
+      XFBridgeLog.Warn(cid, "game.load: the main menu's Continue (" + route + ")");
+      return "{\"ok\":true,\"requested\":true,\"route\":\"main_menu_continue\",\"modded\":" + XFJson.Flag(Equals(route, "modded")) + "}";
     }
     let handler = XFGame.Handler();
     if !IsDefined(handler) || !handler.HasLastCheckpoint() {
@@ -469,6 +578,7 @@ public abstract class XFGame {
       return XFJson.Fail("unavailable", "the game's save handler isn't available");
     }
     registry.ClearSaves();
+    registry.ClearDetailsKnown();
     handler.RegisterToCallback(n"OnSavesForLoadReady", registry, n"OnXFBridgeSavesReady");
     handler.RequestSavesForLoad();
     return "{\"ok\":true,\"requested\":true}";
@@ -488,6 +598,68 @@ public abstract class XFGame {
       }
       out += XFJson.Str(saves[i]);
       i += 1;
+    }
+    return out + "]}";
+  }
+
+  // game.saves (0.7, read), step 1: asks the game for its save list and collects the metadata it sends for each save
+  // (OnSaveMetadataReady, the load menu's own callback). Unlike ListSaves it works in any phase with a live session: it
+  // loads nothing.
+  // 0.8 (session 8's H1): limit is how many of the newest saves' details to ask for (see XFBridgeRegistry.RequestDetail).
+  public static func SavesRequest(cid: String, limit: Int32) -> String {
+    let handler = XFGame.Handler();
+    let registry = XFBridgeRegistry.Get();
+    if !IsDefined(handler) || !IsDefined(registry) {
+      return XFJson.Fail("unavailable", "the game's save handler isn't available");
+    }
+    registry.ClearListed();
+    registry.DropDetails(handler);
+    registry.SetDetailsLimit(Max(1, Min(limit, 200)));
+    registry.StartMetadata();
+    handler.RegisterToCallback(n"OnSavesForLoadReady", registry, n"OnXFBridgeSavesListed");
+    handler.RegisterToCallback(n"OnSaveMetadataReady", registry, n"OnXFBridgeSaveMetadata");
+    handler.RequestSavesForLoad();
+    return "{\"ok\":true,\"requested\":true}";
+  }
+
+  // game.saves, step 2: the names and whatever metadata has arrived; `done` stops collecting (the plugin's last step,
+  // taken even when a read failed: RB-118). Its list is its own, never game.load's.
+  public static func SavesAnswer(cid: String, done: Bool) -> String {
+    let registry = XFBridgeRegistry.Get();
+    if !IsDefined(registry) {
+      return XFJson.Fail("game_not_ready", "no game session yet");
+    }
+    let names = registry.ListedSaves();
+    let metadata = registry.SaveMetadata();
+    let ready = registry.ListedReady();
+    let out = "{\"ok\":true,\"ready\":" + XFJson.Flag(ready) + ",\"names\":[";
+    let i = 0;
+    while i < ArraySize(names) {
+      if i > 0 {
+        out += ",";
+      }
+      out += XFJson.Str(names[i]);
+      i += 1;
+    }
+    out += "],\"metadata\":[";
+    i = 0;
+    while i < ArraySize(metadata) {
+      if i > 0 {
+        out += ",";
+      }
+      out += metadata[i];
+      i += 1;
+    }
+    if done {
+      registry.StopMetadata();
+      let handler = XFGame.Handler();
+      registry.DropDetails(handler);
+      if IsDefined(handler) {
+        handler.UnregisterFromCallback(n"OnSaveMetadataReady", registry, n"OnXFBridgeSaveMetadata");
+        if !ready {
+          handler.UnregisterFromCallback(n"OnSavesForLoadReady", registry, n"OnXFBridgeSavesListed");
+        }
+      }
     }
     return out + "]}";
   }
@@ -519,6 +691,23 @@ public abstract class XFGame {
     }
     if index < 0 {
       return XFJson.Fail("save_not_found", "the game's save list no longer has '" + name + "'; nothing was loaded");
+    }
+    // 0.8: at the main menu, the Load menu's own path, which needs to know whether the save was made with mods; its details
+    // are asked for once and the plugin tries again while they arrive (metadata_pending).
+    if Equals(XFBridgeActions.Phase(), "main_menu") {
+      let modded = registry.DetailsModded(index);
+      if modded < 0 {
+        registry.WatchDetails(handler);
+        registry.RequestDetail(handler, index);
+        return XFJson.Fail("metadata_pending", "the game hasn't sent the details of '" + name + "' yet; nothing was loaded");
+      }
+      let menu = XFGame.MainMenu();
+      if !IsDefined(menu) {
+        return XFGame.MainMenuMissing();
+      }
+      XFBridgeLog.Warn(cid, "game.load: the main menu loads '" + name + "' (position " + IntToString(index) + ", made with mods " + XFJson.Flag(modded == 1) + ")");
+      menu.XFBridgeLoad(index, modded == 1);
+      return "{\"ok\":true,\"requested\":true,\"route\":\"main_menu_load\",\"name\":" + XFJson.Str(name) + ",\"modded\":" + XFJson.Flag(modded == 1) + "}";
     }
     XFBridgeLog.Warn(cid, "game.load: loading '" + name + "' (position " + IntToString(index) + "); everything since it is discarded, the bridge's save lock with it");
     handler.LoadSavedGame(index);

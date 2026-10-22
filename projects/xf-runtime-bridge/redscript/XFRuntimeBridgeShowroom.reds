@@ -163,6 +163,18 @@ public abstract class XFShowroom {
     return XFShowroomText.Anchor(true, Codeware.Version());
   }
 
+  // 0.8.2: which showroom archives (comma-separated names without the extension) the game loaded from its mod folders
+  // (Codeware's ResourceDepot.ArchiveExists compares archive file names), so the tools find the staged build by itself.
+  public static func Archives(cid: String, names: String) -> String {
+    let depot = GameInstance.GetResourceDepot();
+    let out = "";
+    for name in StrSplit(names, ",") {
+      let loaded = IsDefined(depot) && depot.ArchiveExists(name + ".archive");
+      out += (StrLen(out) > 0 ? "," : "") + XFJson.Str(name) + ":" + XFJson.Flag(loaded);
+    }
+    return "{\"ok\":true,\"archives\":{" + out + "}}";
+  }
+
   public static func Spawn(cid: String, kind: String, template: ResRef, appearance: String, label: String, index: Int32, x: Float, y: Float, z: Float, yaw: Float) -> String {
     let refusal = XFShowroomText.Refusal();
     if StrLen(refusal) > 0 {
@@ -335,6 +347,10 @@ public abstract class XFShowroom {
 
   public static func Anchor(cid: String) -> String {
     return XFShowroomText.Anchor(false, "");
+  }
+
+  public static func Archives(cid: String, names: String) -> String {
+    return "{\"ok\":true,\"archives\":{}}";
   }
 
   public static func Spawn(cid: String, kind: String, template: ResRef, appearance: String, label: String, index: Int32, x: Float, y: Float, z: Float, yaw: Float) -> String {

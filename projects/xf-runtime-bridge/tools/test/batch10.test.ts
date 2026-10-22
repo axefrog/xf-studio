@@ -208,14 +208,15 @@ describe("0.6 the showroom on the camera ray, the scene report and pre-capture c
     synthetic?.close();
   });
 
-  test("with the camera as anchor the middle head's eyes sit on the view ray, and the game's projection puts them at the centre", async () => {
+  test("with the camera as anchor the middle head's eyes sit on the view ray, and photo mode's camera puts them at the centre", async () => {
     await phase(api, "photo_mode");
     const out = await ok(api, "showroom.spawn", { manifest: fixture, presets: ["Gloss A · as before"], distance_m: 2.5 });
     expect(out.height_from).toBe("camera_ray");
     const eyes = out.pieces[0].eyes;
     // The camera at (100, 198, 11.7) looks 10 degrees down: 2.5 m along it the eyes are 0.434 m below the camera's height.
     expect(near(eyes[1], 198 + 2.5 * Math.cos((10 * Math.PI) / 180), 1e-3) && near(eyes[2], 11.7 - 2.5 * Math.sin((10 * Math.PI) / 180), 1e-3)).toBe(true);
-    expect(out.pieces[0].eyes_on_screen).toMatchObject({ by: "game", in_frame: true });
+    // 0.8 (session 8's G3): in photo mode the photo camera's own pose and field of view, never the game's projection.
+    expect(out.pieces[0].eyes_on_screen).toMatchObject({ by: "model (photo mode's camera: its pose and field of view)", in_frame: true });
     expect(Math.abs(out.pieces[0].eyes_on_screen.x) < 1e-3 && Math.abs(out.pieces[0].eyes_on_screen.y) < 1e-3).toBe(true);
     const three = await ok(api, "showroom.spawn", { manifest: fixture, distance_m: 2.5, spacing_m: 0.5 });
     // The others keep the distance and the elevation angle: in frame, on a gentle curve through the centre (the camera is pitched).
@@ -229,12 +230,12 @@ describe("0.6 the showroom on the camera ray, the scene report and pre-capture c
     await ok(api, "showroom.spawn", { manifest: fixture, distance_m: 2.5, spacing_m: 0.5 });
     await ok(api, "showroom.light", { manifest: fixture, rig: "key" });
     const report = await ok(api, "scene.report", { manifest: fixture, focus: "piece:1" });
-    expect(report.camera).toMatchObject({ mode: "photo", fov: 30, projection: { by: "game", fov_axis: "vertical" } });
+    expect(report.camera).toMatchObject({ mode: "photo", fov: 30, projection: { by: "fov" } });
     expect(near(report.camera.pitch_deg, -10, 0.01)).toBe(true);
     const ids = report.subjects.map((s: Any) => s.id);
     expect(ids).toContain("v");
     expect(ids).toContain("piece:1");
-    const blocked = report.subjects.find((s: Any) => s.label === "Sim NPC B");
+    const blocked = report.subjects.find((s: Any) => s.label === "Character.Sim NPC B");
     expect(blocked.occluded).toBe(true);
     const rig = report.lights.each.filter((l: Any) => l.kind === "rig");
     expect(rig.length).toBeGreaterThan(0);

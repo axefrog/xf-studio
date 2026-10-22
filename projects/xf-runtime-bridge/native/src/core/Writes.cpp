@@ -449,6 +449,7 @@ json LightSet(const params::LightRequest& aRequest, const LightOps& aOps)
         }
         try
         {
+            RestoreScope restoring; // putting the selection back is never refused by the write gate (RB-122)
             aOps.set(params::key::kLightSelect, static_cast<float>(previous - 1));
             return LightName(previous) + " is selected again, as before";
         }
@@ -531,12 +532,48 @@ json LightSet(const params::LightRequest& aRequest, const LightOps& aOps)
                 {
                     placement["before_unknown"] = was["unknown"];
                 }
-                if (BeforeKnown(off) && off["before"].get<double>() < 0.5)
+                const bool wasOff = BeforeKnown(off) && off["before"].get<double>() < 0.5;
+                if (wasOff)
                 {
                     placeUndo["on"] = false;
                 }
-                aOps.settle();
-                aOps.set(params::key::kLightState, 1.0f);
+                // 0.8.2 (the re-check's fourth finding, and the review's): switching the light on here is the requested placement
+                // (it lands at the camera), so it passes the write gate like any change. The settle between the two switches is
+                // inside the same guard: whatever stops the placement after the switch-off (a pause, a handover, the kill
+                // switch, a settle that fails because the kill switch closed the queue), a light that was on is switched on
+                // again inside a RestoreScope and moved back to where it stood when that's known: its earlier state, never the
+                // placement. After the kill switch those steps go on the cleanup lane. A light that was off stays off.
+                try
+                {
+                    aOps.settle();
+                    aOps.set(params::key::kLightState, 1.0f);
+                }
+                catch (const std::exception&)
+                {
+                    if (!wasOff)
+                    {
+                        RestoreScope restoring;
+                        try
+                        {
+                            aOps.set(params::key::kLightState, 1.0f);
+                            if (was["position"].is_object() && aOps.place)
+                            {
+                                const auto& p = was["position"];
+                                params::LightPlacement back;
+                                back.kind = params::LightPlacement::Kind::World;
+                                back.world = {p.value("x", 0.0f), p.value("y", 0.0f), p.value("z", 0.0f)};
+                                aOps.place(aRequest.light, back);
+                                moved = false;
+                                placement["restored"] = true;
+                            }
+                        }
+                        catch (const std::exception&)
+                        {
+                            // The original failure is the answer; the message below says the light may have moved.
+                        }
+                    }
+                    throw;
+                }
                 aOps.settle();
                 readPosition(placement, "now", "now_unknown");
             }
@@ -654,6 +691,7 @@ json WithdrawCreatorOpen(const CreatorOpenOps& aOps)
 {
     try
     {
+        RestoreScope withdrawing; // a withdrawal is never refused by the write gate (RB-122)
         auto answer = aOps.cancel();
         return answer.is_object() ? answer : json::object();
     }
@@ -863,6 +901,7 @@ json PoseSet(const PoseSetOps& aOps)
         {
             try
             {
+                RestoreScope restoring; // never refused by the write gate (RB-122)
                 aOps.restoreCategory(category["before_category"].get<int32_t>());
                 what = "the pose category was put back";
             }
@@ -978,19 +1017,32 @@ bool RestoreOnce::Tick(bool aReady, const std::function<void()>& aRestore,
 namespace
 {
 // Reads the slot until aWanted says it's done, settling between reads. The last reading, or null.
-json PollSlot(const InventoryOps& aOps, const std::string& aSlot, const std::string& aItem, const std::function<bool(const json&)>& aWanted)
+json PollSlot(const InventoryOps& aOps, const std::string& aSlot, const std::string& aItem, const std::string& aId,
+              const std::function<bool(const json&)>& aWanted)
 {
     json last;
     for (int i = 0; i < kInventoryPolls; ++i)
     {
         aOps.settle();
-        last = aOps.slot(aSlot, aItem);
+        last = aOps.slot(aSlot, aItem, aId);
         if (aWanted(last))
         {
             break;
         }
     }
     return last;
+}
+
+// An inventory undo's parameters (RB-125): the record and slot, and the exact copy when the game named it (digits only,
+// as params::ParseInventoryEquip accepts them), so a second, differently rolled copy of the record is never put on instead.
+json ExactItemParams(const std::string& aItem, const std::string& aId, const std::string& aSlot)
+{
+    json params{{"item", aItem}, {"slot", aSlot}};
+    if (!aId.empty() && aId.size() <= 20 && aId.find_first_not_of("0123456789") == std::string::npos)
+    {
+        params["id"] = aId;
+    }
+    return params;
 }
 } // namespace
 
@@ -1007,7 +1059,9 @@ json InventoryEquip(const params::InventoryEquipRequest& aRequest, const Invento
     json out{{"item", aRequest.item}, {"slot", slot}, {"added", added}, {"previous", previous}};
     if (!equipped)
     {
-        const auto now = PollSlot(aOps, slot, aRequest.item, [](const json& aNow) { return aNow.value("matches", false); });
+        // RB-125: the exact copy the equip step chose, not any copy of the record.
+        const auto now = PollSlot(aOps, slot, aRequest.item, step.value("id", std::string()),
+                                  [](const json& aNow) { return aNow.value("matches", false); });
         equipped = now.value("matches", false);
         if (!equipped)
         {
@@ -1030,9 +1084,19 @@ json InventoryEquip(const params::InventoryEquipRequest& aRequest, const Invento
                                  ? "the item is equipped, but the " + slot + " area is hidden (an empty area of the active wardrobe outfit, or hidden headgear), so it doesn't draw; wardrobe.equip with item puts it into the outfit, or with area and show: equipped shows it"
                                  : "the item is equipped, but the active wardrobe outfit shows another item in the " + slot + " area; wardrobe.equip with item puts this one into the outfit, or clear: true takes the outfit off";
     }
+    // RB-125 (0.8.1): which copy of the record was asked for and found, and the earlier item's own copy for the undo.
+    if (const auto exact = step.find("exact"); exact != step.end() && exact->is_boolean())
+    {
+        out["exact"] = *exact;
+        if (!exact->get<bool>())
+        {
+            out["exact_note"] = "V no longer has the exact copy asked for (id " + aRequest.id + "), so another copy of the same item was equipped";
+        }
+    }
+    const auto previousId = step.value("previous_id", std::string());
     if (!previous.empty() && !alreadyWorn)
     {
-        out["undo"] = {{"method", "inventory.equip"}, {"params", {{"item", previous}, {"slot", slot}}}};
+        out["undo"] = {{"method", "inventory.equip"}, {"params", ExactItemParams(previous, previousId, slot)}};
         if (added)
         {
             out["undo_note"] = "then inventory.unequip with this item and remove_added: true takes the added item out of V's inventory";
@@ -1055,12 +1119,13 @@ json InventoryUnequip(const params::InventoryUnequipRequest& aRequest, const Inv
 {
     json out;
     std::string previous;
+    std::string previousId;
     std::string slot = aRequest.slot;
     bool worn = true;
     if (!aRequest.item.empty() && aRequest.removeAdded)
     {
         // An added item that isn't worn (another item was equipped over it) is only removed.
-        const auto now = aOps.slot(std::string(), aRequest.item);
+        const auto now = aOps.slot(std::string(), aRequest.item, std::string());
         slot = now.value("slot", slot);
         worn = now.value("matches", false);
     }
@@ -1069,10 +1134,11 @@ json InventoryUnequip(const params::InventoryUnequipRequest& aRequest, const Inv
         const auto step = aOps.unequip();
         slot = step.value("slot", slot);
         previous = step.value("previous", std::string());
+        previousId = step.value("previous_id", std::string());
         bool empty = step.value("was_empty", false);
         if (!empty)
         {
-            const auto now = PollSlot(aOps, slot, std::string(), [](const json& aNow) { return aNow.value("empty", false); });
+            const auto now = PollSlot(aOps, slot, std::string(), std::string(), [](const json& aNow) { return aNow.value("empty", false); });
             empty = now.value("empty", false);
             if (!empty)
             {
@@ -1096,7 +1162,7 @@ json InventoryUnequip(const params::InventoryUnequipRequest& aRequest, const Inv
     }
     if (!previous.empty() && !removed)
     {
-        out["undo"] = {{"method", "inventory.equip"}, {"params", {{"item", previous}, {"slot", slot}}}};
+        out["undo"] = {{"method", "inventory.equip"}, {"params", ExactItemParams(previous, previousId, slot)}};
     }
     else
     {
@@ -1152,12 +1218,14 @@ public:
     RelockOnExit(const SaveOps& aOps, bool aArmed) : m_ops(aOps), m_armed(aArmed) {}
     RelockOnExit(const RelockOnExit&) = delete;
     RelockOnExit& operator=(const RelockOnExit&) = delete;
+    void Disarm() { m_armed = false; }
     ~RelockOnExit()
     {
         if (m_armed && m_ops.relock)
         {
             try
             {
+                RestoreScope restoring; // the lock goes back whatever the write gate says (RB-119, RB-122)
                 m_ops.relock();
             }
             catch (...)
@@ -1191,15 +1259,24 @@ json GameSave(const params::GameSaveRequest& aRequest, const SaveOps& aOps)
             {
                 names += (names.empty() ? "" : ", ") + (item.is_string() ? item.get<std::string>() : item.dump());
             }
-            throw MethodError("bridge_effects_active", "the bridge still holds something on V that a save would keep (" + names +
+            throw MethodError("bridge_effects_active", "the bridge still holds something that a save would keep (" + names +
                                                            "); nothing was saved. player_stop lifts the effects and stops behaviours "
-                                                           "(wardrobe_equip {resume: true} puts a suspended outfit back), then save again");
+                                                           "(wardrobe_equip {resume: true} puts a suspended outfit back; the weather's and "
+                                                           "cyberware's undos put those back), then save again");
         }
     }
+    // RB-119 (0.8.1): only override_lock can release the bridge's lock, so with it the relock is owned before prepare runs.
+    // A prepare whose answer is lost (a game-thread timeout after it started, the kill switch closing the queue) may still
+    // have released the lock; the relock then goes on the queue behind it and takes the lock back only if the release
+    // happened (XFGame.Retake checks the script's own relock flag). A prepare that answered "nothing released" disarms it.
+    RelockOnExit relock(aOps, aRequest.overrideLock);
     const auto prepared = aOps.prepare();
     const bool released = prepared.value("lock_released", false);
+    if (!released)
+    {
+        relock.Disarm();
+    }
     // From here on, every way out of this function takes the released lock back.
-    RelockOnExit relock(aOps, released);
     if (released)
     {
         const auto deadline = Now(aOps.now) + std::chrono::milliseconds(kSaveUnlockWaitMs);
@@ -1346,8 +1423,30 @@ json GameLoad(const params::GameLoadRequest& aRequest, const LoadOps& aOps)
         {
             aOps.guard();
         }
-        // The load step looks this exact name up in the game's list again and loads that position.
-        out = aOps.load(saves[static_cast<size_t>(index)]);
+        // The load step looks this exact name up in the game's list again and loads that position. 0.8: from the main menu it
+        // first needs the save's details (whether it was made with mods), which the game sends a moment after they are
+        // asked for; the step answers metadata_pending until then and is tried again for up to kSaveDetailsWaitMs.
+        const auto detailsDeadline = Now(aOps.now) + std::chrono::milliseconds(kSaveDetailsWaitMs);
+        while (true)
+        {
+            try
+            {
+                out = aOps.load(saves[static_cast<size_t>(index)]);
+                break;
+            }
+            catch (const MethodError& e)
+            {
+                if (e.code != "metadata_pending")
+                {
+                    throw;
+                }
+                if (Now(aOps.now) >= detailsDeadline)
+                {
+                    throw MethodError("timeout", "the game didn't send the details of '" + aRequest.name + "' in time; nothing was loaded");
+                }
+                aOps.sleep(std::chrono::milliseconds(150));
+            }
+        }
     }
     out["undo"] = nullptr;
     out["undo_note"] = "loading can't be undone: everything since that save was discarded, the bridge's save lock with it";
@@ -1591,6 +1690,8 @@ json StatusWhileLoading(const std::string& aPhase, const json& aLayer)
     return json{{"phase", aPhase},
                 {"answered_by", "plugin"},
                 {"script_layer", aLayer},
+                // 0.8.2: the loaded world is in and the game waits for a key (the press-any-key screen) [hypothesis].
+                {"waiting_for_input", aLayer.value("waiting_for_input", false)},
                 {"player_present", false},
                 {"photo_mode_active", false},
                 {"photo_mode_can_open", false},

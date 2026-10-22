@@ -9,7 +9,8 @@
  *   3. The verified archive unbundled; its plate mesh and textures kept (the selector, `.app` and morph target are not).
  *   4. The showroom entity, its `.app`, and the light rigs (`resources.ts`) turned into resources by WolvenKit.
  *   5. One archive packed from exactly that tree, checked by the showroom's own verifier (`verify.ts`, which imports nothing
- *      from here), then promoted with an `xfs/showroom-package-1` manifest. Never installed.
+ *      from here), then promoted with an `xfs/showroom-package-1` manifest, written both at the build's root and beside the
+ *      archive (`xfs_showroom_<key>.showroom.json`), so the staged mod describes itself to the runtime bridge. Never installed.
  *
  * File and process mechanics come from the caller (`tools`, `verifierTools`), as for the export host.
  */
@@ -63,6 +64,8 @@ export type ShowroomManifest = {
   readonly modName: string;
   readonly builderVersion: string;
   readonly archive: string;
+  /** Builder 2: where the mod carries this manifest itself (beside the archive), for the runtime bridge's discovery. */
+  readonly shippedManifest: string;
   readonly collectionId: string;
   readonly collectionName: string;
   readonly collectionSha256: string;
@@ -223,9 +226,14 @@ export async function buildShowroom(options: ShowroomBuildOptions): Promise<{ ma
     eyeMakeup: { archiveSha256: eyeArchiveSha, manifestSha256: sha256(eyeManifestText), verifiedUnpackedFiles: eyeManifest.verifiedUnpackedFiles,
       experimental: feature0.experimental ?? [], omissions: feature0.omissions ?? [], warnings: feature0.warnings ?? [] },
     files: [{ path: `archive/pc/mod/${paths.archive}.archive`, sha256: archiveSha, bytes: statSync(archive).size }],
+    shippedManifest: `archive/pc/mod/${paths.archive}.showroom.json`,
     verification, installed: false, gameRenderingVerified: false,
   };
   writeFileSync(join(stage, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n", "utf8");
+  // Builder 2 (runtime bridge 0.8.3): the same manifest beside the archive, so the mod a coordinator stages describes
+  // itself; the bridge reads it through the game's own archive/pc/mod folder (showroom.staged). The game loads only
+  // .archive files there, and no .archive.xl names this one.
+  writeFileSync(join(target, `${paths.archive}.showroom.json`), JSON.stringify(manifest, null, 2) + "\n", "utf8");
   try { renameSync(stage, final); } finally { if (existsSync(stage)) rmSync(stage, { recursive: true, force: true }); }
   log(`Promoted ${final}`);
   return { manifest, package: final };

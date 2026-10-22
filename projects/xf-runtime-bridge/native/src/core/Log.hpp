@@ -13,6 +13,8 @@
 #include <string>
 #include <string_view>
 
+#include "core/LayoutGuard.hpp"
+
 namespace xfb
 {
 enum class Level : uint8_t

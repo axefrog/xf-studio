@@ -32,6 +32,7 @@
 #include "plugin/GameHandlers.hpp"
 #include "plugin/LivePoseMemory.hpp"
 #include "plugin/Natives.hpp"
+#include "plugin/Overlay.hpp"
 #include "plugin/Plugin.hpp"
 #include "plugin/ScriptCall.hpp"
 
@@ -47,6 +48,32 @@ void RecordRearm(State& aState, bool aOk, const std::string& aMessage)
 {
     std::scoped_lock _(aState.rearmMutex);
     aState.lastRearm = nlohmann::json{{"ok", aOk}, {"message", aMessage}, {"at_tick", aState.runningTicks.load()}};
+}
+
+// 0.8.3: whether the game's own window is the one in front (the kill key reads the keyboard only then).
+bool GameWindowInFront()
+{
+    const auto window = GetForegroundWindow();
+    DWORD pid = 0;
+    return window && GetWindowThreadProcessId(window, &pid) != 0 && pid == GetCurrentProcessId();
+}
+
+// 0.8.3: the bridge's own kill key ([ui] kill_key, core/KillKey.hpp), read on the game thread once a tick while the bridge
+// listens, the game's window is in front and CET's overlay is closed. Only reads the keyboard; sends nothing.
+void PollKillKey(State& aState)
+{
+    const auto& chord = aState.config.killKey;
+    // 0.8.3 (the review): armed only while the bridge runs, the game's window is in front and CET's overlay is closed; the watch
+    // needs the key released after it is armed again, and the window and the overlay are checked again right before the kill.
+    const auto armedNow = [&aState] {
+        return aState.bridge && !aState.bridge->GetDispatcher().IsKilled() && GameWindowInFront() && !aState.cetOverlayOpen.load();
+    };
+    const auto down = [](int aVk) { return (GetAsyncKeyState(aVk) & 0x8000) != 0; };
+    if (aState.killKeyWatch.Poll(chord, chord.enabled && armedNow(), down, armedNow))
+    {
+        log::Warn("bridge.kill_key", "key=" + chord.label + " (the bridge's own kill key)");
+        aState.bridge->Kill("kill_key");
+    }
 }
 
 // Reconnect after the kill switch (XFBridge_Rearm), on the game thread between queue drains. Waits (a few
@@ -197,6 +224,12 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
                 log::Info("game.save_relock_dropped", "reason=session_detached (a load discards the bridge's changes)", "save-relock");
             }
         }
+        // 0.8.2: put-back steps a write posted after the kill switch closed the queue (GameThreadQueue::PostCleanup), before
+        // the kill switch's restore and only while the scripts can be called (they wait through a load).
+        if (scriptsReady)
+        {
+            state.queue.DrainCleanup(kMaxTasksPerTick);
+        }
         // Behaviours (0.6) at tick rate, before the kill switch's restore so their stop steps come first.
         {
             static auto last = std::chrono::steady_clock::now();
@@ -232,6 +265,55 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
             }
         }
         HandleRearm(state);
+        PollKillKey(state);
+        // 0.8.2: the status surface for this tick (one at a time: core/InkUi.hpp ChooseStatusSurface). 0.8.3: none while no
+        // game session is live (a loading screen, the press-any-key screen after a load).
+        const auto surface = inkui::ChooseStatusSurface({state.InkVisible(), state.overlayHost.CanShowPanel(), scriptsReady});
+        state.statusSurface.store(static_cast<int>(surface));
+        // 0.7: the overlay host's panel data (the three-slot hand-off to the render thread) and its switches.
+        if (state.overlayHost.Enabled())
+        {
+            xfb::overlay::PanelData panel;
+            panel.tick = tick;
+            panel.scriptsLive = scriptsReady;
+            bool killed = false;
+            if (state.bridge)
+            {
+                auto& dispatcher = state.bridge->GetDispatcher();
+                killed = dispatcher.IsKilled();
+                panel.requests = dispatcher.RequestCount();
+            }
+            // 0.8 (the UI review): the status line every surface shows, made in one place.
+            const auto status = inkui::Summarize(BridgeViewNow());
+            panel.tone = status.tone;
+            panel.bridgeStatus = status.text;
+            panel.diagnostics = state.config.overlayDiagnostics;
+            panel.show = surface == inkui::StatusSurface::XfBox;
+            if (panel.show && !killed)
+            {
+                // 0.8.2: as the status surface, the coordinator's lines and the question with its keys (the ink panel's).
+                for (auto& [level, text] : state.messages.Lines())
+                {
+                    panel.lines.emplace_back(level, text);
+                }
+                PendingAsk ask;
+                AnsweredAsk answered;
+                if (state.messages.Pending(ask))
+                {
+                    panel.pendingAsk = ask.text;
+                    // 0.8.2 (the review): the keys only while they answer this question (the ink panel holds it with its keys:
+                    // not when it is switched off, nor without Codeware); else where to answer.
+                    panel.askHint = inkui::AnswerHint(ask.choices, state.config.answerKeys, state.InkKeysAsk() == ask.id);
+                }
+                else if (state.messages.Answered(answered))
+                {
+                    panel.askHint = "Answered: " + answered.label;
+                }
+            }
+            state.overlayHost.SetKilled(killed);
+            state.overlayHost.SetCetOpen(state.cetOverlayOpen.load());
+            xfb::plugin::overlay::Publish(panel);
+        }
         // A client dropped for idleness can't be driving photo mode any more: give the cursor back
         // (RB-34). Only after a write, since only a write hides it. Between sessions there is no cursor flag to
         // release (the registry holding it goes with the session).
@@ -337,7 +419,7 @@ std::string SemVerText(const RED4ext::v1::SemVer* aVersion)
 void StartBridge(State& aState)
 {
     std::string error;
-    aState.bridge = std::make_unique<Bridge>(aState.config, aState.session, aState.queue);
+    aState.bridge = Bridge::Create(aState.config, aState.session, aState.queue);
     RegisterMethods(aState.bridge->GetDispatcher());
     if (aState.bridge->Start(error))
     {
@@ -402,6 +484,9 @@ bool Load(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk)
     // Every game-thread method and step waits for a live scripted session, checked right before it runs (RB-76).
     SetGameGate([](const std::string& aWhat) { Get().scriptLayer.Require(aWhat); });
     live::ResolveAddresses(); // the live-pose commands' own engine addresses (refused for the session if missing)
+    // 0.7: the XF overlay host (off unless [overlay] enabled; its hooks attach only then, and never detach at run time).
+    state.overlayHost.Configure(state.config.overlayEnabled, xfb::overlay::ThemeFromName(state.config.overlayTheme), state.config.overlayScalePercent);
+    xfb::plugin::overlay::Install(aHandle, aSdk, state.overlayHost);
 
     RegisterStates(aHandle, aSdk);
 
@@ -437,6 +522,8 @@ bool Load(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk)
 void Unload()
 {
     auto& state = Get();
+    // RB-107: the overlay's detours stay attached until RED4ext detaches them at exit; from here they only pass through.
+    state.overlayHost.SetPassThrough(true);
     log::Info("plugin.unload", "requests_served=" +
                                    std::to_string(state.bridge ? state.bridge->GetDispatcher().RequestCount() : 0));
     state.queue.Close();

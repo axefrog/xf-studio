@@ -6,16 +6,17 @@
 import { captureWindow, CaptureError, type CaptureRecord } from "../capture/capture.ts";
 import type { CommandContext, CommandResult } from "../api/catalogue.ts";
 import {
-  choosePieces, eyesOf, facingOf, PEDESTAL_BELOW_M, planError, planLayout, planOnRay, readShowroom, spill, spacingFor, toWorld, yawFacing,
-  type Anchor, type Placement, type RigPlacement, type RigProfile, type Showroom, type Vec3,
+  choosePieces, chooseStagedShowroom, eyesOf, facingOf, PEDESTAL_BELOW_M, planError, planLayout, planOnRay, readShowroom, resolveStaged, showroomBuilds, spill, spacingFor, toWorld, yawFacing,
+  type Anchor, type Placement, type RigPlacement, type RigProfile, type Showroom, type StagedArchive, type Vec3,
 } from "./plan.ts";
-import { calibrate, modelFromFov, poseOf, project, type Calibration, type CameraModel, type CameraPose } from "../scene/camera.ts";
+import { modelForRead, modelFromFov, poseOf, project, type Calibration, type CameraModel, type CameraPose } from "../scene/camera.ts";
 import { frameOf } from "../scene/report.ts";
+import { withOverlayCleared } from "../api/catalogue060.ts";
 
 type Json = Record<string, any>;
 
 async function call(context: CommandContext, method: string, params: Record<string, unknown>, timeoutMs?: number): Promise<Json> {
-  const response = await context.api.callBridge(method, params, context.cid, timeoutMs);
+  const response = await context.api.callBridge(method, params, context.cid, timeoutMs, context.signal);
   if (!response.ok) throw Object.assign(new Error(response.error.message), { plain: response.error });
   return response.result as Json;
 }
@@ -34,11 +35,72 @@ async function anchorOf(context: CommandContext, wanted: string | undefined): Pr
   return { anchor: { origin: source.position, forward: source.forward, ground: v.position[2] }, from, raw };
 }
 
-const manifestsOf = (input: Json): Showroom[] => {
+/** 0.8.2 (the review): which archives the game loaded, asked of showroom.anchor 16 at a time (its limit) and combined. */
+export async function loadedArchives(context: CommandContext, archives: readonly string[]): Promise<Record<string, boolean>> {
+  const loaded: Record<string, boolean> = {};
+  for (let i = 0; i < archives.length; i += 16) {
+    const raw = await call(context, "showroom.anchor", { archives: archives.slice(i, i + 16) });
+    Object.assign(loaded, (raw.archives as Record<string, boolean> | undefined) ?? {});
+  }
+  return loaded;
+}
+
+/**
+ * 0.8.3: the staged showroom archives as the game itself sees them (the bridge's showroom.staged: its archive/pc/mod, which is
+ * MO2's virtual folder when MO2 launched the game), or null from a bridge that doesn't know the method (before 0.8.3).
+ */
+export async function stagedArchives(context: CommandContext): Promise<StagedArchive[] | null> {
+  const response = await context.api.callBridge("showroom.staged", {}, context.cid, undefined, context.signal);
+  if (!response.ok) {
+    if (response.error.code === "unknown_method") return null;
+    throw Object.assign(new Error(response.error.message), { plain: response.error });
+  }
+  return ((response.result as Json).archives as StagedArchive[] | undefined) ?? [];
+}
+
+/**
+ * The showroom builds to use: the manifests given, or the staged builds found by themselves. 0.8.3 (session 10's G1: the
+ * staged mods were found by no one, because the tools looked only in their own checkout's dist): the game says which
+ * showroom archives it has (showroom.staged), and each is resolved to its manifest, the one a self-describing build ships
+ * inside the mod, else this machine's build with the same bytes (plan.ts resolveStaged, which also looks in the primary
+ * checkout's dist). Every resolved build is used, so a preset is found in whichever holds it. An older bridge falls back to
+ * 0.8.2's route (the newest local build whose archive the game loaded). found says which, for the answer.
+ */
+async function manifestsOf(input: Json, context: CommandContext): Promise<{ showrooms: Showroom[]; found?: Json }> {
   const paths = [...(input.manifest ? [input.manifest as string] : []), ...((input.manifests as string[] | undefined) ?? [])];
-  if (!paths.length) throw planError("bad_input", "Give manifest: the showroom build's folder or its manifest.json (from tools/build_showroom_package.ts).");
-  return paths.map(readShowroom);
-};
+  if (paths.length) return { showrooms: paths.map(readShowroom) };
+  const staged = await stagedArchives(context);
+  if (staged) {
+    if (!staged.length) {
+      throw planError(
+        "showroom_not_staged",
+        "The game has no XF Finish Showroom archive in its archive/pc/mod folder. Stage one (in MO2, enable an XF Finish Showroom mod in this profile) and restart the game, or give manifest.",
+      );
+    }
+    const { resolved, unresolved } = resolveStaged(staged, showroomBuilds());
+    if (!resolved.length) {
+      throw planError(
+        "showroom_manifest_missing",
+        `The game has ${staged.map((s) => s.archive).join(", ")} staged, but no manifest for ${staged.length > 1 ? "them" : "it"}: ${unresolved.map((u) => `${u.archive}: ${u.why}`).join("; ")}. Rebuild XF Finish Showroom (projects/xf-studio/authoring/tools/build_showroom_package.ts, which ships its manifest inside the mod since 0.8.3) and restage it, or give manifest.`,
+      );
+    }
+    return {
+      showrooms: resolved.map((r) => r.showroom),
+      found: {
+        how: "the showroom archives the game itself sees in archive/pc/mod (showroom.staged), each with its manifest",
+        builds: resolved.map((r) => ({ archive: r.archive, manifest: r.by === "shipped_manifest" ? "shipped in the staged mod" : r.manifest, by: r.by })),
+        ...(unresolved.length ? { unresolved } : {}),
+      },
+    };
+  }
+  const builds = showroomBuilds();
+  const loaded = await loadedArchives(context, [...new Set(builds.map((b) => b.archive))]);
+  const chosen = chooseStagedShowroom(builds, loaded);
+  return {
+    showrooms: [readShowroom(chosen.manifest)],
+    found: { manifest: chosen.manifest, archive: chosen.archive, how: "the newest build on this machine whose archive the game loaded", ...(chosen.also_staged.length ? { also_staged: chosen.also_staged } : {}) },
+  };
+}
 
 /**
  * showroom.spawn: the chosen presets' heads in a row or an arc in front of V or the camera. Distances run from the camera
@@ -49,7 +111,7 @@ const manifestsOf = (input: Json): Showroom[] => {
  * with V as anchor the heads stand at their natural height.
  */
 export async function runShowroomSpawn(input: Json, context: CommandContext): Promise<CommandResult> {
-  const showrooms = manifestsOf(input);
+  const { showrooms, found } = await manifestsOf(input, context);
   const pieces = choosePieces(showrooms, input.presets as string[] | undefined);
   const { anchor, from, raw } = await anchorOf(context, input.anchor as string | undefined);
   const layout = (input.layout as "row" | "arc" | undefined) ?? "arc";
@@ -74,6 +136,11 @@ export async function runShowroomSpawn(input: Json, context: CommandContext): Pr
     placements = planLayout(anchor, pieces.length, layout, spacing, distance, lateral, { eyes, height, anchorEye });
     heightFrom = input.height_m !== undefined ? "given" : from === "camera" ? "camera" : "natural";
   }
+  // 0.7 (session 7: a head spawned half inside a wall and a bench): each head's eyes are probed for free space (level rays
+  // CLEARANCE_M long) and a clear sight line from the anchor; a blocked head steps back towards the anchor, then sideways,
+  // until a place is clear, and the answer says where it moved and why.
+  const space: SpaceReport[] = [];
+  const adjusted = input.avoid_walls === false ? [] : await findFreeSpace(context, placements, from === "camera" ? anchor.origin : [anchor.origin[0], anchor.origin[1], anchor.ground + eyes[2]], anchor.forward, space);
   const raise = Math.round((height - eyes[2]) * 1000) / 1000;
   const notes: string[] = [];
   if (raise > PEDESTAL_BELOW_M) notes.push(`The heads stand ${raise} m above their natural height; the pedestals reach only ${PEDESTAL_BELOW_M} m down, so they end in the air.`);
@@ -82,15 +149,104 @@ export async function runShowroomSpawn(input: Json, context: CommandContext): Pr
     x: p.position[0], y: p.position[1], z: p.position[2], yaw: p.yaw }));
   const placed = await call(context, "showroom.place", { items, replace: input.replace !== false }, 30000);
   const projected = pose ? await projectEyes(context, pose, placements.map((p) => p.eyes!)) : null;
+  for (const a of adjusted) notes.push(a.note);
   if (projected?.some((p) => !p.in_frame)) notes.push(`Head ${projected.filter((p) => !p.in_frame).map((p) => p.index).join(", ")} is outside the frame (projected eyes); fewer heads, a smaller spacing_m or a larger distance_m brings it in.`);
-  return { value: { anchor: from, layout, spacing_m: spacing, distance_m: distance, lateral_m: lateral, height_m: height,
+  return { value: { ...(found ? { showroom_found: found } : {}), anchor: from, layout, spacing_m: spacing, distance_m: distance, lateral_m: lateral, height_m: height,
     height_from: heightFrom, raised_m: raise,
     measured_to: "each head's eyes, from the camera (or V's eyes)",
     pieces: items.map((item, i) => ({ index: item.index, label: item.label, appearance: item.appearance, position: [item.x, item.y, item.z], eyes: placements[i]!.eyes, yaw: item.yaw,
       ...(projected ? { eyes_on_screen: projected[i] } : {}) })),
     ...(projected ? { projection: { by: projected[0]?.by, units: "window heights from the window's centre, x right, y down; in frame while |y| <= 0.5 and |x| <= aspect/2" } } : {}),
+    ...(adjusted.length ? { moved_for_space: adjusted.map(({ note: _n, ...rest }) => rest) } : {}),
+    // 0.8 (session 8's G6: moved_for_space was absent, read as null, when the head stood clear): whether the free space was
+    // checked at all, and for each head its clearance and whether it moved.
+    space_check: input.avoid_walls === false
+      ? { checked: false, why: "avoid_walls: false" }
+      : space.length
+        ? { checked: true, radius_m: CLEARANCE_M, heads: space }
+        : { checked: false, why: "this bridge has no world.probe (an older build)" },
     ...(notes.length ? { notes } : {}),
     ...placed } };
+}
+
+/** How far each head's eyes need to be from static geometry, and the steps a blocked head tries (0.7). */
+export const CLEARANCE_M = 0.3;
+const STEPS: { back: number; side: number }[] = [
+  { back: 0.3, side: 0 }, { back: 0.6, side: 0 }, { back: 0, side: 0.5 }, { back: 0, side: -0.5 }, { back: 0.3, side: 0.5 }, { back: 0.3, side: -0.5 }, { back: 0, side: 1 }, { back: 0, side: -1 },
+];
+
+type Adjustment = { index: number; from: Vec3; to: Vec3 | null; why: string; note: string; checked?: false };
+/**
+ * 0.8: one head's free-space check: clear where it stands, moved (and how far), or not placed clear; clearance_m is the
+ * nearest static geometry around its eyes within the check's radius (the radius itself when nothing was hit).
+ */
+export type SpaceReport = { index: number; checked: boolean; clear: boolean; clearance_m: number | null; sight_blocked: boolean | null; moved_m: number; why?: string };
+
+/**
+ * Probes each placement's eyes (world.probe: level rays and a sight line from the anchor) and moves a blocked one to the
+ * first clear step, in place (position and eyes together). Without world.probe (an older bridge: `unknown_method`) nothing
+ * is checked. Any other failed probe (RB-117: a timeout, a rate limit, the game gate) is reported for that head as not
+ * checked, and the other heads are still probed.
+ */
+export async function findFreeSpace(context: CommandContext, placements: Placement[], anchorEye: Vec3, forward: Vec3, report: SpaceReport[] = []): Promise<Adjustment[]> {
+  const out: Adjustment[] = [];
+  const probe = async (point: Vec3) => {
+    const response = await context.api.callBridge("world.probe", { points: [point], clearance_m: CLEARANCE_M, sight_from: anchorEye }, context.cid, undefined, context.signal);
+    if (!response.ok) return { failed: response.error.code, message: response.error.message } as const;
+    const r = ((response.result as Json).probes as Json[])[0] ?? {};
+    const blockedSides = Number(r.clearance?.blocked ?? 0);
+    const sight = r.sight?.blocked === true;
+    const nearest = typeof r.clearance?.nearest_m === "number" ? Math.round(r.clearance.nearest_m * 1000) / 1000 : null;
+    return { clear: blockedSides === 0 && !sight, nearest, sight, why: sight ? "static geometry between the anchor and the head" : blockedSides ? `static geometry within ${CLEARANCE_M} m of the head's eyes (${blockedSides} of 8 directions)` : "" };
+  };
+  const h = Math.hypot(forward[0], forward[1]) || 1;
+  const f: Vec3 = [forward[0] / h, forward[1] / h, 0];
+  const right: Vec3 = [f[1], -f[0], 0];
+  for (const p of placements) {
+    if (!p.eyes) continue;
+    const first = await probe(p.eyes);
+    if ("failed" in first) {
+      if (first.failed === "unknown_method") {
+        report.length = 0;
+        return out; // no world.probe: an older bridge
+      }
+      out.push({ index: p.index, from: [...p.position] as Vec3, to: null, why: `not checked (${first.failed})`, checked: false,
+        note: `Head ${p.index}'s free space wasn't checked: the probe failed (${first.failed}: ${first.message}); it stands where it was placed.` });
+      report.push({ index: p.index, checked: false, clear: false, clearance_m: null, sight_blocked: null, moved_m: 0, why: `the probe failed (${first.failed})` });
+      continue;
+    }
+    if (first.clear) {
+      report.push({ index: p.index, checked: true, clear: true, clearance_m: first.nearest, sight_blocked: false, moved_m: 0 });
+      continue;
+    }
+    const from = [...p.position] as Vec3;
+    let moved: Vec3 | null = null;
+    let clearance: number | null = null;
+    for (const step of STEPS) {
+      const d: Vec3 = [-f[0] * step.back + right[0] * step.side, -f[1] * step.back + right[1] * step.side, 0];
+      const eyes: Vec3 = [p.eyes[0] + d[0], p.eyes[1] + d[1], p.eyes[2]];
+      const check = await probe(eyes);
+      if (!("failed" in check) && check.clear) {
+        p.position = [p.position[0] + d[0], p.position[1] + d[1], p.position[2]].map((v) => Math.round(v * 1000) / 1000) as Vec3;
+        p.eyes = eyes.map((v) => Math.round(v * 1000) / 1000) as Vec3;
+        moved = p.position;
+        clearance = check.nearest;
+        break;
+      }
+    }
+    const movedM = moved ? Math.round(Math.hypot(moved[0] - from[0], moved[1] - from[1]) * 100) / 100 : 0;
+    report.push({ index: p.index, checked: true, clear: moved !== null, clearance_m: moved ? clearance : first.nearest, sight_blocked: moved ? false : first.sight, moved_m: movedM, why: first.why });
+    out.push({
+      index: p.index,
+      from,
+      to: moved,
+      why: first.why,
+      note: moved
+        ? `Head ${p.index} was moved ${Math.round(Math.hypot(moved[0] - from[0], moved[1] - from[1]) * 100) / 100} m for free space (${first.why}).`
+        : `Head ${p.index} has ${first.why} and no clear place was found within 1 m; choose another spot or a smaller distance_m.`,
+    });
+  }
+  return out;
 }
 
 /**
@@ -103,9 +259,12 @@ async function projectEyes(context: CommandContext, pose: CameraPose, points: Ve
   try {
     const read = await call(context, "scene.read", { points, parts: ["camera"] });
     const camera = poseOf(read.camera) ?? pose;
-    model = calibrate(camera, read.calibration as Calibration | undefined);
+    // 0.8 (session 8's G3: (-5.2, -48.5) for a centred head under photo mode's drone camera): in photo mode the model
+    // from the photo camera's own pose and field of view (the game's projection follows the gameplay camera there);
+    // elsewhere the game's projection when it passes the consistency checks.
+    model = modelForRead(camera, read.calibration as Calibration | undefined, read.camera?.mode ?? read.phase);
     const shown = (read.points as { screen: unknown }[] | undefined) ?? [];
-    if (shown.length === points.length && read.calibration) {
+    if (shown.length === points.length && read.calibration && model.game_projection === "consistent") {
       const toFrame = frameOf(read.calibration as Calibration, camera.aspect);
       game = shown.map((p) => toFrame(p.screen as never));
     }
@@ -114,10 +273,16 @@ async function projectEyes(context: CommandContext, pose: CameraPose, points: Ve
   }
   return points.map((point, index) => {
     const m = project(model, point);
-    const g = game?.[index];
+    let g = game?.[index];
+    // 0.8 (session 8's G6 read (-2.5, -77) in normal play): a game projection far from the camera model's isn't trusted.
+    if (g && (!Number.isFinite(g.x) || !Number.isFinite(g.y) || Math.hypot(g.x - m.x, g.y - m.y) > 0.25)) g = undefined;
     const at = g ?? { x: m.x, y: m.y };
     return { index, x: Math.round(at.x * 1e4) / 1e4, y: Math.round(at.y * 1e4) / 1e4, in_frame: !m.behind && Math.abs(at.y) <= 0.5 && Math.abs(at.x) <= model.aspect / 2,
-      by: g ? "game" : model.by === "game" ? "model (calibrated by the game)" : "model (field of view read as vertical)" };
+      by: g ? "game"
+        : model.game_projection === "not_used" ? "model (photo mode's camera: its pose and field of view)"
+        : model.by === "game" ? "model (calibrated by the game)"
+        : model.game_projection === "inconsistent" ? "model (field of view read as vertical; the game's projection disagreed with its camera)"
+        : "model (field of view read as vertical)" };
   });
 }
 
@@ -130,7 +295,7 @@ export async function runShowroomLight(input: Json, context: CommandContext): Pr
     const cleared = await call(context, "showroom.clear", { what: "lights" });
     return { value: { rig: "none", ...cleared, undo: null, undo_note: "showroom_light with a rig lights the heads again" } };
   }
-  const showrooms = manifestsOf(input);
+  const { showrooms, found } = await manifestsOf(input, context);
   const showroom = showrooms[0]!;
   const profile = ((input.rig as RigProfile | undefined) ?? "creator") as RigProfile;
   const rig = showroom.rigs[profile];
@@ -158,11 +323,28 @@ export async function runShowroomLight(input: Json, context: CommandContext): Pr
   const advice = worst >= 0.05
     ? `Each head also gets about ${Math.round(worst * 100)} % of its own rig's light from its neighbours' rigs. For identical light, use rig key, light fewer heads, or spawn them at least ${spacingFor(rig.lights, showroom.headJoint, rigs.length)} m apart.`
     : undefined;
-  return { value: { rig: profile, target, lights_per_rig: rig.lights.length, rigs: items.map((i) => ({ for: i.index, position: [i.x, i.y, i.z], yaw: i.yaw })),
+  return { value: { ...(found ? { showroom_found: found } : {}), rig: profile, target, lights_per_rig: rig.lights.length, rigs: items.map((i) => ({ for: i.index, position: [i.x, i.y, i.z], yaw: i.yaw })),
     ...(spills.length ? { spill: spills, spill_worst: worst } : {}), ...(advice ? { warning: advice } : {}), ...placed } };
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const sleep = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    const timer = setTimeout(done, ms);
+    function done() {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
+      resolve();
+    }
+    signal?.addEventListener("abort", done, { once: true });
+  });
+
+/** A sweep stops at its next step once an emergency control (or Ctrl+C) cancels it (RB-121); its return still runs. */
+function stopIfCancelled(context: CommandContext) {
+  if (context.signal?.aborted) throw planError("interrupted", "The sweep was stopped before its next step.");
+}
+
+/** 0.8: the sweep's capture step (a test replaces it to see that the overlay is out of every frame). */
+export const SWEEP_CAPTURE = { capture: captureWindow };
 
 /** showroom.rotate: turn heads to a yaw relative to how they were set down, by a delta, or through a sweep with captures. */
 export async function runShowroomRotate(input: Json, context: CommandContext): Promise<CommandResult> {
@@ -181,17 +363,24 @@ export async function runShowroomRotate(input: Json, context: CommandContext): P
   const settle = (sweep.settle_ms as number | undefined) ?? 400;
   const startYaws = new Map(heads.map((h) => [h.index, h.yaw]));
   const frames: Json[] = [], images: NonNullable<CommandResult["images"]> = [];
+  const undo = { method: "showroom.turn", params: { turns: [...startYaws].map(([index, yaw]) => ({ index, yaw: normalise(yaw) })) } };
+  let failure: unknown = null;
   try {
     for (let i = 0; i < steps; i++) {
+      stopIfCancelled(context);
       const angle = steps === 1 ? from : from + ((to - from) * i) / (steps - 1);
       await turnTo((h) => h.base_yaw + angle);
-      await sleep(settle);
+      await sleep(settle, context.signal);
+      stopIfCancelled(context);
       const frame: Json = { step: i + 1, angle_deg: Math.round(angle * 100) / 100 };
       if (sweep.capture === true) {
         try {
-          const record: CaptureRecord = captureWindow({ target: context.api.captureTarget(), region: sweep.region ? { name: sweep.region } as never : undefined,
-            name: `${(sweep.name as string | undefined) ?? "showroom-sweep"}-${String(i + 1).padStart(2, "0")}`, outDir: context.captureRoot, route: "auto" });
+          // 0.8 (session 8's G4: the sweep's frames showed the XF overlay): the same hide as capture_screenshot's.
+          const shot = await withOverlayCleared(context, () => (stopIfCancelled(context), SWEEP_CAPTURE.capture({ target: context.api.captureTarget(), region: sweep.region ? { name: sweep.region } as never : undefined,
+            name: `${(sweep.name as string | undefined) ?? "showroom-sweep"}-${String(i + 1).padStart(2, "0")}`, outDir: context.captureRoot, route: "auto" })));
+          const record: CaptureRecord = shot.value;
           frame.capture = { full: record.full?.path ?? null, view: record.view.path };
+          frame.overlay = shot.overlay;
           images.push({ path: record.view.path, width: record.view.width, height: record.view.height, mimeType: "image/png", role: "view" });
         } catch (error) {
           if (error instanceof CaptureError) throw planError(`capture_${error.code}`, error.message);
@@ -200,11 +389,35 @@ export async function runShowroomRotate(input: Json, context: CommandContext): P
       }
       frames.push(frame);
     }
-  } finally {
-    if (sweep.return !== false) await call(context, "showroom.turn", { turns: [...startYaws].map(([index, yaw]) => ({ index, yaw: normalise(yaw) })) }).catch(() => undefined);
+  } catch (error) {
+    failure = error;
   }
-  return { value: { swept: heads.map((h) => h.index), from_deg: from, to_deg: to, steps, frames, returned: sweep.return !== false,
-    undo: { method: "showroom.turn", params: { turns: [...startYaws].map(([index, yaw]) => ({ index, yaw: normalise(yaw) })) } } }, images };
+  // Turning the heads back is reported, never swallowed (RB-128): a refused return leaves them turned, so the answer (or
+  // the sweep's own error) says so and keeps the exact undo.
+  let returnError: { code: string; message: string } | null = null;
+  if (sweep.return !== false) {
+    try {
+      // Cleanup: sent even after a cancellation (no signal); a handover or the kill switch then refuses it, and that is said.
+      const back = await context.api.callBridge("showroom.turn", undo.params, context.cid);
+      if (!back.ok) throw Object.assign(new Error(back.error.message), { plain: back.error });
+    } catch (error) {
+      const plain = (error as { plain?: { code: string; message: string } }).plain;
+      returnError = { code: plain?.code ?? "failed", message: plain?.message ?? (error as Error).message };
+    }
+  }
+  const notReturned = returnError
+    ? `The heads weren't turned back (${returnError.code}: ${returnError.message}); they stay at the sweep's last angle until showroom_turn runs the undo: ${JSON.stringify(undo)}.`
+    : null;
+  if (failure) {
+    const plain = (failure as { plain?: { code: string; message: string; detail?: string } }).plain;
+    if (notReturned) {
+      if (plain) plain.detail = [plain.detail, notReturned].filter(Boolean).join(" ");
+      else if (failure instanceof Error) failure.message = `${failure.message} ${notReturned}`;
+    }
+    throw failure;
+  }
+  return { value: { swept: heads.map((h) => h.index), from_deg: from, to_deg: to, steps, frames, returned: sweep.return !== false && !returnError,
+    ...(returnError ? { return_failed: returnError, warning: notReturned } : {}), undo }, images };
 }
 
 /** Wraps a yaw into −180…180. */

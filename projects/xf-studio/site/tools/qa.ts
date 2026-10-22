@@ -1,5 +1,5 @@
 /**
- * Browser QA for the built site (local; needs Chrome): bun tools/qa.ts [--no-shots]
+ * Browser QA for the built site (local; needs Chrome): bun tools/qa.ts [--no-shots] [--pages <name,…>]
  * Serves dist/ under the Pages base path, then for every page × viewport × colour scheme records console/CSP errors,
  * failed requests, horizontal overflow and text contrast, and saves full-page screenshots plus section crops to
  * .evidence/qa-<date>/ (git-ignored). Also exercises the theme override, no-JavaScript fallback and skip link.
@@ -22,6 +22,7 @@ const SCHEMES = ["light", "dark"] as const;
 const PAGES = [
   { name: "index", path: "", sections: true },
   { name: "credits", path: "credits.html", sections: true },
+  { name: "mcp", path: "mcp.html", sections: true },
   { name: "knowledge", path: "knowledge/", sections: true },
   { name: "knowledge-cc-file-chain", path: "knowledge/cc-file-chain.html", sections: false },
   { name: "knowledge-mod-loading", path: "knowledge/mod-loading.html", sections: false },
@@ -98,6 +99,11 @@ async function screenshot(page: Browser, file: string, clip?: { x: number; y: nu
 
 const config = loadConfig({ baseUrl: "http://127.0.0.1/" + basePath(loadConfig()).slice(1) });
 const shots = !process.argv.includes("--no-shots");
+// --pages index,mcp checks only those pages (smaller runs; the knowledge pages' full-page captures dominate memory).
+const pagesArg = process.argv.indexOf("--pages");
+const only = pagesArg >= 0 ? (process.argv[pagesArg + 1] ?? "").split(",").filter(Boolean) : null;
+const pages = only ? PAGES.filter(target => only.includes(target.name)) : PAGES;
+if (only && pages.length !== only.length) throw new Error(`--pages takes names from: ${PAGES.map(target => target.name).join(", ")}`);
 const date = new Date().toISOString().slice(0, 10);
 const outDir = join(siteRoot, ".evidence", `qa-${date}`);
 mkdirSync(outDir, { recursive: true });
@@ -125,7 +131,7 @@ try {
     await page.send("Emulation.setDeviceMetricsOverride", { width: viewport.width, height: viewport.height, deviceScaleFactor: viewport.scale, mobile: viewport.mobile });
     for (const scheme of SCHEMES) {
       await page.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: scheme }, { name: "prefers-reduced-motion", value: "reduce" }] });
-      for (const target of PAGES) {
+      for (const target of pages) {
         log.length = 0;
         await waitForLoad(page, base + target.path);
         await Bun.sleep(150);

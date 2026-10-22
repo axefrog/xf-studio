@@ -22,6 +22,65 @@ public abstract class XFScene {
     return StrLen(parts) == 0 || StrContains("," + parts + ",", "," + part + ",");
   }
 
+  // The world-object rule (0.7, session 7's crash): on a world object of unknown type (what V looks at, an NPC, anything a
+  // query returns) the bridge calls only the natives every entity answers (GetEntityID, GetClassName, GetWorldPosition,
+  // GetWorldForward, GetWorldYaw), keeps each answer in a local before building text, and reads a record name only after a
+  // cast to the class that declares GetRecordID (gamePuppetBase, VehicleObject). It never calls display-name, interaction or
+  // device natives on such an object: session 7's player_state on V's apartment door ended in the script VM's String +
+  // String operator with a null right operand (exe+0x60a893, the concatenation helper, reached from the operator's native
+  // handler at exe+0x285ccc), after GetDisplayName and IsInteractionLookAtTarget on the door (knowledge/game-crashes.md §2.4).
+  public static func Identity(object: ref<GameObject>, from: Vector4) -> String {
+    let id = EntityID.ToDebugString(object.GetEntityID());
+    let cls = object.GetClassName();
+    let at = object.GetWorldPosition();
+    let distance = Vector4.Distance(at, from);
+    let record = "";
+    let puppet = object as gamePuppetBase;
+    if IsDefined(puppet) {
+      let recordId = puppet.GetRecordID();
+      record = TDBID.ToStringDEBUG(recordId);
+    } else {
+      let vehicle = object as VehicleObject;
+      if IsDefined(vehicle) {
+        let vehicleRecord = vehicle.GetRecordID();
+        record = TDBID.ToStringDEBUG(vehicleRecord);
+      }
+    }
+    let out = "\"id\":" + XFJson.Str(id) + ",\"class\":" + XFJson.Name(cls) + ",\"distance\":" + XFJson.Num(distance);
+    if StrLen(record) > 0 {
+      out += ",\"record\":" + XFJson.Str(record);
+    }
+    return out;
+  }
+
+  // What V looks at (the targeting system's look-at object), by the world-object rule; "null" for nothing.
+  public static func LookedAt(player: ref<PlayerPuppet>) -> String {
+    let targeting = GameInstance.GetTargetingSystem(GetGameInstance());
+    if !IsDefined(targeting) || !IsDefined(player) {
+      return "null";
+    }
+    let looked = targeting.GetLookAtObject(player, true, false);
+    if !IsDefined(looked) {
+      return "null";
+    }
+    let from = player.GetWorldPosition();
+    return "{" + XFScene.Identity(looked, from) + "}";
+  }
+
+  // The HUD's world interaction prompt as the HUD shows it (the UIInteractions blackboard, data only; 0.7: stands in for the
+  // look-at object's interaction query, which the world-object rule leaves out).
+  public static func Prompt(game: GameInstance) -> String {
+    let defs = GetAllBlackboardDefs().UIInteractions;
+    let board = GameInstance.GetBlackboardSystem(game).Get(defs);
+    if !IsDefined(board) {
+      return "null";
+    }
+    let hub = FromVariant<InteractionChoiceHubData>(board.GetVariant(defs.InteractionChoiceHub));
+    let title = GetLocalizedText(hub.title);
+    let count = ArraySize(hub.choices);
+    return "{\"active\":" + XFJson.Flag(hub.active) + ",\"title\":" + XFJson.Str(title) + ",\"choices\":" + IntToString(count) + "}";
+  }
+
   // A static-geometry ray from a point to a target: blocked when something static is hit more than 12 cm before it.
   public static func Ray(from: Vector4, to: Vector4) -> String {
     let result: TraceResult;
@@ -62,13 +121,16 @@ public abstract class XFScene {
     return new Vector4(head.X + forward.X * 0.08, head.Y + forward.Y * 0.08, head.Z + 0.045, 1.0);
   }
 
+  // RB-113 (the world-object rule): every native answer in a local before any text is built.
   public static func Subject(object: ref<GameObject>, camera: Vector4, occlusion: Bool) -> String {
     let head: Vector4;
     let slot = XFScene.Head(object, head);
     let forward = object.GetWorldForward();
+    let position = object.GetWorldPosition();
+    let yaw = object.GetWorldYaw();
     let face = XFScene.Face(head, forward);
-    let out = "\"position\":" + XFScene.Arr(object.GetWorldPosition()) + ",\"head\":" + XFScene.Arr(head) + ",\"head_slot\":" + XFJson.Flag(slot);
-    out += ",\"forward\":" + XFScene.Arr(forward) + ",\"yaw\":" + XFJson.Num(object.GetWorldYaw()) + ",\"face\":" + XFScene.Arr(face);
+    let out = "\"position\":" + XFScene.Arr(position) + ",\"head\":" + XFScene.Arr(head) + ",\"head_slot\":" + XFJson.Flag(slot);
+    out += ",\"forward\":" + XFScene.Arr(forward) + ",\"yaw\":" + XFJson.Num(yaw) + ",\"face\":" + XFScene.Arr(face);
     if occlusion {
       out += ",\"occlusion\":" + XFScene.Ray(camera, face);
     }
@@ -96,8 +158,13 @@ public abstract class XFScene {
       let up = new Vector4(center.X + u.X * 0.1, center.Y + u.Y * 0.1, center.Z + u.Z * 0.1, 1.0);
       let right = new Vector4(center.X + r.X * 0.1, center.Y + r.Y * 0.1, center.Z + r.Z * 0.1, 1.0);
       let far = new Vector4(camPos.X + f.X * 5.0, camPos.Y + f.Y * 5.0, camPos.Z + f.Z * 5.0, 1.0);
+      // 0.8 (session 8's G3): a point off the axis at 5 m, at the same angle as right (0.1 m at 1 m). The active camera's
+      // own projection puts both at the same screen x; photo mode's drone camera looking straight at V made center and far
+      // agree by chance through the gameplay camera, so the on-axis check alone passed a projection that wasn't the
+      // active camera's.
+      let farRight = new Vector4(far.X + r.X * 0.5, far.Y + r.Y * 0.5, far.Z + r.Z * 0.5, 1.0);
       out += ",\"calibration\":{\"center\":" + XFPhoto.Screen(cameraSystem.ProjectPoint(center)) + ",\"up\":" + XFPhoto.Screen(cameraSystem.ProjectPoint(up));
-      out += ",\"right\":" + XFPhoto.Screen(cameraSystem.ProjectPoint(right)) + ",\"far\":" + XFPhoto.Screen(cameraSystem.ProjectPoint(far)) + "}";
+      out += ",\"right\":" + XFPhoto.Screen(cameraSystem.ProjectPoint(right)) + ",\"far\":" + XFPhoto.Screen(cameraSystem.ProjectPoint(far)) + ",\"far_right\":" + XFPhoto.Screen(cameraSystem.ProjectPoint(farRight)) + "}";
     }
     let player = GetPlayer(game);
     let registry = XFBridgeRegistry.Get();
@@ -121,8 +188,9 @@ public abstract class XFScene {
           if written > 0 {
             out += ",";
           }
-          out += "{\"id\":" + XFJson.Str(EntityID.ToDebugString(npc.GetEntityID())) + ",\"name\":" + XFJson.Str(npc.GetDisplayName()) + ",\"class\":" + XFJson.Name(npc.GetClassName());
-          out += ",\"distance\":" + XFJson.Num(Vector4.Distance(npc.GetWorldPosition(), player.GetWorldPosition())) + ",\"dead\":" + XFJson.Flag(npc.IsDead()) + "," + XFScene.Subject(npc, camPos, occlusion && hasCamera) + "}";
+          // 0.7: the world-object rule (Identity): the record name instead of GetDisplayName.
+          let dead = npc.IsDead();
+          out += "{" + XFScene.Identity(npc, player.GetWorldPosition()) + ",\"dead\":" + XFJson.Flag(dead) + "," + XFScene.Subject(npc, camPos, occlusion && hasCamera) + "}";
           written += 1;
         }
         i += 1;
@@ -214,12 +282,15 @@ public abstract class XFScene {
         let light = IsDefined(entity) && entity.IsA(n"gamePhotomodeLightObject") ? entity as GameObject : null;
         out += "{\"light\":" + IntToString(i) + ",\"found\":" + XFJson.Flag(IsDefined(light));
         if IsDefined(light) {
-          out += ",\"position\":" + XFScene.Arr(light.GetWorldPosition()) + ",\"forward\":" + XFScene.Arr(light.GetWorldForward());
+          // RB-113: the light's answers in locals before the text is built (the world-object rule).
+          let lightAt = light.GetWorldPosition();
+          let lightForward = light.GetWorldForward();
+          out += ",\"position\":" + XFScene.Arr(lightAt) + ",\"forward\":" + XFScene.Arr(lightForward);
           if IsDefined(controller) {
             out += ",\"selected\":" + XFJson.Flag(controller.XFBridgeLightIndicatorIndex() == i - 1);
           }
           if hasHead {
-            out += ",\"to_face\":" + XFScene.Ray(light.GetWorldPosition(), face);
+            out += ",\"to_face\":" + XFScene.Ray(lightAt, face);
           }
         } else {
           out += ",\"why\":" + XFJson.Str(IsDefined(entity) ? "the light indicator follows something that isn't a photo-mode light" : "no light entity for it (off, or not placed yet)");

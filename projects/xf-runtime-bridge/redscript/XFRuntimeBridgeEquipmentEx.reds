@@ -40,6 +40,12 @@ public class XFOutfitApi {
   public let usedSlots: ref<ReflectionMemberFunc>;
 }
 
+// RB-95 (0.7): XFScriptOutfit.Api's answer for the game session.
+@if(ModuleExists("EquipmentEx") && ModuleExists("Codeware"))
+public class XFOutfitApiCache extends ScriptableSystem {
+  public let api: ref<XFOutfitApi>;
+}
+
 @if(ModuleExists("EquipmentEx") && ModuleExists("Codeware"))
 public abstract class XFScriptOutfit {
   // The Equipment-EX version these signatures were checked against (its Facade's EquipmentEx.Version()).
@@ -98,17 +104,43 @@ public abstract class XFScriptOutfit {
   }
 
   // The installed version, for the answers (informational: the check is by signature).
+  // 0.7 (session 7 read "unknown"): a redscript class's static functions aren't registered on the class; they are global
+  // functions named "<Class>::<Name>;<parameter types>" (runtime-bridge-design §3.5). Equipment-EX's facade class
+  // EquipmentEx has no module (its scripts/Facade.reds), so Version is the global "EquipmentEx::Version;".
   public static func Version() -> String {
-    let facade = Reflection.GetClass(n"EquipmentEx");
-    if !IsDefined(facade) {
-      facade = Reflection.GetClass(n"EquipmentEx.EquipmentEx");
+    let fn = Reflection.GetGlobalFunction(n"EquipmentEx::Version;");
+    if !IsDefined(fn) {
+      for candidate in Reflection.GetGlobalFunctions() {
+        if StrBeginsWith(NameToString(candidate.GetName()), "EquipmentEx::Version") || StrBeginsWith(NameToString(candidate.GetFullName()), "EquipmentEx::Version") {
+          fn = candidate;
+          break;
+        }
+      }
     }
-    let fn = IsDefined(facade) ? facade.GetStaticFunction(n"Version") : null;
+    if !IsDefined(fn) {
+      let facade = Reflection.GetClass(n"EquipmentEx");
+      fn = IsDefined(facade) ? facade.GetStaticFunction(n"Version") : null;
+    }
     return IsDefined(fn) ? FromVariant<String>(fn.Call()) : "unknown";
   }
 
   // Equipment-EX's outfit system and the functions the bridge calls, checked by name and parameter types.
+  // RB-95 (0.7): the lookup below scans the class's functions and reads the version, so its answer is kept for the game
+  // session in a scriptable system of our own (one per session, gone with it) and reused by every call after the first.
   public static func Api() -> ref<XFOutfitApi> {
+    let container = GameInstance.GetScriptableSystemsContainer(GetGameInstance());
+    let cache = IsDefined(container) ? container.Get(n"XFRuntimeBridge.XFOutfitApiCache") as XFOutfitApiCache : null;
+    if IsDefined(cache) && IsDefined(cache.api) {
+      return cache.api;
+    }
+    let api = XFScriptOutfit.Lookup();
+    if IsDefined(cache) {
+      cache.api = api;
+    }
+    return api;
+  }
+
+  public static func Lookup() -> ref<XFOutfitApi> {
     let api = new XFOutfitApi();
     api.version = XFScriptOutfit.Version();
     let container = GameInstance.GetScriptableSystemsContainer(GetGameInstance());
@@ -144,10 +176,42 @@ public abstract class XFScriptOutfit {
   }
 
   public static func EquipInto(api: ref<XFOutfitApi>, item: ItemID, slot: TweakDBID) -> Bool {
+    let called: Bool;
+    return XFScriptOutfit.EquipIntoChecked(api, item, slot, called);
+  }
+
+  // 0.7: the call's own status apart from Equipment-EX's answer (a failed reflection call also reads as false).
+  public static func EquipIntoChecked(api: ref<XFOutfitApi>, item: ItemID, slot: TweakDBID, out called: Bool) -> Bool {
     let args: array<Variant>;
     ArrayPush(args, ToVariant(item));
     ArrayPush(args, ToVariant(slot));
-    return FromVariant<Bool>(api.equipItem.Call(api.system, args));
+    let status = false;
+    let answer = api.equipItem.Call(api.system, args, status);
+    called = status;
+    return status && FromVariant<Bool>(answer);
+  }
+
+  // Equipment-EX's own slot for an item (its OutfitSystem.GetItemSlot: the last of the record's placementSlots, which its
+  // tweaks append), or an invalid ID when that isn't one of its OutfitSlots.
+  public static func OutfitSlotFor(item: ItemID) -> TweakDBID {
+    let slots = TweakDBInterface.GetForeignKeyArray(ItemID.GetTDBID(item) + t".placementSlots");
+    if ArraySize(slots) == 0 {
+      return TDBID.None();
+    }
+    let last = ArrayLast(slots);
+    return StrBeginsWith(TDBID.ToStringDEBUG(last), "OutfitSlots.") ? last : TDBID.None();
+  }
+
+  // Whether an outfit slot now holds this exact item (the transaction system's attachment slot, as PartsJson reads it).
+  public static func InOutfit(api: ref<XFOutfitApi>, player: ref<PlayerPuppet>, item: ItemID) -> Bool {
+    let transactions = GameInstance.GetTransactionSystem(GetGameInstance());
+    for slot in XFScriptOutfit.Slots(api) {
+      let object = transactions.GetItemInSlot(player, slot);
+      if IsDefined(object) && object.GetItemID() == item {
+        return true;
+      }
+    }
+    return false;
   }
 
   public static func Unequip(api: ref<XFOutfitApi>, slot: TweakDBID) -> Void {
@@ -240,9 +304,19 @@ public abstract class XFScriptOutfit {
     if !FromVariant<Bool>(api.isEquippable.Call(api.system, args)) {
       return XFJson.Fail("bad_params", "EquipmentEx has no outfit slot for '" + XFInventory.ItemName(item) + "' (it takes clothing only)");
     }
-    let none: TweakDBID;
-    if !XFScriptOutfit.EquipInto(api, item, none) {
-      return XFJson.Fail("failed", "EquipmentEx refused to put '" + XFInventory.ItemName(item) + "' into the outfit");
+    // 0.7 (session 7: "refused" for a helmet, with IsEquippable true and the outfit not blocked): the item's own outfit slot
+    // is passed explicitly (RB-95: no reliance on an empty ID meaning "omitted"), the reflection call's status is told
+    // apart from Equipment-EX's answer, and an item that is in the outfit afterwards counts, whatever the call answered.
+    let slot = XFScriptOutfit.OutfitSlotFor(item);
+    let called = false;
+    let answered = XFScriptOutfit.EquipIntoChecked(api, item, slot, called);
+    if !answered && XFScriptOutfit.InOutfit(api, player, item) {
+      XFBridgeLog.Info("wardrobe", "EquipmentEx's EquipItem answered false (call ran: " + XFJson.Flag(called) + ") but '" + XFInventory.ItemName(item) + "' is in the outfit");
+      return "";
+    }
+    if !answered {
+      let why = called ? "EquipmentEx answered false" : "the call through Codeware's reflection didn't run";
+      return XFJson.Fail("failed", "EquipmentEx didn't put '" + XFInventory.ItemName(item) + "' into the outfit (" + why + "; its outfit slot " + (TDBID.IsValid(slot) ? TDBID.ToStringDEBUG(slot) : "none: the item's placement slots end in no OutfitSlots entry") + ")");
     }
     return "";
   }

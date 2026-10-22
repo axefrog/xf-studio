@@ -1,6 +1,6 @@
 {
   "name": "xf-runtime-bridge-tools",
-  "version": "0.6.1",
+  "version": "0.8.3",
   "private": true,
   "type": "module",
   "scripts": {
