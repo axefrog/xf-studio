@@ -1089,6 +1089,8 @@ json GameSaveMethod(const MethodContext& aContext)
         }
     };
     ops.guard = WritesGuard();
+    // 0.8.4, test hook: a one-shot hold after prepare (test.save.delay), taken by this save.
+    ops.hold = [] { return Get().saveHoldMs.exchange(0); };
     // RB-83: what the bridge holds on V (its status effects, a suspended outfit) and whether a behaviour runs, read in one
     // game-thread step.
     ops.holds = [&queue, cid] {
@@ -1996,6 +1998,10 @@ void RegisterMethods(Dispatcher& aDispatcher)
                                      "Makes one new manual save; refused while the bridge's save lock is held unless overridden.", &GameSaveMethod));
     aDispatcher.Register(WriteMethod("game.load", Access::WriteSave, RunOn::BridgeThread, "Loads the latest save or one save by name.",
                                      &GameLoadMethod));
+    // 0.8.4, a test hook for card row L1 ([bridge] allow_test_hooks, the -writes package only): changes only the bridge.
+    aDispatcher.Register({"test.save.delay", Access::WriteSave, RunOn::BridgeThread,
+                          "Test hook: holds the next manual save after its prepare step for ms milliseconds (once).",
+                          [](const MethodContext& aContext) { return writes::TestSaveDelay(aContext.params, Get().config.allowTestHooks, Get().saveHoldMs); }});
 
     // Bridge 0.5: XF Finish Showroom (the showroom write class, listed only by the test profile's -writes build).
     aDispatcher.Register({"showroom.anchor", Access::Read, RunOn::GameThread,

@@ -535,6 +535,40 @@ void InkDrawn(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut, i
     });
 }
 
+// XFBridge_KillKey(action: String, key: String) -> String   (0.8.4, the maintainer: the kill key chosen in the game). action
+// "get" answers bridge_info's kill_key; "set" takes a chord's text (the XF Runtime Bridge window's Change... captures it) and
+// "reset" the default; both save it to config.ini's [ui] kill_key and answer what else may react to it (warnings, never a
+// refusal). Bridge bookkeeping and the plugin's own config.ini only; the game's and CET's files are only read.
+void KillKeyNative(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::CString* aOut, int64_t)
+{
+    RED4ext::CString action;
+    RED4ext::CString key;
+    RED4ext::GetParameter(aFrame, &action);
+    RED4ext::GetParameter(aFrame, &key);
+    aFrame->code++; // skip ParamEnd
+
+    Guarded("XFBridge_KillKey", [&] {
+        const auto what = ToStd(action);
+        json answer;
+        if (what == "set")
+        {
+            answer = SetKillKey(ToStd(key).substr(0, 64), "cet-window");
+        }
+        else if (what == "reset")
+        {
+            answer = SetKillKey(killkey::kDefault, "cet-window-reset");
+        }
+        else
+        {
+            answer = json{{"ok", true}, {"kill_key", KillKeyJson()}};
+        }
+        if (aOut)
+        {
+            *aOut = RED4ext::CString(SerializeJson(answer).c_str());
+        }
+    });
+}
+
 void RegisterGlobal(RED4ext::CRTTISystem* aRtti, const char* aName, auto aFunction, const char* aReturnType,
                     std::initializer_list<const char*> aStringParams, const char* aParamType = "String")
 {
@@ -601,7 +635,9 @@ void PostRegisterTypes()
         RegisterGlobal(rtti, "XFBridge_CetOverlay", &CetOverlay, "Bool", {"open"}, "Bool");
         // 0.8 (bridge-080a): the ink panel's report of the question it shows.
         RegisterGlobalTyped(rtti, "XFBridge_InkDrawn", &InkDrawn, "Bool", {{"Int32", "id"}, {"Bool", "shown"}});
-        log::Info("rtti.register_types", "phase=post_register natives=19");
+        // 0.8.4: the kill key chosen in the XF Runtime Bridge window.
+        RegisterGlobal(rtti, "XFBridge_KillKey", &KillKeyNative, "String", {"action", "key"});
+        log::Info("rtti.register_types", "phase=post_register natives=20");
     }
     catch (const std::exception& e)
     {

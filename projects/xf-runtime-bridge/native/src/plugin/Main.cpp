@@ -62,7 +62,12 @@ bool GameWindowInFront()
 // listens, the game's window is in front and CET's overlay is closed. Only reads the keyboard; sends nothing.
 void PollKillKey(State& aState)
 {
-    const auto& chord = aState.config.killKey;
+    // 0.8.4: the key can change while the game runs (XFBridge_KillKey); a new key needs a release first, like a re-arm.
+    if (aState.killKeyChanged.exchange(false))
+    {
+        aState.killKeyWatch = killkey::Watch{};
+    }
+    const auto chord = aState.KillKey();
     // 0.8.3 (the review): armed only while the bridge runs, the game's window is in front and CET's overlay is closed; the watch
     // needs the key released after it is armed again, and the window and the overlay are checked again right before the kill.
     const auto armedNow = [&aState] {
@@ -289,6 +294,13 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
             panel.bridgeStatus = status.text;
             panel.diagnostics = state.config.overlayDiagnostics;
             panel.show = surface == inkui::StatusSurface::XfBox;
+            {
+                // 0.8.4 (the UI review's fix 4): the XF box stands where the ink panel does.
+                const auto hud = state.hud.Current();
+                panel.anchor = hud.anchor;
+                panel.x = hud.x;
+                panel.y = hud.y;
+            }
             if (panel.show && !killed)
             {
                 // 0.8.2: as the status surface, the coordinator's lines and the question with its keys (the ink panel's).
@@ -476,6 +488,12 @@ bool Load(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk)
     for (const auto& warning : state.config.warnings)
     {
         log::Warn("plugin.config_warning", warning);
+    }
+    // 0.8.4: what else may react to the kill key (the game's input files, CET's hotkeys), read once here and on each change.
+    state.killKeyConflicts = ReadKillKeyConflicts(state.config.killKey);
+    for (const auto& warning : state.killKeyConflicts.warnings)
+    {
+        log::Warn("plugin.kill_key_warning", warning);
     }
 
     // Every engine address a game call needs, resolved now rather than lazily at the first call, where a

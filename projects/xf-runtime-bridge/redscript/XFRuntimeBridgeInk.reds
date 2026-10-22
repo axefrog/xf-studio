@@ -1148,6 +1148,8 @@ public class XFInkOverlay extends ScriptableSystem {
     entry.markAt = new Vector2(left, top);
     entry.markPx = px;
     entry.markOnScreen = px.X > -10.0 && px.Y > -10.0 && px.X < this.m_screen.X && px.Y < this.m_screen.Y;
+    // 0.8.4: the pin's point itself in window pixels (the projector's -1..1 across and down the window).
+    entry.pointPx = new Vector2((s.X + 1.0) * 0.5 * this.m_screen.X, (s.Y + 1.0) * 0.5 * this.m_screen.Y);
     entry.markPlacedNow = true;
     XFInkPins.NoteDrawn(entry, "xf_overlay");
     return true;

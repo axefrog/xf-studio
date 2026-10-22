@@ -42,3 +42,6 @@ public static native func XFBridge_CetOverlay(open: Bool) -> Bool
 // Bridge 0.8 (the UI review): the ink panel reports the question it draws and whether it is on screen now, about five times a
 // second, so the CET label shows only the status and the answer keys instead of the question a third time.
 public static native func XFBridge_InkDrawn(id: Int32, shown: Bool) -> Bool
+// 0.8.4: the kill key chosen in the XF Runtime Bridge window (CET): action get, set (key: a chord such as Ctrl+Shift+End) or
+// reset; answers JSON with the key and what else may react to it. Saved to config.ini's [ui] kill_key.
+public static native func XFBridge_KillKey(action: String, key: String) -> String
