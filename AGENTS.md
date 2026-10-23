@@ -17,6 +17,9 @@ R&D is a permanent, first-class mandate, run like a research lab beside the prod
 - **Distil findings into the [knowledge base](knowledge/README.md).** It holds current, cited, evidence-graded answers to "how does X work?". Task logs alone are not enough.
 - **The meta-coordinator owns the [research queue](research/backlog/research-queue.md).** A chat that needs something researched, beyond a quick lookup inside its own scope, sends the meta-coordinator the full brief it would have given its own research agent. The meta-coordinator acts as the go-between. It points at material we already have, trims covered parts and merges overlaps between chats' requests, then runs the brief and delivers the result into the knowledge base. R&D build tracks stay with their own chats.
 - **Read before you work.** Agents and subagents read the relevant knowledge pages before starting and update them when they learn something.
+  - Every agent brief names the knowledge pages to read first.
+  - Every agent report ends with a "Knowledge used" line: the pages it relied on, and any it found wrong or incomplete.
+- **Observed results update the knowledge page in the same commit.** When a test, a compile or a game session confirms or contradicts a knowledge page, update that page (with the evidence and its grade), not only your own notes. The meta-coordinator checks this when agreeing merges.
 - **Offline understanding serves the tests.** Its purpose is to make the maintainer's in-game tests succeed first time, not to replace them.
 
 ## Working with the maintainer
