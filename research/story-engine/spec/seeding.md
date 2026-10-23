@@ -1,6 +1,6 @@
 # S2. Seed language and seeding layer specification
 
-**Status:** v1.3, 23 October 2026. v1.3 closes what S3 v0.2 still needed: `sownBy` after compaction, and the claim-conflict read's sharing. v1.2 answers GPT-6 Astra's review of S3 where it touches S2: overlays can't erase fixed identities, director-sown casting filters, and a fuller read API. v1.1 added what layer 3's specification ([S3](procedural.md)) needs: sowing requests, source withdrawal, a read API, the core hooks typed, and corrections to the fit hook and hook inputs.
+**Status:** v1.4, 23 October 2026. v1.4 aligns the city and social reads with [S1](simulation.md): bands are registered strings, and regimes have two reads. v1.3: v1.3 closes what S3 v0.2 still needed: `sownBy` after compaction, and the claim-conflict read's sharing. v1.2 answers GPT-6 Astra's review of S3 where it touches S2: overlays can't erase fixed identities, director-sown casting filters, and a fuller read API. v1.1 added what layer 3's specification ([S3](procedural.md)) needs: sowing requests, source withdrawal, a read API, the core hooks typed, and corrections to the fit hook and hook inputs.
 - **Reviews.** Two reviews by GPT-6 Astra: of v0.1 (25 findings) and of v0.16 (23 findings), all adopted (§16).
 - **The core.** v1.0 defines the core: the subset the first implementation builds (§0.3). Everything else on this page is a **later capability**, which the first implementation rejects plainly rather than accepting with partial behaviour.
 - **The research.** Versions v0.1 to v0.16 folded in the requirements of dossiers 8 and 10 to 23. §15 traces each dossier's list; git history has the version steps.
@@ -910,7 +910,7 @@ type CityRead =
   | { refuge: { leaf: RoleKey | Id } };              // whether V could lie low there
 ```
 
-S1 exposes these as pins and process state. **No atom exposes a heat number.** A `city` atom is `maybe` until S1 has a reading for its scope.
+S1 exposes these as pins and process state ([S1 §9](simulation.md)). **No atom exposes a heat number.** Band names are registered strings from S1's pack, not a fixed list. `regime(scope)` answers the kind of the greatest live regime; `regimeIs(scope, kind)` answers yes or no. A read whose phase isn't built answers `maybe`. A `city` atom is `maybe` until S1 has a reading for its scope.
 
 **Hot state opens windows.** A window may open on a band and close on its fall, latched like any other window (§2.7). A world requirement may name a band or a regime. When a fitted seed is sited at a hot cell, the fit report cites the band that justified it. "Why now" is answered by a cause chain of at most four links, through the parents S1 records on each event.
 

@@ -1,6 +1,7 @@
 # S0. Kernel specification
 
-**Status:** v4.9, 23 October 2026.
+**Status:** v4.10, 23 October 2026.
+- v4.10 adds eight clarifications from writing [S1](simulation.md) (V4-39 to V4-46).
 - v4.9 completes the process interface for S1 (V4-35 to V4-38), from the [P3](../p3-simulation-layer.md) design.
 - v4.8: an event-kind registry; occurrence ids and times on delivered envelopes; `tempo` in settings (V4-32 to V4-34).
 - v4.7 clarifies pattern frames for layer 3 (V4-31).
@@ -728,7 +729,7 @@ A city's incidents can therefore start as counts in per-window summaries. Fine d
 
 Simulation processes are S1's. The kernel defines when they run and what they may read.
 
-- **One shared window.** All processes share a base simulation window, `W_sim` **[tunable 600 s]**. A process runs every `n`-th window, `n ≥ 1`, aligned so it runs when `k mod n = 0`. `run(ctx, k)` computes its outputs for windows `k` to `k + n − 1`. Its randomness is keyed `("proc", worldSeed, processId, k, …)`.
+- **One shared window.** All processes share a base simulation window, `W_sim` **[tunable 600 s]**. A process runs every `n`-th window, `n ≥ 1`, aligned so it runs when `k mod n = 0`. `run(ctx, k)` computes its outputs for windows `k` to `k + n − 1`. Its randomness is keyed `("proc", worldSeed, processId, w, …)`, where `w` is the window being computed, not the run's start (v4.10).
 - **Order at each boundary** `t = k × W_sim`:
   1. Apply the outputs of every process run whose span ends at `t`, by tier (coarse first), then by `id`.
   2. Apply the external operations stamped in the window that just ended, by timestamp, then `Id`. These are game readings, observations and seed operations.
@@ -1303,6 +1304,14 @@ v4 adds what the seeding layer and sifting need. None of the additions changes a
 | V4-36 | A process reads other processes' published digests | §9.4 | K-2 | To implement |
 | V4-37 | `demanded(tier)` for fine-tier processes | §9.4, §10.6 | K-3 | To implement |
 | V4-38 | The process operation set: frames, decide, order, observe, tell, belief set | §9.4 | K-4 | To implement |
+| V4-39 | A summary whose scope has no place strictly under it gives its items the scope itself as their place | §9.3 | [S1](simulation.md) §16.1 K-1 | A clarification |
+| V4-40 | A `Derive` input that resolves `unavailable` reaches the derive as `undefined`; other statuses propagate | §5.1 | K-2 | A clarification |
+| V4-41 | **A process draw is keyed by the window being computed**: `rand("proc", worldSeed, processId, w, …)`, not by the run's start, so a draw is independent of where a run starts | §9.4 | K-3 | To implement; the reference model's `ctx.rand` changes |
+| V4-42 | Process digests are readable by registered reads and hooks, as of the last applied boundary | §9.4 | K-4 | A clarification |
+| V4-43 | The process operation shapes, and `contributionId(spec)` as a pure function | §9.4 | K-5 | With V4-38 |
+| V4-44 | `matchStrength(actor, change, types?)`: the greatest relevance the kernel's matching gives a change against an actor's eligible frames, as a read | §10.5 | K-6 | A small read |
+| V4-45 | An event may be minted with a `time` earlier than the boundary at which it is applied | §9.2 | K-7 | A clarification |
+| V4-46 | A layer's `SeedRecord` with no `actor` retains only its own `nodes` | §14.1 | K-8 | A clarification |
 
 **Dossier 11's other kernel requirements:**
 - **S1 policies:**
