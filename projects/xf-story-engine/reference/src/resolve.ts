@@ -167,8 +167,7 @@ export class Resolver {
   }
 
   /** An outer resolution (spec 5). Hard limits turn into `failed` plus a defect. */
-  resolve(node: Id, path: SlotPath, t: GameTime): ResolveResult {
-    const ctx = newOpCtx(this.k.config.allowance);
+  resolve(node: Id, path: SlotPath, t: GameTime, ctx: OpCtx = newOpCtx(this.k.config.allowance)): ResolveResult {
     try {
       return this.resolveWithin(ctx, node, path, t);
     } catch (e) {
@@ -181,8 +180,7 @@ export class Resolver {
   }
 
   /** The complete, deterministic account of a resolution (spec 13). Bypasses the cache for the slot itself. */
-  trace(node: Id, path: SlotPath, t: GameTime): Trace {
-    const ctx = newOpCtx(this.k.config.allowance);
+  trace(node: Id, path: SlotPath, t: GameTime, ctx: OpCtx = newOpCtx(this.k.config.allowance)): Trace {
     const { path: plain, window: explicitK } = splitWindow(path);
     const header = this.k.store.header(node);
     const tr = emptyTrace(node, plain, t, 0);

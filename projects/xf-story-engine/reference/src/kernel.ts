@@ -204,7 +204,8 @@ export class Kernel {
   }
 
   emit(change: Change): void {
-    const pc: PendingChange = { change, time: this.now, revision: this.revision, epoch: this.epoch };
+    // A change is a snapshot of what happened: a later write, or a discarded batch's, must not reach it.
+    const pc: PendingChange = { change: structuredClone(change), time: this.now, revision: this.revision, epoch: this.epoch };
     // An open staged batch is silent: its changes wait for the commit (spec 14.2a).
     if (this.batch) this.batch.changes.push(pc);
     else this.pending.push(pc);

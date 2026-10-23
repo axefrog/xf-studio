@@ -14,7 +14,8 @@
 // The reference model implements the batch by snapshot and restore, as the specification allows.
 
 import type { Kernel } from './kernel.ts';
-import type { Trace } from './resolve.ts';
+import { type OpCtx, type Trace, newOpCtx } from './resolve.ts';
+import { Allowance } from './work.ts';
 import type { GameTime, Id, PendingChange, Query, QueryOutcome, ResolveResult, SlotPath, Value } from './types.ts';
 
 interface Mark {
@@ -35,8 +36,11 @@ export class StagedBatch {
   readonly changes: PendingChange[] = [];
   state: 'open' | 'committed' | 'discarded' = 'open';
   private mark: Mark;
+  /** The one allowance every read made through the batch draws on (spec 14.2a, 10.7). */
+  private readonly allowance: Allowance;
 
   constructor(private readonly k: Kernel) {
+    this.allowance = newOpCtx(k.config.allowance).allowance;
     this.mark = {
       revision: k.revision,
       store: k.store.capture(),
@@ -69,24 +73,34 @@ export class StagedBatch {
 
   // ---- reads through the batch ----
 
+  /** The work allowance the batch has used so far (spec 14.2a). */
+  get used(): number {
+    return this.allowance.used;
+  }
+
+  /** A fresh operation context that draws on the batch's shared allowance. */
+  private ctx(): OpCtx {
+    return { allowance: this.allowance, stack: new Set(), depth: 0, peak: 0 };
+  }
+
   resolve(node: Id, path: SlotPath, t?: GameTime): ResolveResult {
     this.assertOpen();
-    return this.k.resolve(node, path, t);
+    return this.k.resolver.resolve(node, path, t ?? this.k.now, this.ctx());
   }
 
   value(node: Id, path: SlotPath, t?: GameTime): Value | undefined {
-    this.assertOpen();
-    return this.k.value(node, path, t);
+    const r = this.resolve(node, path, t);
+    return r.status === 'ok' || r.status === 'contradiction' ? r.value : undefined;
   }
 
   trace(node: Id, path: SlotPath, t?: GameTime): Trace {
     this.assertOpen();
-    return this.k.trace(node, path, t);
+    return this.k.resolver.trace(node, path, t ?? this.k.now, this.ctx());
   }
 
   query(q: Query): QueryOutcome {
     this.assertOpen();
-    return this.k.query(q);
+    return this.k.queries.run(q, this.ctx());
   }
 
   // ---- ending ----

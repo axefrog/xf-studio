@@ -192,6 +192,10 @@ export class Layer2 implements Layer2Hook {
     this.facts = opts.facts ?? {};
     this.global = emptyGlobal();
     k.layer2 = this;
+    // A new v4 lineage root records its initial settings (S0 section 14.2). A lineage that already has saves, or already holds a settings
+    // log, is left as it is: an empty log in a v3 save stays empty.
+    if (k.settings.length === 0 && k.persistence.parentKey === null && k.persistence.chain.size === 0) k.settings.set({});
+    this.settingsSeen = k.settings.length;
   }
 
   get port(): Layer2Port {

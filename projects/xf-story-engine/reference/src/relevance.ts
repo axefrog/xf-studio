@@ -61,7 +61,7 @@ export function ownValueOf(change: Change): OwnValue | undefined {
   return undefined;
 }
 
-export function bindingsOf(change: Change, focusOf: (frame: Id) => Id[] = () => []): { bindings: Binding[]; wild: Extract<Change, { c: 'contribution' }> | null } {
+export function bindingsOf(change: Change): { bindings: Binding[]; wild: Extract<Change, { c: 'contribution' }> | null } {
   switch (change.c) {
     case 'pin':
     case 'reading':
@@ -86,7 +86,7 @@ export function bindingsOf(change: Change, focusOf: (frame: Id) => Id[] = () => 
     case 'frame': {
       // A frame status change binds the frame's actor (role `actor`) and each node in its focus (role `focus`) (spec 10.5, v4).
       const out: Binding[] = [{ node: change.actor, role: 'actor' }];
-      for (const n of focusOf(change.frame)) out.push({ node: n, role: 'focus' });
+      for (const n of change.focus) out.push({ node: n, role: 'focus' });
       return { bindings: out, wild: null };
     }
     case 'contribution': {
@@ -124,7 +124,7 @@ export class Dispatcher {
   }
 
   private begin(pc: PendingChange): Active {
-    const { bindings, wild } = bindingsOf(pc.change, (f) => this.k.frames.frame(f)?.focus.nodes ?? []);
+    const { bindings, wild } = bindingsOf(pc.change);
     const a: Active = { pc, scan: this.k.frames.scanList(), pos: 0, bindings, wild, best: new Map() };
     if (pc.change.c === 'edge' && pc.change.ended) a.includeEdge = pc.change.edge;
     const own = ownValueOf(pc.change);

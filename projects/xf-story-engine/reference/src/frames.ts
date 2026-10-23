@@ -353,7 +353,7 @@ export class Frames {
     }, { dilemma: true });
     // A status change is a semantic change (spec 10.5, v4); weight and parent changes are not.
     if (this.k.config.frameChanges && before !== undefined && before !== status) {
-      this.k.emit({ c: 'frame', frame: id, actor: f.actor, level: f.level, old: before, new: status });
+      this.k.emit({ c: 'frame', frame: id, actor: f.actor, level: f.level, focus: [...f.focus.nodes], old: before, new: status });
     }
     return f;
   }

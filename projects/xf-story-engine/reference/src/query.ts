@@ -32,8 +32,7 @@ export class Queries {
   }
 
   /** An outer query. Hard limits give `failed` and record a defect. */
-  run(q: Query): QueryOutcome {
-    const ctx = newOpCtx(this.k.config.allowance);
+  run(q: Query, ctx: OpCtx = newOpCtx(this.k.config.allowance)): QueryOutcome {
     try {
       return { status: 'ok', items: this.execute(ctx, q) };
     } catch (e) {

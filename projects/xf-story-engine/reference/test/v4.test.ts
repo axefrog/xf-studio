@@ -125,7 +125,7 @@ describe('V4-4: the frame change', () => {
     expect(k.dispatcher.drain()).toHaveLength(0);
     k.frames.setStatus(actorFrame.id, 'satisfied', cause);
     expect(k.pending).toHaveLength(1);
-    expect(k.pending[0]!.change).toEqual({ c: 'frame', frame: actorFrame.id, actor: actorFrame.actor, level: 'goal', old: 'active', new: 'satisfied' });
+    expect(k.pending[0]!.change).toEqual({ c: 'frame', frame: actorFrame.id, actor: actorFrame.actor, level: 'goal', focus: [site], old: 'active', new: 'satisfied' });
     k.settle();
     const out = k.dispatcher.drain();
     // The watcher reacts to a place: the focus node (role `focus`) is the binding that matches.
@@ -308,9 +308,11 @@ describe('V4-26: staged batches', () => {
     const before = JSON.stringify([...k.persistence.currentView().toData().pins]);
     const rev = k.revision;
     const batch = k.stage();
+    let minted: Id | undefined;
     batch.write((kk) => {
       kk.pin({ node: n, slot: 'x', value: 'b', reason: 'committed', cause });
       const nid = kk.mint(v, cause, 'extra', 'fx:t');
+      minted = nid;
       kk.contribute({ source: { layer: 'authored', origin: v }, target: { slot: 'x', scope: { nodes: [nid] } }, form: { f: 'const', value: 'c' }, mode: 'constrain' });
       kk.addEdge({ type: 'core:located-in', from: nid, to: n, cause });
       kk.frames.open({ actor: v, level: 'goal', origin: v, weight: 1, cause });
@@ -324,7 +326,8 @@ describe('V4-26: staged batches', () => {
     expect(k.frames.all().length).toBe(framesDuring - 1);
     expect(k.store.allEdges()).toHaveLength(0);
     expect(k.beliefs.entries()).toHaveLength(0);
-    expect(k.store.header(H(s('mint'), s('x')))).toBeUndefined();
+    expect(minted).toBeDefined();
+    expect(k.store.header(minted!)).toBeUndefined();
     k.settle();
     expect(k.dispatcher.drain()).toHaveLength(0);
     expect(JSON.stringify([...k.persistence.currentView().toData().pins])).toBe(before);

@@ -96,6 +96,12 @@ export function onLoad(l2: Layer2): void {
   l2.baseTotal = l2.global.playTotal;
   l2.arbiter.session = 'settling';
   l2.arbiter.saveAge = info?.ageSeconds ?? 0;
+  // A save that loaded read-only (spec 14.4) is reconstructed for reading only: no root, watcher, contribution, withdrawal,
+  // maintenance or lifecycle write is made, because the kernel refuses every write and the world does not move.
+  if (k.readOnly) {
+    for (const inst of l2.all()) if (!isTerminal(inst.st.state)) l2.registerActor(inst.id);
+    return;
+  }
   // Packs come back from the host: the pack roots, their watchers.
   for (const [pid] of l2.packs) {
     k.root(`pack:${pid}`, 'core:seed');

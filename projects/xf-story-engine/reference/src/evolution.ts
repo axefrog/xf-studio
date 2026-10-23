@@ -128,7 +128,7 @@ export class Evolution {
     const key = canonicalKey(env.op);
     let ord = 0;
     for (const q of this.queue) if (q.stamp === env.stamp && canonicalKey(q.op) === key) ord++;
-    const id = H(hs('xop'), hid(env.epoch), hi(env.stamp), hrec(env.op), hi(ord));
+    const id = H(hs('xop'), hi(env.stamp), hrec(env.op), hi(ord));
     this.queue.push({ ...env, id });
     return { accepted: true, id };
   }

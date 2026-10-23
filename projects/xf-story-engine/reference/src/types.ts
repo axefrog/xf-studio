@@ -212,7 +212,7 @@ export type Change =
   | { c: 'contribution'; contribution: Contribution; ended: boolean }
   | { c: 'reading'; node: Id; slot: SlotPath; old?: Value; new: Value; at?: GameTime }
   /** A frame's status changed (v4, V4-4). Weight and parent changes produce none. */
-  | { c: 'frame'; frame: Id; actor: Id; level: string; old: string; new: string };
+  | { c: 'frame'; frame: Id; actor: Id; level: string; focus: Id[]; old: string; new: string };
 
 /** A change as queued: stamped with the time it was made, the revision it produced, and the epoch it was made in. */
 export interface PendingChange {
