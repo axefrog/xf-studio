@@ -6,13 +6,14 @@
 // into `failed` plus a defect. Resolution never emits changes and never bumps the revision (I-13).
 
 import { ln } from './fdlibm-log.ts';
-import { H, i as hi, id as hid, rand, s as hs, val as hval } from './id.ts';
+import { H, i as hi, id as hid, ownedId, rand, s as hs, val as hval } from './id.ts';
 import type { Kernel } from './kernel.ts';
 import {
   type Binding, type PredicateEnv, ReadViolation, evalAll, selectorMatches,
 } from './predicate.ts';
 import { ALL, intersect, isEmpty, subtract } from './region.ts';
 import type { Schema, SlotInfo } from './schema.ts';
+import type { SlotDef } from './schema-types.ts';
 import type { Form } from './types.ts';
 import {
   domainRegion, encodeValue, enumerateRegion, gridStep, normalizeRegion, pointRegion, regionSize, valueKey, valuesEqual,
@@ -490,26 +491,55 @@ export class Resolver {
     return normalizeRegion(vt, r);
   }
 
+  /**
+   * The owned values whose derived slot is a unary view of an owner's slot, by kind: the household's resident `m0` has `profile`
+   * derived from `^/p0`, so a pin on the resident's profile narrows the household's `p0` (S1 4.2, SPEC-NOTES 93).
+   */
+  private ownerViews = new Map<string, Array<{ childSlot: string; childKind: string; view: SlotDef }>>();
+
+  private ownerViewsOf(kind: string): Array<{ childSlot: string; childKind: string; view: SlotDef }> {
+    let hit = this.ownerViews.get(kind);
+    if (hit) return hit;
+    hit = [];
+    for (const s of this.schema.kind(kind).slots) {
+      const vt = this.schema.dim(s.dim).value;
+      if (vt.t !== 'node' || s.card !== 'one' || !this.schema.hasKind(vt.kind)) continue;
+      for (const v of this.schema.kind(vt.kind).slots) {
+        if (v.derive?.preimage && v.derive.inputs.length === 1 && v.derive.inputs[0]!.startsWith('^/')) hit.push({ childSlot: s.key, childKind: vt.kind, view: v });
+      }
+    }
+    this.ownerViews.set(kind, hit);
+    return hit;
+  }
+
   /** Constraints that narrow `info`'s input through the preimage of a unary view over it (spec 6.4). */
   private viewConstraints(header: NodeHeader, info: SlotInfo, path: SlotPath): Constraint[] {
     const out: Constraint[] = [];
     const rk = this.schema.kind(header.kind);
-    for (const d of rk.slots) {
-      if (!d.derive?.preimage || d.derive.inputs.length !== 1 || d.derive.inputs[0] !== path) continue;
-      const dInfo = this.schema.slotInfo(header.kind, d.key);
+    const views: Array<{ vh: NodeHeader; d: SlotDef }> = [];
+    for (const d of rk.slots) if (d.derive?.preimage && d.derive.inputs.length === 1 && d.derive.inputs[0] === path) views.push({ vh: header, d });
+    // The same view when its one input is a slot of the owner (`^/path`): the owned value's own pins and views narrow this slot.
+    for (const ov of this.ownerViewsOf(header.kind)) {
+      if (ov.view.derive!.inputs[0] !== `^/${path}`) continue;
+      const vh = this.k.store.header(ownedId(header.id, ov.childSlot));
+      if (vh) views.push({ vh, d: ov.view });
+    }
+    for (const { vh, d } of views) {
+      const dInfo = this.schema.slotInfo(vh.kind, d.key);
       if (!dInfo) continue;
       const own: Constraint[] = [];
-      for (const p of this.pinsInEffect(header, d.key, false, 0, 0)) {
+      for (const p of this.pinsInEffect(vh, d.key, false, 0, 0)) {
         own.push({
           id: p.id, source: 'pin', precedence: PIN_PRECEDENCE[p.reason], region: this.pinRegion(dInfo.vt, p),
           negate: false, active: false, label: p.reason,
         });
       }
-      own.push(...this.viewConstraints(header, dInfo, d.key));
-      const fn = this.schema.registry.get('preimage', d.derive.preimage);
+      own.push(...this.viewConstraints(vh, dInfo, d.key));
+      const pre = d.derive!.preimage!;
+      const fn = this.schema.registry.get('preimage', pre);
       for (const c of own) {
         if (c.negate) continue;
-        const back = fn(c.region, [], d.derive.preimage.params ?? {});
+        const back = fn(c.region, [], pre.params ?? {});
         out.push({
           id: c.id, source: 'preimage', precedence: c.precedence, region: this.normalizeSafe(info.vt, back),
           negate: false, active: false, label: `${c.label} via ${d.key}`,

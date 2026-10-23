@@ -26,6 +26,8 @@ export class Store {
 
   private readonly pinsById = new Map<Id, Pin>();
   private readonly pinIndex = new Map<string, Id[]>();
+  /** node to the Ids of the pins on any of its slots, withdrawn or not (a lookup for layers that cache a node's derived values). */
+  private readonly pinsByNode = new Map<Id, Id[]>();
   readonly withdrawn = new Map<Id, Withdrawal>();
 
   private readonly contribs = new Map<Id, Contribution>();
@@ -40,7 +42,7 @@ export class Store {
   capture(): unknown {
     return structuredClone({
       headers: this.headers, nodes: this.nodes, headersByKind: this.headersByKind, ownedBy: this.ownedBy, membersOf: this.membersOf,
-      pinsById: this.pinsById, pinIndex: this.pinIndex, withdrawn: this.withdrawn, contribs: this.contribs,
+      pinsById: this.pinsById, pinIndex: this.pinIndex, pinsByNode: this.pinsByNode, withdrawn: this.withdrawn, contribs: this.contribs,
       contribByNode: this.contribByNode, contribGeneral: this.contribGeneral, edges: this.edges,
       edgesFromIdx: this.edgesFromIdx, edgesToIdx: this.edgesToIdx,
     });
@@ -61,6 +63,7 @@ export class Store {
     swap(this.membersOf, c.membersOf);
     swap(this.pinsById, c.pinsById);
     swap(this.pinIndex, c.pinIndex);
+    swap(this.pinsByNode, c.pinsByNode);
     swap(this.withdrawn, c.withdrawn);
     swap(this.contribs, c.contribs);
     swap(this.contribByNode, c.contribByNode);
@@ -80,6 +83,7 @@ export class Store {
     this.membersOf.clear();
     this.pinsById.clear();
     this.pinIndex.clear();
+    this.pinsByNode.clear();
     this.withdrawn.clear();
     this.contribs.clear();
     this.contribByNode.clear();
@@ -163,7 +167,20 @@ export class Store {
     let list = this.pinIndex.get(k);
     if (!list) this.pinIndex.set(k, (list = []));
     list.push(p.id);
+    let byNode = this.pinsByNode.get(p.node);
+    if (!byNode) this.pinsByNode.set(p.node, (byNode = []));
+    byNode.push(p.id);
     return true;
+  }
+
+  /** The pins on any slot of a node, in insertion order, withdrawn or not. */
+  pinsOfNode(node: Id): Pin[] {
+    return (this.pinsByNode.get(node) ?? []).map((i) => this.pinsById.get(i)!);
+  }
+
+  /** How many pins and contributions name a node: zero means nothing local narrows what the pack and the seed give it. */
+  localState(node: Id): number {
+    return (this.pinsByNode.get(node)?.length ?? 0) + (this.contribByNode.get(node)?.length ?? 0);
   }
 
   pin(id: Id): Pin | undefined {
@@ -208,6 +225,12 @@ export class Store {
       const at = list.indexOf(id);
       if (at >= 0) list.splice(at, 1);
       if (list.length === 0) this.pinIndex.delete(k);
+    }
+    const byNode = this.pinsByNode.get(p.node);
+    if (byNode) {
+      const at = byNode.indexOf(id);
+      if (at >= 0) byNode.splice(at, 1);
+      if (byNode.length === 0) this.pinsByNode.delete(p.node);
     }
   }
 

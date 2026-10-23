@@ -38,9 +38,11 @@ export function idToBytes(x: Id): Uint8Array {
   return out;
 }
 
+const HEX: string[] = Array.from({ length: 256 }, (_, n) => n.toString(16).padStart(2, '0'));
+
 export function bytesToHex(u: Uint8Array): string {
   let out = '';
-  for (let n = 0; n < u.length; n++) out += u[n]!.toString(16).padStart(2, '0');
+  for (let n = 0; n < u.length; n++) out += HEX[u[n]!];
   return out;
 }
 
@@ -62,43 +64,101 @@ export function f64Bytes(v: number): Uint8Array {
   return out;
 }
 
-/** The canonical encoding of an argument list. Exposed so tests can pin the byte layout. */
+/** The UTF-8 length of a string, without allocating. */
+function utf8Length(str: string): number {
+  let n = 0;
+  for (let c = 0; c < str.length; c++) {
+    const u = str.charCodeAt(c);
+    if (u < 0x80) n += 1;
+    else if (u < 0x800) n += 2;
+    else if (u >= 0xd800 && u <= 0xdbff && c + 1 < str.length) {
+      n += 4;
+      c++;
+    } else n += 3;
+  }
+  return n;
+}
+
+const ID_HEX: number[] = (() => {
+  const t = new Array<number>(128).fill(-1);
+  for (let c = 0; c < 10; c++) t[48 + c] = c;
+  for (let c = 0; c < 6; c++) t[97 + c] = 10 + c;
+  return t;
+})();
+
+/** The canonical encoding of an argument list. Exposed so tests can pin the byte layout. One buffer, written once. */
 export function encodeArgs(args: readonly HArg[]): Uint8Array {
-  const parts: Uint8Array[] = [];
+  let total = 0;
   for (const a of args) {
     switch (a.t) {
-      case 's': {
-        const bytes = textEncoder.encode(a.v);
-        const head = new Uint8Array(5);
-        head[0] = 0x01;
-        new DataView(head.buffer).setUint32(1, bytes.length, true);
-        parts.push(head, bytes);
+      case 's':
+        total += 5 + utf8Length(a.v);
         break;
-      }
       case 'i':
-        parts.push(Uint8Array.of(0x02), i64Bytes(a.v));
+      case 'f':
+        total += 9;
         break;
       case 'id':
-        parts.push(Uint8Array.of(0x03), idToBytes(a.v));
-        break;
-      case 'f':
-        parts.push(Uint8Array.of(0x04), f64Bytes(a.v));
+        total += 17;
         break;
       case 'b':
-        parts.push(Uint8Array.of(0x05, a.v ? 1 : 0));
+        total += 2;
         break;
       case 'val':
-        parts.push(Uint8Array.of(0x06), a.bytes, Uint8Array.of(0x00));
+        total += 2 + a.bytes.length;
         break;
     }
   }
-  let total = 0;
-  for (const p of parts) total += p.length;
   const out = new Uint8Array(total);
+  const dv = new DataView(out.buffer);
   let at = 0;
-  for (const p of parts) {
-    out.set(p, at);
-    at += p.length;
+  for (const a of args) {
+    switch (a.t) {
+      case 's': {
+        const len = utf8Length(a.v);
+        out[at] = 0x01;
+        dv.setUint32(at + 1, len, true);
+        textEncoder.encodeInto(a.v, out.subarray(at + 5, at + 5 + len));
+        at += 5 + len;
+        break;
+      }
+      case 'i': {
+        out[at] = 0x02;
+        const v = a.v;
+        if (typeof v === 'number' && Number.isSafeInteger(v)) {
+          // two's complement, little-endian: the low word, then the high word (the floor quotient)
+          dv.setUint32(at + 1, ((v % 4294967296) + 4294967296) % 4294967296, true);
+          dv.setInt32(at + 5, Math.floor(v / 4294967296), true);
+        } else out.set(i64Bytes(v), at + 1);
+        at += 9;
+        break;
+      }
+      case 'id': {
+        const x = a.v;
+        if (!isId(x)) throw new Error(`not an Id: ${String(x)}`);
+        out[at] = 0x03;
+        for (let n = 0; n < 16; n++) out[at + 1 + n] = ID_HEX[x.charCodeAt(2 * n)]! * 16 + ID_HEX[x.charCodeAt(2 * n + 1)]!;
+        at += 17;
+        break;
+      }
+      case 'f':
+        out[at] = 0x04;
+        if (Number.isNaN(a.v)) throw new Error('NaN is forbidden in a hash argument');
+        dv.setFloat64(at + 1, a.v === 0 ? 0 : a.v, true);
+        at += 9;
+        break;
+      case 'b':
+        out[at] = 0x05;
+        out[at + 1] = a.v ? 1 : 0;
+        at += 2;
+        break;
+      case 'val':
+        out[at] = 0x06;
+        out.set(a.bytes, at + 1);
+        out[at + 1 + a.bytes.length] = 0x00;
+        at += 2 + a.bytes.length;
+        break;
+    }
   }
   return out;
 }
