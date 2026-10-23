@@ -4,7 +4,7 @@ What the Story Engine needs from the running game. This list is decided by what 
 
 ## Current picture
 
-Refreshed whenever the bridge reaches a milestone; last refreshed 22 October 2026.
+Refreshed whenever the bridge reaches a milestone; last refreshed 23 October 2026.
 
 - **Where the code is.** `main` has bridge 0.8.5. Bridge 0.8.8 (branch `claude/bridge-080a`) holds NPC direction and the read-only senses (S2 to S6), built and tested offline but never run in game; the DM toolkit (`claude/bridge-080-dm`) is work in progress.
 - **XF Core C1** is designed (`research/runtime/xf-core-architecture.md` on `claude/xf-core-design`). It takes all 12 plugin API needs and `companion@1` into account. The plugin lives in `projects/xf-story-engine/`, built against the published SDK. The Story Engine's review (5 blocking, 9 missing, 6 changes) was resolved in design round 2 (`7adc6430`): 17 accepted, 2 changed, 1 partly deferred. Highlights:
