@@ -1,5 +1,5 @@
 {
- "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + idle choice (claude/body-fidelity) + expressions feature (claude/expressions-p1) + mottle actions (claude/mottle) + expression.setAxis and setLinks (claude/expressions-drawer); the dense-field note shortened on claude/ui-copy-polish (text only) + lighting setups (claude/lighting-setups) + expression.intensity (claude/expression-interpolator) + rendering options (claude/rendering-options) + transition.set (claude/expression-transition) + character.resolveConflict (claude/profiles-p1; additions only) + collection.exportWindowCopy (claude/polish-2; additions only) + tabs.rename and tabs.move (claude/profiles-p2; additions only)",
+ "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + idle choice (claude/body-fidelity) + expressions feature (claude/expressions-p1) + mottle actions (claude/mottle) + expression.setAxis and setLinks (claude/expressions-drawer); the dense-field note shortened on claude/ui-copy-polish (text only) + lighting setups (claude/lighting-setups) + expression.intensity (claude/expression-interpolator) + rendering options (claude/rendering-options) + transition.set (claude/expression-transition) + character.resolveConflict (claude/profiles-p1; additions only) + collection.exportWindowCopy (claude/polish-2; additions only) + tabs.rename and tabs.move (claude/profiles-p2; additions only) + tabs.new, tabs.reset, tabs.saveAsDefault, tabs.updateDefault, defaults.rename, defaults.delete and defaults.restore (claude/profiles-p2; additions only)",
  "states": {
   "starter": {
    "modes": {
@@ -375,6 +375,20 @@
      "to": {
       "min": 0,
       "unit": "index"
+     }
+    },
+    "layer/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "layer/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
      }
     },
     "layer/camera.setFov": {
@@ -1028,6 +1042,20 @@
       "unit": "index"
      }
     },
+    "point/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "point/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "point/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -1674,6 +1702,20 @@
      "to": {
       "min": 0,
       "unit": "index"
+     }
+    },
+    "viewport/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "viewport/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
      }
     },
     "viewport/camera.setFov": {
@@ -2324,6 +2366,20 @@
       "unit": "index"
      }
     },
+    "collection/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "collection/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "collection/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -2970,6 +3026,20 @@
      "to": {
       "min": 0,
       "unit": "index"
+     }
+    },
+    "preset/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "preset/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
      }
     },
     "preset/camera.setFov": {
@@ -3833,6 +3903,20 @@
       "unit": "index"
      }
     },
+    "layer/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "layer/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "layer/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -4491,6 +4575,20 @@
       "unit": "index"
      }
     },
+    "point/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "point/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "point/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -5137,6 +5235,20 @@
      "to": {
       "min": 0,
       "unit": "index"
+     }
+    },
+    "viewport/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "viewport/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
      }
     },
     "viewport/camera.setFov": {
@@ -5787,6 +5899,20 @@
       "unit": "index"
      }
     },
+    "collection/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "collection/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "collection/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -6433,6 +6559,20 @@
      "to": {
       "min": 0,
       "unit": "index"
+     }
+    },
+    "preset/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "preset/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
      }
     },
     "preset/camera.setFov": {
@@ -7297,6 +7437,20 @@
       "unit": "index"
      }
     },
+    "layer/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "layer/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "layer/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -7956,6 +8110,20 @@
       "unit": "index"
      }
     },
+    "point/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "point/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "point/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -8602,6 +8770,20 @@
      "to": {
       "min": 0,
       "unit": "index"
+     }
+    },
+    "viewport/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "viewport/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
      }
     },
     "viewport/camera.setFov": {
@@ -9252,6 +9434,20 @@
       "unit": "index"
      }
     },
+    "collection/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "collection/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "collection/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -9898,6 +10094,20 @@
      "to": {
       "min": 0,
       "unit": "index"
+     }
+    },
+    "preset/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "preset/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
      }
     },
     "preset/camera.setFov": {
@@ -10761,6 +10971,20 @@
       "unit": "index"
      }
     },
+    "layer/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "layer/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "layer/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -11419,6 +11643,20 @@
       "unit": "index"
      }
     },
+    "point/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "point/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "point/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -12065,6 +12303,20 @@
      "to": {
       "min": 0,
       "unit": "index"
+     }
+    },
+    "viewport/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "viewport/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
      }
     },
     "viewport/camera.setFov": {
@@ -12715,6 +12967,20 @@
       "unit": "index"
      }
     },
+    "collection/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "collection/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "collection/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -13361,6 +13627,20 @@
      "to": {
       "min": 0,
       "unit": "index"
+     }
+    },
+    "preset/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "preset/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
      }
     },
     "preset/camera.setFov": {
@@ -14224,6 +14504,20 @@
       "unit": "index"
      }
     },
+    "layer/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "layer/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "layer/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -14882,6 +15176,20 @@
       "unit": "index"
      }
     },
+    "point/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "point/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "point/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -15528,6 +15836,20 @@
      "to": {
       "min": 0,
       "unit": "index"
+     }
+    },
+    "viewport/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "viewport/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
      }
     },
     "viewport/camera.setFov": {
@@ -16178,6 +16500,20 @@
       "unit": "index"
      }
     },
+    "collection/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "collection/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "collection/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -16824,6 +17160,20 @@
      "to": {
       "min": 0,
       "unit": "index"
+     }
+    },
+    "preset/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "preset/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
      }
     },
     "preset/camera.setFov": {
@@ -17690,6 +18040,20 @@
       "unit": "index"
      }
     },
+    "layer/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "layer/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "layer/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -18351,6 +18715,20 @@
       "unit": "index"
      }
     },
+    "point/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "point/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "point/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -18997,6 +19375,20 @@
      "to": {
       "min": 0,
       "unit": "index"
+     }
+    },
+    "viewport/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "viewport/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
      }
     },
     "viewport/camera.setFov": {
@@ -19647,6 +20039,20 @@
       "unit": "index"
      }
     },
+    "collection/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "collection/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "collection/camera.setFov": {
      "degrees": {
       "min": 10,
@@ -20293,6 +20699,20 @@
      "to": {
       "min": 0,
       "unit": "index"
+     }
+    },
+    "preset/tabs.saveAsDefault": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "preset/defaults.rename": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
      }
     },
     "preset/camera.setFov": {
