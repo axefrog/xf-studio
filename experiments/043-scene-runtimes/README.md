@@ -1,6 +1,6 @@
 # Experiment 043: scene runtimes (profiles phase 4a)
 
-**Status:** gap map and chunk plan, approved 22 October 2026 with decisions D1–D4 at their defaults (§4). Chunks 4a-i (§7), 4a-ii (§8), 4a-iii (§9) and 4a-iv (§10) are built on `claude/profiles-4a`. This is the working record for [profiles design §4.5](../../research/authoring/profiles-views-layouts-design.md#45-scene-runtimes-and-switching-phase-4a) and its phase 4a row in §9.2. It builds on spike S2 ([experiment 039](../039-view-switch-spike/README.md), prototype on branch `claude/spike-views`).
+**Status:** gap map and chunk plan, approved 22 October 2026 with decisions D1–D4 at their defaults (§4). Chunks 4a-i (§7), 4a-ii (§8), 4a-iii (§9), 4a-iv (§10) and 4a-v (§11) are built on `claude/profiles-4a`. This is the working record for [profiles design §4.5](../../research/authoring/profiles-views-layouts-design.md#45-scene-runtimes-and-switching-phase-4a) and its phase 4a row in §9.2. It builds on spike S2 ([experiment 039](../039-view-switch-spike/README.md), prototype on branch `claude/spike-views`).
 
 Source paths are relative to `projects/xf-studio/authoring/src/`, and line numbers are at `72369156` (phase 1 merged). Tests are in `projects/xf-studio/authoring/tests/`.
 
@@ -372,7 +372,7 @@ Sol's confirmation found five fixed and two only partly fixed, with one new Medi
     - **A new device is given back what the old one held** before it answers anything: the subject head, then the live turn's source. A question whose device was ended under it is asked again of the next device. So a suspension fails no work, and a live turn the preview service still holds keeps drawing (the reviewed failure: every later frame was `null`).
   - **`load()` is the preview setup's first load** and its Try again. It resolves once a head of the drawn scene is shown. A want superseded during the first load waits for the one that replaced it.
   - **A later head that can't be built leaves the V shown before**, with one plain notice ("Your V couldn't be shown in the 3D view, so the V shown before stays. Change the V again to try once more.") and a diagnostics entry. The next change builds again.
-  - **Core preparation progress.** While nothing is shown it goes to the head pane, as before. While another V is shown, the person gets one plain notice per want ("… The V shown now stays until it's ready."). Progress in the pane's quiet overlay is 4a-v's.
+  - **Core preparation progress** goes to the head pane: its loading state while nothing is shown, its quiet status line while another V is (4a-v replaced this chunk's one-off notice, §11).
 - **A head is built, shown and hidden** (`preview/browser/browser-head-attachment.ts`, `buildBrowserHead`).
   - *Built hidden, with the signal:* the body's core prepared, the scene built on the device, the stage theme, research tools and quality followers, the V's detail service, and the saved-V, preview and motion services. Nothing reaches the application.
   - *Shown:* drawn on the device, its services attached, its layered surfaces connected and the on-head editor mounted, its save caught up with the V's, the scene's motion restored and the view's camera read. It follows the V's context (details, facial shape, makeup, body switch, puppet).
@@ -464,7 +464,7 @@ Sol's confirmation found five fixed and two only partly fixed, with one new Medi
 
 **Decisions and caveats.**
 
-- **Ready means built.** "The previous V stays drawn until the new one is ready" holds for the runtime: the new head is shown once it is built, then its V's details fill in as before. Preparing details, programs and textures while hidden, with progress, is 4a-v. The details aren't prepared while hidden in this chunk, because a hidden runtime draws no frames and the detail uploads are paced per frame.
+- **Ready meant built in this chunk.** The new head was shown once built, and its V's details filled in afterwards. 4a-v made ready mean prepared: details, programs and maps made ready while hidden, with progress (§11).
 - **Preview demand waits for residency; it doesn't buy it.** A V's previews get a device only while a resident head shows it, and the device is made only once a question wants it. A non-resident V's questions wait rather than taking a warm V's device, because in 4a the Character panel shows only the shown head's V, so such questions are background work for a panel no one sees. With several drawn views (4b), a view's want makes its V resident, and its previews follow.
 - **A warm V keeps its device**, as it keeps its head, so switching back is instant for previews too.
 - **The preview stage's busy state** (`studio-ui/components/choice-preview.ts`) is a behaviour fix inside the component library: one frame request is tracked by a token that a new or stopped frame source clears. It changes nothing visible.
@@ -488,14 +488,105 @@ Sol's confirmation found five fixed and two only partly fixed, with one new Medi
 - **A suspendable device must be invisible to its users.** Ending a worker is cheap, but whatever the service believes the device holds (the subject head, the live source) has to come back with the next one, and a question asked meanwhile has to wait for the owner's admission rather than make a device of its own.
 - **The GL-object counter keeps listing objects that died in a context loss.** A probe section that runs after a context loss must compare against its own baseline.
 
-**What 4a-v needs from this.**
-
-- **A prepare step before `show`.** The residency shows a runtime as soon as its build resolves. 4a-v puts `runtime.prepare(view, signal)` (and the V's details) inside the owner's build, or adds a preparing state between built and shown, so the previous V stays drawn until the new one is prepared.
-- **Progress in place.** While another V is shown, the owner's `preparing` hook tells the person once, by notice. 4a-v replaces that with the pane's quiet overlay (`studio-ui/panels/viewports.ts`), through a typed preparation state on the owner's snapshot.
-- **`device.show(view)`** for phase 2's tabs goes through the same owner: a tab switch becomes a want.
+**What 4a-v needed from this** (built in §11): a preparing state between built and shown, progress in the pane's quiet line instead of the one-off notice, and `show(view)` through the owner.
 
 **What 4a-vi needs from this.**
 
 - **Routing by named view.** The owner shows one drawn scene. Routing a view action to the named view's runtime, and readiness per scene for the loaders (the `savedAppearance.ready` port reads `heads.shown()`), replace the single attachments the shown head makes (`attach({ preview, motion, … })`).
 - **The editors per view.** The shown head mounts the on-head editor in `show`; `preview/browser/scene-editors.ts` takes that over per view, and exception 17 goes.
 - **T3** (`measure.ts` in this folder) can drive a body switch through the production page: `xfStudioSceneEvidence().residency` lists the residents and the build in flight.
+
+## 11. Chunk 4a-v: prepare before showing, with progress (built)
+
+It closes S2's second defect: a lighting setup's or a V's first draw froze the page while its programs linked in one blocking task (94 s on a cold program cache). Every program a hidden runtime's first frame would link is now compiled ahead and linked on the driver's threads, so the page never waits on the link itself. Behind progress, the link still takes as long as the driver needs (about 35 s for a cold masculine V on synthetic heads, below).
+
+**What changed.**
+
+- **Prepared before shown** (`preview/scene-residency.ts`). The residency owner now builds a runtime, then prepares it (the port's `prepare`), and only then shows it, so the previous V stays drawn until the new one is *prepared*, not just built.
+  - A want superseded while it prepares stops at its next step and is disposed, never shown.
+  - Preparation is work done ahead: one that fails for any reason but an abort still shows the runtime, whose first frame then does the rest, so the person's choice is never lost to it.
+  - A warm runtime is shown at once while it is still prepared (the port's `prepared`). One that needs preparing again (its lighting or what it draws changed while warm) is prepared first, with no build, and stays warm if that is superseded. Evicting or losing one stops its preparation first.
+- **Progress, typed.** The owner publishes `PreparationState`: the scene and key, the stage (`core`, `build`, `details`, `programs`, `textures`, `warm-up`), an overall fraction that only grows for one want, what it waits on (`host`, `files`, `driver`, `gpu`), the host's own line while it prepares a core, and whether the runtime was warm. Stages never go back. Each stage has a weight, and only the stages a want goes through count (a masculine V's core first).
+- **The runtime's preparation** (`platform/scene/runtime-preparation.ts`, `SceneRuntime.prepare`). It runs in small steps between frames, each within `PREPARE_FRAME_MS` (8 ms) of the page's thread:
+  1. **The feature renderers' own passes** (`FeatureRenderer.prepare`, new and optional): eye makeup compiles its composite's three passes ahead (`createPlateComposite().compile`), then composites, so its merged plate exists and is visible as the first frame draws it.
+  2. **Every mesh the next frame draws**, through the lighting stage's `prepare`: the forward scene, the scatter and contact variants, and each caster's shadow depth variants. The shadow pass's pick of a depth material is reproduced (`shadowDepthMaterial`, after three r186's `getDepthMaterial`), including the variant it picks when the maps redraw inside the contact prepass, where every caster wears its depth material. Each mesh is marked as receiving shadows before it is compiled, as the frame marks it: Three keys a program on it.
+  3. **The display's own passes** (`prepareDisplay`): the game grade or the studio's coverage and tone passes, the skin scatter's blur, and a stand-in for Three's background plane (`BackgroundMaterial`, otherwise linked inside the first studio frame: 2.3 s cold).
+  4. **Links.** With KHR_parallel_shader_compile the preparation asks, once a frame and without waiting, how many programs are linked, then takes each one's first use a few per frame. Without it a fence stands in (see the fallback below).
+  5. **Textures.** The maps the compiled materials hold (their own properties and uniforms: Three copies built-in maps into uniforms only when it draws), uploaded a few per frame.
+  6. **One hidden warm-up draw** on the renderer device (`RendererDevice.warmUp`). The hidden runtime draws one frame exactly as shown, and in the same task the device draws the shown runtime again, so the canvas keeps the shown V's pixels and nothing of the hidden one reaches the screen. It builds what only a draw makes (the driver's input layouts, frame-sized targets), and a fence then waits for the GPU. Warm-ups count in the slot's `warmUps`, never in its `frames`.
+- **What a preparation leaves behind.** Three deletes a program's shaders only at its first use, so a program compiled ahead and released unused (a superseded preparation) left both shaders on the driver. `releaseShadersWithPrograms` deletes them with the program. The renderer's scenes now share one prefiltered room (`studio-environment.ts`): it took 32–61 ms of the page's thread per runtime, and the last runtime to go frees it.
+- **The head** (`browser-head-attachment.ts`, `AttachedHead.prepare`). It asks for the V's details on a head of their body and waits until they are placed (shown, failed or waiting for WolvenKit), reporting the host's progress. The V's own makeup is hidden as the view hides it. Then it prepares the scene, together with the lighting setups of any other view of the same scene (phase 4a has none). `prepared()` is the scene's.
+- **The owner** (`browser-scene-heads.ts`). A masculine V's want starts with the `core` stage, and the host's line goes with it. The typed state goes to the presentation (`preparation` port, then `ViewportAttachment.setPreparation`, read as `viewport.snapshot().head.preparation`). While nothing is shown, the pane's loading progress follows the overall fraction too. 4a-iv's one-off notice ("… The V shown now stays until it's ready.") is gone.
+- **`show(view)` for phase 2's tabs** (`heads.show(view)`). The drawn view becomes `view`, and its scene's head is wanted like any subject change: the head shown stays drawn, with progress, until that one is prepared. A newer want supersedes it, and a view that doesn't exist is refused. `shownView()` reports it. The root gives the owner `scenes.of(view)`.
+- **In the pane** (`studio-ui/panels/viewports.ts`, `studio-ui/preparation-text.ts`). While a V is shown and the next one is prepared, the quiet status line says which stage it is in, worded "Next V: …" (the wait picks the verb: preparing skin, hair and clothes on the host, else loading them), with a thin bar along its foot for the fraction. While nothing is shown, the pane's loading state says the stage. The line appears only once a preparation has run for 150 ms, so a quick re-preparation of a warm V never flashes it. It keeps one width for every stage, so it never resizes. The style guide's *Viewport overlays* entry gained the quiet line's three forms (written first, as the UI component track); no new component was needed.
+- **The parity tool** (`tools/scene-parity.ts compare`, rule in `tools/parity-rule.ts`). It applies the revised rule of §8: a frame passes when, against its nearest base, it differs by at most one channel step on fewer than 0.01 % of its pixels. The report gives each frame's figures and the worst frame's. On G1's captures it gives 17 identical, 3 within noise, worst `board2-studio-1024`: 8 of 460,192 pixels (0.0017 %), one step.
+
+**Gates.**
+
+- **T1, residency** (`tests/scene-residency.test.ts`, 5 new tests on the injected clock; the 12 earlier ones unchanged):
+  - the previous runtime stays shown until the new one is built and prepared;
+  - progress is typed, never decreases, never goes back a stage, says its driver wait and ends;
+  - a want superseded while it prepares stops within 100 ms of clock, is disposed and never shown, and its late reports are ignored;
+  - a warm runtime still prepared is shown in the same turn, and one that isn't is prepared first and stays warm when superseded;
+  - a failed preparation still shows;
+  - evicting a warm runtime being prepared stops it first.
+- **The owner** (`tests/browser-scene-heads.test.ts`, 2 new):
+  - a new head is prepared while the old V stays drawn, its typed progress (`core` first for a masculine V) reaches the presentation, moves forward and ends, and nothing is noticed;
+  - `show(view)` wants that view's scene's head, keeps the shown one until it is ready, shows a warm one at once, and refuses a missing view.
+- **Words and plumbing** (`tests/preparation-progress.test.ts`): the attachment carries the state beside the phase and drops it; every stage has a plain line in both places, with no developer words.
+- **Parity rule** (`tests/scene-parity-rule.test.ts`).
+- **T2, the preparation probe** (`tests/webgl-scene-preparation.test.ts`, page `tests/webgl-scene-preparation-probe-page.ts`). Synthetic heads, a fresh headless Chrome profile per run (a cold program cache), the production ports' shape under `SceneResidency`, and a counted context with links and uploads counted. It runs twice, with KHR_parallel_shader_compile and without it (the extension hidden: the fallback). Its gates:
+  - a first V with nothing shown;
+  - a cold V (the other body under the game's creator rig: programs never linked in the page) wanted while the first is shown;
+  - eight warm switches;
+  - a cancel while the third V's programs are prepared;
+  - closing everything.
+
+**Results** (23 October 2026; RTX 4070, ANGLE D3D11, headless Chrome; every run under the 3 GB guard, peak 1.4 GB):
+
+| Gate | With KHR_parallel_shader_compile | Without it (fallback) |
+|---|---|---|
+| Longest main-thread task, cold V, from the want to 1 s after it is shown (< 50 ms) | **none of 50 ms or more** | 13.2 s (5 tasks over 50 ms) |
+| Cold V, want to first presented frame | 35.3 s (17 programs linked on the driver's threads, behind progress) | 32.1 s |
+| Cold V, show to first presented frame | 32.6 ms | 33.0 ms |
+| Cold V frames before shown / hidden warm-ups | 0 / 1 | 0 / 1 |
+| Shown V's pixels while the cold V prepared | unchanged | unchanged |
+| Cold V's first shown frame: links, programs made, uploads | 0, 0, 9 (a later frame also sends 9: its bone matrices) | 0, 0, 9 (9) |
+| Links in any warm-up draw, the renderer's first included | 0 (warm-ups 6–10 ms) | 0 (8–10 ms) |
+| Warm switch, want to first presented frame (≤ 100 ms) | 1.2–5.4 ms (8 switches) | 1.2–18 ms |
+| Cancel while compiling, superseding want to stop (≤ 100 ms) | 3.4 ms; nothing drawn, GPU objects back | 10.7 ms; the same |
+| Progress | stages in order, fraction never decreasing, 31 steps in `programs` | the same, 23 steps in `programs` |
+| Closing everything (4a-i's gate with preparation) | GPU objects and programs at the baseline (`BackgroundMaterial` used once) | the same |
+
+Before the fixes in this chunk, the same probe found the cold V's warm-up draw linking 5 programs in one 36–44 s task, the first V's linking 8 in 5.2 s, and a superseded preparation leaving 4 shaders. The probe's own diagnostics name what was linked where (`warmUpPrograms`, `links`, `slow`), and that is how each was found:
+
+- the merged makeup plate, visible only after its first composite;
+- the composite's and the scatter's own passes;
+- the shadow depth variant picked inside the contact prepass;
+- the background plane;
+- meshes compiled before they were marked as receiving shadows.
+
+| Other runs | Result |
+|---|---|
+| Scene, view, preview, character, viewport, motion, residency, lighting, render, head, parity, preparation, UI, style-guide, makeup, startup, workspace, profiles and boundary tests | 105 files: 1,032 pass, 5 skip (real-game oracles), 0 fail (peak 1.7 GB) |
+| WebGL probes | renderer device 9, scene dispose 4, scene host 7, body 6, clothing 7, studio lighting 4, display 12, eye 5, plate composite 8, contact shadow 3, skin scatter 8, choice preview 6: all pass (peaks 0.5–1.5 GB) |
+| `bun run check` | passes |
+
+**The fallback (no KHR_parallel_shader_compile).** It stays chunked and reports progress, but it can't keep the page free. The fence trick assumes a link has finished once the GPU process has worked through the commands sent so far. ANGLE still links on its worker threads, so the fence signals early, and the first use of a program then blocks until its link is done (13.2 s for the slowest cold program). Without the extension the page has no way to ask whether a link is done without waiting. Chrome on Windows always offers the extension, so the fallback matters for other browsers and GPUs.
+
+**Decisions and caveats.**
+
+- **The first load is prepared too.** With nothing shown, the pane shows its loading state through every stage, and the head appears with its V's details, programs and maps ready, rather than bare and filling in. On a warm host that adds the details' time (about 1 s) to the time before the first head.
+- **The first build's room.** The first runtime on a renderer still prefilters the room on the page's thread, with PMREM's own programs linked inside it: 0.4 s cold, 80–100 ms warm (the probe's first V: one task of 98–164 ms). Later runtimes share it. Sharing it with the first build too, or moving the prefilter off the page's thread, is a performance-track item.
+- **The cold link time itself** (35 s on synthetic heads, 94 s in S2 on real data) is moved off the page's thread and behind progress, not removed. G2 measures it on real data with a fresh profile; its size stays a performance-track item.
+- **A lighting change on the shown view** still compiles its new programs inside the next frame. 4a-v prepares runtimes before they are shown (a V, a body, a view), not a setup change on the runtime already shown. The same machinery (the stage's `prepare` and `prepareDisplay` against the new setup, then swapping it in) can cover that next, so the old setup stays drawn until the new one is linked.
+- **A finding on the way (not changed, to keep parity).** The shadow maps are redrawn inside the contact prepass, whose casters wear their depth materials. Three's shadow pass then picks a depth material for the depth material itself, and turns its cull side over on every redraw (`shadowSide[material.side]`). So the maps are drawn with front-face culling on one redraw and back-face on the next. Compiling ahead covers both variants. Whether the maps should be drawn once per frame outside the prepass is a rendering question for the code-health ledger.
+- **Details catch up on a warm V.** A warm head shown again is shown at once, then catches up with its V as before (an update in place), because preparing its details first would make every warm switch wait for the host.
+- **Uploads in a frame.** The first shown frame still sends what every frame sends: the bones' matrices (9 small updates here), as a later frame does. The gate counts map uploads.
+- **The UI captures** are taken with a verification hook (`xfStudioShowPreparation`), so each stage is drawn by the pane's own code at a known fraction. A real switch passes through the same states too quickly to capture.
+
+**What 4a-vi needs from this.**
+
+- **The S2 gates in their final test form** (`tests/webgl-scene-runtimes.test.ts`): this chunk's probe already measures the preparation half (warm switch, cancel, stray frames, long tasks, links and uploads in the first frame).
+- **G2** on real data with a fresh Chrome profile: a lighting setup and a body never drawn, with `gl-probe.ts`. `xfStudioSceneEvidence().residency.preparation` shows the stage meanwhile.
+- **Routing by named view** can use `heads.show(view)` and `scenes.of(view)`: a tab switch is then a want, and the view's preview and motion services follow the runtime shown.

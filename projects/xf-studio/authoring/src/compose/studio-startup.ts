@@ -495,6 +495,13 @@ async function start(host: StudioHost, root: HTMLElement) {
     xfStudioLayeredSamples: () => viewer()?.layeredSamples() ?? null,
     // Developer captures: put the playing or paused idle at a motion time (the dangles re-simulate to it deterministically).
     xfStudioSeekIdle: (seconds: number) => { const scene = viewer(); scene?.idle?.seek(seconds); return scene?.idle?.time ?? null; },
+    // Developer captures (tools/preparation-look.ts): show a preparation state in the head pane as the runtime owner would, in its quiet
+    // status line, or with `pane` in its loading state (null: back to the shown head). The next real preparation replaces it.
+    xfStudioShowPreparation: (state: Parameters<typeof viewportDevice.headPreparation>[0], options: { pane?: boolean } = {}) => {
+      viewportDevice.headPreparation(state);
+      if (state && options.pane) viewportDevice.headPending("preparing", "", state.fraction);
+      else if (heads.shown()) viewportDevice.headReady();
+    },
     // Creator rig evidence for calibration captures (tools/creator-light-look.ts): its lights, one alone, and the frame cost.
     xfStudioCreatorRig: {
       lights: () => viewer()?.lighting.rig.lights.map(light => ({ name: light.id, castShadow: light.shadows })) ?? [],
