@@ -1,6 +1,6 @@
 # S2. Seed language and seeding layer specification
 
-**Status:** v1.7, 23 October 2026. v1.7 says how in-scene offers meet the attempt bound and a scene's end. v1.6 settles what the first implementation of the core found silent or contradictory (found while building it in the reference model): closure status, guard links, unchained beats, casting before the window, the category gate, R1's exits and adult guarantee, and L-06. v1.5 adds in-scene offers and puts obstacles in the core, from [language check 1](../language-check-1.md). v1.4: v1.4 aligns the city and social reads with [S1](simulation.md): bands are registered strings, and regimes have two reads. v1.3: v1.3 closes what S3 v0.2 still needed: `sownBy` after compaction, and the claim-conflict read's sharing. v1.2 answers GPT-6 Astra's review of S3 where it touches S2: overlays can't erase fixed identities, director-sown casting filters, and a fuller read API. v1.1 added what layer 3's specification ([S3](procedural.md)) needs: sowing requests, source withdrawal, a read API, the core hooks typed, and corrections to the fit hook and hook inputs.
+**Status:** v1.8, 23 October 2026. v1.8 rules on five questions from the core's fix round: T12 from `unattended`, game-clock reads at window boundaries, play-clock restarts at a load, L-06's "differ", and the resituating hook. v1.7 says how in-scene offers meet the attempt bound and a scene's end. v1.6 settles what the first implementation of the core found silent or contradictory (found while building it in the reference model): closure status, guard links, unchained beats, casting before the window, the category gate, R1's exits and adult guarantee, and L-06. v1.5 adds in-scene offers and puts obstacles in the core, from [language check 1](../language-check-1.md). v1.4: v1.4 aligns the city and social reads with [S1](simulation.md): bands are registered strings, and regimes have two reads. v1.3: v1.3 closes what S3 v0.2 still needed: `sownBy` after compaction, and the claim-conflict read's sharing. v1.2 answers GPT-6 Astra's review of S3 where it touches S2: overlays can't erase fixed identities, director-sown casting filters, and a fuller read API. v1.1 added what layer 3's specification ([S3](procedural.md)) needs: sowing requests, source withdrawal, a read API, the core hooks typed, and corrections to the fit hook and hook inputs.
 - **Reviews.** Two reviews by GPT-6 Astra: of v0.1 (25 findings) and of v0.16 (23 findings), all adopted (§16).
 - **The core.** v1.0 defines the core: the subset the first implementation builds (§0.3). Everything else on this page is a **later capability**, which the first implementation rejects plainly rather than accepting with partial behaviour.
 - **The research.** Versions v0.1 to v0.16 folded in the requirements of dossiers 8 and 10 to 23. §15 traces each dossier's list; git history has the version steps.
@@ -632,7 +632,7 @@ interface UnattendedPlan {
 ```
 
 - **A stake on `v`** (V's money, items, standing) is allowed only as a consequence of an action V accepts (L-15).
-- **A consequential choice:** every action MUST have a consequence that something reads: a write to a seed fact with a consumer, or a link whose `on` reads the response (`{ response: …, is: [action:<id>] }`). No two actions may have the same consequence: their writes, as sets of fact = value pairs, differ, or a response link tells them apart (L-06).
+- **A consequential choice:** every action MUST have a consequence that something reads: a write to a seed fact with a consumer, or a link whose `on` reads the response (`{ response: …, is: [action:<id>] }`). No two actions may have the same consequence: their writes, as sets of fact = value pairs, differ (on any fact), or a response link tells them apart (L-06).
 - **What a response template answers.** `to` matches V's acts. An answer to an offer is one of them, matched by response kind: `decline:<id>`, `action:<id>`, `action:*` or `any`.
 - **A decision beat's stances** need at least three, including `refuse` (L-14).
 ```ts
@@ -762,7 +762,9 @@ A beat's request takes the seed's `timing`; its class and channel come from the 
 - `maxWait: { clock: 'play', s: 1800 }`;
 - `onExpire: 'retry'` for authored seeds, and `'unattended'` for procedural ones.
 
-**Play-clock durations across a load.** The play clock restarts at a load (§8.2). A play-clock duration that was running (`maxWait`, a lapse, a category timer) restarts from the load. Game-clock durations don't.
+**Play-clock durations across a load.** The play clock restarts at a load (§8.2). **Every** play-clock duration that was still running restarts from the load: `maxWait`, a lapse, a category timer, a `since`, a timed casting wait. One that had already elapsed stays elapsed. Game-clock durations don't restart.
+
+**Game-clock durations are read at window boundaries.** A game-clock duration (`since`, a timed wait, the unattended plan, an aftermath delay, `maxWait` on the game clock) is measured as of the last simulation window boundary, never at the host's exact tick, so its result is the same however ticks fell (§4.3).
 
 ### 2.13 Scale, turns, threads and forms
 
@@ -1666,8 +1668,8 @@ Each transition is recorded (§10.1). At each re-evaluation step, the first appl
 | T10 | `offered` | V's response to the first offer is a decline; the null path with no reoffers left; or an exposed lapse with `then: 'unattended'` | `unattended` | Its content and writes (§7.4) |
 | T10a | `offered`, `running` | V retracts an offer (§7.4) | `withdrawn` | Quietly: pending deliveries cancelled; no response effects; no unattended plan; a neutral `retracted` entry. History already committed stays |
 | T11 | `offered` | The first offer was answered "not now" with reoffers left, lapsed with `then: 'reoffer'`, or lapsed without ever being displayed, within the offer's total attempt bound (§8.5) | `cast` | The offer beat is `deferred` (§7.4); `attempt` + 1 for the offer's draws |
-| T12 | `running` | `end` is yes, and no promise without `mayStayOpen` is open | `resolved` | Close as a success (§6.4) |
-| T13 | `unattended` | The plan's `after` has passed since entry | `resolved` | Apply `outcome`; mint its events; close as settled (§6.4) |
+| T12 | `running`, `unattended` | `end` is yes, and no promise without `mayStayOpen` is open | `resolved` | Close as a success (§6.4) |
+| T13 | `unattended` | The plan's `after` has passed since entry, and T12 hasn't fired | `resolved` | Apply `outcome`; mint its events; close as settled (§6.4) |
 | T14 | `cast` | The first request expired unreleased with `onExpire: 'unattended'` | `unattended` | — |
 | T15 | `running` | The seed is **stuck** (§7.5) | `withered` | Close as `abandoned`; record a `stuck` defect |
 
@@ -1685,7 +1687,7 @@ A seed **closes** on every move to `resolved` or `withered`, and on a move to `w
 
 1. **Mints one `seed-outcome` event,** committed. Its kernel fields are only the seed and the time. The details go in a `closure` record entry keyed by the event's `Id`:
    - **`status`:**
-     - `resolved`, after T12 only: the seed reached its end while V was in it;
+     - `resolved`, after T12 only: the seed reached its end while V was in it, including through content V's own answer set going (T12 from `unattended`, as when a decline's exit plays);
      - `transformed`, if a child seed `growsFrom` it;
      - `abandoned`, otherwise, including every T13: a seed the world settled without V is never `resolved`, even if its plan makes `end` yes;
    - **`witnessed`:** true if V was exposed (§10.2) to the beat or plan that ended it;
@@ -1862,7 +1864,7 @@ Its source is the game port (S5). It is session state and is not persisted. Afte
 |---|---|---|---|
 | `settling` | At a load | `pull` deliveries only | After `settle` play seconds **[tunable 90]** |
 | `returning` | After settling, only when the save's age is 30 minutes or more (§8.7) | The return view's deliveries, class 1 or lower; class 0 deliveries | When the view's deliveries are released, or after 120 play seconds |
-| `resituating` | After settling or returning | One cue of class 2 or lower: from the seed V was last attending, or, with none, one class-0 hook. Class 0 deliveries also pass | When that cue is released, or after 120 play seconds **[tunable]** |
+| `resituating` | After settling or returning | One cue of class 2 or lower: from the seed V was last attending (the one with V's latest receipt), or, with none, one class-0 hook: the first class-0 delivery the arbiter releases, in its usual order. Class 0 deliveries also pass | When that cue is released, or after 120 play seconds **[tunable]** |
 | `normal` | After resituating | As §8.3 | — |
 
 **Away** is an overlay, set and cleared by S5's away marker. While it is set, only classes 0 and 1 pass, whatever the state.
