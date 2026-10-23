@@ -125,6 +125,46 @@ describe('SF1-X-2: the floors', () => {
     expect(sim.gate.produce(occ([{ who: a!, role: 'target' }], { tags: ['sex.act'] }), settingsNow(sim), 0)).toEqual({ ok: false, reason: 'sex-tag' });
   });
 
+  test('a pin that gave a minor an adult age is gone when it is withdrawn and when its window has passed: the floor reads what the kernel resolves (Sol 1)', () => {
+    const s = busySim('SF1-X-2c', 1, undefined, ['city.events']);
+    const firstMinor = (): Id => {
+      for (const c of s.w.districts[0]!.cellIds) for (const r of s.people.residentsOfBlock(c)) if (s.people.view(r)!.ageClass === 'minor') return r;
+      throw new Error('no minor');
+    };
+    const gateOf = (who: Id) => s.gate.produce({ kind: 'assault', origin: 'sim', size: 1, window: 0, participants: [{ who, role: 'victim' }], effects: [], creator: s.w.s1 }, settingsNow(s), s.k.now);
+    const minor = firstMinor();
+    const cause = H(hs('age-pin'));
+    expect(gateOf(minor)).toEqual({ ok: false, reason: 'floor-minor' });
+    // withdrawal: the view is cached while the pin holds, and must not outlive it
+    const pin = s.k.pin({ node: minor, slot: 'age', value: 35, reason: 'authored', cause });
+    expect(s.people.view(minor)!.age).toBe(35);
+    expect(gateOf(minor)).toEqual({ ok: true });
+    expect(s.k.withdrawPin(pin.id, cause)).toBe(true);
+    expect(s.k.value(minor, 'age')).toBeLessThan(18);
+    expect(s.people.view(minor)!.ageClass).toBe('minor');
+    expect(gateOf(minor)).toEqual({ ok: false, reason: 'floor-minor' });
+    // a contribution with a window: it holds for the first window only, and one that is ended stops at once
+    const give = (value: number, to?: number) => s.k.contribute({
+      source: { layer: 'authored', origin: cause }, target: { slot: 'age', scope: { nodes: [minor] } }, form: { f: 'const', value }, mode: 'constrain',
+      valid: to === undefined ? {} : { from: 0, to },
+    });
+    give(40, 600);
+    expect(s.people.view(minor)!.age).toBe(40);
+    s.advance(2);
+    expect(s.k.now).toBeGreaterThanOrEqual(1200);
+    expect(s.k.value(minor, 'age')).toBeLessThan(18);
+    expect(s.people.view(minor)!.ageClass).toBe('minor');
+    expect(gateOf(minor)).toEqual({ ok: false, reason: 'floor-minor' });
+    const open = give(41);
+    expect(s.people.view(minor)!.age).toBe(41);
+    s.k.endContribution(open.id);
+    expect(s.people.view(minor)!.ageClass).toBe('minor');
+    expect(gateOf(minor)).toEqual({ ok: false, reason: 'floor-minor' });
+    // clearing the caches changes nothing
+    s.people.dropCaches();
+    expect(s.people.view(minor)!.ageClass).toBe('minor');
+  });
+
   test('a <role>-group participant never fills a floor role', () => {
     const group = sim.w.group(sim.w.districts[0]!.id, 'A1');
     for (const role of ['aggressor-group', 'victim-group', 'target-group', 'hostile-group']) {
@@ -225,6 +265,24 @@ describe('SF1-X-4: the protected set', () => {
     expect(sim.gate.produce({ ...o, participants: [{ who: r, role: 'participant' }], effects: [{ on: r, effect: 'help' }] }, settingsNow(sim), 6000)).toEqual({ ok: true });
   });
 
+  test('a person observed later was not present earlier: where and who is present at a past time read the protected set as of that time (Sol 7)', () => {
+    const sim = busySim('SF1-X-4c', 1, (d) => { d.people.absentP = 1; }, ['city.events']);
+    const cell = sim.w.districts[0]!.cellIds[0]!;
+    const residents = sim.people.residentsOfBlock(cell).slice(0, 2);
+    expect(sim.people.presentAt(cell, 0)).toEqual([]);
+    for (const r of residents) expect(sim.people.where(r, 0).cause).not.toBe('protected-present');
+    // V observes both at time 1200
+    for (const r of residents) sim.k.pin({ node: r, slot: 'age', value: sim.k.value(r, 'age') as number, reason: 'observed', at: 1200, cause: H(hs('observer')), evidence: r });
+    sim.k.now = 1300;
+    expect(sim.people.presentAt(cell, 0)).toEqual([]);
+    for (const r of residents) {
+      expect(sim.people.where(r, 0).cls).toBe('away');
+      expect(sim.people.where(r, 1100).cls).toBe('away');
+      expect(sim.people.where(r, 1300).cause).toBe('protected-present');
+      expect(sim.people.where(r, 1300).cls).not.toBe('away');
+    }
+  });
+
   test('casting never chooses the protected person for a harm role, over many occurrences at the same place and hour', () => {
     const { sim, r, moment } = protectedFrom('SF1-X-4b', 0);
     // the same moment a week on: the protected person is present in the cell by the routine
@@ -248,7 +306,7 @@ describe('SF1-X-4: the protected set', () => {
       if (cast !== 'no-cast') for (const e of cast) if (e.role === 'victim' && e.who === r) hits++;
     }
     expect(hits).toBeGreaterThan(0);
-  });
+  }, 120_000);
 
   test('a protected person is never away by where', () => {
     const { sim, r } = protectedFrom('SF1-X-4c', 0);

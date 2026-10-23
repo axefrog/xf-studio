@@ -78,7 +78,7 @@ export class World {
   buildNodes(): void {
     const k = this.k;
     const stream: Id[] = [this.city, this.v, this.vState, this.port, this.s1];
-    for (const d of Object.values(this.index.districts)) {
+    for (const d of Object.keys(this.index.districts).sort().map((id) => this.index.districts[id]!)) {
       const node = k.mirrored(`place:${d.key}`, 'xf:district');
       if (node !== d.id) throw new Error(`the index names ${d.key} as ${d.id}, not ${node}`);
       stream.push(node);

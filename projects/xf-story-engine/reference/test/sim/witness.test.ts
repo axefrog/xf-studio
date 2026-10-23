@@ -136,6 +136,43 @@ describe('SF1-W-2: attribution', () => {
   });
 });
 
+describe('SF1-W-2b: a decision that persists reads only what persists (Sol 6)', () => {
+  const setup = (name: string, memorable: boolean) => {
+    const sim = quietSim(name);
+    // regard is the NPC's regard of V, so the attribution that scales it is the NPC's reason for what V did
+    const { obs } = cast(sim);
+    const foe = sim.w.v;
+    const E = H(hs('e-sol6'));
+    sim.k.beliefs.set({
+      believer: obs, subject: foe, path: 'reason', at: 5, region: { r: 'set', values: ['cruel', 'hostile'] }, confidence: 0.5, evidence: [E],
+      source: { by: 'observed', event: E }, formed: 0, refreshed: 0, memorable,
+    });
+    return { sim, obs, foe };
+  };
+
+  test('a texture attribution does not scale a trust loss, a memorable one does, and a reload changes neither', () => {
+    const texture = setup('SF1-W-2b', false);
+    const memorable = setup('SF1-W-2b', true);
+    expect(texture.sim.tiePolicy.attributionMultiplier(texture.obs, texture.foe, 5)).toBe(1);
+    expect(memorable.sim.tiePolicy.attributionMultiplier(memorable.obs, memorable.foe, 5)).toBe(1.5);
+    const reloaded = setup('SF1-W-2b', false);
+    reloaded.sim.k.persistence.save('A');
+    reloaded.sim.k.persistence.load('A');
+    expect(reloaded.sim.k.beliefs.activeOf(reloaded.obs).length).toBe(0);
+    const after = (x: { sim: Sim; obs: Id; foe: Id }) => {
+      // after a load the resident is addressed again before anything is said of them
+      expect(x.sim.people.residentAt(x.sim.w.districts[0]!.cellIds[0]!, 0)).toBe(x.obs);
+      return x.sim.tiePolicy.applyInteraction(x.obs, x.foe, 'conflict', { at: 5 });
+    };
+    const noReload = after(texture);
+    expect(after(reloaded)).toEqual(noReload);
+    // the loss is the table's own, unscaled (trustB -0.03, trustI -0.05 from 0.5, in 64ths); the memorable attribution scales it by 1.5
+    expect([noReload.trustB, noReload.trustI]).toEqual([0.46875, 0.453125]);
+    const scaled = after(memorable);
+    expect([scaled.trustB, scaled.trustI]).toEqual([0.453125, 0.421875]);
+  });
+});
+
 describe('SF1-W-3: telling', () => {
   test('protectiveRelevance 0.8, severity 0.7, closeness c: score = 0.8 x 0.7 x c, p_tell = 0.3 x score', () => {
     const sim = quietSim('SF1-W-3');
@@ -280,6 +317,41 @@ describe('SF1-W-6: a telling is not harm', () => {
     }
   });
 
+  test('a telling passes the gate before it is minted or counted; a refusal mints nothing, takes no volume and is logged (Sol 9)', () => {
+    const build = (name: string) => {
+      const sim = quietSim(name, (data) => { data.minds.tellBase = 1e9; });
+      const d = sim.w.districts[0]!;
+      const [teller, listener, victim] = [0, 1, 2].map((n) => ofClass(sim, 0, n)) as [Id, Id, Id];
+      protect(sim, listener, victim);
+      const E = sim.k.events.mintEvent({
+        creator: sim.w.port, cause: sim.w.port, name: 'src', time: 1000, kind: 'assault', place: d.cellIds[0]!,
+        participants: [{ who: sim.w.v, role: 'aggressor' }, { who: victim, role: 'victim' }], effects: [{ on: victim, effect: 'harm' }], witnesses: [teller],
+      });
+      sim.k.beliefs.set({ believer: teller, subject: sim.w.v, path: 'did.harm', at: 1000, value: victim, confidence: 1, evidence: [E], source: { by: 'observed', event: E }, formed: 0, refreshed: 0, memorable: true });
+      const tells = (): Id[] => sim.k.store.idsOfKind('core:event').filter((x) => sim.k.value(x, 'kind') === 'tell');
+      return { sim, teller, listener, tells };
+    };
+    const a = build('SF1-W-6c');
+    const asked: Array<{ kind: string; origin: string; roles: string[] }> = [];
+    const produce = a.sim.gate.produce.bind(a.sim.gate);
+    a.sim.gate.produce = (o, s, n) => {
+      asked.push({ kind: o.kind, origin: o.origin, roles: o.participants.map((p) => p.role) });
+      return produce(o, s, n);
+    };
+    expect(a.sim.policies.encounter(a.teller, a.listener, 10)).toBe(true);
+    expect(asked).toEqual([{ kind: 'tell', origin: 'policy', roles: ['teller', 'listener', 'subject'] }]);
+    expect(a.tells().length).toBe(1);
+    expect(a.sim.record.tells).toEqual([10]);
+    // the gate refuses: no telling is minted, no volume is taken, nobody is told, and the refusal is in the log
+    const b = build('SF1-W-6d');
+    b.sim.gate.produce = () => ({ ok: false, reason: 'excluded' });
+    expect(b.sim.policies.encounter(b.teller, b.listener, 10)).toBe(false);
+    expect(b.tells()).toEqual([]);
+    expect(b.sim.record.tells).toEqual([]);
+    expect(b.sim.k.beliefs.activeOf(b.listener)).toEqual([]);
+    expect(b.sim.record.log.filter((e) => e.proc === 'social' && e.kind === 'gate').map((e) => e.reason)).toEqual(['excluded']);
+  });
+
   test('a consequential expose with V as the target is refused v-target', () => {
     const sim = quietSim('SF1-W-6b');
     const d = sim.w.districts[0]!;
@@ -390,5 +462,79 @@ describe('SF1-T-3: acceptance', () => {
     let any = false;
     for (let n = 0; n < 200 && !any; n++) any = sim.tiePolicy.accepts(npc, sim.w.v, 'close', H(hs('bid'), hi(n))).accepted;
     expect(any).toBe(true);
+  });
+});
+
+describe('SF1-T-4: the cap on materialised ties and the retract (Sol 8, 16)', () => {
+  const live = (sim: Sim, who: Id) => [...sim.k.store.edgesFrom(who), ...sim.k.store.edgesTo(who)].filter((e) => e.type === 'xf:tie' && (e.valid.to === undefined || e.valid.to > sim.k.now));
+  const residents = (sim: Sim): Id[] => sim.w.districts[0]!.cellIds.flatMap((c) => sim.people.residentsOfBlock(c));
+
+  test('V tied to 21 residents holds 20: the weakest tie of V is ended for the newest, and an NPC at the cap with free ties makes room', () => {
+    const sim = quietSim('SF1-T-4a');
+    const cap = sim.data.ties.maxMaterialised;
+    const all = residents(sim);
+    for (const r of all.slice(0, cap + 1)) expect(sim.tiePolicy.materialise(r, sim.w.v)).toBeDefined();
+    expect(live(sim, sim.w.v).length).toBe(cap);
+    expect(sim.tiePolicy.hasEdge(all[cap]!, sim.w.v)).toBe(true);
+    // an ordinary resident with nothing protecting their ties makes room the same way
+    const a = all[30]!;
+    for (const b of all.slice(31, 31 + cap + 3)) expect(sim.tiePolicy.materialise(a, b)).toBeDefined();
+    expect(live(sim, a).length).toBe(cap);
+  });
+
+  test('a person whose every tie is depended on makes no room: the new tie is refused, logged, and nothing is ended', () => {
+    const sim = quietSim('SF1-T-4b');
+    const cap = sim.data.ties.maxMaterialised;
+    const all = residents(sim);
+    const a = all[0]!;
+    const others = all.slice(1, cap + 2);
+    for (const [n, o] of others.slice(0, cap).entries()) {
+      expect(sim.tiePolicy.materialise(a, o)).toBeDefined();
+      protect(sim, o, a, 1, `sol8-${n}`);
+    }
+    expect(live(sim, a).length).toBe(cap);
+    const before = live(sim, a).map((e) => e.id).sort();
+    const extra = others[cap]!;
+    expect(sim.tiePolicy.materialise(a, extra)).toBeUndefined();
+    expect(sim.tiePolicy.hasEdge(a, extra)).toBe(false);
+    expect(live(sim, a).map((e) => e.id).sort()).toEqual(before);
+    expect(sim.record.log.filter((e) => e.reason === 'tie-cap').length).toBe(1);
+    // the other end being full refuses just the same, and its own ties stay
+    const b = all[40]!;
+    expect(sim.tiePolicy.materialise(extra, b)).toBeDefined();
+    expect(sim.tiePolicy.materialise(a, b)).toBeUndefined();
+    expect(live(sim, b).length).toBe(1);
+  });
+
+  const talk = (sim: Sim, npc: Id, kind: string, name: string): Id =>
+    sim.k.events.mintEvent({ creator: sim.w.port, cause: sim.w.port, name, time: 100, kind, place: sim.w.districts[0]!.cellIds[0]!, participants: [{ who: sim.w.v, role: 'participant' }, { who: npc, role: 'participant' }] });
+
+  test('a retract ends the thread: no later bid, favour or repair changes its status or the regard, and the thread stays visible', () => {
+    const sim = quietSim('SF1-T-4c');
+    const npc = residents(sim)[0]!;
+    const v = sim.w.v;
+    const hear = (kind: string, name: string) => sim.tiePolicy.hear(sim.policies.viewEvent(talk(sim, npc, kind, name))!);
+    hear('favour', 'f1');
+    expect(sim.tiePolicy.hasEdge(npc, v)).toBe(true);
+    const warm = sim.tiePolicy.regardOf(npc, v);
+    expect(warm.evN).toBe(1);
+    hear('retract', 'r1');
+    expect(sim.tiePolicy.excluded(npc, v)).toBe(true);
+    expect(sim.tiePolicy.statusOf(npc, v)).toBe('ended');
+    expect(sim.tiePolicy.hasEdge(npc, v)).toBe(true);
+    const before = JSON.stringify(sim.tiePolicy.regardOf(npc, v));
+    // nothing is made for the thread any more
+    expect(sim.tiePolicy.bid(npc, 'friendly', H(hs('bid'), hi(1)))).toBe(false);
+    hear('favour', 'f2');
+    hear('conflict', 'c1');
+    hear('repair', 'p1');
+    expect(JSON.stringify(sim.tiePolicy.regardOf(npc, v))).toBe(before);
+    expect(sim.tiePolicy.statusOf(npc, v)).toBe('ended');
+    expect(sim.record.log.filter((e) => e.reason === 'excluded-thread').length).toBe(4);
+    // the retract itself is idempotent, and another NPC's thread is untouched
+    hear('retract', 'r2');
+    expect(sim.record.softExcluded.length).toBe(1);
+    const other = residents(sim)[1]!;
+    expect(sim.tiePolicy.excluded(other, v)).toBe(false);
   });
 });

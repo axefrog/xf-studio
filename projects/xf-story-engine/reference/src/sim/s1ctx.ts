@@ -12,6 +12,14 @@ import type { GateResult, LogDraft, Occurrence } from './occ.ts';
 import type { S1Record } from './record.ts';
 import type { Sim } from './sim.ts';
 
+/**
+ * The version of each process of the core (S1 1.4). Raise one when its behaviour changes: the versions are part of what a lineage pins, so
+ * a save made under another version opens read-only instead of resuming old state under new code.
+ */
+export const PROCESS_VERSIONS: Record<string, number> = {
+  'city.events': 1, 'group.decide': 1, 'order.stocks': 1, 'city.mirror': 1, 'order.ledger': 1, 'order.norms': 1, 'scene.acts': 1,
+};
+
 export type CoarseFine = { kind: 'exact' } | { kind: 'count' } | { kind: 'distribution'; tolerance: string };
 
 export interface DemandedNode {

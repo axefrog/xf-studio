@@ -119,15 +119,17 @@ export class Reads {
   }
 
   private fed(name: string, deps: ReadDeps, digestId: string, key: (args: unknown[]) => string | undefined, current: (args: unknown[]) => string, feed: (d: never) => Feed<Transition> | undefined): void {
+    const transitions = (args: unknown[], from: GameTime, to: GameTime): ReadTransition[] => {
+      const kk = key(args);
+      const cur = current(args);
+      if (kk === undefined || cur === MAYBE) return [{ t: from, value: MAYBE }];
+      return feedTransitions(this.sim, feed(this.dg(digestId) as never), kk, cur, from, to);
+    };
     this.add({
       name, version: 1, deps,
-      eval: (args) => current(args),
-      transitions: (args, from, to) => {
-        const kk = key(args);
-        const cur = current(args);
-        if (kk === undefined || cur === MAYBE) return [{ t: from, value: MAYBE }];
-        return feedTransitions(this.sim, feed(this.dg(digestId) as never), kk, cur, from, to);
-      },
+      // S2 evaluates a closing condition at the time of each Change it delivers: the value at a past time is the one the transitions give, `maybe` outside what they cover
+      eval: (args, t) => (t >= this.k.now ? current(args) : transitions(args, t, t)[0]!.value),
+      transitions,
     });
   }
 
@@ -159,7 +161,7 @@ export class Reads {
     this.fed('regime', { ...ev(), interests: [{ kind: 'core:event', slot: '*' }] }, 'city.events', (a) => { const d = this.districtOf(a[0]); return d ? `regime|${d}` : undefined; }, regimeNow, (d: EventsDigest) => d?.changes);
     this.add({
       name: 'regimeIs', version: 1, deps: { ...ev(), interests: [{ kind: 'core:event', slot: '*' }] },
-      eval: (a) => { const r = regimeNow(a); return r === MAYBE ? MAYBE : r === a[1] ? 'yes' : 'no'; },
+      eval: (a, t) => { const r = this.eval('regime', [a[0]], t); return r === MAYBE ? MAYBE : r === a[1] ? 'yes' : 'no'; },
       transitions: (a, from, to) => this.transitions('regime', [a[0]], from, to).map((x) => ({ t: x.t, value: x.value === MAYBE ? MAYBE : x.value === a[1] ? 'yes' : 'no' })),
     });
 
@@ -206,7 +208,7 @@ export class Reads {
     // tied(a, b, type)
     this.add({
       name: 'tied', version: 1, deps: { digests: [], interests: [{ slot: '*' }], time: true, roles: ['a', 'b'] },
-      eval: (a) => (typeof a[0] === 'string' && typeof a[1] === 'string' ? this.tied(a[0], a[1]) : MAYBE),
+      eval: (a, t) => (typeof a[0] === 'string' && typeof a[1] === 'string' ? (t >= this.k.now ? this.tied(a[0], a[1]) : this.transitions('tied', a, t, t)[0]!.value) : MAYBE),
       transitions: (a, from, to) => {
         if (typeof a[0] !== 'string' || typeof a[1] !== 'string') return [{ t: from, value: MAYBE }];
         const e = sim.tiePolicy.edge(a[0], a[1]) ?? [...sim.k.store.edgesFrom(a[0]), ...sim.k.store.edgesTo(a[0])].find((x) => x.type === 'xf:tie' && (x.from === a[1] || x.to === a[1]));

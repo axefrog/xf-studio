@@ -72,8 +72,8 @@ export class People {
    */
   static shared = true;
   private static memo = new Map<string, { list: Array<ResidentView | undefined> }>();
-  private blocks = new Map<Id, { stamp: number; info: BlockInfo }>();
-  private views = new Map<Id, { stamp: number; list: Array<ResidentView | undefined> }>();
+  private blocks = new Map<Id, { stamp: number; now: number; info: BlockInfo }>();
+  private views = new Map<Id, { stamp: number; now: number; list: Array<ResidentView | undefined> }>();
   private spells = new Map<string, { s0: number; starts: number[] }>();
   private ranks = new Map<Id, Id>();
 
@@ -131,7 +131,7 @@ export class People {
     for (let i = 0; i < n; i++) ids.push(k.address(cell, `households[${i}]`));
     const stamp = this.stampOf(ids);
     const hit = this.blocks.get(cell);
-    if (this.cacheOn && hit && hit.stamp === stamp && hit.info.households.length === n) return hit.info;
+    if (this.cacheOn && hit && hit.stamp === stamp && (stamp === 0 || hit.now === k.now) && hit.info.households.length === n) return hit.info;
     const sizes = ids.map((h) => {
       const s = k.value(h, 'size');
       return typeof s === 'number' ? s : 0;
@@ -139,7 +139,7 @@ export class People {
     const prefix = [0];
     for (const s of sizes) prefix.push(prefix[prefix.length - 1]! + s);
     const info: BlockInfo = { cell, households: ids, sizes, prefix };
-    this.blocks.set(cell, { stamp, info });
+    this.blocks.set(cell, { stamp, now: k.now, info });
     return info;
   }
 
@@ -204,19 +204,21 @@ export class People {
     const members = [0, 1, 2, 3, 4, 5].map((j) => this.residentId(ref.household, j));
     const stamp = this.stampOf([ref.household, ...members.filter((m) => k.store.header(m) !== undefined)]);
     const hit = this.views.get(ref.household);
-    if (this.cacheOn && hit && hit.stamp === stamp && hit.list[ref.j] !== undefined) return hit.list[ref.j];
+    // a household nothing local touches is the same at any time; one that is touched is good only at the time it was resolved (a pin's validity is a window)
+    const fresh = hit !== undefined && hit.stamp === stamp && (stamp === 0 || hit.now === k.now);
+    if (this.cacheOn && hit && fresh && hit.list[ref.j] !== undefined) return hit.list[ref.j];
     const memoKey = `${k.worldSeed}|${this.w.pack.version}|${ref.household}`;
     const shared = this.cacheOn && People.shared && stamp === 0 ? People.memo.get(memoKey) : undefined;
     if (shared && shared.list[ref.j] !== undefined) {
       const out = shared.list[ref.j];
-      this.views.set(ref.household, { stamp, list: [...shared.list] });
+      this.views.set(ref.household, { stamp, now: k.now, list: [...shared.list] });
       return out;
     }
     const view = this.resolveView(res, ref);
     // The cache keeps the views of a household together; a stamp that moved starts it again.
-    const list = hit && hit.stamp === stamp ? hit.list : [];
+    const list = hit && fresh ? hit.list : [];
     list[ref.j] = view;
-    this.views.set(ref.household, { stamp, list });
+    this.views.set(ref.household, { stamp, now: k.now, list });
     if (this.cacheOn && People.shared && stamp === 0) {
       let m = People.memo.get(memoKey);
       if (!m) People.memo.set(memoKey, (m = { list: [] }));
@@ -380,7 +382,8 @@ export class People {
     const weights = rows[p]!;
     let cls = (['home', 'work', 'out'] as const)[invCum(weights, this.keys.sched(res, day, p))] as WhereClass;
     let cause: Whereabouts['cause'] = 'none';
-    if (this.protectedSet(res)) return { cls, cell: this.placeOf(v, cls, day, p), cause: 'protected-present' };
+    // protected as of `t`, not as of now: a person observed later was not retroactively present (S1 5.4 casts from recorded history as of the occurrence's own time)
+    if (this.protectedAt(res, t)) return { cls, cell: this.placeOf(v, cls, day, p), cause: 'protected-present' };
     if (this.stateAt(v, 'health', t).state === 1) {
       cls = 'away';
       cause = 'ill';

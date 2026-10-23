@@ -372,6 +372,37 @@ describe('SF1-I-15: the mean is bounded', () => {
     expect(sim.data.events.nMax).toBe(0.85);
   });
 
+  test('a regime that arrives in a window changes incidents from the next window: its own window reads the regimes live at its start (Sol 13)', () => {
+    const offspringOf = (festivalTheft: number, at: 'own' | 'next') => {
+      const sim = Sim.create({
+        worldSeed: seedOf('SF1-I-15r'), index: fx3Slice(), only: ['city.events'],
+        data: quietData((d) => {
+          for (const r of d.regimes) r.arrival = 0;
+          const f = d.regimes.find((r) => r.kind === 'festival')!;
+          // one festival arrives in the first window (a rate of 5,760 a day is a certainty), and it changes the means of theft
+          f.arrival = 5760;
+          f.effects = { ...f.effects, theft: festivalTheft };
+          d.events.nMax = 3;
+        }),
+      });
+      sim.k.settings.set({ cityScale: 5 }, 0);
+      const c1 = sim.w.districts[0]!.cellIds[0]!;
+      const w = 300;
+      sim.startAt(w);
+      const due = at === 'own' ? w : w + 1;
+      inject(sim, ...Array.from({ length: 40 }, (_, n) => child(sim, `p${n}`, 0, due, 'theft', 2, c1)));
+      sim.advance(due - w + 1);
+      expect(eventsState(sim).regimes.some((r) => r.kind === 'festival')).toBe(true);
+      // the children born of the injected parents are gen 1 (the injected ones are gen 0 by their facts)
+      return Object.values(eventsState(sim).calendar).flat().filter((x) => x.parentFacts.gen === 1).length;
+    };
+    // in the window the festival arrives it changes nothing: ten times the effect, the same offspring
+    expect(offspringOf(0.1, 'own')).toBe(offspringOf(10, 'own'));
+    expect(offspringOf(0.1, 'own')).toBeGreaterThan(0);
+    // in the next window it does
+    expect(offspringOf(10, 'next')).toBeGreaterThan(offspringOf(0.1, 'next'));
+  });
+
   test('over many cascades from large roots no chain exceeds 4 links', () => {
     const roots = FULL ? 1000 : 120;
     const sim = Sim.create({ worldSeed: seedOf('SF1-I-15b'), index: fx3Slice(), data: quietData((d) => { for (const r of d.regimes) r.arrival = 0; d.events.capPerWindow = 1000; }), only: ['city.events'] });

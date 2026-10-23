@@ -19,7 +19,7 @@ import type { GroupDigest } from './proc-groups.ts';
 import type { MirrorDigest } from './proc-mirror.ts';
 import type { NormsDigest } from './proc-norms.ts';
 import type { StocksDigest } from './proc-stocks.ts';
-import type { S1Ctx, S1Process, S1Result } from './s1ctx.ts';
+import { PROCESS_VERSIONS, type S1Ctx, type S1Process, type S1Result } from './s1ctx.ts';
 import type { Sim } from './sim.ts';
 import { simulatedDistricts } from './index-types.ts';
 
@@ -157,7 +157,7 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
   const proc = processCause(procId);
 
   return {
-    id: procId, version: 1, tier: 0, coarseFine: { kind: 'count' }, lag: 0,
+    id: procId, version: PROCESS_VERSIONS[procId]!, tier: 0, coarseFine: { kind: 'count' }, lag: 0,
     init: () => emptyEvents(),
 
     run(c: S1Ctx, w: number): S1Result<EventsState, EventsDigest> {
@@ -187,9 +187,12 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
       };
 
       const allowedKind = (kind: string): boolean => sim.kindAllowed(kind, c.settings);
+      // the modifiers of a window are those of the regimes live at its start, after the exits: a regime that arrives in this window changes
+      // incidents from the next one (S1 7.1, 7.2)
+      let liveAtStart: RegimeRec[] = [];
       const regimeMod = (d: Id, kind: KindName): number => {
         let m = 1;
-        for (const r of st.regimes) if (r.scope === d) m = m * Math.max(0.1, r.effects[kind] ?? 1);
+        for (const r of liveAtStart) if (r.scope === d) m = m * Math.max(0.1, r.effects[kind] ?? 1);
         return m;
       };
       const groupMod = (d: Id, kind: KindName): number => {
@@ -232,6 +235,7 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
         ops.push({ op: 'mint-event', spec: { name: `regime-end/${r.id}`, time: T, kind: 'regime-end', place: r.scope, causes: [r.id], outcome: 'done' } });
         regimesChanged(r.scope, T, before, st.regimes);
       }
+      liveAtStart = [...st.regimes];
 
       // (3) candidates
       const cands: Cand[] = [];
@@ -449,7 +453,8 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
           const bin = invCum(kd.delayWeights, sim.ids.child(d.id, ci, 'bin'));
           const [lo, hi2] = ev.delayBins[bin]!;
           const due = w + lo + Math.floor(sim.ids.child(d.id, ci, 'win') * (hi2 - lo + 1));
-          const row = Object.entries(kd.matrix).filter(([k2]) => allowedKind(k2));
+          // the rows of the matrix in the order of the kind registry, never the order a record lists them (S1 1.2)
+          const row = sim.data.kinds.flatMap((k2): Array<[string, number]> => (kd.matrix[k2.name] !== undefined && allowedKind(k2.name) ? [[k2.name, kd.matrix[k2.name]!]] : []));
           if (row.length === 0) continue;
           const childKind = row[invCum(row.map((e) => e[1]), sim.ids.child(d.id, ci, 'kind'))]![0];
           if (childKind === 'police-action' && sim.ids.report(d.id, ci) >= sim.reportChance(district, Math.min(10, d.witnesses), stocks, norms)) continue;

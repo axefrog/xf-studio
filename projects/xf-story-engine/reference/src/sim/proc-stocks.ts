@@ -8,7 +8,7 @@ import { clip01 } from './arith.ts';
 import type { EventsDigest } from './proc-events.ts';
 import type { NormsDigest } from './proc-norms.ts';
 import { type DigestBase, type EventFact, feedAfter } from './occ.ts';
-import type { S1Process } from './s1ctx.ts';
+import { PROCESS_VERSIONS, type S1Process } from './s1ctx.ts';
 import type { Sim } from './sim.ts';
 import { simulatedDistricts } from './index-types.ts';
 
@@ -44,7 +44,7 @@ export function stockRows(sim: Sim, f: EventFact): Array<{ dE: number; dY: numbe
 export function stocksProcess(sim: Sim): S1Process<StocksState, StocksDigest> {
   const cfg = sim.data.stocks;
   return {
-    id: 'order.stocks', version: 1, tier: 0, coarseFine: { kind: 'exact' }, lag: 0,
+    id: 'order.stocks', version: PROCESS_VERSIONS['order.stocks']!, tier: 0, coarseFine: { kind: 'exact' }, lag: 0,
     init: () => {
       const districts: StocksState['districts'] = {};
       for (const d of simulatedDistricts(sim.w.index)) districts[d.id] = { E: d.trust.E0, Y: d.trust.Y0, L: d.trust.L0 };

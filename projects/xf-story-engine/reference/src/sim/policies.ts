@@ -15,6 +15,7 @@ import type { Change, Effect, GameTime, Id, Region } from '../types.ts';
 import { ln } from '../fdlibm-log.ts';
 import { clamp, invCum, q64 } from './arith.ts';
 import { RAW_KIND_NAMES, TIE_KIND_NAMES } from './kinds.ts';
+import type { Occurrence } from './occ.ts';
 import { recipeClasses } from './fit.ts';
 import type { Sim } from './sim.ts';
 
@@ -404,12 +405,22 @@ export class Policies {
     const inFocus = k.frames.demandTier(teller) >= 3 || k.frames.demandTier(listener) >= 3;
     const aboutSpecial = best.b.subject === this.sim.w.v || this.sim.people.protectedSet(best.b.subject);
     if (!inFocus && !aboutSpecial) return false;
+    const rec = this.sim.record;
     if (!inFocus) {
-      const rec = this.sim.record;
       rec.tells = rec.tells.filter((x) => w - x < this.sim.data.acts.hourWindows);
       if (rec.tells.length >= m.tellsPerHour) return false;
-      rec.tells.push(w);
     }
+    // everything S1 produces passes the one gate before it is minted and before it takes any of the volume allowance (S1 6, S1-I-9)
+    const occ: Occurrence = {
+      kind: 'tell', origin: 'policy', size: 1, window: w, participants: [{ who: teller, role: 'teller' }, { who: listener, role: 'listener' }, { who: best.b.subject, role: 'subject' }],
+      effects: [], creator: this.sim.w.s1,
+    };
+    const gated = this.sim.gate.produce(occ, k.settings.at(k.now), k.now);
+    if (!gated.ok) {
+      this.sim.logNow({ w, proc: 'social', kind: 'gate', reason: gated.reason, refs: [teller, listener, best.b.subject] });
+      return false;
+    }
+    if (!inFocus) rec.tells.push(w);
     const hop = best.b.hop ?? 0;
     const op = hop >= m.hopLimit ? 3 : invCum(m.operatorWeights, this.sim.ids.op(teller, listener, best.b.id, hop));
     const operator = (['level', 'sharpen', 'assimilate', null] as const)[op]!;
@@ -423,7 +434,7 @@ export class Policies {
     k.beliefs.tellAs(teller, listener, best.b.id, teller_, operator);
     // the reason belief of the same act travels with it unless the telling levelled it
     if (operator !== 'level') {
-      const reason = k.beliefs.activeOf(teller).find((x) => x.path === 'reason' && x.subject === best!.b.subject && x.at === best!.b.at);
+      const reason = k.beliefs.activeOf(teller).find((x) => x.memorable && x.path === 'reason' && x.subject === best!.b.subject && x.at === best!.b.at);
       if (reason) k.beliefs.tellAs(teller, listener, reason.id, teller_, operator);
     }
     this.sim.logNow({ w, proc: 'social', kind: 'decision', reason: 'tell', key: `${teller}|${listener}|${best.b.id}`, refs: [teller_] });
@@ -439,7 +450,7 @@ export class Policies {
     const rate = this.sim.data.shape.rate[kind];
     if (!rate) return cfg.diag[kind] ?? 1;
     let all = 0;
-    for (const r of Object.values(this.sim.data.shape.rate)) all = all + r.reduce((a, b) => a + b, 0);
+    for (const name of Object.keys(this.sim.data.shape.rate).sort()) all = all + this.sim.data.shape.rate[name]!.reduce((a, b) => a + b, 0);
     const mine = rate.reduce((a, b) => a + b, 0);
     if (!(all > 0) || !(mine > 0)) return cfg.diag[kind] ?? 1;
     return clamp(-ln(mine / all), cfg.diagMin, cfg.diagMax);
@@ -564,6 +575,14 @@ export class Policies {
     else if (h.kind === 'xf:journal') this.sim.vFrames.journalChanged(ch.node);
   }
 
+  /** The group node of an affiliation: the district's A1 to A3 that stands for it, in district order; undefined when no group does. */
+  groupOfAffiliation(aff: string): Id | undefined {
+    for (const d of this.sim.w.districts) {
+      for (const [i, slot] of (['A1', 'A2', 'A3'] as const).entries()) if (d.affOrder[2 + i] === aff) return this.sim.w.group(d.id, slot);
+    }
+    return undefined;
+  }
+
   /** The game is ground truth (S1 8.8): end what the game now contradicts; beliefs are left, and the divergence is logged. */
   reconcile(person: Id, slot: string, value: unknown, old: unknown, quiet = false): void {
     const k = this.k;
@@ -584,9 +603,16 @@ export class Policies {
       // corrected something, so a reload that restates what was handled leaves the log as it was
       if (corrected || (!quiet && old !== undefined && old !== value)) this.sim.logNow({ w, proc: 'reconcile', kind: 'correction', reason: 'game-dead', refs: [person] });
     } else if (slot === 'affiliation' && value !== old) {
+      // end the old membership, add the new one when its group exists, caused by the game (S1 8.8 step 2); one already held is kept
+      const target = typeof value === 'string' ? this.groupOfAffiliation(value) : undefined;
       for (const e of k.groups.memberships(person)) {
+        if (e.to === target) continue;
         k.endEdge(e.id, k.now);
         corrected = true;
+      }
+      // only a move joins a group: the first reading, or one the game restates after a load, is not a change, and a dead person joins nothing
+      if (old !== undefined && target !== undefined && k.value(person, 'alive') !== 'no' && !k.groups.memberships(person).some((e) => e.to === target)) {
+        k.addEdge({ type: 'core:member-of', from: person, to: target, attrs: { role: 'member', strength: 1 }, cause: this.sim.w.port, valid: { from: k.now }, silent: quiet });
       }
       if (corrected || old !== undefined) this.sim.logNow({ w, proc: 'reconcile', kind: 'correction', reason: 'game-moved', refs: [person] });
     } else if (slot === 'quest-linked') {

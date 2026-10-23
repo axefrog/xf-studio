@@ -19,7 +19,7 @@ import { type IdentityKeys, identityKeys } from './keys.ts';
 import type { CastEntry, Descriptor, Occurrence } from './occ.ts';
 import { People } from './people.ts';
 import { type S1Record, appendLog, emptyRecord } from './record.ts';
-import { toProcessDef } from './s1ctx.ts';
+import { PROCESS_VERSIONS, toProcessDef } from './s1ctx.ts';
 import { Ties } from './ties.ts';
 import { type WorldOptions, World } from './world.ts';
 import type { EventsState } from './proc-events.ts';
@@ -119,9 +119,13 @@ export class Sim {
     }
   }
 
-  /** The lineage record pins the data, the tables and the processes it runs on (S1 1.4): packs with no contributions that carry versions. */
+  /**
+   * The lineage record pins the data, the tables and the processes it runs on (S1 1.4): packs with no contributions that carry versions.
+   * A process is pinned by its id and its version, whether or not this instance runs it, so a save made under another version of any of
+   * them opens read-only.
+   */
   private installPins(): void {
-    const procs = ['city.events', 'group.decide', 'order.stocks', 'city.mirror', 'order.ledger', 'order.norms', 'scene.acts'];
+    const procs = Object.keys(PROCESS_VERSIONS).sort().map((id) => [id, PROCESS_VERSIONS[id]!] as const);
     this.k.persistence.installPack({
       id: 'xf.s1.sim@1', version: H(hs('s1sim'), hrec({ data: this.data, procs, index: this.w.index.hash })), contributions: [],
     });

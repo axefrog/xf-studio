@@ -3,7 +3,7 @@
 import { describe, expect, test } from 'bun:test';
 import { H, id as hid, i as hi, rand, s as hs } from '../../src/id.ts';
 import { aggregateItems, labelOf, residentSum, type LedgerItem } from '../../src/sim/ledger.ts';
-import { operative, pressures, pulseU, type G, type GroupDigest, type GroupState } from '../../src/sim/proc-groups.ts';
+import { operative, pressures, pulseReplaces, pulseU, type G, type GroupDigest, type GroupState } from '../../src/sim/proc-groups.ts';
 import { ReplayPort } from '../../src/sim/port.ts';
 import { Sim } from '../../src/sim/sim.ts';
 import { fx3Slice } from '../../src/sim/slices.ts';
@@ -241,6 +241,24 @@ describe('SF1-G: the groups', () => {
     const released = { ...p, releasedAt: 86400 };
     expect(pulseU(released, 0.8, tau, 86400, 0.5)).toBeCloseTo(0.24, 12);
     expect(pulseU(released, 0.8, tau, 86400 + tau, 0.5)).toBeLessThan(0.24 * 0.4);
+  });
+
+  test('a pulse is replaced by the stronger urgency now, not at the time of the new fact: a weak mirrored fact older than a strong city one does not displace it (Sol 14)', () => {
+    const tau = 14 * 86400;
+    const T = 600;
+    const city = { at: 550, sev: 1, latched: false };
+    const mirrored = { at: 100, sev: 0.3, latched: false };
+    // at the time of the mirrored fact the city pulse has not happened yet (urgency 0), which is what let the old comparison replace it
+    expect(pulseU(city, 0.8, tau, 100, 0)).toBe(0);
+    expect(pulseReplaces(city, mirrored, 0.8, tau, 0, T)).toBe(false);
+    // in the other order, the strong newer fact does replace the weak old one
+    expect(pulseReplaces(mirrored, city, 0.8, tau, 0, T)).toBe(true);
+    // a latched pulse is held at its floor and is judged the same way
+    const held = { at: 550, sev: 1, latched: true, rival: 3 };
+    expect(pulseReplaces(held, { at: 100, sev: 0.3, latched: true, rival: 3 }, 0.8, tau, 0.5, T)).toBe(false);
+    expect(pulseReplaces(undefined, mirrored, 0.8, tau, 0, T)).toBe(true);
+    // equal urgency keeps the one held
+    expect(pulseReplaces(city, { ...city }, 0.8, tau, 0, T)).toBe(false);
   });
 
   const groupSim = (name: string, tweak: (d: S1Data) => void = () => {}) => Sim.create({ worldSeed: seedOf(name), index: fx3Slice(), data: quietData(tweak), only: ['group.decide'] });

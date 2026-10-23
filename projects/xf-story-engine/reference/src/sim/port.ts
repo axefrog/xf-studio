@@ -78,7 +78,7 @@ export class ReplayPort {
       }
       case 'person': {
         const node = this.node(line.key);
-        for (const [slot, value] of Object.entries(line.slots)) this.reading(line.t, node, slot, value);
+        for (const slot of Object.keys(line.slots).sort()) this.reading(line.t, node, slot, line.slots[slot]!);
         return;
       }
       case 'event': {

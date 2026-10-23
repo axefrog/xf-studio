@@ -12,7 +12,7 @@ import { clip01, invCum, spacingCount } from './arith.ts';
 import type { NormDef } from './data.ts';
 import { type DigestBase, type EventFact, type Feed, type Transition, pushFeed } from './occ.ts';
 import type { CastEntry, Descriptor } from './occ.ts';
-import type { S1Ctx, S1Process, S1Result } from './s1ctx.ts';
+import { PROCESS_VERSIONS, type S1Ctx, type S1Process, type S1Result } from './s1ctx.ts';
 import type { Sim } from './sim.ts';
 import { simulatedDistricts } from './index-types.ts';
 import { ceilingOf } from '../settings.ts';
@@ -126,7 +126,7 @@ export function normsProcess(sim: Sim): S1Process<NormsState, NormsDigest> {
   const rawKinds = norms.flatMap((n) => n.ladder.map((r) => kindName(n.id, r.rung)));
 
   return {
-    id: procId, version: 1, tier: 1, coarseFine: { kind: 'distribution', tolerance: '10%' }, lag: 0,
+    id: procId, version: PROCESS_VERSIONS[procId]!, tier: 1, coarseFine: { kind: 'distribution', tolerance: '10%' }, lag: 0,
     init: () => {
       const slots: NormsState['slots'] = {};
       for (const d of simulatedDistricts(sim.w.index)) {

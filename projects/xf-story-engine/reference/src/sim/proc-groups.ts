@@ -12,7 +12,7 @@ import { recipeClasses } from './fit.ts';
 import { type DigestBase, type EventFact, type Feed, type Transition, feedAfter, pushFeed } from './occ.ts';
 import type { EventsDigest } from './proc-events.ts';
 import type { MirrorDigest } from './proc-mirror.ts';
-import type { S1Ctx, S1Process, S1Result } from './s1ctx.ts';
+import { PROCESS_VERSIONS, type S1Ctx, type S1Process, type S1Result } from './s1ctx.ts';
 import type { Sim } from './sim.ts';
 import { simulatedDistricts } from './index-types.ts';
 
@@ -68,6 +68,14 @@ export function pulseU(p: Pulse | undefined, u0: number, tauSeconds: number, t: 
   if (!p.latched) return base * exptab(-e / tauSeconds);
   if (p.releasedAt === undefined || t < p.releasedAt) return Math.max(base * exptab(-e / tauSeconds), hold * base);
   return hold * base * exptab(-(t - p.releasedAt) / tauSeconds);
+}
+
+/**
+ * Whether a new pulse replaces the one a drive holds: the stronger urgency now wins (S1 7.8). Both are read at the snapshot time `T`, never
+ * at the new fact's own time, because a fact that reaches the group late (a mirrored one) is older than facts already counted.
+ */
+export function pulseReplaces(cur: Pulse | undefined, p: Pulse, u0: number, tauSeconds: number, hold: number, T: GameTime): boolean {
+  return cur === undefined || pulseU(p, u0, tauSeconds, T, hold) > pulseU(cur, u0, tauSeconds, T, hold);
 }
 
 /** The four pressures of a group at `t`, a pure function of its books and pulses (S1 7.8). */
@@ -137,7 +145,7 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
   const intentDef = (id: string): IntentDef => cfg.intents.find((i) => i.id === id)!;
 
   return {
-    id: procId, version: 1, tier: 0, coarseFine: { kind: 'exact' }, lag: 0,
+    id: procId, version: PROCESS_VERSIONS[procId]!, tier: 0, coarseFine: { kind: 'exact' }, lag: 0,
     init: () => {
       const groups: GroupState['groups'] = {};
       for (const d of simulatedDistricts(sim.w.index)) {
@@ -189,7 +197,7 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
           const put = (drive: string, p: Pulse, u0: number, tau: number, hold = 0): void => {
             if (!(drive in def.ethos)) return;
             const cur = g.pulse[drive];
-            if (cur === undefined || pulseU(p, u0, tau * DAY, f.time, hold) > pulseU(cur, u0, tau * DAY, f.time, hold)) g.pulse[drive] = p;
+            if (pulseReplaces(cur, p, u0, tau * DAY, hold, T)) g.pulse[drive] = p;
           };
           if ((f.kind === 'gang-clash' || f.kind === 'assault') && f.sides?.b === mine) {
             put('care_of_members', { at: f.time, sev, latched: false }, cfg.pulses.careU0, cfg.pulses.careTauDays);

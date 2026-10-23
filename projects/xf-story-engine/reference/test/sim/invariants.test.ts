@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { canonicalKey } from '../../src/canon.ts';
 import { H, id as hid, i as hi, s as hs } from '../../src/id.ts';
 import type { Id } from '../../src/types.ts';
+import { PROCESS_VERSIONS } from '../../src/sim/s1ctx.ts';
 import { PROCESS_WRITES, auditGate, auditWriters, lintSources, observeWrites } from '../../src/sim/audit.ts';
 import { TABLE_HASHES } from '../../src/sim/arith.ts';
 import { ReplayPort } from '../../src/sim/port.ts';
@@ -37,6 +38,29 @@ describe('the invariants of the simulation layer', () => {
     b.advance(40);
     expect(differing(recordOf(a), recordOf(b))).toEqual([]);
   });
+
+  test('S1-I-1 Keyed: the order a record lists its properties in is not part of the model (matrix, rates, presence: Sol 4)', () => {
+    const reversed = <T>(o: Record<string, T>): Record<string, T> => Object.fromEntries(Object.entries(o).reverse());
+    const run = (flip: boolean): { sim: Sim; rec: ReturnType<typeof recordOf> } => {
+      const index = fx3Slice();
+      const data = fxData((d) => {
+        busy(40)(d);
+        if (flip) {
+          d.shape.rate = reversed(d.shape.rate) as typeof d.shape.rate;
+          for (const kd of d.kinds) kd.matrix = reversed(kd.matrix) as typeof kd.matrix;
+        }
+      });
+      if (flip) for (const c of Object.values(index.cells)) c.presence = reversed(c.presence);
+      const sim = Sim.create({ worldSeed: seedOf('S1-I-1o'), index, data });
+      sim.advance(100);
+      return { sim, rec: recordOf(sim) };
+    };
+    const a = run(false);
+    const b = run(true);
+    expect(b.sim.w.dataHash).toBe(a.sim.w.dataHash);
+    expect(new Set(occurrences(a.sim).filter((o) => o.gen > 0).map((o) => o.kind)).size).toBeGreaterThan(2);
+    expect(differing(a.rec, b.rec)).toEqual([]);
+  }, 120_000);
 
   test('S1-I-2 Arithmetic: only the operations and tables of S1 1.2, with the frozen tables; no fused multiply-add', () => {
     expect(lintSources(files).filter((f) => f.audit === 'arithmetic')).toEqual([]);
@@ -387,6 +411,34 @@ describe('the invariants of the simulation layer', () => {
     const other = Sim.create({ worldSeed: seedOf('S1-I-28'), index: fx3Slice(), data: fxData((d) => { d.ties.cGeo = 5; }), only: ['city.events'] });
     (other.k.persistence as unknown as { chain: Map<string, unknown> }).chain.set('A', rec);
     expect(other.k.persistence.load('A').readOnly).toBe(true);
+  });
+
+  test('S1-I-28 One version: the version of a process is pinned with its id; a save made under another version of any process loads read-only, and the same versions load', () => {
+    expect(Object.keys(PROCESS_VERSIONS).sort()).toEqual(['city.events', 'city.mirror', 'group.decide', 'order.ledger', 'order.norms', 'order.stocks', 'scene.acts']);
+    const make = () => Sim.create({ worldSeed: seedOf('S1-I-28v'), index: fx3Slice(), data: fxData(), only: ['city.events'] });
+    const a = make();
+    a.advance(3);
+    const rec = a.k.persistence.save('A');
+    // every process takes its version from the one table
+    const all = Sim.create({ worldSeed: seedOf('S1-I-28v'), index: fx3Slice(), data: fxData() });
+    for (const [id, def] of all.defs) expect(def.version, id).toBe(PROCESS_VERSIONS[id]);
+    expect(all.defs.size).toBe(7);
+    const same = make();
+    (same.k.persistence as unknown as { chain: Map<string, unknown> }).chain.set('A', rec);
+    expect(same.k.persistence.load('A').readOnly).not.toBe(true);
+    // a version raised in a process this instance does not even run still changes the lineage
+    for (const id of ['city.events', 'scene.acts']) {
+      const was = PROCESS_VERSIONS[id]!;
+      PROCESS_VERSIONS[id] = was + 1;
+      try {
+        const other = make();
+        expect(other.defs.get('city.events')!.version).toBe(PROCESS_VERSIONS['city.events']);
+        (other.k.persistence as unknown as { chain: Map<string, unknown> }).chain.set('A', rec);
+        expect(other.k.persistence.load('A').readOnly, id).toBe(true);
+      } finally {
+        PROCESS_VERSIONS[id] = was;
+      }
+    }
   });
 });
 

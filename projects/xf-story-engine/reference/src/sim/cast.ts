@@ -39,7 +39,8 @@ export class Casting {
     const d = this.districtOf(cell);
     if (f < 5) return c.presence[d.affOrder[f]!] ?? 0;
     let sum = 0;
-    for (const [aff, v] of Object.entries(c.presence)) if (d.affOrder.indexOf(aff) < 0 || d.affOrder.indexOf(aff) === 5) sum += v;
+    // summed in the order of the names, never the order the record happens to list them
+    for (const aff of Object.keys(c.presence).sort()) if (d.affOrder.indexOf(aff) < 0 || d.affOrder.indexOf(aff) === 5) sum += c.presence[aff]!;
     return sum;
   }
 

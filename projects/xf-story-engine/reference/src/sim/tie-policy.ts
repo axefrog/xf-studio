@@ -88,13 +88,27 @@ export class TiePolicy {
     return q64(0.25 * (timeP + intensityP + intimacyP + servicesP));
   }
 
-  /** Materialise the tie between two nodes (S1 4.6): a person has at most 20; a new one beyond that ends the weakest that nothing depends on. */
-  materialise(a: Id, b: Id): Edge {
+  /**
+   * Materialise the tie between two nodes (S1 4.6): a person has at most 20; a new one beyond that ends the weakest that nothing depends on.
+   * When either end is full and nothing of theirs can be ended, nothing is ended and nothing is made: the result is `undefined` and the
+   * refusal is logged (the cap is a hard limit on retained state, S1-I-12).
+   */
+  materialise(a: Id, b: Id): Edge | undefined {
     const have = this.edge(a, b);
     if (have) return have;
     const t = this.sim.ties.tie(a, b);
     const [lo, hi] = a < b ? [a, b] : [b, a];
-    for (const who of [a, b]) this.makeRoom(who, who === a ? b : a);
+    // both ends are asked before anything is ended
+    const drops: Edge[] = [];
+    for (const who of [a, b]) {
+      const room = this.roomFor(who, who === a ? b : a);
+      if (room === 'none') {
+        this.sim.logNow({ w: this.sim.windowNow(), proc: 'ties', kind: 'admission', reason: 'tie-cap', key: tieEdgeId(a, b), refs: [who] });
+        return undefined;
+      }
+      if (room !== 'free') drops.push(room);
+    }
+    for (const e of drops) this.k.endEdge(e.id, this.k.now);
     return this.k.addEdge({
       id: tieEdgeId(a, b), type: 'xf:tie', from: lo, to: hi, cause: SAMPLED, valid: { from: this.k.now },
       attrs: { kind: t?.kind ?? 'neighbour', status: 'acquainted', strength: 0, lastContact: -1 },
@@ -107,24 +121,29 @@ export class TiePolicy {
     return out.sort((x, y) => (x.id < y.id ? -1 : 1));
   }
 
-  private makeRoom(who: Id, other: Id): void {
+  /**
+   * Room for one more tie of `who`: `free` under the cap, else the weakest tie that neither V, a live frame nor a memorable belief depends
+   * on (a tie to V is V's, so an NPC never gives one up; V's own are given up like anyone's, weakest first), or `none`.
+   */
+  private roomFor(who: Id, other: Id): Edge | 'free' | 'none' {
     const mine = this.ties(who);
-    if (mine.length < this.cfg.maxMaterialised) return;
+    if (mine.length < this.cfg.maxMaterialised) return 'free';
     const v = this.sim.w.v;
     let weakest: Edge | undefined;
     let weakestS = Number.POSITIVE_INFINITY;
     for (const e of mine) {
       const o = e.from === who ? e.to : e.from;
-      if (o === other || o === v || who === v) continue;
+      if (o === other || o === v) continue;
       if (this.k.frames.framesOf(o).length > 0) continue;
-      if (this.k.beliefs.memorable().some((x) => x.belief.believer === who && (x.belief.subject === o || x.belief.evidence.includes(e.id)))) continue;
+      // V holds no beliefs: a tie of V's is kept while the other end remembers V
+      if (this.k.beliefs.memorable().some((x) => (x.belief.believer === who && (x.belief.subject === o || x.belief.evidence.includes(e.id))) || (who === v && x.belief.believer === o && x.belief.subject === v))) continue;
       const s = this.strengthOf(e.from, e.to);
       if (s < weakestS) {
         weakestS = s;
         weakest = e;
       }
     }
-    if (weakest) this.k.endEdge(weakest.id, this.k.now);
+    return weakest ?? 'none';
   }
 
   // ---- the NPC's regard of V ----
@@ -148,7 +167,8 @@ export class TiePolicy {
 
   /** The multiplier on a negative trust delta by the NPC's belief about the cause (S1 4.7): dispositional 1.5, situational 0.5, unknown 1. */
   attributionMultiplier(npc: Id, subject: Id, at: GameTime | undefined): number {
-    const b = this.k.beliefs.activeOf(npc).find((x) => x.subject === subject && x.path === 'reason' && (at === undefined || x.at === at));
+    // a decision that persists reads only what persists: a texture belief is dropped on a load (S1 8.3, 11), and regard is saved
+    const b = this.k.beliefs.activeOf(npc).find((x) => x.memorable && x.subject === subject && x.path === 'reason' && (at === undefined || x.at === at));
     if (!b || b.region === undefined || b.region.r !== 'set') return 1;
     const classes = Object.values(this.sim.data.minds.reasons);
     const disp = classes.some((c) => c.dispositional.some((x) => (b.region as { values: string[] }).values.includes(x)));
@@ -223,7 +243,13 @@ export class TiePolicy {
   /** V proposes a rung and the NPC answers by its own acceptance; a status change needs an observed V act (S1 4.7). */
   bid(npc: Id, rung: Rung, event: Id): boolean {
     const v = this.sim.w.v;
+    // a thread V has retracted is switched off: no bid is made for it (S1 4.7)
+    if (this.excluded(npc, v)) {
+      this.sim.logNow({ w: this.sim.windowNow(), proc: 'ties', kind: 'admission', reason: 'excluded-thread', key: tieEdgeId(npc, v), refs: [npc, event] });
+      return false;
+    }
     const edge = this.materialise(npc, v);
+    if (!edge) return false;
     const res = this.accepts(npc, v, rung, event);
     if (res.accepted) this.k.updateEdge(edge.id, { attrs: { status: rung } });
     this.applyInteraction(npc, v, res.accepted ? 'reply-accept' : 'reply-decline');
@@ -264,6 +290,12 @@ export class TiePolicy {
     if (!mine) return;
     const npc = this.npcOf(ev);
     if (npc === undefined) return;
+    // after a retract the thread stays visible and editable, and nothing is made for it
+    const off = (): boolean => {
+      if (!this.excluded(npc, v)) return false;
+      this.sim.logNow({ w: this.sim.windowNow(), proc: 'ties', kind: 'admission', reason: 'excluded-thread', key: tieEdgeId(npc, v), refs: [npc, ev.id] });
+      return true;
+    };
     const rec = (): TieRecord => this.record(npc, v);
     const note = (reason: string): void => {
       const r = rec();
@@ -282,18 +314,21 @@ export class TiePolicy {
       case 'conflict':
       case 'joint-activity':
       case 'crisis':
-        this.materialise(npc, v);
+        if (off() || !this.materialise(npc, v)) return;
         this.applyInteraction(npc, v, ev.kind, { at: ev.time, hours: 1 });
         note(ev.kind);
         break;
       case 'repair':
-        this.materialise(npc, v);
+        if (off() || !this.materialise(npc, v)) return;
         this.repair(npc, v, ev.effects.some((e) => e.effect === 'give'));
         note('repair');
         break;
       case 'retract': {
         const id = tieEdgeId(npc, v);
         if (!this.sim.record.softExcluded.includes(id)) this.sim.record.softExcluded.push(id);
+        // `ended` is by V's retract (S1 4.7)
+        const e = this.edge(npc, v);
+        if (e && e.attrs.status !== 'ended') this.k.updateEdge(e.id, { attrs: { status: 'ended' } });
         note('retract');
         break;
       }

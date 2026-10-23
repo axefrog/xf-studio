@@ -153,7 +153,7 @@ describe('SF1-E3: the mirror overriding a simulated value with a game reading', 
     const district = sim.w.districts[0]!;
     const goal = k.frames.open({ actor: mv, level: 'goal', origin: H(hs('pay-collector')), weight: 1, payload: { goal: { effects: [] } }, cause: mv });
     const member = k.addEdge({ type: 'core:member-of', from: mv, to: sim.w.circle(district.id), attrs: { role: 'member', strength: 1 }, cause: mv });
-    const tie = sim.tiePolicy.materialise(mv, sim.w.v);
+    const tie = sim.tiePolicy.materialise(mv, sim.w.v)!;
     const E = H(hs('evidence'), hid(mv));
     k.beliefs.set({ believer: other, subject: mv, path: 'affiliation', value: 'civilian', confidence: 1, evidence: [E], source: { by: 'observed', event: E }, formed: 0, refreshed: 0, memorable: true });
     const g3 = sim.w.index.names!.g3!;
@@ -654,6 +654,64 @@ describe('SF1-E1: a Kabuki week, in one call, in many calls and with reloads', (
     expect(reads.filter((x) => x === 'maybe')).toEqual([]);
     for (const name of ['heatRank', 'tension', 'reach', 'protected', 'contract']) expect(A.reads.eval(name, [A.w.districts[0]!.cellIds[0]])).toBe('maybe');
   }, 1_800_000);
+});
+
+
+describe('SF1-E5: reconcile moves a membership when the game moves a person (Sol 15)', () => {
+  const adult = { alive: 'yes', 'age-class': 'adult' } as const;
+  const setup = () => {
+    const sim = Sim.create({ worldSeed: seedOf('SF1-E5'), index: makeKabukiSlice(), data: defaultData(), only: ['city.events'] });
+    const port = new ReplayPort(sim);
+    port.submit([{ t: 0, op: 'person', key: 'p', slots: { affiliation: 'TygerClaws', ...adult } }]);
+    sim.advance(2);
+    const p = port.node('p');
+    const d = sim.w.districts[0]!;
+    const held = (): Id[] => sim.k.groups.memberships(p).map((e) => e.to).sort();
+    const move = (aff: string): void => {
+      port.submit([{ t: sim.k.now + 5, op: 'person', key: 'p', slots: { affiliation: aff } }]);
+      sim.advance(2);
+    };
+    return { sim, port, p, d, held, move };
+  };
+
+  test('a move ends the old membership and joins the group of the new affiliation, caused by the game; a first reading, a restatement and a civilian join nothing', () => {
+    const { sim, p, d, held, move } = setup();
+    const claws = sim.w.group(d.id, 'A1');
+    const mox = sim.w.group(d.id, 'A2');
+    expect(d.affOrder[2]).toBe('TygerClaws');
+    expect(d.affOrder[3]).toBe('TheMox');
+    // the first reading is not a change
+    expect(held()).toEqual([]);
+    move('TheMox');
+    expect(held()).toEqual([mox]);
+    move('TygerClaws');
+    expect(held()).toEqual([claws]);
+    const edges = sim.k.store.edgesFrom(p).filter((e) => e.type === 'core:member-of');
+    // the old edge stays as history, ended; the new one is the game's
+    expect(edges.length).toBe(2);
+    expect(edges.find((e) => e.to === mox)!.valid.to).toBeDefined();
+    expect(edges.find((e) => e.to === claws)!.cause).toBe(sim.w.port);
+    expect(sim.record.log.filter((e) => e.reason === 'game-moved' && e.refs.includes(p)).length).toBe(2);
+    // restating the same affiliation, or reconciling it again with no earlier reading, changes nothing
+    const before = JSON.stringify(sim.k.store.edgesFrom(p).map((e) => [e.id, e.valid]));
+    sim.policies.reconcile(p, 'affiliation', 'TygerClaws', undefined, true);
+    sim.policies.reconcile(p, 'affiliation', 'TygerClaws', undefined, true);
+    expect(JSON.stringify(sim.k.store.edgesFrom(p).map((e) => [e.id, e.valid]))).toBe(before);
+    // civilian is no group: the membership ends and none is added
+    move('civilian');
+    expect(held()).toEqual([]);
+  });
+
+  test('a person the game says is dead joins no group when the affiliation moves', () => {
+    const { sim, port, p, d, held, move } = setup();
+    move('TheMox');
+    expect(held()).toEqual([sim.w.group(d.id, 'A2')]);
+    port.submit([{ t: sim.k.now + 5, op: 'person', key: 'p', slots: { alive: 'no' } }]);
+    sim.advance(2);
+    expect(held()).toEqual([]);
+    move('TygerClaws');
+    expect(held()).toEqual([]);
+  });
 });
 
 

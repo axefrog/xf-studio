@@ -14,7 +14,7 @@ import { processCause } from '../evolution.ts';
 import type { Effect, Id } from '../types.ts';
 import type { CastEntry, Descriptor } from './occ.ts';
 import type { DigestBase } from './occ.ts';
-import type { S1Ctx, S1Process, S1Result } from './s1ctx.ts';
+import { PROCESS_VERSIONS, type S1Ctx, type S1Process, type S1Result } from './s1ctx.ts';
 import type { Sim } from './sim.ts';
 import type { EventsState } from './proc-events.ts';
 
@@ -91,7 +91,7 @@ export function actsProcess(sim: Sim): S1Process<ActsState, ActsDigest> {
   };
 
   return {
-    id: procId, version: 1, tier: 3, coarseFine: { kind: 'count' }, lag: 1, demandLookback: 1,
+    id: procId, version: PROCESS_VERSIONS[procId]!, tier: 3, coarseFine: { kind: 'count' }, lag: 1, demandLookback: 1,
     init: () => ({ v: 1, prev: null, published: [], recent: {} }),
 
     run(c: S1Ctx, k: number): S1Result<ActsState, ActsDigest> {
@@ -148,11 +148,12 @@ export function actsProcess(sim: Sim): S1Process<ActsState, ActsDigest> {
           }
         }
       }
-      // (3) regeneration is silent: the contributions of published items in the cells now in focus, when the kernel holds none
+      // (3) regeneration is silent: the contributions of published items in the cells now in focus, when the kernel holds none. A pin on the
+      // item (a canon descriptor) says nothing of its people: the test is for the scene's own contributions.
       for (const cell of focus) {
         for (const p of st.published) {
           if (p.cell !== cell || k - p.w >= sim.data.events.heatHorizon) continue;
-          if (sim.k.store.localState(p.item) > 0) continue;
+          if (sim.k.store.namedContributions(p.item) > 0) continue;
           const entry = sim.ringEntry(p.summary);
           if (!entry?.meta?.[p.index]) continue;
           const d = itemDescriptor(sim, p.summary, p.index, p.w, cell, entry.kind, entry.meta[p.index]!);

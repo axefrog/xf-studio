@@ -221,7 +221,7 @@ describe('SF1-M-4 and SF1-M-5: the game corrects what S1 assumed', () => {
     k.frames.open({ actor: mv, level: 'goal', origin: mv, weight: 1, focus: { nodes: [d.cellIds[0]!], tier: 2 }, payload: { goal: { effects: [] } }, cause: mv });
     const circle = sim.w.circle(d.id);
     const member = k.addEdge({ type: 'core:member-of', from: mv, to: circle, cause: mv, attrs: { role: 'member', strength: 0.5, visibility: 'open', terms: 'standing' } });
-    const tie = sim.tiePolicy.materialise(mv, sim.w.v);
+    const tie = sim.tiePolicy.materialise(mv, sim.w.v)!;
     const other = port.node('other');
     k.beliefs.set({ believer: other, subject: mv, path: 'alive', value: 'yes', confidence: 1, evidence: [mv], source: { by: 'observed', event: mv }, formed: 0, refreshed: 0, memorable: true });
     return { sim, port, mv, member, tie, other };

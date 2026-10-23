@@ -694,7 +694,7 @@ that most need a decision.
 98. **`publish-item` is `Events.publishItem`; the kernel keeps a session guard, the publishing layer keeps the record. (new)**
     It resolves the item's kind, time, place, participants and effects as they stand and emits one `event` change stamped with
     the item's time. A second call in the same session does nothing; the set is not persisted (S1's `ActsState.published` is
-    what survives a reload). It refuses a node that is not a summary item. The `contribute` operation takes `silent`, which
+    what survives a reload) and belongs to the session, so a load that rewinds and a discarded stage both forget it. It refuses a node that is not a summary item. The `contribute` operation takes `silent`, which
     S1 sets when it regenerates an opened item's contributions after a load (V4-48).
 99. **The operation names and shapes. (new)** `frame-open`, `frame-status`, `frame-weight`, `frame-interests`, `decide`,
     `order`, `observe`, `tell`, `belief-set`, `belief-drop` and `publish-item` join the earlier operations. `observe` pins
@@ -726,9 +726,13 @@ that most need a decision.
     tested first on what the node already knows: a summary's kind and span (committed at minting, cached in
     `Summaries.spans`, cleared with the summaries), an item's time (`itemTime`, the same keyed draw the descriptor uses) and
     an event's minted kind and time (`Events.mintedFacts`). Anything that cannot pass is neither resolved nor materialised.
-    The result is the same unless a pin or a contribution later changes the `kind` or `time` of a minted event or a summary,
-    which nothing in the reference does; an item that already exists (canon, or in focus) is always left to the exact
-    check. The same run now costs 3 ms.
+    A query still tests what a node resolves to (S0 8.3), so each shortcut holds only while it is proved equal to
+    resolution: a cached fact is used only for a node nothing local touches (`Store.localState` is the number it was cached
+    at, and it is not cached at all for a node that already had a pin or a contribution when it was minted), and the whole
+    prefilter is off while a rule over a kind could touch `kind`, `time`, `from` or `length` (`Store.generalTouches`). An item
+    that already exists (canon, or in focus) is always left to the exact check. The same run still costs 3 ms. Review R1
+    (finding 3) found the first version unsafe for a pinned kind; `test/query.test.ts` has the cases, with and without the
+    cache and after a save and a load.
 
 ### The simulation layer's core (S1 v0.2, `src/sim/`)
 
@@ -828,6 +832,62 @@ Numbers are identifiers: 116 and 117 above belong to the kernel block and are no
     read it. The reference has no such read, so the audit cannot rely on its absence being checked elsewhere: the lint fails on
     the name, on the demand reads and on V's cell or position in the files of tiers 0 to 2.
 
+### Review round R1: the independent review of the core (entries 126 onward)
+
+One read-only review of the branch by GPT-6.1 Sol at xhigh effort found 17 problems (10 High, 7 Medium). Each is fixed with a
+regression test. The decisions the fixes needed:
+
+126. **`Store.localState` moves on every local change, and a cache made from touched state is good only at its own time. (new)**
+    It is the number of pins and contributions that name a node, and a withdrawn pin and an ended contribution count twice,
+    so a withdrawal or an end moves it as an addition does. The resident views and blocks, the minted facts of an event and the
+    spans of a summary are stamped with it. A household nothing local touches has the same view at any time; a touched one
+    is good only at the time it was resolved, because a contribution's validity is a window. A forgotten withdrawal had let a
+    generated minor keep an adult age in the gate's cache (finding 1).
+127. **The order a record lists its properties in is not part of the model. (new)** The matrix rows of a kind are taken in the
+    order of the kind registry, the rates and the presence of a cell are summed in the order of their names, districts are
+    walked by Id and a person's slots are read in name order. Two records that mean the same, and hash the same, give the same
+    run (finding 4; `S1-I-1` has the reordered run).
+128. **Regeneration asks for the scene, not for local state. (new)** `scene.acts` regenerates an opened item's people when the
+    kernel holds no contribution that names the item (`Store.namedContributions`). A canon descriptor leaves three pins and
+    no people, and the old test (`localState > 0`) took the pins for the scene (finding 5; `SF1-A-2b`).
+129. **A decision that persists reads only memorable beliefs. (new)** The attribution multiplier of a trust loss and the reason
+    belief that travels with a telling both ignore texture beliefs, which a load drops (S1 8.3, S1-I-15). A reload no longer
+    changes the regard (finding 6).
+130. **`where` reads the protected set as of the time asked. (new)** A person V observed at 1200 was not present at 0 because of it.
+    S1 4.5's pseudocode says `protectedSet`, S1 5.4 says casting is from recorded history as of the occurrence's own time; the
+    reference follows 5.4 (`protectedAt(res, t)`), which equals the set now for a time at or after now (finding 7).
+131. **The cap of materialised ties is hard, V is under it, and a thread V retracted is closed. (new)** `materialise` asks both ends for
+    room before it ends or makes anything: under the cap, the weakest tie that no live frame and no memorable belief depends
+    on, or none, in which case it makes nothing, ends nothing and logs `tie-cap` (the caller carries on without the tie). An
+    NPC never gives up a tie to V; V's own ties are given up weakest first like anyone's, unless the other end has a frame or
+    remembers V. A retract sets the status `ended` and closes the thread: `bid` and the five tie events for it are refused and
+    logged `excluded-thread`; the thread stays visible (finding 8, finding 16).
+132. **A telling passes the gate before it is minted or takes volume. (new)** The occurrence is `tell`, origin `policy`, with the
+    roles teller, listener and subject (informational, so the gate lets it through); a refusal is logged with its reason and
+    leaves the hourly allowance alone (finding 9).
+133. **A registered read evaluated at a past time answers from its transitions. (new)** `eval(name, args, t)` for a read fed by a
+    digest's `changes` feed (band, regime, regimeIs, priceLevel, refuge, label, normGap, groupGap) and for `tied` is the value
+    the transitions give at `t`, and `maybe` outside what the feed covers (eight windows) or before any reading. A time at or
+    after now is the current value. S2's closing conditions read through this (finding 12).
+134. **The modifiers of a window are those of the regimes live at its start, after the exits. (new)** A regime that arrives in the
+    window changes incidents from the next one: not the offspring of the window's own occurrences, not the thinning, not
+    `modBirth` (S1 7.1, 7.2; finding 13).
+135. **A group's pulse is replaced by the stronger urgency now. (new)** `pulseReplaces` compares both at the snapshot time `T`, not at
+    the time of the new fact; a mirrored fact older than a city fact already counted must not displace it (finding 14).
+136. **A changed affiliation joins the group of the new one. (new)** `reconcile` ends the memberships that are not to it and adds a
+    `core:member-of` edge caused by the port (the game's own node) when a group stands for the affiliation: the A1 to A3 of the
+    first simulated district, in Id order, that lists it. Only a move joins: a first reading, or one the game restates after a
+    load, is not a change (a load keeps live memberships and drops ended ones, so a restated reading that joined would make a
+    dead person's membership again), and a person the game says is dead joins nothing. A membership already held is kept
+    (finding 15; the partition test of `properties.test.ts` caught the first version).
+137. **A process version is pinned with its id. (new)** `PROCESS_VERSIONS` (in `s1ctx.ts`) is the one table; every process takes
+    its version from it, and the lineage pack hashes the ids and versions of all seven whether or not an instance runs them.
+    A save made under another version of any opens read-only (finding 17).
+138. **A string's UTF-8 length counts a lone surrogate as three bytes. (new, kernel)** `utf8Length` took any high surrogate followed
+    by anything for a pair; the encoder writes U+FFFD for a lone one. Two different strings could hash the same (finding 10).
+139. **`matchStrength` keeps its memo per interest source. (new, kernel)** A frame that inherits from two matching sources is pulled
+    by each on its own, as dispatch pulls it; the shared memo returned the weaker (finding 11).
+
 ### Spec findings for the coordinator (S1)
 
 The ones that need a decision, worst first:
@@ -848,5 +908,15 @@ The ones that need a decision, worst first:
 - **116 (a kernel gap).** An event kept as the evidence of a memorable belief was a bare header after a load and could not be
   minted again; S0 11.2 and 14.3 do not say who restores its fields. Minting it again does, silently.
 - **117 (queries).** S0 8.3 step 9 enumerates every item of every summary in scope for a query. A world that has run a week made
-  the mirror's and the norms process's queries the dearest thing in a window. The pruning keeps the result and relies on the
-  `kind` and `time` of a minted event not being overridden.
+  the mirror's and the norms process's queries the dearest thing in a window. The pruning keeps the result: it is used only
+  where it is proved equal to resolution (review R1 made it so; a pin on a minted event's kind is seen).
+- **130 (casting from history).** S1 4.5's pseudocode for `where` uses `protectedSet` (now); S1 5.4 says casting reads recorded
+  history as of the occurrence's own time. The reference follows 5.4. If 4.5 was meant, a person observed later is
+  retroactively present in every earlier scene and the same cast cannot be regenerated.
+- **131 (V and the cap).** S1 4.6 caps "a person" at 20 materialised ties and says the tie to evict is one that "neither V, a
+  live frame nor a memorable belief depends on". Every tie of V's is one V depends on, so read literally V's list could
+  never make room. The reference puts V under the cap and ends V's weakest tie that the other end neither has a frame about
+  nor remembers V by; a refused tie is logged `tie-cap`.
+- **136 (which group).** S1 8.8 says to add the new membership "if the group exists". A mirrored person has no district, so the
+  reference takes the first simulated district, in Id order, whose A1 to A3 stands for the affiliation. With two districts
+  that list the same gang this is arbitrary.

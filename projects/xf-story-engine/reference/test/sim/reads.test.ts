@@ -94,6 +94,43 @@ describe('SF1-R-2: transitions', () => {
     expect(sim.reads.transitions('band', [c1], from, (w + 23) * W)).toEqual([{ t: from, value: 'maybe' }]);
   });
 
+  test('eval at a past time is the value the transitions give at that time, including a change that reverts, and maybe outside what they cover (Sol 12)', () => {
+    const sim = quietSim('SF1-R-2e', (d) => {
+      d.events.offspring = [0, 0, 0, 0];
+      // the heat of the accident is gone after three windows and a band may change after two, so the band rises and falls back
+      d.events.heatAge = [{ upTo: 3, weight: 1.0 }, { upTo: 1008, weight: 0.01 }];
+      d.events.bandMinDwell = 2;
+    });
+    const c1 = sim.w.districts[0]!.cellIds[0]!;
+    const w = 200;
+    sim.startAt(w);
+    inject(sim, child(sim, 'rise', 0, w, 'accident', 2, c1));
+    const port = sim.reads.port();
+    // what the read said as the world went by, boundary by boundary; each is asked again later, while the feed still covers it
+    const seen: Array<{ t: number; value: string }> = [];
+    for (let i = 0; i < 12; i++) {
+      sim.advance(1);
+      seen.push({ t: sim.k.now, value: sim.reads.eval('band', [c1]) });
+      for (const x of seen) {
+        if (sim.k.now - x.t > 6 * W) continue;
+        expect(sim.reads.eval('band', [c1], x.t), `at ${x.t} from ${sim.k.now}`).toBe(x.value);
+        expect(port.eval('band', [c1], x.t)).toBe(x.value);
+      }
+    }
+    const values = seen.map((x) => x.value);
+    expect(values.indexOf('elevated')).toBe(0);
+    expect(values.at(-1)).toBe('quiet');
+    // between boundaries the value is the one in force: it rose at the first boundary and fell at the fifth
+    const fell = seen.find((x) => x.value === 'quiet')!;
+    expect(fell.t).toBe((w + 5) * W);
+    expect(sim.reads.eval('band', [c1], fell.t - 1)).toBe('elevated');
+    expect(sim.reads.eval('band', [c1], fell.t)).toBe('quiet');
+    // regimeIs is answered from the same history, and a time older than the feed, or before any reading, is maybe
+    expect(sim.reads.eval('regimeIs', ['fx_d1', 'festival'], fell.t)).toBe('no');
+    expect(sim.reads.eval('band', [c1], 0)).toBe('maybe');
+    expect(sim.reads.eval('band', [c1], seen[0]!.t)).toBe('maybe');
+  });
+
   test('normGap over a window in which it fell: the same shape', () => {
     const sim = Sim.create({
       worldSeed: seedOf('SF1-R-2n'), index: fx3Slice(), only: ['order.norms'],

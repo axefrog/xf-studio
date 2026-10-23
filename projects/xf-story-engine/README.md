@@ -80,7 +80,7 @@ bun test
 bun x tsc --noEmit
 ```
 
-The suite has 956 tests and runs in about six minutes (the simulation layer's runs of whole weeks are most of it),
+The suite has 983 tests and runs in about six minutes (the simulation layer's runs of whole weeks are most of it),
 peaking near 1.3 GB. In this repository run heavy commands under the memory guard
 (`python tools/memory_guard.py --limit 3 -- bun test`), as the repository rules ask. `S1_FULL=1 bun test test/sim/e2e.test.ts`
 runs the end-to-end fixtures at the specification's scale (a Kabuki week of 1,008 windows takes under a minute).

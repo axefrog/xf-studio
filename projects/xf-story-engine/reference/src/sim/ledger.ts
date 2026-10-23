@@ -11,7 +11,7 @@ import type { GameTime, Id } from '../types.ts';
 import { clamp, q64 } from './arith.ts';
 import type { LedgerData } from './data.ts';
 import { type DigestBase, type Feed, type Transition, pushFeed } from './occ.ts';
-import type { S1Ctx, S1Process, S1Result } from './s1ctx.ts';
+import { PROCESS_VERSIONS, type S1Ctx, type S1Process, type S1Result } from './s1ctx.ts';
 import type { Sim } from './sim.ts';
 import { simulatedDistricts } from './index-types.ts';
 
@@ -148,7 +148,7 @@ export function ledgerProcess(sim: Sim): S1Process<LedgerState, LedgerDigest> {
   const W = sim.data.time.W;
   void processCause;
   return {
-    id: procId, version: 1, tier: 1, coarseFine: { kind: 'distribution', tolerance: '0.1 absolute' }, lag: 0,
+    id: procId, version: PROCESS_VERSIONS[procId]!, tier: 1, coarseFine: { kind: 'distribution', tolerance: '0.1 absolute' }, lag: 0,
     init: () => ({ v: 1, handledSeq: -1, labels: {} }),
     run(c: S1Ctx, k: number): S1Result<LedgerState, LedgerDigest> {
       const st = c.own<LedgerState>();

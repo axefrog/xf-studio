@@ -102,6 +102,38 @@ describe('SF1-A-2: regeneration is silent', () => {
   });
 });
 
+describe('SF1-A-2b: regeneration reads the scene, not the pins (Sol 5)', () => {
+  test('an item whose descriptor was made canon keeps its pins through a load, and its people are regenerated all the same', () => {
+    const { sim, emitted, port, c1 } = actsSim('SF1-A-2b');
+    const j = 100;
+    port.submit([{ t: (j - 1) * W + 5, op: 'reading', node: 'v', slot: 'cell', value: 'c1' }]);
+    sim.startAt(j);
+    inject(sim, child(sim, 'a1', 0, j + 1, 'theft', 1, c1), child(sim, 'a2', 0, j + 1, 'theft', 1, c1));
+    sim.advance(3);
+    const before = actsState(sim).published.map((p) => ({ ...p }));
+    expect(before.length).toBe(2);
+    const view = (id: Id) => {
+      const v = sim.policies.viewEvent(id)!;
+      return { participants: v.participants, witnesses: v.witnesses, effects: v.effects, time: v.time, place: v.place };
+    };
+    const first = before.map((p) => view(p.item));
+    // only the summary descriptor is canon: the item's time, place and kind become pins; its people stay contributions of the scene
+    const canon = before[0]!;
+    sim.k.summaries.makeItemCanon(canon.summary, canon.index, 'observed', H(hs('canoniser')));
+    const count = emitted.length;
+    sim.k.persistence.save('A');
+    sim.advance(2);
+    sim.k.persistence.load('A');
+    expect(sim.k.store.localState(canon.item)).toBeGreaterThan(0);
+    expect(sim.k.store.pinsOfNode(canon.item).length).toBeGreaterThan(0);
+    new ReplayPort(sim).submit([{ t: sim.k.now, op: 'reading', node: 'v', slot: 'cell', value: 'c1' }]);
+    sim.advance(3);
+    for (const [i, p] of before.entries()) expect(view(p.item), `item ${i}`).toEqual(first[i]!);
+    expect(sim.k.value(canon.item, 'participants#count')).toBe(first[0]!.participants.length);
+    expect(emitted.length).toBe(count);
+  });
+});
+
 describe('SF1-A-3: no catch-up, recorded demand', () => {
   test('an item is opened if and only if its cell was in the recorded focus of its own window: absent then present is never opened, present then absent is opened', () => {
     const { sim, port, c1 } = actsSim('SF1-A-3');

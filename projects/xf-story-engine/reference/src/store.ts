@@ -178,9 +178,30 @@ export class Store {
     return (this.pinsByNode.get(node) ?? []).map((i) => this.pinsById.get(i)!);
   }
 
-  /** How many pins and contributions name a node: zero means nothing local narrows what the pack and the seed give it. */
+  /**
+   * A number that moves when a pin or a contribution naming the node is added, removed or withdrawn, or a contribution is ended (a
+   * withdrawn pin and an ended contribution count twice): zero means nothing local narrows what the pack and the seed give it. A cache
+   * of something derived from the node is good while it holds still, and, when it is not zero, only at the time it was made (a
+   * contribution's validity is a window).
+   */
   localState(node: Id): number {
-    return (this.pinsByNode.get(node)?.length ?? 0) + (this.contribByNode.get(node)?.length ?? 0);
+    const pins = this.pinsByNode.get(node);
+    const contribs = this.contribByNode.get(node);
+    let n = 0;
+    if (pins) {
+      n += pins.length;
+      for (const id of pins) if (this.withdrawn.has(id)) n++;
+    }
+    if (contribs) {
+      n += contribs.length;
+      for (const id of contribs) if (this.contribs.get(id)?.valid.to !== undefined) n++;
+    }
+    return n;
+  }
+
+  /** How many contributions name the node. */
+  namedContributions(node: Id): number {
+    return this.contribByNode.get(node)?.length ?? 0;
   }
 
   /** Whether a contribution that names no node (a rule over a kind, or over everything) could touch one of these slots. */

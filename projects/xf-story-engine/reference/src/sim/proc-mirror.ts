@@ -9,7 +9,7 @@ import { mintedId } from '../id.ts';
 import type { Effect, GameTime, Id } from '../types.ts';
 import { type DigestBase, type EventFact, type Feed, pushFeed } from './occ.ts';
 import { RAW_KIND_NAMES } from './kinds.ts';
-import type { S1Ctx, S1Process, S1Result } from './s1ctx.ts';
+import { PROCESS_VERSIONS, type S1Ctx, type S1Process, type S1Result } from './s1ctx.ts';
 import type { Sim } from './sim.ts';
 
 export interface MirrorState {
@@ -46,12 +46,12 @@ export function mirrorProcess(sim: Sim): S1Process<MirrorState, MirrorDigest> {
   const classOfAff = (aff: string | undefined): 'gang' | 'corp' | 'ncpd' | 'civilian' => {
     if (aff === undefined || aff === 'civilian') return 'civilian';
     if (aff === 'ncpd') return 'ncpd';
-    for (const d of Object.values(sim.w.index.districts)) for (const b of d.entry.byAff) if (b.aff === aff) return b.cls;
+    for (const id of Object.keys(sim.w.index.districts).sort()) for (const b of sim.w.index.districts[id]!.entry.byAff) if (b.aff === aff) return b.cls;
     return 'civilian';
   };
 
   return {
-    id: procId, version: 1, tier: 1, coarseFine: { kind: 'exact' }, lag: 1,
+    id: procId, version: PROCESS_VERSIONS[procId]!, tier: 1, coarseFine: { kind: 'exact' }, lag: 1,
     init: () => ({ v: 1, seen: [], counters: {}, lastHeat: 0, next: 0, cover: [] }),
 
     run(c: S1Ctx, w: number): S1Result<MirrorState, MirrorDigest> {
