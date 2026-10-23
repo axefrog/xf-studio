@@ -1,6 +1,6 @@
 // SF1-L and SF1-G: the reputation ledger and the groups (S1 7.7, 7.8, 8.6, 14.1).
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test, setDefaultTimeout } from 'bun:test';
 import { H, id as hid, i as hi, rand, s as hs } from '../../src/id.ts';
 import { aggregateItems, labelOf, residentSum, type LedgerItem } from '../../src/sim/ledger.ts';
 import { operative, pressures, pulseReplaces, pulseU, type G, type GroupDigest, type GroupState } from '../../src/sim/proc-groups.ts';
@@ -10,6 +10,9 @@ import { fx3Slice } from '../../src/sim/slices.ts';
 import { defaultData, type S1Data } from '../../src/sim/data.ts';
 import type { Id } from '../../src/types.ts';
 import { quietData, seedOf } from './helpers.ts';
+
+// Bun 1.4 gives the default set in test/setup.ts to the first test file only
+setDefaultTimeout(120_000);
 
 const W = 600;
 const cfg = defaultData().ledger;

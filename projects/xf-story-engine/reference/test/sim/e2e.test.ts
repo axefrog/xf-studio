@@ -1,7 +1,7 @@
 // SF1-E: the end-to-end fixtures (S1 14.2). The spec's scale (a Kabuki week, 1,008 windows, 2,600 windows) runs with `S1_FULL=1`; the
 // default run keeps every check at a smaller scale, so the suite stays a few minutes.
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test, setDefaultTimeout } from 'bun:test';
 import { processCause } from '../../src/evolution.ts';
 import { H, id as hid, mintedId, s as hs } from '../../src/id.ts';
 import type { Change, Id } from '../../src/types.ts';
@@ -19,6 +19,9 @@ import { itemTime } from '../../src/summary.ts';
 import { child as childOf, eventsState, fxData, inject as injectInto, occurrences, seedOf } from './helpers.ts';
 import { lcg, restate, transfer } from './feed.ts';
 import { differing, recordOf } from './records.ts';
+
+// Bun 1.4 gives the default set in test/setup.ts to the first test file only
+setDefaultTimeout(120_000);
 
 const W = 600;
 const FULL = process.env.S1_FULL === '1';

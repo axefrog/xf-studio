@@ -1,6 +1,6 @@
 // SF1-M: the mirror and reconciliation against the offline replay port (S1 7.3, 8.8, 14.1).
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test, setDefaultTimeout } from 'bun:test';
 import { processCause } from '../../src/evolution.ts';
 import { H, id as hid, mintedId, s as hs } from '../../src/id.ts';
 import type { Id } from '../../src/types.ts';
@@ -9,6 +9,9 @@ import type { MirrorDigest, MirrorState } from '../../src/sim/proc-mirror.ts';
 import { Sim } from '../../src/sim/sim.ts';
 import { fx3Slice } from '../../src/sim/slices.ts';
 import { quietData, seedOf } from './helpers.ts';
+
+// Bun 1.4 gives the default set in test/setup.ts to the first test file only
+setDefaultTimeout(120_000);
 
 const W = 600;
 const mirrorProc = processCause('city.mirror');

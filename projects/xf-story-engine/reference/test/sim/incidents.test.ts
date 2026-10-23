@@ -1,7 +1,7 @@
 // SF1-S, SF1-I and SF1-O-3, the rest: regimes, coupling, causality, summaries and the ring, demand independence, cover, the mean, one
 // descriptor, the soak; and SF1-P-3, SF1-H-8 (S1 14.1). The long runs are scaled down unless `S1_FULL=1` asks for the spec's figures.
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test, setDefaultTimeout } from 'bun:test';
 import { processCause } from '../../src/evolution.ts';
 import { H, id as hid, i as hi, rand, s as hs } from '../../src/id.ts';
 import { itemTime } from '../../src/summary.ts';
@@ -16,6 +16,9 @@ import { spacingCount } from '../../src/sim/arith.ts';
 import { processKeys } from '../../src/sim/keys.ts';
 import { districtIdOf, fx3Slice, makeKabukiSlice } from '../../src/sim/slices.ts';
 import { child, eventsState, fxData, inject, occurrences, quietData, quietSim, seedOf } from './helpers.ts';
+
+// Bun 1.4 gives the default set in test/setup.ts to the first test file only
+setDefaultTimeout(120_000);
 
 const W = 600;
 const DAY = 144;

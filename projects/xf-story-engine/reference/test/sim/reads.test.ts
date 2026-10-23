@@ -1,6 +1,6 @@
 // SF1-R: the registered reads for S2 (S1 9.1, 14.1).
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test, setDefaultTimeout } from 'bun:test';
 import { canonicalKey } from '../../src/canon.ts';
 import { H, id as hid, s as hs } from '../../src/id.ts';
 import type { EventsDigest } from '../../src/sim/proc-events.ts';
@@ -10,6 +10,9 @@ import { Sim } from '../../src/sim/sim.ts';
 import { fx3Slice, makeKabukiSlice } from '../../src/sim/slices.ts';
 import type { Id } from '../../src/types.ts';
 import { child, fxData, inject, quietData, quietSim, seedOf } from './helpers.ts';
+
+// Bun 1.4 gives the default set in test/setup.ts to the first test file only
+setDefaultTimeout(120_000);
 
 const W = 600;
 

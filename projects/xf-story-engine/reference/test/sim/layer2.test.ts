@@ -1,7 +1,7 @@
 // Layer 2 over the simulation layer (S2 2.16, 2.17, S1 9.1): the `city` and `social` atoms the core builds are read through S1's registered
 // reads; the others stay refused plainly; the reads wake the seeds that depend on them.
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test, setDefaultTimeout } from 'bun:test';
 import { H, s as hs } from '../../src/id.ts';
 import type { Id } from '../../src/types.ts';
 import { evalPred } from '../../src/seeding/eval.ts';
@@ -15,6 +15,9 @@ import { Sim } from '../../src/sim/sim.ts';
 import { fx3Slice } from '../../src/sim/slices.ts';
 import { child, inject, quietData, seedOf } from './helpers.ts';
 import { MINI_ID, MINI_PACK, miniPack } from '../s2/mini.ts';
+
+// Bun 1.4 gives the default set in test/setup.ts to the first test file only
+setDefaultTimeout(120_000);
 
 const W = 600;
 const cause = H(hs('fx'), hs('layer2'));

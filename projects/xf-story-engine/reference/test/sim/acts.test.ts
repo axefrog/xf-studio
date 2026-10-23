@@ -1,6 +1,6 @@
 // SF1-A: the fine tier (S1 7.9, 14.1).
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test, setDefaultTimeout } from 'bun:test';
 import { processCause } from '../../src/evolution.ts';
 import { H, mintedId, s as hs } from '../../src/id.ts';
 import type { Change, Id } from '../../src/types.ts';
@@ -10,6 +10,9 @@ import { type EventsState } from '../../src/sim/proc-events.ts';
 import { Sim } from '../../src/sim/sim.ts';
 import { fx3Slice } from '../../src/sim/slices.ts';
 import { child, fxData, inject, quietData, seedOf } from './helpers.ts';
+
+// Bun 1.4 gives the default set in test/setup.ts to the first test file only
+setDefaultTimeout(120_000);
 
 const W = 600;
 const FULL = process.env.S1_FULL === '1';

@@ -1,6 +1,6 @@
 // SF1-S and SF1-I: the shapes, the regimes, admission and the incidents of `city.events` (S1 7.1, 7.2, 14.1).
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test, setDefaultTimeout } from 'bun:test';
 import { processCause } from '../../src/evolution.ts';
 import { H, id as hid, mintedId, s } from '../../src/id.ts';
 import type { Id } from '../../src/types.ts';
@@ -10,6 +10,9 @@ import type { PendingChild } from '../../src/sim/occ.ts';
 import { Sim } from '../../src/sim/sim.ts';
 import { fx3Slice } from '../../src/sim/slices.ts';
 import { child, fxData, inject, quietData, quietSim, seedOf } from './helpers.ts';
+
+// Bun 1.4 gives the default set in test/setup.ts to the first test file only
+setDefaultTimeout(120_000);
 
 const W = 600;
 const proc = processCause('city.events');

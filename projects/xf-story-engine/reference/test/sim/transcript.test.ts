@@ -4,7 +4,7 @@
 // frozen, so a change anywhere in the layer that alters one answer fails here, and a native core must write the same lines. Beside the digest
 // the test states, independently of the code, what some of the lines must say.
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test, setDefaultTimeout } from 'bun:test';
 import { H, id as hid, i as hi, s as hs } from '../../src/id.ts';
 import type { Id } from '../../src/types.ts';
 import { ReplayPort } from '../../src/sim/port.ts';
@@ -12,6 +12,9 @@ import type { EventsState } from '../../src/sim/proc-events.ts';
 import { Sim } from '../../src/sim/sim.ts';
 import { fx3Slice } from '../../src/sim/slices.ts';
 import { fxData, seedOf } from './helpers.ts';
+
+// Bun 1.4 gives the default set in test/setup.ts to the first test file only
+setDefaultTimeout(120_000);
 
 const W = 600;
 const adult = { alive: 'yes', 'age-class': 'adult' } as const;

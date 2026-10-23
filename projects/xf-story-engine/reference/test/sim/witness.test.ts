@@ -1,6 +1,6 @@
 // SF1-W and SF1-T-3: witness, social and fade; tie acceptance (S1 4.7, 8.3, 8.4, 8.5, 14.1).
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test, setDefaultTimeout } from 'bun:test';
 import { H, id as hid, i as hi, s as hs } from '../../src/id.ts';
 import type { Belief } from '../../src/beliefs.ts';
 import { q64 } from '../../src/sim/arith.ts';
@@ -10,6 +10,9 @@ import { Sim } from '../../src/sim/sim.ts';
 import { acceptP, regardEdgeId } from '../../src/sim/tie-policy.ts';
 import type { Effect, Id } from '../../src/types.ts';
 import { quietSim } from './helpers.ts';
+
+// Bun 1.4 gives the default set in test/setup.ts to the first test file only
+setDefaultTimeout(120_000);
 
 const DAY = 86400;
 

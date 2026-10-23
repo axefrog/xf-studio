@@ -1,6 +1,6 @@
 // SF1-N, SF1-O: the norms and the stocks (S1 7.5, 7.6, 14.1).
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test, setDefaultTimeout } from 'bun:test';
 import { H, id as hid, rand, s as hs, i as hi } from '../../src/id.ts';
 import { processCause } from '../../src/evolution.ts';
 import type { Id } from '../../src/types.ts';
@@ -12,6 +12,9 @@ import { Sim } from '../../src/sim/sim.ts';
 import { fx3Slice } from '../../src/sim/slices.ts';
 import { type S1Data } from '../../src/sim/data.ts';
 import { fxData, quietData, seedOf } from './helpers.ts';
+
+// Bun 1.4 gives the default set in test/setup.ts to the first test file only
+setDefaultTimeout(120_000);
 
 const W = 600;
 

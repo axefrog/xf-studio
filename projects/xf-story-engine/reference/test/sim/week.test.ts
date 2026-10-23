@@ -1,6 +1,6 @@
 // The template-written week (S1 14.3): the record of a Kabuki week written out by a fixed template, the same under a reload.
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test, setDefaultTimeout } from 'bun:test';
 import { defaultData } from '../../src/sim/data.ts';
 import { ReplayPort, type ReplayLine } from '../../src/sim/port.ts';
 import { Sim } from '../../src/sim/sim.ts';
@@ -8,6 +8,9 @@ import { makeKabukiSlice } from '../../src/sim/slices.ts';
 import { clockOf, weekLines, weekText } from '../../src/sim/week.ts';
 import { restate, transfer } from './feed.ts';
 import { seedOf } from './helpers.ts';
+
+// Bun 1.4 gives the default set in test/setup.ts to the first test file only
+setDefaultTimeout(120_000);
 
 const W = 600;
 const FULL = process.env.S1_FULL === '1';

@@ -1,7 +1,7 @@
 // S1-I-1 to S1-I-28 (S1 13): one test for each of the simulation layer's own invariants, beside the kernel's I-1 to I-16. Most are checked
 // more closely by the fixture named in the test; here each is stated and tested on a small run, so a reader finds all twenty-eight in one place.
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test, setDefaultTimeout } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { canonicalKey } from '../../src/canon.ts';
@@ -16,6 +16,9 @@ import { fx3Slice } from '../../src/sim/slices.ts';
 import { genPlan, genScript, execute } from './gen.ts';
 import { child, eventsState, fxData, inject, occurrences, quietData, seedOf } from './helpers.ts';
 import { differing, recordOf } from './records.ts';
+
+// Bun 1.4 gives the default set in test/setup.ts to the first test file only
+setDefaultTimeout(120_000);
 
 const W = 600;
 const SRC = join(import.meta.dir, '../../src/sim');

@@ -1,7 +1,7 @@
 // The property tests of S1 14.3: generated scripts, named streams, shrinking of a failing script; partition and reload, regeneration under
 // forgetting, metamorphic relations, hard limits, demand independence. The seeds and lengths are scaled down unless `S1_FULL=1`.
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test, setDefaultTimeout } from 'bun:test';
 import { hrec } from '../../src/canon.ts';
 import { H, memberId, s as hs } from '../../src/id.ts';
 import type { Id } from '../../src/types.ts';
@@ -16,6 +16,9 @@ import { lcg } from './feed.ts';
 import { CELLS, differenceOf, execute, genPlan, genScript, make, shrink, shrinkDifference } from './gen.ts';
 import { eventsState, fxData, inject, child, occurrences, seedOf, withSecondDistrict } from './helpers.ts';
 import { differing, recordOf } from './records.ts';
+
+// Bun 1.4 gives the default set in test/setup.ts to the first test file only
+setDefaultTimeout(120_000);
 
 const W = 600;
 const FULL = process.env.S1_FULL === '1';

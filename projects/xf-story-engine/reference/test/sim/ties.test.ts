@@ -1,10 +1,13 @@
 // SF1-T: the tie function (S1 4.6, 14.1).
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test, setDefaultTimeout } from 'bun:test';
 import { identityKeys } from '../../src/sim/keys.ts';
 import { People } from '../../src/sim/people.ts';
 import { Ties } from '../../src/sim/ties.ts';
 import { fxWorld } from './helpers.ts';
+
+// Bun 1.4 gives the default set in test/setup.ts to the first test file only
+setDefaultTimeout(120_000);
 
 const FULL = process.env.S1_FULL === '1';
 
