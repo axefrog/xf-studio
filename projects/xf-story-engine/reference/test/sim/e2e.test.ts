@@ -11,12 +11,13 @@ import type { PendingChild, RingEntry } from '../../src/sim/occ.ts';
 import { ReplayPort, type ReplayLine } from '../../src/sim/port.ts';
 import { itemDescriptor, type ActsState } from '../../src/sim/proc-acts.ts';
 import type { EventsState } from '../../src/sim/proc-events.ts';
+import type { GroupDigest } from '../../src/sim/proc-groups.ts';
 import type { NormsDigest, NormsState } from '../../src/sim/proc-norms.ts';
 import type { StocksDigest } from '../../src/sim/proc-stocks.ts';
 import { Sim } from '../../src/sim/sim.ts';
 import { fx3Slice, makeKabukiSlice } from '../../src/sim/slices.ts';
 import { itemTime } from '../../src/summary.ts';
-import { fxData, seedOf } from './helpers.ts';
+import { eventsState, fxData, occurrences, seedOf } from './helpers.ts';
 import { differing, recordOf } from './records.ts';
 
 const W = 600;
@@ -42,8 +43,6 @@ function transfer(from: Sim, key: string, make: () => Sim, epochs = 7): Sim {
   fresh.k.persistence.load(key);
   return fresh;
 }
-
-const eventsState = (sim: Sim): EventsState => sim.k.evolution.states.get('city.events')!.state as EventsState;
 
 /** Count the runs of every process, by window, from now on. */
 function countRuns(sim: Sim): Map<string, number[]> {
@@ -412,6 +411,284 @@ describe('SF1-E4: reload after the parent has left the ring', () => {
 });
 
 const actsOf = (sim: Sim): ActsState => sim.k.evolution.states.get('scene.acts')!.state as ActsState;
+
+
+
+describe('SF1-E1: a Kabuki week, in one call, in many calls and with reloads', () => {
+  const index = makeKabukiSlice();
+  const N = FULL ? 1008 : 288;
+  const publicW = FULL ? 300 : 100;
+  const privateW = FULL ? 400 : 160;
+  const DAYW = 144;
+  const district = 'wat_kab';
+  const adult = { alive: 'yes', 'age-class': 'adult' } as const;
+
+  const make = (only?: string[]): Sim => Sim.create({ worldSeed: seedOf('SF1-E1'), index, data: defaultData(), ...(only ? { only } : {}) });
+
+  /** The replay script: V's position and district, two people, and the enforcement events the fixture injects. */
+  const script = (vCell: string, events: 'both' | 'private' | 'none'): ReplayLine[] => [
+    { t: 0, op: 'reading', node: 'v', slot: 'district', value: district },
+    { t: 0, op: 'reading', node: 'v', slot: 'cell', value: vCell },
+    { t: 0, op: 'person', key: 'claw', slots: { affiliation: 'TygerClaws', ...adult } },
+    { t: 0, op: 'person', key: 'vendor', slots: { affiliation: 'civilian', ...adult } },
+    ...(events === 'both'
+      ? [{ t: publicW * W + 100, op: 'event' as const, kind: 'enf.fee.word', place: 'g2', participants: [{ who: 'claw', role: 'enforcer' }, { who: 'vendor', role: 'target' }], witnesses: 6 }]
+      : []),
+    ...(events !== 'none'
+      ? [{ t: privateW * W + 100, op: 'event' as const, kind: 'enf.fee.word', place: 'g2', participants: [{ who: 'claw', role: 'enforcer' }, { who: 'vendor', role: 'target' }], witnesses: 3 }]
+      : []),
+  ];
+
+  /** What the game states again after a load: the latest of every reading, and the events that have not happened yet. */
+  const restate = (sim: Sim, lines: ReplayLine[]): void => {
+    const now = sim.k.now;
+    const latest = new Map<string, ReplayLine>();
+    const out: ReplayLine[] = [];
+    for (const l of lines) {
+      if (l.op === 'event') {
+        if (l.t >= now) out.push(l);
+      } else if (l.op === 'reading') latest.set(`${l.node}|${l.slot}`, { ...l, t: now });
+      else if (l.op === 'person') latest.set(`person|${l.key}`, { ...l, t: now });
+    }
+    new ReplayPort(sim).submit([...latest.values(), ...out]);
+  };
+
+  /** Build a sim fed the script, let `how` drive it, and give back the sim it ends with (which `how` may have replaced by a reload). */
+  const run = (vCell: string, events: 'both' | 'private' | 'none', how: (sim: Sim) => Sim | void, only?: string[]): Sim => {
+    const sim = make(only);
+    new ReplayPort(sim).submit(script(vCell, events));
+    return how(sim) ?? sim;
+  };
+
+  /** Per-window observations of run B: the bounds, the reads and the offered immigrants. */
+  function observe(sim: Sim) {
+    const expected: Record<string, number> = {};
+    const def = sim.defs.get('city.events')!;
+    const original = def.run.bind(def);
+    def.run = (pctx, k) => {
+      const T = pctx.windowStart;
+      const p = sim.people.periodOf(T);
+      const st = pctx.own<EventsState>();
+      const groups = pctx.digest<GroupDigest>('group.decide');
+      const scale = sim.k.settings.at(T).cityScale;
+      for (const d of sim.w.districts) {
+        for (const kd of sim.data.kinds) {
+          let regimeMod = 1;
+          for (const r of st?.regimes ?? []) if (r.scope === d.id) regimeMod = regimeMod * Math.max(0.1, r.effects[kd.name] ?? 1);
+          let groupMod = 1;
+          if (kd.name !== 'gang-clash') {
+            let sum = 0;
+            for (let f = 1; f < 6; f++) sum = sum + sim.city.offenderShare(d.id, kd.name, f) * (groups?.boost[d.id]?.[f]?.[kd.name] ?? 0);
+            groupMod = Math.max(0.5, 1 + sum);
+          }
+          for (let m = 1; m <= 4; m++) {
+            expected[kd.name] = (expected[kd.name] ?? 0) + sim.data.shape.rate[kd.name]![m - 1]! * scale * sim.city.shape(kd.name, T) * sim.city.share(d.id, kd.name, p) * regimeMod * groupMod * (W / 86400);
+          }
+        }
+      }
+      void k;
+      return original(pctx, k);
+    };
+    return expected;
+  }
+
+  const percOf = (sim: Sim): number => {
+    const dg = sim.digestOf<NormsDigest>('order.norms');
+    return dg?.norms[sim.w.districts[0]!.id]?.fee?.perc ?? Number.NaN;
+  };
+
+  test('records, volume, agreement, causes, bands, bounds, norms, publication, floors and reads', () => {
+    // ---- run A: one call; run B: one call per window, with the observations; run C: daily calls elsewhere; run D: reloads ----
+    const emittedA: Array<{ id: Id; now: number }> = [];
+    const A = run('g1', 'both', (sim) => {
+      const emit = sim.k.emit.bind(sim.k);
+      sim.k.emit = (change: Change, time?: number) => {
+        if (change.c === 'event') emittedA.push({ id: change.event, now: sim.k.now });
+        emit(change, time);
+      };
+      sim.advance(N);
+    });
+
+    const percB: number[] = [];
+    let expected: Record<string, number> = {};
+    const reads: string[] = [];
+    let calendarMax = 0;
+    const B = run('g1', 'both', (sim) => {
+      expected = observe(sim);
+      const cells = sim.w.districts[0]!.cellIds;
+      for (let w = 0; w < N; w++) {
+        sim.advance(1);
+        percB.push(percOf(sim));
+        if (w >= 2) {
+          for (const c of cells) reads.push(sim.reads.eval('band', [c]));
+          reads.push(sim.reads.eval('normGap', ['fee', district]), sim.reads.eval('priceLevel', [district]), sim.reads.eval('regime', [district]), sim.reads.eval('presence', [district, 'TygerClaws']));
+        }
+        const st = eventsState(sim);
+        for (const list of Object.values(st.calendar)) calendarMax = Math.max(calendarMax, list.length);
+        const stocks = sim.digestOf<StocksDigest>('order.stocks');
+        for (const s of Object.values(stocks?.districts ?? {})) for (const v of Object.values(s)) {
+          expect(v).toBeGreaterThanOrEqual(0);
+          expect(v).toBeLessThanOrEqual(1);
+        }
+        const norms = sim.stateOf<NormsState>('order.norms');
+        for (const s of Object.values(norms?.slots ?? {})) for (const v of [s.priv, s.beh, s.perc, s.qe, s.qn]) {
+          expect(v).toBeGreaterThanOrEqual(0);
+          expect(v).toBeLessThanOrEqual(1);
+        }
+      }
+    });
+
+    const C = run('g9', 'both', (sim) => {
+      sim.k.frames.demandRoots.add(sim.people.residentAt(sim.w.districts[0]!.cellIds[7]!, 0));
+      for (let d = 0; d < N / DAYW; d++) sim.advance(DAYW);
+    });
+
+    const rnd = lcg(0xe1);
+    const Dend = run('g1', 'both', (sim) => {
+      // a save and a load at a random boundary on each day, into a fresh process under another epoch
+      let cur = sim;
+      let at = 0;
+      for (let d = 0; d < Math.min(3, Math.ceil(N / DAYW)); d++) {
+        const stop = d * DAYW + 10 + Math.floor(rnd() * (DAYW - 20));
+        cur.advance(stop - at);
+        at = stop;
+        cur.k.persistence.save(`D${d}`);
+        cur = transfer(cur, `D${d}`, make, 3 + d);
+        restate(cur, script('g1', 'both'));
+      }
+      cur.advance(N - at);
+      return cur;
+    });
+
+    // ---- the records ----
+    const ra = recordOf(A);
+    expect(differing(ra, recordOf(B))).toEqual([]);
+    expect(differing(ra, recordOf(Dend)).filter((x) => x !== 'headers')).toEqual([]);
+    const rc = recordOf(C, { processes: ['scene.acts'], logProcs: ['scene.acts'] });
+    const raCoarse = recordOf(A, { processes: ['scene.acts'], logProcs: ['scene.acts'] });
+    expect(differing(raCoarse, rc).filter((x) => !['frames', 'seeds', 'headers'].includes(x))).toEqual([]);
+    expect(C.stateOf('scene.acts')).not.toEqual(A.stateOf('scene.acts'));
+
+    // ---- the volume: the immigrants of each kind against the sum of the means of the realised propensities ----
+    const all = occurrences(A);
+    const immigrants: Record<string, number> = {};
+    for (const o of all) if (o.gen === 0) immigrants[o.kind] = (immigrants[o.kind] ?? 0) + 1;
+    for (const kd of A.data.kinds) {
+      const want = expected[kd.name] ?? 0;
+      const got = immigrants[kd.name] ?? 0;
+      // refused and uncast incidents are offered and not admitted
+      expect(Math.abs(got - want), `${kd.name}: ${got} against ${want.toFixed(1)}`).toBeLessThanOrEqual(4 * Math.sqrt(want) + 0.1 * want + 2);
+    }
+    expect(Object.values(expected).reduce((a, b) => a + b, 0)).toBeGreaterThan(20);
+    // no size 4 closer than 432 windows to another
+    const big = [...eventsState(A).ring.filter((e) => e.event?.size === 4).map((e) => e.w)].sort((a, b) => a - b);
+    for (let i = 1; i < big.length; i++) expect(big[i]! - big[i - 1]!).toBeGreaterThanOrEqual(432);
+
+    // ---- agreement: every summary's count is its items at its cell; every descriptor is what the kernel reports ----
+    for (const e of eventsState(A).ring) {
+      if (e.count !== undefined) {
+        expect(A.k.value(e.id, 'count')).toBe(e.count);
+        for (let j = 0; j < e.count; j++) {
+          const item = A.k.summaries.materialise(e.id, j);
+          expect(A.k.value(item, 'place')).toBe(e.cell);
+          expect(A.k.value(item, 'time')).toBe(itemTime(e.id, j, e.w * W, W));
+        }
+      } else if (e.event) {
+        expect(A.k.value(e.id, 'time')).toBe(e.event.time);
+        expect(A.k.value(e.id, 'place')).toBe(e.cell);
+        expect(A.k.value(e.id, 'kind')).toBe(e.kind);
+      }
+    }
+
+    // ---- causes ----
+    const byId = new Map(all.map((o) => [o.id, o]));
+    for (const o of all) {
+      expect(o.chain.length).toBe(o.gen);
+      expect(o.gen).toBeLessThanOrEqual(4);
+      const p = o.parent === undefined ? undefined : byId.get(o.parent);
+      if (p) {
+        expect(o.w).toBeGreaterThan(p.w);
+        expect(o.time).toBeGreaterThan(p.time);
+      }
+    }
+
+    // ---- bands: no two band pins on one cell within 144 windows ----
+    const pins = A.k.store.allPins().filter((p) => p.slot.startsWith('band@w'));
+    const byCell = new Map<Id, number[]>();
+    for (const p of pins) byCell.set(p.node, [...(byCell.get(p.node) ?? []), Number(p.slot.slice(6))]);
+    expect(pins.length).toBeGreaterThan(0);
+    for (const ws of byCell.values()) {
+      ws.sort((a, b) => a - b);
+      for (let i = 1; i < ws.length; i++) expect(ws[i]! - ws[i - 1]!).toBeGreaterThanOrEqual(144);
+    }
+
+    // ---- bounds ----
+    expect(calendarMax).toBeLessThanOrEqual(256);
+    expect(A.record.log.filter((e) => e.reason === 'calendar-overflow').length).toBe(0);
+    expect(eventsState(A).ring.every((e) => A.windowNow() - 1 - e.w < 1008)).toBe(true);
+
+    // ---- norms: the public event moves the perception of fee, the private one does not ----
+    const percNone: number[] = [];
+    const percPriv: number[] = [];
+    run('g1', 'none', (sim) => { for (let w = 0; w < N; w++) { sim.advance(1); percNone.push(percOf(sim)); } }, ['order.norms']);
+    run('g1', 'private', (sim) => { for (let w = 0; w < N; w++) { sim.advance(1); percPriv.push(percOf(sim)); } }, ['order.norms']);
+    for (let w = 0; w < N; w++) {
+      if (w <= publicW) expect(percB[w], `window ${w}`).toBe(percNone[w]!);
+      expect(percPriv[w], `window ${w}`).toBe(percNone[w]!);
+    }
+    expect(percB.slice(publicW + 3).some((x, i) => x !== percNone[publicW + 3 + i])).toBe(true);
+
+    // ---- publication: every opened item once, none later than its lag ----
+    const published = actsOf(A).published;
+    for (const p of published) {
+      const mine = emittedA.filter((e) => e.id === p.item);
+      expect(mine.length, 'published once').toBe(1);
+      expect(mine[0]!.now).toBeLessThanOrEqual((p.w + 2) * W);
+    }
+
+    // ---- floors ----
+    const harm = new Set<string>(A.data.gate.harmEffects);
+    const floor = new Set<string>(A.data.gate.floorRoles);
+    let persons = 0;
+    for (const e of eventsState(A).ring) {
+      const ids = e.event ? [e.id] : (e.count !== undefined ? Array.from({ length: e.count }, (_, j) => A.k.summaries.itemId(e.id, j)) : []);
+      for (const id of ids) {
+        const ev = A.policies.viewEvent(id);
+        if (!ev) continue;
+        for (const x of ev.participants) {
+          if (!floor.has(x.role)) continue;
+          persons++;
+          expect(x.who).not.toBe(A.w.v);
+          expect(A.gate.ageClassOf(x.who, ev.time)).toBe('adult');
+        }
+        for (const ef of ev.effects) if (harm.has(ef.effect)) {
+          expect(ef.on).not.toBe(A.w.v);
+          expect(A.people.protectedAt(ef.on, ev.time)).toBe(false);
+        }
+      }
+    }
+    // and the people the items would be cast with, which are a pure function of what the ring holds
+    for (const e of eventsState(A).ring) {
+      if (e.count === undefined || !e.meta) continue;
+      for (let j = 0; j < e.count; j++) {
+        const cast = A.casting.cast(itemDescriptor(A, e.id, j, e.w, e.cell, e.kind, e.meta[j]!));
+        if (cast === 'no-cast') continue;
+        for (const x of cast) {
+          if (x.who === undefined || !floor.has(x.role)) continue;
+          persons++;
+          expect(x.who).not.toBe(A.w.v);
+          expect(A.gate.ageClassOf(x.who, itemTime(e.id, j, e.w * W, W))).toBe('adult');
+        }
+      }
+    }
+    expect(persons).toBeGreaterThan(FULL ? 100 : 10);
+
+    // ---- the reads answer at every window after the first processed boundary ----
+    expect(reads.length).toBeGreaterThan(0);
+    expect(reads.filter((x) => x === 'maybe')).toEqual([]);
+    for (const name of ['heatRank', 'tension', 'reach', 'protected', 'contract']) expect(A.reads.eval(name, [A.w.districts[0]!.cellIds[0]])).toBe('maybe');
+  }, 1_800_000);
+});
 
 
 void defaultData;

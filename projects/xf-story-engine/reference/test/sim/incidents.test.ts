@@ -13,7 +13,7 @@ import { type EventsDigest, type EventsState, type RegimeRec } from '../../src/s
 import type { MirrorDigest } from '../../src/sim/proc-mirror.ts';
 import { Sim } from '../../src/sim/sim.ts';
 import { fx3Slice, makeKabukiSlice } from '../../src/sim/slices.ts';
-import { child, fxData, inject, quietData, quietSim, seedOf } from './helpers.ts';
+import { child, eventsState, fxData, inject, occurrences, quietData, quietSim, seedOf } from './helpers.ts';
 
 const W = 600;
 const DAY = 144;
@@ -25,8 +25,6 @@ const busy = (factor: number, tweak: (d: S1Data) => void = () => {}): S1Data =>
     for (const k of Object.keys(d.shape.rate)) d.shape.rate[k] = d.shape.rate[k]!.map((x) => x * factor) as [number, number, number, number];
     tweak(d);
   });
-
-const eventsState = (sim: Sim): EventsState => sim.k.evolution.states.get('city.events')!.state as EventsState;
 
 describe('SF1-S-2: regimes', () => {
   test('arrivals within three standard deviations, none ends before its planned length, all gone by their maximum dwell, one live regime of a kind per district', () => {
@@ -137,23 +135,6 @@ describe('SF1-S-6: a value closes and reopens in one batch', () => {
     expect(sim.reads.eval('regimeIs', ['fx_d1', 'crackdown'])).toBe('yes');
   });
 });
-
-/** Walk the ring: every occurrence with its window and time, events by their descriptor and items by their summary. */
-function occurrences(sim: Sim): Array<{ id: Id; kind: string; w: number; time: number; gen: number; chain: Id[]; parent?: Id }> {
-  const out: Array<{ id: Id; kind: string; w: number; time: number; gen: number; chain: Id[]; parent?: Id }> = [];
-  for (const e of eventsState(sim).ring) {
-    if (e.event) {
-      out.push({ id: e.id, kind: e.kind, w: e.w, time: e.event.time, gen: e.event.gen, chain: e.event.chain, ...(e.event.parent !== undefined ? { parent: e.event.parent } : {}) });
-    } else if (e.meta && e.count !== undefined) {
-      for (let j = 0; j < e.count; j++) {
-        const m = e.meta[j];
-        if (!m) continue;
-        out.push({ id: sim.k.summaries.itemId(e.id, j), kind: e.kind, w: e.w, time: itemTime(e.id, j, e.w * W, W), gen: m.gen, chain: m.chain, ...(m.parent !== undefined ? { parent: m.parent } : {}) });
-      }
-    }
-  }
-  return out;
-}
 
 describe('SF1-I-5: causality', () => {
   test('every child is born in a later window and at a later time than its parent; no cause follows its effect', () => {
