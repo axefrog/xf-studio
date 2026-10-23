@@ -341,7 +341,8 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
   /** See `api.prepare`. */
   async function prepare(options: { signal?: AbortSignal; report?: (report: RuntimePreparationReport) => void;
     setups?: readonly LightingSource[] } = {}): Promise<RuntimePreparationResult> {
-    const base = { renderer, scene, camera, lighting, frame: nextFrame, signal: options.signal };
+    // The feature renderers' own passes first (eye makeup's composite), then their surfaces as the first frame draws them.
+    const base = { renderer, scene, camera, lighting, frame: nextFrame, signal: options.signal, features: (signal?: AbortSignal) => features?.prepare(signal) };
     // Other setups a view of this scene shows: their programs too, while hidden (a shown runtime keeps drawing its own setup).
     if (options.setups?.length && !drawn.shown) {
       const own = lighting.source, key = JSON.stringify(own);

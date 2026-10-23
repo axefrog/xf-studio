@@ -320,6 +320,18 @@ export function createSkinScatter(renderer: THREE.WebGLRenderer) {
       const role = variantRole(material);
       return role ? variants.variantFor(material, role) : null;
     },
+    /**
+     * Compile the blur's program ahead (profiles phase 4a-v), bound to a target as its passes are: a scene's first scatter frame then links
+     * nothing of its own. Resolves once the driver has linked it; at once while the scatter is off.
+     */
+    compile(): Promise<void> {
+      if (!enabled || bare) return Promise.resolve();
+      const previous = renderer.getRenderTarget(), stand = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
+      try { renderer.setRenderTarget(stand); return renderer.compileAsync(quadScene, quadCamera).then(() => undefined); }
+      finally { renderer.setRenderTarget(previous); stand.dispose(); }
+    },
+    /** The blur's material (its program, for a caller preparing ahead). */
+    get blurMaterial(): THREE.Material { return blur; },
     /** Developer evidence: drop the input variants, so the next frame measures their compile (a V's first scatter frame). */
     resetVariants() { variants.clear(); },
     dispose() { disposeTargets(); variants.dispose(); blur.dispose(); quad.geometry.dispose(); },

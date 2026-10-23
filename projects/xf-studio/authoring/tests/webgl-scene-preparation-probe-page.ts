@@ -45,12 +45,22 @@ export type ScenePreparationProbe = {
   links: { stage: string; via: string }[];
   /** Diagnostics: GPU objects made after the baseline and still alive once everything closed, with the stack that made each. */
   leaks: { kind: string; stack?: string }[];
-  /** Diagnostics: programs the warm-up made, each against the programs of the same name made before it (their cache keys' differing parts). */
+  /** Diagnostics: programs the warm-up made (each with the start of its cache key): none when preparation compiled everything ahead. */
   warmUpPrograms: { key: string; name: string; diff: string[] }[];
+  /** Diagnostics: the uploads of the cold V's first shown frame, and every map uploaded ahead (with the stage that uploaded it). */
+  firstFrameUploads: string[];
+  initTextures: string[];
+  /** Diagnostics: tasks of 30 ms and more, with the stage reported last before each began. */
+  longTasks: { ms: number; stage: string; at: number }[];
+  stages: { at: number; label: string }[];
+  /** Diagnostics: each warm-up draw and each show, in ms on the page's thread, and the device's frame times. */
+  timings: { warmUps: number[]; warmUpLinks: number[]; shows: number[]; cpuFrame: unknown; prefilters: number[]; builds: number[] };
+  /** Uploads during a later, steady frame of the same V (per-frame data such as bone matrices), to compare with its first. */
+  steadyUploads: number;
   baseline: Counts; closed: Counts;
 };
 const probe: ScenePreparationProbe = { ok: false, errors: [], renderer: "", parallel: true, first: null as never, cold: null as never, warm: null as never,
-  cancel: null as never, progress: {}, slow: [], links: [], leaks: [], warmUpPrograms: [], baseline: null as never, closed: null as never };
+  cancel: null as never, progress: {}, slow: [], links: [], leaks: [], warmUpPrograms: [], firstFrameUploads: [], initTextures: [], longTasks: [], stages: [], timings: { warmUps: [], warmUpLinks: [], shows: [], cpuFrame: null, prefilters: [], builds: [] }, steadyUploads: -1, baseline: null as never, closed: null as never };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const frame = () => new Promise<number>(resolve => requestAnimationFrame(resolve));
 
@@ -67,9 +77,15 @@ try {
   const tasks: { start: number; duration: number }[] = [];
   new PerformanceObserver(list => { for (const entry of list.getEntries()) tasks.push({ start: entry.startTime, duration: entry.duration }); })
     .observe({ type: "longtask", buffered: true });
-  const longest = (from: number, to: number) => tasks.filter(task => task.start + task.duration >= from && task.start <= to)
-    .reduce((max, task) => Math.max(max, task.duration), 0);
-  const over50 = (from: number, to: number) => tasks.filter(task => task.start + task.duration >= from && task.start <= to && task.duration > 50).length;
+  /** The page's own tasks: the probe's pixel reads (they wait for the GPU), which aren't the preparation's. */
+  const own: { start: number; end: number }[] = [];
+  /** A task's own length: its duration less the probe's pixel reads inside it. */
+  const length = (task: { start: number; duration: number }) => task.duration - own.filter(span => span.start >= task.start - 1 && span.end <= task.start + task.duration + 1)
+    .reduce((sum, span) => sum + span.end - span.start, 0);
+  const within = (from: number, to: number) => tasks.filter(task => task.start + task.duration >= from && task.start <= to)
+    .map(task => ({ start: task.start, duration: length(task) }));
+  const longest = (from: number, to: number) => within(from, to).reduce((max, task) => Math.max(max, task.duration), 0);
+  const over50 = (from: number, to: number) => within(from, to).filter(task => task.duration > 50).length;
 
   const element = document.createElement("div");
   element.style.cssText = "width:160px;height:120px";
@@ -80,9 +96,11 @@ try {
   /** The stage the want in flight reported last (diagnostics). */
   let stageLabel = "setup";
   const stageNow = () => stageLabel;
+  const stageLog: { at: number; label: string }[] = [];
   let beforeWarmUp: { key: string; programs: Set<{ name: string; cacheKey: string }> } | null = null;
   // Links and uploads, counted at the context (a draw that links or uploads shows here).
   const calls = { links: 0, uploads: 0 };
+  let watchUploads = false;
   {
     const context = gl as unknown as Record<string, (...args: unknown[]) => unknown>;
     const link = context.linkProgram!.bind(gl);
@@ -94,16 +112,40 @@ try {
       context[name] = (...args: unknown[]) => {
         const start = performance.now();
         try { return original(...args); }
-        finally { const ms = performance.now() - start; if (ms >= 20 && probe.slow.length < 60) probe.slow.push({ call: name, ms, stage: stageNow(), via: via() }); }
+        finally { const ms = performance.now() - start; if (ms >= 10 && probe.slow.length < 80) probe.slow.push({ call: name, ms, stage: stageNow(), via: via() }); }
       };
     }
     for (const name of ["texImage2D", "texSubImage2D", "texStorage2D", "texImage3D", "texSubImage3D", "texStorage3D", "compressedTexImage2D"]) {
       const original = context[name]!.bind(gl);
-      context[name] = (...args: unknown[]) => { calls.uploads++; return original(...args); };
+      context[name] = (...args: unknown[]) => { calls.uploads++; if (watchUploads && probe.firstFrameUploads.length < 20) probe.firstFrameUploads.push(`${name} ${via()}`); return original(...args); };
     }
   }
   const device = createRendererDevice(element, { context: gl }), renderer = device.renderer;
   probe.parallel = renderer.extensions.has("KHR_parallel_shader_compile");
+  {
+    const fromScene = THREE.PMREMGenerator.prototype.fromScene;
+    THREE.PMREMGenerator.prototype.fromScene = function (this: THREE.PMREMGenerator, ...args: Parameters<typeof fromScene>) {
+      const start = performance.now();
+      try { return fromScene.apply(this, args); } finally { probe.timings.prefilters.push(performance.now() - start); }
+    };
+    const create = createSceneRuntime;
+    void create;
+  }
+  {
+    const warmUp = device.warmUp.bind(device);
+    device.warmUp = slot => {
+      const start = performance.now(), links = calls.links;
+      try { return warmUp(slot); } finally { probe.timings.warmUps.push(performance.now() - start); probe.timings.warmUpLinks.push(calls.links - links); }
+    };
+  }
+  {
+    const init = renderer.initTexture.bind(renderer);
+    renderer.initTexture = (texture: THREE.Texture) => {
+      const image = texture.image as { width?: number; height?: number } | undefined;
+      probe.initTextures.push(`${stageNow()}|${texture.name}|${texture.uuid.slice(0, 8)}|${image?.width}x${image?.height}|${texture.constructor.name}`);
+      return init(texture);
+    };
+  }
   renderer.debug.onShaderError = (context, program, vertex, fragment) => {
     probe.errors.push(`${context.getProgramInfoLog(program) ?? ""} ${context.getShaderInfoLog(vertex) ?? ""} ${context.getShaderInfoLog(fragment) ?? ""}`.trim() || "shader error");
   };
@@ -114,7 +156,9 @@ try {
   const checksum = () => {
     const width = gl.drawingBufferWidth, height = gl.drawingBufferHeight, out = new Uint8Array(width * height * 4);
     renderer.setRenderTarget(null);
+    const start = performance.now();
     gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, out);
+    own.push({ start, end: performance.now() });
     let h = 0x811c9dc5; for (const byte of out) { h ^= byte; h = Math.imul(h, 0x01000193); }
     return `${out.length}:${(h >>> 0).toString(16)}`;
   };
@@ -140,7 +184,9 @@ try {
       progress({ stage: "build" });
       const options: SceneHostOptions = { renderers: STUDIO_RENDERERS, loadCore: async () => ({ ...syntheticCore(), body: want.body }), loadMotion: motion(),
         loadLut: async () => ({ lut: null, source: null as never }), body: want.body, signal };
+      const built = performance.now();
       const runtime = await createSceneRuntime(device, options);
+      probe.timings.builds.push(performance.now() - built);
       runtimes.set(runtime, want.key);
       runtime.setLighting(lightingOf(want.lighting));
       const makeup = runtime.feature(EYE_MAKEUP_RENDERER)!;
@@ -164,7 +210,7 @@ try {
       }
     },
     prepared: runtime => runtime.prepared(),
-    show: runtime => { device.show(runtime.slot); runtime.requestRender(); },
+    show: runtime => { const start = performance.now(); device.show(runtime.slot); runtime.requestRender(); probe.timings.shows.push(performance.now() - start); },
     hide: () => {},
     dispose: runtime => { runtimes.delete(runtime); runtime.dispose(); },
   }, { warm: 1 });
@@ -178,17 +224,13 @@ try {
     if (beforeWarmUp && !label.startsWith(beforeWarmUp.key)) {
       const before = beforeWarmUp;
       for (const program of programs()) if (!before.programs.has(program)) {
-        const parts = program.cacheKey.split(",");
-        const peers = [...before.programs].filter(other => other.name === program.name);
-        const scored = [...before.programs].map(peer => { const theirs = peer.cacheKey.split(","); const d = parts.map((part, i) => part === theirs[i] ? "" : `${i}:${part}|${theirs[i]}`).filter(Boolean); return { d, name: peer.name }; })
-          .sort((x, y) => x.d.length - y.d.length).slice(0, 2);
-        const diff = [`KEY ${program.cacheKey.slice(0, 700)}`, ...scored.map(entry => `vs ${entry.name}: ${entry.d.join(" ").slice(0, 400)}`)];
-        void peers;
+        const diff = [program.cacheKey.slice(0, 300)];
         probe.warmUpPrograms.push({ key: before.key, name: program.name, diff });
       }
       beforeWarmUp = null;
     }
     stageLabel = label;
+    stageLog.push({ at: performance.now(), label });
   });
   const want = (subject: string, body: Want["body"], record: Want["record"], lighting: Want["lighting"]): Want =>
     ({ scene: "s1", key: `s1|${subject}|${body}|${lighting}`, body, record, lighting });
@@ -206,6 +248,13 @@ try {
   {
     const warm = await createSceneRuntime(device, { renderers: STUDIO_RENDERERS, loadCore: async () => syntheticCore(), loadMotion: motion(),
       loadLut: async () => ({ lut: null, source: null as never }) });
+    // With a V and a makeup layer composited, so the shared 1×1 maps of the layered-makeup engine and of the V's materials (they live as
+    // long as the renderer) are in it.
+    warm.setCharacterDetails(await warm.details.load(recordA, { fetcher, reuse: null }));
+    const makeup = warm.feature(EYE_MAKEUP_RENDERER)!;
+    makeup.layers.setCanvases([mask], ["one"]);
+    makeup.layers.updateLayer(0, initialRecipe().layers[0]!, undefined, undefined, true);
+    await warm.prepare();
     device.show(warm.slot); warm.requestRender(); await settle();
     warm.dispose(); await sleep(50);
   }
@@ -230,12 +279,26 @@ try {
     const runtime = await pending;
     // Shown now, before its first frame: the canvas still holds the first V's pixels, and this one has drawn nothing yet.
     const shownAt = performance.now(), framesBefore = runtime.frameTiming().frames, warmUps = runtime.slot.warmUps;
+    stageLog.push({ at: performance.now(), label: "probe:shown" });
     const unchanged = checksum() === before;
     const at = { ...calls, programs: counter.made().program };
+    watchUploads = true;
     for (let i = 0; i < 600 && runtime.frameTiming().frames === 0; i++) await frame();
+    watchUploads = false;
+    stageLog.push({ at: performance.now(), label: "probe:first-frame-drawn" });
     const firstFrame = { links: calls.links - at.links, programs: counter.made().program - at.programs, uploads: calls.uploads - at.uploads };
     await frame();
     const presented = performance.now();
+    stageLog.push({ at: presented, label: "probe:presented" });
+    // A later frame of the same V, drawn on request: what every frame uploads (bone matrices), to set the first frame against.
+    {
+      const before = calls.uploads;
+      runtime.requestRender();
+      const drawn = runtime.frameTiming().frames;
+      for (let i = 0; i < 60 && runtime.frameTiming().frames === drawn; i++) await frame();
+      probe.steadyUploads = calls.uploads - before;
+      probe.timings.cpuFrame = device.stats().cpuFrame;
+    }
     await sleep(1000);
     probe.cold = { wantToShownMs: presented - start, showToPresentedMs: presented - shownAt, longestTaskMs: longest(start, presented + 1000),
       tasksOver50: over50(start, presented + 1000), framesBeforeShown: framesBefore, warmUps, canvasUnchanged: unchanged, firstFrame,
@@ -275,7 +338,10 @@ try {
   residency.dispose();
   await sleep(100);
   probe.closed = counts();
-  probe.leaks = counter.aliveSince(baselineMark).map(({ kind, stack }) => ({ kind, stack: stack?.split("\n").slice(0, 12).map(line => line.trim()).join(" < ") }));
+  probe.stages = stageLog.map(entry => ({ at: Math.round(entry.at), label: entry.label }));
+  probe.longTasks = tasks.filter(task => task.duration >= 30).map(task => ({ ms: Math.round(task.duration), at: Math.round(task.start),
+    stage: [...stageLog].reverse().find(entry => entry.at <= task.start)?.label ?? "before" }));
+  probe.leaks = counter.aliveSince(baselineMark).map(({ kind, stack }) => ({ kind, stack: stack?.split("\n").slice(0, 30).map(line => line.trim()).join(" < ") }));
   device.dispose();
   probe.ok = probe.errors.length === 0;
 } catch (error) {

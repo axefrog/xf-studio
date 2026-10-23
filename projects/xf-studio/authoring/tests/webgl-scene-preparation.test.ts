@@ -47,8 +47,16 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     }
   });
 
-  test("its first shown frame links no program and uploads nothing: preparation did it all", () => {
-    for (const probe of [parallel, fallback]) expect(probe.cold.firstFrame).toEqual({ links: 0, programs: 0, uploads: 0 });
+  test("its first shown frame links no program and uploads no map: only what every frame sends (its bones), as a later frame does", () => {
+    for (const probe of [parallel, fallback]) {
+      expect({ links: probe.cold.firstFrame.links, programs: probe.cold.firstFrame.programs }).toEqual({ links: 0, programs: 0 });
+      expect(probe.steadyUploads).toBeGreaterThanOrEqual(0);
+      expect(probe.cold.firstFrame.uploads).toBe(probe.steadyUploads);
+      // No warm-up linked a program either, the very first on the renderer included: everything it drew was compiled ahead.
+      expect(probe.warmUpPrograms).toEqual([]);
+      expect(probe.timings.warmUpLinks.length).toBeGreaterThanOrEqual(3);
+      expect(probe.timings.warmUpLinks.every(links => links === 0)).toBe(true);
+    }
   });
 
   test("a switch to a warm, prepared V draws its first frame within 100 ms, with no build and no preparation", () => {

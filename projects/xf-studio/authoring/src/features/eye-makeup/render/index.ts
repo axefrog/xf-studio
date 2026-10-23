@@ -75,6 +75,11 @@ function createEyeMakeupRenderer(host: SceneHostPort): EyeMakeupRenderer {
     plates: stack.plates, materials: stack.materials,
     // The composite, only after a layer or the skin changed (plate-blend.ts).
     beforeDraw: () => stack.prepareBlend(host.renderer),
+    // Before the scene is shown: the composite's passes linked ahead, then the merged plate made as the first frame draws it.
+    async prepare(signal) {
+      await stack.preparePasses(host.renderer);
+      if (!signal?.aborted) stack.prepareBlend(host.renderer);
+    },
     setNormals: stack.setNormals,
     setResearchTools(enabled: boolean) {
       if (enabled === research) return;

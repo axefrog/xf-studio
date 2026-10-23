@@ -377,8 +377,13 @@ export function createLightingSetupStage(options: {
         // The shadow pass draws into the lights' maps: any render target keys a program as one does (no tone mapping, working colour space).
         if (castsShadowMaps()) {
           renderer.setRenderTarget(target ?? depthTarget());
-          for (const mesh of meshes) if (mesh.castShadow) for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
-            if (material.visible) compileAs(mesh, shadowDepthMaterial(mesh, material));
+          for (const mesh of meshes) if (mesh.castShadow) {
+            for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+              if (material.visible) compileAs(mesh, shadowDepthMaterial(mesh, material));
+            }
+            // The maps are redrawn inside the contact prepass too (its draw is the frame's first, while every caster wears its depth
+            // material), so Three's shadow pass then picks a depth material for the depth material itself: that variant as well.
+            if (contactOn) compileAs(mesh, shadowDepthMaterial(mesh, contact.casterMaterial(mesh)));
           }
         }
       } finally { renderer.setRenderTarget(previous); }
@@ -387,20 +392,25 @@ export function createLightingSetupStage(options: {
         if ((value as THREE.Texture | null)?.isTexture) textures.add(value as THREE.Texture);
         else if (Array.isArray(value)) for (const entry of value) collect(entry);
       };
+      // A material's own maps (Three copies them into its uniforms only when it draws), and the uniforms it was compiled with.
       for (const material of materials) {
-        const uniforms = (renderer.properties.get(material) as { uniforms?: Record<string, THREE.IUniform> }).uniforms;
-        for (const uniform of Object.values(uniforms ?? {})) collect(uniform?.value);
+        for (const value of Object.values(material)) collect(value);
+        const own = (material as THREE.ShaderMaterial).uniforms;
+        const compiled = (renderer.properties.get(material) as { uniforms?: Record<string, THREE.IUniform> }).uniforms;
+        for (const uniform of [...Object.values(own ?? {}), ...Object.values(compiled ?? {})]) collect(uniform?.value);
       }
       releaseShadersWithPrograms(renderer, linkedPrograms(renderer, materials));
       return { ready: Promise.all(pending).then(() => undefined), textures: [...textures], programs: () => linkedPrograms(renderer, materials) };
     },
     /**
      * Compile the display's own passes for the shown setup, as the next frame draws them (the game display's grade, or the studio's coverage
-     * and tone pass), so a setup's first frame waits on none of them either.
+     * and tone pass, and the skin scatter's blur), so a setup's first frame waits on none of them either.
      */
     prepareDisplay(): { ready: Promise<void>; programs(): LinkedProgram[] } {
       applyState();
-      const compiled = display.compile(game() ? "creator" : "studio");
+      const compiled = display.compile(game() ? "creator" : "studio", scene);
+      // The skin scatter's blur, when this display can run it.
+      if (display.scatterPossible) { compiled.pending.push(scatter.compile()); compiled.materials.push(scatter.blurMaterial); }
       releaseShadersWithPrograms(renderer, linkedPrograms(renderer, compiled.materials));
       return { ready: Promise.all(compiled.pending).then(() => undefined), programs: () => linkedPrograms(renderer, compiled.materials) };
     },

@@ -35,6 +35,11 @@ export type RuntimePreparationPorts = {
     prepare(object: THREE.Object3D, camera: THREE.Camera): { ready: Promise<void>; textures: THREE.Texture[]; programs(): readonly LinkedProgram[] };
     prepareDisplay(): { ready: Promise<void>; programs(): readonly LinkedProgram[] };
   };
+  /**
+   * Before the scene is compiled: the feature renderers' own passes made ready and their GPU state current (feature-renderers.ts
+   * `prepare`), so their surfaces are compiled as the first frame draws them.
+   */
+  features?(signal?: AbortSignal): Promise<void> | void;
   /** Maps to upload besides those the compiled programs sample (the core head's). */
   textures?(): Iterable<THREE.Texture>;
   /** Wait for the next animation frame, then a task of its own (work between frames, never inside one). */
@@ -80,8 +85,10 @@ export async function prepareRuntime(ports: RuntimePreparationPorts): Promise<Ru
   };
   check();
 
-  // 1. Programs: every mesh the next frame draws, then the display's passes.
+  // 1. Programs: the feature renderers' own passes, then every mesh the next frame draws, then the display's passes.
   report("programs", 0);
+  await ports.features?.(signal);
+  check();
   const meshes: THREE.Mesh[] = [];
   scene.traverseVisible(object => { if ((object as THREE.Mesh).isMesh) meshes.push(object as THREE.Mesh); });
   const compiled: { textures?: THREE.Texture[]; programs(): readonly LinkedProgram[] }[] = [];

@@ -459,5 +459,7 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
   return { plates, materials, textures, plate, geometry, setCanvases, reconcileLayerCanvases, dispose,
     setLayerCanvas, needsOptics, needsAlbedo, updateLayer, diagnostics, setUnderlaySource, setSkinLight, prepareBlend, blendDiagnostics, contextRestored, prewarmFinishes,
     releaseFinishStandIns, setNormals(value: boolean) { plateLight.handle.setNormals(value); },
+    /** The composite's passes compiled ahead (profiles phase 4a-v): the first `prepareBlend` that composites links nothing then. */
+    preparePasses: (renderer: THREE.WebGLRenderer) => composite.compile(renderer),
     setWire(value: boolean) { wireframe = value; plateLight.material.wireframe = value; for (const m of materials) m.wireframe = value; } };
 }
