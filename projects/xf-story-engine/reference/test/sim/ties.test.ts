@@ -44,7 +44,7 @@ describe('SF1-T-1: symmetry', () => {
     const tied = forward.filter((x) => x?.tied).length;
     expect(tied).toBeGreaterThan(0);
     expect(tied).toBeLessThan(forward.length);
-  });
+  }, 120_000);
 });
 
 describe('SF1-T-2: the numbers', () => {

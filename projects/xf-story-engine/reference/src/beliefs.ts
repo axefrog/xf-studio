@@ -38,6 +38,11 @@ export interface Belief {
    * memory machinery, stay deferred (V4-30).
    */
   salience?: number;
+  /**
+   * How many tellings the belief has been through (S1 8.4: a hop limit of 4). Optional, omitted at 0. The simulation layer's field;
+   * it changes no kernel rule.
+   */
+  hop?: number;
 }
 
 /** A belief as an operation or a policy states it: the record without its Id, which the kernel derives unless one is given. */
@@ -59,9 +64,9 @@ export type Known =
 /** S1's policy hooks (spec 11.2). This is the stub the reference model ships. */
 export interface BeliefPolicy {
   /** Beliefs an observer forms on witnessing an event. */
-  onWitness(k: Kernel, event: Id, observer: Id): Array<Omit<Belief, 'id' | 'formed' | 'refreshed' | 'believer'>>;
+  onWitness(k: Kernel, event: Id, observer: Id): Array<Omit<Belief, 'id' | 'formed' | 'refreshed' | 'believer'> & { id?: Id }>;
   /** Overrides applied to a belief being told (confidence, memorability). Evidence is never overridden. */
-  onSocial(k: Kernel, belief: Belief, teller: Id, listener: Id, operator?: TellOperator | null): Partial<Pick<Belief, 'confidence' | 'memorable' | 'path' | 'value' | 'region' | 'salience'>>;
+  onSocial(k: Kernel, belief: Belief, teller: Id, listener: Id, operator?: TellOperator | null): Partial<Pick<Belief, 'confidence' | 'memorable' | 'path' | 'value' | 'region' | 'salience' | 'hop'>>;
   /** A boundary passed: `at` is the boundary's time (spec 11.2, SPEC-NOTES 50). */
   onTick(k: Kernel, believer: Id, at: GameTime): void;
   aggregate(k: Kernel, audience: Id[], subject: Id, path: SlotPath): { value?: Value; confidence: number; mass?: number; items?: number } | undefined;
@@ -303,6 +308,8 @@ export class Beliefs {
     if (src.at !== undefined) told.at = src.at;
     const sal = over.salience ?? src.salience;
     if (sal) told.salience = sal;
+    const hop = over.hop;
+    if (hop) told.hop = hop;
     return this.set(told);
   }
 

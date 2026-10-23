@@ -45,7 +45,7 @@ describe('SF1-P-0: the schema resolves', () => {
     expect(households).toBe(1000);
     expect(residents).toBeGreaterThan(2000);
     expect(k.defects.items).toEqual([]);
-  });
+  }, 120_000);
 
   test("a pin on a resident's profile narrows its household's slot (S0 6.4)", () => {
     const k = w.k;

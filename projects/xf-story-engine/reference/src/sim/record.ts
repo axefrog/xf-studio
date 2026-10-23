@@ -24,8 +24,18 @@ export interface S1Record {
   dirtySeq: number;
   /** Tell volume: the windows of social events minted outside focus, for the hourly cap. */
   tells: number[];
-  /** Materialised ties: the history of each (S1 4.7), by tie edge Id. */
-  tieHistory: Record<Id, Array<{ event: Id; salience: number; reason: string; kind: string; at: GameTime }>>;
+  /** Materialised ties: the history and the counts of each (S1 4.7), by tie edge Id. */
+  tieHistory: Record<Id, TieRecord>;
+}
+
+export interface TieRecord {
+  /** At most 32, newest last. */
+  entries: Array<{ event: Id; salience: number; reason: string; kind: string; at: GameTime }>;
+  hours: number;
+  disclosures: number;
+  favours: number;
+  /** The last loss of each trust component, for a repair to restore. */
+  lastLoss: { trustA: number; trustB: number; trustI: number };
 }
 
 export function emptyRecord(): S1Record {

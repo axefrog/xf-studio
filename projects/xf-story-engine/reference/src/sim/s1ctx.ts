@@ -58,6 +58,8 @@ export interface S1Process<S, D> {
   coarseFine: CoarseFine;
   /** Publication lag in windows (S1 9.4). */
   lag: number;
+  /** A fine-tier process also runs for the demand of the windows just ended (kernel `demandLookback`). */
+  demandLookback?: number;
   init(sim: Sim): S;
   run(c: S1Ctx, k: number): S1Result<S, D>;
 }
@@ -71,6 +73,7 @@ export function toProcessDef<S, D>(sim: Sim, p: S1Process<S, D>): ProcessDef {
     period: 1,
     coarseFine: p.coarseFine,
     lag: p.lag,
+    ...(p.demandLookback ? { demandLookback: p.demandLookback } : {}),
     init: () => p.init(sim),
     run(pctx: ProcessCtx, k: number): ProcessResult {
       const logs: LogDraft[] = [];

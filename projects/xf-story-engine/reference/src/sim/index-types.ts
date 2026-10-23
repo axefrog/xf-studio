@@ -77,6 +77,8 @@ export interface WorldIndex {
   cells: Record<Id, CellIndex>;
   /** The opportunity of all districts not listed. */
   rest: { totalA: Record<KindName, Per4> };
+  /** The names a replay script uses for places: a cell, a district's key. Static data, like the rest of the slice. */
+  names?: Record<string, Id>;
 }
 
 /** The simulated districts, in `Id` order. */

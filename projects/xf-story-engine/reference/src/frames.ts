@@ -474,6 +474,11 @@ export class Frames {
     return this.demandLog.some((e) => e.tier === tier && e.from <= t && (e.to === undefined || t < e.to));
   }
 
+  /** Whether demand reached `tier` at any time in `[from, to)`, from the recorded demand history (I-15). */
+  demandOverlaps(tier: Tier, from: GameTime, to: GameTime): boolean {
+    return this.demandLog.some((e) => e.tier === tier && e.from < to && (e.to === undefined || from < e.to));
+  }
+
   demandHistory(): Array<{ tier: Tier; from: GameTime; to?: GameTime }> {
     return this.demandLog.map((e) => ({ ...e }));
   }

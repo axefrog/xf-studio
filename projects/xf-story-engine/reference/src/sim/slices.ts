@@ -64,6 +64,7 @@ export function fx3Slice(): WorldIndex {
   };
   return withHash({
     version: 'xf.fx3.index@1',
+    names: { c1, c2, c3, fx_d1: dId },
     districts: { [dId]: district },
     cells: {
       [c1]: cell(c1, 0, [c2], [c3], 'public', 0.5),
@@ -231,6 +232,7 @@ export function makeKabukiSlice(): WorldIndex {
   });
   return withHash({
     version: 'xf.kabuki.index@1',
+    names: { wat_kab: dId, wat_nor: nId, wat_lch: lId, ...Object.fromEntries(cellIds.map((id, i) => [nameOf(i), id])) },
     districts: {
       [dId]: district,
       [nId]: stub(nId, 'wat_nor', 3100, [['civilian', 'civilian', 2500], ['ncpd', 'ncpd', 62], ['TygerClaws', 'gang', 190], ['Maelstrom', 'gang', 220], ['Militech', 'corp', 128]]),

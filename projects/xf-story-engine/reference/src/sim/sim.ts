@@ -24,6 +24,18 @@ import { Ties } from './ties.ts';
 import { type WorldOptions, World } from './world.ts';
 import type { EventsState } from './proc-events.ts';
 import { eventsProcess } from './proc-events.ts';
+import { groupsProcess } from './proc-groups.ts';
+import { mirrorProcess } from './proc-mirror.ts';
+import { normsProcess } from './proc-norms.ts';
+import { stocksProcess } from './proc-stocks.ts';
+import { actsProcess } from './proc-acts.ts';
+import { Ledger, ledgerProcess } from './ledger.ts';
+import type { RingEntry } from './occ.ts';
+import { Policies } from './policies.ts';
+import { TiePolicy } from './tie-policy.ts';
+import { VFrames } from './vframes.ts';
+import { Divergence } from './divergence.ts';
+import { Reads } from './reads.ts';
 import type { LogDraft } from './occ.ts';
 import type { StocksDigest } from './proc-stocks.ts';
 import type { NormsDigest } from './proc-norms.ts';
@@ -48,6 +60,15 @@ export class Sim {
   readonly casting: Casting;
   readonly city: CityModel;
   readonly gate: Gate;
+  readonly ledger: Ledger;
+  readonly policies: Policies;
+  readonly tiePolicy: TiePolicy;
+  readonly vFrames: VFrames;
+  readonly divergence: Divergence;
+  readonly reads: Reads;
+  /** The canon characters of the main story (S1 4.4), joined to mirrored nodes by game key. */
+  readonly spine = new Set<Id>();
+  readonly mirrorProc: Id = processCause('city.mirror');
   record: S1Record = emptyRecord();
   readonly defs = new Map<string, ProcessDef>();
 
@@ -61,9 +82,15 @@ export class Sim {
     this.ties = new Ties(this.w, this.people, this.ids);
     this.city = new CityModel(this.w, this.people, this.ids, this.casting);
     this.gate = new Gate(this.w, this.people);
+    this.ledger = new Ledger(this);
+    this.policies = new Policies(this);
+    this.tiePolicy = new TiePolicy(this);
+    this.vFrames = new VFrames(this);
+    this.divergence = new Divergence(this);
+    this.reads = new Reads(this);
     this.people.hooks = {
       closed: (v, t) => this.closedAt(v.role, v.cell, t),
-      isSpine: () => false,
+      isSpine: (n) => this.spine.has(n),
       defect: (kind, detail) => this.logNow({ w: this.windowNow(), proc: 'people', kind: 'defect', reason: kind, refs: [], key: detail }),
     };
     // The record's sink for the processes' log entries, the hooks that save and restore the record.
@@ -74,6 +101,7 @@ export class Sim {
     this.k.loadHooks.push((rec, report) => this.onLoad(rec, report));
     this.installPins();
     this.registerProcesses(opts.only);
+    this.policies.install();
   }
 
   static create(opts: SimOptions): Sim {
@@ -83,7 +111,7 @@ export class Sim {
   // ---- registration ----
 
   private registerProcesses(only?: string[]): void {
-    const defs = [eventsProcess(this)].map((p) => toProcessDef(this, p as never));
+    const defs = [eventsProcess(this), groupsProcess(this), stocksProcess(this), mirrorProcess(this), ledgerProcess(this), normsProcess(this), actsProcess(this)].map((p) => toProcessDef(this, p as never));
     for (const d of defs) {
       if (only && !only.includes(d.id)) continue;
       this.defs.set(d.id, d);
@@ -101,6 +129,10 @@ export class Sim {
   }
 
   // ---- the record ----
+
+  windowStart(w: number): GameTime {
+    return w * this.data.time.W;
+  }
 
   windowNow(): number {
     return Math.floor(this.k.now / this.data.time.W);
@@ -121,6 +153,7 @@ export class Sim {
     this.people.dropCaches();
     this.ties.dropCaches();
     this.w.buildNodes();
+    this.policies.openWatch();
     const mine = (report.changedPacks ?? []).filter((x) => x.startsWith('xf.core.world@1@') || x.startsWith('xf.s1.sim@1@'));
     if (mine.length > 0) {
       this.k.readOnly = { message: `This save was made with other simulation data (${mine.join(', ')}). It opens read-only.` };
@@ -151,6 +184,20 @@ export class Sim {
 
   digestOf<D>(id: string): D | undefined {
     return this.k.evolution.digestOf<D>(id);
+  }
+
+  /** A summary's ring entry (S1 9.4 `why`, 7.9): the descriptor fields the ring keeps for seven days, read from the events process's applied state. */
+  ringEntry(summary: Id): RingEntry | undefined {
+    const st = this.k.evolution.states.get('city.events')?.state as EventsState | null | undefined;
+    return st?.ring.find((e) => e.id === summary);
+  }
+
+  /** The summary an item belongs to and its index, from the item's header. */
+  summaryOfItem(item: Id): { summary: Id; index: number } | undefined {
+    const h = this.k.store.header(item);
+    if (!h || h.origin.by !== 'minted' || h.origin.creator !== h.origin.cause) return undefined;
+    const m = /^item:(\d+)$/.exec(h.origin.name);
+    return m ? { summary: h.origin.creator, index: Number(m[1]) } : undefined;
   }
 
   /** Start the world at a window (a test that does not want to run the windows before): the kernel's cursor and time move, nothing runs. */

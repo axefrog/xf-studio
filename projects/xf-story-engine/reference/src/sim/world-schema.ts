@@ -83,6 +83,8 @@ const RESIDENT_SLOTS = (j: number): SlotDef[] => [
   slot('life', 'xf:life', { tier: 3 }),
   // The game time a story event killed the resident, pinned by whoever killed them; absent while they live (S1 4.2).
   slot('died', 'core:time', { mode: 'assigned', tier: 3 }),
+  // The rungs of the relationship ladder the person refuses, comma-separated (S1 4.7): a boundary pin.
+  slot('boundary', 'core:display-name', { mode: 'assigned', tier: 3 }),
   slot('position', 'core:position', { mode: 'mirrored', tier: 3 }),
 ];
 
@@ -114,6 +116,11 @@ export function worldDefs(data: S1Data, wSim = data.time.W): SchemaDefs {
       prior: { name: 'weights', version: 1, params: { weights: { low: data.people.sociability.prior[0], mid: data.people.sociability.prior[1], high: data.people.sociability.prior[2] } } },
     }),
     dim('xf:yesno', { t: 'enum', values: ['yes', 'no'] }),
+    dim('xf:alive', { t: 'enum', values: ['yes', 'no'] }),
+    dim('xf:flag', { t: 'enum', values: ['yes', 'no'] }),
+    dim('xf:affiliation', { t: 'text' }),
+    dim('xf:tracked', { t: 'enum', values: ['yes', 'no'] }),
+    dim('xf:jstate', { t: 'enum', values: ['active', 'blocked', 'finished', 'failed'] }),
     dim('xf:wanted', { t: 'int', min: 0, max: 5 }, { structure: 'order' }),
     dim('xf:signed', { t: 'real', min: -1, max: 1, quantum: 1 / 64 }, { structure: 'metric' }),
     dim('xf:tie-kind', { t: 'enum', values: ['kin', 'crew', 'colleague', 'neighbour', 'friend', 'rival'] }),
@@ -178,10 +185,11 @@ export function worldDefs(data: S1Data, wSim = data.time.W): SchemaDefs {
     {
       id: 'xf:person', extends: ['core:person'],
       slots: [
-        slot('affiliation', 'core:display-name', { mode: 'mirrored', tier: 3 }),
-        slot('alive', 'xf:yesno', { mode: 'mirrored', tier: 3 }),
-        slot('crowd', 'xf:yesno', { mode: 'mirrored', tier: 3 }),
-        slot('quest-linked', 'xf:yesno', { mode: 'mirrored', tier: 3 }),
+        slot('affiliation', 'xf:affiliation', { mode: 'mirrored', tier: 3 }),
+        slot('alive', 'xf:alive', { mode: 'mirrored', tier: 3 }),
+        slot('crowd', 'xf:flag', { mode: 'mirrored', tier: 3 }),
+        slot('quest-linked', 'xf:flag', { mode: 'mirrored', tier: 3 }),
+        slot('boundary', 'core:display-name', { mode: 'assigned', tier: 3 }),
       ],
     },
     {
@@ -195,7 +203,13 @@ export function worldDefs(data: S1Data, wSim = data.time.W): SchemaDefs {
     },
     {
       id: 'xf:journal', extends: ['core:thing'],
-      slots: [slot('family', 'core:display-name', { mode: 'mirrored', tier: 1 }), slot('district', 'core:display-name', { mode: 'mirrored', tier: 1 })],
+      slots: [
+        slot('family', 'core:display-name', { mode: 'mirrored', tier: 1 }),
+        slot('district', 'core:display-name', { mode: 'mirrored', tier: 1 }),
+        slot('tracked', 'xf:tracked', { mode: 'mirrored', tier: 1 }),
+        slot('jstate', 'xf:jstate', { mode: 'mirrored', tier: 1 }),
+        slot('target', 'core:display-name', { mode: 'mirrored', tier: 1 }),
+      ],
     },
   ];
 

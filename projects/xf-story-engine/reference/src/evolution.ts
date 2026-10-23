@@ -106,6 +106,12 @@ export interface ProcessDef {
   coarseFine?: { kind: 'exact' } | { kind: 'count' } | { kind: 'distribution'; tolerance: string };
   /** Publication lag, in windows (S1 9.4). Recorded, not used by resolution. */
   lag?: number;
+  /**
+   * A fine-tier process also runs when demand reached its tier in the `demandLookback` windows before the boundary, so it can finish
+   * what the demand of a window just ended asked for (S1 7.9: the items of window `k - 1` are opened from the demand recorded for
+   * window `k - 1`, even when V has left by `k`). Judged from the recorded demand history.
+   */
+  demandLookback?: number;
   /** The state of a new lineage (V4-35): what `own()` answers before the first batch with a state has applied. */
   init?(ctx: { worldSeed: Id }): unknown;
   run(ctx: ProcessCtx, k: number): ProcessOp[] | ProcessResult;
@@ -318,7 +324,7 @@ export class Evolution {
     const started: Array<{ id: string; batch: OutstandingBatch }> = [];
     for (const def of starting) {
       if (((b % def.period) + def.period) % def.period !== 0) continue;
-      if (def.tier >= 3 && !k.frames.demandReachesAt(def.tier, T)) continue;
+      if (def.tier >= 3 && !k.frames.demandReachesAt(def.tier, T) && !(def.demandLookback && k.frames.demandOverlaps(def.tier, T - def.demandLookback * W, T))) continue;
       const ctx = newOpCtx(k.config.allowance);
       const pctx: ProcessCtx = {
         k: b, processId: def.id, worldSeed: k.worldSeed, windowStart: T, wSim: W,
