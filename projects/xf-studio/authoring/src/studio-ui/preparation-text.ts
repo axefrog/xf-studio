@@ -31,7 +31,7 @@ const PANE = {
 } as const;
 
 const NEXT = {
-  core: "Next V: making its head…",
+  core: "Next V: building the head…",
   build: "Next V: loading the head…",
   details: "Next V: hair and clothes…",
   programs: "Next V: readying the look…",
@@ -44,23 +44,3 @@ export const NEXT_LINE_MAX_CHARS = 26;
 
 /** How long a preparation runs before the status line says so: a warm V prepared again in a frame or two never flashes a line. */
 export const PREPARATION_LINE_DELAY_MS = 150;
-/** Once the line has appeared it stays at least this long, so a preparation that ends right after it showed never reads as a flash. */
-export const PREPARATION_LINE_MIN_VISIBLE_MS = 300;
-
-/**
- * When the quiet status line shows the next V's preparation: while it is wanted, and for a short minimum once it has appeared (a held line
- * is the last one shown). `reset()` drops it at once (the pane is no longer showing a V). Times are the caller's clock, so the rule is testable.
- */
-export class PreparationLineGate {
-  private since: number | null = null;
-  /** `wanted`: the preparation has run long enough to be worth a line. `holdMs`: how long a held line must still stay, else null. */
-  step(now: number, wanted: boolean): { show: boolean; holdMs: number | null } {
-    if (wanted) { this.since ??= now; return { show: true, holdMs: null }; }
-    if (this.since === null) return { show: false, holdMs: null };
-    const left = PREPARATION_LINE_MIN_VISIBLE_MS - (now - this.since);
-    if (left > 0) return { show: true, holdMs: left };
-    this.since = null;
-    return { show: false, holdMs: null };
-  }
-  reset() { this.since = null; }
-}

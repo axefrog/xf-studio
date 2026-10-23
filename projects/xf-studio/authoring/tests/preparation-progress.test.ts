@@ -5,7 +5,7 @@
  */
 import { expect, test } from "bun:test";
 import { ViewportAttachment, type PreparationState } from "../src/app/viewport-attachment";
-import { NEXT_LINE_MAX_CHARS, PREPARATION_LINE_MIN_VISIBLE_MS, PreparationLineGate, preparationLine } from "../src/studio-ui/preparation-text";
+import { NEXT_LINE_MAX_CHARS, preparationLine } from "../src/studio-ui/preparation-text";
 import { PREPARATION_STAGES } from "../src/preview/scene-residency";
 
 const port = { moveHost: () => {}, measure: () => ({ width: 300, height: 200 }), resize: () => {}, cancelInput: () => {}, inputCapture: () => false,
@@ -57,22 +57,4 @@ test("the quiet line is one line at every stage: each `next` string fits the nar
   }
   expect(preparationLine({ stage: "details", waiting: "host" }, "next")).toBe("Next V: hair and clothes…");
   expect(preparationLine({ stage: "programs", waiting: null }, "next")).toBe("Next V: readying the look…");
-});
-
-test("the status line stays visible for a short minimum once it has appeared, then goes", () => {
-  const gate = new PreparationLineGate();
-  // Never wanted: never shown.
-  expect(gate.step(0, false)).toEqual({ show: false, holdMs: null });
-  // It appears at t=1000 and the preparation ends 40 ms later: the line stays for the rest of 300 ms.
-  expect(gate.step(1000, true)).toEqual({ show: true, holdMs: null });
-  expect(gate.step(1040, false)).toEqual({ show: true, holdMs: PREPARATION_LINE_MIN_VISIBLE_MS - 40 });
-  expect(gate.step(1299, false).show).toBe(true);
-  expect(gate.step(1300, false)).toEqual({ show: false, holdMs: null });
-  // A line shown for longer than the minimum goes at once when the preparation ends.
-  gate.step(2000, true); gate.step(2500, true);
-  expect(gate.step(2501, false)).toEqual({ show: false, holdMs: null });
-  // The pane no longer showing a V drops a held line at once.
-  gate.step(3000, true);
-  gate.reset();
-  expect(gate.step(3010, false)).toEqual({ show: false, holdMs: null });
 });

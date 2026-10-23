@@ -12,7 +12,7 @@ import type { PanelController } from "./collection";
 import { PANEL_META } from "../panel-meta";
 import { DETAIL_NOTICE_TEXT } from "./preview";
 import { wolvenKitStepButton } from "../wolvenkit-step";
-import { PREPARATION_LINE_DELAY_MS, PreparationLineGate, preparationLine } from "../preparation-text";
+import { PREPARATION_LINE_DELAY_MS, preparationLine } from "../preparation-text";
 
 /** Right-drag pans both viewports; only a stationary right-click opens the menu (catalogued `right-click`). */
 export function contextMenuGate(kind: ViewportScope, target: HTMLElement, open: (event: MouseEvent) => void) {
@@ -120,9 +120,6 @@ export function headPanel(rt: StudioRuntime, view: ViewContext): PanelController
   const detailStatus = h("div", { class: "viewport-detail-status", hidden: true }, detailText, detailStep.element, nextBar.element);
   /** When the preparation shown now began (its key), so a preparation shorter than the delay never flashes a line. */
   let preparingKey = "", preparingSince = 0, lineTimer: ReturnType<typeof setTimeout> | undefined, lastFrame: Frame | undefined;
-  /** The status line's minimum-visible rule, and the last preparation line it said (what a held line keeps saying until it goes). */
-  const lineGate = new PreparationLineGate();
-  let lastNextLine: { text: string; fraction: number } | undefined;
   element.append(slot, loading, detailStatus,
     h("div", { class: "viewport-top" }, context, toolbar.element),
     h("div", { class: "viewport-bottom" }, hints.strip, badge.element), hints.tip);
@@ -168,22 +165,17 @@ export function headPanel(rt: StudioRuntime, view: ViewContext): PanelController
     const state = frame.viewport.head;
     const details = frame.status.assets.characterDetails;
     const unavailable = details?.slots.find(entry => entry.state === "unavailable" && entry.message);
-    // The next V being made ready while this one stays shown comes first, once it has run long enough to be worth a line. Once shown, the
-    // line stays a short minimum (the gate), so a preparation ending just after it appeared never reads as a flash.
+    // The next V being made ready while this one stays shown comes first, once it has run long enough to be worth a line.
     const next = state.phase === "ready" ? state.preparation : undefined;
-    const now = performance.now();
-    if ((next?.key ?? "") !== preparingKey) { preparingKey = next?.key ?? ""; preparingSince = now; }
-    const waited = now - preparingSince;
+    if ((next?.key ?? "") !== preparingKey) { preparingKey = next?.key ?? ""; preparingSince = performance.now(); }
+    const waited = performance.now() - preparingSince;
     clearTimeout(lineTimer);
-    if (state.phase !== "ready") lineGate.reset();
-    const wanted = !!next && waited >= PREPARATION_LINE_DELAY_MS;
-    if (wanted) lastNextLine = { text: preparationLine(next, "next"), fraction: next.fraction };
-    const gate = lineGate.step(now, wanted);
-    // Paint again when the delay passes or the hold ends (one timer, the sooner of the two).
-    const again = Math.min(next && waited < PREPARATION_LINE_DELAY_MS ? PREPARATION_LINE_DELAY_MS - waited : Infinity, gate.holdMs ?? Infinity);
-    if (again < Infinity) { lastFrame = frame; lineTimer = setTimeout(() => { if (lastFrame) paintDetails(lastFrame); }, again + 1); }
-    const preparing = gate.show ? lastNextLine : undefined;
-    const line = preparing ? preparing.text
+    if (next && waited < PREPARATION_LINE_DELAY_MS) {
+      lastFrame = frame;
+      lineTimer = setTimeout(() => { if (lastFrame) paintDetails(lastFrame); }, PREPARATION_LINE_DELAY_MS - waited + 1);
+    }
+    const preparing = next && waited >= PREPARATION_LINE_DELAY_MS ? next : undefined;
+    const line = preparing ? preparationLine(preparing, "next")
       : state.phase !== "ready" || !details ? ""
       : details.phase === "preparing" ? "Preparing your V's details…"
       : details.phase === "failed" ? (details.notice ? DETAIL_NOTICE_TEXT[details.notice] : details.message)
