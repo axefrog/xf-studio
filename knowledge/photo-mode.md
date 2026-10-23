@@ -504,6 +504,15 @@ The same machine and resolution ([session-15 checks](../research/runtime/runtime
 | A7 | Inconclusive: changing the layer doesn't re-route while photo mode is open (needs a reopen) |
 | A8 | The pointer's `screen_px` ([33, 271]) agreed with the pointer in the capture (about [51, 285]) and `window` with the capture's size |
 
+### Session 16 on bridge 0.8.9 (23 October 2026)
+
+Same machine and resolution ([session-16 checks](../research/runtime/runtime-bridge-test-card.md#a16-photo-mode-the-panels-place-and-a-reopen-6-min)); **[runtime]**:
+
+| Row (card) | Result |
+|---|---|
+| A5r | **Passed.** `bottom_right` placed left of the menu on the bottom row, clear of the menu, the tab buttons, the category's icon and title and the hints (the maintainer: "All clear"). The zones now include `top_bar` [3762, 626, 1192, 108] and `top_bar_title` [3984, 511, 222, 52], the icon included |
+| A7r | **Inconclusive again.** After closing and reopening photo mode with the notifications layer and then the top layer, `ui_hud` still reported `photo_menu_attached` true and the visible panel could not be told apart from the one inside the menu. 0.8.10 puts the panel's layer in the tag beside its heading ("test - layer notifications", "test - photo menu"), so the capture answers which layer draws |
+
 ### Questions only the game can answer
 
 Session 14 answered rows 1 to 10, 12, 13, 18 and 19 for the panel bridge 0.8.6 built ([results above](#session-14-on-bridge-086-23-october-2026)); rows 9 and 10 showed that `ModalPopup` holds neither, and session 15 carries rows 14, 17 and 20 and the clicks. The rows were written before the build, against these proposed additions (all built in 0.8.6 under these names, except that the panel is the ink panel itself, not a demo): `ui_hud {layer: "photo_menu"}`, showing a demo XF panel built by §15.6's route; an `ink_tree` event logged at `OnShow` (the root's children in order with names, sizes, scales and `GetScreenPosition` rectangles, the probe's laid-out width, the controller's object id, and whether the layer was created or reused); `ink_pointer` events from the demo's hover and click handlers; and `ui_hud {modal: true/false}`, which pushes or pops one `ModalPopup` for the demo. Rows use the card's runner `ask "…" [answers]` for questions to the player, who is only ever told to do things inside the game. Run on the test profile with photo mode's lights off, on a 21:9 3840 × 1600 display unless a row says otherwise.

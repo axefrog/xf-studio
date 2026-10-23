@@ -772,7 +772,7 @@ public class XFInkPanel {
   // 0.8.10 (session 16's A7r: after a reopen the HUD-layer panel could not be told from the one inside photo mode's menu): the
   // tag beside the heading names where this panel is drawn, "test" alone on the HUD layer.
   public func SetWhere(place: String) -> Void {
-    this.m_tag.SetText(StrLen(place) > 0 ? "test  |  " + place : "test");
+    this.m_tag.SetText(StrLen(place) > 0 ? "test - " + place : "test");
   }
 
   public func ChipCount() -> Int32 {

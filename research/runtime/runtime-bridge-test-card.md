@@ -1,6 +1,6 @@
 # Runtime bridge test card
 
-**Status: session 15 ran on 0.8.8 on 23 October 2026: photo mode's panel took clicks and held the exit; the save lock, Save anyway and the probes worked; NPC direction spawned, walked, spoke and took choices in the game's own widget; the senses agreed with the screens; the event and save-identity probes answered most of their rows ([NPC direction §8](../../knowledge/npc-direction.md#8-session-15-on-bridge-088-23-october-2026), [game events](../../knowledge/game-events.md#questions-only-the-game-can-answer), [save identity](../../knowledge/save-identity.md#session-15-results)). It found the panel over the category icon, the pin mark low in the middle, our choices over a device's screen, the actor's own reactions winning over our faces and greetings, a scene that walked backwards and spoke before arriving, and two misread senses; the game froze and the watchdog ended it at 14:41 (no bridge code on the hung threads). 0.8.9 fixes those offline, so the [session-16 checks](#session-16-checks-bridge-089) are next. Session 14 ran on 0.8.6, session 12 on 0.8.4 and session 11 on 0.8.3 ([write-up](../../experiments/042-session-11/README.md)).**
+**Status: session 15 ran on 0.8.8 on 23 October 2026: photo mode's panel took clicks and held the exit; the save lock, Save anyway and the probes worked; NPC direction spawned, walked, spoke and took choices in the game's own widget; the senses agreed with the screens; the event and save-identity probes answered most of their rows ([NPC direction §8](../../knowledge/npc-direction.md#8-session-15-on-bridge-088-23-october-2026), [game events](../../knowledge/game-events.md#questions-only-the-game-can-answer), [save identity](../../knowledge/save-identity.md#session-15-results)). It found the panel over the category icon, the pin mark low in the middle, our choices over a device's screen, the actor's own reactions winning over our faces and greetings, a scene that walked backwards and spoke before arriving, and two misread senses; the game froze and the watchdog ended it at 14:41 (no bridge code on the hung threads). 0.8.9 fixed those offline and session 16 ran it on 23 October: the reaction wraps held (a smile stayed through 20 s), the panel's zone rule, the device-screen check, the pin mark at the side edge, the phone, the answer-key guard and the senses all passed; it found a walk away from V still going backwards, the pin mark clamped onto the minimap and the status bars, a spawn beside a machine standing unseen, no `dialogue.hub` records, the A7 layer check unable to tell its layers apart, `equipped` listing two clothing items, and a scene whose "bark" was its own greeting step. 0.8.10 fixes those offline, so the [session-17 checks](#session-17-checks-bridge-0810) are next. Session 14 ran on 0.8.6, session 12 on 0.8.4 and session 11 on 0.8.3 ([write-up](../../experiments/042-session-11/README.md)).**
 
 **Who does what.** The maintainer starts MO2 and the game, loads a save, keeps the game window in front, and opens the character creator when asked (a mirror, or F12 with Character Customization Anywhere). The coordinator drives everything else through the bridge (MCP tools or the command line) and takes the screenshots. Agents never launch the game or MO2; only the coordinator stages, and only the `XF Runtime Bridge` entry in the test profile.
 
@@ -8,7 +8,8 @@
 |---|---|---|
 | [Before the session](#before-the-session-coordinator) | offline | The coordinator restages the `XF Runtime Bridge` entry from a new build |
 | [Finish showroom checks](#finish-showroom-checks-bridge-050) | 30-35 min | Only with the 0.5.0 -writes build, Codeware and XF Finish Showroom staged, and an XF Eye Artistry build of the same collection and commit; a dim interior at night with 4 m clear in front of V |
-| [Session 16 checks](#session-16-checks-bridge-089) | about 45 min | Only with the 0.8.9 -writes build (`--allow-inventory`), Codeware, TweakXL, Equipment-EX and the two XF Finish Showroom mods (no restage of those); one restage (`answer_keys = IK_F6`, `[overlay] enabled = false`), no relaunch; a quiet street in Little China or Kabuki in daylight, a vending machine with an in-world screen, a car, a conversation, a phone |
+| [Session 17 checks](#session-17-checks-bridge-0810) | about 20 min, then the memory row (6) | Only with the 0.8.10 -writes build (`--allow-inventory`), Codeware, TweakXL, Equipment-EX and the two XF Finish Showroom mods (no restage of those); one restage (`answer_keys = IK_F6`, `[overlay] enabled = false`), no relaunch; the quiet street of session 16, a vending machine with an in-world screen, a conversation with two choice points, a busy street |
+| [Session 16 checks](#session-16-checks-bridge-089) | ran 23 October on 0.8.9 | Only with the 0.8.9 -writes build (`--allow-inventory`), Codeware, TweakXL, Equipment-EX and the two XF Finish Showroom mods (no restage of those); one restage (`answer_keys = IK_F6`, `[overlay] enabled = false`), no relaunch; a quiet street in Little China or Kabuki in daylight, a vending machine with an in-world screen, a car, a conversation, a phone |
 | [Session 15 checks](#session-15-checks-bridge-088) | ran 23 October on 0.8.8 | Only with the 0.8.8 -writes build (`--allow-inventory`), Codeware, TweakXL, Equipment-EX and the two XF Finish Showroom mods (no restage of those); one restage (`answer_keys = IK_F6`, `[overlay] enabled = false`) and one relaunch at the end (F); a quiet street near Kabuki in daylight with open sky, then a walk through Kabuki and Little China, a car, a fight, a phone |
 | [Session 14 checks](#session-14-checks-bridge-086) | ran 23 October on 0.8.6 | Only with the 0.8.6 -writes build (`--allow-inventory`), Codeware, Equipment-EX and the two XF Finish Showroom mods (no restage of those); a street in bright daylight with open sky; one relaunch of the game (T) |
 | [Session 13 checks](#session-13-checks-bridge-085) | about 15 min | Only with the 0.8.5 -writes build (`--allow-inventory`), Codeware, Equipment-EX and the two XF Finish Showroom mods (no restage of those); a street in daylight; one relaunch of the game (T) |
@@ -105,7 +106,9 @@ Standing rules for C's rows and tools, from the sessions' friction logs (session
 - **`session_wait` needs `after`** for an event that may land before the wait starts: pass the stream's `latest` from `session_events {limit: 1}`, read just before the command it waits on. Post asks only through the helper that records their id.
 - **Questions that the stop key ends** can't be answered until after Reconnect: phrase them "remember, then reconnect, then answer".
 - **A dialogue pick by M** is preceded by an info line, never an ask, so the answer key doesn't compete with the game's dialogue keys.
-- **The answer key** works on the ink panel and, from 0.8.9, on the CET line; a press within 0.5 s of a new question is ignored.
+- **The answer key** works on the ink panel and, from 0.8.9, on the CET line; a press within 0.5 s of a new question is ignored. A question that wants the key says "close CET, then press F6 in the game": keys do nothing with CET's overlay open (session 16).
+- **Memory: use it freely, with a tripwire** (the maintainer, session 16). A heavy row runs beside `bun tools/commit-tripwire.ts --for-s <seconds> [--on-trip "<the row's off switch>"]`; below 4 GB of the machine's free commit it runs the off switch once and exits 3, and the row stops there. A climb of the game's private bytes is data to record, never a reason to skip a row.
+- **An NPC scene speaks only what it writes.** A voiceset trigger (`greeting`) is the voice's own line and may be curt or warm; a scene's lines are subtitles, and its actor's face is set before she walks.
 
 ## Finish showroom checks (bridge 0.5.0)
 
@@ -137,7 +140,81 @@ Only with the 0.5.0 -writes build and XF Finish Showroom staged ([pipeline guide
 
 Evidence: every answer's JSON (spawn plans, spill estimates, sweep frames), the captures (F3–F7 as a fidelity sheet, L1–L3 as a lineup sheet and per-preset strips, L4's burst manifest), the plugin log's `showroom` lines, the Codeware version, and the three archives' SHA-256.
 
+## Session 17 checks (bridge 0.8.10)
+
+Only with the 0.8.10 -writes build built with `--allow-inventory` ([build record](#build-record-bridge-0810-branch-build-not-staged)); Codeware, TweakXL, Equipment-EX and the two XF Finish Showroom mods staged as for session 16 (no restage of those). 0.8.10 is session 16's fixes ([design §3.18](runtime-bridge-design.md#318-bridge-0810-session-16s-findings)); these rows check each one in the game, then measure the game's memory over three loads. C is the coordinator, M the maintainer; tool names are the MCP names. **The MCP server must run 0.8.10's tools** (restart it after the restage): `player_status`'s inventory part answers `clothing`, `npc_spawn` may answer `moved_for_sight`, `npc_release` and `npc_move` may answer `turns_first`.
+
+**One restage, no relaunch. Time: about 20 minutes, then the memory row (6).** The groups run in this order; if time runs short, drop from the bottom of the Drop column, never a group marked keep. Follow the [process notes](#process-notes-for-every-session) (where to look before a transient, `ui_message`'s limits, `session_wait`'s `after`, and the memory tripwire).
+
+| Group | What | Where | Min | Drop |
+|---|---|---|---|---|
+| [Z](#z17-the-launch-2-min) | The launch, the version, the tripwire's first reading | The quiet street of session 16 (Little China or Kabuki, daylight, open sky) | 2 | keep |
+| [N](#n17-npc-direction-9-min) | The walk away, the scene twice, a spawn at a machine, the `holocall` refusal | The street, then a vending machine with an in-world screen | 9 | keep N1 to N3 |
+| [D](#d17-the-pin-at-the-edge-2-min) | The pin mark at both side edges | The street | 2 | keep |
+| [A](#a17-photo-mode-which-layer-draws-3-min) | Which layer draws after a reopen | The street, in photo mode | 3 | A can go |
+| [S](#s17-the-senses-and-the-event-feed-4-min) | The clothing list, the dialogue hubs, the stim tap with the tripwire | Little China | 4 | drop G9, then G6 |
+| [M](#m17-memory-6-min) | The game's private bytes across three loads with the bridge idle | Anywhere (the loads are of Z2's save) | 6 | keep |
+
+**Restage first** (C, MO2 closed): in the **`XF Studio diagnostic`** profile, **replace** the `XF Runtime Bridge` entry's files with `xf-runtime-bridge-0.8.10-writes.zip` (manifest `"version": "0.8.10"`, the build record's `commit`, `write_classes` ending in `npc`, `test_probes` listing three). In the staged `config.ini` set `[ui] answer_keys = IK_F6` and `[overlay] enabled = false`, as in session 16. Note what MO2's overwrite folder holds for the bridge.
+
+**The memory rule is a tripwire, not a skip.** Use the memory freely; a heavy row (G9, the loads) runs beside `bun tools/commit-tripwire.ts --for-s <the row's seconds> [--on-trip "<its off switch>"]`, which watches the machine's free commit (the commit limit less the committed bytes) and, under 4 GB, runs the row's off switch once and exits 3. The first row to run it stops at that point; no row is skipped for the game's private bytes climbing.
+
+### Z17. The launch (2 min)
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| Z1 | M, C | M launches the game and loads the latest save (the quiet street, daylight); C: `bridge_info`; C reads the game's private bytes (`Get-Process Cyberpunk2077`, `PrivateMemorySize64`), the working set and the machine's free commit (`bun tools/commit-tripwire.ts --for-s 3 --interval-s 1`); | `plugin_version` 0.8.10, `build_commit` the build record's, `natives=27` in the plugin log, no redscript error naming `XFNpc`, `XFNpcRegistry`, `XFNpcHub`, `XFInkStyle`, `XFInkOverlay`, `XFInkPanel`, `XFPhotoMenuPanel`, `XFSenses` or `XFEventProbe`; the memory numbers noted as M0 | An old DLL or a redscript error: stop and copy the log |
+| Z2 | C | `game_save {}` | The session's own save (loaded again at the end of N, and by M) | — |
+
+### N17. NPC direction (9 min)
+
+The street from Z. Every `session_wait` for an `npc.*` event passes `after` (the process notes). Look in the plugin log for the new `npc-reactions` lines ("a1 held the game's …"): they say whether the game's own reaction tried and was held.
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| N1 [N3, N5's walk] | C, M | `npc_spawn {cast: "woman_corpo", ahead_m: 8}`, wait `npc.spawned`; `ui_message {level: "info", text: "Watch her walk to you and away again."}`; `npc_move {who, to: "v"}`, wait `npc.arrived`; `npc_release {who, how: "walk_away"}`; `ask "Did she turn to the way she was going and walk away forwards? [Forwards, Turned then backwards, Backwards at once]"` | The release answers `turns_first: true`; the plugin log shows `npc a1 command turn sent` and, up to 3 s later, `command move sent`; she turns on the spot and walks away **forwards** | Backwards: which of the two answers; the log's times; `npc_status` during the walk (the motion, her yaw): the cause is then not her facing at the start |
+| N2 [dissolve] | C, M | `npc_spawn {cast: "man_corpo", ahead_m: 6}`, wait `npc.spawned`; `npc_release {who, how: "dissolve"}`; the same ask | `turns_first: true`; forwards; `npc.dissolved` once V can't see him | As N1 |
+| N3 [N5, twice] | C, M | `ui_message {level: "info", text: "Scene check: a passer-by walks up and asks you something. Answer with the FIRST line, using your usual dialogue keys. Watch her face."}`; `npc_scenario {name: "stranger_question"}`; C takes a series as she walks up (`s17-N3-walk`), at arrival and at the choices; `ask "Did she smile as she walked up and while she asked? Did she say anything besides the subtitle? [All as it should be, She barked, She didn't smile, Backwards away]"`; then the same with "…the SECOND line…" | Each run: she smiles from the moment she appears, through the question (joy on thanks, disgust on the second line), **no voice line at all** (the subtitle only), walks away forwards; `outcome` `done`, `answers.answer` 0 then 1; the log's `npc-reactions` lines (how many holds) | A bark: the plugin log around its time (`npc-reactions` holds before it mean the game's reaction was held and something else spoke; none mean the stand-down did not run); no smile: the capture and `npc_status`'s `face` |
+| N4 [N4] | C, M | M walks to a vending machine with an in-world screen near the street (the map's shopping-cart icon; C names the nearest from `scene_read`) and stands in front of it; `npc_spawn {cast: "woman_corpo", ahead_m: 2, side_m: 1.5}`; `ask "Can you see her? [Yes, No]"`; then `npc_release {who: "all"}` | Yes: either as asked, or the answer carries `moved_for_sight` (from, to, metres) and she stands at the nearest place V's head sees; or `no_visible_spot` (data: step back from the machine and try again) | No, with no `moved_for_sight`: the answer's `position`, a capture; the ray tests the Static group only [hypothesis], so a machine that isn't in it hides her |
+| N5 [N7] | C | `npc_say {speaker: "Caller", text: "x", style: "holocall"}` | Refused in plain words: "'holocall' is now called call_subtitle: use that." with the valid styles | — |
+
+### D17. The pin at the edge (2 min)
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| D1r2 | C, M | As session 16's D1r: a pin 15 m ahead and 8 m up; `player_look {at: p}`; then `player_look {yaw: 120, relative: true}`; C captures (`s17-D1-right`); `ui_state`; then `player_look {yaw: -240, relative: true}`; C captures (`s17-D1-left`); `ui_state`; `world_pin_clear`; the look's undo; `ask "Is the mark clear of the minimap, the quest tracker, the status bars and the ink panel on both sides? [Clear on both, Right covered, Left covered, Both covered]"` | Clear on both: the mark at the side edge in the pin's direction (`at_edge` true), on the right between about 58 % and 76 % of the window's height (below the tracker, above the weapon block), on the left below the ink panel and above the bottom-left icons | Covered: the capture with `xf_mark.px` and the panel's `geometry` line; with the quest tracker closed or longer than 1250 units the right band is narrower |
+
+### A17. Photo mode: which layer draws (3 min)
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| A7r2 [A7] | C, M | `ui_hud {layer: "notifications"}`; `ask "Close photo mode and open it again, then click Done." [Done]`; C captures (`s17-A7a`, 1:1 crop of the panel's heading); `ui_hud {layer: "top"}`; the same ask; C captures (`s17-A7b`); `ui_hud {reset: true}`; `photo_exit` | The tag beside the heading says where each panel draws: "test - layer notifications" or "test - layer top" for the HUD-layer panel, "test - photo menu" for the one inside the menu. Records which layers draw in photo mode after a reopen ([ink UI](../../knowledge/ink-ui.md#open-questions), 2) | Only "photo menu" ever shows: the other layers don't draw in photo mode; the photo-menu route stays the only in-menu surface |
+
+### S17. The senses and the event feed (4 min)
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| SS5r2 [SS5] | C, M | `player_status {parts: ["inventory"]}`; `ask "Which of V's clothing areas show an outfit's pieces, and which show real equipment? (Free text.)"` | `inventory.clothing` lists the six areas with what is equipped and what each shows (`outfit`, `hidden`, `equipped` or `empty`) and the active set; `equipped_note` says what `equipped` covers; M's answer matches the `shows` values | A difference: the area and what the screen shows |
+| G6r2 [G6] | M | `ask "Talk to someone with a real conversation (a quest or gig person, not a vendor) that has two choice points; after each choice click which line you took, counting from the top." [First, Second, Third, Fourth]` (twice); `test_events {since, kinds: ["dialogue"]}` | `dialogue.hub` records now appear (hub ids, states, choice counts, one per change) beside the `dialogue.index` records, the ids agreeing; the last index before a hub goes equals M's pick | No `dialogue.hub` again: the poll's reading of `DialogChoiceHubs` is empty for the game's own hubs; note the plugin log's probe lines |
+| G9r [G9] | C, M | `test_events {stims: true}`; start the tripwire beside it: `bun tools/commit-tripwire.ts --for-s 90 --on-trip "test.events {\"stims\":false}"`; `ask "Walk the busy street for a minute. Did the frame rate drop? [Same, Dropped]"`; `test_events {stims: false}` | As session 16: tens of `stim.count` per window, Same; the tripwire's last line "done" | Dropped: the stim tap stays out of the feed; a trip (exit 3) means the memory ran short, not the tap |
+
+### M17. Memory (6 min)
+
+Session 16 measured the game's private bytes at 15.1 GB (after the first load), 16.4 GB (after a second load) and 17.9 GB (about 45 minutes and several loads later), the working set steady at 7 to 8.5 GB: the bridge's own memory was flat offline, and the climb came with loads and play. This row separates the loads.
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| M1 | C | **Three loads with the bridge idle.** Read the game's private bytes, working set and the machine's free commit now (L0); then three times: `game_load {name: <Z2's save>, discard_unsaved: true}`, `game_wait {phase: "gameplay"}`, then **no bridge call at all for 60 s** (the bridge idle; no ink panel question, no scene), then read the three numbers (L1, L2, L3). Run `bun tools/commit-tripwire.ts --for-s 400` beside it | The numbers are the data: whether the private bytes climb by a roughly constant amount per load (the game's own growth), return after each load, or step once. Free commit stays above 4 GB | A trip (exit 3): the next load is not started; the numbers so far are the result |
+
+**Friction log (throughout).** Every point of friction met in passing, with each surface by its name.
+
+**Afterwards:** C records each result in [NPC direction §9](../../knowledge/npc-direction.md#9-session-16-on-bridge-089-23-october-2026) (a new § 10 for session 17), [game events](../../knowledge/game-events.md#questions-only-the-game-can-answer), [photo mode](../../knowledge/photo-mode.md#session-16-on-bridge-089-23-october-2026), [ink UI](../../knowledge/ink-ui.md) and the [runtime requirements](../story-engine/runtime-requirements.md) Status column, marking each source [runtime].
+
+Evidence: every answer's JSON, the captures named above (`local/reviews/ui-review-bridge-0810/`), `session_log {tail: 500}` and `test_events {since: 0, limit: 500}` at the end, the plugin log, and the memory readings (L0 to L3 with M0).
+
 ## Session 16 checks (bridge 0.8.9)
+
+**Ran on 23 October 2026** (results in [NPC direction §9](../../knowledge/npc-direction.md#9-session-16-on-bridge-089-23-october-2026), [game events](../../knowledge/game-events.md#questions-only-the-game-can-answer), [photo mode](../../knowledge/photo-mode.md#session-16-on-bridge-089-23-october-2026) and [ink UI](../../knowledge/ink-ui.md)); its memory rule (skip a heavy row when the private bytes climb) is replaced by the tripwire in the [process notes](#process-notes-for-every-session).
 
 Only with the 0.8.9 -writes build built with `--allow-inventory` ([build record](#build-record-bridge-089-branch-build-not-staged)); Codeware, TweakXL, Equipment-EX and the two XF Finish Showroom mods staged as for session 15 (no restage of those). 0.8.9 is session 15's fixes ([design §3.17](runtime-bridge-design.md#317-bridge-089-session-15s-findings)); these rows check each one in the game and run the rows session 15 skipped (G3, G6, NC2, A7 with a reopen, and G9 if the memory rows allow). C is the coordinator, M the maintainer; tool names are the MCP names. **The MCP server must run 0.8.9's tools** (restart it after the restage): `npc_say` takes `near_m` and `style: "call_subtitle"`, `test_events` takes `kinds`.
 
@@ -1428,6 +1505,10 @@ Expected evidence (under MO2, logs sit in `overwrite/`):
 | `r6/logs/redscript_rCURRENT.log` | Both `.reds` files from `red4ext/plugins/XFRuntimeBridge/Scripts`; `Compilation complete` | The plugin's script path under MO2 |
 
 Afterwards, record outcomes in the [design page](runtime-bridge-design.md) (unverified rows become [runtime] with the capture id), in [knowledge/runtime-access.md](../../knowledge/runtime-access.md), and the session 2 answers in [experiment 020](../../experiments/020-session-2/README.md).
+
+## Build record (bridge 0.8.10, branch build, not staged)
+
+Being built; the record follows in the next commit.
 
 ## Build record (bridge 0.8.9, branch build, not staged)
 

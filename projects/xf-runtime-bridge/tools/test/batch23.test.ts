@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { hudBlocks, placeEdgeMark, type Rect } from "../overlay/ink-place.ts";
 import { validate } from "../api/schema.ts";
+import { GIB, freeCommitBytes, parseReading, tripped } from "../commit-tripwire.ts";
 import { findCommand } from "../api/catalogue.ts";
 import { projectDir } from "./helpers.ts";
 
@@ -106,5 +107,31 @@ describe("0.8.10 N5: the reactions held back are logged", () => {
     const npc = read("redscript", "XFRuntimeBridgeNpc.reds");
     expect(npc).toContain('XFBridgeLog.Info("npc-reactions", entry.who + " held the game\'s " + what');
     expect(npc).toContain("public let held: Int32;");
+  });
+});
+
+describe("0.8.10 M: the memory rule is a tripwire on the machine's free commit, not a skip", () => {
+  test("it trips below the floor (4 GB by default) and not at or above it", () => {
+    const limit = 100 * GIB;
+    expect(freeCommitBytes({ limit, committed: 96 * GIB })).toBe(4 * GIB);
+    expect(tripped({ limit, committed: 96 * GIB }, 4)).toBe(false);
+    expect(tripped({ limit, committed: 96 * GIB + 1 }, 4)).toBe(true);
+    expect(tripped({ limit, committed: 60 * GIB }, 4)).toBe(false);
+  });
+
+  test("the counters' line parses; anything else is not a reading", () => {
+    expect(parseReading("102768369664 77999026176\r\n")).toEqual({ limit: 102768369664, committed: 77999026176 });
+    expect(parseReading("")).toBeNull();
+    expect(parseReading("0 5")).toBeNull();
+    expect(parseReading("a b")).toBeNull();
+  });
+
+  test("the card names the tripwire and no longer skips a heavy row on a climb of the game's private bytes", () => {
+    const card = read("..", "..", "research", "runtime", "runtime-bridge-test-card.md");
+    const at = card.indexOf("## Session 17 checks");
+    expect(at).toBeGreaterThan(0);
+    const session17 = card.slice(at, card.indexOf("## Session 16 checks"));
+    expect(session17).toContain("commit-tripwire.ts");
+    expect(session17).not.toContain("skip G9");
   });
 });
