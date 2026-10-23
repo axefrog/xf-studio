@@ -310,8 +310,9 @@ describe.skipIf(!existsSync(FENGARI))("0.8.4 the CET comment box wraps at words 
       frameTime = frameTime + 1
       draw(s)
       return table.concat({ answers, same, tostring(keys), tostring(change), tostring(ignored), tostring(queued[1]) }, ",")`);
-    // 4 answers of 26 to 31 characters (with the key) at 7 px each against a 392 px row: the first two share a row, the third and the fourth each start one.
-    expect(out).toBe("4,1,true,true,true,mark");
+    // 4 answers of 17 to 23 characters at 7 px each against a 392 px row (0.8.7: the window's buttons name no key): the first two
+    // share a row, the third and the fourth another.
+    expect(out).toBe("4,2,true,true,true,mark");
   });
 
   test("the window draws stopped, capturing a key, and with a refused key, without errors", () => {

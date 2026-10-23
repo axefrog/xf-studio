@@ -10,6 +10,9 @@ export const BRIDGE_MESSAGES: Readonly<Record<string, string>> = {
   bad_request: "The game bridge didn't understand the request. This is a bug in the tool that sent it.",
   bad_params: "Some of the values given aren't valid for this action.",
   test_hooks_off: "Test hooks are off in this build. Only the -writes package for the dedicated XF test profile has them ([bridge] allow_test_hooks in its config.ini).",
+  not_in_this_package:
+    "This package doesn't carry that test probe. Only the -writes package for the dedicated XF test profile has it (the companion probe's xfb_companion_probe.exe beside the plugin).",
+  companion_running: "A sleeping companion probe is already running. End it with test_companion_probe {mode: \"stop\"}, or quit the game, which ends it.",
   bad_version: "The game bridge speaks a different protocol version. Update XF Runtime Bridge and the XF tools together.",
   unauthorized: "The game bridge refused the connection key. Restart the game so the bridge writes a fresh session file.",
   killed:

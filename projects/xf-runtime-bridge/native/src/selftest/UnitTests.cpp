@@ -5176,7 +5176,7 @@ void Bridge087Tests()
         const auto twice = ParamsCode([&] { pr::RunCompanion(sleep, exe, {}, {}, 0); });
         const auto stopped = pr::RunCompanion(pr::CompanionRequest{"stop"}, exe, {}, {}, 0);
         Check("0.8.7 a sleeping companion keeps its job; a second is refused; stop closes the job and kill-on-close ends it",
-              asleep.value("in_job", false) && twice == "busy" && stopped.value("stopped", false) && stopped.value("ended_by_job_close", false),
+              asleep.value("in_job", false) && twice == "companion_running" && stopped.value("stopped", false) && stopped.value("ended_by_job_close", false),
               asleep.dump() + " / " + twice + " / " + stopped.dump());
         const auto none = pr::RunCompanion(pr::CompanionRequest{"stop"}, exe, {}, {}, 0);
         Check("0.8.7 stop with no sleeping companion says so", !none.value("stopped", true), none.dump());

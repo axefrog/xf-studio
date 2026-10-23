@@ -193,7 +193,7 @@ json RunCompanion(const CompanionRequest& aRequest, const std::filesystem::path&
         std::scoped_lock _(g_keptMutex);
         if (g_keptJob)
         {
-            throw MethodError("busy", "a sleeping companion runs already (pid " + std::to_string(g_keptPid) + "); stop it first");
+            throw MethodError("companion_running", "a sleeping companion runs already (pid " + std::to_string(g_keptPid) + "); stop it first");
         }
     }
     std::error_code ec;

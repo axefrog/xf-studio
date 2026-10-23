@@ -1629,7 +1629,7 @@ Tools not yet sorted into an area above.
 - **Permission:** Save and load the game (`write-save`)
 - **Changes the game:** Yes
 - **Undo:** pin "clear" sets every test fact back to 0; arm_before_save: false stops the BeforeSave write.
-- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off)
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`game_not_ready`](#refusal-game-not-ready)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1650,6 +1650,7 @@ Tools not yet sorted into an area above.
 - **Permission:** Change the world (`write-world`)
 - **Changes the game:** Yes
 - **Undo:** mode stop ends a sleeping companion; quitting the game ends it too.
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`not_in_this_package`](#refusal-not-in-this-package), [`companion_running`](#refusal-companion-running), [`failed`](#refusal-failed)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1692,6 +1693,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-client-timeout"></a>`client_timeout` | The game bridge didn't answer. The game may be frozen or loading; try again shortly. |
 | <a id="refusal-clip-not-found"></a>`clip_not_found` | The animation set is loaded but has no clip with that name. Check the name, or the test package's build. |
 | <a id="refusal-codeware-missing"></a>`codeware_missing` | The showroom spawns its heads and lights through Codeware, which the game hasn't loaded. Install Codeware 1.20 or newer from its official release page (the bridge never installs it), then restart the game. Nothing was spawned. |
+| <a id="refusal-companion-running"></a>`companion_running` | A sleeping companion probe is already running. End it with test_companion_probe {mode: "stop"}, or quit the game, which ends it. |
 | <a id="refusal-connect-failed"></a>`connect_failed` | Couldn't connect to the game bridge. Restart the game and try again. |
 | <a id="refusal-creator-leave-disabled"></a>`creator_leave_disabled` | Opening, confirming or backing out of the appearance screen is switched off in this bridge's config.ini (allow_creator_leave; only the XF test profile's build allows it). Ask the player to open it, or to press Confirm or Back. |
 | <a id="refusal-creator-open-timeout"></a>`creator_open_timeout` | The game was asked to open the appearance screen but didn't within the wait, so the request was withdrawn and the appearance screen won't open (the pause menu may open instead: close it with Esc). Saving stays locked until a save is loaded. Close any menu and try again, or ask the player to open it (a mirror, or F12 with Character Customization Anywhere). |
@@ -1726,6 +1728,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-not-in-gameplay"></a>`not_in_gameplay` | This needs V in the world (or, for the clock, the appearance screen or photo mode): load a save and close any other menus first. |
 | <a id="refusal-not-in-inventory"></a>`not_in_inventory` | V doesn't have that item. Nothing was changed. Ask again with add_if_missing to add one to V's inventory first. |
 | <a id="refusal-not-in-photo-mode"></a>`not_in_photo_mode` | This only works in photo mode. Open it with photo_open (or ask the player to press the photo mode key), then try again. |
+| <a id="refusal-not-in-this-package"></a>`not_in_this_package` | This package doesn't carry that test probe. Only the -writes package for the dedicated XF test profile has it (the companion probe's xfb_companion_probe.exe beside the plugin). |
 | <a id="refusal-not-in-world"></a>`not_in_world` | The showroom works while V is in the world or in photo mode. Close menus (or leave the appearance screen) and try again. |
 | <a id="refusal-not-ready"></a>`not_ready` | The game can't spawn entities yet. Wait until V can move, then try again. |
 | <a id="refusal-not-safe-now"></a>`not_safe_now` | The game isn't at a safe moment for the appearance screen (combat, a scene, a vehicle, or somewhere photo mode isn't allowed). Nothing was opened. Walk V somewhere quiet and try again. |
