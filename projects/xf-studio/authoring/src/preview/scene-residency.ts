@@ -19,7 +19,9 @@
  * - **The shown runtime prepared again** (`refresh`, profiles phase 4a-v-b). A change asked of the shown runtime that its preparation hasn't
  *   readied (a lighting setup whose programs aren't linked) is staged by the runtime, which keeps drawing what it drew; the owner prepares
  *   it as it would a warm runtime (the port's `prepareShown`), and the runtime takes the change over at the end. It is a want like any other:
- *   a newer change of the shown runtime restarts it, and a want for another runtime supersedes it.
+ *   a newer change of the shown runtime restarts it, and a want for another runtime supersedes it. A change put off that way (superseded,
+ *   or asked while another runtime was wanted) is taken up again when that want ends without hiding the shown runtime: it failed, or the
+ *   shown runtime was wanted again. Otherwise the shown runtime is hidden, and takes its change at once.
  * - **Context loss** drops the warm runtimes first (`contextLost`): the device restores only what is shown or still being built.
  * - **Disposal is ordinary disposal** (the port's `dispose`), the same for eviction, context loss, a superseded build and `dispose`.
  */
@@ -111,6 +113,8 @@ export class SceneResidency<W extends ResidencyWant, R> {
   private readonly listeners = new Set<() => void>();
   private sequence = 0;
   private disposed = false;
+  /** The shown runtime's change was put off by a want for another runtime (`refresh`): taken up again if that want ends with it still shown. */
+  private shownPutOff = false;
   /** How many runtimes may stay warm beside the shown one (decision D2's budget; a count, not bytes). */
   readonly warm: number;
 
@@ -130,7 +134,9 @@ export class SceneResidency<W extends ResidencyWant, R> {
     if (this.building && this.building.want.key !== want.key) this.supersede();
     if (this.building) return this.building.promise;
     if (resident) {
-      if (resident.state === "shown" || (this.port.prepared?.(resident.runtime, want) ?? true)) { this.swap(resident); return Promise.resolve(resident.runtime); }
+      // The shown runtime wanted again: a change of it put off by the want just superseded goes on.
+      if (resident.state === "shown") { this.resumeShown(); return Promise.resolve(resident.runtime); }
+      if (this.port.prepared?.(resident.runtime, want) ?? true) { this.swap(resident); return Promise.resolve(resident.runtime); }
       return this.start(want, resident);
     }
     return this.start(want);
@@ -155,14 +161,16 @@ export class SceneResidency<W extends ResidencyWant, R> {
   /**
    * The shown runtime was asked for a change it isn't prepared for (or no longer is: the change went back): prepare it again while it keeps
    * drawing (the port's `prepareShown`; see the header). A preparation of it in flight restarts; a want for another runtime in flight is
-   * left alone (the shown runtime is about to be hidden, and takes its change at once then). Resolves once it is prepared, or nothing was
-   * needed; rejects with an `AbortError` when superseded.
+   * left alone (the shown runtime is about to be hidden, and takes its change at once then), and the change is put off until that want
+   * ends: if it ends with this runtime still shown, the change is prepared then. Resolves once it is prepared, or nothing was needed (or it
+   * was put off); rejects with an `AbortError` when superseded.
    */
   refresh(): Promise<void> {
     const shown = this.shownResident();
     if (this.disposed || !shown || !this.port.prepareShown) return Promise.resolve();
-    if (this.building && !this.building.shown) return Promise.resolve();
+    if (this.building && !this.building.shown) { this.shownPutOff = true; return Promise.resolve(); }
     if (this.building) this.supersede();
+    this.shownPutOff = false;
     if (this.port.prepared?.(shown.runtime, shown.want) ?? true) return Promise.resolve();
     return this.start(shown.want, shown, true).then(() => undefined);
   }
@@ -226,7 +234,12 @@ export class SceneResidency<W extends ResidencyWant, R> {
       this.swap(made);
       return runtime;
     })().catch(error => {
-      if (this.building === build) { this.building = null; this.publish(); }
+      if (this.building === build) {
+        this.building = null;
+        this.publish();
+        // Another runtime's want that failed leaves the shown one shown: a change of it put off meanwhile goes on.
+        if (!shown) this.resumeShown();
+      }
       throw signal.aborted ? signal.reason ?? superseded() : error;
     });
     this.building = build;
@@ -253,9 +266,17 @@ export class SceneResidency<W extends ResidencyWant, R> {
   }
   private publish() { for (const listener of [...this.listeners]) listener(); }
   private shownResident() { for (const resident of this.residents.values()) if (resident.state === "shown") return resident; return undefined; }
+  /** Take up the shown runtime's change put off by another want (see the header), once nothing else is wanted. */
+  private resumeShown() {
+    if (!this.shownPutOff || this.building) return;
+    this.shownPutOff = false;
+    this.refresh().catch(() => { /* Superseded in turn: a newer want has it. */ });
+  }
   private supersede() {
     const build = this.building;
     if (!build) return;
+    // A change of the shown runtime stopped for another want is put off, not dropped.
+    if (build.shown) this.shownPutOff = true;
     this.building = null;
     build.controller.abort(superseded());
     this.publish();
@@ -264,6 +285,8 @@ export class SceneResidency<W extends ResidencyWant, R> {
   private swap(next: Resident<W, R>) {
     if (next.state === "shown") return;
     const previous = this.shownResident();
+    // The runtime shown before is hidden, and takes its change at once (or keeps it staged for when it is shown again).
+    this.shownPutOff = false;
     if (previous) { this.port.hide(previous.runtime); previous.state = "warm"; }
     next.state = "shown"; next.shownAt = ++this.sequence;
     try { this.port.show(next.runtime, next.want); }
@@ -280,6 +303,7 @@ export class SceneResidency<W extends ResidencyWant, R> {
   private evict(resident: Resident<W, R>) {
     // A warm runtime being prepared again stops first.
     if (this.building?.resident === resident) this.supersede();
+    if (resident.state === "shown") this.shownPutOff = false;
     this.residents.delete(resident.want.key);
     this.port.dispose(resident.runtime);
   }

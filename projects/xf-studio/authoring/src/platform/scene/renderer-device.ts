@@ -4,6 +4,7 @@ import { bindRenderTriggers, createRenderScheduler, type RenderStats } from "../
 import { viewportPixelRatio, watchDevicePixelRatio } from "../../preview/render/device-pixel-ratio";
 import { linearTargetSupported } from "../../preview/render/linear-display";
 import { visibleViewportSize } from "../../preview/viewport-size";
+import { beginContextGeneration, contextGeneration, endContextGeneration } from "./context-generation";
 
 /**
  * The renderer device (profiles phase 4a-ii, experiments/043-scene-runtimes): one per window's 3D pane. It owns the canvas, the one WebGL
@@ -96,18 +97,16 @@ export function createRendererDevice(host: HTMLElement, options: RendererDeviceO
   releases.push(() => scheduler.dispose());
   // Pointer and wheel input on the canvas (hover highlights, handle drags) and a restored context draw the shown runtime.
   releases.push(bindRenderTriggers(invalidate, { element: canvas }));
-  // The context's lifetime as a signal: it aborts when the context is lost, and a new one starts once it is restored (work on the GPU in
-  // flight across a loss, such as a preparation's links, stops on it and starts again after the restore).
-  const contextLostError = () => new DOMException("The WebGL context was lost.", "ContextLostError");
-  let life = new AbortController();
+  // The context's generations (context-generation.ts): one ends when the context is lost, the next begins once it is restored. Work on the
+  // GPU in flight across a loss (a preparation's links, an upload's fences) stops on its signal and starts again after the restore.
   const waiting = new Set<() => void>();
   const restored = () => {
-    life = new AbortController();
+    beginContextGeneration(renderer);
     options.onContext?.("restored");
     for (const entry of [...entries]) entry.scene.contextRestored();
     for (const resume of [...waiting]) resume();
   };
-  const lost = () => { life.abort(contextLostError()); options.onContext?.("lost"); };
+  const lost = () => { endContextGeneration(renderer); options.onContext?.("lost"); };
   canvas.addEventListener("webglcontextrestored", restored);
   canvas.addEventListener("webglcontextlost", lost);
   releases.push(() => { canvas.removeEventListener("webglcontextrestored", restored); canvas.removeEventListener("webglcontextlost", lost); });
@@ -178,15 +177,13 @@ export function createRendererDevice(host: HTMLElement, options: RendererDeviceO
       show(entry ?? null);
     },
     /**
-     * A signal for the context as it is now: it aborts (a `ContextLostError`) when the context is lost, and is aborted already while it is
-     * lost. Work that holds GPU objects across frames stops on it; `contextReady` says when to start again.
+     * The signal of the context's generation now (context-generation.ts): it aborts (a `ContextLostError`) when the context is lost, and is
+     * aborted already while it is lost. Work that holds GPU objects across frames stops on it; `contextReady` says when to start again.
      */
-    contextSignal(): AbortSignal {
-      return renderer.getContext().isContextLost() && !life.signal.aborted ? AbortSignal.abort(contextLostError()) : life.signal;
-    },
+    contextSignal: (): AbortSignal => contextGeneration(renderer),
     /** Resolves once the context is usable (at once when it is; after a restore, once every runtime restored its own); rejects with `signal.reason` once aborted. */
     contextReady(signal?: AbortSignal): Promise<void> {
-      if (!renderer.getContext().isContextLost() && !life.signal.aborted) return Promise.resolve();
+      if (!contextGeneration(renderer).aborted) return Promise.resolve();
       return new Promise<void>((resolve, reject) => {
         const done = () => { waiting.delete(resume); signal?.removeEventListener("abort", aborted); };
         const resume = () => { done(); resolve(); };

@@ -12,15 +12,18 @@ type Linking = { isReady?(): boolean };
 
 /**
  * The programs asked for and not linked yet. `admit` waits, a frame at a time, until fewer than `limit` are linking, so a new program can
- * be asked for; `add` records the ones a step asked for. Without `parallel` (no KHR_parallel_shader_compile) it never waits.
+ * be asked for, or until its `signal` aborts (a superseded preparation, or the context's generation ending: a lost context's links never
+ * finish, so a wait on them must end with it); the caller checks the signal after. `add` records the ones a step asked for. Without
+ * `parallel` (no KHR_parallel_shader_compile) it never waits.
  */
 export function linkPacer(options: { parallel: boolean; limit?: number; frame(): Promise<void>; waiting?(): void }) {
   const limit = options.limit ?? linksInFlight(), known = new Set<Linking>();
   let linking: Linking[] = [];
   return {
-    async admit() {
+    async admit(signal?: AbortSignal) {
       if (!options.parallel) return;
       for (;;) {
+        if (signal?.aborted) return;
         linking = linking.filter(program => !(program.isReady?.() ?? true));
         if (linking.length < limit) return;
         options.waiting?.();

@@ -418,6 +418,31 @@ test("shadow maps survive a quality notice that keeps their size, and are drawn 
   stage.dispose();
 });
 
+test("a staged setup's shadow maps, drawn before a lost context, are drawn again once it takes over after the restore (4a-v-b review: staged rigs)", () => {
+  const scene = new THREE.Scene();
+  const caster = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());
+  caster.castShadow = true; scene.add(caster);
+  const shadowMap = { enabled: false, type: 0, autoUpdate: true, needsUpdate: false };
+  const renderer = { render: () => {}, setRenderTarget: () => {}, setClearColor: () => {}, getRenderTarget: () => null, shadowMap,
+    getDrawingBufferSize: (v: THREE.Vector2) => v.set(8, 8) } as unknown as THREE.WebGLRenderer;
+  const stage = createLightingSetupStage({ scene, renderer, loadLut: () => new Promise(() => {}), createEnvironment: room() });
+  const camera = new THREE.PerspectiveCamera(), drawn = () => { const was = shadowMap.needsUpdate; shadowMap.needsUpdate = false; return was; };
+  stage.render(camera); drawn();
+  // Another setup staged, its maps drawn by a frame drawn for it (a warm-up), then the context is lost and restored.
+  const setup = studioStageSetup(DEFAULT_STUDIO_STAGE);
+  const next: LightingSource = { kind: "setup", setup: { ...setup, lights: setup.lights.map(light => ({ ...light, intensity: light.intensity * 2 })) } };
+  stage.stage(next);
+  stage.withStaged(() => stage.render(camera));
+  expect(drawn()).toBe(true);
+  stage.restore();
+  stage.render(camera); drawn();
+  // It takes over: its maps went with the context, so the next frame draws them again.
+  stage.setSource(next);
+  stage.render(camera);
+  expect(drawn()).toBe(true);
+  stage.dispose();
+});
+
 test("a chosen calibration equal to the token's reads back as chosen, and every view's lights node stores the token (PREV-135)", () => {
   // An explicitly chosen 0.46 (the old default) is written with its shadow switch, so it isn't read as untouched.
   const chosen = { ...DEFAULT_CREATOR_LIGHTING, exposure: 0.46 };

@@ -347,11 +347,15 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
     });
     return parts.join("|");
   };
-  /** The meshes drawn when a preparation last ended (`drawnKey`), and every lighting program state a preparation readied them for since. */
-  let preparedFor: { drawn: string; lighting: Set<string> } | null = null;
+  /**
+   * The meshes drawn when a preparation last ended (`drawnKey`), and every lighting program state a preparation readied them for since, in
+   * the context generation they were readied in (context-generation.ts): a restored context has none of their programs (Three drops its
+   * program cache with the context), so a record from an ended generation readies nothing.
+   */
+  let preparedFor: { drawn: string; lighting: Set<string>; generation: AbortSignal } | null = null;
   /** Whether the meshes drawn now have been prepared for `source`'s programs (a setup drawn before, or the one drawn now). */
-  const lightingPrepared = (source: LightingSource) =>
-    !!preparedFor && preparedFor.lighting.has(lighting.programStateFor(source)) && preparedFor.drawn === drawnKey();
+  const lightingPrepared = (source: LightingSource) => !!preparedFor && !preparedFor.generation.aborted
+    && preparedFor.lighting.has(lighting.programStateFor(source)) && preparedFor.drawn === drawnKey();
   /** A lighting setup asked for while shown and not prepared yet: staged, drawn once a preparation readied it (see the header). */
   let pendingLighting: LightingSource | null = null;
   const unpreparedListeners = new Set<() => void>();
@@ -390,8 +394,8 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
       throw error;
     }
     if (drawn.shown) adoptPending();
-    const now = drawnKey();
-    if (preparedFor?.drawn !== now) preparedFor = { drawn: now, lighting: new Set() };
+    const now = drawnKey(), generation = device.contextSignal();
+    if (preparedFor?.drawn !== now || preparedFor.generation !== generation) preparedFor = { drawn: now, lighting: new Set(), generation };
     preparedFor.lighting.add(lighting.programState());
     return result;
   }

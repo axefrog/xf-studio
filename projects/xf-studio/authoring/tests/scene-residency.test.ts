@@ -410,10 +410,15 @@ describe("prepared before shown, with typed progress (4a-v T1)", () => {
 describe("the shown runtime prepared again for a change it isn't prepared for (refresh, profiles phase 4a-v-b)", () => {
   /** Runtimes that are asked for a change (`needs`, a generation) and prepared for one (`prepared`) while shown, in three steps of 20 ms. */
   type Shown = { key: string; needs: number; prepared: number; shown: boolean };
-  function shownHarness(clock: Clock) {
+  function shownHarness(clock: Clock, options: { fail?: Set<string> } = {}) {
     const log: string[] = [];
     const residency = new SceneResidency<Want, Shown>({
-      build: async want => { await clock.sleep(10); return { key: want.key, needs: 0, prepared: 0, shown: false }; },
+      build: async (want, signal) => {
+        await clock.sleep(10);
+        signal.throwIfAborted();
+        if (options.fail?.has(want.key)) throw Error("The head couldn't be read.");
+        return { key: want.key, needs: 0, prepared: 0, shown: false };
+      },
       prepared: runtime => runtime.prepared >= runtime.needs,
       prepareShown: async (runtime, _want, signal, progress) => {
         const target = runtime.needs;
@@ -491,5 +496,64 @@ describe("the shown runtime prepared again for a change it isn't prepared for (r
     expect(residency.preparation()).toBeNull();
     expect(runtimeB.prepared).toBe(0);
     expect(log.filter(entry => entry.startsWith("show"))).toEqual([`show:${a.key}`, `show:${b.key}`]);
+  });
+
+  test("a change put off by a want for another runtime goes on when that want ends with it still shown: wanted again, or the other failed (4a-v-b review 4)", async () => {
+    for (const ending of ["wanted again", "failed", "asked meanwhile, then failed"] as const) {
+      const clock = new Clock(), b = wantOf("s1", "v2", "female");
+      const { residency, log } = shownHarness(clock, { fail: ending === "wanted again" ? new Set() : new Set([b.key]) });
+      const a = wantOf("s1", "v1", "female");
+      const showing = residency.want(a);
+      await clock.advance(20);
+      const runtime = await showing;
+      runtime.needs = 1;
+      if (ending === "asked meanwhile, then failed") {
+        // The change is asked while B is built: put off at once.
+        const toB = residency.want(b).catch((error: Error) => error.message);
+        await residency.refresh();
+        expect(residency.preparation()?.key).toBe(b.key);
+        await clock.advance(15);
+        expect(await toB).toBe("The head couldn't be read.");
+      } else {
+        // The change is being prepared when B is wanted: stopped, and put off.
+        const refreshing = residency.refresh().catch((error: Error) => error.name);
+        await clock.advance(5);
+        const toB = residency.want(b).catch((error: Error) => error.name === "AbortError" ? "superseded" : error.message);
+        await clock.advance(2);
+        if (ending === "wanted again") {
+          // Back to A before B is shown: B stops, and A, still shown, is prepared for its change.
+          expect(await residency.want(a)).toBe(runtime);
+          await clock.advance(10);
+          expect(await toB).toBe("superseded");
+        } else {
+          await clock.advance(10);
+          expect(await toB).toBe("The head couldn't be read.");
+        }
+        await clock.advance(10);
+        expect(await refreshing).toBe("AbortError");
+      }
+      // A is still shown, and its change is prepared again and taken over.
+      expect(residency.preparation()).toMatchObject({ key: a.key, change: "shown" });
+      await clock.advance(100);
+      expect({ ending, prepared: runtime.prepared, preparing: residency.preparation() }).toEqual({ ending, prepared: 1, preparing: null });
+      expect(log.filter(entry => entry.startsWith("show") || entry.startsWith("hide"))).toEqual([`show:${a.key}`]);
+      residency.dispose();
+    }
+  });
+
+  test("a want for another runtime that is shown takes the put-off change with it: nothing is prepared for the hidden runtime", async () => {
+    const clock = new Clock(), { residency, log } = shownHarness(clock);
+    const a = wantOf("s1", "v1", "female"), b = wantOf("s1", "v2", "female");
+    const showing = residency.want(a);
+    await clock.advance(20);
+    const runtime = await showing;
+    runtime.needs = 1;
+    residency.refresh().catch(() => {});
+    await clock.advance(5);
+    await Promise.all([residency.want(b), clock.advance(30)]);
+    await clock.advance(100);
+    expect(residency.shown()?.key).toBe(b.key);
+    expect(residency.preparation()).toBeNull();
+    expect(log.filter(entry => entry.startsWith("prepare"))).toEqual([`prepare:${a.key}:1`]);
   });
 });

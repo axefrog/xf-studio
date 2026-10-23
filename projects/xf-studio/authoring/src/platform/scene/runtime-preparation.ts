@@ -4,7 +4,7 @@ import { uploadStep, uploadUnfinished } from "../../character/render/character-d
 import { PREPARE_FRAME_MS } from "./character-renderer";
 import { isDrawable } from "./drawables";
 import { linkPacer } from "./link-pacing";
-import { gpuGate } from "./gpu-gate";
+import { gpuDrained, gpuGate } from "./gpu-gate";
 
 /**
  * Preparing a scene runtime before it is shown (profiles phase 4a-v, experiments/043-scene-runtimes §11): what its first shown frame would
@@ -30,8 +30,9 @@ import { gpuGate } from "./gpu-gate";
  *    is the floor of this design. A last draw of everything follows (what only the whole frame makes), and its fence.
  *
  * Every step checks the signal: an abort stops at the next step and rejects with `signal.reason` (links already sent finish on the
- * driver's threads either way). Progress goes to `report` as the stage, how far into it, and what it waits on. A lost context is one
- * such abort: `acrossContextLoss` runs the preparation under the context's signal and starts it again after the restore.
+ * driver's threads either way), the wait for a link slot included. Progress goes to `report` as the stage, how far into it, and what it
+ * waits on. A lost context is one such abort: `acrossContextLoss` runs the preparation under the signal of the context's generation
+ * (context-generation.ts) and starts it again after the restore. Its fences are deleted when it ends, however it ends.
  */
 export type RuntimePreparationStage = "programs" | "textures" | "warm-up";
 export type RuntimePreparationReport = { stage: RuntimePreparationStage; fraction: number; waiting: "driver" | "gpu" | null };
@@ -84,7 +85,6 @@ const FENCE_FRAMES = 120;
 export async function prepareRuntime(ports: RuntimePreparationPorts): Promise<RuntimePreparationResult> {
   const { renderer, scene, camera, lighting, signal } = ports;
   const now = ports.now ?? (() => performance.now()), budget = ports.budget ?? PREPARE_FRAME_MS;
-  const gl = renderer.getContext() as WebGL2RenderingContext;
   let started = now(), frames = 0;
   const check = () => { if (signal?.aborted) throw signal.reason ?? new DOMException("The preparation was stopped.", "AbortError"); };
   const frame = async () => { await ports.frame(); frames++; started = now(); check(); };
@@ -93,20 +93,8 @@ export async function prepareRuntime(ports: RuntimePreparationPorts): Promise<Ru
   const report = (stage: RuntimePreparationStage, fraction: number, waiting: RuntimePreparationReport["waiting"] = null) =>
     ports.report?.({ stage, fraction: Math.max(0, Math.min(1, fraction)), waiting });
   /** Wait, a frame at a time and never blocking, until the GPU has done what was sent so far; resolves with the frames waited. */
-  const drained = async (stage: RuntimePreparationStage, fraction: number, waiting: "driver" | "gpu") => {
-    if (typeof gl.fenceSync !== "function" || gl.isContextLost()) return 0;
-    const fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
-    if (!fence) return 0;
-    gl.flush();
-    let waited = 0;
-    try {
-      for (; waited < FENCE_FRAMES && gl.getSyncParameter(fence, gl.SYNC_STATUS) !== gl.SIGNALED; waited++) {
-        report(stage, fraction, waiting);
-        await frame();
-      }
-    } finally { gl.deleteSync(fence); }
-    return waited;
-  };
+  const drained = (stage: RuntimePreparationStage, fraction: number, waiting: "driver" | "gpu") =>
+    gpuDrained(renderer, { frame, frames: FENCE_FRAMES, waiting: () => report(stage, fraction, waiting) });
   check();
 
   // 1. Programs: the feature renderers' own passes, then every mesh the next frame draws, then the display's passes.
@@ -127,7 +115,8 @@ export async function prepareRuntime(ports: RuntimePreparationPorts): Promise<Ru
     const made = lighting.prepareSteps(object, camera);
     for (const step of made.steps) {
       await pace();
-      await links.admit();
+      await links.admit(signal);
+      check();
       step();
       links.add(made.programs());
     }
@@ -164,21 +153,23 @@ export async function prepareRuntime(ports: RuntimePreparationPorts): Promise<Ru
   const textures = [...new Set([...compiled.flatMap(entry => entry.textures ?? []), ...ports.textures?.() ?? []])].filter(needsUpload);
   report("textures", 0);
   let uploads = 0;
-  // Each upload sent only once the GPU process caught up with the last (gpu-gate.ts): none waits inside the call.
-  const gate = gpuGate(gl);
-  for (const [index, texture] of textures.entries()) {
-    // A large map a band at a time (character-detail-loader.ts `uploadStep`), a frame let through whenever a step used up its share.
-    let counted = false;
-    while (needsUpload(texture)) {
-      await pace();
-      while (!gate.idle()) await frame();
-      if (!counted) { uploads++; counted = true; }
-      const done = uploadStep(texture, renderer);
-      gate.mark();
-      if (done) break;
+  // Each upload sent only once the GPU process caught up with the last (gpu-gate.ts): none waits inside the call. Its last fence goes with it.
+  const gate = gpuGate(renderer);
+  try {
+    for (const [index, texture] of textures.entries()) {
+      // A large map a band at a time (character-detail-loader.ts `uploadStep`), a frame let through whenever a step used up its share.
+      let counted = false;
+      while (needsUpload(texture)) {
+        await pace();
+        while (!gate.idle()) await frame();
+        if (!counted) { uploads++; counted = true; }
+        const done = uploadStep(texture, renderer);
+        gate.mark();
+        if (done) break;
+      }
+      report("textures", (index + 1) / textures.length);
     }
-    report("textures", (index + 1) / textures.length);
-  }
+  } finally { gate.dispose(); }
   report("textures", 1);
   for (const step of ports.work?.() ?? []) { await frame(); step(); }
 

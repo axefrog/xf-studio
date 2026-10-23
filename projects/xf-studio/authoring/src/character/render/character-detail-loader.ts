@@ -14,6 +14,7 @@ import { prepareEyeballGeometry, type EyeballHandle, type EyeShellHandle } from 
 import type { FaceDecalHandle } from "../../materials/render/face-decal-material";
 import type { LayeredHandle } from "../../materials/render/layered-material";
 import { transferDeltas, VertexGrid } from "../../materials/render/decal-underlay";
+import { contextGeneration } from "../../platform/scene/context-generation";
 
 /**
  * Renderer device port for the resolved character details (head skin, face details, brows, lashes, hair, eyes, piercings): it reads the host's
@@ -406,21 +407,44 @@ const uploadWatched = new WeakSet<THREE.Texture>();
 const BANDED_TEXELS = 2048 * 2048;
 /** Rows per band: 512 rows of a 4096-wide map are 8 MB, about 5–10 ms. */
 const BAND_ROWS = 512;
-/** Large maps part-way through their first upload: the next band, and the bitmap they are copied from (a texture of its own). */
-const banded = new WeakMap<THREE.Texture, { next: number; source: THREE.Texture; width: number; rows: number }>();
+/**
+ * Large maps part-way through their first upload: the next band, the bitmap they are copied from (and a texture of its own around it), and
+ * the context generation their storage was made in (context-generation.ts): storage of a lost context is gone, so its band state is too.
+ */
+type Banded = { next: number; bitmap: ImageBitmap; source: THREE.Texture; rows: number; generation: AbortSignal };
+const banded = new WeakMap<THREE.Texture, Banded>();
 /** Whether `texture`'s first upload is under way in bands (its storage is made, some rows aren't copied yet): it still needs `uploadStep`. */
-export const uploadUnfinished = (texture: THREE.Texture) => banded.has(texture);
+export const uploadUnfinished = (texture: THREE.Texture) => { const pending = banded.get(texture); return !!pending && !pending.generation.aborted; };
+/**
+ * Whether a banded upload can go on where it stopped: its storage is still the texture's (made in this context generation, and Three hasn't
+ * uploaded the texture again meanwhile: a newer version, or a restored context, would upload it whole from its image and close the bitmap),
+ * and its bitmap is still open (a closed one reads 0 by 0).
+ */
+function bandsHold(texture: THREE.Texture, pending: Banded, renderer: THREE.WebGLRenderer) {
+  const stored = renderer.properties ? (renderer.properties.get(texture) as { __version?: number }).__version : texture.version;
+  return !pending.generation.aborted && stored === texture.version && pending.bitmap.width > 0 && pending.bitmap.height > 0;
+}
 /**
  * One step of `texture`'s first upload (profiles phase 4a-v-b), with `renderer`: the whole map at once (`uploadTexture`), or, for a large
  * map with a decoded bitmap, its storage first and then one band of rows per step (`copyTextureToTexture` from the bitmap; the last band
  * makes the mipmaps). Every caller continues a banded upload where another left it, so one stopped part-way (a preparation superseded)
- * is finished by the next that needs the map. Returns true once the map is uploaded.
+ * is finished by the next that needs the map. One whose storage didn't hold (a context lost and restored, the texture changed) starts
+ * again, from its bitmap while it is open and otherwise as an ordinary upload from its image. A map larger than the renderer's textures
+ * goes whole (Three makes it smaller first), never in bands of the bitmap's size. Returns true once the map is uploaded, never before.
  */
 export function uploadStep(texture: THREE.Texture, renderer: THREE.WebGLRenderer): boolean {
-  const pending = banded.get(texture);
+  let pending = banded.get(texture);
+  if (pending && !bandsHold(texture, pending, renderer)) {
+    banded.delete(texture);
+    pending = undefined;
+  }
   if (!pending) {
-    const bitmap = uploadSources.get(texture);
-    if (!bitmap || bitmap.width * bitmap.height < BANDED_TEXELS || typeof renderer.copyTextureToTexture !== "function") {
+    let bitmap = uploadSources.get(texture);
+    // A closed bitmap can't be uploaded from: its image is, as Three would.
+    if (bitmap && !(bitmap.width > 0 && bitmap.height > 0)) { withdrawUploadSource(texture); bitmap = undefined; }
+    const largest = renderer.capabilities?.maxTextureSize ?? Infinity;
+    if (!bitmap || bitmap.width * bitmap.height < BANDED_TEXELS || bitmap.width > largest || bitmap.height > largest
+      || typeof renderer.copyTextureToTexture !== "function") {
       uploadTexture(texture, map => renderer.initTexture(map));
       return true;
     }
@@ -429,15 +453,15 @@ export function uploadStep(texture: THREE.Texture, renderer: THREE.WebGLRenderer
     texture.image = bitmap; texture.source.dataReady = false; texture.onUpdate = null as unknown as typeof texture.onUpdate;
     try { renderer.initTexture(texture); }
     finally { texture.image = image; texture.source.dataReady = true; texture.onUpdate = onUpdate; }
-    banded.set(texture, { next: 0, source: new THREE.Texture(bitmap), width: bitmap.width, rows: bitmap.height });
+    banded.set(texture, { next: 0, bitmap, source: new THREE.Texture(bitmap), rows: bitmap.height, generation: contextGeneration(renderer) });
     return false;
   }
-  const { next, source, width, rows } = pending, height = Math.min(BAND_ROWS, rows - next), last = next + height >= rows;
+  const { next, bitmap, source, rows } = pending, height = Math.min(BAND_ROWS, rows - next), last = next + height >= rows;
   // Three makes the mipmaps after a copy into level 0 when the texture asks for them: only after the last band.
   const mipmaps = texture.generateMipmaps;
   texture.generateMipmaps = last && mipmaps;
   try {
-    renderer.copyTextureToTexture(source, texture, new THREE.Box2(new THREE.Vector2(0, next), new THREE.Vector2(width, next + height)),
+    renderer.copyTextureToTexture(source, texture, new THREE.Box2(new THREE.Vector2(0, next), new THREE.Vector2(bitmap.width, next + height)),
       new THREE.Vector2(0, next));
   } finally { texture.generateMipmaps = mipmaps; }
   if (!last) { pending.next += height; return false; }

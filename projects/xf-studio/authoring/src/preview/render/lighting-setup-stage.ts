@@ -607,9 +607,10 @@ export function createLightingSetupStage(options: {
     },
     /**
      * After a restored context: prefilter the room again into the same texture, and draw the shadow maps again on the next frame (the
-     * restored context's maps are empty, and a still V would otherwise keep them: PREV-132).
+     * restored context's maps are empty, and a still V would otherwise keep them: PREV-132). A staged setup's rig is drawn again too: its
+     * fingerprint, a record of maps drawn in the context's last generation, is dropped with them.
      */
-    restore() { environment.restore(); shadowKey = ""; },
+    restore() { environment.restore(); shadowKey = ""; if (staged) staged.shadowKey = ""; },
     /** Test and evidence access: the drawn setup's rig. */
     get rig() { return rig; },
     display,
