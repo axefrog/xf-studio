@@ -39,6 +39,8 @@ export type DeviceSlot = {
   readonly shown: boolean;
   /** Frames drawn of this runtime. */
   readonly frames: number;
+  /** Hidden warm-up draws of this runtime (`warmUp`; never presented). */
+  readonly warmUps: number;
   /** It goes (its owner is disposing it): hidden first if shown. Never touches the renderer. */
   remove(): void;
 };
@@ -66,7 +68,7 @@ export function createRendererDevice(host: HTMLElement, options: RendererDeviceO
   host.prepend(canvas);
   renderer.setPixelRatio(viewportPixelRatio(devicePixelRatio));
   const releases: (() => void)[] = [() => { renderer.dispose(); renderer.forceContextLoss(); canvas.remove(); }];
-  type Entry = { scene: DrawnScene; slot: DeviceSlot; frames: number };
+  type Entry = { scene: DrawnScene; slot: DeviceSlot; frames: number; warmUps: number };
   const entries = new Set<Entry>();
   let shown: Entry | null = null, disposed = false;
   let width = 0, height = 0;
@@ -129,10 +131,11 @@ export function createRendererDevice(host: HTMLElement, options: RendererDeviceO
     resize,
     /** Add a runtime, hidden. Its owner removes it when the runtime goes. */
     add(scene: DrawnScene): DeviceSlot {
-      const entry: Entry = { scene, frames: 0, slot: {
+      const entry: Entry = { scene, frames: 0, warmUps: 0, slot: {
         requestFrame: () => { if (shown === entry) scheduler.invalidate(); },
         get shown() { return shown === entry; },
         get frames() { return entry.frames; },
+        get warmUps() { return entry.warmUps; },
         remove: () => {
           if (!entries.delete(entry)) return;
           if (shown === entry) show(null);
@@ -141,6 +144,23 @@ export function createRendererDevice(host: HTMLElement, options: RendererDeviceO
       entries.add(entry);
       slots.set(entry.slot, entry);
       return entry.slot;
+    },
+    /**
+     * A hidden runtime's warm-up (profiles phase 4a-v): draw it once, exactly as a shown frame would (the same targets, passes and
+     * variants, at the pane's size), so whatever only a draw makes (Three's draw-time programs, the driver's input layouts, the frame-sized
+     * targets, the last uploads) is made now, then draw the shown runtime again in the same task: the canvas keeps the shown runtime's
+     * pixels, and nothing of the hidden one ever reaches the screen. Counts in the slot's `warmUps`, never in its `frames`. False (and
+     * nothing drawn) for a runtime shown already or not on this device.
+     */
+    warmUp(slot: DeviceSlot): boolean {
+      const entry = slots.get(slot);
+      if (disposed || !entry || !entries.has(entry) || entry === shown) return false;
+      resize();
+      if (width && height) entry.scene.resized(width, height);
+      entry.warmUps++;
+      try { entry.scene.draw(0); }
+      finally { if (shown) { shown.frames++; shown.scene.draw(0); } }
+      return true;
     },
     /** Draw this runtime (null: none, and the canvas hides). The one shown before lets go of the canvas first. */
     show(slot: DeviceSlot | null) {

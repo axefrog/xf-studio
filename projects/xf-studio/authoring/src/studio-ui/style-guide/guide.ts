@@ -96,6 +96,7 @@ body.guide { overflow: auto; height: auto; }
 .handle-legend { width: 100%; max-width: 480px; display: block; }
 .toast-demo { display: flex; flex-direction: column; gap: var(--sp-3); max-width: 420px; }
 .demo-viewport { height: 170px; }
+.demo-viewport.demo-status { position: relative; width: 300px; height: 110px; }
 .demo-uv { height: 170px; margin-top: var(--sp-4); }
 .demo-hints { height: auto; min-height: 58px; }
 .demo-hints .viewport-bottom { position: static; padding: var(--sp-4); }

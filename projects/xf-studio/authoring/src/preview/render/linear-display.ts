@@ -221,6 +221,27 @@ export function createLinearDisplay(renderer: THREE.WebGLRenderer) {
      * the ones the frame draws with (Three keys a program's output encoding and tone mapping on the target).
      */
     sceneTarget(preset: LightingPreset): THREE.WebGLRenderTarget | null { return preset === "creator" || linear ? ensureTarget() : null; },
+    /**
+     * Compile the passes `render` draws for `preset` after the scene (the game display's grade to the canvas; the studio's coverage into the
+     * target and its tone pass to the canvas), each bound to the target it draws into, so their programs are the ones the frame uses.
+     * Three's `compileAsync`: the promises resolve once the driver has linked them. The direct path has no passes of its own.
+     */
+    compile(preset: LightingPreset): { pending: Promise<unknown>[]; materials: THREE.Material[] } {
+      const previous = renderer.getRenderTarget(), pending: Promise<unknown>[] = [];
+      try {
+        if (preset === "creator") {
+          renderer.setRenderTarget(previous);
+          pending.push(renderer.compileAsync(creatorPass.scene, quadCamera));
+          return { pending, materials: [creator] };
+        }
+        if (!linear) return { pending, materials: [] };
+        renderer.setRenderTarget(ensureTarget());
+        pending.push(renderer.compileAsync(coveragePass.scene, quadCamera));
+        renderer.setRenderTarget(previous);
+        pending.push(renderer.compileAsync(studioPass.scene, quadCamera));
+        return { pending, materials: [coverage, studio] };
+      } finally { renderer.setRenderTarget(previous); }
+    },
     /** Use a decoded game LUT, or the neutral LUT (null). */
     setLut(next: GradingLut | null) {
       const replacement = lutTexture(next ?? neutralGradingLut(32));

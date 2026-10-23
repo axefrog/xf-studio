@@ -3,9 +3,15 @@
  * and the V's context, which outlives them.
  *
  * - **A superseding subject change.** The drawn scene wants a head for (its V, the V's body). A change of the scene's V, or of the V's body
- *   (a save, a preset, the other Default V, Undo), is a new want: the newest wins (scene-residency.ts), a build still running for an older
- *   one stops (and the page stops waiting for a masculine core, whose host job finishes and is cached: decision D1), and the head shown before stays drawn until the new one is built. Nothing
- *   is refused meanwhile: the V's context stays attached, and its changes land as they are made.
+ *   (a save, a preset, the other Default V, Undo), is a new want: the newest wins (scene-residency.ts), a build or preparation still running
+ *   for an older one stops (and the page stops waiting for a masculine core, whose host job finishes and is cached: decision D1), and the
+ *   head shown before stays drawn until the new one is prepared. Nothing is refused meanwhile: the V's context stays attached, and its
+ *   changes land as they are made.
+ * - **Prepared before shown** (phase 4a-v). A new head is built, then prepared hidden (its V's details made ready, its programs compiled
+ *   ahead, its maps uploaded, one hidden warm-up draw: browser-head-attachment.ts `prepare`), and only then shown, so its first frame
+ *   waits on nothing. Its typed progress goes to the presentation (`preparation`): the head pane's loading state while nothing is shown,
+ *   its quiet status line while another V is.
+ * - **A view to show** (`show(view)`, for phase 2's tabs): the drawn view becomes `view`, and its scene's head is wanted like any other.
  * - **Residency.** The shown head plus at most one warm one (`warm`, decision D2); a warm head is shown again at once, catching up with
  *   its V. A lost context drops the warm heads first. The same decisions bound the choice-preview devices: only a V a resident head shows
  *   is admitted to have one, and a question for any other V waits for its admission (choice-preview-suspension.ts).
@@ -19,7 +25,7 @@ import type { CharacterScenePorts, CharacterService } from "../../character/char
 import type { CoreBody } from "../../character/render-detail";
 import { createBrowserChoicePreviewDevice } from "../../character/browser/browser-choice-preview-device";
 import { pageFailure } from "../../diagnostics/page-sink";
-import { SceneResidency, type ResidencySnapshot, type ResidencyWant } from "../scene-residency";
+import { SceneResidency, type PreparationStage, type PreparationState, type ResidencySnapshot, type ResidencyWant } from "../scene-residency";
 import { suspendablePreviews, type SuspendablePreviews } from "../../character/choice-preview-suspension";
 import { buildBrowserHead, type AttachedHead, type HeadAttachmentPorts } from "./browser-head-attachment";
 
@@ -29,9 +35,13 @@ export type SceneHeadWant = ResidencyWant & { readonly character: string; readon
 export type SceneHeadsPorts = {
   /** What every head is built with (its scene ports, the graph, the layered surfaces, the application's attachments). */
   head: Omit<HeadAttachmentPorts, "character" | "prepareCore" | "notice">;
-  /** The drawn view's scene and the V it shows (phase 4a draws one view), and making one for a scene that has none. */
+  /**
+   * The drawn view's scene and the V it shows (phase 4a draws one view), and making one for a scene that has none. `of(view)`: the scene a
+   * view shows (`show(view)` draws it; absent: views can't be shown by name).
+   */
   scenes: {
     drawn(): string;
+    of?(view: string): string | undefined;
     subject(scene: string): string | undefined;
     ensureSubject(scene: string): Promise<string | null>;
     subscribe(listener: () => void): () => void;
@@ -42,6 +52,11 @@ export type SceneHeadsPorts = {
   prepareCore(body: CoreBody, pending: (message: string, progress: number | null) => void, signal: AbortSignal): Promise<void>;
   /** Show progress in the head pane while no head is shown yet (the first load). */
   pending(message: string, progress: number | null): void;
+  /**
+   * How far the wanted head is being built and prepared, as typed data (null: nothing is in flight). The presentation shows it in the head
+   * pane: in its loading state while nothing is shown, in its quiet status line while a V is.
+   */
+  preparation?(state: PreparationState | null): void;
   /** A plain notice for the person. */
   notice(text: string): void;
   /** The head shown now changed (undefined: none is shown); the composition root connects what follows the shown head. */
@@ -57,6 +72,8 @@ export type SceneHeadsPorts = {
   warm?: number;
 };
 
+const STAGES: readonly PreparationStage[] = ["build", "details", "programs", "textures", "warm-up"];
+const STAGES_MALE: readonly PreparationStage[] = ["core", ...STAGES];
 const NOT_SHOWN = "Your V couldn't be shown in the 3D view, so the V shown before stays. Change the V again to try once more.";
 const isAbort = (error: unknown) => (error as { name?: string })?.name === "AbortError";
 
@@ -64,13 +81,24 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
   /** Each V's context as last handed over by its owner, with what this module connected to it and its choice-preview device. */
   const contexts = new Map<string, { context: CharacterContextActions; release: () => void; previews: SuspendablePreviews | undefined }>();
   let started = false, disposed = false, scheduled = false;
-  /** Whether the want being built has told the person it is preparing (once per want, while another head is shown). */
-  let told = "";
+  /** The view `show(view)` drew last (undefined: the drawn view the scenes port names). */
+  let drawnView: string | undefined;
 
   const residency = new SceneResidency<SceneHeadWant, AttachedHead>({
-    build: (want, signal) => buildBrowserHead({ ...ports.head, character: { body: want.body, ...saveOf(want.character), context: contextOf(want.character) },
-      prepareCore: (body, buildSignal) => ports.prepareCore(body, (message, progress) => preparing(want, message, progress), buildSignal),
-      notice: ports.notice }, signal),
+    build: (want, signal, progress) => {
+      progress({ stage: want.body === "male" ? "core" : "build" });
+      return buildBrowserHead({ ...ports.head, character: { body: want.body, ...saveOf(want.character), context: contextOf(want.character) },
+        prepareCore: (body, buildSignal) => ports.prepareCore(body, (message, fraction) => {
+          progress({ stage: "core", fraction: fraction ?? 0, waiting: "host", ...(message ? { detail: message } : {}) });
+          // The first load: the head pane says what the host is doing, as it always has.
+          if (!residency.shown()) ports.pending(message, residency.preparation()?.fraction ?? fraction);
+        }, buildSignal).then(() => progress({ stage: "build" })),
+        notice: ports.notice }, signal);
+    },
+    prepare: (head, _want, signal, progress) => head.prepare(signal, progress),
+    prepared: head => head.prepared(),
+    // A masculine V's core head is prepared by the host first (once; the host caches it).
+    stages: want => want.body === "male" ? STAGES_MALE : STAGES,
     show: head => {
       head.show();
       // The V's context stays attached while heads swap: creator changes are never refused for a reload (the old `not_ready`).
@@ -83,14 +111,16 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
   }, { warm: ports.warm });
   const offContext = ports.onContext?.(event => { if (event === "lost") residency.contextLost(); });
   const offScenes = ports.scenes.subscribe(() => schedule());
-
-  /** Progress of a head's core preparation: in the head pane while nothing is shown, else one plain notice (the V shown stays). */
-  function preparing(want: SceneHeadWant, message: string, progress: number | null) {
-    if (!residency.shown()) { ports.pending(message, progress); return; }
-    if (told === want.key || residency.pending()?.key !== want.key) return;
-    told = want.key;
-    ports.notice(`${message} The V shown now stays until it's ready.`.trim());
-  }
+  // The want in flight's progress, as typed data, for the head pane (its loading state or its quiet status line).
+  let told: PreparationState | null = null;
+  const offPreparation = residency.subscribe(() => {
+    const state = residency.preparation();
+    if (JSON.stringify(state) === JSON.stringify(told)) return;
+    told = state;
+    ports.preparation?.(state);
+    // While nothing is shown yet, the head pane's own progress follows the whole preparation (the host's line while it prepares the core).
+    if (state && !residency.shown() && state.stage !== "core") ports.pending("", state.fraction);
+  });
   function saveOf(character: string): { save?: NonNullable<ReturnType<CharacterContextActions["shownSave"]>> } {
     const save = contextOf(character).shownSave();
     return save ? { save } : {};
@@ -143,9 +173,14 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
       ...(previews ? { previews } : {}),
     };
   }
+  /** The drawn view's scene: the view `show(view)` drew, else the one the scenes port names. */
+  function drawnScene(): string {
+    const scene = drawnView === undefined ? undefined : ports.scenes.of?.(drawnView);
+    return scene ?? ports.scenes.drawn();
+  }
   /** What the drawn scene wants now (undefined while its V isn't known: `load` makes one). */
   function current(): SceneHeadWant | undefined {
-    const scene = ports.scenes.drawn(), character = ports.scenes.subject(scene);
+    const scene = drawnScene(), character = ports.scenes.subject(scene);
     if (!character || !ports.characters.document(character)) return undefined;
     const body = contextOf(character).shownBody();
     return { scene, character, body, key: `${scene}|${character}|${body}` };
@@ -183,7 +218,7 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
     async load(): Promise<void> {
       if (disposed) throw Error("The 3D view was closed.");
       started = true;
-      const scene = ports.scenes.drawn();
+      const scene = drawnScene();
       const character = await ports.scenes.ensureSubject(scene);
       if (!character) throw Error("The V couldn't be shown: this window can't make one. Reload the window to continue.");
       for (let attempt = 0; ; attempt++) {
@@ -192,15 +227,31 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
         catch (error) { if (!isAbort(error) || disposed || attempt > 50) throw error; }
       }
     },
+    /**
+     * Draw `view` (phase 2's tab switch: `device.show(view)`): its scene's head is wanted like any subject change, so the head shown now
+     * stays drawn, with progress, until that one is prepared, and a newer `show` or change supersedes it. Resolves once it is shown.
+     */
+    show(view: string): Promise<void> {
+      if (disposed) return Promise.reject(Error("The 3D view was closed."));
+      if (!ports.scenes.of?.(view)) return Promise.reject(Error("That view no longer exists."));
+      drawnView = view;
+      const want = current();
+      if (!want) return Promise.reject(Error("That view's V isn't known yet."));
+      return request(want).then(() => undefined);
+    },
+    /** The view `show` drew last (undefined: the drawn view the scenes port names). */
+    shownView(): string | undefined { return drawnView; },
     /** The head shown now. */
     shown(): AttachedHead | undefined { return residency.shown(); },
+    /** The want being built or prepared, and how far it is (null: none). */
+    preparation(): PreparationState | null { return residency.preparation(); },
     /** The resident heads and the build in flight, as evidence. */
     snapshot(): ResidencySnapshot { return residency.snapshot(); },
     /** Everything goes (the window closes): the build stops, every head is disposed, the contexts are let go. */
     dispose() {
       if (disposed) return;
       disposed = true;
-      offContext?.(); offScenes();
+      offContext?.(); offScenes(); offPreparation();
       residency.dispose();
       ports.head.attach({ characterContext: undefined });
       for (const { release } of contexts.values()) release();

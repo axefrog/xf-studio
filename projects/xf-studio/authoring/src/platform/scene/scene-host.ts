@@ -27,6 +27,7 @@ import { createCameraSettle } from "./camera-settle";
 import { createMouthApertureSampler, headBones } from "./mouth-aperture-sampler";
 import { createOrbitLimits, SceneOrbitControls } from "./orbit-limits";
 import type { RendererDevice } from "./renderer-device";
+import { prepareRuntime, type RuntimePreparationReport, type RuntimePreparationResult } from "./runtime-preparation";
 
 /**
  * The scene host (feature-module platform §5): one scene runtime, the platform's 3D scene of one subject, drawn by the window's renderer
@@ -64,7 +65,7 @@ export type SceneHostOptions = {
   signal?: AbortSignal;
 };
 /** What a runtime uses of the renderer device. */
-export type SceneDevice = Pick<RendererDevice, "renderer" | "measure" | "resize" | "add" | "stats">;
+export type SceneDevice = Pick<RendererDevice, "renderer" | "measure" | "resize" | "add" | "stats" | "warmUp">;
 /** A stored orbit, in neutral head space (workspace-state.ts `CameraState` has the same shape). */
 export type SceneCameraState = { position: number[]; target: number[]; fov: number };
 export type SceneRuntime = Awaited<ReturnType<typeof createSceneRuntime>>;
@@ -324,6 +325,38 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
     invalidate();
     for (const listener of faceChanged) listener();
   }) ?? (() => {}));
+  /**
+   * What the programs of the meshes drawn now depend on (the lighting stage's program state, then each visible mesh and its materials),
+   * recorded when a preparation ends: while it is unchanged the runtime is still prepared (`prepared`).
+   */
+  const programKey = () => {
+    const parts = [lighting.programState()];
+    scene.traverseVisible(object => {
+      const mesh = object as THREE.Mesh;
+      if (mesh.isMesh) parts.push(`${mesh.id}:${(Array.isArray(mesh.material) ? mesh.material : [mesh.material]).map(material => material.uuid).join(",")}`);
+    });
+    return parts.join("|");
+  };
+  let preparedKey = "";
+  /** See `api.prepare`. */
+  async function prepare(options: { signal?: AbortSignal; report?: (report: RuntimePreparationReport) => void;
+    setups?: readonly LightingSource[] } = {}): Promise<RuntimePreparationResult> {
+    const base = { renderer, scene, camera, lighting, frame: nextFrame, signal: options.signal };
+    // Other setups a view of this scene shows: their programs too, while hidden (a shown runtime keeps drawing its own setup).
+    if (options.setups?.length && !drawn.shown) {
+      const own = lighting.source, key = JSON.stringify(own);
+      try {
+        for (const setup of options.setups) {
+          if (JSON.stringify(setup) === key) continue;
+          lighting.setSource(setup);
+          await prepareRuntime({ ...base, warmUp: () => false, programsOnly: true });
+        }
+      } finally { lighting.setSource(own); }
+    }
+    const result = await prepareRuntime({ ...base, report: options.report, warmUp: () => device.warmUp(drawn) });
+    preparedKey = programKey();
+    return result;
+  }
   const api = {
     /** Whose core head this scene shows. */
     body: core.body,
@@ -336,6 +369,15 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
     dispose: () => { drawn.remove(); character.dispose(); releaseAll(releases); },
     /** Its place on the renderer device: the device shows it by this (`device.show(runtime.slot)`). */
     slot: drawn,
+    /**
+     * Make this runtime ready for its first shown frame while it is hidden (profiles phase 4a-v, runtime-preparation.ts): every mesh drawn
+     * now compiled for every pass, the programs linked off the page's thread and taken, the maps uploaded, one hidden warm-up draw. `setups`:
+     * other lighting setups a view of this scene shows, whose programs are compiled too. Small steps between frames; rejects with the
+     * signal's reason once it aborts. Call it again after the V's details are placed: what is ready already costs only a check.
+     */
+    prepare,
+    /** Whether a preparation ended and nothing that decides programs changed since (the lighting, what is drawn): its next show needs none. */
+    prepared: () => preparedKey !== "" && preparedKey === programKey(),
     onFrame,
     /** Something the host can't see changed what it draws (for example the selected layer's handles): draw a frame. */
     requestRender: invalidate,

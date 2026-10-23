@@ -33,6 +33,10 @@ import type { WorkspaceState } from "../../app/workspace/workspace-state";
 import type { ViewGraph } from "../../platform/core/view-graph";
 import type { LayeredMakeupSurface } from "../../engines/layered-makeup/render/makeup-stack";
 import { surfaceOutline, type SurfaceOutline } from "../../engines/layered-makeup/surface-edge";
+import type { PreparationProgress } from "../scene-residency";
+import { MAIN_VIEW } from "../../platform/api/view-graph";
+import { previewFields } from "../preview-view-graph";
+import { lightingSource, type LightingSource } from "../lighting-setups";
 
 type ViewportDevice = ReturnType<typeof createBrowserViewportDevice>;
 type PreviewDevice = ReturnType<typeof createBrowserPreviewDevice>;
@@ -110,6 +114,14 @@ export type AttachedHead = {
   characterContext: CharacterContextActions;
   /** Whether the head is the one shown now. */
   readonly shown: boolean;
+  /**
+   * Make the head ready to be shown while it is hidden (profiles phase 4a-v): the V's details loaded and made ready for their first frame,
+   * then the whole scene prepared (programs compiled ahead, maps uploaded, one hidden warm-up draw; scene-host.ts `prepare`), reporting its
+   * stages. Rejects with `signal.reason` once aborted. A detail failure doesn't stop it: the head shows without them, as it would anyway.
+   */
+  prepare(signal: AbortSignal, progress: PreparationProgress): Promise<void>;
+  /** Whether a warm head is still prepared (nothing that decides its programs changed since): shown again, it needs nothing more. */
+  prepared(): boolean;
   /** Draw this head and connect it (see the module header). Throws, having let go of what it connected, when a step fails. */
   show(): void;
   /** Hand over to the head shown next: its camera to the node, its motion released, its connections let go. Safe to call when hidden. */
@@ -194,6 +206,30 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
       scene, body: wanted, savedAppearance, preview, motion, characterDetails, characterContext: context,
       get shown() { return shown; },
       showSave,
+      async prepare(prepareSignal, progress) {
+        if (disposed) throw Error("The head was released.");
+        prepareSignal.throwIfAborted();
+        // The V's own details on a head of its body (the feminine head standing in for an unavailable masculine one shows none), with its
+        // own makeup hidden as the view hides it, as show would place them.
+        const request = context.detailRequest();
+        if (request.bodyGender === scene.body) {
+          scene.setHiddenOptions(context.hiddenOptions());
+          progress({ stage: "details", fraction: 0, waiting: "host" });
+          await detailsSettled(characterDetails, request, prepareSignal, (fraction, waiting) => progress({ stage: "details", fraction, waiting }));
+        }
+        progress({ stage: "details", fraction: 1 });
+        // Every lighting setup a view of this scene shows (phase 4a draws the main view; its own setup is the scene's now).
+        const setups: LightingSource[] = [];
+        if (ports.graph) {
+          const graph = ports.graph, own = graph.node(MAIN_VIEW, "scene").id;
+          for (const view of graph.viewIds()) if (view !== MAIN_VIEW && graph.node(view, "scene").id === own) {
+            const lights = previewFields(graph, view).lights;
+            setups.push(lightingSource({ setup: lights.setup, setups: lights.setups }, lights.creatorLighting));
+          }
+        }
+        await scene.prepare?.({ signal: prepareSignal, setups, report: report => progress(report) });
+      },
+      prepared: () => scene.prepared?.() ?? true,
       show() {
         if (shown || disposed) return;
         shown = true;
@@ -283,4 +319,36 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
     releaseAll(releases);
     throw signal.aborted ? signal.reason : error;
   }
+}
+
+/**
+ * Wait until the detail service has settled `request` (shown, failed or waiting for WolvenKit, with no change on it still updating), asking
+ * for it first (asking again for the request asked last is a no-op). Reports the host's progress while it prepares. Rejects with
+ * `signal.reason` once aborted.
+ */
+function detailsSettled(details: CharacterDetailActions, request: Parameters<CharacterDetailActions["setCharacter"]>[0], signal: AbortSignal,
+  progress: (fraction: number, waiting: "host" | "files" | null) => void): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    let done = false;
+    const end = (error?: unknown) => {
+      if (done) return;
+      done = true;
+      stop(); signal.removeEventListener("abort", aborted);
+      if (error === undefined) resolve(); else reject(error);
+    };
+    const aborted = () => end(signal.reason);
+    const check = (finished = false) => {
+      const status = details.snapshot();
+      if ((status.phase === "ready" && !status.updating) || status.phase === "failed") { end(); return; }
+      // Its own work ended without a result to wait for (the service was released meanwhile).
+      if (finished && status.phase !== "preparing" && !status.updating) { end(); return; }
+      const step = status.phase === "preparing" ? status.progress : null;
+      progress(step && step.total > 0 ? Math.min(0.9, step.index / step.total) : status.updating ? 0.5 : 0, step ? "host" : "files");
+    };
+    const stop = details.subscribe(() => check());
+    if (signal.aborted) { aborted(); return; }
+    signal.addEventListener("abort", aborted, { once: true });
+    void details.setCharacter(request).then(() => check(true), () => check(true));
+    check();
+  });
 }

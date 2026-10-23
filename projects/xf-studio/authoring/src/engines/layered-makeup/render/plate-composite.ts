@@ -266,6 +266,23 @@ export function createPlateComposite(window: BlendWindow, options: { precision?:
       }
       return texturesOf(into);
     },
+    /**
+     * Compile the composite's three passes ahead (profiles phase 4a-v), each bound to a target as `update` binds one, so its first update
+     * links nothing on the page's thread. Three's `compileAsync`: resolves once the driver has linked them.
+     */
+    compile(renderer: THREE.WebGLRenderer): Promise<void> {
+      const previousTarget = renderer.getRenderTarget(), stand = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
+      const pending: Promise<unknown>[] = [];
+      try {
+        renderer.setRenderTarget(stand);
+        for (const pass of [layerPass, resolvePass, roughnessPass]) { mesh.material = pass; pending.push(renderer.compileAsync(scene, camera)); }
+      } finally {
+        mesh.material = layerPass;
+        renderer.setRenderTarget(previousTarget);
+        stand.dispose();
+      }
+      return Promise.all(pending).then(() => undefined);
+    },
     /** GPU bytes held by the composite: the accumulation target (10 channels), and the merged target (10) and roughness chain (1) with their mips. */
     bytes() {
       if (!targets) return 0;

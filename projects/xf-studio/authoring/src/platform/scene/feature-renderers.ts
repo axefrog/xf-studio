@@ -229,6 +229,21 @@ export function createFeatureRenderers(context: FeatureRendererContext, factorie
         guarded(entry, "beforeDraw", renderer => renderer.beforeDraw?.());
       }
     },
+    /**
+     * Before the scene is shown (profiles phase 4a-v): each renderer makes its own passes ready ahead and its GPU state current
+     * (`FeatureRenderer.prepare`), one after another; one that fails is reported and the others still prepare (its first frame does the rest).
+     */
+    async prepare(signal?: AbortSignal) {
+      for (const entry of [...entries]) {
+        if (signal?.aborted) return;
+        for (const item of entry.attached) { syncFollowers(item); syncBones(item); }
+        try { await entry.renderer?.prepare?.(signal); entry.failing.delete("prepare"); }
+        catch (error) {
+          if (signal?.aborted) return;
+          if (!entry.failing.has("prepare")) { entry.failing.add("prepare"); report(entry.feature, "prepare", error); }
+        }
+      }
+    },
     setNormals(enabled: boolean) { for (const entry of entries) guarded(entry, "setNormals", renderer => renderer.setNormals?.(enabled)); },
     setWireframe(enabled: boolean) { for (const entry of entries) guarded(entry, "setWireframe", renderer => renderer.setWireframe?.(enabled)); },
     setResearchTools(enabled: boolean) { for (const entry of entries) guarded(entry, "setResearchTools", renderer => renderer.setResearchTools?.(enabled)); },

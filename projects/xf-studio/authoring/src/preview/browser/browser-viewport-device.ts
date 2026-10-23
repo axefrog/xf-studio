@@ -142,6 +142,8 @@ export function createBrowserViewportDevice(options: {
     headPending(phase: "loading" | "preparing" | "unavailable", message: string, progress: number | null = null) {
       attachment.setPending("head", phase, message, progress);
     },
+    /** How far the head the drawn view wants is being built and prepared (null: none is); the pane shows it (phase 4a-v). */
+    headPreparation(state: Parameters<ViewportAttachment<HTMLElement>["setPreparation"]>[1]) { attachment.setPreparation("head", state); },
     /** The recipe or selection changed: redraw the UV pane, and the head's next frame (its handles follow them). */
     drawUV() { uvEditor?.draw(); viewer?.requestRender(); },
     capture() { return editors.capture(); },

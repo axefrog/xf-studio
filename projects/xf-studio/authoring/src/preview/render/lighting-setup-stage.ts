@@ -234,10 +234,61 @@ export function createLightingSetupStage(options: {
     if (announce || game() !== wasGame) notify();
   }
   apply(false);
+  /** Whether the next frame draws shadow maps (the setup's lights cast, and the Face shadows preference is on). */
+  const castsShadowMaps = () => state.shadowMap.enabled && shadowsEnabled && shown.lights.some(light => light.shadows);
+  /**
+   * Everything the V shows receives the lights' shadows (makeup and decals included, so they darken with the skin under them); which meshes
+   * cast is the character renderer's choice (skin, body and clothing). Set before each frame, and before a compile ahead: Three keys a
+   * program on whether its mesh receives shadows, so a part compiled without it would be linked again by its first frame.
+   */
+  const receiveShadows = (root: THREE.Object3D, visibleOnly: boolean) => {
+    if (!shadowsEnabled || !shown.lights.some(light => light.shadows)) return;
+    const mark = (object: THREE.Object3D) => { if ((object as THREE.Mesh).isMesh) object.receiveShadow = true; };
+    if (visibleOnly) root.traverseVisible(mark); else root.traverse(mark);
+  };
+  /** A 1×1 target to compile shadow depth variants against while the scene itself draws to the canvas (the direct studio path). */
+  let depthCompileTarget: THREE.WebGLRenderTarget | null = null;
+  const depthTarget = () => depthCompileTarget ??= new THREE.WebGLRenderTarget(1, 1);
+  /** Stand-ins for Three's own depth materials (its shadow pass keeps them private): the same parameters, so the same programs. */
+  const depthProxies = new Map<string, THREE.MeshDepthMaterial>();
+  /**
+   * The depth material Three's shadow pass (WebGLShadowMap `getDepthMaterial`, three r186) draws `mesh` with for `material` under a
+   * directional or spot light, with the fields that pass sets on it: the mesh's own `customDepthMaterial`, else the default depth
+   * material or a per-material variant of it (alpha-tested, displaced or clipped materials). Every field it copies is part of a program key.
+   */
+  function shadowDepthMaterial(mesh: THREE.Mesh, material: THREE.Material): THREE.Material {
+    const source = material as THREE.MeshStandardMaterial & { clipShadows?: boolean; linewidth?: number; wireframeLinewidth?: number };
+    let result = mesh.customDepthMaterial as THREE.MeshDepthMaterial | undefined;
+    if (!result) {
+      const variant = (renderer.localClippingEnabled && source.clipShadows === true && Array.isArray(source.clippingPlanes) && source.clippingPlanes.length !== 0)
+        || (!!source.displacementMap && source.displacementScale !== 0) || (!!source.alphaMap && source.alphaTest > 0) || (!!source.map && source.alphaTest > 0)
+        || source.alphaToCoverage === true;
+      const key = variant ? material.uuid : "";
+      result = depthProxies.get(key) ?? depthProxies.set(key, new THREE.MeshDepthMaterial()).get(key)!;
+    }
+    const target = result as THREE.MeshDepthMaterial & { clipShadows: boolean; linewidth?: number; wireframeLinewidth: number };
+    target.visible = source.visible;
+    target.wireframe = source.wireframe ?? false;
+    target.side = source.shadowSide ?? (source.side === THREE.FrontSide ? THREE.BackSide : source.side === THREE.BackSide ? THREE.FrontSide : THREE.DoubleSide);
+    target.alphaMap = source.alphaMap ?? null;
+    target.alphaTest = source.alphaToCoverage === true ? 0.5 : source.alphaTest;
+    target.map = source.map ?? null;
+    target.clipShadows = source.clipShadows ?? false;
+    target.clippingPlanes = source.clippingPlanes;
+    target.clipIntersection = source.clipIntersection;
+    target.displacementMap = source.displacementMap ?? null;
+    target.displacementScale = source.displacementScale ?? 1;
+    target.displacementBias = source.displacementBias ?? 0;
+    target.wireframeLinewidth = source.wireframeLinewidth ?? 1;
+    target.linewidth = source.linewidth;
+    return result;
+  }
 
   return {
     /** The display the shown setup draws through, as the lighting preset it replaced (`creator` for the game display). */
     get preset(): LightingPreset { return game() ? "creator" : "studio"; },
+    /** The setup or game rig the scene is lit by now (a copy). */
+    get source(): LightingSource { return structuredClone(source); },
     /** Light the scene by a setup, or by the built-in game rig for the body shown. */
     setSource(next: LightingSource) {
       if (JSON.stringify(next) === JSON.stringify(source)) return;
@@ -273,9 +324,7 @@ export function createLightingSetupStage(options: {
     applyRendererState() { applyState(); },
     /** Draw one frame through the shown setup's display transform. */
     render(camera: THREE.Camera) {
-      // Everything the V shows receives the lights' shadows (makeup and decals included, so they darken with the skin under them);
-      // which meshes cast is the character renderer's choice (skin, body and clothing).
-      if (shadowsEnabled && shown.lights.some(light => light.shadows)) scene.traverseVisible(object => { if ((object as THREE.Mesh).isMesh) object.receiveShadow = true; });
+      receiveShadows(scene, true);
       // The maps are this scene's lights': they are drawn again when this scene's fingerprint changed, whatever another scene left.
       let redraw: boolean | undefined;
       if (renderer.shadowMap) {
@@ -290,20 +339,22 @@ export function createLightingSetupStage(options: {
       display.render(scene, camera, game() ? "creator" : "studio", scattering ? () => scatter.render(scene, camera) : undefined);
     },
     /**
-     * Compile `object`'s programs (a part not in the scene yet) for every pass the next frame draws it in: the forward scene into the
-     * display's target, the skin scatter's input variants and the contact shadows' caster depth. Three's `compileAsync` over
-     * KHR_parallel_shader_compile: the driver links them on its own threads, and `ready` resolves when all are linked, so the first frame
-     * that draws the part finds them done instead of waiting on each link (PREV-188/189: seconds on ANGLE's D3D11 compiler). Returns the
-     * textures the compiled programs sample (their uniforms), so the caller can upload them ahead too, and the programs themselves, whose
-     * first use (`LinkedProgram`) the caller can take ahead as well once they are linked. Lights' shadow maps still compile
-     * their depth variants on first use (Three builds them inside its shadow pass).
+     * Compile `object`'s programs (a part not in the scene yet, or the whole scene) for every pass the next frame draws it in: the forward
+     * scene into the display's target, the skin scatter's input variants, the contact shadows' caster depth and, while the shown setup's
+     * lights draw shadow maps, each caster's shadow depth variant as Three's shadow pass will pick it (`shadowDepthMaterial`). Three's
+     * `compileAsync` over KHR_parallel_shader_compile: the driver links them on its own threads, and `ready` resolves when all are linked,
+     * so the first frame that draws the part finds them done instead of waiting on each link (PREV-188/189: seconds on ANGLE's D3D11
+     * compiler). Returns the textures the compiled programs sample (their uniforms), so the caller can upload them ahead too, and the
+     * programs themselves, whose first use (`LinkedProgram`) the caller can take ahead as well once they are linked.
      */
     prepare(object: THREE.Object3D, camera: THREE.Camera): { ready: Promise<void>; textures: THREE.Texture[]; programs(): LinkedProgram[] } {
       const pending: Promise<unknown>[] = [], materials = new Set<THREE.Material>();
       const meshes: THREE.Mesh[] = [];
       object.traverse(child => { if ((child as THREE.Mesh).isMesh) meshes.push(child as THREE.Mesh); });
-      // Compiled with this scene's state: Three keys a program on the tone mapping, output colour space and shadow switches.
+      // Compiled with this scene's state: Three keys a program on the tone mapping, output colour space and shadow switches, and on
+      // whether its mesh receives shadows (as the frame will set it).
       applyState();
+      receiveShadows(object, false);
       const previous = renderer.getRenderTarget();
       /** Compile `mesh` as drawn with `material` (a pass's own material swapped in for the compile only). */
       const compileAs = (mesh: THREE.Mesh, material: THREE.Material) => {
@@ -313,7 +364,8 @@ export function createLightingSetupStage(options: {
         finally { mesh.material = own; }
       };
       try {
-        renderer.setRenderTarget(display.sceneTarget(game() ? "creator" : "studio"));
+        const target = display.sceneTarget(game() ? "creator" : "studio");
+        renderer.setRenderTarget(target);
         pending.push(renderer.compileAsync(object, camera, scene));
         for (const mesh of meshes) for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) materials.add(material);
         if (display.scatterPossible) for (const mesh of meshes) {
@@ -322,6 +374,13 @@ export function createLightingSetupStage(options: {
           if (variant) compileAs(mesh, variant);
         }
         if (contactOn) for (const mesh of meshes) if (mesh.castShadow) compileAs(mesh, contact.casterMaterial(mesh));
+        // The shadow pass draws into the lights' maps: any render target keys a program as one does (no tone mapping, working colour space).
+        if (castsShadowMaps()) {
+          renderer.setRenderTarget(target ?? depthTarget());
+          for (const mesh of meshes) if (mesh.castShadow) for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+            if (material.visible) compileAs(mesh, shadowDepthMaterial(mesh, material));
+          }
+        }
       } finally { renderer.setRenderTarget(previous); }
       const textures = new Set<THREE.Texture>();
       const collect = (value: unknown) => {
@@ -332,7 +391,26 @@ export function createLightingSetupStage(options: {
         const uniforms = (renderer.properties.get(material) as { uniforms?: Record<string, THREE.IUniform> }).uniforms;
         for (const uniform of Object.values(uniforms ?? {})) collect(uniform?.value);
       }
+      releaseShadersWithPrograms(renderer, linkedPrograms(renderer, materials));
       return { ready: Promise.all(pending).then(() => undefined), textures: [...textures], programs: () => linkedPrograms(renderer, materials) };
+    },
+    /**
+     * Compile the display's own passes for the shown setup, as the next frame draws them (the game display's grade, or the studio's coverage
+     * and tone pass), so a setup's first frame waits on none of them either.
+     */
+    prepareDisplay(): { ready: Promise<void>; programs(): LinkedProgram[] } {
+      applyState();
+      const compiled = display.compile(game() ? "creator" : "studio");
+      releaseShadersWithPrograms(renderer, linkedPrograms(renderer, compiled.materials));
+      return { ready: Promise.all(compiled.pending).then(() => undefined), programs: () => linkedPrograms(renderer, compiled.materials) };
+    },
+    /**
+     * What the programs this scene draws with depend on, as one string (the shown setup's light types and shadow switches, its room and
+     * display, the scatter, contact and shadow switches): equal strings need no new programs for the same meshes.
+     */
+    programState(): string {
+      return JSON.stringify([game(), shown.environment > 0, shadowsEnabled, contactOn, scatter.enabled, display.scatterPossible, state.toneMapping,
+        rig.objects.map(light => [isSpot(light), light.castShadow, bodyCastersOnly(light.shadow)])]);
     },
     status: (): LightingStageStatus => structuredClone({ preset: game() ? "creator" : "studio", sex,
       defaultExposure: DEFAULT_CREATOR_LIGHTING.exposure, lut: lutStatus }),
@@ -376,6 +454,8 @@ export function createLightingSetupStage(options: {
     contact,
     dispose() {
       disposed = true; stopRecheck(); listeners.clear(); rig.dispose(); display.dispose(); environment.dispose(); scatter.dispose(); contact.dispose();
+      for (const proxy of depthProxies.values()) proxy.dispose();
+      depthProxies.clear(); depthCompileTarget?.dispose(); depthCompileTarget = null;
     },
   };
 }
@@ -385,7 +465,9 @@ export type LightingSetupStage = ReturnType<typeof createLightingSetupStage>;
  * A program Three linked: its first use reads its uniforms and attributes back from the driver (a synchronous round trip that waits
  * for whatever the GPU still has queued), which a caller preparing ahead takes between frames instead of inside the first frame.
  */
-export type LinkedProgram = { getUniforms(): unknown; getAttributes(): unknown };
+export type LinkedProgram = { getUniforms(): unknown; getAttributes(): unknown;
+  /** Whether the driver has finished linking it, asked without waiting (true at once without KHR_parallel_shader_compile). */
+  isReady?(): boolean };
 /** Every program Three holds for `materials` (a transparent two-sided material has one per side). */
 export function linkedPrograms(renderer: THREE.WebGLRenderer, materials: Iterable<THREE.Material>): LinkedProgram[] {
   const programs = new Set<LinkedProgram>();
@@ -394,6 +476,28 @@ export function linkedPrograms(renderer: THREE.WebGLRenderer, materials: Iterabl
     for (const program of owned?.values() ?? []) programs.add(program);
   }
   return [...programs];
+}
+
+/** Programs whose release frees their shaders too (`releaseShadersWithPrograms`). */
+const shaderOwners = new WeakSet<object>();
+/**
+ * Programs compiled ahead may be released without ever being drawn (a preparation superseded, a part let go before it showed). Three
+ * deletes a program's shaders at its first use only, so a program released unused would leave both shaders on the driver for good (three
+ * r186 `WebGLProgram.destroy`). Their release deletes them too: deleting a shader already deleted at first use does nothing.
+ */
+export function releaseShadersWithPrograms(renderer: THREE.WebGLRenderer, programs: Iterable<LinkedProgram>): void {
+  const gl = renderer.getContext();
+  for (const program of programs) {
+    const owned = program as LinkedProgram & { destroy?: () => void; vertexShader?: WebGLShader; fragmentShader?: WebGLShader };
+    if (shaderOwners.has(owned) || typeof owned.destroy !== "function") continue;
+    shaderOwners.add(owned);
+    const destroy = owned.destroy.bind(owned);
+    owned.destroy = () => {
+      if (owned.vertexShader) gl.deleteShader(owned.vertexShader);
+      if (owned.fragmentShader) gl.deleteShader(owned.fragmentShader);
+      destroy();
+    };
+  }
 }
 
 /**

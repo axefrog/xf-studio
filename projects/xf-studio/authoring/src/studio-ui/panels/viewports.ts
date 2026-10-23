@@ -12,6 +12,7 @@ import type { PanelController } from "./collection";
 import { PANEL_META } from "../panel-meta";
 import { DETAIL_NOTICE_TEXT } from "./preview";
 import { wolvenKitStepButton } from "../wolvenkit-step";
+import { PREPARATION_LINE_DELAY_MS, preparationLine } from "../preparation-text";
 
 /** Right-drag pans both viewports; only a stationary right-click opens the menu (catalogued `right-click`). */
 export function contextMenuGate(kind: ViewportScope, target: HTMLElement, open: (event: MouseEvent) => void) {
@@ -109,11 +110,16 @@ export function headPanel(rt: StudioRuntime, view: ViewContext): PanelController
   const element = h("div", { class: "viewport-panel", tabindex: "0", "aria-label": `3D view. ${keyDescription("head")}` });
   const hints = new ViewportInputHints(port.viewport, "head", slot, element);
   // Quiet, overlaid status for the V's skin, face details, eyes, brows, lashes, hair, piercings and body: progress while they prepare, one plain line
-  // when something can't be shown, with its one next step when it waits for WolvenKit (NATIVE-47). Absolutely placed, so it never moves the
-  // viewport's other overlays.
+  // when something can't be shown, with its one next step when it waits for WolvenKit (NATIVE-47). While the V shown stays and the next one
+  // is made ready (profiles phase 4a-v), it says which stage that is, with a thin bar for how far. Absolutely placed, so it never moves the
+  // viewport's other overlays, and a fixed width while preparing, so its stages never resize it.
   const detailText = h("span", { class: "viewport-detail-text", role: "status" });
   const detailStep = wolvenKitStepButton(rt);
-  const detailStatus = h("div", { class: "viewport-detail-status", hidden: true }, detailText, detailStep.element);
+  const nextBar = progressBar({ label: "Next V", className: "viewport-detail-progress" });
+  nextBar.element.hidden = true;
+  const detailStatus = h("div", { class: "viewport-detail-status", hidden: true }, detailText, detailStep.element, nextBar.element);
+  /** When the preparation shown now began (its key), so a preparation shorter than the delay never flashes a line. */
+  let preparingKey = "", preparingSince = 0, lineTimer: ReturnType<typeof setTimeout> | undefined, lastFrame: Frame | undefined;
   element.append(slot, loading, detailStatus,
     h("div", { class: "viewport-top" }, context, toolbar.element),
     h("div", { class: "viewport-bottom" }, hints.strip, badge.element), hints.tip);
@@ -140,7 +146,9 @@ export function headPanel(rt: StudioRuntime, view: ViewContext): PanelController
     stateBar.hidden = tone !== "progress";
     const progress = state.phase === "preparing" && typeof state.progress === "number" ? state.progress : null;
     stateProgress.set(progress);
-    const text = state.error ?? state.message ?? (tone === "error" ? "The 3D view could not load." : "Checking the 3D view…");
+    // A scene runtime being built and prepared says which stage it is in (the host's own line while it prepares a core head).
+    const preparing = state.phase === "preparing" && state.preparation ? preparationLine(state.preparation, "pane") : undefined;
+    const text = state.error ?? preparing ?? state.message ?? (tone === "error" ? "The 3D view could not load." : "Checking the 3D view…");
     setText(stateText, text);
     // Say what still works unless the message already does.
     stateNote.hidden = tone === "progress" || /UV/.test(text);
@@ -152,6 +160,34 @@ export function headPanel(rt: StudioRuntime, view: ViewContext): PanelController
       applyCapability(next, port.previewSetup.capability(nextAction!));
     }
   }
+  /** The quiet status line: the next V being made ready, else the shown V's details (see `detailStatus`). */
+  function paintDetails(frame: Frame) {
+    const state = frame.viewport.head;
+    const details = frame.status.assets.characterDetails;
+    const unavailable = details?.slots.find(entry => entry.state === "unavailable" && entry.message);
+    // The next V being made ready while this one stays shown comes first, once it has run long enough to be worth a line.
+    const next = state.phase === "ready" ? state.preparation : undefined;
+    if ((next?.key ?? "") !== preparingKey) { preparingKey = next?.key ?? ""; preparingSince = performance.now(); }
+    const waited = performance.now() - preparingSince;
+    clearTimeout(lineTimer);
+    if (next && waited < PREPARATION_LINE_DELAY_MS) {
+      lastFrame = frame;
+      lineTimer = setTimeout(() => { if (lastFrame) paintDetails(lastFrame); }, PREPARATION_LINE_DELAY_MS - waited + 1);
+    }
+    const preparing = next && waited >= PREPARATION_LINE_DELAY_MS ? next : undefined;
+    const line = preparing ? preparationLine(preparing, "next")
+      : state.phase !== "ready" || !details ? ""
+      : details.phase === "preparing" ? "Preparing your V's details…"
+      : details.phase === "failed" ? (details.notice ? DETAIL_NOTICE_TEXT[details.notice] : details.message)
+      : details.need ? details.updateError ?? ""
+      : unavailable?.message ?? "";
+    detailStatus.hidden = !line;
+    detailStatus.dataset.tone = preparing ? "preparing" : details?.phase === "preparing" ? "progress" : "notice";
+    setText(detailText, line);
+    nextBar.element.hidden = !preparing;
+    nextBar.set(preparing ? preparing.fraction : null);
+    detailStep.update(frame, !preparing && !!line && details?.need === "wolvenkit");
+  }
   return {
     spec: { id: "head", ...PANEL_META["head"], element,
       visibility: visible => { if (visible) requestAnimationFrame(() => port.viewport.resize("head")); } },
@@ -161,17 +197,7 @@ export function headPanel(rt: StudioRuntime, view: ViewContext): PanelController
       if (state.phase !== "ready") paintState(state, frame.previewSetup.head.next);
       // Hints hide themselves while the head isn't interactive (their own state), so they never cover this.
       badge.update(frame.viewport.head.phase === "ready"); hints.update(frame); toolbar.update(frame);
-      const details = frame.status.assets.characterDetails;
-      const unavailable = details?.slots.find(entry => entry.state === "unavailable" && entry.message);
-      const line = state.phase !== "ready" || !details ? ""
-        : details.phase === "preparing" ? "Preparing your V's details…"
-        : details.phase === "failed" ? (details.notice ? DETAIL_NOTICE_TEXT[details.notice] : details.message)
-        : details.need ? details.updateError ?? ""
-        : unavailable?.message ?? "";
-      detailStatus.hidden = !line;
-      detailStatus.dataset.tone = details?.phase === "preparing" ? "progress" : "notice";
-      setText(detailText, line);
-      detailStep.update(frame, !!line && details?.need === "wolvenkit");
+      paintDetails(frame);
       // The crumb: the preset, then what each shown module contributes for this scene (eye makeup: the selected layer).
       const draft = frame.library.draft, presetName = draft?.presets.find(preset => preset.id === draft.selected)?.name;
       const summaries = view.view.summaries();

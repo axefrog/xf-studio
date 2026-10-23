@@ -12,6 +12,7 @@ import type { ChoicePreviewPort } from "../src/character/choice-preview-service"
 import type { AttachedHead } from "../src/preview/browser/browser-head-attachment";
 import { vHistory } from "./fixtures/character-steps";
 import { creator, harness } from "./fixtures/fake-heads";
+import type { PreparationState } from "../src/preview/scene-residency";
 
 /** A characters' owner holding each V's one context (made with the scene ports the heads owner offers). */
 function characterOwner(bodies: Record<string, "female" | "male">) {
@@ -45,8 +46,10 @@ function gates() {
   };
 }
 
-function owner(bodies: Record<string, "female" | "male">, failBuild: number[] = [], previews: SceneHeadsPorts["previews"] = null) {
+function owner(bodies: Record<string, "female" | "male">, failBuild: number[] = [], previews: SceneHeadsPorts["previews"] = null,
+  views: Record<string, { scene: string; subject: string }> = {}) {
   const scene = { subject: Object.keys(bodies)[0]! };
+  const preparations: (PreparationState | null)[] = [];
   const gate = gates(), h = harness({ build: gate.build, failBuild }), people = characterOwner(bodies);
   const listeners = new Set<() => void>(), shown: (AttachedHead | undefined)[] = [], notices: string[] = [], pending: string[] = [];
   const prepared: { body: string; signal: AbortSignal }[] = [];
@@ -54,15 +57,16 @@ function owner(bodies: Record<string, "female" | "male">, failBuild: number[] = 
   let prepare: (body: string, signal: AbortSignal) => Promise<void> = async () => {};
   const heads = createBrowserSceneHeads({
     head: { ...h.ports },
-    scenes: { drawn: () => "s1", subject: () => scene.subject, ensureSubject: async () => scene.subject,
+    scenes: { drawn: () => "s1", of: view => view === "main" ? "s1" : views[view]?.scene,
+      subject: id => Object.values(views).find(view => view.scene === id)?.subject ?? scene.subject, ensureSubject: async () => scene.subject,
       subscribe: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; } },
     characters: people.port,
     prepareCore: (body, _pending, signal) => { prepared.push({ body, signal }); return prepare(body, signal); },
-    pending: message => pending.push(message), notice: text => notices.push(text),
+    pending: message => pending.push(message), notice: text => notices.push(text), preparation: state => preparations.push(state),
     shown: head => shown.push(head), previews,
     onContext: listener => { contextListeners.add(listener); return () => { contextListeners.delete(listener); }; },
   });
-  return { h, gate, people, heads, shown, notices, pending, prepared, scene, listeners,
+  return { h, gate, people, heads, shown, notices, pending, prepared, scene, listeners, preparations,
     setPrepare(next: typeof prepare) { prepare = next; },
     changeScene() { for (const listener of listeners) listener(); },
     loseContext() { for (const listener of contextListeners) listener("lost"); } };
@@ -296,5 +300,59 @@ test("a live turn survives its V's eviction: A's live preview, B, then C evict A
   // B and C drew no previews, so A's are the only devices: the first ended with A's eviction.
   expect(devices).toHaveLength(2);
   expect(devices[1]).toEqual(["subject female", "start", "frame"]);
+  o.heads.dispose();
+});
+
+test("4a-v: a new head is prepared before it is shown, with the V shown before still drawn; its typed progress reaches the presentation and ends, with no notice", async () => {
+  const o = owner({ v1: "female" });
+  await o.heads.load();
+  const female = o.heads.shown()!, context = female.characterContext;
+  // The first load went through every stage too, with the pane told how far (nothing was shown meanwhile).
+  expect(o.preparations.filter(Boolean).map(state => state!.key)).toContain("s1|v1|female");
+  expect(o.preparations.at(-1)).toBeNull();
+  // The male V's head: his core prepared by the host (held), then built and prepared, while the female V stays shown.
+  let release!: () => void;
+  o.setPrepare((_body, signal) => new Promise((resolve, reject) => { release = resolve; signal.addEventListener("abort", () => reject(signal.reason)); }));
+  const preparedBefore = o.preparations.length, pendingBefore = o.pending.length;
+  context.dispatch({ kind: "character.useDefault", bodyGender: "male" });
+  await settle();
+  expect(o.heads.shown()).toBe(female);
+  expect(o.heads.preparation()).toMatchObject({ key: "s1|v1|male", stage: "core", warm: false });
+  release();
+  for (let i = 0; i < 20 && o.heads.shown() === female; i++) await settle();
+  const male = o.heads.shown()!;
+  expect(male.body).toBe("male");
+  const states = o.preparations.slice(preparedBefore);
+  const stages = [...new Set(states.filter(Boolean).map(state => state!.stage))];
+  expect(stages[0]).toBe("core");
+  expect(stages).toContain("details");
+  expect(states.at(-1)).toBeNull();
+  const fractions = states.filter(Boolean).map(state => state!.fraction);
+  for (let i = 1; i < fractions.length; i++) expect(fractions[i]!).toBeGreaterThanOrEqual(fractions[i - 1]!);
+  // While another V was shown, the head pane's loading state wasn't touched, and the old one-off notice is gone.
+  expect(o.pending.length).toBe(pendingBefore);
+  expect(o.notices.filter(text => text.includes("stays until"))).toEqual([]);
+  o.heads.dispose();
+});
+
+test("4a-v: show(view) wants the head of that view's scene like any subject change; the head shown stays until it is ready, and a missing view is refused", async () => {
+  const o = owner({ v1: "female", v2: "female" }, [], null, { side: { scene: "s2", subject: "v2" } });
+  await o.heads.load();
+  const first = o.heads.shown()!;
+  o.gate.open.female = false;
+  const shown = o.heads.show("side");
+  await settle();
+  expect(o.heads.shown()).toBe(first);
+  expect(o.heads.preparation()).toMatchObject({ scene: "s2", key: "s2|v2|female" });
+  o.gate.release("female");
+  await shown;
+  expect(o.heads.shownView()).toBe("side");
+  expect(o.heads.snapshot().residents.map(item => `${item.key}:${item.state}`)).toEqual(["s1|v1|female:warm", "s2|v2|female:shown"]);
+  // Back to the main view: its head is warm, so it is shown at once.
+  const builds = o.h.builds;
+  await o.heads.show("main");
+  expect(o.heads.shown()).toBe(first);
+  expect(o.h.builds).toBe(builds);
+  await expect(o.heads.show("gone")).rejects.toThrow("no longer exists");
   o.heads.dispose();
 });

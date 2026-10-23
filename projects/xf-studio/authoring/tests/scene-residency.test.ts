@@ -3,10 +3,12 @@
  * an injected clock in steps that each check their signal, as a scene runtime's build does. A seeded model drives random subject and body
  * changes (with cancels by supersession) and checks after every step: the last choice is what ends up shown, nothing superseded is ever
  * shown, a superseded build stops within 100 ms of clock, a warm runtime is reused without a build, the least recently shown is evicted
- * first, and every runtime built is disposed exactly once by the end.
+ * first, and every runtime built is disposed exactly once by the end. Phase 4a-v adds preparation: a runtime is shown only once built and
+ * prepared, its typed progress only grows, a want superseded while it prepares stops and is never shown, and a warm runtime is prepared
+ * again only when it needs to be.
  */
 import { describe, expect, test } from "bun:test";
-import { SceneResidency, type ResidencyWant } from "../src/preview/scene-residency";
+import { SceneResidency, type PreparationState, type ResidencyWant } from "../src/preview/scene-residency";
 
 /** A virtual clock: timers run only when it is advanced. */
 class Clock {
@@ -238,4 +240,169 @@ describe("residency and the superseding subject change (4a-iv T1)", () => {
       expect(h.built.every(runtime => runtime.disposed === 1)).toBe(true);
     });
   }
+});
+
+/** A residency whose runtimes are built, then prepared in clock steps that check their signal and report their stages (4a-v). */
+function preparing(clock: Clock, options: { warm?: number; prepareSteps?: number; fail?: boolean; stale?: Set<string> } = {}) {
+  const log: string[] = [], reports: string[] = [], states: PreparationState[] = [], cancels: number[] = [];
+  let next = 0;
+  const steps = options.prepareSteps ?? 4;
+  const residency = new SceneResidency<Want, Runtime>({
+    build: async (want, signal, progress) => {
+      progress({ stage: "build", fraction: 0 });
+      await clock.sleep(20);
+      if (signal.aborted) throw signal.reason;
+      progress({ stage: "build", fraction: 1 });
+      log.push(`built:${want.key}`);
+      return { id: ++next, key: want.key, disposed: 0, shown: false };
+    },
+    prepare: async (runtime, want, signal, progress) => {
+      log.push(`prepare:${want.key}`);
+      const stages = ["details", "programs", "textures", "warm-up"] as const;
+      for (let step = 0; step < steps; step++) {
+        progress({ stage: stages[step % stages.length]!, fraction: 0.5, waiting: step === 1 ? "driver" : null });
+        await clock.sleep(25);
+        if (signal.aborted) {
+          cancels.push(clock.now - (signal as AbortSignal & { abortedAt?: number }).abortedAt!);
+          log.push(`prepare-stopped:${want.key}`);
+          throw signal.reason;
+        }
+        // A step that reports an earlier stage again never moves the state back.
+        progress({ stage: "details", fraction: 0 });
+      }
+      if (options.fail) throw Error("The driver lost a program.");
+      log.push(`prepared:${runtime.key}`);
+    },
+    prepared: runtime => !options.stale?.has(runtime.key),
+    show: runtime => { runtime.shown = true; log.push(`show:${runtime.key}`); },
+    hide: runtime => { runtime.shown = false; log.push(`hide:${runtime.key}`); },
+    dispose: runtime => { runtime.disposed++; log.push(`dispose:${runtime.key}`); },
+  }, { warm: options.warm });
+  residency.subscribe(() => {
+    const state = residency.preparation();
+    if (state) { states.push(state); reports.push(`${state.key}:${state.stage}:${state.fraction.toFixed(3)}:${state.waiting ?? "-"}`); }
+  });
+  const want = (target: Want) => {
+    const building = (residency as unknown as { building: { controller: AbortController } | null }).building;
+    if (building) {
+      const signal = building.controller.signal as AbortSignal & { abortedAt?: number };
+      signal.addEventListener("abort", () => { signal.abortedAt = clock.now; }, { once: true });
+    }
+    return residency.want(target).then(() => "shown", (error: Error) => error.name === "AbortError" ? "superseded" : `failed:${error.message}`);
+  };
+  return { residency, log, reports, states, cancels, want };
+}
+
+describe("prepared before shown, with typed progress (4a-v T1)", () => {
+  test("the previous runtime stays shown until the new one is built and prepared; progress is typed, monotonic and ends", async () => {
+    const clock = new Clock(), h = preparing(clock);
+    const a = wantOf("s1", "v1", "female"), b = wantOf("s1", "v1", "male");
+    h.want(a); await clock.advance(300);
+    expect(h.residency.shown()?.key).toBe(a.key);
+    const toB = h.want(b);
+    await clock.advance(60);
+    // B is built and preparing; A is still the one shown.
+    expect(h.residency.shown()?.key).toBe(a.key);
+    expect(h.residency.snapshot().preparation).toMatchObject({ key: b.key, warm: false });
+    expect(["details", "programs"]).toContain(h.residency.preparation()!.stage);
+    await clock.advance(300);
+    expect(await toB).toBe("shown");
+    expect(h.log.slice(-4)).toEqual([`prepare:${b.key}`, `prepared:${b.key}`, `hide:${a.key}`, `show:${b.key}`]);
+    expect(h.residency.preparation()).toBeNull();
+    // Each want's fraction only grows, its stages never go back, and a driver wait is said while it lasts.
+    for (const key of [a.key, b.key]) {
+      const states = h.states.filter(state => state.key === key);
+      const order = ["core", "build", "details", "programs", "textures", "warm-up"];
+      for (let i = 1; i < states.length; i++) {
+        expect(states[i]!.fraction).toBeGreaterThanOrEqual(states[i - 1]!.fraction);
+        expect(order.indexOf(states[i]!.stage)).toBeGreaterThanOrEqual(order.indexOf(states[i - 1]!.stage));
+      }
+      expect(states.at(-1)!.stage).toBe("warm-up");
+      expect(states.some(state => state.waiting === "driver")).toBe(true);
+    }
+  });
+
+  test("a want superseded while it prepares stops within 100 ms, is disposed and never shown; its late reports are ignored", async () => {
+    const clock = new Clock(), h = preparing(clock, { prepareSteps: 8 });
+    const a = wantOf("s1", "v1", "female"), b = wantOf("s1", "v2", "female"), c = wantOf("s1", "v3", "female");
+    h.want(a); await clock.advance(400);
+    const toB = h.want(b);
+    await clock.advance(70);
+    expect(h.log.at(-1)).toBe(`prepare:${b.key}`);
+    const toC = h.want(c);
+    await clock.advance(10);
+    // C is in flight now: no state of B's is published after the supersession.
+    expect(h.residency.preparation()?.key).toBe(c.key);
+    const reportsAfter = h.reports.length;
+    await clock.advance(600);
+    expect([await toB, await toC]).toEqual(["superseded", "shown"]);
+    expect(h.reports.slice(reportsAfter).every(line => line.startsWith(c.key))).toBe(true);
+    expect(h.log).toContain(`prepare-stopped:${b.key}`);
+    expect(h.log).toContain(`dispose:${b.key}`);
+    expect(h.log.filter(line => line === `show:${b.key}`)).toEqual([]);
+    expect(h.cancels.length).toBe(1);
+    expect(h.cancels[0]).toBeLessThanOrEqual(100);
+  });
+
+  test("a warm runtime still prepared is shown at once; one that needs preparing again is prepared first and stays warm when superseded", async () => {
+    const clock = new Clock(), stale = new Set<string>(), h = preparing(clock, { stale });
+    const a = wantOf("s1", "v1", "female"), b = wantOf("s1", "v1", "male");
+    h.want(a); await clock.advance(300);
+    h.want(b); await clock.advance(300);
+    // Back to A, still prepared: shown in the same turn, no build and no preparation.
+    const before = h.log.length;
+    const toA = h.want(a);
+    expect(h.residency.shown()?.key).toBe(a.key);
+    expect(await toA).toBe("shown");
+    expect(h.log.slice(before)).toEqual([`hide:${b.key}`, `show:${a.key}`]);
+    // B's lighting changed while it was warm: it is prepared again (no build), with A still shown, and only then shown.
+    stale.add(b.key);
+    const toB = h.want(b);
+    await clock.advance(30);
+    expect(h.residency.shown()?.key).toBe(a.key);
+    expect(h.residency.preparation()).toMatchObject({ key: b.key, warm: true });
+    expect(h.residency.preparation()!.stage).not.toBe("build");
+    // Superseded by A again: B stops preparing, stays warm (not disposed), and A stays shown.
+    const back = h.want(a);
+    await clock.advance(100);
+    expect(await back).toBe("shown");
+    expect(await toB).toBe("superseded");
+    expect(h.residency.snapshot().residents.map(item => `${item.key}:${item.state}`)).toEqual([`${a.key}:shown`, `${b.key}:warm`]);
+    expect(h.log.filter(line => line === `dispose:${b.key}`)).toEqual([]);
+    expect(h.log.filter(line => line === `built:${b.key}`).length).toBe(1);
+    // Wanted again and left to finish: prepared, then shown.
+    const again = h.want(b);
+    await clock.advance(300);
+    expect(await again).toBe("shown");
+    expect(h.log.slice(-3)).toEqual([`prepared:${b.key}`, `hide:${a.key}`, `show:${b.key}`]);
+  });
+
+  test("a preparation that fails (not an abort) still shows the runtime: preparing is work ahead, never a reason to lose the want", async () => {
+    const clock = new Clock(), h = preparing(clock, { fail: true });
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+      const a = wantOf("s1", "v1", "female");
+      const toA = h.want(a);
+      await clock.advance(300);
+      expect(await toA).toBe("shown");
+      expect(h.residency.shown()?.key).toBe(a.key);
+    } finally { console.warn = warn; }
+  });
+
+  test("evicting or losing a warm runtime that is being prepared again stops its preparation first", async () => {
+    const clock = new Clock(), stale = new Set<string>(), h = preparing(clock, { stale, prepareSteps: 8 });
+    const a = wantOf("s1", "v1", "female"), b = wantOf("s1", "v1", "male");
+    h.want(a); await clock.advance(400);
+    h.want(b); await clock.advance(400);
+    stale.add(a.key);
+    const toA = h.want(a);
+    await clock.advance(30);
+    h.residency.contextLost();
+    await clock.advance(100);
+    expect(await toA).toBe("superseded");
+    expect(h.residency.preparation()).toBeNull();
+    expect(h.log).toContain(`dispose:${a.key}`);
+    expect(h.residency.shown()?.key).toBe(b.key);
+  });
 });

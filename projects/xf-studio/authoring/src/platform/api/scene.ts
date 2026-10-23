@@ -188,6 +188,12 @@ export interface SceneHostPort {
 export interface FeatureRenderer {
   /** Bring the feature's own GPU state up to date right before the host draws a frame (only on frames that are drawn). */
   beforeDraw?(): void;
+  /**
+   * Before the scene is shown (profiles phase 4a-v): make the feature's own passes ready ahead (their programs linked off the page's
+   * thread), then bring its GPU state up to date as `beforeDraw` would, so the host's compile ahead finds its surfaces as the first frame
+   * draws them. Resolves when that frame would wait on nothing of the feature's; stops early when `signal` aborts.
+   */
+  prepare?(signal?: AbortSignal): Promise<void>;
   /** The viewer's display toggles, applied to the feature's own materials. */
   setNormals?(enabled: boolean): void;
   setWireframe?(enabled: boolean): void;
