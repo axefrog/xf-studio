@@ -140,6 +140,14 @@ npc::Ops OpsFor(const std::string& aCid)
         RED4ext::CString reason(aReason.c_str());
         return ScriptCall("XFNpc", "ReleaseAll", {"String"}, {&reason}, aCid);
     };
+    ops.prepare = [aCid](const std::string& aWho) {
+        RED4ext::CString who(aWho.c_str());
+        return ScriptCall("XFNpc", "PrepareActor", {"String"}, {&who}, aCid);
+    };
+    ops.startAct = [aCid](const std::string& aWho) {
+        RED4ext::CString who(aWho.c_str());
+        return ScriptCall("XFNpc", "StartGesture", {"String"}, {&who}, aCid);
+    };
     ops.poll = [aCid](const std::string& aWhos) {
         RED4ext::CString whos(aWhos.c_str());
         return ScriptCall("XFNpc", "Poll", {"String"}, {&whos}, aCid);

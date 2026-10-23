@@ -80,6 +80,8 @@ struct Actor
     bool stuck = false;  // selftest.npc {stuck: who}: its walk makes no progress (npc.blocked)
     int32_t attitude = 0; // V15: 0 friendly, 1 neutral, 2 hostile
     bool immortal = true;
+    bool prepared = false; // its attitude and god mode applied (ops.prepare, from the tick behind the write gate)
+    int32_t prepares = 0;
 };
 } // namespace
 
@@ -103,6 +105,7 @@ struct SimNpc::State
         std::string who, title;
         std::vector<std::string> choices;
         int32_t answer = -1;
+        std::string withdrawn; // "busy": the game's own prompt came up (selftest.npc {game_prompt: true})
     } hub;
     bool codeware = true;
     bool recordsMissing = false;
@@ -153,6 +156,11 @@ npc::Ops MakeOps(SimNpc::State* aState)
         {
             return json{{"walkable", false}, {"streamed", true}};
         }
+        // The simulated street is one level: no walkable ground more than 2 m above or below V's.
+        if (std::abs(aPoint[2] - v[2]) > 2.0)
+        {
+            return json{{"walkable", false}, {"streamed", true}};
+        }
         return json{{"walkable", true}, {"streamed", true}, {"point", Arr({aPoint[0], aPoint[1], v[2]})}};
     };
     ops.ray = [s](const Vec3&, const Vec3&) -> json {
@@ -177,7 +185,8 @@ npc::Ops MakeOps(SimNpc::State* aState)
                 continue;
             }
             npcs.push_back({{"id", n.id}, {"record", n.record}, {"class", n.cls}, {"distance", d}, {"position", Arr(n.position)}, {"crowd", n.crowd},
-                            {"protected", !n.reasons.empty()}, {"reasons", n.reasons}, {"busy", n.busy.empty() ? json(nullptr) : json(n.busy)}, {"dead", false}});
+                            {"protected", !n.reasons.empty()}, {"reasons", n.reasons}, {"busy", n.busy.empty() ? json(nullptr) : json(n.busy)}, {"dead", false},
+                            {"pickable", n.crowd && n.reasons.empty() && n.busy.empty()}});
         }
         for (const auto& [who, a] : s->actors)
         {
@@ -194,7 +203,7 @@ npc::Ops MakeOps(SimNpc::State* aState)
             if (static_cast<int32_t>(npcs.size()) < aMax)
             {
                 npcs.push_back({{"id", a.id}, {"record", a.record}, {"class", "NPCPuppet"}, {"distance", d}, {"position", Arr(a.position)}, {"crowd", false},
-                                {"protected", false}, {"reasons", json::array()}, {"busy", nullptr}, {"dead", a.dead}});
+                                {"protected", false}, {"reasons", json::array()}, {"busy", nullptr}, {"dead", a.dead}, {"pickable", false}});
             }
         }
         return json{{"npcs", npcs}, {"found", found}, {"simulated", true}};
@@ -217,11 +226,15 @@ npc::Ops MakeOps(SimNpc::State* aState)
                 }
                 throw MethodError("npc_protected", "simulated: that NPC belongs to the game (" + reasons + "); the bridge leaves it alone");
             }
+            if (!n.crowd)
+            {
+                throw MethodError("npc_protected", "simulated: only plain passers-by are picked; that NPC isn't one (not_crowd)");
+            }
             if (!n.busy.empty())
             {
                 throw MethodError("npc_busy", "simulated: that NPC is busy (" + n.busy + ")");
             }
-            if (npc::Distance(n.position, v) > npc::kListMaxM)
+            if (npc::Distance(n.position, v) > npc::kMaxRangeM)
             {
                 throw MethodError("too_far", "simulated: that NPC is more than 40 m from V");
             }
@@ -388,7 +401,7 @@ npc::Ops MakeOps(SimNpc::State* aState)
         if (!aShow)
         {
             const bool was = s->hub.shown && s->hub.id == aHub.id;
-            if (was)
+            if (s->hub.id == aHub.id)
             {
                 s->hub = SimNpc::State::HubState{};
             }
@@ -413,6 +426,7 @@ npc::Ops MakeOps(SimNpc::State* aState)
         s->hub.title = aHub.title;
         s->hub.choices = aHub.choices;
         s->hub.answer = -1;
+        s->hub.withdrawn.clear();
         return json{{"shown", true}};
     };
     ops.release = [s](const std::string& aWho, const std::string& aHow) {
@@ -450,8 +464,26 @@ npc::Ops MakeOps(SimNpc::State* aState)
             else
             {
                 const auto& a = it->second;
-                npcs.push_back({{"who", who}, {"exists", a.spawned}, {"spawned", a.spawned}, {"dead", a.dead}, {"position", Arr(a.position)}, {"yaw", a.yaw},
-                                {"command_state", a.command.kind.empty() ? std::string("NotExecuting") : a.command.state}});
+                json entry{{"who", who}, {"exists", a.spawned}, {"spawned", a.spawned}, {"dead", a.dead}, {"position", Arr(a.position)}, {"yaw", a.yaw},
+                           {"command_state", a.command.kind.empty() ? std::string("NotExecuting") : a.command.state}};
+                if (a.kind == "actor")
+                {
+                    entry["prepared"] = a.prepared;
+                    entry["gesture_ready"] = false; // the simulated carrier plays at once
+                }
+                else
+                {
+                    // A pick: the street NPC's own state now (selftest.npc {street: {id, busy, reasons}} changes it).
+                    for (const auto& n : s->street)
+                    {
+                        if (n.id == a.id)
+                        {
+                            entry["busy"] = n.busy;
+                            entry["protected"] = !n.reasons.empty() || !n.crowd;
+                        }
+                    }
+                }
+                npcs.push_back(entry);
             }
             if (comma == std::string::npos)
             {
@@ -462,7 +494,21 @@ npc::Ops MakeOps(SimNpc::State* aState)
         return json{{"v", {{"position", player.value("position", json::array({0, 0, 0}))}, {"busy", player.value("busy", std::string())}}},
                     {"camera", CameraOf(player)},
                     {"npcs", npcs},
-                    {"hub", {{"id", s->hub.id}, {"answer", s->hub.answer}, {"shown", s->hub.shown}}}};
+                    {"hub", {{"id", s->hub.id}, {"answer", s->hub.answer}, {"shown", s->hub.shown}, {"withdrawn", s->hub.withdrawn}}}};
+    };
+    ops.prepare = [s](const std::string& aWho) -> json {
+        std::scoped_lock _(s->mutex);
+        const auto it = s->actors.find(aWho);
+        if (it == s->actors.end() || it->second.lost)
+        {
+            throw MethodError("npc_lost", "simulated: " + aWho + " isn't in the world any more");
+        }
+        it->second.prepared = true;
+        ++it->second.prepares;
+        return json{{"prepared", true}};
+    };
+    ops.startAct = [](const std::string&) -> json {
+        return json{{"playing", true}};
     };
     return ops;
 }
@@ -495,6 +541,26 @@ SimNpc::SimNpc(Dispatcher& aDispatcher, SimNpcHooks aHooks)
                               if (p.contains("records_missing"))
                               {
                                   s->recordsMissing = p["records_missing"].get<bool>();
+                              }
+                              if (p.contains("game_prompt") && p["game_prompt"].get<bool>() && s->hub.shown)
+                              {
+                                  s->hub.shown = false; // the plugin's OnInteractionData wrap: the game's prompt comes first
+                                  s->hub.withdrawn = "busy";
+                              }
+                              if (p.contains("street"))
+                              {
+                                  const auto id = p["street"].value("id", std::string());
+                                  for (auto& n : s->street)
+                                  {
+                                      if (n.id == id)
+                                      {
+                                          n.busy = p["street"].value("busy", n.busy);
+                                          if (p["street"].contains("reasons"))
+                                          {
+                                              n.reasons = p["street"]["reasons"].get<std::vector<std::string>>();
+                                          }
+                                      }
+                                  }
                               }
                               if (p.contains("hub_busy"))
                               {
@@ -583,6 +649,8 @@ SimNpc::SimNpc(Dispatcher& aDispatcher, SimNpcHooks aHooks)
                                                     {"trigger", a.trigger},
                                                     {"attitude", a.attitude},
                                                     {"immortal", a.immortal},
+                                                    {"prepared", a.prepared},
+                                                    {"prepares", a.prepares},
                                                     {"dead", a.dead}});
                               }
                               json voices = json::object();

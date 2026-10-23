@@ -638,3 +638,143 @@ describe("0.8.6+npc: the Story Engine's staging (V15 stand-ins, V16 out of sight
     await ok(api, "session.resume", {});
   }, 30_000);
 });
+
+describe("0.8.6+npc: the Sol review's fixes against the self-test host", () => {
+  let host: Host;
+  let api: CommandApi;
+  beforeAll(async () => {
+    host = await startSelftestHost(["--allow-writes", "--write-classes", ALL], 180);
+    api = apiFor(host);
+    await bridge(api, "selftest.npc", { speed: 8 });
+    await bridge(api, "selftest.player", { busy: "", position: [100, 200, 10], yaw: 0 });
+  }, HOOK_TIMEOUT_MS);
+  afterAll(async () => {
+    await host?.stop();
+  });
+
+  test("1: picks only plain passers-by; a pick that turns busy is given back with its gaze; picks get no stance or removal", async () => {
+    const list = await ok(api, "npc.list", { radius_m: 20 });
+    const byId = Object.fromEntries((list.npcs as Any[]).map((n) => [n.id, n]));
+    expect(byId["EntityID(9001)"].pickable).toBe(true);
+    expect(byId["EntityID(9003)"].pickable).toBe(false); // the quest NPC, outside the crowd
+    expect(await refused(api, "npc.pick", { id: "EntityID(9003)" })).toBe("npc_protected");
+    expect(await refused(api, "npc.pick", { id: "EntityID(9004)" })).toBe("npc_busy");
+    const since = await latest(api);
+    const pick = await ok(api, "npc.pick", { id: "EntityID(9001)" });
+    await ok(api, "npc.look", { who: pick.who, at: "v" });
+    expect(await refused(api, "npc.place", { who: pick.who, at: [101, 201, 10] })).toBe("not_ours");
+    expect(await refused(api, "npc.turn", { who: pick.who, to: "v" })).toBe("not_ours");
+    expect(await refused(api, "npc.release", { who: pick.who, how: "despawn" })).toBe("bad_params");
+    await bridge(api, "selftest.npc", { street: { id: "EntityID(9001)", busy: "combat" } });
+    const auto = await event(api, "npc.auto_released", since, pick.who);
+    expect(auto.data.reason).toBe("npc_busy");
+    expect((await ok(api, "npc.status")).npcs).toEqual([]);
+    await bridge(api, "selftest.npc", { street: { id: "EntityID(9001)", busy: "" } });
+  }, 30_000);
+
+  test("2: an actor is prepared by the tick, and not while the bridge is paused", async () => {
+    await bridge(api, "selftest.pause_writes", { paused: true });
+    const blocked = await api.run("npc.spawn", { cast: "woman_corpo", ahead_m: 3 });
+    expect(blocked.ok ? "" : blocked.error.code).toBe("writes_paused");
+    await bridge(api, "selftest.pause_writes", { paused: false });
+    const since = await latest(api);
+    const a = await ok(api, "npc.spawn", { cast: "woman_corpo", ahead_m: 3 });
+    await event(api, "npc.spawned", since, a.who);
+    let actor: Any;
+    for (let i = 0; i < 40; i++) {
+      actor = ((await bridge(api, "selftest.npc", {})).actors as Any[]).find((x) => x.who === a.who);
+      if (actor?.prepared) break;
+      await sleep(50);
+    }
+    expect(actor).toMatchObject({ prepared: true, prepares: 1 });
+    await ok(api, "npc.release", { who: "all" });
+  }, 30_000);
+
+  test("3 and 4: a place far below V is refused; a placement or a turn replaces a walk, which then never arrives", async () => {
+    const since = await latest(api);
+    const a = await ok(api, "npc.spawn", { cast: "woman_corpo", ahead_m: 4 });
+    await event(api, "npc.spawned", since, a.who);
+    expect(await refused(api, "npc.place", { who: a.who, at: [100, 204, 0] })).toBe("not_walkable");
+    const placed = await ok(api, "npc.place", { who: a.who, at: [101, 203, 11] });
+    expect(placed.at[2]).toBe(10); // snapped to the street
+    await bridge(api, "selftest.npc", { speed: 0.2 });
+    await ok(api, "npc.move", { who: a.who, to_point: [100, 215, 10] });
+    const turn = await ok(api, "npc.turn", { who: a.who, to: "v" });
+    expect(turn.replaced).toBe("move");
+    await bridge(api, "selftest.npc", { speed: 8 });
+    await sleep(1200);
+    const arrived = await bridge(api, "session.events", { since, limit: 100, kinds: ["npc.arrived"] });
+    expect((arrived.events as Any[]).filter((e) => e.data?.who === a.who)).toEqual([]);
+    await ok(api, "npc.release", { who: "all" });
+  }, 30_000);
+
+  test("8: a door prompt takes our choices down (the pick before max_s is the unit checks' row)", async () => {
+    const since = await latest(api);
+    const a = await ok(api, "npc.spawn", { cast: "woman_corpo", ahead_m: 2 });
+    await event(api, "npc.spawned", since, a.who);
+    const hub = await ok(api, "npc.choices", { who: a.who, choices: ["Yes.", "No."] });
+    await bridge(api, "selftest.npc", { game_prompt: true });
+    let withdrawn: Any;
+    for (let i = 0; i < 40 && !withdrawn; i++) {
+      withdrawn = ((await bridge(api, "session.events", { since, limit: 100, kinds: ["npc.choice"] })).events as Any[]).find((e) => e.data?.hub === hub.hub);
+      if (!withdrawn) await sleep(50);
+    }
+    expect(withdrawn.data).toMatchObject({ withdrawn: true, reason: "choices_busy" });
+    expect((await ok(api, "npc.status")).hub).toBeNull();
+    await ok(api, "npc.release", { who: "all" });
+  }, 30_000);
+
+  test("6, 7 and 9: a scene takes only its own set's answer, cleans up every actor it spawned, and lets the pipe go between polls", async () => {
+    const scene: Scenario = {
+      scenario: "xfs_review_check",
+      actors: { a: { cast: "woman_corpo" } },
+      steps: [
+        { do: "npc.spawn", who: "a", ahead_m: 2 },
+        { wait: "npc.spawned", who: "a", max_s: 10 },
+        { do: "npc.choices", who: "a", choices: ["One.", "Two."], max_s: 20 },
+        { pause: 1.5 },
+        { do: "npc.choices", who: "a", choices: ["Three.", "Four."], max_s: 20 },
+        { wait: "npc.choice", who: "a", max_s: 20, as: "answer" },
+        { do: "npc.spawn", who: "a", ahead_m: 3 },
+      ],
+    } as Any as Scenario;
+    const other = apiFor(host);
+    const context = { api, cid: "t-scene-review", captureRoot: tempDir("xfb-npc-scene-") };
+    const running = runScenario(scene, context);
+    // Meanwhile another client answers both sets from its own connection: its calls are never refused bridge_busy. The first
+    // set's answer arrives while the scene isn't waiting yet; the scene's wait must take only the second set's.
+    let attempts = 0;
+    let oks = 0;
+    let first = false;
+    let second = false;
+    const until = Date.now() + 15_000;
+    while (Date.now() < until && !second) {
+      await sleep(200);
+      attempts++;
+      const status = await other.callBridge("npc.status", {}, "t-other");
+      other.release();
+      if (!status.ok) continue;
+      oks++;
+      const shown = (status.result as Any).hub;
+      if (shown && shown.choices[0] === "One." && !first) {
+        await other.callBridge("selftest.npc", { answer: 0 }, "t-other");
+        first = true;
+      } else if (shown && shown.choices[0] === "Three." && !second) {
+        await other.callBridge("selftest.npc", { answer: 0 }, "t-other");
+        second = true;
+      }
+      other.release();
+    }
+    const report = await running;
+    other.close();
+    expect(first && second).toBe(true);
+    expect(oks).toBe(attempts);
+    const answered = report.steps.find((s: Any) => s.wait === "npc.choice");
+    expect(answered?.event?.label).toBe("Three.");
+    // The second spawn of a live name is refused, and the clean-up released the actor it did spawn.
+    expect(report.outcome).toBe("failed");
+    expect(report.why).toContain("already out");
+    expect(report.released).toEqual(["a"]);
+    expect((await ok(api, "npc.status")).npcs).toEqual([]);
+  }, 40_000);
+});

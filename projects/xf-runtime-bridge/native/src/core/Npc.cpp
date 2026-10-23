@@ -1128,6 +1128,10 @@ json Service::Turn(const json& aParams, const Ops& aOps)
         std::scoped_lock _(m_mutex);
         auto& npc = Ours(who, true);
         RequireDirected(npc);
+        if (!npc.releasing.empty())
+        {
+            throw MethodError("npc_releasing", who + " is being released (" + npc.releasing + ")");
+        }
         const auto there = Resolve(target, v);
         // The point to turn to: the target itself, or (away) the point opposite it, so the rotation doesn't depend on the
         // command's angleOffset semantics [hypothesis for angleOffset].
@@ -1139,17 +1143,17 @@ json Service::Turn(const json& aParams, const Ops& aOps)
     aOps.command(who, command);
     std::scoped_lock _(m_mutex);
     auto& npc = Ours(who, true);
-    if (!npc.motion || npc.motion->kind == "turn")
-    {
-        Motion motion;
-        motion.kind = "turn";
-        motion.target = target;
-        motion.maxS = 5.0;
-        motion.yawGoal = goal;
-        motion.hasYawGoal = true;
-        motion.away = away;
-        npc.motion = motion;
-    }
+    // The review's finding 4: the turn's AI command replaces any walk or follow the actor had, so its tracking goes too
+    // (a walk given up for a turn must never report npc.arrived later).
+    const auto replaced = npc.motion ? npc.motion->kind : std::string();
+    Motion motion;
+    motion.kind = "turn";
+    motion.target = target;
+    motion.maxS = 5.0;
+    motion.yawGoal = goal;
+    motion.hasYawGoal = true;
+    motion.away = away;
+    npc.motion = motion;
     if (hold)
     {
         npc.facing = Facing{target, away, 0.0};
@@ -1159,6 +1163,10 @@ json Service::Turn(const json& aParams, const Ops& aOps)
         npc.facing.reset();
     }
     json out{{"who", who}, {away ? "away_from" : "to", TargetJson(target)}, {"yaw_goal", std::round(goal * 10) / 10}, {"hold", hold}};
+    if (!replaced.empty() && replaced != "turn")
+    {
+        out["replaced"] = replaced;
+    }
     out["undo"] = hold ? Undo("npc.turn", {{"who", who}, {"off", true}}) : Undo("npc.stop", {{"who", who}});
     out["undo_note"] = hold ? "the undo stops holding the facing (the actor keeps facing where it faces); npc.turned follows each turn"
                             : "npc.stop ends the turn where it is; npc.turned follows when it faces there";
@@ -1186,11 +1194,40 @@ json Service::Place(const json& aParams, const Ops& aOps)
     const auto v = RequireV(aOps);
     {
         std::scoped_lock _(m_mutex);
-        RequireDirected(Ours(who, true));
+        auto& npc = Ours(who, true);
+        RequireDirected(npc);
+        if (!npc.releasing.empty())
+        {
+            throw MethodError("npc_releasing", who + " is being released (" + npc.releasing + ")");
+        }
         CheckRange(*at, v);
     }
+    // The review's finding 3: the teleport itself makes no navigation test, so the spot is snapped to walkable, streamed ground
+    // within 2 m first (the spawn's own rule); a point under the street or in the air is refused, never used as given.
+    const auto ground = aOps.ground ? aOps.ground(*at) : json{{"walkable", false}, {"streamed", false}};
+    if (!ground.value("streamed", false))
+    {
+        throw MethodError("not_streamed", "the world around that place isn't loaded (no walkable ground streamed in)");
+    }
+    if (!ground.value("walkable", false) || !ground.contains("point"))
+    {
+        throw MethodError("not_walkable", "there is no walkable ground within 2 m of that place");
+    }
+    const auto spot = ToVec(ground["point"]);
+    {
+        std::scoped_lock _(m_mutex);
+        CheckRange(spot, v);
+    }
+    command.target.point = spot;
     auto step = aOps.command(who, command);
-    json out{{"who", who}, {"at", json::array({(*at)[0], (*at)[1], (*at)[2]})}};
+    {
+        std::scoped_lock _(m_mutex);
+        auto& npc = Ours(who, true);
+        npc.motion.reset(); // the review's finding 4: a placement replaces any walk, follow or turn the game was given
+        npc.position = spot;
+        npc.known = true;
+    }
+    json out{{"who", who}, {"at", json::array({spot[0], spot[1], spot[2]})}, {"asked_at", json::array({(*at)[0], (*at)[1], (*at)[2]})}};
     if (step.contains("before") && step["before"].contains("position"))
     {
         json back{{"who", who}, {"at", step["before"]["position"]}};
@@ -1216,7 +1253,10 @@ json Service::Stop(const json& aParams, const Ops& aOps)
     const auto who = RequireWho(aParams);
     {
         std::scoped_lock _(m_mutex);
-        Ours(who, true);
+        if (Ours(who, true).releasing == "walk_away")
+        {
+            throw MethodError("npc_releasing", who + " is walking away to be released; npc_release with despawn removes it at once");
+        }
     }
     Command command;
     command.kind = "stop";
@@ -2252,53 +2292,65 @@ void Service::Tick(double aDt, const TickInput& aInput, const Ops& aOps)
         }
         Emit("npc.act_done", "info", who + " finished a gesture", {{"who", who}, {"gesture", gesture}});
     }
+    // The review's finding 5: a hub whose time is up is read once more first, so a pick made just before max_s counts.
     if (hubTimedOut)
     {
-        Hub hub;
+        poll = true;
+    }
+    if (poll)
+    {
+        std::string whos;
+        bool any = false;
         {
             std::scoped_lock _(m_mutex);
-            if (!m_hub)
+            for (const auto& [who, npc] : m_npcs)
             {
-                return;
+                whos += (whos.empty() ? "" : ",") + who;
             }
-            hub = m_hub->hub;
-            m_hub.reset();
+            any = !whos.empty() || m_hub.has_value();
         }
-        try
+        if (any)
         {
-            aOps.hub(hub, false);
+            json reading;
+            bool read = false;
+            try
+            {
+                reading = aOps.poll(whos);
+                read = true;
+            }
+            catch (const std::exception&)
+            {
+                // the next poll tries again
+            }
+            if (read)
+            {
+                OnPoll(reading, aOps, aInput);
+            }
         }
-        catch (const std::exception&)
-        {
-        }
-        Emit("npc.choice", "info", "The player didn't choose in time", {{"who", hub.who}, {"hub", hub.id}, {"timeout", true}});
     }
-    if (!poll)
-    {
-        return;
-    }
-    std::string whos;
+    ExpireHub(aOps);
+}
+
+void Service::ExpireHub(const Ops& aOps)
+{
+    Hub hub;
     {
         std::scoped_lock _(m_mutex);
-        for (const auto& [who, npc] : m_npcs)
-        {
-            whos += (whos.empty() ? "" : ",") + who;
-        }
-        if (whos.empty() && !m_hub)
+        if (!m_hub || m_hub->age < m_hub->maxS)
         {
             return;
         }
+        hub = m_hub->hub;
+        m_hub.reset();
     }
-    json reading;
     try
     {
-        reading = aOps.poll(whos);
+        aOps.hub(hub, false);
     }
     catch (const std::exception&)
     {
-        return; // the next poll tries again
     }
-    OnPoll(reading, aOps, aInput);
+    Emit("npc.choice", "info", "The player didn't choose in time", {{"who", hub.who}, {"hub", hub.id}, {"timeout", true}});
 }
 
 void Service::OnPoll(const json& aReading, const Ops& aOps, const TickInput& aInput)
@@ -2316,7 +2368,8 @@ void Service::OnPoll(const json& aReading, const Ops& aOps, const TickInput& aIn
         }
         // V15: in a fight only handed-back stand-ins are left; they are still watched (lost, died, dissolve).
     }
-    std::vector<std::string> lost, died, spawnedNow, arrived, walkedAway, dissolved;
+    std::vector<std::string> lost, died, spawnedNow, arrived, walkedAway, dissolved, toPrepare, toStartAct;
+    std::vector<std::pair<std::string, std::string>> picksEnded;
     std::vector<std::pair<std::string, std::string>> failed, followEnded;
     std::vector<json> blocked, turned;
     std::vector<std::pair<std::string, Command>> holdTurns;
@@ -2378,6 +2431,32 @@ void Service::OnPoll(const json& aReading, const Ops& aOps, const TickInput& aIn
             if (npc.handedBack || npc.deadKept)
             {
                 continue; // its own AI has it; nothing to track but lost, died and dissolve
+            }
+            // The review's finding 1: a pick stays adopted only while it would still be picked (a plain passer-by, not busy,
+            // not fighting, not protected); otherwise it is given back at once.
+            if (npc.kind == "pick")
+            {
+                const auto pickBusy = entry.value("busy", std::string());
+                if (!pickBusy.empty())
+                {
+                    picksEnded.emplace_back(who, "npc_busy");
+                    continue;
+                }
+                if (entry.value("protected", false))
+                {
+                    picksEnded.emplace_back(who, "npc_protected");
+                    continue;
+                }
+            }
+            // The review's finding 2: an actor's first moment (its attitude, god mode) and a gesture's start change the game,
+            // so the poll only reports them; they are sent below, each behind the write gate.
+            if (npc.kind == "actor" && !entry.value("prepared", true))
+            {
+                toPrepare.push_back(who);
+            }
+            if (entry.value("gesture_ready", false))
+            {
+                toStartAct.push_back(who);
             }
             if (!npc.motion)
             {
@@ -2515,6 +2594,39 @@ void Service::OnPoll(const json& aReading, const Ops& aOps, const TickInput& aIn
                 }
             }
         }
+    }
+    const auto gateOpen = [&aInput] { return !aInput.writesOpen || aInput.writesOpen(); };
+    for (const auto& who : toPrepare)
+    {
+        if (!aOps.prepare || !gateOpen())
+        {
+            continue; // the next poll asks again while it is unprepared
+        }
+        try
+        {
+            aOps.prepare(who);
+        }
+        catch (const std::exception&)
+        {
+        }
+    }
+    for (const auto& who : toStartAct)
+    {
+        if (!aOps.startAct || !gateOpen())
+        {
+            continue;
+        }
+        try
+        {
+            aOps.startAct(who);
+        }
+        catch (const std::exception&)
+        {
+        }
+    }
+    for (const auto& [who, why] : picksEnded)
+    {
+        ReleaseOne(who, "leave", why, aOps);
     }
     for (const auto& [who, turn] : holdTurns)
     {
@@ -2723,14 +2835,24 @@ void Service::OnPoll(const json& aReading, const Ops& aOps, const TickInput& aIn
     std::optional<Hub> answered;
     int32_t index = -1;
     bool walkedOff = false;
+    bool gameTook = false;
     {
         std::scoped_lock _(m_mutex);
         if (m_hub)
         {
-            index = hub.value("id", 0) == m_hub->hub.id ? hub.value("answer", -1) : -1;
+            const bool same = hub.value("id", 0) == m_hub->hub.id;
+            index = same ? hub.value("answer", -1) : -1;
             if (index >= 0 && index < static_cast<int32_t>(m_hub->hub.choices.size()))
             {
                 answered = m_hub->hub;
+                m_hub.reset();
+            }
+            else if (same && hub.value("withdrawn", std::string()) == "busy")
+            {
+                // The review's finding 8: a door or device prompt, or the game's own dialogue, came up while ours showed; the
+                // game's comes first, so ours was withdrawn.
+                answered = m_hub->hub;
+                gameTook = true;
                 m_hub.reset();
             }
             else
@@ -2745,7 +2867,19 @@ void Service::OnPoll(const json& aReading, const Ops& aOps, const TickInput& aIn
             }
         }
     }
-    if (answered && walkedOff)
+    if (answered && gameTook)
+    {
+        try
+        {
+            aOps.hub(*answered, false);
+        }
+        catch (const std::exception&)
+        {
+        }
+        Emit("npc.choice", "warn", "The game showed its own prompt or dialogue, so the choices were withdrawn",
+             {{"who", answered->who}, {"hub", answered->id}, {"withdrawn", true}, {"reason", "choices_busy"}});
+    }
+    else if (answered && walkedOff)
     {
         try
         {

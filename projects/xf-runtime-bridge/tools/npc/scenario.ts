@@ -11,7 +11,9 @@
 // refusal fails the scene, except optional steps and a gesture without the XF gesture carrier (carrier_missing), which are
 // skipped with a warning (the scene still runs, as the design allows). A wait that runs out fails the scene, except a wait
 // with "as" (the answer is then "timeout") or "optional". However the scene ends (done, failed, stopped), every actor it
-// brought in is released.
+// brought in is released, each one it ever spawned (a name spawned again while its first actor is still out is refused).
+// A wait for npc.choice takes only the answer to the choices the scene showed last for that actor (its hub), never an
+// earlier set's late timeout. Between polls the runner lets the bridge's main pipe go, so other XF tools can call meanwhile.
 //
 //   bun tools/npc/scenario.ts <scene.json> [--dry-run]      (or the catalogue's npc.scenario, through MCP or the CLI)
 
@@ -222,6 +224,11 @@ export async function runScenario(scenario: Scenario, context: CommandContext, o
   }
 
   const handles: Record<string, string> = {};
+  // Every actor the scene spawned, in order (the review's finding 7: a name spawned twice must not hide the first from the
+  // clean-up).
+  const spawned: { name: string; handle: string }[] = [];
+  // The hub of the choices each actor showed last (the review's finding 6).
+  const lastHub: Record<string, number> = {};
   const lastLine: Record<string, string> = {};
   const consumed = new Set<number>();
   const pollMs = options.pollMs ?? 250;
@@ -238,6 +245,12 @@ export async function runScenario(scenario: Scenario, context: CommandContext, o
       report.events.push({ at_s: seconds(), kind: event.kind, who: event.data?.who, data: event.data });
     }
   };
+  // The review's finding 9: let the main pipe go while the runner waits, as session.wait does.
+  const idle = async (ms: number) => {
+    context.api.release();
+    await sleep(ms, context.signal);
+  };
+  const isGone = (handle: string) => seen.some((e) => (e.kind === "npc.released" || e.kind === "npc.lost" || e.kind === "npc.auto_released") && e.data?.who === handle);
   const handleOf = (name: string) => handles[name];
   const nameOf = (handle: string) => Object.entries(handles).find(([, h]) => h === handle)?.[0] ?? handle;
 
@@ -251,7 +264,7 @@ export async function runScenario(scenario: Scenario, context: CommandContext, o
         continue;
       }
       if ("pause" in step) {
-        await sleep(step.pause * 1000, context.signal);
+        await idle(step.pause * 1000);
         report.steps.push({ pause: step.pause, at_s: began });
         continue;
       }
@@ -269,13 +282,21 @@ export async function runScenario(scenario: Scenario, context: CommandContext, o
         if (step.do !== "npc.spawn" && typeof step.who === "string" && step.who !== "all" && !handleOf(step.who)) {
           throw new ScenarioError(`${step.who} hasn't been brought in yet (a npc.spawn step must come first)`);
         }
+        if (step.do === "npc.spawn" && handles[step.who]) {
+          await readEvents();
+          if (!isGone(handles[step.who]!)) {
+            throw new ScenarioError(`${step.who} is already out (${handles[step.who]}); release it before spawning that name again`);
+          }
+        }
         const out = await execute(context, step.do, input);
         const entry: Json = { do: step.do, who: step.who, at_s: began, ok: out.ok, took_s: Math.round((seconds() - began) * 10) / 10 };
         if (out.ok) {
           if (step.do === "npc.spawn") {
             handles[step.who] = String(out.result.who);
+            spawned.push({ name: step.who, handle: handles[step.who]! });
             report.actors[step.who] = handles[step.who];
           }
+          if (step.do === "npc.choices" && typeof out.result.hub === "number") lastHub[step.who ?? ""] = out.result.hub;
           if (step.do === "npc.say" && out.result.line) lastLine[step.who ?? ""] = String(out.result.line); // "" : a voice with no body
           entry.result = out.result;
           report.steps.push(entry);
@@ -296,6 +317,7 @@ export async function runScenario(scenario: Scenario, context: CommandContext, o
         const handle = step.who ? handleOf(step.who) : undefined;
         if (step.who && !handle) throw new ScenarioError(`${step.who} hasn't been brought in yet, so there is nothing to wait for`);
         const deadline = Date.now() + (step.max_s ?? 30) * 1000;
+        const hub = step.wait === "npc.choice" ? lastHub[step.who ?? ""] : undefined;
         let found: Json | undefined;
         while (!found && Date.now() < deadline && !context.signal?.aborted) {
           await readEvents();
@@ -304,9 +326,10 @@ export async function runScenario(scenario: Scenario, context: CommandContext, o
               !consumed.has(e.seq) &&
               e.kind === step.wait &&
               (!handle || e.data?.who === handle) &&
+              (hub === undefined || e.data?.hub === hub) &&
               (step.wait !== "npc.said" || !lastLine[step.who ?? ""] || step.any === true || e.data?.line === lastLine[step.who ?? ""]),
           );
-          if (!found) await sleep(pollMs, context.signal);
+          if (!found) await idle(pollMs);
         }
         if (context.signal?.aborted) throw new ScenarioError("the scene was stopped", "stopped");
         if (found) {
@@ -347,19 +370,19 @@ export async function runScenario(scenario: Scenario, context: CommandContext, o
   } finally {
     // Release every actor the scene brought in and that isn't gone already.
     await readEvents().catch(() => undefined);
-    const gone = new Set(seen.filter((e) => e.kind === "npc.released" || e.kind === "npc.lost" || e.kind === "npc.auto_released").map((e) => e.data?.who));
-    for (const [name, handle] of Object.entries(handles)) {
-      if (gone.has(handle)) {
+    for (const { name, handle } of spawned) {
+      if (isGone(handle)) {
         report.released.push(name);
         continue;
       }
-      const walking = report.steps.some((s) => s.do === "npc.release" && s.who === name && s.ok);
+      const walking = handles[name] === handle && report.steps.some((s) => s.do === "npc.release" && s.who === name && s.ok);
       if (walking && report.outcome === "done") {
         // walk_away still under way: give it its time, then make sure.
         const deadline = Date.now() + 25_000;
         while (Date.now() < deadline) {
           await readEvents().catch(() => undefined);
           if (seen.some((e) => e.kind === "npc.released" && e.data?.who === handle)) break;
+          context.api.release();
           await sleep(pollMs);
         }
         if (seen.some((e) => e.kind === "npc.released" && e.data?.who === handle)) {

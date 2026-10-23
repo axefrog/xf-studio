@@ -1310,7 +1310,7 @@ Spawn XF actors (never saved), pick NPCs near V, and direct them: walk, follow, 
 
 ### `npc_list`
 
-**List the NPCs near V.** The NPCs within radius_m of V (default 15, at most 40): each one's id (for npc_pick), record, distance and place, whether it is part of the street crowd, whether it is protected (a quest character, a companion, a vendor, police, a child, a boss, or in a story scene) with the reasons, whether it is busy (sitting or leaning somewhere, fighting), and which are the session's own. Changes nothing.
+**List the NPCs near V.** The NPCs within radius_m of V (default 15, at most 40): each one's id (for npc_pick), record, distance and place, whether it is part of the street crowd, whether it is protected (a quest character, a companion, a vendor, police, a child, a boss, or in a story scene) with the reasons, whether it is busy (sitting or leaning somewhere, fighting, hostile to V), whether npc_pick would take it (pickable: a plain passer-by of the street crowd, not busy), and which are the session's own. Changes nothing.
 
 - **Command:** `npc.list`, the bridge method `npc.list`
 - **Permission:** Look (`read`)
@@ -1325,7 +1325,7 @@ Spawn XF actors (never saved), pick NPCs near V, and direct them: walk, follow, 
 
 ### `npc_pick`
 
-**Pick an NPC near V.** Adopts one NPC near V (its id from npc_list) so the bridge can make it look at someone, change its face and say a line; it is never moved or given a gesture, and it keeps walking its own way. Protected NPCs (story characters, companions, vendors, police, children, bosses, anyone in a scene) and busy ones are refused. Answers the NPC's handle (p1, p2, ...). Changes nothing by itself.
+**Pick an NPC near V.** Adopts one plain passer-by of the street crowd within 30 m of V (its id from npc_list, pickable) so the bridge can make it look at someone, change its face and say a line; it is never moved, placed, turned, given a gesture or a stance, or removed, and it keeps walking its own way. Anyone else is refused: protected NPCs (story characters, companions, vendors, police, children, bosses, anyone in a scene) and every NPC outside the street crowd (a quest may use one without marking it), and busy ones (sitting or leaning somewhere, fighting, hostile to V). A pick that becomes busy or protected later is given back at once (npc.auto_released), and its gaze, face and lines are taken back on its release, the kill switch, the pause and a handover; a load takes the NPC itself away. Answers the NPC's handle (p1, p2, ...). Changes nothing by itself.
 
 - **Command:** `npc.pick`, the bridge method `npc.pick`
 - **Permission:** Look (`read`)
@@ -1423,7 +1423,7 @@ No parameters.
 - **Permission:** Direct NPCs (`write-npc`)
 - **Changes the game:** Yes
 - **Undo:** npc_stop ends a turn where it is; a held facing's undo is npc_turn with off.
-- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`not_v`](#refusal-not-v), `npc_unknown`, `not_ours`, `npc_lost`, `npc_handed_back`, `npc_dead`, `npc_not_spawned`, `no_ai`
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`not_v`](#refusal-not-v), `npc_unknown`, `not_ours`, `npc_lost`, `npc_handed_back`, `npc_dead`, `npc_not_spawned`, `npc_releasing`, `no_ai`
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1443,7 +1443,7 @@ No parameters.
 - **Permission:** Direct NPCs (`write-npc`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo places the actor back where it stood.
-- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`not_v`](#refusal-not-v), `npc_unknown`, `not_ours`, `npc_lost`, `npc_handed_back`, `npc_dead`, [`too_far`](#refusal-too-far), `no_ai`
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`not_v`](#refusal-not-v), `npc_unknown`, `not_ours`, `npc_lost`, `npc_handed_back`, `npc_dead`, `npc_releasing`, [`not_streamed`](#refusal-not-streamed), `not_walkable`, [`too_far`](#refusal-too-far), `no_ai`
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -1459,7 +1459,7 @@ No parameters.
 - **Permission:** Direct NPCs (`write-npc`)
 - **Changes the game:** Yes
 - **Undo:** Nothing to undo: the actor holds its place.
-- **Refusals:** `npc_unknown`, `not_ours`
+- **Refusals:** `npc_unknown`, `not_ours`, `npc_releasing`
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|

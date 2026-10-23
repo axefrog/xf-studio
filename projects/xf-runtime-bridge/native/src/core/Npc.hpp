@@ -273,9 +273,16 @@ struct Ops
     // Everything the bridge holds on NPCs, in one step (the kill switch): hubs withdrawn, lines hidden, commands cancelled,
     // look-ats removed, faces reset, gestures stopped, actors deleted: {released: n, ...}.
     std::function<json(const std::string& aReason)> releaseAll;
-    // The tick's reading, for the handles in aWhos (comma list): {v: {position, busy}, camera: {position, forward, fov,
-    //  aspect}, npcs: [{who, exists, spawned, dead, position, yaw, command_state}], hub: {id, answer (-1 none), shown}}.
+    // The tick's reading, for the handles in aWhos (comma list), changing nothing: {v: {position, busy}, camera: {position,
+    //  forward, fov, aspect}, npcs: [{who, exists, spawned, dead, position, yaw, command_state, prepared (actors), gesture_ready,
+    //  busy and protected (picks)}], hub: {id, answer (-1 none), shown, withdrawn ("busy": the game's own prompt or dialogue
+    //  came up)}}.
     std::function<json(const std::string& aWhos)> poll;
+    // An actor's first moment in the world: its attitude towards V and (unless mortal) god mode. Sent by the tick behind the
+    // write gate when the poll reports it unprepared.
+    std::function<json(const std::string& aWho)> prepare;
+    // A gesture's start once its carrier exists (enter the workspot, jump to the clip). Sent by the tick behind the write gate.
+    std::function<json(const std::string& aWho)> startAct;
 };
 
 // Where the dispatcher and the script gate stand, for the tick.
@@ -426,6 +433,8 @@ private:
     void ReleaseEverything(const std::string& aReason, const Ops& aOps);
     json NpcJson(const Npc& aNpc) const;
     void OnPoll(const json& aReading, const Ops& aOps, const TickInput& aInput);
+    // A hub past its max_s: withdrawn with npc.choice {timeout} (after the poll has read a pending answer).
+    void ExpireHub(const Ops& aOps);
     // V16: whether a point (an actor's feet) is out of V's sight: outside the camera's view, or with static geometry between the
     // camera and both its head and its feet.
     bool OutOfSight(const Camera& aCamera, const Vec3& aPoint, const Ops& aOps) const;

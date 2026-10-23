@@ -52,6 +52,7 @@ public class XFNpcRegistry extends ScriptableSystem {
   private let m_hubWho: String;
   private let m_hubIndex: Int32;
   private let m_hubAnswer: Int32;
+  private let m_hubWithdrawn: String; // "busy": the game's own prompt or dialogue came up while ours showed
   private let m_lastInputAt: Float;
   private let m_voiceLines: array<Int32>; // lines from a voice with no body (npc.say without who)
 
@@ -124,6 +125,17 @@ public class XFNpcRegistry extends ScriptableSystem {
     this.m_hubShown = true;
     this.m_hubIndex = 0;
     this.m_hubAnswer = -1;
+    this.m_hubWithdrawn = "";
+  }
+
+  // The game's own interaction prompt or dialogue came up: ours goes (the game's comes first); the tick reads why.
+  public func WithdrawForGame() -> Void {
+    this.m_hubShown = false;
+    this.m_hubWithdrawn = "busy";
+  }
+
+  public func HubWithdrawn() -> String {
+    return this.m_hubWithdrawn;
   }
 
   public func HideHub() -> Void {
@@ -160,6 +172,7 @@ public class XFNpcRegistry extends ScriptableSystem {
 
   public func ClearHubAnswer() -> Void {
     this.m_hubAnswer = -1;
+    this.m_hubWithdrawn = "";
     let empty: ListChoiceHubData;
     this.m_hub = empty;
   }
@@ -363,6 +376,13 @@ protected cb func OnDialogsData(value: Variant) -> Bool {
   let registry = XFNpcRegistry.Get();
   if IsDefined(registry) && registry.HubShown() {
     let data = FromVariant<DialogChoiceHubs>(value);
+    // The review's finding 8: the game's own dialogue choices came up: ours goes, theirs draw as the game sent them.
+    if ArraySize(data.choiceHubs) > 0 {
+      registry.WithdrawForGame();
+      let ours = registry.Hub();
+      XFBridgeLog.Info("npc-hub", "the game showed its own dialogue choices; hub " + IntToString(ours.id) + " withdrawn");
+      return wrappedMethod(value);
+    }
     ArrayPush(data.choiceHubs, registry.Hub());
     return wrappedMethod(ToVariant(data));
   }
@@ -371,9 +391,19 @@ protected cb func OnDialogsData(value: Variant) -> Bool {
 
 @wrapMethod(InteractionUIBase)
 protected cb func OnInteractionData(value: Variant) -> Bool {
-  // While our hub shows, the interaction prompt doesn't redraw over it (the module's flicker guard).
   let registry = XFNpcRegistry.Get();
   if IsDefined(registry) && registry.HubShown() {
+    let prompt = FromVariant<InteractionChoiceHubData>(value);
+    if prompt.active {
+      // The review's finding 8: a door or device prompt came up while our hub showed: ours goes and the widget is redrawn
+      // without it, so the prompt shows and the player's keys reach it.
+      registry.WithdrawForGame();
+      XFNpcHub.Refresh(false);
+      let ours = registry.Hub();
+      XFBridgeLog.Info("npc-hub", "an interaction prompt came up; hub " + IntToString(ours.id) + " withdrawn");
+      return wrappedMethod(value);
+    }
+    // An empty update while ours shows isn't drawn over it (the module's flicker guard).
     return true;
   }
   return wrappedMethod(value);
@@ -461,7 +491,26 @@ public abstract class XFNpcCheck {
     if combat {
       return "combat";
     }
+    let player = XFPlayer.Player();
+    if IsDefined(player) {
+      let attitude = GameObject.GetAttitudeBetween(puppet, player);
+      if Equals(attitude, EAIAttitude.AIA_Hostile) {
+        return "hostile";
+      }
+    }
     return "";
+  }
+
+  // The review's finding 1: who may be picked at all. Quest reservation can't be read safely (IsQuest only sees a quest mark or
+  // quest items, and a quest can use an unmarked community NPC), so only plain passers-by of the street crowd are picked:
+  // a crowd NPC with no protection reason. Returns "" when it may be picked, else the reasons (JSON strings).
+  public static func PickRefusal(puppet: ref<ScriptedPuppet>) -> String {
+    let reasons = XFNpcCheck.Reasons(puppet);
+    let crowd = puppet.IsCrowd();
+    if !crowd {
+      reasons += (StrLen(reasons) > 0 ? "," : "") + "\"not_crowd\"";
+    }
+    return reasons;
   }
 }
 
@@ -562,10 +611,12 @@ public abstract class XFNpc {
       let crowd = IsDefined(puppet) && puppet.IsCrowd();
       let reasons = IsDefined(puppet) ? XFNpcCheck.Reasons(puppet) : "\"not_a_puppet\"";
       let busy = IsDefined(puppet) ? XFNpcCheck.Busy(puppet) : "";
+      let refusal = IsDefined(puppet) ? XFNpcCheck.PickRefusal(puppet) : "\"not_a_puppet\"";
+      let pickable = StrLen(refusal) == 0 && StrLen(busy) == 0 && !dead;
       let ours = IsDefined(registry) ? registry.WhoIs(npc.GetEntityID()) : "";
       out += (written > 0 ? "," : "") + "{" + identity + ",\"position\":" + XFScene.Arr(position) + ",\"dead\":" + XFJson.Flag(dead);
       out += ",\"crowd\":" + XFJson.Flag(crowd) + ",\"protected\":" + XFJson.Flag(StrLen(reasons) > 0) + ",\"reasons\":[" + reasons + "]";
-      out += ",\"busy\":" + (StrLen(busy) > 0 ? XFJson.Str(busy) : "null") + (StrLen(ours) > 0 ? ",\"ours\":" + XFJson.Str(ours) : "") + "}";
+      out += ",\"busy\":" + (StrLen(busy) > 0 ? XFJson.Str(busy) : "null") + ",\"pickable\":" + XFJson.Flag(pickable) + (StrLen(ours) > 0 ? ",\"ours\":" + XFJson.Str(ours) : "") + "}";
       written += 1;
     }
     }
@@ -594,9 +645,9 @@ public abstract class XFNpc {
       if dead {
         return XFJson.Fail("npc_busy", "that NPC is dead");
       }
-      let reasons = XFNpcCheck.Reasons(puppet);
+      let reasons = XFNpcCheck.PickRefusal(puppet);
       if StrLen(reasons) > 0 {
-        return XFJson.Fail("npc_protected", "that NPC belongs to the game's story or services (" + StrReplaceAll(reasons, "\"", "") + "); the bridge leaves it alone");
+        return XFJson.Fail("npc_protected", "only plain passers-by are picked; that NPC isn't one (" + StrReplaceAll(reasons, "\"", "") + "), so the bridge leaves it alone");
       }
       let busy = XFNpcCheck.Busy(puppet);
       if StrLen(busy) > 0 {
@@ -604,8 +655,8 @@ public abstract class XFNpc {
       }
       let position = puppet.GetWorldPosition();
       let distance = Vector4.Distance(position, from);
-      if distance > 40.0 {
-        return XFJson.Fail("too_far", "that NPC is more than 40 m from V");
+      if distance > 30.0 {
+        return XFJson.Fail("too_far", "that NPC is more than 30 m from V");
       }
       let recordId = puppet.GetRecordID();
       let record = TDBID.ToStringDEBUG(recordId);
@@ -979,7 +1030,40 @@ public abstract class XFNpc {
     return "{\"ok\":true,\"playing\":true,\"pending_carrier\":true}";
   }
 
-  // Poll's step: the carrier exists, so the actor enters its workspot and jumps to the clip (AMM's order [source]).
+  // Whether a gesture's carrier exists and its clip waits to start (the poll reports it; StartGesture starts it).
+  public static func GestureReady(entry: ref<XFNpcEntry>) -> Bool {
+    if !entry.hasCarrier || entry.playing || StrLen(entry.clip) == 0 {
+      return false;
+    }
+    let system = GameInstance.GetDynamicEntitySystem();
+    return IsDefined(system) && system.IsSpawned(entry.carrier);
+  }
+
+  // The tick's gated steps (the review's finding 2): an actor's attitude and god mode once it exists, and a gesture's start.
+  public static func PrepareActor(cid: String, who: String) -> String {
+    let registry = XFNpcRegistry.Get();
+    let entry = IsDefined(registry) ? registry.Entry(who) : null;
+    let puppet = XFNpc.PuppetOf(entry);
+    if !IsDefined(puppet) || !Equals(entry.kind, "actor") {
+      return XFNpc.Lost(who);
+    }
+    if !entry.prepared {
+      XFNpc.Prepare(entry, puppet);
+    }
+    return "{\"ok\":true,\"prepared\":true}";
+  }
+
+  public static func StartGesture(cid: String, who: String) -> String {
+    let registry = XFNpcRegistry.Get();
+    let entry = IsDefined(registry) ? registry.Entry(who) : null;
+    if !IsDefined(entry) {
+      return XFNpc.Lost(who);
+    }
+    XFNpc.PlayAct(entry);
+    return "{\"ok\":true,\"playing\":" + XFJson.Flag(entry.playing) + "}";
+  }
+
+  // The carrier exists, so the actor enters its workspot and jumps to the clip (AMM's order [source]).
   public static func PlayAct(entry: ref<XFNpcEntry>) -> Void {
     if !entry.hasCarrier || entry.playing || StrLen(entry.clip) == 0 {
       return;
@@ -1160,10 +1244,6 @@ public abstract class XFNpc {
           if !IsDefined(puppet) {
             item += ",\"exists\":false,\"spawned\":" + XFJson.Flag(spawned) + "}";
           } else {
-            if Equals(entry.kind, "actor") && !entry.prepared {
-              XFNpc.Prepare(entry, puppet);
-            }
-            XFNpc.PlayAct(entry);
             let position = puppet.GetWorldPosition();
             let yaw = puppet.GetWorldYaw();
             let dead = puppet.IsDead();
@@ -1174,7 +1254,16 @@ public abstract class XFNpc {
               state = EnumValueToString("AICommandState", Cast<Int64>(EnumInt(commandState)));
             }
             item += ",\"exists\":true,\"spawned\":" + XFJson.Flag(spawned) + ",\"dead\":" + XFJson.Flag(dead) + ",\"position\":" + XFScene.Arr(position);
-            item += ",\"yaw\":" + XFJson.Num(yaw) + ",\"command_state\":" + XFJson.Str(state) + "}";
+            item += ",\"yaw\":" + XFJson.Num(yaw) + ",\"command_state\":" + XFJson.Str(state);
+            if Equals(entry.kind, "actor") {
+              let ready = XFNpc.GestureReady(entry);
+              item += ",\"prepared\":" + XFJson.Flag(entry.prepared) + ",\"gesture_ready\":" + XFJson.Flag(ready);
+            } else {
+              let pickBusy = XFNpcCheck.Busy(puppet);
+              let pickRefusal = XFNpcCheck.PickRefusal(puppet);
+              item += ",\"busy\":" + XFJson.Str(pickBusy) + ",\"protected\":" + XFJson.Flag(StrLen(pickRefusal) > 0);
+            }
+            item += "}";
           }
         }
         out += (StrLen(out) > 0 ? "," : "") + item;
@@ -1187,7 +1276,7 @@ public abstract class XFNpc {
     let hubText = "{\"id\":0,\"answer\":-1,\"shown\":false}";
     if IsDefined(registry) {
       let hub = registry.Hub();
-      hubText = "{\"id\":" + IntToString(hub.id) + ",\"answer\":" + IntToString(registry.HubAnswer()) + ",\"shown\":" + XFJson.Flag(registry.HubShown()) + "}";
+      hubText = "{\"id\":" + IntToString(hub.id) + ",\"answer\":" + IntToString(registry.HubAnswer()) + ",\"shown\":" + XFJson.Flag(registry.HubShown()) + ",\"withdrawn\":" + XFJson.Str(registry.HubWithdrawn()) + "}";
     }
     let camera = XFNpcV.Camera();
     return "{\"ok\":true,\"v\":" + vText + camera + ",\"npcs\":[" + out + "],\"hub\":" + hubText + "}";
@@ -1251,5 +1340,13 @@ public abstract class XFNpc {
 
   public static func Poll(cid: String, whos: String) -> String {
     return "{\"ok\":true,\"v\":{\"busy\":\"\"},\"npcs\":[],\"hub\":{\"id\":0,\"answer\":-1,\"shown\":false}}";
+  }
+
+  public static func PrepareActor(cid: String, who: String) -> String {
+    return XFNpc.Missing();
+  }
+
+  public static func StartGesture(cid: String, who: String) -> String {
+    return XFNpc.Missing();
   }
 }

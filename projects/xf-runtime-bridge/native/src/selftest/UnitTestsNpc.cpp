@@ -646,6 +646,101 @@ void StagingTests()
         Check("the handover: nothing held, nothing to do", service.ReleaseAllNow("handover", ops)["released"].empty());
     }
 }
+// The Sol review of 0.8.6+npc: turns and placements replace a walk's tracking, placement on walkable ground only, an answer
+// read before the hub expires, a hub the game took down, picks given back when busy or protected, and the tick's gated
+// forward steps (an actor's preparation).
+void ReviewTests()
+{
+    xfb::EventLog log;
+    n::Service service;
+    service.SetEvents(&log);
+    Fake fake;
+    auto ops = fake.Ops();
+    int prepares = 0;
+    ops.prepare = [&](const std::string& aWho) {
+        ++prepares;
+        fake.npcs[aWho]["prepared"] = true;
+        return json{{"prepared", true}};
+    };
+    service.Spawn(json{{"cast", "woman_corpo"}, {"at", json{{"ahead_m", 5}}}}, ops);
+    fake.npcs["a1"]["exists"] = true;
+    fake.npcs["a1"]["spawned"] = true;
+    fake.npcs["a1"]["prepared"] = false;
+    n::TickInput closed;
+    closed.writesOpen = [] { return false; };
+    service.Tick(n::kPollSeconds + 0.01, closed, ops);
+    Check("review 2: an unprepared actor isn't prepared while the gate is closed", prepares == 0 && Events(log, "npc.spawned").size() == 1);
+    Poll(service, fake, ops);
+    Check("review 2: prepared by the tick once the gate is open, once", prepares == 1);
+    Poll(service, fake, ops);
+    Check("review 2: not prepared twice", prepares == 1);
+
+    // Finding 4: a turn replaces a walk; the walk never reports npc.arrived.
+    service.Move(json{{"who", "a1"}, {"to", json::array({0, 20, 0})}}, ops);
+    const auto turn = service.Turn(json{{"who", "a1"}, {"to", "v"}}, ops);
+    Check("review 4: a turn during a walk says it replaced the walk", turn["replaced"] == "move");
+    fake.npcs["a1"]["position"] = {0.0, 19.5, 0.0};
+    fake.npcs["a1"]["command_state"] = "Success";
+    Poll(service, fake, ops);
+    Check("review 4: the abandoned walk reports no npc.arrived", Events(log, "npc.arrived").empty());
+    service.Move(json{{"who", "a1"}, {"to", json::array({0, 25, 0})}}, ops);
+    fake.npcs["a1"]["command_state"] = "Executing";
+    service.Place(json{{"who", "a1"}, {"at", json::array({0, 10, 0})}}, ops);
+    Check("review 4: a placement ends the walk's tracking", !service.Status(json::object())["npcs"][0].contains("motion"));
+
+    // Finding 3: placement only on walkable, streamed ground, snapped to it.
+    fake.walkable = false;
+    Check("review 3: a place with no walkable ground near it is refused", CodeOf([&] { service.Place(json{{"who", "a1"}, {"at", json::array({0, 4, -10})}}, ops); }) == "not_walkable");
+    fake.walkable = true;
+    auto groundOps = ops;
+    groundOps.ground = [](const n::Vec3& aPoint) { return json{{"walkable", true}, {"streamed", true}, {"point", {aPoint[0], aPoint[1], 0.25}}}; };
+    const auto placed = service.Place(json{{"who", "a1"}, {"at", json::array({1, 4, 3})}}, groundOps);
+    Check("review 3: the actor goes to the snapped ground, not the asked point", Near(placed["at"][2].get<double>(), 0.25) && Near(placed["asked_at"][2].get<double>(), 3.0));
+    auto unstreamed = ops;
+    unstreamed.ground = [](const n::Vec3&) { return json{{"walkable", false}, {"streamed", false}}; };
+    Check("review 3: unstreamed ground is refused not_streamed", CodeOf([&] { service.Place(json{{"who", "a1"}, {"at", json::array({0, 4, 0})}}, unstreamed); }) == "not_streamed");
+
+    // Finding 5: an answer given just before max_s counts.
+    fake.npcs["a1"]["position"] = {0.0, 2.0, 0.0};
+    Poll(service, fake, ops);
+    const auto hub = service.Choices(json{{"who", "a1"}, {"choices", json::array({"Yes.", "No."})}, {"max_s", 5}}, ops);
+    fake.hub = json{{"id", hub["hub"]}, {"answer", 0}};
+    service.Tick(5.1, {}, ops);
+    auto choices = Events(log, "npc.choice");
+    Check("review 5: the pick read at max_s wins over the timeout", choices.size() == 1 && choices[0]["data"]["index"] == 0 && !choices[0]["data"].contains("timeout"));
+    fake.hub = json{{"id", 0}, {"answer", -1}};
+    // Finding 8: the game took our hub down for its own prompt.
+    const auto again = service.Choices(json{{"who", "a1"}, {"choices", json::array({"Yes.", "No."})}}, ops);
+    fake.hub = json{{"id", again["hub"]}, {"answer", -1}, {"shown", false}, {"withdrawn", "busy"}};
+    Poll(service, fake, ops);
+    choices = Events(log, "npc.choice");
+    Check("review 8: a hub the game withdrew ends with npc.choice {withdrawn, choices_busy}",
+          choices.size() == 2 && choices[1]["data"]["withdrawn"] == true && choices[1]["data"]["reason"] == "choices_busy" && !service.Status(json::object())["hub"].is_object());
+    fake.hub = json{{"id", 0}, {"answer", -1}};
+
+    // Finding 1: a pick that turns busy (or protected) is given back at once, its look taken back.
+    service.Pick(json{{"id", "E1"}}, ops);
+    fake.npcs["p1"] = json{{"who", "p1"}, {"exists", true}, {"spawned", true}, {"position", {2.0, 2.0, 0.0}}, {"busy", ""}, {"protected", false}};
+    service.Look(json{{"who", "p1"}, {"at", "v"}}, ops);
+    Poll(service, fake, ops);
+    Check("review 1: a calm pick stays", service.Status(json::object())["npcs"].size() == 2);
+    fake.npcs["p1"]["busy"] = "combat";
+    fake.calls.clear();
+    Poll(service, fake, ops);
+    const auto autos = Events(log, "npc.auto_released");
+    Check("review 1: a pick that starts fighting is given back (look off, left to its AI, never removed)",
+          !autos.empty() && autos.back()["data"]["who"] == "p1" && autos.back()["data"]["reason"] == "npc_busy" && fake.Called("look p1 off") && fake.Called("release p1 leave"));
+    service.Pick(json{{"id", "E1"}}, ops);
+    fake.npcs["p2"] = json{{"who", "p2"}, {"exists", true}, {"spawned", true}, {"position", {2.0, 2.0, 0.0}}, {"busy", ""}, {"protected", true}};
+    Poll(service, fake, ops);
+    Check("review 1: a pick that turns protected is given back", Events(log, "npc.auto_released").back()["data"]["reason"] == "npc_protected");
+    const auto p3 = service.Pick(json{{"id", "E1"}}, ops)["who"].get<std::string>();
+    Check("review 1: picks are never moved, placed, turned or removed",
+          CodeOf([&] { service.Place(json{{"who", p3}, {"at", json::array({0, 1, 0})}}, ops); }) == "not_ours" &&
+              CodeOf([&] { service.Move(json{{"who", p3}, {"to", "v"}}, ops); }) == "not_ours" &&
+              CodeOf([&] { service.Turn(json{{"who", p3}, {"to", "v"}}, ops); }) == "not_ours" &&
+              CodeOf([&] { service.Release(json{{"who", p3}, {"how", "despawn"}}, ops); }) == "bad_params");
+}
 } // namespace
 
 int RunNpcUnitTests()
@@ -657,5 +752,6 @@ int RunNpcUnitTests()
     ReleaseTests();
     DirectorTests();
     StagingTests();
+    ReviewTests();
     return gNpcFailures;
 }
