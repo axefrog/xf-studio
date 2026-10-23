@@ -578,15 +578,17 @@ export class Policies {
         k.endEdge(e.id, k.now);
         corrected = true;
       }
-      if (!quiet || corrected) this.sim.logNow({ w, proc: 'reconcile', kind: 'correction', reason: 'game-dead', refs: [person] });
+      // a reading with no earlier one is the game stating its state (a first reading, or a restatement after a load): it is logged only if it
+      // corrected something, so a reload that restates what was handled leaves the log as it was
+      if (corrected || (!quiet && old !== undefined && old !== value)) this.sim.logNow({ w, proc: 'reconcile', kind: 'correction', reason: 'game-dead', refs: [person] });
     } else if (slot === 'affiliation' && value !== old) {
       for (const e of k.groups.memberships(person)) {
         k.endEdge(e.id, k.now);
         corrected = true;
       }
-      this.sim.logNow({ w, proc: 'reconcile', kind: 'correction', reason: 'game-moved', refs: [person] });
+      if (corrected || old !== undefined) this.sim.logNow({ w, proc: 'reconcile', kind: 'correction', reason: 'game-moved', refs: [person] });
     } else if (slot === 'quest-linked') {
-      this.sim.logNow({ w, proc: 'reconcile', kind: 'correction', reason: 'game-fact', refs: [person] });
+      if (old !== undefined && value !== old) this.sim.logNow({ w, proc: 'reconcile', kind: 'correction', reason: 'game-fact', refs: [person] });
     }
     if (corrected) this.stats.corrections++;
     this.sim.divergence.noteReading(person, slot);
