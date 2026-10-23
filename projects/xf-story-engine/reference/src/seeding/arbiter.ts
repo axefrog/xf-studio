@@ -8,7 +8,7 @@ import type { Contribution, Form, GameTime, Id, Region } from '../types.ts';
 import { ceilingOf } from '../settings.ts';
 import { bound, playOf } from './doc.ts';
 import { applyEffects } from './effects.ts';
-import { evalPred, matchPattern, roleVerdict } from './eval.ts';
+import { evalPred, gameTick, matchPattern, roleVerdict } from './eval.ts';
 import { claimWins, claimsConflict, effective, verdictOnNode } from './cast.ts';
 import * as ids from './ids.ts';
 import type { Instance, Layer2 } from './layer2.ts';
@@ -155,6 +155,25 @@ export function submitDelivery(l2: Layer2, inst: Instance, beat: string | undefi
   return d;
 }
 
+/**
+ * An in-scene offer whose scene has ended is dropped, whether it is still queued, released or displayed and unanswered (S2 section 8.3):
+ * the reason is "the scene ended", and its beat is skipped as rejected. Returns whether anything was dropped.
+ */
+export function dropEndedScenes(l2: Layer2, inst: Instance): boolean {
+  let any = false;
+  for (const d of inst.st.deliveries) {
+    if (!d.inScene || !d.beat) continue;
+    if (d.state !== 'queued' && d.state !== 'released' && d.state !== 'displayed') continue;
+    if (sceneRunning(inst, d.beat)) continue;
+    d.state = 'withdrawn';
+    l2.record(inst, 'expired', { delivery: d.id, why: 'the scene ended' });
+    const rt = inst.st.beats[d.beat];
+    if (rt && !isFinal(rt.state)) skipBeat(l2, inst, d.beat, 'rejected', 'the scene ended');
+    any = true;
+  }
+  return any;
+}
+
 /** Withdraw every pending (queued, never released) delivery of an instance; a cancellation, sending nothing to V. */
 export function withdrawPending(l2: Layer2, inst: Instance, keepClosing = true): void {
   for (const d of inst.st.deliveries) {
@@ -228,7 +247,7 @@ export function arbiterStep(l2: Layer2, s: number): void {
   for (const { inst, d } of allDeliveries(l2)) {
     if (d.state !== 'queued' || d.stopped) continue;
     // The total attempt bound (S2 section 8.5): one bound per logical offer, across channels and reloads.
-    if (d.what === 'offer' && !d.pull && d.attempts >= l2.tun.maxAttempts) {
+    if (d.what === 'offer' && !d.pull && !d.inScene && d.attempts >= l2.tun.maxAttempts) {
       d.stopped = true;
       l2.record(inst, 'expired', { delivery: d.id, why: 'the total attempt bound was reached: the offer waits for pull' });
       continue;
@@ -243,15 +262,8 @@ export function arbiterStep(l2: Layer2, s: number): void {
     const closing = d.what === 'closing' || d.what === 'coda' || d.what === 'news';
     // An offer made inside a running scene is part of that scene's content, not a new push: it skips every gate (S2 section 8.3).
     if (d.inScene) {
-      // ...but only while the scene it belongs to is still running: a scene that ended takes its offer with it.
-      if (d.beat && !sceneRunning(inst, d.beat)) {
-        d.state = 'withdrawn';
-        l2.record(inst, 'expired', { delivery: d.id, why: 'the scene ended' });
-        const rtS = inst.st.beats[d.beat];
-        if (rtS && rtS.state === 'available') skipBeat(l2, inst, d.beat, 'omitted', 'the scene ended');
-        l2.queueReeval(inst, 'scene ended');
-        continue;
-      }
+      // It is not a push, so it is not counted towards the attempt bound, and it is released while its scene runs: a scene that
+      // ended took its offer with it before this point (`dropEndedScenes`, run by `expirations`).
       const ch0 = l2.reg.channels.get(channel);
       cands.push({ inst, d, frag, channel, cls: ch0?.class ?? d.timing.class, score: Number.POSITIVE_INFINITY, tie: ids.arbTie(l2.worldSeed, d.id) });
       continue;
@@ -266,7 +278,7 @@ export function arbiterStep(l2: Layer2, s: number): void {
     for (const a of forbidden(d)) if (asp.has(a)) blocked = true;
     if (blocked) continue;
     // Gate 3: the session state and the away overlay.
-    if (!sessionAllows(l2, d, cls)) continue;
+    if (!sessionAllows(l2, d, cls, inst)) continue;
     if (cls !== 0 && !d.pull) {
       // Gates 4 to 6 apply to the rest.
       if (s - A.lastRelease < spacing) continue;
@@ -316,13 +328,36 @@ function pickContentChannel(l2: Layer2, inst: Instance, d: Delivery): ChannelId 
 
 // ---- the session (S2 section 8.2) ----
 
-function sessionAllows(l2: Layer2, d: Delivery, cls: number): boolean {
+/**
+ * The seed V was last attending: the one with the most recent receipt (S2 section 8.2). Receipts carry the cumulative play time, so the
+ * answer does not depend on the session. Ties go to the lower Id.
+ */
+export function lastAttendedSeed(l2: Layer2): Id | undefined {
+  let best: { seed: Id; at: number } | undefined;
+  for (const inst of l2.all()) {
+    for (const r of inst.st.receipts) {
+      if (r.grade === 'ambient') continue;
+      if (!best || r.playTotal > best.at || (r.playTotal === best.at && inst.id < best.seed)) best = { seed: inst.id, at: r.playTotal };
+    }
+  }
+  return best?.seed;
+}
+
+/** Whether a delivery is the one cue `resituating` allows: from the last-attended seed, or, with none, a class-0 hook (S2 section 8.2). */
+function isResituatingCue(l2: Layer2, inst: Instance, cls: number): boolean {
+  if (cls > 2) return false;
+  const last = lastAttendedSeed(l2);
+  return last === undefined ? cls === 0 : inst.id === last;
+}
+
+function sessionAllows(l2: Layer2, d: Delivery, cls: number, inst: Instance): boolean {
   const A = l2.arbiter;
   if (l2.port.away() && cls > 1) return false;
   switch (A.session) {
     case 'settling': return d.pull;
     case 'returning': return cls <= 1;
-    case 'resituating': return cls === 0 || (cls <= 2 && !A.cueReleased);
+    // Class-0 deliveries pass; otherwise only the cue passes, and only once.
+    case 'resituating': return cls === 0 || (!A.cueReleased && isResituatingCue(l2, inst, cls));
     default: return true;
   }
 }
@@ -353,18 +388,25 @@ function updateSession(l2: Layer2, s: number): void {
 // ---- expiry, lapse and timeouts ----
 
 function expirations(l2: Layer2, s: number): void {
+  for (const inst of l2.live()) {
+    if (dropEndedScenes(l2, inst)) l2.queueReeval(inst, 'scene ended');
+    // Play-clock wake-ups are checked here, by the arbiter's step (S2 section 4.3).
+    if (inst.st.wakeups.some((w) => w.clock === 'play' && w.at <= l2.playTotal())) l2.queueReeval(inst, 'wake', { time: l2.k.now, reason: 'wake' });
+  }
   for (const { inst, d } of allDeliveries(l2)) {
     if (isTerminal(inst.st.state) && d.what !== 'closing' && d.what !== 'coda' && d.what !== 'news' && d.what !== 'notice') continue;
     if (d.state === 'queued' && !d.stopped) {
       const closing = d.what === 'closing' || d.what === 'coda' || d.what === 'news';
-      const waited = d.timing.maxWait.clock === 'play' ? s - d.submitted : l2.k.now - d.submittedGame;
+      const waited = d.timing.maxWait.clock === 'play' ? s - d.submitted : gameTick(l2) - d.submittedGame;
       const win = d.windowClose && inst.st.releaseWindow !== undefined && inst.st.latches.includes(inst.st.releaseWindow);
-      if (!closing && !d.pull && (waited >= d.timing.maxWait.s || win)) expireQueued(l2, inst, d);
+      if (!closing && !d.pull && (waited >= d.timing.maxWait.s || win)) { expireQueued(l2, inst, d); l2.queueReeval(inst, 'expired'); }
     } else if (d.state === 'released' && d.releasedAt !== undefined) {
       const persistent = d.provenance.channel !== '' && l2.reg.channels.get(d.provenance.channel)?.kind === 'persistent';
-      if (persistent && s - d.releasedAt >= l2.tun.displayTimeoutPersistent) missed(l2, inst, d, 'timed out unseen');
+      if (persistent && s - d.releasedAt >= l2.tun.displayTimeoutPersistent) { missed(l2, inst, d, 'timed out unseen'); l2.queueReeval(inst, 'missed'); }
     } else if (d.state === 'displayed' && d.what === 'offer' && d.lapseAt !== undefined && s >= d.lapseAt) {
       lapse(l2, inst, d);
+      // The lapse changed beat and seed states: the instance is evaluated again, so the new state's wake-ups are installed (L2-03).
+      l2.queueReeval(inst, 'lapse');
     }
   }
 }
@@ -391,10 +433,10 @@ function expireQueued(l2: Layer2, inst: Instance, d: Delivery): void {
 function resubmit(l2: Layer2, inst: Instance, old: Delivery): Delivery | undefined {
   if (!old.beat) return undefined;
   const frag = old.fragment ? fragmentOf(inst, old.fragment) : undefined;
-  const d = submitDelivery(l2, inst, old.beat, frag, { what: old.what, content: old.content as ContentRef, pull: old.pull });
+  const d = submitDelivery(l2, inst, old.beat, frag, { what: old.what, content: old.content as ContentRef, pull: old.pull, ...(old.inScene ? { inScene: true } : {}) });
   d.attempts = old.attempts;
   d.tried = [...old.tried];
-  if (d.attempts >= l2.tun.maxAttempts) {
+  if (d.attempts >= l2.tun.maxAttempts && !d.inScene) {
     d.stopped = true;
     l2.record(inst, 'expired', { delivery: d.id, why: 'the total attempt bound was reached: the offer waits for pull' });
   }
@@ -453,7 +495,10 @@ function setBeatState(l2: Layer2, inst: Instance, beat: string, state: BeatRunti
   const rt = inst.st.beats[beat]!;
   rt.state = state;
   rt.since = l2.k.now;
-  if (isFinal(state) || state === 'deferred') rt.finalAt = l2.k.now;
+  if (isFinal(state) || state === 'deferred') {
+    rt.finalAt = l2.k.now;
+    rt.finalAtPlay = l2.playTotal();
+  }
   l2.record(inst, 'beat', { beat, to: state });
 }
 
@@ -543,7 +588,7 @@ function prepareAndRelease(l2: Layer2, inst: Instance, d: Delivery, channel: Cha
   }
   if (d.fragment) d.responses = selectResponses(l2, inst, d);
   if (cls >= 2) d.retractUntil = l2.arbiter.play + l2.tun.retractWindow;
-  if (cls <= 2 && cls !== 0 && l2.arbiter.session === 'resituating') l2.arbiter.cueReleased = true;
+  if (l2.arbiter.session === 'resituating' && !closing && isResituatingCue(l2, inst, cls)) l2.arbiter.cueReleased = true;
   l2.arbiter.log.push({ at: l2.arbiter.play, delivery: d.id, seed: inst.id, class: cls, channel, score, delta: 0 });
   l2.record(inst, 'release', { delivery: d.id, channel, class: cls, what: d.what });
   l2.hooks.onRelease?.(hookInputs(l2, inst, d, cls));
@@ -743,7 +788,12 @@ function upsertReceipt(l2: Layer2, inst: Instance, d: Delivery, r: DisplayReport
   if (d.beat) rec.beat = d.beat;
   rec.what = d.what;
   if (d.fragment) rec.fragment = d.fragment;
-  if (GRADE[r.grade] >= GRADE[rec.grade]) rec.grade = r.grade;
+  // A grade that is raised is stamped with the time it was reached (S2 section 10.1a): the receipt records when the retained grade was.
+  if (GRADE[r.grade] > GRADE[rec.grade]) {
+    rec.grade = r.grade;
+    rec.at = l2.k.now;
+    rec.playTotal = l2.playTotal();
+  }
   if (!rec.channels.includes(r.channel)) rec.channels = [...rec.channels, r.channel].sort();
   if (r.cue) rec.cue = { ...rec.cue, ...Object.fromEntries(Object.entries(r.cue).filter(([, v]) => v !== undefined)) };
   if (!cur) st.receipts.push(rec);
@@ -823,7 +873,9 @@ export function respondTo(l2: Layer2, id: Id, resp: Response): boolean {
     participants: [{ who: k.vId, role: 'actor' }], witnesses: [k.vId], causes: d.offerEvent ? [d.offerEvent] : [],
   });
   k.events.makeCanon(ev, 'observed', inst.id);
-  l2.record(inst, 'response', { event: ev, kind: kindStr, offer: d.offerEvent, sincePlay: l2.arbiter.play - (d.displayedAt ?? l2.arbiter.play), beat });
+  const answering = answerTemplates(l2, inst, d, kindStr);
+  if (answering.length > 0) d.responses = [...new Set([...(d.responses ?? []), ...answering])];
+  l2.record(inst, 'response', { event: ev, kind: kindStr, offer: d.offerEvent, sincePlay: l2.arbiter.play - (d.displayedAt ?? l2.arbiter.play), beat, ...(answering.length > 0 ? { templates: answering } : {}) });
 
   if (action) {
     applyEffects(l2, inst, action.writes, { origin: 'action', tag: `${beat}:${d.n}:a` });
@@ -832,8 +884,10 @@ export function respondTo(l2: Layer2, id: Id, resp: Response): boolean {
   } else if (decline) {
     applyEffects(l2, inst, decline.writes, { origin: 'decline', tag: `${beat}:${d.n}:d` });
     // Its response content is delivered, unless a beat of the seed plays that same content (S2 section 7.4).
-    const playedByBeat = Object.values(st.document.beats).some((b) => playOf(b).refs.includes(typeof decline.response === 'string' ? decline.response : ''));
-    if (!playedByBeat) submitDelivery(l2, inst, beat, undefined, { what: 'reply', suffix: `decline${d.n}`, content: decline.response, pull: true });
+    if (decline.response !== undefined) {
+      const playedByBeat = Object.values(st.document.beats).some((b) => playOf(b).refs.includes(typeof decline.response === 'string' ? decline.response : ''));
+      if (!playedByBeat) submitDelivery(l2, inst, beat, undefined, { what: 'reply', suffix: `decline${d.n}`, content: decline.response, pull: true });
+    }
     setBeat(l2, inst, beat, 'done');
     if (first) transition(l2, inst, 'unattended', 'T10', `V declined with "${decline.id}"`);
   } else {
@@ -871,9 +925,31 @@ function selectResponses(l2: Layer2, inst: Instance, d: Delivery): string[] {
   const frag = d.fragment ? fragmentOf(inst, d.fragment) : undefined;
   const out: string[] = [];
   (frag?.responses ?? []).forEach((r, i) => {
+    // A template answering V's answer to an offer (a response kind) is chosen when V answers (`answerTemplates`).
+    if (typeof r.to === 'string') return;
+    const to = r.to;
     if (r.needs !== undefined && evalPred(l2, { inst, t: l2.k.now }, r.needs as Pred) !== 'yes') return;
-    const acted = l2.ledger().some((e) => e.kind === 'event' && e.grade === 'confirmed' && matchPattern(l2, inst, r.to, e.facts, false) !== null);
+    const acted = l2.ledger().some((e) => e.kind === 'event' && e.grade === 'confirmed' && matchPattern(l2, inst, to, e.facts, false) !== null);
     if (acted) out.push(`${frag!.id}#${i}`);
+  });
+  return out;
+}
+
+/** Whether a response template's `to` names V's answer: `decline:<id>`, `action:<id>`, `decline:*`, `action:*` or `any` (S2 section 2.9). */
+export function answerMatches(to: string, answer: string): boolean {
+  if (to === 'any') return true;
+  if (to === answer) return true;
+  return to.endsWith(':*') && answer.startsWith(to.slice(0, -1));
+}
+
+/** The templates of the offer's fragment that answer V's answer, whose `needs` hold now. */
+function answerTemplates(l2: Layer2, inst: Instance, d: Delivery, answer: string): string[] {
+  const frag = d.fragment ? fragmentOf(inst, d.fragment) : undefined;
+  const out: string[] = [];
+  (frag?.responses ?? []).forEach((r, i) => {
+    if (typeof r.to !== 'string' || !answerMatches(r.to, answer)) return;
+    if (r.needs !== undefined && evalPred(l2, { inst, t: l2.k.now }, r.needs as Pred) !== 'yes') return;
+    out.push(`${frag!.id}#${i}`);
   });
   return out;
 }

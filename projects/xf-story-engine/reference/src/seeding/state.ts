@@ -13,7 +13,7 @@ export function emptyGlobal(): GlobalState {
 
 export function newInstanceState(
   res: CompiledResult,
-  info: { pack: string; template: string; version: number; by: 'pack' | 'director' | 'plugin'; layer: Layer; decision?: Id; sowSeq: number; now: GameTime },
+  info: { pack: string; template: string; version: number; by: 'pack' | 'director' | 'plugin'; layer: Layer; decision?: Id; sowSeq: number; now: GameTime; playTotal: number },
 ): InstanceState {
   const roles: Record<string, RoleState> = {};
   for (const key of Object.keys(res.seed.roles)) roles[key] = { committed: false, attempt: 0, ladder: { cursor: 0, relaxed: [] } };
@@ -27,7 +27,7 @@ export function newInstanceState(
     template: { pack: info.pack, id: info.template, version: info.version },
     source: { by: info.by, layer: info.layer, ...(info.decision !== undefined ? { decision: info.decision } : {}) },
     sowSeq: info.sowSeq, document: res.seed, structureHash: res.structureHash, closure: res.closure,
-    state: 'sown', since: info.now, entered: { sown: info.now }, latches: [], roles, facts, beats, draws: res.draws, consumed: [],
+    state: 'sown', since: info.now, entered: { sown: info.now }, enteredPlay: { sown: info.playTotal }, latches: [], roles, facts, beats, draws: res.draws, consumed: [],
     deliveries: [], receipts: [], wakeups: [], record: [], nextEntry: 0, committed: false,
     world: (res.seed.world ?? []).map(() => ({ installed: false, ended: false })), frames: { roles: {}, goals: {} }, edges: {}, promises,
     intersections: {}, released: false,

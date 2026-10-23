@@ -27,7 +27,7 @@ import { Arbiter, arbiterStep, displayReport, findDelivery, replyTo, respondTo, 
 import { completeBeat } from './beats.ts';
 import { marksAt } from './effects.ts';
 import { evalPred, explainPred, ledger, type Explain, type LedgerEntry } from './eval.ts';
-import { onBoundary, onRelevance, openWatcher, runWork, sowTemplate, type SowOpts } from './engine.ts';
+import { onBoundary, onRelevance, openWatcher, runWork, sowReads, sowTemplate, type SowOpts } from './engine.ts';
 import { detectIntersections } from './intersect.ts';
 import { flush, onLoad, syncGlobal, syncRecord } from './persist.ts';
 import { transition } from './run.ts';
@@ -285,6 +285,8 @@ export class Layer2 implements Layer2Hook {
 
   /** A setting changed, a seed changed state, or something was exposed: queue the live instances that read it. */
   notifyReaders(kind: 'settings' | 'seeds' | 'exposure', except?: Instance): void {
+    // The packs whose sowing predicates read it are told too, so a template whose `sow` turns yes is sown without an unrelated trigger.
+    for (const [pid, index] of this.packs) if (sowReads(index)[kind]) this.sowQueue.add(pid);
     for (const i of this.live()) {
       if (i === except) continue;
       const r = this.readsOf(i);

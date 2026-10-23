@@ -152,7 +152,8 @@ function expandLadder(seed: SeedInput, p: LadderParams): Expansion {
   sourceMap['facts.rung'] = 'profile.params.rungs';
   sourceMap['facts.exit'] = 'profile.params.exits';
   for (const b of p.boundaries ?? []) {
-    facts[b.fact] = { authoredOnly: true, initial: 0 };
+    // A boundary is persistent (A.2 step 1): lasting, never cleared, and it only rises.
+    facts[b.fact] = { authoredOnly: true, initial: 0, persist: 'lasting' };
     sourceMap[`facts.${b.fact}`] = 'profile.params.boundaries';
   }
 
@@ -164,17 +165,15 @@ function expandLadder(seed: SeedInput, p: LadderParams): Expansion {
       findings.push(err('profile', `The boundary "${b.fact}" is set by the beat "${b.by}", which the seed does not have.`, 'profile.params.boundaries'));
       continue;
     }
-    own[b.by] = { ...target, leaves: [...(target.leaves ?? []), { fact: b.fact, set: b.set }] };
+    own[b.by] = { ...target, leaves: [...(target.leaves ?? []), { fact: b.fact, set: b.set, persist: 'lasting' }] };
   }
 
-  // End: the top rung and its beats are final, or an exit has been taken.
+  // End: the top rung and its beats are final, or an exit has been taken. Only the exit beats write `exit`, when they complete
+  // (A.2 step 3), so `exit > 0` means an exit beat is done, and the end waits for the exit's content (A.2 step 7, A.4).
   const top: Pred = p.intimate
     ? { all: [{ seedFact: rungKey, op: 'eq', value: n - 1 }, { beat: 'intimate', state: ['done', 'skipped'] }] }
     : { all: [{ seedFact: rungKey, op: 'eq', value: n - 1 }, { beat: `offer-${n - 1}`, state: ['done'] }] };
-  // An exit ends the ladder once its content is done (A.2 step 7: "any exit beat is `done`"), not when the answer is written:
-  // otherwise a decline would end the seed before its exit could play (SPEC-NOTES 59).
-  const exitDone: Pred = { any: ['exit-decline', 'exit-stay', 'exit-lapse'].map((b) => ({ beat: b, state: ['done'] })) as Pred[] };
-  const end: Pred = { any: [top, { all: [{ seedFact: exitKey, op: 'gt', value: 0 }, exitDone] }] };
+  const end: Pred = { any: [top, { seedFact: exitKey, op: 'gt', value: 0 }] };
   const unattended = { after: p.lapseAfter, outcome: [{ fact: exitKey, set: 3 }] };
   const turns = [{ level: 'concern' as const, who: withRole, kind: 'tie' as const, what: { seedFact: rungKey, op: 'gt', value: 0 } as PredInput }];
   const start = ['offer-1'];

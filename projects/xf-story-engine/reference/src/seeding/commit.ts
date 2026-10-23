@@ -30,10 +30,11 @@ function installStandIn(l2: Layer2, inst: Instance, node: Id, constraints: Predi
   }
 }
 
-function castOf(inst: Instance, ref: string, v: Id): Id | undefined {
+/** The node a reference names: V, an Id, a role being committed in this batch (staged, not yet in the layer-2 state), or a role already cast. */
+function castOf(inst: Instance, ref: string, v: Id, staged: Record<string, Id> = {}): Id | undefined {
   if (ref === 'v') return v;
   if (/^[0-9a-f]{32}$/.test(ref)) return ref;
-  return inst.st.roles[ref]?.cast;
+  return staged[ref] ?? inst.st.roles[ref]?.cast;
 }
 
 /**
@@ -61,13 +62,13 @@ export function commitRoles(l2: Layer2, inst: Instance, roles: string[], cause: 
     }
     if (node === undefined) continue;
     nodes[r] = node;
-    const edge = k.addEdge({ type: 'core:cast', from: inst.id, to: node, data: { role: r }, cause });
+    const edge = k.addEdge({ type: 'core:cast', from: inst.id, to: node, data: { role: r }, cause, id: ids.castEdgeId(inst.id, r, node, now, cause) });
     const roleFrame = st.frames.roles[r];
     if (roleFrame) k.frames.setFocus(roleFrame, { nodes: [node] }, inst.id);
     let goalFrame: Id | undefined;
     if (role.goal) {
       const effects = role.goal.effects.flatMap((e) => {
-        const on = castOf(inst, e.on, k.vId) ?? (nodes[e.on] as Id | undefined);
+        const on = castOf(inst, e.on, k.vId, nodes);
         return on === undefined ? [] : [{ on, effect: e.effect }];
       });
       goalFrame = ids.goalFrameId(inst.id, r);
@@ -79,7 +80,7 @@ export function commitRoles(l2: Layer2, inst: Instance, roles: string[], cause: 
     for (const a of role.authored ?? []) {
       if ('belief' in a) {
         const b = (a as BeliefDecl).belief;
-        const about = castOf(inst, b.about, k.vId);
+        const about = castOf(inst, b.about, k.vId, nodes);
         if (about === undefined) continue;
         const belief: Parameters<typeof k.beliefs.set>[0] = {
           believer: node, subject: about, path: b.path, confidence: b.confidence ?? 1, evidence: [inst.id],
@@ -90,7 +91,7 @@ export function commitRoles(l2: Layer2, inst: Instance, roles: string[], cause: 
         k.beliefs.set(belief);
       } else {
         const e = (a as EdgeDecl).edge;
-        const to = castOf(inst, e.to, k.vId);
+        const to = castOf(inst, e.to, k.vId, nodes);
         if (to === undefined) continue;
         k.addEdge({ type: e.type, from: node, to, attrs: (e.attrs ?? {}) as never, cause: inst.id });
       }
@@ -98,7 +99,7 @@ export function commitRoles(l2: Layer2, inst: Instance, roles: string[], cause: 
     // The world requirements that name this role and start at commit.
     (doc.world ?? []).forEach((w, i) => {
       if (st.world[i]?.installed || fromOf(w) !== 'commit' || !('role' in w.target) || w.target.role !== r) return;
-      const ins = installRequirement(l2, inst, i, k.batch ?? undefined);
+      const ins = installRequirement(l2, inst, i, k.batch ?? undefined, undefined, false, nodes);
       if (ins) {
         installed.push(ins);
         commits.push((x) => { x.st.world[i] = { contribution: ins.contribution, installed: true, ended: false, from: now }; });
@@ -121,7 +122,7 @@ export function commitRoles(l2: Layer2, inst: Instance, roles: string[], cause: 
   if (first) {
     (doc.world ?? []).forEach((w, i) => {
       if (st.world[i]?.installed || fromOf(w) !== 'commit' || 'role' in w.target) return;
-      const ins = installRequirement(l2, inst, i, k.batch ?? undefined);
+      const ins = installRequirement(l2, inst, i, k.batch ?? undefined, undefined, false, nodes);
       if (ins) {
         installed.push(ins);
         commits.push((x) => { x.st.world[i] = { contribution: ins.contribution, installed: true, ended: false, from: now }; });

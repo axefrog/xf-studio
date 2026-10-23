@@ -34,6 +34,14 @@ export const watchFrameId = (seed: Id): Id => mintedId(seed, seed, 'frame:watch'
 export const roleFrameId = (seed: Id, role: string): Id => mintedId(seed, seed, `frame:role:${role}`);
 export const goalFrameId = (seed: Id, role: string): Id => mintedId(seed, seed, `frame:goal:${role}`);
 
+/**
+ * A cast edge's Id: it names the role, so two roles bound to the same node have two edges, and the commit (the time and the delivery that
+ * committed it), so a role committed again after it was lost has a new one (S2 section 5.3, L2-06). The kernel's own edge Id leaves the
+ * edge data, and so the role, out.
+ */
+export const castEdgeId = (seed: Id, role: string, node: Id, at: number, cause: Id): Id =>
+  H(hs('cast-edge'), hid(seed), hs(role), hid(node), hi(at), hid(cause));
+
 /** A stand-in's node: `H("mint", seedId, seedId, "role:" + key)` (S2 section 5.4). */
 export const standInNode = (seed: Id, role: string): Id => mintedId(seed, seed, `role:${role}`);
 

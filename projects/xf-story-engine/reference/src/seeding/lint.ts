@@ -13,7 +13,7 @@ import { atoms, bound, effectSites, fragmentSites, playOf, predSites, type Effec
 import type { PackIndex } from './packs.ts';
 import { barredRoles } from './floors.ts';
 import { L2Registry, type PortReport } from './registries.ts';
-import { walkPred } from './pred.ts';
+import { compare, walkPred } from './pred.ts';
 import type {
   CompiledSeed, EffectDecl, Finding, FactsTable, Fragment, Pack, Pred, Role, RolePredicate, TextUnit,
 } from './types.ts';
@@ -57,6 +57,35 @@ class Out {
   warn(code: string, message: string, at?: string, extra?: { engine?: boolean; notChecked?: string; fix?: string }): void {
     this.add('warning', code, message, at, extra);
   }
+}
+
+/**
+ * The beats a start beat can lead to (S2 section 7.1): a beat with chain links is reached through them (`join` decides how many),
+ * a beat a failure leads to is reached when the failing beat is, and a beat with no chain links that is neither in `start` nor led to
+ * becomes available on its fragment's `needs` alone, so it counts as reachable. The lint's L-44 and the fit report share this.
+ */
+export function reachableBeats(c: CompiledSeed): Set<string> {
+  const reach = new Set<string>(c.start);
+  const ledBy = (key: string): string[] => Object.entries(c.beats).filter(([, b]) => (b.failure ?? []).some((f) => f.leadsTo === key)).map(([k]) => k);
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const [k, b] of Object.entries(c.beats)) {
+      if (reach.has(k)) continue;
+      const srcs = (b.links ?? []).filter((l) => 'because' in l || 'then' in l).map((l) => ('because' in l ? l.because : (l as { then: string }).then));
+      const led = ledBy(k);
+      let ok: boolean;
+      if (srcs.length === 0) ok = led.length === 0 || led.some((s) => reach.has(s));
+      else {
+        ok = (b.join ?? 'all') === 'any' ? srcs.some((s) => reach.has(s)) : srcs.every((s) => reach.has(s));
+        if (ok && led.length > 0) ok = led.some((s) => reach.has(s));
+      }
+      if (ok) {
+        reach.add(k);
+        changed = true;
+      }
+    }
+  }
+  return reach;
 }
 
 /** Every role a predicate argument names with `{ role }`. */
@@ -231,23 +260,7 @@ export function lintSeed(c: CompiledSeed, ctx: LintCtx): Finding[] {
   }
   if (live > ctx.maxLive) out.warn('L-04', `Up to ${live} beats of this seed can be live at once; the limit is ${ctx.maxLive}. The engine will hold the extra beats back.`, 'beats');
 
-  const reach = new Set<string>(c.start);
-  for (let changed = true; changed; ) {
-    changed = false;
-    for (const [k, b] of Object.entries(c.beats)) {
-      if (reach.has(k)) continue;
-      const ls = b.links ?? [];
-      const srcs = ls.filter((l) => 'because' in l || 'then' in l).map((l) => ('because' in l ? l.because : (l as { then: string }).then));
-      let ok: boolean;
-      if (ls.length === 0) ok = false;
-      else if (srcs.length === 0) ok = true;
-      else ok = (b.join ?? 'all') === 'any' ? srcs.some((s) => reach.has(s)) : srcs.every((s) => reach.has(s));
-      if (ok) {
-        reach.add(k);
-        changed = true;
-      }
-    }
-  }
+  const reach = reachableBeats(c);
   for (const k of beatKeys) if (!reach.has(k)) out.warn('L-44', `No path from the start reaches the beat "${k}".`, `beats.${k}`);
 
   // ---- L-05, L-06: facts and choices ----
@@ -270,6 +283,23 @@ export function lintSeed(c: CompiledSeed, ctx: LintCtx): Finding[] {
     }
     return ps;
   };
+  // The responses the seed's links read, per offer beat: `action:<id>` names one action; `action` and `action:*` name them all ('*').
+  const namedResponses = (beat: string): Set<string> => {
+    const named = new Set<string>();
+    for (const b of Object.values(c.beats)) {
+      for (const l of b.links ?? []) {
+        if (!('because' in l) || !l.on) continue;
+        walkPred(l.on, (n) => {
+          if (typeof n === 'string' || !('response' in n) || n.response !== beat) return;
+          for (const x of n.is) {
+            if (x === 'action' || x === 'action:*') named.add('*');
+            else if (x.startsWith('action:')) named.add(x);
+          }
+        });
+      }
+    }
+    return named;
+  };
   const consumed = (fact: string): boolean => {
     const decl = c.facts?.[fact];
     const consumers = decl?.route?.consumers ?? [];
@@ -290,14 +320,25 @@ export function lintSeed(c: CompiledSeed, ctx: LintCtx): Finding[] {
     const o = frag.offer;
     if (!o || o.choice !== 'consequential') continue;
     const at = `fragments.${frag.id}.offer`;
-    // S2 section 11.1 (L-06): each action writes a distinct value of a seed fact that something reads. Writes the actions
-    // share, or to facts nothing reads, are side effects and do not count towards that, nor against it.
-    const facts = new Set(o.actions.flatMap((a) => (a.writes ?? []).flatMap((w) => ('fact' in w ? [w.fact] : []))));
-    const unconsumed = [...facts].filter((f) => !consumed(f));
-    const pairs = o.actions.map((a) => new Set((a.writes ?? []).flatMap((w) => ('fact' in w && w.set !== undefined && consumed(w.fact) ? [`${w.fact}=${w.set}`] : []))));
-    const ok = pairs.every((mine, i) => [...mine].some((p) => pairs.every((other, j) => j === i || !other.has(p))));
-    if (o.actions.length < 2 || !ok) {
-      out.error('L-06', `The offer in "${beat}" is a consequential choice, but its actions do not each write a different value of a fact something reads${unconsumed.length ? ` (nothing reads: ${unconsumed.join(', ')})` : ''}. A choice that changes nothing is flavour.`, at, { fix: 'Give each action a "set" on a seed fact with a consumer, or mark the choice "flavour".' });
+    // S2 section 2.9 (L-06): every action has a consequence that something reads, either a write to a seed fact with a consumer or a
+    // link whose `on` reads the response ({ response: beat, is: [action:<id>] }); and no two actions have the same consequence:
+    // their writes, as sets of fact = value pairs, differ, or a response link tells them apart.
+    const named = namedResponses(beat);
+    const writesOf = (a: (typeof o.actions)[number]): string[] => (a.writes ?? []).flatMap((w) => ('fact' in w ? [w.set !== undefined ? `${w.fact}=${w.set}` : `${w.fact}+=${w.add ?? 0}`] : []));
+    const readableOf = (a: (typeof o.actions)[number]): string[] => [
+      ...(a.writes ?? []).flatMap((w) => ('fact' in w && consumed(w.fact) ? [w.set !== undefined ? `${w.fact}=${w.set}` : `${w.fact}+=${w.add ?? 0}`] : [])),
+      ...(named.has(`action:${a.id}`) ? [`response:${a.id}`] : named.has('*') ? ['response:*'] : []),
+    ];
+    const withoutConsequence = o.actions.filter((a) => readableOf(a).length === 0).map((a) => a.id);
+    const fullKey = (a: (typeof o.actions)[number]): string => JSON.stringify([...new Set([...writesOf(a), ...(named.has(`action:${a.id}`) ? [`response:${a.id}`] : named.has('*') ? ['response:*'] : [])])].sort());
+    const keys = o.actions.map(fullKey);
+    const same = o.actions.filter((a, i) => keys.indexOf(keys[i]!) !== i || keys.lastIndexOf(keys[i]!) !== i).map((a) => a.id);
+    if (o.actions.length < 2) {
+      out.error('L-06', `The offer in "${beat}" is a consequential choice with fewer than two actions. A choice that changes nothing is flavour.`, at, { fix: 'Give it a second action, or mark the choice "flavour".' });
+    } else if (withoutConsequence.length > 0) {
+      out.error('L-06', `The offer in "${beat}" is a consequential choice, but ${withoutConsequence.map((x) => `"${x}"`).join(', ')} ${withoutConsequence.length === 1 ? 'has' : 'have'} no consequence anything reads. An action needs a write to a seed fact with a consumer, or a link whose "on" reads its response.`, at, { fix: 'Give each action a "set" on a seed fact with a consumer, or a link that reads its response; or mark the choice "flavour".' });
+    } else if (same.length > 0) {
+      out.error('L-06', `The offer in "${beat}" is a consequential choice, but ${same.map((x) => `"${x}"`).join(', ')} ${same.length === 1 ? 'has' : 'have'} the same consequence as another action. Their writes have to differ, or a response link has to tell them apart.`, at, { fix: 'Write different values, or read each action\'s response in a link.' });
     }
   }
 
@@ -371,10 +412,17 @@ export function lintSeed(c: CompiledSeed, ctx: LintCtx): Finding[] {
       out.error('L-41', `The ${b.kind} beat "${k}" has a "role", so a short form could drop it. These beats can never be dropped.`, `beats.${k}.role`);
     }
     if (b.inScene) {
-      const follows = (b.links ?? []).some((l) => 'because' in l);
+      // An in-scene offer links `because` a beat whose fragment has the same `scene` label (S2 section 2.8, L-131a).
+      const sceneOf = (beat: string): string[] => [...new Set(playOf(c.beats[beat]!).refs.map((r) => fragOf(r)?.scene ?? ''))];
+      const mine = sceneOf(k);
       const offers = playOf(b).refs.some((r) => !!fragOf(r)?.offer);
-      if (!follows || !offers) {
-        out.error('L-131a', `The in-scene beat "${k}" has to be an offer that follows a running beat of the same scene: link it with "because" to that beat.`, `beats.${k}.inScene`);
+      const sameScene = mine.length === 1 && mine[0] !== '' && (b.links ?? []).some((l) => {
+        if (!('because' in l) || !beatKeys.has(l.because)) return false;
+        const theirs = sceneOf(l.because);
+        return theirs.length === 1 && theirs[0] === mine[0];
+      });
+      if (!offers || !sameScene) {
+        out.error('L-131a', `The in-scene beat "${k}" has to be an offer that links "because" a beat whose fragment has the same scene label as its own. Give both fragments the same "scene", and link them.`, `beats.${k}.inScene`);
       }
     }
     if (b.kind !== undefined && b.kind !== 'texture') {
@@ -442,7 +490,7 @@ export function lintSeed(c: CompiledSeed, ctx: LintCtx): Finding[] {
       if (!r.because || String(r.because).trim() === '') out.error('L-19', 'A response needs a "because": the concern it answers.', at);
       if (r.attribution) {
         const needsBelief = r.needs !== undefined && (() => { let hit = false; walkPred(r.needs as Pred, (n) => { if (typeof n !== 'string' && 'believes' in n && n.believes.of === 'v') hit = true; }); return hit; })();
-        const act = r.to.participant === 'v';
+        const act = typeof r.to === 'string' || r.to.participant === 'v';
         if (!needsBelief || !act || !r.reply) {
           out.error('L-52', `An attribution line needs: a "believes" test on that character's belief about V, a "because" that names an act of V's, and a reply for V that can correct it${!needsBelief ? ' (missing: the believes test)' : ''}${!act ? ' (missing: an observed act of V)' : ''}${!r.reply ? ' (missing: V\'s reply)' : ''}.`, at);
         }
@@ -592,7 +640,7 @@ export function lintSeed(c: CompiledSeed, ctx: LintCtx): Finding[] {
     if (!fade) out.error('L-99', `The explicit scene "${frag.id}" has no fade: a non-explicit form that leaves the same facts.`, `fragments.${frag.id}.implied`, { engine: true });
     else if (!canonicalEqual(effectFacts(frag.leaves), effectFacts(fade.leaves))) out.error('L-100', `"${frag.id}" and its fade "${fade.id}" leave different facts, so the seed would run differently with or without the scene.`, `fragments.${frag.id}`, { engine: true });
     for (const role of roles) if (bindsOf(beat, role) && !guaranteesAdult(c.roles[role]!)) out.error('L-99', `The explicit scene "${frag.id}" binds "${role}", who is not guaranteed to be an adult.`, `beats.${beat}`, { engine: true });
-    if (!reachedByAcceptedAction(c, beat, frags)) out.error('L-99', `The explicit scene "${frag.id}" can be reached other than by an action V accepted.`, `beats.${beat}.links`, { engine: true });
+    if (!reachedByAcceptedAction(c, beat, frags, closure.fragments)) out.error('L-99', `The explicit scene "${frag.id}" can be reached other than by an action V accepted.`, `beats.${beat}.links`, { engine: true });
   }
   for (const e of effects) {
     if (e.effect.tag?.startsWith('sex.') && e.origin !== 'action') out.error('L-98', 'An effect on V tagged sex.* has to come from an action V accepted.', e.at, { engine: true });
@@ -636,30 +684,49 @@ export function lintSeed(c: CompiledSeed, ctx: LintCtx): Finding[] {
 const effectFacts = (es: EffectDecl[] | undefined): unknown =>
   (es ?? []).map((e) => ({ ...e })).sort((a, b) => (JSON.stringify(a) < JSON.stringify(b) ? -1 : 1));
 
-/** Whether a beat is linked only from offer beats, by a condition that holds only after V accepted an action. */
-function reachedByAcceptedAction(c: CompiledSeed, beat: string, frags: Array<{ beat: string; frag: Fragment }>): boolean {
+/**
+ * Whether a beat can be reached only through an action V accepted (L-99). Every way into the beat is looked at: it is not in `start`,
+ * no failure leads to it, it is not offered again by a `reoffer`, and its chain links are such that satisfying them implies the
+ * acceptance. A link's condition is proved by its structure: an `all` is proved by any one part, an `any` by every part, and a
+ * `not`, a bare test, or any form that cannot be shown to imply the acceptance is not a proof.
+ */
+function reachedByAcceptedAction(c: CompiledSeed, beat: string, frags: Array<{ beat: string; frag: Fragment }>, all: Fragment[]): boolean {
   const b = c.beats[beat]!;
-  const links = (b.links ?? []).filter((l): l is { because: string; on?: Pred } => 'because' in l);
-  if (links.length === 0) return false;
-  return links.every((l) => {
+  if (c.start.includes(beat) || b.reoffer !== undefined) return false;
+  if (Object.values(c.beats).some((x) => (x.failure ?? []).some((f) => f.leadsTo === beat))) return false;
+  const chain = (b.links ?? []).filter((l) => 'because' in l || 'then' in l);
+  const becauseLinks = chain.filter((l): l is { because: string; on?: Pred } => 'because' in l);
+  if (becauseLinks.length === 0) return false;
+  const proves = (l: { because: string; on?: Pred }): boolean => {
     const src = frags.find((f) => f.beat === l.because);
     if (!src?.frag.offer || !l.on) return false;
-    let acts = false;
-    walkPred(l.on, (n) => {
-      if (typeof n === 'string') return;
-      if ('response' in n && n.is.every((x) => x.startsWith('action'))) acts = true;
-      if ('seedFact' in n) {
-        // The fact is written only by an offer's actions, never by a decline, the null path or a beat.
-        const wrote = (es: EffectDecl[] | undefined): boolean => (es ?? []).some((e) => 'fact' in e && e.fact === n.seedFact);
-        const o = src.frag.offer!;
-        const actionWrites = o.actions.some((a) => wrote(a.writes));
-        const otherWrites = o.decline.some((d) => wrote(d.writes)) || wrote(o.nullPath.writes) || wrote(src.frag.leaves) || wrote(c.beats[l.because]!.leaves) ||
-          Object.values(c.beats).some((x) => wrote(x.leaves));
-        if (actionWrites && !otherWrites) acts = true;
-      }
-    });
-    return acts;
-  });
+    return impliesAccepted(c, l.because, src.frag, l.on, all);
+  };
+  // `all` needs every chain link, so one proving link is enough; `any` needs only one of them, so every chain link must prove it.
+  if ((b.join ?? 'all') === 'any') return chain.every((l) => 'because' in l && proves(l));
+  return becauseLinks.some(proves);
+}
+
+/** Whether `p` being yes implies V accepted an action of the offer in `srcBeat`. */
+function impliesAccepted(c: CompiledSeed, srcBeat: string, srcFrag: Fragment, p: Pred, all: Fragment[]): boolean {
+  if (typeof p === 'string') return false;
+  if ('all' in p) return p.all.some((x) => impliesAccepted(c, srcBeat, srcFrag, x, all));
+  if ('any' in p) return p.any.length > 0 && p.any.every((x) => impliesAccepted(c, srcBeat, srcFrag, x, all));
+  if ('response' in p) return p.response === srcBeat && p.is.length > 0 && p.is.every((x) => x === 'action' || x.startsWith('action:'));
+  if ('seedFact' in p) {
+    // The test can be made true only by the offer's actions, never by a decline, the null path, another fragment, a beat or the
+    // unattended plan, and it is false before any write: a comparison that the fact's initial value already satisfies proves nothing.
+    // A write counts if it can make the test true: an `add`, or a `set` to a value the test accepts.
+    const wrote = (es: EffectDecl[] | undefined): boolean => (es ?? []).some((e) => 'fact' in e && e.fact === p.seedFact && (e.set === undefined || compare(e.set, p.op, p.value)));
+    const o = srcFrag.offer!;
+    const actionWrites = o.actions.some((a) => wrote(a.writes));
+    const otherWrites = o.decline.some((d) => wrote(d.writes)) || wrote(o.nullPath.writes) ||
+      all.some((f) => wrote(f.leaves) || (f !== srcFrag && !!f.offer && (f.offer.actions.some((a) => wrote(a.writes)) || f.offer.decline.some((d) => wrote(d.writes)) || wrote(f.offer.nullPath.writes)))) ||
+      Object.values(c.beats).some((x) => wrote(x.leaves)) || wrote(c.unattended.outcome);
+    const initial = c.facts?.[p.seedFact]?.initial ?? 0;
+    return actionWrites && !otherWrites && !compare(initial, p.op, p.value);
+  }
+  return false;
 }
 
 interface RefSite { ref: string | { todo: true; note?: string }; at: string }
@@ -681,7 +748,7 @@ function PackRefs(c: CompiledSeed, fragments: Fragment[]): RefSite[] {
       o.actions.forEach((a, i) => out.push({ ref: a.foresight, at: `${base}.offer.actions[${i}].foresight` }));
       if (o.nullPath.content) out.push({ ref: o.nullPath.content, at: `${base}.offer.nullPath.content` });
       if (o.lapse.content) out.push({ ref: o.lapse.content, at: `${base}.offer.lapse.content` });
-      o.decline.forEach((d, i) => out.push({ ref: d.response, at: `${base}.offer.decline[${i}].response` }));
+      o.decline.forEach((d, i) => { if (d.response !== undefined) out.push({ ref: d.response, at: `${base}.offer.decline[${i}].response` }); });
       if (o.retractQuietly) out.push({ ref: o.retractQuietly, at: `${base}.offer.retractQuietly` });
     }
     (f.responses ?? []).forEach((r, i) => {

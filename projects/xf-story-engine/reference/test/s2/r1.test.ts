@@ -5,8 +5,8 @@ import { describe, expect, test } from 'bun:test';
 import { mintedId } from '../../src/id.ts';
 import type { Id } from '../../src/types.ts';
 import { printPred, parsePred } from '../../src/seeding/pred.ts';
-import { LAPSE_AFTER, R1_ID, R1_PACK, r1Pack, r1Seed } from './r1.ts';
-import { clock, delivery, firstOffer, openWindow, play, playUntil, r1World, recordOf, show } from './drive.ts';
+import { LAPSE_AFTER, R1_ID, R1_PACK, r1Pack, r1Params, r1Seed } from './r1.ts';
+import { clock, delivery, firstOffer, openWindow, play, playUntil, r1World, r1WorldWith, recordOf, show } from './drive.ts';
 import { advance, makeWorld, setFact, settle, spots, takemura } from './world.ts';
 
 const stateOf = (inst: { st: { state: string } }): string => inst.st.state;
@@ -50,25 +50,32 @@ describe('SF-7: scenario R1, the decline path', () => {
     expect(w.l2.respond(offer.id, { kind: 'decline', id: 'decline' })).toBe(true);
     settle(w);
     expect(stateOf(inst)).toBe('unattended');
+    // The decline writes nothing and has no content of its own: `exit` still reads 0, and the exit beat is what plays (A.2 step 2).
+    expect(inst.st.facts.exit!.pin).toBeUndefined();
     const exit = delivery(inst, 'exit-decline', ['queued', 'released'])!;
     expect(exit).toBeDefined();
+    expect(inst.st.deliveries.filter((d) => d.what === 'reply')).toHaveLength(0);
     // The decline exit's content plays, once.
     playUntil(w, () => delivery(inst, 'exit-decline', ['released']) !== undefined);
     const played = delivery(inst, 'exit-decline', ['released'])!;
     show(w, played, 'presented');
+    // Only when the exit's content is done does `exit` read 1; the end waits for it (A.2 step 3).
+    expect(inst.st.facts.exit!.pin).toBeUndefined();
+    expect(stateOf(inst)).toBe('unattended');
     w.l2.contentCompleted(played.id);
     settle(w);
     expect(inst.st.beats['exit-decline']!.state).toBe('done');
     expect(inst.st.deliveries.filter((d) => d.beat === 'exit-decline')).toHaveLength(1);
+    expect(w.k.store.pin(inst.st.facts.exit!.pin!)!.value).toBe(1);
 
-    // The world settles it without V.
-    advance(w, 10 + LAPSE_AFTER + 600);
-    settle(w);
+    // The seed reaches its end while V is in it: T12, `resolved`, witnessed (S2 section 6.4).
     expect(stateOf(inst)).toBe('resolved');
+    expect(inst.st.record.some((r) => r.kind === 'transition' && (r.data as { row?: string }).row === 'T12')).toBe(true);
     const closure = recordOf(inst, 'closure')[0]!;
-    expect(closure.witnessed).toBe(false);
-    // S2 section 6.4: resolved after T13 with `end` yes. The decline exit's content was completed, so `end` is yes.
+    expect(closure.witnessed).toBe(true);
     expect(closure.status).toBe('resolved');
+    // A witnessed completion queues no unwitnessed-completion news.
+    expect(inst.st.deliveries.some((d) => d.what === 'news')).toBe(false);
     expect(w.k.value(inst.st.closed!.event, 'kind')).toBe('seed-outcome');
     expect(w.k.events.isCanon(inst.st.closed!.event)).toBe(true);
     // The cast edges ended, the frames closed, the seed is no longer a demand root.
@@ -77,7 +84,25 @@ describe('SF-7: scenario R1, the decline path', () => {
     expect(w.k.frames.demandRoots.has(inst.id)).toBe(false);
   });
 
-  test('SF-7 as written: the exit content plays but is never completed, so the plan settles it and the closure status is abandoned', () => {
+  test('SF-7 variant: ignoring every offer until the plan settles it ends by T13 with status abandoned, unwitnessed, with news', () => {
+    const { w, inst } = r1WorldWith('SF-7v', { profile: { id: 'relationship-ladder', params: r1Params({ reoffers: 0 }) as never } });
+    openWindow(w);
+    const offer = firstOffer(w, inst);
+    // Nobody answers: the offer lapses on the play clock, and with no reoffer left the first offer's lapse is T10.
+    play(w, clock(w) + 1801);
+    expect(offer.state).toBe('expired');
+    expect(stateOf(inst)).toBe('unattended');
+    advance(w, w.k.now + LAPSE_AFTER + 600);
+    settle(w);
+    expect(stateOf(inst)).toBe('resolved');
+    expect(inst.st.record.some((r) => r.kind === 'transition' && (r.data as { row?: string }).row === 'T13')).toBe(true);
+    const closure = recordOf(inst, 'closure')[0]!;
+    expect(closure.status).toBe('abandoned');
+    expect(closure.witnessed).toBe(false);
+    expect(inst.st.deliveries.some((d) => d.what === 'news')).toBe(true);
+  });
+
+  test('SF-7 variant: an exit shown but never completed leaves the end to the plan, which is abandoned however `end` reads then', () => {
     const { w, inst } = r1World('SF-7c');
     openWindow(w);
     const offer = firstOffer(w, inst);
@@ -89,13 +114,20 @@ describe('SF-7: scenario R1, the decline path', () => {
     settle(w);
     expect(stateOf(inst)).toBe('resolved');
     expect(recordOf(inst, 'closure')[0]!.status).toBe('abandoned');
+    expect(recordOf(inst, 'closure')[0]!.witnessed).toBe(false);
   });
 
-  test('V declines at the first rung: the seed writes exit = 1 and the null path is not taken', () => {
+  test('V declines at the first rung: the decline writes nothing, the exit beat writes exit = 1 when it completes, and the null path is not taken', () => {
     const { w, inst } = r1World('SF-7b');
     openWindow(w);
     const offer = firstOffer(w, inst);
     w.l2.respond(offer.id, { kind: 'decline', id: 'decline' });
+    settle(w);
+    expect(inst.st.facts.exit!.pin).toBeUndefined();
+    playUntil(w, () => delivery(inst, 'exit-decline', ['released']) !== undefined);
+    const played = delivery(inst, 'exit-decline', ['released'])!;
+    show(w, played, 'presented');
+    w.l2.contentCompleted(played.id);
     settle(w);
     const pin = w.k.store.pin(inst.st.facts.exit!.pin!)!;
     expect(pin.value).toBe(1);

@@ -79,7 +79,7 @@ export class PackIndex {
       for (const a of o.actions) out.push(a.foresight);
       if (o.nullPath.content) out.push(o.nullPath.content);
       if (o.lapse.content) out.push(o.lapse.content);
-      for (const d of o.decline) out.push(d.response);
+      for (const d of o.decline) if (d.response !== undefined) out.push(d.response);
       if (o.retractQuietly) out.push(o.retractQuietly);
     }
     for (const r of f.responses ?? []) {

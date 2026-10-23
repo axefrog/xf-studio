@@ -102,7 +102,7 @@ const TRIPS: Trip[] = [
     s.world = [{ target: { selector: { slot: 'mood', scope: { nodes: Array.from({ length: 65 }, (_, i) => `n${i}`) } } }, form: { fixed: { f: 'const', value: 'quiet' } } }];
   } },
   { code: 'L-43', level: 'error', what: 'a ladder step that relaxes a requirement the text relies on', mutate: (_p, s) => { s.roles!.npc!.textAttrs = ['age-class']; s.roles!.npc!.onUnfilled = [{ relax: 0 }, 'withdraw']; } },
-  { code: 'L-44', level: 'warning', what: 'a beat no path from the start reaches', mutate: (_p, s) => { s.beats!.orphan = { play: 'pack:f-finish' }; } },
+  { code: 'L-44', level: 'warning', what: 'a beat no path from the start reaches', mutate: (_p, s) => { s.beats!.orphan = { play: 'pack:f-finish', links: [{ because: 'orphan2' }] }; s.beats!.orphan2 = { play: 'pack:f-finish', links: [{ because: 'orphan' }] }; } },
   { code: 'L-52', level: 'error', what: 'an attribution line with no "believes" test', mutate: (p) => { frag(p, 'f-finish').responses = [{ to: { participant: 'v' }, because: 'v paid', content: 'pack:t-no', attribution: true, reply: 'pack:t-no', replyWrites: [{ tells: { listener: 'npc', about: 'v', path: 'age', value: 1 } }] }]; } },
   { code: 'L-56', level: 'error', what: 'a "believes" test that names the director', mutate: (_p, s) => { s.context = 'believes(director, v, age)'; } },
   { code: 'L-57', level: 'error', what: 'a registry function that reads the director\'s belief about V', mutate: (_p, s) => { s.context = 'peek@1()'; },

@@ -12,6 +12,7 @@ import { evalPred, ledger } from './eval.ts';
 import type { Instance, Layer2 } from './layer2.ts';
 import { isTerminal } from './layer2.ts';
 import { pickChannel, timingFor } from './arbiter.ts';
+import { reachableBeats } from './lint.ts';
 import { windowStates } from './run.ts';
 import { newInstanceState } from './state.ts';
 import type { CompiledResult } from './compile.ts';
@@ -71,7 +72,7 @@ export function fitReport(l2: Layer2, packId: string, templateId: string): FitRe
 
 function evaluate(l2: Layer2, out: FitReport, res: CompiledResult, fitId: Id, packId: string, templateId: string): FitReport {
   const k = l2.k;
-  const st = newInstanceState(res, { pack: packId, template: templateId, version: res.seed.version, by: 'pack', layer: 'authored', sowSeq: 0, now: k.now });
+  const st = newInstanceState(res, { pack: packId, template: templateId, version: res.seed.version, by: 'pack', layer: 'authored', sowSeq: 0, now: k.now, playTotal: l2.playTotal() });
   const inst: Instance = { id: fitId, st };
   const doc = st.document;
   let withdraw: string | undefined;
@@ -144,15 +145,7 @@ function evaluate(l2: Layer2, out: FitReport, res: CompiledResult, fitId: Id, pa
     }
   }
   // The exits and the decline preview.
-  const reach = new Set<string>(doc.start);
-  for (let ch = true; ch; ) {
-    ch = false;
-    for (const [bk, b] of Object.entries(doc.beats)) {
-      if (reach.has(bk)) continue;
-      const srcs = (b.links ?? []).filter((l) => 'because' in l || 'then' in l).map((l) => ('because' in l ? l.because : (l as { then: string }).then));
-      if (srcs.length === 0 ? (b.links ?? []).length > 0 : (b.join ?? 'all') === 'any' ? srcs.some((s) => reach.has(s)) : srcs.every((s) => reach.has(s))) { reach.add(bk); ch = true; }
-    }
-  }
+  const reach = reachableBeats(doc);
   for (const [bk, b] of Object.entries(doc.beats)) {
     if (b.kind === 'exit') out.exits.push({ beat: bk, reachable: reach.has(bk), leadsTo: playOf(b).refs[0] ?? '' });
   }

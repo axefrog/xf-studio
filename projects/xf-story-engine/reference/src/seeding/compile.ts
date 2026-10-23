@@ -2,6 +2,7 @@
 // document with its closure. A document that uses a later capability (section 0.3) is refused plainly:
 // "not supported yet", never half-built.
 
+import { canonicalEqual, canonicalKey } from '../canon.ts';
 import { PredSyntaxError, walkPred } from './pred.ts';
 import { atoms, bound, fragmentSites, playOf, predSites, resolvePreds, type PredSite } from './doc.ts';
 import { lintSeed, type LintCtx } from './lint.ts';
@@ -15,7 +16,7 @@ export interface CompiledResult {
   closure: { fragments: Fragment[]; texts: TextMeta[] };
   structureHash: string;
   findings: Finding[];
-  draws: Record<string, { value: string; attempt: number }>;
+  draws: Record<string, { value: string; attempt: number; raw?: number; clamped?: number }>;
   /** Generated part path to the author's field it came from (S2 section 11.1, source maps). */
   sourceMap: Record<string, string>;
 }
@@ -23,7 +24,7 @@ export type CompileOutcome = CompiledResult | { ok: false; findings: Finding[] }
 
 export interface CompileOptions {
   /** Draws a choice among weighted options (S2 section 3.4). Without one, modes and variants are not drawn. */
-  draw?: (choice: string, options: Array<{ id: string; weight: number }>) => { value: string; attempt: number };
+  draw?: (choice: string, options: Array<{ id: string; weight: number }>) => { value: string; attempt: number; raw?: number; clamped?: number };
   /** Evaluates a predicate at sowing (a rare variant's gate). Without one, a rare variant is not eligible. */
   evalPred?: (p: Pred) => 'yes' | 'no' | 'maybe';
   /** Applied to the expanded, merged document before the lint (S2 section 1.3: how a sowing request's overlay applies). */
@@ -66,18 +67,31 @@ export function laterFindings(input: SeedInput, pack: PackIndex): Finding[] {
     if (p.weight === 'plant') out.push(later('Plants (promises that open with a trace)', `promises[${i}].weight`));
     if (p.retire !== undefined) out.push(later('A retirement trace for an unpaid promise', `promises[${i}].retire`));
   }
+  // Every fragment the document can reach, through its implied forms and every reference they make (the closure), is checked: a
+  // later capability in a fallback is a later capability in the seed (S2 section 0.3).
   const frags = new Set<string>();
+  const queue: string[] = [];
   const visit = (ref: string | undefined): void => {
     const f = pack.fragment(ref);
-    if (f && !frags.has(f.id)) frags.add(f.id);
+    if (f && !frags.has(f.id)) {
+      frags.add(f.id);
+      queue.push(f.id);
+    }
   };
   for (const b of Object.values(input.beats ?? {})) for (const r of playOf(b).refs) visit(r);
+  for (const e of input.closing !== undefined ? [input.closing] : []) if (typeof e === 'string') visit(e);
+  for (const w of input.windows ?? []) if (typeof w.closeContent === 'string') visit(w.closeContent);
+  for (const b of Object.values(input.beats ?? {})) for (const r of b.aftermath?.signposts ?? []) visit(r);
   // Beats the profile will generate play their fragments too.
   if (input.profile?.id === LADDER_ID) {
     const p = input.profile.params as unknown as LadderParams;
     for (const o of Object.values(p.offers ?? {})) visit(o.offer);
     if (p.intimate) { visit(p.intimate.scene); visit(p.intimate.fade); }
     for (const e of Object.values(p.exits ?? {})) if (typeof e === 'string') visit(e);
+  }
+  while (queue.length > 0) {
+    const f = pack.fragments.get(queue.shift()!)!;
+    for (const ref of PackIndex.fragmentRefs(f)) if (typeof ref === 'string') visit(ref);
   }
   for (const id of frags) {
     const f = pack.fragments.get(id)!;
@@ -123,7 +137,7 @@ export function compileSeed(input: SeedInput, ctx: LintCtx, opts: CompileOptions
   let seed = exp.seed;
 
   // 2. Draw the mode, then the variant, and merge the variant's parts (S2 section 3.4).
-  const draws: Record<string, { value: string; attempt: number }> = {};
+  const draws: Record<string, { value: string; attempt: number; raw?: number; clamped?: number }> = {};
   const v = seed.variation;
   if (v && opts.draw) {
     let mode: string | undefined;
@@ -210,6 +224,29 @@ function lintLadder(c: CompiledSeed, p: LadderParams, ctx: LintCtx): Finding[] {
   }
   if (Object.keys(p.exits ?? {}).filter((k) => (exits as readonly string[]).includes(k)).length < 3) {
     // reported per exit above; nothing more to add
+  }
+  // The lapse exit's fragment carries the lapse gate (A.4): the profile cannot put a condition on a fragment, so the contract is checked
+  // here. It measures from `offer-1` (the first offer), the one simplification of A.4, and has no qualifying act in the span.
+  const lapse = p.exits?.lapse;
+  if (typeof lapse === 'string' && lapse !== '') {
+    const frag = ctx.pack.fragment(lapse);
+    const needs = frag?.needs as Pred | undefined;
+    const lapseAfter = p.lapseAfter;
+    let hasSince = false;
+    const noActs = new Set<string>();
+    if (needs) {
+      walkPred(needs, (n) => {
+        if (typeof n === 'string') return;
+        if ('since' in n && 'atLeast' in n && 'beat' in n.since && n.since.beat === 'offer-1' && canonicalEqual(n.atLeast, lapseAfter)) hasSince = true;
+        if ('count' in n && n.since && 'beat' in n.since && n.since.beat === 'offer-1' && ((n.op === 'eq' && n.value === 0) || (n.op === 'le' && n.value === 0) || (n.op === 'lt' && n.value === 1))) {
+          noActs.add(canonicalKey(n.count));
+        }
+      });
+    }
+    const missingActs = (p.pacing?.acts ?? []).filter((a) => !noActs.has(canonicalKey({ participant: p.with, ...a })) && !noActs.has(canonicalKey(a)));
+    if (!frag || !hasSince || missingActs.length > 0) {
+      e('L-10', `The lapse exit "${lapse}" has to be a fragment whose "needs" says when it is due: since the first offer (offer-1) at least ${lapseAfter.s} ${lapseAfter.clock === 'game' ? 'game ' : 'play '}seconds, and none of the pacing acts since then. The profile cannot put that condition on the fragment, so it checks it.`, 'profile.params.exits.lapse');
+    }
   }
   // L-11: the intimate scene is a human-authored pack scene with a fade, and holds no choice.
   if (p.intimate) {

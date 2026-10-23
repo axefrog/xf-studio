@@ -17,17 +17,34 @@ export interface EffectCtx {
 
 /** The default persistence class (S2 section 2.5): route variables are lasting, the incidental resettable. */
 export function persistClassOf(inst: Instance, e: EffectDecl): PersistClass {
+  // The effect's own class wins, then the fact's, then the default: a route variable records where the story went, so it is lasting.
   if (e.persist) return e.persist;
-  if ('fact' in e) return inst.st.document.facts?.[e.fact]?.route ? 'lasting' : 'resettable';
+  if ('fact' in e) {
+    const decl = inst.st.document.facts?.[e.fact];
+    return decl?.persist ?? (decl?.route ? 'lasting' : 'resettable');
+  }
   return 'lasting';
 }
 
 /** Write one seed fact (S2 section 2.5): at most one current pin per fact, the old one withdrawn and kept as history. */
-export function writeSeedFact(l2: Layer2, inst: Instance, key: string, value: number, cls: PersistClass): Id {
+export function writeSeedFact(l2: Layer2, inst: Instance, key: string, value: number, cls: PersistClass): Id | undefined {
   const k = l2.k;
   const now = k.now;
   const node = ids.seedFactNode(inst.id, key);
   const cur = inst.st.facts[key] ?? { n: 0 };
+  const decl = inst.st.document.facts?.[key];
+  // An authored-only fact (a boundary) is written by authored content only, and the engine never lowers or clears it (Appendix A.2 step 6).
+  if (decl?.authoredOnly) {
+    if (inst.st.source.layer !== 'authored') {
+      l2.record(inst, 'beat', { effect: 'seed-fact', fact: key, refused: 'the fact is authored-only' });
+      return undefined;
+    }
+    if (value < readSeedFact(l2, inst, key)) {
+      l2.record(inst, 'beat', { effect: 'seed-fact', fact: key, refused: 'a boundary only rises' });
+      return undefined;
+    }
+    cls = 'lasting';
+  }
   if (cur.pin !== undefined && !k.store.isWithdrawn(cur.pin)) k.withdrawPin(cur.pin, inst.id, now);
   const pinId = ids.seedFactPinId(inst.id, key, cur.n);
   k.pin({ id: pinId, node, slot: 'value', value, reason: 'committed', cause: inst.id, at: now });

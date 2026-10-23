@@ -5,12 +5,12 @@ import type { GameTime, Id } from '../types.ts';
 import { ceilingOf } from '../settings.ts';
 import { atoms, playOf } from './doc.ts';
 import { applyEffects } from './effects.ts';
-import { evalPred } from './eval.ts';
+import { evalPred, gameTick } from './eval.ts';
 import * as ids from './ids.ts';
 import type { Instance, Layer2 } from './layer2.ts';
 import { isTerminal } from './layer2.ts';
 import type { BeatRuntime, BeatState, Fragment, Pred } from './types.ts';
-import { submitDelivery } from './arbiter.ts';
+import { dropEndedScenes, submitDelivery } from './arbiter.ts';
 
 export const isFinal = (s: BeatState): boolean => s === 'done' || s === 'failed' || s === 'skipped';
 const LIVE: ReadonlySet<BeatState> = new Set(['available', 'running']);
@@ -67,6 +67,21 @@ export function sceneRunning(inst: Instance, key: string): boolean {
   return links.length > 0 && links.every((l) => inst.st.beats[l.because]?.state === 'running');
 }
 
+/** The failures that lead to a beat: (the failing beat, the index of its `failure` entry) (S2 section 7.3). */
+export function leadersOf(inst: Instance, key: string): Array<{ src: string; index: number }> {
+  const out: Array<{ src: string; index: number }> = [];
+  for (const [src, b] of Object.entries(inst.st.document.beats).sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
+    (b.failure ?? []).forEach((f, index) => { if (f.leadsTo === key) out.push({ src, index }); });
+  }
+  return out;
+}
+
+/**
+ * Whether a beat's links are satisfied (S2 section 7.1). `join` combines the chain links (`because`, `then`) only; an `obstructedBy`
+ * link is a guard that must always hold. A beat in `start` needs no chain links. A beat a failure leads to becomes available when that
+ * failure happens, and its own chain links, if it has any, are checked as well. A beat with no chain links that is neither in `start`
+ * nor led to is satisfied here and waits only for its fragment's `needs` (R1's lapse exit).
+ */
 export function linkState(l2: Layer2, inst: Instance, key: string, t: GameTime): LinkState {
   const b = inst.st.document.beats[key]!;
   const links = b.links ?? [];
@@ -104,6 +119,7 @@ export function linkState(l2: Layer2, inst: Instance, key: string, t: GameTime):
     }
   }
   const isStart = inst.st.document.start.includes(key);
+  const led = leadersOf(inst, key);
   const join = b.join ?? 'all';
   let flowSat: boolean;
   let never: boolean;
@@ -116,6 +132,14 @@ export function linkState(l2: Layer2, inst: Instance, key: string, t: GameTime):
   } else {
     flowSat = flow.every((f) => f.sat);
     never = flow.some((f) => f.never);
+  }
+  if (led.length > 0 && !isStart) {
+    const happened = led.some(({ src, index }) => inst.st.beats[src]?.state === 'failed' && inst.st.beats[src]!.failedBy === index);
+    if (!happened) {
+      flowSat = false;
+      // Every beat that could fail into this one has ended some other way: the failure can never happen.
+      if (led.every(({ src }) => { const s = inst.st.beats[src]?.state; return s === undefined || isFinal(s); })) never = true;
+    }
   }
   return { satisfied: flowSat && !obstructed, never };
 }
@@ -171,7 +195,7 @@ export function chooseFragment(l2: Layer2, inst: Instance, key: string, n: numbe
       if (prior && best.some((f) => f.id === prior.value)) pick = best.find((f) => f.id === prior.value);
       else {
         const d = l2.draw(inst.id, choice, best.map((f) => ({ id: f.id })), inst.st.beats[key]!.attempt);
-        inst.st.draws[choice] = { value: d.value, attempt: inst.st.beats[key]!.attempt };
+        inst.st.draws[choice] = { value: d.value, attempt: inst.st.beats[key]!.attempt, ...(d.raw !== undefined ? { raw: d.raw } : {}), ...(d.clamped !== undefined ? { clamped: d.clamped } : {}) };
         pick = best.find((f) => f.id === d.value);
       }
     }
@@ -211,7 +235,10 @@ function setBeat(l2: Layer2, inst: Instance, key: string, state: BeatState, extr
   rt.state = state;
   rt.since = l2.k.now;
   Object.assign(rt, extra);
-  if (state === 'done' || state === 'failed' || state === 'skipped' || state === 'deferred') rt.finalAt = l2.k.now;
+  if (state === 'done' || state === 'failed' || state === 'skipped' || state === 'deferred') {
+    rt.finalAt = l2.k.now;
+    rt.finalAtPlay = l2.playTotal();
+  }
   l2.record(inst, 'beat', { beat: key, from: was, to: state });
 }
 
@@ -233,8 +260,8 @@ export function completeBeat(l2: Layer2, inst: Instance, key: string): void {
   }
 }
 
-export function failBeat(l2: Layer2, inst: Instance, key: string, why: string): void {
-  setBeat(l2, inst, key, 'failed');
+export function failBeat(l2: Layer2, inst: Instance, key: string, why: string, index?: number): void {
+  setBeat(l2, inst, key, 'failed', index === undefined ? {} : { failedBy: index });
   l2.record(inst, 'beat', { beat: key, failed: why });
 }
 
@@ -247,7 +274,8 @@ export function updateBeats(l2: Layer2, inst: Instance): boolean {
   const st = inst.st;
   if (!(st.state === 'cast' || st.state === 'offered' || st.state === 'running' || st.state === 'unattended')) return false;
   const doc = st.document;
-  let any = false;
+  // An in-scene offer whose scene has ended is dropped, and its beat skipped as rejected (S2 section 8.3).
+  let any = dropEndedScenes(l2, inst);
   for (let pass = 0; pass < 32; pass++) {
     let changed = false;
     const t = l2.k.now;
@@ -274,7 +302,8 @@ export function updateBeats(l2: Layer2, inst: Instance): boolean {
         }
       } else if (rt.state === 'available' && b.kind === 'aftermath' && b.aftermath && !rt.delayed) {
         const due = (rt.availableAt ?? t) + b.aftermath.delay.s;
-        if (t >= due) {
+        const ripe = b.aftermath.delay.clock === 'play' ? l2.playTotal() >= (rt.availableAtPlay ?? l2.playTotal()) + b.aftermath.delay.s : gameTick(l2, t) >= due;
+        if (ripe) {
           rt.delayed = true;
           const cancel = b.aftermath.cancelIf;
           if (cancel && evalPred(l2, { inst, t }, cancel) === 'yes') { skipBeat(l2, inst, key, 'rejected', 'cancelled'); changed = true; continue; }
@@ -311,6 +340,7 @@ function makeAvailable(l2: Layer2, inst: Instance, key: string): boolean {
   rt.state = 'available';
   rt.since = l2.k.now;
   rt.availableAt = l2.k.now;
+  rt.availableAtPlay = l2.playTotal();
   rt.fragment = chosen.base.id;
   rt.delayed = false;
   l2.record(inst, 'beat', { beat: key, to: 'available', fragment: chosen.fragment.id, ...(chosen.gated ? { gated: chosen.gated } : {}) });
@@ -351,7 +381,7 @@ function runBeat(l2: Layer2, inst: Instance, key: string): boolean {
     }
     if (evalPred(l2, ctx, f.when) === 'yes') {
       if (f.warnFirst !== undefined && !warningSeen(inst, key)) continue;
-      failBeat(l2, inst, key, `failure[${i}]`);
+      failBeat(l2, inst, key, `failure[${i}]`, i);
       return true;
     }
   }

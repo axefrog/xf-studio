@@ -80,11 +80,12 @@ function offerFragment(i: number, name: string): Fragment {
       stakes: [{ bearer: 'takemura', what: 'tie' }],
       actions: [
         { id: 'accept', stance: 'help', foresight: `pack:t-fore-accept-${i}`, writes: [{ fact: 'rung', set: i, persist: 'lasting' }] },
-        { id: 'stay', stance: 'bargain', foresight: `pack:t-fore-stay-${i}`, writes: [{ fact: 'exit', set: 2, persist: 'lasting' }] },
+        // `stay` and `decline` write nothing: `exit-stay` and `exit-decline` read the response (Appendix A.2 step 2).
+        { id: 'stay', stance: 'bargain', foresight: `pack:t-fore-stay-${i}` },
       ],
       nullPath: { id: 'not-now', content: `pack:t-notnow-${i}` },
       lapse: { after: { clock: 'play', s: 1800 }, then: 'reoffer' },
-      decline: [{ id: 'decline', response: 'pack:qh-exit-decline', writes: [{ fact: 'exit', set: 1, persist: 'lasting' }] }],
+      decline: [{ id: 'decline' }],
       choice: 'consequential',
     },
   };

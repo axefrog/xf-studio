@@ -94,8 +94,9 @@ describe('R-5 and R-12: in-scene follow-ups', () => {
     },
   } as never;
   const build = (name: string): { w: World; inst: Instance } => mini(name, seed, (p) => {
+    p.fragments.find((f) => f.id === 'f-meet')!.scene = 'talk';
     p.fragments.push({
-      id: 'f-ask', level: 'exchange', roles: ['npc'], salience: 'foreground', forms: { standard: 'pack:t-go' }, channels: ['message'],
+      scene: 'talk', id: 'f-ask', level: 'exchange', roles: ['npc'], salience: 'foreground', forms: { standard: 'pack:t-go' }, channels: ['message'],
       offer: { stakes: [{ bearer: 'npc', what: 'x' }], actions: [{ id: 'a', stance: 'help', foresight: 'pack:t-go' }], nullPath: { id: 'n' }, lapse: { after: { clock: 'play', s: 600 }, then: 'unattended' }, decline: [{ id: 'd', response: 'pack:t-no' }], choice: 'flavour' },
     });
   });

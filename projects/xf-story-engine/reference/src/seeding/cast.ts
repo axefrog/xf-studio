@@ -8,7 +8,8 @@ import { evalPredicate } from '../predicate.ts';
 import { newOpCtx } from '../resolve.ts';
 import { LimitExceeded } from '../work.ts';
 import type { GameTime, Id, Predicate, Query, QueryScope } from '../types.ts';
-import { bound } from './doc.ts';
+import { bound, playOf } from './doc.ts';
+import { gameTick } from './eval.ts';
 import { barredRoles } from './floors.ts';
 import { recordClaim } from './intersect.ts';
 import { roleDeps } from './lint.ts';
@@ -163,8 +164,8 @@ function liveBinding(l2: Layer2, inst: Instance, role: string): { live: boolean;
     const rt = inst.st.beats[bk];
     if (!rt || (rt.state !== 'available' && rt.state !== 'running')) continue;
     const pack = l2.packs.get(inst.st.template.pack ?? '');
-    const refs = b.play ? (typeof b.play === 'string' ? [b.play] : 'alternates' in (b.play as object) ? (b.play as { alternates: string[] }).alternates : [(b.play as { fixed: string }).fixed]) : [];
-    for (const ref of refs) {
+    // Every form `play` can take (a reference, alternates, or a fixed part holding either) is read by the one decoder.
+    for (const ref of playOf(b).refs) {
       const f = inst.st.closure.fragments.find((x) => x.id === ref.replace(/^pack:/, '')) ?? pack?.fragment(ref);
       if (f?.roles.some((r) => (b.bind?.[r] ?? r) === role)) {
         live = true;
@@ -394,10 +395,17 @@ export function runLadder(l2: Layer2, inst: Instance, key: string, first: CastAt
     if (step === 'wait' || (typeof step === 'object' && 'wait' in step)) {
       const d = step === 'wait' ? 'window' : step.wait;
       if (d === 'window') return { r: 'waiting' };
-      if (rs.ladder.waitUntil === undefined) rs.ladder.waitUntil = l2.k.now + d.s;
-      if (l2.k.now < rs.ladder.waitUntil) return { r: 'waiting' };
+      // A timed wait runs on its own clock: game time is read at window boundaries, play time on the cumulative play clock.
+      if (d.clock === 'play') {
+        if (rs.ladder.waitUntilPlay === undefined) rs.ladder.waitUntilPlay = l2.playTotal() + d.s;
+        if (l2.playTotal() < rs.ladder.waitUntilPlay) return { r: 'waiting' };
+        rs.ladder.waitUntilPlay = undefined;
+      } else {
+        if (rs.ladder.waitUntil === undefined) rs.ladder.waitUntil = l2.k.now + d.s;
+        if (gameTick(l2) < rs.ladder.waitUntil) return { r: 'waiting' };
+        rs.ladder.waitUntil = undefined;
+      }
       rs.ladder.cursor++;
-      rs.ladder.waitUntil = undefined;
       continue;
     }
     if (typeof step === 'object' && 'relax' in step) {

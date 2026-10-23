@@ -26,14 +26,16 @@ export interface Installed {
 }
 
 /** The target nodes a requirement names right now: the cast node of its role, or the expansion of a selector. */
-export function requirementNodes(l2: Layer2, inst: Instance, w: WorldRequirement): { nodes: Id[]; slot: string; tooBroad?: boolean } | undefined {
+export function requirementNodes(l2: Layer2, inst: Instance, w: WorldRequirement, staged: Record<string, Id> = {}): { nodes: Id[]; slot: string; tooBroad?: boolean } | undefined {
+  // A role being committed in an open batch has its node in `staged` before the layer-2 state records it (a stand-in is minted there).
+  const castOf = (role: string): Id | undefined => staged[role] ?? inst.st.roles[role]?.cast;
   if ('role' in w.target) {
-    const n = inst.st.roles[w.target.role]?.cast;
+    const n = castOf(w.target.role);
     return n === undefined ? undefined : { nodes: [n], slot: w.target.slot };
   }
   const sel = w.target.selector;
   const slot = sel.slot === '*' ? '*' : sel.slot;
-  const resolve = (x: string): Id => (inst.st.roles[x]?.cast ?? l2.k.expandId(x));
+  const resolve = (x: string): Id => (castOf(x) ?? l2.k.expandId(x));
   if (sel.scope && 'nodes' in sel.scope) return { nodes: sel.scope.nodes.map(resolve), slot };
   const scope: QueryScope = sel.scope ? ('under' in sel.scope ? { under: resolve(sel.scope.under) } : { region: sel.scope.region }) : { under: l2.k.expandId('root:city') };
   const q: Query = { find: sel.kind ?? 'core:thing', scope, at: l2.k.now, must: sel.where ?? [], limit: l2.tun.watchMax + 1 };
@@ -61,9 +63,9 @@ function contributionSpec(l2: Layer2, inst: Instance, index: number, w: WorldReq
  * Install a requirement's contribution (inside a staged batch if one is given). Returns what was installed, for the
  * watch, or undefined when it names a role that is not cast, or is open.
  */
-export function installRequirement(l2: Layer2, inst: Instance, index: number, batch?: StagedBatch, fromTime?: number, silent = false): Installed | undefined {
+export function installRequirement(l2: Layer2, inst: Instance, index: number, batch?: StagedBatch, fromTime?: number, silent = false, staged: Record<string, Id> = {}): Installed | undefined {
   const w = inst.st.document.world![index]!;
-  const nodes = requirementNodes(l2, inst, w);
+  const nodes = requirementNodes(l2, inst, w, staged);
   if (!nodes || (nodes.nodes.length === 0 && !('selector' in w.target))) return undefined;
   const selector = 'selector' in w.target ? w.target.selector : undefined;
   const spec = contributionSpec(l2, inst, index, w, nodes.nodes, nodes.slot, selector);

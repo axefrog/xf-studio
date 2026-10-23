@@ -146,7 +146,10 @@ export interface Role {
 export interface SeedFactDecl {
   route?: { consumers: Array<BeatKey | string> };
   initial?: number;
+  /** Only authored content may write it (boundaries, Appendix A). Such a fact only rises: the engine never lowers or clears it. */
   authoredOnly?: boolean;
+  /** The persistence class of a write to this fact, unless the effect names its own (S2 section 2.5); a route variable defaults to `lasting`. */
+  persist?: PersistClass;
 }
 
 export interface WorldRequirement {
@@ -237,14 +240,19 @@ export interface OfferSpec {
   actions: Array<{ id: string; stance: Stance; foresight: ContentRef; writes?: EffectDecl[]; costs?: Cost[] }>;
   nullPath: { id: string; content?: ContentRef; writes?: EffectDecl[] };
   lapse: { after: Duration; then: 'unattended' | 'reoffer' | 'withdraw'; content?: ContentRef };
-  decline: Array<{ id: string; response: ContentRef; writes?: EffectDecl[] }>;
+  /** `response` is omitted when an exit beat plays it (S2 section 2.9). */
+  decline: Array<{ id: string; response?: ContentRef; writes?: EffectDecl[] }>;
   choice: 'flavour' | 'consequential' | 'unchoice';
   retractQuietly?: ContentRef;
 }
 
 export type ActPattern = EventPattern;
 export interface ResponseTemplate {
-  to: ActPattern;
+  /**
+   * What the template answers (S2 section 2.9): an act of V's, or V's answer to an offer, matched by response kind:
+   * `decline:<id>`, `action:<id>`, `action:*`, `decline:*` or `any`.
+   */
+  to: ActPattern | string;
   because: string;
   content: ContentRef;
   needs?: PredInput;
@@ -262,6 +270,8 @@ export interface Fragment {
   leaves?: EffectDecl[];
   roles: RoleKey[];
   applies?: PredInput;
+  /** A scene label: beats whose fragments share it may chain `inScene` offers (S2 section 8.3, L-131a). */
+  scene?: string;
   tone?: string;
   repeat?: 'never' | { times: number } | 'free';
   minGap?: { game?: number; offers?: number };
@@ -534,7 +544,7 @@ export interface RoleState {
   standIn?: { kind: KindId; constraints: Predicate[] };
   committed: boolean;
   attempt: number;
-  ladder: { cursor: number; relaxed: number[]; waitUntil?: GameTime };
+  ladder: { cursor: number; relaxed: number[]; waitUntil?: GameTime; waitUntilPlay?: number };
   /** Why the role is unfilled, when it is (S2-I-5). */
   unfilled?: string;
   /** A shrunk (dropped) optional role. */
@@ -552,6 +562,10 @@ export interface BeatRuntime {
   since: GameTime;
   /** The game time of the last move into a final or deferred state (the `since` point of count atoms). */
   finalAt?: GameTime;
+  /** The cumulative play time (`playTotal`) of the same move: the `since` point of a play-clock duration. */
+  finalAtPlay?: number;
+  /** Which `failure` entry failed the beat (its index), for a `leadsTo` beat (S2 section 7.1). */
+  failedBy?: number;
   releases: number;
   offers: number;
   attempt: number;
@@ -567,6 +581,8 @@ export interface BeatRuntime {
   fragment?: string;
   /** When an aftermath became available. */
   availableAt?: GameTime;
+  /** The cumulative play time of the same moment (an aftermath delayed on the play clock). */
+  availableAtPlay?: number;
   /** The number of times the beat became available (the `n` of its draws and ids). */
   availableCount: number;
   /** An aftermath's delay has passed and its signposts and content were submitted. */
@@ -575,7 +591,8 @@ export interface BeatRuntime {
   objWarned?: boolean;
 }
 
-export interface Wakeup { clock: 'game'; at: GameTime; reason: string; key?: string }
+/** A wake-up: a game time, or a cumulative play time (`playTotal`) checked by the arbiter's step (S2 section 4.3). */
+export interface Wakeup { clock: 'game' | 'play'; at: number; reason: string; key?: string }
 
 export interface ConsumedEvent { sub: string; event: Id; at: GameTime; cast: Record<RoleKey, Id> }
 
@@ -592,6 +609,8 @@ export interface InstanceState {
   since: GameTime;
   /** When each state was last entered (the `since` point of the `since` atom). */
   entered: Partial<Record<SeedStateName, GameTime>>;
+  /** The cumulative play time at the same moments (the `since` point of a play-clock duration). */
+  enteredPlay: Partial<Record<SeedStateName, number>>;
   releaseWindow?: string;
   form?: string;
   latches: string[];

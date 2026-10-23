@@ -7,6 +7,7 @@
 import { canonicalKey } from '../canon.ts';
 import type { Id } from '../types.ts';
 import { Arbiter } from './arbiter.ts';
+import { atoms, fragmentSites, predSites } from './doc.ts';
 import { emptyGlobal } from './state.ts';
 import { runMaintenance } from './effects.ts';
 import * as ids from './ids.ts';
@@ -130,6 +131,8 @@ export function onLoad(l2: Layer2): void {
     // The sowing contributions are rebuilt from the stored document (S2 section 12.1).
     reinstall(l2, inst);
     for (const d of st.deliveries) resetDelivery(l2, inst, d);
+    // A play-clock duration that was running restarts from the load (S2 section 2.12).
+    restartPlayDurations(l2, inst);
     // A pack installed before this load may withdraw the saved version (S2 section 12.3).
     if (l2.applyMigration(inst)) continue;
     // Fire the wake-ups already past, in time order, and re-evaluate in Id order.
@@ -139,6 +142,40 @@ export function onLoad(l2: Layer2): void {
   l2.boundaryDue = k.now;
   runMaintenance(l2, k.now);
   l2.boundaryDue = undefined;
+}
+
+/**
+ * The play clock restarts at a load (S2 section 8.2), and a play-clock duration that was running restarts with it (S2 section 2.12):
+ * a `since` atom on the play clock, a timed `wait` step of a ladder, an unattended plan or an aftermath delayed on the play clock. A
+ * duration that had already passed stays passed. Game-clock durations are not touched.
+ */
+function restartPlayDurations(l2: Layer2, inst: Instance): void {
+  const st = inst.st;
+  const now = l2.playTotal();
+  const running = (stamp: number | undefined, s: number): stamp is number => stamp !== undefined && now - stamp < s;
+  const sites = [...predSites(st.document), ...st.closure.fragments.flatMap((f) => fragmentSites(f))];
+  for (const site of sites) {
+    for (const { atom } of atoms(site.pred)) {
+      if (!('since' in atom && 'atLeast' in atom) || atom.atLeast.clock !== 'play') continue;
+      if ('beat' in atom.since) {
+        const rt = st.beats[atom.since.beat];
+        if (rt && running(rt.finalAtPlay, atom.atLeast.s)) rt.finalAtPlay = now;
+      } else {
+        const state = atom.since.state;
+        if (running(st.enteredPlay[state], atom.atLeast.s)) st.enteredPlay[state] = now;
+      }
+    }
+  }
+  const after = st.document.unattended.after;
+  if (after.clock === 'play' && running(st.enteredPlay.unattended, after.s)) st.enteredPlay.unattended = now;
+  for (const [key, rs] of Object.entries(st.roles)) {
+    const step = (st.document.roles[key]?.onUnfilled ?? ['wait', 'withdraw'])[rs.ladder.cursor];
+    if (rs.ladder.waitUntilPlay !== undefined && typeof step === 'object' && 'wait' in step && step.wait !== 'window') rs.ladder.waitUntilPlay = now + step.wait.s;
+  }
+  for (const [key, rt] of Object.entries(st.beats)) {
+    const d = st.document.beats[key]?.aftermath?.delay;
+    if (d && d.clock === 'play' && running(rt.availableAtPlay, d.s)) rt.availableAtPlay = now;
+  }
 }
 
 function reinstall(l2: Layer2, inst: Instance): void {

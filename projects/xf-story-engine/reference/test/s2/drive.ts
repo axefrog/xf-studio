@@ -3,7 +3,7 @@
 
 import type { Id } from '../../src/types.ts';
 import type { Instance } from '../../src/seeding/layer2.ts';
-import type { Delivery, ExposureGrade } from '../../src/seeding/types.ts';
+import type { Delivery, ExposureGrade, SeedInput } from '../../src/seeding/types.ts';
 import { R1_ID, R1_PACK, r1Pack } from './r1.ts';
 import { type World, makeWorld, setFact, settle, spots, takemura, advance } from './world.ts';
 import type { WorldOpts } from './world.ts';
@@ -51,6 +51,20 @@ export function r1World(name: string, opts: WorldOpts = {}): { w: World; inst: I
   settle(w);
   const inst = w.l2.ofTemplate(R1_ID)[0]!;
   return { w, inst };
+}
+
+/** The R1 world with the seed's own fields changed (a variant of the scenario). */
+export function r1WorldWith(name: string, seedOver: Partial<SeedInput>, opts: WorldOpts = {}): { w: World; inst: Instance } {
+  const w = makeWorld(name, opts);
+  spots(w);
+  takemura(w, 0);
+  setFact(w, 'q112_done', 0, 0);
+  setFact(w, 'q115_point_of_no_return', 0, 0);
+  setFact(w, 'q112_takemura_dead', 0, 0);
+  const f = w.l2.installPack(r1Pack({}, seedOver));
+  if (f.length > 0) throw new Error(`pack findings: ${JSON.stringify(f)}`);
+  settle(w);
+  return { w, inst: w.l2.ofTemplate(R1_ID)[0]! };
 }
 
 /** Make R1's window open: q112 done, Takemura alive and allied. */

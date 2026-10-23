@@ -16,7 +16,7 @@ import type { Instance, Layer2, SowOutcome, Trigger } from './layer2.ts';
 import { isTerminal } from './layer2.ts';
 import { Arbiter } from './arbiter.ts';
 import { compileSeed } from './compile.ts';
-import { collectInterests, computeWakeups, reevaluate } from './run.ts';
+import { addPredInterests, collectInterests, computeWakeups, reevaluate } from './run.ts';
 import { installRequirement, layerOfInstance, originOf } from './world.ts';
 import { toPred } from './pred.ts';
 import { newInstanceState } from './state.ts';
@@ -125,7 +125,8 @@ export function sowTemplate(l2: Layer2, packId: string, templateId: string, opts
   const res = compileSeed(template as SeedInput, lintCtx, {
     draw: (choice, options) => {
       const d = l2.draw(iid, choice, options.map((o) => ({ id: o.id, weight: o.weight })), 0, l2.hooks.fit ? (o) => l2.hooks.fit!(choice, o, { id: iid, template: templateId }) : undefined);
-      return { value: d.value, attempt: 0 };
+      // The record keeps what the fit hook returned and what the draw used of it (S2 section 3.4).
+      return { value: d.value, attempt: 0, ...(d.raw !== undefined ? { raw: d.raw } : {}), ...(d.clamped !== undefined ? { clamped: d.clamped } : {}) };
     },
     evalPred: (p) => evalPred(l2, { t: k.now }, p),
     ...(opts.overlay
@@ -143,7 +144,7 @@ export function sowTemplate(l2: Layer2, packId: string, templateId: string, opts
   // Mint the seed node, and open its frames (S2 section 3.1).
   k.mint(creator, cause, name, 'core:seed');
   const st = newInstanceState(res, {
-    pack: packId, template: templateId, version: template.version, by, layer, sowSeq: l2.global.nextSowSeq++, now: k.now,
+    pack: packId, template: templateId, version: template.version, by, layer, sowSeq: l2.global.nextSowSeq++, now: k.now, playTotal: l2.playTotal(),
     ...(opts.decision !== undefined ? { decision: opts.decision } : {}),
   });
   const roles = st.roles;
@@ -187,14 +188,7 @@ export function openWatcher(l2: Layer2, packId: string): void {
   const reacts = new Map<string, import('../types.ts').Selector>();
   for (const s of index.pack.seeds) {
     if (s.sow === undefined) continue;
-    const p = toPred(s.sow);
-    for (const { atom } of atoms(p)) {
-      if ('fact' in atom) {
-        const n = l2.factNode(atom.fact);
-        const sel = { kind: 'core:game-fact', slot: 'value', scope: { nodes: [n] } };
-        reacts.set(canonicalKey(sel), sel);
-      }
-    }
+    addPredInterests(l2, toPred(s.sow), undefined, (sel) => { reacts.set(canonicalKey(sel), sel); });
   }
   const list = [...reacts.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map((e) => e[1]);
   const fid = ids.watchFrameId(root);
@@ -243,9 +237,31 @@ export function onRelevance(l2: Layer2, r: Relevance): void {
 export function onBoundary(l2: Layer2, _boundary: number, at: GameTime): void {
   l2.boundaryDue = at;
   for (const inst of l2.live()) {
-    if (inst.st.wakeups.some((w) => w.at <= at)) l2.queueReeval(inst, 'wake', { time: at, reason: 'wake' });
+    if (inst.st.wakeups.some((w) => w.clock === 'game' && w.at <= at)) l2.queueReeval(inst, 'wake', { time: at, reason: 'wake' });
   }
-  for (const [pid, p] of l2.packs) if (p.pack.seeds.some((s) => s.repeat !== undefined)) l2.sowQueue.add(pid);
+  // A repeatable template's gap runs out on the clock, and a sowing predicate on the hour changes with it (S2 section 4.3).
+  for (const [pid, p] of l2.packs) if (p.pack.seeds.some((s) => s.repeat !== undefined) || sowReads(p).hour) l2.sowQueue.add(pid);
+}
+
+const sowReadsCache = new WeakMap<object, { settings: boolean; seeds: boolean; exposure: boolean; hour: boolean }>();
+
+/** What layer-2 state the sowing predicates of a pack's templates read besides the kernel's (the reverse index for sowing, S2 section 4.1). */
+export function sowReads(index: import('./packs.ts').PackIndex): { settings: boolean; seeds: boolean; exposure: boolean; hour: boolean } {
+  let r = sowReadsCache.get(index);
+  if (!r) {
+    r = { settings: false, seeds: false, exposure: false, hour: false };
+    for (const s of index.pack.seeds) {
+      if (s.sow === undefined) continue;
+      for (const { atom } of atoms(toPred(s.sow))) {
+        if ('setting' in atom) r.settings = true;
+        else if ('seed' in atom) r.seeds = true;
+        else if ('exposed' in atom) r.exposure = true;
+        else if ('hour' in atom) r.hour = true;
+      }
+    }
+    sowReadsCache.set(index, r);
+  }
+  return r;
 }
 
 /** Run queued work within the tick budget (S0 section 10.7, S2 section 4.4). Instances run in Id order. */

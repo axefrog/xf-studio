@@ -155,6 +155,21 @@ export const stateSince = (inst: Instance, state: string): GameTime | undefined 
 /** The `since` point of a beat: its last move into a final or deferred state (SPEC-NOTES). */
 export const beatSince = (inst: Instance, beat: string): GameTime | undefined => inst.st.beats[beat]?.finalAt;
 
+/** The cumulative play time at which a state was last entered, or undefined if it never was (the `since` point of a play-clock duration). */
+export const stateSincePlay = (inst: Instance, state: string): number | undefined => inst.st.enteredPlay[state as keyof Instance['st']['entered']];
+
+/** The cumulative play time of a beat's last move into a final or deferred state. */
+export const beatSincePlay = (inst: Instance, beat: string): number | undefined => inst.st.beats[beat]?.finalAtPlay;
+
+/**
+ * Game time as layer 2 reads a duration: the last simulation window boundary at or before `t`. A game-clock duration is
+ * checked at window boundaries only (S2 section 4.3), so a result never depends on where the host's ticks fell.
+ */
+export const gameTick = (l2: Layer2, t: GameTime = l2.k.now): GameTime => {
+  const w = l2.k.config.wSim;
+  return Math.floor(t / w) * w;
+};
+
 export const subKey = (pat: EventPattern): string => canonicalKey(pat);
 
 export function countOf(inst: Instance, pat: EventPattern, since: { beat: string } | { state: string } | undefined): number {
@@ -379,9 +394,14 @@ function ex(l2: Layer2, ctx: EvalCtx, p: Pred, depth: number, explain: boolean):
   }
   if ('since' in p && 'atLeast' in p) {
     if (!ctx.inst) return done('maybe', 'there is no instance to read');
+    if (p.atLeast.clock === 'play') {
+      const fromPlay = 'beat' in p.since ? beatSincePlay(ctx.inst, p.since.beat) : stateSincePlay(ctx.inst, p.since.state);
+      if (fromPlay === undefined) return done('no');
+      return done(verdictOf(l2.playTotal() - fromPlay >= p.atLeast.s));
+    }
     const from = 'beat' in p.since ? beatSince(ctx.inst, p.since.beat) : stateSince(ctx.inst, p.since.state);
     if (from === undefined) return done('no');
-    return done(verdictOf(ctx.t - from >= p.atLeast.s));
+    return done(verdictOf(gameTick(l2, ctx.t) - from >= p.atLeast.s));
   }
   if ('exposed' in p) return done(verdictOf(exposedMatches(l2, ctx, p.exposed)));
   if ('cap' in p) return done(l2.port.cap(p.cap));

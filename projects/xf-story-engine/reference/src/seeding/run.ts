@@ -8,7 +8,7 @@ import { castOrder, castRole, runLadder, standInRecipe, effective } from './cast
 import { atoms, fragmentSites, playOf, predSites } from './doc.ts';
 import { applyEffects } from './effects.ts';
 import { consumeEvent } from './consume.ts';
-import { evalPred, roleVerdict, stateSince } from './eval.ts';
+import { beatSincePlay, evalPred, gameTick, roleVerdict, stateSince, stateSincePlay } from './eval.ts';
 import * as ids from './ids.ts';
 import type { Instance, Layer2, Trigger } from './layer2.ts';
 import { isTerminal } from './layer2.ts';
@@ -17,7 +17,7 @@ import { watchFixed } from './watch.ts';
 import { endRequirement, installRequirement } from './world.ts';
 import { isFinal, isLive, isStuck, updateBeats } from './beats.ts';
 import { queueClosing, withdrawPending } from './arbiter.ts';
-import type { ContentRef, SeedStateName, Wakeup } from './types.ts';
+import type { ContentRef, Pred, SeedStateName, Wakeup } from './types.ts';
 
 export type WindowState = 'open' | 'pending' | 'closed';
 
@@ -74,6 +74,7 @@ export function transition(l2: Layer2, inst: Instance, to: SeedStateName, row: s
   st.state = to;
   st.since = l2.k.now;
   st.entered[to] = l2.k.now;
+  st.enteredPlay[to] = l2.playTotal();
   l2.record(inst, 'transition', { row, from, to, why });
   l2.notifyReaders('seeds', inst);
   if (row === 'T6') {
@@ -111,9 +112,11 @@ export function closeSeed(l2: Layer2, inst: Instance, to: SeedStateName, row: st
   // Closing: one seed-outcome event, committed; the details go in a `closure` record entry.
   const closes = to === 'resolved' || to === 'withered' || (to === 'withdrawn' && st.released);
   if (closes) {
-    const resolved = to === 'resolved' && (row === 'T12' || (row === 'T13' && evalPred(l2, { inst, t: now }, doc.end) === 'yes'));
+    // `resolved` only after T12: the seed reached its end while V was in it. A seed the world settled without V (every T13) is
+    // `abandoned`, even if its plan makes `end` yes (S2 section 6.4).
+    const resolved = to === 'resolved' && row === 'T12';
     const status: 'resolved' | 'abandoned' = resolved ? 'resolved' : 'abandoned';
-    const witnessed = row === 'T12';
+    const witnessed = endingExposed(inst, row);
     const ev = k.events.mintEvent({
       creator: inst.id, cause: inst.id, name: 'outcome', time: now, kind: 'seed-outcome',
       participants: [{ who: inst.id, role: 'participant' }], outcome: status === 'resolved' ? 'done' : 'failed',
@@ -154,6 +157,22 @@ export function closeSeed(l2: Layer2, inst: Instance, to: SeedStateName, row: st
   l2.unregisterActor(inst.id);
   l2.queue.delete(inst.id);
   l2.syncRecord(inst);
+}
+
+/**
+ * Whether V was exposed to the beat or plan that ended the seed (S2 section 6.4, L2-17). A seed that reached its end (T12) was ended by
+ * the beats that completed last: V was exposed if a delivery of one of them reached at least `presented`. A seed the world settled
+ * (T13) was ended by the plan, which V is not shown; a forced closure was ended by nothing V was shown.
+ */
+function endingExposed(inst: Instance, row: string): boolean {
+  if (row !== 'T12') return false;
+  const st = inst.st;
+  const done = Object.entries(st.beats).filter(([, rt]) => rt.state === 'done' && rt.finalAt !== undefined);
+  if (done.length === 0) return false;
+  const last = Math.max(...done.map(([, rt]) => rt.finalAtPlay ?? -1));
+  const lastGame = Math.max(...done.map(([, rt]) => rt.finalAt!));
+  const ending = done.filter(([, rt]) => (rt.finalAtPlay ?? -1) === last && rt.finalAt === lastGame).map(([key]) => key);
+  return st.receipts.some((r) => r.beat !== undefined && ending.includes(r.beat) && r.grade !== 'ambient');
 }
 
 /** The window whose close policy applies: the release window after a release, else the lowest-index window (S2 section 2.7). */
@@ -292,11 +311,13 @@ function step(l2: Layer2, inst: Instance): boolean {
       return true;
     }
   }
-  if (state === 'running' && evalPred(l2, { inst, t }, doc.end) === 'yes' && !Object.entries(st.promises).some(([id, s]) => s === 'open' && !(doc.promises ?? []).find((p) => p.id === id)?.mayStayOpen)) {
+  // T12 reads `running`; a seed V declined is `unattended` while its exit beat plays, and reaching `end` there is the same success
+  // (S2 section 6.2 and fixture SF-7: the decline exit plays, then T12).
+  if ((state === 'running' || state === 'unattended') && evalPred(l2, { inst, t }, doc.end) === 'yes' && !Object.entries(st.promises).some(([id, s]) => s === 'open' && !(doc.promises ?? []).find((p) => p.id === id)?.mayStayOpen)) {
     transition(l2, inst, 'resolved', 'T12', 'the end state was reached');
     return true;
   }
-  if (state === 'unattended' && t - (st.entered.unattended ?? t) >= doc.unattended.after.s) {
+  if (state === 'unattended' && durationElapsed(l2, st.entered.unattended, st.enteredPlay.unattended, doc.unattended.after)) {
     applyEffects(l2, inst, doc.unattended.outcome, { origin: 'unattended', tag: 'unattended' });
     mintUnattendedEvents(l2, inst);
     transition(l2, inst, 'resolved', 'T13', 'the world settled it without V');
@@ -400,6 +421,15 @@ function updatePromises(l2: Layer2, inst: Instance): void {
 
 const ceilTo = (t: GameTime, w: number): GameTime => Math.ceil(t / w) * w;
 
+/**
+ * Whether a duration has passed since a point (S2 section 4.3). A game-clock duration is read at the last window boundary, so it
+ * becomes true only at the boundary that ends the window it fell due in; a play-clock one runs on the cumulative play time.
+ */
+export function durationElapsed(l2: Layer2, gameFrom: GameTime | undefined, playFrom: number | undefined, d: { clock: 'game' | 'play'; s: number }): boolean {
+  if (d.clock === 'play') return playFrom !== undefined && l2.playTotal() - playFrom >= d.s;
+  return gameFrom !== undefined && gameTick(l2) - gameFrom >= d.s;
+}
+
 export function computeWakeups(l2: Layer2, inst: Instance): Wakeup[] {
   const st = inst.st;
   const doc = st.document;
@@ -408,7 +438,10 @@ export function computeWakeups(l2: Layer2, inst: Instance): Wakeup[] {
   const W = k.config.wSim;
   const nextBoundary = (Math.floor(now / W) + 1) * W;
   const out: Wakeup[] = [];
-  const add = (at: GameTime, reason: string): void => { out.push({ clock: 'game', at: Math.max(at, nextBoundary <= at ? at : at), reason }); };
+  // A game-time wake-up fires at the window boundary that ends the window it falls due in (S2 section 4.3).
+  const add = (at: GameTime, reason: string): void => { out.push({ clock: 'game', at: Math.max(ceilTo(at, W), nextBoundary), reason }); };
+  // A play-time wake-up is checked by the arbiter's step, on the cumulative play time.
+  const addPlay = (at: number, reason: string): void => { out.push({ clock: 'play', at, reason }); };
   if (st.state === 'waiting') add(ceilTo((st.lastRecast ?? st.since) + l2.tun.recastEvery, W), 'recast');
   const sites = [...predSites(doc), ...inst.st.closure.fragments.flatMap((f) => fragmentSites(f))];
   let believes = false;
@@ -418,8 +451,13 @@ export function computeWakeups(l2: Layer2, inst: Instance): Wakeup[] {
       if ('believes' in atom) believes = true;
       else if ('hour' in atom) { hours.add(atom.hour[0]); hours.add(atom.hour[1]); }
       else if ('since' in atom && 'atLeast' in atom) {
-        const from = 'beat' in atom.since ? inst.st.beats[atom.since.beat]?.finalAt : stateSince(inst, atom.since.state);
-        if (from !== undefined && from + atom.atLeast.s > now) add(from + atom.atLeast.s, 'since');
+        if (atom.atLeast.clock === 'play') {
+          const from = 'beat' in atom.since ? inst.st.beats[atom.since.beat]?.finalAtPlay : stateSincePlay(inst, atom.since.state);
+          if (from !== undefined && from + atom.atLeast.s > l2.playTotal()) addPlay(from + atom.atLeast.s, 'since');
+        } else {
+          const from = 'beat' in atom.since ? inst.st.beats[atom.since.beat]?.finalAt : stateSince(inst, atom.since.state);
+          if (from !== undefined && from + atom.atLeast.s > gameTick(l2)) add(from + atom.atLeast.s, 'since');
+        }
       }
     }
   }
@@ -432,15 +470,71 @@ export function computeWakeups(l2: Layer2, inst: Instance): Wakeup[] {
       if (at > now) { add(at, 'hour'); break; }
     }
   }
-  for (const [key, rs] of Object.entries(st.roles)) if (rs.ladder.waitUntil !== undefined && rs.ladder.waitUntil > now) add(rs.ladder.waitUntil, `wait:${key}`);
-  if (st.state === 'unattended') add((st.entered.unattended ?? now) + doc.unattended.after.s, 'unattended');
+  for (const [key, rs] of Object.entries(st.roles)) {
+    if (rs.ladder.waitUntil !== undefined && rs.ladder.waitUntil > gameTick(l2)) add(rs.ladder.waitUntil, `wait:${key}`);
+    if (rs.ladder.waitUntilPlay !== undefined && rs.ladder.waitUntilPlay > l2.playTotal()) addPlay(rs.ladder.waitUntilPlay, `wait:${key}`);
+  }
+  if (st.state === 'unattended') {
+    const after = doc.unattended.after;
+    if (after.clock === 'play') addPlay((st.enteredPlay.unattended ?? l2.playTotal()) + after.s, 'unattended');
+    else add((st.entered.unattended ?? now) + after.s, 'unattended');
+  }
   for (const [key, rt] of Object.entries(st.beats)) {
     const b = doc.beats[key]!;
-    if (rt.state === 'available' && b.kind === 'aftermath' && b.aftermath && !rt.delayed) add((rt.availableAt ?? now) + b.aftermath.delay.s, `aftermath:${key}`);
+    if (rt.state === 'available' && b.kind === 'aftermath' && b.aftermath && !rt.delayed) {
+      if (b.aftermath.delay.clock === 'play') addPlay((rt.availableAtPlay ?? l2.playTotal()) + b.aftermath.delay.s, `aftermath:${key}`);
+      else add((rt.availableAt ?? now) + b.aftermath.delay.s, `aftermath:${key}`);
+    }
   }
   const uniq = new Map<string, Wakeup>();
-  for (const w of out) uniq.set(`${w.at}|${w.reason}`, w);
-  return [...uniq.values()].sort((a, b) => a.at - b.at || (a.reason < b.reason ? -1 : 1));
+  for (const w of out) uniq.set(`${w.clock}|${w.at}|${w.reason}`, w);
+  return [...uniq.values()].sort((a, b) => (a.clock < b.clock ? -1 : a.clock > b.clock ? 1 : 0) || a.at - b.at || (a.reason < b.reason ? -1 : 1));
+}
+
+/**
+ * The kernel values a predicate can read, as interests (S2 section 4.1): a game fact and, through its `decidedBy` guard, every fact the
+ * guard reads (and the guards of those); a `decided` test reads the guard; a role's cast node; an event kind a `count` reads; a registered
+ * read's declared dependencies. One collection serves an instance's watch frame and a pack's sowing watcher, so a sowing predicate
+ * waits on exactly what an instance's would (L2-09).
+ */
+export function addPredInterests(l2: Layer2, p: Pred, inst: Instance | undefined, add: (s: Selector) => void): void {
+  const guardOf = (name: string): Pred | undefined => {
+    const g = l2.facts[name]?.decidedBy;
+    if (g === undefined) return undefined;
+    const gp = typeof g === 'string' && g !== 'yes' && g !== 'no' ? l2.parseCached(g) : g;
+    return typeof gp === 'string' ? undefined : gp;
+  };
+  const seen = new Set<string>();
+  const guardInterests = (name: string): void => {
+    if (seen.has(`g:${name}`)) return;
+    seen.add(`g:${name}`);
+    const gp = guardOf(name);
+    if (gp) for (const { atom } of atoms(gp)) { if ('fact' in atom) factInterest(atom.fact); else if ('decided' in atom) guardInterests(atom.decided); }
+  };
+  const factInterest = (name: string): void => {
+    add({ kind: 'core:game-fact', slot: 'value', scope: { nodes: [l2.factNode(name)] } });
+    guardInterests(name);
+  };
+  const roleInterest = (role: string): void => {
+    const c = inst?.st.roles[role]?.cast;
+    if (c !== undefined) add({ slot: '*', scope: { nodes: [c] } });
+  };
+  for (const { atom } of atoms(p)) {
+    if ('fact' in atom) factInterest(atom.fact);
+    else if ('decided' in atom) guardInterests(atom.decided);
+    else if ('role' in atom) roleInterest(atom.role);
+    else if ('believes' in atom) roleInterest(atom.believes.who);
+    else if ('count' in atom) {
+      const w: Selector['where'] = atom.count.kind === undefined ? [] : [{ path: 'kind', op: 'eq', arg: atom.count.kind }];
+      add({ kind: 'core:event', slot: '*', where: w });
+    } else if ('fn' in atom) {
+      for (const r of atom.reads) {
+        if (r.fact) factInterest(r.fact);
+        else if (r.node) add({ slot: '*', scope: { nodes: [r.node] } });
+        else if (r.role) roleInterest(r.role);
+      }
+    }
+  }
 }
 
 /** The interests the watch frame holds: every kernel value the instance's predicates can read (S2 section 4.1). */
@@ -449,42 +543,12 @@ export function collectInterests(l2: Layer2, inst: Instance): Selector[] {
   const doc = st.document;
   const out = new Map<string, Selector>();
   const add = (s: Selector): void => { out.set(canonicalKey(s), s); };
-  const factInterest = (name: string): void => {
-    add({ kind: 'core:game-fact', slot: 'value', scope: { nodes: [l2.factNode(name)] } });
-    const g = l2.facts[name]?.decidedBy;
-    if (g !== undefined) {
-      const p = typeof g === 'string' && g !== 'yes' && g !== 'no' ? l2.parseCached(g) : g;
-      if (typeof p !== 'string') for (const { atom } of atoms(p)) if ('fact' in atom) factInterest(atom.fact);
-    }
-  };
   const roleInterest = (role: string): void => {
     const c = st.roles[role]?.cast;
     if (c !== undefined) add({ slot: '*', scope: { nodes: [c] } });
   };
   const sites = [...predSites(doc), ...st.closure.fragments.flatMap((f) => fragmentSites(f))];
-  for (const s of sites) {
-    for (const { atom } of atoms(s.pred)) {
-      if ('fact' in atom) factInterest(atom.fact);
-      else if ('decided' in atom) {
-        const g = l2.facts[atom.decided]?.decidedBy;
-        if (g !== undefined) {
-          const p = typeof g === 'string' && g !== 'yes' && g !== 'no' ? l2.parseCached(g) : g;
-          if (typeof p !== 'string') for (const x of atoms(p)) if ('fact' in x.atom) factInterest(x.atom.fact);
-        }
-      } else if ('role' in atom) roleInterest(atom.role);
-      else if ('believes' in atom) roleInterest(atom.believes.who);
-      else if ('count' in atom) {
-        const w: Selector['where'] = atom.count.kind === undefined ? [] : [{ path: 'kind', op: 'eq', arg: atom.count.kind }];
-        add({ kind: 'core:event', slot: '*', where: w });
-      } else if ('fn' in atom) {
-        for (const r of atom.reads) {
-          if (r.fact) factInterest(r.fact);
-          else if (r.node) add({ slot: '*', scope: { nodes: [r.node] } });
-          else if (r.role) roleInterest(r.role);
-        }
-      }
-    }
-  }
+  for (const s of sites) addPredInterests(l2, s.pred, inst, add);
   (doc.world ?? []).forEach((w) => { if ('role' in w.target) roleInterest(w.target.role); });
   for (const key of Object.keys(doc.roles)) if (st.roles[key]?.committed) roleInterest(key);
   return [...out.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map((e) => e[1]);
