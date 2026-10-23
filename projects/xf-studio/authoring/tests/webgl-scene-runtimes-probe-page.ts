@@ -22,8 +22,9 @@
  *    The least recently shown runtime is evicted past the budget. Then a V in a scene of its own is opened and closed (`close(scene)`):
  *    the GPU objects and Three's programs are back where they were.
  * 6c. The morph-target texture (4a-vi): a geometry the size of the real head's morph targets (6,800 vertices, 105 targets of position and
- *    normal deltas), drawn once as Three builds it at the draw, and its twin made ahead in steps (morph-textures.ts, as a preparation runs
- *    them) and then drawn: each step's time, the draw's, and whether Three kept the texture made ahead, byte for byte its own.
+ *    normal deltas), made ahead in steps (morph-textures.ts, as a preparation runs them) as a first load does, before any morph mesh was
+ *    drawn on the renderer, its program compiled ahead, then drawn; then its twin drawn as Three builds it at the draw: each step's time,
+ *    the first draw's, Three's draw, and whether Three kept the texture made ahead, byte for byte its own.
  * 7. A context lost while a cold V's programs link (after 6, since a lost context's objects are never deleted): its preparation starts
  *    again once the context is back, and the V is shown and draws.
  * 5. (After 4.) A lighting setup never drawn, asked of the shown V (profiles phase 4a-v-b): it is staged and prepared while the setup before
@@ -59,7 +60,7 @@ import { AuthoringDocument } from "../src/app/authoring/authoring-document";
 import { createBrowserPreviewDevice } from "../src/legacy/eye-makeup/browser/browser-preview-device";
 import { offerUploadSource, uploadStep, UPLOAD_BITMAP_OPTIONS } from "../src/character/render/character-detail-loader";
 import { gpuGate } from "../src/platform/scene/gpu-gate";
-import { morphTextureMap, morphTextureSteps } from "../src/platform/scene/morph-textures";
+import { morphTextures, morphTextureSteps } from "../src/platform/scene/morph-textures";
 import { EYE_RASTER_REGION, freshWorkspace } from "./fixtures/eye-region";
 import { multipleOutputs, type RecordedAttachment, type RecordedShader } from "./fixtures/single-output";
 
@@ -99,11 +100,11 @@ export type SceneRuntimesProbe = {
   supersede: { superseded: string; back: string; shown: string; built: string[]; cancelMs: number; canvasUnchanged: boolean;
     late: { outcome: string; built: boolean; disposed: boolean; frames: number }; shownKeys: string[]; warm: string[]; evicted: string[]; residents: string[] };
   closeSubject: { before: Counts; opened: Counts; after: Counts; shownAfter: boolean };
-  /** 6c: Three's own morph texture build at a draw, against the same texture made ahead in steps. */
-  morph: { vertices: number; targets: number; mapKnown: boolean; threeDrawMs: number; steps: number; stepMaxMs: number; totalMs: number; drawMs: number;
+  /** 6c: the first morph texture on a renderer made ahead in steps and drawn, against Three's own build of its twin at a draw. */
+  morph: { vertices: number; targets: number; patched: boolean; threeDrawMs: number; steps: number; stepMaxMs: number; totalMs: number; drawMs: number;
     handed: boolean; identical: boolean; tasksOver50: number;
-    /** Diagnostics: the long tasks from Three's draw to ours, each against when its draw ended (`three`) and when the steps began (`at`), and each step's start. */
-    tasks: { at: number; ms: number }[]; stepsAt: number[]; threeEndedAt: number };
+    /** Diagnostics: the long tasks from the first step to our draw, each against when the steps began (`at`), and each step's start. */
+    tasks: { at: number; ms: number }[]; stepsAt: number[] };
   /** What the context showed of programs with several outputs and targets with several colour attachments (none), and how much it saw. */
   singleOutput: { issues: string[]; fragments: number; attachments: number };
   progress: Record<string, { stage: string; fraction: number; waiting: string | null }[]>;
@@ -629,16 +630,6 @@ try {
     const meshOf = (made: THREE.BufferGeometry) => { const mesh = new THREE.Mesh(made, material); mesh.updateMorphTargets(); mesh.frustumCulled = false; return mesh; };
     const camera = new THREE.PerspectiveCamera();
     const theirs = geometry(), ours = geometry(), a = meshOf(theirs), b = meshOf(ours);
-    // The program first (a morph program, the same for both), so the draws below time the morph texture only.
-    {
-      const scene = new THREE.Scene(), copy = new THREE.BufferGeometry().copy(theirs); scene.add(meshOf(copy));
-      renderer.setRenderTarget(target);
-      await renderer.compileAsync(scene, camera);
-      renderer.render(scene, camera);
-      renderer.setRenderTarget(null);
-      copy.dispose();
-      await settle();
-    }
     const drawOnly = (mesh: THREE.Mesh) => {
       const scene = new THREE.Scene(); scene.add(mesh);
       renderer.setRenderTarget(target);
@@ -648,10 +639,17 @@ try {
       renderer.setRenderTarget(null);
       return ms;
     };
-    const mapKnown = !!morphTextureMap(renderer);
-    await frame();
-    const threeDrawMs = drawOnly(a), threeEnded = performance.now();
-    await settle();
+    // The first load: the program compiled ahead (a morph program, the same for both; linked, not yet drawn), and no morph mesh drawn on
+    // this renderer before (the synthetic heads have none): the morph texture is made ahead like any other's.
+    const patched = !!morphTextures(renderer);
+    {
+      const scene = new THREE.Scene(); scene.add(b);
+      renderer.setRenderTarget(target);
+      await renderer.compileAsync(scene, camera);
+      renderer.setRenderTarget(null);
+      scene.remove(b);
+      await settle();
+    }
     // Ahead, as a preparation runs the steps: a frame let through whenever a step used its share, each upload once the GPU caught up.
     const steps = morphTextureSteps(renderer, ours);
     const gate = gpuGate(renderer), times: number[] = [], stepsAt: number[] = [];
@@ -668,19 +666,24 @@ try {
     gate.dispose();
     const totalMs = performance.now() - started;
     await frame();
-    const made = morphTextureMap(renderer)?.get(ours);
+    const made = morphTextures(renderer)?.get(ours);
+    // The first draw: the program's first use, and the morph texture found ready.
     const drawMs = drawOnly(b), drawnAt = performance.now();
-    const kept = morphTextureMap(renderer)?.get(ours);
-    const own = morphTextureMap(renderer)?.get(theirs);
-    // The comparison below is the probe's own work, in a task of its own after the draw's.
+    const kept = morphTextures(renderer)?.get(ours);
+    const morphTasks = within(started, drawnAt).map(task => ({ at: task.start - started, ms: task.duration })), tasksOver50 = over50(started, drawnAt);
+    await settle();
+    // Three's own build of the twin, at its draw.
+    await frame();
+    const threeDrawMs = drawOnly(a);
+    const own = morphTextures(renderer)?.get(theirs);
+    // The comparison below is the probe's own work, in a task of its own after the draws.
     await frame();
     const left = (made?.texture.image.data ?? new Float32Array()) as Float32Array, right = (own?.texture.image.data ?? new Float32Array(1)) as Float32Array;
     let identical = left.length === right.length;
     for (let i = 0; identical && i < left.length; i++) if (left[i] !== right[i]) identical = false;
     await sleep(200);
-    probe.morph = { vertices, targets, mapKnown, threeDrawMs, steps: times.length, stepMaxMs: Math.max(0, ...times), totalMs, drawMs,
-      handed: !!made && kept === made, identical, tasksOver50: over50(started, drawnAt),
-      tasks: within(threeEnded - 200, drawnAt).map(task => ({ at: task.start - started, ms: task.duration })), stepsAt, threeEndedAt: threeEnded - started };
+    probe.morph = { vertices, targets, patched, threeDrawMs, steps: times.length, stepMaxMs: Math.max(0, ...times), totalMs, drawMs,
+      handed: !!made && kept === made, identical, tasksOver50, tasks: morphTasks, stepsAt };
     theirs.dispose(); ours.dispose(); material.dispose(); target.dispose();
     await sleep(50);
   }

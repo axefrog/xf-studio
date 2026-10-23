@@ -82,10 +82,10 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     }
   });
 
-  test("the morph-target texture is made ahead in steps under 50 ms each, byte for byte Three's, and the draw that follows builds none (4a-vi)", () => {
+  test("the morph-target texture is made ahead in steps under 50 ms each, the first on a renderer too, byte for byte Three's, and the draw that follows builds none (4a-vi)", () => {
     for (const probe of [parallel, fallback]) {
       const { morph } = probe;
-      expect(morph.mapKnown).toBe(true);
+      expect(morph.patched).toBe(true);
       expect(morph.handed).toBe(true);
       expect(morph.identical).toBe(true);
       expect(morph.steps).toBeGreaterThan(2);

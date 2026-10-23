@@ -8,35 +8,30 @@
  * when the geometry has none for its count of targets.
  *
  * So a runtime's preparation makes the same texture ahead (`morphTextureSteps`): the buffer filled a few layers at a time, exactly as Three
- * fills it, each batch of layers uploaded on its own (`DataArrayTexture.layerUpdates`), and the finished texture put in Three's map with the
- * entry Three would have made, so the first draw finds it ready and builds nothing. Nothing of it is drawn before it is complete.
+ * fills it, each batch of layers uploaded on its own (`DataArrayTexture.layerUpdates`), and the finished texture registered with the
+ * renderer as Three registers its own, so the first draw finds it ready and builds nothing. Nothing of it is drawn before it is complete.
  *
- * **Finding Three's map.** It is a `WeakMap` inside the renderer that Three exposes no way to reach. The first draw of a morph geometry on a
- * renderer (a runtime's warm-up) is watched (`watchMorphMap`): of the `WeakMap`s read with that geometry as the key during the draw, the one
- * holding afterwards an entry of Three's shape (`{ count, texture: DataArrayTexture, size: Vector2 }`) is Three's. Until it is found, nothing
- * is made ahead and Three builds its own at the draw, as before: the first runtime on a renderer pays it (the first load, outside the switch
- * gates). Three makes a new map when the context is restored, so a map found belongs to its context's generation (context-generation.ts)
- * and is looked for again after a restore. The revision is checked (`REVISION` 186): another Three falls back to its own build.
+ * **Three's map, through a patch.** Three r186 keeps the map private to the renderer. The Studio patches Three (`patches/three@0.186.0.patch`,
+ * applied by `bun install` from `patchedDependencies`; experiment 043 §13, docs/toolchain.md) so each renderer exposes its context's morph
+ * textures as `xfsMorphTextures`: `get(geometry)`, and `set(geometry, count, texture, size)`, which registers a texture as `update` registers
+ * its own (the entry, and its release when the geometry is disposed). It is per renderer and per context: Three makes a new one when the
+ * context is restored, so steps begun before a loss hand nothing over. Without the patch (a Three upgrade that dropped it) nothing is made
+ * ahead and Three builds its own at the draw, as before; `tests/morph-textures.test.ts` fails then, and holds the bytes against Three's.
  */
 import * as THREE from "three";
 import { contextGeneration, inGeneration } from "./context-generation";
 
 /** Three's entry for a geometry's morph texture (WebGLMorphtargets, r186). */
 type MorphEntry = { count: number; texture: THREE.DataArrayTexture; size: THREE.Vector2 };
-type MorphMap = WeakMap<THREE.BufferGeometry, MorphEntry>;
-/** The Three revision whose morph textures this module reproduces. */
-export const MORPH_TEXTURE_REVISION = "186";
-
-const maps = new WeakMap<object, { map: MorphMap; generation: AbortSignal }>();
-const isEntry = (value: unknown): value is MorphEntry => {
-  const entry = value as Partial<MorphEntry> | undefined;
-  return !!entry && typeof entry.count === "number" && entry.texture?.isDataArrayTexture === true && (entry.size as THREE.Vector2 | undefined)?.isVector2 === true;
+/** A renderer's morph textures for its current context, as the Studio's Three patch exposes them. */
+export type MorphTextures = {
+  get(geometry: THREE.BufferGeometry): MorphEntry | undefined;
+  set(geometry: THREE.BufferGeometry, count: number, texture: THREE.DataArrayTexture, size: THREE.Vector2): MorphEntry;
 };
 
-/** Three's map of morph textures for `renderer`'s current context, once a draw has shown it (`watchMorphMap`). */
-export function morphTextureMap(renderer: THREE.WebGLRenderer): MorphMap | undefined {
-  const found = maps.get(renderer);
-  return found && inGeneration(renderer, found.generation) ? found.map : undefined;
+/** `renderer`'s morph textures for its current context (undefined: Three isn't patched). */
+export function morphTextures(renderer: THREE.WebGLRenderer): MorphTextures | undefined {
+  return (renderer as THREE.WebGLRenderer & { xfsMorphTextures?: MorphTextures }).xfsMorphTextures;
 }
 
 /** Whether `object` draws with morph targets (Three builds a morph texture for its geometry). */
@@ -47,35 +42,13 @@ export function morphGeometry(object: THREE.Object3D): THREE.BufferGeometry | un
 }
 
 /**
- * Run `draw` (a draw that may build the morph textures of `geometries`), and learn Three's map from it while the renderer's isn't known.
- * See the module header.
- */
-export function watchMorphMap<T>(renderer: THREE.WebGLRenderer, geometries: readonly THREE.BufferGeometry[], draw: () => T): T {
-  if (!geometries.length || THREE.REVISION !== MORPH_TEXTURE_REVISION || morphTextureMap(renderer)) return draw();
-  const keys = new Set<object>(geometries), seen = new Set<WeakMap<object, unknown>>();
-  const get = WeakMap.prototype.get;
-  WeakMap.prototype.get = function (this: WeakMap<object, unknown>, key: object) {
-    if (keys.has(key)) seen.add(this);
-    return get.call(this, key);
-  };
-  try { return draw(); }
-  finally {
-    WeakMap.prototype.get = get;
-    for (const map of seen) if (geometries.some(geometry => isEntry(get.call(map, geometry)))) {
-      maps.set(renderer, { map: map as MorphMap, generation: contextGeneration(renderer) });
-      break;
-    }
-  }
-}
-
-/**
  * The steps that make `geometry`'s morph texture ahead, each within `budget` ms of `now` (fill) or `chunk` bytes (upload); undefined when
- * there is nothing to make (Three's map isn't known yet, or it holds the geometry's texture already). `step()` returns true once the texture
- * is in Three's map. `dispose()` frees a texture not handed over (a preparation that stopped part-way).
+ * there is nothing to make (Three isn't patched, or the renderer holds the geometry's texture already). `step()` returns true once the
+ * texture is registered with the renderer. `dispose()` frees a texture not handed over (a preparation that stopped part-way).
  */
 export function morphTextureSteps(renderer: THREE.WebGLRenderer, geometry: THREE.BufferGeometry,
   options: { now?(): number; budget?: number; chunk?: number } = {}): { step(): boolean; dispose(): void } | undefined {
-  const map = morphTextureMap(renderer);
+  const map = morphTextures(renderer);
   const morphs = geometry.morphAttributes;
   // Three reads them the same way (`Vector4.fromBufferAttribute`, interleaved or not).
   type Attribute = THREE.BufferAttribute;
@@ -109,8 +82,8 @@ export function morphTextureSteps(renderer: THREE.WebGLRenderer, geometry: THREE
   return {
     step() {
       if (handed) return true;
-      // A context lost meanwhile took Three's map with it: Three builds its own at the draw, as before.
-      if (!inGeneration(renderer, generation) || morphTextureMap(renderer) !== map) { release(); return true; }
+      // A context lost meanwhile took the renderer's morph textures with it: Three builds its own at the draw, as before.
+      if (!inGeneration(renderer, generation) || morphTextures(renderer) !== map) { release(); return true; }
       // Three drew the geometry meanwhile and made its own: nothing to hand over.
       if (map.get(geometry)?.count === count) { release(); return true; }
       const start = now();
@@ -128,12 +101,9 @@ export function morphTextureSteps(renderer: THREE.WebGLRenderer, geometry: THREE
         renderer.initTexture(texture);
         uploaded = last;
         if (uploaded < count) return false;
-        // Complete: Three's own entry, and its release with the geometry.
-        const made = texture, entry: MorphEntry = { count, texture: made, size: new THREE.Vector2(width, height) };
-        map.set(geometry, entry);
+        // Complete: registered as Three registers its own (the entry, and its release with the geometry).
+        map.set(geometry, count, texture, new THREE.Vector2(width, height));
         handed = true;
-        const dispose = () => { made.dispose(); if (map.get(geometry) === entry) map.delete(geometry); geometry.removeEventListener("dispose", dispose); };
-        geometry.addEventListener("dispose", dispose);
         buffer = null;
         return true;
       }

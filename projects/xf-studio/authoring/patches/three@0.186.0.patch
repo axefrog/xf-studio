@@ -1,0 +1,63 @@
+diff --git a/build/three.module.js b/build/three.module.js
+index c52087acfabae80efabb8cc05e3a1d96e35a1426..71a5a29d077f8fdd6f55b00dc7e8d8af69a39ac9 100644
+--- a/build/three.module.js
++++ b/build/three.module.js
+@@ -4597,9 +4597,47 @@ function WebGLMorphtargets( gl, capabilities, textures ) {
+ 
+ 	}
+ 
++	// XF Studio patch (morph-texture injection): a geometry's entry, and a morph texture made elsewhere (in the same layout as `update`
++	// fills) registered as `update` registers its own, so the geometry's first draw finds it ready. Read by XF Studio's
++	// platform/scene/morph-textures.ts through `WebGLRenderer.xfsMorphTextures`.
++
++	function get( geometry ) {
++
++		return morphTextures.get( geometry );
++
++	}
++
++	function set( geometry, count, texture, size ) {
++
++		const previous = morphTextures.get( geometry );
++
++		if ( previous !== undefined ) previous.texture.dispose();
++
++		const entry = { count: count, texture: texture, size: size };
++
++		morphTextures.set( geometry, entry );
++
++		function disposeTexture() {
++
++			texture.dispose();
++
++			morphTextures.delete( geometry );
++
++			geometry.removeEventListener( 'dispose', disposeTexture );
++
++		}
++
++		geometry.addEventListener( 'dispose', disposeTexture );
++
++		return entry;
++
++	}
++
+ 	return {
+ 
+-		update: update
++		update: update,
++		get: get,
++		set: set
+ 
+ 	};
+ 
+@@ -16548,6 +16586,9 @@ class WebGLRenderer {
+ 			 */
+ 			_this.properties = properties;
+ 
++			// XF Studio patch (morph-texture injection): this context's morph textures (`get`, `set`). A restored context makes new ones.
++			_this.xfsMorphTextures = morphtargets;
++
+ 			/**
+ 			 * Manages the render lists of the renderer.
+ 			 *

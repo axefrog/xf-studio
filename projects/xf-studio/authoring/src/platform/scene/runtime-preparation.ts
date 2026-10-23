@@ -5,7 +5,7 @@ import { PREPARE_FRAME_MS } from "./character-renderer";
 import { isDrawable } from "./drawables";
 import { linkPacer } from "./link-pacing";
 import { gpuDrained, gpuGate } from "./gpu-gate";
-import { morphGeometry, morphTextureSteps, watchMorphMap } from "./morph-textures";
+import { morphGeometry, morphTextureSteps } from "./morph-textures";
 
 /**
  * Preparing a scene runtime before it is shown (profiles phase 4a-v, experiments/043-scene-runtimes §11): what its first shown frame would
@@ -196,8 +196,7 @@ export async function prepareRuntime(ports: RuntimePreparationPorts): Promise<Ru
     for (let at = 0, size = 1; at < drawables.length;) {
       await pace();
       const piece = new Set(drawables.slice(at, at + size));
-      // A morph mesh's first draw on a renderer shows where Three keeps its morph textures (morph-textures.ts).
-      if (!watchMorphMap(renderer, [...piece].map(morphGeometry).filter(geometry => geometry !== undefined), () => ports.warmUp(piece))) break;
+      if (!ports.warmUp(piece)) break;
       warmedUp = true;
       at += piece.size;
       const waited = await drained("warm-up", 0.9 * at / drawables.length, "gpu");
