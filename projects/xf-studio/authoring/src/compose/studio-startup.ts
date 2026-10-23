@@ -374,7 +374,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   // The editors (scene-editors.ts): every composed layered surface is registered, and each view's on-head editor edits the look that view's
   // scene shows, naming it through the view's panel (the input layer's resolution, profiles design §3.6). The root names no feature.
   const panelOf = (view: string) => sessionState.instance(viewPanel(view));
-  const editors = createSceneEditors({ surfaces: STUDIO_LAYERED_SURFACES, look: { feature: core.document.feature, preview: previewDevice }, core,
+  const editors = createSceneEditors({ surfaces: STUDIO_LAYERED_SURFACES, look: { feature: core.document.feature, preview: previewDevice, ref: () => lookEditor.ref() }, core,
     naming: { look: view => targets.named(panelOf(view)).look,
       complete: (action, view) => targets.complete(action, core.app.descriptor(action.kind as StudioAction["kind"]), { instance: panelOf(view) }) as StudioAction },
     drawn: () => drawnView(), viewport: viewportDevice, attach: services => core.app.attach(services), message: adapterMessage });

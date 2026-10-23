@@ -356,6 +356,24 @@ test("4a-vi: each view's on-head editor is mounted on the head shown for it, and
   expect(log.at(-1)).toBe("unmount:2:" + side);
 });
 
+test("4a-vi: until phase 2, show(view) of a view whose scene shows another look than the edited one is refused, with nothing changed", async () => {
+  const views: Record<string, { scene: string; subject: string }> = {}, log: string[] = [];
+  const o = owner({ v1: "female", v2: "female" }, [], null, views, { mount: (_head, view) => { log.push(`mount:${view}`); return () => log.push(`unmount:${view}`); },
+    refusal: view => view === side ? "That view shows a different look." : undefined });
+  const side = o.h.ports.graph!.addView("main", {}, { label: "Side" });
+  views[side] = { scene: "s2", subject: "v2" };
+  await o.heads.load();
+  const first = o.heads.shown()!, builds = o.h.builds;
+  await expect(o.heads.show(side)).rejects.toThrow("That view shows a different look.");
+  // The drawn view, the head, its editor and the residency are as they were: nothing was wanted or built.
+  expect(o.heads.shownView()).toBe("main");
+  expect(o.heads.shown()).toBe(first);
+  expect(o.h.builds).toBe(builds);
+  expect(o.heads.preparation()).toBeNull();
+  expect(log).toEqual(["mount:main"]);
+  o.heads.dispose();
+});
+
 test("4a-vi: each view routes to the runtime holding it: the drawn one, a warm one of its V and body, or none (loading, absent)", async () => {
   const views: Record<string, { scene: string; subject: string }> = {};
   const o = owner({ v1: "female", v2: "female", v3: "female" }, [], null, views);

@@ -11,6 +11,9 @@
  *   follows the head's Surface controls tool. Its selections and gestures name the look `view`'s scene shows (the input layer's naming for
  *   that view, `naming`: its panel's resolution, profiles design §3.3, §3.6), and its gestures come from `view`. The release unmounts it,
  *   settling a gesture still open (cancelled), and withdraws the surface's outline.
+ * - **One edited look until phase 2.** The look editor edits one document, the drawn scene's look, and the editors' preview source rasters
+ *   it. Until phase 2 gives each view its own document, a view whose scene shows another look can't be drawn: `refusal(view)` says so
+ *   plainly, and the runtime owner refuses `show(view)` with it, so the editor never names one look while showing another's layers.
  * - **The UV editor** is a panel, not a view, until view graph P6: it edits the look the drawn view shows (`drawn`), so only its naming lives
  *   here; the root mounts it with its canvas and the device's reads.
  */
@@ -20,7 +23,7 @@ import type { LayeredSurfaceRenderer } from "../../engines/layered-makeup/render
 import { surfaceOutline } from "../../engines/layered-makeup/surface-edge";
 import type { StudioAction } from "../../app/studio-application";
 import type { AdapterMessage } from "../../app/presentation-status";
-import type { LookRef } from "../../library/collection-documents";
+import { sameLook, type LookRef } from "../../library/collection-documents";
 import type { createTrustedAuthoringCore } from "../../app/trusted-authoring-core";
 import type { AttachedHead, HeadServices, LayeredSurfaceWiring } from "./browser-head-attachment";
 import type { createBrowserViewportDevice } from "./browser-viewport-device";
@@ -35,8 +38,8 @@ export type LayeredSurfaces = ReadonlyMap<string, FeatureRendererFactory<Layered
 
 export type SceneEditorPorts = {
   surfaces: LayeredSurfaces;
-  /** The look editor: the feature whose part it edits, and the device that rasters its layers. */
-  look: { readonly feature: string; readonly preview: LayeredSurfaceWiring["preview"] };
+  /** The look editor: the feature whose part it edits, the device that rasters its layers, and the look its document shows (`ref`). */
+  look: { readonly feature: string; readonly preview: LayeredSurfaceWiring["preview"]; ref(): LookRef | undefined };
   /** The authoring core: the layers and selection the editors draw, and the application's gestures and dispatch. */
   core: { geometry: Pick<Core["geometry"], "layer" | "recipe">; presentation: Pick<Core["presentation"], "selected" | "layer" | "selectedField">;
     app: Pick<Core["app"], "dispatch" | "beginGesture" | "applyGesture" | "endGesture" | "surfaceEdge"> };
@@ -53,6 +56,9 @@ export type SceneEditorPorts = {
   /** A plain message from an editor (`surface`: the on-head editor's; `uv`: the UV editor's). */
   message(source: AdapterMessage["source"], text: string): void;
 };
+
+/** Why a view whose scene shows another look can't be drawn yet (phase 2 edits each view's look). */
+export const ANOTHER_LOOK = "That view shows a different look from the one you're editing, and two looks can't be edited side by side yet.";
 
 export function createSceneEditors(ports: SceneEditorPorts) {
   const { core, naming } = ports;
@@ -107,6 +113,15 @@ export function createSceneEditors(ports: SceneEditorPorts) {
         ports.viewport.unmountSurface();
         ports.attach({ surfaceOutline: undefined });
       };
+    },
+    /**
+     * Why `view` can't be drawn now (undefined: it can): its scene shows another look than the one the look editor's document shows, and
+     * until phase 2 one document is edited at a time (see the header).
+     */
+    refusal(view: ViewId): string | undefined {
+      const shows = naming.look(view), edited = ports.look.ref();
+      const same = shows && edited ? sameLook(shows, edited) : !shows && !edited;
+      return same ? undefined : ANOTHER_LOOK;
     },
     /** The UV editor's hooks: the drawn view's look (a panel until view graph P6), its gestures from the UV view. */
     uvHooks(): Pick<UVHooks, "recipe" | "layer" | "selected" | "selectedField" | "selectField" | "select" | "surfaceEdge" | "begin" | "apply" | "cancel" | "finish" | "message"> {

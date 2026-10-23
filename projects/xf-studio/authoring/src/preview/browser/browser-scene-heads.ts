@@ -70,8 +70,11 @@ export type SceneHeadsPorts = {
   notice(text: string): void;
   /** The head shown now changed (undefined: none is shown); the composition root connects what follows the shown head. */
   shown(head: AttachedHead | undefined): void;
-  /** Each view's editors (scene-editors.ts): mount the on-head editor on the head shown for `view`; the release unmounts it. */
-  editors?: { mount(head: AttachedHead, view: string): () => void };
+  /**
+   * Each view's editors (scene-editors.ts): mount the on-head editor on the head shown for `view`; the release unmounts it. `refusal`: why
+   * `view` can't be drawn now (its scene shows another look than the one edited, until phase 2), which `show(view)` refuses with.
+   */
+  editors?: { mount(head: AttachedHead, view: string): () => void; refusal?(view: string): string | undefined };
   /** Hear the pane's WebGL context being lost and restored. */
   onContext?(listener: (event: "lost" | "restored") => void): () => void;
   /**
@@ -265,11 +268,15 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
     },
     /**
      * Draw `view` (phase 2's tab switch: `device.show(view)`): its scene's head is wanted like any subject change, so the head shown now
-     * stays drawn, with progress, until that one is prepared, and a newer `show` or change supersedes it. Resolves once it is shown.
+     * stays drawn, with progress, until that one is prepared, and a newer `show` or change supersedes it. Resolves once it is shown. A view
+     * whose scene shows another look than the one edited is refused, with nothing changed (until phase 2: scene-editors.ts `refusal`).
      */
     show(view: string): Promise<void> {
       if (disposed) return Promise.reject(Error("The 3D view was closed."));
       if (ports.scenes.of(view) === undefined) return Promise.reject(Error("That view no longer exists."));
+      // One look is edited at a time until phase 2: a view showing another can't take the editor (scene-editors.ts `refusal`).
+      const refused = ports.editors?.refusal?.(view);
+      if (refused) return Promise.reject(Error(refused));
       drawnView = view;
       const want = current();
       if (!want) return Promise.reject(Error("That view's V isn't known yet."));
